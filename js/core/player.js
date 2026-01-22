@@ -170,7 +170,7 @@ class Player {
                 // 我们可以在返回结果后，在 controller 层（game.js/battle.js）播放特效。
                 // 但为了方便，我们尝试调用全局 game
             }
-            game.playCardEffect(null, card.type); 
+            game.playCardEffect(null, card.type);
         }
 
         // 执行卡牌效果
@@ -251,30 +251,30 @@ class Player {
             case 'swapHpPercent':
                 // 检查是否有目标
                 if (!target) return { type: 'error', message: '需要目标' };
-                
+
                 // 计算百分比
                 const playerPercent = this.currentHp / this.maxHp;
                 const enemyPercent = target.currentHp / target.maxHp;
-                
+
                 // 交换百分比
                 const newPlayerHp = Math.floor(this.maxHp * enemyPercent);
                 const newEnemyHp = Math.floor(target.maxHp * playerPercent);
-                
+
                 // 确保至少有1点血
                 const finalPlayerHp = Math.max(1, newPlayerHp);
                 const finalEnemyHp = Math.max(1, newEnemyHp);
-                
+
                 const playerDiff = finalPlayerHp - this.currentHp;
                 const enemyDiff = finalEnemyHp - target.currentHp;
-                
+
                 this.currentHp = finalPlayerHp;
                 target.currentHp = finalEnemyHp;
-                
+
                 Utils.showBattleLog(`逆转乾坤！生命比率互换！`);
                 return { type: 'swapHpPercent', playerDiff, enemyDiff, target };
 
             // ========== 新增效果类型 ==========
-            
+
             case 'damageAll':
                 // 对所有敌人造成伤害，返回让battle.js处理
                 return { type: 'damageAll', value, target: 'allEnemies' };
@@ -324,11 +324,11 @@ class Player {
                 const condition = effect.condition;
                 const condThreshold = effect.threshold || 0.2;
                 let conditionMet = false;
-                
+
                 if (condition === 'lowHp') {
                     conditionMet = (this.currentHp / this.maxHp) <= condThreshold;
                 }
-                
+
                 if (conditionMet) {
                     const drawVal = effect.drawValue || 0;
                     const energyVal = effect.energyValue || 0;
@@ -499,7 +499,7 @@ class Player {
 
         this.collectedLaws.push(law);
         this.lawsCollected++;
-        this.fateRing.exp += 50; // 增加命环经验
+        this.fateRing.exp += 100; // 增加命环经验
 
         // 解锁法则对应的卡牌
         if (law.unlockCards) {

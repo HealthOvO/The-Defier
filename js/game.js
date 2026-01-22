@@ -626,7 +626,7 @@ class Game {
                 this.achievementSystem.updateStat('lawsCollected', 1);
 
                 // 命环经验额外奖励
-                this.player.fateRing.exp += 20;
+                this.player.fateRing.exp += 50;
                 this.player.checkFateRingLevelUp();
 
                 if (law.unlockCards && law.unlockCards.length > 0) {
@@ -1195,17 +1195,17 @@ class Game {
 
     // 购买命环经验
     buyRingExp() {
-        const cost = 100;
+        const cost = 50;
         if (this.player.gold < cost) {
             Utils.showBattleLog('灵石不足！');
             return;
         }
 
         this.player.gold -= cost;
-        this.player.fateRing.exp += 30;
+        this.player.fateRing.exp += 50;
         this.player.checkFateRingLevelUp();
 
-        Utils.showBattleLog('命环经验 +30！');
+        Utils.showBattleLog('命环经验 +50！');
         document.getElementById('shop-gold-display').textContent = this.player.gold;
     }
 
