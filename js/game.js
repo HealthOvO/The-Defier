@@ -27,6 +27,19 @@ class Game {
         this.bindGlobalEvents();
         this.initCollection();
         this.initDynamicBackground();
+        
+        // 尝试加载存档
+        if (this.loadGame()) {
+            // 如果加载成功且在地图界面，则显示地图
+            if (this.player.currentHp > 0) {
+                 this.showScreen('map-screen');
+            } else {
+                 // 如果死亡，则重置并回主菜单
+                 this.clearSave();
+                 this.showScreen('main-menu');
+            }
+        }
+        
         console.log('The Defier 2.1 初始化完成！');
     }
 
@@ -88,6 +101,62 @@ class Game {
         }
 
         document.body.prepend(bg);
+    }
+
+    // 保存游戏
+    saveGame() {
+        const gameState = {
+            player: this.player.getState(),
+            map: {
+                nodes: this.map.nodes,
+                currentNodeIndex: this.map.currentNodeIndex,
+                completedNodes: this.map.completedNodes
+            },
+            unlockedRealms: this.unlockedRealms || [1],
+            timestamp: Date.now()
+        };
+        localStorage.setItem('theDefierSave', JSON.stringify(gameState));
+        console.log('游戏已保存');
+    }
+
+    // 加载游戏
+    loadGame() {
+        const savedData = localStorage.getItem('theDefierSave');
+        if (!savedData) return false;
+
+        try {
+            const gameState = JSON.parse(savedData);
+            
+            // 恢复玩家状态
+            Object.assign(this.player, gameState.player);
+            // 恢复命环对象引用
+            if (gameState.player.fateRing) {
+                this.player.fateRing = gameState.player.fateRing;
+            }
+            
+            // 恢复地图状态
+            this.map.nodes = gameState.map.nodes;
+            this.map.currentNodeIndex = gameState.map.currentNodeIndex;
+            this.map.completedNodes = gameState.map.completedNodes;
+            
+            this.unlockedRealms = gameState.unlockedRealms || [1];
+            
+            console.log('游戏已加载');
+            return true;
+        } catch (e) {
+            console.error('加载存档失败:', e);
+            return false;
+        }
+    }
+
+    // 清除存档
+    clearSave() {
+        localStorage.removeItem('theDefierSave');
+    }
+
+    // 自动保存
+    autoSave() {
+        this.saveGame();
     }
 
     // 初始化图鉴
@@ -179,6 +248,54 @@ class Game {
         this.showScreen('achievements-screen');
     }
 
+    // 初始化关卡选择界面
+    initRealmSelect() {
+        const container = document.getElementById('realm-select-container');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        // 假设最高9重天
+        for (let i = 1; i <= 9; i++) {
+            const isUnlocked = this.unlockedRealms && this.unlockedRealms.includes(i);
+            const isCompleted = isUnlocked && this.unlockedRealms.includes(i + 1); // 简单判断：解锁了下一关说明这关过了
+            
+            const realmCard = document.createElement('div');
+            realmCard.className = `realm-card ${isUnlocked ? '' : 'locked'}`;
+            
+            const realmName = this.map.getRealmName(i);
+            const env = this.map.getRealmEnvironment(i);
+            
+            realmCard.innerHTML = `
+                <div class="realm-icon">${isUnlocked ? (isCompleted ? '🏆' : '⚔️') : '🔒'}</div>
+                <div class="realm-info">
+                    <h3>${realmName}</h3>
+                    <p class="realm-env">${env.name}: ${env.desc}</p>
+                    ${isCompleted ? '<span class="replay-tag">重复挑战 (收益减半)</span>' : ''}
+                </div>
+            `;
+            
+            if (isUnlocked) {
+                realmCard.addEventListener('click', () => {
+                    this.startRealm(i, isCompleted);
+                });
+            }
+            
+            container.appendChild(realmCard);
+        }
+    }
+    
+    // 开始指定关卡
+    startRealm(realmLevel, isReplay = false) {
+        this.player.realm = realmLevel;
+        this.player.floor = 0;
+        this.player.isReplay = isReplay; // 标记是否为重玩
+        
+        this.map.generate(this.player.realm);
+        this.showScreen('map-screen');
+        this.autoSave();
+    }
+
     // 显示界面
     showScreen(screenId) {
         document.querySelectorAll('.screen').forEach(screen => {
@@ -197,8 +314,28 @@ class Game {
                 this.initCollection();
             } else if (screenId === 'achievements-screen') {
                 this.initAchievements();
+            } else if (screenId === 'character-select') {
+                this.updateCharacterInfo();
+            } else if (screenId === 'realm-select-screen') {
+                this.initRealmSelect();
             }
         }
+    }
+
+    // 更新角色信息界面
+    updateCharacterInfo() {
+        document.getElementById('char-hp').textContent = this.player.maxHp;
+        document.getElementById('char-energy').textContent = this.player.baseEnergy;
+        document.getElementById('char-draw').textContent = this.player.drawCount;
+        
+        // 命环等级
+        const ringName = this.player.fateRing.name;
+        document.getElementById('ring-level-display').textContent = ringName;
+        document.getElementById('char-imprint-badge').textContent = ringName;
+        
+        const loadedCount = this.player.fateRing.loadedLaws.length;
+        const totalSlots = this.player.fateRing.slots;
+        document.getElementById('loaded-laws').textContent = `${loadedCount}/${totalSlots}`;
     }
 
     // 开始新游戏
@@ -211,6 +348,9 @@ class Game {
         this.runStartTime = Date.now();
         this.currentBattleNode = null;
         this.rewardCardSelected = false;
+        
+        // 确保有解锁记录
+        if (!this.unlockedRealms) this.unlockedRealms = [1];
 
         // 应用永久起始加成
         const bonuses = this.achievementSystem.loadStartBonuses();
@@ -222,10 +362,8 @@ class Game {
         if (bonuses.gold) this.player.gold += bonuses.gold;
         if (bonuses.draw) this.player.drawCount += bonuses.draw;
 
-        // 生成第一层地图
-        this.map.generate(this.player.realm);
-
-        this.showScreen('map-screen');
+        // 不直接生成地图，而是去选关界面
+        this.showScreen('realm-select-screen');
     }
 
     // 开始战斗 - 保存当前节点
@@ -306,9 +444,18 @@ class Game {
         this.player.enemiesDefeated += enemies.length;
 
         // 命环获得经验
-        const ringExp = enemies.reduce((sum, e) => sum + (e.ringExp || 10), 0);
+        let ringExp = enemies.reduce((sum, e) => sum + (e.ringExp || 10), 0);
+        
+        // 重玩收益减半
+        if (this.player.isReplay) {
+             ringExp = Math.floor(ringExp * 0.5);
+        }
+        
         this.player.fateRing.exp += ringExp;
         this.player.checkFateRingLevelUp();
+        
+        // 自动保存
+        this.autoSave();
 
         // 更新成就统计
         this.achievementSystem.updateStat('enemiesDefeated', enemies.length);
@@ -336,6 +483,12 @@ class Game {
                 canSteal = true;
                 stealEnemy = enemy;
             }
+        }
+        
+        // 重玩收益减半
+        if (this.player.isReplay) {
+             totalGold = Math.floor(totalGold * 0.5);
+             // 重玩可以盗取，但不给额外经验奖励了
         }
 
         this.player.gold += totalGold;
@@ -503,9 +656,18 @@ class Game {
 
         // 检查牌组大小
         this.achievementSystem.updateStat('minDeckClear', this.player.deck.length, 'min');
+        
+        // 解锁下一重天
+        if (!this.unlockedRealms) this.unlockedRealms = [1];
+        if (!this.unlockedRealms.includes(this.player.realm + 1)) {
+            this.unlockedRealms.push(this.player.realm + 1);
+        }
 
+        // 允许玩家选择继续或回城
+        // 这里暂时保持自动推进，但增加保存
         this.player.realm++;
         this.player.floor = 0;
+        this.autoSave();
 
         if (this.player.realm > 5) {
             this.showVictoryScreen();
@@ -610,6 +772,13 @@ class Game {
     // 显示设置
     showSettings() {
         alert('The Defier 2.1\n\n操作说明:\n- 点击手牌使用卡牌\n- 点击敌人选择目标\n- 点击"结束回合"结束当前回合\n\n系统:\n- 命环经验: 击败敌人获得\n- 法则盗取: 击败敌人后有机会盗取\n- 成就: 完成挑战解锁奖励');
+    }
+
+    // 卡牌使用效果
+    playCardEffect(targetEl, cardType) {
+        if (typeof particles !== 'undefined') {
+            particles.playCardEffect(targetEl, cardType);
+        }
     }
 
     // 关闭模态框

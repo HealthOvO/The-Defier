@@ -108,9 +108,21 @@
         </div>
     </div>
 
-    <!-- 地图选择界面 -->
+    <!-- 关卡选择界面 -->
+    <div id="realm-select-screen" class="screen">
+        <div class="screen-header">
+            <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
+            <h2>选择试炼天域</h2>
+        </div>
+        <div class="realm-select-container" id="realm-select-container">
+            <!-- 动态生成 -->
+        </div>
+    </div>
+
+    <!-- 地图界面 -->
     <div id="map-screen" class="screen">
         <div class="map-header">
+            <button class="back-btn" onclick="game.showScreen('realm-select-screen')">← 返回关卡选择</button>
             <div class="player-status-bar">
                 <div class="status-item hp">
                     <span class="icon">❤️</span>

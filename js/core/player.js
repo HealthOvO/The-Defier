@@ -154,6 +154,25 @@ class Player {
         // 从手牌移除
         this.hand.splice(cardIndex, 1);
 
+        // 播放卡牌特效
+        if (typeof game !== 'undefined' && game.playCardEffect) {
+            // 获取目标元素
+            let targetEl = null;
+            if (target && target.id) {
+                // 假设敌人有ID关联到DOM
+                // 这里我们假设 battle.js 会处理 target 关联
+                // 或者我们简单传 null，让特效系统自己找默认位置
+                // 暂时传 null，让 particles.js 的 playCardEffect 处理默认玩家位置
+                // 如果是攻击，我们希望能定位到敌人
+                // 但这里 player.js 不应该知道太多 DOM 细节
+                // 我们在 game.js 或 battle.js 中处理更合适，但这里是触发点
+                // 实际上 playCard 是逻辑层。
+                // 我们可以在返回结果后，在 controller 层（game.js/battle.js）播放特效。
+                // 但为了方便，我们尝试调用全局 game
+            }
+            game.playCardEffect(null, card.type); 
+        }
+
         // 执行卡牌效果
         const results = this.executeCardEffects(card, target);
 
@@ -228,6 +247,34 @@ class Player {
 
             case 'execute':
                 return { type: 'execute', target: effect.target };
+
+            case 'swapHpPercent':
+                // 检查是否有目标
+                if (!target) return { type: 'error', message: '需要目标' };
+                
+                // 计算百分比
+                const playerPercent = this.currentHp / this.maxHp;
+                const enemyPercent = target.currentHp / target.maxHp;
+                
+                // 交换百分比
+                // 玩家新生命值 = 玩家最大生命值 * 敌人当前百分比
+                const newPlayerHp = Math.floor(this.maxHp * enemyPercent);
+                // 敌人新生命值 = 敌人最大生命值 * 玩家当前百分比
+                const newEnemyHp = Math.floor(target.maxHp * playerPercent);
+                
+                // 应用变化
+                // 确保至少有1点血
+                const finalPlayerHp = Math.max(1, newPlayerHp);
+                const finalEnemyHp = Math.max(1, newEnemyHp);
+                
+                const playerDiff = finalPlayerHp - this.currentHp;
+                const enemyDiff = finalEnemyHp - target.currentHp;
+                
+                this.currentHp = finalPlayerHp;
+                target.currentHp = finalEnemyHp;
+                
+                Utils.showBattleLog(`逆转乾坤！生命比率互换！`);
+                return { type: 'swapHpPercent', playerDiff, enemyDiff, target };
 
             default:
                 return { type: 'unknown' };

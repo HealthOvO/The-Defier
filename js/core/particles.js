@@ -164,6 +164,43 @@ class ParticleSystem {
         this.flashScreen('rgba(108, 92, 231, 0.2)', 200);
     }
 
+    // 卡牌使用效果
+    playCardEffect(targetEl, cardType) {
+        if (!targetEl) targetEl = document.querySelector('.player-avatar'); // 默认目标为玩家
+        
+        switch (cardType) {
+            case 'attack':
+                this.attackEffect(targetEl);
+                break;
+            case 'defense':
+                this.shieldEffect(document.querySelector('.player-avatar'));
+                break;
+            case 'heal':
+                this.healEffect(document.querySelector('.player-avatar'));
+                break;
+            case 'law':
+                this.lawEffect(targetEl);
+                break;
+            case 'fire':
+                this.fireEffect(targetEl);
+                break;
+            case 'thunder':
+                this.thunderEffect(targetEl);
+                break;
+            default:
+                // 通用效果
+                if (targetEl) {
+                    const rect = targetEl.getBoundingClientRect();
+                    this.createParticle(
+                        rect.left + rect.width / 2,
+                        rect.top + rect.height / 2,
+                        'magic',
+                        { size: 10 }
+                    );
+                }
+        }
+    }
+
     // 暴击效果
     criticalEffect(targetEl) {
         const rect = targetEl.getBoundingClientRect();

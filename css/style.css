@@ -1142,10 +1142,10 @@ body {
     min-height: 40px;
 }
 
-/* End Turn Button */
+/* End Turn Button - Fixed Position */
 .end-turn-btn {
-    position: absolute;
-    right: var(--spacing-lg);
+    position: fixed; /* Changed from absolute to fixed */
+    right: 30px;
     bottom: 220px;
     padding: var(--spacing-md) var(--spacing-xl);
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
@@ -1157,6 +1157,7 @@ body {
     font-weight: 500;
     cursor: pointer;
     transition: all var(--transition-normal);
+    z-index: 100; /* Ensure it's above other elements */
 }
 
 .end-turn-btn:hover {
@@ -1340,8 +1341,86 @@ body {
 }
 
 /* ===================================
-   Modals
+   关卡选择界面样式
    =================================== */
+#realm-select-screen {
+    background: 
+        radial-gradient(circle at 50% 30%, rgba(26, 35, 126, 0.2) 0%, transparent 60%),
+        var(--bg-ink);
+}
+
+.realm-select-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-lg);
+    padding: var(--spacing-xl);
+    justify-content: center;
+    overflow-y: auto;
+    max-height: calc(100vh - 80px);
+}
+
+.realm-card {
+    width: 280px;
+    height: 360px;
+    background: linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.2) 100%);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.4s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.realm-card:hover {
+    transform: translateY(-10px);
+    border-color: var(--accent-gold);
+    box-shadow: 0 15px 30px rgba(0,0,0,0.5);
+}
+
+.realm-card.locked {
+    opacity: 0.5;
+    filter: grayscale(1);
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.realm-icon {
+    font-size: 4rem;
+    margin-bottom: var(--spacing-md);
+    filter: drop-shadow(0 0 10px rgba(255,215,0,0.3));
+}
+
+.realm-info {
+    text-align: center;
+}
+
+.realm-info h3 {
+    font-family: var(--font-display);
+    font-size: 1.8rem;
+    color: var(--accent-gold);
+    margin-bottom: var(--spacing-sm);
+}
+
+.realm-env {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-md);
+    line-height: 1.4;
+}
+
+.replay-tag {
+    display: inline-block;
+    padding: 4px 8px;
+    background: rgba(76, 175, 80, 0.2);
+    border: 1px solid var(--accent-green);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: var(--accent-green);
+}
 .modal {
     position: fixed;
     top: 0;
@@ -1481,9 +1560,65 @@ body {
     margin-top: 4px;
 }
 
-/* ===================================
-   Animations
-   =================================== */
+/* 粒子通用样式 */
+.particle {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    background-size: contain;
+    background-repeat: no-repeat;
+    animation: particleFade 1s forwards;
+}
+
+@keyframes particleFade {
+    0% { opacity: 1; transform: translate(0, 0) scale(1); }
+    100% { opacity: 0; transform: translate(var(--offset-x), var(--offset-y)) scale(0); }
+}
+
+.particle-magic {
+    background: radial-gradient(circle, #fff, transparent);
+    border-radius: 50%;
+    box-shadow: 0 0 10px #fff;
+}
+
+.particle-attack {
+    background: var(--accent-red);
+    clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+}
+
+.particle-heal {
+    background: var(--accent-green);
+    border-radius: 50%;
+    box-shadow: 0 0 5px var(--accent-green);
+}
+
+.particle-shield {
+    border: 2px solid var(--accent-cyan);
+    border-radius: 50%;
+    background: transparent;
+}
+
+.particle-fire {
+    background: radial-gradient(circle, #ff5722, #ff9800);
+    border-radius: 50%;
+    filter: blur(2px);
+}
+
+.particle-thunder {
+    background: #ffeb3b;
+    clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%);
+    transform: rotate(45deg);
+}
+
+.particle-law {
+    background: var(--accent-purple);
+    border-radius: 2px;
+    box-shadow: 0 0 8px var(--accent-purple);
+}
+
+.screen-shake {
+    animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+}
 @keyframes shake {
 
     0%,
