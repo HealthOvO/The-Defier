@@ -60,7 +60,7 @@ class Battle {
 
         // 更新UI
         this.updateBattleUI();
-        this.bindCardEvents();
+        // this.bindCardEvents(); // Removed redundant call, updateHandUI handles this
     }
 
     // 更新战斗UI

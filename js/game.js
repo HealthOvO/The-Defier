@@ -287,6 +287,12 @@ class Game {
     
     // 开始指定关卡
     startRealm(realmLevel, isReplay = false) {
+        // 如果点击的是当前正在进行的关卡，且并未死亡，则直接返回地图
+        if (this.player.realm === realmLevel && this.map.nodes.length > 0 && this.player.currentHp > 0) {
+            this.showScreen('map-screen');
+            return;
+        }
+
         this.player.realm = realmLevel;
         this.player.floor = 0;
         this.player.isReplay = isReplay; // 标记是否为重玩
@@ -330,8 +336,13 @@ class Game {
         
         // 命环等级
         const ringName = this.player.fateRing.name;
-        document.getElementById('ring-level-display').textContent = ringName;
-        document.getElementById('char-imprint-badge').textContent = ringName;
+        // Fix: ID mismatch, HTML uses 'ring-level'
+        const ringLevelEl = document.getElementById('ring-level');
+        if (ringLevelEl) ringLevelEl.textContent = ringName;
+        
+        // Update badge text if it exists
+        const badgeEl = document.querySelector('.imprint-badge') || document.querySelector('.imprint-badge残次');
+        if (badgeEl) badgeEl.textContent = ringName;
         
         const loadedCount = this.player.fateRing.loadedLaws.length;
         const totalSlots = this.player.fateRing.slots;
