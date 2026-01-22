@@ -257,12 +257,9 @@ class Player {
                 const enemyPercent = target.currentHp / target.maxHp;
                 
                 // 交换百分比
-                // 玩家新生命值 = 玩家最大生命值 * 敌人当前百分比
                 const newPlayerHp = Math.floor(this.maxHp * enemyPercent);
-                // 敌人新生命值 = 敌人最大生命值 * 玩家当前百分比
                 const newEnemyHp = Math.floor(target.maxHp * playerPercent);
                 
-                // 应用变化
                 // 确保至少有1点血
                 const finalPlayerHp = Math.max(1, newPlayerHp);
                 const finalEnemyHp = Math.max(1, newEnemyHp);
@@ -275,6 +272,115 @@ class Player {
                 
                 Utils.showBattleLog(`逆转乾坤！生命比率互换！`);
                 return { type: 'swapHpPercent', playerDiff, enemyDiff, target };
+
+            // ========== 新增效果类型 ==========
+            
+            case 'damageAll':
+                // 对所有敌人造成伤害，返回让battle.js处理
+                return { type: 'damageAll', value, target: 'allEnemies' };
+
+            case 'removeBlock':
+                // 移除敌人护盾
+                return { type: 'removeBlock', target: effect.target };
+
+            case 'selfDamage':
+                // 对自身造成伤害
+                this.currentHp = Math.max(1, this.currentHp - value);
+                return { type: 'selfDamage', value };
+
+            case 'lifeSteal':
+                // 生命汲取 - 记录吸血比例，让battle.js在造成伤害后处理
+                return { type: 'lifeSteal', value: effect.value };
+
+            case 'executeDamage':
+                // 斩杀伤害：对低于阈值的敌人造成双倍伤害
+                if (!target) return { type: 'damage', value };
+                const threshold = effect.threshold || 0.3;
+                const hpPercent = target.currentHp / target.hp;
+                const finalDamage = hpPercent < threshold ? value * 2 : value;
+                // 应用力量加成
+                let execDmg = finalDamage;
+                if (this.buffs.strength) execDmg += this.buffs.strength;
+                if (this.fateRing.path === 'power') execDmg = Math.floor(execDmg * 1.15);
+                return { type: 'damage', value: execDmg, target: effect.target, isExecute: hpPercent < threshold };
+
+            case 'blockFromStrength':
+                // 基于力量获得护盾
+                const strength = this.buffs.strength || 0;
+                const multiplier = effect.multiplier || 3;
+                const minimum = effect.minimum || 5;
+                const blockAmount = Math.max(minimum, strength * multiplier);
+                this.addBlock(blockAmount);
+                return { type: 'block', value: blockAmount };
+
+            case 'percentDamage':
+                // 百分比伤害（基于敌人最大生命值）
+                if (!target) return { type: 'damage', value: 0 };
+                const percentDmg = Math.floor(target.hp * effect.value);
+                return { type: 'damage', value: percentDmg, target: effect.target };
+
+            case 'conditionalDraw':
+                // 条件抽牌（如低血量时抽牌）
+                const condition = effect.condition;
+                const condThreshold = effect.threshold || 0.2;
+                let conditionMet = false;
+                
+                if (condition === 'lowHp') {
+                    conditionMet = (this.currentHp / this.maxHp) <= condThreshold;
+                }
+                
+                if (conditionMet) {
+                    const drawVal = effect.drawValue || 0;
+                    const energyVal = effect.energyValue || 0;
+                    if (drawVal > 0) this.drawCards(drawVal);
+                    if (energyVal > 0) this.currentEnergy += energyVal;
+                    Utils.showBattleLog(`绝处逢生触发！抽${drawVal}牌，获得${energyVal}灵力！`);
+                    return { type: 'conditionalDraw', triggered: true, draw: drawVal, energy: energyVal };
+                } else {
+                    Utils.showBattleLog(`条件未满足，效果未触发`);
+                    return { type: 'conditionalDraw', triggered: false };
+                }
+
+            case 'bonusGold':
+                // 战斗结束后获得额外金币
+                const bonusMin = effect.min || 0;
+                const bonusMax = effect.max || 0;
+                const bonusAmount = Utils.random(bonusMin, bonusMax);
+                // 标记待领取的金币，将在战斗胜利时结算
+                this.pendingBonusGold = (this.pendingBonusGold || 0) + bonusAmount;
+                Utils.showBattleLog(`天降横财！战斗结束获得 ${bonusAmount} 灵石`);
+                return { type: 'bonusGold', value: bonusAmount };
+
+            case 'ringExp':
+                // 命环经验增加
+                const expValue = effect.value || 0;
+                this.fateRing.exp += expValue;
+                this.checkFateRingLevelUp();
+                Utils.showBattleLog(`顿悟！命环经验 +${expValue}`);
+                return { type: 'ringExp', value: expValue };
+
+            case 'reshuffleDiscard':
+                // 将弃牌堆洗回抽牌堆
+                if (this.discardPile.length > 0) {
+                    this.drawPile = Utils.shuffle([...this.drawPile, ...this.discardPile]);
+                    const reshuffled = this.discardPile.length;
+                    this.discardPile = [];
+                    Utils.showBattleLog(`时光倒流！${reshuffled}张牌洗回牌库`);
+                    return { type: 'reshuffleDiscard', value: reshuffled };
+                }
+                return { type: 'reshuffleDiscard', value: 0 };
+
+            case 'consumeAllEnergy':
+                // 消耗所有灵力造成伤害
+                const energyToConsume = this.currentEnergy;
+                const damagePerEnergy = effect.damagePerEnergy || 6;
+                const totalDamage = energyToConsume * damagePerEnergy;
+                this.currentEnergy = 0;
+                if (totalDamage > 0) {
+                    Utils.showBattleLog(`破釜沉舟！消耗${energyToConsume}灵力！`);
+                    return { type: 'damage', value: totalDamage, target: effect.target };
+                }
+                return { type: 'consumeAllEnergy', value: 0 };
 
             default:
                 return { type: 'unknown' };

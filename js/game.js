@@ -27,19 +27,19 @@ class Game {
         this.bindGlobalEvents();
         this.initCollection();
         this.initDynamicBackground();
-        
+
         // 尝试加载存档
         if (this.loadGame()) {
             // 如果加载成功且在地图界面，则显示地图
             if (this.player.currentHp > 0) {
-                 this.showScreen('map-screen');
+                this.showScreen('map-screen');
             } else {
-                 // 如果死亡，则重置并回主菜单
-                 this.clearSave();
-                 this.showScreen('main-menu');
+                // 如果死亡，则重置并回主菜单
+                this.clearSave();
+                this.showScreen('main-menu');
             }
         }
-        
+
         console.log('The Defier 2.1 初始化完成！');
     }
 
@@ -126,21 +126,21 @@ class Game {
 
         try {
             const gameState = JSON.parse(savedData);
-            
+
             // 恢复玩家状态
             Object.assign(this.player, gameState.player);
             // 恢复命环对象引用
             if (gameState.player.fateRing) {
                 this.player.fateRing = gameState.player.fateRing;
             }
-            
+
             // 恢复地图状态
             this.map.nodes = gameState.map.nodes;
             this.map.currentNodeIndex = gameState.map.currentNodeIndex;
             this.map.completedNodes = gameState.map.completedNodes;
-            
+
             this.unlockedRealms = gameState.unlockedRealms || [1];
-            
+
             console.log('游戏已加载');
             return true;
         } catch (e) {
@@ -252,20 +252,20 @@ class Game {
     initRealmSelect() {
         const container = document.getElementById('realm-select-container');
         if (!container) return;
-        
+
         container.innerHTML = '';
-        
+
         // 假设最高9重天
         for (let i = 1; i <= 9; i++) {
             const isUnlocked = this.unlockedRealms && this.unlockedRealms.includes(i);
             const isCompleted = isUnlocked && this.unlockedRealms.includes(i + 1); // 简单判断：解锁了下一关说明这关过了
-            
+
             const realmCard = document.createElement('div');
             realmCard.className = `realm-card ${isUnlocked ? '' : 'locked'}`;
-            
+
             const realmName = this.map.getRealmName(i);
             const env = this.map.getRealmEnvironment(i);
-            
+
             realmCard.innerHTML = `
                 <div class="realm-icon">${isUnlocked ? (isCompleted ? '🏆' : '⚔️') : '🔒'}</div>
                 <div class="realm-info">
@@ -274,17 +274,17 @@ class Game {
                     ${isCompleted ? '<span class="replay-tag">重复挑战 (收益减半)</span>' : ''}
                 </div>
             `;
-            
+
             if (isUnlocked) {
                 realmCard.addEventListener('click', () => {
                     this.startRealm(i, isCompleted);
                 });
             }
-            
+
             container.appendChild(realmCard);
         }
     }
-    
+
     // 开始指定关卡
     startRealm(realmLevel, isReplay = false) {
         // 如果点击的是当前正在进行的关卡，且并未死亡，则直接返回地图
@@ -296,7 +296,7 @@ class Game {
         this.player.realm = realmLevel;
         this.player.floor = 0;
         this.player.isReplay = isReplay; // 标记是否为重玩
-        
+
         this.map.generate(this.player.realm);
         this.showScreen('map-screen');
         this.autoSave();
@@ -333,17 +333,17 @@ class Game {
         document.getElementById('char-hp').textContent = this.player.maxHp;
         document.getElementById('char-energy').textContent = this.player.baseEnergy;
         document.getElementById('char-draw').textContent = this.player.drawCount;
-        
+
         // 命环等级
         const ringName = this.player.fateRing.name;
         // Fix: ID mismatch, HTML uses 'ring-level'
         const ringLevelEl = document.getElementById('ring-level');
         if (ringLevelEl) ringLevelEl.textContent = ringName;
-        
+
         // Update badge text if it exists
         const badgeEl = document.querySelector('.imprint-badge') || document.querySelector('.imprint-badge残次');
         if (badgeEl) badgeEl.textContent = ringName;
-        
+
         const loadedCount = this.player.fateRing.loadedLaws.length;
         const totalSlots = this.player.fateRing.slots;
         document.getElementById('loaded-laws').textContent = `${loadedCount}/${totalSlots}`;
@@ -359,7 +359,7 @@ class Game {
         this.runStartTime = Date.now();
         this.currentBattleNode = null;
         this.rewardCardSelected = false;
-        
+
         // 确保有解锁记录
         if (!this.unlockedRealms) this.unlockedRealms = [1];
 
@@ -456,15 +456,15 @@ class Game {
 
         // 命环获得经验
         let ringExp = enemies.reduce((sum, e) => sum + (e.ringExp || 10), 0);
-        
+
         // 重玩收益减半
         if (this.player.isReplay) {
-             ringExp = Math.floor(ringExp * 0.5);
+            ringExp = Math.floor(ringExp * 0.5);
         }
-        
+
         this.player.fateRing.exp += ringExp;
         this.player.checkFateRingLevelUp();
-        
+
         // 自动保存
         this.autoSave();
 
@@ -495,11 +495,11 @@ class Game {
                 stealEnemy = enemy;
             }
         }
-        
+
         // 重玩收益减半
         if (this.player.isReplay) {
-             totalGold = Math.floor(totalGold * 0.5);
-             // 重玩可以盗取，但不给额外经验奖励了
+            totalGold = Math.floor(totalGold * 0.5);
+            // 重玩可以盗取，但不给额外经验奖励了
         }
 
         this.player.gold += totalGold;
@@ -667,7 +667,7 @@ class Game {
 
         // 检查牌组大小
         this.achievementSystem.updateStat('minDeckClear', this.player.deck.length, 'min');
-        
+
         // 解锁下一重天
         if (!this.unlockedRealms) this.unlockedRealms = [1];
         if (!this.unlockedRealms.includes(this.player.realm + 1)) {
@@ -757,7 +757,7 @@ class Game {
         slotsContainer.innerHTML = '';
 
         if (ring.slots === 0) {
-             slotsContainer.innerHTML = '<div style="color: var(--text-muted); padding: 20px;">残缺印记无法承载法则，请寻找古玉觉醒...</div>';
+            slotsContainer.innerHTML = '<div style="color: var(--text-muted); padding: 20px;">残缺印记无法承载法则，请寻找古玉觉醒...</div>';
         }
 
         for (let i = 0; i < ring.slots; i++) {
@@ -797,6 +797,193 @@ class Game {
         document.querySelectorAll('.modal').forEach(modal => {
             modal.classList.remove('active');
         });
+    }
+
+    // ========== 商店功能 ==========
+
+    // 当前商店节点和商品
+    shopNode = null;
+    shopItems = [];
+
+    // 显示商店
+    showShop(node) {
+        this.shopNode = node;
+        this.shopItems = this.generateShopItems();
+
+        // 更新金币显示
+        document.getElementById('shop-gold-display').textContent = this.player.gold;
+
+        // 生成商品卡牌
+        this.renderShopCards();
+
+        this.showScreen('shop-screen');
+    }
+
+    // 生成商店商品
+    generateShopItems() {
+        const items = [];
+        const realm = this.player.realm;
+
+        // 生成3-5张卡牌
+        const cardCount = Utils.random(3, 5);
+        for (let i = 0; i < cardCount; i++) {
+            const card = getRandomCard();
+            const basePrice = this.getCardPrice(card);
+            items.push({
+                card: card,
+                price: basePrice,
+                sold: false
+            });
+        }
+
+        return items;
+    }
+
+    // 获取卡牌价格
+    getCardPrice(card) {
+        const rarityPrices = {
+            basic: 30,
+            common: 50,
+            uncommon: 80,
+            rare: 120,
+            epic: 180,
+            legendary: 250
+        };
+        return rarityPrices[card.rarity] || 50;
+    }
+
+    // 渲染商店卡牌
+    renderShopCards() {
+        const container = document.getElementById('shop-cards');
+        container.innerHTML = '';
+
+        this.shopItems.forEach((item, index) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'shop-card-wrapper';
+
+            const cardEl = Utils.createCardElement(item.card, index);
+            cardEl.classList.add(`rarity-${item.card.rarity || 'common'}`);
+            if (item.sold) {
+                cardEl.classList.add('sold');
+            }
+
+            const priceBtn = document.createElement('div');
+            priceBtn.className = `card-price ${this.player.gold < item.price ? 'cannot-afford' : ''}`;
+            priceBtn.innerHTML = `💰 ${item.price}`;
+
+            if (!item.sold && this.player.gold >= item.price) {
+                priceBtn.addEventListener('click', () => this.buyCard(index));
+            }
+
+            wrapper.appendChild(cardEl);
+            if (!item.sold) {
+                wrapper.appendChild(priceBtn);
+            } else {
+                const soldTag = document.createElement('div');
+                soldTag.className = 'card-price';
+                soldTag.textContent = '已售出';
+                soldTag.style.opacity = '0.5';
+                wrapper.appendChild(soldTag);
+            }
+
+            container.appendChild(wrapper);
+        });
+    }
+
+    // 购买卡牌
+    buyCard(index) {
+        const item = this.shopItems[index];
+        if (!item || item.sold) return;
+        if (this.player.gold < item.price) {
+            Utils.showBattleLog('灵石不足！');
+            return;
+        }
+
+        this.player.gold -= item.price;
+        this.player.addCardToDeck(item.card);
+        item.sold = true;
+
+        Utils.showBattleLog(`购买了 ${item.card.name}！`);
+
+        // 更新显示
+        document.getElementById('shop-gold-display').textContent = this.player.gold;
+        this.renderShopCards();
+    }
+
+    // 购买治疗
+    buyHeal() {
+        const cost = 50;
+        if (this.player.gold < cost) {
+            Utils.showBattleLog('灵石不足！');
+            return;
+        }
+
+        const healAmount = Math.floor(this.player.maxHp * 0.3);
+        this.player.gold -= cost;
+        this.player.heal(healAmount);
+
+        Utils.showBattleLog(`恢复了 ${healAmount} 点生命！`);
+        document.getElementById('shop-gold-display').textContent = this.player.gold;
+    }
+
+    // 显示移除卡牌界面
+    showRemoveCard() {
+        const cost = 75;
+        if (this.player.gold < cost) {
+            Utils.showBattleLog('灵石不足！');
+            return;
+        }
+
+        const container = document.getElementById('remove-card-list');
+        container.innerHTML = '';
+
+        this.player.deck.forEach((card, index) => {
+            const cardEl = Utils.createCardElement(card, index);
+            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
+            cardEl.addEventListener('click', () => this.removeCard(index, cost));
+            container.appendChild(cardEl);
+        });
+
+        document.getElementById('remove-card-modal').classList.add('active');
+    }
+
+    // 移除卡牌
+    removeCard(index, cost) {
+        if (this.player.gold < cost) return;
+
+        const card = this.player.deck[index];
+        this.player.deck.splice(index, 1);
+        this.player.gold -= cost;
+
+        Utils.showBattleLog(`移除了 ${card.name}！`);
+        document.getElementById('shop-gold-display').textContent = this.player.gold;
+        this.closeModal();
+    }
+
+    // 购买命环经验
+    buyRingExp() {
+        const cost = 100;
+        if (this.player.gold < cost) {
+            Utils.showBattleLog('灵石不足！');
+            return;
+        }
+
+        this.player.gold -= cost;
+        this.player.fateRing.exp += 30;
+        this.player.checkFateRingLevelUp();
+
+        Utils.showBattleLog('命环经验 +30！');
+        document.getElementById('shop-gold-display').textContent = this.player.gold;
+    }
+
+    // 关闭商店
+    closeShop() {
+        if (this.shopNode) {
+            this.map.completeNode(this.shopNode);
+            this.shopNode = null;
+        }
+        this.autoSave();
+        this.showScreen('map-screen');
     }
 }
 

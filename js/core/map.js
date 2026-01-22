@@ -158,7 +158,7 @@ class GameMap {
         document.getElementById('map-gold').textContent = player.gold;
         document.getElementById('map-floor').textContent = this.getRealmName(player.realm);
         document.getElementById('realm-title').textContent = this.getRealmName(player.realm);
-        
+
         // 更新环境法则显示
         const env = this.getRealmEnvironment(player.realm);
         const indicator = document.getElementById('realm-law-indicator');
@@ -226,14 +226,14 @@ class GameMap {
             bossInstance.isBoss = true;
             bossInstance.name = `【天劫】${bossInstance.name}`; // 标记为天劫BOSS
             bossInstance.ringExp = 50 + realm * 20; // BOSS给大量经验
-            
+
             // 天劫增强
             bossInstance.maxHp = Math.floor(bossInstance.maxHp * 1.2);
             bossInstance.currentHp = bossInstance.maxHp;
 
             this.game.currentBattleNode = node;
             this.game.startBattle([bossInstance], node);
-            
+
             Utils.showBattleLog(`天劫降临！击败【${bossInstance.name}】以破境！`);
         }
     }
@@ -307,14 +307,8 @@ class GameMap {
 
     // 打开商店
     openShop(node) {
-        // 简化处理：直接给一张卡牌选择
-        const card = getRandomCard('uncommon');
-        if (card) {
-            this.game.player.addCardToDeck(card);
-            Utils.showBattleLog(`商店赠送: ${card.name}`);
-        }
-        this.completeNode(node);
-        this.game.showScreen('map-screen');
+        this.game.currentBattleNode = node;
+        this.game.showShop(node);
     }
 
     // 营地休息

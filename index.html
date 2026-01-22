@@ -277,6 +277,70 @@
         </div>
     </div>
 
+    <!-- 商店界面 -->
+    <div id="shop-screen" class="screen">
+        <div class="screen-header">
+            <button class="back-btn" onclick="game.closeShop()">← 离开商店</button>
+            <h2>🏪 神秘商铺</h2>
+            <div class="shop-gold">
+                <span class="icon">💰</span>
+                <span id="shop-gold-display">0</span> 灵石
+            </div>
+        </div>
+        <div class="shop-container">
+            <div class="shop-section">
+                <h3>📜 卡牌出售</h3>
+                <div class="shop-cards" id="shop-cards">
+                    <!-- 动态生成 -->
+                </div>
+            </div>
+            <div class="shop-section">
+                <h3>✨ 特殊服务</h3>
+                <div class="shop-services">
+                    <div class="shop-service" id="heal-service">
+                        <div class="service-icon">💖</div>
+                        <div class="service-info">
+                            <div class="service-name">灵丹妙药</div>
+                            <div class="service-desc">恢复 30% 最大生命值</div>
+                        </div>
+                        <button class="buy-btn" onclick="game.buyHeal()">
+                            <span class="price">💰 50</span>
+                        </button>
+                    </div>
+                    <div class="shop-service" id="remove-service">
+                        <div class="service-icon">🗑️</div>
+                        <div class="service-info">
+                            <div class="service-name">净化仪式</div>
+                            <div class="service-desc">从牌组移除一张牌</div>
+                        </div>
+                        <button class="buy-btn" onclick="game.showRemoveCard()">
+                            <span class="price">💰 75</span>
+                        </button>
+                    </div>
+                    <div class="shop-service" id="upgrade-service">
+                        <div class="service-icon">⬆️</div>
+                        <div class="service-info">
+                            <div class="service-name">命环充能</div>
+                            <div class="service-desc">命环经验 +30</div>
+                        </div>
+                        <button class="buy-btn" onclick="game.buyRingExp()">
+                            <span class="price">💰 100</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 移除卡牌弹窗 -->
+    <div id="remove-card-modal" class="modal">
+        <div class="modal-content deck-view">
+            <button class="modal-close" onclick="game.closeModal()">×</button>
+            <h2>选择要移除的卡牌</h2>
+            <div class="deck-cards" id="remove-card-list"></div>
+        </div>
+    </div>
+
     <!-- 卡牌详情弹窗 -->
     <div id="card-modal" class="modal">
         <div class="modal-content card-detail">

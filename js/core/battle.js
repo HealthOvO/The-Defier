@@ -238,7 +238,7 @@ class Battle {
                         Utils.addShakeEffect(enemyEl);
                         Utils.showFloatingNumber(enemyEl, damage, 'damage');
                     }
-                    Utils.showBattleLog(`造成 ${damage} 点伤害！`);
+                    Utils.showBattleLog(`造成 ${damage} 点伤害！${result.isExecute ? '（斩杀加成！）' : ''}`);
 
                     // 检查生命汲取法则
                     const lifeDrainLaw = this.player.collectedLaws.find(l => l.id === 'lifeDrain');
@@ -249,12 +249,21 @@ class Battle {
                             Utils.showBattleLog(`生命汲取恢复 ${heal} 点生命`);
                         }
                     }
+
+                    // 处理待处理的生命汲取效果
+                    if (this.pendingLifeSteal && this.pendingLifeSteal > 0) {
+                        const stealHeal = Math.floor(damage * this.pendingLifeSteal);
+                        if (stealHeal > 0) {
+                            this.player.heal(stealHeal);
+                            Utils.showBattleLog(`吸血恢复 ${stealHeal} 点生命`);
+                        }
+                        this.pendingLifeSteal = 0;
+                    }
                 }
                 break;
 
             case 'penetrate':
                 if (target) {
-                    // 穿透伤害无视护盾
                     const oldBlock = target.block;
                     target.block = 0;
                     target.currentHp -= result.value;
@@ -270,7 +279,6 @@ class Battle {
 
             case 'execute':
                 if (target) {
-                    // 斩杀 - 造成等于敌人已损失生命的伤害
                     const lostHp = target.hp - target.currentHp;
                     const damage = this.dealDamageToEnemy(target, lostHp);
                     if (enemyEl) {
@@ -309,6 +317,59 @@ class Battle {
                     }
                     Utils.showBattleLog(`敌人获得 ${result.buffType} 效果`);
                 }
+                break;
+
+            // ========== 新增效果类型处理 ==========
+
+            case 'damageAll':
+                // 对所有敌人造成伤害
+                for (let i = 0; i < this.enemies.length; i++) {
+                    const enemy = this.enemies[i];
+                    if (enemy.currentHp <= 0) continue;
+
+                    const dmg = this.dealDamageToEnemy(enemy, result.value);
+                    const el = document.querySelector(`.enemy[data-index="${i}"]`);
+                    if (el) {
+                        Utils.addShakeEffect(el);
+                        Utils.showFloatingNumber(el, dmg, 'damage');
+                    }
+                }
+                Utils.showBattleLog(`横扫千军！对所有敌人造成 ${result.value} 点伤害！`);
+                break;
+
+            case 'removeBlock':
+                if (target && target.block > 0) {
+                    const removedBlock = target.block;
+                    target.block = 0;
+                    Utils.showBattleLog(`破甲！移除敌人 ${removedBlock} 点护盾！`);
+                }
+                break;
+
+            case 'selfDamage':
+                const playerEl = document.querySelector('.player-avatar');
+                if (playerEl) {
+                    Utils.addShakeEffect(playerEl);
+                    Utils.showFloatingNumber(playerEl, result.value, 'damage');
+                }
+                Utils.showBattleLog(`自伤 ${result.value} 点！`);
+                break;
+
+            case 'lifeSteal':
+                // 记录生命汲取比例，等待下次伤害结算
+                this.pendingLifeSteal = result.value;
+                break;
+
+            case 'conditionalDraw':
+                if (result.triggered) {
+                    Utils.showBattleLog(`条件触发！抽 ${result.draw} 牌，获得 ${result.energy} 灵力！`);
+                }
+                break;
+
+            case 'bonusGold':
+            case 'ringExp':
+            case 'reshuffleDiscard':
+            case 'swapHpPercent':
+                // 这些效果已在 player.js 中处理完毕
                 break;
         }
 
