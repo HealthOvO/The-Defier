@@ -572,6 +572,30 @@ class Game {
 
         // 更新成就 - 收集新卡牌
         this.achievementSystem.updateStat('uniqueCards', card.id);
+
+        // 启用继续按钮
+        const continueBtn = document.getElementById('continue-reward-btn');
+        if (continueBtn) {
+            continueBtn.disabled = false;
+            continueBtn.textContent = '继续前进';
+        }
+    }
+
+    // 跳过奖励卡牌（扣除灵石）
+    skipRewardCard() {
+        const cost = 20;
+        if (this.player.gold >= cost) {
+            this.player.gold -= cost;
+            Utils.showBattleLog(`跳过卡牌奖励，扣除 ${cost} 灵石`);
+        }
+        this.rewardCardSelected = true;
+
+        // 启用继续按钮
+        const continueBtn = document.getElementById('continue-reward-btn');
+        if (continueBtn) {
+            continueBtn.disabled = false;
+            continueBtn.textContent = '继续前进';
+        }
     }
 
     // 尝试盗取法则
@@ -627,6 +651,176 @@ class Game {
         }
 
         this.showScreen('map-screen');
+    }
+
+    // 显示事件弹窗
+    showEventModal(event, node) {
+        this.currentBattleNode = node;
+        this.currentEvent = event;
+
+        const modal = document.getElementById('event-modal');
+        document.getElementById('event-icon').textContent = event.icon || '❓';
+        document.getElementById('event-title').textContent = event.name || '神秘事件';
+
+        // 显示描述或对话
+        const descEl = document.getElementById('event-desc');
+        if (event.speaker) {
+            descEl.innerHTML = `<span style="color: var(--accent-gold)">${event.speaker.icon}</span> ${event.speaker.dialogue}`;
+        } else {
+            descEl.textContent = event.description || '发生了一些事情...';
+        }
+
+        // 生成选项
+        const choicesEl = document.getElementById('event-choices');
+        choicesEl.innerHTML = '';
+
+        event.choices.forEach((choice, index) => {
+            // 检查条件
+            let canChoose = true;
+            let conditionText = '';
+
+            if (choice.condition) {
+                switch (choice.condition.type) {
+                    case 'hp':
+                        canChoose = this.player.currentHp >= choice.condition.min;
+                        if (!canChoose) conditionText = `(需要 ${choice.condition.min} HP)`;
+                        break;
+                    case 'gold':
+                        canChoose = this.player.gold >= choice.condition.min;
+                        if (!canChoose) conditionText = `(需要 ${choice.condition.min} 灵石)`;
+                        break;
+                    case 'deckSize':
+                        canChoose = this.player.deck.length >= choice.condition.min;
+                        if (!canChoose) conditionText = `(需要 ${choice.condition.min} 张卡牌)`;
+                        break;
+                }
+            }
+
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            if (!canChoose) btn.classList.add('disabled');
+            btn.innerHTML = `
+                <div>${choice.icon || '▶'} ${choice.text} ${conditionText}</div>
+                <div class="choice-effect">${choice.result || ''}</div>
+            `;
+
+            if (canChoose) {
+                btn.onclick = () => this.selectEventChoice(index);
+            } else {
+                btn.style.opacity = '0.5';
+                btn.style.cursor = 'not-allowed';
+            }
+
+            choicesEl.appendChild(btn);
+        });
+
+        modal.classList.add('active');
+    }
+
+    // 选择事件选项
+    selectEventChoice(choiceIndex) {
+        const choice = this.currentEvent.choices[choiceIndex];
+        if (!choice) return;
+
+        // 关闭弹窗
+        document.getElementById('event-modal').classList.remove('active');
+
+        // 执行效果
+        if (choice.effects && choice.effects.length > 0) {
+            choice.effects.forEach(effect => this.executeEventEffect(effect));
+        }
+
+        // 完成事件
+        this.onEventComplete();
+    }
+
+    // 执行事件效果
+    executeEventEffect(effect) {
+        switch (effect.type) {
+            case 'gold':
+                this.player.gold += effect.value;
+                Utils.showBattleLog(`灵石 ${effect.value > 0 ? '+' : ''}${effect.value}`);
+                break;
+
+            case 'randomGold':
+                const goldAmount = Math.floor(Math.random() * (effect.max - effect.min + 1)) + effect.min;
+                this.player.gold += goldAmount;
+                Utils.showBattleLog(`获得 ${goldAmount} 灵石`);
+                break;
+
+            case 'heal':
+                this.player.currentHp = Math.min(this.player.maxHp, this.player.currentHp + effect.value);
+                Utils.showBattleLog(`恢复 ${effect.value} HP`);
+                break;
+
+            case 'damage':
+                this.player.currentHp -= effect.value;
+                Utils.showBattleLog(`失去 ${effect.value} HP`);
+                break;
+
+            case 'ringExp':
+                this.player.fateRing.exp += effect.value;
+                this.player.checkFateRingLevelUp();
+                Utils.showBattleLog(`命环经验 +${effect.value}`);
+                break;
+
+            case 'card':
+                let card = null;
+                if (effect.cardId && CARDS[effect.cardId]) {
+                    card = { ...CARDS[effect.cardId] };
+                } else if (effect.rarity) {
+                    card = getRandomCard(effect.rarity);
+                }
+                if (card) {
+                    this.player.addCardToDeck(card);
+                    Utils.showBattleLog(`获得卡牌: ${card.name}`);
+                }
+                break;
+
+            case 'maxHp':
+                this.player.maxHp += effect.value;
+                if (effect.value > 0) {
+                    this.player.currentHp += effect.value;
+                }
+                Utils.showBattleLog(`最大HP ${effect.value > 0 ? '+' : ''}${effect.value}`);
+                break;
+
+            case 'permaBuff':
+                if (!this.player.permBuffs) this.player.permBuffs = {};
+                this.player.permBuffs[effect.stat] = (this.player.permBuffs[effect.stat] || 0) + effect.value;
+                Utils.showBattleLog(`永久${effect.stat === 'strength' ? '力量' : '属性'} ${effect.value > 0 ? '+' : ''}${effect.value}`);
+                break;
+
+            case 'law':
+                if (effect.random) {
+                    const lawKeys = Object.keys(LAWS);
+                    const randomLaw = LAWS[lawKeys[Math.floor(Math.random() * lawKeys.length)]];
+                    if (randomLaw && this.player.collectLaw({ ...randomLaw })) {
+                        Utils.showBattleLog(`获得法则: ${randomLaw.name}`);
+                    }
+                }
+                break;
+
+            case 'random':
+                if (effect.options) {
+                    const roll = Math.random();
+                    let cumulative = 0;
+                    for (const option of effect.options) {
+                        cumulative += option.chance;
+                        if (roll < cumulative) {
+                            if (option.type !== 'nothing') {
+                                this.executeEventEffect(option);
+                            }
+                            break;
+                        }
+                    }
+                }
+                break;
+
+            default:
+                // 未处理的效果类型
+                console.log('未处理的事件效果:', effect.type);
+        }
     }
 
     // 事件完成
@@ -716,32 +910,72 @@ class Game {
     showDeckModal(type) {
         const modal = document.getElementById('deck-modal');
         const container = document.getElementById('deck-view-cards');
+
+        // Let's look at index.html content again.
+        // I only saw removal modal. I did NOT see deck-modal in the snippets I viewed.
+        // Let me verify index.html around line 300-400.
+
         const title = modal.querySelector('h2');
 
         let cards = [];
         switch (type) {
             case 'deck':
                 cards = this.player.deck;
-                title.textContent = '当前牌组';
+                title.textContent = `当前牌组 (${cards.length})`;
                 break;
             case 'draw':
                 cards = this.player.drawPile;
-                title.textContent = '抽牌堆';
+                title.textContent = `抽牌堆 (${cards.length})`;
                 break;
             case 'discard':
                 cards = this.player.discardPile;
-                title.textContent = '弃牌堆';
+                title.textContent = `弃牌堆 (${cards.length})`;
                 break;
         }
 
+        // 统计数量
+        const cardCounts = {};
+        const uniqueCards = [];
+
+        cards.forEach(card => {
+            if (!cardCounts[card.id]) {
+                cardCounts[card.id] = {
+                    count: 0,
+                    card: card
+                };
+                uniqueCards.push(card);
+            }
+            cardCounts[card.id].count++;
+        });
+
+        // 排序：稀有度 > 名称
+        const rarityOrder = { legendary: 5, epic: 4, rare: 3, uncommon: 2, common: 1, basic: 0 };
+        uniqueCards.sort((a, b) => {
+            const rA = rarityOrder[a.rarity || 'common'];
+            const rB = rarityOrder[b.rarity || 'common'];
+            if (rA !== rB) return rB - rA;
+            return a.id.localeCompare(b.id);
+        });
+
         container.innerHTML = '';
-        cards.forEach((card, index) => {
+        uniqueCards.forEach((card, index) => {
+            const count = cardCounts[card.id].count;
             const cardEl = Utils.createCardElement(card, index);
             cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
+
+            // 如果数量大于1，添加徽章
+            if (count > 1) {
+                const badge = document.createElement('div');
+                badge.className = 'card-count-badge';
+                badge.textContent = `x${count}`;
+                cardEl.appendChild(badge);
+            }
+
             container.appendChild(cardEl);
         });
 
         modal.classList.add('active');
+
     }
 
     // 显示命环

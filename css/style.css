@@ -2542,3 +2542,100 @@ body {
 .buy-btn .price {
     font-weight: 600;
 }
+
+/* ===================================
+   Event Modal
+   =================================== */
+.event-view {
+    max-width: 500px;
+    text-align: center;
+}
+
+.event-header {
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, rgba(156, 39, 176, 0.3) 0%, rgba(0, 0, 0, 0.5) 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.event-view .event-icon {
+    font-size: 3rem;
+    margin-bottom: var(--spacing-sm);
+}
+
+.event-view h2 {
+    font-family: var(--font-display);
+    color: var(--accent-gold);
+    font-size: 1.6rem;
+}
+
+.event-body {
+    padding: var(--spacing-lg);
+}
+
+.event-desc {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-lg);
+}
+
+.event-choices {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.event-choice {
+    padding: var(--spacing-md);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-align: left;
+}
+
+.event-choice:hover {
+    background: rgba(157, 78, 221, 0.2);
+    border-color: var(--accent-purple);
+    transform: translateX(5px);
+}
+
+.event-choice .choice-effect {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* ===================================
+   Reward Actions
+   =================================== */
+.reward-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.skip-reward-btn {
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    font-size: 0.9rem;
+}
+
+.skip-reward-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: var(--accent-gold);
+    color: var(--text-primary);
+}
+
+.continue-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

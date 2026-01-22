@@ -240,47 +240,23 @@ class GameMap {
 
     // 触发事件
     triggerEvent(node) {
-        // 随机事件
-        const events = [
-            {
-                title: '神秘宝箱',
-                description: '你发现了一个神秘的宝箱...',
-                choices: [
-                    { text: '打开它', effect: () => this.eventReward('chest') },
-                    { text: '离开', effect: () => this.completeNode(node) }
-                ]
-            },
-            {
-                title: '受伤的修士',
-                description: '一位受伤的修士向你求助...',
-                choices: [
-                    { text: '治疗他 (-10 HP)', effect: () => this.eventHealNpc(node) },
-                    { text: '无视', effect: () => this.completeNode(node) }
-                ]
-            },
-            {
-                title: '古老祭坛',
-                description: '一座古老的祭坛散发着神秘的光芒...',
-                choices: [
-                    { text: '献祭生命 (-10 HP, +1 法则经验)', effect: () => this.eventAltar(node) },
-                    { text: '离开', effect: () => this.completeNode(node) }
-                ]
-            }
-        ];
-
-        const event = events[Math.floor(Math.random() * events.length)];
-        this.showEventModal(event, node);
+        // 使用events.js的事件数据
+        const event = getRandomEvent();
+        if (event) {
+            this.game.showEventModal(event, node);
+        } else {
+            // 后备处理
+            this.game.player.gold += 30;
+            this.game.player.fateRing.exp += 15;
+            Utils.showBattleLog('遭遇神秘事件 - 获得 30 灵石');
+            this.completeNode(node);
+            this.game.showScreen('map-screen');
+        }
     }
 
-    // 显示事件弹窗
+    // 显示事件弹窗 - 由game.js处理
     showEventModal(event, node) {
-        this.game.currentBattleNode = node; // 保存节点
-        // 简化处理：直接给予奖励
-        this.game.player.gold += 30;
-        this.game.player.fateRing.exp += 15; // 事件也给命环经验
-        Utils.showBattleLog(`${event.title} - 获得 30 灵石, 命环经验+15`);
-        this.completeNode(node);
-        this.game.showScreen('map-screen');
+        this.game.showEventModal(event, node);
     }
 
     // 事件奖励

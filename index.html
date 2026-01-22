@@ -247,7 +247,11 @@
                     <span id="reward-gold">+50 灵石</span>
                 </div>
             </div>
-            <button class="continue-btn" onclick="game.continueAfterReward()">继续前进</button>
+            <div class="reward-actions">
+                <button class="continue-btn" id="continue-reward-btn" onclick="game.continueAfterReward()"
+                    disabled>请先选择一张卡牌</button>
+                <button class="skip-reward-btn" onclick="game.skipRewardCard()">跳过卡牌 (扣20灵石)</button>
+            </div>
         </div>
     </div>
 
@@ -327,6 +331,22 @@
                             <span class="price">💰 100</span>
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 事件弹窗 -->
+    <div id="event-modal" class="modal">
+        <div class="modal-content event-view">
+            <div class="event-header">
+                <div class="event-icon" id="event-icon">❓</div>
+                <h2 id="event-title">神秘事件</h2>
+            </div>
+            <div class="event-body">
+                <p class="event-desc" id="event-desc">发生了一些事情...</p>
+                <div class="event-choices" id="event-choices">
+                    <!-- 动态生成选项 -->
                 </div>
             </div>
         </div>
