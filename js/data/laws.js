@@ -164,41 +164,45 @@ const REALM_LAWS = {
 // 命环信息
 const FATE_RING = {
     levels: [
-        { level: 1, name: '一阶', slots: 1, expRequired: 0 },
-        { level: 2, name: '二阶', slots: 2, expRequired: 100 },
-        { level: 3, name: '三阶', slots: 3, expRequired: 300 },
-        { level: 4, name: '四阶', slots: 4, expRequired: 600 }
+        { level: 0, name: '残缺印记', slots: 0, expRequired: 0, desc: '无法承载完整法则' },
+        { level: 1, name: '一阶·觉醒', slots: 1, expRequired: 100, desc: '初识天机，可纳一法' },
+        { level: 2, name: '二阶·通玄', slots: 2, expRequired: 300, desc: '双法并济，生生不息' },
+        { level: 3, name: '三阶·神变', slots: 3, expRequired: 600, desc: '三元归一，神通自成' },
+        { level: 4, name: '四阶·逆命', slots: 4, expRequired: 1000, desc: '四象封天，逆乱阴阳' }
     ],
 
     // 命环进化路径
     paths: {
-        basic: {
-            name: '基础命环',
-            description: '最初的命环，蕴含无限可能'
+        crippled: {
+            name: '残缺印记',
+            description: '天道所弃，命数残缺。灵力恢复减半，无法盗取法则。',
+            bonus: { type: 'energyMalus', value: -1 }
         },
-        power: {
-            name: '力量之环',
-            description: '攻击力+15%',
-            bonus: { type: 'damageMultiplier', value: 1.15 },
-            requires: ['basic']
+        awakened: {
+            name: '逆命之环',
+            description: '古玉重塑，逆天改命。解锁法则盗取能力。',
+            bonus: { type: 'stealUnlock', value: true }
         },
-        agility: {
-            name: '敏捷之环',
-            description: '每回合额外抽1张牌',
-            bonus: { type: 'extraDraw', value: 1 },
-            requires: ['basic']
+        thunder_god: {
+            name: '雷神环',
+            description: '雷法大成，万雷听令。雷属性伤害+50%。',
+            bonus: { type: 'elementBonus', element: 'thunder', value: 0.5 },
+            requires: ['awakened'],
+            elementReq: 'thunder'
         },
-        wisdom: {
-            name: '智慧之环',
-            description: '每回合额外1点灵力',
-            bonus: { type: 'extraEnergy', value: 1 },
-            requires: ['basic']
+        void_lord: {
+            name: '虚空环',
+            description: '身化虚空，万法不沾。闪避率+20%。',
+            bonus: { type: 'dodgeBonus', value: 0.2 },
+            requires: ['awakened'],
+            elementReq: 'void'
         },
-        defiance: {
-            name: '逆天之环',
-            description: '所有效果+25%，盗取几率翻倍',
-            bonus: { type: 'allBonus', value: 1.25 },
-            requires: ['power', 'agility', 'wisdom']
+        sword_immortal: {
+            name: '剑仙环',
+            description: '一剑破万法。剑意伤害+40%，自带穿透。',
+            bonus: { type: 'damageBonus', category: 'sword', value: 0.4 },
+            requires: ['awakened'],
+            elementReq: 'sword'
         }
     }
 };

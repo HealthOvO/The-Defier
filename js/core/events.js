@@ -80,6 +80,12 @@ class EventSystem {
         switch (condition.type) {
             case 'hp':
                 return player.currentHp >= condition.min;
+            case 'awakenRing':
+                if (player.awakenFateRing()) {
+                    return '逆命之环已觉醒！解锁法则盗取！';
+                }
+                return '命环已觉醒';
+
             case 'gold':
                 return player.gold >= condition.min;
             case 'deckSize':
@@ -127,6 +133,12 @@ class EventSystem {
         const player = this.game.player;
 
         switch (effect.type) {
+            case 'awakenRing':
+                if (player.awakenFateRing()) {
+                    return '逆命之环已觉醒！解锁法则盗取！';
+                }
+                return '命环已觉醒';
+
             case 'gold':
                 if (effect.percent) {
                     const amount = Math.floor(player.gold * (effect.percent / 100));

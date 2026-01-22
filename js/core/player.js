@@ -31,12 +31,12 @@ class Player {
 
         // 命环
         this.fateRing = {
-            level: 1,
-            name: '一阶',
+            level: 0,
+            name: '残缺印记',
             exp: 0,
-            slots: 1,
+            slots: 0,
             loadedLaws: [],
-            path: 'basic'
+            path: 'crippled'
         };
 
         // 收集的法则
@@ -380,13 +380,18 @@ class Player {
 
     // 检查命环升级
     checkFateRingLevelUp() {
+        // 残缺印记无法通过经验升级，必须觉醒
+        if (this.fateRing.level === 0) return false;
+
         const levels = FATE_RING.levels;
-        for (let i = levels.length - 1; i >= 0; i--) {
+        // 注意 levels[0] 是 level 0, levels[1] 是 level 1
+        for (let i = levels.length - 1; i >= 1; i--) {
             if (this.fateRing.exp >= levels[i].expRequired) {
                 if (this.fateRing.level < levels[i].level) {
                     this.fateRing.level = levels[i].level;
                     this.fateRing.name = levels[i].name;
                     this.fateRing.slots = levels[i].slots;
+                    Utils.showBattleLog(`命环突破！晋升为【${this.fateRing.name}】`);
                     return true;
                 }
                 break;

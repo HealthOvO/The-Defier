@@ -123,15 +123,6 @@ class GameMap {
         this.updateStatusBar();
     }
 
-    // 更新状态栏
-    updateStatusBar() {
-        const player = this.game.player;
-        document.getElementById('map-hp').textContent = `${player.currentHp}/${player.maxHp}`;
-        document.getElementById('map-gold').textContent = player.gold;
-        document.getElementById('map-floor').textContent = this.getRealmName(player.realm);
-        document.getElementById('realm-title').textContent = this.getRealmName(player.realm);
-    }
-
     // 获取天域名称
     getRealmName(realm) {
         const names = {
@@ -146,6 +137,34 @@ class GameMap {
             9: '第九重·飞升天'
         };
         return names[realm] || `第${realm}重天`;
+    }
+
+    // 获取天域环境法则
+    getRealmEnvironment(realm) {
+        const envs = {
+            1: { name: '灵气稀薄', desc: '灵力恢复-1', effect: 'energy_malus' },
+            2: { name: '雷霆淬体', desc: '每回合受到3点雷属性伤害', effect: 'thunder_damage' },
+            3: { name: '重力压制', desc: '抽牌数-1', effect: 'draw_malus' },
+            4: { name: '丹火焚心', desc: '回合结束时燃烧手牌', effect: 'burn_hand' },
+            5: { name: '心魔滋生', desc: '敌人造成伤害+50%', effect: 'enemy_buff' }
+        };
+        return envs[realm] || { name: '平稳', desc: '无特殊效果', effect: 'none' };
+    }
+
+    // 更新状态栏
+    updateStatusBar() {
+        const player = this.game.player;
+        document.getElementById('map-hp').textContent = `${player.currentHp}/${player.maxHp}`;
+        document.getElementById('map-gold').textContent = player.gold;
+        document.getElementById('map-floor').textContent = this.getRealmName(player.realm);
+        document.getElementById('realm-title').textContent = this.getRealmName(player.realm);
+        
+        // 更新环境法则显示
+        const env = this.getRealmEnvironment(player.realm);
+        const indicator = document.getElementById('realm-law-indicator');
+        if (indicator) {
+            indicator.querySelector('.law-text').textContent = `当前法则：${env.name} (${env.desc})`;
+        }
     }
 
     // 节点点击
@@ -205,9 +224,17 @@ class GameMap {
         if (boss) {
             const bossInstance = JSON.parse(JSON.stringify(boss));
             bossInstance.isBoss = true;
+            bossInstance.name = `【天劫】${bossInstance.name}`; // 标记为天劫BOSS
             bossInstance.ringExp = 50 + realm * 20; // BOSS给大量经验
+            
+            // 天劫增强
+            bossInstance.maxHp = Math.floor(bossInstance.maxHp * 1.2);
+            bossInstance.currentHp = bossInstance.maxHp;
+
             this.game.currentBattleNode = node;
             this.game.startBattle([bossInstance], node);
+            
+            Utils.showBattleLog(`天劫降临！击败【${bossInstance.name}】以破境！`);
         }
     }
 

@@ -5,17 +5,18 @@
 
 /* CSS Variables */
 :root {
-    /* 主色调 */
-    --primary: #1a237e;
-    --primary-light: #3949ab;
-    --primary-dark: #0d1421;
+    /* 主色调 - 水墨与暗金 */
+    --primary: #0f1423;
+    --primary-light: #1c2541;
+    --primary-dark: #0b0f1a;
 
-    /* 强调色 */
-    --accent-gold: #ffd700;
-    --accent-purple: #9c27b0;
-    --accent-cyan: #00bcd4;
-    --accent-red: #f44336;
-    --accent-green: #4caf50;
+    /* 强调色 - 流光金与逆命紫 */
+    --accent-gold: #d4af37;
+    --accent-gold-bright: #f9e295;
+    --accent-purple: #7b2cbf;
+    --accent-cyan: #48cae4;
+    --accent-red: #9b2226;
+    --accent-green: #2d6a4f;
 
     /* 卡牌颜色 */
     --card-attack: #e53935;
@@ -24,10 +25,11 @@
     --card-chance: #ffc107;
     --card-energy: #78909c;
 
-    /* 背景 */
-    --bg-dark: #0a0e1a;
-    --bg-medium: #121829;
-    --bg-light: #1a2235;
+    /* 背景 - 水墨黑 */
+    --bg-dark: #0a0e14;
+    --bg-medium: #141a26;
+    --bg-light: #1f2937;
+    --bg-ink: rgba(0, 0, 0, 0.85);
 
     /* 文字 */
     --text-primary: #ffffff;
@@ -1943,4 +1945,106 @@ body {
 
 .stat-row:last-child {
     border-bottom: none;
+}
+/* ===================================
+   New Fate Ring Visual (Battle Background)
+   =================================== */
+.battle-bg-ring {
+    position: absolute;
+    bottom: -100px;
+    left: -100px;
+    width: 600px;
+    height: 600px;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.6;
+    transform: rotateX(60deg) rotateZ(0deg);
+    transform-style: preserve-3d;
+    transition: all 1s ease;
+}
+
+.ring-layer {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: 2px solid var(--accent-gold);
+    box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
+}
+
+.layer-1 {
+    width: 300px;
+    height: 300px;
+    border-width: 15px;
+    border-style: double;
+    border-color: rgba(212, 175, 55, 0.3);
+    animation: ringRotate1 60s linear infinite;
+}
+
+.layer-2 {
+    width: 450px;
+    height: 450px;
+    border-width: 2px;
+    border-style: dashed;
+    border-color: rgba(123, 44, 191, 0.4);
+    animation: ringRotate2 40s linear infinite reverse;
+}
+
+.layer-3 {
+    width: 580px;
+    height: 580px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.1);
+    animation: ringRotate1 100s linear infinite;
+}
+
+.ring-center-gem {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 50px;
+    height: 50px;
+    background: radial-gradient(circle, var(--accent-gold-bright) 0%, var(--accent-gold) 60%, transparent 100%);
+    border-radius: 50%;
+    box-shadow: 0 0 50px var(--accent-gold);
+    animation: gemPulse 4s ease-in-out infinite;
+}
+
+@keyframes ringRotate1 {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes ringRotate2 {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes gemPulse {
+    0%, 100% { opacity: 0.8; transform: translate(-50%, -50%) scale(1); }
+    50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+}
+
+/* Realm Law Indicator */
+.realm-law-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-lg);
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid var(--accent-red);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--spacing-lg);
+    box-shadow: 0 0 15px rgba(155, 34, 38, 0.3);
+}
+
+.law-icon {
+    font-size: 1.5rem;
+}
+
+.law-text {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
 }

@@ -583,6 +583,10 @@ class Game {
         const slotsContainer = document.getElementById('loaded-laws-list');
         slotsContainer.innerHTML = '';
 
+        if (ring.slots === 0) {
+             slotsContainer.innerHTML = '<div style="color: var(--text-muted); padding: 20px;">残缺印记无法承载法则，请寻找古玉觉醒...</div>';
+        }
+
         for (let i = 0; i < ring.slots; i++) {
             const lawId = ring.loadedLaws[i];
             const law = lawId ? LAWS[lawId] : null;
