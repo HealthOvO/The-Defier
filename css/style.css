@@ -2658,3 +2658,11 @@ body {
     border: 2px solid #fff;
     pointer-events: none;
 }
+
+/* ===================================
+   High Priority UI Overlays
+   =================================== */
+#battle-log {
+    z-index: 2000 !important;
+    /* Ensure it shows above modals */
+}

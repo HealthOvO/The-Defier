@@ -587,14 +587,13 @@ class Game {
         if (this.player.gold >= cost) {
             this.player.gold -= cost;
             Utils.showBattleLog(`跳过卡牌奖励，扣除 ${cost} 灵石`);
-        }
-        this.rewardCardSelected = true;
 
-        // 启用继续按钮
-        const continueBtn = document.getElementById('continue-reward-btn');
-        if (continueBtn) {
-            continueBtn.disabled = false;
-            continueBtn.textContent = '继续前进';
+            // 跳过视为已选择，且直接继续
+            this.rewardCardSelected = true;
+            this.continueAfterReward();
+        } else {
+            Utils.showBattleLog(`灵石不足！需要 ${cost} 灵石才能跳过`);
+            // 不启用继续按钮
         }
     }
 
