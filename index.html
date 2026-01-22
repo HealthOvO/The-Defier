@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Defier - 逆命者</title>
+    <meta name="description" content="一款基于东方仙侠的卡牌Roguelike游戏，逆天改命，盗取法则，成为真正的逆命者！">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@300;400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/animations.css">
+</head>
+
+<body>
+    <!-- 主菜单 -->
+    <div id="main-menu" class="screen active">
+        <div class="menu-bg"></div>
+        <div class="menu-content">
+            <div class="game-logo">
+                <h1 class="title-cn">逆命者</h1>
+                <h2 class="title-en">THE DEFIER</h2>
+                <p class="tagline">天命印记定终生？偏要逆命而行。</p>
+            </div>
+            <div class="menu-buttons">
+                <button class="menu-btn primary" onclick="game.startNewGame()">
+                    <span class="btn-icon">⚔️</span>
+                    <span class="btn-text">开始游戏</span>
+                </button>
+                <button class="menu-btn" onclick="game.showScreen('character-select')">
+                    <span class="btn-icon">🧙</span>
+                    <span class="btn-text">角色信息</span>
+                </button>
+                <button class="menu-btn" onclick="game.showScreen('collection')">
+                    <span class="btn-icon">📚</span>
+                    <span class="btn-text">法则图鉴</span>
+                </button>
+                <button class="menu-btn" onclick="game.showAchievements()">
+                    <span class="btn-icon">🏆</span>
+                    <span class="btn-text">成就</span>
+                </button>
+                <button class="menu-btn" onclick="game.showSettings()">
+                    <span class="btn-icon">⚙️</span>
+                    <span class="btn-text">设置</span>
+                </button>
+            </div>
+            <div class="version-info">v2.0.0 | 基于《我的命环能进化》</div>
+        </div>
+    </div>
+
+    <!-- 角色选择/信息界面 -->
+    <div id="character-select" class="screen">
+        <div class="screen-header">
+            <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
+            <h2>角色信息</h2>
+        </div>
+        <div class="character-panel">
+            <div class="character-avatar">
+                <div class="avatar-ring"></div>
+                <div class="avatar-inner">林风</div>
+            </div>
+            <div class="character-info">
+                <h3>林风 · 逆命者</h3>
+                <div class="imprint-badge残次">残次印记</div>
+                <p class="character-desc">身负最残次印记，却获得神秘古玉，拥有盗取法则的能力。</p>
+                <div class="character-stats">
+                    <div class="stat">
+                        <span class="stat-icon">❤️</span>
+                        <span class="stat-name">生命</span>
+                        <span class="stat-value" id="char-hp">80</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-icon">⚡</span>
+                        <span class="stat-name">灵力</span>
+                        <span class="stat-value" id="char-energy">3</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-icon">🎴</span>
+                        <span class="stat-name">抽牌</span>
+                        <span class="stat-value" id="char-draw">5</span>
+                    </div>
+                </div>
+            </div>
+            <div class="fate-ring-display">
+                <h4>命环状态</h4>
+                <div class="ring-visual">
+                    <div class="ring-core"></div>
+                    <div class="ring-orbit orbit-1"></div>
+                    <div class="ring-orbit orbit-2"></div>
+                </div>
+                <p>命环等级: <span id="ring-level">一阶</span></p>
+                <p>已装载法则: <span id="loaded-laws">0/3</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 法则图鉴 -->
+    <div id="collection" class="screen">
+        <div class="screen-header">
+            <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
+            <h2>法则图鉴</h2>
+        </div>
+        <div class="collection-grid" id="collection-grid">
+            <!-- 动态生成 -->
+        </div>
+    </div>
+
+    <!-- 地图选择界面 -->
+    <div id="map-screen" class="screen">
+        <div class="map-header">
+            <div class="player-status-bar">
+                <div class="status-item hp">
+                    <span class="icon">❤️</span>
+                    <span id="map-hp">80/80</span>
+                </div>
+                <div class="status-item gold">
+                    <span class="icon">💰</span>
+                    <span id="map-gold">0</span>
+                </div>
+                <div class="status-item floor">
+                    <span class="icon">🏔️</span>
+                    <span id="map-floor">第一重·凡尘界</span>
+                </div>
+            </div>
+        </div>
+        <div class="map-container">
+            <div class="realm-title" id="realm-title">第一重·凡尘界</div>
+            <div class="map-nodes" id="map-nodes">
+                <!-- 动态生成节点 -->
+            </div>
+        </div>
+        <div class="map-footer">
+            <button class="menu-btn small" onclick="game.showDeck()">查看牌组</button>
+            <button class="menu-btn small" onclick="game.showFateRing()">命环</button>
+        </div>
+    </div>
+
+    <!-- 战斗界面 -->
+    <div id="battle-screen" class="screen">
+        <div class="battle-container">
+            <!-- 敌人区域 -->
+            <div class="enemy-area">
+                <div class="enemy-container" id="enemy-container">
+                    <!-- 动态生成敌人 -->
+                </div>
+            </div>
+
+            <!-- 连击显示 -->
+            <div class="combo-display" id="combo-display">
+                <div class="combo-count" id="combo-count">2</div>
+                <div class="combo-text">COMBO</div>
+                <div class="combo-bonus" id="combo-bonus">伤害+10%</div>
+            </div>
+
+            <!-- 中间战斗区域 -->
+            <div class="battle-middle">
+                <div class="battle-log" id="battle-log"></div>
+            </div>
+
+            <!-- 玩家区域 -->
+            <div class="player-area">
+                <div class="player-character">
+                    <div class="player-avatar">
+                        <div class="avatar-effects"></div>
+                        <span>林风</span>
+                    </div>
+                    <div class="player-bars">
+                        <div class="hp-bar">
+                            <div class="bar-fill hp-fill" id="player-hp-bar"></div>
+                            <span class="bar-text" id="player-hp-text">80/80</span>
+                        </div>
+                        <div class="block-display" id="block-display">
+                            <span class="block-icon">🛡️</span>
+                            <span class="block-value" id="block-value">0</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="energy-display">
+                    <div class="energy-orbs" id="energy-orbs">
+                        <!-- 动态生成灵力球 -->
+                    </div>
+                    <span class="energy-text" id="energy-text">3/3</span>
+                </div>
+            </div>
+
+            <!-- 手牌区域 -->
+            <div class="hand-area">
+                <div class="deck-pile" id="deck-pile">
+                    <span class="pile-count" id="deck-count">20</span>
+                    <span class="pile-label">牌库</span>
+                </div>
+                <div class="hand-cards" id="hand-cards">
+                    <!-- 动态生成手牌 -->
+                </div>
+                <div class="discard-pile" id="discard-pile">
+                    <span class="pile-count" id="discard-count">0</span>
+                    <span class="pile-label">弃牌</span>
+                </div>
+            </div>
+
+            <!-- 结束回合按钮 -->
+            <button class="end-turn-btn" id="end-turn-btn" onclick="game.battle.endTurn()">
+                结束回合
+            </button>
+        </div>
+    </div>
+
+    <!-- 战斗奖励界面 -->
+    <div id="reward-screen" class="screen">
+        <div class="reward-container">
+            <h2 class="reward-title">战斗胜利！</h2>
+            <div class="steal-chance" id="steal-section">
+                <h3>🔮 法则盗取</h3>
+                <p id="steal-text">你感受到敌人体内残留的法则力量...</p>
+                <button class="steal-btn" id="steal-btn" onclick="game.attemptSteal()">
+                    尝试盗取
+                </button>
+            </div>
+            <div class="reward-cards" id="reward-cards">
+                <!-- 动态生成奖励卡牌 -->
+            </div>
+            <div class="reward-resources">
+                <div class="reward-item">
+                    <span class="icon">💰</span>
+                    <span id="reward-gold">+50 灵石</span>
+                </div>
+            </div>
+            <button class="continue-btn" onclick="game.continueAfterReward()">继续前进</button>
+        </div>
+    </div>
+
+    <!-- 游戏结束界面 -->
+    <div id="game-over-screen" class="screen">
+        <div class="game-over-container">
+            <h2 class="game-over-title" id="game-over-title">陨落...</h2>
+            <p class="game-over-text" id="game-over-text">逆命之路，暂时中断</p>
+            <div class="run-stats">
+                <div class="stat-row">
+                    <span>到达层数</span>
+                    <span id="stat-floor">第1层</span>
+                </div>
+                <div class="stat-row">
+                    <span>击败敌人</span>
+                    <span id="stat-enemies">0</span>
+                </div>
+                <div class="stat-row">
+                    <span>获得法则</span>
+                    <span id="stat-laws">0</span>
+                </div>
+            </div>
+            <div class="game-over-buttons">
+                <button class="menu-btn primary" onclick="game.startNewGame()">再次挑战</button>
+                <button class="menu-btn" onclick="game.showScreen('main-menu')">返回主菜单</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 卡牌详情弹窗 -->
+    <div id="card-modal" class="modal">
+        <div class="modal-content card-detail">
+            <button class="modal-close" onclick="game.closeModal()">×</button>
+            <div class="card-large" id="modal-card"></div>
+        </div>
+    </div>
+
+    <!-- 牌组查看弹窗 -->
+    <div id="deck-modal" class="modal">
+        <div class="modal-content deck-view">
+            <button class="modal-close" onclick="game.closeModal()">×</button>
+            <h2>当前牌组</h2>
+            <div class="deck-cards" id="deck-view-cards"></div>
+        </div>
+    </div>
+
+    <!-- 命环弹窗 -->
+    <div id="ring-modal" class="modal">
+        <div class="modal-content ring-view">
+            <button class="modal-close" onclick="game.closeModal()">×</button>
+            <h2>命环</h2>
+            <div class="ring-large">
+                <div class="ring-visual large">
+                    <div class="ring-core"></div>
+                    <div class="ring-orbit orbit-1"></div>
+                    <div class="ring-orbit orbit-2"></div>
+                    <div class="ring-slots" id="ring-slots">
+                        <!-- 法则槽位 -->
+                    </div>
+                </div>
+            </div>
+            <div class="ring-info">
+                <p>命环等级: <span id="modal-ring-level">一阶</span></p>
+                <p>进化进度: <span id="ring-progress">0/100</span></p>
+            </div>
+            <div class="loaded-laws" id="loaded-laws-list">
+                <!-- 已装载的法则 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 成就界面 -->
+    <div id="achievements-screen" class="screen">
+        <div class="screen-header">
+            <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
+            <h2>🏆 成就殿堂</h2>
+        </div>
+        <div class="achievements-container" id="achievements-container">
+            <!-- 动态生成 -->
+        </div>
+    </div>
+
+    <!-- 加载脚本 -->
+    <script src="js/data/cards.js"></script>
+    <script src="js/data/enemies.js"></script>
+    <script src="js/data/laws.js"></script>
+    <script src="js/data/events.js"></script>
+    <script src="js/data/achievements.js"></script>
+    <script src="js/core/utils.js"></script>
+    <script src="js/core/particles.js"></script>
+    <script src="js/core/events.js"></script>
+    <script src="js/core/achievements.js"></script>
+    <script src="js/core/battle.js"></script>
+    <script src="js/core/map.js"></script>
+    <script src="js/core/player.js"></script>
+    <script src="js/game.js"></script>
+</body>
+
+</html>

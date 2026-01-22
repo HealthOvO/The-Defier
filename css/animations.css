@@ -1,0 +1,979 @@
+/* ===================================
+   The Defier 2.0 - 动画特效
+   =================================== */
+
+/* 粒子系统基础 */
+.particles-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 100;
+}
+
+.particle {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: particleFade 1s ease forwards;
+}
+
+@keyframes particleFade {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    100% {
+        opacity: 0;
+        transform: scale(0);
+    }
+}
+
+/* 攻击粒子 */
+.particle-attack {
+    background: radial-gradient(circle, #ff6b6b 0%, #ee5a24 100%);
+    box-shadow: 0 0 10px #ff6b6b, 0 0 20px #ee5a24;
+}
+
+/* 雷电粒子 */
+.particle-thunder {
+    background: radial-gradient(circle, #74b9ff 0%, #0984e3 100%);
+    box-shadow: 0 0 15px #74b9ff, 0 0 30px #0984e3;
+    animation: thunderFlash 0.5s ease forwards;
+}
+
+@keyframes thunderFlash {
+
+    0%,
+    50% {
+        opacity: 1;
+    }
+
+    25%,
+    75% {
+        opacity: 0.3;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+/* 火焰粒子 */
+.particle-fire {
+    background: radial-gradient(circle, #fdcb6e 0%, #e17055 50%, #d63031 100%);
+    box-shadow: 0 0 10px #fdcb6e, 0 0 20px #e17055;
+    animation: fireRise 1s ease forwards;
+}
+
+@keyframes fireRise {
+    0% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(-50px) scale(0.5);
+    }
+}
+
+/* 治疗粒子 */
+.particle-heal {
+    background: radial-gradient(circle, #00b894 0%, #55efc4 100%);
+    box-shadow: 0 0 10px #55efc4;
+    animation: healFloat 1.5s ease forwards;
+}
+
+@keyframes healFloat {
+    0% {
+        opacity: 1;
+        transform: translateY(0) rotate(0deg);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(-30px) rotate(180deg);
+    }
+}
+
+/* 护盾粒子 */
+.particle-shield {
+    background: radial-gradient(circle, #00cec9 0%, #81ecec 100%);
+    box-shadow: 0 0 15px #00cec9;
+    border-radius: 0;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+
+/* 法则粒子 */
+.particle-law {
+    background: radial-gradient(circle, #a29bfe 0%, #6c5ce7 100%);
+    box-shadow: 0 0 20px #a29bfe, 0 0 40px #6c5ce7;
+    animation: lawSpiral 1.5s ease forwards;
+}
+
+@keyframes lawSpiral {
+    0% {
+        opacity: 1;
+        transform: rotate(0deg) scale(1) translateY(0);
+    }
+
+    100% {
+        opacity: 0;
+        transform: rotate(720deg) scale(0) translateY(-50px);
+    }
+}
+
+/* ===================================
+   连击系统视觉效果
+   =================================== */
+
+.combo-display {
+    position: fixed;
+    top: 20%;
+    right: 50px;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    z-index: 200;
+    animation: comboPopIn 0.3s ease;
+}
+
+.combo-display.show {
+    display: flex;
+}
+
+@keyframes comboPopIn {
+    0% {
+        transform: scale(0) rotate(-20deg);
+        opacity: 0;
+    }
+
+    50% {
+        transform: scale(1.2) rotate(5deg);
+    }
+
+    100% {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+    }
+}
+
+.combo-count {
+    font-size: 4rem;
+    font-weight: 900;
+    font-family: var(--font-display);
+    background: linear-gradient(135deg, #ffd700 0%, #ff6b6b 50%, #a29bfe 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+    filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.5));
+}
+
+.combo-text {
+    font-size: 1.2rem;
+    color: var(--accent-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.3em;
+}
+
+.combo-bonus {
+    font-size: 1rem;
+    color: var(--accent-green);
+    margin-top: 5px;
+}
+
+/* 连击等级颜色 */
+.combo-display.level-2 .combo-count {
+    background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+}
+
+.combo-display.level-3 .combo-count {
+    background: linear-gradient(135deg, #a29bfe 0%, #6c5ce7 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+}
+
+.combo-display.level-4 .combo-count {
+    background: linear-gradient(135deg, #ffd700 0%, #ff6b6b 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: rainbowGlow 1s linear infinite;
+}
+
+@keyframes rainbowGlow {
+    0% {
+        filter: drop-shadow(0 0 20px #ff6b6b);
+    }
+
+    33% {
+        filter: drop-shadow(0 0 20px #ffd700);
+    }
+
+    66% {
+        filter: drop-shadow(0 0 20px #a29bfe);
+    }
+
+    100% {
+        filter: drop-shadow(0 0 20px #ff6b6b);
+    }
+}
+
+/* ===================================
+   状态效果图标
+   =================================== */
+
+.status-effects {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 120px;
+}
+
+.status-effect {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 4px;
+    font-size: 0.9rem;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.status-effect .value {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    background: var(--bg-dark);
+    border-radius: 50%;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 状态类型颜色 */
+.status-effect.buff {
+    border-color: var(--accent-green);
+}
+
+.status-effect.debuff {
+    border-color: var(--accent-red);
+}
+
+.status-effect.law {
+    border-color: var(--accent-purple);
+}
+
+/* ===================================
+   卡牌稀有度特效
+   =================================== */
+
+.card.rarity-common {
+    border-color: #b2bec3;
+}
+
+.card.rarity-uncommon {
+    border-color: #00b894;
+    box-shadow: 0 0 15px rgba(0, 184, 148, 0.3);
+}
+
+.card.rarity-rare {
+    border-color: #0984e3;
+    box-shadow: 0 0 20px rgba(9, 132, 227, 0.4);
+    animation: rareGlow 2s ease-in-out infinite;
+}
+
+@keyframes rareGlow {
+
+    0%,
+    100% {
+        box-shadow: 0 0 20px rgba(9, 132, 227, 0.4);
+    }
+
+    50% {
+        box-shadow: 0 0 30px rgba(9, 132, 227, 0.7);
+    }
+}
+
+.card.rarity-epic {
+    border-color: #6c5ce7;
+    box-shadow: 0 0 25px rgba(108, 92, 231, 0.5);
+    animation: epicPulse 2s ease-in-out infinite;
+}
+
+@keyframes epicPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 25px rgba(108, 92, 231, 0.5);
+        transform: scale(1);
+    }
+
+    50% {
+        box-shadow: 0 0 35px rgba(108, 92, 231, 0.8);
+        transform: scale(1.02);
+    }
+}
+
+.card.rarity-legendary {
+    border-color: #ffd700;
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
+    animation: legendaryShine 3s linear infinite;
+    position: relative;
+    overflow: hidden;
+}
+
+@keyframes legendaryShine {
+    0% {
+        box-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
+    }
+
+    25% {
+        box-shadow: 0 0 30px rgba(255, 107, 107, 0.6);
+    }
+
+    50% {
+        box-shadow: 0 0 30px rgba(162, 155, 254, 0.6);
+    }
+
+    75% {
+        box-shadow: 0 0 30px rgba(0, 184, 148, 0.6);
+    }
+
+    100% {
+        box-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
+    }
+}
+
+.card.rarity-legendary::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg,
+            transparent 40%,
+            rgba(255, 255, 255, 0.3) 50%,
+            transparent 60%);
+    animation: legendarySwipe 3s linear infinite;
+}
+
+@keyframes legendarySwipe {
+    0% {
+        transform: translateX(-100%) rotate(45deg);
+    }
+
+    100% {
+        transform: translateX(100%) rotate(45deg);
+    }
+}
+
+/* ===================================
+   卡牌升级标识
+   =================================== */
+
+.card.upgraded .card-name::after {
+    content: '+';
+    color: var(--accent-gold);
+    font-weight: 900;
+    margin-left: 2px;
+}
+
+.card.upgraded {
+    border-width: 3px;
+}
+
+/* ===================================
+   暴击效果
+   =================================== */
+
+@keyframes criticalHit {
+    0% {
+        transform: scale(1);
+        filter: brightness(1);
+    }
+
+    20% {
+        transform: scale(1.3);
+        filter: brightness(2);
+    }
+
+    40% {
+        transform: scale(0.95);
+    }
+
+    60% {
+        transform: scale(1.1);
+    }
+
+    100% {
+        transform: scale(1);
+        filter: brightness(1);
+    }
+}
+
+.critical-hit {
+    animation: criticalHit 0.5s ease;
+}
+
+.critical-text {
+    position: absolute;
+    font-size: 2.5rem;
+    font-weight: 900;
+    color: #ffd700;
+    text-shadow:
+        0 0 10px #ffd700,
+        0 0 20px #ff6b6b,
+        2px 2px 0 #000;
+    animation: criticalFloat 1s ease forwards;
+    z-index: 1000;
+}
+
+@keyframes criticalFloat {
+    0% {
+        opacity: 1;
+        transform: translateY(0) scale(1.5);
+    }
+
+    50% {
+        transform: translateY(-30px) scale(1.2);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(-60px) scale(1);
+    }
+}
+
+/* ===================================
+   屏幕震动效果
+   =================================== */
+
+@keyframes screenShake {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    10% {
+        transform: translateX(-10px) translateY(5px);
+    }
+
+    20% {
+        transform: translateX(10px) translateY(-5px);
+    }
+
+    30% {
+        transform: translateX(-8px) translateY(3px);
+    }
+
+    40% {
+        transform: translateX(8px) translateY(-3px);
+    }
+
+    50% {
+        transform: translateX(-5px);
+    }
+
+    60% {
+        transform: translateX(5px);
+    }
+
+    70% {
+        transform: translateX(-3px);
+    }
+
+    80% {
+        transform: translateX(3px);
+    }
+
+    90% {
+        transform: translateX(-1px);
+    }
+}
+
+.screen-shake {
+    animation: screenShake 0.5s ease;
+}
+
+/* ===================================
+   新版地图路径样式
+   =================================== */
+
+.map-container-v2 {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--spacing-xl);
+    overflow: auto;
+    background:
+        radial-gradient(ellipse at 50% 20%, rgba(26, 35, 126, 0.3) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(156, 39, 176, 0.2) 0%, transparent 40%),
+        var(--bg-dark);
+}
+
+.map-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.map-path {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.2);
+    stroke-width: 2;
+    stroke-dasharray: 8, 4;
+    animation: pathFlow 20s linear infinite;
+}
+
+@keyframes pathFlow {
+    0% {
+        stroke-dashoffset: 0;
+    }
+
+    100% {
+        stroke-dashoffset: -100;
+    }
+}
+
+.map-path.active {
+    stroke: var(--accent-gold);
+    stroke-width: 3;
+    filter: drop-shadow(0 0 5px var(--accent-gold));
+    stroke-dasharray: none;
+}
+
+.map-path.completed {
+    stroke: var(--accent-green);
+    opacity: 0.5;
+}
+
+/* 地图节点2.0 */
+.map-node-v2 {
+    width: 80px;
+    height: 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.6);
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    position: relative;
+    z-index: 1;
+}
+
+.map-node-v2 .node-icon {
+    font-size: 2rem;
+    margin-bottom: 4px;
+}
+
+.map-node-v2 .node-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.map-node-v2:hover:not(.locked):not(.completed) {
+    transform: scale(1.15);
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.4);
+}
+
+.map-node-v2.current {
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 20px var(--accent-gold);
+    animation: nodeFloat 3s ease-in-out infinite;
+}
+
+@keyframes nodeFloat {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+.map-node-v2.enemy {
+    border-color: var(--card-attack);
+}
+
+.map-node-v2.elite {
+    border-color: #a29bfe;
+    box-shadow: 0 0 15px rgba(162, 155, 254, 0.3);
+}
+
+.map-node-v2.boss {
+    border-color: #ffd700;
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.5);
+    animation: bossGlow 2s ease-in-out infinite;
+}
+
+@keyframes bossGlow {
+
+    0%,
+    100% {
+        box-shadow: 0 0 25px rgba(255, 215, 0, 0.5);
+    }
+
+    50% {
+        box-shadow: 0 0 40px rgba(255, 215, 0, 0.8);
+    }
+}
+
+.map-node-v2.event {
+    border-color: #00cec9;
+}
+
+.map-node-v2.shop {
+    border-color: #fdcb6e;
+}
+
+.map-node-v2.rest {
+    border-color: #55efc4;
+}
+
+/* 节点预览卡 */
+.node-preview {
+    position: absolute;
+    bottom: calc(100% + 15px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 200px;
+    background: var(--bg-medium);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    padding: 12px;
+    opacity: 0;
+    visibility: hidden;
+    transition: all var(--transition-fast);
+    z-index: 100;
+    pointer-events: none;
+}
+
+.map-node-v2:hover .node-preview {
+    opacity: 1;
+    visibility: visible;
+}
+
+.node-preview::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 8px solid transparent;
+    border-top-color: var(--bg-medium);
+}
+
+.node-preview-title {
+    font-weight: 600;
+    color: var(--accent-gold);
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+}
+
+.node-preview-content {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.node-preview-rewards {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.7rem;
+}
+
+/* ===================================
+   事件对话框
+   =================================== */
+
+.event-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+}
+
+.event-modal.active {
+    display: flex;
+}
+
+.event-container {
+    width: 90%;
+    max-width: 600px;
+    background: linear-gradient(180deg, var(--bg-medium) 0%, var(--bg-dark) 100%);
+    border: 2px solid var(--accent-purple);
+    border-radius: 20px;
+    overflow: hidden;
+    animation: eventSlideIn 0.5s ease;
+}
+
+@keyframes eventSlideIn {
+    0% {
+        opacity: 0;
+        transform: translateY(50px) scale(0.9);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.event-header {
+    padding: 20px;
+    background: rgba(156, 39, 176, 0.2);
+    text-align: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.event-icon {
+    font-size: 3rem;
+    margin-bottom: 10px;
+}
+
+.event-title {
+    font-family: var(--font-display);
+    font-size: 1.8rem;
+    color: var(--accent-gold);
+}
+
+.event-body {
+    padding: 25px;
+}
+
+.event-description {
+    font-size: 1rem;
+    line-height: 1.8;
+    color: var(--text-secondary);
+    margin-bottom: 25px;
+    text-align: center;
+}
+
+.event-speaker {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.speaker-avatar {
+    width: 60px;
+    height: 60px;
+    background: var(--bg-light);
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 2rem;
+    border: 2px solid var(--accent-purple);
+}
+
+.speaker-dialogue {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    border-radius: 12px;
+    border-left: 3px solid var(--accent-purple);
+    font-style: italic;
+    line-height: 1.6;
+}
+
+.event-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.event-choice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 15px 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-align: left;
+}
+
+.event-choice:hover {
+    background: rgba(255, 215, 0, 0.1);
+    border-color: var(--accent-gold);
+    transform: translateX(10px);
+}
+
+.choice-icon {
+    font-size: 1.5rem;
+}
+
+.choice-content {
+    flex: 1;
+}
+
+.choice-text {
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.choice-result {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.choice-result.positive {
+    color: var(--accent-green);
+}
+
+.choice-result.negative {
+    color: var(--accent-red);
+}
+
+.choice-result.neutral {
+    color: var(--accent-cyan);
+}
+
+/* ===================================
+   成就通知
+   =================================== */
+
+.achievement-popup {
+    position: fixed;
+    top: 100px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100px);
+    background: linear-gradient(135deg, var(--bg-medium) 0%, var(--bg-dark) 100%);
+    border: 2px solid var(--accent-gold);
+    border-radius: 16px;
+    padding: 20px 30px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    z-index: 3000;
+    opacity: 0;
+    transition: all 0.5s ease;
+    box-shadow: 0 10px 40px rgba(255, 215, 0, 0.3);
+}
+
+.achievement-popup.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.achievement-icon {
+    font-size: 2.5rem;
+}
+
+.achievement-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.achievement-label {
+    font-size: 0.8rem;
+    color: var(--accent-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+}
+
+.achievement-name {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* ===================================
+   动态背景效果
+   =================================== */
+
+.dynamic-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: -1;
+    overflow: hidden;
+}
+
+.bg-star {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: white;
+    border-radius: 50%;
+    animation: twinkleStar 3s ease-in-out infinite;
+}
+
+@keyframes twinkleStar {
+
+    0%,
+    100% {
+        opacity: 0.3;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1.5);
+    }
+}
+
+.bg-cloud {
+    position: absolute;
+    width: 200px;
+    height: 100px;
+    background: radial-gradient(ellipse, rgba(255, 255, 255, 0.05) 0%, transparent 70%);
+    animation: floatCloud 60s linear infinite;
+}
+
+@keyframes floatCloud {
+    0% {
+        transform: translateX(-200px);
+    }
+
+    100% {
+        transform: translateX(calc(100vw + 200px));
+    }
+}
