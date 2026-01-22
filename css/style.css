@@ -2639,3 +2639,22 @@ body {
     opacity: 0.5;
     cursor: not-allowed;
 }
+
+/* ===================================
+   Card Count Badge
+   =================================== */
+.card-count-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: var(--accent-gold);
+    color: var(--text-dark);
+    font-size: 0.85rem;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 12px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+    z-index: 20;
+    border: 2px solid #fff;
+    pointer-events: none;
+}
