@@ -816,10 +816,111 @@ class Game {
                 }
                 break;
 
+            case 'battle':
+                // 触发战斗
+                if (effect.enemyId && ENEMIES[effect.enemyId]) {
+                    const enemy = JSON.parse(JSON.stringify(ENEMIES[effect.enemyId]));
+                    this.closeModal();
+                    setTimeout(() => {
+                        this.startBattle(enemy, this.currentBattleNode);
+                    }, 300);
+                }
+                break;
+
+            case 'trial':
+                // 试炼模式 - 设置特殊战斗规则
+                this.trialMode = {
+                    type: effect.trialType,
+                    rounds: effect.rounds,
+                    rewardMultiplier: effect.rewardMultiplier || 1,
+                    reward: effect.reward
+                };
+                Utils.showBattleLog(`进入试炼模式: ${effect.trialType}`);
+                // 触发战斗（使用当前天域的随机敌人）
+                const trialEnemy = getRandomEnemy(this.player.realm);
+                if (trialEnemy) {
+                    this.closeModal();
+                    setTimeout(() => {
+                        this.startBattle(trialEnemy, this.currentBattleNode);
+                    }, 300);
+                }
+                break;
+
+            case 'upgradeCard':
+                // 升级卡牌效果 - 显示升级选择界面
+                this.closeModal();
+                setTimeout(() => {
+                    this.showEventUpgradeCard();
+                }, 100);
+                return; // 不自动完成事件
+
+            case 'removeCardType':
+                // 移除指定类型的卡牌
+                const cardType = effect.cardType;
+                const removeCount = effect.count || 1;
+                let removed = 0;
+
+                for (let i = this.player.deck.length - 1; i >= 0 && removed < removeCount; i--) {
+                    if (this.player.deck[i].type === cardType) {
+                        const removedCard = this.player.deck.splice(i, 1)[0];
+                        Utils.showBattleLog(`移除了 ${removedCard.name}`);
+                        removed++;
+                    }
+                }
+                break;
+
+            case 'awakenRing':
+                // 觉醒命环
+                if (this.player.fateRing.level === 0) {
+                    this.player.fateRing.level = 1;
+                    this.player.fateRing.name = '一阶·觉醒';
+                    this.player.fateRing.slots = 1;
+                    this.player.fateRing.path = 'awakened';
+                    Utils.showBattleLog('命环觉醒！逆命之路开启！');
+                }
+                break;
+
             default:
                 // 未处理的效果类型
                 console.log('未处理的事件效果:', effect.type);
         }
+    }
+
+    // 事件中升级卡牌
+    showEventUpgradeCard() {
+        const modal = document.getElementById('deck-modal');
+        const container = document.getElementById('deck-view-cards');
+        container.innerHTML = '<h3 style="width:100%;text-align:center;margin-bottom:16px;">选择要升级的卡牌</h3>';
+
+        const upgradableCards = this.player.deck.filter(c => canUpgradeCard(c));
+
+        if (upgradableCards.length === 0) {
+            container.innerHTML += '<p style="text-align:center;color:var(--text-muted);">没有可升级的卡牌</p>';
+            setTimeout(() => {
+                this.closeModal();
+                this.onEventComplete();
+            }, 1500);
+            return;
+        }
+
+        this.player.deck.forEach((card, index) => {
+            if (!canUpgradeCard(card)) return;
+
+            const cardEl = Utils.createCardElement(card, index);
+            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
+            cardEl.style.cursor = 'pointer';
+
+            cardEl.addEventListener('click', () => {
+                const upgraded = upgradeCard(card);
+                this.player.deck[index] = upgraded;
+                Utils.showBattleLog(`${card.name} 升级为 ${upgraded.name}！`);
+                this.closeModal();
+                this.onEventComplete();
+            });
+            container.appendChild(cardEl);
+        });
+
+        modal.classList.add('active');
     }
 
     // 事件完成
