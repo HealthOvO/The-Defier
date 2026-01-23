@@ -333,10 +333,10 @@ class Game {
 
         container.innerHTML = '';
 
-        // 假设最高9重天
-        for (let i = 1; i <= 9; i++) {
+        // 更新为15重天
+        for (let i = 1; i <= 15; i++) {
             const isUnlocked = this.unlockedRealms && this.unlockedRealms.includes(i);
-            const isCompleted = isUnlocked && this.unlockedRealms.includes(i + 1); // 简单判断：解锁了下一关说明这关过了
+            const isCompleted = isUnlocked && this.unlockedRealms.includes(i + 1); // 简单判断
 
             const realmCard = document.createElement('div');
             realmCard.className = `realm-card ${isUnlocked ? '' : 'locked'}`;
@@ -751,6 +751,13 @@ class Game {
         const stealText = document.getElementById('steal-text');
         const rewardGold = document.getElementById('reward-gold');
         const rewardCards = document.getElementById('reward-cards');
+        
+        // 关键修复：初始时禁用“继续前进”按钮，强制玩家选择或跳过
+        const continueBtn = document.getElementById('continue-reward-btn');
+        if (continueBtn) {
+            continueBtn.disabled = true;
+            continueBtn.textContent = '请选择奖励';
+        }
 
         rewardGold.textContent = `+${gold} 灵石 | 命环经验 +${ringExp}`;
 
@@ -876,6 +883,12 @@ class Game {
 
     // 奖励后继续 - 修复关卡推进bug
     continueAfterReward() {
+        // 双重保险：必须已选择卡牌（包括跳过）
+        if (!this.rewardCardSelected) {
+            Utils.showBattleLog('请先选择一张卡牌奖励，或支付灵石跳过');
+            return;
+        }
+
         // 使用保存的当前战斗节点
         if (this.currentBattleNode) {
             this.map.completeNode(this.currentBattleNode);
@@ -1277,18 +1290,26 @@ class Game {
             this.unlockedRealms.push(this.player.realm + 1);
         }
 
-        // 允许玩家选择继续或回城
-        // 这里暂时保持自动推进，但增加保存
-        this.player.realm++;
-        this.player.floor = 0;
-        this.autoSave();
-
-        if (this.player.realm > 5) {
+        // 检查是否通关所有天域 (现在是15重)
+        if (this.player.realm >= 15) {
             this.showVictoryScreen();
             return;
         }
 
-        // 治疗玩家
+        // 允许玩家选择继续或回城
+        // 这里暂时保持自动推进，但增加保存
+        this.player.realm++;
+        this.player.floor = 0;
+        
+        // 关键修复：不要重置 currentHp 到 maxHp，保留当前状态
+        // 也不要回退到第一层，player.realm 已经 ++ 了
+        // 之前的代码似乎没有重置回第一层，但可能有逻辑错误导致感知错觉？
+        // 或者是 autoSave 读取时的问题？
+        // 检查 loadGame 逻辑，如果有非法数据会被重置，可能是那里
+        
+        this.autoSave();
+
+        // 治疗玩家 (小幅回复，而不是回满)
         const healAmount = Math.floor(this.player.maxHp * 0.2);
         this.player.heal(healAmount);
         Utils.showBattleLog(`进入下一重天域，恢复 ${healAmount} HP`);

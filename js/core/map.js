@@ -134,7 +134,13 @@ class GameMap {
             6: '第六重·化神天',
             7: '第七重·合体天',
             8: '第八重·大乘天',
-            9: '第九重·飞升天'
+            9: '第九重·飞升天',
+            10: '第十重·地仙界',
+            11: '第十一重·天仙界',
+            12: '第十二重·金仙界',
+            13: '第十三重·大罗天',
+            14: '第十四重·混元天',
+            15: '第十五重·无上天'
         };
         return names[realm] || `第${realm}重天`;
     }
@@ -150,7 +156,13 @@ class GameMap {
             6: { name: '法则混乱', desc: '卡牌费用随机变化 (-1到+1)', effect: 'chaos_cost' },
             7: { name: '虚空吞噬', desc: '每回合失去 5% 最大生命值', effect: 'void_drain' },
             8: { name: '天道压制', desc: '所有卡牌效果降低 20%', effect: 'heaven_suppress' },
-            9: { name: '生死轮回', desc: '受到致死伤害时有 50% 几率复活并回满血（限一次）', effect: 'rebirth' }
+            9: { name: '生死轮回', desc: '受到致死伤害时有 50% 几率复活并回满血（限一次）', effect: 'rebirth' },
+            10: { name: '大地束缚', desc: '灵力上限-1，且闪避率降低20%', effect: 'earth_bind' },
+            11: { name: '天人五衰', desc: '所有负面状态持续时间+1回合', effect: 'decay' },
+            12: { name: '金戈铁马', desc: '使用攻击牌时，需消耗当前生命值的5%', effect: 'blood_tax' },
+            13: { name: '时光逆流', desc: '每3回合，敌人会额外行动一次', effect: 'time_warp' },
+            14: { name: '混元无极', desc: '敌人对所有伤害拥有20%抗性，且无法被眩晕', effect: 'chaos_immune' },
+            15: { name: '大道独行', desc: '最大生命值减半，但造成的伤害提升50%', effect: 'final_trial' }
         };
         return envs[realm] || { name: '平稳', desc: '无特殊效果', effect: 'none' };
     }

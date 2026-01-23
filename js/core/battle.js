@@ -272,6 +272,14 @@ class Battle {
                 return;
             }
 
+            // 12. 金戈铁马 (realm 12) - 使用攻击牌消耗生命
+            if (this.player.realm === 12 && card.type === 'attack') {
+                const bloodTax = Math.max(1, Math.floor(this.player.maxHp * 0.05));
+                this.player.takeDamage(bloodTax);
+                Utils.showBattleLog(`金戈铁马：消耗 ${bloodTax} 点生命以攻击`);
+                // 如果自杀，需要终止吗？暂不终止，允许同归于尽
+            }
+
             // 立即给予视觉反馈：卡牌淡出或标记为使用中
             const cardEls = document.querySelectorAll('#hand-cards .card');
             if (cardEls[cardIndex]) {
@@ -428,7 +436,21 @@ class Battle {
                 if (target) {
                     target.buffs[result.buffType] = (target.buffs[result.buffType] || 0) + result.value;
                     if (result.buffType === 'stun') {
-                        target.stunned = true;
+                        // 14. 混元无极 (realm 14) - 免疫眩晕
+                        if (this.player.realm === 14) {
+                            Utils.showBattleLog('混元无极：敌人免疫眩晕！');
+                        } else {
+                            target.stunned = true;
+                            
+                            // 共鸣：绝对零度 (Absolute Zero)
+                            if (this.player.activeResonances) {
+                                const absoluteZero = this.player.activeResonances.find(r => r.id === 'absoluteZero');
+                                if (absoluteZero) {
+                                    target.buffs.weak = (target.buffs.weak || 0) + absoluteZero.effect.value;
+                                    Utils.showBattleLog(`绝对零度：敌人获得 ${absoluteZero.effect.value} 层虚弱`);
+                                }
+                            }
+                        }
                     }
                     Utils.showBattleLog(`敌人获得 ${result.buffType} 效果`);
                 }
@@ -497,11 +519,32 @@ class Battle {
         // 5. 心魔滋生 (realm 5) - 这里是玩家打敌人，不需要增强
         // 如果是敌人打玩家，需要在 takeDamage 或者 enemy action 中处理
         
+        // 14. 混元无极 (realm 14) - 敌人20%抗性
+        if (this.player.realm === 14) {
+            amount = Math.floor(amount * 0.8);
+        }
+
         // 应用力量加成 (Strength)
         if (this.player.buffs.strength && this.player.buffs.strength > 0) {
             amount += this.player.buffs.strength;
             // 力量通常是本回合持续生效，不需要在这里消耗
             // 除非是某些特殊的一次性力量，但一般力量定义为回合内Buff
+        }
+
+        // 共鸣：雷火劫 (Plasma Overload)
+        if (this.player.activeResonances) {
+            const plasmaOverload = this.player.activeResonances.find(r => r.id === 'plasmaOverload');
+            if (plasmaOverload) {
+                // 简单起见，只要造成伤害就触发真实伤害，不严格检查是否是雷/火属性
+                // 或者我们可以检查卡牌类型？这里 dealDamageToEnemy 只是底层函数，拿不到卡牌信息
+                // 为了游戏性，我们可以设定为“攻击造成伤害时额外造成”
+                const trueDmg = plasmaOverload.effect.value;
+                enemy.currentHp -= trueDmg;
+                // 显示特效
+                const enemyEl = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`);
+                if (enemyEl) Utils.showFloatingNumber(enemyEl, trueDmg, 'damage');
+                // Utils.showBattleLog(`雷火劫：额外 ${trueDmg} 点真实伤害`);
+            }
         }
 
         // 检查下一次攻击加成 (Concentration)
@@ -636,17 +679,28 @@ class Battle {
             // 处理敌人debuff
             await this.processEnemyDebuffs(enemy, i);
 
-            // 执行敌人行动
-            await this.executeEnemyAction(enemy, i);
-
-            // 检查玩家是否死亡
-            if (!this.player.isAlive()) {
-                this.battleEnded = true;
-                return;
+            // 13. 时光逆流 (realm 13) - 每3回合行动两次
+            let actionCount = 1;
+            if (this.player.realm === 13 && this.turnNumber % 3 === 0) {
+                actionCount = 2;
+                if (i === 0) Utils.showBattleLog('时光逆流：敌人速度加快！');
             }
 
-            // 下一个行动模式
-            enemy.currentPatternIndex = (enemy.currentPatternIndex + 1) % enemy.patterns.length;
+            for (let k = 0; k < actionCount; k++) {
+                // 执行敌人行动
+                await this.executeEnemyAction(enemy, i);
+
+                // 检查玩家是否死亡
+                if (!this.player.isAlive()) {
+                    this.battleEnded = true;
+                    return;
+                }
+
+                // 下一个行动模式
+                enemy.currentPatternIndex = (enemy.currentPatternIndex + 1) % enemy.patterns.length;
+                
+                if (k < actionCount - 1) await Utils.sleep(500);
+            }
 
             await Utils.sleep(300);
         }

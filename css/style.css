@@ -1240,9 +1240,10 @@ body {
 
 .card-header {
     text-align: center;
-    padding: 2px 0;
+    padding: 2px 0 2px 15px; /* Added left padding to avoid overlap with cost */
     border-bottom: 2px solid rgba(0, 0, 0, 0.1);
     margin-bottom: 4px;
+    width: 100%;
 }
 
 .card-name {
@@ -1982,7 +1983,7 @@ body {
     }
 
     .card-header {
-        padding: 2px 0;
+        padding: 2px 0 2px 14px;
     }
 
     /* 手牌区域优化 */

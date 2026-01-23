@@ -175,6 +175,52 @@ const REALM_LAWS = {
     9: ['timeStop']          // 飞升天
 };
 
+// 法则共鸣定义
+const LAW_RESONANCES = {
+    plasmaOverload: {
+        id: 'plasmaOverload',
+        name: '雷火劫',
+        laws: ['thunderLaw', 'flameTruth'],
+        description: '雷火交加，毁灭万物。攻击造成伤害时额外造成5点真实伤害。',
+        effect: { type: 'trueDamage', value: 5 }
+    },
+    astralShift: {
+        id: 'astralShift',
+        name: '风空遁',
+        laws: ['windSpeed', 'spaceRift'],
+        description: '身如幻影。闪避成功时抽1张牌。',
+        effect: { type: 'dodgeDraw', value: 1 }
+    },
+    absoluteZero: {
+        id: 'absoluteZero',
+        name: '绝对零度',
+        laws: ['iceFreeze', 'timeStop'],
+        description: '冻结时空。敌人被眩晕时获得3层虚弱。',
+        effect: { type: 'stunDebuff', buffType: 'weak', value: 3 }
+    },
+    gaiaBlessing: {
+        id: 'gaiaBlessing',
+        name: '大地恩赐',
+        laws: ['earthShield', 'lifeDrain'],
+        description: '生生不息。回合结束若有护盾，恢复护盾值10%的生命。',
+        effect: { type: 'shieldHeal', percent: 0.1 }
+    },
+    voidSlash: {
+        id: 'voidSlash',
+        name: '虚空斩',
+        laws: ['swordIntent', 'voidEmbrace'],
+        description: '无视防御。穿透伤害提升50%。',
+        effect: { type: 'penetrateBonus', percent: 0.5 }
+    },
+    chaoticStorm: {
+        id: 'chaoticStorm',
+        name: '混沌风暴',
+        laws: ['chaosLaw', 'thunderLaw'],
+        description: '不可名状的雷霆。回合开始造成3-8点随机雷属性伤害。',
+        effect: { type: 'turnStartDamage', min: 3, max: 8, element: 'thunder' }
+    }
+};
+
 // 命环信息
 const FATE_RING = {
     // 命环等级定义

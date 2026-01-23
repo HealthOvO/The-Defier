@@ -47,6 +47,9 @@ class Player {
 
         // 收集的法则
         this.collectedLaws = [];
+        
+        // 激活的共鸣
+        this.activeResonances = [];
 
         // 游戏进度
         this.realm = 1;
@@ -72,6 +75,9 @@ class Player {
 
     // 重新计算属性
     recalculateStats() {
+        // 检查共鸣状态
+        this.checkResonances();
+
         const charData = CHARACTERS[this.characterId || 'linFeng'];
         if (!charData) return;
 
@@ -111,11 +117,39 @@ class Player {
             // 力量等战斗属性不直接加在基础属性里，而是在战斗开始时初始化到buff中
         }
 
+        // 5. 天域环境影响
+        // Realm 10: 大地束缚 - 灵力上限-1
+        if (this.realm === 10) {
+            newBaseEnergy = Math.max(1, newBaseEnergy - 1);
+        }
+        // Realm 15: 大道独行 - 最大生命值减半
+        if (this.realm === 15) {
+            newMaxHp = Math.floor(newMaxHp * 0.5);
+        }
+
         // 更新属性 (保持当前生命值比例或数值？通常保持当前数值，除非超过最大值)
         this.maxHp = newMaxHp;
         this.baseEnergy = newBaseEnergy;
         this.drawCount = newDrawCount;
         this.currentHp = Math.min(this.currentHp, this.maxHp);
+    }
+
+    // 检查共鸣状态
+    checkResonances() {
+        if (typeof LAW_RESONANCES === 'undefined') return;
+
+        this.activeResonances = [];
+        const loadedLaws = this.fateRing.loadedLaws.filter(Boolean); // 获取所有已装载的法则ID
+
+        for (const key in LAW_RESONANCES) {
+            const resonance = LAW_RESONANCES[key];
+            const hasAllLaws = resonance.laws.every(lawId => loadedLaws.includes(lawId));
+            
+            if (hasAllLaws) {
+                this.activeResonances.push(resonance);
+                // Utils.showBattleLog(`法则共鸣激活：${resonance.name}`); // 避免刷屏，仅在变化时提示更好
+            }
+        }
     }
 
     // 准备战斗
@@ -206,6 +240,21 @@ class Player {
 
         // 处理回合开始的buff
         this.processBuffsOnTurnStart();
+
+        // 共鸣：混沌风暴
+        const chaoticStorm = this.activeResonances.find(r => r.id === 'chaoticStorm');
+        if (chaoticStorm) {
+            const dmg = Utils.random(chaoticStorm.effect.min, chaoticStorm.effect.max);
+            // 假设game.battle存在且能访问enemies
+            if (this.game && this.game.battle && this.game.battle.enemies) {
+                const enemies = this.game.battle.enemies.filter(e => e.currentHp > 0);
+                if (enemies.length > 0) {
+                    const target = enemies[Math.floor(Math.random() * enemies.length)];
+                    this.game.battle.dealDamageToEnemy(target, dmg);
+                    Utils.showBattleLog(`混沌风暴轰击！造成 ${dmg} 点雷伤`);
+                }
+            }
+        }
     }
 
     // 应用法则被动
@@ -239,15 +288,37 @@ class Player {
 
     // 受到伤害
     takeDamage(amount) {
+        // 共鸣：风空遁 (Astral Shift) - 闪避抽牌
+        const astralShift = this.activeResonances.find(r => r.id === 'astralShift');
+
         // 检查闪避
         if (this.buffs.dodge && this.buffs.dodge > 0) {
-            this.buffs.dodge--;
-            return { dodged: true, damage: 0 };
+            // Realm 10: 大地束缚 - 20%几率闪避失败
+            if (this.realm === 10 && Math.random() < 0.2) {
+                 Utils.showBattleLog(`大地束缚：闪避失效！`);
+                 // 继续受到伤害，不消耗闪避层数（或者消耗？通常失效也会消耗，这里假设失效不消耗还是消耗？）
+                 // 为了惩罚，让它失效但消耗层数可能太狠，或者失效但不消耗？
+                 // 这里选择：闪避失效，必须硬抗，层数保留或消耗？
+                 // 如果保留，下次还能闪，但这次被打。如果消耗，就是纯亏。
+                 // 既然是“闪避率降低”，那意味着这次尝试闪避失败了。
+                 this.buffs.dodge--; 
+            } else {
+                this.buffs.dodge--;
+                if (astralShift) {
+                    this.drawCards(astralShift.effect.value);
+                    Utils.showBattleLog(`风空遁触发！闪避并抽牌`);
+                }
+                return { dodged: true, damage: 0 };
+            }
         }
 
         // 空间裂隙法则 - 随机闪避
         const spaceLaw = this.collectedLaws.find(l => l.id === 'spaceRift');
         if (spaceLaw && Math.random() < spaceLaw.passive.value) {
+            if (astralShift) {
+                this.drawCards(astralShift.effect.value);
+                Utils.showBattleLog(`风空遁触发！闪避并抽牌`);
+            }
             return { dodged: true, damage: 0 };
         }
 
@@ -255,6 +326,10 @@ class Player {
         const chaosLaw = this.collectedLaws.find(l => l.id === 'chaosLaw');
         if (chaosLaw && Math.random() < 0.1) {
             Utils.showBattleLog('混沌之力扭曲了现实，伤害无效！');
+            if (astralShift) {
+                this.drawCards(astralShift.effect.value);
+                Utils.showBattleLog(`风空遁触发！闪避并抽牌`);
+            }
             return { dodged: true, damage: 0 };
         }
 
@@ -338,6 +413,20 @@ class Player {
             value = Math.floor(value * 0.8);
         }
 
+        // 15. 大道独行 (realm 15) - 伤害提升50%
+        if (this.realm === 15 && (effect.type === 'damage' || effect.type === 'penetrate' || effect.type === 'damageAll')) {
+            value = Math.floor(value * 1.5);
+        }
+
+        // 共鸣：虚空斩 (Void Slash) - 穿透加成
+        if (effect.type === 'penetrate') {
+            const voidSlash = this.activeResonances.find(r => r.id === 'voidSlash');
+            if (voidSlash) {
+                value = Math.floor(value * (1 + voidSlash.effect.percent));
+                // Utils.showBattleLog('虚空斩：穿透伤害提升！'); // 频繁提示可能烦人
+            }
+        }
+
         // 应用法则加成
         if (this.applyLawBonuses) {
             value = this.applyLawBonuses(effect.type, value);
@@ -381,18 +470,35 @@ class Player {
             case 'execute':
                 return { type: 'execute', target: effect.target };
 
+            case 'percentDamage':
+                if (!target) return { type: 'error', message: '需要目标' };
+                // 造成目标最大生命值一定百分比的伤害
+                const pDamage = Math.floor(target.maxHp * effect.value);
+                return { type: 'damage', value: pDamage, target: effect.target };
+
             case 'swapHpPercent':
                 if (!target) return { type: 'error', message: '需要目标' };
                 const playerPercent = this.currentHp / this.maxHp;
-                const enemyPercent = target.currentHp / target.maxHp;
+                // 确保百分比不为0，至少保留1%
+                // 实际上如果玩家只有1HP，百分比极低，交换给满血敌人会造成巨大伤害
+                // 但如果敌人满血(100%)，交换给玩家，玩家应该满血
+                
+                // 关键修正：获取百分比时，保留足够精度，并确保不会导致生命值归零
+                const enemyPercent = Math.max(0.01, target.currentHp / target.maxHp); // 敌人至少保留1%
+                const safePlayerPercent = Math.max(0.01, this.currentHp / this.maxHp); // 玩家至少保留1%
+
                 const newPlayerHp = Math.floor(this.maxHp * enemyPercent);
-                const newEnemyHp = Math.floor(target.maxHp * playerPercent);
+                const newEnemyHp = Math.floor(target.maxHp * safePlayerPercent);
+                
                 const finalPlayerHp = Math.max(1, newPlayerHp);
                 const finalEnemyHp = Math.max(1, newEnemyHp);
+                
                 const playerDiff = finalPlayerHp - this.currentHp;
                 const enemyDiff = finalEnemyHp - target.currentHp;
+                
                 this.currentHp = finalPlayerHp;
                 target.currentHp = finalEnemyHp;
+                
                 Utils.showBattleLog(`逆转乾坤！生命比率互换！`);
                 return { type: 'swapHpPercent', playerDiff, enemyDiff, target };
 
@@ -410,8 +516,26 @@ class Player {
                 return { type: 'lifeSteal', value: effect.value };
 
             case 'conditionalDraw':
-                // 简化逻辑
-                return { type: 'conditionalDraw', triggered: false };
+                // 实现条件抽牌
+                let triggered = false;
+                if (effect.condition === 'lowHp') {
+                    if (this.currentHp / this.maxHp < effect.threshold) {
+                        triggered = true;
+                    }
+                }
+                
+                if (triggered) {
+                    if (effect.drawValue) this.drawCards(effect.drawValue);
+                    if (effect.energyValue) {
+                        this.currentEnergy += effect.energyValue;
+                        // 触发UI更新（虽然通常在playCard后会统一更新，但能量变化需要及时反映）
+                    }
+                    Utils.showBattleLog(`绝处逢生生效！抽${effect.drawValue}牌，回${effect.energyValue}灵力`);
+                    return { type: 'conditionalDraw', triggered: true };
+                } else {
+                    Utils.showBattleLog(`条件未满足（生命需低于${Math.floor(effect.threshold * 100)}%）`);
+                    return { type: 'conditionalDraw', triggered: false };
+                }
 
             case 'bonusGold':
                 this.pendingBonusGold = (this.pendingBonusGold || 0) + Utils.random(effect.min, effect.max);
@@ -466,6 +590,16 @@ class Player {
 
     // 添加Buff
     addBuff(type, value) {
+        if (value <= 0) return; // 忽略无效buff
+
+        // 11. 天人五衰 (realm 11) - 负面状态持续时间+1
+        const isDebuff = ['weak', 'vulnerable', 'poison', 'burn', 'paralysis', 'stun'].includes(type);
+        if (this.realm === 11 && isDebuff) {
+            value += 1;
+            // 可以在首次触发时提示，避免刷屏
+            // Utils.showBattleLog('天人五衰：负面状态加深');
+        }
+
         if (this.buffs[type]) {
             this.buffs[type] += value;
         } else {
@@ -549,6 +683,18 @@ class Player {
             const burnDamage = this.hand.length * 2;
             this.takeDamage(burnDamage);
             Utils.showBattleLog(`丹火焚心：受到 ${burnDamage} 点伤害`);
+        }
+
+        // 共鸣：大地恩赐 (Gaia's Blessing) - 护盾回血
+        if (this.block > 0) {
+            const gaiaBlessing = this.activeResonances.find(r => r.id === 'gaiaBlessing');
+            if (gaiaBlessing) {
+                const healAmount = Math.floor(this.block * gaiaBlessing.effect.percent);
+                if (healAmount > 0) {
+                    this.heal(healAmount);
+                    Utils.showBattleLog(`大地恩赐：恢复 ${healAmount} 点生命`);
+                }
+            }
         }
 
         // 弃掉所有手牌

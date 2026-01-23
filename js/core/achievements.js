@@ -121,7 +121,6 @@ class AchievementSystem {
             case 'bossesDefeated':
             case 'lawsCollected':
             case 'loadedLaws':
-            case 'realmCleared':
             case 'eventsCompleted':
             case 'totalGold':
             case 'maxCombo':
@@ -129,6 +128,10 @@ class AchievementSystem {
             case 'noDamageBattle':
             case 'lowHpBossKill':
                 return (this.stats[condition.type] || 0) >= condition.value;
+
+            case 'realmCleared':
+                // realmCleared 可能是最大通关层数 (mode='max')，所以只需要比较数值
+                return (this.stats.realmCleared || 0) >= condition.value;
 
             case 'uniqueCards':
             case 'nodeTypesVisited':

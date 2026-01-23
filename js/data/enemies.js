@@ -460,6 +460,227 @@ const ENEMIES = {
         gold: { min: 200, max: 320 }
     },
 
+    // ==================== 第十重·地仙界 ====================
+    earthGuardian: {
+        id: 'earthGuardian',
+        name: '地脉守卫',
+        icon: '🗿',
+        realm: 10,
+        hp: 220, // 300 -> 220
+        patterns: [
+            { type: 'defend', value: 30, intent: '🛡️' }, // 40 -> 30
+            { type: 'attack', value: 25, intent: '⚔️' }, // 35 -> 25
+            { type: 'buff', buffType: 'thorns', value: 3, intent: '🌵' }, // 5 -> 3
+            { type: 'attack', value: 30, intent: '⚔️' } // 45 -> 30
+        ],
+        stealChance: 0.3,
+        stealLaw: 'earthShield',
+        gold: { min: 150, max: 250 }
+    },
+
+    terraTitan: {
+        id: 'terraTitan',
+        name: '镇岳巨灵',
+        icon: '⛰️',
+        realm: 10,
+        isBoss: true,
+        hp: 550, // 700 -> 550
+        patterns: [
+            { type: 'attack', value: 35, intent: '⚔️' }, // 50 -> 35
+            { type: 'defend', value: 45, intent: '🛡️' }, // 60 -> 45
+            { type: 'attack', value: 45, intent: '⚔️' }, // 60 -> 45
+            { type: 'debuff', buffType: 'stun', value: 1, intent: '🔨' },
+            { type: 'multiAttack', value: 15, count: 4, intent: '🔥' } // 20 -> 15
+        ],
+        stealChance: 0.6,
+        stealLaw: 'earthShield',
+        gold: { min: 350, max: 500 }
+    },
+
+    // ==================== 第十一重·天仙界 ====================
+    cloudSpirit: {
+        id: 'cloudSpirit',
+        name: '流云仙灵',
+        icon: '☁️',
+        realm: 11,
+        hp: 200, // 250 -> 200
+        patterns: [
+            { type: 'buff', buffType: 'dodge', value: 2, intent: '💨' },
+            { type: 'attack', value: 30, intent: '⚔️' }, // 40 -> 30
+            { type: 'attack', value: 28, intent: '⚔️' } // 35 -> 28
+        ],
+        stealChance: 0.3,
+        stealLaw: 'windSpeed',
+        gold: { min: 200, max: 300 }
+    },
+
+    celestialJudge: {
+        id: 'celestialJudge',
+        name: '司天神官',
+        icon: '📜',
+        realm: 11,
+        isBoss: true,
+        hp: 650, // 800 -> 650
+        patterns: [
+            { type: 'debuff', buffType: 'weak', value: 4, intent: '✨' }, // 5 -> 4
+            { type: 'attack', value: 45, intent: '⚔️' }, // 55 -> 45
+            { type: 'debuff', buffType: 'vulnerable', value: 4, intent: '💢' }, // 5 -> 4
+            { type: 'attack', value: 50, intent: '⚔️' }, // 65 -> 50
+            { type: 'heal', value: 40, intent: '💚' } // 50 -> 40
+        ],
+        stealChance: 0.7,
+        stealLaw: 'lightHeal',
+        gold: { min: 400, max: 600 }
+    },
+
+    // ==================== 第十二重·金仙界 ====================
+    goldenSoldier: {
+        id: 'goldenSoldier',
+        name: '金甲天兵',
+        icon: '🛡️',
+        realm: 12,
+        hp: 300, // 400 -> 300
+        patterns: [
+            { type: 'defend', value: 40, intent: '🛡️' }, // 50 -> 40
+            { type: 'attack', value: 40, intent: '⚔️' }, // 50 -> 40
+            { type: 'multiAttack', value: 12, count: 3, intent: '🔥' } // 15 -> 12
+        ],
+        stealChance: 0.3,
+        stealLaw: 'metalBody',
+        gold: { min: 250, max: 350 }
+    },
+
+    gildedEmperor: {
+        id: 'gildedEmperor',
+        name: '金阙帝君',
+        icon: '👑',
+        realm: 12,
+        isBoss: true,
+        hp: 800, // 1000 -> 800
+        patterns: [
+            { type: 'buff', buffType: 'strength', value: 6, intent: '💪' }, // 8 -> 6
+            { type: 'attack', value: 60, intent: '⚔️' }, // 70 -> 60
+            { type: 'defend', value: 60, intent: '🛡️' }, // 80 -> 60
+            { type: 'multiAttack', value: 20, count: 4, intent: '🔥' }, // 25x5 -> 20x4
+            { type: 'attack', value: 70, intent: '⚔️' } // 90 -> 70
+        ],
+        stealChance: 0.8,
+        stealLaw: 'metalBody',
+        gold: { min: 500, max: 800 }
+    },
+
+    // ==================== 第十三重·大罗天 ====================
+    voidWalker: {
+        id: 'voidWalker',
+        name: '虚空行者',
+        icon: '🌌',
+        realm: 13,
+        hp: 400, // 500 -> 400
+        patterns: [
+            { type: 'buff', buffType: 'dodge', value: 2, intent: '💨' }, // 3 -> 2
+            { type: 'attack', value: 50, intent: '⚔️' }, // 60 -> 50
+            { type: 'debuff', buffType: 'paralysis', value: 2, intent: '⚡' }
+        ],
+        stealChance: 0.4,
+        stealLaw: 'voidEmbrace',
+        gold: { min: 300, max: 400 }
+    },
+
+    daoistSage: {
+        id: 'daoistSage',
+        name: '太上道祖',
+        icon: '☯️',
+        realm: 13,
+        isBoss: true,
+        hp: 950, // 1200 -> 950
+        patterns: [
+            { type: 'debuff', buffType: 'stun', value: 1, intent: '💫' },
+            { type: 'attack', value: 65, intent: '⚔️' }, // 80 -> 65
+            { type: 'heal', value: 80, intent: '💚' }, // 100 -> 80
+            { type: 'multiAttack', value: 25, count: 4, intent: '🔥' }, // 30x5 -> 25x4
+            { type: 'buff', buffType: 'nextTurnBlock', value: 40, intent: '🛡️' } // 50 -> 40
+        ],
+        stealChance: 0.9,
+        stealLaw: 'timeStop',
+        gold: { min: 700, max: 1000 }
+    },
+
+    // ==================== 第十四重·混元天 ====================
+    chaosBeast: {
+        id: 'chaosBeast',
+        name: '混沌魔神',
+        icon: '🐙',
+        realm: 14,
+        hp: 600, // 800 -> 600
+        patterns: [
+            { type: 'attack', value: 60, intent: '⚔️' }, // 80 -> 60
+            { type: 'debuff', buffType: 'burn', value: 6, intent: '🔥' }, // 10 -> 6
+            { type: 'debuff', buffType: 'poison', value: 6, intent: '🤢' }, // 10 -> 6
+            { type: 'attack', value: 80, intent: '⚔️' } // 100 -> 80
+        ],
+        stealChance: 0.5,
+        stealLaw: 'chaosLaw',
+        gold: { min: 400, max: 600 }
+    },
+
+    chaosLord: {
+        id: 'chaosLord',
+        name: '混元无极',
+        icon: '🌀',
+        realm: 14,
+        isBoss: true,
+        hp: 1400, // 1800 -> 1400
+        patterns: [
+            { type: 'attack', value: 80, intent: '⚔️' }, // 100 -> 80
+            { type: 'debuff', buffType: 'vulnerable', value: 6, intent: '💢' }, // 10 -> 6
+            { type: 'debuff', buffType: 'weak', value: 6, intent: '✨' }, // 10 -> 6
+            { type: 'multiAttack', value: 30, count: 4, intent: '🔥' }, // 40x5 -> 30x4
+            { type: 'heal', value: 150, intent: '💚' }, // 200 -> 150
+            { type: 'attack', value: 120, intent: '⚔️' } // 150 -> 120
+        ],
+        stealChance: 1.0,
+        stealLaw: 'chaosLaw',
+        gold: { min: 800, max: 1200 }
+    },
+
+    // ==================== 第十五重·无上天 ====================
+    cosmicShadow: {
+        id: 'cosmicShadow',
+        name: '大道投影',
+        icon: '👥',
+        realm: 15,
+        hp: 900, // 1200 -> 900
+        patterns: [
+            { type: 'attack', value: 90, intent: '⚔️' }, // 120 -> 90
+            { type: 'defend', value: 80, intent: '🛡️' }, // 100 -> 80
+            { type: 'buff', buffType: 'strength', value: 8, intent: '💪' }, // 10 -> 8
+            { type: 'attack', value: 120, intent: '⚔️' } // 150 -> 120
+        ],
+        stealChance: 0.6,
+        stealLaw: 'reversal',
+        gold: { min: 600, max: 900 }
+    },
+
+    theDefier: {
+        id: 'theDefier',
+        name: '逆天者·心魔',
+        icon: '👿',
+        realm: 15,
+        isBoss: true,
+        hp: 2500, // 3000 -> 2500
+        patterns: [
+            { type: 'attack', value: 120, intent: '⚔️' }, // 150 -> 120
+            { type: 'debuff', buffType: 'stun', value: 1, intent: '💫' },
+            { type: 'multiAttack', value: 40, count: 5, intent: '🔥' }, // 50x6 -> 40x5
+            { type: 'heal', value: 400, intent: '💚' }, // 500 -> 400
+            { type: 'buff', buffType: 'strength', value: 15, intent: '💪' }, // 20 -> 15
+            { type: 'attack', value: 250, intent: '💀' } // 300 -> 250
+        ],
+        stealChance: 1.0,
+        stealLaw: 'karmaKill',
+        gold: { min: 1500, max: 2500 }
+    },
+
     // ==================== 隐藏 & 特殊敌人 ====================
     controlledCultivator: {
         id: 'controlledCultivator',
