@@ -1634,8 +1634,64 @@ class Game {
         }
     }
 
+    // 显示卡牌选择界面
+    showCardSelection(mode = 'upgrade', callback = null) {
+        const modal = document.getElementById('card-selection-modal');
+        const container = document.getElementById('selection-cards');
+        const title = document.getElementById('selection-title');
+        const desc = document.getElementById('selection-desc');
+        
+        container.innerHTML = '';
+        this.selectionCallback = callback;
+
+        if (mode === 'upgrade') {
+            title.textContent = '强化卡牌';
+            desc.textContent = '选择一张卡牌进行永久强化，数值提升，名字变为绿色。';
+        } else if (mode === 'remove') {
+            title.textContent = '移除卡牌';
+            desc.textContent = '选择一张卡牌从牌组中永久移除。';
+        }
+
+        // 排序：先攻击后防御
+        const sortedDeck = [...this.player.deck].sort((a, b) => {
+            if (a.type === b.type) return 0;
+            return a.type === 'attack' ? -1 : 1;
+        });
+
+        sortedDeck.forEach(card => {
+            // 如果是升级模式且卡牌已升级，则跳过（或者显示为不可选）
+            if (mode === 'upgrade' && card.upgraded) return;
+            
+            const cardEl = Utils.createCardElement(card);
+            cardEl.classList.add('selectable');
+            cardEl.onclick = () => {
+                if (this.selectionCallback) {
+                    this.selectionCallback(card);
+                }
+                this.closeModal();
+            };
+            container.appendChild(cardEl);
+        });
+        
+        // 如果没有可选卡牌
+        if (container.children.length === 0) {
+            container.innerHTML = '<div style="color: white; padding: 20px;">没有可选择的卡牌</div>';
+        }
+
+        modal.classList.add('active');
+    }
+
+    // 取消卡牌选择
+    cancelCardSelection() {
+        if (this.selectionCallback) {
+            this.selectionCallback(null);
+        }
+        this.closeModal();
+    }
+
     // 关闭模态框
     closeModal() {
+        this.selectionCallback = null;
         document.querySelectorAll('.modal').forEach(modal => {
             modal.classList.remove('active');
         });

@@ -215,8 +215,16 @@ class EventSystem {
                 return `永久${effect.stat} ${effect.value >= 0 ? '+' : ''}${effect.value}`;
 
             case 'upgradeCard':
-                // TODO: 实现卡牌升级选择界面
-                return '选择一张牌升级';
+                return new Promise(resolve => {
+                    this.game.showCardSelection('upgrade', (card) => {
+                        if (card) {
+                            this.game.player.upgradeCard(card.instanceId);
+                            resolve(`强化了 ${card.name}`);
+                        } else {
+                            resolve('放弃了强化');
+                        }
+                    });
+                });
 
             case 'removeCardType':
                 // TODO: 实现卡牌移除选择界面

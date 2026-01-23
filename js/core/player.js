@@ -417,8 +417,52 @@ class Player {
 
     // 添加卡牌到牌组
     addCardToDeck(card) {
-        const newCard = { ...card, instanceId: this.generateCardId() };
+        // 深拷贝 effects 以防止修改影响原数据和其他卡牌
+        const newCard = { 
+            ...card, 
+            instanceId: this.generateCardId(),
+            effects: card.effects.map(e => ({ ...e })) 
+        };
         this.deck.push(newCard);
+    }
+
+    // 升级卡牌
+    upgradeCard(cardInstanceId) {
+        const cardIndex = this.deck.findIndex(c => c.instanceId === cardInstanceId);
+        if (cardIndex === -1) return false;
+
+        const card = this.deck[cardIndex];
+        if (card.upgraded) return false; // 已经升级过
+
+        card.upgraded = true;
+        card.name += '+';
+        
+        // 升级效果
+        card.effects.forEach(effect => {
+            if (effect.value !== undefined) {
+                // 简单的升级逻辑：数值提升
+                if (typeof effect.value === 'number') {
+                    // 伤害/护盾/治疗提升 ~40% (至少+2)
+                    if (['damage', 'block', 'heal', 'damageAll'].includes(effect.type)) {
+                        effect.value = Math.floor(effect.value * 1.4) + 2;
+                    } 
+                    // 抽牌/能量提升 1
+                    else if (['draw', 'energy'].includes(effect.type)) {
+                        effect.value += 1;
+                    }
+                    // Buff/Debuff 层数 +1
+                    else if (['buff', 'debuff'].includes(effect.type)) {
+                        effect.value += 1;
+                    }
+                }
+            }
+        });
+
+        // 更新描述
+        // 简单地在描述后添加提示，实际项目中应该有动态描述生成
+        // card.description += ' (已强化)';
+        
+        return true;
     }
 
     // 收集法则

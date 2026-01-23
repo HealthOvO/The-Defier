@@ -400,6 +400,16 @@
         </div>
     </div>
 
+    <!-- 卡牌选择弹窗 (升级/移除) -->
+    <div id="card-selection-modal" class="modal">
+        <div class="modal-content selection-view">
+            <h2 id="selection-title">选择一张卡牌</h2>
+            <p id="selection-desc">选择一张卡牌进行升级</p>
+            <div class="deck-cards" id="selection-cards"></div>
+            <button class="menu-btn secondary" onclick="game.cancelCardSelection()">取消</button>
+        </div>
+    </div>
+
     <!-- 命环弹窗 -->
     <div id="ring-modal" class="modal">
         <div class="modal-content ring-view">
