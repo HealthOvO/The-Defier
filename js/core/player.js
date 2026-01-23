@@ -81,6 +81,13 @@ class Player {
         const charData = CHARACTERS[this.characterId || 'linFeng'];
         if (!charData) return;
 
+        // 安全检查：如果等级>=1但路径仍为crippled，强制觉醒
+        // 这是为了修复旧存档可能存在的状态不一致问题
+        if (this.fateRing.level >= 1 && this.fateRing.path === 'crippled') {
+            this.fateRing.path = 'awakened';
+            // 可能需要通知用户或log，但recalculateStats调用频繁，保持静默
+        }
+
         // 1. 基础属性
         let newMaxHp = charData.stats.maxHp;
         let newBaseEnergy = charData.stats.energy;
@@ -855,6 +862,11 @@ class Player {
                     this.fateRing.level = levels[i].level;
                     this.fateRing.name = levels[i].name;
                     this.fateRing.slots = levels[i].slots;
+
+                    // 确保从残缺印记升级时，路径变为觉醒
+                    if (this.fateRing.path === 'crippled' && this.fateRing.level >= 1) {
+                        this.fateRing.path = 'awakened';
+                    }
 
                     // 立即应用新等级的属性加成
                     this.recalculateStats();
