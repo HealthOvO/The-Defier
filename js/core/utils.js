@@ -247,8 +247,9 @@ const Utils = {
             for (const [buff, value] of Object.entries(entity.buffs)) {
                 if (value > 0) {
                     const icon = this.getBuffIcon(buff);
+                    const name = this.getBuffName(buff);
                     if (icon) {
-                        html += `<div class="buff-icon" title="${buff}">${icon}<span class="buff-val">${value}</span></div>`;
+                        html += `<div class="buff-icon" title="${name}: ${value}层">${icon}<span class="buff-val">${value}</span></div>`;
                     }
                 }
             }
@@ -257,6 +258,31 @@ const Utils = {
             html += `<div class="buff-icon" title="眩晕: 无法行动">💫</div>`;
         }
         return html;
+    },
+
+    // 获取 Buff 名称
+    getBuffName(type) {
+        const names = {
+            weak: '虚弱', // 造成伤害降低
+            vulnerable: '易伤', // 受到伤害增加
+            strength: '力量', // 造成伤害增加
+            poison: '中毒', // 回合开始受伤害
+            burn: '灼烧', // 受到伤害时减少层数
+            paralysis: '麻痹', // 有几率跳过回合
+            regeneration: '再生', // 回复生命
+            reflect: '反伤', // 反弹伤害
+            dodge: '闪避', // 免疫伤害
+            startBlock: '坚韧', // 初始护盾
+            extraTurn: '迅捷', // 额外回合
+            thorns: '荆棘', // 反伤
+            chaosAura: '混乱光环',
+            nextTurnBlock: '固守',
+            nextAttackBonus: '聚气',
+            damageReduction: '减伤',
+            stealth: '潜行',
+            artifact: '神力'
+        };
+        return names[type] || type;
     },
 
     // 获取 Buff 图标
@@ -271,6 +297,14 @@ const Utils = {
             regeneration: '🌿', // 再生
             reflect: '🔮', // 反伤
             dodge: '👻', // 闪避
+            startBlock: '🛡️',
+            extraTurn: '⏩',
+            thorns: '🌵',
+            chaosAura: '🌀',
+            nextTurnBlock: '🛡️',
+            nextAttackBonus: '🎯',
+            damageReduction: '🛡️',
+            stealth: '👻',
             artifact: '🏺' // 神器/宝物效果
         };
         return icons[type] || '';

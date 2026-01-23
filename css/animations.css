@@ -128,6 +128,55 @@
     }
 }
 
+/* 寒冰粒子 */
+.particle-ice {
+    background: radial-gradient(circle, #81ecec 0%, #74b9ff 100%);
+    box-shadow: 0 0 10px #81ecec;
+    border-radius: 2px;
+    animation: iceShatter 0.8s ease forwards;
+}
+
+@keyframes iceShatter {
+    0% {
+        opacity: 1;
+        transform: scale(0) rotate(0deg);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1) rotate(180deg);
+    }
+
+    100% {
+        opacity: 0;
+        transform: scale(0.5) rotate(360deg);
+    }
+}
+
+/* 虚空/暗影粒子 */
+.particle-dark {
+    background: radial-gradient(circle, #2d3436 0%, #000000 100%);
+    box-shadow: 0 0 15px #6c5ce7;
+    animation: darkImplode 1.2s ease forwards;
+}
+
+@keyframes darkImplode {
+    0% {
+        opacity: 0.8;
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.5);
+        opacity: 0.5;
+    }
+
+    100% {
+        transform: scale(0);
+        opacity: 0;
+    }
+}
+
 /* ===================================
    连击系统视觉效果
    =================================== */

@@ -35,6 +35,9 @@ class Player {
         // 遗物
         this.relic = charData.relic;
 
+        // 法宝
+        this.treasures = [];
+
         // 命环
         this.fateRing = {
             level: 0,
@@ -42,7 +45,8 @@ class Player {
             exp: 0,
             slots: 0,
             loadedLaws: [],
-            path: 'crippled'
+            path: 'crippled',
+            unlockedPaths: ['crippled']
         };
 
         // 收集的法则
@@ -65,7 +69,11 @@ class Player {
         const list = deckList || STARTER_DECK;
         this.deck = list.map(cardId => {
             const card = CARDS[cardId];
-            return card ? { ...card, instanceId: this.generateCardId() } : null;
+            // Fix: Use deep copy to prevent shared state between same cards
+            if (!card) return null;
+            const newCard = JSON.parse(JSON.stringify(card));
+            newCard.instanceId = this.generateCardId();
+            return newCard;
         }).filter(Boolean);
     }
 
@@ -133,6 +141,12 @@ class Player {
         if (this.realm === 15) {
             newMaxHp = Math.floor(newMaxHp * 0.5);
         }
+        // Realm 18: 混沌终焉 - 所有属性减半
+        if (this.realm === 18) {
+            newMaxHp = Math.floor(newMaxHp * 0.5);
+            newBaseEnergy = Math.max(1, Math.floor(newBaseEnergy * 0.5));
+            newDrawCount = Math.max(1, Math.floor(newDrawCount * 0.5));
+        }
 
         // 更新属性 (保持当前生命值比例或数值？通常保持当前数值，除非超过最大值)
         this.maxHp = newMaxHp;
@@ -194,6 +208,19 @@ class Player {
                 this.hand.push({ ...card, instanceId: this.generateCardId(), cost: 0, isTemp: true });
             }
         }
+
+        // 命环路径：智慧之环 (额外获得2张随机技能牌)
+        if (this.fateRing.path === 'wisdom') {
+            const skills = ['meditation', 'spiritBoost', 'quickDraw', 'concentration', 'powerUp', 'analysis'];
+            for (let i = 0; i < 2; i++) {
+                const randomSkill = skills[Math.floor(Math.random() * skills.length)];
+                const card = CARDS[randomSkill];
+                if (card) {
+                    this.hand.push({ ...card, instanceId: this.generateCardId(), cost: 0, isTemp: true });
+                }
+            }
+            Utils.showBattleLog('智慧之环：获得额外技能牌');
+        }
     }
 
     // 应用命环加成 - 已废弃，由recalculateStats替代
@@ -207,7 +234,21 @@ class Player {
         // 1. 灵气稀薄 (realm 1) - 改为护盾效果-20%，更友好的新手体验
         // 效果在addBlock方法中处理
 
-        this.block = 0; // 护盾不保留到下回合
+        // 护盾每回合清零 (除非拥有'retainBlock'效果)
+        let keepBlock = false;
+        try {
+            keepBlock = this.hasBuff('retainBlock') ||
+                (this.collectedLaws && this.collectedLaws.some(l => l && l.passive && l.passive.type === 'retainBlock'));
+        } catch (e) {
+            console.warn('Error checking block retention:', e);
+        }
+
+        if (!keepBlock) {
+            this.block = 0;
+        }
+
+        // 触发法宝回合开始效果
+        this.triggerTreasureEffect('onTurnStart');
 
         // ... 其他代码 ...
 
@@ -283,6 +324,11 @@ class Player {
             amount = Math.floor(amount * 0.8);
         }
 
+        // 命环路径护盾加成/减益
+        const path = this.fateRing.path;
+        if (path === 'toughness') amount = Math.floor(amount * 1.3); // 坚韧: +30%
+        if (path === 'destruction') amount = Math.floor(amount * 0.8); // 毁灭: -20%
+
         // 大地护盾法则
         const earthLaw = this.collectedLaws.find(l => l.id === 'earthShield');
         if (earthLaw) {
@@ -302,7 +348,15 @@ class Player {
         // 共鸣：风空遁 (Astral Shift) - 闪避抽牌
         const astralShift = this.activeResonances.find(r => r.id === 'astralShift');
 
-        // 检查闪避
+        // 0. 检查闪避率 (Dodge Chance) - 新增机制
+        if (this.buffs.dodgeChance && this.buffs.dodgeChance > 0) {
+            if (Math.random() < this.buffs.dodgeChance) {
+                Utils.showBattleLog(`${this.name} 闪避了攻击！(几率: ${Math.floor(this.buffs.dodgeChance * 100)}%)`);
+                return { dodged: true, damage: 0 };
+            }
+        }
+
+        // 1. 检查绝对闪避
         if (this.buffs.dodge && this.buffs.dodge > 0) {
             // Realm 10: 大地束缚 - 20%几率闪避失败
             if (this.realm === 10 && Math.random() < 0.2) {
@@ -422,6 +476,14 @@ class Player {
         // 8. 天道压制 (realm 8)
         if (this.realm === 8 && (typeof value === 'number')) {
             value = Math.floor(value * 0.8);
+        }
+
+        // 命环路径伤害加成
+        if (effect.type === 'damage' || effect.type === 'penetrate' || effect.type === 'damageAll') {
+            const path = this.fateRing.path;
+            if (path === 'destruction') value = Math.floor(value * 1.3); // 毁灭: +30%
+            if (path === 'insight') value = Math.floor(value * 1.2);    // 洞察: +20%
+            if (path === 'defiance') value = Math.floor(value * 1.5);   // 逆天: +50%
         }
 
         // 15. 大道独行 (realm 15) - 伤害提升50%
@@ -773,7 +835,10 @@ class Player {
 
     // 添加卡牌到牌组
     addCardToDeck(card) {
-        const newCard = { ...card, instanceId: this.generateCardId() };
+        // Fix: Use deep copy to isolate instances (avoids "averaged cost" bug)
+        if (!card) return;
+        const newCard = JSON.parse(JSON.stringify(card));
+        newCard.instanceId = this.generateCardId();
         this.deck.push(newCard);
     }
 
@@ -934,7 +999,54 @@ class Player {
             collectedLaws: this.collectedLaws,
             realm: this.realm,
             floor: this.floor,
-            enemiesDefeated: this.enemiesDefeated
+            enemiesDefeated: this.enemiesDefeated,
+            treasures: this.treasures
         };
     }
+
+    // === 法宝系统 ===
+
+    // 获得法宝
+    addTreasure(treasureId) {
+        if (this.hasTreasure(treasureId)) {
+            // 已有，补偿金币
+            this.gold += 50;
+            Utils.showBattleLog(`已拥有该法宝，转化为50灵石`);
+            return false;
+        }
+
+        const treasureData = TREASURES[treasureId];
+        if (!treasureData) return false;
+
+        // 深拷贝并初始化
+        const treasure = {
+            ...treasureData,
+            obtainedAt: Date.now(),
+            data: treasureData.data ? { ...treasureData.data } : {} // 运行时数据
+        };
+
+        this.treasures.push(treasure);
+
+        // 触发获取回调
+        if (treasure.callbacks && treasure.callbacks.onObtain) {
+            treasure.callbacks.onObtain(this, treasure);
+        }
+
+        return true;
+    }
+
+    // 是否拥有法宝
+    hasTreasure(treasureId) {
+        return this.treasures.some(t => t.id === treasureId);
+    }
+
+    // 触发法宝效果
+    triggerTreasureEffect(triggerType, ...args) {
+        this.treasures.forEach(treasure => {
+            if (treasure.callbacks && treasure.callbacks[triggerType]) {
+                treasure.callbacks[triggerType](this, ...args, treasure);
+            }
+        });
+    }
 }
+

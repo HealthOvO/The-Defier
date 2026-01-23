@@ -140,6 +140,68 @@ class ParticleSystem {
         }
     }
 
+    // 寒冰效果
+    iceEffect(targetEl, count = 12) {
+        const rect = targetEl.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+
+        for (let i = 0; i < count; i++) {
+            setTimeout(() => {
+                const angle = Utils.random(0, Math.PI * 2);
+                const distance = Utils.random(10, 40);
+
+                this.createParticle(
+                    centerX + Math.cos(angle) * distance,
+                    centerY + Math.sin(angle) * distance,
+                    'ice',
+                    { size: Utils.random(6, 12), duration: 800 }
+                );
+            }, i * 20);
+        }
+        this.flashScreen('rgba(116, 185, 255, 0.2)', 150);
+    }
+
+    // 暗影/虚空效果
+    darkEffect(targetEl, count = 15) {
+        const rect = targetEl.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+
+        for (let i = 0; i < count; i++) {
+            setTimeout(() => {
+                this.createParticle(
+                    centerX + Utils.random(-30, 30),
+                    centerY + Utils.random(-30, 30),
+                    'dark',
+                    { size: Utils.random(8, 20), duration: 1200 }
+                );
+            }, i * 30);
+        }
+        this.shakeScreen('normal');
+    }
+
+    // Boss出场效果
+    bossSpawnEffect() {
+        this.shakeScreen('heavy');
+        this.flashScreen('rgba(255, 0, 0, 0.3)', 500);
+
+        // 全屏暗影粒子
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        for (let i = 0; i < 30; i++) {
+            setTimeout(() => {
+                this.createParticle(
+                    Utils.random(0, width),
+                    Utils.random(height / 2 - 100, height / 2 + 100),
+                    'dark',
+                    { size: Utils.random(15, 30), duration: 1500 }
+                );
+            }, i * 20);
+        }
+    }
+
     // 法则效果
     lawEffect(targetEl, count = 20) {
         const rect = targetEl.getBoundingClientRect();
@@ -167,7 +229,7 @@ class ParticleSystem {
     // 卡牌使用效果
     playCardEffect(targetEl, cardType) {
         if (!targetEl) targetEl = document.querySelector('.player-avatar'); // 默认目标为玩家
-        
+
         switch (cardType) {
             case 'attack':
                 this.attackEffect(targetEl);
@@ -186,6 +248,13 @@ class ParticleSystem {
                 break;
             case 'thunder':
                 this.thunderEffect(targetEl);
+                break;
+            case 'ice':
+                this.iceEffect(targetEl);
+                break;
+            case 'dark':
+            case 'void':
+                this.darkEffect(targetEl);
                 break;
             default:
                 // 通用效果

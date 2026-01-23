@@ -25,6 +25,12 @@
                 <h2 class="title-en">THE DEFIER</h2>
                 <p class="tagline">天命印记定终生？偏要逆命而行。</p>
             </div>
+            <div class="game-description"
+                style="max-width: 600px; margin: 0 auto 30px; font-size: 1rem; color: var(--text-secondary); line-height: 1.6;">
+                <p>在这个被“天道”严密掌控的世界，众生命运皆由生来注定的“命环”所限。</p>
+                <p>你，作为拥有神秘古玉的“逆命者”，获得了盗取法则、突破桎梏的能力。</p>
+                <p>构建独一无二的卡组，猎杀传说中的神兽，将它们的力量化为己用，向着苍穹之上的最高意志发起挑战。</p>
+            </div>
             <div class="menu-buttons">
                 <button class="menu-btn primary" id="continue-game-btn" onclick="game.continueGame()"
                     style="display: none;">
@@ -51,7 +57,7 @@
                     <span class="btn-icon">📖</span>
                 </button>
             </div>
-            <div class="version-info">v3.6 | 基于《我的命环能进化》</div>
+            <div class="version-info">v4.0 | 基于我的命环能进化</div>
         </div>
     </div>
 
@@ -103,6 +109,11 @@
                         <span class="stat-icon">🎴</span>
                         <span class="stat-name">抽牌</span>
                         <span class="stat-value" id="char-draw">5</span>
+                    </div>
+                    <div class="stat" style="display: none;">
+                        <span class="stat-icon">💪</span>
+                        <span class="stat-name">力量</span>
+                        <span class="stat-value" id="char-strength">-</span>
                     </div>
                 </div>
             </div>
@@ -159,6 +170,7 @@
                     <span id="map-floor">第一重·凡尘界</span>
                 </div>
             </div>
+            <div id="map-treasures" class="treasures-bar"></div>
         </div>
         <div class="map-container">
             <div class="realm-title" id="realm-title">第一重·凡尘界</div>
@@ -182,6 +194,7 @@
             <div class="ring-center-gem"></div>
         </div>
         <div class="battle-container">
+            <div id="battle-treasures" class="treasures-bar battle-pos"></div>
             <!-- 敌人区域 -->
             <div class="enemy-area">
                 <div class="enemy-container" id="enemy-container">
@@ -428,12 +441,15 @@
     <!-- 加载脚本 -->
     <script src="js/data/cards.js"></script>
     <script src="js/data/enemies.js"></script>
+    <script src="js/data/fate_ring.js"></script>
     <script src="js/data/laws.js"></script>
+    <script src="js/data/treasures.js"></script>
     <script src="js/data/events.js"></script>
     <script src="js/data/achievements.js"></script>
     <script src="js/data/characters.js"></script>
     <script src="js/core/utils.js"></script>
     <script src="js/core/particles.js"></script>
+    <script src="js/core/audio.js"></script>
     <script src="js/core/events.js"></script>
     <script src="js/core/achievements.js"></script>
     <script src="js/core/battle.js"></script>

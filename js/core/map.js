@@ -140,7 +140,10 @@ class GameMap {
             12: '第十二重·金仙界',
             13: '第十三重·大罗天',
             14: '第十四重·混元天',
-            15: '第十五重·无上天'
+            15: '第十五重·无上天',
+            16: '第十六重·太乙天',
+            17: '第十七重·大罗天',
+            18: '第十八重·混沌天'
         };
         return names[realm] || `第${realm}重天`;
     }
@@ -162,7 +165,10 @@ class GameMap {
             12: { name: '金戈铁马', desc: '使用攻击牌时，需消耗当前生命值的5%', effect: 'blood_tax' },
             13: { name: '时光逆流', desc: '每3回合，敌人会额外行动一次', effect: 'time_warp' },
             14: { name: '混元无极', desc: '敌人对所有伤害拥有20%抗性，且有50%几率免疫眩晕', effect: 'chaos_immune' },
-            15: { name: '大道独行', desc: '最大生命值减半，但造成的伤害提升50%', effect: 'final_trial' }
+            15: { name: '大道独行', desc: '最大生命值减半，但造成的伤害提升50%', effect: 'final_trial' },
+            16: { name: '太乙神雷', desc: '敌人攻击自带20%吸血，且每回合获得攻击力+1', effect: 'vampire_scaling' },
+            17: { name: '大罗法身', desc: '敌人免疫控制效果，且每回合回复 5% 最大生命', effect: 'immunity_regen' },
+            18: { name: '混沌终焉', desc: '极难挑战：玩家所有属性减半，敌人全属性翻倍', effect: 'chaos_end' }
         };
         return envs[realm] || { name: '平稳', desc: '无特殊效果', effect: 'none' };
     }
@@ -180,6 +186,11 @@ class GameMap {
         const indicator = document.getElementById('realm-law-indicator');
         if (indicator) {
             indicator.querySelector('.law-text').textContent = `当前法则：${env.name} (${env.desc})`;
+        }
+
+        // 渲染法宝
+        if (this.game.renderTreasures) {
+            this.game.renderTreasures();
         }
     }
 

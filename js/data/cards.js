@@ -232,11 +232,11 @@ const CARDS = {
         type: 'law',
         cost: 1,
         icon: '🌀',
-        description: '获得 1 层闪避（完全躲避下一次攻击）',
+        description: '获得 50% 闪避率（持续1回合）',
         rarity: 'rare',
         lawType: 'space',
         effects: [
-            { type: 'buff', buffType: 'dodge', value: 1, target: 'self' }
+            { type: 'buff', buffType: 'dodgeChance', value: 0.5, target: 'self', duration: 1 }
         ]
     },
 
@@ -260,11 +260,11 @@ const CARDS = {
         type: 'law',
         cost: 2,
         icon: '🕳️',
-        description: '造成敌人已损失生命值50%的伤害',
+        description: '造成敌人已损失生命值30%的伤害',
         rarity: 'legendary',
         lawType: 'void',
         effects: [
-            { type: 'execute', value: 0.5, target: 'enemy' }
+            { type: 'execute', value: 0.3, target: 'enemy' }
         ]
     },
 
@@ -517,11 +517,11 @@ const CARDS = {
         type: 'law',
         cost: 1,
         icon: '🌀',
-        description: '获得 2 层闪避',
+        description: '获得 1 层闪避',
         rarity: 'rare',
         lawType: 'space',
         effects: [
-            { type: 'buff', buffType: 'dodge', value: 2, target: 'self' }
+            { type: 'buff', buffType: 'dodge', value: 1, target: 'self' }
         ]
     },
 
@@ -545,11 +545,11 @@ const CARDS = {
         type: 'law',
         cost: 3,
         icon: '☠️',
-        description: '必定命中，造成敌人最大生命30%的伤害',
+        description: '必定命中，造成敌人最大生命15%的伤害',
         rarity: 'legendary',
         lawType: 'karma',
         effects: [
-            { type: 'percentDamage', value: 0.3, target: 'enemy' }
+            { type: 'percentDamage', value: 0.15, target: 'enemy' }
         ]
     },
 
@@ -612,7 +612,7 @@ const CARDS = {
         id: 'reversal',
         name: '逆转乾坤',
         type: 'chance',
-        cost: 3,
+        cost: 4,
         icon: '🔄',
         description: '与敌人交换当前生命值百分比',
         rarity: 'legendary',
@@ -847,7 +847,7 @@ const CARDS = {
             { type: 'buff', buffType: 'thorns', value: 3, target: 'self', duration: 2 }
         ]
     },
-    meditation: {
+    zenMeditation: {
         id: 'zenMeditation',
         name: '禅定',
         type: 'defense',
@@ -1026,13 +1026,13 @@ const UPGRADE_RULES = {
         swordIntent: { damage: 4 },
         flameTruth: { damage: 3, burn: 1 },
         timeStop: { costReduction: 1 }, // 3费 -> 2费
-        voidEmbrace: { multiplier: 0.15 },  // 50% -> 65%
+        voidEmbrace: { multiplier: 0.2 },  // 30% -> 50%
 
         // 新增/补全的升级规则
         shieldBash: { damage: 2, block: 2 }, // 4/4 -> 6/6
         counterStance: { block: 3, thorns: 3 }, // 3/5 -> 6/8
         battleCry: { damage: 3, strength: 1 }, // 5/2 -> 8/3
-        spaceRift: { dodge: 1 }, // 1层 -> 2层
+        spaceRift: { dodge: -1, dodgeChance: 0.25 }, // 50% -> 75%
         luckyStrike: { minDamage: 3, maxDamage: 5 }, // 5-15 -> 8-20
         fortuneWheel: { minCards: 1, maxCards: 1 }, // 1-3 -> 2-4
         miracleHeal: { heal: 5 }, // 15 -> 20
@@ -1159,6 +1159,9 @@ function upgradeCard(card) {
             }
             if (effect.type === 'buff' && effect.buffType === 'dodge' && specialRule.dodge) {
                 effect.value += specialRule.dodge;
+            }
+            if (effect.type === 'buff' && effect.buffType === 'dodgeChance' && specialRule.dodgeChance) {
+                effect.value += specialRule.dodgeChance;
             }
             if (effect.type === 'buff' && effect.buffType === 'nextAttackBonus' && specialRule.bonus) {
                 effect.value += specialRule.bonus;
@@ -1319,6 +1322,7 @@ function generateUpgradedDescription(card) {
                 if (effect.buffType === 'strength') desc += `获得 ${effect.value} 点力量${effect.permanent ? '(永久)' : ''}。`;
                 else if (effect.buffType === 'thorns') desc += `获得 ${effect.value} 点荆棘。`;
                 else if (effect.buffType === 'dodge') desc += `获得 ${effect.value} 层闪避。`;
+                else if (effect.buffType === 'dodgeChance') desc += `获得 ${Math.floor(effect.value * 100)}% 闪避率。`;
                 else if (effect.buffType === 'nextTurnBlock') desc += `下回合开始时获得 ${effect.value} 点护盾。`;
                 else if (effect.buffType === 'damageReduction') desc += `本回合受到的伤害减少${effect.value}%。`;
                 else if (effect.buffType === 'nextAttackBonus') desc += `下一张攻击牌伤害+${effect.value}。`;

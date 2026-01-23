@@ -60,6 +60,23 @@ class Battle {
         // 玩家回合开始
         this.player.startTurn();
 
+        // 播放BGM
+        if (typeof audioManager !== 'undefined') {
+            const isBoss = this.enemies.some(e => e.isBoss);
+            audioManager.playBGM(isBoss ? 'boss' : 'battle');
+        }
+
+        // Boss出场特效
+        const isBoss = this.enemies.some(e => e.isBoss);
+        if (isBoss && typeof particles !== 'undefined') {
+            setTimeout(() => particles.bossSpawnEffect(), 500);
+        }
+
+        // 触发法宝战斗开始效果
+        if (this.player.triggerTreasureEffect) {
+            this.player.triggerTreasureEffect('onBattleStart');
+        }
+
         // 确保结束回合按钮可用
         const endTurnBtn = document.getElementById('end-turn-btn');
         if (endTurnBtn) {
@@ -113,6 +130,11 @@ class Battle {
         const buffsContainer = document.getElementById('player-buffs');
         if (buffsContainer) {
             buffsContainer.innerHTML = Utils.renderBuffs(this.player);
+        }
+
+        // 渲染法宝
+        if (this.game.renderTreasures) {
+            this.game.renderTreasures();
         }
     }
 
@@ -200,6 +222,36 @@ class Battle {
             cardEl.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.onCardClick(index);
+            });
+
+            // 手势支持 (上滑出牌)
+            let startY = 0;
+            let startTime = 0;
+
+            cardEl.addEventListener('touchstart', (e) => {
+                startY = e.touches[0].clientY;
+                startTime = Date.now();
+            }, { passive: true });
+
+            cardEl.addEventListener('touchend', (e) => {
+                const endY = e.changedTouches[0].clientY;
+                const endTime = Date.now();
+                const deltaY = endY - startY; // 负值表示向上
+                const deltaTime = endTime - startTime;
+
+                if (deltaY < -50 && deltaTime < 500) {
+                    // 上滑且快速，视为出牌
+                    // 添加震动反馈
+                    if (navigator.vibrate) navigator.vibrate(50);
+                    this.onCardClick(index);
+                }
+            });
+
+            // 悬停音效
+            cardEl.addEventListener('mouseenter', () => {
+                if (typeof audioManager !== 'undefined') {
+                    audioManager.playSFX('hover');
+                }
             });
         });
     }
@@ -301,8 +353,32 @@ class Battle {
                 game.handleCombo(card.type);
             }
 
+            // 触发法宝使用卡牌效果
+            const context = {
+                damageModifier: 0
+                // 未来可扩展 blockModifier 等，但需修改 player.playCard
+            };
+
+            if (this.player.triggerTreasureEffect) {
+                this.player.triggerTreasureEffect('onCardPlay', card, context);
+            }
+
             // 播放卡牌
             const results = this.player.playCard(cardIndex, target);
+
+            // 播放音效
+            if (typeof audioManager !== 'undefined') {
+                audioManager.playSFX('attack');
+            }
+
+            // 应用法宝的伤害修正 (仅对 damage 类型有效，因为 block 等已在 playCard 内部执行)
+            if (results && context.damageModifier !== 0) {
+                results.forEach(res => {
+                    if (res.type === 'damage' || res.type === 'penetrate' || res.type === 'damageAll') {
+                        res.value += context.damageModifier;
+                    }
+                });
+            }
 
             // 处理效果
             if (results && Array.isArray(results)) {
@@ -621,7 +697,15 @@ class Battle {
             }
         }
 
+        const wasAlive = enemy.currentHp > 0;
         enemy.currentHp -= amount;
+
+        if (wasAlive && enemy.currentHp <= 0) {
+            if (this.player.triggerTreasureEffect) {
+                this.player.triggerTreasureEffect('onKill', enemy);
+            }
+        }
+
         return amount;
     }
 
@@ -750,6 +834,23 @@ class Battle {
         // 清除敌人护盾
         for (const enemy of this.enemies) {
             enemy.block = 0;
+
+            // 16. 太乙神雷 (realm 16) - 敌人每回合获得攻击力+1
+            if (this.player.realm === 16) {
+                if (!enemy.buffs.strength) enemy.buffs.strength = 0;
+                enemy.buffs.strength += 1;
+                Utils.showBattleLog(`${enemy.name} 吸收灵气，攻击力+1`);
+            }
+
+            // 17. 大罗法身 (realm 17) - 敌人每回合回复 5% 最大生命
+            if (this.player.realm === 17) {
+                const regen = Math.floor(enemy.maxHp * 0.05);
+                if (regen > 0 && enemy.currentHp < enemy.maxHp) {
+                    enemy.currentHp = Math.min(enemy.maxHp, enemy.currentHp + regen);
+                    Utils.showFloatingNumber(document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`), regen, 'heal');
+                    Utils.showBattleLog(`${enemy.name} 回复了 ${regen} 点生命`);
+                }
+            }
         }
     }
 
@@ -845,6 +946,15 @@ class Battle {
                         Utils.addShakeEffect(playerEl);
                         if (result.damage > 0) {
                             Utils.showFloatingNumber(playerEl, result.damage, 'damage');
+                        }
+                    }
+
+                    // 16. 太乙神雷 (realm 16) - 敌人攻击吸血 20%
+                    if (this.player.realm === 16 && result.damage > 0) {
+                        const heal = Math.ceil(result.damage * 0.2);
+                        if (heal > 0) {
+                            enemy.currentHp = Math.min(enemy.maxHp, enemy.currentHp + heal);
+                            Utils.showFloatingNumber(document.querySelector(`.enemy[data-index="${index}"]`), heal, 'heal');
                         }
                     }
 

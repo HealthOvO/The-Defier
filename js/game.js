@@ -68,6 +68,32 @@ class Game {
             }
         });
 
+        // 全局点击音效
+        document.addEventListener('click', (e) => {
+            // 如果点击的是按钮或包含在按钮内，或者是卡牌、菜单按钮、收藏项、角色卡片、关卡卡片
+            if (e.target.closest('button') || e.target.closest('.card') || e.target.closest('.menu-btn') || e.target.closest('.collection-item') || e.target.closest('.character-card') || e.target.closest('.realm-card')) {
+                // 如果没有被阻止传播
+                if (typeof audioManager !== 'undefined') {
+                    // 重要按钮播放确认音效
+                    const targetBtn = e.target.closest('button');
+                    const targetRealm = e.target.closest('.realm-card');
+
+                    if ((targetBtn && (
+                        targetBtn.id === 'new-game-btn' ||
+                        targetBtn.id === 'confirm-character-btn' ||
+                        targetBtn.id === 'end-turn-btn' ||
+                        targetBtn.id === 'continue-game-btn' ||
+                        targetBtn.classList.contains('primary')
+                    )) || targetRealm) {
+                        audioManager.playSFX('confirm');
+                    } else {
+                        // 普通点击
+                        audioManager.playSFX('click');
+                    }
+                }
+            }
+        });
+
         // 点击模态框背景关闭
         document.querySelectorAll('.modal').forEach(modal => {
             modal.addEventListener('click', (e) => {
@@ -176,6 +202,16 @@ class Game {
                 this.player.recalculateStats();
             }
 
+            // 兼容性修复：确保法宝列表已初始化
+            if (!this.player.treasures) {
+                this.player.treasures = [];
+            }
+            if (!this.player.collectedLaws) {
+                this.player.collectedLaws = [];
+            } else {
+                this.player.collectedLaws = this.player.collectedLaws.filter(Boolean);
+            }
+
             // 数据修复
             if (isNaN(this.player.gold)) {
                 this.player.gold = 100;
@@ -187,6 +223,13 @@ class Game {
             // 恢复命环对象引用
             if (gameState.player.fateRing) {
                 this.player.fateRing = gameState.player.fateRing;
+                // Migration: Ensure new properties exist
+                if (!this.player.fateRing.loadedLaws) {
+                    this.player.fateRing.loadedLaws = [];
+                }
+                if (!this.player.fateRing.unlockedPaths) {
+                    this.player.fateRing.unlockedPaths = ['awakened'];
+                }
                 this.player.checkFateRingLevelUp();
             }
 
@@ -645,6 +688,35 @@ class Game {
         if (battleNameEl && char) {
             battleNameEl.textContent = char.name;
         }
+
+        // 更新属性显示
+        const strengthEl = document.getElementById('char-strength');
+        // 检查永久Buff中的力量
+        let strength = 0;
+        if (this.player.permBuffs && this.player.permBuffs.strength) {
+            strength = this.player.permBuffs.strength;
+        }
+        // 如果在战斗中，加上临时Buff
+        if (this.player.buffs && this.player.buffs.strength) {
+            strength = this.player.buffs.strength; // buffs usually formatted as total value? check addBuff
+            // addBuff accumulates: this.buffs[type] += value
+            // Since prepareBattle calls addBuff for permBuffs, this.buffs.strength ALREADY includes permBuffs during battle.
+            // But checking this.player.buffs.strength is safer if we are in battle.
+            // If NOT in battle, use permBuffs.
+        }
+
+        // Better logic:
+        let displayStrength = 0;
+        if (this.battle && !this.battle.battleEnded && this.player.buffs.strength) {
+            displayStrength = this.player.buffs.strength;
+        } else if (this.player.permBuffs && this.player.permBuffs.strength) {
+            displayStrength = this.player.permBuffs.strength;
+        }
+
+        if (strengthEl) {
+            strengthEl.textContent = displayStrength > 0 ? displayStrength : '-';
+            strengthEl.parentElement.style.display = displayStrength > 0 ? 'flex' : 'none';
+        }
     }
 
     // 开始战斗 - 保存当前节点
@@ -809,6 +881,38 @@ class Game {
 
         rewardGold.textContent = `+${gold} 灵石 | 命环经验 +${ringExp}`;
 
+        // 法宝掉落判定
+        const resourceContainer = document.querySelector('.reward-resources');
+        // 清理旧的掉落显示
+        const existingTreasures = resourceContainer.querySelectorAll('.reward-treasure-item');
+        existingTreasures.forEach(el => el.remove());
+
+        let dropChance = 0.15; // 普通概率提升一点
+        if (this.currentBattleNode && this.currentBattleNode.type === 'elite') dropChance = 0.40;
+        if (this.currentBattleNode && this.currentBattleNode.type === 'boss') dropChance = 1.0;
+
+        if (Math.random() < dropChance) {
+            const treasureKeys = Object.keys(TREASURES);
+            const unowned = treasureKeys.filter(k => !this.player.hasTreasure(k));
+            if (unowned.length > 0) {
+                const tid = unowned[Math.floor(Math.random() * unowned.length)];
+                const droppedTreasure = TREASURES[tid];
+
+                // 自动获取
+                this.player.addTreasure(droppedTreasure.id);
+
+                const tItem = document.createElement('div');
+                tItem.className = 'reward-item reward-treasure-item';
+                tItem.style.color = 'var(--accent-gold)';
+                tItem.style.cursor = 'help';
+                tItem.title = droppedTreasure.description;
+                tItem.innerHTML = `<span class="icon">${droppedTreasure.icon}</span> <span>获得法宝：${droppedTreasure.name}</span>`;
+                resourceContainer.appendChild(tItem);
+
+                Utils.showBattleLog(`战斗胜利！获得法宝: ${droppedTreasure.name}`);
+            }
+        }
+
         // 法则盗取部分
         if (canSteal && stealEnemy && !this.stealAttempted) {
             stealSection.style.display = 'flex';
@@ -871,7 +975,7 @@ class Game {
 
     // 跳过奖励卡牌（扣除灵石）
     skipRewardCard() {
-        const cost = 20;
+        const cost = 10 * this.player.realm;
         if (this.player.gold >= cost) {
             this.player.gold -= cost;
             Utils.showBattleLog(`跳过卡牌奖励，扣除 ${cost} 灵石`);
@@ -922,7 +1026,19 @@ class Game {
                     stealText.innerHTML += `<br><span style="color: var(--accent-purple)">解锁法则牌: ${cardName}</span>`;
                 }
             } else {
-                stealText.innerHTML = `<span style="color: var(--text-secondary)">你已经掌握了这个法则</span>`;
+                // 补偿机制
+                let compensationMsg = `<span style="color: var(--text-secondary)">你已经掌握了这个法则</span>`;
+
+                // 给予补偿：50灵石 + 20命环经验
+                this.player.gold += 50;
+                this.player.fateRing.exp += 20;
+                this.player.checkFateRingLevelUp();
+
+                compensationMsg += `<br><span style="color: var(--accent-gold)">获得补偿：50灵石，20命环经验</span>`;
+                stealText.innerHTML = compensationMsg;
+
+                // 更新UI
+                this.updatePlayerDisplay();
             }
         } else {
             stealText.innerHTML = `<span style="color: var(--text-muted)">盗取失败...法则残留消散了</span>`;
@@ -1211,16 +1327,57 @@ class Game {
         }
     }
 
-    // 事件中升级卡牌
+    // 事件中升级卡牌 (Revised with Preview)
     showEventUpgradeCard() {
         const modal = document.getElementById('deck-modal');
         const container = document.getElementById('deck-view-cards');
-        container.innerHTML = '<h3 style="width:100%;text-align:center;margin-bottom:16px;">选择要升级的卡牌</h3>';
+        // Clear previous content
+        container.innerHTML = '';
+        container.style.display = 'flex';
+        container.style.flexDirection = 'row'; // Ensure row layout for split view
+
+        // Create Split Layout
+        const listContainer = document.createElement('div');
+        listContainer.style.flex = '1';
+        listContainer.style.display = 'flex';
+        listContainer.style.flexWrap = 'wrap';
+        listContainer.style.justifyContent = 'center';
+        listContainer.style.alignContent = 'flex-start';
+        listContainer.style.overflowY = 'auto';
+        listContainer.style.maxHeight = '60vh';
+
+        const previewContainer = document.createElement('div');
+        previewContainer.style.width = '300px';
+        previewContainer.style.borderLeft = '1px solid rgba(255,255,255,0.1)';
+        previewContainer.style.padding = '10px';
+        previewContainer.style.display = 'flex';
+        previewContainer.style.flexDirection = 'column';
+        previewContainer.style.alignItems = 'center';
+
+        container.appendChild(listContainer);
+        container.appendChild(previewContainer);
+
+        // Preview UI Elements
+        previewContainer.innerHTML = `
+            <h3 style="color:var(--accent-gold);margin-top:0;">升级预览</h3>
+            <div id="upgrade-preview-placeholder" style="color:#666;margin-top:50px;">
+                鼠标悬浮或点击卡牌<br>查看升级效果
+            </div>
+            <div id="upgrade-preview-card" style="display:none; transform:scale(1.1); margin: 20px 0;"></div>
+            <div id="upgrade-diff-text" style="width:100%; font-size:0.9rem; color:#ddd; margin: 10px 0; background:rgba(0,0,0,0.3); padding:8px; border-radius:4px; display:none;"></div>
+            <button id="confirm-upgrade-btn" class="menu-btn" style="margin-top:auto; width:100%;" disabled>确认升级</button>
+        `;
+
+        const confirmBtn = previewContainer.querySelector('#confirm-upgrade-btn');
+        const previewCardDiv = previewContainer.querySelector('#upgrade-preview-card');
+        const previewTextDiv = previewContainer.querySelector('#upgrade-diff-text');
+        const placeholder = previewContainer.querySelector('#upgrade-preview-placeholder');
+
+        let selectedIndex = -1;
 
         const upgradableCards = this.player.deck.filter(c => canUpgradeCard(c));
-
         if (upgradableCards.length === 0) {
-            container.innerHTML += '<p style="text-align:center;color:var(--text-muted);">没有可升级的卡牌</p>';
+            listContainer.innerHTML = '<p style="text-align:center;color:var(--text-muted);width:100%;">没有可升级的卡牌</p>';
             setTimeout(() => {
                 this.closeModal();
                 this.onEventComplete();
@@ -1228,22 +1385,70 @@ class Game {
             return;
         }
 
+        // Render Cards
         this.player.deck.forEach((card, index) => {
             if (!canUpgradeCard(card)) return;
 
             const cardEl = Utils.createCardElement(card, index);
             cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
             cardEl.style.cursor = 'pointer';
+            cardEl.dataset.index = index;
 
-            cardEl.addEventListener('click', () => {
+            // Interaction Logic
+            const showPreview = () => {
                 const upgraded = upgradeCard(card);
-                this.player.deck[index] = upgraded;
-                Utils.showBattleLog(`${card.name} 升级为 ${upgraded.name}！`);
-                this.closeModal();
-                this.onEventComplete();
+                placeholder.style.display = 'none';
+                previewCardDiv.style.display = 'flex';
+                previewTextDiv.style.display = 'block';
+
+                // Clear and render upgraded card
+                previewCardDiv.innerHTML = '';
+                const upgradedEl = Utils.createCardElement(upgraded, 999); // Dummy index
+                upgradedEl.classList.add(`rarity-${upgraded.rarity || 'common'}`);
+                previewCardDiv.appendChild(upgradedEl);
+
+                // Show basic info text
+                previewTextDiv.innerHTML = `
+                    <p style="margin:0;color:var(--accent-green);font-weight:bold;">${card.name} ➤ ${upgraded.name}</p>
+                    <p style="margin:4px 0 0 0;font-size:0.8rem;">${upgraded.description}</p>
+                `;
+            };
+
+            // Hover: Show preview (but don't select if not clicked)
+            cardEl.addEventListener('mouseenter', () => {
+                if (selectedIndex === -1) showPreview();
             });
-            container.appendChild(cardEl);
+
+            // Click: Select and Enable Confirm
+            cardEl.addEventListener('click', () => {
+                // Deselect others
+                listContainer.querySelectorAll('.card').forEach(c => c.style.border = '');
+                // Select this
+                cardEl.style.border = '3px solid var(--accent-gold)';
+                selectedIndex = index;
+                showPreview(); // Force show this preview
+                confirmBtn.disabled = false;
+                confirmBtn.classList.remove('disabled');
+            });
+
+            listContainer.appendChild(cardEl);
         });
+
+        // Confirm Action
+        confirmBtn.onclick = () => {
+            if (selectedIndex === -1) return;
+            const card = this.player.deck[selectedIndex];
+            const upgraded = upgradeCard(card);
+            this.player.deck[selectedIndex] = upgraded;
+            Utils.showBattleLog(`${card.name} 升级为 ${upgraded.name}！`);
+
+            // Clean up styles
+            container.style.display = '';
+            container.style.flexDirection = '';
+
+            this.closeModal();
+            this.onEventComplete();
+        };
 
         modal.classList.add('active');
     }
@@ -1416,28 +1621,38 @@ class Game {
         const uniqueCards = [];
 
         cards.forEach(card => {
-            if (!cardCounts[card.id]) {
-                cardCounts[card.id] = {
+            // Fix: Handle undefined/corrupt cards to prevent crash
+            if (!card || !card.id) {
+                console.warn('Found invalid card in deck:', card);
+                return;
+            }
+
+            const key = card.upgraded ? `${card.id}_upgraded` : card.id;
+
+            if (!cardCounts[key]) {
+                cardCounts[key] = {
                     count: 0,
                     card: card
                 };
                 uniqueCards.push(card);
             }
-            cardCounts[card.id].count++;
+            cardCounts[key].count++;
         });
 
-        // 排序：稀有度 > 名称
+        // 排序：稀有度 > 名称 > 等级
         const rarityOrder = { legendary: 5, epic: 4, rare: 3, uncommon: 2, common: 1, basic: 0 };
         uniqueCards.sort((a, b) => {
             const rA = rarityOrder[a.rarity || 'common'];
             const rB = rarityOrder[b.rarity || 'common'];
             if (rA !== rB) return rB - rA;
-            return a.id.localeCompare(b.id);
+            if (a.id !== b.id) return a.id.localeCompare(b.id);
+            return (b.upgraded ? 1 : 0) - (a.upgraded ? 1 : 0);
         });
 
         container.innerHTML = '';
         uniqueCards.forEach((card, index) => {
-            const count = cardCounts[card.id].count;
+            const key = card.upgraded ? `${card.id}_upgraded` : card.id;
+            const count = cardCounts[key].count;
             const cardEl = Utils.createCardElement(card, index);
             cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
 
@@ -1456,10 +1671,47 @@ class Game {
 
     }
 
+    // 渲染法宝栏
+    renderTreasures() {
+        if (!this.player || !this.player.treasures) return;
+
+        const containers = [
+            document.getElementById('map-treasures'),
+            document.getElementById('battle-treasures'),
+            document.getElementById('treasures-container') // 顶部栏 (如有)
+        ];
+
+        // 构建 HTML
+        const html = this.player.treasures.map(treasure => {
+            const rarityClass = treasure.rarity || 'common';
+            return `
+                <div class="treasure-icon ${rarityClass}">
+                    ${treasure.icon}
+                    <div class="treasure-tooltip">
+                        <h4>${treasure.name}</h4>
+                        <p>${treasure.description}</p>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // 更新所有容器
+        containers.forEach(container => {
+            if (container) {
+                container.innerHTML = html;
+            }
+        });
+    }
+
     // 显示命环
     showFateRing() {
         const modal = document.getElementById('ring-modal');
         const ring = this.player.fateRing;
+
+        // In-memory fix for missing data (prevents crash if loaded from old save without reload)
+        if (!ring.loadedLaws) ring.loadedLaws = [];
+        if (!ring.unlockedPaths) ring.unlockedPaths = ['awakened'];
+        if (!ring.path) ring.path = 'awakened';
 
         // 使用新的HTML结构
         modal.innerHTML = `
@@ -1481,10 +1733,10 @@ class Game {
                             <div style="font-size: 0.9rem; color: #aaa;">LV.${ring.level}</div>
                             
                             <div style="margin-top: 10px; background: rgba(0,0,0,0.3); height: 6px; border-radius: 3px; overflow: hidden;">
-                                <div style="width: ${(ring.exp / (FATE_RING.levels[ring.level + 1]?.expRequired || ring.exp || 1)) * 100}%; background: var(--accent-gold); height: 100%;"></div>
+                                <div style="width: ${Math.min(100, (ring.exp / (FATE_RING.levels[ring.level + 1]?.exp || 9999)) * 100)}%; background: var(--accent-gold); height: 100%;"></div>
                             </div>
                             <div style="font-size: 0.8rem; margin-top: 5px; color: #888;">
-                                经验值: ${ring.exp}/${FATE_RING.levels[ring.level + 1]?.expRequired || 'Max'}
+                                经验值: ${ring.exp}/${FATE_RING.levels[ring.level + 1]?.exp || (ring.level >= 10 ? 'Max' : '???')}
                             </div>
                         </div>
                         
@@ -1539,9 +1791,10 @@ class Game {
 
     // 渲染当前路径信息
     renderCurrentPathInfo(ring) {
-        if (!ring.path || ring.path === 'crippled') return '';
+        if (!ring.path) return '';
 
         const path = FATE_RING.paths[ring.path];
+        if (!path) return ''; // Guard against invalid path keys (e.g. 'undefined' string)
         return `
             <div class="ring-path-info">
                 <div style="font-weight: bold; color: var(--accent-purple); margin-bottom: 5px;">
@@ -1797,28 +2050,33 @@ class Game {
 
         settingsContainer.innerHTML = `
             <div class="game-intro-content" style="text-align: left; line-height: 1.6; max-height: 60vh; overflow-y: auto; padding-right: 10px;">
-                <h3 style="color: var(--accent-gold); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 0;">🔮 背景故事</h3>
-                <p>在这个世界，天道为万物设立了【命环】，锁定了众生的命运上限。然而，天道之善存有一线生机，诞生了能够通过吞噬法则突破命环的【逆命者】。</p>
-                <p>你正是这样一位逆命者。为了打破宿命的枷锁，你必须不断挑战天域，击败天道派来的【天罚者】，夺取他们的法则，重塑自己的命环。</p>
-                
-                <h3 style="color: var(--accent-purple); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">🎮 核心玩法</h3>
+                <h3 style="color: var(--accent-gold); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 0;">🔮 版本更新 v4.0 (终极版)</h3>
+                <p><strong>🔥 核心更新：</strong></p>
                 <ul style="padding-left: 20px; list-style-type: disc;">
-                    <li><strong>卡牌构建</strong>：收集强力卡牌，组合出独特的战斗流派。</li>
-                    <li><strong>法则系统</strong>：击败精英敌人获取【法则】，装载到命环中获得强大的被动效果。</li>
-                    <li><strong>命环进化</strong>：积累经验升级命环，选择不同的进化路径（如力量之环、智慧之环等）。</li>
-                    <li><strong>法则共鸣</strong>：特定的法则组合会触发【共鸣】，产生额外的强力效果。</li>
+                    <li><strong>终极天域 (16-18重)</strong>：挑战【太乙天】(成长吸血)、【大罗天】(免疫回复) 与 【混沌终焉】(全属性减半的绝望试炼)。</li>
+                    <li><strong>命环进化</strong>：命环系统全面实装，支持从LV1至LV10的完整进化，不同路径赋予强力被动。</li>
+                    <li><strong>平衡性重构</strong>：削弱了部分无限流/秒杀流卡牌（如因果律杀、虚空拥抱），增强了策略深度。</li>
+                    <li><strong>护盾保留</strong>：引入【大地领域】法则，获得后护盾不再回合清零，支持叠甲流玩法。</li>
+                </ul>
+
+                <h3 style="color: var(--accent-purple); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">🎮 游戏玩法</h3>
+                <p>在这个被天道锁死的修仙世界，你作为【逆命者】，需通过战斗不断吞噬法则，重塑命环。</p>
+                <ul style="padding-left: 20px; list-style-type: disc;">
+                    <li><strong>卡牌与法则</strong>：收集卡牌构建流派，击败精英夺取【法则】赋予被动。</li>
+                    <li><strong>共鸣系统</strong>：特定法则组合可触发共鸣（如五行俱全、时空扭曲）。</li>
+                    <li><strong>策略试炼</strong>：每次进入更高天域，敌人会变得更强且拥有特殊机制（如反伤、吸血、复活）。</li>
                 </ul>
                 
                 <h3 style="color: var(--accent-red); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">👥 角色介绍</h3>
                 <ul style="padding-left: 20px; list-style-type: none;">
-                    <li style="margin-bottom: 10px;"><strong>🗡️ 林风</strong>：初始逆命者，均衡发展，擅长利用命环力量。</li>
-                    <li style="margin-bottom: 10px;"><strong>💚 香叶</strong>：治愈系角色，拥有强大的恢复能力，以血换血。</li>
-                    <li style="margin-bottom: 10px;"><strong>🪙 无欲</strong>：佛门苦行僧，擅长防御反击与金钟罩。</li>
-                    <li><strong>❄️ 严寒</strong>：冰霜法师，擅长控制与冻结敌人。</li>
+                    <li style="margin-bottom: 10px;"><strong>🗡️ 林风</strong>：全能战士，擅长利用命环力量，各方面属性均衡。</li>
+                    <li style="margin-bottom: 10px;"><strong>💚 香叶</strong>：医毒圣手，虽生命值较低，但拥有强大的回复能力。</li>
+                    <li style="margin-bottom: 10px;"><strong>🪙 无欲</strong>：佛门金刚，自带护盾加成，擅长防守反击与反伤玩法。</li>
+                    <li><strong>❄️ 严寒</strong>：极冰修士，擅长控制与削弱，能让敌人寸步难行。</li>
                 </ul>
 
-                <div style="margin-top: 20px; text-align: center; font-size: 0.8rem; color: #666;">
-                    当前版本: v3.6
+                <div style="margin-top: 20px; text-align: center; font-size: 0.8rem; color: #888;">
+                    当前版本: v4.0 | 逆命轮回·终极版
                 </div>
             </div>
         `;
@@ -1870,8 +2128,8 @@ class Game {
         const items = [];
         const services = [];
         const realm = this.player.realm || 1;
-        // 价格随天域层数轻微上涨，每重天+10%
-        const priceMult = 1 + (realm - 1) * 0.1;
+        // 价格随天域层数轻微上涨，每重天+5% (原10%)
+        const priceMult = 1 + (realm - 1) * 0.05;
 
         // 1. 生成卡牌 (5张)
         for (let i = 0; i < 5; i++) {
@@ -1880,7 +2138,8 @@ class Game {
             if (card.rarity === 'basic') { i--; continue; }
 
             const basePrice = this.getCardPrice(card);
-            const price = Math.floor(basePrice * priceMult);
+            // 商店特惠：所有卡牌8折
+            const price = Math.floor(basePrice * 0.8 * priceMult);
 
             items.push({
                 type: 'card',
@@ -1897,8 +2156,8 @@ class Game {
             type: 'service',
             name: '灵丹妙药',
             icon: '💖',
-            desc: `恢复 ${Math.floor(this.player.maxHp * 0.3)} 点生命`,
-            price: Math.floor(50 * priceMult),
+            desc: `恢复 ${Math.floor(this.player.maxHp * 0.5)} 点生命`, // 30% -> 50%
+            price: Math.floor(30 * priceMult), // 50 -> 30
             sold: false
         });
 
@@ -1909,7 +2168,7 @@ class Game {
             name: '净化仪式',
             icon: '🗑️',
             desc: '移除一张牌',
-            price: Math.floor(75 * (1 + (this.player.removeCount || 0) * 0.5) * priceMult), // 移除次数越多越贵
+            price: Math.floor(50 * (1 + (this.player.removeCount || 0) * 0.5) * priceMult), // 75 -> 50
             sold: false
         });
 
@@ -1919,8 +2178,8 @@ class Game {
             type: 'service',
             name: '命环充能',
             icon: '⬆️',
-            desc: '命环经验 +50',
-            price: Math.floor(60 * priceMult),
+            desc: '命环经验 +100', // 50 -> 100
+            price: Math.floor(50 * priceMult), // 60 -> 50
             sold: false
         });
 
@@ -1968,6 +2227,31 @@ class Game {
                 price: Math.floor(300 * priceMult),
                 sold: false
             });
+        }
+
+        // 4. 法宝 (25% 几率)
+        if (Math.random() < 0.25) {
+            const treasureKeys = Object.keys(TREASURES);
+            const unowned = treasureKeys.filter(k => !this.player.hasTreasure(k));
+
+            if (unowned.length > 0) {
+                const tid = unowned[Math.floor(Math.random() * unowned.length)];
+                const t = TREASURES[tid];
+
+                // 确保价格存在
+                const tPrice = t.price || 150;
+
+                services.push({
+                    id: t.id,
+                    type: 'treasure',
+                    name: t.name,
+                    icon: t.icon,
+                    desc: t.description,
+                    price: Math.floor(tPrice * priceMult),
+                    sold: false,
+                    data: t
+                });
+            }
         }
 
         return { items, services };
@@ -2080,6 +2364,15 @@ class Game {
 
     // 应用服务效果
     applyServiceEffect(service) {
+        // 法宝购买逻辑
+        if (service.type === 'treasure') {
+            if (this.player.addTreasure(service.id)) {
+                Utils.showBattleLog(`获得法宝：${service.name}`);
+                return true;
+            }
+            return false;
+        }
+
         switch (service.id) {
             case 'heal':
                 if (this.player.currentHp >= this.player.maxHp) {
@@ -2104,7 +2397,7 @@ class Game {
             case 'law':
                 if (service.data) {
                     this.player.collectLaw(service.data);
-                    Utils.showBattleLog(`习得法则：${service.data.name}`);
+                    Utils.showBattleLog(`习得法则：${service.data.name} `);
                     return true;
                 }
                 return false;
@@ -2135,7 +2428,7 @@ class Game {
 
         this.player.deck.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
+            cardEl.classList.add(`rarity - ${card.rarity || 'common'} `);
 
             // 点击移除
             cardEl.addEventListener('click', () => {
@@ -2146,7 +2439,7 @@ class Game {
                 this.player.removeCount = (this.player.removeCount || 0) + 1;
                 serviceItem.sold = true;
 
-                Utils.showBattleLog(`移除了 ${card.name}`);
+                Utils.showBattleLog(`移除了 ${card.name} `);
 
                 this.closeModal();
                 // 刷新商店界面
@@ -2194,9 +2487,9 @@ class Game {
         const restBtn = document.createElement('button');
         restBtn.className = 'event-choice';
         restBtn.innerHTML = `
-            <div>💤 休息 (恢复 ${healAmount} HP)</div>
-            <div class="choice-effect">当前HP: ${this.player.currentHp}/${this.player.maxHp}</div>
-        `;
+                    < div >💤 休息(恢复 ${healAmount} HP)</div >
+                        <div class="choice-effect">当前HP: ${this.player.currentHp}/${this.player.maxHp}</div>
+                `;
         restBtn.onclick = () => this.campfireRest();
         choicesEl.appendChild(restBtn);
 
@@ -2205,9 +2498,9 @@ class Game {
         const upgradeBtn = document.createElement('button');
         upgradeBtn.className = 'event-choice';
         upgradeBtn.innerHTML = `
-            <div>⬆️ 升级卡牌</div>
-            <div class="choice-effect">可升级: ${upgradableCount} 张</div>
-        `;
+                    < div >⬆️ 升级卡牌</div >
+                        <div class="choice-effect">可升级: ${upgradableCount} 张</div>
+                `;
         if (upgradableCount > 0) {
             upgradeBtn.onclick = () => this.showCampfireUpgrade();
         } else {
@@ -2222,9 +2515,9 @@ class Game {
             const removeBtn = document.createElement('button');
             removeBtn.className = 'event-choice';
             removeBtn.innerHTML = `
-                <div>🗑️ 净化 (移除一张牌)</div>
-                <div class="choice-effect">精简牌组，提升效率</div>
-            `;
+                    < div >🗑️ 净化(移除一张牌)</div >
+                        <div class="choice-effect">精简牌组，提升效率</div>
+                `;
             removeBtn.onclick = () => this.showCampfireRemove();
             choicesEl.appendChild(removeBtn);
         }
@@ -2242,30 +2535,103 @@ class Game {
         this.completeCampfire();
     }
 
-    // 显示升级卡牌界面
+    // 显示升级卡牌界面 (Campfire Version with Preview)
     showCampfireUpgrade() {
         this.closeModal();
 
         const modal = document.getElementById('deck-modal');
         const container = document.getElementById('deck-view-cards');
-        container.innerHTML = '<h3 style="width:100%;text-align:center;margin-bottom:16px;">选择要升级的卡牌</h3>';
+        container.innerHTML = '';
+        container.style.display = 'flex';
+        container.style.flexDirection = 'row';
+
+        // Reuse split layout logic
+        const listContainer = document.createElement('div');
+        listContainer.style.flex = '1';
+        listContainer.style.display = 'flex';
+        listContainer.style.flexWrap = 'wrap';
+        listContainer.style.justifyContent = 'center';
+        listContainer.style.alignContent = 'flex-start';
+        listContainer.style.overflowY = 'auto';
+        listContainer.style.maxHeight = '60vh';
+
+        const previewContainer = document.createElement('div');
+        previewContainer.style.width = '300px';
+        previewContainer.style.borderLeft = '1px solid rgba(255,255,255,0.1)';
+        previewContainer.style.padding = '10px';
+        previewContainer.style.display = 'flex';
+        previewContainer.style.flexDirection = 'column';
+        previewContainer.style.alignItems = 'center';
+
+        container.appendChild(listContainer);
+        container.appendChild(previewContainer);
+
+        previewContainer.innerHTML = `
+                    < h3 style = "color:var(--accent-gold);margin-top:0;" > 升级预览</h3 >
+            <div id="upgrade-preview-placeholder" style="color:#666;margin-top:50px;">
+                鼠标悬浮或点击卡牌<br>查看升级效果
+            </div>
+            <div id="upgrade-preview-card" style="display:none; transform:scale(1.1); margin: 20px 0;"></div>
+            <div id="upgrade-diff-text" style="width:100%; font-size:0.9rem; color:#ddd; margin: 10px 0; background:rgba(0,0,0,0.3); padding:8px; border-radius:4px; display:none;"></div>
+            <button id="confirm-upgrade-btn" class="menu-btn" style="margin-top:auto; width:100%;" disabled>确认升级</button>
+                `;
+
+        const confirmBtn = previewContainer.querySelector('#confirm-upgrade-btn');
+        const previewCardDiv = previewContainer.querySelector('#upgrade-preview-card');
+        const previewTextDiv = previewContainer.querySelector('#upgrade-diff-text');
+        const placeholder = previewContainer.querySelector('#upgrade-preview-placeholder');
+
+        let selectedIndex = -1;
 
         this.player.deck.forEach((card, index) => {
             if (!canUpgradeCard(card)) return;
 
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
+            cardEl.classList.add(`rarity - ${card.rarity || 'common'} `);
             cardEl.style.cursor = 'pointer';
 
-            // 显示升级预览
-            cardEl.addEventListener('mouseenter', () => {
+            const showPreview = () => {
                 const upgraded = upgradeCard(card);
-                cardEl.title = `升级后: ${upgraded.name}\n${upgraded.description}`;
+                placeholder.style.display = 'none';
+                previewCardDiv.style.display = 'flex';
+                previewTextDiv.style.display = 'block';
+
+                previewCardDiv.innerHTML = '';
+                const upgradedEl = Utils.createCardElement(upgraded, 999);
+                upgradedEl.classList.add(`rarity - ${upgraded.rarity || 'common'} `);
+                previewCardDiv.appendChild(upgradedEl);
+
+                previewTextDiv.innerHTML = `
+                    < p style = "margin:0;color:var(--accent-green);font-weight:bold;" > ${card.name} ➤ ${upgraded.name}</p >
+                        <p style="margin:4px 0 0 0;font-size:0.8rem;">${upgraded.description}</p>
+                `;
+            };
+
+            cardEl.addEventListener('mouseenter', () => {
+                if (selectedIndex === -1) showPreview();
             });
 
-            cardEl.addEventListener('click', () => this.campfireUpgradeCard(index));
-            container.appendChild(cardEl);
+            cardEl.addEventListener('click', () => {
+                listContainer.querySelectorAll('.card').forEach(c => c.style.border = '');
+                cardEl.style.border = '3px solid var(--accent-gold)';
+                selectedIndex = index;
+                showPreview();
+                confirmBtn.disabled = false;
+                confirmBtn.classList.remove('disabled');
+            });
+
+            listContainer.appendChild(cardEl);
         });
+
+        // Confirm Action
+        confirmBtn.onclick = () => {
+            if (selectedIndex === -1) return;
+            this.campfireUpgradeCard(selectedIndex);
+
+            // Clean up
+            container.style.display = '';
+            container.style.flexDirection = '';
+        };
 
         modal.classList.add('active');
     }
@@ -2294,7 +2660,7 @@ class Game {
 
         this.player.deck.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
+            cardEl.classList.add(`rarity - ${card.rarity || 'common'} `);
             cardEl.style.cursor = 'pointer';
             cardEl.addEventListener('click', () => this.campfireRemoveCard(index));
             container.appendChild(cardEl);

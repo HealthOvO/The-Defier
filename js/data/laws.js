@@ -28,7 +28,7 @@ const LAWS = {
         element: 'sword',
         passive: {
             type: 'penetration',
-            value: 0.15
+            value: 0.25
         },
         unlockCards: ['swordIntent']
     },
@@ -42,10 +42,23 @@ const LAWS = {
         element: 'fire',
         passive: {
             type: 'burnOnHit',
-            value: 1,
-            chance: 0.3
+            value: 2,
+            chance: 0.4
         },
         unlockCards: ['flameTruth']
+    },
+
+    earthDomain: {
+        id: 'earthDomain',
+        name: '大地领域',
+        icon: '⛰️',
+        description: '不动如山。护盾不会在回合结束时消失。',
+        rarity: 'epic',
+        element: 'earth',
+        passive: {
+            type: 'retainBlock'
+        },
+        unlockCards: []
     },
 
     spaceRift: {
@@ -57,7 +70,7 @@ const LAWS = {
         element: 'space',
         passive: {
             type: 'dodgeChance',
-            value: 0.1
+            value: 0.15
         },
         unlockCards: ['spaceRift']
     },
@@ -301,178 +314,7 @@ const LAW_RESONANCES = {
     }
 };
 
-// 命环信息
-const FATE_RING = {
-    // 命环等级定义
-    levels: [
-        { level: 0, name: '残缺印记', slots: 0, expRequired: 0, desc: '无法承载完整法则' },
-        { level: 1, name: '一阶·觉醒', slots: 1, expRequired: 100, desc: '初识天机，可纳一法', canChoosePath: true, bonus: { maxHp: 10 } },
-        { level: 2, name: '二阶·通玄', slots: 2, expRequired: 300, desc: '双法并济，生生不息', canChoosePath: true, bonus: { maxHp: 20, energy: 1 } },
-        { level: 3, name: '三阶·神变', slots: 3, expRequired: 600, desc: '三元归一，神通自成', canChoosePath: true, bonus: { maxHp: 40, energy: 1, draw: 1 } },
-        { level: 4, name: '四阶·逆命', slots: 4, expRequired: 1000, desc: '四象封天，逆乱阴阳', bonus: { maxHp: 60, energy: 2, draw: 1 } }
-    ],
 
-    // 命环进化路径
-    paths: {
-        // ===== 基础路径 =====
-        crippled: {
-            id: 'crippled',
-            name: '残缺印记',
-            icon: '💔',
-            description: '天道所弃，命数残缺。灵力恢复减半，无法盗取法则。',
-            bonus: { type: 'energyMalus', value: -1 },
-            tier: 0
-        },
-        awakened: {
-            id: 'awakened',
-            name: '逆命之环',
-            icon: '💫',
-            description: '古玉重塑，逆天改命。解锁法则盗取能力。',
-            bonus: { type: 'stealUnlock', value: true },
-            tier: 0.5,
-            requires: []
-        },
-
-        // ===== 一阶进化 (等级1时可选) =====
-        power: {
-            id: 'power',
-            name: '力量之环',
-            icon: '💪',
-            description: '专注力量修炼。攻击伤害+15%。',
-            bonus: { type: 'damageBonus', value: 0.15 },
-            tier: 1,
-            requires: ['awakened'],
-            levelReq: 1
-        },
-        wisdom: {
-            id: 'wisdom',
-            name: '智慧之环',
-            icon: '🧠',
-            description: '精研心法奥义。每回合额外+1灵力。',
-            bonus: { type: 'energyBonus', value: 1 },
-            tier: 1,
-            requires: ['awakened'],
-            levelReq: 1
-        },
-        agility: {
-            id: 'agility',
-            name: '敏捷之环',
-            icon: '🌪️',
-            description: '身法如风。每回合多抽1张牌。',
-            bonus: { type: 'drawBonus', value: 1 },
-            tier: 1,
-            requires: ['awakened'],
-            levelReq: 1
-        },
-        defense: {
-            id: 'defense',
-            name: '坚韧之环',
-            icon: '🏰',
-            description: '铁壁铜墙。最大生命+20，护盾效果+20%。',
-            bonus: { type: 'hpBonus', value: 20, blockBonus: 0.2 },
-            tier: 1,
-            requires: ['awakened'],
-            levelReq: 1
-        },
-
-        // ===== 二阶进化 (等级2时可选) =====
-        thunder_god: {
-            id: 'thunder_god',
-            name: '雷神环',
-            icon: '⚡',
-            description: '雷法大成，万雷听令。雷属性伤害+50%。',
-            bonus: { type: 'elementBonus', element: 'thunder', value: 0.5 },
-            tier: 2,
-            requires: ['power'],
-            levelReq: 2
-        },
-        flame_lord: {
-            id: 'flame_lord',
-            name: '焚天环',
-            icon: '🔥',
-            description: '业火焚身，涅槃重生。火焰伤害+50%，灼烧效果翻倍。',
-            bonus: { type: 'elementBonus', element: 'fire', value: 0.5, burnDouble: true },
-            tier: 2,
-            requires: ['power'],
-            levelReq: 2
-        },
-        sword_immortal: {
-            id: 'sword_immortal',
-            name: '剑仙环',
-            icon: '🗡️',
-            description: '一剑破万法。剑意伤害+40%，20%穿透。',
-            bonus: { type: 'damageBonus', category: 'sword', value: 0.4, penetration: 0.2 },
-            tier: 2,
-            requires: ['power'],
-            levelReq: 2
-        },
-        void_lord: {
-            id: 'void_lord',
-            name: '虚空环',
-            icon: '🌀',
-            description: '身化虚空，万法不沾。闪避率+20%。',
-            bonus: { type: 'dodgeBonus', value: 0.2 },
-            tier: 2,
-            requires: ['agility'],
-            levelReq: 2
-        },
-        time_master: {
-            id: 'time_master',
-            name: '时间环',
-            icon: '⏰',
-            description: '操控时间长河。10%几率获得额外回合。',
-            bonus: { type: 'extraTurnChance', value: 0.1 },
-            tier: 2,
-            requires: ['wisdom'],
-            levelReq: 2
-        },
-
-        // ===== 三阶进化 (等级3时可选) =====
-        defiance: {
-            id: 'defiance',
-            name: '真·逆天之环',
-            icon: '👑',
-            description: '真正的逆命者！法则盗取率+50%，伤害+25%。',
-            bonus: { type: 'ultimate', stealBonus: 0.5, damageBonus: 0.25 },
-            tier: 3,
-            requires: ['thunder_god', 'flame_lord', 'sword_immortal', 'void_lord', 'time_master'],
-            requiresAny: true,
-            levelReq: 3
-        },
-
-        // ===== 四阶进化 (等级4时可选) =====
-        law_hunter: {
-            id: 'law_hunter',
-            name: '天道猎手',
-            icon: '🎯',
-            description: '法则猎手。法则盗取100%成功，但效果减半。',
-            bonus: { type: 'lawHunter', stealRate: 1.0, effectReduction: 0.5 },
-            tier: 4,
-            requires: ['defiance'],
-            levelReq: 4
-        },
-        law_fusion: {
-            id: 'law_fusion',
-            name: '法则融合',
-            icon: '🔮',
-            description: '法则大成。可同时装载5个法则，但每回合-1灵力。',
-            bonus: { type: 'lawFusion', extraSlots: 1, energyPenalty: 1 },
-            tier: 4,
-            requires: ['defiance'],
-            levelReq: 4
-        },
-        pure_power: {
-            id: 'pure_power',
-            name: '纯粹之力',
-            icon: '💪',
-            description: '放弃法则，回归本心。放弃所有法则，攻击伤害+100%。',
-            bonus: { type: 'purePower', damageBonus: 1.0, noLaws: true },
-            tier: 4,
-            requires: ['defiance'],
-            levelReq: 4
-        }
-    }
-};
 
 /**
  * 获取当前可选择的进化路径
@@ -539,9 +381,28 @@ function attemptStealLaw(enemy, stealBonus = 0) {
 // 获取法则被动效果描述
 function getLawPassiveDescription(law) {
     const passive = law.passive;
+    const elementMap = {
+        'thunder': '雷',
+        'fire': '火',
+        'sword': '剑',
+        'space': '空间',
+        'time': '时间',
+        'void': '虚空',
+        'chaos': '混沌',
+        'blood': '血', // lifeDrain -> blood? based on element: 'blood' in data
+        'earth': '土',
+        'wind': '风',
+        'ice': '冰',
+        'life': '生命',
+        'metal': '金',
+        'karma': '因果',
+        'reversal': '逆转'
+    };
+
     switch (passive.type) {
         case 'damageBonus':
-            return `${law.element}属性攻击+${passive.value}点伤害`;
+            const eleName = elementMap[law.element] || law.element;
+            return `${eleName}属性攻击+${passive.value}点伤害`;
         case 'penetration':
             return `${Math.floor(passive.value * 100)}%伤害无视护盾`;
         case 'burnOnHit':
