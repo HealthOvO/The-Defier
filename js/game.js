@@ -774,8 +774,19 @@ class Game {
     executeEventEffect(effect) {
         switch (effect.type) {
             case 'gold':
-                this.player.gold += effect.value;
-                this.eventResults.push(`💰 灵石 ${effect.value > 0 ? '+' : ''}${effect.value}`);
+                if (effect.percent) {
+                    const amount = Math.floor(this.player.gold * (Math.abs(effect.percent) / 100));
+                    if (effect.percent < 0) {
+                        this.player.gold -= amount;
+                        this.eventResults.push(`💰 灵石 -${amount} (${Math.abs(effect.percent)}%)`);
+                    } else {
+                        this.player.gold += amount;
+                        this.eventResults.push(`💰 灵石 +${amount} (${effect.percent}%)`);
+                    }
+                } else {
+                    this.player.gold += effect.value;
+                    this.eventResults.push(`💰 灵石 ${effect.value > 0 ? '+' : ''}${effect.value}`);
+                }
                 break;
 
             case 'randomGold':
