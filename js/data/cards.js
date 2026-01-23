@@ -746,3 +746,147 @@ function getRewardCards(count = 3) {
     }
     return cards;
 }
+
+// ==================== 卡牌升级系统 ====================
+
+// 升级规则配置
+const UPGRADE_RULES = {
+    // 默认规则：伤害+3，护盾+3，费用-1（最低0）
+    default: {
+        damage: 3,
+        block: 3,
+        heal: 3,
+        costReduction: 0  // 部分卡牌减费
+    },
+    // 特殊卡牌的升级规则
+    special: {
+        strike: { damage: 3 },          // 6 -> 9
+        defend: { block: 3 },           // 5 -> 8
+        heavyStrike: { damage: 4 },     // 12 -> 16
+        quickSlash: { damage: 2 },      // 4 -> 6
+        doubleStrike: { damage: 2 },    // 4x2 -> 6x2
+        ragingBlow: { damage: 5 },      // 20 -> 25
+        ironWill: { block: 4 },         // 12 -> 16
+        meditation: { draw: 1 },        // 抽2 -> 抽3
+        spiritBoost: { energy: 1 },     // +2灵力 -> +3灵力
+        innerPeace: { block: 2, heal: 2 },
+        thunderLaw: { damage: 4 },
+        swordIntent: { damage: 4 },
+        flameTruth: { damage: 3, burn: 1 },
+        timeStop: { costReduction: 1 }, // 3费 -> 2费
+        voidEmbrace: { multiplier: 0.15 },  // 50% -> 65%
+    }
+};
+
+/**
+ * 升级卡牌
+ * @param {Object} card - 要升级的卡牌
+ * @returns {Object} - 升级后的卡牌副本
+ */
+function upgradeCard(card) {
+    if (!card || card.upgraded) return card;
+
+    // 创建卡牌副本
+    const upgradedCard = JSON.parse(JSON.stringify(card));
+    upgradedCard.upgraded = true;
+    upgradedCard.name = card.name + '+';
+
+    // 获取升级规则
+    const specialRule = UPGRADE_RULES.special[card.id];
+    const defaultRule = UPGRADE_RULES.default;
+
+    // 升级效果
+    for (let i = 0; i < upgradedCard.effects.length; i++) {
+        const effect = upgradedCard.effects[i];
+
+        if (specialRule) {
+            // 应用特殊规则
+            if (effect.type === 'damage' && specialRule.damage) {
+                effect.value += specialRule.damage;
+            }
+            if (effect.type === 'block' && specialRule.block) {
+                effect.value += specialRule.block;
+            }
+            if (effect.type === 'heal' && specialRule.heal) {
+                effect.value += specialRule.heal;
+            }
+            if (effect.type === 'draw' && specialRule.draw) {
+                effect.value += specialRule.draw;
+            }
+            if (effect.type === 'energy' && specialRule.energy) {
+                effect.value += specialRule.energy;
+            }
+            if (effect.type === 'debuff' && effect.buffType === 'burn' && specialRule.burn) {
+                effect.value += specialRule.burn;
+            }
+            if (effect.type === 'execute' && specialRule.multiplier) {
+                effect.value = (effect.value || 1) + specialRule.multiplier;
+            }
+        } else {
+            // 应用默认规则
+            if (effect.type === 'damage') {
+                effect.value += defaultRule.damage;
+            }
+            if (effect.type === 'block') {
+                effect.value += defaultRule.block;
+            }
+            if (effect.type === 'heal') {
+                effect.value += defaultRule.heal;
+            }
+        }
+    }
+
+    // 费用减少（如果有特殊规则）
+    if (specialRule && specialRule.costReduction) {
+        upgradedCard.cost = Math.max(0, upgradedCard.cost - specialRule.costReduction);
+    }
+
+    // 更新描述
+    upgradedCard.description = generateUpgradedDescription(upgradedCard);
+
+    return upgradedCard;
+}
+
+/**
+ * 生成升级后的描述
+ */
+function generateUpgradedDescription(card) {
+    let desc = '';
+    for (const effect of card.effects) {
+        switch (effect.type) {
+            case 'damage':
+                desc += `造成 ${effect.value} 点伤害。`;
+                break;
+            case 'block':
+                desc += `获得 ${effect.value} 点护盾。`;
+                break;
+            case 'heal':
+                desc += `恢复 ${effect.value} 点生命。`;
+                break;
+            case 'draw':
+                desc += `抽 ${effect.value} 张牌。`;
+                break;
+            case 'energy':
+                desc += `获得 ${effect.value} 点灵力。`;
+                break;
+            case 'execute':
+                desc += `造成敌人已损失生命${Math.floor(effect.value * 100)}%的伤害。`;
+                break;
+            case 'debuff':
+                if (effect.buffType === 'burn') {
+                    desc += `使敌人获得 ${effect.value} 层灼烧。`;
+                } else if (effect.buffType === 'stun') {
+                    desc += `敌人跳过下一回合。`;
+                }
+                break;
+        }
+    }
+    return desc.trim() || card.description;
+}
+
+/**
+ * 检查卡牌是否可升级
+ */
+function canUpgradeCard(card) {
+    return card && !card.upgraded;
+}

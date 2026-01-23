@@ -289,11 +289,8 @@ class GameMap {
 
     // 营地休息
     restAtCamp(node) {
-        const healAmount = Math.floor(this.game.player.maxHp * 0.3);
-        this.game.player.heal(healAmount);
-        Utils.showBattleLog(`休息恢复 ${healAmount} 点生命`);
-        this.completeNode(node);
-        this.game.showScreen('map-screen');
+        this.game.currentBattleNode = node;
+        this.game.showCampfire(node);
     }
 
     // 完成节点

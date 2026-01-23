@@ -210,6 +210,11 @@ class Battle {
 
         const target = this.enemies[targetIndex];
 
+        // 触发连击追踪
+        if (typeof game !== 'undefined' && game.handleCombo) {
+            game.handleCombo(card.type);
+        }
+
         // 播放卡牌
         const results = this.player.playCard(cardIndex, target);
 
@@ -382,6 +387,14 @@ class Battle {
 
     // 对敌人造成伤害
     dealDamageToEnemy(enemy, amount) {
+        // 应用连击加成
+        if (typeof game !== 'undefined' && game.getComboBonus) {
+            const comboBonus = game.getComboBonus();
+            if (comboBonus > 0) {
+                amount = Math.floor(amount * (1 + comboBonus));
+            }
+        }
+
         // 检查易伤
         if (enemy.buffs.vulnerable && enemy.buffs.vulnerable > 0) {
             amount += enemy.buffs.vulnerable;

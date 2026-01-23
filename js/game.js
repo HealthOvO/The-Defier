@@ -1218,6 +1218,158 @@ class Game {
         this.autoSave();
         this.showScreen('map-screen');
     }
+
+    // ========== 营地功能 ==========
+
+    campfireNode = null;
+
+    // 显示营地选项
+    showCampfire(node) {
+        this.campfireNode = node;
+
+        // 使用事件弹窗显示营地选项
+        const modal = document.getElementById('event-modal');
+        document.getElementById('event-icon').textContent = '🏕️';
+        document.getElementById('event-title').textContent = '野外营地';
+        document.getElementById('event-desc').textContent = '你找到了一个安全的休息地点，可以在这里恢复精力或磨练技艺...';
+
+        const choicesEl = document.getElementById('event-choices');
+        choicesEl.innerHTML = '';
+
+        // 选项1: 休息恢复HP
+        const healAmount = Math.floor(this.player.maxHp * 0.3);
+        const restBtn = document.createElement('button');
+        restBtn.className = 'event-choice';
+        restBtn.innerHTML = `
+            <div>💤 休息 (恢复 ${healAmount} HP)</div>
+            <div class="choice-effect">当前HP: ${this.player.currentHp}/${this.player.maxHp}</div>
+        `;
+        restBtn.onclick = () => this.campfireRest();
+        choicesEl.appendChild(restBtn);
+
+        // 选项2: 升级卡牌
+        const upgradableCount = this.player.deck.filter(c => canUpgradeCard(c)).length;
+        const upgradeBtn = document.createElement('button');
+        upgradeBtn.className = 'event-choice';
+        upgradeBtn.innerHTML = `
+            <div>⬆️ 升级卡牌</div>
+            <div class="choice-effect">可升级: ${upgradableCount} 张</div>
+        `;
+        if (upgradableCount > 0) {
+            upgradeBtn.onclick = () => this.showCampfireUpgrade();
+        } else {
+            upgradeBtn.classList.add('disabled');
+            upgradeBtn.style.opacity = '0.5';
+            upgradeBtn.style.cursor = 'not-allowed';
+        }
+        choicesEl.appendChild(upgradeBtn);
+
+        // 选项3: 移除卡牌（如果牌组足够大）
+        if (this.player.deck.length > 5) {
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'event-choice';
+            removeBtn.innerHTML = `
+                <div>🗑️ 净化 (移除一张牌)</div>
+                <div class="choice-effect">精简牌组，提升效率</div>
+            `;
+            removeBtn.onclick = () => this.showCampfireRemove();
+            choicesEl.appendChild(removeBtn);
+        }
+
+        modal.classList.add('active');
+    }
+
+    // 营地休息
+    campfireRest() {
+        const healAmount = Math.floor(this.player.maxHp * 0.3);
+        this.player.heal(healAmount);
+        Utils.showBattleLog(`休息恢复 ${healAmount} 点生命！`);
+
+        this.closeModal();
+        this.completeCampfire();
+    }
+
+    // 显示升级卡牌界面
+    showCampfireUpgrade() {
+        this.closeModal();
+
+        const modal = document.getElementById('deck-modal');
+        const container = document.getElementById('deck-view-cards');
+        container.innerHTML = '<h3 style="width:100%;text-align:center;margin-bottom:16px;">选择要升级的卡牌</h3>';
+
+        this.player.deck.forEach((card, index) => {
+            if (!canUpgradeCard(card)) return;
+
+            const cardEl = Utils.createCardElement(card, index);
+            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
+            cardEl.style.cursor = 'pointer';
+
+            // 显示升级预览
+            cardEl.addEventListener('mouseenter', () => {
+                const upgraded = upgradeCard(card);
+                cardEl.title = `升级后: ${upgraded.name}\n${upgraded.description}`;
+            });
+
+            cardEl.addEventListener('click', () => this.campfireUpgradeCard(index));
+            container.appendChild(cardEl);
+        });
+
+        modal.classList.add('active');
+    }
+
+    // 升级选中的卡牌
+    campfireUpgradeCard(index) {
+        const card = this.player.deck[index];
+        if (!canUpgradeCard(card)) return;
+
+        const upgraded = upgradeCard(card);
+        this.player.deck[index] = upgraded;
+
+        Utils.showBattleLog(`${card.name} 升级为 ${upgraded.name}！`);
+
+        this.closeModal();
+        this.completeCampfire();
+    }
+
+    // 显示移除卡牌界面（营地版）
+    showCampfireRemove() {
+        this.closeModal();
+
+        const modal = document.getElementById('deck-modal');
+        const container = document.getElementById('deck-view-cards');
+        container.innerHTML = '<h3 style="width:100%;text-align:center;margin-bottom:16px;">选择要移除的卡牌</h3>';
+
+        this.player.deck.forEach((card, index) => {
+            const cardEl = Utils.createCardElement(card, index);
+            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
+            cardEl.style.cursor = 'pointer';
+            cardEl.addEventListener('click', () => this.campfireRemoveCard(index));
+            container.appendChild(cardEl);
+        });
+
+        modal.classList.add('active');
+    }
+
+    // 移除选中的卡牌（营地版）
+    campfireRemoveCard(index) {
+        const card = this.player.deck[index];
+        this.player.deck.splice(index, 1);
+
+        Utils.showBattleLog(`移除了 ${card.name}！`);
+
+        this.closeModal();
+        this.completeCampfire();
+    }
+
+    // 完成营地
+    completeCampfire() {
+        if (this.campfireNode) {
+            this.map.completeNode(this.campfireNode);
+            this.campfireNode = null;
+        }
+        this.autoSave();
+        this.showScreen('map-screen');
+    }
 }
 
 // 全局游戏实例
