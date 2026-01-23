@@ -3207,3 +3207,167 @@ body {
     display: flex;
     justify-content: center;
 }
+
+.hidden {
+    display: none !important;
+}
+
+/* ===================================
+   Mobile Responsiveness (Phone & Tablet)
+   =================================== */
+@media screen and (max-width: 768px) {
+
+    /* 主菜单调整 */
+    .menu-content {
+        width: 90%;
+        padding: 20px;
+    }
+
+    .title-cn {
+        font-size: 3rem;
+    }
+
+    .title-en {
+        font-size: 1.2rem;
+    }
+
+    .menu-buttons {
+        gap: 15px;
+    }
+
+    .menu-btn {
+        width: 100%;
+        padding: 12px;
+    }
+
+    /* 角色选择界面 */
+    .character-selection-container {
+        padding: 10px;
+    }
+
+    .story-intro {
+        font-size: 0.9rem;
+        padding: 15px;
+    }
+
+    .character-cards-wrapper {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .character-card {
+        width: 100%;
+        max-width: 300px;
+        height: auto;
+        min-height: 400px;
+    }
+
+    /* 战斗界面调整 */
+    .battle-container {
+        grid-template-rows: 1fr 1fr 1.2fr 180px;
+        padding: 10px;
+    }
+
+    /* 敌人区域 */
+    .enemy-container {
+        gap: 10px;
+        justify-content: center;
+    }
+
+    .enemy-card {
+        width: 120px;
+        height: 160px;
+    }
+
+    .enemy-intent {
+        top: -30px;
+    }
+
+    /* 玩家区域 */
+    .player-area {
+        position: relative;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .player-character {
+        flex-direction: row;
+        gap: 10px;
+    }
+
+    .player-avatar {
+        width: 60px;
+        height: 60px;
+        font-size: 0.8rem;
+    }
+
+    /* 手牌区域 */
+    .hand-area {
+        height: 160px;
+        padding-bottom: 60px;
+        /* 给结束回合按钮留位置 */
+    }
+
+    .hand-cards {
+        gap: -30px;
+        /* 增加重叠 */
+    }
+
+    .card {
+        width: 120px;
+        height: 170px;
+        font-size: 0.8rem;
+    }
+
+    /* 结束回合按钮悬浮或固定在底部 */
+    .end-turn-btn {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        width: auto;
+        padding: 10px 20px;
+        font-size: 1rem;
+        z-index: 100;
+    }
+
+    /* 战斗日志放中间上方 */
+    .battle-middle {
+        pointer-events: none;
+    }
+
+    .battle-log {
+        font-size: 0.9rem;
+        max-width: 90%;
+    }
+
+    /* 地图界面 */
+    .map-nodes {
+        height: 60vh;
+    }
+
+    /* 命环界面 */
+    .fate-ring-body {
+        flex-direction: column;
+    }
+
+    .ring-status-panel,
+    .law-library-panel {
+        width: 100%;
+        height: auto;
+        min-height: 200px;
+    }
+
+    /* 弹窗适配 */
+    .modal-content {
+        width: 95%;
+        max-height: 90vh;
+        padding: 15px;
+    }
+
+    /* 顶部栏 */
+    .player-status-bar {
+        font-size: 0.8rem;
+        gap: 10px;
+    }
+}

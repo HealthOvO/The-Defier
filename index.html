@@ -26,11 +26,16 @@
                 <p class="tagline">天命印记定终生？偏要逆命而行。</p>
             </div>
             <div class="menu-buttons">
-                <button class="menu-btn primary" onclick="game.showCharacterSelection()">
-                    <span class="btn-icon">⚔️</span>
-                    <span class="btn-text">开始游戏</span>
+                <button class="menu-btn primary" id="continue-game-btn" onclick="game.continueGame()"
+                    style="display: none;">
+                    <span class="btn-icon">▶️</span>
+                    <span class="btn-text">继续冒险</span>
                 </button>
-                <button class="menu-btn" onclick="game.showScreen('character-select')">
+                <button class="menu-btn primary" id="new-game-btn" onclick="game.showCharacterSelection()">
+                    <span class="btn-icon">⚔️</span>
+                    <span class="btn-text">新的轮回</span>
+                </button>
+                <button class="menu-btn" onclick="game.showPlayerInfo()">
                     <span class="btn-icon">🧙</span>
                     <span class="btn-text">角色信息</span>
                 </button>
@@ -78,12 +83,12 @@
         <div class="character-panel">
             <div class="character-avatar">
                 <div class="avatar-ring"></div>
-                <div class="avatar-inner">林风</div>
+                <div class="avatar-inner" id="info-char-avatar">林风</div>
             </div>
             <div class="character-info">
-                <h3>林风 · 逆命者</h3>
-                <div class="imprint-badge残次">残次印记</div>
-                <p class="character-desc">身负最残次印记，却获得神秘古玉，拥有盗取法则的能力。</p>
+                <h3 id="info-char-name">林风 · 逆命者</h3>
+                <div class="imprint-badge" id="info-char-title">残次印记</div>
+                <p class="character-desc" id="info-char-desc">身负最残次印记，却获得神秘古玉，拥有盗取法则的能力。</p>
                 <div class="character-stats">
                     <div class="stat">
                         <span class="stat-icon">❤️</span>
@@ -202,7 +207,7 @@
                 <div class="player-character">
                     <div class="player-avatar">
                         <div class="avatar-effects"></div>
-                        <span>林风</span>
+                        <span id="player-name-display">林风</span>
                     </div>
                     <div class="player-bars">
                         <div class="hp-bar">
