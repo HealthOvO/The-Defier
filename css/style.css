@@ -341,8 +341,7 @@ body {
     gap: var(--spacing-xl);
     padding: var(--spacing-xl);
     height: calc(100% - 70px);
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: auto;
 }
 
 .character-avatar {
@@ -539,9 +538,7 @@ body {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: var(--spacing-md);
     padding: var(--spacing-lg);
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    max-height: 100%;
+    overflow: auto;
 }
 
 .collection-item {
@@ -623,8 +620,7 @@ body {
     flex-direction: column;
     align-items: center;
     padding: var(--spacing-xl);
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: auto;
 }
 
 .realm-title {
@@ -1329,24 +1325,6 @@ body {
     gap: var(--spacing-xl);
     height: 100%;
     padding: var(--spacing-xl);
-    overflow-y: auto; /* Allow scrolling */
-    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
-}
-
-/* Responsive fix for reward screen on mobile */
-@media (max-height: 800px) {
-    .reward-container {
-        justify-content: flex-start;
-        padding-top: 60px;
-        padding-bottom: 60px;
-        height: auto;
-        min-height: 100%;
-    }
-    
-    .reward-cards {
-        flex-wrap: wrap;
-        justify-content: center;
-    }
 }
 
 .reward-title {
@@ -1521,7 +1499,6 @@ body {
     padding: var(--spacing-xl);
     justify-content: center;
     overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
     max-height: calc(100vh - 80px);
 }
 
@@ -1629,18 +1606,8 @@ body {
     padding: var(--spacing-xl);
     max-width: 90%;
     max-height: 90%;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+    overflow: auto;
     position: relative;
-}
-
-/* Mobile responsive adjustments for modals */
-@media (max-width: 768px) {
-    .modal-content {
-        padding: var(--spacing-md);
-        width: 95%;
-        max-height: 95%;
-    }
 }
 
 .modal-close {
@@ -1667,16 +1634,7 @@ body {
 }
 
 .deck-view {
-    width: 80%;
-    max-width: 1000px;
-}
-
-/* Mobile override for deck view */
-@media (max-width: 768px) {
-    .deck-view {
-        width: 95%;
-        min-width: auto;
-    }
+    min-width: 600px;
 }
 
 .deck-view h2 {
@@ -1700,17 +1658,6 @@ body {
 
 .deck-cards .card:hover {
     transform: scale(0.9);
-}
-
-@media (max-width: 768px) {
-    .deck-cards {
-        gap: var(--spacing-sm);
-    }
-    
-    .deck-cards .card {
-        transform: scale(0.9); /* Restore scale on mobile as card base size is smaller */
-        margin: 0;
-    }
 }
 
 /* Ring Modal */
@@ -2151,8 +2098,7 @@ body {
 
 .achievements-container {
     padding: var(--spacing-lg);
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: auto;
     max-height: calc(100vh - 80px);
 }
 
@@ -2805,29 +2751,6 @@ body {
 .event-desc {
     font-size: 1rem;
     line-height: 1.6;
-/* ===================================
-   Card Selection Modal
-   =================================== */
-.selection-view {
-    text-align: center;
-    width: 80%;
-    max-width: 1000px;
-}
-
-@media (max-width: 768px) {
-    .selection-view {
-        width: 95%;
-        min-width: auto;
-    }
-}
-
-.selection-view h2 {
-    font-family: var(--font-display);
-    color: var(--accent-gold);
-    margin-bottom: var(--spacing-sm);
-}
-
-.selection-view p {
     color: var(--text-secondary);
     margin-bottom: var(--spacing-lg);
 }
@@ -3478,27 +3401,4 @@ body {
         font-size: 0.8rem;
         gap: 10px;
     }
-}
-
-.card.selectable:hover {
-    transform: translateY(-20px) scale(1.1);
-    box-shadow: 0 0 20px var(--accent-gold);
-    border-color: var(--accent-gold);
-    cursor: pointer;
-}
-
-/* Upgraded Card Style */
-.card.upgraded .card-name {
-    color: #4caf50; /* Green for upgraded */
-    text-shadow: 0 0 5px rgba(76, 175, 80, 0.5);
-}
-
-.card.upgraded {
-    border-color: #4caf50;
-    box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
-}
-
-.card.upgraded .card-cost {
-    border-color: #4caf50;
-    color: #4caf50;
 }

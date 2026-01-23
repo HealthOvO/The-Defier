@@ -86,9 +86,6 @@ const Utils = {
     createCardElement(card, index = 0) {
         const cardEl = document.createElement('div');
         cardEl.className = `card ${card.type}`;
-        if (card.upgraded) {
-            cardEl.classList.add('upgraded');
-        }
         cardEl.dataset.cardId = card.id;
         cardEl.dataset.index = index;
 

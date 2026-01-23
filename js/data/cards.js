@@ -544,11 +544,11 @@ const CARDS = {
         type: 'law',
         cost: 3,
         icon: '☠️',
-        description: '必定命中，造成敌人最大生命30%的伤害',
+        description: '必定命中，造成敌人最大生命10%的伤害',
         rarity: 'legendary',
         lawType: 'karma',
         effects: [
-            { type: 'percentDamage', value: 0.3, target: 'enemy' }
+            { type: 'percentDamage', value: 0.1, target: 'enemy' }
         ]
     },
 
