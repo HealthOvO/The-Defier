@@ -1765,61 +1765,155 @@ class Game {
 
     // ========== 商店功能 ==========
 
-    // 当前商店节点和商品
     shopNode = null;
-    shopItems = [];
+    shopItems = []; // 卡牌商品
+    shopServices = []; // 特殊服务/道具
 
     // 显示商店
     showShop(node) {
         this.shopNode = node;
-        this.shopItems = this.generateShopItems();
+
+        // 生成商店数据（每次进入生成，增加随机性）
+        // 理想情况下应该保存在node中以防SL大法，但为了简单暂不持久化到node.data
+        const data = this.generateShopData();
+        this.shopItems = data.items;
+        this.shopServices = data.services;
 
         // 更新金币显示
         document.getElementById('shop-gold-display').textContent = this.player.gold;
 
-        // 生成商品卡牌
-        this.renderShopCards();
+        // 渲染商店
+        this.renderShop();
 
         this.showScreen('shop-screen');
     }
 
-    // 生成商店商品
-    generateShopItems() {
+    // 生成商店数据
+    generateShopData() {
         const items = [];
-        const realm = this.player.realm;
+        const services = [];
+        const realm = this.player.realm || 1;
+        // 价格随天域层数轻微上涨，每重天+10%
+        const priceMult = 1 + (realm - 1) * 0.1;
 
-        // 生成3-5张卡牌
-        const cardCount = Utils.random(3, 5);
-        for (let i = 0; i < cardCount; i++) {
+        // 1. 生成卡牌 (5张)
+        for (let i = 0; i < 5; i++) {
             const card = getRandomCard();
+            // 商店不卖基础牌
+            if (card.rarity === 'basic') { i--; continue; }
+
             const basePrice = this.getCardPrice(card);
+            const price = Math.floor(basePrice * priceMult);
+
             items.push({
+                type: 'card',
                 card: card,
-                price: basePrice,
+                price: price,
                 sold: false
             });
         }
 
-        return items;
+        // 2. 固定服务
+        // 治疗
+        services.push({
+            id: 'heal',
+            type: 'service',
+            name: '灵丹妙药',
+            icon: '💖',
+            desc: `恢复 ${Math.floor(this.player.maxHp * 0.3)} 点生命`,
+            price: Math.floor(50 * priceMult),
+            sold: false
+        });
+
+        // 移除卡牌
+        services.push({
+            id: 'remove',
+            type: 'service',
+            name: '净化仪式',
+            icon: '🗑️',
+            desc: '移除一张牌',
+            price: Math.floor(75 * (1 + (this.player.removeCount || 0) * 0.5) * priceMult), // 移除次数越多越贵
+            sold: false
+        });
+
+        // 命环经验
+        services.push({
+            id: 'exp',
+            type: 'service',
+            name: '命环充能',
+            icon: '⬆️',
+            desc: '命环经验 +50',
+            price: Math.floor(60 * priceMult),
+            sold: false
+        });
+
+        // 3. 随机商品 (30% 几率刷出法则，20% 几率刷出属性药水)
+        if (Math.random() < 0.3) {
+            const lawKeys = Object.keys(LAWS);
+            // 尝试找一个未获得的法则
+            const uncollected = lawKeys.filter(k => !this.player.collectedLaws.some(l => l.id === k));
+            if (uncollected.length > 0) {
+                const randomLawId = uncollected[Math.floor(Math.random() * uncollected.length)];
+                const law = LAWS[randomLawId];
+                services.push({
+                    id: 'law',
+                    type: 'item',
+                    name: '法则残卷',
+                    icon: '📜',
+                    desc: `获得: ${law.name}`,
+                    price: Math.floor(250 * priceMult),
+                    sold: false,
+                    data: law
+                });
+            }
+        }
+
+        if (Math.random() < 0.25) {
+            services.push({
+                id: 'maxHp',
+                type: 'item',
+                name: '淬体金丹',
+                icon: '💊',
+                desc: '最大生命上限 +5',
+                price: Math.floor(120 * priceMult),
+                sold: false
+            });
+        }
+
+        // 极小概率刷出永久力量
+        if (Math.random() < 0.05) {
+            services.push({
+                id: 'strength',
+                type: 'item',
+                name: '龙血草',
+                icon: '💪',
+                desc: '永久力量 +1',
+                price: Math.floor(300 * priceMult),
+                sold: false
+            });
+        }
+
+        return { items, services };
     }
 
-    // 获取卡牌价格
+    // 获取卡牌基础价格
     getCardPrice(card) {
         const rarityPrices = {
-            basic: 30,
-            common: 50,
-            uncommon: 80,
-            rare: 120,
-            epic: 180,
-            legendary: 250
+            basic: 0,
+            common: 60,
+            uncommon: 100,
+            rare: 180,
+            epic: 300,
+            legendary: 500
         };
-        return rarityPrices[card.rarity] || 50;
+        return rarityPrices[card.rarity] || 60;
     }
 
-    // 渲染商店卡牌
-    renderShopCards() {
-        const container = document.getElementById('shop-cards');
-        container.innerHTML = '';
+    // 渲染商店
+    renderShop() {
+        // 1. 渲染卡牌
+        const cardContainer = document.getElementById('shop-cards');
+        cardContainer.innerHTML = '';
 
         this.shopItems.forEach((item, index) => {
             const wrapper = document.createElement('div');
@@ -1827,76 +1921,137 @@ class Game {
 
             const cardEl = Utils.createCardElement(item.card, index);
             cardEl.classList.add(`rarity-${item.card.rarity || 'common'}`);
-            if (item.sold) {
-                cardEl.classList.add('sold');
-            }
+            if (item.sold) cardEl.classList.add('sold');
 
             const priceBtn = document.createElement('div');
-            priceBtn.className = `card-price ${this.player.gold < item.price ? 'cannot-afford' : ''}`;
-            priceBtn.innerHTML = `💰 ${item.price}`;
+            priceBtn.className = `card-price ${this.player.gold < item.price || item.sold ? 'cannot-afford' : ''}`;
+            priceBtn.innerHTML = item.sold ? '已售出' : `💰 ${item.price}`;
 
-            if (!item.sold && this.player.gold >= item.price) {
-                priceBtn.addEventListener('click', () => this.buyCard(index));
+            if (!item.sold) {
+                priceBtn.addEventListener('click', () => this.buyItem('card', index));
+                priceBtn.style.cursor = 'pointer';
             }
 
             wrapper.appendChild(cardEl);
-            if (!item.sold) {
-                wrapper.appendChild(priceBtn);
-            } else {
-                const soldTag = document.createElement('div');
-                soldTag.className = 'card-price';
-                soldTag.textContent = '已售出';
-                soldTag.style.opacity = '0.5';
-                wrapper.appendChild(soldTag);
+            wrapper.appendChild(priceBtn);
+            cardContainer.appendChild(wrapper);
+        });
+
+        // 2. 渲染服务/道具
+        const serviceContainer = document.getElementById('shop-services-container');
+        serviceContainer.innerHTML = '';
+
+        this.shopServices.forEach((service, index) => {
+            const el = document.createElement('div');
+            el.className = 'shop-service';
+            el.id = `service-${service.id}`;
+            if (service.sold) el.style.opacity = '0.5';
+
+            el.innerHTML = `
+                <div class="service-icon">${service.icon}</div>
+                <div class="service-info">
+                    <div class="service-name">${service.name}</div>
+                    <div class="service-desc">${service.desc}</div>
+                </div>
+                <button class="buy-btn ${this.player.gold < service.price || service.sold ? 'disabled' : ''}">
+                    <span class="price">${service.sold ? '已售出' : '💰 ' + service.price}</span>
+                </button>
+            `;
+
+            if (!service.sold) {
+                const btn = el.querySelector('.buy-btn');
+                btn.addEventListener('click', () => this.buyItem('service', index));
             }
 
-            container.appendChild(wrapper);
+            serviceContainer.appendChild(el);
         });
     }
 
-    // 购买卡牌
-    buyCard(index) {
-        const item = this.shopItems[index];
+    // 统一购买逻辑
+    buyItem(type, index) {
+        let item;
+        if (type === 'card') {
+            item = this.shopItems[index];
+        } else {
+            item = this.shopServices[index];
+        }
+
         if (!item || item.sold) return;
         if (this.player.gold < item.price) {
             Utils.showBattleLog('灵石不足！');
             return;
         }
 
+        // 执行购买效果
+        if (type === 'card') {
+            this.player.addCardToDeck(item.card);
+            Utils.showBattleLog(`购买了 ${item.card.name}`);
+        } else {
+            // 处理服务效果
+            const success = this.applyServiceEffect(item);
+            if (!success) return; // 如果效果执行失败（如满血购买治疗？），不扣钱
+        }
+
+        // 扣款并标记
         this.player.gold -= item.price;
-        this.player.addCardToDeck(item.card);
         item.sold = true;
 
-        Utils.showBattleLog(`购买了 ${item.card.name}！`);
-
-        // 更新显示
+        // 更新UI
         document.getElementById('shop-gold-display').textContent = this.player.gold;
-        this.renderShopCards();
+        this.renderShop();
     }
 
-    // 购买治疗
-    buyHeal() {
-        const cost = 50;
-        if (this.player.gold < cost) {
-            Utils.showBattleLog('灵石不足！');
-            return;
+    // 应用服务效果
+    applyServiceEffect(service) {
+        switch (service.id) {
+            case 'heal':
+                if (this.player.currentHp >= this.player.maxHp) {
+                    Utils.showBattleLog('生命值已满！');
+                    return false;
+                }
+                const healAmount = Math.floor(this.player.maxHp * 0.3);
+                this.player.heal(healAmount);
+                Utils.showBattleLog(`恢复了 ${healAmount} 点生命`);
+                return true;
+
+            case 'remove':
+                this.showRemoveCard(service); // 特殊处理：需要打开选择界面
+                return false; // 不在 buyItem 中立刻扣款，由 showRemoveCard 处理
+
+            case 'exp':
+                this.player.fateRing.exp += 50;
+                this.player.checkFateRingLevelUp();
+                Utils.showBattleLog('命环经验 +50');
+                return true;
+
+            case 'law':
+                if (service.data) {
+                    this.player.collectLaw(service.data);
+                    Utils.showBattleLog(`习得法则：${service.data.name}`);
+                    return true;
+                }
+                return false;
+
+            case 'maxHp':
+                this.player.maxHp += 5;
+                this.player.currentHp += 5;
+                Utils.showBattleLog('最大生命 +5');
+                return true;
+
+            case 'strength':
+                this.player.addPermBuff('strength', 1);
+                Utils.showBattleLog('永久力量 +1');
+                return true;
+
+            default:
+                return false;
         }
-
-        const healAmount = Math.floor(this.player.maxHp * 0.3);
-        this.player.gold -= cost;
-        this.player.heal(healAmount);
-
-        Utils.showBattleLog(`恢复了 ${healAmount} 点生命！`);
-        document.getElementById('shop-gold-display').textContent = this.player.gold;
     }
 
-    // 显示移除卡牌界面
-    showRemoveCard() {
-        const cost = 75;
-        if (this.player.gold < cost) {
-            Utils.showBattleLog('灵石不足！');
-            return;
-        }
+    // 显示移除卡牌界面 (重构以适应新商店)
+    showRemoveCard(serviceItem) {
+        // 如果钱不够在 buyItem 里已经检查了，但为了安全
+        if (this.player.gold < serviceItem.price) return;
 
         const container = document.getElementById('remove-card-list');
         container.innerHTML = '';
@@ -1904,41 +2059,31 @@ class Game {
         this.player.deck.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
             cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
-            cardEl.addEventListener('click', () => this.removeCard(index, cost));
+
+            // 点击移除
+            cardEl.addEventListener('click', () => {
+                this.player.deck.splice(index, 1);
+                this.player.gold -= serviceItem.price;
+
+                // 增加移除计数，让下次更贵
+                this.player.removeCount = (this.player.removeCount || 0) + 1;
+                serviceItem.sold = true;
+
+                Utils.showBattleLog(`移除了 ${card.name}`);
+
+                this.closeModal();
+                // 刷新商店界面
+                document.getElementById('shop-gold-display').textContent = this.player.gold;
+                this.renderShop();
+            });
+
             container.appendChild(cardEl);
         });
 
         document.getElementById('remove-card-modal').classList.add('active');
     }
 
-    // 移除卡牌
-    removeCard(index, cost) {
-        if (this.player.gold < cost) return;
-
-        const card = this.player.deck[index];
-        this.player.deck.splice(index, 1);
-        this.player.gold -= cost;
-
-        Utils.showBattleLog(`移除了 ${card.name}！`);
-        document.getElementById('shop-gold-display').textContent = this.player.gold;
-        this.closeModal();
-    }
-
-    // 购买命环经验
-    buyRingExp() {
-        const cost = 50;
-        if (this.player.gold < cost) {
-            Utils.showBattleLog('灵石不足！');
-            return;
-        }
-
-        this.player.gold -= cost;
-        this.player.fateRing.exp += 50;
-        this.player.checkFateRingLevelUp();
-
-        Utils.showBattleLog('命环经验 +50！');
-        document.getElementById('shop-gold-display').textContent = this.player.gold;
-    }
+    // 剩下的 buyRingExp 等旧方法可以删除，因为已经集成到 applyServiceEffect 中了
 
     // 关闭商店
     closeShop() {
