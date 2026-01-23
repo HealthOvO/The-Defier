@@ -106,6 +106,7 @@ class Game {
     // 保存游戏
     saveGame() {
         const gameState = {
+            version: '2.2.0', // 添加版本号
             player: this.player.getState(),
             map: {
                 nodes: this.map.nodes,
@@ -127,6 +128,21 @@ class Game {
         try {
             const gameState = JSON.parse(savedData);
 
+            // 版本检查 - 如果是旧版本存档，清除并重新开始
+            const currentVersion = '2.2.0';
+            if (!gameState.version || gameState.version < '2.2.0') {
+                console.log('检测到旧版本存档，已清除');
+                this.clearSave();
+                return false;
+            }
+
+            // 验证牌组数据有效性
+            if (!gameState.player.deck || !Array.isArray(gameState.player.deck) || gameState.player.deck.length < 5) {
+                console.log('存档牌组数据无效，已清除存档');
+                this.clearSave();
+                return false;
+            }
+
             // 恢复玩家状态
             Object.assign(this.player, gameState.player);
             // 恢复命环对象引用
@@ -145,6 +161,7 @@ class Game {
             return true;
         } catch (e) {
             console.error('加载存档失败:', e);
+            this.clearSave();
             return false;
         }
     }
