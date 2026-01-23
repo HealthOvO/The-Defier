@@ -188,9 +188,9 @@ const EVENTS = {
                 ]
             },
             {
-                text: '献祭卡牌',
-                icon: '🎴',
-                result: '移除一张牌，获得升级版',
+                text: '强化卡牌',
+                icon: '⚡',
+                result: '选择一张卡牌进行升级',
                 resultType: 'positive',
                 condition: { type: 'deckSize', min: 6 },
                 effects: [

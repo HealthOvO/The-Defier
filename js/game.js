@@ -666,6 +666,7 @@ class Game {
             this.currentBattleNode = null;
         }
 
+        this.autoSave();
         this.showScreen('map-screen');
     }
 
@@ -968,6 +969,7 @@ class Game {
             this.currentBattleNode = null;
         }
 
+        this.autoSave();
         this.showScreen('map-screen');
     }
 
