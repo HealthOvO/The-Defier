@@ -108,6 +108,12 @@ class Battle {
         } else {
             blockDisplay.classList.remove('show');
         }
+
+        // 更新 Buffs
+        const buffsContainer = document.getElementById('player-buffs');
+        if (buffsContainer) {
+            buffsContainer.innerHTML = Utils.renderBuffs(this.player);
+        }
     }
 
     // 更新敌人UI

@@ -159,6 +159,7 @@ class Player {
         this.discardPile = [];
         this.exhaustPile = [];
         this.block = 0;
+        this.turnNumber = 0; // 初始化回合数
 
         // 确保战斗前属性是最新的
         this.recalculateStats();
@@ -193,6 +194,7 @@ class Player {
 
     // 开始回合
     startTurn() {
+        this.turnNumber++; // 增加回合计数
         this.currentEnergy = this.baseEnergy;
 
         // 1. 灵气稀薄 (realm 1) - 改为护盾效果-20%，更友好的新手体验

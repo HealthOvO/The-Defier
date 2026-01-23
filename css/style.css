@@ -944,6 +944,33 @@ body {
     opacity: 1;
 }
 
+/* Buff Display */
+.buff-list {
+    display: flex;
+    gap: 4px;
+    margin-top: 5px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.buff-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.buff-val {
+    font-weight: bold;
+    color: var(--accent-gold);
+}
+
 /* Player Area */
 .player-area {
     display: flex;
@@ -1240,7 +1267,8 @@ body {
 
 .card-header {
     text-align: center;
-    padding: 2px 0 2px 15px; /* Added left padding to avoid overlap with cost */
+    padding: 2px 0 2px 15px;
+    /* Added left padding to avoid overlap with cost */
     border-bottom: 2px solid rgba(0, 0, 0, 0.1);
     margin-bottom: 4px;
     width: 100%;
@@ -1992,7 +2020,8 @@ body {
         padding: var(--spacing-sm);
         gap: var(--spacing-sm);
         overflow-x: auto;
-        -webkit-overflow-scrolling: touch; /* 修复iOS滚动 */
+        -webkit-overflow-scrolling: touch;
+        /* 修复iOS滚动 */
         justify-content: flex-start;
     }
 
@@ -2000,7 +2029,8 @@ body {
         display: flex;
         flex-wrap: nowrap;
         overflow-x: auto;
-        -webkit-overflow-scrolling: touch; /* 修复iOS滚动 */
+        -webkit-overflow-scrolling: touch;
+        /* 修复iOS滚动 */
         max-width: 100%;
         padding: 10px 0;
     }
@@ -3409,12 +3439,13 @@ body {
     }
 
     /* 弹窗适配 */
-.modal-content {
-    width: 95%;
-    max-height: 90vh;
-    padding: 15px;
-    -webkit-overflow-scrolling: touch; /* 修复iOS滚动 */
-}
+    .modal-content {
+        width: 95%;
+        max-height: 90vh;
+        padding: 15px;
+        -webkit-overflow-scrolling: touch;
+        /* 修复iOS滚动 */
+    }
 
     /* 顶部栏 */
     .player-status-bar {

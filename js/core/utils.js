@@ -93,7 +93,7 @@ const Utils = {
                 e.preventDefault();
                 Utils.showCardDetail(card);
             };
-            
+
             // 移动端长按模拟
             let pressTimer;
             div.addEventListener('touchstart', (e) => {
@@ -104,10 +104,10 @@ const Utils = {
             div.addEventListener('touchend', () => clearTimeout(pressTimer));
             div.addEventListener('touchmove', () => clearTimeout(pressTimer));
         }
-        
+
         const costHtml = isReward ? '' : `<div class="card-cost">${card.cost}</div>`;
         const typeIcon = this.getCardTypeIcon(card.type);
-        
+
         div.innerHTML = `
             ${costHtml}
             <div class="card-header">
@@ -117,7 +117,7 @@ const Utils = {
             <div class="card-desc">${card.description}</div>
             <div class="card-type">${typeIcon} ${this.getCardTypeName(card.type)}</div>
         `;
-        
+
         return div;
     },
 
@@ -144,7 +144,7 @@ const Utils = {
             modal.style.display = 'none';
             modal.onclick = () => modal.style.display = 'none';
             document.body.appendChild(modal);
-            
+
             // 添加样式（如果CSS中没有）
             const style = document.createElement('style');
             style.textContent = `
@@ -202,7 +202,7 @@ const Utils = {
 
     getEffectDescription(effect) {
         // 简单的效果描述生成器，用于详情页
-        switch(effect.type) {
+        switch (effect.type) {
             case 'damage': return `造成 ${effect.value} 点伤害`;
             case 'block': return `获得 ${effect.value} 点护盾`;
             case 'heal': return `恢复 ${effect.value} 点生命`;
@@ -240,6 +240,42 @@ const Utils = {
         return names[type] || '未知';
     },
 
+    // 渲染 Buff 列表
+    renderBuffs(entity) {
+        let html = '';
+        if (entity.buffs) {
+            for (const [buff, value] of Object.entries(entity.buffs)) {
+                if (value > 0) {
+                    const icon = this.getBuffIcon(buff);
+                    if (icon) {
+                        html += `<div class="buff-icon" title="${buff}">${icon}<span class="buff-val">${value}</span></div>`;
+                    }
+                }
+            }
+        }
+        if (entity.stunned) {
+            html += `<div class="buff-icon" title="眩晕: 无法行动">💫</div>`;
+        }
+        return html;
+    },
+
+    // 获取 Buff 图标
+    getBuffIcon(type) {
+        const icons = {
+            weak: '🥀', // 虚弱:造成伤害降低
+            vulnerable: '💔', // 易伤:受到伤害增加
+            strength: '💪', // 力量:造成伤害增加
+            poison: '☠️', // 中毒
+            burn: '🔥', // 灼烧
+            paralysis: '⚡', // 麻痹
+            regeneration: '🌿', // 再生
+            reflect: '🔮', // 反伤
+            dodge: '👻', // 闪避
+            artifact: '🏺' // 神器/宝物效果
+        };
+        return icons[type] || '';
+    },
+
     // 创建敌人元素
     createEnemyElement(enemy, index = 0) {
         const enemyEl = document.createElement('div');
@@ -264,6 +300,9 @@ const Utils = {
             </div>
             <div class="enemy-hp-text">${enemy.currentHp}/${enemy.hp}</div>
             ${enemy.block > 0 ? `<div class="enemy-block">🛡️ ${enemy.block}</div>` : ''}
+            <div class="buff-list enemy-buffs">
+                ${this.renderBuffs(enemy)}
+            </div>
         `;
 
         return enemyEl;

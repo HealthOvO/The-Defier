@@ -15,7 +15,8 @@ const CHARACTERS = {
             gold: 100,
             energy: 3
         },
-        deck: ['strike', 'strike', 'strike', 'strike', 'strike', 'defend', 'defend', 'defend', 'defend', 'spiritBoost'],
+        // 初始套牌：替换部分基础牌为专属牌
+        deck: ['strike', 'strike', 'strike', 'strike', 'defiantWill', 'defend', 'defend', 'defend', 'defend', 'spiritBoost'],
         relic: {
             id: 'fateRing',
             name: '逆命之环',
@@ -35,7 +36,8 @@ const CHARACTERS = {
             gold: 100,
             energy: 3
         },
-        deck: ['strike', 'strike', 'strike', 'strike', 'poisonTouch', 'defend', 'defend', 'defend', 'defend', 'minorHeal'],
+        // 初始套牌：加入治愈之触
+        deck: ['strike', 'strike', 'strike', 'strike', 'poisonTouch', 'defend', 'defend', 'defend', 'healingTouch', 'minorHeal'],
         relic: {
             id: 'healingBlood',
             name: '治愈之血',
@@ -55,7 +57,8 @@ const CHARACTERS = {
             gold: 100,
             energy: 3
         },
-        deck: ['monkStrike', 'monkStrike', 'monkStrike', 'strike', 'strike', 'defend', 'defend', 'defend', 'defend', 'ironSkin'],
+        // 初始套牌：加入金刚怒目，保留铁布衫
+        deck: ['monkStrike', 'monkStrike', 'monkStrike', 'vajraGlare', 'strike', 'defend', 'defend', 'defend', 'defend', 'ironSkin'],
         relic: {
             id: 'vajraBody',
             name: '金刚法相',
@@ -75,7 +78,8 @@ const CHARACTERS = {
             gold: 150,
             energy: 3
         },
-        deck: ['strike', 'strike', 'strike', 'defend', 'defend', 'defend', 'meditation', 'spiritBoost', 'quickDraw', 'analysis'],
+        // 初始套牌：加入命环解析
+        deck: ['strike', 'strike', 'strike', 'defend', 'defend', 'defend', 'meditation', 'spiritBoost', 'quickDraw', 'ringAnalysis'],
         relic: {
             id: 'scholarLens',
             name: '真理之镜',

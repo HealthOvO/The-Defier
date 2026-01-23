@@ -161,7 +161,7 @@ class GameMap {
             11: { name: '天人五衰', desc: '所有负面状态持续时间+1回合', effect: 'decay' },
             12: { name: '金戈铁马', desc: '使用攻击牌时，需消耗当前生命值的5%', effect: 'blood_tax' },
             13: { name: '时光逆流', desc: '每3回合，敌人会额外行动一次', effect: 'time_warp' },
-            14: { name: '混元无极', desc: '敌人对所有伤害拥有20%抗性，且无法被眩晕', effect: 'chaos_immune' },
+            14: { name: '混元无极', desc: '敌人对所有伤害拥有20%抗性，且有50%几率免疫眩晕', effect: 'chaos_immune' },
             15: { name: '大道独行', desc: '最大生命值减半，但造成的伤害提升50%', effect: 'final_trial' }
         };
         return envs[realm] || { name: '平稳', desc: '无特殊效果', effect: 'none' };
