@@ -983,34 +983,159 @@ class Game {
         const ring = this.player.fateRing;
 
         document.getElementById('modal-ring-level').textContent = ring.name;
-        const expRequired = FATE_RING.levels[ring.level]?.expRequired || 999;
+        const currentLevelInfo = FATE_RING.levels[ring.level];
+        const nextLevelInfo = FATE_RING.levels[ring.level + 1];
+        const expRequired = nextLevelInfo?.expRequired || currentLevelInfo?.expRequired || 999;
         document.getElementById('ring-progress').textContent = `${ring.exp}/${expRequired}`;
 
         const slotsContainer = document.getElementById('loaded-laws-list');
         slotsContainer.innerHTML = '';
 
-        if (ring.slots === 0) {
-            slotsContainer.innerHTML = '<div style="color: var(--text-muted); padding: 20px;">残缺印记无法承载法则，请寻找古玉觉醒...</div>';
+        // 显示当前路径
+        const currentPath = FATE_RING.paths[ring.path];
+        if (currentPath && ring.path !== 'crippled') {
+            const pathDiv = document.createElement('div');
+            pathDiv.className = 'current-path-display';
+            pathDiv.innerHTML = `
+                <div style="margin-bottom: 16px; padding: 12px; background: linear-gradient(135deg, rgba(255,215,0,0.1), rgba(156,39,176,0.1)); border-radius: 8px; border: 1px solid var(--accent-gold);">
+                    <div style="font-size: 1.2rem; margin-bottom: 4px;">${currentPath.icon || '💫'} ${currentPath.name}</div>
+                    <div style="font-size: 0.85rem; color: var(--text-secondary);">${currentPath.description}</div>
+                </div>
+            `;
+            slotsContainer.appendChild(pathDiv);
         }
 
-        for (let i = 0; i < ring.slots; i++) {
-            const lawId = ring.loadedLaws[i];
-            const law = lawId ? LAWS[lawId] : null;
-
-            const slot = document.createElement('div');
-            slot.className = `law-slot ${law ? 'filled' : ''}`;
-            slot.innerHTML = law ? `
-                <div class="law-icon">${law.icon}</div>
-                <div class="law-name">${law.name}</div>
-            ` : `
-                <div class="law-icon">+</div>
-                <div class="law-name">空槽</div>
+        // 检查是否可以进化
+        const availablePaths = getAvailablePaths(ring);
+        if (availablePaths.length > 0 && ring.level > 0) {
+            const evolveSection = document.createElement('div');
+            evolveSection.className = 'evolve-section';
+            evolveSection.innerHTML = `
+                <h4 style="margin: 16px 0 8px; color: var(--accent-gold);">🌟 可进化路径</h4>
             `;
 
-            slotsContainer.appendChild(slot);
+            const pathsGrid = document.createElement('div');
+            pathsGrid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px;';
+
+            availablePaths.forEach(path => {
+                const pathCard = document.createElement('div');
+                pathCard.className = 'path-card';
+                pathCard.style.cssText = `
+                    padding: 12px; 
+                    background: rgba(255,255,255,0.05); 
+                    border: 1px solid rgba(255,255,255,0.2); 
+                    border-radius: 8px; 
+                    cursor: pointer; 
+                    transition: all 0.3s;
+                    text-align: center;
+                `;
+                pathCard.innerHTML = `
+                    <div style="font-size: 2rem; margin-bottom: 4px;">${path.icon}</div>
+                    <div style="font-weight: 600; margin-bottom: 4px;">${path.name}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">${path.description}</div>
+                `;
+
+                pathCard.addEventListener('mouseenter', () => {
+                    pathCard.style.borderColor = 'var(--accent-gold)';
+                    pathCard.style.transform = 'translateY(-2px)';
+                    pathCard.style.boxShadow = '0 4px 12px rgba(255,215,0,0.2)';
+                });
+                pathCard.addEventListener('mouseleave', () => {
+                    pathCard.style.borderColor = 'rgba(255,255,255,0.2)';
+                    pathCard.style.transform = 'translateY(0)';
+                    pathCard.style.boxShadow = 'none';
+                });
+                pathCard.addEventListener('click', () => {
+                    this.evolveFateRing(path.id);
+                });
+
+                pathsGrid.appendChild(pathCard);
+            });
+
+            evolveSection.appendChild(pathsGrid);
+            slotsContainer.appendChild(evolveSection);
+        }
+
+        if (ring.slots === 0) {
+            slotsContainer.innerHTML += '<div style="color: var(--text-muted); padding: 20px; text-align: center;">残缺印记无法承载法则，请寻找古玉觉醒...</div>';
+        } else {
+            // 显示法则槽位
+            const lawsTitle = document.createElement('h4');
+            lawsTitle.style.cssText = 'margin: 16px 0 8px; color: var(--accent-purple);';
+            lawsTitle.textContent = '📜 装载的法则';
+            slotsContainer.appendChild(lawsTitle);
+
+            const lawsGrid = document.createElement('div');
+            lawsGrid.style.cssText = 'display: flex; gap: 12px; flex-wrap: wrap;';
+
+            for (let i = 0; i < ring.slots; i++) {
+                const lawId = ring.loadedLaws[i];
+                const law = lawId ? LAWS[lawId] : null;
+
+                const slot = document.createElement('div');
+                slot.className = `law-slot ${law ? 'filled' : ''}`;
+                slot.style.cssText = 'padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; text-align: center; min-width: 80px;';
+                slot.innerHTML = law ? `
+                    <div class="law-icon" style="font-size: 1.5rem;">${law.icon}</div>
+                    <div class="law-name" style="font-size: 0.8rem; margin-top: 4px;">${law.name}</div>
+                ` : `
+                    <div class="law-icon" style="font-size: 1.5rem; opacity: 0.3;">+</div>
+                    <div class="law-name" style="font-size: 0.8rem; opacity: 0.5;">空槽</div>
+                `;
+
+                lawsGrid.appendChild(slot);
+            }
+
+            slotsContainer.appendChild(lawsGrid);
         }
 
         modal.classList.add('active');
+    }
+
+    // 进化命环
+    evolveFateRing(pathId) {
+        const path = FATE_RING.paths[pathId];
+        if (!path) return;
+
+        // 记录之前的路径
+        if (!this.player.fateRing.unlockedPaths) {
+            this.player.fateRing.unlockedPaths = [];
+        }
+        if (this.player.fateRing.path && this.player.fateRing.path !== 'crippled') {
+            this.player.fateRing.unlockedPaths.push(this.player.fateRing.path);
+        }
+
+        // 设置新路径
+        this.player.fateRing.path = pathId;
+
+        // 应用路径加成
+        this.applyPathBonus(path);
+
+        Utils.showBattleLog(`命环进化！获得【${path.name}】！`);
+
+        // 关闭并重新打开以刷新UI
+        this.closeModal();
+        setTimeout(() => this.showFateRing(), 100);
+
+        this.autoSave();
+    }
+
+    // 应用路径加成
+    applyPathBonus(path) {
+        if (!path.bonus) return;
+
+        switch (path.bonus.type) {
+            case 'hpBonus':
+                this.player.maxHp += path.bonus.value;
+                this.player.currentHp += path.bonus.value;
+                break;
+            case 'energyBonus':
+                this.player.baseEnergy += path.bonus.value;
+                break;
+            case 'drawBonus':
+                this.player.drawCount += path.bonus.value;
+                break;
+        }
     }
 
     // 显示设置

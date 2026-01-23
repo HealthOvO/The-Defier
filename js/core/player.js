@@ -203,9 +203,25 @@ class Player {
             value += this.buffs.strength;
         }
 
-        // 应用命环力量加成
-        if (effect.type === 'damage' && this.fateRing.path === 'power') {
-            value = Math.floor(value * 1.15);
+        // 应用命环进化路径加成
+        if (effect.type === 'damage') {
+            const path = this.fateRing.path;
+            // 力量之环: +15%伤害
+            if (path === 'power') {
+                value = Math.floor(value * 1.15);
+            }
+            // 剑仙环: +40%伤害
+            if (path === 'sword_immortal') {
+                value = Math.floor(value * 1.4);
+            }
+            // 雷神环/焚天环: +50%元素伤害 (简化为通用加成)
+            if (path === 'thunder_god' || path === 'flame_lord') {
+                value = Math.floor(value * 1.5);
+            }
+            // 真·逆天之环: +25%伤害
+            if (path === 'defiance') {
+                value = Math.floor(value * 1.25);
+            }
         }
 
         // 应用法则加成

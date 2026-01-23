@@ -165,47 +165,186 @@ const REALM_LAWS = {
 const FATE_RING = {
     levels: [
         { level: 0, name: '残缺印记', slots: 0, expRequired: 0, desc: '无法承载完整法则' },
-        { level: 1, name: '一阶·觉醒', slots: 1, expRequired: 100, desc: '初识天机，可纳一法' },
-        { level: 2, name: '二阶·通玄', slots: 2, expRequired: 300, desc: '双法并济，生生不息' },
-        { level: 3, name: '三阶·神变', slots: 3, expRequired: 600, desc: '三元归一，神通自成' },
+        { level: 1, name: '一阶·觉醒', slots: 1, expRequired: 100, desc: '初识天机，可纳一法', canChoosePath: true },
+        { level: 2, name: '二阶·通玄', slots: 2, expRequired: 300, desc: '双法并济，生生不息', canChoosePath: true },
+        { level: 3, name: '三阶·神变', slots: 3, expRequired: 600, desc: '三元归一，神通自成', canChoosePath: true },
         { level: 4, name: '四阶·逆命', slots: 4, expRequired: 1000, desc: '四象封天，逆乱阴阳' }
     ],
 
     // 命环进化路径
     paths: {
+        // ===== 基础路径 =====
         crippled: {
+            id: 'crippled',
             name: '残缺印记',
+            icon: '💔',
             description: '天道所弃，命数残缺。灵力恢复减半，无法盗取法则。',
-            bonus: { type: 'energyMalus', value: -1 }
+            bonus: { type: 'energyMalus', value: -1 },
+            tier: 0
         },
         awakened: {
+            id: 'awakened',
             name: '逆命之环',
+            icon: '💫',
             description: '古玉重塑，逆天改命。解锁法则盗取能力。',
-            bonus: { type: 'stealUnlock', value: true }
+            bonus: { type: 'stealUnlock', value: true },
+            tier: 1,
+            requires: []
         },
+
+        // ===== 一阶进化 (等级1时可选) =====
+        power: {
+            id: 'power',
+            name: '力量之环',
+            icon: '💪',
+            description: '专注力量修炼。攻击伤害+15%。',
+            bonus: { type: 'damageBonus', value: 0.15 },
+            tier: 1,
+            requires: ['awakened'],
+            levelReq: 1
+        },
+        wisdom: {
+            id: 'wisdom',
+            name: '智慧之环',
+            icon: '🧠',
+            description: '精研心法奥义。每回合额外+1灵力。',
+            bonus: { type: 'energyBonus', value: 1 },
+            tier: 1,
+            requires: ['awakened'],
+            levelReq: 1
+        },
+        agility: {
+            id: 'agility',
+            name: '敏捷之环',
+            icon: '🌪️',
+            description: '身法如风。每回合多抽1张牌。',
+            bonus: { type: 'drawBonus', value: 1 },
+            tier: 1,
+            requires: ['awakened'],
+            levelReq: 1
+        },
+        defense: {
+            id: 'defense',
+            name: '坚韧之环',
+            icon: '🏰',
+            description: '铁壁铜墙。最大生命+20，护盾效果+20%。',
+            bonus: { type: 'hpBonus', value: 20, blockBonus: 0.2 },
+            tier: 1,
+            requires: ['awakened'],
+            levelReq: 1
+        },
+
+        // ===== 二阶进化 (等级2时可选) =====
         thunder_god: {
+            id: 'thunder_god',
             name: '雷神环',
+            icon: '⚡',
             description: '雷法大成，万雷听令。雷属性伤害+50%。',
             bonus: { type: 'elementBonus', element: 'thunder', value: 0.5 },
-            requires: ['awakened'],
-            elementReq: 'thunder'
+            tier: 2,
+            requires: ['power'],
+            levelReq: 2
         },
-        void_lord: {
-            name: '虚空环',
-            description: '身化虚空，万法不沾。闪避率+20%。',
-            bonus: { type: 'dodgeBonus', value: 0.2 },
-            requires: ['awakened'],
-            elementReq: 'void'
+        flame_lord: {
+            id: 'flame_lord',
+            name: '焚天环',
+            icon: '🔥',
+            description: '业火焚身，涅槃重生。火焰伤害+50%，灼烧效果翻倍。',
+            bonus: { type: 'elementBonus', element: 'fire', value: 0.5, burnDouble: true },
+            tier: 2,
+            requires: ['power'],
+            levelReq: 2
         },
         sword_immortal: {
+            id: 'sword_immortal',
             name: '剑仙环',
-            description: '一剑破万法。剑意伤害+40%，自带穿透。',
-            bonus: { type: 'damageBonus', category: 'sword', value: 0.4 },
-            requires: ['awakened'],
-            elementReq: 'sword'
+            icon: '🗡️',
+            description: '一剑破万法。剑意伤害+40%，20%穿透。',
+            bonus: { type: 'damageBonus', category: 'sword', value: 0.4, penetration: 0.2 },
+            tier: 2,
+            requires: ['power'],
+            levelReq: 2
+        },
+        void_lord: {
+            id: 'void_lord',
+            name: '虚空环',
+            icon: '🌀',
+            description: '身化虚空，万法不沾。闪避率+20%。',
+            bonus: { type: 'dodgeBonus', value: 0.2 },
+            tier: 2,
+            requires: ['agility'],
+            levelReq: 2
+        },
+        time_master: {
+            id: 'time_master',
+            name: '时间环',
+            icon: '⏰',
+            description: '操控时间长河。10%几率获得额外回合。',
+            bonus: { type: 'extraTurnChance', value: 0.1 },
+            tier: 2,
+            requires: ['wisdom'],
+            levelReq: 2
+        },
+
+        // ===== 三阶进化 (等级3时可选) =====
+        defiance: {
+            id: 'defiance',
+            name: '真·逆天之环',
+            icon: '👑',
+            description: '真正的逆命者！法则盗取率+50%，伤害+25%。',
+            bonus: { type: 'ultimate', stealBonus: 0.5, damageBonus: 0.25 },
+            tier: 3,
+            requires: ['thunder_god', 'flame_lord', 'sword_immortal', 'void_lord', 'time_master'],
+            requiresAny: true,
+            levelReq: 3
         }
     }
 };
+
+/**
+ * 获取当前可选择的进化路径
+ * @param {Object} fateRing - 玩家的命环状态
+ * @returns {Array} 可选择的路径列表
+ */
+function getAvailablePaths(fateRing) {
+    const available = [];
+    const currentLevel = fateRing.level;
+    const currentPath = fateRing.path;
+
+    for (const pathId in FATE_RING.paths) {
+        const path = FATE_RING.paths[pathId];
+
+        // 跳过已选择的路径
+        if (pathId === currentPath) continue;
+
+        // 检查等级要求
+        if (path.levelReq && path.levelReq > currentLevel) continue;
+
+        // 检查前置要求
+        if (path.requires && path.requires.length > 0) {
+            if (path.requiresAny) {
+                // 满足任意一个即可
+                const hasAny = path.requires.some(req =>
+                    fateRing.unlockedPaths && fateRing.unlockedPaths.includes(req)
+                );
+                if (!hasAny && !path.requires.includes(currentPath)) continue;
+            } else {
+                // 必须满足所有
+                const hasAll = path.requires.every(req =>
+                    fateRing.unlockedPaths && fateRing.unlockedPaths.includes(req) || req === currentPath
+                );
+                if (!hasAll) continue;
+            }
+        }
+
+        // 跳过残缺印记
+        if (pathId === 'crippled') continue;
+
+        available.push({ ...path, id: pathId });
+    }
+
+    return available;
+}
 
 // 尝试盗取法则
 function attemptStealLaw(enemy, stealBonus = 0) {
