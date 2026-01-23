@@ -375,6 +375,9 @@ class Game {
             // 特殊处理
             if (screenId === 'map-screen') {
                 this.map.render();
+                this.updatePlayerDisplay();
+            } else if (screenId === 'battle-screen') {
+                this.updatePlayerDisplay();
             } else if (screenId === 'collection') {
                 this.initCollection();
             } else if (screenId === 'achievements-screen') {

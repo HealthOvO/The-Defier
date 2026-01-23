@@ -78,6 +78,17 @@ class Battle {
         const hpText = document.getElementById('player-hp-text');
         const blockDisplay = document.getElementById('block-display');
         const blockValue = document.getElementById('block-value');
+        const nameDisplay = document.getElementById('player-name-display');
+
+        // 更新名字
+        if (nameDisplay) {
+            const charId = this.player.characterId || 'linFeng';
+            // 假设 CHARACTERS 是全局变量，如果不是，需要通过 game.CHARACTERS 或 window.CHARACTERS 访问
+            // 根据之前的代码，CHARACTERS 应该是全局的 (加载自 js/data/characters.js)
+            if (typeof CHARACTERS !== 'undefined' && CHARACTERS[charId]) {
+                nameDisplay.textContent = CHARACTERS[charId].name;
+            }
+        }
 
         const hpPercent = (this.player.currentHp / this.player.maxHp) * 100;
         hpBar.style.width = `${hpPercent}%`;
