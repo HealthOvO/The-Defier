@@ -169,7 +169,7 @@ class Game {
 
             // 恢复玩家状态
             Object.assign(this.player, gameState.player);
-            
+
             // 重新计算属性，确保版本更新后的加成生效
             // 并且防止旧存档中可能存在的错误叠加
             if (this.player.recalculateStats) {
@@ -249,15 +249,59 @@ class Game {
             const collected = this.player.collectedLaws.some(l => l.id === lawId);
 
             const item = document.createElement('div');
+            // 保留 locked 样式用于视觉区分（变灰），但不再隐藏详细信息
             item.className = `collection-item ${collected ? '' : 'locked'}`;
+
+            // 样式调整：允许高度自适应以显示描述
+            item.style.height = 'auto';
+            item.style.minHeight = '140px';
+            item.style.display = 'flex';
+            item.style.flexDirection = 'column';
+            item.style.alignItems = 'center';
+            item.style.padding = '15px';
+            item.style.cursor = collected ? 'pointer' : 'default';
+
+            // 构建描述HTML
+            let descHtml = '';
+            let passiveText = '';
+
+            // 尝试获取被动效果描述（如果函数存在）
+            if (typeof getLawPassiveDescription === 'function') {
+                passiveText = getLawPassiveDescription(law);
+            } else if (law.passive) {
+                // 简单的fallback
+                passiveText = `被动: ${law.passive.type} ${law.passive.value}`;
+            }
+
+            if (collected) {
+                descHtml = `
+                    <div class="collection-desc" style="font-size: 0.85rem; color: #ccc; margin-top: 8px; text-align: center; line-height: 1.4;">
+                        ${law.description}
+                    </div>
+                `;
+            } else {
+                descHtml = `
+                    <div class="collection-desc" style="font-size: 0.85rem; color: #666; margin-top: 8px; font-style: italic;">
+                        未获得
+                    </div>
+                `;
+            }
+
+            // 始终显示名字
             item.innerHTML = `
-                <div class="collection-icon">${law.icon}</div>
-                <div class="collection-name">${collected ? law.name : '???'}</div>
+                <div class="collection-icon" style="font-size: 2.5rem; margin-bottom: 5px;">${law.icon}</div>
+                <div class="collection-name" style="font-size: 1.1rem; font-weight: bold; color: var(--accent-gold);">${law.name}</div>
+                ${descHtml}
             `;
 
             if (collected) {
                 item.addEventListener('click', () => {
-                    alert(`${law.name}\n\n${law.description}\n\n被动效果: ${getLawPassiveDescription(law)}`);
+                    // 详情弹窗
+                    let detailMsg = `${law.name}\n\n${law.description}`;
+                    if (passiveText) {
+                        detailMsg += `\n\n被动效果: ${passiveText}`;
+                    }
+                    alert(detailMsg);
                 });
             }
 
@@ -751,7 +795,7 @@ class Game {
         const stealText = document.getElementById('steal-text');
         const rewardGold = document.getElementById('reward-gold');
         const rewardCards = document.getElementById('reward-cards');
-        
+
         // 关键修复：初始时禁用“继续前进”按钮，强制玩家选择或跳过
         const continueBtn = document.getElementById('continue-reward-btn');
         if (continueBtn) {
@@ -1252,20 +1296,20 @@ class Game {
 
         // 恢复生命值
         this.player.currentHp = this.player.maxHp;
-        
+
         // 重置层数
         this.player.floor = 0;
-        
+
         // 重新生成地图
         this.map.generate(this.player.realm);
-        
+
         // 自动保存
         // 关键修复：保存必须在所有状态重置（扣钱、恢复HP、重置层数）之后立即进行
         // 这样如果用户在点击“重修此界”后刷新，加载的存档已经是扣过钱并重置进度的状态
         this.autoSave();
-        
+
         Utils.showBattleLog(`时光倒流... 损失 ${reviveCost} 灵石，重修 ${this.map.getRealmName(this.player.realm)}`);
-        
+
         // 进入地图界面
         this.showScreen('map-screen');
     }
@@ -1300,13 +1344,13 @@ class Game {
         // 这里暂时保持自动推进，但增加保存
         this.player.realm++;
         this.player.floor = 0;
-        
+
         // 关键修复：不要重置 currentHp 到 maxHp，保留当前状态
         // 也不要回退到第一层，player.realm 已经 ++ 了
         // 之前的代码似乎没有重置回第一层，但可能有逻辑错误导致感知错觉？
         // 或者是 autoSave 读取时的问题？
         // 检查 loadGame 逻辑，如果有非法数据会被重置，可能是那里
-        
+
         this.autoSave();
 
         // 治疗玩家 (小幅回复，而不是回满)

@@ -436,10 +436,14 @@ class Battle {
                 if (target) {
                     target.buffs[result.buffType] = (target.buffs[result.buffType] || 0) + result.value;
                     if (result.buffType === 'stun') {
-                        // 14. 混元无极 (realm 14) - 免疫眩晕
-                        if (this.player.realm === 14) {
-                            Utils.showBattleLog('混元无极：敌人免疫眩晕！');
-                        } else {
+                        // 14. 混元无极 (realm 14) - 50% 免疫眩晕
+                        let immune = false;
+                        if (this.player.realm === 14 && Math.random() < 0.5) {
+                            immune = true;
+                            Utils.showBattleLog('混元无极：敌人免疫了眩晕！');
+                        }
+
+                        if (!immune) {
                             target.stunned = true;
 
                             // 共鸣：绝对零度 (Absolute Zero)
