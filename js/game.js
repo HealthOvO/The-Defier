@@ -508,6 +508,12 @@ class Game {
         if (bonuses.gold) this.player.gold += bonuses.gold;
         if (bonuses.draw) this.player.drawCount += bonuses.draw;
 
+        // 清空地图数据，确保startRealm不会误判为继续游戏
+        if (this.map) {
+            this.map.nodes = [];
+            this.map.bossNode = null;
+        }
+
         // 不直接生成地图，而是去选关界面
         this.showScreen('realm-select-screen');
         this.autoSave();
