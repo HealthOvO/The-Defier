@@ -183,7 +183,13 @@ class Game {
             this.map.completedNodes = gameState.map.completedNodes;
 
             this.unlockedRealms = gameState.unlockedRealms || [1];
-            this.savedScreen = gameState.currentScreen || 'map-screen';
+
+            // 恢复界面：如果是战斗或奖励界面，因为临时数据未保存，强制回退到地图
+            let savedScreen = gameState.currentScreen || 'map-screen';
+            if (['battle-screen', 'reward-screen', 'game-over-screen'].includes(savedScreen)) {
+                savedScreen = 'map-screen';
+            }
+            this.savedScreen = savedScreen;
 
             console.log('游戏已加载');
             return true;
@@ -538,11 +544,8 @@ class Game {
 
     // 显示角色详情（主菜单）
     showPlayerInfo() {
-        // 如果有存档，显示存档角色；否则显示林风
-        let charId = 'linFeng';
-        if (this.loadGameResult && this.player && this.player.characterId) {
-            charId = this.player.characterId;
-        }
+        // 优先显示当前玩家对象的角色，没有则默认为林风
+        const charId = (this.player && this.player.characterId) ? this.player.characterId : 'linFeng';
 
         const char = CHARACTERS[charId];
         if (!char) return;
