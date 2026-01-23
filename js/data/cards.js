@@ -697,10 +697,9 @@ const CARDS = {
         rarity: 'legendary',
         lawType: 'chaos',
         effects: [
-            effects: [
-                { type: 'damage', value: 5, target: 'enemy' },
-                { type: 'debuff', buffType: 'stun', value: 1, target: 'enemy' }
-            ]
+            { type: 'damage', value: 5, target: 'enemy' },
+            { type: 'debuff', buffType: 'stun', value: 1, target: 'enemy' }
+        ]
     },
 
     // ==================== 多角色专属卡牌 ====================

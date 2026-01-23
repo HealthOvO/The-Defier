@@ -437,7 +437,16 @@ class Battle {
         // 检查战斗是否结束
         if (this.checkBattleEnd()) return;
 
-        // ...
+        // 新回合
+        this.turnNumber++;
+        this.currentTurn = 'player';
+        this.player.startTurn();
+
+        // 启用结束回合按钮
+        const endTurnBtn = document.getElementById('end-turn-btn');
+        if (endTurnBtn) endTurnBtn.disabled = false;
+
+        this.updateBattleUI();
     }
 
     // 敌人回合行动
