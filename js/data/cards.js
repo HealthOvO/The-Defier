@@ -260,11 +260,11 @@ const CARDS = {
         type: 'law',
         cost: 2,
         icon: '🕳️',
-        description: '造成等于敌人已损失生命值的伤害',
+        description: '造成敌人已损失生命值50%的伤害',
         rarity: 'legendary',
         lawType: 'void',
         effects: [
-            { type: 'execute', value: 1, target: 'enemy' }
+            { type: 'execute', value: 0.5, target: 'enemy' }
         ]
     },
 

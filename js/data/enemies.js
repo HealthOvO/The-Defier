@@ -254,6 +254,232 @@ const ENEMIES = {
         stealChance: 0.6,
         stealLaw: 'timeStop',
         gold: { min: 250, max: 350 }
+    },
+
+    // ==================== 第六重·化神天 ====================
+    divineSwordsman: {
+        id: 'divineSwordsman',
+        name: '化神剑修',
+        icon: '⚔️',
+        realm: 6,
+        hp: 100,
+        patterns: [
+            { type: 'attack', value: 18, intent: '⚔️' },
+            { type: 'attack', value: 22, intent: '⚔️' },
+            { type: 'defend', value: 15, intent: '🛡️' },
+            { type: 'multiAttack', value: 8, count: 3, intent: '🔥' }
+        ],
+        stealChance: 0.35,
+        stealLaw: 'swordIntent',
+        gold: { min: 70, max: 110 }
+    },
+
+    thunderTribulation: {
+        id: 'thunderTribulation',
+        name: '天劫雷灵',
+        icon: '⛈️',
+        realm: 6,
+        hp: 90,
+        patterns: [
+            { type: 'attack', value: 20, intent: '⚔️' },
+            { type: 'debuff', buffType: 'paralysis', value: 2, intent: '⚡' },
+            { type: 'attack', value: 25, intent: '⚔️' },
+            { type: 'debuff', buffType: 'burn', value: 4, intent: '🔥' }
+        ],
+        stealChance: 0.4,
+        stealLaw: 'thunderLaw',
+        gold: { min: 65, max: 100 }
+    },
+
+    divineLord: {
+        id: 'divineLord',
+        name: '化神大能',
+        icon: '🧙‍♂️',
+        realm: 6,
+        isBoss: true,
+        hp: 280,
+        patterns: [
+            { type: 'buff', buffType: 'strength', value: 4, intent: '💪' },
+            { type: 'attack', value: 25, intent: '⚔️' },
+            { type: 'heal', value: 20, intent: '💚' },
+            { type: 'debuff', buffType: 'vulnerable', value: 3, intent: '✨' },
+            { type: 'attack', value: 30, intent: '⚔️' },
+            { type: 'multiAttack', value: 12, count: 4, intent: '🔥' },
+            { type: 'defend', value: 25, intent: '🛡️' }
+        ],
+        stealChance: 0.65,
+        stealLaw: 'voidEmbrace',
+        gold: { min: 320, max: 450 }
+    },
+
+    // ==================== 第七重·合体天 ====================
+    fusionAncestor: {
+        id: 'fusionAncestor',
+        name: '合体老祖',
+        icon: '👴',
+        realm: 7,
+        hp: 130,
+        patterns: [
+            { type: 'attack', value: 22, intent: '⚔️' },
+            { type: 'buff', buffType: 'strength', value: 3, intent: '💪' },
+            { type: 'attack', value: 28, intent: '⚔️' },
+            { type: 'defend', value: 20, intent: '🛡️' }
+        ],
+        stealChance: 0.4,
+        stealLaw: 'timeStop',
+        gold: { min: 90, max: 140 }
+    },
+
+    starBeast: {
+        id: 'starBeast',
+        name: '星辰巨兽',
+        icon: '🌟',
+        realm: 7,
+        hp: 150,
+        patterns: [
+            { type: 'attack', value: 25, intent: '⚔️' },
+            { type: 'attack', value: 20, intent: '⚔️' },
+            { type: 'multiAttack', value: 10, count: 4, intent: '🔥' },
+            { type: 'defend', value: 25, intent: '🛡️' }
+        ],
+        stealChance: 0.35,
+        stealLaw: 'spaceRift',
+        gold: { min: 100, max: 160 }
+    },
+
+    fusionSovereign: {
+        id: 'fusionSovereign',
+        name: '合体天尊',
+        icon: '👑',
+        realm: 7,
+        isBoss: true,
+        hp: 350,
+        patterns: [
+            { type: 'attack', value: 30, intent: '⚔️' },
+            { type: 'debuff', buffType: 'weak', value: 4, intent: '✨' },
+            { type: 'buff', buffType: 'strength', value: 5, intent: '💪' },
+            { type: 'defend', value: 30, intent: '🛡️' },
+            { type: 'attack', value: 35, intent: '⚔️' },
+            { type: 'multiAttack', value: 14, count: 5, intent: '🔥' },
+            { type: 'heal', value: 25, intent: '💚' }
+        ],
+        stealChance: 0.7,
+        stealLaw: 'timeStop',
+        gold: { min: 400, max: 550 }
+    },
+
+    // ==================== 第八重·大乘天 ====================
+    mahayanaShadow: {
+        id: 'mahayanaShadow',
+        name: '大乘虚影',
+        icon: '👤',
+        realm: 8,
+        hp: 180,
+        patterns: [
+            { type: 'attack', value: 28, intent: '⚔️' },
+            { type: 'debuff', buffType: 'vulnerable', value: 4, intent: '✨' },
+            { type: 'attack', value: 32, intent: '⚔️' },
+            { type: 'buff', buffType: 'strength', value: 4, intent: '💪' }
+        ],
+        stealChance: 0.45,
+        stealLaw: 'voidEmbrace',
+        gold: { min: 130, max: 200 }
+    },
+
+    riftGuardian: {
+        id: 'riftGuardian',
+        name: '时空裂隙守卫',
+        icon: '🌀',
+        realm: 8,
+        hp: 200,
+        patterns: [
+            { type: 'defend', value: 30, intent: '🛡️' },
+            { type: 'attack', value: 30, intent: '⚔️' },
+            { type: 'debuff', buffType: 'stun', value: 1, intent: '💫' },
+            { type: 'multiAttack', value: 12, count: 4, intent: '🔥' }
+        ],
+        stealChance: 0.4,
+        stealLaw: 'timeRewind',
+        gold: { min: 150, max: 220 }
+    },
+
+    mahayanaSupreme: {
+        id: 'mahayanaSupreme',
+        name: '大乘至尊',
+        icon: '🔱',
+        realm: 8,
+        isBoss: true,
+        hp: 450,
+        patterns: [
+            { type: 'buff', buffType: 'strength', value: 5, intent: '💪' },
+            { type: 'attack', value: 35, intent: '⚔️' },
+            { type: 'debuff', buffType: 'burn', value: 5, intent: '🔥' },
+            { type: 'defend', value: 35, intent: '🛡️' },
+            { type: 'attack', value: 40, intent: '⚔️' },
+            { type: 'multiAttack', value: 16, count: 5, intent: '🔥' },
+            { type: 'heal', value: 30, intent: '💚' },
+            { type: 'debuff', buffType: 'vulnerable', value: 4, intent: '✨' }
+        ],
+        stealChance: 0.75,
+        stealLaw: 'karmaKill',
+        gold: { min: 500, max: 700 }
+    },
+
+    // ==================== 第九重·飞升天 ====================
+    ascensionMessenger: {
+        id: 'ascensionMessenger',
+        name: '飞升使者',
+        icon: '👼',
+        realm: 9,
+        hp: 250,
+        patterns: [
+            { type: 'attack', value: 35, intent: '⚔️' },
+            { type: 'buff', buffType: 'strength', value: 5, intent: '💪' },
+            { type: 'attack', value: 40, intent: '⚔️' },
+            { type: 'heal', value: 20, intent: '💚' }
+        ],
+        stealChance: 0.5,
+        stealLaw: 'timeStop',
+        gold: { min: 180, max: 280 }
+    },
+
+    heavenlyEnforcer: {
+        id: 'heavenlyEnforcer',
+        name: '天道执法者',
+        icon: '⚖️',
+        realm: 9,
+        hp: 280,
+        patterns: [
+            { type: 'attack', value: 38, intent: '⚔️' },
+            { type: 'debuff', buffType: 'stun', value: 1, intent: '💫' },
+            { type: 'multiAttack', value: 15, count: 5, intent: '🔥' },
+            { type: 'defend', value: 40, intent: '🛡️' }
+        ],
+        stealChance: 0.45,
+        stealLaw: 'karmaKill',
+        gold: { min: 200, max: 320 }
+    },
+
+    heavenlyAvatar: {
+        id: 'heavenlyAvatar',
+        name: '天道化身',
+        icon: '🌌',
+        realm: 9,
+        isBoss: true,
+        hp: 600,
+        patterns: [
+            { type: 'buff', buffType: 'strength', value: 6, intent: '💪' },
+            { type: 'attack', value: 45, intent: '⚔️' },
+            { type: 'debuff', buffType: 'vulnerable', value: 5, intent: '✨' },
+            { type: 'defend', value: 40, intent: '🛡️' },
+            { type: 'attack', value: 50, intent: '⚔️' },
+            { type: 'multiAttack', value: 18, count: 6, intent: '🔥' },
+            { type: 'heal', value: 40, intent: '💚' },
+            { type: 'debuff', buffType: 'stun', value: 1, intent: '💫' }
+        ],
+        stealChance: 0.8,
+        stealLaw: 'reversal',
+        gold: { min: 800, max: 1200 }
     }
 };
 

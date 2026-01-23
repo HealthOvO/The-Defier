@@ -1910,6 +1910,182 @@ body {
     }
 }
 
+/* 更小屏幕适配 - 手机端 */
+@media (max-width: 480px) {
+    .title-cn {
+        font-size: 2.2rem;
+    }
+
+    .title-en {
+        font-size: 0.8rem;
+        letter-spacing: 0.2em;
+    }
+
+    .menu-btn {
+        width: 200px;
+        padding: var(--spacing-xs) var(--spacing-sm);
+        font-size: 0.9rem;
+    }
+
+    /* 卡牌样式 - 手机端优化 */
+    .card {
+        width: 65px;
+        height: 95px;
+        margin-left: -25px;
+        padding: 4px;
+    }
+
+    .card:first-child {
+        margin-left: 0;
+    }
+
+    .card-cost {
+        width: 22px;
+        height: 22px;
+        font-size: 0.75rem;
+        top: -5px;
+        left: -5px;
+    }
+
+    .card-name {
+        font-size: 0.55rem;
+    }
+
+    .card-type {
+        font-size: 0.45rem;
+    }
+
+    .card-desc {
+        font-size: 0.45rem;
+        min-height: 28px;
+        line-height: 1.2;
+    }
+
+    .card-art {
+        font-size: 1.3rem;
+    }
+
+    .card-header {
+        padding: 2px 0;
+    }
+
+    /* 手牌区域优化 */
+    .hand-area {
+        min-height: 130px;
+        padding: var(--spacing-sm);
+        gap: var(--spacing-sm);
+        overflow-x: auto;
+        justify-content: flex-start;
+    }
+
+    .hand-cards {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        max-width: 100%;
+        padding: 10px 0;
+    }
+
+    .deck-pile,
+    .discard-pile {
+        width: 50px;
+        height: 75px;
+        min-width: 50px;
+    }
+
+    .pile-count {
+        font-size: 1.1rem;
+    }
+
+    .pile-label {
+        font-size: 0.55rem;
+    }
+
+    .end-turn-btn {
+        bottom: 145px;
+        padding: var(--spacing-xs) var(--spacing-sm);
+        font-size: 0.8rem;
+        right: var(--spacing-sm);
+    }
+
+    /* 玩家区域优化 */
+    .player-area {
+        padding: var(--spacing-sm);
+        gap: var(--spacing-md);
+    }
+
+    .player-avatar {
+        width: 60px;
+        height: 60px;
+        font-size: 1rem;
+    }
+
+    .hp-bar {
+        width: 90px;
+        height: 12px;
+    }
+
+    .bar-text {
+        font-size: 0.65rem;
+    }
+
+    .energy-orb {
+        width: 18px;
+        height: 18px;
+    }
+
+    .energy-text {
+        font-size: 0.7rem;
+    }
+
+    /* 敌人区域优化 */
+    .enemy-avatar {
+        width: 70px;
+        height: 70px;
+        font-size: 2rem;
+    }
+
+    .enemy-hp {
+        width: 70px;
+    }
+
+    .enemy-intent {
+        width: 28px;
+        height: 28px;
+        font-size: 0.9rem;
+        top: -12px;
+        right: -12px;
+    }
+
+    /* 地图节点优化 */
+    .map-node {
+        width: 50px;
+        height: 50px;
+        font-size: 1.3rem;
+    }
+
+    .map-node.boss {
+        width: 60px;
+        height: 60px;
+    }
+
+    .realm-title {
+        font-size: 1.4rem;
+    }
+
+    /* 奖励卡牌优化 */
+    .reward-cards {
+        flex-wrap: wrap;
+        gap: var(--spacing-sm);
+        justify-content: center;
+    }
+
+    .reward-card {
+        width: 80px;
+        height: 115px;
+    }
+}
+
 /* ===================================
    成就界面样式
    =================================== */
