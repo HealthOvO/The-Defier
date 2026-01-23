@@ -122,7 +122,7 @@ class Game {
     // 保存游戏
     saveGame() {
         const gameState = {
-            version: '2.2.0', // 添加版本号
+            version: '2.2.0',
             player: this.player.getState(),
             map: {
                 nodes: this.map.nodes,
@@ -130,6 +130,7 @@ class Game {
                 completedNodes: this.map.completedNodes
             },
             unlockedRealms: this.unlockedRealms || [1],
+            currentScreen: this.currentScreen,
             timestamp: Date.now()
         };
         localStorage.setItem('theDefierSave', JSON.stringify(gameState));
@@ -144,7 +145,7 @@ class Game {
         try {
             const gameState = JSON.parse(savedData);
 
-            // 版本检查 - 如果是旧版本存档，清除并重新开始
+            // 版本检查
             const currentVersion = '2.2.0';
             if (!gameState.version || gameState.version < '2.2.0') {
                 console.log('检测到旧版本存档，已清除');
@@ -152,7 +153,7 @@ class Game {
                 return false;
             }
 
-            // 验证牌组数据有效性
+            // 验证牌组数据
             if (!gameState.player.deck || !Array.isArray(gameState.player.deck) || gameState.player.deck.length < 5) {
                 console.log('存档牌组数据无效，已清除存档');
                 this.clearSave();
@@ -162,9 +163,8 @@ class Game {
             // 恢复玩家状态
             Object.assign(this.player, gameState.player);
 
-            // 数据修复：检查 NaN 金币
+            // 数据修复
             if (isNaN(this.player.gold)) {
-                console.log('检测到灵石数据异常(NaN)，已重置为 100');
                 this.player.gold = 100;
             }
             if (isNaN(this.player.currentHp) || this.player.currentHp <= 0) {
@@ -174,7 +174,6 @@ class Game {
             // 恢复命环对象引用
             if (gameState.player.fateRing) {
                 this.player.fateRing = gameState.player.fateRing;
-                // 检查命环升级（防止经验溢出但未升级）
                 this.player.checkFateRingLevelUp();
             }
 
@@ -184,6 +183,7 @@ class Game {
             this.map.completedNodes = gameState.map.completedNodes;
 
             this.unlockedRealms = gameState.unlockedRealms || [1];
+            this.savedScreen = gameState.currentScreen || 'map-screen';
 
             console.log('游戏已加载');
             return true;
@@ -202,6 +202,20 @@ class Game {
     // 自动保存
     autoSave() {
         this.saveGame();
+    }
+
+    // 继续游戏
+    continueGame() {
+        if (this.loadGameResult) {
+            // 如果保存的界面是角色选择或主菜单，说明并未真正开始游戏，转到地图
+            if (['main-menu', 'character-select'].includes(this.savedScreen)) {
+                this.showScreen('map-screen');
+            } else {
+                this.showScreen(this.savedScreen);
+            }
+        } else {
+            window.location.reload();
+        }
     }
 
     // 初始化图鉴
