@@ -549,8 +549,8 @@ class Player {
 
     // 检查命环升级
     checkFateRingLevelUp() {
-        // 残缺印记无法通过经验升级，必须觉醒
-        if (this.fateRing.level === 0) return false;
+        // 即使是level 0，如果经验足够也应该能觉醒
+        // if (this.fateRing.level === 0) return false;
 
         const levels = FATE_RING.levels;
         // 注意 levels[0] 是 level 0, levels[1] 是 level 1

@@ -145,9 +145,21 @@ class Game {
 
             // 恢复玩家状态
             Object.assign(this.player, gameState.player);
+
+            // 数据修复：检查 NaN 金币
+            if (isNaN(this.player.gold)) {
+                console.log('检测到灵石数据异常(NaN)，已重置为 100');
+                this.player.gold = 100;
+            }
+            if (isNaN(this.player.currentHp) || this.player.currentHp <= 0) {
+                this.player.currentHp = Math.floor(this.player.maxHp * 0.5);
+            }
+
             // 恢复命环对象引用
             if (gameState.player.fateRing) {
                 this.player.fateRing = gameState.player.fateRing;
+                // 检查命环升级（防止经验溢出但未升级）
+                this.player.checkFateRingLevelUp();
             }
 
             // 恢复地图状态
