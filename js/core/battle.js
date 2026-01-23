@@ -12,6 +12,7 @@ class Battle {
         this.selectedCard = null;
         this.targetingMode = false;
         this.battleEnded = false;
+        this.isProcessingCard = false; // 防止卡牌连点
     }
 
     // 初始化战斗
@@ -21,6 +22,7 @@ class Battle {
         this.turnNumber = 0;
         this.selectedCard = null;
         this.targetingMode = false;
+        this.isProcessingCard = false;
 
         // 创建敌人实例
         if (Array.isArray(enemyData)) {
@@ -57,6 +59,12 @@ class Battle {
 
         // 玩家回合开始
         this.player.startTurn();
+
+        // 确保结束回合按钮可用
+        const endTurnBtn = document.getElementById('end-turn-btn');
+        if (endTurnBtn) {
+            endTurnBtn.disabled = false;
+        }
 
         // 更新UI
         this.updateBattleUI();
@@ -182,7 +190,7 @@ class Battle {
 
     // 卡牌点击处理
     onCardClick(cardIndex) {
-        if (this.currentTurn !== 'player' || this.battleEnded) return;
+        if (this.currentTurn !== 'player' || this.battleEnded || this.isProcessingCard) return;
 
         const card = this.player.hand[cardIndex];
         if (!card) return;
@@ -213,11 +221,25 @@ class Battle {
 
     // 对目标使用卡牌
     async playCardOnTarget(cardIndex, targetIndex) {
+        if (this.isProcessingCard) return;
+        this.isProcessingCard = true;
+
         this.targetingMode = false;
         this.selectedCard = null;
 
         const card = this.player.hand[cardIndex];
-        if (!card) return;
+        if (!card) {
+            this.isProcessingCard = false;
+            return;
+        }
+
+        // 立即给予视觉反馈：卡牌淡出或标记为使用中
+        const cardEls = document.querySelectorAll('#hand-cards .card');
+        if (cardEls[cardIndex]) {
+            cardEls[cardIndex].style.opacity = '0.5';
+            cardEls[cardIndex].style.transform = 'scale(0.9)';
+            cardEls[cardIndex].style.pointerEvents = 'none';
+        }
 
         const target = this.enemies[targetIndex];
 
@@ -239,6 +261,7 @@ class Battle {
 
         // 更新UI
         this.updateBattleUI();
+        this.isProcessingCard = false;
     }
 
     // 处理效果
@@ -305,6 +328,31 @@ class Battle {
                         Utils.showFloatingNumber(enemyEl, damage, 'damage');
                     }
                     Utils.showBattleLog(`虚空拥抱造成 ${damage} 点伤害！`);
+                }
+                break;
+
+            case 'executeDamage':
+                if (target) {
+                    let baseDmg = result.value;
+                    const threshold = result.threshold || 0.3;
+                    if (target.currentHp / target.hp < threshold) {
+                        baseDmg *= 2;
+                        Utils.showBattleLog(`斩杀触发！双倍伤害！`);
+                    }
+                    const dmg = this.dealDamageToEnemy(target, baseDmg);
+                    if (enemyEl) {
+                        Utils.addShakeEffect(enemyEl);
+                        Utils.showFloatingNumber(enemyEl, dmg, 'damage');
+                    }
+                }
+                break;
+
+            case 'reshuffle':
+                if (result.value > 0) {
+                    Utils.showBattleLog(`时光倒流！将 ${result.value} 张牌洗回抽牌堆`);
+                    this.updatePilesUI();
+                } else {
+                    Utils.showBattleLog(`弃牌堆为空，无需洗牌`);
                 }
                 break;
 
@@ -398,6 +446,24 @@ class Battle {
 
     // 对敌人造成伤害
     dealDamageToEnemy(enemy, amount) {
+        // 5. 心魔滋生 (realm 5) - 这里是玩家打敌人，不需要增强
+        // 如果是敌人打玩家，需要在 takeDamage 或者 enemy action 中处理
+        
+        // 应用力量加成 (Strength)
+        if (this.player.buffs.strength && this.player.buffs.strength > 0) {
+            amount += this.player.buffs.strength;
+            // 力量通常是本回合持续生效，不需要在这里消耗
+            // 除非是某些特殊的一次性力量，但一般力量定义为回合内Buff
+        }
+
+        // 检查下一次攻击加成 (Concentration)
+        if (this.player.buffs.nextAttackBonus && this.player.buffs.nextAttackBonus > 0) {
+            amount += this.player.buffs.nextAttackBonus;
+            Utils.showBattleLog(`聚气生效！伤害增加 ${this.player.buffs.nextAttackBonus}`);
+            // 消耗Buff
+            delete this.player.buffs.nextAttackBonus;
+        }
+
         // 应用连击加成
         if (typeof game !== 'undefined' && game.getComboBonus) {
             const comboBonus = game.getComboBonus();
@@ -428,7 +494,7 @@ class Battle {
 
     // 结束回合
     async endTurn() {
-        if (this.currentTurn !== 'player' || this.battleEnded) return;
+        if (this.currentTurn !== 'player' || this.battleEnded || this.isProcessingCard) return;
 
         // 禁用结束回合按钮
         document.getElementById('end-turn-btn').disabled = true;
@@ -509,6 +575,16 @@ class Battle {
                 continue;
             }
 
+            // 检查麻痹 (50% 几率跳过回合)
+            if (enemy.buffs.paralysis && enemy.buffs.paralysis > 0) {
+                enemy.buffs.paralysis--;
+                if (Math.random() < 0.5) {
+                    Utils.showBattleLog(`${enemy.name} 因麻痹无法动弹！`);
+                    await Utils.sleep(500);
+                    continue;
+                }
+            }
+
             // 处理敌人debuff
             await this.processEnemyDebuffs(enemy, i);
 
@@ -577,8 +653,17 @@ class Battle {
         }
     }
 
+    // 敌人造成伤害
+    dealEnemyDamage(enemy, amount) {
+        // 5. 心魔滋生 (realm 5)
+        if (this.player.realm === 5) {
+            amount = Math.floor(amount * 1.25);
+        }
+        return amount;
+    }
+
     // 执行敌人行动
-    async executeEnemyAction(enemy, enemyIndex) {
+    async executeEnemyAction(enemy, index) {
         const pattern = enemy.patterns[enemy.currentPatternIndex];
         const playerEl = document.querySelector('.player-avatar');
 
@@ -597,6 +682,15 @@ class Battle {
                 if (this.player.buffs.weak && this.player.buffs.weak > 0) {
                     damage = Math.floor(damage * 0.75);
                 }
+
+                // 检查敌人被弱化 (Weak)
+                if (enemy.buffs.weak && enemy.buffs.weak > 0) {
+                    damage = Math.floor(damage * 0.75); // 减少25%伤害
+                    enemy.buffs.weak--;
+                }
+
+                // 应用心魔滋生
+                damage = this.dealEnemyDamage(enemy, damage);
 
                 const result = this.player.takeDamage(damage);
 
@@ -624,6 +718,9 @@ class Battle {
                     if (enemy.buffs.strength) {
                         multiDamage += enemy.buffs.strength;
                     }
+
+                    // 应用心魔滋生
+                    multiDamage = this.dealEnemyDamage(enemy, multiDamage);
 
                     const multiResult = this.player.takeDamage(multiDamage);
 

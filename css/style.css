@@ -70,6 +70,9 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    /* 优化触摸体验，消除300ms延迟 */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 html,
@@ -80,6 +83,8 @@ body {
     background: var(--bg-dark);
     color: var(--text-primary);
     overflow: hidden;
+    /* 禁用默认的过度滚动效果 */
+    overscroll-behavior: none;
 }
 
 /* ===================================
@@ -1161,11 +1166,20 @@ body {
     margin-left: 0;
 }
 
-.card:hover {
-    transform: translateY(-40px) scale(1.15) rotate(2deg);
-    z-index: 100;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
-    border-color: var(--accent-gold);
+/* 仅在支持悬停的设备上启用 hover 效果 */
+@media (hover: hover) {
+    .card:hover {
+        transform: translateY(-40px) scale(1.15) rotate(2deg);
+        z-index: 100;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+        border-color: var(--accent-gold);
+    }
+}
+
+/* 移动端点击反馈 */
+.card:active {
+    transform: scale(0.95);
+    transition: transform 0.1s;
 }
 
 .card.attack {
@@ -1272,15 +1286,17 @@ body {
     transition: all var(--transition-normal);
 }
 
-/* 悬停时显示完整描述 */
-.card:hover .card-desc {
-    max-height: 100px;
-    overflow: visible;
-    -webkit-line-clamp: unset;
-    background: rgba(255, 255, 255, 0.9);
-    z-index: 10;
-    position: relative;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+/* 悬停时显示完整描述 - 仅限鼠标 */
+@media (hover: hover) {
+    .card:hover .card-desc {
+        max-height: 100px;
+        overflow: visible;
+        -webkit-line-clamp: unset;
+        background: rgba(255, 255, 255, 0.9);
+        z-index: 10;
+        position: relative;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
 }
 
 /* End Turn Button - Fixed Position */
@@ -1975,6 +1991,7 @@ body {
         padding: var(--spacing-sm);
         gap: var(--spacing-sm);
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch; /* 修复iOS滚动 */
         justify-content: flex-start;
     }
 
@@ -1982,6 +1999,7 @@ body {
         display: flex;
         flex-wrap: nowrap;
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch; /* 修复iOS滚动 */
         max-width: 100%;
         padding: 10px 0;
     }
@@ -3390,11 +3408,12 @@ body {
     }
 
     /* 弹窗适配 */
-    .modal-content {
-        width: 95%;
-        max-height: 90vh;
-        padding: 15px;
-    }
+.modal-content {
+    width: 95%;
+    max-height: 90vh;
+    padding: 15px;
+    -webkit-overflow-scrolling: touch; /* 修复iOS滚动 */
+}
 
     /* 顶部栏 */
     .player-status-bar {

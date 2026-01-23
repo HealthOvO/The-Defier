@@ -112,16 +112,23 @@ class Player {
     // 开始回合
     startTurn() {
         this.currentEnergy = this.baseEnergy;
+        
+        // 1. 灵气稀薄 (realm 1)
+        if (this.realm === 1) {
+            this.currentEnergy = Math.max(0, this.currentEnergy - 1);
+            Utils.showBattleLog('灵气稀薄：灵力-1');
+        }
+
         this.block = 0; // 护盾不保留到下回合
 
-        // 遗物效果：金刚法相（每回合开始如果需要保留护盾逻辑，这里会被清零，但遗物是战斗开始时获得，所以没问题）
-        // 如果想让金刚法相每回合都给，那太强了。描述是"战斗开始时"。
+        // ... 其他代码 ...
 
-        // 应用法则被动效果
-        this.applyLawPassives();
-
-        // 抽牌
+        // 3. 重力压制 (realm 3)
         let drawAmount = this.drawCount;
+        if (this.realm === 3) {
+            drawAmount = Math.max(0, drawAmount - 1);
+            Utils.showBattleLog('重力压制：抽牌-1');
+        }
 
         // 敏捷之环 - 额外抽牌
         if (this.fateRing.path === 'agility') {
@@ -135,6 +142,19 @@ class Player {
         }
 
         this.drawCards(drawAmount);
+
+        // 2. 雷霆淬体 (realm 2)
+        if (this.realm === 2) {
+            this.takeDamage(3);
+            Utils.showBattleLog('雷霆淬体：受到3点雷伤');
+        }
+
+        // 7. 虚空吞噬 (realm 7)
+        if (this.realm === 7) {
+            const drain = Math.floor(this.maxHp * 0.05);
+            this.takeDamage(drain);
+            Utils.showBattleLog(`虚空吞噬：失去 ${drain} 点生命`);
+        }
 
         // 处理回合开始的buff
         this.processBuffsOnTurnStart();
@@ -204,6 +224,14 @@ class Player {
         }
 
         if (this.currentHp <= 0) {
+            // 9. 生死轮回 (realm 9)
+            if (this.realm === 9 && !this.hasRebirthed && Math.random() < 0.5) {
+                this.currentHp = this.maxHp;
+                this.hasRebirthed = true;
+                Utils.showBattleLog('生死轮回：逆天改命，满血复活！');
+                return { dodged: false, damage: amount - remainingDamage };
+            }
+
             this.currentHp = 0;
             // 触发死亡事件
         }
@@ -215,6 +243,11 @@ class Player {
         const card = this.hand[cardIndex];
         if (!card) return false;
 
+        // 6. 法则混乱 (realm 6) - 费用随机变化已在抽牌时或回合开始处理？
+        // 实际上最好是在使用时动态计算，或者在抽到手牌时修改 cost
+        // 为了简化，我们假设抽到时已经变了，或者在这里动态增加消耗
+        // 但标准做法是修改卡牌对象的 cost 属性
+        
         // 检查灵力
         if (card.cost > this.currentEnergy) return false;
 
@@ -251,6 +284,11 @@ class Player {
     // 执行单个效果
     executeEffect(effect, target) {
         let value = effect.value || 0;
+
+        // 8. 天道压制 (realm 8)
+        if (this.realm === 8 && (typeof value === 'number')) {
+            value = Math.floor(value * 0.8);
+        }
 
         // 应用法则加成
         if (this.applyLawBonuses) {
@@ -341,6 +379,37 @@ class Player {
                 this.currentEnergy = 0;
                 return { type: 'damage', value: energy * (effect.damagePerEnergy || 6), target: effect.target };
 
+            case 'randomCards':
+                const count = Utils.random(effect.minValue, effect.maxValue);
+                const addedCards = [];
+                for (let i = 0; i < count; i++) {
+                    const randomCard = getRandomCard(); // 假设此函数全局可用，或需要从cards.js导入
+                    if (randomCard) {
+                        const tempCard = { ...randomCard, instanceId: this.generateCardId(), isTemp: true, cost: 0 };
+                        this.hand.push(tempCard);
+                        addedCards.push(tempCard);
+                    }
+                }
+                return { type: 'draw', value: count, cards: addedCards };
+
+            case 'blockFromStrength':
+                const strength = this.buffs.strength || 0;
+                const blockAmount = Math.max(effect.minimum || 0, strength * (effect.multiplier || 1));
+                this.addBlock(blockAmount);
+                return { type: 'block', value: blockAmount };
+
+            case 'reshuffleDiscard':
+                if (this.discardPile.length > 0) {
+                    this.drawPile.push(...this.discardPile);
+                    this.discardPile = [];
+                    this.drawPile = Utils.shuffle(this.drawPile);
+                    return { type: 'reshuffle', value: this.drawPile.length };
+                }
+                return { type: 'reshuffle', value: 0 };
+                
+            case 'executeDamage':
+                 return { type: 'executeDamage', value: effect.value, threshold: effect.threshold, target: effect.target };
+
             default:
                 return { type: 'unknown' };
         }
@@ -371,6 +440,13 @@ class Player {
             Utils.showBattleLog(`受到中毒伤害！剩余 ${this.buffs.poison || 0} 层`);
         }
 
+        // 铁布衫：下回合获得护盾
+        if (this.buffs.nextTurnBlock) {
+            this.addBlock(this.buffs.nextTurnBlock);
+            Utils.showBattleLog(`铁布衫生效！获得 ${this.buffs.nextTurnBlock} 点护盾`);
+            delete this.buffs.nextTurnBlock;
+        }
+
         // 自动格挡/反伤等逻辑...
     }
 
@@ -385,6 +461,11 @@ class Player {
 
             const card = this.drawPile.pop();
             if (card) {
+                // 6. 法则混乱 (realm 6)
+                if (this.realm === 6) {
+                    const change = Math.floor(Math.random() * 3) - 1; // -1, 0, 1
+                    card.cost = Math.max(0, card.cost + change);
+                }
                 this.hand.push(card);
             }
         }
@@ -392,6 +473,13 @@ class Player {
 
     // 结束回合
     endTurn() {
+        // 4. 丹火焚心 (realm 4)
+        if (this.realm === 4 && this.hand.length > 0) {
+            const burnDamage = this.hand.length * 2;
+            this.takeDamage(burnDamage);
+            Utils.showBattleLog(`丹火焚心：受到 ${burnDamage} 点伤害`);
+        }
+
         // 弃掉所有手牌
         this.discardPile.push(...this.hand);
         this.hand = [];

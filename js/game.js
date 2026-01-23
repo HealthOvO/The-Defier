@@ -153,6 +153,13 @@ class Game {
                 return false;
             }
 
+            // 检查生命值，如果是0或更低，说明是死亡存档，直接清除
+            if (!gameState.player || gameState.player.currentHp <= 0) {
+                console.log('检测到死亡存档，已清除');
+                this.clearSave();
+                return false;
+            }
+
             // 验证牌组数据
             if (!gameState.player.deck || !Array.isArray(gameState.player.deck) || gameState.player.deck.length < 5) {
                 console.log('存档牌组数据无效，已清除存档');
@@ -1189,6 +1196,9 @@ class Game {
 
     // 战斗失败
     onBattleLost() {
+        // 清除存档，防止死亡后还能继续
+        this.clearSave();
+
         document.getElementById('game-over-title').textContent = '陨落...';
         document.getElementById('game-over-title').classList.remove('victory');
         document.getElementById('game-over-text').textContent = '逆命之路，暂时中断';

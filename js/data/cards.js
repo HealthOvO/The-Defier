@@ -544,11 +544,11 @@ const CARDS = {
         type: 'law',
         cost: 3,
         icon: '☠️',
-        description: '必定命中，造成敌人最大生命10%的伤害',
+        description: '必定命中，造成敌人最大生命30%的伤害',
         rarity: 'legendary',
         lawType: 'karma',
         effects: [
-            { type: 'percentDamage', value: 0.1, target: 'enemy' }
+            { type: 'percentDamage', value: 0.3, target: 'enemy' }
         ]
     },
 
@@ -849,6 +849,53 @@ const UPGRADE_RULES = {
         flameTruth: { damage: 3, burn: 1 },
         timeStop: { costReduction: 1 }, // 3费 -> 2费
         voidEmbrace: { multiplier: 0.15 },  // 50% -> 65%
+
+        // 新增/补全的升级规则
+        shieldBash: { damage: 2, block: 2 }, // 4/4 -> 6/6
+        counterStance: { block: 3, thorns: 3 }, // 3/5 -> 6/8
+        battleCry: { damage: 3, strength: 1 }, // 5/2 -> 8/3
+        spaceRift: { dodge: 1 }, // 1层 -> 2层
+        luckyStrike: { minDamage: 3, maxDamage: 5 }, // 5-15 -> 8-20
+        fortuneWheel: { minCards: 1, maxCards: 1 }, // 1-3 -> 2-4
+        miracleHeal: { heal: 5 }, // 15 -> 20
+        
+        sweepingStrike: { damage: 3 }, // 8 -> 11
+        armorBreaker: { damage: 3 }, // 5 -> 8
+        tripleSlash: { damage: 1 }, // 3x3 -> 4x3
+        earthShatter: { damage: 8 }, // 25 -> 33
+        swordBreaker: { damage: 5 }, // 15 -> 20
+        bloodSlash: { damage: 4 }, // 8 -> 12
+        finishingBlow: { damage: 4 }, // 10 -> 14
+        
+        goldenBell: { block: 5 }, // 15 -> 20
+        offenseDefense: { multiplier: 1 }, // x3 -> x4
+        halfDamage: { costReduction: 1 }, // 2费 -> 1费
+        turtleShell: { block: 2, draw: 1 }, // 3/1 -> 5/2
+        ironSkin: { block: 3, nextBlock: 3 }, // 6/4 -> 9/7
+        
+        thunderStorm: { damage: 4, paralysis: 1 }, // 10/2 -> 14/3
+        inferno: { damage: 2 }, // 8x3 -> 10x3
+        voidWalk: { dodge: 1 }, // 2 -> 3
+        timeRewind: { costReduction: 1 }, // 4费 -> 3费
+        karmaKill: { percent: 0.15 }, // 30% -> 45%
+        iceFreeze: { damage: 3, weak: 1 }, // 7/3 -> 10/4
+        
+        desperateSurvival: { draw: 1, energy: 1 }, // 3/3 -> 4/4
+        windfall: { minGold: 10, maxGold: 25 }, // 25-100 -> 35-125
+        enlightenment: { exp: 25 }, // 50 -> 75
+        reversal: { costReduction: 1 }, // 3费 -> 2费
+        
+        concentration: { bonus: 3 }, // +5 -> +8
+        doubleEdge: { damage: 5 }, // 10 -> 15
+        powerUp: { strength: 1 }, // 2 -> 3
+        quickDraw: { draw: 1 }, // 1 -> 2
+        allIn: { damagePerEnergy: 2 }, // 6 -> 8
+        chaosControl: { damage: 3, stun: 1 }, // 5/1 -> 8/2 (眩晕回合还是1，伤害加点)
+        
+        poisonTouch: { damage: 2, poison: 2 }, // 3/2 -> 5/4
+        minorHeal: { heal: 3 }, // 5 -> 8
+        monkStrike: { damage: 3, block: 2 }, // 6/4 -> 9/6
+        analysis: { draw: 1 }, // 1 -> 2
     }
 };
 
@@ -893,6 +940,71 @@ function upgradeCard(card) {
             if (effect.type === 'debuff' && effect.buffType === 'burn' && specialRule.burn) {
                 effect.value += specialRule.burn;
             }
+            if (effect.type === 'debuff' && effect.buffType === 'poison' && specialRule.poison) {
+                effect.value += specialRule.poison;
+            }
+            if (effect.type === 'debuff' && effect.buffType === 'vulnerable' && specialRule.vulnerable) {
+                effect.value += specialRule.vulnerable;
+            }
+            if (effect.type === 'debuff' && effect.buffType === 'weak' && specialRule.weak) {
+                effect.value += specialRule.weak;
+            }
+            if (effect.type === 'debuff' && effect.buffType === 'paralysis' && specialRule.paralysis) {
+                effect.value += specialRule.paralysis;
+            }
+            if (effect.type === 'buff' && effect.buffType === 'thorns' && specialRule.thorns) {
+                effect.value += specialRule.thorns;
+            }
+            if (effect.type === 'buff' && effect.buffType === 'strength' && specialRule.strength) {
+                effect.value += specialRule.strength;
+            }
+            if (effect.type === 'buff' && effect.buffType === 'dodge' && specialRule.dodge) {
+                effect.value += specialRule.dodge;
+            }
+            if (effect.type === 'buff' && effect.buffType === 'nextAttackBonus' && specialRule.bonus) {
+                effect.value += specialRule.bonus;
+            }
+            if (effect.type === 'buff' && effect.buffType === 'nextTurnBlock' && specialRule.nextBlock) {
+                effect.value += specialRule.nextBlock;
+            }
+            if (effect.type === 'randomDamage') {
+                if (specialRule.minDamage) effect.minValue += specialRule.minDamage;
+                if (specialRule.maxDamage) effect.maxValue += specialRule.maxDamage;
+            }
+            if (effect.type === 'randomCards') {
+                if (specialRule.minCards) effect.minValue += specialRule.minCards;
+                if (specialRule.maxCards) effect.maxValue += specialRule.maxCards;
+            }
+            if (effect.type === 'damageAll' && specialRule.damage) {
+                effect.value += specialRule.damage;
+            }
+            if (effect.type === 'penetrate' && specialRule.damage) {
+                effect.value += specialRule.damage;
+            }
+            if (effect.type === 'executeDamage' && specialRule.damage) {
+                effect.value += specialRule.damage;
+            }
+            if (effect.type === 'blockFromStrength' && specialRule.multiplier) {
+                effect.multiplier += specialRule.multiplier;
+            }
+            if (effect.type === 'percentDamage' && specialRule.percent) {
+                effect.value += specialRule.percent;
+            }
+            if (effect.type === 'conditionalDraw') {
+                if (specialRule.draw) effect.drawValue += specialRule.draw;
+                if (specialRule.energy) effect.energyValue += specialRule.energy;
+            }
+            if (effect.type === 'bonusGold') {
+                if (specialRule.minGold) effect.min += specialRule.minGold;
+                if (specialRule.maxGold) effect.max += specialRule.maxGold;
+            }
+            if (effect.type === 'ringExp' && specialRule.exp) {
+                effect.value += specialRule.exp;
+            }
+            if (effect.type === 'consumeAllEnergy' && specialRule.damagePerEnergy) {
+                effect.damagePerEnergy += specialRule.damagePerEnergy;
+            }
+
             if (effect.type === 'execute' && specialRule.multiplier) {
                 effect.value = (effect.value || 1) + specialRule.multiplier;
             }
@@ -935,7 +1047,7 @@ function generateUpgradedDescription(card) {
                 desc += `获得 ${effect.value} 点护盾。`;
                 break;
             case 'heal':
-                desc += `恢复 ${effect.value} 点生命。`;
+                desc += `回复 ${effect.value} 点生命。`;
                 break;
             case 'draw':
                 desc += `抽 ${effect.value} 张牌。`;
@@ -943,15 +1055,74 @@ function generateUpgradedDescription(card) {
             case 'energy':
                 desc += `获得 ${effect.value} 点灵力。`;
                 break;
+            case 'penetrate':
+                desc += `造成 ${effect.value} 点穿透伤害。`;
+                break;
+            case 'damageAll':
+                desc += `对所有敌人造成 ${effect.value} 点伤害。`;
+                break;
+            case 'randomDamage':
+                desc += `随机造成 ${effect.minValue}-${effect.maxValue} 点伤害。`;
+                break;
+            case 'randomCards':
+                desc += `随机获得 ${effect.minValue}-${effect.maxValue} 张临时卡牌。`;
+                break;
             case 'execute':
                 desc += `造成敌人已损失生命${Math.floor(effect.value * 100)}%的伤害。`;
                 break;
-            case 'debuff':
-                if (effect.buffType === 'burn') {
-                    desc += `使敌人获得 ${effect.value} 层灼烧。`;
-                } else if (effect.buffType === 'stun') {
-                    desc += `敌人跳过下一回合。`;
+            case 'percentDamage':
+                desc += `造成敌人最大生命${Math.floor(effect.value * 100)}%的伤害。`;
+                break;
+            case 'selfDamage':
+                desc += `自身受到 ${effect.value} 点伤害。`;
+                break;
+            case 'lifeSteal':
+                desc += `回复造成伤害的${Math.floor(effect.value * 100)}%生命。`;
+                break;
+            case 'removeBlock':
+                desc += `移除敌人所有护盾。`;
+                break;
+            case 'reshuffleDiscard':
+                desc += `将弃牌堆洗回抽牌堆。`;
+                break;
+            case 'swapHpPercent':
+                desc += `与敌人交换当前生命值百分比。`;
+                break;
+            case 'blockFromStrength':
+                desc += `获得等于你力量值x${effect.multiplier}的护盾（最少${effect.minimum}）。`;
+                break;
+            case 'executeDamage':
+                desc += `造成 ${effect.value} 点伤害，对生命低于${Math.floor((effect.threshold || 0.3) * 100)}%的敌人造成双倍。`;
+                break;
+            case 'consumeAllEnergy':
+                desc += `消耗所有灵力，每点灵力造成 ${effect.damagePerEnergy} 点伤害。`;
+                break;
+            case 'conditionalDraw':
+                if (effect.condition === 'lowHp') {
+                    desc += `若生命低于${Math.floor(effect.threshold * 100)}%，抽${effect.drawValue}张牌+${effect.energyValue}灵力。`;
                 }
+                break;
+            case 'bonusGold':
+                desc += `战斗结束后获得 ${effect.min}-${effect.max} 灵石。`;
+                break;
+            case 'ringExp':
+                desc += `命环经验+${effect.value}。`;
+                break;
+            case 'debuff':
+                if (effect.buffType === 'burn') desc += `使敌人获得 ${effect.value} 层灼烧。`;
+                else if (effect.buffType === 'poison') desc += `给予 ${effect.value} 层中毒。`;
+                else if (effect.buffType === 'vulnerable') desc += `使敌人获得 ${effect.value} 层易伤。`;
+                else if (effect.buffType === 'weak') desc += `使敌人获得 ${effect.value} 层虚弱。`;
+                else if (effect.buffType === 'paralysis') desc += `使敌人获得 ${effect.value} 层麻痹。`;
+                else if (effect.buffType === 'stun') desc += `敌人跳过下一回合。`;
+                break;
+            case 'buff':
+                if (effect.buffType === 'strength') desc += `获得 ${effect.value} 点力量${effect.permanent ? '(永久)' : ''}。`;
+                else if (effect.buffType === 'thorns') desc += `获得 ${effect.value} 点荆棘。`;
+                else if (effect.buffType === 'dodge') desc += `获得 ${effect.value} 层闪避。`;
+                else if (effect.buffType === 'nextTurnBlock') desc += `下回合开始时获得 ${effect.value} 点护盾。`;
+                else if (effect.buffType === 'damageReduction') desc += `本回合受到的伤害减少${effect.value}%。`;
+                else if (effect.buffType === 'nextAttackBonus') desc += `下一张攻击牌伤害+${effect.value}。`;
                 break;
         }
     }

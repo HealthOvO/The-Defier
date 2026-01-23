@@ -142,11 +142,15 @@ class GameMap {
     // 获取天域环境法则
     getRealmEnvironment(realm) {
         const envs = {
-            1: { name: '灵气稀薄', desc: '灵力恢复-1', effect: 'energy_malus' },
+            1: { name: '灵气稀薄', desc: '灵力恢复-1 (每回合开始时)', effect: 'energy_malus' },
             2: { name: '雷霆淬体', desc: '每回合受到3点雷属性伤害', effect: 'thunder_damage' },
             3: { name: '重力压制', desc: '抽牌数-1', effect: 'draw_malus' },
-            4: { name: '丹火焚心', desc: '回合结束时燃烧手牌', effect: 'burn_hand' },
-            5: { name: '心魔滋生', desc: '敌人造成伤害+50%', effect: 'enemy_buff' }
+            4: { name: '丹火焚心', desc: '回合结束时若有手牌，受到等于手牌数x2的伤害', effect: 'burn_hand' },
+            5: { name: '心魔滋生', desc: '敌人造成伤害+25%', effect: 'enemy_buff' },
+            6: { name: '法则混乱', desc: '卡牌费用随机变化 (-1到+1)', effect: 'chaos_cost' },
+            7: { name: '虚空吞噬', desc: '每回合失去 5% 最大生命值', effect: 'void_drain' },
+            8: { name: '天道压制', desc: '所有卡牌效果降低 20%', effect: 'heaven_suppress' },
+            9: { name: '生死轮回', desc: '受到致死伤害时有 50% 几率复活并回满血（限一次）', effect: 'rebirth' }
         };
         return envs[realm] || { name: '平稳', desc: '无特殊效果', effect: 'none' };
     }
