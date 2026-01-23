@@ -555,6 +555,18 @@ function getLawPassiveDescription(law) {
             return `每回合额外抽${passive.value}张牌`;
         case 'slowOnHit':
             return `${Math.floor(passive.chance * 100)}%几率减缓敌人${passive.value}回合`;
+        case 'healPerTurn':
+            return `每回合恢复${passive.value}点生命`;
+        case 'chaosControl':
+            return `${Math.floor(passive.value * 100)}%几率使敌人陷入混乱`;
+        case 'reflectDamage':
+            return `反弹${Math.floor(passive.value * 100)}%受到的伤害`;
+        case 'damageToHeal':
+            return `${Math.floor(passive.value * 100)}%几率将承受伤害转化为治疗`;
+        case 'persistentBlock':
+            return `护盾不会在回合结束时消失`;
+        case 'resurrect':
+            return `死亡时${Math.floor(passive.percent * 100)}%血量复活（每场战斗${passive.value}次）`;
         default:
             return '未知效果';
     }

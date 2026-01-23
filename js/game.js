@@ -1597,7 +1597,7 @@ class Game {
                     <div class="lib-icon">${law.icon}</div>
                     <div class="lib-info">
                         <div class="lib-name">${law.name}</div>
-                        <div class="lib-desc">${law.effectDesc || law.desc || '效果未知'}</div>
+                        <div class="lib-desc">${(typeof getLawPassiveDescription === 'function' ? getLawPassiveDescription(law) : '') || law.description || '效果未知'}</div>
                     </div>
                     ${isEquipped ? '<div style="font-size: 0.8rem; color: var(--accent-gold);">已装</div>' : ''}
                 </div>
