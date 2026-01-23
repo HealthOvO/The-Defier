@@ -509,8 +509,8 @@ class Game {
         this.currentBattleNode = null;
         this.rewardCardSelected = false;
 
-        // 确保有解锁记录
-        if (!this.unlockedRealms) this.unlockedRealms = [1];
+        // 强制重置解锁进度（应用户要求，新轮回如果不继承则重置为1）
+        this.unlockedRealms = [1];
 
         // 应用永久起始加成
         const bonuses = this.achievementSystem.loadStartBonuses();
