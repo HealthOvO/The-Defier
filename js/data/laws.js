@@ -329,7 +329,7 @@ const FATE_RING = {
             icon: '💫',
             description: '古玉重塑，逆天改命。解锁法则盗取能力。',
             bonus: { type: 'stealUnlock', value: true },
-            tier: 1,
+            tier: 0.5,
             requires: []
         },
 
@@ -482,13 +482,18 @@ const FATE_RING = {
 function getAvailablePaths(fateRing) {
     const available = [];
     const currentLevel = fateRing.level;
-    const currentPath = fateRing.path;
+    const currentPath = fateRing.path || 'crippled'; // Optimize: default to crippled
+    const currentPathData = FATE_RING.paths[currentPath];
+    const currentTier = currentPathData ? currentPathData.tier : 0;
 
     for (const pathId in FATE_RING.paths) {
         const path = FATE_RING.paths[pathId];
 
         // 跳过已选择的路径
         if (pathId === currentPath) continue;
+
+        // BUG修复: 必须选择比当前Tier更高的路径，防止同级互转或降级
+        if (path.tier <= currentTier) continue;
 
         // 检查等级要求
         if (path.levelReq && path.levelReq > currentLevel) continue;
