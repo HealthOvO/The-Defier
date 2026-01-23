@@ -3453,3 +3453,124 @@ body {
         gap: 10px;
     }
 }
+
+/* ===================================
+   Evolution UI
+   =================================== */
+.evolution-view {
+    padding: 30px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: radial-gradient(circle at center, rgba(30, 10, 50, 0.8) 0%, rgba(10, 5, 20, 0.9) 100%);
+    border-radius: var(--radius-lg);
+}
+
+.evolution-title {
+    color: var(--accent-gold);
+    margin-bottom: 30px;
+    font-family: var(--font-display);
+    font-size: 2rem;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.evolution-options-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+    width: 100%;
+    max-width: 900px;
+    margin-bottom: 30px;
+}
+
+.evolution-path-card {
+    flex: 1 1 200px;
+    max-width: 250px;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 215, 0, 0.3);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.evolution-path-card:hover {
+    transform: translateY(-5px) scale(1.05);
+    background: rgba(255, 215, 0, 0.1);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5), 0 0 15px rgba(255, 215, 0, 0.3);
+    border-color: var(--accent-gold);
+    z-index: 10;
+}
+
+.evolution-path-card .path-icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
+}
+
+.evolution-path-card .path-name {
+    margin-bottom: 10px;
+    color: var(--text-primary);
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+.evolution-path-card .path-desc {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.4;
+    margin-bottom: 15px;
+}
+
+.evolution-path-card .path-select-hint {
+    margin-top: auto;
+    font-size: 0.8rem;
+    color: var(--accent-gold);
+    opacity: 0;
+    transition: opacity 0.3s;
+    transform: translateY(10px);
+}
+
+.evolution-path-card:hover .path-select-hint {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.evolution-back-btn {
+    padding: 10px 40px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 20px;
+    transition: all 0.3s;
+}
+
+.evolution-back-btn:hover {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 768px) {
+    .evolution-options-container {
+        /* On mobile, stack them but keep flexible width */
+        flex-direction: row;
+        /* Actually row with wrap is fine for mobile too if items are 200px wide, 
+           but on very small screens (320px) they might need to be 100% */
+    }
+
+    .evolution-path-card {
+        /* Enforce full width on smaller mobile screens */
+        flex: 1 1 100%;
+        max-width: 100%;
+    }
+}

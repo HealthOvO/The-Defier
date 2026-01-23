@@ -1717,31 +1717,25 @@ class Game {
 
         if (availablePaths.length === 0) return;
 
-        const slotsContainer = document.querySelector('.fate-ring-body'); // 覆盖整个 body
+        const slotsContainer = document.querySelector('.fate-ring-body');
         slotsContainer.innerHTML = `
-            <div style="padding: 30px; width: 100%; display: flex; flex-direction: column; align-items: center;">
-                <h2 style="color: var(--accent-gold); margin-bottom: 20px;">选择进化路径</h2>
-                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; width: 100%; max-width: 800px;">
+            <div class="evolution-view">
+                <h2 class="evolution-title">选择进化路径</h2>
+                <div class="evolution-options-container">
                     ${availablePaths.map(path => `
-                        <div class="path-card" onclick="game.evolveFateRing('${path.id}')" style="
-                            padding: 20px; 
-                            background: rgba(255,255,255,0.05); 
-                            border: 1px solid var(--accent-gold); 
-                            border-radius: 8px; 
-                            cursor: pointer;
-                            transition: all 0.3s;
-                            text-align: center;
-                        ">
-                            <div style="font-size: 2.5rem; margin-bottom: 10px;">${path.icon}</div>
-                            <h3 style="margin-bottom: 10px;">${path.name}</h3>
-                            <p style="color: #aaa; font-size: 0.9rem;">${path.description}</p>
+                        <div class="evolution-path-card" onclick="game.evolveFateRing('${path.id}')">
+                            <div class="path-icon">${path.icon}</div>
+                            <h3 class="path-name">${path.name}</h3>
+                            <p class="path-desc">${path.description}</p>
+                            <div class="path-select-hint">点击选择</div>
                         </div>
                     `).join('')}
                 </div>
-                <button onclick="game.showFateRing()" style="margin-top: 30px; padding: 10px 30px; background: transparent; border: 1px solid rgba(255,255,255,0.3); color: white; cursor: pointer;">返回</button>
+                <button class="evolution-back-btn" onclick="game.showFateRing()">返回</button>
             </div>
          `;
     }
+
 
     // 进化命环
     evolveFateRing(pathId) {
@@ -1824,7 +1818,7 @@ class Game {
                 </ul>
 
                 <div style="margin-top: 20px; text-align: center; font-size: 0.8rem; color: #666;">
-                    当前版本: v3.5
+                    当前版本: v3.6
                 </div>
             </div>
         `;
