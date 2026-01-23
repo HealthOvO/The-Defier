@@ -122,7 +122,7 @@ class Game {
     // 保存游戏
     saveGame() {
         const gameState = {
-            version: '2.2.0',
+            version: '3.0.0',
             player: this.player.getState(),
             map: {
                 nodes: this.map.nodes,
@@ -146,8 +146,8 @@ class Game {
             const gameState = JSON.parse(savedData);
 
             // 版本检查
-            const currentVersion = '2.2.0';
-            if (!gameState.version || gameState.version < '2.2.0') {
+            const currentVersion = '3.0.0';
+            if (!gameState.version || gameState.version < '2.2.0') { // 兼容2.2.0存档
                 console.log('检测到旧版本存档，已清除');
                 this.clearSave();
                 return false;
@@ -1348,10 +1348,10 @@ class Game {
                             <div style="font-size: 0.9rem; color: #aaa;">LV.${ring.level}</div>
                             
                             <div style="margin-top: 10px; background: rgba(0,0,0,0.3); height: 6px; border-radius: 3px; overflow: hidden;">
-                                <div style="width: ${(ring.exp / (FATE_RING.levels[ring.level]?.expRequired || 999)) * 100}%; background: var(--accent-gold); height: 100%;"></div>
+                                <div style="width: ${(ring.exp / (FATE_RING.levels[ring.level + 1]?.expRequired || ring.exp || 1)) * 100}%; background: var(--accent-gold); height: 100%;"></div>
                             </div>
                             <div style="font-size: 0.8rem; margin-top: 5px; color: #888;">
-                                经验值: ${ring.exp}/${FATE_RING.levels[ring.level]?.expRequired || 'Max'}
+                                经验值: ${ring.exp}/${FATE_RING.levels[ring.level + 1]?.expRequired || 'Max'}
                             </div>
                         </div>
                         
