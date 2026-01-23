@@ -704,7 +704,51 @@ const CARDS = {
     },
 
     // ==================== 多角色专属卡牌 ====================
-    // 香叶
+    // ===== 林风（逆命者）- 突破与进化主题 =====
+    defiantWill: {
+        id: 'defiantWill',
+        name: '逆天意志',
+        type: 'attack',
+        cost: 1,
+        icon: '💫',
+        description: '造成 8 点伤害，若命环≥2级，再造成 8 点伤害',
+        rarity: 'uncommon',
+        character: 'linFeng',
+        effects: [
+            { type: 'damage', value: 8, target: 'enemy' },
+            { type: 'conditionalDamage', condition: 'fateRingLevel', minLevel: 2, bonusDamage: 8, target: 'enemy' }
+        ]
+    },
+    ringResonance: {
+        id: 'ringResonance',
+        name: '命环共振',
+        type: 'attack',
+        cost: 2,
+        icon: '🔮',
+        description: '根据装载法则数量+4伤害，抽1张牌',
+        rarity: 'rare',
+        character: 'linFeng',
+        effects: [
+            { type: 'damagePerLaw', baseDamage: 4, damagePerLaw: 4, target: 'enemy' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+    breakthrough: {
+        id: 'breakthrough',
+        name: '突破极限',
+        type: 'attack',
+        cost: 3,
+        icon: '⚡',
+        description: '造成 25 点伤害，命环经验+30',
+        rarity: 'rare',
+        character: 'linFeng',
+        effects: [
+            { type: 'damage', value: 25, target: 'enemy' },
+            { type: 'ringExp', value: 30 }
+        ]
+    },
+
+    // ===== 香叶（治愈法则）- 增益与治疗主题 =====
     poisonTouch: {
         id: 'poisonTouch',
         name: '毒触',
@@ -713,6 +757,7 @@ const CARDS = {
         icon: '🤢',
         description: '造成 3 点伤害，给予 2 层中毒',
         rarity: 'common',
+        character: 'xiangYe',
         effects: [
             { type: 'damage', value: 3, target: 'enemy' },
             { type: 'debuff', buffType: 'poison', value: 2, target: 'enemy' }
@@ -726,12 +771,54 @@ const CARDS = {
         icon: '🩹',
         description: '回复 5 点生命',
         rarity: 'common',
+        character: 'xiangYe',
         effects: [
             { type: 'heal', value: 5, target: 'self' }
         ]
     },
+    healingTouch: {
+        id: 'healingTouch',
+        name: '治愈之触',
+        type: 'skill',
+        cost: 1,
+        icon: '💚',
+        description: '回复 8 点生命，净化 1 层负面效果',
+        rarity: 'uncommon',
+        character: 'xiangYe',
+        effects: [
+            { type: 'heal', value: 8, target: 'self' },
+            { type: 'cleanse', value: 1, target: 'self' }
+        ]
+    },
+    bloodBlessing: {
+        id: 'bloodBlessing',
+        name: '血之祝福',
+        type: 'skill',
+        cost: 2,
+        icon: '🩸',
+        description: '回复 15 点生命，使敌人虚弱 2 回合',
+        rarity: 'rare',
+        character: 'xiangYe',
+        effects: [
+            { type: 'heal', value: 15, target: 'self' },
+            { type: 'debuff', buffType: 'weak', value: 2, target: 'enemy' }
+        ]
+    },
+    lifeSurge: {
+        id: 'lifeSurge',
+        name: '生命涌动',
+        type: 'defense',
+        cost: 0,
+        icon: '💖',
+        description: '获得等于已损失生命50%的护盾',
+        rarity: 'rare',
+        character: 'xiangYe',
+        effects: [
+            { type: 'blockFromLostHp', percent: 0.5, target: 'self' }
+        ]
+    },
 
-    // 无欲
+    // ===== 无欲（佛门）- 反击与控制主题 =====
     monkStrike: {
         id: 'monkStrike',
         name: '武僧打击',
@@ -740,13 +827,56 @@ const CARDS = {
         icon: '🙏',
         description: '造成 6 点伤害，获得 4 点护盾',
         rarity: 'common',
+        character: 'wuYu',
         effects: [
             { type: 'damage', value: 6, target: 'enemy' },
             { type: 'block', value: 4, target: 'self' }
         ]
     },
+    vajraGlare: {
+        id: 'vajraGlare',
+        name: '金刚怒目',
+        type: 'attack',
+        cost: 1,
+        icon: '😡',
+        description: '造成 5 点伤害，获得 3 点荆棘持续 2 回合',
+        rarity: 'uncommon',
+        character: 'wuYu',
+        effects: [
+            { type: 'damage', value: 5, target: 'enemy' },
+            { type: 'buff', buffType: 'thorns', value: 3, target: 'self', duration: 2 }
+        ]
+    },
+    meditation: {
+        id: 'zenMeditation',
+        name: '禅定',
+        type: 'defense',
+        cost: 2,
+        icon: '🧘',
+        description: '获得 15 点护盾，下次被攻击时反弹等量伤害',
+        rarity: 'rare',
+        character: 'wuYu',
+        effects: [
+            { type: 'block', value: 15, target: 'self' },
+            { type: 'buff', buffType: 'reflect', value: 1, target: 'self' }
+        ]
+    },
+    salvation: {
+        id: 'salvation',
+        name: '普渡众生',
+        type: 'law',
+        cost: 3,
+        icon: '☸️',
+        description: '对所有敌人造成 12 点伤害并眩晕 1 回合',
+        rarity: 'epic',
+        character: 'wuYu',
+        effects: [
+            { type: 'damageAll', value: 12, target: 'allEnemies' },
+            { type: 'debuffAll', buffType: 'stun', value: 1, target: 'allEnemies' }
+        ]
+    },
 
-    // 严寒
+    // ===== 严寒（学者）- 分析与削弱主题 =====
     analysis: {
         id: 'analysis',
         name: '弱点分析',
@@ -755,9 +885,52 @@ const CARDS = {
         icon: '🧐',
         description: '抽 1 张牌，使敌人获得 1 层易伤',
         rarity: 'common',
+        character: 'yanHan',
         effects: [
             { type: 'draw', value: 1, target: 'self' },
             { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'enemy' }
+        ]
+    },
+    ringAnalysis: {
+        id: 'ringAnalysis',
+        name: '命环解析',
+        type: 'skill',
+        cost: 1,
+        icon: '📊',
+        description: '敌人易伤 2 层，命环经验+15',
+        rarity: 'uncommon',
+        character: 'yanHan',
+        effects: [
+            { type: 'debuff', buffType: 'vulnerable', value: 2, target: 'enemy' },
+            { type: 'ringExp', value: 15 }
+        ]
+    },
+    lawInsight: {
+        id: 'lawInsight',
+        name: '法则窥探',
+        type: 'skill',
+        cost: 2,
+        icon: '👁️',
+        description: '抽 2 张牌，本战法则盗取率+10%',
+        rarity: 'rare',
+        character: 'yanHan',
+        effects: [
+            { type: 'draw', value: 2, target: 'self' },
+            { type: 'buff', buffType: 'stealBonus', value: 0.1, target: 'self' }
+        ]
+    },
+    timeStasis: {
+        id: 'timeStasis',
+        name: '时间凝滞',
+        type: 'law',
+        cost: 3,
+        icon: '⏳',
+        description: '敌人下次攻击伤害-50%，你额外行动1次',
+        rarity: 'epic',
+        character: 'yanHan',
+        effects: [
+            { type: 'debuff', buffType: 'damageReduction', value: 50, target: 'enemy' },
+            { type: 'buff', buffType: 'extraTurn', value: 1, target: 'self' }
         ]
     },
 };
@@ -774,21 +947,25 @@ const CARD_POOL = {
     common: [
         'heavyStrike', 'quickSlash', 'doubleStrike', 'ironWill', 'shieldBash',
         'spiritBoost', 'meditation', 'armorBreaker', 'goldenBell', 'turtleShell',
-        'concentration', 'doubleEdge', 'quickDraw', // Fix missing comma
+        'concentration', 'doubleEdge', 'quickDraw',
         'poisonTouch', 'minorHeal', 'monkStrike', 'analysis'
     ],
     uncommon: [
         'ragingBlow', 'counterStance', 'innerPeace', 'battleCry', 'luckyStrike',
         'sweepingStrike', 'tripleSlash', 'bloodSlash', 'offenseDefense', 'ironSkin',
-        'windfall', 'powerUp'
+        'windfall', 'powerUp',
+        // 新增角色卡牌
+        'defiantWill', 'healingTouch', 'vajraGlare', 'ringAnalysis'
     ],
     rare: [
         'thunderLaw', 'swordIntent', 'flameTruth', 'spaceRift', 'fortuneWheel',
-        'miracleHeal', 'earthShatter', 'swordBreaker', 'finishingBlow', 'halfDamage', // Fix missing comma
+        'miracleHeal', 'earthShatter', 'swordBreaker', 'finishingBlow', 'halfDamage',
         'thunderStorm', 'voidWalk', 'iceFreeze', 'desperateSurvival', 'enlightenment',
-        'allIn'
+        'allIn',
+        // 新增角色卡牌
+        'ringResonance', 'breakthrough', 'bloodBlessing', 'lifeSurge', 'zenMeditation', 'lawInsight'
     ],
-    epic: ['inferno', 'timeRewind'],
+    epic: ['inferno', 'timeRewind', 'salvation', 'timeStasis'],
     legendary: ['timeStop', 'voidEmbrace', 'karmaKill', 'reversal', 'chaosControl']
 };
 
@@ -859,7 +1036,7 @@ const UPGRADE_RULES = {
         luckyStrike: { minDamage: 3, maxDamage: 5 }, // 5-15 -> 8-20
         fortuneWheel: { minCards: 1, maxCards: 1 }, // 1-3 -> 2-4
         miracleHeal: { heal: 5 }, // 15 -> 20
-        
+
         sweepingStrike: { damage: 3 }, // 8 -> 11
         armorBreaker: { damage: 3 }, // 5 -> 8
         tripleSlash: { damage: 1 }, // 3x3 -> 4x3
@@ -867,36 +1044,57 @@ const UPGRADE_RULES = {
         swordBreaker: { damage: 5 }, // 15 -> 20
         bloodSlash: { damage: 4 }, // 8 -> 12
         finishingBlow: { damage: 4 }, // 10 -> 14
-        
+
         goldenBell: { block: 5 }, // 15 -> 20
         offenseDefense: { multiplier: 1 }, // x3 -> x4
         halfDamage: { costReduction: 1 }, // 2费 -> 1费
         turtleShell: { block: 2, draw: 1 }, // 3/1 -> 5/2
         ironSkin: { block: 3, nextBlock: 3 }, // 6/4 -> 9/7
-        
+
         thunderStorm: { damage: 4, paralysis: 1 }, // 10/2 -> 14/3
         inferno: { damage: 2 }, // 8x3 -> 10x3
         voidWalk: { dodge: 1 }, // 2 -> 3
         timeRewind: { costReduction: 1 }, // 4费 -> 3费
         karmaKill: { percent: 0.15 }, // 30% -> 45%
         iceFreeze: { damage: 3, weak: 1 }, // 7/3 -> 10/4
-        
+
         desperateSurvival: { draw: 1, energy: 1 }, // 3/3 -> 4/4
         windfall: { minGold: 10, maxGold: 25 }, // 25-100 -> 35-125
         enlightenment: { exp: 25 }, // 50 -> 75
         reversal: { costReduction: 1 }, // 3费 -> 2费
-        
+
         concentration: { bonus: 3 }, // +5 -> +8
         doubleEdge: { damage: 5 }, // 10 -> 15
         powerUp: { strength: 1 }, // 2 -> 3
         quickDraw: { draw: 1 }, // 1 -> 2
         allIn: { damagePerEnergy: 2 }, // 6 -> 8
         chaosControl: { damage: 3, stun: 1 }, // 5/1 -> 8/2 (眩晕回合还是1，伤害加点)
-        
+
         poisonTouch: { damage: 2, poison: 2 }, // 3/2 -> 5/4
         minorHeal: { heal: 3 }, // 5 -> 8
         monkStrike: { damage: 3, block: 2 }, // 6/4 -> 9/6
         analysis: { draw: 1 }, // 1 -> 2
+
+        // ==================== 新增角色卡牌升级规则 ====================
+        // 林风
+        defiantWill: { damage: 2, bonusDamage: 2 }, // 8/8 -> 10/10
+        ringResonance: { baseDamage: 2, damagePerLaw: 1 }, // 4+4/法则 -> 6+5/法则
+        breakthrough: { damage: 5, exp: 20 }, // 25/30 -> 30/50
+
+        // 香叶
+        healingTouch: { heal: 4, cleanse: 1 }, // 8/1 -> 12/2
+        bloodBlessing: { heal: 5, weak: 1 }, // 15/2 -> 20/3
+        lifeSurge: { percent: 0.25 }, // 50% -> 75%
+
+        // 无欲
+        vajraGlare: { damage: 3, thorns: 2 }, // 5/3 -> 8/5
+        zenMeditation: { block: 5 }, // 15 -> 20
+        salvation: { damage: 3 }, // 12 -> 15
+
+        // 严寒
+        ringAnalysis: { vulnerable: 1, exp: 10 }, // 2/15 -> 3/25
+        lawInsight: { draw: 1, stealBonus: 0.05 }, // 2/10% -> 3/15%
+        timeStasis: { damageReduction: 25 }  // 50% -> 75%
     }
 };
 

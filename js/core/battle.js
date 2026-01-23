@@ -223,26 +223,26 @@ class Battle {
         // 修改判定逻辑：只要有效果是针对敌人的，且效果类型需要目标，就进入选择模式
         // 注意：某些效果可能既有对敌也有对己（如武僧打击：伤害敌人+自己护盾）
         const needsTarget = card.effects.some(e =>
-            (e.target === 'enemy' || e.target === 'allEnemies') && 
-            ['damage', 'penetrate', 'debuff', 'execute', 'randomDamage', 'damageAll', 'removeBlock', 'consumeAllEnergy'].includes(e.type)
+            (e.target === 'enemy' || e.target === 'allEnemies') &&
+            ['damage', 'penetrate', 'debuff', 'execute', 'randomDamage', 'damageAll', 'removeBlock', 'consumeAllEnergy', 'conditionalDamage', 'damagePerLaw'].includes(e.type)
         );
 
         // 如果是群体攻击（target: allEnemies），其实不需要选择目标，直接释放即可
         // 但如果有些效果是 target: enemy（单体），有些是 allEnemies，则需要选择
         // 实际上，只要有一个效果需要单体目标，就必须选择
         const requiresSingleTarget = card.effects.some(e =>
-            e.target === 'enemy' && 
-            ['damage', 'penetrate', 'debuff', 'execute', 'randomDamage', 'removeBlock', 'consumeAllEnergy'].includes(e.type)
+            e.target === 'enemy' &&
+            ['damage', 'penetrate', 'debuff', 'execute', 'randomDamage', 'removeBlock', 'consumeAllEnergy', 'conditionalDamage', 'damagePerLaw'].includes(e.type)
         );
 
         if (requiresSingleTarget && this.enemies.filter(e => e.currentHp > 0).length > 0) {
             // 如果只有一个敌人，且没有处于强制选择模式，或许可以直接打出？
             // 但为了操作统一性，通常还是保持点击卡牌->选择目标（或自动选择唯一目标）
-            
+
             if (this.enemies.filter(e => e.currentHp > 0).length === 1) {
-                 // 只有一个敌人，自动选择
-                 const targetIndex = this.enemies.findIndex(e => e.currentHp > 0);
-                 this.playCardOnTarget(cardIndex, targetIndex);
+                // 只有一个敌人，自动选择
+                const targetIndex = this.enemies.findIndex(e => e.currentHp > 0);
+                this.playCardOnTarget(cardIndex, targetIndex);
             } else {
                 // 进入选择目标模式
                 this.selectedCard = cardIndex;
@@ -441,7 +441,7 @@ class Battle {
                             Utils.showBattleLog('混元无极：敌人免疫眩晕！');
                         } else {
                             target.stunned = true;
-                            
+
                             // 共鸣：绝对零度 (Absolute Zero)
                             if (this.player.activeResonances) {
                                 const absoluteZero = this.player.activeResonances.find(r => r.id === 'absoluteZero');
@@ -506,7 +506,39 @@ class Battle {
             case 'ringExp':
             case 'reshuffleDiscard':
             case 'swapHpPercent':
+            case 'cleanse':
+            case 'blockFromLostHp':
                 // 这些效果已在 player.js 中处理完毕
+                break;
+
+            case 'conditionalDamage':
+                // 命环等级条件伤害已在player.js判断，这里只需显示结果
+                if (result.triggered !== false && result.value) {
+                    // 如果触发了额外伤害，作为damage类型处理
+                    if (target) {
+                        const dmg = this.dealDamageToEnemy(target, result.value);
+                        const enemyEl2 = document.querySelector(`.enemy[data-index="${targetIndex}"]`);
+                        if (enemyEl2) {
+                            Utils.addShakeEffect(enemyEl2);
+                            Utils.showFloatingNumber(enemyEl2, dmg, 'damage');
+                        }
+                        Utils.showBattleLog(`命环共振！额外造成 ${dmg} 点伤害！`);
+                    }
+                }
+                break;
+
+            case 'debuffAll':
+                // 对所有敌人施加debuff
+                for (let i = 0; i < this.enemies.length; i++) {
+                    const enemy = this.enemies[i];
+                    if (enemy.currentHp <= 0) continue;
+
+                    enemy.buffs[result.buffType] = (enemy.buffs[result.buffType] || 0) + result.value;
+                    if (result.buffType === 'stun') {
+                        enemy.stunned = true;
+                    }
+                }
+                Utils.showBattleLog(`普渡众生！所有敌人获得 ${result.buffType} 效果！`);
                 break;
         }
 
@@ -518,7 +550,7 @@ class Battle {
     dealDamageToEnemy(enemy, amount) {
         // 5. 心魔滋生 (realm 5) - 这里是玩家打敌人，不需要增强
         // 如果是敌人打玩家，需要在 takeDamage 或者 enemy action 中处理
-        
+
         // 14. 混元无极 (realm 14) - 敌人20%抗性
         if (this.player.realm === 14) {
             amount = Math.floor(amount * 0.8);
@@ -698,7 +730,7 @@ class Battle {
 
                 // 下一个行动模式
                 enemy.currentPatternIndex = (enemy.currentPatternIndex + 1) % enemy.patterns.length;
-                
+
                 if (k < actionCount - 1) await Utils.sleep(500);
             }
 

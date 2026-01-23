@@ -159,20 +159,77 @@ const LAWS = {
             chance: 0.2
         },
         unlockCards: []
+    },
+
+    // ==================== 新增法则 ====================
+    healingLaw: {
+        id: 'healingLaw',
+        name: '治愈法则',
+        icon: '💚',
+        description: '生命之力流转，每回合恢复生命',
+        rarity: 'rare',
+        element: 'life',
+        passive: {
+            type: 'healPerTurn',
+            value: 5
+        },
+        unlockCards: ['healingTouch', 'bloodBlessing']
+    },
+
+    metalBody: {
+        id: 'metalBody',
+        name: '金属法则',
+        icon: '🦾',
+        description: '铜皮铁骨，护盾效果增强',
+        rarity: 'rare',
+        element: 'metal',
+        passive: {
+            type: 'blockBonus',
+            value: 0.25  // 25%护盾加成
+        },
+        unlockCards: ['goldenBell', 'ironSkin']
+    },
+
+    karmaLaw: {
+        id: 'karmaLaw',
+        name: '因果法则',
+        icon: '⚖️',
+        description: '因果循环，伤害反弹',
+        rarity: 'legendary',
+        element: 'karma',
+        passive: {
+            type: 'reflectDamage',
+            value: 0.1  // 10%伤害反弹
+        },
+        unlockCards: ['karmaKill']
+    },
+
+    reversalLaw: {
+        id: 'reversalLaw',
+        name: '逆转法则',
+        icon: '🔄',
+        description: '乾坤逆转，伤害化为治愈',
+        rarity: 'legendary',
+        element: 'reversal',
+        passive: {
+            type: 'damageToHeal',
+            value: 0.2  // 20%几率伤害转治愈
+        },
+        unlockCards: ['reversal']
     }
 };
 
 // 天域对应的可盗取法则
 const REALM_LAWS = {
-    1: ['swordIntent'],      // 凡尘界
-    2: ['thunderLaw'],       // 练气天
-    3: ['swordIntent', 'spaceRift'],  // 筑基天
-    4: ['flameTruth'],       // 金丹天
-    5: ['timeStop', 'voidEmbrace'],   // 元婴天
-    6: ['lifeDrain', 'earthShield'],  // 化神天
-    7: ['windSpeed', 'iceFreeze'],    // 合体天
-    8: ['voidEmbrace'],      // 大乘天
-    9: ['timeStop']          // 飞升天
+    1: ['swordIntent'],                    // 凡尘界
+    2: ['thunderLaw'],                     // 练气天
+    3: ['swordIntent', 'spaceRift'],       // 筑基天
+    4: ['flameTruth'],                     // 金丹天
+    5: ['timeStop', 'voidEmbrace'],        // 元婴天
+    6: ['lifeDrain', 'earthShield', 'healingLaw'],  // 化神天
+    7: ['windSpeed', 'iceFreeze', 'metalBody'],     // 合体天
+    8: ['voidEmbrace', 'karmaLaw'],        // 大乘天
+    9: ['timeStop', 'reversalLaw']         // 飞升天
 };
 
 // 法则共鸣定义
@@ -218,6 +275,29 @@ const LAW_RESONANCES = {
         laws: ['chaosLaw', 'thunderLaw'],
         description: '不可名状的雷霆。回合开始造成3-8点随机雷属性伤害。',
         effect: { type: 'turnStartDamage', min: 3, max: 8, element: 'thunder' }
+    },
+
+    // ==================== 新增法则共鸣 ====================
+    lifeReincarnation: {
+        id: 'lifeReincarnation',
+        name: '生命轮回',
+        laws: ['healingLaw', 'timeStop'],
+        description: '生死轮回。死亡时100%复活（每战一次）。',
+        effect: { type: 'resurrect', value: 1, percent: 0.5 }
+    },
+    ironFortress: {
+        id: 'ironFortress',
+        name: '钢铁堡垒',
+        laws: ['metalBody', 'earthShield'],
+        description: '铜墙铁壁。护盾不会在回合结束时消失。',
+        effect: { type: 'persistentBlock', value: true }
+    },
+    thunderSword: {
+        id: 'thunderSword',
+        name: '剑雷交织',
+        laws: ['swordIntent', 'thunderLaw'],
+        description: '电光剑影。穿透伤害附带2层麻痹。',
+        effect: { type: 'penetrateParalysis', value: 2 }
     }
 };
 
@@ -358,6 +438,38 @@ const FATE_RING = {
             requires: ['thunder_god', 'flame_lord', 'sword_immortal', 'void_lord', 'time_master'],
             requiresAny: true,
             levelReq: 3
+        },
+
+        // ===== 四阶进化 (等级4时可选) =====
+        law_hunter: {
+            id: 'law_hunter',
+            name: '天道猎手',
+            icon: '🎯',
+            description: '法则猎手。法则盗取100%成功，但效果减半。',
+            bonus: { type: 'lawHunter', stealRate: 1.0, effectReduction: 0.5 },
+            tier: 4,
+            requires: ['defiance'],
+            levelReq: 4
+        },
+        law_fusion: {
+            id: 'law_fusion',
+            name: '法则融合',
+            icon: '🔮',
+            description: '法则大成。可同时装载5个法则，但每回合-1灵力。',
+            bonus: { type: 'lawFusion', extraSlots: 1, energyPenalty: 1 },
+            tier: 4,
+            requires: ['defiance'],
+            levelReq: 4
+        },
+        pure_power: {
+            id: 'pure_power',
+            name: '纯粹之力',
+            icon: '💪',
+            description: '放弃法则，回归本心。放弃所有法则，攻击伤害+100%。',
+            bonus: { type: 'purePower', damageBonus: 1.0, noLaws: true },
+            tier: 4,
+            requires: ['defiance'],
+            levelReq: 4
         }
     }
 };

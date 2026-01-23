@@ -47,7 +47,7 @@ class Player {
 
         // 收集的法则
         this.collectedLaws = [];
-        
+
         // 激活的共鸣
         this.activeResonances = [];
 
@@ -101,7 +101,7 @@ class Player {
                 if (path.bonus.type === 'hpBonus') newMaxHp += path.bonus.value;
                 if (path.bonus.type === 'energyBonus') newBaseEnergy += path.bonus.value;
                 if (path.bonus.type === 'drawBonus') newDrawCount += path.bonus.value;
-                
+
                 // 复合加成
                 if (path.bonus.type === 'ultimate') {
                     // 真·逆天之环并没有直接属性加成，主要是机制加成，但如果有可以在这里加
@@ -144,7 +144,7 @@ class Player {
         for (const key in LAW_RESONANCES) {
             const resonance = LAW_RESONANCES[key];
             const hasAllLaws = resonance.laws.every(lawId => loadedLaws.includes(lawId));
-            
+
             if (hasAllLaws) {
                 this.activeResonances.push(resonance);
                 // Utils.showBattleLog(`法则共鸣激活：${resonance.name}`); // 避免刷屏，仅在变化时提示更好
@@ -159,10 +159,10 @@ class Player {
         this.discardPile = [];
         this.exhaustPile = [];
         this.block = 0;
-        
+
         // 确保战斗前属性是最新的
         this.recalculateStats();
-        
+
         this.currentEnergy = this.baseEnergy;
         this.buffs = {};
 
@@ -194,22 +194,19 @@ class Player {
     // 开始回合
     startTurn() {
         this.currentEnergy = this.baseEnergy;
-        
-        // 1. 灵气稀薄 (realm 1)
-        if (this.realm === 1) {
-            this.currentEnergy = Math.max(0, this.currentEnergy - 1);
-            Utils.showBattleLog('灵气稀薄：灵力-1');
-        }
+
+        // 1. 灵气稀薄 (realm 1) - 改为护盾效果-20%，更友好的新手体验
+        // 效果在addBlock方法中处理
 
         this.block = 0; // 护盾不保留到下回合
 
         // ... 其他代码 ...
 
-        // 3. 重力压制 (realm 3)
+        // 3. 重力压制 (realm 3) - 仅首回合抽牌-1
         let drawAmount = this.drawCount;
-        if (this.realm === 3) {
+        if (this.realm === 3 && this.turnNumber === 1) {
             drawAmount = Math.max(0, drawAmount - 1);
-            Utils.showBattleLog('重力压制：抽牌-1');
+            Utils.showBattleLog('重力压制：首回合抽牌-1');
         }
 
         // 敏捷之环 - 额外抽牌
@@ -272,6 +269,11 @@ class Player {
 
     // 添加护盾
     addBlock(amount) {
+        // 1. 灵气稀薄 (realm 1) - 护盾效果-20%
+        if (this.realm === 1) {
+            amount = Math.floor(amount * 0.8);
+        }
+
         // 大地护盾法则
         const earthLaw = this.collectedLaws.find(l => l.id === 'earthShield');
         if (earthLaw) {
@@ -295,13 +297,13 @@ class Player {
         if (this.buffs.dodge && this.buffs.dodge > 0) {
             // Realm 10: 大地束缚 - 20%几率闪避失败
             if (this.realm === 10 && Math.random() < 0.2) {
-                 Utils.showBattleLog(`大地束缚：闪避失效！`);
-                 // 继续受到伤害，不消耗闪避层数（或者消耗？通常失效也会消耗，这里假设失效不消耗还是消耗？）
-                 // 为了惩罚，让它失效但消耗层数可能太狠，或者失效但不消耗？
-                 // 这里选择：闪避失效，必须硬抗，层数保留或消耗？
-                 // 如果保留，下次还能闪，但这次被打。如果消耗，就是纯亏。
-                 // 既然是“闪避率降低”，那意味着这次尝试闪避失败了。
-                 this.buffs.dodge--; 
+                Utils.showBattleLog(`大地束缚：闪避失效！`);
+                // 继续受到伤害，不消耗闪避层数（或者消耗？通常失效也会消耗，这里假设失效不消耗还是消耗？）
+                // 为了惩罚，让它失效但消耗层数可能太狠，或者失效但不消耗？
+                // 这里选择：闪避失效，必须硬抗，层数保留或消耗？
+                // 如果保留，下次还能闪，但这次被打。如果消耗，就是纯亏。
+                // 既然是“闪避率降低”，那意味着这次尝试闪避失败了。
+                this.buffs.dodge--;
             } else {
                 this.buffs.dodge--;
                 if (astralShift) {
@@ -370,7 +372,7 @@ class Player {
         // 实际上最好是在使用时动态计算，或者在抽到手牌时修改 cost
         // 为了简化，我们假设抽到时已经变了，或者在这里动态增加消耗
         // 但标准做法是修改卡牌对象的 cost 属性
-        
+
         // 检查灵力
         if (card.cost > this.currentEnergy) return false;
 
@@ -482,23 +484,23 @@ class Player {
                 // 确保百分比不为0，至少保留1%
                 // 实际上如果玩家只有1HP，百分比极低，交换给满血敌人会造成巨大伤害
                 // 但如果敌人满血(100%)，交换给玩家，玩家应该满血
-                
+
                 // 关键修正：获取百分比时，保留足够精度，并确保不会导致生命值归零
                 const enemyPercent = Math.max(0.01, target.currentHp / target.maxHp); // 敌人至少保留1%
                 const safePlayerPercent = Math.max(0.01, this.currentHp / this.maxHp); // 玩家至少保留1%
 
                 const newPlayerHp = Math.floor(this.maxHp * enemyPercent);
                 const newEnemyHp = Math.floor(target.maxHp * safePlayerPercent);
-                
+
                 const finalPlayerHp = Math.max(1, newPlayerHp);
                 const finalEnemyHp = Math.max(1, newEnemyHp);
-                
+
                 const playerDiff = finalPlayerHp - this.currentHp;
                 const enemyDiff = finalEnemyHp - target.currentHp;
-                
+
                 this.currentHp = finalPlayerHp;
                 target.currentHp = finalEnemyHp;
-                
+
                 Utils.showBattleLog(`逆转乾坤！生命比率互换！`);
                 return { type: 'swapHpPercent', playerDiff, enemyDiff, target };
 
@@ -523,7 +525,7 @@ class Player {
                         triggered = true;
                     }
                 }
-                
+
                 if (triggered) {
                     if (effect.drawValue) this.drawCards(effect.drawValue);
                     if (effect.energyValue) {
@@ -578,9 +580,47 @@ class Player {
                     return { type: 'reshuffle', value: this.drawPile.length };
                 }
                 return { type: 'reshuffle', value: 0 };
-                
+
             case 'executeDamage':
-                 return { type: 'executeDamage', value: effect.value, threshold: effect.threshold, target: effect.target };
+                return { type: 'executeDamage', value: effect.value, threshold: effect.threshold, target: effect.target };
+
+            // ==================== 新增效果类型 ====================
+            case 'conditionalDamage':
+                // 命环等级条件伤害（林风：逆天意志）
+                if (effect.condition === 'fateRingLevel' && this.fateRing.level >= effect.minLevel) {
+                    return { type: 'damage', value: effect.bonusDamage, target: effect.target };
+                }
+                return { type: 'conditionalDamage', triggered: false };
+
+            case 'damagePerLaw':
+                // 根据装载法则数量造成伤害（林风：命环共振）
+                const loadedLawCount = this.fateRing.loadedLaws.filter(Boolean).length;
+                const totalDamage = effect.baseDamage + (loadedLawCount * effect.damagePerLaw);
+                return { type: 'damage', value: totalDamage, target: effect.target };
+
+            case 'cleanse':
+                // 净化负面效果（香叶：治愈之触）
+                const debuffTypes = ['weak', 'vulnerable', 'poison', 'burn', 'paralysis'];
+                let cleansed = 0;
+                for (const debuff of debuffTypes) {
+                    if (this.buffs[debuff] && cleansed < effect.value) {
+                        delete this.buffs[debuff];
+                        cleansed++;
+                        Utils.showBattleLog(`净化了 ${debuff} 效果`);
+                    }
+                }
+                return { type: 'cleanse', value: cleansed };
+
+            case 'blockFromLostHp':
+                // 根据已损失生命获得护盾（香叶：生命涌动）
+                const lostHp = this.maxHp - this.currentHp;
+                const shieldFromHp = Math.floor(lostHp * effect.percent);
+                this.addBlock(shieldFromHp);
+                return { type: 'block', value: shieldFromHp };
+
+            case 'debuffAll':
+                // 群体debuff（无欲：普渡众生）
+                return { type: 'debuffAll', buffType: effect.buffType, value: effect.value, target: 'allEnemies' };
 
             default:
                 return { type: 'unknown' };
@@ -605,7 +645,7 @@ class Player {
         } else {
             this.buffs[type] = value;
         }
-        
+
         // 获取Buff名称
         let buffName = type;
         const buffNames = {
@@ -628,7 +668,7 @@ class Player {
         else if (typeof GameData !== 'undefined' && GameData.getBuffName) buffName = GameData.getBuffName(type);
 
         Utils.showBattleLog(`获得了 ${buffName} x${value}`);
-        
+
         // 触发buff获得时的回调（如果有）
         if (type === 'strength') {
             // Strength logic handled dynamically
@@ -811,10 +851,10 @@ class Player {
                     this.fateRing.level = levels[i].level;
                     this.fateRing.name = levels[i].name;
                     this.fateRing.slots = levels[i].slots;
-                    
+
                     // 立即应用新等级的属性加成
                     this.recalculateStats();
-                    
+
                     Utils.showBattleLog(`命环突破！晋升为【${this.fateRing.name}】`);
                     return true;
                 }
@@ -836,10 +876,10 @@ class Player {
             }
         }
         this.fateRing.path = pathName;
-        
+
         // 立即应用新路径的加成
         this.recalculateStats();
-        
+
         return true;
     }
 
