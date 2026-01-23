@@ -533,18 +533,50 @@ class Player {
     }
 
     // 装载法则到命环
-    loadLawToRing(lawId) {
-        if (this.fateRing.loadedLaws.length >= this.fateRing.slots) {
+    loadLawToRing(lawId, slotIndex = -1) {
+        // 如果没有指定槽位，找第一个空槽
+        if (slotIndex === -1) {
+            for (let i = 0; i < this.fateRing.slots; i++) {
+                if (!this.fateRing.loadedLaws[i]) {
+                    slotIndex = i;
+                    break;
+                }
+            }
+        }
+
+        // 检查槽位是否有效
+        if (slotIndex < 0 || slotIndex >= this.fateRing.slots) {
             return false;
         }
 
-        const law = this.collectedLaws.find(l => l.id === lawId);
-        if (!law) return false;
+        // 如果该槽位已有法则，先卸载
+        if (this.fateRing.loadedLaws[slotIndex]) {
+            this.unloadLawFromRing(slotIndex);
+        }
 
-        if (this.fateRing.loadedLaws.includes(lawId)) return false;
+        // 如果要装载的法则已经在其他槽位，也先卸载
+        const existingIndex = this.fateRing.loadedLaws.indexOf(lawId);
+        if (existingIndex !== -1) {
+            this.unloadLawFromRing(existingIndex);
+        }
 
-        this.fateRing.loadedLaws.push(lawId);
+        this.fateRing.loadedLaws[slotIndex] = lawId;
         return true;
+    }
+
+    // 从命环卸载法则
+    unloadLawFromRing(slotIndex) {
+        if (slotIndex >= 0 && slotIndex < this.fateRing.slots) {
+            this.fateRing.loadedLaws[slotIndex] = null;
+            return true;
+        }
+        return false;
+    }
+
+    // 获取当前槽位的法则
+    getLawInSlot(index) {
+        const lawId = this.fateRing.loadedLaws[index];
+        return lawId ? LAWS[lawId] : null;
     }
 
     // 检查命环升级

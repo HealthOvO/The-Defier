@@ -1144,114 +1144,245 @@ class Game {
         const modal = document.getElementById('ring-modal');
         const ring = this.player.fateRing;
 
-        document.getElementById('modal-ring-level').textContent = ring.name;
-        const currentLevelInfo = FATE_RING.levels[ring.level];
-        const nextLevelInfo = FATE_RING.levels[ring.level + 1];
-        const expRequired = nextLevelInfo?.expRequired || currentLevelInfo?.expRequired || 999;
-        document.getElementById('ring-progress').textContent = `${ring.exp}/${expRequired}`;
-
-        const slotsContainer = document.getElementById('loaded-laws-list');
-        slotsContainer.innerHTML = '';
-
-        // 显示当前路径
-        const currentPath = FATE_RING.paths[ring.path];
-        if (currentPath && ring.path !== 'crippled') {
-            const pathDiv = document.createElement('div');
-            pathDiv.className = 'current-path-display';
-            pathDiv.innerHTML = `
-                <div style="margin-bottom: 16px; padding: 12px; background: linear-gradient(135deg, rgba(255,215,0,0.1), rgba(156,39,176,0.1)); border-radius: 8px; border: 1px solid var(--accent-gold);">
-                    <div style="font-size: 1.2rem; margin-bottom: 4px;">${currentPath.icon || '💫'} ${currentPath.name}</div>
-                    <div style="font-size: 0.85rem; color: var(--text-secondary);">${currentPath.description}</div>
+        // 使用新的HTML结构
+        modal.innerHTML = `
+            <div class="modal-content fate-ring-modal-content">
+                <div class="fate-ring-header">
+                    <h2 style="color: var(--accent-gold); margin: 0; font-family: var(--font-display);">命环系统</h2>
+                    <div class="modal-close" onclick="game.closeModal()">×</div>
                 </div>
-            `;
-            slotsContainer.appendChild(pathDiv);
-        }
+                
+                <div class="fate-ring-body">
+                    <!-- 左侧：状态面板 -->
+                    <div class="ring-status-panel">
+                        <div class="ring-visual">
+                            <div style="font-size: 3rem;">${ring.limitBreaked ? '👑' : '💫'}</div>
+                        </div>
+                        
+                        <div class="ring-level-info">
+                            <h3 style="color: var(--accent-gold); margin-bottom: 5px;">${ring.name}</h3>
+                            <div style="font-size: 0.9rem; color: #aaa;">LV.${ring.level}</div>
+                            
+                            <div style="margin-top: 10px; background: rgba(0,0,0,0.3); height: 6px; border-radius: 3px; overflow: hidden;">
+                                <div style="width: ${(ring.exp / (FATE_RING.levels[ring.level]?.expRequired || 999)) * 100}%; background: var(--accent-gold); height: 100%;"></div>
+                            </div>
+                            <div style="font-size: 0.8rem; margin-top: 5px; color: #888;">
+                                经验值: ${ring.exp}/${FATE_RING.levels[ring.level]?.expRequired || 'Max'}
+                            </div>
+                        </div>
+                        
+                        <!-- 当前路径加成 -->
+                        ${this.renderCurrentPathInfo(ring)}
+                    </div>
+                    
+                    <!-- 中间：槽位展示 -->
+                    <div class="ring-slots-panel">
+                        <div class="slots-circle">
+                            <div class="center-core">
+                                <span>${ring.slots}</span>
+                            </div>
+                            
+                            <!-- 动态生成槽位 -->
+                            ${this.renderRingSlots(ring)}
+                        </div>
+                        
+                        <div id="slot-action-hint" style="position: absolute; bottom: 20px; color: var(--text-muted); font-size: 0.9rem;">
+                            ${this.selectedRingSlot !== undefined ? '从右侧选择法则装填' : '点击槽位进行操作'}
+                        </div>
+                    </div>
+                    
+                    <!-- 右侧：法则库 -->
+                    <div class="law-library-panel">
+                        <div class="library-header">
+                            法则库 (${this.player.collectedLaws.length})
+                        </div>
+                        <div class="library-list">
+                            ${this.renderLawLibrary(ring)}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
 
-        // 检查是否可以进化
-        const availablePaths = getAvailablePaths(ring);
-        if (availablePaths.length > 0 && ring.level > 0) {
-            const evolveSection = document.createElement('div');
-            evolveSection.className = 'evolve-section';
-            evolveSection.innerHTML = `
-                <h4 style="margin: 16px 0 8px; color: var(--accent-gold);">🌟 可进化路径</h4>
-            `;
-
-            const pathsGrid = document.createElement('div');
-            pathsGrid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px;';
-
-            availablePaths.forEach(path => {
-                const pathCard = document.createElement('div');
-                pathCard.className = 'path-card';
-                pathCard.style.cssText = `
-                    padding: 12px; 
-                    background: rgba(255,255,255,0.05); 
-                    border: 1px solid rgba(255,255,255,0.2); 
-                    border-radius: 8px; 
-                    cursor: pointer; 
-                    transition: all 0.3s;
-                    text-align: center;
-                `;
-                pathCard.innerHTML = `
-                    <div style="font-size: 2rem; margin-bottom: 4px;">${path.icon}</div>
-                    <div style="font-weight: 600; margin-bottom: 4px;">${path.name}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-muted);">${path.description}</div>
-                `;
-
-                pathCard.addEventListener('mouseenter', () => {
-                    pathCard.style.borderColor = 'var(--accent-gold)';
-                    pathCard.style.transform = 'translateY(-2px)';
-                    pathCard.style.boxShadow = '0 4px 12px rgba(255,215,0,0.2)';
-                });
-                pathCard.addEventListener('mouseleave', () => {
-                    pathCard.style.borderColor = 'rgba(255,255,255,0.2)';
-                    pathCard.style.transform = 'translateY(0)';
-                    pathCard.style.boxShadow = 'none';
-                });
-                pathCard.addEventListener('click', () => {
-                    this.evolveFateRing(path.id);
-                });
-
-                pathsGrid.appendChild(pathCard);
-            });
-
-            evolveSection.appendChild(pathsGrid);
-            slotsContainer.appendChild(evolveSection);
-        }
-
-        if (ring.slots === 0) {
-            slotsContainer.innerHTML += '<div style="color: var(--text-muted); padding: 20px; text-align: center;">残缺印记无法承载法则，请寻找古玉觉醒...</div>';
-        } else {
-            // 显示法则槽位
-            const lawsTitle = document.createElement('h4');
-            lawsTitle.style.cssText = 'margin: 16px 0 8px; color: var(--accent-purple);';
-            lawsTitle.textContent = '📜 装载的法则';
-            slotsContainer.appendChild(lawsTitle);
-
-            const lawsGrid = document.createElement('div');
-            lawsGrid.style.cssText = 'display: flex; gap: 12px; flex-wrap: wrap;';
-
-            for (let i = 0; i < ring.slots; i++) {
-                const lawId = ring.loadedLaws[i];
-                const law = lawId ? LAWS[lawId] : null;
-
-                const slot = document.createElement('div');
-                slot.className = `law-slot ${law ? 'filled' : ''}`;
-                slot.style.cssText = 'padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; text-align: center; min-width: 80px;';
-                slot.innerHTML = law ? `
-                    <div class="law-icon" style="font-size: 1.5rem;">${law.icon}</div>
-                    <div class="law-name" style="font-size: 0.8rem; margin-top: 4px;">${law.name}</div>
-                ` : `
-                    <div class="law-icon" style="font-size: 1.5rem; opacity: 0.3;">+</div>
-                    <div class="law-name" style="font-size: 0.8rem; opacity: 0.5;">空槽</div>
-                `;
-
-                lawsGrid.appendChild(slot);
-            }
-
-            slotsContainer.appendChild(lawsGrid);
-        }
+        // 绑定事件
+        this.bindRingEvents();
 
         modal.classList.add('active');
+    }
+
+    // 渲染当前路径信息
+    renderCurrentPathInfo(ring) {
+        if (!ring.path || ring.path === 'crippled') return '';
+
+        const path = FATE_RING.paths[ring.path];
+        return `
+            <div class="ring-path-info">
+                <div style="font-weight: bold; color: var(--accent-purple); margin-bottom: 5px;">
+                    ${path.icon || '✨'} ${path.name}
+                </div>
+                <div style="font-size: 0.8rem; line-height: 1.4;">
+                    ${path.description}
+                </div>
+                ${this.renderEvolveButton(ring)}
+            </div>
+        `;
+    }
+
+    // 渲染进化按钮（如果有）
+    renderEvolveButton(ring) {
+        const available = getAvailablePaths(ring);
+        if (available.length > 0 && ring.level > 0) {
+            return `
+                <button onclick="game.showEvolveOptions()" 
+                    style="width: 100%; margin-top: 10px; padding: 5px; background: rgba(255,215,0,0.2); border: 1px solid var(--accent-gold); color: var(--accent-gold); border-radius: 4px; cursor: pointer;">
+                    🌟 命环进化
+                </button>
+            `;
+        }
+        return '';
+    }
+
+    // 渲染环形槽位
+    renderRingSlots(ring) {
+        let html = '';
+        const radius = 105; // 半径
+
+        for (let i = 0; i < ring.slots; i++) {
+            const angle = (i / ring.slots) * 2 * Math.PI - Math.PI / 2; // 从上方开始
+            const x = Math.cos(angle) * radius + 120; // +120是偏移量，使其居中 (300/2 - 30)
+            const y = Math.sin(angle) * radius + 120;
+
+            const lawId = ring.loadedLaws[i];
+            const law = lawId ? LAWS[lawId] : null;
+            const isSelected = this.selectedRingSlot === i;
+
+            html += `
+                <div class="law-slot-node ${law ? 'filled' : 'empty'}" 
+                     style="left: ${x}px; top: ${y}px; ${isSelected ? 'box-shadow: 0 0 15px var(--accent-green); border-color: var(--accent-green);' : ''}"
+                     data-index="${i}">
+                    ${law ? law.icon : '+'}
+                </div>
+            `;
+        }
+        return html;
+    }
+
+    // 渲染法则库列表
+    renderLawLibrary(ring) {
+        if (this.player.collectedLaws.length === 0) {
+            return '<div style="padding: 20px; text-align: center; color: #666;">暂无法则</div>';
+        }
+
+        return this.player.collectedLaws.map(law => {
+            const isEquipped = ring.loadedLaws.includes(law.id);
+            return `
+                <div class="library-item ${isEquipped ? 'equipped' : ''}" data-id="${law.id}">
+                    <div class="lib-icon">${law.icon}</div>
+                    <div class="lib-info">
+                        <div class="lib-name">${law.name}</div>
+                        <div class="lib-desc">${law.effectDesc || law.desc || '效果未知'}</div>
+                    </div>
+                    ${isEquipped ? '<div style="font-size: 0.8rem; color: var(--accent-gold);">已装</div>' : ''}
+                </div>
+            `;
+        }).join('');
+    }
+
+    // 绑定命环界面事件
+    bindRingEvents() {
+        const modal = document.getElementById('ring-modal');
+
+        // 绑定槽位点击
+        modal.querySelectorAll('.law-slot-node').forEach(slot => {
+            slot.addEventListener('click', (e) => {
+                const index = parseInt(slot.dataset.index);
+                const ring = this.player.fateRing;
+
+                // 如果该槽位有法则，点击卸载
+                if (ring.loadedLaws[index]) {
+                    this.player.unloadLawFromRing(index);
+                    Utils.showBattleLog('法则已卸载');
+                    this.showFateRing(); // 刷新
+                    this.autoSave();
+                } else {
+                    // 如果是空槽位，选中它
+                    if (this.selectedRingSlot === index) {
+                        this.selectedRingSlot = undefined; // 取消选中
+                    } else {
+                        this.selectedRingSlot = index;
+                    }
+                    this.showFateRing();
+                }
+            });
+        });
+
+        // 绑定法则库点击
+        modal.querySelectorAll('.library-item').forEach(item => {
+            if (item.classList.contains('equipped')) return;
+
+            item.addEventListener('click', () => {
+                const lawId = item.dataset.id;
+                let targetSlot = this.selectedRingSlot;
+
+                // 如果没选中槽位，找第一个空的
+                if (targetSlot === undefined) {
+                    for (let i = 0; i < this.player.fateRing.slots; i++) {
+                        if (!this.player.fateRing.loadedLaws[i]) {
+                            targetSlot = i;
+                            break;
+                        }
+                    }
+                }
+
+                // 如果还没找到（满了），或者选中的槽位已经满了（虽然逻辑上unload了，但保护一下）
+                // 实际上 loadLawToRing 会处理覆盖逻辑
+
+                if (this.player.loadLawToRing(lawId, targetSlot !== undefined ? targetSlot : -1)) {
+                    Utils.showBattleLog(`已装填法则【${LAWS[lawId]?.name}】`);
+                    this.selectedRingSlot = undefined; // 重置选中
+                    this.showFateRing();
+                    this.autoSave();
+                } else {
+                    Utils.showBattleLog('装填失败：没有空槽位或槽位无效');
+                }
+            });
+        });
+    }
+
+    // 显示进化选项（为了复用之前的逻辑，这里把之前的 showFateRing 里的进化部分提出来）
+    showEvolveOptions() {
+        const modal = document.getElementById('ring-modal'); // 复用同一个modal，或者创建一个临时的覆盖层
+        // 这里简单起见，我们直接在模态框里替换内容显示进化选项，或者弹出一个 alert/confirm 风格的选择
+
+        const ring = this.player.fateRing;
+        const availablePaths = getAvailablePaths(ring);
+
+        if (availablePaths.length === 0) return;
+
+        const slotsContainer = document.querySelector('.fate-ring-body'); // 覆盖整个 body
+        slotsContainer.innerHTML = `
+            <div style="padding: 30px; width: 100%; display: flex; flex-direction: column; align-items: center;">
+                <h2 style="color: var(--accent-gold); margin-bottom: 20px;">选择进化路径</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; width: 100%; max-width: 800px;">
+                    ${availablePaths.map(path => `
+                        <div class="path-card" onclick="game.evolveFateRing('${path.id}')" style="
+                            padding: 20px; 
+                            background: rgba(255,255,255,0.05); 
+                            border: 1px solid var(--accent-gold); 
+                            border-radius: 8px; 
+                            cursor: pointer;
+                            transition: all 0.3s;
+                            text-align: center;
+                        ">
+                            <div style="font-size: 2.5rem; margin-bottom: 10px;">${path.icon}</div>
+                            <h3 style="margin-bottom: 10px;">${path.name}</h3>
+                            <p style="color: #aaa; font-size: 0.9rem;">${path.description}</p>
+                        </div>
+                    `).join('')}
+                </div>
+                <button onclick="game.showFateRing()" style="margin-top: 30px; padding: 10px 30px; background: transparent; border: 1px solid rgba(255,255,255,0.3); color: white; cursor: pointer;">返回</button>
+            </div>
+         `;
     }
 
     // 进化命环
