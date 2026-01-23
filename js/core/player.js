@@ -477,7 +477,8 @@ class Player {
             case 'percentDamage':
                 if (!target) return { type: 'error', message: '需要目标' };
                 // 造成目标最大生命值一定百分比的伤害
-                const pDamage = Math.floor(target.maxHp * effect.value);
+                const maxHp = target.maxHp || target.hp;
+                const pDamage = Math.floor(maxHp * effect.value);
                 return { type: 'damage', value: pDamage, target: effect.target };
 
             case 'swapHpPercent':
@@ -488,11 +489,12 @@ class Player {
                 // 但如果敌人满血(100%)，交换给玩家，玩家应该满血
 
                 // 关键修正：获取百分比时，保留足够精度，并确保不会导致生命值归零
-                const enemyPercent = Math.max(0.01, target.currentHp / target.maxHp); // 敌人至少保留1%
+                const targetMaxHp = target.maxHp || target.hp;
+                const enemyPercent = Math.max(0.01, target.currentHp / targetMaxHp); // 敌人至少保留1%
                 const safePlayerPercent = Math.max(0.01, this.currentHp / this.maxHp); // 玩家至少保留1%
 
                 const newPlayerHp = Math.floor(this.maxHp * enemyPercent);
-                const newEnemyHp = Math.floor(target.maxHp * safePlayerPercent);
+                const newEnemyHp = Math.floor(targetMaxHp * safePlayerPercent);
 
                 const finalPlayerHp = Math.max(1, newPlayerHp);
                 const finalEnemyHp = Math.max(1, newEnemyHp);

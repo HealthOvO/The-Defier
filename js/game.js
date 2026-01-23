@@ -278,6 +278,10 @@ class Game {
                     <div class="collection-desc" style="font-size: 0.85rem; color: #ccc; margin-top: 8px; text-align: center; line-height: 1.4;">
                         ${law.description}
                     </div>
+                    ${passiveText ? `
+                    <div class="collection-effect" style="font-size: 0.8rem; color: #4ff; margin-top: 8px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 5px;">
+                        ${passiveText}
+                    </div>` : ''}
                 `;
             } else {
                 descHtml = `
