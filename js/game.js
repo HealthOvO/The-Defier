@@ -388,11 +388,7 @@ class Game {
             // 剧情背景
             const introDiv = document.createElement('div');
             introDiv.className = 'story-intro';
-            introDiv.style.marginBottom = '20px';
-            introDiv.style.padding = '15px';
-            introDiv.style.background = 'rgba(0,0,0,0.6)';
-            introDiv.style.borderRadius = '8px';
-            introDiv.style.lineHeight = '1.6';
+
             introDiv.innerHTML = `
                 <p><strong>背景设定：</strong></p>
                 <p>“命环”，乃天道为万物众生设下的枷锁，意在限制潜力，维持统治。</p>
@@ -404,10 +400,7 @@ class Game {
 
             const cardsContainer = document.createElement('div');
             cardsContainer.className = 'character-cards-wrapper';
-            cardsContainer.style.display = 'flex';
-            cardsContainer.style.gap = '20px';
-            cardsContainer.style.justifyContent = 'center';
-            cardsContainer.style.flexWrap = 'wrap';
+
 
             for (const charId in CHARACTERS) {
                 const char = CHARACTERS[charId];
