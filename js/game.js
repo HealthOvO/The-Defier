@@ -738,16 +738,35 @@ class Game {
         const choice = this.currentEvent.choices[choiceIndex];
         if (!choice) return;
 
-        // 关闭弹窗
-        document.getElementById('event-modal').classList.remove('active');
+        // 收集效果结果用于显示
+        this.eventResults = [];
 
         // 执行效果
         if (choice.effects && choice.effects.length > 0) {
             choice.effects.forEach(effect => this.executeEventEffect(effect));
         }
 
-        // 完成事件
-        this.onEventComplete();
+        // 在弹窗中显示结果
+        const descEl = document.getElementById('event-desc');
+        const choicesEl = document.getElementById('event-choices');
+
+        if (this.eventResults.length > 0) {
+            descEl.innerHTML = `<div style="color: var(--accent-gold); font-size: 1.1rem;">✨ 结果</div>`;
+            descEl.innerHTML += this.eventResults.map(r => `<div style="margin-top: 8px;">${r}</div>`).join('');
+        } else if (choice.effects && choice.effects.length === 0) {
+            descEl.innerHTML = `<div style="color: var(--text-muted);">你转身离开了...</div>`;
+        }
+
+        // 隐藏选项，显示继续按钮
+        choicesEl.innerHTML = '';
+        const continueBtn = document.createElement('button');
+        continueBtn.className = 'event-choice';
+        continueBtn.innerHTML = '<div>▶ 继续</div>';
+        continueBtn.onclick = () => {
+            document.getElementById('event-modal').classList.remove('active');
+            this.onEventComplete();
+        };
+        choicesEl.appendChild(continueBtn);
     }
 
     // 执行事件效果
@@ -755,29 +774,29 @@ class Game {
         switch (effect.type) {
             case 'gold':
                 this.player.gold += effect.value;
-                Utils.showBattleLog(`灵石 ${effect.value > 0 ? '+' : ''}${effect.value}`);
+                this.eventResults.push(`💰 灵石 ${effect.value > 0 ? '+' : ''}${effect.value}`);
                 break;
 
             case 'randomGold':
                 const goldAmount = Math.floor(Math.random() * (effect.max - effect.min + 1)) + effect.min;
                 this.player.gold += goldAmount;
-                Utils.showBattleLog(`获得 ${goldAmount} 灵石`);
+                this.eventResults.push(`💰 获得 ${goldAmount} 灵石`);
                 break;
 
             case 'heal':
                 this.player.currentHp = Math.min(this.player.maxHp, this.player.currentHp + effect.value);
-                Utils.showBattleLog(`恢复 ${effect.value} HP`);
+                this.eventResults.push(`💚 恢复 ${effect.value} HP`);
                 break;
 
             case 'damage':
                 this.player.currentHp -= effect.value;
-                Utils.showBattleLog(`失去 ${effect.value} HP`);
+                this.eventResults.push(`💔 失去 ${effect.value} HP`);
                 break;
 
             case 'ringExp':
                 this.player.fateRing.exp += effect.value;
                 this.player.checkFateRingLevelUp();
-                Utils.showBattleLog(`命环经验 +${effect.value}`);
+                this.eventResults.push(`🔮 命环经验 +${effect.value}`);
                 break;
 
             case 'card':
@@ -789,7 +808,7 @@ class Game {
                 }
                 if (card) {
                     this.player.addCardToDeck(card);
-                    Utils.showBattleLog(`获得卡牌: ${card.name}`);
+                    this.eventResults.push(`🃏 获得卡牌: ${card.name}`);
                 }
                 break;
 
@@ -798,13 +817,13 @@ class Game {
                 if (effect.value > 0) {
                     this.player.currentHp += effect.value;
                 }
-                Utils.showBattleLog(`最大HP ${effect.value > 0 ? '+' : ''}${effect.value}`);
+                this.eventResults.push(`❤️ 最大HP ${effect.value > 0 ? '+' : ''}${effect.value}`);
                 break;
 
             case 'permaBuff':
                 if (!this.player.permBuffs) this.player.permBuffs = {};
                 this.player.permBuffs[effect.stat] = (this.player.permBuffs[effect.stat] || 0) + effect.value;
-                Utils.showBattleLog(`永久${effect.stat === 'strength' ? '力量' : '属性'} ${effect.value > 0 ? '+' : ''}${effect.value}`);
+                this.eventResults.push(`💪 永久${effect.stat === 'strength' ? '力量' : '属性'} ${effect.value > 0 ? '+' : ''}${effect.value}`);
                 break;
 
             case 'law':
@@ -812,7 +831,7 @@ class Game {
                     const lawKeys = Object.keys(LAWS);
                     const randomLaw = LAWS[lawKeys[Math.floor(Math.random() * lawKeys.length)]];
                     if (randomLaw && this.player.collectLaw({ ...randomLaw })) {
-                        Utils.showBattleLog(`获得法则: ${randomLaw.name}`);
+                        this.eventResults.push(`✨ 获得法则: ${randomLaw.name}`);
                     }
                 }
                 break;
