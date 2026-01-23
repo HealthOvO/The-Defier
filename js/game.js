@@ -455,6 +455,10 @@ class Game {
                             <div class="char-name">${char.name}</div>
                             <div class="char-title">${char.title}</div>
                             <div class="char-desc">${char.description}</div>
+                            <div class="char-relic-info" style="margin: 10px 0; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; border: 1px solid var(--border-color);">
+                                <div style="color: var(--accent-gold); font-size: 0.9em;">✦ 天赋：${char.relic.name}</div>
+                                <div style="font-size: 0.8em; color: #ccc; margin-top: 2px;">${char.relic.desc}</div>
+                            </div>
                             <div class="char-stats-preview">
                                 <div class="stat-item">
                                     <span>${char.stats.maxHp}</span>
