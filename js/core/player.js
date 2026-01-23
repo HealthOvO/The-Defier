@@ -346,6 +346,34 @@ class Player {
         }
     }
 
+
+    // 添加Buff
+    addBuff(type, value) {
+        if (this.buffs[type]) {
+            this.buffs[type] += value;
+        } else {
+            this.buffs[type] = value;
+        }
+        Utils.showBattleLog(`获得了 ${GameData.getBuffName ? GameData.getBuffName(type) : type} x${value}`);
+        // 触发buff获得时的回调（如果有）
+        if (type === 'strength') {
+            // Strength logic handled dynamically
+        }
+    }
+
+    // 回合开始时处理Buff
+    processBuffsOnTurnStart() {
+        // 中毒伤害结算在EnemyTurn，但如果玩家中毒？
+        if (this.buffs.poison) {
+            this.takeDamage(this.buffs.poison);
+            this.buffs.poison--;
+            if (this.buffs.poison <= 0) delete this.buffs.poison;
+            Utils.showBattleLog(`受到中毒伤害！剩余 ${this.buffs.poison || 0} 层`);
+        }
+
+        // 自动格挡/反伤等逻辑...
+    }
+
     // 抽牌
     drawCards(count) {
         for (let i = 0; i < count; i++) {
