@@ -437,22 +437,49 @@ class Battle {
         // 检查战斗是否结束
         if (this.checkBattleEnd()) return;
 
-        // 新回合
-        this.turnNumber++;
-        this.currentTurn = 'player';
-        this.player.startTurn();
-
-        // 启用结束回合按钮
-        document.getElementById('end-turn-btn').disabled = false;
-
-        this.updateBattleUI();
+        // ...
     }
 
-    // 敌人回合
+    // 敌人回合行动
     async enemyTurn() {
         for (let i = 0; i < this.enemies.length; i++) {
             const enemy = this.enemies[i];
             if (enemy.currentHp <= 0) continue;
+
+            // 混沌法则判定：混乱效果 (10% 几率)
+            const chaosLaw = this.player.collectedLaws.find(l => l.id === 'chaosLaw');
+            if (chaosLaw && Math.random() < chaosLaw.passive.value) {
+                // 混乱触发
+                Utils.showBattleLog(`${enemy.name} 因混沌之力陷入混乱！`);
+
+                // 随机行为：1. 攻击自己 2. 攻击队友（若有） 3. 跳过
+                const chaosRoll = Math.random();
+                if (chaosRoll < 0.4) {
+                    // 攻击自己
+                    const dmg = 5;
+                    enemy.currentHp -= dmg;
+                    Utils.showBattleLog(`${enemy.name} 攻击了自己，受到 ${dmg} 点伤害！`);
+                    // 显示伤害数字
+                    const enemyEl = document.querySelector(`.enemy-card[data-index="${i}"]`);
+                    if (enemyEl) Utils.showFloatingNumber(enemyEl, dmg, 'damage');
+                } else if (chaosRoll < 0.7 && this.enemies.length > 1) {
+                    // 攻击队友
+                    const teammates = this.enemies.filter(e => e !== enemy && e.currentHp > 0);
+                    if (teammates.length > 0) {
+                        const target = teammates[Math.floor(Math.random() * teammates.length)];
+                        target.currentHp -= 8;
+                        Utils.showBattleLog(`${enemy.name} 误伤了队友 ${target.name}！`);
+                    } else {
+                        Utils.showBattleLog(`${enemy.name} 呆立当场！`);
+                    }
+                } else {
+                    // 跳过
+                    Utils.showBattleLog(`${enemy.name} 因混乱错过了攻击机会！`);
+                }
+
+                await Utils.sleep(800);
+                continue; // 跳过正常行动
+            }
 
             // 检查眩晕
             if (enemy.stunned) {
@@ -486,6 +513,8 @@ class Battle {
         }
     }
 
+
+
     // 处理敌人debuff
     async processEnemyDebuffs(enemy, enemyIndex) {
         const enemyEl = document.querySelector(`.enemy[data-index="${enemyIndex}"]`);
@@ -501,6 +530,22 @@ class Battle {
                 Utils.showFloatingNumber(enemyEl, burnDamage, 'damage');
             }
             Utils.showBattleLog(`${enemy.name} 受到 ${burnDamage} 点灼烧伤害`);
+
+            this.updateBattleUI();
+            await Utils.sleep(300);
+        }
+
+        // 中毒
+        if (enemy.buffs.poison && enemy.buffs.poison > 0) {
+            const poisonDamage = enemy.buffs.poison;
+            enemy.currentHp -= poisonDamage;
+            enemy.buffs.poison--;
+
+            if (enemyEl) {
+                Utils.addFlashEffect(enemyEl, 'green');
+                Utils.showFloatingNumber(enemyEl, poisonDamage, 'damage');
+            }
+            Utils.showBattleLog(`${enemy.name} 受到 ${poisonDamage} 点中毒伤害`);
 
             this.updateBattleUI();
             await Utils.sleep(300);

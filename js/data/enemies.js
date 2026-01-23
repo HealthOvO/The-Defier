@@ -460,6 +460,43 @@ const ENEMIES = {
         gold: { min: 200, max: 320 }
     },
 
+    // ==================== 隐藏 & 特殊敌人 ====================
+    controlledCultivator: {
+        id: 'controlledCultivator',
+        name: '被控修士',
+        icon: '🧟',
+        realm: 8, // 高阶区域出现
+        hp: 180,
+        patterns: [
+            { type: 'attack', value: 25, intent: '⚔️' },
+            { type: 'debuff', buffType: 'weak', value: 2, intent: '✨' },
+            { type: 'attack', value: 30, intent: '⚔️' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'chaosLaw',
+        gold: { min: 100, max: 150 }
+    },
+
+    thePunisher: {
+        id: 'thePunisher',
+        name: '天罚者',
+        icon: '👁️',
+        realm: 9, // 与天道同阶
+        isBoss: true,
+        hp: 550,
+        patterns: [
+            { type: 'attack', value: 40, intent: '⚔️' },
+            { type: 'debuff', buffType: 'stun', value: 1, intent: '😵' }, // 混沌法则：控制
+            { type: 'multiAttack', value: 20, count: 4, intent: '🔥' },
+            { type: 'buff', buffType: 'strength', value: 5, intent: '💪' },
+            { type: 'attack', value: 50, intent: '⚔️' },
+            { type: 'heal', value: 50, intent: '💚' }
+        ],
+        stealChance: 1.0, // 必掉
+        stealLaw: 'chaosLaw',
+        gold: { min: 600, max: 900 }
+    },
+
     heavenlyAvatar: {
         id: 'heavenlyAvatar',
         name: '天道化身',

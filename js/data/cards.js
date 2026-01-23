@@ -685,7 +685,81 @@ const CARDS = {
         effects: [
             { type: 'consumeAllEnergy', damagePerEnergy: 6, target: 'enemy' }
         ]
-    }
+    },
+
+    chaosControl: {
+        id: 'chaosControl',
+        name: '混沌支配',
+        type: 'law',
+        cost: 2,
+        icon: '🌀',
+        description: '造成 5 点伤害，使敌人眩晕1回合',
+        rarity: 'legendary',
+        lawType: 'chaos',
+        effects: [
+            effects: [
+                { type: 'damage', value: 5, target: 'enemy' },
+                { type: 'debuff', buffType: 'stun', value: 1, target: 'enemy' }
+            ]
+    },
+
+    // ==================== 多角色专属卡牌 ====================
+    // 香叶
+    poisonTouch: {
+        id: 'poisonTouch',
+        name: '毒触',
+        type: 'attack',
+        cost: 1,
+        icon: '🤢',
+        description: '造成 3 点伤害，给予 2 层中毒',
+        rarity: 'common',
+        effects: [
+            { type: 'damage', value: 3, target: 'enemy' },
+            { type: 'debuff', buffType: 'poison', value: 2, target: 'enemy' }
+        ]
+    },
+    minorHeal: {
+        id: 'minorHeal',
+        name: '小治愈术',
+        type: 'skill',
+        cost: 1,
+        icon: '🩹',
+        description: '回复 5 点生命',
+        rarity: 'common',
+        effects: [
+            { type: 'heal', value: 5, target: 'self' }
+        ]
+    },
+
+    // 无欲
+    monkStrike: {
+        id: 'monkStrike',
+        name: '武僧打击',
+        type: 'attack',
+        cost: 1,
+        icon: '🙏',
+        description: '造成 6 点伤害，获得 4 点护盾',
+        rarity: 'common',
+        effects: [
+            { type: 'damage', value: 6, target: 'enemy' },
+            { type: 'block', value: 4, target: 'self' }
+        ]
+    },
+
+    // 严寒
+    analysis: {
+        id: 'analysis',
+        name: '弱点分析',
+        type: 'skill',
+        cost: 0,
+        icon: '🧐',
+        description: '抽 1 张牌，使敌人获得 1 层易伤',
+        rarity: 'common',
+        effects: [
+            { type: 'draw', value: 1, target: 'self' },
+            { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'enemy' }
+        ]
+    },
 };
 
 // 初始牌组
@@ -700,7 +774,8 @@ const CARD_POOL = {
     common: [
         'heavyStrike', 'quickSlash', 'doubleStrike', 'ironWill', 'shieldBash',
         'spiritBoost', 'meditation', 'armorBreaker', 'goldenBell', 'turtleShell',
-        'concentration', 'doubleEdge', 'quickDraw'
+        'concentration', 'doubleEdge', 'quickDraw', // Fix missing comma
+        'poisonTouch', 'minorHeal', 'monkStrike', 'analysis'
     ],
     uncommon: [
         'ragingBlow', 'counterStance', 'innerPeace', 'battleCry', 'luckyStrike',
@@ -709,12 +784,12 @@ const CARD_POOL = {
     ],
     rare: [
         'thunderLaw', 'swordIntent', 'flameTruth', 'spaceRift', 'fortuneWheel',
-        'miracleHeal', 'earthShatter', 'swordBreaker', 'finishingBlow', 'halfDamage',
+        'miracleHeal', 'earthShatter', 'swordBreaker', 'finishingBlow', 'halfDamage', // Fix missing comma
         'thunderStorm', 'voidWalk', 'iceFreeze', 'desperateSurvival', 'enlightenment',
         'allIn'
     ],
     epic: ['inferno', 'timeRewind'],
-    legendary: ['timeStop', 'voidEmbrace', 'karmaKill', 'reversal']
+    legendary: ['timeStop', 'voidEmbrace', 'karmaKill', 'reversal', 'chaosControl']
 };
 
 // 获取随机卡牌

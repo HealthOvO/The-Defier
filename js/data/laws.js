@@ -90,6 +90,20 @@ const LAWS = {
         unlockCards: ['voidEmbrace']
     },
 
+    chaosLaw: {
+        id: 'chaosLaw',
+        name: '混沌法则',
+        icon: '🌀',
+        description: '操控人心，造成混乱',
+        rarity: 'legendary',
+        element: 'chaos',
+        passive: {
+            type: 'chaosControl', // 特殊效果：让敌人攻击其队友？目前单挑，改为强力debuff
+            value: 0.1, // 10%几率让敌人混乱（跳过回合or攻击自己）
+        },
+        unlockCards: ['chaosControl']
+    },
+
     lifeDrain: {
         id: 'lifeDrain',
         name: '生命汲取',

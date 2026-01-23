@@ -2842,6 +2842,7 @@ body {
     z-index: 2000 !important;
     /* Ensure it shows above modals */
 }
+
 /* 命环界面布局增强 */
 .fate-ring-modal-content {
     display: flex;
@@ -2891,7 +2892,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(circle, rgba(255,215,0,0.1) 0%, rgba(0,0,0,0.5) 100%);
+    background: radial-gradient(circle, rgba(255, 215, 0, 0.1) 0%, rgba(0, 0, 0, 0.5) 100%);
 }
 
 .ring-level-info {
@@ -3039,4 +3040,149 @@ body {
 .lib-desc {
     font-size: 0.75rem;
     color: var(--text-muted);
+}
+
+/* ===================================
+   Character Selection Screen
+   =================================== */
+.character-selection-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 30px;
+    padding: 40px;
+    height: 70%;
+    overflow-x: auto;
+}
+
+.character-card {
+    width: 280px;
+    height: 450px;
+    background: linear-gradient(135deg, rgba(30, 30, 30, 0.9) 0%, rgba(10, 10, 10, 0.95) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 2px;
+    /* For border gradient effect if needed */
+    position: relative;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    display: flex;
+    flex-direction: column;
+}
+
+.character-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 12px;
+    border: 2px solid transparent;
+    transition: all 0.3s;
+    pointer-events: none;
+}
+
+.character-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.character-card.selected {
+    transform: translateY(-10px) scale(1.05);
+    box-shadow: 0 0 30px var(--accent-gold);
+    border-color: var(--accent-gold);
+}
+
+.character-card.selected::before {
+    border-color: var(--accent-gold);
+}
+
+.card-inner {
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 10px;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.char-header {
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background: radial-gradient(circle at center, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+}
+
+.char-avatar {
+    font-size: 4rem;
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.3));
+}
+
+.char-body {
+    padding: 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.char-name {
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-align: center;
+    color: #fff;
+    margin-bottom: 5px;
+}
+
+.char-title {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-top: -10px;
+    margin-bottom: 15px;
+}
+
+.char-desc {
+    font-size: 0.85rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.char-stats-preview {
+    display: flex;
+    justify-content: space-around;
+    padding: 10px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-size: 0.8rem;
+}
+
+.stat-item span:first-child {
+    font-size: 1.2rem;
+    margin-bottom: 3px;
+}
+
+.char-relic-preview {
+    font-size: 0.8rem;
+    color: var(--text-gold);
+    text-align: center;
+    margin-top: auto;
+}
+
+.character-selection-footer {
+    padding: 20px;
+    display: flex;
+    justify-content: center;
 }

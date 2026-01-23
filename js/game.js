@@ -378,9 +378,105 @@ class Game {
         document.getElementById('loaded-laws').textContent = `${loadedCount}/${totalSlots}`;
     }
 
+    // 显示角色选择界面
+    showCharacterSelection() {
+        this.selectedCharacterId = null;
+        const container = document.getElementById('character-selection-container');
+        if (container) {
+            container.innerHTML = '';
+
+            // 剧情背景
+            const introDiv = document.createElement('div');
+            introDiv.className = 'story-intro';
+            introDiv.style.marginBottom = '20px';
+            introDiv.style.padding = '15px';
+            introDiv.style.background = 'rgba(0,0,0,0.6)';
+            introDiv.style.borderRadius = '8px';
+            introDiv.style.lineHeight = '1.6';
+            introDiv.innerHTML = `
+                <p><strong>背景设定：</strong></p>
+                <p>“命环”，乃天道为万物众生设下的枷锁，意在限制潜力，维持统治。</p>
+                <p>然而天道亦有善恶，善念留下一线生机，即为“逆命者”。</p>
+                <p>恶念化身天道之主，对此大为震怒，封印善念，并派遣“天罚者”猎杀逆命之人。</p>
+                <p>如今，你作为新的逆命者觉醒，需在天罚者的追猎下不断突破命环，最终斩杀恶道，解放众生。</p>
+            `;
+            container.appendChild(introDiv);
+
+            const cardsContainer = document.createElement('div');
+            cardsContainer.className = 'character-cards-wrapper';
+            cardsContainer.style.display = 'flex';
+            cardsContainer.style.gap = '20px';
+            cardsContainer.style.justifyContent = 'center';
+            cardsContainer.style.flexWrap = 'wrap';
+
+            for (const charId in CHARACTERS) {
+                const char = CHARACTERS[charId];
+                const card = document.createElement('div');
+                card.className = 'character-card';
+                card.dataset.id = charId;
+                card.innerHTML = `
+                    <div class="card-inner">
+                        <div class="char-header">
+                            <div class="char-avatar">${char.avatar}</div>
+                        </div>
+                        <div class="char-body">
+                            <div class="char-name">${char.name}</div>
+                            <div class="char-title">${char.title}</div>
+                            <div class="char-desc">${char.description}</div>
+                            <div class="char-stats-preview">
+                                <div class="stat-item">
+                                    <span>${char.stats.maxHp}</span>
+                                    <span>HP</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span>${char.stats.energy}</span>
+                                    <span>灵力</span>
+                                </div>
+                            </div>
+                            <div class="char-relic-preview">
+                                🔮 ${char.relic.name}
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                card.addEventListener('click', () => {
+                    this.selectCharacter(charId);
+                });
+
+                cardsContainer.appendChild(card);
+            }
+            container.appendChild(cardsContainer);
+        }
+
+        const confirmBtn = document.getElementById('confirm-character-btn');
+        if (confirmBtn) confirmBtn.disabled = true;
+
+        this.showScreen('character-selection-screen');
+    }
+
+    // 选择角色
+    selectCharacter(charId) {
+        this.selectedCharacterId = charId;
+        const cards = document.querySelectorAll('.character-card');
+        cards.forEach(c => {
+            if (c.dataset.id === charId) c.classList.add('selected');
+            else c.classList.remove('selected');
+        });
+        const confirmBtn = document.getElementById('confirm-character-btn');
+        if (confirmBtn) confirmBtn.disabled = false;
+    }
+
+    // 确认选择
+    confirmCharacterSelection() {
+        if (this.selectedCharacterId) {
+            this.startNewGame(this.selectedCharacterId);
+        }
+    }
+
     // 开始新游戏
-    startNewGame() {
-        this.player.reset();
+    startNewGame(characterId = 'linFeng') {
+        this.player.reset(characterId);
         this.player.realm = 1;
         this.player.floor = 0;
         this.comboCount = 0;
@@ -491,8 +587,19 @@ class Game {
             ringExp = Math.floor(ringExp * 0.5);
         }
 
+        // 遗物：逆命之环（额外获得25%经验）
+        if (this.player.relic && this.player.relic.id === 'fateRing') {
+            ringExp = Math.floor(ringExp * 1.25);
+        }
+
         this.player.fateRing.exp += ringExp;
-        this.player.checkFateRingLevelUp();
+        const levelUp = this.player.checkFateRingLevelUp();
+
+        if (levelUp) {
+            // 命环升级触发微弱的法则波动，虽然现在还不足以引来天罚者，但随着等级提升...
+            Utils.showBattleLog("命环突破！法则波动引起了未知的注视...");
+            // 将来可以在这里根据level触发特定事件或对话
+        }
 
         // 自动保存
         this.autoSave();

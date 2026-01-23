@@ -26,7 +26,7 @@
                 <p class="tagline">天命印记定终生？偏要逆命而行。</p>
             </div>
             <div class="menu-buttons">
-                <button class="menu-btn primary" onclick="game.startNewGame()">
+                <button class="menu-btn primary" onclick="game.showCharacterSelection()">
                     <span class="btn-icon">⚔️</span>
                     <span class="btn-text">开始游戏</span>
                 </button>
@@ -48,6 +48,24 @@
                 </button>
             </div>
             <div class="version-info">v2.2.0 | 基于《我的命环能进化》</div>
+        </div>
+    </div>
+
+    <!-- 角色选择界面 -->
+    <div id="character-selection-screen" class="screen">
+        <div class="screen-header">
+            <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
+            <h2>选择你的命运</h2>
+        </div>
+        <div class="character-selection-container" id="character-selection-container">
+            <!-- 动态生成 -->
+        </div>
+        <div class="character-selection-footer">
+            <button class="menu-btn primary" id="confirm-character-btn" onclick="game.confirmCharacterSelection()"
+                disabled>
+                <span class="btn-icon">⚔️</span>
+                <span class="btn-text">踏入轮回</span>
+            </button>
         </div>
     </div>
 
@@ -423,6 +441,7 @@
     <script src="js/data/laws.js"></script>
     <script src="js/data/events.js"></script>
     <script src="js/data/achievements.js"></script>
+    <script src="js/data/characters.js"></script>
     <script src="js/core/utils.js"></script>
     <script src="js/core/particles.js"></script>
     <script src="js/core/events.js"></script>

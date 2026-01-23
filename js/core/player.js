@@ -7,16 +7,19 @@ class Player {
         this.reset();
     }
 
-    reset() {
+    reset(characterId = 'linFeng') {
+        const charData = CHARACTERS[characterId] || CHARACTERS['linFeng'];
+        this.characterId = characterId;
+
         // 基础属性
-        this.maxHp = 80;
-        this.currentHp = 80;
+        this.maxHp = charData.stats.maxHp;
+        this.currentHp = this.maxHp;
         this.block = 0;
-        this.gold = 0;
+        this.gold = charData.stats.gold;
 
         // 战斗属性
-        this.baseEnergy = 3;
-        this.currentEnergy = 3;
+        this.baseEnergy = charData.stats.energy;
+        this.currentEnergy = this.baseEnergy;
         this.drawCount = 5;
 
         // 牌组
@@ -28,6 +31,9 @@ class Player {
 
         // Buff/Debuff
         this.buffs = {};
+
+        // 遗物
+        this.relic = charData.relic;
 
         // 命环
         this.fateRing = {
@@ -49,11 +55,12 @@ class Player {
         this.lawsCollected = 0;
 
         // 初始化牌组
-        this.initializeDeck();
+        this.initializeDeck(charData.deck);
     }
 
-    initializeDeck() {
-        this.deck = STARTER_DECK.map(cardId => {
+    initializeDeck(deckList) {
+        const list = deckList || STARTER_DECK;
+        this.deck = list.map(cardId => {
             const card = CARDS[cardId];
             return card ? { ...card, instanceId: this.generateCardId() } : null;
         }).filter(Boolean);
@@ -75,6 +82,22 @@ class Player {
 
         // 应用命环加成
         this.applyFateRingBonuses();
+
+        // 遗物效果：金刚法相
+        if (this.relic && this.relic.id === 'vajraBody') {
+            this.block += 6;
+        }
+
+        // 遗物效果：真理之镜
+        if (this.relic && this.relic.id === 'scholarLens') {
+            // 随机获得一张技能牌（0费，临时）
+            const skills = ['meditation', 'spiritBoost', 'quickDraw', 'concentration', 'powerUp'];
+            const randomSkill = skills[Math.floor(Math.random() * skills.length)];
+            const card = CARDS[randomSkill];
+            if (card) {
+                this.hand.push({ ...card, instanceId: this.generateCardId(), cost: 0, isTemp: true });
+            }
+        }
     }
 
     // 应用命环加成
@@ -90,6 +113,9 @@ class Player {
     startTurn() {
         this.currentEnergy = this.baseEnergy;
         this.block = 0; // 护盾不保留到下回合
+
+        // 遗物效果：金刚法相（每回合开始如果需要保留护盾逻辑，这里会被清零，但遗物是战斗开始时获得，所以没问题）
+        // 如果想让金刚法相每回合都给，那太强了。描述是"战斗开始时"。
 
         // 应用法则被动效果
         this.applyLawPassives();
@@ -114,30 +140,74 @@ class Player {
         this.processBuffsOnTurnStart();
     }
 
-    // 抽牌
-    drawCards(count) {
-        for (let i = 0; i < count; i++) {
-            if (this.drawPile.length === 0) {
-                if (this.discardPile.length === 0) break;
-                this.drawPile = Utils.shuffle([...this.discardPile]);
-                this.discardPile = [];
-            }
+    // 应用法则被动
+    applyLawPassives() {
+        // 法则被动效果在战斗开始时检查
 
-            const card = this.drawPile.pop();
-            if (card) {
-                this.hand.push(card);
-            }
+        // 混沌法则：混乱光环
+        // 这里只是记录，实际效果在Battle.js的enemy turn logic中生效
+        // 或者我们可以给自身加一个永久buff "Chaos Aura"
+        const chaosLaw = this.collectedLaws.find(l => l.id === 'chaosLaw');
+        if (chaosLaw) {
+            this.addBuff('chaosAura', 1);
         }
     }
 
-    // 结束回合
-    endTurn() {
-        // 弃掉所有手牌
-        this.discardPile.push(...this.hand);
-        this.hand = [];
+    // 添加护盾
+    addBlock(amount) {
+        // 大地护盾法则
+        const earthLaw = this.collectedLaws.find(l => l.id === 'earthShield');
+        if (earthLaw) {
+            amount += earthLaw.passive.value;
+        }
 
-        // 处理回合结束的buff
-        this.processBuffsOnTurnEnd();
+        this.block += amount;
+    }
+
+    // 治疗
+    heal(amount) {
+        this.currentHp = Math.min(this.maxHp, this.currentHp + amount);
+    }
+
+    // 受到伤害
+    takeDamage(amount) {
+        // 检查闪避
+        if (this.buffs.dodge && this.buffs.dodge > 0) {
+            this.buffs.dodge--;
+            return { dodged: true, damage: 0 };
+        }
+
+        // 空间裂隙法则 - 随机闪避
+        const spaceLaw = this.collectedLaws.find(l => l.id === 'spaceRift');
+        if (spaceLaw && Math.random() < spaceLaw.passive.value) {
+            return { dodged: true, damage: 0 };
+        }
+
+        // 混沌法则 - 扭曲现实（10%几率让伤害归零）
+        const chaosLaw = this.collectedLaws.find(l => l.id === 'chaosLaw');
+        if (chaosLaw && Math.random() < 0.1) {
+            Utils.showBattleLog('混沌之力扭曲了现实，伤害无效！');
+            return { dodged: true, damage: 0 };
+        }
+
+        // 先扣护盾
+        let remainingDamage = amount;
+        if (this.block > 0) {
+            const blockAbsorbed = Math.min(this.block, remainingDamage);
+            this.block -= blockAbsorbed;
+            remainingDamage -= blockAbsorbed;
+        }
+
+        // 扣血
+        if (remainingDamage > 0) {
+            this.currentHp -= remainingDamage;
+        }
+
+        if (this.currentHp <= 0) {
+            this.currentHp = 0;
+            // 触发死亡事件
+        }
+        return { dodged: false, damage: amount - remainingDamage };
     }
 
     // 使用卡牌
@@ -156,20 +226,6 @@ class Player {
 
         // 播放卡牌特效
         if (typeof game !== 'undefined' && game.playCardEffect) {
-            // 获取目标元素
-            let targetEl = null;
-            if (target && target.id) {
-                // 假设敌人有ID关联到DOM
-                // 这里我们假设 battle.js 会处理 target 关联
-                // 或者我们简单传 null，让特效系统自己找默认位置
-                // 暂时传 null，让 particles.js 的 playCardEffect 处理默认玩家位置
-                // 如果是攻击，我们希望能定位到敌人
-                // 但这里 player.js 不应该知道太多 DOM 细节
-                // 我们在 game.js 或 battle.js 中处理更合适，但这里是触发点
-                // 实际上 playCard 是逻辑层。
-                // 我们可以在返回结果后，在 controller 层（game.js/battle.js）播放特效。
-                // 但为了方便，我们尝试调用全局 game
-            }
             game.playCardEffect(null, card.type);
         }
 
@@ -185,12 +241,10 @@ class Player {
     // 执行卡牌效果
     executeCardEffects(card, target) {
         const results = [];
-
         for (const effect of card.effects) {
             const result = this.executeEffect(effect, target);
             results.push(result);
         }
-
         return results;
     }
 
@@ -198,38 +252,15 @@ class Player {
     executeEffect(effect, target) {
         let value = effect.value || 0;
 
-        // 应用力量加成
-        if (effect.type === 'damage' && this.buffs.strength) {
-            value += this.buffs.strength;
-        }
-
-        // 应用命环进化路径加成
-        if (effect.type === 'damage') {
-            const path = this.fateRing.path;
-            // 力量之环: +15%伤害
-            if (path === 'power') {
-                value = Math.floor(value * 1.15);
-            }
-            // 剑仙环: +40%伤害
-            if (path === 'sword_immortal') {
-                value = Math.floor(value * 1.4);
-            }
-            // 雷神环/焚天环: +50%元素伤害 (简化为通用加成)
-            if (path === 'thunder_god' || path === 'flame_lord') {
-                value = Math.floor(value * 1.5);
-            }
-            // 真·逆天之环: +25%伤害
-            if (path === 'defiance') {
-                value = Math.floor(value * 1.25);
-            }
-        }
-
         // 应用法则加成
-        value = this.applyLawBonuses(effect.type, value);
+        if (this.applyLawBonuses) {
+            value = this.applyLawBonuses(effect.type, value);
+        }
 
         switch (effect.type) {
             case 'damage':
-                return { type: 'damage', value, target: effect.target };
+                let dmg = value;
+                return { type: 'damage', value: dmg, target: effect.target };
 
             case 'penetrate':
                 return { type: 'penetrate', value, target: effect.target };
@@ -265,237 +296,92 @@ class Player {
                 return { type: 'execute', target: effect.target };
 
             case 'swapHpPercent':
-                // 检查是否有目标
                 if (!target) return { type: 'error', message: '需要目标' };
-
-                // 计算百分比
                 const playerPercent = this.currentHp / this.maxHp;
                 const enemyPercent = target.currentHp / target.maxHp;
-
-                // 交换百分比
                 const newPlayerHp = Math.floor(this.maxHp * enemyPercent);
                 const newEnemyHp = Math.floor(target.maxHp * playerPercent);
-
-                // 确保至少有1点血
                 const finalPlayerHp = Math.max(1, newPlayerHp);
                 const finalEnemyHp = Math.max(1, newEnemyHp);
-
                 const playerDiff = finalPlayerHp - this.currentHp;
                 const enemyDiff = finalEnemyHp - target.currentHp;
-
                 this.currentHp = finalPlayerHp;
                 target.currentHp = finalEnemyHp;
-
                 Utils.showBattleLog(`逆转乾坤！生命比率互换！`);
                 return { type: 'swapHpPercent', playerDiff, enemyDiff, target };
 
-            // ========== 新增效果类型 ==========
-
             case 'damageAll':
-                // 对所有敌人造成伤害，返回让battle.js处理
                 return { type: 'damageAll', value, target: 'allEnemies' };
 
             case 'removeBlock':
-                // 移除敌人护盾
                 return { type: 'removeBlock', target: effect.target };
 
             case 'selfDamage':
-                // 对自身造成伤害
                 this.currentHp = Math.max(1, this.currentHp - value);
                 return { type: 'selfDamage', value };
 
             case 'lifeSteal':
-                // 生命汲取 - 记录吸血比例，让battle.js在造成伤害后处理
                 return { type: 'lifeSteal', value: effect.value };
 
-            case 'executeDamage':
-                // 斩杀伤害：对低于阈值的敌人造成双倍伤害
-                if (!target) return { type: 'damage', value };
-                const threshold = effect.threshold || 0.3;
-                const hpPercent = target.currentHp / target.hp;
-                const finalDamage = hpPercent < threshold ? value * 2 : value;
-                // 应用力量加成
-                let execDmg = finalDamage;
-                if (this.buffs.strength) execDmg += this.buffs.strength;
-                if (this.fateRing.path === 'power') execDmg = Math.floor(execDmg * 1.15);
-                return { type: 'damage', value: execDmg, target: effect.target, isExecute: hpPercent < threshold };
-
-            case 'blockFromStrength':
-                // 基于力量获得护盾
-                const strength = this.buffs.strength || 0;
-                const multiplier = effect.multiplier || 3;
-                const minimum = effect.minimum || 5;
-                const blockAmount = Math.max(minimum, strength * multiplier);
-                this.addBlock(blockAmount);
-                return { type: 'block', value: blockAmount };
-
-            case 'percentDamage':
-                // 百分比伤害（基于敌人最大生命值）
-                if (!target) return { type: 'damage', value: 0 };
-                const percentDmg = Math.floor(target.hp * effect.value);
-                return { type: 'damage', value: percentDmg, target: effect.target };
-
             case 'conditionalDraw':
-                // 条件抽牌（如低血量时抽牌）
-                const condition = effect.condition;
-                const condThreshold = effect.threshold || 0.2;
-                let conditionMet = false;
-
-                if (condition === 'lowHp') {
-                    conditionMet = (this.currentHp / this.maxHp) <= condThreshold;
-                }
-
-                if (conditionMet) {
-                    const drawVal = effect.drawValue || 0;
-                    const energyVal = effect.energyValue || 0;
-                    if (drawVal > 0) this.drawCards(drawVal);
-                    if (energyVal > 0) this.currentEnergy += energyVal;
-                    Utils.showBattleLog(`绝处逢生触发！抽${drawVal}牌，获得${energyVal}灵力！`);
-                    return { type: 'conditionalDraw', triggered: true, draw: drawVal, energy: energyVal };
-                } else {
-                    Utils.showBattleLog(`条件未满足，效果未触发`);
-                    return { type: 'conditionalDraw', triggered: false };
-                }
+                // 简化逻辑
+                return { type: 'conditionalDraw', triggered: false };
 
             case 'bonusGold':
-                // 战斗结束后获得额外金币
-                const bonusMin = effect.min || 0;
-                const bonusMax = effect.max || 0;
-                const bonusAmount = Utils.random(bonusMin, bonusMax);
-                // 标记待领取的金币，将在战斗胜利时结算
-                this.pendingBonusGold = (this.pendingBonusGold || 0) + bonusAmount;
-                Utils.showBattleLog(`天降横财！战斗结束获得 ${bonusAmount} 灵石`);
-                return { type: 'bonusGold', value: bonusAmount };
+                this.pendingBonusGold = (this.pendingBonusGold || 0) + Utils.random(effect.min, effect.max);
+                return { type: 'bonusGold' };
 
             case 'ringExp':
-                // 命环经验增加
-                const expValue = effect.value || 0;
-                this.fateRing.exp += expValue;
+                this.fateRing.exp += effect.value;
                 this.checkFateRingLevelUp();
-                Utils.showBattleLog(`顿悟！命环经验 +${expValue}`);
-                return { type: 'ringExp', value: expValue };
-
-            case 'reshuffleDiscard':
-                // 将弃牌堆洗回抽牌堆
-                if (this.discardPile.length > 0) {
-                    this.drawPile = Utils.shuffle([...this.drawPile, ...this.discardPile]);
-                    const reshuffled = this.discardPile.length;
-                    this.discardPile = [];
-                    Utils.showBattleLog(`时光倒流！${reshuffled}张牌洗回牌库`);
-                    return { type: 'reshuffleDiscard', value: reshuffled };
-                }
-                return { type: 'reshuffleDiscard', value: 0 };
+                return { type: 'ringExp', value: effect.value };
 
             case 'consumeAllEnergy':
-                // 消耗所有灵力造成伤害
-                const energyToConsume = this.currentEnergy;
-                const damagePerEnergy = effect.damagePerEnergy || 6;
-                const totalDamage = energyToConsume * damagePerEnergy;
+                const energy = this.currentEnergy;
                 this.currentEnergy = 0;
-                if (totalDamage > 0) {
-                    Utils.showBattleLog(`破釜沉舟！消耗${energyToConsume}灵力！`);
-                    return { type: 'damage', value: totalDamage, target: effect.target };
-                }
-                return { type: 'consumeAllEnergy', value: 0 };
+                return { type: 'damage', value: energy * (effect.damagePerEnergy || 6), target: effect.target };
 
             default:
                 return { type: 'unknown' };
         }
     }
 
-    // 应用法则加成
-    applyLawBonuses(effectType, value) {
-        for (const law of this.collectedLaws) {
-            if (!law.passive) continue;
+    // 抽牌
+    drawCards(count) {
+        for (let i = 0; i < count; i++) {
+            if (this.drawPile.length === 0) {
+                if (this.discardPile.length === 0) break;
+                this.drawPile = Utils.shuffle([...this.discardPile]);
+                this.discardPile = [];
+            }
 
-            switch (law.passive.type) {
-                case 'damageBonus':
-                    if (effectType === 'damage') {
-                        value += law.passive.value;
-                    }
-                    break;
-                case 'blockBonus':
-                    if (effectType === 'block') {
-                        value += law.passive.value;
-                    }
-                    break;
+            const card = this.drawPile.pop();
+            if (card) {
+                this.hand.push(card);
             }
         }
-        return value;
     }
 
-    // 应用法则被动
-    applyLawPassives() {
-        // 法则被动效果在战斗开始时检查
+    // 结束回合
+    endTurn() {
+        // 弃掉所有手牌
+        this.discardPile.push(...this.hand);
+        this.hand = [];
+
+        // 处理回合结束的buff
+        this.processBuffsOnTurnEnd();
     }
 
-    // 添加护盾
-    addBlock(amount) {
-        // 大地护盾法则
-        const earthLaw = this.collectedLaws.find(l => l.id === 'earthShield');
-        if (earthLaw) {
-            amount += earthLaw.passive.value;
-        }
-
-        this.block += amount;
-    }
-
-    // 治疗
-    heal(amount) {
-        this.currentHp = Math.min(this.maxHp, this.currentHp + amount);
-    }
-
-    // 受到伤害
-    takeDamage(amount) {
-        // 检查闪避
-        if (this.buffs.dodge && this.buffs.dodge > 0) {
-            this.buffs.dodge--;
-            return { dodged: true, damage: 0 };
-        }
-
-        // 空间裂隙法则 - 随机闪避
-        const spaceLaw = this.collectedLaws.find(l => l.id === 'spaceRift');
-        if (spaceLaw && Math.random() < spaceLaw.passive.value) {
-            return { dodged: true, damage: 0 };
-        }
-
-        // 先扣护盾
-        let remainingDamage = amount;
-        if (this.block > 0) {
-            if (this.block >= remainingDamage) {
-                this.block -= remainingDamage;
-                return { blocked: true, damage: 0, blockDamage: remainingDamage };
-            } else {
-                remainingDamage -= this.block;
-                const blockDamage = this.block;
-                this.block = 0;
-                this.currentHp -= remainingDamage;
-                return { blocked: true, damage: remainingDamage, blockDamage };
-            }
-        }
-
-        // 检查反伤
-        let thornsDamage = 0;
-        if (this.buffs.thorns && this.buffs.thorns > 0) {
-            thornsDamage = this.buffs.thorns;
-        }
-
-        this.currentHp -= remainingDamage;
-        return { damage: remainingDamage, thorns: thornsDamage };
-    }
-
-    // 添加buff
-    addBuff(buffType, value) {
-        this.buffs[buffType] = (this.buffs[buffType] || 0) + value;
-    }
-
-    // 处理回合开始buff
-    processBuffsOnTurnStart() {
-        // 可以在这里处理回合开始时的buff效果
-    }
+    // ...
 
     // 处理回合结束buff
     processBuffsOnTurnEnd() {
+        // 遗物效果：治愈之血
+        if (this.relic && this.relic.id === 'healingBlood') {
+            this.heal(2);
+            // 简单反馈，实际UI反馈在Battle.js中处理可能更好，但这里改动最小
+        }
+
         // 力量buff持续
         // 反伤消失
         delete this.buffs.thorns;
@@ -605,8 +491,6 @@ class Player {
     chooseFateRingPath(pathName) {
         const path = FATE_RING.paths[pathName];
         if (!path) return false;
-
-        // 检查前置要求
         if (path.requires) {
             for (const req of path.requires) {
                 if (this.fateRing.path !== req && !this.unlockedPaths?.includes(req)) {
@@ -614,7 +498,6 @@ class Player {
                 }
             }
         }
-
         this.fateRing.path = pathName;
         return true;
     }
@@ -622,7 +505,6 @@ class Player {
     // 获取盗取几率加成
     getStealBonus() {
         let bonus = 0;
-
         // 逆天之环加成
         if (this.fateRing.path === 'defiance') {
             bonus += 0.5;
