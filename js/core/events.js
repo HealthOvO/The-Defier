@@ -210,8 +210,10 @@ class EventSystem {
                 break;
 
             case 'permaBuff':
-                player.permanentBuffs = player.permanentBuffs || {};
-                player.permanentBuffs[effect.stat] = (player.permanentBuffs[effect.stat] || 0) + effect.value;
+                player.permBuffs = player.permBuffs || {};
+                player.permBuffs[effect.stat] = (player.permBuffs[effect.stat] || 0) + effect.value;
+                // 立即重新计算属性，确保UI更新
+                if (player.recalculateStats) player.recalculateStats();
                 return `永久${effect.stat} ${effect.value >= 0 ? '+' : ''}${effect.value}`;
 
             case 'upgradeCard':

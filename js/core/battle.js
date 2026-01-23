@@ -140,7 +140,17 @@ class Battle {
             const cardEl = Utils.createCardElement(card, index);
 
             // 检查是否可用
+            let playable = true;
             if (card.cost > this.player.currentEnergy) {
+                playable = false;
+            }
+            if (card.condition) {
+                if (card.condition.type === 'hp' && this.player.currentHp < card.condition.min) {
+                    playable = false;
+                }
+            }
+
+            if (!playable) {
                 cardEl.classList.add('unplayable');
             }
 
@@ -201,19 +211,48 @@ class Battle {
             return;
         }
 
+        // 检查卡牌特殊条件
+        if (card.condition) {
+            if (card.condition.type === 'hp' && this.player.currentHp < card.condition.min) {
+                Utils.showBattleLog(`生命值不足！需要至少 ${card.condition.min} 点生命`);
+                return;
+            }
+        }
+
         // 检查是否需要选择目标
+        // 修改判定逻辑：只要有效果是针对敌人的，且效果类型需要目标，就进入选择模式
+        // 注意：某些效果可能既有对敌也有对己（如武僧打击：伤害敌人+自己护盾）
         const needsTarget = card.effects.some(e =>
-            e.target === 'enemy' && (e.type === 'damage' || e.type === 'penetrate' || e.type === 'debuff' || e.type === 'execute' || e.type === 'randomDamage')
+            (e.target === 'enemy' || e.target === 'allEnemies') && 
+            ['damage', 'penetrate', 'debuff', 'execute', 'randomDamage', 'damageAll', 'removeBlock', 'consumeAllEnergy'].includes(e.type)
         );
 
-        if (needsTarget && this.enemies.filter(e => e.currentHp > 0).length > 1) {
-            // 进入选择目标模式
-            this.selectedCard = cardIndex;
-            this.targetingMode = true;
-            this.updateHandUI();
-            Utils.showBattleLog('选择目标');
+        // 如果是群体攻击（target: allEnemies），其实不需要选择目标，直接释放即可
+        // 但如果有些效果是 target: enemy（单体），有些是 allEnemies，则需要选择
+        // 实际上，只要有一个效果需要单体目标，就必须选择
+        const requiresSingleTarget = card.effects.some(e =>
+            e.target === 'enemy' && 
+            ['damage', 'penetrate', 'debuff', 'execute', 'randomDamage', 'removeBlock', 'consumeAllEnergy'].includes(e.type)
+        );
+
+        if (requiresSingleTarget && this.enemies.filter(e => e.currentHp > 0).length > 0) {
+            // 如果只有一个敌人，且没有处于强制选择模式，或许可以直接打出？
+            // 但为了操作统一性，通常还是保持点击卡牌->选择目标（或自动选择唯一目标）
+            
+            if (this.enemies.filter(e => e.currentHp > 0).length === 1) {
+                 // 只有一个敌人，自动选择
+                 const targetIndex = this.enemies.findIndex(e => e.currentHp > 0);
+                 this.playCardOnTarget(cardIndex, targetIndex);
+            } else {
+                // 进入选择目标模式
+                this.selectedCard = cardIndex;
+                this.targetingMode = true;
+                this.updateHandUI();
+                Utils.showBattleLog('选择目标');
+            }
         } else {
-            // 直接使用卡牌
+            // 不需要选择目标（如群体攻击、纯自我Buff、纯过牌），直接对首个敌人（作为默认占位）或自身释放
+            // 注意：playCardOnTarget 内部会处理 targetIndex，如果是群体攻击，target参数可能被忽略或只作为参考
             const targetIndex = this.enemies.findIndex(e => e.currentHp > 0);
             this.playCardOnTarget(cardIndex, targetIndex);
         }
@@ -224,44 +263,53 @@ class Battle {
         if (this.isProcessingCard) return;
         this.isProcessingCard = true;
 
-        this.targetingMode = false;
-        this.selectedCard = null;
+        try {
+            this.targetingMode = false;
+            this.selectedCard = null;
 
-        const card = this.player.hand[cardIndex];
-        if (!card) {
+            const card = this.player.hand[cardIndex];
+            if (!card) {
+                return;
+            }
+
+            // 立即给予视觉反馈：卡牌淡出或标记为使用中
+            const cardEls = document.querySelectorAll('#hand-cards .card');
+            if (cardEls[cardIndex]) {
+                cardEls[cardIndex].style.opacity = '0.5';
+                cardEls[cardIndex].style.transform = 'scale(0.9)';
+                cardEls[cardIndex].style.pointerEvents = 'none';
+            }
+
+            const target = this.enemies[targetIndex];
+
+            // 触发连击追踪
+            if (typeof game !== 'undefined' && game.handleCombo) {
+                game.handleCombo(card.type);
+            }
+
+            // 播放卡牌
+            const results = this.player.playCard(cardIndex, target);
+
+            // 处理效果
+            if (results && Array.isArray(results)) {
+                for (const result of results) {
+                    await this.processEffect(result, target, targetIndex);
+                }
+            }
+
+            // 检查战斗是否结束
+            if (this.checkBattleEnd()) return;
+
+            // 更新UI
+            this.updateBattleUI();
+        } catch (error) {
+            console.error('Error playing card:', error);
+            Utils.showBattleLog('卡牌使用失败！');
+            // 尝试恢复UI状态
+            this.updateHandUI();
+        } finally {
             this.isProcessingCard = false;
-            return;
         }
-
-        // 立即给予视觉反馈：卡牌淡出或标记为使用中
-        const cardEls = document.querySelectorAll('#hand-cards .card');
-        if (cardEls[cardIndex]) {
-            cardEls[cardIndex].style.opacity = '0.5';
-            cardEls[cardIndex].style.transform = 'scale(0.9)';
-            cardEls[cardIndex].style.pointerEvents = 'none';
-        }
-
-        const target = this.enemies[targetIndex];
-
-        // 触发连击追踪
-        if (typeof game !== 'undefined' && game.handleCombo) {
-            game.handleCombo(card.type);
-        }
-
-        // 播放卡牌
-        const results = this.player.playCard(cardIndex, target);
-
-        // 处理效果
-        for (const result of results) {
-            await this.processEffect(result, target, targetIndex);
-        }
-
-        // 检查战斗是否结束
-        if (this.checkBattleEnd()) return;
-
-        // 更新UI
-        this.updateBattleUI();
-        this.isProcessingCard = false;
     }
 
     // 处理效果

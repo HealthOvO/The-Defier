@@ -169,6 +169,12 @@ class Game {
 
             // 恢复玩家状态
             Object.assign(this.player, gameState.player);
+            
+            // 重新计算属性，确保版本更新后的加成生效
+            // 并且防止旧存档中可能存在的错误叠加
+            if (this.player.recalculateStats) {
+                this.player.recalculateStats();
+            }
 
             // 数据修复
             if (isNaN(this.player.gold)) {
@@ -1197,7 +1203,13 @@ class Game {
     // 战斗失败
     onBattleLost() {
         // 清除存档，防止死亡后还能继续
+        // this.clearSave(); // 改为仅在选择重新开始或退出时清除？或者保留存档但标记为已死亡
+        // 为了支持重修此界，我们暂时保留内存中的数据，但清除硬盘上的进度以防刷新作弊
+        // 只有当玩家选择“重修此界”时，才会重新写入存档（扣钱后的）
         this.clearSave();
+
+        // 标记玩家已死亡，即使被非法恢复，也会在加载时被拦截
+        this.player.currentHp = 0;
 
         document.getElementById('game-over-title').textContent = '陨落...';
         document.getElementById('game-over-title').classList.remove('victory');
@@ -1207,7 +1219,42 @@ class Game {
         document.getElementById('stat-enemies').textContent = this.player.enemiesDefeated;
         document.getElementById('stat-laws').textContent = this.player.collectedLaws.length;
 
+        // 显示重修此界按钮 (仅在非第一层或有一定进度时？为了体验，总是显示)
+        const restartBtn = document.getElementById('restart-realm-btn');
+        if (restartBtn) {
+            restartBtn.style.display = 'inline-block';
+            restartBtn.title = '保留当前属性和牌组，重新挑战本重天域';
+        }
+
         this.showScreen('game-over-screen');
+    }
+
+    // 重修此界 (Restart Realm)
+    restartRealm() {
+        if (!this.player) return;
+
+        // 增加复活代价：扣除一定灵石
+        const reviveCost = Math.floor(this.player.gold * 0.5); // 扣除50%灵石
+        this.player.gold -= reviveCost;
+
+        // 恢复生命值
+        this.player.currentHp = this.player.maxHp;
+        
+        // 重置层数
+        this.player.floor = 0;
+        
+        // 重新生成地图
+        this.map.generate(this.player.realm);
+        
+        // 自动保存
+        // 关键修复：保存必须在所有状态重置（扣钱、恢复HP、重置层数）之后立即进行
+        // 这样如果用户在点击“重修此界”后刷新，加载的存档已经是扣过钱并重置进度的状态
+        this.autoSave();
+        
+        Utils.showBattleLog(`时光倒流... 损失 ${reviveCost} 灵石，重修 ${this.map.getRealmName(this.player.realm)}`);
+        
+        // 进入地图界面
+        this.showScreen('map-screen');
     }
 
     // 天域完成

@@ -359,8 +359,9 @@ const CARDS = {
         type: 'attack',
         cost: 3,
         icon: '🌋',
-        description: '造成 25 点伤害，自身受 5 点伤害',
+        description: '造成 25 点伤害，自身受 5 点伤害（生命≤5不可用）',
         rarity: 'rare',
+        condition: { type: 'hp', min: 6 },
         effects: [
             { type: 'damage', value: 25, target: 'enemy' },
             { type: 'selfDamage', value: 5, target: 'self' }

@@ -70,6 +70,54 @@ class Player {
         return 'card_' + Math.random().toString(36).substr(2, 9);
     }
 
+    // 重新计算属性
+    recalculateStats() {
+        const charData = CHARACTERS[this.characterId || 'linFeng'];
+        if (!charData) return;
+
+        // 1. 基础属性
+        let newMaxHp = charData.stats.maxHp;
+        let newBaseEnergy = charData.stats.energy;
+        let newDrawCount = 5;
+
+        // 2. 命环等级加成
+        const levelData = FATE_RING.levels[this.fateRing.level];
+        if (levelData && levelData.bonus) {
+            if (levelData.bonus.maxHp) newMaxHp += levelData.bonus.maxHp;
+            if (levelData.bonus.energy) newBaseEnergy += levelData.bonus.energy;
+            if (levelData.bonus.draw) newDrawCount += levelData.bonus.draw;
+        }
+
+        // 3. 命环路径加成
+        if (this.fateRing.path && FATE_RING.paths[this.fateRing.path]) {
+            const path = FATE_RING.paths[this.fateRing.path];
+            if (path.bonus) {
+                if (path.bonus.type === 'hpBonus') newMaxHp += path.bonus.value;
+                if (path.bonus.type === 'energyBonus') newBaseEnergy += path.bonus.value;
+                if (path.bonus.type === 'drawBonus') newDrawCount += path.bonus.value;
+                
+                // 复合加成
+                if (path.bonus.type === 'ultimate') {
+                    // 真·逆天之环并没有直接属性加成，主要是机制加成，但如果有可以在这里加
+                }
+            }
+        }
+
+        // 4. 永久属性加成 (来自事件/成就)
+        if (this.permBuffs) {
+            if (this.permBuffs.maxHp) newMaxHp += this.permBuffs.maxHp;
+            if (this.permBuffs.energy) newBaseEnergy += this.permBuffs.energy;
+            if (this.permBuffs.draw) newDrawCount += this.permBuffs.draw;
+            // 力量等战斗属性不直接加在基础属性里，而是在战斗开始时初始化到buff中
+        }
+
+        // 更新属性 (保持当前生命值比例或数值？通常保持当前数值，除非超过最大值)
+        this.maxHp = newMaxHp;
+        this.baseEnergy = newBaseEnergy;
+        this.drawCount = newDrawCount;
+        this.currentHp = Math.min(this.currentHp, this.maxHp);
+    }
+
     // 准备战斗
     prepareBattle() {
         this.hand = [];
@@ -77,11 +125,17 @@ class Player {
         this.discardPile = [];
         this.exhaustPile = [];
         this.block = 0;
+        
+        // 确保战斗前属性是最新的
+        this.recalculateStats();
+        
         this.currentEnergy = this.baseEnergy;
         this.buffs = {};
 
-        // 应用命环加成
-        this.applyFateRingBonuses();
+        // 应用永久力量加成
+        if (this.permBuffs && this.permBuffs.strength) {
+            this.addBuff('strength', this.permBuffs.strength);
+        }
 
         // 遗物效果：金刚法相
         if (this.relic && this.relic.id === 'vajraBody') {
@@ -100,14 +154,8 @@ class Player {
         }
     }
 
-    // 应用命环加成
-    applyFateRingBonuses() {
-        // 智慧之环 - 额外灵力
-        if (this.fateRing.path === 'wisdom') {
-            this.currentEnergy += 1;
-            this.baseEnergy += 1;
-        }
-    }
+    // 应用命环加成 - 已废弃，由recalculateStats替代
+    // applyFateRingBonuses() { ... }
 
     // 开始回合
     startTurn() {
@@ -423,7 +471,30 @@ class Player {
         } else {
             this.buffs[type] = value;
         }
-        Utils.showBattleLog(`获得了 ${GameData.getBuffName ? GameData.getBuffName(type) : type} x${value}`);
+        
+        // 获取Buff名称
+        let buffName = type;
+        const buffNames = {
+            strength: '力量',
+            weak: '虚弱',
+            vulnerable: '易伤',
+            poison: '中毒',
+            burn: '灼烧',
+            thorns: '荆棘',
+            dodge: '闪避',
+            block: '护盾',
+            nextTurnBlock: '固守',
+            paralysis: '麻痹',
+            stun: '眩晕',
+            nextAttackBonus: '聚气',
+            damageReduction: '减伤',
+            chaosAura: '混乱光环'
+        };
+        if (buffNames[type]) buffName = buffNames[type];
+        else if (typeof GameData !== 'undefined' && GameData.getBuffName) buffName = GameData.getBuffName(type);
+
+        Utils.showBattleLog(`获得了 ${buffName} x${value}`);
+        
         // 触发buff获得时的回调（如果有）
         if (type === 'strength') {
             // Strength logic handled dynamically
@@ -594,6 +665,10 @@ class Player {
                     this.fateRing.level = levels[i].level;
                     this.fateRing.name = levels[i].name;
                     this.fateRing.slots = levels[i].slots;
+                    
+                    // 立即应用新等级的属性加成
+                    this.recalculateStats();
+                    
                     Utils.showBattleLog(`命环突破！晋升为【${this.fateRing.name}】`);
                     return true;
                 }
@@ -615,6 +690,10 @@ class Player {
             }
         }
         this.fateRing.path = pathName;
+        
+        // 立即应用新路径的加成
+        this.recalculateStats();
+        
         return true;
     }
 

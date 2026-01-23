@@ -177,12 +177,13 @@ const REALM_LAWS = {
 
 // 命环信息
 const FATE_RING = {
+    // 命环等级定义
     levels: [
         { level: 0, name: '残缺印记', slots: 0, expRequired: 0, desc: '无法承载完整法则' },
-        { level: 1, name: '一阶·觉醒', slots: 1, expRequired: 100, desc: '初识天机，可纳一法', canChoosePath: true },
-        { level: 2, name: '二阶·通玄', slots: 2, expRequired: 300, desc: '双法并济，生生不息', canChoosePath: true },
-        { level: 3, name: '三阶·神变', slots: 3, expRequired: 600, desc: '三元归一，神通自成', canChoosePath: true },
-        { level: 4, name: '四阶·逆命', slots: 4, expRequired: 1000, desc: '四象封天，逆乱阴阳' }
+        { level: 1, name: '一阶·觉醒', slots: 1, expRequired: 100, desc: '初识天机，可纳一法', canChoosePath: true, bonus: { maxHp: 10 } },
+        { level: 2, name: '二阶·通玄', slots: 2, expRequired: 300, desc: '双法并济，生生不息', canChoosePath: true, bonus: { maxHp: 20, energy: 1 } },
+        { level: 3, name: '三阶·神变', slots: 3, expRequired: 600, desc: '三元归一，神通自成', canChoosePath: true, bonus: { maxHp: 40, energy: 1, draw: 1 } },
+        { level: 4, name: '四阶·逆命', slots: 4, expRequired: 1000, desc: '四象封天，逆乱阴阳', bonus: { maxHp: 60, energy: 2, draw: 1 } }
     ],
 
     // 命环进化路径
