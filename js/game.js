@@ -1516,6 +1516,16 @@ class Game {
                         <div class="library-list">
                             ${this.renderLawLibrary(ring)}
                         </div>
+                        
+                        <!-- 法则共鸣显示 -->
+                        <div class="resonance-panel" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                            <div class="library-header" style="color: var(--accent-gold);">
+                                法则共鸣
+                            </div>
+                            <div class="resonance-list" style="max-height: 150px; overflow-y: auto;">
+                                ${this.renderResonances(ring)}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1603,6 +1613,37 @@ class Game {
                 </div>
             `;
         }).join('');
+    }
+
+    // 渲染法则共鸣
+    renderResonances(ring) {
+        if (!typeof LAW_RESONANCES === 'object') return '';
+
+        let activeResonances = [];
+
+        for (const key in LAW_RESONANCES) {
+            const resonance = LAW_RESONANCES[key];
+            const hasAllLaws = resonance.laws.every(lawId => ring.loadedLaws.includes(lawId));
+
+            if (hasAllLaws) {
+                activeResonances.push(resonance);
+            }
+        }
+
+        if (activeResonances.length === 0) {
+            return '<div style="padding: 10px; text-align: center; color: #666; font-size: 0.8rem;">暂无激活共鸣</div>';
+        }
+
+        return activeResonances.map(res => `
+            <div class="resonance-item" style="padding: 8px; margin-bottom: 8px; background: rgba(255, 215, 0, 0.1); border: 1px solid var(--accent-gold); border-radius: 4px;">
+                <div style="font-weight: bold; color: var(--accent-gold); font-size: 0.9rem; margin-bottom: 4px;">
+                    ⚡ ${res.name}
+                </div>
+                <div style="font-size: 0.8rem; color: #ddd; line-height: 1.3;">
+                    ${res.description}
+                </div>
+            </div>
+        `).join('');
     }
 
     // 绑定命环界面事件
@@ -1748,9 +1789,47 @@ class Game {
         }
     }
 
-    // 显示设置
-    showSettings() {
-        alert('The Defier 2.1\n\n操作说明:\n- 点击手牌使用卡牌\n- 点击敌人选择目标\n- 点击"结束回合"结束当前回合\n\n系统:\n- 命环经验: 击败敌人获得\n- 法则盗取: 击败敌人后有机会盗取\n- 成就: 完成挑战解锁奖励');
+    // 显示游戏介绍 (原设置)
+    showGameIntro() {
+        const modal = document.getElementById('settings-modal');
+        // 确保模态框存在
+        if (!modal) {
+            console.error('Settings modal not found!');
+            return;
+        }
+
+        const settingsContainer = document.getElementById('settings-options');
+        if (!settingsContainer) return;
+
+        settingsContainer.innerHTML = `
+            <div class="game-intro-content" style="text-align: left; line-height: 1.6; max-height: 60vh; overflow-y: auto; padding-right: 10px;">
+                <h3 style="color: var(--accent-gold); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 0;">🔮 背景故事</h3>
+                <p>在这个世界，天道为万物设立了【命环】，锁定了众生的命运上限。然而，天道之善存有一线生机，诞生了能够通过吞噬法则突破命环的【逆命者】。</p>
+                <p>你正是这样一位逆命者。为了打破宿命的枷锁，你必须不断挑战天域，击败天道派来的【天罚者】，夺取他们的法则，重塑自己的命环。</p>
+                
+                <h3 style="color: var(--accent-purple); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">🎮 核心玩法</h3>
+                <ul style="padding-left: 20px; list-style-type: disc;">
+                    <li><strong>卡牌构建</strong>：收集强力卡牌，组合出独特的战斗流派。</li>
+                    <li><strong>法则系统</strong>：击败精英敌人获取【法则】，装载到命环中获得强大的被动效果。</li>
+                    <li><strong>命环进化</strong>：积累经验升级命环，选择不同的进化路径（如力量之环、智慧之环等）。</li>
+                    <li><strong>法则共鸣</strong>：特定的法则组合会触发【共鸣】，产生额外的强力效果。</li>
+                </ul>
+                
+                <h3 style="color: var(--accent-red); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">👥 角色介绍</h3>
+                <ul style="padding-left: 20px; list-style-type: none;">
+                    <li style="margin-bottom: 10px;"><strong>🗡️ 林风</strong>：初始逆命者，均衡发展，擅长利用命环力量。</li>
+                    <li style="margin-bottom: 10px;"><strong>💚 香叶</strong>：治愈系角色，拥有强大的恢复能力，以血换血。</li>
+                    <li style="margin-bottom: 10px;"><strong>🪙 无欲</strong>：佛门苦行僧，擅长防御反击与金钟罩。</li>
+                    <li><strong>❄️ 严寒</strong>：冰霜法师，擅长控制与冻结敌人。</li>
+                </ul>
+
+                <div style="margin-top: 20px; text-align: center; font-size: 0.8rem; color: #666;">
+                    当前版本: v3.5
+                </div>
+            </div>
+        `;
+
+        modal.classList.add('active');
     }
 
     // 卡牌使用效果

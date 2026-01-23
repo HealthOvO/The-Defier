@@ -47,11 +47,11 @@
                 <button class="util-btn" onclick="game.showAchievements()" title="成就">
                     <span class="btn-icon">🏆</span>
                 </button>
-                <button class="util-btn" onclick="game.showSettings()" title="设置">
-                    <span class="btn-icon">⚙️</span>
+                <button class="util-btn" onclick="game.showGameIntro()" title="游戏介绍">
+                    <span class="btn-icon">📖</span>
                 </button>
             </div>
-            <div class="version-info">v3.0.0 | 基于《我的命环能进化》</div>
+            <div class="version-info">v3.5 | 基于《我的命环能进化》</div>
         </div>
     </div>
 
@@ -396,6 +396,17 @@
             </div>
             <div class="loaded-laws" id="loaded-laws-list">
                 <!-- 已装载的法则 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 游戏介绍/设置弹窗 -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content settings-view">
+            <button class="modal-close" onclick="game.closeModal()">×</button>
+            <h2>游戏介绍</h2>
+            <div id="settings-options" class="settings-options">
+                <!-- 动态生成 -->
             </div>
         </div>
     </div>
