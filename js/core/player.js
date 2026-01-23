@@ -549,6 +549,7 @@ class Player {
     // 获取状态
     getState() {
         return {
+            characterId: this.characterId,
             maxHp: this.maxHp,
             currentHp: this.currentHp,
             block: this.block,
