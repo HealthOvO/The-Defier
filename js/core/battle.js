@@ -624,7 +624,21 @@ class Battle {
                         enemy.stunned = true;
                     }
                 }
-                Utils.showBattleLog(`普渡众生！所有敌人获得 ${result.buffType} 效果！`);
+                break;
+
+            case 'maxHpOnKill':
+                if (target && target.currentHp <= 0) {
+                    this.player.maxHp += result.value;
+                    this.player.currentHp += result.value; // 同时回复等量生命
+                    Utils.showBattleLog(`灵魂收割！最大生命 +${result.value}`);
+                    const playerEl = document.querySelector('.player-avatar');
+                    Utils.showFloatingNumber(playerEl, result.value, 'heal');
+                }
+                break;
+
+            case 'mulligan':
+                Utils.showBattleLog(`命运扭转！重抽 ${result.value} 张牌`);
+                this.updateHandUI();
                 break;
         }
 

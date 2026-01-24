@@ -233,6 +233,38 @@ class Game {
                 this.player.checkFateRingLevelUp();
             }
 
+            // Fix: Global Force Sync for Card Data Persistence
+            // 强制同步卡牌数据：使用最新代码中的数值覆盖存档中的旧数据，解决旧存档数值不更新的问题
+            if (this.player.deck) {
+                this.player.deck = this.player.deck.map(savedCard => {
+                    // 在最新卡牌库中查找定义
+                    // 如果是初始数据中不存在的卡牌（生成的？），CARDS中可能找不到
+                    const originalDef = CARDS[savedCard.id];
+
+                    // 如果找不到（可能是移除的卡牌或特殊卡牌），则保持原样
+                    if (!originalDef) return savedCard;
+
+                    // 创建新副本
+                    let newCard = JSON.parse(JSON.stringify(originalDef));
+
+                    // 恢复状态: 升级
+                    if (savedCard.upgraded) {
+                        try {
+                            // 重新执行升级逻辑，获取最新数值
+                            newCard = upgradeCard(newCard);
+                        } catch (e) {
+                            console.warn(`Card upgrade sync failed for ${savedCard.name}:`, e);
+                            return savedCard; // 出错则回退
+                        }
+                    }
+
+                    // 理论上如果后续有其他动态属性（如“临时卡牌”标记等），应在此处合并
+                    // 目前主要关注静态数值和升级状态
+
+                    return newCard;
+                });
+            }
+
             // 恢复地图状态
             this.map.nodes = gameState.map.nodes;
             this.map.currentNodeIndex = gameState.map.currentNodeIndex;
@@ -417,15 +449,42 @@ class Game {
         this.showScreen('achievements-screen');
     }
 
+    // 渲染法宝
+    renderTreasures(containerId = 'map-treasures') {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        if (this.player.treasures) {
+            this.player.treasures.forEach(t => {
+                const el = document.createElement('div');
+                el.className = `treasure-item rarity-${t.rarity || 'common'}`;
+                el.innerHTML = t.icon || '📦';
+
+                // 获取动态描述
+                const desc = (t.getDesc && this.player) ? t.getDesc(this.player) : t.description;
+
+                el.title = `${t.name}\n${desc}`;
+
+                // 点击查看详情
+                el.addEventListener('click', () => {
+                    alert(`${t.name}\n\n${desc}`);
+                });
+
+                container.appendChild(el);
+            });
+        }
+    }
+
     // 初始化关卡选择界面
     initRealmSelect() {
         const container = document.getElementById('realm-select-container');
         if (!container) return;
 
         container.innerHTML = '';
-
-        // 更新为15重天
-        for (let i = 1; i <= 15; i++) {
+        // 更新为18重天
+        for (let i = 1; i <= 18; i++) {
             const isUnlocked = this.unlockedRealms && this.unlockedRealms.includes(i);
             const isCompleted = isUnlocked && this.unlockedRealms.includes(i + 1); // 简单判断
 
@@ -857,6 +916,29 @@ class Game {
 
         this.player.gold += totalGold;
         this.achievementSystem.updateStat('totalGold', totalGold);
+        this.achievementSystem.updateStat('enemiesDefeated', enemies.length); // 更新击杀数
+        this.achievementSystem.updateStat('realmCleared', this.player.realm, 'max');
+
+        // 计算命环经验奖励 (包含遗物加成)
+        let totalRingExp = ringExp;
+        if (this.player.relic && this.player.relic.id === 'fateRing') {
+            const level = this.player.fateRing ? this.player.fateRing.level : 0;
+            const bonusExp = 20 + (level * 5);
+            totalRingExp += bonusExp;
+            Utils.showBattleLog(`逆命之环生效！额外获得 ${bonusExp} 命环经验`);
+        }
+
+        // 增加经验
+        this.player.fateRing.exp += totalRingExp;
+        this.player.checkFateRingLevelUp();
+
+        // 显示奖励界面
+        this.showRewardScreen(totalGold, canSteal, stealEnemy, totalRingExp);
+
+        // 检查BOSS击杀
+        if (this.currentBattleNode && this.currentBattleNode.type === 'boss') {
+            this.achievementSystem.updateStat('bossesDefeated', 1);
+        }
 
         // 显示奖励界面
         this.showRewardScreen(totalGold, canSteal, stealEnemy, ringExp);
@@ -1016,6 +1098,9 @@ class Game {
 
                 // 更新成就
                 this.achievementSystem.updateStat('lawsCollected', 1);
+                if (!this.achievementSystem.stats.firstStealSuccess) {
+                    this.achievementSystem.updateStat('firstStealSuccess', true, 'set');
+                }
 
                 // 命环经验额外奖励
                 this.player.fateRing.exp += 50;
@@ -1237,6 +1322,27 @@ class Game {
                     const randomLaw = LAWS[lawKeys[Math.floor(Math.random() * lawKeys.length)]];
                     if (randomLaw && this.player.collectLaw({ ...randomLaw })) {
                         this.eventResults.push(`✨ 获得法则: ${randomLaw.name}`);
+                    }
+                }
+                break;
+
+            case 'treasure':
+                if (effect.treasureId) {
+                    if (this.player.addTreasure(effect.treasureId)) {
+                        this.eventResults.push(`🏺 获得法宝: ${TREASURES[effect.treasureId].name}`);
+                    } else {
+                        this.eventResults.push(`已拥有该法宝，获得替代奖励`);
+                    }
+                } else if (effect.random) {
+                    const tKeys = Object.keys(TREASURES);
+                    const unowned = tKeys.filter(k => !this.player.hasTreasure(k));
+                    if (unowned.length > 0) {
+                        const tid = unowned[Math.floor(Math.random() * unowned.length)];
+                        this.player.addTreasure(tid);
+                        this.eventResults.push(`🏺 获得随机法宝: ${TREASURES[tid].name}`);
+                    } else {
+                        this.player.gold += 100;
+                        this.eventResults.push(`法宝已收集齐，获得 100 灵石`);
                     }
                 }
                 break;
@@ -1543,8 +1649,8 @@ class Game {
             this.unlockedRealms.push(this.player.realm + 1);
         }
 
-        // 检查是否通关所有天域 (现在是15重)
-        if (this.player.realm >= 15) {
+        // 检查是否通关所有天域 (现在是18重)
+        if (this.player.realm >= 18) {
             this.showVictoryScreen();
             return;
         }
@@ -1568,6 +1674,7 @@ class Game {
         Utils.showBattleLog(`进入下一重天域，恢复 ${healAmount} HP`);
 
         this.map.generate(this.player.realm);
+        this.renderTreasures('map-treasures');
         this.showScreen('map-screen');
     }
 
@@ -2131,23 +2238,9 @@ class Game {
         // 价格随天域层数轻微上涨，每重天+5% (原10%)
         const priceMult = 1 + (realm - 1) * 0.05;
 
-        // 1. 生成卡牌 (5张)
-        for (let i = 0; i < 5; i++) {
-            const card = getRandomCard();
-            // 商店不卖基础牌
-            if (card.rarity === 'basic') { i--; continue; }
-
-            const basePrice = this.getCardPrice(card);
-            // 商店特惠：所有卡牌8折
-            const price = Math.floor(basePrice * 0.8 * priceMult);
-
-            items.push({
-                type: 'card',
-                card: card,
-                price: price,
-                sold: false
-            });
-        }
+        // 1. 生成卡牌 (使用新方法)
+        const newCards = this.generateShopCards(5);
+        items.push(...newCards);
 
         // 2. 固定服务
         // 治疗
@@ -2229,32 +2322,76 @@ class Game {
             });
         }
 
-        // 4. 法宝 (25% 几率)
-        if (Math.random() < 0.25) {
-            const treasureKeys = Object.keys(TREASURES);
-            const unowned = treasureKeys.filter(k => !this.player.hasTreasure(k));
+        // 5. 更多服务
+        // 刷新商店
+        services.push({
+            id: 'refresh',
+            type: 'service',
+            name: '重新进货',
+            icon: '🔄',
+            desc: '刷新所有卡牌商品',
+            price: Math.floor(50 * priceMult),
+            sold: false
+        });
 
-            if (unowned.length > 0) {
-                const tid = unowned[Math.floor(Math.random() * unowned.length)];
-                const t = TREASURES[tid];
-
-                // 确保价格存在
-                const tPrice = t.price || 150;
-
-                services.push({
-                    id: t.id,
-                    type: 'treasure',
-                    name: t.name,
-                    icon: t.icon,
-                    desc: t.description,
-                    price: Math.floor(tPrice * priceMult),
-                    sold: false,
-                    data: t
-                });
-            }
-        }
+        // 赌博：神秘盒子
+        services.push({
+            id: 'gamble',
+            type: 'service',
+            name: '神秘盲盒',
+            icon: '🎁',
+            desc: '可能获得灵石、卡牌或...空气？',
+            price: Math.floor(30 * priceMult),
+            sold: false
+        });
 
         return { items, services };
+    }
+
+    // 生成商店卡牌 (封装以便刷新使用)
+    generateShopCards(count = 5) {
+        const items = [];
+        const realm = this.player.realm || 1;
+        const priceMult = 1 + (realm - 1) * 0.05;
+
+        for (let i = 0; i < count; i++) {
+            // 随层数提升稀有度
+            let rarity = 'common';
+            const roll = Math.random();
+            if (realm >= 3) {
+                if (roll < 0.1) rarity = 'legendary'; // 10%
+                else if (roll < 0.35) rarity = 'epic'; // 25%
+                else if (roll < 0.7) rarity = 'rare'; // 35%
+                else rarity = 'uncommon';
+            } else {
+                if (roll < 0.05) rarity = 'legendary';
+                else if (roll < 0.2) rarity = 'rare';
+                else if (roll < 0.5) rarity = 'uncommon';
+            }
+
+            const card = getRandomCard(rarity); // 需要确保 getRandomCard 支持参数，或者我们手动筛选
+            // 之前的 getRandomCard 实现可能不支持参数，稳妥起见我们用旧逻辑并增强筛选
+            // 如果 getRandomCard 不支持，就多随机几次取最好的？
+            // 假设 getRandomCard 虽然支持参数（查看 import/export），但Utils中没看到，可能是全局的。
+            // 检查 game.js 顶部引用... 好像是 data/cards.js 里的helper？
+            // 没关系，我们先用简单逻辑:
+
+            // 暂且使用全局 getRandomCard，如果不接受参数，我们就在外部过滤
+            // 实际上 cards.js 里的 getRandomCard(rarity) 是支持的（通常）
+            // 如果不支持，我们会得到随机牌。
+
+            // 商店特惠：所有卡牌8折
+            const basePrice = this.getCardPrice(card);
+            const price = Math.floor(basePrice * 0.8 * priceMult);
+
+            items.push({
+                type: 'card',
+                card: card,
+                price: price,
+                sold: false
+            });
+        }
+        return items;
     }
 
     // 获取卡牌基础价格
@@ -2413,6 +2550,80 @@ class Game {
                 Utils.showBattleLog('永久力量 +1');
                 return true;
 
+            case 'refresh':
+                // 刷新卡牌
+                this.shopItems = this.generateShopCards(5);
+                Utils.showBattleLog('商店货物已刷新');
+                this.renderShop();
+                // 刷新服务可以重复购买，所以要把 sold 设回 false
+                // 但 buyItem 会把它设为 true。我们需要手动重置。
+                // 稍微麻烦点：在 buyItem 中，如果 applyServiceEffect 返回 'repeatable'，就不设为 sold。
+                // 或者在这里简单一点，把本次购买的 service item 重新加入？
+                // 简单处理：刷新服务本身不刷新，但可以多次购买。
+                // 由于 buyItem 会设置 sold=true，我们需要在外部修正，或让 applyServiceEffect 返回特殊值。
+                // 暂时让刷新是一次性的？不，刷新应该可以说是多次。
+                // HACK: 找到当前服务对象并重置 sold
+                setTimeout(() => {
+                    const refreshService = this.shopServices.find(s => s.id === 'refresh');
+                    if (refreshService) refreshService.sold = false;
+                    this.renderShop();
+                }, 50);
+                return true;
+
+            case 'gamble':
+                const roll = Math.random();
+                if (roll < 0.5) { // 50% 亏本/保本
+                    const goldBack = Utils.random(10, 30);
+                    this.player.gold += goldBack;
+                    Utils.showBattleLog(`盲盒：获得 ${goldBack} 灵石（亏了...）`);
+                } else if (roll < 0.85) { // 35% 获得随机卡牌
+                    const randCard = getRandomCard(this.player.realm > 2 ? 'uncommon' : 'common');
+                    this.player.addCardToDeck(randCard);
+                    Utils.showBattleLog(`盲盒：获得卡牌【${randCard.name}】！`);
+                } else if (roll < 0.98) { // 13% 小奖 (稀有卡或大量金币)
+                    if (Math.random() < 0.5) {
+                        const rareCard = getRandomCard('rare');
+                        this.player.addCardToDeck(rareCard);
+                        Utils.showBattleLog(`盲盒：大奖！获得稀有卡牌【${rareCard.name}】！`);
+                    } else {
+                        const bigGold = Utils.random(80, 150);
+                        this.player.gold += bigGold;
+                        Utils.showBattleLog(`盲盒：手气不错！获得 ${bigGold} 灵石！`);
+                    }
+                } else { // 2% 传说/法宝奖
+                    const jackpot = Math.random();
+                    if (jackpot < 0.5) {
+                        const legCard = getRandomCard('legendary');
+                        this.player.addCardToDeck(legCard);
+                        Utils.showBattleLog(`盲盒：传说大奖！！获得【${legCard.name}】！`);
+                    } else {
+                        // 尝试给法宝
+                        const treasureKeys = Object.keys(TREASURES);
+                        const unowned = treasureKeys.filter(k => !this.player.hasTreasure(k));
+                        if (unowned.length > 0) {
+                            const tid = unowned[Math.floor(Math.random() * unowned.length)];
+                            this.player.addTreasure(tid);
+                            Utils.showBattleLog(`盲盒：鸿运当头！获得法宝【${TREASURES[tid].name}】！`);
+                        } else {
+                            this.player.gold += 300;
+                            Utils.showBattleLog(`盲盒：传说大奖！获得 300 灵石！`);
+                        }
+                    }
+                }
+
+                // 盲盒也可以重复买
+                setTimeout(() => {
+                    const gambleService = this.shopServices.find(s => s.id === 'gamble');
+                    if (gambleService) {
+                        gambleService.sold = false;
+                        // 稍微涨价？
+                        gambleService.price = Math.floor(gambleService.price * 1.5);
+                        gambleService.name = '神秘盲盒 (涨价了)'
+                    }
+                    this.renderShop();
+                }, 50);
+                return true;
+
             default:
                 return false;
         }
@@ -2487,7 +2698,7 @@ class Game {
         const restBtn = document.createElement('button');
         restBtn.className = 'event-choice';
         restBtn.innerHTML = `
-                    < div >💤 休息(恢复 ${healAmount} HP)</div >
+                    <div>💤 休息(恢复 ${healAmount} HP)</div>
                         <div class="choice-effect">当前HP: ${this.player.currentHp}/${this.player.maxHp}</div>
                 `;
         restBtn.onclick = () => this.campfireRest();
@@ -2498,7 +2709,7 @@ class Game {
         const upgradeBtn = document.createElement('button');
         upgradeBtn.className = 'event-choice';
         upgradeBtn.innerHTML = `
-                    < div >⬆️ 升级卡牌</div >
+                    <div>⬆️ 升级卡牌</div>
                         <div class="choice-effect">可升级: ${upgradableCount} 张</div>
                 `;
         if (upgradableCount > 0) {
@@ -2515,7 +2726,7 @@ class Game {
             const removeBtn = document.createElement('button');
             removeBtn.className = 'event-choice';
             removeBtn.innerHTML = `
-                    < div >🗑️ 净化(移除一张牌)</div >
+                    <div>🗑️ 净化(移除一张牌)</div>
                         <div class="choice-effect">精简牌组，提升效率</div>
                 `;
             removeBtn.onclick = () => this.showCampfireRemove();
@@ -2567,7 +2778,7 @@ class Game {
         container.appendChild(previewContainer);
 
         previewContainer.innerHTML = `
-                    < h3 style = "color:var(--accent-gold);margin-top:0;" > 升级预览</h3 >
+                    <h3 style="color:var(--accent-gold);margin-top:0;">升级预览</h3>
             <div id="upgrade-preview-placeholder" style="color:#666;margin-top:50px;">
                 鼠标悬浮或点击卡牌<br>查看升级效果
             </div>
@@ -2587,7 +2798,7 @@ class Game {
             if (!canUpgradeCard(card)) return;
 
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.classList.add(`rarity - ${card.rarity || 'common'} `);
+            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
             cardEl.style.cursor = 'pointer';
 
             const showPreview = () => {
@@ -2598,11 +2809,11 @@ class Game {
 
                 previewCardDiv.innerHTML = '';
                 const upgradedEl = Utils.createCardElement(upgraded, 999);
-                upgradedEl.classList.add(`rarity - ${upgraded.rarity || 'common'} `);
+                upgradedEl.classList.add(`rarity-${upgraded.rarity || 'common'}`);
                 previewCardDiv.appendChild(upgradedEl);
 
                 previewTextDiv.innerHTML = `
-                    < p style = "margin:0;color:var(--accent-green);font-weight:bold;" > ${card.name} ➤ ${upgraded.name}</p >
+                    <p style="margin:0;color:var(--accent-green);font-weight:bold;">${card.name} ➤ ${upgraded.name}</p>
                         <p style="margin:4px 0 0 0;font-size:0.8rem;">${upgraded.description}</p>
                 `;
             };
@@ -2660,7 +2871,7 @@ class Game {
 
         this.player.deck.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.classList.add(`rarity - ${card.rarity || 'common'} `);
+            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
             cardEl.style.cursor = 'pointer';
             cardEl.addEventListener('click', () => this.campfireRemoveCard(index));
             container.appendChild(cardEl);

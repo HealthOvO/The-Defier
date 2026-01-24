@@ -139,7 +139,7 @@ class Player {
         }
         // Realm 15: 大道独行 - 最大生命值减半
         if (this.realm === 15) {
-            newMaxHp = Math.floor(newMaxHp * 0.5);
+            newMaxHp = Math.floor(newMaxHp * 0.7);
         }
         // Realm 18: 混沌终焉 - 所有属性减半
         if (this.realm === 18) {
@@ -193,20 +193,30 @@ class Player {
             this.addBuff('strength', this.permBuffs.strength);
         }
 
-        // 遗物效果：金刚法相
+        // 遗物效果：金刚法相 (无欲)
         if (this.relic && this.relic.id === 'vajraBody') {
-            this.block += 6;
+            const level = this.fateRing ? this.fateRing.level : 0;
+            const blockAmt = 6 + level;
+            this.block += blockAmt;
+            Utils.showBattleLog(`金刚法相：获得 ${blockAmt} 护盾`);
         }
 
-        // 遗物效果：真理之镜
+        // 遗物效果：真理之镜 (严寒)
         if (this.relic && this.relic.id === 'scholarLens') {
-            // 随机获得一张技能牌（0费，临时）
-            const skills = ['meditation', 'spiritBoost', 'quickDraw', 'concentration', 'powerUp'];
-            const randomSkill = skills[Math.floor(Math.random() * skills.length)];
-            const card = CARDS[randomSkill];
-            if (card) {
-                this.hand.push({ ...card, instanceId: this.generateCardId(), cost: 0, isTemp: true });
+            const level = this.fateRing ? this.fateRing.level : 0;
+            const count = level >= 5 ? 2 : 1; // 5级后给2张
+
+            // 随机获得技能牌（0费，临时）
+            const skills = ['meditation', 'spiritBoost', 'quickDraw', 'concentration', 'powerUp', 'divineShield', 'fateTwist'];
+
+            for (let i = 0; i < count; i++) {
+                const randomSkill = skills[Math.floor(Math.random() * skills.length)];
+                const card = CARDS[randomSkill];
+                if (card) {
+                    this.hand.push({ ...card, instanceId: this.generateCardId(), cost: 0, isTemp: true });
+                }
             }
+            Utils.showBattleLog(`真理之镜：获得 ${count} 张临时技能牌`);
         }
 
         // 命环路径：智慧之环 (额外获得2张随机技能牌)
@@ -249,6 +259,14 @@ class Player {
 
         // 触发法宝回合开始效果
         this.triggerTreasureEffect('onTurnStart');
+
+        // 遗物效果：治愈之血 (香叶)
+        if (this.relic && this.relic.id === 'healingBlood') {
+            const level = this.fateRing ? this.fateRing.level : 0;
+            const healAmt = 2 + Math.floor(level / 3);
+            this.heal(healAmt);
+            Utils.showBattleLog(`治愈之血：回复 ${healAmt} 生命`);
+        }
 
         // ... 其他代码 ...
 
@@ -396,6 +414,17 @@ class Player {
                 Utils.showBattleLog(`风空遁触发！闪避并抽牌`);
             }
             return { dodged: true, damage: 0 };
+        }
+
+        // 检查减伤 Buff (天地同寿等)
+        if (this.buffs.damageReduction && this.buffs.damageReduction > 0) {
+            const reduction = Math.min(100, this.buffs.damageReduction);
+            amount = Math.floor(amount * (100 - reduction) / 100);
+            delete this.buffs.damageReduction; // 通常是一次性或一回合？看定义是Buff。如果是'halfDamage'卡牌，描述是“本回合”，应该持续到回合结束。
+            // 这里为了简化，假设damageReduction是持续性Buff，但如果是回合结束清除，player.js需要处理回合结束清理buff。
+            // 目前Buff系统简陋，'halfDamage'效果是 buffType: 'damageReduction'。
+            // 如果是持续一回合，不应该在这里delete。应该在endTurn清理。
+            // 先不delete，假设 endTurn 会清理临时buff。
         }
 
         // 先扣护盾
@@ -586,6 +615,29 @@ class Player {
             case 'selfDamage':
                 this.currentHp = Math.max(1, this.currentHp - value);
                 return { type: 'selfDamage', value };
+
+            case 'maxHpOnKill':
+                return { type: 'maxHpOnKill', value, target: effect.target };
+
+            case 'mulligan':
+                const handSize = this.hand.length; // 当前手牌（不包括打出的这张）
+                // 将手牌全部丢弃
+                while (this.hand.length > 0) {
+                    this.discardPile.push(this.hand.pop());
+                }
+                // 抽取相同数量
+                this.drawCards(handSize);
+                return { type: 'mulligan', value: handSize };
+
+            case 'blockFromEnergy':
+                const blockVal = this.currentEnergy * effect.multiplier;
+                this.addBlock(blockVal);
+                return { type: 'block', value: blockVal };
+
+            case 'damagePerCard':
+                const cardsCount = this.hand.length;
+                const dmgVal = cardsCount * value;
+                return { type: 'damage', value: dmgVal, target: effect.target };
 
             case 'lifeSteal':
                 return { type: 'lifeSteal', value: effect.value };

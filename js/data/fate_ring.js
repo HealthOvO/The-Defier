@@ -12,11 +12,11 @@ const FATE_RING = {
         3: { exp: 1000, slots: 3, bonus: { maxHp: 30, energy: 1, draw: 0 } }, // 突破：获得灵力
         4: { exp: 1500, slots: 4, bonus: { maxHp: 40, energy: 1, draw: 0 } },
         5: { exp: 2200, slots: 4, bonus: { maxHp: 50, energy: 1, draw: 1 } }, // 突破：获得抽牌
-        6: { exp: 3000, slots: 5, bonus: { maxHp: 60, energy: 1, draw: 1 } },
-        7: { exp: 4000, slots: 5, bonus: { maxHp: 70, energy: 2, draw: 1 } }, // 突破：获得灵力
-        8: { exp: 5500, slots: 6, bonus: { maxHp: 80, energy: 2, draw: 1 } },
-        9: { exp: 7500, slots: 6, bonus: { maxHp: 90, energy: 2, draw: 2 } }, // 突破：获得抽牌
-        10: { exp: 99999, slots: 7, bonus: { maxHp: 100, energy: 3, draw: 2 } } // 巅峰：3灵力
+        6: { exp: 3000, slots: 5, bonus: { maxHp: 70, energy: 1, draw: 1 } }, // HP +60 -> +70
+        7: { exp: 4000, slots: 5, bonus: { maxHp: 80, energy: 2, draw: 1 } }, // HP +70 -> +80
+        8: { exp: 5500, slots: 6, bonus: { maxHp: 100, energy: 2, draw: 2 } }, // HP +80 -> +100, Draw +1 -> +2
+        9: { exp: 7500, slots: 6, bonus: { maxHp: 120, energy: 2, draw: 2 } }, // HP +90 -> +120
+        10: { exp: 99999, slots: 7, bonus: { maxHp: 150, energy: 3, draw: 3 } } // HP +100 -> +150, Draw +2 -> +3
     },
 
     // 进化路径

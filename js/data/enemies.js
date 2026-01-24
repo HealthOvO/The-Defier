@@ -595,9 +595,9 @@ const ENEMIES = {
         hp: 950, // 1200 -> 950
         patterns: [
             { type: 'debuff', buffType: 'stun', value: 1, intent: '💫' },
-            { type: 'attack', value: 65, intent: '⚔️' }, // 80 -> 65
+            { type: 'attack', value: 55, intent: '⚔️' }, // 80 -> 65 -> 55
             { type: 'heal', value: 80, intent: '💚' }, // 100 -> 80
-            { type: 'multiAttack', value: 25, count: 4, intent: '🔥' }, // 30x5 -> 25x4
+            { type: 'multiAttack', value: 20, count: 4, intent: '🔥' }, // 30x5 -> 25x4 -> 20x4
             { type: 'buff', buffType: 'nextTurnBlock', value: 40, intent: '🛡️' } // 50 -> 40
         ],
         stealChance: 0.9,
@@ -613,10 +613,10 @@ const ENEMIES = {
         realm: 14,
         hp: 600, // 800 -> 600
         patterns: [
-            { type: 'attack', value: 60, intent: '⚔️' }, // 80 -> 60
+            { type: 'attack', value: 50, intent: '⚔️' }, // 80 -> 60 -> 50
             { type: 'debuff', buffType: 'burn', value: 6, intent: '🔥' }, // 10 -> 6
             { type: 'debuff', buffType: 'poison', value: 6, intent: '🤢' }, // 10 -> 6
-            { type: 'attack', value: 80, intent: '⚔️' } // 100 -> 80
+            { type: 'attack', value: 65, intent: '⚔️' } // 100 -> 80 -> 65
         ],
         stealChance: 0.5,
         stealLaw: 'chaosLaw',
@@ -631,12 +631,12 @@ const ENEMIES = {
         isBoss: true,
         hp: 1100, // 1400 -> 1100
         patterns: [
-            { type: 'attack', value: 60, intent: '⚔️' }, // 80 -> 60
+            { type: 'attack', value: 50, intent: '⚔️' }, // 80 -> 60 -> 50
             { type: 'debuff', buffType: 'vulnerable', value: 6, intent: '💢' },
             { type: 'debuff', buffType: 'weak', value: 6, intent: '✨' },
-            { type: 'multiAttack', value: 22, count: 4, intent: '🔥' }, // 30 -> 22
+            { type: 'multiAttack', value: 18, count: 4, intent: '🔥' }, // 30 -> 22 -> 18
             { type: 'heal', value: 120, intent: '💚' }, // 150 -> 120
-            { type: 'attack', value: 90, intent: '⚔️' } // 120 -> 90
+            { type: 'attack', value: 75, intent: '⚔️' } // 120 -> 90 -> 75
         ],
         stealChance: 1.0,
         stealLaw: 'chaosLaw',
@@ -651,10 +651,10 @@ const ENEMIES = {
         realm: 15,
         hp: 900, // 1200 -> 900
         patterns: [
-            { type: 'attack', value: 90, intent: '⚔️' }, // 120 -> 90
+            { type: 'attack', value: 80, intent: '⚔️' }, // 120 -> 90 -> 80
             { type: 'defend', value: 80, intent: '🛡️' }, // 100 -> 80
             { type: 'buff', buffType: 'strength', value: 8, intent: '💪' }, // 10 -> 8
-            { type: 'attack', value: 120, intent: '⚔️' } // 150 -> 120
+            { type: 'attack', value: 100, intent: '⚔️' } // 150 -> 120 -> 100
         ],
         stealChance: 0.6,
         stealLaw: 'reversal',
@@ -667,14 +667,14 @@ const ENEMIES = {
         icon: '👿',
         realm: 15,
         isBoss: true,
-        hp: 2000, // 2500 -> 2000
+        hp: 1900, // 2500 -> 2000 -> 1900
         patterns: [
-            { type: 'attack', value: 90, intent: '⚔️' }, // 120 -> 90
+            { type: 'attack', value: 80, intent: '⚔️' }, // 120 -> 90 -> 80
             { type: 'debuff', buffType: 'stun', value: 1, intent: '💫' },
-            { type: 'multiAttack', value: 30, count: 5, intent: '🔥' }, // 40 -> 30
+            { type: 'multiAttack', value: 25, count: 5, intent: '🔥' }, // 40 -> 30 -> 25
             { type: 'heal', value: 300, intent: '💚' }, // 400 -> 300
-            { type: 'buff', buffType: 'strength', value: 10, intent: '💪' }, // 15 -> 10
-            { type: 'attack', value: 180, intent: '💀' } // 250 -> 180
+            { type: 'buff', buffType: 'strength', value: 8, intent: '💪' }, // 15 -> 10 -> 8
+            { type: 'attack', value: 110, intent: '💀' } // 250 -> 180 -> 110 (No more one-shot)
         ],
         stealChance: 1.0,
         stealLaw: 'karmaKill',

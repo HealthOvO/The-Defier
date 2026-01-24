@@ -1037,17 +1037,17 @@ const UPGRADE_RULES = {
         fortuneWheel: { minCards: 1, maxCards: 1 }, // 1-3 -> 2-4
         miracleHeal: { heal: 5 }, // 15 -> 20
 
-        sweepingStrike: { damage: 3 }, // 8 -> 11
-        armorBreaker: { damage: 3 }, // 5 -> 8
-        tripleSlash: { damage: 1 }, // 3x3 -> 4x3
-        earthShatter: { damage: 8 }, // 25 -> 33
-        swordBreaker: { damage: 5 }, // 15 -> 20
-        bloodSlash: { damage: 4 }, // 8 -> 12
+        sweepingStrike: { damage: 5 }, // 8 -> 13
+        armorBreaker: { damage: 5 }, // 5 -> 10
+        tripleSlash: { damage: 2 }, // 3x3 -> 5x3
+        earthShatter: { damage: 15 }, // 25 -> 40
+        swordBreaker: { damage: 10 }, // 15 -> 25
+        bloodSlash: { damage: 6 }, // 8 -> 14
         finishingBlow: { damage: 4 }, // 10 -> 14
 
         goldenBell: { block: 5 }, // 15 -> 20
         offenseDefense: { multiplier: 1 }, // x3 -> x4
-        halfDamage: { costReduction: 1 }, // 2费 -> 1费
+        halfDamage: { damageReduction: 25 }, // 50% -> 75%
         turtleShell: { block: 2, draw: 1 }, // 3/1 -> 5/2
         ironSkin: { block: 3, nextBlock: 3 }, // 6/4 -> 9/7
 
@@ -1094,7 +1094,13 @@ const UPGRADE_RULES = {
         // 严寒
         ringAnalysis: { vulnerable: 1, exp: 10 }, // 2/15 -> 3/25
         lawInsight: { draw: 1, stealBonus: 0.05 }, // 2/10% -> 3/15%
-        timeStasis: { damageReduction: 25 }  // 50% -> 75%
+        timeStasis: { damageReduction: 25 },  // 50% -> 75%
+
+        // 新增卡牌升级
+        soulHarvest: { damage: 5, maxHp: 1 }, // 12/2 -> 17/3
+        fateTwist: { costReduction: 1 }, // 1 -> 0
+        divineShield: { multiplier: 3 }, // 5 -> 8
+        stormFury: { damage: 2 } // 4 -> 6
     }
 };
 
@@ -1168,6 +1174,9 @@ function upgradeCard(card) {
             }
             if (effect.type === 'buff' && effect.buffType === 'nextTurnBlock' && specialRule.nextBlock) {
                 effect.value += specialRule.nextBlock;
+            }
+            if (effect.type === 'buff' && effect.buffType === 'damageReduction' && specialRule.damageReduction) {
+                effect.value += specialRule.damageReduction;
             }
             if (effect.type === 'randomDamage') {
                 if (specialRule.minDamage) effect.minValue += specialRule.minDamage;
