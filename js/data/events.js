@@ -367,150 +367,151 @@ const EVENTS = {
             }
         ]
     }
+        ]
+    },
+
+// ==================== 3.0新增事件 ====================
+celestialGamble: {
+    id: 'celestialGamble',
+        name: '天机赌局',
+            icon: '🎲',
+                description: '一位神秘的虚影邀请你参与一场关于运气的赌局...',
+                    choices: [
+                        {
+                            text: '小赌怡情 (10% HP)',
+                            icon: '💉',
+                            result: '50% 获得 100 灵石',
+                            resultType: 'neutral',
+                            effects: [
+                                {
+                                    type: 'random', options: [
+                                        { type: 'gold', value: 100, chance: 0.5 },
+                                        { type: 'damage', value: 8, chance: 0.5 } // 约10%HP
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            text: '豪赌一把 (30% HP)',
+                            icon: '🩸',
+                            result: '40% 获得随机法宝',
+                            resultType: 'negative',
+                            effects: [
+                                {
+                                    type: 'random', options: [
+                                        { type: 'treasure', random: true, chance: 0.4 },
+                                        { type: 'damage', value: 24, chance: 0.6 } // 约30%HP
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            text: '拒绝赌博',
+                            icon: '👋',
+                            result: '离开',
+                            resultType: 'neutral',
+                            effects: []
+                        }
+                    ]
 },
 
-    // ==================== 3.0新增事件 ====================
-    celestialGamble: {
-        id: 'celestialGamble',
-        name: '天机赌局',
-        icon: '🎲',
-        description: '一位神秘的虚影邀请你参与一场关于运气的赌局...',
-        choices: [
-            {
-                text: '小赌怡情 (10% HP)',
-                icon: '💉',
-                result: '50% 获得 100 灵石',
-                resultType: 'neutral',
-                effects: [
-                    {
-                        type: 'random', options: [
-                            { type: 'gold', value: 100, chance: 0.5 },
-                            { type: 'damage', value: 8, chance: 0.5 } // 约10%HP
-                        ]
-                    }
-                ]
-            },
-            {
-                text: '豪赌一把 (30% HP)',
-                icon: '🩸',
-                result: '40% 获得随机法宝',
-                resultType: 'negative',
-                effects: [
-                    {
-                        type: 'random', options: [
-                            { type: 'treasure', random: true, chance: 0.4 },
-                            { type: 'damage', value: 24, chance: 0.6 } // 约30%HP
-                        ]
-                    }
-                ]
-            },
-            {
-                text: '拒绝赌博',
-                icon: '👋',
-                result: '离开',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    voidRift: {
-        id: 'voidRift',
+voidRift: {
+    id: 'voidRift',
         name: '虚空裂隙',
-        icon: '🌀',
-        description: '空间撕裂，连接着充满危险与机遇的虚空位面...',
-        choices: [
-            {
-                text: '深入探索',
-                icon: '👁️',
-                result: '受到伤害，获得强力卡牌',
-                resultType: 'negative',
-                effects: [
-                    { type: 'damage', value: 15 },
-                    { type: 'card', rarity: 'epic' }
-                ]
-            },
-            {
-                text: '封印裂隙',
-                icon: '🔒',
-                result: '命环经验 +50',
-                resultType: 'positive',
-                effects: [
-                    { type: 'ringExp', value: 50 },
-                    { type: 'heal', value: 10 }
-                ]
-            }
-        ]
-    },
+            icon: '🌀',
+                description: '空间撕裂，连接着充满危险与机遇的虚空位面...',
+                    choices: [
+                        {
+                            text: '深入探索',
+                            icon: '👁️',
+                            result: '受到伤害，获得强力卡牌',
+                            resultType: 'negative',
+                            effects: [
+                                { type: 'damage', value: 15 },
+                                { type: 'card', rarity: 'epic' }
+                            ]
+                        },
+                        {
+                            text: '封印裂隙',
+                            icon: '🔒',
+                            result: '命环经验 +50',
+                            resultType: 'positive',
+                            effects: [
+                                { type: 'ringExp', value: 50 },
+                                { type: 'heal', value: 10 }
+                            ]
+                        }
+                    ]
+},
 
-    ancientLibrary: {
-        id: 'ancientLibrary',
+ancientLibrary: {
+    id: 'ancientLibrary',
         name: '上古书库',
-        icon: '📚',
-        description: '这里收藏着无数失传的典籍，知识就是力量...',
-        choices: [
-            {
-                text: '研读禁术',
-                icon: '📖',
-                result: '获得一张随机法则牌',
-                resultType: 'positive',
-                effects: [
-                    { type: 'card', rarity: 'legendary' }
-                ]
-            },
-            {
-                text: '整理古籍',
-                icon: '🧹',
-                result: '移除一张牌，命环经验+30',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'removeCardType', count: 1, cardType: 'strike' }, // 简化：这里只能移除特定类型？或者我们需要通用移除效果
-                    // game.js 的 removeCardType 是移除特定类型。
-                    // 为了通用移除，最好还是用 'remove' 服务那种交互。
-                    // 暂时用 移除所有打击牌？不，太强。
-                    // 改为：升级一张牌
-                    { type: 'upgradeCard' },
-                    { type: 'ringExp', value: 30 }
-                ]
-            }
-        ]
-    },
+            icon: '📚',
+                description: '这里收藏着无数失传的典籍，知识就是力量...',
+                    choices: [
+                        {
+                            text: '研读禁术',
+                            icon: '📖',
+                            result: '获得一张随机法则牌',
+                            resultType: 'positive',
+                            effects: [
+                                { type: 'card', rarity: 'legendary' }
+                            ]
+                        },
+                        {
+                            text: '整理古籍',
+                            icon: '🧹',
+                            result: '移除一张牌，命环经验+30',
+                            resultType: 'neutral',
+                            effects: [
+                                { type: 'removeCardType', count: 1, cardType: 'strike' }, // 简化：这里只能移除特定类型？或者我们需要通用移除效果
+                                // game.js 的 removeCardType 是移除特定类型。
+                                // 为了通用移除，最好还是用 'remove' 服务那种交互。
+                                // 暂时用 移除所有打击牌？不，太强。
+                                // 改为：升级一张牌
+                                { type: 'upgradeCard' },
+                                { type: 'ringExp', value: 30 }
+                            ]
+                        }
+                    ]
+},
 
-    wanderingSmith: {
-        id: 'wanderingSmith',
+wanderingSmith: {
+    id: 'wanderingSmith',
         name: '云游铁匠',
-        icon: '🔨',
-        description: '一位背着巨大铁砧的铁匠正在休息，他似乎可以强化万物...',
-        choices: [
-            {
-                text: '强化卡牌',
-                icon: '⚡',
-                result: '升级一张卡牌',
-                resultType: 'positive',
-                effects: [
-                    { type: 'upgradeCard' }
-                ]
-            },
-            {
-                text: '打造法宝',
-                icon: '🏺',
-                result: '花费150灵石购买随机法宝',
-                resultType: 'neutral',
-                condition: { type: 'gold', min: 150 },
-                effects: [
-                    { type: 'gold', value: -150 },
-                    { type: 'treasure', random: true }
-                ]
-            },
-            {
-                text: '离开',
-                icon: '👋',
-                result: '无事发生',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    }
+            icon: '🔨',
+                description: '一位背着巨大铁砧的铁匠正在休息，他似乎可以强化万物...',
+                    choices: [
+                        {
+                            text: '强化卡牌',
+                            icon: '⚡',
+                            result: '升级一张卡牌',
+                            resultType: 'positive',
+                            effects: [
+                                { type: 'upgradeCard' }
+                            ]
+                        },
+                        {
+                            text: '打造法宝',
+                            icon: '🏺',
+                            result: '花费150灵石购买随机法宝',
+                            resultType: 'neutral',
+                            condition: { type: 'gold', min: 150 },
+                            effects: [
+                                { type: 'gold', value: -150 },
+                                { type: 'treasure', random: true }
+                            ]
+                        },
+                        {
+                            text: '离开',
+                            icon: '👋',
+                            result: '无事发生',
+                            resultType: 'neutral',
+                            effects: []
+                        }
+                    ]
+}
 };
 
 // 事件池 - 按类型分类
