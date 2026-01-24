@@ -18,6 +18,13 @@ class EventSystem {
 
     // 显示事件
     showEvent(event) {
+        // Fix: Delegate to main game event modal to prevent duplicates and ensure consistency
+        if (this.game && this.game.showEventModal) {
+            this.game.showEventModal(event, this.game.currentBattleNode);
+            return;
+        }
+
+        // Fallback (Legacy)
         this.currentEvent = event;
 
         // 创建事件模态框

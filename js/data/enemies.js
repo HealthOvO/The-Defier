@@ -803,6 +803,220 @@ const ENEMIES = {
         stealChance: 0.8,
         stealLaw: 'reversal',
         gold: { min: 800, max: 1200 }
+    },
+
+    // ==================== 第十六重·太乙天 (吸血主题) ====================
+    bloodBat: {
+        id: 'bloodBat',
+        name: '嗜血妖蝠',
+        icon: '🦇',
+        realm: 16,
+        hp: 350,
+        patterns: [
+            { type: 'attack', value: 40, intent: '🩸' }, // 吸血需配合环境或特殊effect实现，这里暂时用高攻
+            { type: 'debuff', buffType: 'weak', value: 3, intent: '✨' },
+            { type: 'multiAttack', value: 20, count: 3, intent: '🔥' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'woodLife',
+        gold: { min: 400, max: 500 }
+    },
+
+    bloodSlave: {
+        id: 'bloodSlave',
+        name: '血奴',
+        icon: '🧟‍♂️',
+        realm: 16,
+        hp: 400,
+        patterns: [
+            { type: 'attack', value: 50, intent: '⚔️' },
+            { type: 'buff', buffType: 'strength', value: 3, intent: '💪' },
+            { type: 'attack', value: 60, intent: '⚔️' }
+        ],
+        stealChance: 0.25,
+        stealLaw: null,
+        gold: { min: 400, max: 550 }
+    },
+
+    bloodGeneral: {
+        id: 'bloodGeneral',
+        name: '鲜血将军',
+        icon: '🧛',
+        realm: 16,
+        isElite: true,
+        hp: 600,
+        patterns: [
+            { type: 'attack', value: 60, intent: '⚔️' },
+            { type: 'heal', value: 50, intent: '💚' },
+            { type: 'debuff', buffType: 'vulnerable', value: 3, intent: '💔' },
+            { type: 'multiAttack', value: 25, count: 4, intent: '🔥' }
+        ],
+        stealChance: 0.4,
+        stealLaw: 'deathWither', // 假设有对应法则
+        gold: { min: 600, max: 800 }
+    },
+
+    bloodAncestor: {
+        id: 'bloodAncestor',
+        name: '血河老祖',
+        icon: '🩸',
+        realm: 16,
+        isBoss: true,
+        hp: 1200,
+        patterns: [
+            { type: 'attack', value: 70, intent: '⚔️' },
+            { type: 'heal', value: 100, intent: '💚' },
+            { type: 'multiAttack', value: 30, count: 5, intent: '🔥' },
+            { type: 'buff', buffType: 'strength', value: 5, intent: '💪' },
+            { type: 'debuff', buffType: 'weak', value: 5, intent: '✨' },
+            { type: 'attack', value: 90, intent: '💀' }
+        ],
+        stealChance: 0.8,
+        stealLaw: 'woodLife',
+        gold: { min: 1000, max: 1500 }
+    },
+
+    // ==================== 第十七重·大罗天 (不灭/恢复主题) ====================
+    goldenArhat: {
+        id: 'goldenArhat',
+        name: '金身罗汉',
+        icon: '🧘‍♂️',
+        realm: 17,
+        hp: 600,
+        patterns: [
+            { type: 'defend', value: 50, intent: '🛡️' },
+            { type: 'attack', value: 45, intent: '⚔️' },
+            { type: 'buff', buffType: 'thorns', value: 5, intent: '🌵' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'metalBody',
+        gold: { min: 500, max: 600 }
+    },
+
+    jadeStatue: {
+        id: 'jadeStatue',
+        name: '玉虚守卫',
+        icon: '🗽',
+        realm: 17,
+        hp: 550,
+        patterns: [
+            { type: 'heal', value: 30, intent: '💚' },
+            { type: 'attack', value: 50, intent: '⚔️' },
+            { type: 'defend', value: 40, intent: '🛡️' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'earthShield',
+        gold: { min: 500, max: 650 }
+    },
+
+    immortalGuardian: {
+        id: 'immortalGuardian',
+        name: '不灭战魂',
+        icon: '👻',
+        realm: 17,
+        isElite: true,
+        hp: 800,
+        patterns: [
+            { type: 'buff', buffType: 'regeneration', value: 20, intent: '🌿' },
+            { type: 'attack', value: 65, intent: '⚔️' },
+            { type: 'defend', value: 60, intent: '🛡️' },
+            { type: 'attack', value: 70, intent: '⚔️' }
+        ],
+        stealChance: 0.45,
+        stealLaw: 'lifeSource',
+        gold: { min: 700, max: 900 }
+    },
+
+    daluoSupreme: {
+        id: 'daluoSupreme',
+        name: '大罗金仙',
+        icon: '🌞',
+        realm: 17,
+        isBoss: true,
+        hp: 2000,
+        patterns: [
+            { type: 'buff', buffType: 'nextTurnBlock', value: 100, intent: '🛡️' },
+            { type: 'attack', value: 80, intent: '⚔️' },
+            { type: 'heal', value: 200, intent: '💚' },
+            { type: 'debuff', buffType: 'stun', value: 1, intent: '💫' },
+            { type: 'multiAttack', value: 40, count: 4, intent: '🔥' },
+            { type: 'attack', value: 100, intent: '💀' }
+        ],
+        stealChance: 0.9,
+        stealLaw: 'lightHeal',
+        gold: { min: 2000, max: 3000 }
+    },
+
+    // ==================== 第十八重·混沌天 (终焉主题) ====================
+    entropyShade: {
+        id: 'entropyShade',
+        name: '熵增阴影',
+        icon: '⚫',
+        realm: 18,
+        hp: 500,
+        patterns: [
+            { type: 'debuff', buffType: 'weak', value: 5, intent: '✨' },
+            { type: 'attack', value: 70, intent: '⚔️' },
+            { type: 'debuff', buffType: 'vulnerable', value: 5, intent: '💔' }
+        ],
+        stealChance: 0.4,
+        stealLaw: 'darkErosion',
+        gold: { min: 600, max: 800 }
+    },
+
+    chaosFragment: {
+        id: 'chaosFragment',
+        name: '混沌碎片',
+        icon: '🧩',
+        realm: 18,
+        hp: 450,
+        patterns: [
+            { type: 'attack', value: 80, intent: '⚔️' },
+            { type: 'multiAttack', value: 25, count: 3, intent: '🔥' },
+            { type: 'debuff', buffType: 'burn', value: 10, intent: '🔥' }
+        ],
+        stealChance: 0.4,
+        stealLaw: 'chaosLaw',
+        gold: { min: 600, max: 800 }
+    },
+
+    voidDevourer: {
+        id: 'voidDevourer',
+        name: '虚空吞噬者',
+        icon: '🕳️',
+        realm: 18,
+        isElite: true,
+        hp: 1000,
+        patterns: [
+            { type: 'attack', value: 100, intent: '⚔️' }, // 高伤
+            { type: 'buff', buffType: 'strength', value: 5, intent: '💪' },
+            { type: 'debuff', buffType: 'paralysis', value: 3, intent: '⚡' },
+            { type: 'multiAttack', value: 40, count: 5, intent: '🔥' }
+        ],
+        stealChance: 0.5,
+        stealLaw: 'voidEmbrace',
+        gold: { min: 900, max: 1200 }
+    },
+
+    chaosOrigin: {
+        id: 'chaosOrigin',
+        name: '混沌本源·终焉',
+        icon: '🌋',
+        realm: 18,
+        isBoss: true,
+        hp: 3000,
+        patterns: [
+            { type: 'attack', value: 100, intent: '⚔️' },
+            { type: 'debuff', buffType: 'vulnerable', value: 10, intent: '💔' },
+            { type: 'multiAttack', value: 50, count: 6, intent: '🔥' },
+            { type: 'heal', value: 500, intent: '💚' },
+            { type: 'buff', buffType: 'thorns', value: 20, intent: '🌵' },
+            { type: 'attack', value: 150, intent: '💀' },
+            { type: 'buff', buffType: 'strength', value: 10, intent: '💪' }
+        ],
+        stealChance: 1.0,
+        stealLaw: 'chaosLaw', // 或者终极法则
+        gold: { min: 5000, max: 9999 }
     }
 };
 

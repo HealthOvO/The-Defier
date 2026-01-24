@@ -1684,7 +1684,7 @@ class Game {
         document.getElementById('game-over-title').classList.add('victory');
         document.getElementById('game-over-text').textContent = '你打破了命运的枷锁，成为了真正的逆命者！';
 
-        document.getElementById('stat-floor').textContent = '第五重天';
+        document.getElementById('stat-floor').textContent = this.map.getRealmName(this.player.realm);
         document.getElementById('stat-enemies').textContent = this.player.enemiesDefeated;
         document.getElementById('stat-laws').textContent = this.player.collectedLaws.length;
 
@@ -2676,39 +2676,67 @@ class Game {
         }
     }
 
-    // 显示移除卡牌界面 (重构以适应新商店)
+    // 显示移除卡牌界面 (Fixed: Use deck-modal which exists)
     showRemoveCard(serviceItem) {
         // 如果钱不够在 buyItem 里已经检查了，但为了安全
         if (this.player.gold < serviceItem.price) return;
 
-        const container = document.getElementById('remove-card-list');
+        // 先关闭当前弹窗（如果有）
+        this.closeModal();
+
+        const modal = document.getElementById('deck-modal');
+        const container = document.getElementById('deck-view-cards');
+        const title = modal.querySelector('h2');
+
+        // Reset modal content
         container.innerHTML = '';
+        container.style.display = 'flex';
+        container.style.flexWrap = 'wrap';
+        container.style.justifyContent = 'center'; // Ensure centering
+
+        if (title) title.textContent = '选择一张卡牌移除 (净化)';
+
+        // Add hint text
+        const hint = document.createElement('p');
+        hint.style.width = '100%';
+        hint.style.textAlign = 'center';
+        hint.style.marginBottom = '10px';
+        hint.style.color = 'var(--accent-gold)';
+        hint.textContent = `点击卡牌以移除 (消耗 ${serviceItem.price} 灵石)`;
+        container.appendChild(hint);
 
         this.player.deck.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.classList.add(`rarity - ${card.rarity || 'common'} `);
+            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
+            cardEl.style.cursor = 'pointer';
 
             // 点击移除
             cardEl.addEventListener('click', () => {
+                // Confirm dialog could be nice, but for now direct action as before
                 this.player.deck.splice(index, 1);
                 this.player.gold -= serviceItem.price;
 
                 // 增加移除计数，让下次更贵
                 this.player.removeCount = (this.player.removeCount || 0) + 1;
                 serviceItem.sold = true;
+                // Price increase for next time is handled in generateShopData, 
+                // but for current session item is sold.
 
-                Utils.showBattleLog(`移除了 ${card.name} `);
+                Utils.showBattleLog(`已移除 ${card.name}`);
 
                 this.closeModal();
                 // 刷新商店界面
                 document.getElementById('shop-gold-display').textContent = this.player.gold;
+                // Re-render shop to show 'Sold' status
                 this.renderShop();
+                // Re-open shop screen (it might be hidden by modal)
+                this.showScreen('shop-screen');
             });
 
             container.appendChild(cardEl);
         });
 
-        document.getElementById('remove-card-modal').classList.add('active');
+        modal.classList.add('active');
     }
 
     // 剩下的 buyRingExp 等旧方法可以删除，因为已经集成到 applyServiceEffect 中了

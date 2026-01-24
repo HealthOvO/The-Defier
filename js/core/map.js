@@ -374,15 +374,5 @@ class GameMap {
         return accessible;
     }
 
-    // 获取天域名称
-    getRealmName(realm) {
-        const names = [
-            '凡尘界', '练气天', '筑基天', '金丹天', '元婴天',
-            '化神天', '合体天', '大乘天', '飞升天', '地仙界',
-            '天仙界', '金仙界', '大罗天', '混元天', '无上天',
-            '虚空境', '混沌境', '本源境'
-        ];
-        const index = Math.min(Math.max(0, realm - 1), names.length - 1);
-        return `第${realm}重·${names[index]}`;
-    }
+
 }

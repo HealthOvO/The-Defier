@@ -1224,6 +1224,21 @@ function upgradeCard(card) {
             if (effect.type === 'execute' && specialRule.multiplier) {
                 effect.value = (effect.value || 1) + specialRule.multiplier;
             }
+
+            // Fix for missing upgrade handlers
+            if (effect.type === 'damagePerLaw') {
+                if (specialRule.baseDamage) effect.baseDamage += specialRule.baseDamage;
+                if (specialRule.damagePerLaw) effect.damagePerLaw += specialRule.damagePerLaw;
+            }
+            if (effect.type === 'conditionalDamage' && specialRule.bonusDamage) {
+                effect.bonusDamage += specialRule.bonusDamage;
+            }
+            if (effect.type === 'blockFromLostHp' && specialRule.percent) {
+                effect.percent += specialRule.percent;
+            }
+            if (effect.type === 'buff' && effect.buffType === 'stealBonus' && specialRule.stealBonus) {
+                effect.value += specialRule.stealBonus;
+            }
         } else {
             // 应用默认规则
             if (effect.type === 'damage') {
@@ -1340,6 +1355,18 @@ function generateUpgradedDescription(card) {
                 else if (effect.buffType === 'nextTurnBlock') desc += `下回合开始时获得 ${effect.value} 点护盾。`;
                 else if (effect.buffType === 'damageReduction') desc += `本回合受到的伤害减少${effect.value}%。`;
                 else if (effect.buffType === 'nextAttackBonus') desc += `下一张攻击牌伤害+${effect.value}。`;
+                else if (effect.buffType === 'stealBonus') desc += `本战法则盗取率+${Math.floor(effect.value * 100)}%。`;
+                else if (effect.buffType === 'reflect') desc += `下次被攻击时反弹等量伤害。`;
+                else if (effect.buffType === 'extraTurn') desc += `你额外行动 ${effect.value} 次。`;
+                break;
+            case 'damagePerLaw':
+                desc += `根据装载法则数量+${effect.baseDamage}伤害（当前+${effect.damagePerLaw}/个）。`;
+                break;
+            case 'conditionalDamage':
+                desc += `若命环≥${effect.minLevel}级，再造成 ${effect.bonusDamage} 点伤害。`;
+                break;
+            case 'blockFromLostHp':
+                desc += `获得等于已损失生命${Math.floor(effect.percent * 100)}%的护盾。`;
                 break;
         }
     }
