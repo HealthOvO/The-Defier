@@ -274,7 +274,7 @@ class GameMap {
             return;
         }
 
-        const event = getRandomEvent();
+        const event = typeof getRandomEvent === 'function' ? getRandomEvent() : null;
         console.log('Triggering event:', event);
 
         if (event) {

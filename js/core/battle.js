@@ -60,6 +60,12 @@ class Battle {
         // 玩家回合开始
         this.player.startTurn();
 
+        // 强制检查手牌，如果为空尝试补发（防止Bug）
+        if (this.player.hand.length === 0) {
+            console.warn('StartBattle: Hand empty, forcing draw.');
+            this.player.drawCards(this.player.baseDraw);
+        }
+
         // 播放BGM
         if (typeof audioManager !== 'undefined') {
             const isBoss = this.enemies.some(e => e.isBoss);
@@ -75,6 +81,19 @@ class Battle {
         // 触发法宝战斗开始效果
         if (this.player.triggerTreasureEffect) {
             this.player.triggerTreasureEffect('onBattleStart');
+        }
+
+        // 环境加载
+        this.activeEnvironment = null;
+        if (typeof REALM_ENVIRONMENTS !== 'undefined') {
+            const env = REALM_ENVIRONMENTS[this.player.realm];
+            if (env) {
+                this.activeEnvironment = env;
+                Utils.showBattleLog(`【${env.name}】环境生效！`);
+                if (env.onBattleStart) {
+                    env.onBattleStart(this);
+                }
+            }
         }
 
         // 确保结束回合按钮可用
@@ -95,6 +114,7 @@ class Battle {
         this.updateHandUI();
         this.updateEnergyUI();
         this.updatePilesUI();
+        this.updateEnvironmentUI();
     }
 
     // 更新玩家UI
@@ -247,13 +267,170 @@ class Battle {
                 }
             });
 
-            // 悬停音效
+            // 悬停音效 & 伤害预览
             cardEl.addEventListener('mouseenter', () => {
                 if (typeof audioManager !== 'undefined') {
                     audioManager.playSFX('hover');
                 }
+                this.onCardHover(index);
+            });
+
+            cardEl.addEventListener('mouseleave', () => {
+                this.onCardHoverOut();
             });
         });
+    }
+
+    // 卡牌悬停预览
+    onCardHover(cardIndex) {
+        if (this.battleEnded) return;
+        const card = this.player.hand[cardIndex];
+        if (!card) return;
+
+        // 仅针对攻击卡显示预览
+        // 实际上有些技能卡也可能有伤害，检查效果
+        const damageEffects = card.effects.filter(e =>
+            ['damage', 'penetrate', 'randomDamage', 'damageAll', 'execute', 'executeDamage'].includes(e.type)
+        );
+
+        if (damageEffects.length === 0) return;
+
+        // 遍历所有敌人进行计算
+        this.enemies.forEach((enemy, index) => {
+            let totalDamage = 0; // Initialize totalDamage for each enemy
+            let isTarget = false; // Initialize isTarget for each enemy
+
+            if (enemy.currentHp <= 0) {
+                enemy.currentHp = 0;
+                // 击杀逻辑将在 UI 更新或下一次循环处理
+            } else {
+                // 检查阶段转换
+                if (this.checkPhaseChange) {
+                    this.checkPhaseChange(enemy);
+                }
+            }
+            // 检查每段效果
+            damageEffects.forEach(effect => {
+                // 如果是全体伤害，或者需要选择目标（暂定鼠标悬停时默认预览当前敌人？或者全部敌人？）
+                // UI逻辑：如果还没选目标，通常游戏会只预览 AoE 或者不高亮。
+                // 但为了体验，我们可以让单体攻击在悬停时，如果必须指定目标，暂时不高亮（因为不知道打谁）。
+                // 或者：高亮所有可能的目标？
+                // 简化方案：只预览 AoE 和随机伤害。单体伤害需要拖拽？
+                // 优化方案：杀戮尖塔是拖拽时预览。
+                // 但这里操作模式是点击卡牌 -> 选择目标。
+                // 所以悬停时，如果卡牌需要目标，我们无法确定打谁。
+                // 除非这里是 AoE。
+
+                // 修正：如果处于 targetingMode，悬停敌人时预览？
+                // 这里是悬停手牌。
+
+                if (effect.target === 'allEnemies') {
+                    totalDamage += this.calculateEffectDamage(effect, enemy);
+                    isTarget = true;
+                } else if (effect.target === 'random') {
+                    // 随机伤害难以预览确切目标，暂时忽略或平均？
+                }
+            });
+
+            if (isTarget && totalDamage > 0) {
+                this.updateDamagePreview(index, totalDamage, enemy.currentHp, enemy.hp);
+            }
+        });
+    }
+
+    // 结束悬停
+    onCardHoverOut() {
+        // 清除所有预览
+        const previews = document.querySelectorAll('.enemy-hp-preview');
+        previews.forEach(el => el.style.width = '0%');
+        const pixels = document.querySelectorAll('.enemy-hp-fill');
+        pixels.forEach(el => el.classList.remove('will-die'));
+    }
+
+    // 更新预览条
+    updateDamagePreview(enemyIndex, damage, currentHp, maxHp) {
+        const enemyEl = document.querySelector(`.enemy[data-index="${enemyIndex}"]`);
+        if (!enemyEl) return;
+
+        const previewBar = enemyEl.querySelector('.enemy-hp-preview');
+        if (!previewBar) return;
+
+        // 确保伤害不超过当前血量
+        const effectiveDamage = Math.min(damage, currentHp);
+        const damagePercent = (effectiveDamage / maxHp) * 100;
+
+        // 预览条应该显示在血条末端？不，通常是覆盖在血条即将减少的部分。
+        // CSS设置 .enemy-hp-preview 为 absolute right: 0? 
+        // 或者是覆盖在 .enemy-hp-fill 上？
+        // 简单做法：Preview是灰色，Width = Damage%。
+        // 因为 .enemy-hp-fill 是 width%，我们只需把 preview 放在 fill 里面？
+        // 或者 preview 也是 absolute, left = currentHp% - damage% ?
+        // 让我们看看HTML结构。 .enemy-hp 是相对定位容器。
+        // .enemy-hp-fill 是当前血量。
+        // 我们想让 preview 显示在 fill 的末尾。
+        // 所以 preview 应该放在 fill 内部？或者 preview 也是 absolute top 0 right (100 - currentHpPercent)% ?
+
+        // 重新思考 CSS：
+        // 假设 .enemy-hp-fill width=80%.
+        // 伤害 20%. 剩余 60%.
+        // 我们希望 60%-80% 这段闪烁。
+        // 这可以通过在 .enemy-hp-fill 内部加一个 right-aligned 的 div 实现？难。
+        // 更好的方法：.enemy-hp-preview 绝对定位，left = (currentHp - damage)/maxHp * 100 %. width = damage/maxHp * 100 %.
+
+        const remainingHp = currentHp - effectiveDamage;
+        const leftPercent = (remainingHp / maxHp) * 100;
+
+        previewBar.style.left = `${leftPercent}%`;
+        previewBar.style.width = `${damagePercent}%`;
+        previewBar.style.opacity = '1';
+
+        // 致死提示
+        if (remainingHp <= 0) {
+            const fill = enemyEl.querySelector('.enemy-hp-fill');
+            if (fill) fill.classList.add('will-die'); // 添加致命闪烁
+        }
+    }
+
+    // 计算预估伤害
+    calculateEffectDamage(effect, target) {
+        let value = effect.value || 0;
+        if (effect.type === 'randomDamage') value = (effect.minValue + effect.maxValue) / 2;
+
+        // 1. 玩家自身加成
+        if (['damage', 'penetrate', 'damageAll', 'randomDamage'].includes(effect.type)) {
+            // 力量
+            if (this.player.buffs.strength) value += this.player.buffs.strength;
+
+            // 虚弱
+            if (this.player.buffs.weak) value = Math.floor(value * 0.75);
+
+            // 聚气 (Next Attack Bonus) - 预览不应消耗
+            if (this.player.buffs.nextAttackBonus) value += this.player.buffs.nextAttackBonus;
+        }
+
+        // 2. 目标防御计算
+        let finalDamage = value;
+
+        // 穿透无视护盾
+        if (effect.type !== 'penetrate') {
+            // 计算被护盾抵消的部分
+            if (target.block > 0) {
+                const block = target.block;
+                if (block >= finalDamage) {
+                    finalDamage = 0;
+                } else {
+                    finalDamage -= block;
+                }
+            }
+        }
+
+        // 3. 目标易伤
+        if (target.buffs && target.buffs.vulnerable) {
+            finalDamage += target.buffs.vulnerable; // 这里使用的是固定值易伤，确认下 battle.js 里的逻辑
+            // check battle.js line 699: amount += enemy.buffs.vulnerable; yes it is additive.
+        }
+
+        return Math.max(0, finalDamage);
     }
 
     // 卡牌点击处理
@@ -406,13 +583,20 @@ class Battle {
     async processEffect(result, target, targetIndex) {
         const enemyEl = document.querySelector(`.enemy[data-index="${targetIndex}"]`);
 
+        // 辅助函数：根据伤害计算震动强度
+        const getShakeIntensity = (damage) => {
+            if (damage >= 30) return 'heavy';
+            if (damage < 10) return 'light';
+            return 'medium';
+        };
+
         switch (result.type) {
             case 'damage':
             case 'randomDamage':
                 if (target) {
                     const damage = this.dealDamageToEnemy(target, result.value);
                     if (enemyEl) {
-                        Utils.addShakeEffect(enemyEl);
+                        Utils.addShakeEffect(enemyEl, getShakeIntensity(damage));
                         Utils.showFloatingNumber(enemyEl, damage, 'damage');
                     }
                     Utils.showBattleLog(`造成 ${damage} 点伤害！${result.isExecute ? '（斩杀加成！）' : ''}`);
@@ -447,7 +631,7 @@ class Battle {
                     target.block = oldBlock;
 
                     if (enemyEl) {
-                        Utils.addShakeEffect(enemyEl);
+                        Utils.addShakeEffect(enemyEl, getShakeIntensity(result.value));
                         Utils.showFloatingNumber(enemyEl, result.value, 'damage');
                     }
                     Utils.showBattleLog(`穿透伤害 ${result.value}！`);
@@ -462,7 +646,7 @@ class Battle {
                     const executeDamage = Math.floor(lostHp * executeMultiplier);
                     const damage = this.dealDamageToEnemy(target, executeDamage);
                     if (enemyEl) {
-                        Utils.addShakeEffect(enemyEl);
+                        Utils.addShakeEffect(enemyEl, getShakeIntensity(damage));
                         Utils.showFloatingNumber(enemyEl, damage, 'damage');
                     }
                     Utils.showBattleLog(`虚空拥抱造成 ${damage} 点伤害！`);
@@ -479,7 +663,7 @@ class Battle {
                     }
                     const dmg = this.dealDamageToEnemy(target, baseDmg);
                     if (enemyEl) {
-                        Utils.addShakeEffect(enemyEl);
+                        Utils.addShakeEffect(enemyEl, getShakeIntensity(dmg));
                         Utils.showFloatingNumber(enemyEl, dmg, 'damage');
                     }
                 }
@@ -553,7 +737,7 @@ class Battle {
                     const dmg = this.dealDamageToEnemy(enemy, result.value);
                     const el = document.querySelector(`.enemy[data-index="${i}"]`);
                     if (el) {
-                        Utils.addShakeEffect(el);
+                        Utils.addShakeEffect(el, getShakeIntensity(dmg));
                         Utils.showFloatingNumber(el, dmg, 'damage');
                     }
                 }
@@ -571,7 +755,7 @@ class Battle {
             case 'selfDamage':
                 const playerEl = document.querySelector('.player-avatar');
                 if (playerEl) {
-                    Utils.addShakeEffect(playerEl);
+                    Utils.addShakeEffect(playerEl, getShakeIntensity(result.value));
                     Utils.showFloatingNumber(playerEl, result.value, 'damage');
                 }
                 Utils.showBattleLog(`自伤 ${result.value} 点！`);
@@ -750,9 +934,22 @@ class Battle {
         // 检查战斗是否结束
         if (this.checkBattleEnd()) return;
 
+        // 环境：回合结束效果
+        if (this.activeEnvironment && this.activeEnvironment.onTurnEnd) {
+            this.activeEnvironment.onTurnEnd(this);
+            if (this.checkBattleEnd()) return;
+        }
+
         // 新回合
         this.turnNumber++;
         this.currentTurn = 'player';
+
+        // 环境：回合开始效果
+        if (this.activeEnvironment && this.activeEnvironment.onTurnStart) {
+            this.activeEnvironment.onTurnStart(this);
+            if (this.checkBattleEnd()) return; // 环境伤害可能致死
+        }
+
         this.player.startTurn();
 
         // 启用结束回合按钮
@@ -1057,5 +1254,100 @@ class Battle {
         }
 
         return false;
+    }
+    // 召唤敌人
+    summonEnemy(enemyId) {
+        if (this.enemies.length >= 4) {
+            Utils.showBattleLog('战场拥挤，无法召唤！');
+            return;
+        }
+
+        // 查找敌人数据 (需要在 enemies.js 中导出或全局可访问)
+        // 假设 ENEMIES 是全局变量
+        let enemyData = null;
+        if (typeof ENEMIES !== 'undefined') {
+            // 遍历所有天域查找
+            for (const key in ENEMIES) {
+                if (ENEMIES[key].id === enemyId) {
+                    enemyData = ENEMIES[key];
+                    break;
+                }
+            }
+        }
+
+        if (!enemyData) {
+            // 尝试在当前天域查找
+            const realmEnemies = getEnemiesForRealm(this.player.realm);
+            enemyData = realmEnemies.find(e => e.id === enemyId);
+        }
+
+        if (enemyData) {
+            const newEnemy = this.createEnemyInstance(enemyData);
+            this.enemies.push(newEnemy);
+            Utils.showBattleLog(`召唤了 ${newEnemy.name}！`);
+
+            // 播放召唤特效
+            if (typeof particles !== 'undefined') {
+                // 暂时没有特定召唤特效，用通用的
+            }
+
+            this.updateEnemiesUI();
+        } else {
+            console.error(`Summon failed: Enemy ${enemyId} not found`);
+        }
+    }
+
+    // 检查阶段转换
+    checkPhaseChange(enemy) {
+        if (!enemy.phases || enemy.currentPhase >= enemy.phases.length) return;
+
+        // 初始化 phases
+        if (typeof enemy.currentPhase === 'undefined') enemy.currentPhase = 0;
+
+        const nextPhase = enemy.phases[enemy.currentPhase]; // 这里 enemy.currentPhase 初始应为 0，对应 phases[0] 即第一个转阶段配置
+
+        // 修正逻辑：如果当前 Hp 比例低于 phase 阈值
+        if (nextPhase && (enemy.currentHp / enemy.hp) <= nextPhase.threshold) {
+            // 触发转阶段
+            enemy.currentPhase++; // 增加阶段计数，避免重复触发
+            Utils.showBattleLog(`${enemy.name} 进入${nextPhase.name}形态！`);
+
+            // 更新行动模式
+            if (nextPhase.patterns) {
+                enemy.patterns = nextPhase.patterns;
+                enemy.currentPatternIndex = 0; // 重置循环
+            }
+
+            // 播放特效
+            const enemyEl = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`);
+            if (enemyEl) {
+                Utils.addShakeEffect(enemyEl, 'heavy');
+                Utils.addFlashEffect(enemyEl, 'red'); // 狂暴红光
+            }
+
+            // 恢复少量生命?
+            if (nextPhase.heal) {
+                const healAmt = Math.floor(enemy.hp * nextPhase.heal);
+                enemy.currentHp = Math.min(enemy.hp, enemy.currentHp + healAmt);
+                Utils.showBattleLog(`${enemy.name} 恢复了力量！`);
+            }
+        }
+    }
+
+    // 更新环境UI
+    updateEnvironmentUI() {
+        const envEl = document.getElementById('battle-environment');
+        if (!envEl) return;
+
+        if (this.activeEnvironment) {
+            envEl.style.display = 'flex';
+            envEl.innerHTML = `
+                <span class="env-icon">${this.activeEnvironment.icon}</span>
+                <span class="env-name">${this.activeEnvironment.name}</span>
+            `;
+            envEl.title = this.activeEnvironment.description;
+        } else {
+            envEl.style.display = 'none';
+        }
     }
 }

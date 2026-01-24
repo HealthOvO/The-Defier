@@ -3837,3 +3837,40 @@ body {
         height: 18px;
     }
 }
+
+/* ===================================
+   新增 UI (P0 Update)
+   =================================== */
+
+/* 伤害预览 */
+.enemy-hp-preview {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.5);
+    animation: previewBlink 1s infinite alternate;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.enemy-hp-fill.will-die {
+    animation: lethalPulse 0.5s infinite alternate;
+    background: #444 !important;
+}
+
+/* 工具提示 */
+.game-tooltip {
+    position: fixed;
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid var(--accent-gold);
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 2000;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    display: none;
+    transform: translate(-50%, -120%);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+}

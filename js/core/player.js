@@ -1229,5 +1229,31 @@ class Player {
             }
         });
     }
+    // 检查Buff
+    hasBuff(type) {
+        return this.buffs && this.buffs[type] && this.buffs[type] > 0;
+    }
+
+    // 添加Buff
+    addBuff(type, value) {
+        if (!this.buffs) this.buffs = {};
+        this.buffs[type] = (this.buffs[type] || 0) + value;
+
+        // 特殊Buff处理
+        if (type === 'strength' && value > 0) {
+            Utils.showBattleLog(`获得 ${value} 点力量`);
+        }
+    }
+
+    // 移除Buff
+    removeBuff(type, value = 0) {
+        if (!this.hasBuff(type)) return;
+
+        if (value <= 0 || value >= this.buffs[type]) {
+            delete this.buffs[type];
+        } else {
+            this.buffs[type] -= value;
+        }
+    }
 }
 

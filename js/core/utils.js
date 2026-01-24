@@ -30,31 +30,108 @@ const Utils = {
         floater.textContent = type === 'damage' ? `-${value}` : `+${value}`;
 
         const rect = element.getBoundingClientRect();
-        floater.style.left = `${rect.left + rect.width / 2}px`;
+        // 居中并稍微随机偏移
+        const offsetX = (Math.random() - 0.5) * 20;
+        floater.style.left = `${rect.left + rect.width / 2 + offsetX}px`;
         floater.style.top = `${rect.top}px`;
 
         document.body.appendChild(floater);
 
+        // 简单的粒子效果 (Particles)
+        if (type === 'damage' && typeof particles !== 'undefined') {
+            // 使用 CSS 粒子或简单的 DOM 粒子
+            for (let i = 0; i < 3; i++) {
+                this.spawnParticle(rect.left + rect.width / 2, rect.top + 20, 'var(--accent-red)');
+            }
+        }
+
         setTimeout(() => floater.remove(), 1000);
     },
 
-    // 添加震动效果
-    addShakeEffect(element) {
-        element.classList.add('shake');
-        setTimeout(() => element.classList.remove('shake'), 300);
+    // 生成简单粒子
+    spawnParticle(x, y, color) {
+        const p = document.createElement('div');
+        p.className = 'vfx-particle';
+        p.style.backgroundColor = color;
+        p.style.left = x + 'px';
+        p.style.top = y + 'px';
+
+        // 随机方向
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 30 + 20;
+        const tx = Math.cos(angle) * speed;
+        const ty = Math.sin(angle) * speed;
+
+        p.style.setProperty('--tx', `${tx}px`);
+        p.style.setProperty('--ty', `${ty}px`);
+
+        document.body.appendChild(p);
+        setTimeout(() => p.remove(), 600);
+    },
+
+    // 添加震动效果 (支持强度)
+    addShakeEffect(element, intensity = 'medium') {
+        // 移除旧震动
+        element.classList.remove('shake', 'shake-light', 'shake-heavy');
+        void element.offsetWidth; // 触发重绘
+
+        let className = 'shake';
+        if (intensity === 'light') className = 'shake-light';
+        if (intensity === 'heavy') className = 'shake-heavy';
+
+        element.classList.add(className);
+        setTimeout(() => element.classList.remove(className), 500);
     },
 
     // 添加闪光效果
-    addFlashEffect(element) {
+    addFlashEffect(element, color = '') {
+        element.classList.remove('damage-flash');
+        void element.offsetWidth;
+
+        if (color) element.style.setProperty('--flash-color', color);
+
         element.classList.add('damage-flash');
-        setTimeout(() => element.classList.remove('damage-flash'), 200);
+        setTimeout(() => {
+            element.classList.remove('damage-flash');
+            if (color) element.style.removeProperty('--flash-color');
+        }, 200);
     },
+
+    // ---------------- UI/UX 辅助 ----------------
+
+    // 显示工具提示
+    showTooltip(text, x, y) {
+        let tooltip = document.getElementById('game-tooltip');
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.id = 'game-tooltip';
+            tooltip.className = 'game-tooltip';
+            document.body.appendChild(tooltip);
+        }
+        tooltip.innerHTML = text;
+        tooltip.style.display = 'block';
+        tooltip.style.left = x + 'px';
+        tooltip.style.top = y + 'px';
+    },
+
+    hideTooltip() {
+        const tooltip = document.getElementById('game-tooltip');
+        if (tooltip) tooltip.style.display = 'none';
+    },
+
+    // -------------------------------------------
 
     // 显示战斗日志
     showBattleLog(message) {
         const log = document.getElementById('battle-log');
         log.textContent = message;
         log.classList.add('show');
+
+        // 重置动画
+        log.style.animation = 'none';
+        log.offsetHeight; /* trigger reflow */
+        log.style.animation = null;
+
         setTimeout(() => log.classList.remove('show'), 2000);
     },
 
@@ -280,6 +357,7 @@ const Utils = {
             nextAttackBonus: '聚气',
             damageReduction: '减伤',
             stealth: '潜行',
+            controlImmune: '控制抵抗',
             artifact: '神力'
         };
         return names[type] || type;
@@ -305,6 +383,7 @@ const Utils = {
             nextAttackBonus: '🎯',
             damageReduction: '🛡️',
             stealth: '👻',
+            controlImmune: '🛡️',
             artifact: '🏺' // 神器/宝物效果
         };
         return icons[type] || '';
@@ -318,18 +397,33 @@ const Utils = {
 
         const currentPattern = enemy.patterns[enemy.currentPatternIndex || 0];
         const intentIcon = currentPattern.intent || '❓';
-        const intentValue = currentPattern.value || '';
+        const intentValue = currentPattern.value ? (currentPattern.count ? `${currentPattern.value}x${currentPattern.count}` : currentPattern.value) : '';
+
+        // 意图详细描述
+        let intentDesc = '';
+        switch (currentPattern.type) {
+            case 'attack': intentDesc = `意图：攻击 ${currentPattern.value} 点伤害`; break;
+            case 'multiAttack': intentDesc = `意图：连击 ${currentPattern.value} x ${currentPattern.count} 次`; break;
+            case 'defend': intentDesc = `意图：获得 ${currentPattern.value} 点护盾`; break;
+            case 'buff': intentDesc = `意图：强化自身`; break;
+            case 'debuff': intentDesc = `意图：削弱玩家`; break;
+            case 'heal': intentDesc = `意图：恢复 ${currentPattern.value} 点生命`; break;
+            default: intentDesc = '意图：未知';
+        }
 
         enemyEl.innerHTML = `
             <div class="enemy-avatar">
                 ${enemy.icon}
-                <div class="enemy-intent ${currentPattern.type}">
+                <div class="enemy-intent ${currentPattern.type}" 
+                     onmouseenter="Utils.showTooltip('${intentDesc}', event.clientX, event.clientY)"
+                     onmouseleave="Utils.hideTooltip()">
                     ${intentIcon}
                     ${intentValue ? `<span class="intent-value">${intentValue}</span>` : ''}
                 </div>
             </div>
             <div class="enemy-name">${enemy.name}</div>
             <div class="enemy-hp">
+                <div class="enemy-hp-preview" style="width: 0%"></div>
                 <div class="enemy-hp-fill" style="width: ${(enemy.currentHp / enemy.hp) * 100}%"></div>
             </div>
             <div class="enemy-hp-text">${enemy.currentHp}/${enemy.hp}</div>

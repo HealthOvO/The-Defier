@@ -980,6 +980,37 @@ const ENEMIES = {
         gold: { min: 600, max: 800 }
     },
 
+    fireDemon: {
+        id: 'fireDemon',
+        name: '烈火魔尊',
+        icon: '👹',
+        realm: 4,
+        isBoss: true,
+        hp: 200,
+        patterns: [
+            { type: 'attack', value: 15, intent: '⚔️' },
+            { type: 'buff', buffType: 'strength', value: 2, intent: '💪' },
+            { type: 'debuff', buffType: 'burn', value: 3, intent: '🔥' },
+            { type: 'attack', value: 20, intent: '💀' }
+        ],
+        // P1: 阶段转换
+        phases: [
+            {
+                threshold: 0.5,
+                name: '狂暴',
+                heal: 0.1,
+                patterns: [
+                    { type: 'attack', value: 25, intent: '⚔️' }, // 伤害提升
+                    { type: 'multiAttack', value: 10, count: 3, intent: '🔥' },
+                    { type: 'debuff', buffType: 'burn', value: 5, intent: '🔥' }
+                ]
+            }
+        ],
+        stealChance: 0.6,
+        stealLaw: 'flameTruth',
+        gold: { min: 200, max: 300 }
+    },
+
     voidDevourer: {
         id: 'voidDevourer',
         name: '虚空吞噬者',
