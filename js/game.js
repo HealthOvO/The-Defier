@@ -2484,15 +2484,30 @@ class Game {
         if (type === 'card') {
             this.player.addCardToDeck(item.card);
             Utils.showBattleLog(`购买了 ${item.card.name}`);
+
+            // 扣款并标记
+            this.player.gold -= item.price;
+            item.sold = true;
         } else {
             // 处理服务效果
-            const success = this.applyServiceEffect(item);
-            if (!success) return; // 如果效果执行失败（如满血购买治疗？），不扣钱
-        }
+            const result = this.applyServiceEffect(item);
 
-        // 扣款并标记
-        this.player.gold -= item.price;
-        item.sold = true;
+            if (!result) return; // 失败/取消
+
+            if (result === 'deferred') {
+                return; // 延迟扣款处理 (如移除卡牌)
+            }
+
+            // 立即扣款
+            this.player.gold -= item.price;
+
+            if (result === 'repeatable') {
+                // 可重复购买，不标记为售出
+                // 如果导致涨价，在 applyServiceEffect 中已经处理
+            } else {
+                item.sold = true;
+            }
+        }
 
         // 更新UI
         document.getElementById('shop-gold-display').textContent = this.player.gold;
@@ -2575,8 +2590,8 @@ class Game {
                 return true;
 
             case 'remove':
-                this.showRemoveCard(service); // 特殊处理：需要打开选择界面
-                return false; // 不在 buyItem 中立刻扣款，由 showRemoveCard 处理
+                this.showRemoveCard(service);
+                return 'deferred';
 
             case 'exp':
                 this.player.fateRing.exp += 50;
@@ -2607,21 +2622,8 @@ class Game {
                 // 刷新卡牌
                 this.shopItems = this.generateShopCards(5);
                 Utils.showBattleLog('商店货物已刷新');
-                this.renderShop();
-                // 刷新服务可以重复购买，所以要把 sold 设回 false
-                // 但 buyItem 会把它设为 true。我们需要手动重置。
-                // 稍微麻烦点：在 buyItem 中，如果 applyServiceEffect 返回 'repeatable'，就不设为 sold。
-                // 或者在这里简单一点，把本次购买的 service item 重新加入？
-                // 简单处理：刷新服务本身不刷新，但可以多次购买。
-                // 由于 buyItem 会设置 sold=true，我们需要在外部修正，或让 applyServiceEffect 返回特殊值。
-                // 暂时让刷新是一次性的？不，刷新应该可以说是多次。
-                // HACK: 找到当前服务对象并重置 sold
-                setTimeout(() => {
-                    const refreshService = this.shopServices.find(s => s.id === 'refresh');
-                    if (refreshService) refreshService.sold = false;
-                    this.renderShop();
-                }, 50);
-                return true;
+                // 不在这里 renderShop，由 buyItem 统一处理
+                return 'repeatable';
 
             case 'gamble':
                 const roll = Math.random();
@@ -2664,18 +2666,10 @@ class Game {
                     }
                 }
 
-                // 盲盒也可以重复买
-                setTimeout(() => {
-                    const gambleService = this.shopServices.find(s => s.id === 'gamble');
-                    if (gambleService) {
-                        gambleService.sold = false;
-                        // 稍微涨价？
-                        gambleService.price = Math.floor(gambleService.price * 1.5);
-                        gambleService.name = '神秘盲盒 (涨价了)'
-                    }
-                    this.renderShop();
-                }, 50);
-                return true;
+                // 盲盒涨价逻辑
+                service.price = Math.floor(service.price * 1.5);
+                service.name = '神秘盲盒 (涨价了)';
+                return 'repeatable';
 
             default:
                 return false;

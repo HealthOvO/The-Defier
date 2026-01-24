@@ -260,11 +260,11 @@ const CARDS = {
         type: 'law',
         cost: 2,
         icon: '🕳️',
-        description: '造成敌人已损失生命值30%的伤害',
+        description: '造成敌人已损失生命值15%的伤害',
         rarity: 'legendary',
         lawType: 'void',
         effects: [
-            { type: 'execute', value: 0.3, target: 'enemy' }
+            { type: 'execute', value: 0.15, target: 'enemy' }
         ]
     },
 
@@ -1100,7 +1100,12 @@ const UPGRADE_RULES = {
         soulHarvest: { damage: 5, maxHp: 1 }, // 12/2 -> 17/3
         fateTwist: { costReduction: 1 }, // 1 -> 0
         divineShield: { multiplier: 3 }, // 5 -> 8
-        stormFury: { damage: 2 } // 4 -> 6
+        stormFury: { damage: 2 }, // 4 -> 6
+
+        // 修正：虚空拥抱升级不加百分比，改为减费
+        // 修正：虚空拥抱升级 +15% (15% -> 30%)
+        voidEmbrace: { multiplier: 0.15 },
+        karmaKill: { percent: 0.1 } // 15% -> 25%
     }
 };
 

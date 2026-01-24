@@ -267,17 +267,30 @@ class GameMap {
 
     // 触发事件
     triggerEvent(node) {
-        // 使用events.js的事件数据
+        // 确保 getRandomEvent 可用
+        if (typeof getRandomEvent !== 'function') {
+            console.error('getRandomEvent not found');
+            this.completeNode(node);
+            return;
+        }
+
         const event = getRandomEvent();
+        console.log('Triggering event:', event);
+
         if (event) {
             this.game.showEventModal(event, node);
         } else {
-            // 后备处理
+            // 后备处理：如果随机池为空或出错
+            console.warn('No event returned from pool');
             this.game.player.gold += 30;
             this.game.player.fateRing.exp += 15;
-            Utils.showBattleLog('遭遇神秘事件 - 获得 30 灵石');
+            Utils.showBattleLog('遭遇神秘迷雾... 捡到 30 灵石');
             this.completeNode(node);
-            this.game.showScreen('map-screen');
+            // 确保切回地图，防止卡住
+            // setTimeout(() => this.game.showScreen('map-screen'), 1000); 
+            // completeNode 会 render，但如果当前screen不是map?
+            // 通常 triggerEvent 是在 node click -> battle finish -> map screen 流程中?
+            // 不，event node click 直接触发。
         }
     }
 
@@ -359,5 +372,17 @@ class GameMap {
             }
         }
         return accessible;
+    }
+
+    // 获取天域名称
+    getRealmName(realm) {
+        const names = [
+            '凡尘界', '练气天', '筑基天', '金丹天', '元婴天',
+            '化神天', '合体天', '大乘天', '飞升天', '地仙界',
+            '天仙界', '金仙界', '大罗天', '混元天', '无上天',
+            '虚空境', '混沌境', '本源境'
+        ];
+        const index = Math.min(Math.max(0, realm - 1), names.length - 1);
+        return `第${realm}重·${names[index]}`;
     }
 }

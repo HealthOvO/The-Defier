@@ -174,9 +174,42 @@ class Player {
     }
 
     // 准备战斗
+    // 修复牌组数据（每次战斗前重置，防止费用永久变更）
+    sanitizeDeck() {
+        if (!this.deck || this.deck.length === 0) return;
+
+        this.deck = this.deck.map(card => {
+            if (!card || !card.id || !CARDS[card.id]) return card;
+
+            // 基于原始数据重建卡牌
+            let freshCard = JSON.parse(JSON.stringify(CARDS[card.id])); // 深拷贝原始数据
+
+            // 如果已升级，应用升级效果
+            if (card.upgraded) {
+                // upgradeCard 返回新对象，所以我们要小心
+                if (typeof upgradeCard === 'function') {
+                    freshCard = upgradeCard(freshCard);
+                } else {
+                    freshCard.upgraded = true; // Fallback
+                }
+            }
+
+            // 保留实例ID (如果存在)
+            if (card.instanceId) freshCard.instanceId = card.instanceId;
+            else freshCard.instanceId = this.generateCardId();
+
+            return freshCard;
+        });
+    }
+
+    // 准备战斗
     prepareBattle() {
+        // 关键修复：战斗前净化牌组，修复潜在的费用错误
+        this.sanitizeDeck();
+
         this.hand = [];
-        this.drawPile = Utils.shuffle([...this.deck]);
+        // 关键修复：战斗牌堆必须是深拷贝，防止战斗中修改污染原牌组（如费用变化）
+        this.drawPile = Utils.shuffle(JSON.parse(JSON.stringify(this.deck)));
         this.discardPile = [];
         this.exhaustPile = [];
         this.block = 0;
