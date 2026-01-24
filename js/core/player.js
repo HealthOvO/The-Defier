@@ -798,6 +798,8 @@ class Player {
             // Utils.showBattleLog('天人五衰：负面状态加深');
         }
 
+
+
         if (this.buffs[type]) {
             this.buffs[type] += value;
         } else {
@@ -830,6 +832,17 @@ class Player {
         // 触发buff获得时的回调（如果有）
         if (type === 'strength') {
             // Strength logic handled dynamically
+        }
+    }
+
+    // 添加永久属性加成
+    addPermBuff(stat, value) {
+        if (!this.permBuffs) this.permBuffs = {};
+        this.permBuffs[stat] = (this.permBuffs[stat] || 0) + value;
+
+        // 如果是基础属性，立即重新计算
+        if (['maxHp', 'energy', 'draw'].includes(stat)) {
+            this.recalculateStats();
         }
     }
 
