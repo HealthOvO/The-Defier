@@ -23,7 +23,8 @@ const CHARACTERS = {
             desc: '每次战斗胜利获得额外命环经验 (+20 + 5x等级)。'
         },
         themeColor: 'var(--accent-gold)',
-        bgImage: 'linear-gradient(135deg, rgba(255,215,0,0.1) 0%, rgba(0,0,0,0.8) 100%)'
+        bgImage: 'linear-gradient(135deg, rgba(255,215,0,0.1) 0%, rgba(0,0,0,0.8) 100%)',
+        activeSkillId: 'heavensDefiance'
     },
     xiangYe: {
         id: 'xiangYe',
@@ -44,7 +45,8 @@ const CHARACTERS = {
             desc: '回合开始时，回复 2+(等级/3) 点生命值。'
         },
         themeColor: 'var(--accent-green)',
-        bgImage: 'linear-gradient(135deg, rgba(76,175,80,0.1) 0%, rgba(0,0,0,0.8) 100%)'
+        bgImage: 'linear-gradient(135deg, rgba(76,175,80,0.1) 0%, rgba(0,0,0,0.8) 100%)',
+        activeSkillId: 'lifeBloom'
     },
     wuYu: {
         id: 'wuYu',
@@ -65,7 +67,8 @@ const CHARACTERS = {
             desc: '战斗开始时，获得 6+等级 点护盾。'
         },
         themeColor: 'var(--accent-red)', // Orange-ish Red
-        bgImage: 'linear-gradient(135deg, rgba(255,87,34,0.1) 0%, rgba(0,0,0,0.8) 100%)'
+        bgImage: 'linear-gradient(135deg, rgba(255,87,34,0.1) 0%, rgba(0,0,0,0.8) 100%)',
+        activeSkillId: 'vajraIndestructible'
     },
     yanHan: {
         id: 'yanHan',
@@ -86,6 +89,7 @@ const CHARACTERS = {
             desc: '战斗开始时，随机获得1张0费技能牌 (5级后获得2张)。'
         },
         themeColor: '#2196F3',
-        bgImage: 'linear-gradient(135deg, rgba(33,150,243,0.1) 0%, rgba(0,0,0,0.8) 100%)'
+        bgImage: 'linear-gradient(135deg, rgba(33,150,243,0.1) 0%, rgba(0,0,0,0.8) 100%)',
+        activeSkillId: 'absoluteTruth'
     }
 };

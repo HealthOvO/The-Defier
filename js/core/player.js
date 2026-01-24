@@ -20,7 +20,18 @@ class Player {
         // 战斗属性
         this.baseEnergy = charData.stats.energy;
         this.currentEnergy = this.baseEnergy;
+        this.currentEnergy = this.baseEnergy;
         this.drawCount = 5;
+
+        // 奶糖 (Milk Candy) - 抽牌资源
+        this.milkCandy = 0;
+        this.maxMilkCandy = 3; // 初始上限
+
+        // 主动技能
+        this.activeSkill = null;
+        this.skillLevel = 0; // 0=Locked, 1=Unlocked, 2=Upgraded, 3=Max
+        this.skillCooldown = 0;
+        this.maxCooldown = 0;
 
         // 牌组
         this.deck = [];
@@ -76,6 +87,50 @@ class Player {
 
         // 初始化牌组
         this.initializeDeck(charData.deck);
+
+        // 初始化技能
+        if (charData.activeSkillId) {
+            this.initSkill(charData.activeSkillId);
+        }
+    }
+
+    initSkill(skillId) {
+        if (!SKILLS[skillId]) return;
+        this.activeSkill = { ...SKILLS[skillId] };
+        this.maxCooldown = this.activeSkill.cooldown;
+        this.skillCooldown = 0; // Ready at start? Or start on cooldown? Let's say Ready.
+    }
+
+    unlockUltimate(level) {
+        if (level > this.skillLevel) {
+            this.skillLevel = level;
+            Utils.showBattleLog(`境界突破！主动技能等级提升至 Lv.${level}`);
+            // May reduce cooldown or enhance effect in future
+        }
+    }
+
+    activateSkill(battle) {
+        if (!this.activeSkill || this.skillLevel <= 0) {
+            Utils.showBattleLog('尚未解锁主动技能！');
+            return false;
+        }
+        if (this.skillCooldown > 0) {
+            Utils.showBattleLog(`技能冷却中... (${this.skillCooldown})`);
+            return false;
+        }
+
+        const success = this.activeSkill.effect(this, battle);
+        if (success) {
+            this.skillCooldown = this.maxCooldown;
+            // Level bonus: Lv 2 -> Cooldown -1, Lv 3 -> Cooldown -2?
+            // Simple implementation for now.
+            if (this.skillLevel >= 2) this.skillCooldown = Math.max(1, this.maxCooldown - 1);
+            if (this.skillLevel >= 3) this.skillCooldown = Math.max(1, this.maxCooldown - 2);
+
+            Utils.showBattleLog(`释放终极技能：${this.activeSkill.name}！`);
+            return true;
+        }
+        return false;
     }
 
     initializeDeck(deckList) {
@@ -233,7 +288,12 @@ class Player {
         this.drawPile = Utils.shuffle(JSON.parse(JSON.stringify(this.deck)));
         this.discardPile = [];
         this.exhaustPile = [];
+        this.exhaustPile = [];
         this.block = 0;
+
+        // 战斗开始重置奶糖 (每场战斗/每个敌人重置? 用户说 "Reset per enemy", usually means per battle or per dynamic spawn? Battle.init calls this per battle. So reset here is correct per battle. If "per enemy" means something else, I'll stick to per battle/start.)
+        this.milkCandy = this.maxMilkCandy;
+
         this.turnNumber = 0; // 初始化回合数
 
         // 确保战斗前属性是最新的
@@ -267,7 +327,11 @@ class Player {
                 const randomSkill = skills[Math.floor(Math.random() * skills.length)];
                 const card = CARDS[randomSkill];
                 if (card) {
-                    this.hand.push({ ...card, instanceId: this.generateCardId(), cost: 0, isTemp: true });
+                    // 临时卡：花费由 playCard 逻辑自动处理 (若是draw则消耗糖，否则消耗灵力)
+                    // 用户说 "Spend, not 0 cost". So we keep original cost? 
+                    // Or "Temporary cards ... need spend". 
+                    // Previously I set cost: 0. Now I remove `cost: 0`.
+                    this.hand.push({ ...card, instanceId: this.generateCardId(), isTemp: true });
                 }
             }
             Utils.showBattleLog(`真理之镜：获得 ${count} 张临时技能牌`);
@@ -280,7 +344,7 @@ class Player {
                 const randomSkill = skills[Math.floor(Math.random() * skills.length)];
                 const card = CARDS[randomSkill];
                 if (card) {
-                    this.hand.push({ ...card, instanceId: this.generateCardId(), cost: 0, isTemp: true });
+                    this.hand.push({ ...card, instanceId: this.generateCardId(), isTemp: true });
                 }
             }
             Utils.showBattleLog('智慧之环：获得额外技能牌');
@@ -292,6 +356,10 @@ class Player {
 
     // 开始回合
     startTurn() {
+        if (this.skillCooldown > 0) {
+            this.skillCooldown--;
+        }
+
         this.turnNumber++; // 增加回合计数
         this.currentEnergy = this.baseEnergy;
 
@@ -542,21 +610,60 @@ class Player {
         return { dodged: false, damage: amount - remainingDamage };
     }
 
+    // 弃掉所有手牌
+    discardHand() {
+        const count = this.hand.length;
+        while (this.hand.length > 0) {
+            this.discardPile.push(this.hand.pop());
+        }
+        return count;
+    }
+
     // 使用卡牌
     playCard(cardIndex, target = null) {
         const card = this.hand[cardIndex];
         if (!card) return false;
 
-        // 6. 法则混乱 (realm 6) - 费用随机变化已在抽牌时或回合开始处理？
-        // 实际上最好是在使用时动态计算，或者在抽到手牌时修改 cost
-        // 为了简化，我们假设抽到时已经变了，或者在这里动态增加消耗
-        // 但标准做法是修改卡牌对象的 cost 属性
+        // 检查是否不可打出
+        if (card.unplayable) {
+            Utils.showBattleLog('此牌不可打出！');
+            return false;
+        }
+
+        // 检查奶糖消耗 (如果包含抽牌效果)
+        // 规则: 抽牌卡不消耗灵力，消耗奶糖
+        // 我们检查卡牌是否有 'draw' 或 'drawCalculated' 效果
+        const hasDraw = card.effects.some(e => e.type === 'draw' || e.type === 'drawCalculated' || e.type === 'conditionalDraw' || e.type === 'randomCards');
+
+        // 计算消耗
+        let energyCost = card.cost;
+        let candyCost = 0;
+
+        if (hasDraw) {
+            energyCost = 0; // 抽牌卡不消耗灵力
+            // 奶糖消耗：暂定为 1 点 (无论抽多少) 或者 根据抽牌量? 
+            // 用户说 "Consumption by you". Let's make it 1 Candy per Draw Card play.
+            candyCost = 1;
+        }
 
         // 检查灵力
-        if (card.cost > this.currentEnergy) return false;
+        if (energyCost > 0 && this.currentEnergy < energyCost) {
+            Utils.showBattleLog('灵力不足！');
+            return false;
+        }
 
-        // 消耗灵力
-        this.currentEnergy -= card.cost;
+        // 检查奶糖
+        if (candyCost > 0 && this.milkCandy < candyCost) {
+            Utils.showBattleLog('奶糖不足！无法发动抽牌');
+            return false;
+        }
+
+        // 消耗资源
+        if (energyCost > 0) this.currentEnergy -= energyCost;
+        if (candyCost > 0) {
+            this.milkCandy -= candyCost;
+            // Update UI for candy? (Will be handled in Game/Battle updateUI)
+        }
 
         // 从手牌移除
         this.hand.splice(cardIndex, 1);
@@ -569,8 +676,16 @@ class Player {
         // 执行卡牌效果
         const results = this.executeCardEffects(card, target);
 
-        // 加入弃牌堆
-        this.discardPile.push(card);
+        // 临时卡 (isTemp) -> 消耗 (Exhaust) 而非弃牌
+        // 且需要确认临时卡是否本来就是消耗属性 (exhaust: true). 
+        // 用户要求: "Temporary cards ... use and delete".
+        if (card.isTemp || card.exhaust) {
+            this.exhaustPile.push(card);
+            Utils.showBattleLog('卡牌已消耗');
+        } else {
+            // 加入弃牌堆
+            this.discardPile.push(card);
+        }
 
         return results;
     }

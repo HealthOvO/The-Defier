@@ -237,6 +237,17 @@
                             <span class="block-value" id="block-value">0</span>
                         </div>
                     </div>
+
+                    <!-- 主动技能按钮 (Inserted) -->
+                    <div id="active-skill-btn" class="active-skill-container" onclick="game.activatePlayerSkill()">
+                        <div class="skill-icon">⚡</div>
+                        <div class="skill-cooldown-overlay"></div>
+                        <div class="skill-cooldown-text"></div>
+                        <div class="skill-tooltip">
+                            <div class="skill-name">逆天改命</div>
+                            <div class="skill-desc">丢弃手牌，抽5张牌，回3灵力</div>
+                        </div>
+                    </div>
                 </div>
                 <div class="energy-display">
                     <div class="energy-orbs" id="energy-orbs">
@@ -417,6 +428,21 @@
         </div>
     </div>
 
+    <!-- 技能确认弹窗 -->
+    <div id="skill-confirm-modal" class="modal">
+        <div class="modal-content" style="text-align: center; max-width: 400px;">
+            <button class="modal-close" onclick="game.closeModal()">×</button>
+            <h2 id="skill-confirm-title" style="color: var(--accent-gold); margin-bottom: 20px;">技能确认</h2>
+            <div id="skill-confirm-icon" style="font-size: 4rem; margin: 20px 0;">⚡</div>
+            <p id="skill-confirm-desc"
+                style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 30px; line-height: 1.6;"></p>
+            <div class="skill-confirm-actions" style="display: flex; justify-content: center; gap: 20px;">
+                <button class="menu-btn primary small" onclick="game.confirmActivateSkill()">释放技能</button>
+                <button class="menu-btn small" onclick="game.closeModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 游戏介绍/设置弹窗 -->
     <div id="settings-modal" class="modal">
         <div class="modal-content settings-view">
@@ -451,6 +477,7 @@
     <script src="js/data/treasures.js"></script>
     <script src="js/data/events.js"></script>
     <script src="js/data/achievements.js"></script>
+    <script src="js/data/skills.js"></script>
     <script src="js/data/characters.js"></script>
     <script src="js/core/utils.js"></script>
     <script src="js/core/particles.js"></script>

@@ -1048,6 +1048,57 @@ const ENEMIES = {
         stealChance: 1.0,
         stealLaw: 'chaosLaw', // 或者终极法则
         gold: { min: 5000, max: 9999 }
+    },
+    tribulationCloud5: {
+        id: 'tribulationCloud5',
+        name: '五九天劫',
+        icon: '⛈️',
+        realm: 5,
+        isBoss: true,
+        isTribulation: true,
+        hp: 300, // High HP, goal is survival or deplete
+        patterns: [
+            { type: 'tribulationStrike', value: 10, intent: '⚡' },
+            { type: 'innerDemon', card: 'demonDoubt', count: 1, intent: '👻' },
+            { type: 'tribulationStrike', value: 15, intent: '⚡' }
+        ],
+        description: '天道降下的第一次考验。每回合受到真实伤害。',
+        gold: { min: 0, max: 0 }
+    },
+    tribulationCloud10: {
+        id: 'tribulationCloud10',
+        name: '九九重劫',
+        icon: '⛈️',
+        realm: 10,
+        isBoss: true,
+        isTribulation: true,
+        hp: 800,
+        patterns: [
+            { type: 'tribulationStrike', value: 20, intent: '⚡' },
+            { type: 'innerDemon', card: 'demonFear', count: 1, intent: '👻' },
+            { type: 'tribulationStrike', value: 25, intent: '⚡' },
+            { type: 'tribulationStrike', value: 30, intent: '⚡' }
+        ],
+        description: '更加凶险的天劫。心魔滋生，雷霆万钧。',
+        gold: { min: 0, max: 0 }
+    },
+    tribulationCloud15: {
+        id: 'tribulationCloud15',
+        name: '寂灭道劫',
+        icon: '⛈️',
+        realm: 15,
+        isBoss: true,
+        isTribulation: true,
+        hp: 2000,
+        patterns: [
+            { type: 'tribulationStrike', value: 40, intent: '⚡' },
+            { type: 'innerDemon', card: 'demonDespair', count: 2, intent: '👻' },
+            { type: 'tribulationStrike', value: 50, intent: '⚡' },
+            { type: 'tribulationStrike', value: 60, intent: '⚡' },
+            { type: 'innerDemon', card: 'demonFear', count: 2, intent: '👻' }
+        ],
+        description: '大道的终极考验。唯有心如止水，方能渡过。',
+        gold: { min: 0, max: 0 }
     }
 };
 

@@ -247,6 +247,29 @@ class GameMap {
     // 开始BOSS战斗
     startBossBattle(node) {
         const realm = this.game.player.realm;
+
+        // 5-10-15 层天劫BOSS特殊处理
+        if ([5, 10, 15].includes(realm)) {
+            let tribId = 'tribulationCloud5';
+            if (realm === 10) tribId = 'tribulationCloud10';
+            if (realm === 15) tribId = 'tribulationCloud15';
+
+            // Check if tribulation boss exists in definition
+            // Assuming ENEMIES has these IDs. If not, fallback to normal boss.
+            if (ENEMIES[tribId]) {
+                const tBoss = JSON.parse(JSON.stringify(ENEMIES[tribId]));
+                tBoss.isBoss = true;
+                tBoss.isTribulation = true;
+                tBoss.ringExp = 100 + realm * 20;
+
+                this.game.currentBattleNode = node;
+                this.game.startBattle([tBoss], node);
+
+                Utils.showBattleLog(`【天劫降临】渡过此劫，逆天改命！`);
+                return;
+            }
+        }
+
         const boss = getBossForRealm(realm);
         if (boss) {
             const bossInstance = JSON.parse(JSON.stringify(boss));

@@ -250,6 +250,12 @@ class Game {
                 }
             }
 
+            // Retroactive Skill Unlock (Fix for existing saves)
+            // 确保旧存档中通过了天劫的玩家能解锁对应技能
+            if (this.player.realm >= 5) this.player.unlockUltimate(1);
+            if (this.player.realm >= 10) this.player.unlockUltimate(2);
+            if (this.player.realm >= 15) this.player.unlockUltimate(3);
+
             // Fix: Global Force Sync for Card Data Persistence
             // 强制同步卡牌数据：使用最新代码中的数值覆盖存档中的旧数据，解决旧存档数值不更新的问题
             if (this.player.deck) {
@@ -1304,6 +1310,18 @@ class Game {
                 this.player.fateRing.exp += effect.value;
                 this.player.checkFateRingLevelUp();
                 this.eventResults.push(`🔮 命环经验 +${effect.value}`);
+                // 如果导致升级，checkFateRingLevelUp 内部会处理并可能弹窗，但这里我们主要关注数值
+                break;
+
+            case 'gold':
+                if (effect.percent) {
+                    const amount = Math.floor(this.player.gold * (effect.percent / 100)); // percent is usually negative or positive e.g. -50
+                    this.player.gold += amount;
+                    this.eventResults.push(`💰 灵石 ${amount > 0 ? '+' : ''}${amount} (${effect.percent}%)`);
+                } else {
+                    this.player.gold += effect.value;
+                    this.eventResults.push(`💰 灵石 ${effect.value > 0 ? '+' : ''}${effect.value}`);
+                }
                 break;
 
             case 'card':
@@ -1405,7 +1423,7 @@ class Game {
                 if (trialEnemy) {
                     this.closeModal();
                     setTimeout(() => {
-                        this.startBattle(trialEnemy, this.currentBattleNode);
+                        this.startBattle([trialEnemy], this.currentBattleNode);
                     }, 300);
                 }
                 break;
@@ -1665,6 +1683,12 @@ class Game {
         if (!this.unlockedRealms.includes(this.player.realm + 1)) {
             this.unlockedRealms.push(this.player.realm + 1);
         }
+
+        // 解锁主动技能 (通过5, 10, 15重天)
+        // 玩家当前realm即将+1，所以通过Realm 5 = current realm is 5, next is 6.
+        if (this.player.realm === 5) this.player.unlockUltimate(1);
+        if (this.player.realm === 10) this.player.unlockUltimate(2);
+        if (this.player.realm === 15) this.player.unlockUltimate(3);
 
         // 检查是否通关所有天域 (现在是18重)
         if (this.player.realm >= 18) {
@@ -2523,6 +2547,155 @@ class Game {
         return items;
     }
 
+    // 更新UI
+    updateUI() {
+        if (this.currentScreen === 'map-screen') {
+            this.map.render();
+            this.updatePlayerDisplay();
+        } else if (this.currentScreen === 'battle-screen') {
+            this.updatePlayerDisplay();
+            if (this.battle) {
+                this.battle.updateBattleUI();
+                this.updateActiveSkillUI();
+            }
+        }
+    }
+
+    // 更新主动技能UI
+    updateActiveSkillUI() {
+        const btn = document.getElementById('active-skill-btn');
+        if (!btn) return;
+
+        const skill = this.player.activeSkill;
+        if (!skill || this.player.skillLevel === 0) {
+            btn.style.display = 'none';
+            return;
+        }
+
+        btn.style.display = 'flex';
+
+        // Icon
+        const iconEl = btn.querySelector('.skill-icon');
+        if (iconEl) iconEl.textContent = skill.icon;
+
+        // Tooltip
+        const nameEl = btn.querySelector('.skill-name');
+        const descEl = btn.querySelector('.skill-desc');
+        if (nameEl) nameEl.textContent = skill.name + (this.player.skillLevel > 1 ? ` Lv.${this.player.skillLevel}` : '');
+        if (descEl) descEl.textContent = skill.description;
+
+        // Cooldown
+        const overlay = btn.querySelector('.skill-cooldown-overlay');
+        const text = btn.querySelector('.skill-cooldown-text');
+
+        if (this.player.skillCooldown > 0) {
+            const pct = (this.player.skillCooldown / this.player.maxCooldown) * 100;
+            overlay.style.height = `${pct}%`;
+            text.textContent = this.player.skillCooldown;
+            btn.classList.add('cooldown');
+        } else {
+            overlay.style.height = '0%';
+            text.textContent = '';
+            btn.classList.remove('cooldown');
+            btn.classList.add('ready'); // Add ready class for animation
+        }
+
+        // CSS Injection for Active Skill Visibility
+        if (!document.getElementById('active-skill-style')) {
+            const style = document.createElement('style');
+            style.id = 'active-skill-style';
+            style.innerHTML = `
+                .active-skill-container {
+                    transition: all 0.3s ease;
+                    border: 2px solid transparent;
+                }
+                .active-skill-container.ready {
+                    border-color: var(--accent-gold);
+                    box-shadow: 0 0 15px var(--accent-gold), 0 0 5px #fff inset;
+                    animation: skillPulse 2s infinite;
+                    cursor: pointer;
+                    transform: scale(1.05);
+                }
+                .active-skill-container.ready:hover {
+                    transform: scale(1.15);
+                    box-shadow: 0 0 25px var(--accent-gold), 0 0 10px #fff inset;
+                }
+                @keyframes skillPulse {
+                    0% { box-shadow: 0 0 10px var(--accent-gold); }
+                    50% { box-shadow: 0 0 20px var(--accent-gold), 0 0 10px var(--accent-gold); }
+                    100% { box-shadow: 0 0 10px var(--accent-gold); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    }
+
+    // 激活主动技能 - 点击按钮触发
+    activatePlayerSkill() {
+        if (this.currentScreen !== 'battle-screen') return;
+        if (this.battle.currentTurn !== 'player') {
+            Utils.showBattleLog('现在不是你的回合！');
+            return;
+        }
+
+        // 预检查：是否冷却中
+        if (this.player.skillCooldown > 0) {
+            Utils.showBattleLog(`技能冷却中 (${this.player.skillCooldown})`);
+            return;
+        }
+
+        // 显示确认弹窗
+        this.showSkillConfirmModal();
+    }
+
+    // 显示技能确认弹窗
+    showSkillConfirmModal() {
+        const modal = document.getElementById('skill-confirm-modal');
+        const titleEl = document.getElementById('skill-confirm-title');
+        const iconEl = document.getElementById('skill-confirm-icon');
+        const descEl = document.getElementById('skill-confirm-desc');
+
+        if (this.player.activeSkill) {
+            titleEl.textContent = `${this.player.activeSkill.name}`;
+            iconEl.textContent = this.player.activeSkill.icon || '⚡';
+            descEl.textContent = this.player.activeSkill.description;
+        }
+
+        modal.classList.add('active');
+    }
+
+    // 确认释放技能
+    confirmActivateSkill() {
+        this.closeModal(); // 关闭弹窗
+
+        if (this.player.activateSkill(this.battle)) {
+            this.updateActiveSkillUI();
+            this.battle.updateBattleUI();
+            // 增强反馈
+            const btn = document.getElementById('active-skill-btn');
+            if (btn) {
+                Utils.addShakeEffect(btn);
+                btn.classList.remove('ready');
+
+                // Add particle effect logic if present, omitted for brevity/safety
+                if (typeof particles !== 'undefined') {
+                    // particles.createBurst(btn);
+                }
+            }
+
+            // Visual Flash
+            const flash = document.createElement('div');
+            flash.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(255,255,255,0.3);pointer-events:none;z-index:9999;transition:opacity 0.5s;';
+            document.body.appendChild(flash);
+            setTimeout(() => {
+                flash.style.opacity = '0';
+                setTimeout(() => flash.remove(), 500);
+            }, 50);
+
+            if (typeof audioManager !== 'undefined') audioManager.playSFX('buff');
+        }
+    }
+
     // 获取卡牌基础价格
     getCardPrice(card) {
         const rarityPrices = {
@@ -2795,6 +2968,7 @@ class Game {
                     }
                 }
 
+                alert('请查看顶部战斗日志确认盲盒结果 (获得具体物品)');
                 // 盲盒涨价逻辑
                 service.price = Math.floor(service.price * 1.5);
                 service.name = '神秘盲盒 (涨价了)';

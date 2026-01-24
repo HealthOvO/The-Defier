@@ -182,7 +182,20 @@ const Utils = {
             div.addEventListener('touchmove', () => clearTimeout(pressTimer));
         }
 
-        const costHtml = isReward ? '' : `<div class="card-cost">${card.cost}</div>`;
+        // 检查是否消耗奶糖 (抽牌卡)
+        const hasDraw = card.effects && card.effects.some(e =>
+            e.type === 'draw' || e.type === 'drawCalculated' || e.type === 'conditionalDraw' || e.type === 'randomCards'
+        );
+
+        let costHtml = '';
+        if (!isReward) {
+            if (hasDraw) {
+                // 抽牌卡消耗奶糖
+                costHtml = `<div class="card-cost cost-candy">🍬</div>`;
+            } else {
+                costHtml = `<div class="card-cost">${card.cost}</div>`;
+            }
+        }
         const typeIcon = this.getCardTypeIcon(card.type);
 
         div.innerHTML = `

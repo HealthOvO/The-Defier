@@ -120,6 +120,11 @@ class Battle {
         this.updateEnergyUI();
         this.updatePilesUI();
         this.updateEnvironmentUI();
+
+        // Sync active skill UI (Cooldowns etc)
+        if (this.game && this.game.updateActiveSkillUI) {
+            this.game.updateActiveSkillUI();
+        }
     }
 
     // 更新玩家UI
@@ -189,16 +194,35 @@ class Battle {
         const handContainer = document.getElementById('hand-cards');
         handContainer.innerHTML = '';
 
+        // CSS Force for Scroll
+        handContainer.style.display = 'flex';
+        handContainer.style.flexWrap = 'nowrap';
+        handContainer.style.overflowX = 'auto'; // scrollable
+        handContainer.style.justifyContent = 'flex-start'; // Align left to allow scroll
+        handContainer.style.paddingBottom = '10px'; // Space for scrollbar
+        handContainer.style.width = '100%';
+        handContainer.style.scrollbarWidth = 'thin'; // Firefox
+
         this.player.hand.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
 
             // 检查是否可用
             let playable = true;
-            if (card.cost > this.player.currentEnergy) {
-                playable = false;
-            }
             if (card.condition) {
                 if (card.condition.type === 'hp' && this.player.currentHp < card.condition.min) {
+                    playable = false;
+                }
+                // Check milk candy cost for draw cards ??
+                // Actually playCard logic handles it. But for UI grayscale:
+                // If it's a draw card (energyCost 0, candyCost 1), we should check candy.
+            }
+
+            // Check Candy Cost for UI
+            const hasDraw = card.effects && card.effects.some(e => e.type === 'draw' || e.type === 'drawCalculated' || e.type === 'conditionalDraw' || e.type === 'randomCards');
+            if (hasDraw) {
+                if (this.player.milkCandy < 1) playable = false;
+            } else {
+                if (card.cost > this.player.currentEnergy) {
                     playable = false;
                 }
             }
@@ -231,6 +255,20 @@ class Battle {
         }
 
         energyText.textContent = `${this.player.currentEnergy}/${this.player.baseEnergy}`;
+
+        // 显示奶糖
+        let candyContainer = document.getElementById('candy-container');
+        if (!candyContainer) {
+            candyContainer = document.createElement('div');
+            candyContainer.id = 'candy-container';
+            candyContainer.style.marginLeft = '15px';
+            candyContainer.style.display = 'flex';
+            candyContainer.style.alignItems = 'center';
+            candyContainer.style.color = '#ff9';
+            candyContainer.style.fontSize = '1.2rem';
+            orbsContainer.parentElement.appendChild(candyContainer);
+        }
+        candyContainer.innerHTML = `<span style="margin-right:5px">🍬</span> ${this.player.milkCandy}`;
     }
 
     // 更新牌堆UI
@@ -1315,6 +1353,62 @@ class Battle {
                 const healVal = (typeof pattern.value === 'number' && !isNaN(pattern.value)) ? pattern.value : 0;
                 enemy.currentHp = Math.min(enemy.hp, enemy.currentHp + healVal);
                 Utils.showBattleLog(`${enemy.name} 恢复了 ${healVal} 点生命`);
+                break;
+
+            case 'tribulationStrike':
+                // 天雷：造成真实伤害（无视护盾）但简单实现为普通扣血+提示真正伤害可能复杂
+                // 暂时实现为：扣除护盾后如有溢出扣血 -> 本质上是普通攻击。
+                // 真实伤害意味着直接扣血。
+                Utils.showBattleLog(`天劫轰击！受到 ${pattern.value} 点真实伤害！`);
+                // 直接扣除生命，不通过 takeDamage(避免触发闪避/减伤等，天雷必中)
+                // 也可以调用 player.takeDamage 但带参数 'trueDamage'
+
+                // 简单实现：
+                if (playerEl) Utils.addFlashEffect(playerEl, 'purple');
+                this.player.currentHp -= pattern.value;
+                if (this.player.currentHp < 0) this.player.currentHp = 0;
+                // 显示数字
+                if (playerEl) Utils.showFloatingNumber(playerEl, pattern.value, 'damage');
+
+                // 9. 生死轮回 check inside takeDamage won't trigger if we subtract directly.
+                // Should we duplicate revive logic? Or make takeDamage support 'ignoreBlock'?
+                // Let's use takeDamage but clear block first? No, block should remain.
+                // Better manual handling.
+                if (this.player.currentHp <= 0) {
+                    // 9. 生死轮回 (realm 9) check
+                    if (this.player.realm === 9 && !this.player.hasRebirthed && Math.random() < 0.5) {
+                        this.player.currentHp = this.player.maxHp;
+                        this.player.hasRebirthed = true;
+                        Utils.showBattleLog('生死轮回：逆天改命，满血复活！');
+                    }
+                }
+                break;
+
+            case 'innerDemon':
+                // 塞入心魔牌
+                const demonCardId = pattern.card;
+                const count = pattern.count || 1;
+                const demonCardDef = CARDS[demonCardId];
+                if (demonCardDef) {
+                    for (let c = 0; c < count; c++) {
+                        // Add to Discard Pile? Or Draw Pile? Usually Discard pile to delay effect, 
+                        // or Hand to crowd hand immediately.
+                        // Pattern says "inner demon summon", let's put 1 in Hand and rest in Discard if full?
+                        // Slay the Spire usually puts status into Discard or Draw pile.
+                        // Let's put into Draw Pile to ensure they draw it eventually (or shuffle).
+                        // Actually, putting into Discard means they see it next shuffle.
+                        // Putting into Draw Pile random position is standard.
+                        // Let's shuffle into Draw Pile.
+
+                        // Create instance
+                        const demonCard = { ...demonCardDef, instanceId: this.player.generateCardId() };
+
+                        // Random insert
+                        const pos = Math.floor(Math.random() * (this.player.drawPile.length + 1));
+                        this.player.drawPile.splice(pos, 0, demonCard);
+                    }
+                    Utils.showBattleLog(`心魔滋生！牌组中加入了 ${count} 张 ${demonCardDef.name}`);
+                }
                 break;
         }
 

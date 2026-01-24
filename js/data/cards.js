@@ -146,7 +146,7 @@ const CARDS = {
         type: 'energy',
         cost: 1,
         icon: '🧘',
-        description: '抽 2 张牌',
+        description: '消耗1奶糖。抽 2 张牌',
         rarity: 'common',
         effects: [
             { type: 'draw', value: 2, target: 'self' }
@@ -288,7 +288,7 @@ const CARDS = {
         type: 'chance',
         cost: 1,
         icon: '🎰',
-        description: '随机获得 1-3 张临时卡牌',
+        description: '消耗1奶糖。随机获得 1-3 张临时卡牌',
         rarity: 'rare',
         effects: [
             { type: 'randomCards', minValue: 1, maxValue: 3, target: 'self' }
@@ -446,7 +446,7 @@ const CARDS = {
         character: 'yanHan',
         cost: 0,
         icon: '🔍',
-        description: '造成 4 点伤害。抽 1 张牌',
+        description: '消耗1奶糖。造成 4 点伤害。抽 1 张牌',
         rarity: 'common',
         effects: [
             { type: 'damage', value: 4, target: 'enemy' },
@@ -626,7 +626,7 @@ const CARDS = {
         type: 'defense',
         cost: 1,
         icon: '🐢',
-        description: '获得 3 点护盾，抽 1 张牌',
+        description: '消耗1奶糖。获得 3 点护盾，抽 1 张牌',
         rarity: 'common',
         effects: [
             { type: 'block', value: 3, target: 'self' },
@@ -1246,7 +1246,7 @@ const CARDS = {
         type: 'energy',
         cost: 1,
         icon: '⚡',
-        description: '抽 2 张牌',
+        description: '消耗1奶糖。抽 2 张牌',
         rarity: 'common',
         effects: [
             { type: 'draw', value: 2, target: 'self' }
@@ -1333,7 +1333,7 @@ const CARDS = {
         character: 'yanHan',
         cost: 1,
         icon: '🧐',
-        description: '抽 1 张牌，使敌人获得 1 层易伤',
+        description: '消耗1奶糖。抽 1 张牌，使敌人获得 1 层易伤',
         rarity: 'common',
         effects: [
             { type: 'draw', value: 1, target: 'self' },
@@ -1361,11 +1361,53 @@ const CARDS = {
         character: 'yanHan',
         cost: 2,
         icon: '👁️',
-        description: '抽 2 张牌，本战法则盗取率+10%',
+        description: '消耗1奶糖。抽 2 张牌，本战法则盗取率+10%',
         rarity: 'rare',
         effects: [
             { type: 'draw', value: 2, target: 'self' },
             { type: 'buff', buffType: 'stealBonus', value: 0.1, target: 'self' }
+        ]
+    },
+    demonDoubt: {
+        id: 'demonDoubt',
+        name: '心魔·疑心',
+        type: 'status',
+        cost: -1, // Unplayable
+        icon: '❔',
+        description: '无法打出。保留。回合结束：受到 2 点伤害。',
+        rarity: 'special',
+        unplayable: true,
+        retain: true,
+        effects: [
+            { type: 'selfDamage', value: 2, trigger: 'turnEnd' }
+        ]
+    },
+    demonFear: {
+        id: 'demonFear',
+        name: '心魔·恐惧',
+        type: 'status',
+        cost: -1,
+        icon: '😱',
+        description: '无法打出。保留。回合结束：随机丢弃 1 张手牌。',
+        rarity: 'special',
+        unplayable: true,
+        retain: true,
+        effects: [
+            { type: 'discardRandom', value: 1, trigger: 'turnEnd' }
+        ]
+    },
+    demonDespair: {
+        id: 'demonDespair',
+        name: '心魔·绝望',
+        type: 'status',
+        cost: -1,
+        icon: '🌑',
+        description: '无法打出。保留。回合结束：失去 1 点灵力。',
+        rarity: 'special',
+        unplayable: true,
+        retain: true,
+        effects: [
+            { type: 'energyLoss', value: 1, trigger: 'turnEnd' }
         ]
     }
 };
