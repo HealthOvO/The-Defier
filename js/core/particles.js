@@ -13,6 +13,17 @@ class ParticleSystem {
         this.container = document.createElement('div');
         this.container.className = 'particles-container';
         this.container.id = 'particles-container';
+        // 关键修复：防止粒子容器遮挡点击
+        this.container.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9000;
+            overflow: hidden;
+        `;
         document.body.appendChild(this.container);
     }
 
@@ -34,6 +45,7 @@ class ParticleSystem {
             animation-duration: ${duration}ms;
             --offset-x: ${offsetX}px;
             --offset-y: ${offsetY}px;
+            pointer-events: none;
         `;
 
         this.container.appendChild(particle);
