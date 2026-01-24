@@ -193,6 +193,17 @@ class Game {
                 return false;
             }
 
+            // === 兼容性迁移 ===
+            // 修复：无欲角色的 'goldenBell' 曾与通用卡牌ID冲突，现更名为 'goldenBellSkill'
+            if (gameState.player.characterId === 'wuYu') {
+                gameState.player.deck.forEach(card => {
+                    if (card.id === 'goldenBell') {
+                        card.id = 'goldenBellSkill';
+                        console.log('Migration: Renamed Wu Yu goldenBell -> goldenBellSkill');
+                    }
+                });
+            }
+
             // 恢复玩家状态
             Object.assign(this.player, gameState.player);
 
@@ -222,15 +233,21 @@ class Game {
 
             // 恢复命环对象引用
             if (gameState.player.fateRing) {
-                this.player.fateRing = gameState.player.fateRing;
-                // Migration: Ensure new properties exist
-                if (!this.player.fateRing.loadedLaws) {
-                    this.player.fateRing.loadedLaws = [];
+                // Determine class based on type or character
+                let RingClass = FateRing;
+                if (gameState.player.fateRing.type === 'mutated') RingClass = MutatedRing;
+                if (gameState.player.fateRing.type === 'sealed') RingClass = SealedRing;
+                if (gameState.player.fateRing.type === 'karma') RingClass = KarmaRing;
+                if (gameState.player.fateRing.type === 'analysis') RingClass = AnalysisRing;
+
+                // Re-instantiate
+                this.player.fateRing = new RingClass(this.player);
+                this.player.fateRing.loadFromJSON(gameState.player.fateRing);
+
+                // Check level up or initialization
+                if (this.player.fateRing.checkLevelUp) {
+                    this.player.fateRing.checkLevelUp();
                 }
-                if (!this.player.fateRing.unlockedPaths) {
-                    this.player.fateRing.unlockedPaths = ['awakened'];
-                }
-                this.player.checkFateRingLevelUp();
             }
 
             // Fix: Global Force Sync for Card Data Persistence
@@ -1009,9 +1026,9 @@ class Game {
 
         // 卡牌奖励
         rewardCards.innerHTML = '';
-        const rewardCardList = getRewardCards(3);
+        const cards = getRewardCards(3, this.player.characterId);
 
-        rewardCardList.forEach((card, index) => {
+        cards.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
             cardEl.classList.add('reward-card');
             cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
@@ -1816,7 +1833,9 @@ class Game {
         const ring = this.player.fateRing;
 
         // In-memory fix for missing data (prevents crash if loaded from old save without reload)
-        if (!ring.loadedLaws) ring.loadedLaws = [];
+        if (!ring.slots || ring.slots.length === 0) {
+            if (ring.initSlots) ring.initSlots();
+        }
         if (!ring.unlockedPaths) ring.unlockedPaths = ['awakened'];
         if (!ring.path) ring.path = 'awakened';
 
@@ -1849,13 +1868,16 @@ class Game {
                         
                         <!-- 当前路径加成 -->
                         ${this.renderCurrentPathInfo(ring)}
+
+                        <!-- 角色专属面板 -->
+                        ${this.renderCharacterSpecifics(ring)}
                     </div>
                     
                     <!-- 中间：槽位展示 -->
                     <div class="ring-slots-panel">
                         <div class="slots-circle">
                             <div class="center-core">
-                                <span>${ring.slots}</span>
+                                <span>${ring.maxSlots || ring.slots.length}</span>
                             </div>
                             
                             <!-- 动态生成槽位 -->
@@ -1915,6 +1937,81 @@ class Game {
         `;
     }
 
+    // 渲染角色专属面板
+    renderCharacterSpecifics(ring) {
+        if (ring.type === 'karma' && ring.getKarmaStatus) {
+            const status = ring.getKarmaStatus();
+            const meritPercent = (status.merit / status.max) * 100;
+            const sinPercent = (status.sin / status.max) * 100;
+            return `
+                <div class="ring-specifics-panel" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                    <h4 style="color: var(--accent-gold); margin: 0 0 10px 0;">功德金轮</h4>
+                    
+                    <div style="margin-bottom: 8px;">
+                        <div style="font-size: 0.8rem; display: flex; justify-content: space-between;">
+                            <span>功德 (防御)</span>
+                            <span>${status.merit}/${status.max}</span>
+                        </div>
+                        <div style="background: rgba(0,0,0,0.3); height: 6px; border-radius: 3px; overflow: hidden;">
+                            <div style="width: ${meritPercent}%; background: #ffd700; height: 100%;"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div style="font-size: 0.8rem; display: flex; justify-content: space-between;">
+                            <span>业力 (攻击)</span>
+                            <span>${status.sin}/${status.max}</span>
+                        </div>
+                        <div style="background: rgba(0,0,0,0.3); height: 6px; border-radius: 3px; overflow: hidden;">
+                            <div style="width: ${sinPercent}%; background: #ff4d4d; height: 100%;"></div>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.7rem; color: #888; margin-top: 5px;">
+                        满值触发【金刚法相】或【明王之怒】
+                    </div>
+                </div>
+            `;
+        }
+
+        if (ring.type === 'analysis' && ring.analyzedTypes) {
+            return `
+                <div class="ring-specifics-panel" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                    <h4 style="color: var(--accent-blue); margin: 0 0 10px 0;">真理解析</h4>
+                    <div style="font-size: 0.8rem; color: #ddd;">
+                        已解析物种: <span style="color: var(--accent-gold);">${ring.analyzedTypes.length}</span>
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px;">
+                        ${ring.analyzedTypes.map(t => `<span style="background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 2px; font-size: 0.7rem;">${t}</span>`).join('')}
+                    </div>
+                    ${ring.tacticalConfig && ring.tacticalConfig.damageVsType ? `
+                        <div style="margin-top: 8px; font-size: 0.8rem; color: var(--accent-green);">
+                            当前针对: <strong>${ring.tacticalConfig.damageVsType}</strong>
+                            <br>(伤害 +${(ring.tacticalConfig.damageBonus * 100).toFixed(0)}%)
+                        </div>
+                    ` : '<div style="margin-top: 5px; font-size: 0.7rem; color: #666;">暂无针对目标</div>'}
+                </div>
+            `;
+        }
+
+        if (ring.type === 'sealed') {
+            // 简单的状态提示
+            const unlockedCount = ring.slots.filter(s => s.unlocked).length;
+            return `
+                <div class="ring-specifics-panel" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                    <h4 style="color: var(--accent-purple); margin: 0 0 5px 0;">逆生咒印</h4>
+                    <div style="font-size: 0.8rem;">
+                        解封进度: <span style="color: ${unlockedCount > 1 ? 'var(--accent-red)' : '#888'}">${unlockedCount}/12</span>
+                    </div>
+                    <div style="font-size: 0.7rem; color: #888; margin-top: 5px;">
+                        点击锁定槽位以解除封印（需付出代价）
+                    </div>
+                </div>
+             `;
+        }
+
+        return '';
+    }
+
     // 渲染进化按钮（如果有）
     renderEvolveButton(ring) {
         const available = getAvailablePaths(ring);
@@ -1933,21 +2030,35 @@ class Game {
     renderRingSlots(ring) {
         let html = '';
         const radius = 105; // 半径
+        const slotsCount = ring.slots.length; // Use array length or maxSlots
 
-        for (let i = 0; i < ring.slots; i++) {
-            const angle = (i / ring.slots) * 2 * Math.PI - Math.PI / 2; // 从上方开始
+        for (let i = 0; i < slotsCount; i++) {
+            const angle = (i / slotsCount) * 2 * Math.PI - Math.PI / 2; // 从上方开始
             const x = Math.cos(angle) * radius + 120; // +120是偏移量，使其居中 (300/2 - 30)
             const y = Math.sin(angle) * radius + 120;
 
-            const lawId = ring.loadedLaws[i];
+            const slot = ring.slots[i];
+            const lawId = slot.law;
             const law = lawId ? LAWS[lawId] : null;
             const isSelected = this.selectedRingSlot === i;
+            const isLocked = !slot.unlocked;
+
+            // Mutated Ring Fusion Slot Support
+            const subLawId = slot.subLaw;
+            const subLaw = subLawId ? LAWS[subLawId] : null;
 
             html += `
-                <div class="law-slot-node ${law ? 'filled' : 'empty'}" 
+                <div class="law-slot-node ${law ? 'filled' : 'empty'} ${isLocked ? 'locked' : ''}" 
                      style="left: ${x}px; top: ${y}px; ${isSelected ? 'box-shadow: 0 0 15px var(--accent-green); border-color: var(--accent-green);' : ''}"
                      data-index="${i}">
-                    ${law ? law.icon : '+'}
+                    ${law ? law.icon : (isLocked ? '🔒' : '+')}
+                    
+                    ${ring.type === 'mutated' && law ? `
+                        <div class="sub-slot ${subLaw ? 'filled' : 'empty'}" 
+                             style="position: absolute; right: -10px; bottom: -10px; width: 20px; height: 20px; border-radius: 50%; background: ${subLaw ? '#2a2a2a' : 'rgba(0,0,0,0.5)'}; border: 1px solid var(--accent-gold); display: flex; align-items: center; justify-content: center; font-size: 0.7rem; z-index: 2;">
+                            ${subLaw ? subLaw.icon : ''}
+                        </div>
+                    ` : ''}
                 </div>
             `;
         }
@@ -1961,7 +2072,7 @@ class Game {
         }
 
         return this.player.collectedLaws.map(law => {
-            const isEquipped = ring.loadedLaws.includes(law.id);
+            const isEquipped = ring.getSocketedLaws().includes(law.id);
             return `
                 <div class="library-item ${isEquipped ? 'equipped' : ''}" data-id="${law.id}">
                     <div class="lib-icon">${law.icon}</div>
@@ -1983,7 +2094,8 @@ class Game {
 
         for (const key in LAW_RESONANCES) {
             const resonance = LAW_RESONANCES[key];
-            const hasAllLaws = resonance.laws.every(lawId => ring.loadedLaws.includes(lawId));
+            const equippedLaws = ring.getSocketedLaws();
+            const hasAllLaws = resonance.laws.every(lawId => equippedLaws.includes(lawId));
 
             if (hasAllLaws) {
                 activeResonances.push(resonance);
@@ -2015,10 +2127,25 @@ class Game {
             slot.addEventListener('click', (e) => {
                 const index = parseInt(slot.dataset.index);
                 const ring = this.player.fateRing;
+                const slotData = ring.slots[index];
+
+                if (!slotData.unlocked) {
+                    // Check for SealedRing unseal interaction
+                    if (ring.type === 'sealed' && ring.canUnseal && ring.canUnseal(index)) {
+                        if (confirm(`该槽位被【逆生咒】封印。\n强制解除将永久损耗生命上限。\n是否解除？`)) {
+                            ring.unseal(index);
+                            this.showFateRing();
+                            this.autoSave();
+                        }
+                    } else {
+                        Utils.showBattleLog('该槽位尚未解锁');
+                    }
+                    return;
+                }
 
                 // 如果该槽位有法则，点击卸载
-                if (ring.loadedLaws[index]) {
-                    this.player.unloadLawFromRing(index);
+                if (slotData.law) {
+                    ring.socketLaw(index, null); // Unload
                     Utils.showBattleLog('法则已卸载');
                     this.showFateRing(); // 刷新
                     this.autoSave();
@@ -2044,24 +2171,26 @@ class Game {
 
                 // 如果没选中槽位，找第一个空的
                 if (targetSlot === undefined) {
-                    for (let i = 0; i < this.player.fateRing.slots; i++) {
-                        if (!this.player.fateRing.loadedLaws[i]) {
+                    for (let i = 0; i < this.player.fateRing.slots.length; i++) {
+                        if (this.player.fateRing.slots[i].unlocked && !this.player.fateRing.slots[i].law) {
                             targetSlot = i;
                             break;
                         }
                     }
                 }
 
-                // 如果还没找到（满了），或者选中的槽位已经满了（虽然逻辑上unload了，但保护一下）
-                // 实际上 loadLawToRing 会处理覆盖逻辑
-
-                if (this.player.loadLawToRing(lawId, targetSlot !== undefined ? targetSlot : -1)) {
-                    Utils.showBattleLog(`已装填法则【${LAWS[lawId]?.name}】`);
-                    this.selectedRingSlot = undefined; // 重置选中
-                    this.showFateRing();
-                    this.autoSave();
+                if (targetSlot !== undefined && targetSlot >= 0) {
+                    if (this.player.fateRing.socketLaw(targetSlot, lawId)) {
+                        const lawName = LAWS[lawId]?.name || '法则';
+                        Utils.showBattleLog(`已装填法则【${lawName}】`);
+                        this.selectedRingSlot = undefined; // 重置选中
+                        this.showFateRing();
+                        this.autoSave();
+                    } else {
+                        Utils.showBattleLog('装填失败：槽位未解锁或无效');
+                    }
                 } else {
-                    Utils.showBattleLog('装填失败：没有空槽位或槽位无效');
+                    Utils.showBattleLog('请先选择一个空槽位');
                 }
             });
         });
@@ -2369,7 +2498,7 @@ class Game {
                 else if (roll < 0.5) rarity = 'uncommon';
             }
 
-            const card = getRandomCard(rarity); // 需要确保 getRandomCard 支持参数，或者我们手动筛选
+            const card = getRandomCard(rarity, this.player.characterId); // Pass characterId for filtering
             // 之前的 getRandomCard 实现可能不支持参数，稳妥起见我们用旧逻辑并增强筛选
             // 如果 getRandomCard 不支持，就多随机几次取最好的？
             // 假设 getRandomCard 虽然支持参数（查看 import/export），但Utils中没看到，可能是全局的。

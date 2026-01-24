@@ -39,15 +39,28 @@ class Player {
         this.treasures = [];
 
         // 命环
-        this.fateRing = {
-            level: 0,
-            name: '残缺印记',
-            exp: 0,
-            slots: 0,
-            loadedLaws: [],
-            path: 'crippled',
-            unlockedPaths: ['crippled']
-        };
+        if (typeof MutatedRing !== 'undefined' && characterId === 'linFeng') {
+            this.fateRing = new MutatedRing(this);
+        } else if (typeof SealedRing !== 'undefined' && characterId === 'xiangYe') {
+            this.fateRing = new SealedRing(this);
+        } else if (typeof KarmaRing !== 'undefined' && characterId === 'wuYu') {
+            this.fateRing = new KarmaRing(this);
+        } else if (typeof AnalysisRing !== 'undefined' && characterId === 'yanHan') {
+            this.fateRing = new AnalysisRing(this);
+        } else if (typeof FateRing !== 'undefined') {
+            this.fateRing = new FateRing(this);
+        } else {
+            // Fallback if class not loaded yet
+            this.fateRing = {
+                level: 0,
+                name: '残缺印记',
+                exp: 0,
+                slots: 0,
+                loadedLaws: [],
+                path: 'crippled',
+                unlockedPaths: ['crippled']
+            };
+        }
 
         // 收集的法则
         this.collectedLaws = [];
@@ -101,12 +114,20 @@ class Player {
         let newBaseEnergy = charData.stats.energy;
         let newDrawCount = 5;
 
-        // 2. 命环等级加成
-        const levelData = FATE_RING.levels[this.fateRing.level];
-        if (levelData && levelData.bonus) {
-            if (levelData.bonus.maxHp) newMaxHp += levelData.bonus.maxHp;
-            if (levelData.bonus.energy) newBaseEnergy += levelData.bonus.energy;
-            if (levelData.bonus.draw) newDrawCount += levelData.bonus.draw;
+        // 2. 命环等级及镶嵌加成
+        if (this.fateRing && this.fateRing.getStatsBonus) {
+            const ringBonus = this.fateRing.getStatsBonus();
+            newMaxHp += ringBonus.maxHp;
+            newBaseEnergy += ringBonus.energy;
+            newDrawCount += ringBonus.draw;
+        } else {
+            // 旧逻辑完全保留作为Fallback，但在新类生效时应该不会走这里
+            const levelData = FATE_RING.levels[this.fateRing.level];
+            if (levelData && levelData.bonus) {
+                if (levelData.bonus.maxHp) newMaxHp += levelData.bonus.maxHp;
+                if (levelData.bonus.energy) newBaseEnergy += levelData.bonus.energy;
+                if (levelData.bonus.draw) newDrawCount += levelData.bonus.draw;
+            }
         }
 
         // 3. 命环路径加成
@@ -160,7 +181,7 @@ class Player {
         if (typeof LAW_RESONANCES === 'undefined') return;
 
         this.activeResonances = [];
-        const loadedLaws = this.fateRing.loadedLaws.filter(Boolean); // 获取所有已装载的法则ID
+        const loadedLaws = this.fateRing.getSocketedLaws ? this.fateRing.getSocketedLaws() : [];
 
         for (const key in LAW_RESONANCES) {
             const resonance = LAW_RESONANCES[key];
@@ -281,7 +302,8 @@ class Player {
         let keepBlock = false;
         try {
             keepBlock = this.hasBuff('retainBlock') ||
-                (this.collectedLaws && this.collectedLaws.some(l => l && l.passive && l.passive.type === 'retainBlock'));
+                (this.collectedLaws && this.collectedLaws.some(l => l && l.passive && l.passive.type === 'retainBlock')) ||
+                (this.activeResonances && this.activeResonances.some(r => r.effect && (r.effect.type === 'persistentBlock' || r.effect.type === 'retainBlock')));
         } catch (e) {
             console.warn('Error checking block retention:', e);
         }
@@ -370,6 +392,11 @@ class Player {
 
     // 添加护盾
     addBlock(amount) {
+        if (typeof amount !== 'number' || isNaN(amount)) {
+            console.error('addBlock received invalid amount', amount);
+            return;
+        }
+
         // 1. 灵气稀薄 (realm 1) - 护盾效果-20%
         if (this.realm === 1) {
             amount = Math.floor(amount * 0.8);
@@ -391,11 +418,28 @@ class Player {
 
     // 治疗
     heal(amount) {
+        if (typeof amount !== 'number' || isNaN(amount)) {
+            console.error('heal received invalid amount', amount);
+            return;
+        }
         this.currentHp = Math.min(this.maxHp, this.currentHp + amount);
+    }
+
+    // 恢复灵力
+    gainEnergy(amount) {
+        this.currentEnergy += amount;
+        // 也可以选择在这里限制不超过 baseEnergy，或者允许溢出
+        // 通常Roguelike里回合内加费可以溢出? 暂时不做上限限制以防万一
+        // 但重置回合时会重置为 baseEnergy
     }
 
     // 受到伤害
     takeDamage(amount) {
+        if (typeof amount !== 'number' || isNaN(amount)) {
+            console.error('takeDamage received invalid amount', amount);
+            amount = 0;
+        }
+
         // 共鸣：风空遁 (Astral Shift) - 闪避抽牌
         const astralShift = this.activeResonances.find(r => r.id === 'astralShift');
 
@@ -578,6 +622,94 @@ class Player {
         }
 
         switch (effect.type) {
+            case 'gainSin':
+                if (this.fateRing && this.fateRing.gainSin) {
+                    this.fateRing.gainSin(value);
+                }
+                return { type: 'gainSin', value };
+
+            case 'gainMerit':
+                if (this.fateRing && this.fateRing.gainMerit) {
+                    this.fateRing.gainMerit(value);
+                }
+                return { type: 'gainMerit', value };
+
+            case 'discardHand':
+                const discardedCount = this.hand.length;
+                while (this.hand.length > 0) {
+                    this.discardPile.push(this.hand.pop());
+                }
+                this.lastDiscardedCount = discardedCount; // Store for chained effects
+                return { type: 'discardHand', value: discardedCount };
+
+            case 'drawCalculated': {
+                const base = effect.base || 0;
+                const perDiscard = effect.perDiscard || 0;
+                const count = base + (this.lastDiscardedCount || 0) * perDiscard;
+                this.lastDiscardedCount = 0; // Reset
+                if (count > 0) this.drawCards(count);
+                return { type: 'draw', value: count };
+            }
+
+            case 'conditionalDamage':
+                let dmgValue = 0;
+                let conditionMet = false;
+
+                if (effect.condition === 'lowHp') {
+                    if (this.currentHp / this.maxHp < (effect.threshold || 0.5)) {
+                        conditionMet = true;
+                    }
+                } else if (effect.condition === 'sealed') {
+                    if (this.fateRing && this.fateRing.type === 'sealed' && this.fateRing.slots.some(s => !s.unlocked)) {
+                        conditionMet = true;
+                    }
+                } else {
+                    // Default level check (legacy)
+                    if (this.fateRing && this.fateRing.level >= (effect.minLevel || 0)) {
+                        conditionMet = true;
+                    }
+                }
+
+                if (conditionMet) {
+                    if (effect.multiplier) {
+                        dmgValue = Math.floor((effect.value || 0) * effect.multiplier);
+                    } else if (effect.bonusDamage) {
+                        dmgValue = (effect.value || 0) + effect.bonusDamage;
+                    } else {
+                        dmgValue = effect.value || 0;
+                    }
+                } else {
+                    dmgValue = effect.value || 0;
+                }
+
+                // Apply standard damage logic (modifiers etc. needs to be applied, strictly playCard passes results to battle, battle.dealsDamage)
+                // Wait, playCard executeEffect returns value. 
+                // But wait, standard 'damage' case applies bonuses BEFORE returning?
+                // Line 575+ applies path bonuses and law bonuses to `value`.
+                // So now `dmgValue` is base. I should probably re-apply? 
+                // Actually `value` variable at top of executeEffect ALREADY applied some bonuses?
+                // Yes, lines 567-599 modify `value`.
+                // But `value` comes from `effect.value`. 
+                // `conditionalDamage` has dynamic value. `effect.value` is base.
+                // The bonuses applied at top are to `value`.
+                // If I change value here based on condition, is that correct?
+                // If condition doubles damage, it should double AFTER bonuses? Or BEFORE?
+                // Usually "Doubles damage" implies final damage.
+                // But strict "Base damage x 2" is safer.
+                // Let's assume modifies base.
+
+                // Re-calculating `value` based on condition, using the ALREADY MODIFIED `value` as base?
+                // `value` at this point includes path bonuses etc.
+                // If condition is "Multiplier", we multiply `value`.
+                // If condition is "Bonus", we add to `value`.
+
+                if (conditionMet) {
+                    if (effect.multiplier) value = Math.floor(value * effect.multiplier);
+                    if (effect.bonusDamage) value += effect.bonusDamage;
+                }
+
+                return { type: 'damage', value: value, target: effect.target };
+
             case 'damage':
                 let dmg = value;
                 return { type: 'damage', value: dmg, target: effect.target };
@@ -683,7 +815,8 @@ class Player {
                 return { type: 'damage', value: dmgVal, target: effect.target };
 
             case 'lifeSteal':
-                return { type: 'lifeSteal', value: effect.value };
+                // Ensure value is a number
+                return { type: 'lifeSteal', value: value || 0 };
 
             case 'conditionalDraw':
                 // 实现条件抽牌
@@ -889,8 +1022,10 @@ class Player {
             if (card) {
                 // 6. 法则混乱 (realm 6)
                 if (this.realm === 6) {
+                    // Fix: Prevent cumulative drift by using a base cost
+                    if (card.baseCost === undefined) card.baseCost = card.cost;
                     const change = Math.floor(Math.random() * 3) - 1; // -1, 0, 1
-                    card.cost = Math.max(0, card.cost + change);
+                    card.cost = Math.max(0, card.baseCost + change);
                 }
                 this.hand.push(card);
             }
@@ -975,85 +1110,30 @@ class Player {
         return true;
     }
 
-    // 装载法则到命环
-    loadLawToRing(lawId, slotIndex = -1) {
-        // 如果没有指定槽位，找第一个空槽
-        if (slotIndex === -1) {
-            for (let i = 0; i < this.fateRing.slots; i++) {
-                if (!this.fateRing.loadedLaws[i]) {
-                    slotIndex = i;
-                    break;
-                }
-            }
-        }
-
-        // 检查槽位是否有效
-        if (slotIndex < 0 || slotIndex >= this.fateRing.slots) {
-            return false;
-        }
-
-        // 如果该槽位已有法则，先卸载
-        if (this.fateRing.loadedLaws[slotIndex]) {
-            this.unloadLawFromRing(slotIndex);
-        }
-
-        // 如果要装载的法则已经在其他槽位，也先卸载
-        const existingIndex = this.fateRing.loadedLaws.indexOf(lawId);
-        if (existingIndex !== -1) {
-            this.unloadLawFromRing(existingIndex);
-        }
-
-        this.fateRing.loadedLaws[slotIndex] = lawId;
-        return true;
-    }
-
-    // 从命环卸载法则
-    unloadLawFromRing(slotIndex) {
-        if (slotIndex >= 0 && slotIndex < this.fateRing.slots) {
-            this.fateRing.loadedLaws[slotIndex] = null;
-            return true;
-        }
-        return false;
-    }
-
     // 获取当前槽位的法则
     getLawInSlot(index) {
         const lawId = this.fateRing.loadedLaws[index];
         return lawId ? LAWS[lawId] : null;
     }
 
-    // 检查命环升级
+    // 检查是否升级 (Delegated to FateRing class)
     checkFateRingLevelUp() {
-        const levels = FATE_RING.levels;
-        const maxLevel = Object.keys(levels).length - 1;
-        let pLevel = this.fateRing.level;
-
-        // 寻找经验满足的最高等级
-        for (let i = maxLevel; i > pLevel; i--) {
-            if (this.fateRing.exp >= levels[i].exp) {
-                // 升级处理
-                this.fateRing.level = i;
-                this.fateRing.name = levels[i].name || `Lv.${i} 命环`; // 确保有名字
-                this.fateRing.slots = levels[i].slots;
-
-                // 播放特效
-                if (typeof Utils !== 'undefined' && Utils.showBattleLog) {
-                    Utils.showBattleLog(`✨ 命环突破！晋升至 Lv.${i}！`);
-                }
-
-                this.recalculateStats();
-
-                // 检查进化触发 (Milestones: Lv 1, Lv 3, Lv 7)
-                this.checkEvolution();
-                return true;
-            }
+        if (this.fateRing && this.fateRing.checkLevelUp) {
+            this.fateRing.checkLevelUp();
+            return true;
         }
         return false;
     }
 
     // 检查是否触发进化
     checkEvolution() {
+        // Delegate to FateRing logic or keep simple check here
+        // The FateRing class handles level up, but UI for evolution selection might still belong here or in Game
+
         const level = this.fateRing.level;
+        // Use global FATE_RING to check path tier
+        if (typeof FATE_RING === 'undefined') return;
+
         const currentPath = FATE_RING.paths[this.fateRing.path];
         const currentTier = currentPath ? currentPath.tier : 0;
 
@@ -1065,7 +1145,6 @@ class Player {
 
         // Lv 3: 第一次分支进化 (Tier 1 -> Tier 2)
         if (level >= 3 && currentTier < 2) {
-            // 需要玩家选择，调用 Game 的方法显示界面
             if (this.game && this.game.showEvolutionSelection) {
                 this.game.showEvolutionSelection(2);
             }
@@ -1080,51 +1159,14 @@ class Player {
     }
 
     // 进化命环
+    // 进化命环
     evolveFateRing(pathId) {
-        const pathData = FATE_RING.paths[pathId];
-        if (!pathData) return;
-
+        if (!this.fateRing) return;
         this.fateRing.path = pathId;
-        // 如果名字包含在pathData中，是否覆盖 level name? 通常保持 Level Name (一阶、二阶) + Path Name?
-        // 我们在 UI 显示上组合它们。
-
-        // 应用进化奖励
-        if (pathData.bonus) {
-            this.applyPathBonus(pathData.bonus);
-        }
-
         this.recalculateStats();
     }
 
-    // 应用进化奖励
-    applyPathBonus(bonus) {
-        switch (bonus.type) {
-            case 'hpBonus':
-                this.maxHp += bonus.value;
-                this.currentHp += bonus.value;
-                break;
-            case 'drawBonus':
-                this.addPermBuff('draw', bonus.value);
-                break;
-            case 'energyBonus':
-                this.addPermBuff('energy', bonus.value);
-                break;
-            case 'damageBonus':
-                this.addPermBuff('damage', bonus.value); // 百分比转为固定值？暂存
-                // 实际上 damageBonus (20%) 可能需要特殊处理
-                // 我们在 calculateStats 或 executeEffect 中处理 damageBonus
-                if (!this.permBuffs.damageMult) this.permBuffs.damageMult = 0;
-                this.permBuffs.damageMult += bonus.value;
-                break;
-            case 'ultimate':
-                this.addPermBuff('revive', 1);
-                this.maxHp += 100;
-                this.currentHp += 100;
-                this.addPermBuff('energy', 1);
-                this.addPermBuff('draw', 1);
-                break;
-        }
-    }
+    // applyPathBonus removed, logic moved to recalculateStats and FateRing.getStatsBonus
 
     // 选择命环进化路径
     chooseFateRingPath(pathName) {

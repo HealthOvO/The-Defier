@@ -308,6 +308,178 @@ const CARDS = {
         ]
     },
 
+    // ==================== 角色专属卡牌 (追加) ====================
+    // --- 林风 (Lin Feng) ---
+    defianceStrike: {
+        id: 'defianceStrike',
+        name: '逆命一击',
+        type: 'attack',
+        character: 'linFeng',
+        cost: 1,
+        icon: '🗡️',
+        description: '造成 8 点伤害。若生命值低于50%，伤害翻倍',
+        rarity: 'common',
+        effects: [
+            { type: 'damage', value: 8, target: 'enemy' },
+            { type: 'conditionalDamage', condition: 'lowHp', threshold: 0.5, multiplier: 2, target: 'enemy' }
+        ]
+    },
+    fusionBlast: {
+        id: 'fusionBlast',
+        name: '融合爆发',
+        type: 'skill',
+        character: 'linFeng',
+        cost: 1,
+        icon: '🌌',
+        description: '消耗所有手牌，抽取消耗数量+1张牌',
+        rarity: 'uncommon',
+        effects: [
+            { type: 'discardHand', target: 'self' },
+            { type: 'drawCalculated', base: 1, perDiscard: 1, target: 'self' }
+        ]
+    },
+    lawbreaker: {
+        id: 'lawbreaker',
+        name: '破法者',
+        type: 'power',
+        character: 'linFeng',
+        cost: 2,
+        icon: '🛡️',
+        description: '每打出一张攻击牌，获得 2 点护盾',
+        rarity: 'rare',
+        effects: [
+            { type: 'buff', buffType: 'blockOnAttack', value: 2, target: 'self' }
+        ]
+    },
+
+    // --- 香叶 (Xiang Ye) ---
+    bloodSeal: {
+        id: 'bloodSeal',
+        name: '血之封印',
+        type: 'skill',
+        character: 'xiangYe',
+        cost: 1,
+        icon: '🩸',
+        description: '流失 5 点生命，获得 20 点护盾',
+        rarity: 'common',
+        effects: [
+            { type: 'selfDamage', value: 5, target: 'self' },
+            { type: 'block', value: 20, target: 'self' }
+        ]
+    },
+    vitalityBloom: {
+        id: 'vitalityBloom',
+        name: '生命绽放',
+        type: 'power',
+        character: 'xiangYe',
+        cost: 2,
+        icon: '🌸',
+        description: '回合开始时，回复 3 点生命',
+        rarity: 'uncommon',
+        effects: [
+            { type: 'buff', buffType: 'regen', value: 3, target: 'self' }
+        ]
+    },
+    unchain: {
+        id: 'unchain',
+        name: '解脱',
+        type: 'attack',
+        character: 'xiangYe',
+        cost: 2,
+        icon: '🔗',
+        description: '造成 15 点伤害。若仍有封印槽位，额外造成 10 点伤害',
+        rarity: 'common',
+        effects: [
+            { type: 'damage', value: 15, target: 'enemy' },
+            { type: 'conditionalDamage', condition: 'sealed', bonusDamage: 10, target: 'enemy' }
+        ]
+    },
+
+    // --- 无欲 (Wu Yu) ---
+    karmaStrike: {
+        id: 'karmaStrike',
+        name: '业力击',
+        type: 'attack',
+        character: 'wuYu',
+        cost: 1,
+        icon: '🕉️',
+        description: '造成 6 点伤害。增加 5 点业力',
+        rarity: 'common',
+        effects: [
+            { type: 'damage', value: 6, target: 'enemy' },
+            { type: 'gainSin', value: 5, target: 'self' }
+        ]
+    },
+    goldenBellSkill: {
+        id: 'goldenBellSkill',
+        name: '金钟罩',
+        type: 'skill',
+        character: 'wuYu',
+        cost: 1,
+        icon: '🔔',
+        description: '获得 12 点护盾。增加 5 点功德',
+        rarity: 'common',
+        effects: [
+            { type: 'block', value: 12, target: 'self' },
+            { type: 'gainMerit', value: 5, target: 'self' }
+        ]
+    },
+    asceticism: {
+        id: 'asceticism',
+        name: '苦行',
+        type: 'power',
+        character: 'wuYu',
+        cost: 1,
+        icon: '🙏',
+        description: '回合结束时若有保留手牌，获得保留数x2点功德',
+        rarity: 'uncommon',
+        effects: [
+            { type: 'buff', buffType: 'meritOnRetain', value: 2, target: 'self' }
+        ]
+    },
+
+    // --- 严寒 (Yan Han) ---
+    probe: {
+        id: 'probe',
+        name: '试探',
+        type: 'attack',
+        character: 'yanHan',
+        cost: 0,
+        icon: '🔍',
+        description: '造成 4 点伤害。抽 1 张牌',
+        rarity: 'common',
+        effects: [
+            { type: 'damage', value: 4, target: 'enemy' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+    analyzeWeakness: {
+        id: 'analyzeWeakness',
+        name: '弱点分析',
+        type: 'skill',
+        character: 'yanHan',
+        cost: 1,
+        icon: '📊',
+        description: '给予所有敌人 2 层易伤',
+        rarity: 'uncommon',
+        effects: [
+            { type: 'debuff', buffType: 'vulnerable', value: 2, target: 'allEnemies' }
+        ]
+    },
+    tacticalAdvantage: {
+        id: 'tacticalAdvantage',
+        name: '战术优势',
+        type: 'power',
+        character: 'yanHan',
+        cost: 2,
+        icon: '📈',
+        description: '攻击带有易伤的敌人时，回复 1 点灵力(每回合限2次)',
+        rarity: 'rare',
+        effects: [
+            { type: 'buff', buffType: 'energyOnVulnerable', value: 1, limit: 2, target: 'self' }
+        ]
+    },
+
     // ==================== 2.0新增卡牌 ====================
 
     // 攻击牌
@@ -933,9 +1105,271 @@ const CARDS = {
             { type: 'buff', buffType: 'extraTurn', value: 1, target: 'self' }
         ]
     },
+
+
+
+    // 初始牌组
+
+    voidEmbrace: {
+        id: 'voidEmbrace',
+        name: '虚空拥抱',
+        type: 'law',
+        cost: 3,
+        icon: '🌌',
+        description: '造成 25 点伤害，回复造成伤害 30% 的生命',
+        rarity: 'legendary',
+        lawType: 'void',
+        effects: [
+            { type: 'lifeSteal', value: 0.3, target: 'self' },
+            { type: 'damage', value: 25, target: 'enemy' }
+        ]
+    },
+    karmaKill: {
+        id: 'karmaKill',
+        name: '因果律杀',
+        type: 'law',
+        cost: 3,
+        icon: '☠️',
+        description: '必定命中，造成敌人最大生命15%的伤害',
+        rarity: 'legendary',
+        lawType: 'karma',
+        effects: [
+            { type: 'percentDamage', value: 0.15, target: 'enemy' }
+        ]
+    },
+    iceFreeze: {
+        id: 'iceFreeze',
+        name: '冰封万里',
+        type: 'law',
+        cost: 2,
+        icon: '❄️',
+        description: '造成 7 点伤害，使敌人下回合伤害-3',
+        rarity: 'rare',
+        lawType: 'ice',
+        effects: [
+            { type: 'damage', value: 7, target: 'enemy' },
+            { type: 'debuff', buffType: 'weak', value: 3, target: 'enemy' }
+        ]
+    },
+
+    // 机缘牌
+    desperateSurvival: {
+        id: 'desperateSurvival',
+        name: '绝处逢生',
+        type: 'chance',
+        cost: 1,
+        icon: '🆘',
+        description: '若生命低于20%，抽3张牌+3灵力',
+        rarity: 'rare',
+        effects: [
+            { type: 'conditionalDraw', condition: 'lowHp', threshold: 0.2, drawValue: 3, energyValue: 3 }
+        ]
+    },
+    windfall: {
+        id: 'windfall',
+        name: '天降横财',
+        type: 'chance',
+        cost: 1,
+        icon: '💰',
+        description: '战斗结束后获得 25-100 灵石',
+        rarity: 'uncommon',
+        effects: [
+            { type: 'bonusGold', min: 25, max: 100 }
+        ]
+    },
+    enlightenment: {
+        id: 'enlightenment',
+        name: '顿悟',
+        type: 'chance',
+        cost: 2,
+        icon: '💡',
+        description: '命环经验+50',
+        rarity: 'rare',
+        effects: [
+            { type: 'ringExp', value: 50 }
+        ]
+    },
+    reversal: {
+        id: 'reversal',
+        name: '逆转乾坤',
+        type: 'chance',
+        cost: 4,
+        icon: '🔄',
+        description: '与敌人交换当前生命值百分比',
+        rarity: 'legendary',
+        effects: [
+            { type: 'swapHpPercent', target: 'enemy' }
+        ]
+    },
+
+    // 技能牌
+    concentration: {
+        id: 'concentration',
+        name: '聚气',
+        type: 'energy',
+        cost: 1,
+        icon: '🎯',
+        description: '下一张攻击牌伤害+5',
+        rarity: 'common',
+        effects: [
+            { type: 'buff', buffType: 'nextAttackBonus', value: 5, target: 'self' }
+        ]
+    },
+    doubleEdge: {
+        id: 'doubleEdge',
+        name: '双刃',
+        type: 'attack',
+        cost: 1,
+        icon: '🔪',
+        description: '造成 10 点伤害，获得 1 层易伤',
+        rarity: 'common',
+        effects: [
+            { type: 'damage', value: 10, target: 'enemy' },
+            { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'self' }
+        ]
+    },
+    powerUp: {
+        id: 'powerUp',
+        name: '蓄力',
+        type: 'energy',
+        cost: 1,
+        icon: '💪',
+        description: '获得 2 点力量（永久）',
+        rarity: 'uncommon',
+        effects: [
+            { type: 'buff', buffType: 'strength', value: 2, target: 'self', permanent: true }
+        ]
+    },
+    quickDraw: {
+        id: 'quickDraw',
+        name: '快抽',
+        type: 'energy',
+        cost: 1,
+        icon: '⚡',
+        description: '抽 2 张牌',
+        rarity: 'common',
+        effects: [
+            { type: 'draw', value: 2, target: 'self' }
+        ]
+    },
+    allIn: {
+        id: 'allIn',
+        name: '孤注一掷',
+        type: 'attack',
+        cost: 2,
+        icon: '🎲',
+        description: '消耗所有灵力，每点灵力造成 6 点伤害',
+        rarity: 'rare',
+        effects: [
+            { type: 'damagePerEnergy', multiplier: 6, target: 'enemy' }
+        ]
+    },
+    chaosControl: {
+        id: 'chaosControl',
+        name: '混沌掌控',
+        type: 'skill',
+        cost: 3,
+        icon: '🌀',
+        description: '随机对敌人造成 5-20 伤害，并使其眩晕',
+        rarity: 'legendary',
+        effects: [
+            { type: 'randomDamage', min: 5, max: 20, target: 'enemy' },
+            { type: 'debuff', buffType: 'stun', value: 1, target: 'enemy' }
+        ]
+    },
+
+    // ==================== 多角色专属卡牌 ====================
+
+    // --- 香叶 (Xiang Ye) ---
+    poisonTouch: {
+        id: 'poisonTouch',
+        name: '毒手',
+        type: 'skill',
+        character: 'xiangYe',
+        cost: 1,
+        icon: '☠️',
+        description: '使敌人中毒 2 层',
+        rarity: 'common',
+        effects: [
+            { type: 'debuff', buffType: 'poison', value: 2, target: 'enemy' },
+            { type: 'damage', value: 3, target: 'enemy' }
+        ]
+    },
+    minorHeal: {
+        id: 'minorHeal',
+        name: '小回春术',
+        type: 'skill',
+        character: 'xiangYe',
+        cost: 1,
+        icon: '🌿',
+        description: '回复 5 点生命',
+        rarity: 'common',
+        effects: [
+            { type: 'heal', value: 5, target: 'self' }
+        ]
+    },
+
+    // --- 无欲 (Wu Yu) ---
+    monkStrike: {
+        id: 'monkStrike',
+        name: '罗汉拳',
+        type: 'attack',
+        character: 'wuYu',
+        cost: 1,
+        icon: '👊',
+        description: '造成 6 点伤害，获得 4 点护盾',
+        rarity: 'common',
+        effects: [
+            { type: 'damage', value: 6, target: 'enemy' },
+            { type: 'block', value: 4, target: 'self' }
+        ]
+    },
+
+    // --- 严寒 (Yan Han) ---
+    analysis: {
+        id: 'analysis',
+        name: '弱点分析',
+        type: 'skill',
+        character: 'yanHan',
+        cost: 1,
+        icon: '🧐',
+        description: '抽 1 张牌，使敌人获得 1 层易伤',
+        rarity: 'common',
+        effects: [
+            { type: 'draw', value: 1, target: 'self' },
+            { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'enemy' }
+        ]
+    },
+    ringAnalysis: {
+        id: 'ringAnalysis',
+        name: '命环解析',
+        type: 'skill',
+        character: 'yanHan',
+        cost: 1,
+        icon: '📊',
+        description: '敌人易伤 2 层，命环经验+15',
+        rarity: 'uncommon',
+        effects: [
+            { type: 'debuff', buffType: 'vulnerable', value: 2, target: 'enemy' },
+            { type: 'ringExp', value: 15 }
+        ]
+    },
+    lawInsight: {
+        id: 'lawInsight',
+        name: '法则窥探',
+        type: 'skill',
+        character: 'yanHan',
+        cost: 2,
+        icon: '👁️',
+        description: '抽 2 张牌，本战法则盗取率+10%',
+        rarity: 'rare',
+        effects: [
+            { type: 'draw', value: 2, target: 'self' },
+            { type: 'buff', buffType: 'stealBonus', value: 0.1, target: 'self' }
+        ]
+    }
 };
 
-// 初始牌组
 const STARTER_DECK = [
     'strike', 'strike', 'strike', 'strike', 'strike',
     'defend', 'defend', 'defend', 'defend',
@@ -948,14 +1382,18 @@ const CARD_POOL = {
         'heavyStrike', 'quickSlash', 'doubleStrike', 'ironWill', 'shieldBash',
         'spiritBoost', 'meditation', 'armorBreaker', 'goldenBell', 'turtleShell',
         'concentration', 'doubleEdge', 'quickDraw',
-        'poisonTouch', 'minorHeal', 'monkStrike', 'analysis'
+        'poisonTouch', 'minorHeal', 'monkStrike', 'analysis',
+        // 角色专属
+        'defianceStrike', 'bloodSeal', 'unchain', 'karmaStrike', 'goldenBell', 'probe'
     ],
     uncommon: [
         'ragingBlow', 'counterStance', 'innerPeace', 'battleCry', 'luckyStrike',
         'sweepingStrike', 'tripleSlash', 'bloodSlash', 'offenseDefense', 'ironSkin',
         'windfall', 'powerUp',
         // 新增角色卡牌
-        'defiantWill', 'healingTouch', 'vajraGlare', 'ringAnalysis'
+        'defiantWill', 'healingTouch', 'vajraGlare', 'ringAnalysis',
+        // 角色专属
+        'fusionBlast', 'vitalityBloom', 'asceticism', 'analyzeWeakness'
     ],
     rare: [
         'thunderLaw', 'swordIntent', 'flameTruth', 'spaceRift', 'fortuneWheel',
@@ -963,40 +1401,61 @@ const CARD_POOL = {
         'thunderStorm', 'voidWalk', 'iceFreeze', 'desperateSurvival', 'enlightenment',
         'allIn',
         // 新增角色卡牌
-        'ringResonance', 'breakthrough', 'bloodBlessing', 'lifeSurge', 'zenMeditation', 'lawInsight'
+        'ringResonance', 'breakthrough', 'bloodBlessing', 'lifeSurge', 'zenMeditation', 'lawInsight',
+        // 角色专属
+        'lawbreaker', 'tacticalAdvantage'
     ],
     epic: ['inferno', 'timeRewind', 'salvation', 'timeStasis'],
     legendary: ['timeStop', 'voidEmbrace', 'karmaKill', 'reversal', 'chaosControl']
 };
 
 // 获取随机卡牌
-function getRandomCard(rarity = null) {
-    if (rarity && CARD_POOL[rarity]) {
-        const pool = CARD_POOL[rarity];
+function getRandomCard(rarity = null, characterId = null) {
+    let selectedRarity = rarity;
+
+    // 如果未指定稀有度，随机生成
+    if (!selectedRarity) {
+        const roll = Math.random();
+        if (roll < 0.55) selectedRarity = 'common';
+        else if (roll < 0.80) selectedRarity = 'uncommon';
+        else if (roll < 0.95) selectedRarity = 'rare';
+        else selectedRarity = 'legendary';
+    }
+
+    if (CARD_POOL[selectedRarity]) {
+        let pool = CARD_POOL[selectedRarity];
+
+        // 过滤角色专属卡牌
+        pool = pool.filter(id => {
+            const card = CARDS[id];
+            if (!card) return false;
+            // 如果卡牌没有专属角色限制，所有人可用
+            if (!card.character) return true;
+            // 如果有，必须匹配
+            return card.character === characterId;
+        });
+
+        if (pool.length === 0) {
+            // Fallback if filtering removes all
+            pool = CARD_POOL[selectedRarity];
+        }
+
         const cardId = pool[Math.floor(Math.random() * pool.length)];
         return { ...CARDS[cardId] };
     }
 
-    // 根据权重随机选择稀有度
-    const roll = Math.random();
-    let selectedRarity;
-    if (roll < 0.55) selectedRarity = 'common';
-    else if (roll < 0.80) selectedRarity = 'uncommon';
-    else if (roll < 0.95) selectedRarity = 'rare';
-    else selectedRarity = 'legendary';
-
-    const pool = CARD_POOL[selectedRarity];
-    const cardId = pool[Math.floor(Math.random() * pool.length)];
-    return { ...CARDS[cardId] };
+    // Fallback
+    return { ...CARDS['strike'] };
 }
 
 // 获取奖励卡牌选择
-function getRewardCards(count = 3) {
+function getRewardCards(count = 3, characterId = null) {
     const cards = [];
     for (let i = 0; i < count; i++) {
-        cards.push(getRandomCard());
+        cards.push(getRandomCard(null, characterId));
     }
     return cards;
+
 }
 
 // ==================== 卡牌升级系统 ====================
@@ -1165,6 +1624,7 @@ function upgradeCard(card) {
             if (effect.type === 'buff' && effect.buffType === 'thorns' && specialRule.thorns) {
                 effect.value += specialRule.thorns;
             }
+
             if (effect.type === 'buff' && effect.buffType === 'strength' && specialRule.strength) {
                 effect.value += specialRule.strength;
             }
@@ -1339,6 +1799,18 @@ function generateUpgradedDescription(card) {
             case 'ringExp':
                 desc += `命环经验+${effect.value}。`;
                 break;
+            case 'gainSin':
+                desc += `增加 ${effect.value} 点业力。`;
+                break;
+            case 'gainMerit':
+                desc += `增加 ${effect.value} 点功德。`;
+                break;
+            case 'discardHand':
+                desc += `丢弃所有手牌。`;
+                break;
+            case 'drawCalculated':
+                desc += `抽 ${effect.base}+弃牌数x${effect.perDiscard} 张牌。`;
+                break;
             case 'debuff':
                 if (effect.buffType === 'burn') desc += `使敌人获得 ${effect.value} 层灼烧。`;
                 else if (effect.buffType === 'poison') desc += `给予 ${effect.value} 层中毒。`;
@@ -1358,12 +1830,22 @@ function generateUpgradedDescription(card) {
                 else if (effect.buffType === 'stealBonus') desc += `本战法则盗取率+${Math.floor(effect.value * 100)}%。`;
                 else if (effect.buffType === 'reflect') desc += `下次被攻击时反弹等量伤害。`;
                 else if (effect.buffType === 'extraTurn') desc += `你额外行动 ${effect.value} 次。`;
+                else if (effect.buffType === 'blockOnAttack') desc += `每打出攻击牌获得 ${effect.value} 点护盾。`;
+                else if (effect.buffType === 'regen') desc += `回合开始时回复 ${effect.value} 点生命。`;
+                else if (effect.buffType === 'meritOnRetain') desc += `回合结束每保留一张牌获得 ${effect.value} 点功德。`;
+                else if (effect.buffType === 'energyOnVulnerable') desc += `攻击易伤敌人回复 ${effect.value} 点灵力。`;
                 break;
             case 'damagePerLaw':
                 desc += `根据装载法则数量+${effect.baseDamage}伤害（当前+${effect.damagePerLaw}/个）。`;
                 break;
             case 'conditionalDamage':
-                desc += `若命环≥${effect.minLevel}级，再造成 ${effect.bonusDamage} 点伤害。`;
+                if (effect.condition === 'lowHp') {
+                    desc += `若生命低于${Math.floor(effect.threshold * 100)}%，伤害翻倍。`;
+                } else if (effect.condition === 'sealed') {
+                    desc += `若有被封印的命环槽，额外造成 ${effect.bonusDamage} 点伤害。`;
+                } else {
+                    desc += `若命环≥${effect.minLevel}级，再造成 ${effect.bonusDamage} 点伤害。`;
+                }
                 break;
             case 'blockFromLostHp':
                 desc += `获得等于已损失生命${Math.floor(effect.percent * 100)}%的护盾。`;

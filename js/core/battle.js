@@ -96,6 +96,11 @@ class Battle {
             }
         }
 
+        // 命环战斗开始钩子 (Analysis Ring)
+        if (this.player.fateRing && this.player.fateRing.scanEnemies) {
+            this.player.fateRing.scanEnemies(this.enemies);
+        }
+
         // 确保结束回合按钮可用
         const endTurnBtn = document.getElementById('end-turn-btn');
         if (endTurnBtn) {
@@ -398,14 +403,34 @@ class Battle {
 
         // 1. 玩家自身加成
         if (['damage', 'penetrate', 'damageAll', 'randomDamage'].includes(effect.type)) {
-            // 力量
-            if (this.player.buffs.strength) value += this.player.buffs.strength;
+            // 苦行 (Asceticism) - 若有保留手牌获得功德
+            // 注意：这里是在弃牌之前判断，所以只要手牌数>0就算保留（如果没有手动打出）
+            // 实际上 "保留" 意味着没有被打出。
+            if (this.player.buffs.meritOnRetain > 0) {
+                const retainedCount = this.player.hand.length;
+                if (retainedCount > 0 && this.player.fateRing && this.player.fateRing.gainMerit) {
+                    const merit = retainedCount * this.player.buffs.meritOnRetain;
+                    this.player.fateRing.gainMerit(merit);
+                    Utils.showBattleLog(`苦行：保留${retainedCount}张卡，功德+${merit}`);
+                }
+            }
 
-            // 虚弱
+            // 弃牌
+            if (!this.player.buffs.retainHand) {
+                this.player.discardHand();
+            } // 虚弱
             if (this.player.buffs.weak) value = Math.floor(value * 0.75);
 
             // 聚气 (Next Attack Bonus) - 预览不应消耗
             if (this.player.buffs.nextAttackBonus) value += this.player.buffs.nextAttackBonus;
+        }
+
+        // 命环战术加成 (Analysis Ring)
+        if (this.player.fateRing && this.player.fateRing.getTacticalBonus && target) {
+            const bonus = this.player.fateRing.getTacticalBonus(target);
+            if (bonus > 0) {
+                value = Math.floor(value * (1 + bonus));
+            }
         }
 
         // 2. 目标防御计算
@@ -530,6 +555,20 @@ class Battle {
                 game.handleCombo(card.type);
             }
 
+            // 命环资源钩子 (Karma Ring)
+            if (this.player.fateRing && this.player.fateRing.type === 'karma') {
+                // 简单规则：卡牌耗能多少就积攒多少？或者固定1点？
+                // 暂定：每次出牌积攒 5 点，耗能越高加成越多 ?
+                // 简化：固定值 + 耗能 * 5
+                const gain = 5 + (card.cost || 0) * 5;
+
+                if (card.type === 'attack') {
+                    this.player.fateRing.gainSin(gain);
+                } else if (card.type === 'skill' || card.type === 'power') {
+                    this.player.fateRing.gainMerit(gain);
+                }
+            }
+
             // 触发法宝使用卡牌效果
             const context = {
                 damageModifier: 0
@@ -538,6 +577,12 @@ class Battle {
 
             if (this.player.triggerTreasureEffect) {
                 this.player.triggerTreasureEffect('onCardPlay', card, context);
+            }
+
+            // 破法者 (Lawbreaker) - 攻击获得护盾
+            if (card.type === 'attack' && this.player.buffs.blockOnAttack) {
+                this.player.addBlock(this.player.buffs.blockOnAttack);
+                Utils.showBattleLog(`破法者触发！获得 ${this.player.buffs.blockOnAttack} 护盾`);
             }
 
             // 播放卡牌
@@ -613,7 +658,8 @@ class Battle {
 
                     // 处理待处理的生命汲取效果
                     if (this.pendingLifeSteal && this.pendingLifeSteal > 0) {
-                        const stealHeal = Math.floor(damage * this.pendingLifeSteal);
+                        const stealRate = isNaN(this.pendingLifeSteal) ? 0 : this.pendingLifeSteal;
+                        const stealHeal = Math.floor(damage * stealRate);
                         if (stealHeal > 0) {
                             this.player.heal(stealHeal);
                             Utils.showBattleLog(`吸血恢复 ${stealHeal} 点生命`);
@@ -625,16 +671,17 @@ class Battle {
 
             case 'penetrate':
                 if (target) {
+                    const penDmg = (typeof result.value === 'number' && !isNaN(result.value)) ? result.value : 0;
                     const oldBlock = target.block;
                     target.block = 0;
-                    target.currentHp -= result.value;
+                    target.currentHp -= penDmg;
                     target.block = oldBlock;
 
                     if (enemyEl) {
-                        Utils.addShakeEffect(enemyEl, getShakeIntensity(result.value));
-                        Utils.showFloatingNumber(enemyEl, result.value, 'damage');
+                        Utils.addShakeEffect(enemyEl, getShakeIntensity(penDmg));
+                        Utils.showFloatingNumber(enemyEl, penDmg, 'damage');
                     }
-                    Utils.showBattleLog(`穿透伤害 ${result.value}！`);
+                    Utils.showBattleLog(`穿透伤害 ${penDmg}！`);
                 }
                 break;
 
@@ -688,6 +735,18 @@ class Battle {
 
             case 'energy':
                 Utils.showBattleLog(`获得 ${result.value} 点灵力`);
+                break;
+
+            case 'gainSin':
+                Utils.showBattleLog(`业力 +${result.value}`);
+                break;
+
+            case 'gainMerit':
+                Utils.showBattleLog(`功德 +${result.value}`);
+                break;
+
+            case 'discardHand':
+                Utils.showBattleLog(`丢弃了 ${result.value} 张手牌`);
                 break;
 
             case 'draw':
@@ -832,7 +891,7 @@ class Battle {
 
     // 对敌人造成伤害
     dealDamageToEnemy(enemy, amount) {
-        if (isNaN(amount)) {
+        if (typeof amount !== 'number' || isNaN(amount)) {
             console.error('dealDamageToEnemy received NaN amount', amount);
             amount = 0;
         }
@@ -856,15 +915,25 @@ class Battle {
         if (this.player.activeResonances) {
             const plasmaOverload = this.player.activeResonances.find(r => r.id === 'plasmaOverload');
             if (plasmaOverload) {
-                // 简单起见，只要造成伤害就触发真实伤害，不严格检查是否是雷/火属性
-                // 或者我们可以检查卡牌类型？这里 dealDamageToEnemy 只是底层函数，拿不到卡牌信息
                 // 为了游戏性，我们可以设定为“攻击造成伤害时额外造成”
                 const trueDmg = plasmaOverload.effect.value;
                 enemy.currentHp -= trueDmg;
                 // 显示特效
                 const enemyEl = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`);
                 if (enemyEl) Utils.showFloatingNumber(enemyEl, trueDmg, 'damage');
-                // Utils.showBattleLog(`雷火劫：额外 ${trueDmg} 点真实伤害`);
+                Utils.showBattleLog(`雷火劫：额外 ${trueDmg} 点真实伤害`);
+            }
+        }
+
+        // 战术优势 (Tactical Advantage) - 攻击易伤回能
+        if (this.player.buffs.energyOnVulnerable > 0 && enemy && enemy.buffs && enemy.buffs.vulnerable > 0) {
+            const gain = this.player.buffs.energyOnVulnerable;
+            // 每回合限2次
+            if ((this.tacticalAdvantageTriggerCount || 0) < 2) {
+                this.player.currentEnergy += gain;
+                this.tacticalAdvantageTriggerCount = (this.tacticalAdvantageTriggerCount || 0) + 1;
+                Utils.showBattleLog(`战术优势！回能 +${gain}`);
+                this.updateEnergyUI();
             }
         }
 
@@ -879,8 +948,9 @@ class Battle {
         // 应用连击加成
         if (typeof game !== 'undefined' && game.getComboBonus) {
             const comboBonus = game.getComboBonus();
-            if (comboBonus > 0) {
-                amount = Math.floor(amount * (1 + comboBonus));
+            if (comboBonus > 1) {
+                amount = Math.floor(amount * comboBonus);
+                // Utils.showBattleLog(`连击加成：x${comboBonus.toFixed(1)}`);
             }
         }
 
@@ -889,27 +959,32 @@ class Battle {
             amount += enemy.buffs.vulnerable;
         }
 
-        // 先扣护盾
+        // 默认扣血逻辑
+        let finalDamage = Math.floor(amount);
+        const wasAlive = enemy.currentHp > 0;
+
+        // 检查护盾
         if (enemy.block > 0) {
-            if (enemy.block >= amount) {
-                enemy.block -= amount;
-                return 0;
+            if (enemy.block >= finalDamage) {
+                enemy.block -= finalDamage;
+                finalDamage = 0;
             } else {
-                amount -= enemy.block;
+                finalDamage -= enemy.block;
                 enemy.block = 0;
             }
         }
 
-        const wasAlive = enemy.currentHp > 0;
-        enemy.currentHp -= amount;
+        enemy.currentHp -= finalDamage;
+        if (enemy.currentHp < 0) enemy.currentHp = 0;
 
+        // 击杀触发
         if (wasAlive && enemy.currentHp <= 0) {
             if (this.player.triggerTreasureEffect) {
                 this.player.triggerTreasureEffect('onKill', enemy);
             }
         }
 
-        return amount;
+        return finalDamage;
     }
 
     // 结束回合
@@ -1137,6 +1212,10 @@ class Battle {
         switch (pattern.type) {
             case 'attack':
                 let damage = pattern.value;
+                if (typeof damage !== 'number' || isNaN(damage)) {
+                    console.error('Enemy attack damage is NaN', pattern);
+                    damage = 0;
+                }
 
                 // 应用力量加成
                 if (enemy.buffs.strength) {
@@ -1170,10 +1249,14 @@ class Battle {
                     }
 
                     // 16. 太乙神雷 (realm 16) - 敌人攻击吸血 20%
-                    if (this.player.realm === 16 && result.damage > 0) {
+                    if (this.player.realm === 16 && result.damage > 0 && !isNaN(result.damage)) {
                         const heal = Math.ceil(result.damage * 0.2);
-                        if (heal > 0) {
+                        if (heal > 0 && !isNaN(heal)) {
                             enemy.currentHp = Math.min(enemy.maxHp, enemy.currentHp + heal);
+                            if (isNaN(enemy.currentHp)) {
+                                console.error('Enemy HP became NaN after lifesteal', enemy);
+                                enemy.currentHp = enemy.maxHp; // Fallback
+                            }
                             Utils.showFloatingNumber(document.querySelector(`.enemy[data-index="${index}"]`), heal, 'heal');
                         }
                     }
@@ -1213,8 +1296,9 @@ class Battle {
                 break;
 
             case 'defend':
-                enemy.block += pattern.value;
-                Utils.showBattleLog(`${enemy.name} 获得 ${pattern.value} 点护盾`);
+                const blockVal = (typeof pattern.value === 'number' && !isNaN(pattern.value)) ? pattern.value : 0;
+                enemy.block += blockVal;
+                Utils.showBattleLog(`${enemy.name} 获得 ${blockVal} 点护盾`);
                 break;
 
             case 'buff':
@@ -1228,8 +1312,9 @@ class Battle {
                 break;
 
             case 'heal':
-                enemy.currentHp = Math.min(enemy.hp, enemy.currentHp + pattern.value);
-                Utils.showBattleLog(`${enemy.name} 恢复了 ${pattern.value} 点生命`);
+                const healVal = (typeof pattern.value === 'number' && !isNaN(pattern.value)) ? pattern.value : 0;
+                enemy.currentHp = Math.min(enemy.hp, enemy.currentHp + healVal);
+                Utils.showBattleLog(`${enemy.name} 恢复了 ${healVal} 点生命`);
                 break;
         }
 
