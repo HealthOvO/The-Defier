@@ -3691,9 +3691,10 @@ body {
            but on very small screens (320px) they might need to be 100% */
     }
 
-    flex: 1 1 100%;
-    max-width: 100%;
-}
+    .evolution-path-card {
+        flex: 1 1 100%;
+        max-width: 100%;
+    }
 }
 
 /* ===================================
@@ -3703,75 +3704,136 @@ body {
 
     /* 缩小手牌区域，适应小屏 */
     .hand-area {
-        min-height: 150px;
-        padding: 5px;
-        gap: 5px;
+        min-height: 140px;
+        padding: 2px;
+        gap: 2px;
+        background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.8) 50%);
+        overflow: visible;
+        /* 允许卡牌遮罩弹出效果 */
     }
 
     .hand-cards {
-        gap: -15px;
+        gap: -20px;
         /* 更紧凑的堆叠 */
     }
 
     /* 缩小卡牌尺寸 */
     .card {
-        width: 90px;
-        /* 130 -> 90 */
-        height: 130px;
-        /* 180 -> 130 */
-        margin-left: -25px;
-        font-size: 0.8rem;
+        width: 80px;
+        /* 进一步缩小 */
+        height: 115px;
+        margin-left: -20px;
+        font-size: 0.7rem;
+        padding: 4px;
+        border-width: 2px;
     }
 
     .card-cost {
-        width: 24px;
-        height: 24px;
-        font-size: 0.9rem;
+        width: 20px;
+        height: 20px;
+        font-size: 0.8rem;
+        top: -5px;
+        left: -5px;
+        border-width: 1px;
+    }
+
+    .card-header {
+        padding-left: 10px;
     }
 
     .card-art {
-        font-size: 2rem;
-        /* 图标缩小 */
-        margin: 2px 0;
+        font-size: 1.5rem;
+        margin: 0;
     }
 
     .card-desc {
-        font-size: 0.6rem;
-        padding: 2px 4px;
-        line-height: 1.1;
-        min-height: 30px;
+        font-size: 0.55rem;
+        padding: 1px 2px;
+        line-height: 1;
+        min-height: 25px;
         -webkit-line-clamp: 2;
-        /* 限制行数 */
     }
 
-    /* 调整结束回合按钮位置 */
+    /* 调整结束回合按钮位置 - 彻底悬浮 */
     .end-turn-btn {
-        bottom: 160px;
-        /* 上移，避免遮挡手牌底部? 或者下移? 当前是220px。如果卡牌变矮了，按钮应该下移？不，按钮之前挡住了卡牌。如果卡牌变矮，空隙变大。按钮如果fixed bottom 220，离底220。卡牌高130。那按钮在卡牌上方90px处。应该没事。但如果屏幕也就是600px高。220px位置很高。 */
-        right: 10px;
-        padding: 8px 16px;
-        font-size: 0.9rem;
-        bottom: 140px;
-        /* 下调一点，紧贴手牌上方 */
+        bottom: 125px;
+        /* 紧贴手牌上方 */
+        right: 5px;
+        padding: 6px 12px;
+        font-size: 0.8rem;
+        z-index: 200;
     }
 
-    /* 调整玩家区域，留出空间 */
-    .player-character {
-        transform: scale(0.9);
-        /* 稍微缩小玩家头像 */
-        transform-origin: left bottom;
+    /* 压缩战斗区域垂直空间 */
+    .battle-container {
+        justify-content: flex-end;
+        /* 优先保证底部对齐 */
     }
 
-    /* 调整敌人区域 */
     .enemy-area {
-        padding: 10px;
+        flex: 1;
+        /* 占据剩余空间 */
+        padding: 5px;
+        min-height: 0;
+        /* 允许压缩 */
+        align-items: flex-end;
+        /* 敌人靠下 */
     }
 
     .enemy-container {
         gap: 10px;
+        transform: scale(0.85);
+        /* 整体缩小敌人 */
     }
 
-    .enemy {
-        transform: scale(0.9);
+    .battle-middle {
+        height: 30px;
+        /* 压缩日志区域 */
+        min-height: 30px;
+    }
+
+    .battle-log {
+        font-size: 0.7rem;
+        padding: 2px 8px;
+    }
+
+    /* 调整玩家区域 */
+    .player-area {
+        padding: 0 5px;
+        gap: 10px;
+        margin-bottom: 5px;
+        flex-shrink: 0;
+    }
+
+    .player-character {
+        transform: none;
+        /* 取消之前的 scale */
+        gap: 2px;
+    }
+
+    .player-avatar {
+        width: 50px;
+        height: 50px;
+        font-size: 1rem;
+        border-width: 2px;
+    }
+
+    .avatar-effects {
+        display: none;
+        /* 移除特效减少干扰 */
+    }
+
+    .hp-bar {
+        width: 80px;
+        height: 12px;
+    }
+
+    .bar-text {
+        font-size: 0.6rem;
+    }
+
+    .energy-orb {
+        width: 18px;
+        height: 18px;
     }
 }
