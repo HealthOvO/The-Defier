@@ -802,6 +802,20 @@ class Battle {
             if (enemy.stunned) {
                 enemy.stunned = false;
                 Utils.showBattleLog(`${enemy.name} 被眩晕，跳过回合`);
+
+                // 控制抵抗机制 (Realm 16+)
+                if (this.player.realm >= 16) {
+                    let resistChance = 0;
+                    if (this.player.realm === 16) resistChance = 0.3;
+                    else if (this.player.realm === 17) resistChance = 0.4;
+                    else if (this.player.realm >= 18) resistChance = 0.5;
+
+                    if (Math.random() < resistChance) {
+                        enemy.buffs.controlImmune = 2; // 持续2回合（本回合结束-1，下回合生效）
+                        Utils.showBattleLog(`${enemy.name} 产生了抗性！(免疫控制)`);
+                    }
+                }
+
                 await Utils.sleep(500);
                 continue;
             }

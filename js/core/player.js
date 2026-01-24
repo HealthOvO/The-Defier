@@ -460,6 +460,16 @@ class Player {
             // 先不delete，假设 endTurn 会清理临时buff。
         }
 
+        // 伤害保护机制 (One-shot Protection)
+        // 单次伤害超过最大生命值 35% 的部分，减免 50%
+        const damageCapThreshold = Math.floor(this.maxHp * 0.35);
+        if (amount > damageCapThreshold) {
+            const excess = amount - damageCapThreshold;
+            const reducedExcess = Math.floor(excess * 0.5);
+            amount = damageCapThreshold + reducedExcess;
+            Utils.showBattleLog('触发伤害保护！');
+        }
+
         // 先扣护盾
         let remainingDamage = amount;
         if (this.block > 0) {
