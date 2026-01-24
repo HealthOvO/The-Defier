@@ -2499,6 +2499,59 @@ class Game {
         this.renderShop();
     }
 
+    // 显示命环进化选择
+    showEvolutionSelection(targetTier) {
+        const modal = document.getElementById('event-modal');
+        const titleEl = document.getElementById('event-title');
+        const iconEl = document.getElementById('event-icon');
+        const descEl = document.getElementById('event-desc');
+        const choicesEl = document.getElementById('event-choices');
+
+        titleEl.textContent = '命环进化';
+        iconEl.textContent = '🧬';
+        descEl.textContent = '你的命环因力量满盈而震颤，显化出数条进化的可能...';
+        choicesEl.innerHTML = '';
+
+        // 筛选可用路径
+        const availablePaths = Object.values(FATE_RING.paths).filter(path =>
+            path.tier === targetTier &&
+            (!path.requires || path.requires.includes(this.player.fateRing.path))
+        );
+
+        // 如果是 Tier 3 (逆天之环)，特殊处理 requiresAny
+        if (targetTier === 3) {
+            const ultimatePath = FATE_RING.paths['defiance'];
+            if (ultimatePath) availablePaths.push(ultimatePath);
+        }
+
+        availablePaths.forEach(path => {
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            btn.innerHTML = `
+                <div class="choice-icon">${path.icon || '✨'}</div>
+                <div class="choice-content">
+                    <div class="choice-text">进化：${path.name}</div>
+                    <div class="choice-result">${path.description}</div>
+                </div>
+            `;
+
+            btn.onclick = () => {
+                this.player.evolveFateRing(path.id);
+                Utils.showBattleLog(`命环进化为：${path.name}`);
+                modal.classList.remove('active');
+
+                // 刷新UI
+                if (document.getElementById('ring-modal').classList.contains('active')) {
+                    this.showFateRing();
+                }
+            };
+
+            choicesEl.appendChild(btn);
+        });
+
+        modal.classList.add('active');
+    }
+
     // 应用服务效果
     applyServiceEffect(service) {
         // 法宝购买逻辑

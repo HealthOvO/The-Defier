@@ -968,33 +968,106 @@ class Player {
 
     // 检查命环升级
     checkFateRingLevelUp() {
-        // 即使是level 0，如果经验足够也应该能觉醒
-        // if (this.fateRing.level === 0) return false;
-
         const levels = FATE_RING.levels;
-        // 注意 levels[0] 是 level 0, levels[1] 是 level 1
-        for (let i = levels.length - 1; i >= 1; i--) {
-            if (this.fateRing.exp >= levels[i].expRequired) {
-                if (this.fateRing.level < levels[i].level) {
-                    this.fateRing.level = levels[i].level;
-                    this.fateRing.name = levels[i].name;
-                    this.fateRing.slots = levels[i].slots;
+        const maxLevel = Object.keys(levels).length - 1;
+        let pLevel = this.fateRing.level;
 
-                    // 确保从残缺印记升级时，路径变为觉醒
-                    if (this.fateRing.path === 'crippled' && this.fateRing.level >= 1) {
-                        this.fateRing.path = 'awakened';
-                    }
+        // 寻找经验满足的最高等级
+        for (let i = maxLevel; i > pLevel; i--) {
+            if (this.fateRing.exp >= levels[i].exp) {
+                // 升级处理
+                this.fateRing.level = i;
+                this.fateRing.name = levels[i].name || `Lv.${i} 命环`; // 确保有名字
+                this.fateRing.slots = levels[i].slots;
 
-                    // 立即应用新等级的属性加成
-                    this.recalculateStats();
-
-                    Utils.showBattleLog(`命环突破！晋升为【${this.fateRing.name}】`);
-                    return true;
+                // 播放特效
+                if (typeof Utils !== 'undefined' && Utils.showBattleLog) {
+                    Utils.showBattleLog(`✨ 命环突破！晋升至 Lv.${i}！`);
                 }
-                break;
+
+                this.recalculateStats();
+
+                // 检查进化触发 (Milestones: Lv 1, Lv 3, Lv 7)
+                this.checkEvolution();
+                return true;
             }
         }
         return false;
+    }
+
+    // 检查是否触发进化
+    checkEvolution() {
+        const level = this.fateRing.level;
+        const currentPath = FATE_RING.paths[this.fateRing.path];
+        const currentTier = currentPath ? currentPath.tier : 0;
+
+        // Lv 1: 自动觉醒 (Tier 0 -> Tier 1)
+        if (level >= 1 && currentTier < 1) {
+            this.evolveFateRing('awakened');
+            Utils.showBattleLog(`命环觉醒！无法则之力已激活。`);
+        }
+
+        // Lv 3: 第一次分支进化 (Tier 1 -> Tier 2)
+        if (level >= 3 && currentTier < 2) {
+            // 需要玩家选择，调用 Game 的方法显示界面
+            if (this.game && this.game.showEvolutionSelection) {
+                this.game.showEvolutionSelection(2);
+            }
+        }
+
+        // Lv 7: 高阶进化 (Tier 2 -> Tier 3)
+        if (level >= 7 && currentTier < 3) {
+            if (this.game && this.game.showEvolutionSelection) {
+                this.game.showEvolutionSelection(3);
+            }
+        }
+    }
+
+    // 进化命环
+    evolveFateRing(pathId) {
+        const pathData = FATE_RING.paths[pathId];
+        if (!pathData) return;
+
+        this.fateRing.path = pathId;
+        // 如果名字包含在pathData中，是否覆盖 level name? 通常保持 Level Name (一阶、二阶) + Path Name?
+        // 我们在 UI 显示上组合它们。
+
+        // 应用进化奖励
+        if (pathData.bonus) {
+            this.applyPathBonus(pathData.bonus);
+        }
+
+        this.recalculateStats();
+    }
+
+    // 应用进化奖励
+    applyPathBonus(bonus) {
+        switch (bonus.type) {
+            case 'hpBonus':
+                this.maxHp += bonus.value;
+                this.currentHp += bonus.value;
+                break;
+            case 'drawBonus':
+                this.addPermBuff('draw', bonus.value);
+                break;
+            case 'energyBonus':
+                this.addPermBuff('energy', bonus.value);
+                break;
+            case 'damageBonus':
+                this.addPermBuff('damage', bonus.value); // 百分比转为固定值？暂存
+                // 实际上 damageBonus (20%) 可能需要特殊处理
+                // 我们在 calculateStats 或 executeEffect 中处理 damageBonus
+                if (!this.permBuffs.damageMult) this.permBuffs.damageMult = 0;
+                this.permBuffs.damageMult += bonus.value;
+                break;
+            case 'ultimate':
+                this.addPermBuff('revive', 1);
+                this.maxHp += 100;
+                this.currentHp += 100;
+                this.addPermBuff('energy', 1);
+                this.addPermBuff('draw', 1);
+                break;
+        }
     }
 
     // 选择命环进化路径
