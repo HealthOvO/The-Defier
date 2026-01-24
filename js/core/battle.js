@@ -648,6 +648,11 @@ class Battle {
 
     // 对敌人造成伤害
     dealDamageToEnemy(enemy, amount) {
+        if (isNaN(amount)) {
+            console.error('dealDamageToEnemy received NaN amount', amount);
+            amount = 0;
+        }
+
         // 5. 心魔滋生 (realm 5) - 这里是玩家打敌人，不需要增强
         // 如果是敌人打玩家，需要在 takeDamage 或者 enemy action 中处理
 
@@ -798,7 +803,10 @@ class Battle {
                 continue; // 跳过正常行动
             }
 
-            // 检查眩晕
+            // 处理敌人debuff (提前处理，防止晕眩导致不受DOT伤害)
+            await this.processEnemyDebuffs(enemy, i);
+
+            // 检查晕眩
             if (enemy.stunned) {
                 enemy.stunned = false;
                 Utils.showBattleLog(`${enemy.name} 被眩晕，跳过回合`);
@@ -811,7 +819,7 @@ class Battle {
                     else if (this.player.realm >= 18) resistChance = 0.5;
 
                     if (Math.random() < resistChance) {
-                        enemy.buffs.controlImmune = 2; // 持续2回合（本回合结束-1，下回合生效）
+                        enemy.buffs.controlImmune = 2; // 持续2回合
                         Utils.showBattleLog(`${enemy.name} 产生了抗性！(免疫控制)`);
                     }
                 }
@@ -819,19 +827,6 @@ class Battle {
                 await Utils.sleep(500);
                 continue;
             }
-
-            // 检查麻痹 (50% 几率跳过回合)
-            if (enemy.buffs.paralysis && enemy.buffs.paralysis > 0) {
-                enemy.buffs.paralysis--;
-                if (Math.random() < 0.5) {
-                    Utils.showBattleLog(`${enemy.name} 因麻痹无法动弹！`);
-                    await Utils.sleep(500);
-                    continue;
-                }
-            }
-
-            // 处理敌人debuff
-            await this.processEnemyDebuffs(enemy, i);
 
             // 13. 时光逆流 (realm 13) - 每3回合行动两次
             let actionCount = 1;
