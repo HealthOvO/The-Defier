@@ -312,8 +312,8 @@ const LAW_RESONANCES = {
         id: 'dimensionStrike',
         name: '维度打击',
         laws: ['timeStop', 'spaceRift'],
-        description: '时空扭曲。回合开始时，50%几率让所有手牌耗能-1（本回合），或抽2张牌。',
-        effect: { type: 'turnStartGamble', chance: 0.5, option1: 'costReduce', option2: 'draw' }
+        description: '时空扭曲。回合开始时，50%几率让手牌中随机3张卡牌耗能-1（本回合），或抽2张牌。',
+        effect: { type: 'turnStartGamble', chance: 0.5, option1: 'costReduce', option2: 'draw', count: 3 }
     },
     godDemon: {
         id: 'godDemon',

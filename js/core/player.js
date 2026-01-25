@@ -501,24 +501,44 @@ class Player {
         const dimStrike = this.activeResonances.find(r => r.id === 'dimensionStrike');
         if (dimStrike) {
             if (Math.random() < dimStrike.effect.chance) {
-                // 选项1: 手牌耗能-1 (本回合)
-                // 由于目前还没抽牌，这里只是设定一个标记，抽牌时生效？
-                // 或者直接给个Buff "dimStrikeActive".
-                // 描述说 "回合开始时"。此时还没抽牌。
-                // 最好是在抽牌后？或者给个Buff让他生效。
-                // 简单起见：直接抽2张牌作为替代方案（因为减费实现复杂）？
-                // 或者：本回合所有手牌减费。我们可以在drawCards后遍历手牌减费。
-                // 但这里是 startTurn，在 drawCards 之前。
-                // 所以我们给个标记 this.dimStrikeActive = true.
-                this.dimStrikeCostReduce = true;
-                Utils.showBattleLog('维度打击：本回合手牌耗能降低！');
+                // 选项1: 手牌中随机3张耗能-1
+                const candidates = this.hand.filter(c => c.cost > 0 && !c.isTemp); // 排除0费和临时卡? 临时卡usually cost 0? 
+                // 只是简单的 c.cost > 0 即可
+
+                // Shuffle candidates indices or pick random
+                // Fisher-Yates like select
+                const targets = [];
+                const costCards = this.hand.filter(c => c.cost > 0);
+
+                if (costCards.length > 0) {
+                    const count = Math.min(dimStrike.effect.count || 3, costCards.length);
+                    // Shuffle costCards to pick random ones
+                    const shuffled = Utils.shuffle([...costCards]);
+                    const selected = shuffled.slice(0, count);
+
+                    selected.forEach(card => {
+                        card.cost = Math.max(0, card.cost - 1);
+                        // Visual feedback?
+                    });
+
+                    Utils.showBattleLog(`维度打击：${count} 张手牌耗能 -1！`);
+                    // Update UI needed? usually handled by battle update cycle or manual update
+                    if (this.game && this.game.verifyHandUI) {
+                        // verifyHandUI isn't a standard method, let's rely on standard UI update from battle.endTurn -> startTurn flow
+                        // But startTurn calls drawCards, calls...
+                        // battle.js calls player.startTurn(). 
+                        // After player.startTurn() returns, battle.js typically updates UI?
+                        // Let's check battle.js line 1220: this.updateBattleUI();
+                        // Yes, UI will be updated.
+                    }
+                } else {
+                    Utils.showBattleLog('维度打击：无牌可减费！');
+                }
             } else {
                 // 选项2: 抽2张牌
-                this.drawCards(2); // 这里会立即抽
+                this.drawCards(2);
                 Utils.showBattleLog('维度打击：额外抽2张牌！');
             }
-        } else {
-            this.dimStrikeCostReduce = false;
         }
     }
 
@@ -1383,10 +1403,6 @@ class Player {
                     if (this.buffs.confuse) {
                         // Confuse: Random cost 0-3
                         card.cost = Math.floor(Math.random() * 4);
-                    } else if (this.dimStrikeCostReduce) {
-                        // 维度打击生效中：优先减费
-                        const change = Math.floor(Math.random() * 3) - 1;
-                        card.cost = Math.max(0, card.baseCost + change - 1);
                     } else {
                         // Realm 6: -1 to +1 (Weighted: 20% -1, 30% 0, 50% +1)
                         const r = Math.random();
@@ -1400,12 +1416,8 @@ class Player {
                     // 正常情况
                     if (card.baseCost === undefined) card.baseCost = card.cost; // Ensure baseCost
 
-                    if (this.dimStrikeCostReduce) {
-                        card.cost = Math.max(0, card.baseCost - 1);
-                    } else {
-                        // 确保 consumeCandy 的卡牌 cost 保持为 0 (或 baseCost)
-                        card.cost = card.baseCost;
-                    }
+                    // 确保 consumeCandy 的卡牌 cost 保持为 0 (或 baseCost)
+                    card.cost = card.baseCost;
                 }
                 this.hand.push(card);
             }
