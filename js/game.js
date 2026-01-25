@@ -44,6 +44,13 @@ class Game {
         this.initDynamicBackground();
         this.loadGameResult = this.loadGame();
 
+        // 恢复当前的存档位索引 (修复刷新后无法同步到正确槽位的问题)
+        const savedSlotIndex = sessionStorage.getItem('currentSaveSlot');
+        if (savedSlotIndex !== null) {
+            this.currentSaveSlot = parseInt(savedSlotIndex);
+            console.log(`已恢复存档位: Slot ${this.currentSaveSlot + 1}`);
+        }
+
         // 检查是否有存档，更新按钮状态
         const continueBtn = document.getElementById('continue-game-btn');
         const newGameBtn = document.getElementById('new-game-btn');
@@ -1124,6 +1131,23 @@ class Game {
             rewardCards.appendChild(cardEl);
         });
 
+        // 动态更新跳过按钮文本
+        const skipBtn = this.currentScreenElement ? this.currentScreenElement.querySelector('.skip-reward-btn') : document.querySelector('.skip-reward-btn');
+        if (skipBtn) {
+            const skipCost = 50 * this.player.realm;
+            skipBtn.textContent = `跳过卡牌 (扣${skipCost}灵石)`;
+            // Visual indicator if affordable
+            if (this.player.gold < skipCost) {
+                skipBtn.style.opacity = '0.6';
+                skipBtn.style.cursor = 'not-allowed';
+                skipBtn.title = '灵石不足';
+            } else {
+                skipBtn.style.opacity = '1';
+                skipBtn.style.cursor = 'pointer';
+                skipBtn.title = '';
+            }
+        }
+
         this.showScreen('reward-screen');
     }
 
@@ -1145,7 +1169,7 @@ class Game {
 
     // 跳过奖励卡牌（扣除灵石）
     skipRewardCard() {
-        const cost = 10 * this.player.realm;
+        const cost = 50 * this.player.realm;
         if (this.player.gold >= cost) {
             this.player.gold -= cost;
             Utils.showBattleLog(`跳过卡牌奖励，扣除 ${cost} 灵石`);
@@ -3441,7 +3465,12 @@ class Game {
 
             if (res.success && res.slots) {
                 slots = res.slots;
-            } else if (res.isEmpty && localData) {
+            }
+
+            // 修正：如果云端虽然返回成功，但存档全空（新注册账号），也应该尝试绑定旧存档
+            const isCloudEmpty = res.isEmpty || (slots && slots.every(s => s === null));
+
+            if (isCloudEmpty && localData) {
                 // 如果云端是新的（空），但本地有数据，自动帮用户填入 Slot 0
                 slots[0] = localData;
                 AuthService.saveCloudData(localData, 0); // Async sync
@@ -3514,17 +3543,28 @@ class Game {
     // 选择存档位操作
     selectSlot(index, mode) {
         this.currentSaveSlot = index;
+        // 持久化存储，防止刷新丢失
+        sessionStorage.setItem('currentSaveSlot', index);
+
         const modal = document.getElementById('save-slots-modal');
 
         if (mode === 'load') {
             const data = this.cachedSlots[index];
             if (data) {
-                localStorage.setItem('theDefierSave', JSON.stringify(data));
-                Utils.showBattleLog(`已加载 存档 ${index + 1}`);
-                modal.classList.remove('active');
+                try {
+                    localStorage.setItem('theDefierSave', JSON.stringify(data));
+                    // 标记为手动加载，防止被冲突检测逻辑误判而弹窗
+                    sessionStorage.setItem('justLoadedSave', 'true');
 
-                // Reload game state directly without full refresh if possible, but reload is safer
-                setTimeout(() => window.location.reload(), 500);
+                    Utils.showBattleLog(`已加载 存档 ${index + 1}`);
+                    modal.classList.remove('active');
+
+                    // Reload game state directly without full refresh if possible, but reload is safer
+                    setTimeout(() => window.location.reload(), 500);
+                } catch (e) {
+                    console.error('Load Save Failed:', e);
+                    alert('加载存档失败：本地存储可能已满，请清理浏览器缓存后重试。');
+                }
             }
         } else if (mode === 'new' || mode === 'overwrite') {
             let confirmed = true;
@@ -3619,6 +3659,13 @@ class Game {
     }
 
     async checkForCloudSave() {
+        // 如果是刚刚手动加载的存档，跳过冲突检测，并清除标记
+        if (sessionStorage.getItem('justLoadedSave') === 'true') {
+            sessionStorage.removeItem('justLoadedSave');
+            console.log('Skipping conflict check (Manual load)');
+            return;
+        }
+
         // This is now handled within handleLogin's flow logic, but kept as fallback or for manual checks
         const res = await AuthService.getCloudData();
         if (res.success && res.data) {
