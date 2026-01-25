@@ -43,6 +43,15 @@ class Player {
         // Buff/Debuff
         this.buffs = {};
 
+        // 永久属性加成 (来自事件)
+        this.permaBuffs = {
+            maxHp: 0,
+            energy: 0,
+            draw: 0,
+            strength: 0,
+            defense: 0
+        };
+
         // 遗物
         this.relic = charData.relic;
 
@@ -200,12 +209,11 @@ class Player {
             }
         }
 
-        // 4. 永久属性加成 (来自事件/成就)
-        if (this.permBuffs) {
-            if (this.permBuffs.maxHp) newMaxHp += this.permBuffs.maxHp;
-            if (this.permBuffs.energy) newBaseEnergy += this.permBuffs.energy;
-            if (this.permBuffs.draw) newDrawCount += this.permBuffs.draw;
-            // 力量等战斗属性不直接加在基础属性里，而是在战斗开始时初始化到buff中
+        // 4. 永久属性加成 (Perma Buffs)
+        if (this.permaBuffs) {
+            newMaxHp += (this.permaBuffs.maxHp || 0);
+            newBaseEnergy += (this.permaBuffs.energy || 0);
+            newDrawCount += (this.permaBuffs.draw || 0);
         }
 
         // 5. 天域环境影响
@@ -443,6 +451,7 @@ class Player {
         this.processBuffsOnTurnStart();
 
         // 共鸣：混沌风暴
+        const chaoticStorm = this.activeResonances.find(r => r.id === 'chaoticStorm');
         if (chaoticStorm) {
             const dmg = Utils.random(chaoticStorm.effect.min, chaoticStorm.effect.max);
             // 假设game.battle存在且能访问enemies
@@ -466,14 +475,23 @@ class Player {
 
     // 应用法则被动
     applyLawPassives() {
-        // 法则被动效果在战斗开始时检查
-
-        // 混沌法则：混乱光环
-        // 这里只是记录，实际效果在Battle.js的enemy turn logic中生效
-        // 或者我们可以给自身加一个永久buff "Chaos Aura"
+        // ... (existing code)
         const chaosLaw = this.collectedLaws.find(l => l.id === 'chaosLaw');
         if (chaosLaw) {
             this.addBuff('chaosAura', 1);
+        }
+    }
+
+    // 添加永久属性加成
+    addPermaBuff(type, value) {
+        if (this.permaBuffs[type] !== undefined) {
+            this.permaBuffs[type] += value;
+            this.recalculateStats();
+        } else {
+            // Handle stats that are not directly stored in permaBuffs object structure if needed? 
+            // For now assuming types match keys.
+            this.permaBuffs[type] = (this.permaBuffs[type] || 0) + value;
+            this.recalculateStats();
         }
     }
 

@@ -57,7 +57,9 @@ class Battle {
         this.turnNumber = 1;
         this.turnNumber = 1;
         this.currentTurn = 'player';
+        this.currentTurn = 'player';
         this.isProcessingCard = false; // 强制重置状态
+        this.playerTookDamage = false; // For Trial Challenge
 
         // 玩家回合开始
         this.player.startTurn();
@@ -1396,6 +1398,7 @@ class Battle {
                         Utils.addShakeEffect(playerEl);
                         if (result.damage > 0) {
                             Utils.showFloatingNumber(playerEl, result.damage, 'damage');
+                            this.playerTookDamage = true;
                         }
                     }
 

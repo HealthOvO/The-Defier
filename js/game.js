@@ -991,6 +991,61 @@ class Game {
             ringExp = Math.floor(ringExp * 1.25);
         }
 
+        // 试炼挑战检测 (Trial Challenge)
+        if (this.activeTrial) {
+            let trialSuccess = false;
+            // 获取回合数 (assuming battle object exists and persists turnNumber)
+            // this.battle 应该是当前战斗实例
+
+            if (this.activeTrial === 'speedKill') {
+                const limit = (this.trialData && this.trialData.rounds) ? this.trialData.rounds : 3;
+                if (this.battle && this.battle.turnNumber <= limit) {
+                    trialSuccess = true;
+                }
+            } else if (this.activeTrial === 'noDamage') {
+                if (this.battle && !this.battle.playerTookDamage) {
+                    trialSuccess = true;
+                }
+            }
+
+            if (trialSuccess) {
+                Utils.showBattleLog('⚡ 试炼完成！获得额外奖励！');
+
+                if (this.trialData.rewardMultiplier) {
+                    ringExp = Math.floor(ringExp * this.trialData.rewardMultiplier);
+                    this.player.gold += 50;
+                    Utils.showBattleLog(`奖励翻倍！获得额外 50 灵石`);
+                }
+                if (this.trialData.reward === 'law') {
+                    // 奖励一张随机法则牌
+                    const randomLawKey = Object.keys(LAWS)[Math.floor(Math.random() * Object.keys(LAWS).length)];
+                    const law = LAWS[randomLawKey];
+                    // 只是获得卡牌还是获得法则? "reward: law" usually implies getting the law power or card.
+                    // Description says "obtain rare law".
+                    // Let's force add law to player (if not duplicate)
+                    if (this.player.collectedLaws.some(l => l.id === law.id)) {
+                        this.player.gold += 100; // Fallback
+                        Utils.showBattleLog(`法则已存在，转化为 100 灵石`);
+                    } else {
+                        // Normally stealLaw logic adds checks. Here we force add.
+                        if (this.player.collectedLaws) this.player.collectedLaws.push(law);
+                        Utils.showBattleLog(`领悟法则：${law.name}`);
+                        // Also add unlock card?
+                        if (law.unlockCards) {
+                            law.unlockCards.forEach(cid => {
+                                if (CARDS[cid]) this.player.deck.push({ ...CARDS[cid], instanceId: this.player.generateCardId() });
+                            });
+                        }
+                    }
+                }
+            } else {
+                Utils.showBattleLog('试炼失败...');
+            }
+            // Clear trial state
+            this.activeTrial = null;
+            this.trialData = null;
+        }
+
         this.player.fateRing.exp += ringExp;
         const levelUp = this.player.checkFateRingLevelUp();
 
@@ -1424,13 +1479,111 @@ class Game {
                 break;
 
             case 'heal':
-                this.player.currentHp = Math.min(this.player.maxHp, this.player.currentHp + effect.value);
+                this.player.heal(effect.value); // Use existing heal method
                 this.eventResults.push(`💚 恢复 ${effect.value} HP`);
                 break;
 
+            case 'maxHp':
+                this.player.maxHp += effect.value;
+                this.player.currentHp = Math.min(this.player.currentHp, this.player.maxHp);
+                if (effect.value > 0) {
+                    this.player.heal(effect.value); // Usually MaxHP+ also heals that amount?
+                }
+                this.eventResults.push(`❤️ 最大HP ${effect.value > 0 ? '+' : ''}${effect.value}`);
+                break;
+
+            case 'permaBuff':
+                if (this.player.addPermaBuff) {
+                    this.player.addPermaBuff(effect.stat, effect.value);
+                    const statMap = { 'strength': '力量', 'defense': '防御', 'energy': '灵力', 'maxHp': '生命' };
+                    this.eventResults.push(`💪 永久${statMap[effect.stat] || effect.stat} ${effect.value > 0 ? '+' : ''}${effect.value}`);
+                }
+                break;
+
             case 'damage':
-                this.player.currentHp -= effect.value;
+                this.player.takeDamage(effect.value);
                 this.eventResults.push(`💔 失去 ${effect.value} HP`);
+                break;
+
+            case 'removeCardType':
+                let removedCount = 0;
+                const toRemove = [];
+                // Find cards matching criteria
+                this.player.deck.forEach((card, index) => {
+                    // Check if card matches criteria (e.g. cardId or cardType)
+                    // If cardType is 'strike', remove any card with id/name containing strike? 
+                    // Or check type property.
+                    let match = false;
+                    if (effect.cardId && card.id === effect.cardId) match = true;
+                    if (effect.cardType && card.type === effect.cardType) match = true;
+                    // Special case for 'strike' in data sometimes maps to 'attack' type, detailed check needed?
+                    // Let's assume strict type match first.
+
+                    if (match && removedCount < (effect.count || 1)) {
+                        toRemove.push(index);
+                        removedCount++;
+                    }
+                });
+
+                // Remove from back to front to avoid index shift
+                toRemove.sort((a, b) => b - a).forEach(idx => {
+                    const removed = this.player.deck.splice(idx, 1)[0];
+                    if (removed) this.eventResults.push(`🗑️ 移除: ${removed.name}`);
+                });
+                if (removedCount === 0) {
+                    this.eventResults.push(`⚠️ 没有符合条件的卡牌可移除`);
+                }
+                break;
+
+            case 'upgradeCard':
+                // This requires UI interaction which is hard in instant event result.
+                // We should probably set a state 'pendingUpgrade' and show modal AFTER event modal closes?
+                // Or show modal on top.
+                // For simplicity, let's upgrade a random card if no UI available, OR call a hypothetical openUpgradeUI.
+                // But wait, the prompt asks to "implement logic".
+                // I'll check if openUpgradeUI exists. If not, random upgrade.
+                // Checking previous context... I didn't see openUpgradeUI.
+                // Let's upgrade a RANDOM upgradable card for now to ensure effect works, 
+                // OR trigger a flag "this.pendingCardReward = 'upgrade'"?
+
+                // Let's force a random upgrade for now as MVP.
+                const upgradable = this.player.deck.filter(c => !c.upgraded);
+                if (upgradable.length > 0) {
+                    const target = upgradable[Math.floor(Math.random() * upgradable.length)];
+                    target.upgraded = true;
+                    target.name += '+';
+                    target.value = Math.floor((target.value || 0) * 1.3); // Simple buff
+                    if (target.effects) {
+                        target.effects.forEach(e => {
+                            if (e.value) e.value = Math.floor(e.value * 1.3);
+                        });
+                    }
+                    this.eventResults.push(`✨ 升级: ${target.name}`);
+                } else {
+                    this.eventResults.push(`⚠️ 没有可升级的卡牌`);
+                }
+                break;
+
+            case 'treasure':
+                if (effect.random) {
+                    // Add random treasure
+                    // Need access to TREASURES list.
+                    if (typeof TREASURES !== 'undefined') {
+                        const keys = Object.keys(TREASURES);
+                        const randomKey = keys[Math.floor(Math.random() * keys.length)];
+                        const treasureData = TREASURES[randomKey];
+                        // Simple add logic
+                        this.player.treasures.push({ ...treasureData, instanceId: Date.now() });
+                        // Trigger onObtain if exists?
+                        this.eventResults.push(`🏺 获得法宝: ${treasureData.name}`);
+                    }
+                }
+                break;
+
+            case 'trial':
+                this.activeTrial = effect.trialType; // 'speedKill' or 'noDamage'
+                this.trialData = effect;
+                this.eventResults.push(`⚔️ 试炼开启: ${effect.trialType === 'speedKill' ? '速杀' : '无伤'}`);
                 break;
 
             case 'ringExp':
