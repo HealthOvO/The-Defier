@@ -509,6 +509,27 @@ const ENEMIES = {
         gold: { min: 200, max: 320 }
     },
 
+    ascensionSovereign: {
+        id: 'ascensionSovereign',
+        name: '飞升主宰',
+        icon: '👑',
+        realm: 9,
+        isBoss: true,
+        hp: 600,
+        patterns: [
+            { type: 'buff', buffType: 'strength', value: 5, intent: '💪' },
+            { type: 'attack', value: 45, intent: '⚔️' },
+            { type: 'debuff', buffType: 'vulnerable', value: 3, intent: '✨' },
+            { type: 'multiAttack', value: 20, count: 4, intent: '🔥' },
+            { type: 'heal', value: 50, intent: '💚' },
+            { type: 'defend', value: 50, intent: '🛡️' }
+        ],
+        stealChance: 0.8,
+        stealLaw: 'timeRewind',
+        gold: { min: 400, max: 600 },
+        description: '掌控飞升之力的主宰'
+    },
+
     // ==================== 第十重·地仙界 ====================
     dualMagmaGuardians: {
         id: 'dualMagmaGuardians',

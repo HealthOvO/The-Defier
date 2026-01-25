@@ -2805,6 +2805,62 @@ class Game {
         }
     }
 
+    // 显示通用确认弹窗
+    showConfirmModal(message, onConfirm, onCancel = null) {
+        let modal = document.getElementById('generic-confirm-modal');
+
+        // 动态创建模态框
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'generic-confirm-modal';
+            modal.className = 'modal';
+            modal.style.zIndex = '10000'; // 确保在最上层
+            modal.innerHTML = `
+                <div class="modal-content" style="text-align: center; max-width: 400px; padding: 30px;">
+                    <h3 id="generic-confirm-title" style="color: var(--accent-gold); margin-bottom: 20px;">提示</h3>
+                    <p id="generic-confirm-message" style="color: #ccc; margin-bottom: 30px; line-height: 1.6; font-size: 1.1rem; white-space: pre-line;"></p>
+                    <div style="display: flex; justify-content: center; gap: 20px;">
+                        <button id="generic-confirm-btn" class="menu-btn primary small">确定</button>
+                        <button id="generic-cancel-btn" class="menu-btn small">取消</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            // 绑定通用关闭
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'modal-close';
+            closeBtn.innerHTML = '×';
+            closeBtn.onclick = () => modal.classList.remove('active');
+            modal.querySelector('.modal-content').appendChild(closeBtn);
+        }
+
+        // 更新内容
+        const msgEl = document.getElementById('generic-confirm-message');
+        const confirmBtn = document.getElementById('generic-confirm-btn');
+        const cancelBtn = document.getElementById('generic-cancel-btn');
+
+        if (msgEl) msgEl.textContent = message;
+
+        // 绑定事件 (使用 onclick 覆盖之前的绑定，防止多次触发)
+        if (confirmBtn) {
+            confirmBtn.onclick = () => {
+                modal.classList.remove('active');
+                if (typeof onConfirm === 'function') onConfirm();
+            };
+        }
+
+        if (cancelBtn) {
+            cancelBtn.onclick = () => {
+                modal.classList.remove('active');
+                if (typeof onCancel === 'function') onCancel();
+            };
+        }
+
+        // 显示
+        modal.classList.add('active');
+    }
+
     // 获取卡牌基础价格
     getCardPrice(card) {
         const rarityPrices = {
@@ -3653,24 +3709,31 @@ class Game {
             const user = AuthService.getCurrentUser();
             // Change button to show name or Logout
             btn.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text" style="font-size:0.8rem">${user.username}</span>`;
-            btn.onclick = async () => {
-                if (confirm('确定要退出登录吗？\n(退出前将自动上传当前进度)')) {
-                    // 退出前强制尝试上传一次本地存档
-                    const localSave = localStorage.getItem('theDefierSave');
-                    if (localSave) {
-                        try {
-                            const data = JSON.parse(localSave);
-                            await AuthService.saveCloudData(data, this.currentSaveSlot);
-                            console.log('Logout sync complete');
-                        } catch (e) {
-                            console.error('Logout sync failed', e);
-                        }
-                    }
+            btn.onclick = () => {
+                // Muted/Audio handling (delayed slightly for feel)
+                setTimeout(() => {
+                    this.showConfirmModal(
+                        '确定要退出登录吗？\n(退出前将自动上传当前进度)',
+                        async () => {
+                            // 退出前强制尝试上传一次本地存档
+                            const localSave = localStorage.getItem('theDefierSave');
+                            // Fix: Check if we have a valid slot before syncing
+                            if (localSave && this.currentSaveSlot !== null && this.currentSaveSlot !== undefined) {
+                                try {
+                                    const data = JSON.parse(localSave);
+                                    await AuthService.saveCloudData(data, this.currentSaveSlot);
+                                    console.log('Logout sync complete');
+                                } catch (e) {
+                                    console.error('Logout sync failed', e);
+                                }
+                            }
 
-                    AuthService.logout();
-                    this.checkLoginStatus();
-                    location.reload();
-                }
+                            AuthService.logout();
+                            this.checkLoginStatus();
+                            location.reload();
+                        }
+                    );
+                }, 50);
             };
         } else {
             btn.innerHTML = `<span class="btn-icon">☁️</span><span class="btn-text">登入轮回</span>`;
