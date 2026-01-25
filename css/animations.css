@@ -371,12 +371,10 @@
     0%,
     100% {
         box-shadow: 0 0 25px rgba(108, 92, 231, 0.5);
-        transform: scale(1);
     }
 
     50% {
         box-shadow: 0 0 35px rgba(108, 92, 231, 0.8);
-        transform: scale(1.02);
     }
 }
 
@@ -1044,13 +1042,20 @@
 }
 
 @keyframes particleFly {
-    0% { opacity: 1; transform: scale(1) translate(0, 0); }
-    100% { opacity: 0; transform: scale(0.5) translate(var(--tx), var(--ty)); }
+    0% {
+        opacity: 1;
+        transform: scale(1) translate(0, 0);
+    }
+
+    100% {
+        opacity: 0;
+        transform: scale(0.5) translate(var(--tx), var(--ty));
+    }
 }
 
 /* 震动强度 */
 .shake {
-    animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+    animation: shake 0.4s cubic-bezier(.36, .07, .19, .97) both;
 }
 
 .shake-light {
@@ -1062,33 +1067,86 @@
 }
 
 @keyframes shake {
-    10%, 90% { transform: translate3d(-1px, 0, 0); }
-    20%, 80% { transform: translate3d(2px, 0, 0); }
-    30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
-    40%, 60% { transform: translate3d(4px, 0, 0); }
+
+    10%,
+    90% {
+        transform: translate3d(-1px, 0, 0);
+    }
+
+    20%,
+    80% {
+        transform: translate3d(2px, 0, 0);
+    }
+
+    30%,
+    50%,
+    70% {
+        transform: translate3d(-4px, 0, 0);
+    }
+
+    40%,
+    60% {
+        transform: translate3d(4px, 0, 0);
+    }
 }
 
 @keyframes shakeLight {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-2px); }
-    75% { transform: translateX(2px); }
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    25% {
+        transform: translateX(-2px);
+    }
+
+    75% {
+        transform: translateX(2px);
+    }
 }
 
 @keyframes shakeHeavy {
-    0%, 100% { transform: translate(0, 0) rotate(0deg); }
-    10% { transform: translate(-5px, -5px) rotate(-5deg); }
-    30% { transform: translate(5px, 5px) rotate(5deg); }
-    50% { transform: translate(-5px, 5px) rotate(-5deg); }
-    70% { transform: translate(5px, -5px) rotate(5deg); }
+
+    0%,
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+    }
+
+    10% {
+        transform: translate(-5px, -5px) rotate(-5deg);
+    }
+
+    30% {
+        transform: translate(5px, 5px) rotate(5deg);
+    }
+
+    50% {
+        transform: translate(-5px, 5px) rotate(-5deg);
+    }
+
+    70% {
+        transform: translate(5px, -5px) rotate(5deg);
+    }
 }
 
 /* 伤害预览闪烁 */
 @keyframes previewBlink {
-    from { opacity: 0.4; }
-    to { opacity: 0.8; }
+    from {
+        opacity: 0.4;
+    }
+
+    to {
+        opacity: 0.8;
+    }
 }
 
 @keyframes lethalPulse {
-    from { filter: brightness(1); }
-    to { filter: brightness(0.5); }
+    from {
+        filter: brightness(1);
+    }
+
+    to {
+        filter: brightness(0.5);
+    }
 }

@@ -809,6 +809,8 @@ body {
         radial-gradient(ellipse at 50% 0%, rgba(26, 35, 126, 0.3) 0%, transparent 50%),
         linear-gradient(180deg, var(--bg-dark) 0%, var(--bg-medium) 100%);
     position: relative;
+    overflow: visible;
+    /* 允许卡牌悬停时突出显示 */
 }
 
 /* Enemy Area */
@@ -980,6 +982,9 @@ body {
     align-items: center;
     gap: var(--spacing-xl);
     padding: var(--spacing-md);
+    position: relative;
+    z-index: 5;
+    /* 低于hand-area，确保悬停卡牌不被遮挡 */
 }
 
 .player-character {
@@ -1108,19 +1113,24 @@ body {
 /* Hand Area */
 .hand-area {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
+    /* 卡牌固定在底部 */
     justify-content: flex-start;
     gap: var(--spacing-md);
     padding: var(--spacing-md);
-    padding-top: 60px;
-    /* Slight increase for better hover clearance */
-    min-height: 280px;
-    /* Increased to ensure cards fit with hover effect */
-    background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.5) 100%);
+    padding-top: 40px;
+    /* 调整顶部padding */
+    padding-bottom: 50px;
+    /* 增加底部空间，彻底解决遮挡 */
+    min-height: 260px;
+    background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.3) 100%);
     overflow-x: auto;
-    overflow-y: hidden;
-    /* Prevent vertical scrolling */
+    overflow-y: visible;
+    /* 允许卡牌悬停时向上突出显示 */
     flex-wrap: nowrap;
+    position: relative;
+    z-index: 100;
+    /* 确保手牌区域在其他元素之上 */
 }
 
 .deck-pile,
@@ -1158,6 +1168,8 @@ body {
     display: flex;
     gap: -30px;
     perspective: 1000px;
+    align-items: flex-end;
+    /* 卡牌底部对齐 */
 }
 
 /* Cards */
@@ -1205,10 +1217,25 @@ body {
 /* 仅在支持悬停的设备上启用 hover 效果 */
 @media (hover: hover) {
     .card:hover {
-        transform: translateY(-40px) scale(1.15) rotate(2deg);
         z-index: 100;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+        transform: translateY(-10px) scale(1.1);
+        /* 通用：小幅上移 */
+        box-shadow: 0 0 20px rgba(255, 215, 0, 0.6), 0 4px 15px rgba(0, 0, 0, 0.4);
         border-color: var(--accent-gold);
+        filter: brightness(1.1);
+    }
+
+    /* 手牌特有：大幅突出显示 */
+    /* 手牌特有：大幅突出显示 */
+    .hand-cards .card:hover {
+        transform-origin: bottom center;
+        /* 确保放大时向上延伸 */
+        transform: translateY(-10px) scale(1.1);
+        /* 减小缩放和上移，防止顶部被遮挡 */
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(255, 215, 0, 0.4);
+        margin: 0 5px;
+        /* 调整间距 */
+        z-index: 100;
     }
 }
 
@@ -1278,11 +1305,10 @@ body {
     background: #ffeb3b;
     color: #e91e63;
     border-color: #e91e63;
-    font-size: 1.4rem;
-    /* Increased size */
-    width: 42px;
-    /* Increased dimensions */
-    height: 42px;
+    font-size: 1.1rem;
+    width: 36px;
+    /* 与普通费用徽章一致 */
+    height: 36px;
     box-shadow: 0 0 10px #e91e63;
 }
 
@@ -2039,11 +2065,16 @@ body {
     .hand-area {
         min-height: 130px;
         padding: var(--spacing-sm);
+        padding-top: 50px;
+        /* 为悬停效果留空间 */
         gap: var(--spacing-sm);
         overflow-x: auto;
+        overflow-y: visible;
+        /* 允许卡牌悬停时向上显示 */
         -webkit-overflow-scrolling: touch;
-        /* 修复iOS滚动 */
         justify-content: flex-start;
+        align-items: flex-end;
+        /* 卡牌底部对齐 */
     }
 
     .hand-cards {
@@ -2051,9 +2082,10 @@ body {
         flex-wrap: nowrap;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
-        /* 修复iOS滚动 */
         max-width: 100%;
         padding: 10px 0;
+        align-items: flex-end;
+        /* 卡牌底部对齐 */
     }
 
     .deck-pile,
@@ -2327,10 +2359,15 @@ body {
 }
 
 .card:hover {
-    transform: translateY(-20px) rotateX(5deg) scale(1.15);
+    z-index: 100;
+    /* 确保悬停卡牌在最上层 */
+    transform: translateY(-10px) scale(1.1);
+    /* 通用默认效果 */
     box-shadow:
-        0 20px 40px rgba(0, 0, 0, 0.5),
-        0 0 30px rgba(255, 215, 0, 0.3);
+        0 0 25px rgba(255, 215, 0, 0.5),
+        0 4px 15px rgba(0, 0, 0, 0.4);
+    border-color: var(--accent-gold);
+    filter: brightness(1.1);
 }
 
 /* 战斗日志增强 */
@@ -3407,12 +3444,17 @@ body {
     .hand-area {
         height: 160px;
         padding-bottom: 60px;
-        /* 给结束回合按钮留位置 */
+        padding-top: 50px;
+        /* 为悬停效果留空间 */
+        align-items: flex-end;
+        /* 卡牌底部对齐 */
+        overflow-y: visible;
     }
 
     .hand-cards {
         gap: -30px;
-        /* 增加重叠 */
+        align-items: flex-end;
+        /* 卡牌底部对齐 */
     }
 
     .card {
@@ -3725,15 +3767,20 @@ body {
     .hand-area {
         min-height: 140px;
         padding: 2px;
+        padding-top: 40px;
+        /* 为悬停效果留空间 */
         gap: 2px;
         background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.8) 50%);
         overflow: visible;
-        /* 允许卡牌遮罩弹出效果 */
+        /* 允许卡牌悬停时向上显示 */
+        align-items: flex-end;
+        /* 卡牌底部对齐 */
     }
 
     .hand-cards {
         gap: -20px;
-        /* 更紧凑的堆叠 */
+        align-items: flex-end;
+        /* 卡牌底部对齐 */
     }
 
     /* 缩小卡牌尺寸 */
@@ -3990,7 +4037,9 @@ body {
     color: #ccc;
     font-size: 12px;
     line-height: 1.4;
-}/* Save Slots */
+}
+
+/* Save Slots */
 .slots-container {
     display: grid;
     grid-template-columns: repeat(2, 1fr);

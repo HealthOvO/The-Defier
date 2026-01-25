@@ -393,20 +393,6 @@ class Game {
         this.saveGame();
     }
 
-    // 继续游戏
-    continueGame() {
-        if (this.loadGameResult) {
-            // 如果保存的界面是角色选择或主菜单，说明并未真正开始游戏，转到地图
-            if (['main-menu', 'character-select'].includes(this.savedScreen)) {
-                this.showScreen('map-screen');
-            } else {
-                this.showScreen(this.savedScreen);
-            }
-        } else {
-            window.location.reload();
-        }
-    }
-
     // 初始化图鉴
     initCollection() {
         const grid = document.getElementById('collection-grid');
@@ -1115,16 +1101,13 @@ class Game {
         this.player.fateRing.exp += totalRingExp;
         this.player.checkFateRingLevelUp();
 
-        // 显示奖励界面
-        this.showRewardScreen(totalGold, canSteal, stealEnemy, totalRingExp);
-
         // 检查BOSS击杀
         if (this.currentBattleNode && this.currentBattleNode.type === 'boss') {
             this.achievementSystem.updateStat('bossesDefeated', 1);
         }
 
         // 显示奖励界面
-        this.showRewardScreen(totalGold, canSteal, stealEnemy, ringExp);
+        this.showRewardScreen(totalGold, canSteal, stealEnemy, totalRingExp);
     }
 
     // 显示奖励界面

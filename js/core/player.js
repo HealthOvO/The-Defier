@@ -20,7 +20,6 @@ class Player {
         // 战斗属性
         this.baseEnergy = charData.stats.energy;
         this.currentEnergy = this.baseEnergy;
-        this.currentEnergy = this.baseEnergy;
         this.drawCount = 5;
 
         // 奶糖 (Milk Candy) - 抽牌资源
@@ -300,7 +299,6 @@ class Player {
         // 关键修复：战斗牌堆必须是深拷贝，防止战斗中修改污染原牌组（如费用变化）
         this.drawPile = Utils.shuffle(JSON.parse(JSON.stringify(this.deck)));
         this.discardPile = [];
-        this.exhaustPile = [];
         this.exhaustPile = [];
         this.block = 0;
 

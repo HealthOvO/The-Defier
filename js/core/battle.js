@@ -55,8 +55,6 @@ class Battle {
     // 开始战斗
     startBattle() {
         this.turnNumber = 1;
-        this.turnNumber = 1;
-        this.currentTurn = 'player';
         this.currentTurn = 'player';
         this.isProcessingCard = false; // 强制重置状态
         this.playerTookDamage = false; // For Trial Challenge
@@ -439,32 +437,17 @@ class Battle {
         }
     }
 
-    // 计算预估伤害
+    // 计算预估伤害 (仅用于UI预览，不应修改任何游戏状态)
     calculateEffectDamage(effect, target) {
         let value = effect.value || 0;
         if (effect.type === 'randomDamage') value = (effect.minValue + effect.maxValue) / 2;
 
-        // 1. 玩家自身加成
+        // 1. 玩家自身加成 (仅查询，不修改状态)
         if (['damage', 'penetrate', 'damageAll', 'randomDamage'].includes(effect.type)) {
-            // 苦行 (Asceticism) - 若有保留手牌获得功德
-            // 注意：这里是在弃牌之前判断，所以只要手牌数>0就算保留（如果没有手动打出）
-            // 实际上 "保留" 意味着没有被打出。
-            if (this.player.buffs.meritOnRetain > 0) {
-                const retainedCount = this.player.hand.length;
-                if (retainedCount > 0 && this.player.fateRing && this.player.fateRing.gainMerit) {
-                    const merit = retainedCount * this.player.buffs.meritOnRetain;
-                    this.player.fateRing.gainMerit(merit);
-                    Utils.showBattleLog(`苦行：保留${retainedCount}张卡，功德+${merit}`);
-                }
-            }
-
-            // 弃牌
-            if (!this.player.buffs.retainHand) {
-                this.player.discardHand();
-            } // 虚弱
+            // 虚弱减伤
             if (this.player.buffs.weak) value = Math.floor(value * 0.75);
 
-            // 聚气 (Next Attack Bonus) - 预览不应消耗
+            // 聚气 (Next Attack Bonus) - 预览时计入但不消耗
             if (this.player.buffs.nextAttackBonus) value += this.player.buffs.nextAttackBonus;
         }
 
