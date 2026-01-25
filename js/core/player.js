@@ -1148,12 +1148,19 @@ class Player {
 
             const card = this.drawPile.pop();
             if (card) {
-                // 6. 法则混乱 (realm 6)
-                if (this.realm === 6) {
+                // 6. 法则混乱 (realm 6) 或 混乱状态 (Confuse)
+                if (this.realm === 6 || (this.buffs.confuse && this.buffs.confuse > 0)) {
                     // Fix: Prevent cumulative drift by using a base cost
                     if (card.baseCost === undefined) card.baseCost = card.cost;
-                    const change = Math.floor(Math.random() * 3) - 1; // -1, 0, 1
-                    card.cost = Math.max(0, card.baseCost + change);
+
+                    if (this.buffs.confuse) {
+                        // Confuse: Random cost 0-3
+                        card.cost = Math.floor(Math.random() * 4);
+                    } else {
+                        // Realm 6: -1 to +1
+                        const change = Math.floor(Math.random() * 3) - 1;
+                        card.cost = Math.max(0, card.baseCost + change);
+                    }
                 }
                 this.hand.push(card);
             }

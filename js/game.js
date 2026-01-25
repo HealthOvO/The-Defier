@@ -1809,6 +1809,7 @@ class Game {
         // 这里暂时保持自动推进，但增加保存
         this.player.realm++;
         this.player.floor = 0;
+        this.currentBattleNode = null; // 关键修复：防止奖励结算再次触发节点完成
 
         // 关键修复：不要重置 currentHp 到 maxHp，保留当前状态
         // 也不要回退到第一层，player.realm 已经 ++ 了

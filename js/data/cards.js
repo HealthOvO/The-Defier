@@ -562,8 +562,8 @@ const CARDS = {
         description: '造成 8 点伤害，回复造成伤害的30%生命',
         rarity: 'uncommon',
         effects: [
-            { type: 'damage', value: 8, target: 'enemy' },
-            { type: 'lifeSteal', value: 0.3, target: 'self' }
+            { type: 'lifeSteal', value: 0.3, target: 'self' },
+            { type: 'damage', value: 8, target: 'enemy' }
         ]
     },
 

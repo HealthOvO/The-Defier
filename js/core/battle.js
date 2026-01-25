@@ -1327,6 +1327,25 @@ class Battle {
                     damage = 0;
                 }
 
+                // 检查吞噬效果 (Realm 15)
+                if (pattern.effect === 'devour') {
+                    if (this.player.drawPile.length > 0) {
+                        const devoured = this.player.drawPile.pop();
+                        Utils.showBattleLog(`虚空吞噬：${devoured.name} 被吞噬了！`);
+                        this.updatePilesUI();
+                    } else if (this.player.discardPile.length > 0) {
+                        // 如果抽牌堆为空，吞噬弃牌堆？
+                        // 简单起见，仅吞噬抽牌堆，或者洗牌后吞噬
+                        this.player.drawPile = Utils.shuffle([...this.player.discardPile]);
+                        this.player.discardPile = [];
+                        const devoured = this.player.drawPile.pop();
+                        Utils.showBattleLog(`虚空吞噬：${devoured.name} 被吞噬了！`);
+                        this.updatePilesUI();
+                    } else {
+                        Utils.showBattleLog('虚空吞噬：无牌可吞！');
+                    }
+                }
+
                 // 应用力量加成
                 if (enemy.buffs.strength) {
                     damage += enemy.buffs.strength;
@@ -1418,7 +1437,18 @@ class Battle {
                 break;
 
             case 'debuff':
-                this.player.buffs[pattern.buffType] = (this.player.buffs[pattern.buffType] || 0) + pattern.value;
+                let buffType = pattern.buffType;
+                let buffValue = pattern.value;
+
+                // 随机减益 (Realm 14)
+                if (buffType === 'random') {
+                    const debuffs = ['vulnerable', 'weak', 'burn', 'stun'];
+                    buffType = debuffs[Math.floor(Math.random() * debuffs.length)];
+                    // Stun usually has value 1
+                    if (buffType === 'stun') buffValue = 1;
+                }
+
+                this.player.buffs[buffType] = (this.player.buffs[buffType] || 0) + buffValue;
                 Utils.showBattleLog(`${enemy.name} 对你施加了减益效果`);
                 break;
 
