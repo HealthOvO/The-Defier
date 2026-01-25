@@ -18,6 +18,12 @@ class Game {
         this.comboCount = 0;
         this.lastCardType = null;
         this.runStartTime = null;
+        this.currentSaveSlot = 0; // Default slot
+        this.cachedSlots = [null, null, null, null]; // Cache for slots
+
+        // Restore slot from session if exists
+        const savedSlot = sessionStorage.getItem('currentSaveSlot');
+        if (savedSlot !== null) this.currentSaveSlot = parseInt(savedSlot);
 
         this.init();
     }
@@ -25,6 +31,15 @@ class Game {
     // 初始化
     init() {
         this.bindGlobalEvents();
+        // Initialize Auth
+        if (typeof AuthService !== 'undefined') {
+            AuthService.init();
+            this.checkLoginStatus();
+            // 需求：如果未登录，让他去登录
+            if (!AuthService.isLoggedIn()) {
+                setTimeout(() => this.showLoginModal(), 1000); // 延迟一点显示，体验更好
+            }
+        }
         this.initCollection();
         this.initDynamicBackground();
         this.loadGameResult = this.loadGame();
@@ -33,10 +48,14 @@ class Game {
         const continueBtn = document.getElementById('continue-game-btn');
         const newGameBtn = document.getElementById('new-game-btn');
 
+        // 默认显示“新的轮回”
+        if (newGameBtn) newGameBtn.style.display = 'flex';
+
         if (this.loadGameResult && this.player.currentHp > 0) {
             if (continueBtn) {
                 continueBtn.style.display = 'flex';
-                // newGameBtn 依然显示，供玩家选择重新开始
+                // 当有存档时，新游戏按钮改为“次级”样式或保持原样，但必须显示
+                // 这里我们确保它就在那里，并且文字清晰
             }
         } else {
             if (continueBtn) continueBtn.style.display = 'none';
@@ -51,6 +70,16 @@ class Game {
 
     // 继续游戏
     continueGame() {
+        // 强制登录检查
+        if (typeof AuthService === 'undefined') {
+            alert('登录系统未就绪，请刷新重试！(AuthService missing)');
+            return;
+        }
+        if (!AuthService.isLoggedIn()) {
+            this.showLoginModal();
+            return;
+        }
+
         if (this.loadGameResult) {
             this.showScreen('map-screen');
         } else {
@@ -58,6 +87,8 @@ class Game {
             window.location.reload();
         }
     }
+
+
 
     // 绑定全局事件
     bindGlobalEvents() {
@@ -146,6 +177,7 @@ class Game {
     }
 
     // 保存游戏
+    // 保存游戏
     saveGame() {
         const gameState = {
             version: '3.0.0',
@@ -160,7 +192,18 @@ class Game {
             timestamp: Date.now()
         };
         localStorage.setItem('theDefierSave', JSON.stringify(gameState));
-        console.log('游戏已保存');
+        console.log('游戏已保存 (本地)');
+
+        // 如果已登录，自动同步到云端对应槽位
+        if (AuthService.isLoggedIn()) {
+            AuthService.saveCloudData(gameState, this.currentSaveSlot).then(res => {
+                if (res.success) {
+                    console.log(`游戏已同步 (云端 Slot ${this.currentSaveSlot})`);
+                    // Update cache
+                    this.cachedSlots[this.currentSaveSlot] = gameState;
+                }
+            });
+        }
     }
 
     // 加载游戏
@@ -692,6 +735,13 @@ class Game {
     // 确认选择
     confirmCharacterSelection() {
         if (!this.selectedCharacterId) return;
+
+        // 强制登录检查
+        if (typeof AuthService !== 'undefined' && !AuthService.isLoggedIn()) {
+            this.showLoginModal();
+            return;
+        }
+
         // 清除旧存档，开始新游戏
         this.clearSave();
         this.startNewGame(this.selectedCharacterId);
@@ -699,6 +749,16 @@ class Game {
 
     // 开始新游戏
     startNewGame(characterId = 'linFeng') {
+        // 强制登录检查
+        if (typeof AuthService === 'undefined') {
+            alert('登录系统未就绪，请刷新重试！');
+            return;
+        }
+        if (!AuthService.isLoggedIn()) {
+            this.showLoginModal();
+            return;
+        }
+
         this.player.reset(characterId);
         this.player.realm = 1;
         this.player.floor = 0;
@@ -898,6 +958,11 @@ class Game {
             // 命环升级触发微弱的法则波动，虽然现在还不足以引来天罚者，但随着等级提升...
             Utils.showBattleLog("命环突破！法则波动引起了未知的注视...");
             // 将来可以在这里根据level触发特定事件或对话
+        }
+
+        // 立即标记节点完成，防止意外退出导致进度丢失
+        if (this.currentBattleNode) {
+            this.map.completeNode(this.currentBattleNode);
         }
 
         // 自动保存
@@ -2309,37 +2374,37 @@ class Game {
         if (!settingsContainer) return;
 
         settingsContainer.innerHTML = `
-            <div class="game-intro-content" style="text-align: left; line-height: 1.6; max-height: 60vh; overflow-y: auto; padding-right: 10px;">
-                <h3 style="color: var(--accent-gold); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 0;">🔮 版本更新 v4.0 (终极版)</h3>
-                <p><strong>🔥 核心更新：</strong></p>
-                <ul style="padding-left: 20px; list-style-type: disc;">
-                    <li><strong>终极天域 (16-18重)</strong>：挑战【太乙天】(成长吸血)、【大罗天】(免疫回复) 与 【混沌终焉】(全属性减半的绝望试炼)。</li>
-                    <li><strong>命环进化</strong>：命环系统全面实装，支持从LV1至LV10的完整进化，不同路径赋予强力被动。</li>
-                    <li><strong>平衡性重构</strong>：削弱了部分无限流/秒杀流卡牌（如因果律杀、虚空拥抱），增强了策略深度。</li>
-                    <li><strong>护盾保留</strong>：引入【大地领域】法则，获得后护盾不再回合清零，支持叠甲流玩法。</li>
-                </ul>
+        <div class="game-intro-content" style="text-align: left; line-height: 1.6; max-height: 60vh; overflow-y: auto; padding-right: 10px;">
+            <h3 style="color: var(--accent-gold); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 0;">🔮 版本更新 v4.1 (天道终章)</h3>
+            <p><strong>🔥 核心更新：</strong></p>
+            <ul style="padding-left: 20px; list-style-type: disc;">
+                <li><strong>天域全开 (10-18重)</strong>：开放地仙界至终焉天九大高阶天域。挑战【双子熔岩】、【五行长老】，直至直面【天道终焉】。</li>
+                <li><strong>Boss机制升级</strong>：新增【召唤随从】、【多重行动】与【阶段转换】机制。敌人不再单调，战斗更具策略性。</li>
+                <li><strong>主界面优化</strong>：优化了存档读取逻辑，现在可以更方便地选择开启新轮回或继续冒险。</li>
+                <li><strong>平衡性调整</strong>：调整了过量伤害保护极致（现承受80%溢出伤害），并修复了部分卡牌描述与数值问题。</li>
+            </ul>
 
-                <h3 style="color: var(--accent-purple); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">🎮 游戏玩法</h3>
-                <p>在这个被天道锁死的修仙世界，你作为【逆命者】，需通过战斗不断吞噬法则，重塑命环。</p>
-                <ul style="padding-left: 20px; list-style-type: disc;">
-                    <li><strong>卡牌与法则</strong>：收集卡牌构建流派，击败精英夺取【法则】赋予被动。</li>
-                    <li><strong>共鸣系统</strong>：特定法则组合可触发共鸣（如五行俱全、时空扭曲）。</li>
-                    <li><strong>策略试炼</strong>：每次进入更高天域，敌人会变得更强且拥有特殊机制（如反伤、吸血、复活）。</li>
-                </ul>
-                
-                <h3 style="color: var(--accent-red); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">👥 角色介绍</h3>
-                <ul style="padding-left: 20px; list-style-type: none;">
-                    <li style="margin-bottom: 10px;"><strong>🗡️ 林风</strong>：全能战士，擅长利用命环力量，各方面属性均衡。</li>
-                    <li style="margin-bottom: 10px;"><strong>💚 香叶</strong>：医毒圣手，虽生命值较低，但拥有强大的回复能力。</li>
-                    <li style="margin-bottom: 10px;"><strong>🪙 无欲</strong>：佛门金刚，自带护盾加成，擅长防守反击与反伤玩法。</li>
-                    <li><strong>❄️ 严寒</strong>：极冰修士，擅长控制与削弱，能让敌人寸步难行。</li>
-                </ul>
+            <h3 style="color: var(--accent-purple); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">🎮 游戏玩法</h3>
+            <p>在这个被天道锁死的修仙世界，你作为【逆命者】，需通过战斗不断吞噬法则，重塑命环。</p>
+            <ul style="padding-left: 20px; list-style-type: disc;">
+                <li><strong>卡牌与法则</strong>：收集卡牌构建流派，击败精英夺取【法则】赋予被动。</li>
+                <li><strong>共鸣系统</strong>：特定法则组合可触发共鸣（如五行俱全、时空扭曲）。</li>
+                <li><strong>策略试炼</strong>：十八重天域，每重天域都有独特的环境效果与守关Boss。</li>
+            </ul>
+            
+            <h3 style="color: var(--accent-red); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">👥 角色介绍</h3>
+            <ul style="padding-left: 20px; list-style-type: none;">
+                <li style="margin-bottom: 10px;"><strong>🗡️ 林风</strong>：全能战士，擅长利用命环力量，各方面属性均衡。</li>
+                <li style="margin-bottom: 10px;"><strong>💚 香叶</strong>：医毒圣手，虽生命值较低，但拥有强大的回复能力。</li>
+                <li style="margin-bottom: 10px;"><strong>🪙 无欲</strong>：佛门金刚，自带护盾加成，擅长防守反击与反伤玩法。</li>
+                <li><strong>❄️ 严寒</strong>：极冰修士，擅长控制与削弱，能让敌人寸步难行。</li>
+            </ul>
 
-                <div style="margin-top: 20px; text-align: center; font-size: 0.8rem; color: #888;">
-                    当前版本: v4.0 | 逆命轮回·终极版
-                </div>
+            <div style="margin-top: 20px; text-align: center; font-size: 0.8rem; color: #888;">
+                当前版本: v4.1 | 逆命轮回·天道终章
             </div>
-        `;
+        </div>
+    `;
 
         modal.classList.add('active');
     }
@@ -3277,6 +3342,367 @@ class Game {
         }
         this.autoSave();
         this.showScreen('map-screen');
+    }
+    // --- Auth System ---
+    showLoginModal() {
+        const modal = document.getElementById('auth-modal');
+        if (modal) {
+            modal.classList.add('active');
+            // Clear inputs
+            const u = document.getElementById('auth-username');
+            const p = document.getElementById('auth-password');
+            const m = document.getElementById('auth-message');
+            if (u) u.value = '';
+            if (p) p.value = '';
+            if (m) m.innerText = '';
+        }
+    }
+
+    async handleLogin() {
+        const usernameInput = document.getElementById('auth-username');
+        const passwordInput = document.getElementById('auth-password');
+        const messageEl = document.getElementById('auth-message');
+
+        if (!usernameInput || !passwordInput) return;
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value.trim();
+
+        if (!username || !password) {
+            messageEl.innerText = '请输入账号和密码';
+            return;
+        }
+
+        messageEl.innerText = '登录中...';
+        AuthService.login(username, password).then(async result => {
+            if (result.success) {
+                this.onLoginSuccess(messageEl, '登录成功！');
+            } else {
+                messageEl.innerText = result.message || '登录失败';
+                messageEl.style.color = '#ff6b6b';
+            }
+        });
+    }
+
+    // 打开存档选择界面 (同步云端)
+    async openSaveSlotsWithSync() {
+        if (!AuthService.isLoggedIn()) {
+            if (confirm('尚未登录，是否先登录以同步云端存档？')) {
+                this.showLoginModal();
+                return;
+            }
+            // Guest mode: Just go to character selection (Local only, risk of data loss)
+            this.showCharacterSelection();
+            return;
+        }
+
+        const msgBtn = document.getElementById('new-game-btn');
+        const originalText = msgBtn ? msgBtn.innerHTML : '';
+        if (msgBtn) msgBtn.innerText = '同步中...';
+
+        try {
+            const res = await AuthService.getCloudData();
+            if (msgBtn) msgBtn.innerHTML = originalText;
+
+            let slots = [null, null, null, null];
+            if (res.success && res.slots) {
+                slots = res.slots;
+            } else if (res.isLegacy && res.slots) {
+                slots = res.slots;
+                // Auto-migrate legacy if needed? Already returned as slot 0 format
+            }
+
+            // Update cache
+            this.cachedSlots = slots;
+            this.showSaveSlotsModal(slots);
+        } catch (e) {
+            console.error('Sync failed', e);
+            if (msgBtn) msgBtn.innerHTML = originalText;
+            alert('获取云端存档失败，请检查网络');
+        }
+    }
+
+    // 统一的登录成功逻辑
+    onLoginSuccess(messageEl, successMsg) {
+        messageEl.innerText = successMsg;
+        messageEl.style.color = '#4ff';
+        setTimeout(async () => {
+            this.closeModal();
+            this.checkLoginStatus();
+
+            // 登录成功后，获取云端存档列表并展示选择界面
+            const res = await AuthService.getCloudData();
+
+            // 检查本地旧存档
+            const localSave = localStorage.getItem('theDefierSave');
+            let localData = null;
+            if (localSave) { try { localData = JSON.parse(localSave); } catch (e) { } }
+
+            let slots = [null, null, null, null];
+
+            if (res.success && res.slots) {
+                slots = res.slots;
+            } else if (res.isEmpty && localData) {
+                // 如果云端是新的（空），但本地有数据，自动帮用户填入 Slot 0
+                slots[0] = localData;
+                AuthService.saveCloudData(localData, 0); // Async sync
+                Utils.showBattleLog('检测到旧存档，已自动绑定至 存档 1');
+            }
+
+            this.cachedSlots = slots;
+            this.showSaveSlotsModal(slots);
+
+        }, 500);
+    }
+
+    // 显示存档位选择模态框
+    showSaveSlotsModal(slots) {
+        const modal = document.getElementById('save-slots-modal');
+        const container = document.getElementById('slots-container');
+        if (!modal || !container) return;
+
+        container.innerHTML = '';
+
+        slots.forEach((slotData, index) => {
+            const slotEl = document.createElement('div');
+            const isEmpty = !slotData;
+            slotEl.className = `save-slot ${isEmpty ? 'empty' : ''}`;
+
+            const slotName = `存档 ${index + 1}`;
+
+            let contentHtml = '';
+            if (isEmpty) {
+                contentHtml = `<div class="slot-empty-text">空存档</div>`;
+            } else {
+                const date = new Date(slotData.timestamp).toLocaleString();
+                const realm = (slotData.player && slotData.player.realm) ? slotData.player.realm : '?';
+                const hp = (slotData.player && slotData.player.currentHp) ? slotData.player.currentHp : '?';
+                const roleId = (slotData.player && slotData.player.characterId);
+                let roleName = '未知角色';
+                if (roleId === 'wuYu') roleName = '无欲';
+                if (roleId === 'yanHan') roleName = '严寒'; // Add others if needed
+
+                contentHtml = `
+                    <div class="slot-info-row" style="color:var(--accent-gold); font-weight:bold;">${roleName}</div>
+                    <div class="slot-info-row">🏔️ 第 ${realm} 重天 | ❤️ ${hp}</div>
+                    <div class="slot-info-row" style="font-size:0.8rem; color:#666;">📅 ${date}</div>
+                `;
+            }
+
+            const actionsHtml = isEmpty ?
+                `<button class="menu-btn small" onclick="game.selectSlot(${index}, 'new')">新建轮回</button>` :
+                `<button class="menu-btn small primary" onclick="game.selectSlot(${index}, 'load')">继续</button>
+                 <button class="menu-btn small" style="border-color:var(--accent-red); color:var(--accent-red)" onclick="game.selectSlot(${index}, 'overwrite')">覆盖</button>`;
+
+            slotEl.innerHTML = `
+                <div class="slot-header">
+                    <span>${slotName}</span>
+                </div>
+                <div class="slot-content">
+                    ${contentHtml}
+                </div>
+                <div class="slot-actions">
+                    ${actionsHtml}
+                </div>
+            `;
+
+            container.appendChild(slotEl);
+        });
+
+        modal.classList.add('active');
+    }
+
+    // 选择存档位操作
+    selectSlot(index, mode) {
+        this.currentSaveSlot = index;
+        const modal = document.getElementById('save-slots-modal');
+
+        if (mode === 'load') {
+            const data = this.cachedSlots[index];
+            if (data) {
+                localStorage.setItem('theDefierSave', JSON.stringify(data));
+                Utils.showBattleLog(`已加载 存档 ${index + 1}`);
+                modal.classList.remove('active');
+
+                // Reload game state directly without full refresh if possible, but reload is safer
+                setTimeout(() => window.location.reload(), 500);
+            }
+        } else if (mode === 'new' || mode === 'overwrite') {
+            let confirmed = true;
+            if (mode === 'overwrite') {
+                confirmed = confirm('确定要覆盖此存档吗？旧进度将丢失！');
+            }
+
+            if (confirmed) {
+                // For new game, we start fresh. 
+                // We should probably go to character selection?
+                // Or just clear current local save and refresh?
+                // The logical flow: Select slot -> Go to Character Select -> Start Game
+
+                // Clear local save to force new game start
+                localStorage.removeItem('theDefierSave');
+                this.currentSaveSlot = index; // Persistent? No, reset on reload.
+                // We need to store selected slot in localStorage temporarily so next load knows?
+                // Or just:
+                modal.classList.remove('active');
+
+                // If we treat "New Game" as "Go to Character Select":
+                this.showCharacterSelection();
+
+                // We must ensure that when the actual game starts, it saves to this slot.
+                // Since `this.currentSaveSlot` is set, `saveGame()` will use it.
+                // But if user refreshes at character select, slot info is lost.
+                // Maybe store active slot in sessionStorage?
+                sessionStorage.setItem('currentSaveSlot', index);
+            }
+        }
+    }
+
+    async handleRegister() {
+        const username = document.getElementById('auth-username').value;
+        const password = document.getElementById('auth-password').value;
+        const msg = document.getElementById('auth-message');
+
+        if (!username || !password) {
+            msg.innerText = '请输入账号和密码';
+            return;
+        }
+
+        msg.innerText = '注册中...';
+        const result = await AuthService.register(username, password);
+        if (result.success) {
+            // Auto login logic reuse
+            const loginRes = await AuthService.login(username, password);
+            if (loginRes.success) {
+                // 使用统一的成功处理逻辑，这会自动将本地旧存档上传到新注册的空账号中
+                this.onLoginSuccess(msg, '注册成功！已绑定旧存档');
+            }
+        } else {
+            if (result.error && result.error.code === 202) {
+                msg.innerText = '该用户名已被使用，请换一个';
+            } else {
+                msg.innerText = result.message || '注册失败';
+            }
+        }
+    }
+
+    checkLoginStatus() {
+        const btn = document.getElementById('login-btn');
+        if (!btn) return;
+
+        if (AuthService.isLoggedIn()) {
+            const user = AuthService.getCurrentUser();
+            // Change button to show name or Logout
+            btn.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text" style="font-size:0.8rem">${user.username}</span>`;
+            btn.onclick = async () => {
+                if (confirm('确定要退出登录吗？\n(退出前将自动上传当前进度)')) {
+                    // 退出前强制尝试上传一次本地存档
+                    const localSave = localStorage.getItem('theDefierSave');
+                    if (localSave) {
+                        try {
+                            const data = JSON.parse(localSave);
+                            await AuthService.saveCloudData(data, this.currentSaveSlot);
+                            console.log('Logout sync complete');
+                        } catch (e) {
+                            console.error('Logout sync failed', e);
+                        }
+                    }
+
+                    AuthService.logout();
+                    this.checkLoginStatus();
+                    location.reload();
+                }
+            };
+        } else {
+            btn.innerHTML = `<span class="btn-icon">☁️</span><span class="btn-text">登入轮回</span>`;
+            btn.onclick = () => this.showLoginModal();
+        }
+    }
+
+    async checkForCloudSave() {
+        // This is now handled within handleLogin's flow logic, but kept as fallback or for manual checks
+        const res = await AuthService.getCloudData();
+        if (res.success && res.data) {
+            const cloudTime = res.saveTime ? new Date(res.saveTime).toLocaleString() : '未知时间';
+            // If we are strictly checking, we might want to show the full modal
+            const localSave = localStorage.getItem('theDefierSave');
+            let localData = null;
+            if (localSave) { try { localData = JSON.parse(localSave); } catch (e) { } }
+
+            this.showSaveConflictModal(localData, res.data, res.saveTime);
+        }
+    }
+
+    // 显示存档冲突弹窗
+    showSaveConflictModal(localData, cloudData, cloudTime) {
+        const modal = document.getElementById('save-conflict-modal');
+        if (!modal) return;
+
+        // Populate Info
+        const localInfo = document.getElementById('local-save-info');
+        const cloudInfo = document.getElementById('cloud-save-info');
+
+        const formatInfo = (data, time) => {
+            if (!data) return '无数据';
+            const date = time ? new Date(time).toLocaleString() : (data.timestamp ? new Date(data.timestamp).toLocaleString() : '未知时间');
+            const realm = (data.player && data.player.realm) ? data.player.realm : '?';
+            const hp = (data.player && data.player.currentHp) ? data.player.currentHp : '?';
+            const gold = (data.player && data.player.gold) ? data.player.gold : '?';
+            return `
+                <div style="margin-bottom:4px">📅 ${date}</div>
+                <div style="margin-bottom:4px">🏔️ 第 ${realm} 重天</div>
+                <div>❤️ ${hp} | 💰 ${gold}</div>
+            `;
+        };
+
+        if (localInfo) localInfo.innerHTML = formatInfo(localData, localData ? localData.timestamp : null);
+        if (cloudInfo) cloudInfo.innerHTML = formatInfo(cloudData, cloudTime);
+
+        // Store temp data
+        this.tempCloudData = cloudData;
+
+        modal.classList.add('active');
+    }
+
+    // 解决存档冲突
+    resolveSaveConflict(choice) {
+        const modal = document.getElementById('save-conflict-modal');
+        if (choice === 'local') {
+            // Keep Local -> Upload to Cloud
+            const localSave = localStorage.getItem('theDefierSave');
+            if (localSave) {
+                const data = JSON.parse(localSave);
+                AuthService.saveCloudData(data).then(res => {
+                    if (res.success) {
+                        Utils.showBattleLog('本地存档已覆盖云端！');
+                        modal.classList.remove('active');
+                        // No reload needed
+                    } else {
+                        alert('云端同步失败：' + (res.message || '未知错误'));
+                    }
+                });
+            }
+        } else if (choice === 'cloud') {
+            // Keep Cloud -> Overwrite Local
+            if (this.tempCloudData) {
+                localStorage.setItem('theDefierSave', JSON.stringify(this.tempCloudData));
+                alert('已从云端恢复存档！');
+                modal.classList.remove('active');
+                window.location.reload(); // Reload to apply
+            } else {
+                alert('云端数据读取异常');
+            }
+        }
+    }
+
+    // 加载云端存档 (无本地时)
+    loadCloudGame() {
+        AuthService.getCloudData().then(res => {
+            if (res.success && res.data) {
+                localStorage.setItem('theDefierSave', JSON.stringify(res.data));
+                Utils.showBattleLog('已拉取云端存档');
+                setTimeout(() => window.location.reload(), 500);
+            }
+        });
     }
 }
 

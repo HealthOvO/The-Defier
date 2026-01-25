@@ -1273,7 +1273,7 @@ const CARDS = {
         description: '随机对敌人造成 5-20 伤害，并使其眩晕',
         rarity: 'legendary',
         effects: [
-            { type: 'randomDamage', min: 5, max: 20, target: 'enemy' },
+            { type: 'randomDamage', minValue: 5, maxValue: 20, target: 'enemy' },
             { type: 'debuff', buffType: 'stun', value: 1, target: 'enemy' }
         ]
     },
@@ -1374,10 +1374,11 @@ const CARDS = {
         type: 'status',
         cost: -1, // Unplayable
         icon: '❔',
-        description: '无法打出。保留。回合结束：受到 2 点伤害。',
+        description: '无法打出。保留。占据抽牌位 (在手中时下回合少抽一张)。回合结束：受到 2 点伤害。',
         rarity: 'special',
         unplayable: true,
         retain: true,
+        occupiesDrawSlot: true,
         effects: [
             { type: 'selfDamage', value: 2, trigger: 'turnEnd' }
         ]
@@ -1388,10 +1389,11 @@ const CARDS = {
         type: 'status',
         cost: -1,
         icon: '😱',
-        description: '无法打出。保留。回合结束：随机丢弃 1 张手牌。',
+        description: '无法打出。保留。占据抽牌位 (在手中时下回合少抽一张)。回合结束：随机丢弃 1 张手牌。',
         rarity: 'special',
         unplayable: true,
         retain: true,
+        occupiesDrawSlot: true,
         effects: [
             { type: 'discardRandom', value: 1, trigger: 'turnEnd' }
         ]
@@ -1402,10 +1404,11 @@ const CARDS = {
         type: 'status',
         cost: -1,
         icon: '🌑',
-        description: '无法打出。保留。回合结束：失去 1 点灵力。',
+        description: '无法打出。保留。占据抽牌位 (在手中时下回合少抽一张)。回合结束：失去 1 点灵力。',
         rarity: 'special',
         unplayable: true,
         retain: true,
+        occupiesDrawSlot: true,
         effects: [
             { type: 'energyLoss', value: 1, trigger: 'turnEnd' }
         ]
@@ -1606,7 +1609,10 @@ const UPGRADE_RULES = {
         // 修正：虚空拥抱升级不加百分比，改为减费
         // 修正：虚空拥抱升级 +15% (15% -> 30%)
         voidEmbrace: { multiplier: 0.15 },
-        karmaKill: { percent: 0.1 } // 15% -> 25%
+        karmaKill: { percent: 0.1 }, // 15% -> 25%
+
+        // 修复：融合爆发升级
+        fusionBlast: { draw: 1 }
     }
 };
 
@@ -1644,6 +1650,9 @@ function upgradeCard(card) {
             }
             if (effect.type === 'draw' && specialRule.draw) {
                 effect.value += specialRule.draw;
+            }
+            if (effect.type === 'drawCalculated' && specialRule.draw) {
+                effect.base = (effect.base || 0) + specialRule.draw;
             }
             if (effect.type === 'energy' && specialRule.energy) {
                 effect.value += specialRule.energy;

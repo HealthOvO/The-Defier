@@ -362,6 +362,7 @@ class GameMap {
         for (const row of this.nodes) {
             for (const n of row) {
                 if (n.id === node.id) {
+                    if (n.completed) return; // Prevent double completion
                     n.completed = true;
                     this.completedNodes.push(n.id);
                 }

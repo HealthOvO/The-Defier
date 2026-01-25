@@ -503,9 +503,28 @@ class Battle {
         const card = this.player.hand[cardIndex];
         if (!card) return;
 
+        // 检查奶糖消耗 (如果包含抽牌效果)
+        // 规则: 抽牌卡不消耗灵力，消耗奶糖
+        const hasDraw = card.effects.some(e => e.type === 'draw' || e.type === 'drawCalculated' || e.type === 'conditionalDraw' || e.type === 'randomCards');
+
+        // 计算消耗
+        let energyCost = card.cost;
+        let candyCost = 0;
+
+        if (hasDraw) {
+            energyCost = 0; // 抽牌卡不消耗灵力
+            candyCost = 1;  // 抽牌卡消耗1奶糖
+        }
+
         // 检查灵力
-        if (card.cost > this.player.currentEnergy) {
+        if (energyCost > 0 && this.player.currentEnergy < energyCost) {
             Utils.showBattleLog('灵力不足！');
+            return;
+        }
+
+        // 检查奶糖
+        if (candyCost > 0 && this.player.milkCandy < candyCost) {
+            Utils.showBattleLog('奶糖不足！无法使用此卡');
             return;
         }
 
@@ -1441,11 +1460,12 @@ class Battle {
             return;
         }
 
-        // 查找敌人数据 (需要在 enemies.js 中导出或全局可访问)
-        // 假设 ENEMIES 是全局变量
+        // 查找敌人数据
         let enemyData = null;
-        if (typeof ENEMIES !== 'undefined') {
-            // 遍历所有天域查找
+        if (typeof ENEMIES !== 'undefined' && ENEMIES[enemyId]) {
+            enemyData = ENEMIES[enemyId];
+        } else if (typeof ENEMIES !== 'undefined') {
+            // 尝试遍历所有 (Fallback)
             for (const key in ENEMIES) {
                 if (ENEMIES[key].id === enemyId) {
                     enemyData = ENEMIES[key];
@@ -1454,79 +1474,74 @@ class Battle {
             }
         }
 
-        if (!enemyData) {
-            // 尝试在当前天域查找
-            const realmEnemies = getEnemiesForRealm(this.player.realm);
-            enemyData = realmEnemies.find(e => e.id === enemyId);
-        }
-
         if (enemyData) {
-            const newEnemy = this.createEnemyInstance(enemyData);
-            this.enemies.push(newEnemy);
-            Utils.showBattleLog(`召唤了 ${newEnemy.name}！`);
+            const minion = this.createEnemyInstance(enemyData);
+            minion.isMinion = true; // 标记为随从
+            this.enemies.push(minion);
+            this.updateBattleUI();
 
-            // 播放召唤特效
-            if (typeof particles !== 'undefined') {
-                // 暂时没有特定召唤特效，用通用的
-            }
-
-            this.updateEnemiesUI();
+            // 随从入场特效
+            setTimeout(() => {
+                const newEnemyEl = document.querySelector(`.enemy[data-index="${this.enemies.length - 1}"]`);
+                if (newEnemyEl) Utils.addFlashEffect(newEnemyEl);
+            }, 100);
         } else {
-            console.error(`Summon failed: Enemy ${enemyId} not found`);
+            console.warn(`Summon failed: Enemy ${enemyId} not found.`);
         }
     }
 
-    // 检查阶段转换
-    checkPhaseChange(enemy) {
-        if (!enemy.phases || enemy.currentPhase >= enemy.phases.length) return;
 
-        // 初始化 phases
-        if (typeof enemy.currentPhase === 'undefined') enemy.currentPhase = 0;
+// 检查阶段转换
+checkPhaseChange(enemy) {
+    if (!enemy.phases || enemy.currentPhase >= enemy.phases.length) return;
 
-        const nextPhase = enemy.phases[enemy.currentPhase]; // 这里 enemy.currentPhase 初始应为 0，对应 phases[0] 即第一个转阶段配置
+    // 初始化 phases
+    if (typeof enemy.currentPhase === 'undefined') enemy.currentPhase = 0;
 
-        // 修正逻辑：如果当前 Hp 比例低于 phase 阈值
-        if (nextPhase && (enemy.currentHp / enemy.hp) <= nextPhase.threshold) {
-            // 触发转阶段
-            enemy.currentPhase++; // 增加阶段计数，避免重复触发
-            Utils.showBattleLog(`${enemy.name} 进入${nextPhase.name}形态！`);
+    const nextPhase = enemy.phases[enemy.currentPhase]; // 这里 enemy.currentPhase 初始应为 0，对应 phases[0] 即第一个转阶段配置
 
-            // 更新行动模式
-            if (nextPhase.patterns) {
-                enemy.patterns = nextPhase.patterns;
-                enemy.currentPatternIndex = 0; // 重置循环
-            }
+    // 修正逻辑：如果当前 Hp 比例低于 phase 阈值
+    if (nextPhase && (enemy.currentHp / enemy.hp) <= nextPhase.threshold) {
+        // 触发转阶段
+        enemy.currentPhase++; // 增加阶段计数，避免重复触发
+        Utils.showBattleLog(`${enemy.name} 进入${nextPhase.name}形态！`);
 
-            // 播放特效
-            const enemyEl = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`);
-            if (enemyEl) {
-                Utils.addShakeEffect(enemyEl, 'heavy');
-                Utils.addFlashEffect(enemyEl, 'red'); // 狂暴红光
-            }
+        // 更新行动模式
+        if (nextPhase.patterns) {
+            enemy.patterns = nextPhase.patterns;
+            enemy.currentPatternIndex = 0; // 重置循环
+        }
 
-            // 恢复少量生命?
-            if (nextPhase.heal) {
-                const healAmt = Math.floor(enemy.hp * nextPhase.heal);
-                enemy.currentHp = Math.min(enemy.hp, enemy.currentHp + healAmt);
-                Utils.showBattleLog(`${enemy.name} 恢复了力量！`);
-            }
+        // 播放特效
+        const enemyEl = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`);
+        if (enemyEl) {
+            Utils.addShakeEffect(enemyEl, 'heavy');
+            Utils.addFlashEffect(enemyEl, 'red'); // 狂暴红光
+        }
+
+        // 恢复少量生命?
+        if (nextPhase.heal) {
+            const healAmt = Math.floor(enemy.hp * nextPhase.heal);
+            enemy.currentHp = Math.min(enemy.hp, enemy.currentHp + healAmt);
+            Utils.showBattleLog(`${enemy.name} 恢复了力量！`);
         }
     }
+}
 
-    // 更新环境UI
-    updateEnvironmentUI() {
-        const envEl = document.getElementById('battle-environment');
-        if (!envEl) return;
+// 更新环境UI
+updateEnvironmentUI() {
+    const envEl = document.getElementById('battle-environment');
+    if (!envEl) return;
 
-        if (this.activeEnvironment) {
-            envEl.style.display = 'flex';
-            envEl.innerHTML = `
+    if (this.activeEnvironment) {
+        envEl.style.display = 'flex';
+        envEl.innerHTML = `
                 <span class="env-icon">${this.activeEnvironment.icon}</span>
                 <span class="env-name">${this.activeEnvironment.name}</span>
             `;
-            envEl.title = this.activeEnvironment.description;
-        } else {
-            envEl.style.display = 'none';
-        }
+        envEl.title = this.activeEnvironment.description;
+    } else {
+        envEl.style.display = 'none';
     }
+}
 }

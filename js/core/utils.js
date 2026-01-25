@@ -453,6 +453,14 @@ const Utils = {
     saveGame(state) {
         try {
             localStorage.setItem('theDefierSave', JSON.stringify(state));
+            // 尝试云端同步
+            if (typeof AuthService !== 'undefined' && AuthService.isLoggedIn()) {
+                AuthService.saveCloudData(state).then(res => {
+                    if (res.success) {
+                        // console.log('云存档同步成功');
+                    }
+                });
+            }
         } catch (e) {
             console.error('保存游戏失败:', e);
         }

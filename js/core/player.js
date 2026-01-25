@@ -225,10 +225,15 @@ class Player {
         }
 
         // 更新属性 (保持当前生命值比例或数值？通常保持当前数值，除非超过最大值)
+        // Update attributes
         this.maxHp = newMaxHp;
         this.baseEnergy = newBaseEnergy;
         this.drawCount = newDrawCount;
         this.currentHp = Math.min(this.currentHp, this.maxHp);
+
+        // 动态计算奶糖上限 (每5层增加1个)
+        // 1-5: 3, 6-10: 4, 11-15: 5, 16+: 6
+        this.maxMilkCandy = 3 + Math.floor((Math.max(1, this.realm) - 1) / 5);
     }
 
     // 检查共鸣状态
@@ -411,6 +416,14 @@ class Player {
             drawAmount += windLaw.passive.value;
         }
 
+        // 检查心魔卡 (占据抽牌位)
+        // 这些卡因为 'retain' 属性而留在手中，在此处计算并减少抽牌量
+        const occupiedSlots = this.hand.filter(c => c.occupiesDrawSlot).length;
+        if (occupiedSlots > 0) {
+            drawAmount = Math.max(0, drawAmount - occupiedSlots);
+            Utils.showBattleLog(`心魔作祟：抽牌数 -${occupiedSlots}`);
+        }
+
         this.drawCards(drawAmount);
 
         // 2. 雷霆淬体 (realm 2)
@@ -573,11 +586,11 @@ class Player {
         }
 
         // 伤害保护机制 (One-shot Protection)
-        // 单次伤害超过最大生命值 35% 的部分，减免 50%
+        // 单次伤害超过最大生命值 35% 的部分，减免 20% (受到的伤害为 80%)
         const damageCapThreshold = Math.floor(this.maxHp * 0.35);
         if (amount > damageCapThreshold) {
             const excess = amount - damageCapThreshold;
-            const reducedExcess = Math.floor(excess * 0.5);
+            const reducedExcess = Math.floor(excess * 0.8);
             amount = damageCapThreshold + reducedExcess;
             Utils.showBattleLog('触发伤害保护！');
         }

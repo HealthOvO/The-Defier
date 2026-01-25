@@ -1178,7 +1178,7 @@ body {
     transform-style: preserve-3d;
     margin-left: -35px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-    overflow: hidden;
+    /* overflow: hidden; Removed to show cost badge */
 }
 
 .card::before {
@@ -3990,4 +3990,85 @@ body {
     color: #ccc;
     font-size: 12px;
     line-height: 1.4;
+}/* Save Slots */
+.slots-container {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-lg);
+    padding: var(--spacing-md);
+}
+
+.save-slot {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    transition: all var(--transition-normal);
+    position: relative;
+    overflow: hidden;
+}
+
+.save-slot:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--accent-gold);
+}
+
+.save-slot.active-slot {
+    border-color: var(--accent-cyan);
+    box-shadow: 0 0 15px rgba(0, 188, 212, 0.2);
+}
+
+.slot-header {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: var(--spacing-xs);
+    display: flex;
+    justify-content: space-between;
+}
+
+.slot-content {
+    flex: 1;
+    min-height: 80px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.slot-info-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.slot-empty-text {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.slot-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    justify-content: flex-end;
+}
+
+.slot-actions button {
+    font-size: 0.8rem;
+    padding: 6px 12px;
+}
+
+.slot-overwrite-warning {
+    color: var(--accent-red);
+    font-size: 0.8rem;
+    margin-top: 4px;
 }
