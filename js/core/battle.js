@@ -1100,6 +1100,12 @@ class Battle {
             amount = 0;
         }
 
+        // Elite Ability: Swift (Dodge Chance)
+        if (enemy.buffs.dodgeChance && Math.random() < enemy.buffs.dodgeChance) {
+            Utils.showBattleLog(`${enemy.name} 闪避了攻击！`);
+            return 0;
+        }
+
         // 13. 心魔镜像 (Reflect)
         if (enemy.buffs.reflect && enemy.buffs.reflect > 0) {
             enemy.buffs.reflect--;
@@ -1463,7 +1469,11 @@ class Battle {
 
         // 清除敌人护盾 (moved to start of enemy turn)
         for (const enemy of this.enemies) {
-            // enemy.block = 0; // Moved to start of turn
+            if (enemy.buffs.retainBlock && enemy.buffs.retainBlock > 0) {
+                enemy.buffs.retainBlock--;
+            } else {
+                enemy.block = 0;
+            }
 
             // 16. 太乙神雷 (realm 16) - 敌人每回合获得攻击力+1
             if (this.player.realm === 16) {
@@ -1643,10 +1653,10 @@ class Battle {
                     damage += enemy.buffs.strength;
                 }
 
-                // 检查玩家虚弱
-                if (this.player.buffs.weak && this.player.buffs.weak > 0) {
-                    damage = Math.floor(damage * 0.75);
-                }
+                // 检查玩家虚弱 - FIX: Player Weakness should NOT reduce enemy damage
+                // if (this.player.buffs.weak && this.player.buffs.weak > 0) {
+                //     damage = Math.floor(damage * 0.75);
+                // }
 
                 // 检查敌人被弱化 (Weak)
                 if (enemy.buffs.weak && enemy.buffs.weak > 0) {

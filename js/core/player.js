@@ -411,6 +411,11 @@ class Player {
 
         if (!keepBlock) {
             this.block = 0;
+        } else {
+            // Decrement retainBlock buff if it was the reason for keeping block
+            if (this.hasBuff('retainBlock')) {
+                this.buffs.retainBlock--;
+            }
         }
 
         // 触发法宝回合开始效果
@@ -741,6 +746,11 @@ class Player {
                 Utils.showBattleLog(`风空遁触发！闪避并抽牌`);
             }
             return { dodged: true, damage: 0 };
+        }
+
+        // 检查易伤 (Vulnerable)
+        if (this.buffs.vulnerable && this.buffs.vulnerable > 0) {
+            amount = Math.floor(amount * 1.5);
         }
 
         // 检查减伤 Buff (天地同寿等)
