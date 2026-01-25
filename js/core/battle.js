@@ -953,6 +953,20 @@ class Battle {
             amount = 0;
         }
 
+        // 13. 心魔镜像 (Reflect)
+        if (enemy.buffs.reflect && enemy.buffs.reflect > 0) {
+            enemy.buffs.reflect--;
+            Utils.showBattleLog(`${enemy.name} 反弹了攻击！`);
+            this.player.takeDamage(amount);
+
+            const playerEl = document.querySelector('.player-avatar');
+            if (playerEl) {
+                Utils.addShakeEffect(playerEl, 'heavy');
+                Utils.showFloatingNumber(playerEl, amount, 'damage');
+            }
+            return 0; // 敌人不受伤害
+        }
+
         // 5. 心魔滋生 (realm 5) - 这里是玩家打敌人，不需要增强
         // 如果是敌人打玩家，需要在 takeDamage 或者 enemy action 中处理
 
@@ -1262,11 +1276,36 @@ class Battle {
     // 执行敌人行动
     async executeEnemyAction(enemy, index) {
         const pattern = enemy.patterns[enemy.currentPatternIndex];
-        const playerEl = document.querySelector('.player-avatar');
-
+        // 只有主行动才显示日志，避免子行动刷屏
         Utils.showBattleLog(`${enemy.name} 使用 ${pattern.intent}`);
 
+        await this.processEnemyPattern(enemy, pattern, index);
+
+        this.updateBattleUI();
+    }
+
+    // 处理单个意图模式 (分离出来以支持 multiAction)
+    async processEnemyPattern(enemy, pattern, index) {
+        const playerEl = document.querySelector('.player-avatar');
+
         switch (pattern.type) {
+            case 'multiAction':
+                if (pattern.actions && Array.isArray(pattern.actions)) {
+                    for (const action of pattern.actions) {
+                        await this.processEnemyPattern(enemy, action, index);
+                        await Utils.sleep(300); // 动作间歇
+                    }
+                }
+                break;
+
+            case 'summon':
+                const summonCount = pattern.count || 1;
+                for (let k = 0; k < summonCount; k++) {
+                    this.summonEnemy(pattern.value);
+                }
+                Utils.showBattleLog(`${enemy.name} 召唤了随从！`);
+                break;
+
             case 'attack':
                 let damage = pattern.value;
                 if (typeof damage !== 'number' || isNaN(damage)) {
@@ -1314,7 +1353,8 @@ class Battle {
                                 console.error('Enemy HP became NaN after lifesteal', enemy);
                                 enemy.currentHp = enemy.maxHp; // Fallback
                             }
-                            Utils.showFloatingNumber(document.querySelector(`.enemy[data-index="${index}"]`), heal, 'heal');
+                            const enemyEl = document.querySelector(`.enemy[data-index="${index}"]`);
+                            if (enemyEl) Utils.showFloatingNumber(enemyEl, heal, 'heal');
                         }
                     }
 
@@ -1375,24 +1415,14 @@ class Battle {
                 break;
 
             case 'tribulationStrike':
-                // 天雷：造成真实伤害（无视护盾）但简单实现为普通扣血+提示真正伤害可能复杂
-                // 暂时实现为：扣除护盾后如有溢出扣血 -> 本质上是普通攻击。
-                // 真实伤害意味着直接扣血。
+                // 天雷：造成真实伤害（无视护盾）
                 Utils.showBattleLog(`天劫轰击！受到 ${pattern.value} 点真实伤害！`);
-                // 直接扣除生命，不通过 takeDamage(避免触发闪避/减伤等，天雷必中)
-                // 也可以调用 player.takeDamage 但带参数 'trueDamage'
-
-                // 简单实现：
                 if (playerEl) Utils.addFlashEffect(playerEl, 'purple');
                 this.player.currentHp -= pattern.value;
                 if (this.player.currentHp < 0) this.player.currentHp = 0;
-                // 显示数字
+
                 if (playerEl) Utils.showFloatingNumber(playerEl, pattern.value, 'damage');
 
-                // 9. 生死轮回 check inside takeDamage won't trigger if we subtract directly.
-                // Should we duplicate revive logic? Or make takeDamage support 'ignoreBlock'?
-                // Let's use takeDamage but clear block first? No, block should remain.
-                // Better manual handling.
                 if (this.player.currentHp <= 0) {
                     // 9. 生死轮回 (realm 9) check
                     if (this.player.realm === 9 && !this.player.hasRebirthed && Math.random() < 0.5) {
@@ -1410,18 +1440,7 @@ class Battle {
                 const demonCardDef = CARDS[demonCardId];
                 if (demonCardDef) {
                     for (let c = 0; c < count; c++) {
-                        // Add to Discard Pile? Or Draw Pile? Usually Discard pile to delay effect, 
-                        // or Hand to crowd hand immediately.
-                        // Pattern says "inner demon summon", let's put 1 in Hand and rest in Discard if full?
-                        // Slay the Spire usually puts status into Discard or Draw pile.
-                        // Let's put into Draw Pile to ensure they draw it eventually (or shuffle).
-                        // Actually, putting into Discard means they see it next shuffle.
-                        // Putting into Draw Pile random position is standard.
-                        // Let's shuffle into Draw Pile.
-
-                        // Create instance
                         const demonCard = { ...demonCardDef, instanceId: this.player.generateCardId() };
-
                         // Random insert
                         const pos = Math.floor(Math.random() * (this.player.drawPile.length + 1));
                         this.player.drawPile.splice(pos, 0, demonCard);
@@ -1430,8 +1449,6 @@ class Battle {
                 }
                 break;
         }
-
-        this.updateBattleUI();
     }
 
     // 检查战斗是否结束
@@ -1491,57 +1508,57 @@ class Battle {
     }
 
 
-// 检查阶段转换
-checkPhaseChange(enemy) {
-    if (!enemy.phases || enemy.currentPhase >= enemy.phases.length) return;
+    // 检查阶段转换
+    checkPhaseChange(enemy) {
+        if (!enemy.phases || enemy.currentPhase >= enemy.phases.length) return;
 
-    // 初始化 phases
-    if (typeof enemy.currentPhase === 'undefined') enemy.currentPhase = 0;
+        // 初始化 phases
+        if (typeof enemy.currentPhase === 'undefined') enemy.currentPhase = 0;
 
-    const nextPhase = enemy.phases[enemy.currentPhase]; // 这里 enemy.currentPhase 初始应为 0，对应 phases[0] 即第一个转阶段配置
+        const nextPhase = enemy.phases[enemy.currentPhase]; // 这里 enemy.currentPhase 初始应为 0，对应 phases[0] 即第一个转阶段配置
 
-    // 修正逻辑：如果当前 Hp 比例低于 phase 阈值
-    if (nextPhase && (enemy.currentHp / enemy.hp) <= nextPhase.threshold) {
-        // 触发转阶段
-        enemy.currentPhase++; // 增加阶段计数，避免重复触发
-        Utils.showBattleLog(`${enemy.name} 进入${nextPhase.name}形态！`);
+        // 修正逻辑：如果当前 Hp 比例低于 phase 阈值
+        if (nextPhase && (enemy.currentHp / enemy.hp) <= nextPhase.threshold) {
+            // 触发转阶段
+            enemy.currentPhase++; // 增加阶段计数，避免重复触发
+            Utils.showBattleLog(`${enemy.name} 进入${nextPhase.name}形态！`);
 
-        // 更新行动模式
-        if (nextPhase.patterns) {
-            enemy.patterns = nextPhase.patterns;
-            enemy.currentPatternIndex = 0; // 重置循环
-        }
+            // 更新行动模式
+            if (nextPhase.patterns) {
+                enemy.patterns = nextPhase.patterns;
+                enemy.currentPatternIndex = 0; // 重置循环
+            }
 
-        // 播放特效
-        const enemyEl = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`);
-        if (enemyEl) {
-            Utils.addShakeEffect(enemyEl, 'heavy');
-            Utils.addFlashEffect(enemyEl, 'red'); // 狂暴红光
-        }
+            // 播放特效
+            const enemyEl = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`);
+            if (enemyEl) {
+                Utils.addShakeEffect(enemyEl, 'heavy');
+                Utils.addFlashEffect(enemyEl, 'red'); // 狂暴红光
+            }
 
-        // 恢复少量生命?
-        if (nextPhase.heal) {
-            const healAmt = Math.floor(enemy.hp * nextPhase.heal);
-            enemy.currentHp = Math.min(enemy.hp, enemy.currentHp + healAmt);
-            Utils.showBattleLog(`${enemy.name} 恢复了力量！`);
+            // 恢复少量生命?
+            if (nextPhase.heal) {
+                const healAmt = Math.floor(enemy.hp * nextPhase.heal);
+                enemy.currentHp = Math.min(enemy.hp, enemy.currentHp + healAmt);
+                Utils.showBattleLog(`${enemy.name} 恢复了力量！`);
+            }
         }
     }
-}
 
-// 更新环境UI
-updateEnvironmentUI() {
-    const envEl = document.getElementById('battle-environment');
-    if (!envEl) return;
+    // 更新环境UI
+    updateEnvironmentUI() {
+        const envEl = document.getElementById('battle-environment');
+        if (!envEl) return;
 
-    if (this.activeEnvironment) {
-        envEl.style.display = 'flex';
-        envEl.innerHTML = `
+        if (this.activeEnvironment) {
+            envEl.style.display = 'flex';
+            envEl.innerHTML = `
                 <span class="env-icon">${this.activeEnvironment.icon}</span>
                 <span class="env-name">${this.activeEnvironment.name}</span>
             `;
-        envEl.title = this.activeEnvironment.description;
-    } else {
-        envEl.style.display = 'none';
+            envEl.title = this.activeEnvironment.description;
+        } else {
+            envEl.style.display = 'none';
+        }
     }
-}
 }

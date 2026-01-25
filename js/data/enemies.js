@@ -550,6 +550,23 @@ const ENEMIES = {
         description: '双生一体，火焰共鸣'
     },
 
+    // 召唤物：风之精灵
+    windSpirit: {
+        id: 'windSpirit',
+        name: '风之精灵',
+        icon: '💨',
+        realm: 11,
+        hp: 50,
+        patterns: [
+            { type: 'attack', value: 15, intent: '⚔️' },
+            { type: 'debuff', buffType: 'vulnerable', value: 1, intent: '✨' }
+        ],
+        stealChance: 0.1,
+        stealLaw: null,
+        gold: { min: 10, max: 20 },
+        isMinion: true
+    },
+
     // ==================== 第十一重·天仙界 ====================
     stormSummoner: {
         id: 'stormSummoner',
