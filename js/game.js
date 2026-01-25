@@ -1039,8 +1039,8 @@ class Game {
         const strengthEl = document.getElementById('char-strength');
         // 检查永久Buff中的力量
         let strength = 0;
-        if (this.player.permBuffs && this.player.permBuffs.strength) {
-            strength = this.player.permBuffs.strength;
+        if (this.player.permaBuffs && this.player.permaBuffs.strength) {
+            strength = this.player.permaBuffs.strength;
         }
         // 如果在战斗中，加上临时Buff
         if (this.player.buffs && this.player.buffs.strength) {
@@ -1055,8 +1055,8 @@ class Game {
         let displayStrength = 0;
         if (this.battle && !this.battle.battleEnded && this.player.buffs.strength) {
             displayStrength = this.player.buffs.strength;
-        } else if (this.player.permBuffs && this.player.permBuffs.strength) {
-            displayStrength = this.player.permBuffs.strength;
+        } else if (this.player.permaBuffs && this.player.permaBuffs.strength) {
+            displayStrength = this.player.permaBuffs.strength;
         }
 
         if (strengthEl) {

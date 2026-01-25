@@ -228,10 +228,13 @@ class Player {
             newMaxHp = Math.floor(newMaxHp * 0.7);
         }
         // Realm 18: 混沌终焉 - 所有属性减半
+        // Fix: Explicitly EXCLUDE skill cooldown from reduction.
         if (this.realm === 18) {
             newMaxHp = Math.floor(newMaxHp * 0.5);
             newBaseEnergy = Math.max(1, Math.floor(newBaseEnergy * 0.5));
             newDrawCount = Math.max(1, Math.floor(newDrawCount * 0.5));
+            // Ensure cooldown is NOT halved (Safety check)
+            // this.maxCooldown remains unchanged
         }
 
         // 更新属性 (保持当前生命值比例或数值？通常保持当前数值，除非超过最大值)
@@ -382,6 +385,13 @@ class Player {
 
         // 护盾每回合清零 (除非拥有'retainBlock'效果)
         let keepBlock = false;
+
+        // Fix: Damage Reduction expires at start of next turn (ensures it lasts through control/skips)
+        if (this.buffs.damageReduction) {
+            delete this.buffs.damageReduction;
+            // Utils.showBattleLog('减伤效果已消散');
+        }
+
         try {
             keepBlock = this.hasBuff('retainBlock') ||
                 (this.collectedLaws && this.collectedLaws.some(l => l && l.passive && l.passive.type === 'retainBlock')) ||
@@ -728,11 +738,9 @@ class Player {
         if (this.buffs.damageReduction && this.buffs.damageReduction > 0) {
             const reduction = Math.min(100, this.buffs.damageReduction);
             amount = Math.floor(amount * (100 - reduction) / 100);
-            delete this.buffs.damageReduction; // 通常是一次性或一回合？看定义是Buff。如果是'halfDamage'卡牌，描述是“本回合”，应该持续到回合结束。
-            // 这里为了简化，假设damageReduction是持续性Buff，但如果是回合结束清除，player.js需要处理回合结束清理buff。
-            // 目前Buff系统简陋，'halfDamage'效果是 buffType: 'damageReduction'。
-            // 如果是持续一回合，不应该在这里delete。应该在endTurn清理。
-            // 先不delete，假设 endTurn 会清理临时buff。
+            // Fix: Do NOT delete immediately. It should last for the turn.
+            // delete this.buffs.damageReduction; 
+            Utils.showBattleLog(`减伤生效！抵消了 ${reduction}% 伤害`);
         }
 
         // 伤害保护机制 (One-shot Protection)
@@ -1290,11 +1298,18 @@ class Player {
         const isDebuff = ['weak', 'vulnerable', 'poison', 'burn', 'paralysis', 'stun'].includes(type);
         if (this.realm === 11 && isDebuff) {
             value += 1;
-            // 可以在首次触发时提示，避免刷屏
-            // Utils.showBattleLog('天人五衰：负面状态加深');
         }
 
-
+        // Fix: Damage Reduction Multiplicative Stacking (避免100%免伤)
+        if (type === 'damageReduction') {
+            const current = this.buffs[type] || 0;
+            // Formula: New = Current + (Remaining * Added%)
+            // e.g. 50% + 50% = 50 + (50 * 0.5) = 75%
+            const newVal = current + (100 - current) * (value / 100);
+            this.buffs[type] = Math.min(95, Math.floor(newVal)); // Cap at 95% to be safe, or just floor
+            Utils.showBattleLog(`减伤效果提升至 ${this.buffs[type]}%`);
+            return;
+        }
 
         if (this.buffs[type]) {
             this.buffs[type] += value;

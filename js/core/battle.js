@@ -45,14 +45,83 @@ class Battle {
 
     // 创建敌人实例
     createEnemyInstance(enemyData) {
-        return {
+        // 1. 深拷贝行动模式，防止修改污染原始数据 (Deep copy patterns)
+        const patterns = enemyData.patterns.map(p => ({ ...p }));
+
+        // 2. 全局数值增强 (Global Scaling)
+        // HP +20%
+        let maxHp = Math.floor(enemyData.hp * 1.2);
+
+        // 伤害 +15%
+        patterns.forEach(p => {
+            if (p.type === 'attack' || p.type === 'multiAttack') {
+                if (typeof p.value === 'number') {
+                    p.value = Math.floor(p.value * 1.15);
+                }
+            }
+        });
+
+        // 初始化基本对象
+        const enemy = {
             ...enemyData,
-            currentHp: enemyData.hp,
+            maxHp: maxHp,
+            currentHp: maxHp,
+            patterns: patterns, // 使用修改后的 patterns
             block: 0,
             buffs: {},
             currentPatternIndex: 0,
-            stunned: false
+            stunned: false,
+            isElite: false
         };
+
+        // 3. 精英怪机制 (Elite System)
+        // 非Boss单位有 20% 几率突变为精英
+        // 增加 isMinion 检查，防止召唤物过于变态? 暂时保留给所有非Boss
+        if (!enemy.isBoss && Math.random() < 0.2) {
+            enemy.isElite = true;
+            enemy.alias = enemy.name; // Keep original name reference if needed
+            enemy.name = `【精英】${enemy.name}`;
+
+            // 精英属性加成
+            // HP 额外 +30% (总计 x1.56)
+            enemy.maxHp = Math.floor(enemy.maxHp * 1.3);
+            enemy.currentHp = enemy.maxHp;
+
+            // 伤害 额外 +20% (总计 x1.38)
+            enemy.patterns.forEach(p => {
+                if (p.type === 'attack' || p.type === 'multiAttack') {
+                    if (typeof p.value === 'number') {
+                        p.value = Math.floor(p.value * 1.2);
+                    }
+                }
+            });
+
+            // 随机精英词缀
+            const eliteTypes = ['strength', 'toughness', 'thorns', 'regen', 'swift'];
+            const type = eliteTypes[Math.floor(Math.random() * eliteTypes.length)];
+            enemy.eliteType = type;
+
+            // 初始化词缀效果
+            if (type === 'strength') enemy.buffs.strength = 3;
+            if (type === 'toughness') {
+                enemy.block = 15;
+                enemy.buffs.retainBlock = 1; // 假设系统支持此Buff保留护盾
+            }
+            if (type === 'thorns') enemy.buffs.thorns = 5;
+            // Regen 和 Swift 在回合逻辑或受击逻辑中处理
+            // 为 Swift 添加初始闪避率 (需要在 dealDamage 中支持)
+            if (type === 'swift') enemy.buffs.dodgeChance = 0.15; // 自定义属性
+
+            Utils.showBattleLog(`遭遇强敌：${enemy.name} (特性:${type})`);
+        }
+
+        // Boss HP 额外增强 +20%
+        if (enemy.isBoss) {
+            enemy.maxHp = Math.floor(enemy.maxHp * 1.2);
+            enemy.currentHp = enemy.maxHp;
+        }
+
+        return enemy;
     }
 
     // 开始战斗
@@ -886,6 +955,14 @@ class Battle {
                             Utils.showBattleLog('混元无极：敌人免疫了眩晕！');
                         }
 
+                        // Fix: Boss Unstoppable (霸体) check
+                        if (target.buffs && target.buffs.unstoppable > 0) {
+                            immune = true;
+                            Utils.showBattleLog(`${target.name} 拥有霸体，免疫眩晕！`);
+                            // Optional: Consume 1 stack? Usually unstoppable lasts a turn.
+                            // Decrement logic is usually at turn start/end.
+                        }
+
                         if (!immune) {
                             target.stunned = true;
 
@@ -984,7 +1061,12 @@ class Battle {
 
                     enemy.buffs[result.buffType] = (enemy.buffs[result.buffType] || 0) + result.value;
                     if (result.buffType === 'stun') {
-                        enemy.stunned = true;
+                        // Fix: Boss Unstoppable check for AoE stun
+                        if (enemy.buffs && enemy.buffs.unstoppable > 0) {
+                            Utils.showBattleLog(`${enemy.name} 拥有霸体，免疫眩晕！`);
+                        } else {
+                            enemy.stunned = true;
+                        }
                     }
                 }
                 break;
@@ -1233,9 +1315,44 @@ class Battle {
 
         for (let i = 0; i < this.enemies.length; i++) {
             const enemy = this.enemies[i];
+            const enemyEl = document.querySelector(`.enemy[data-index="${i}"]`);
             if (enemy.currentHp <= 0) continue;
 
             // (Chaos Logic Removed - Replaced by new Chaos Law)
+
+            // === Boss 压迫感增强 (Boss Mechanics 2.0) ===
+            if (enemy.isBoss) {
+                // 每3回合获得1点力量
+                if (this.turnNumber > 0 && this.turnNumber % 3 === 0) {
+                    if (!enemy.buffs.strength) enemy.buffs.strength = 0;
+                    enemy.buffs.strength += 1;
+                    Utils.showBattleLog(`${enemy.name} 怒意增长！(力量+1)`);
+                    Utils.createFloatingText(i, '力量+1', '#ffaa00');
+                }
+
+                // 30% 几率净化一个负面效果
+                if (Math.random() < 0.3) {
+                    const debuffs = Object.keys(enemy.buffs).filter(k =>
+                        ['poison', 'burn', 'weak', 'vulnerable', 'stun', 'freeze'].includes(k) && enemy.buffs[k] > 0
+                    );
+                    if (debuffs.length > 0) {
+                        const remove = debuffs[Math.floor(Math.random() * debuffs.length)];
+                        enemy.buffs[remove] = 0;
+                        Utils.showBattleLog(`${enemy.name} 净化了自身的 ${remove}！`);
+                        Utils.createFloatingText(i, '净化', '#ffffff');
+                    }
+                }
+            }
+
+            // === 精英怪效果: 再生 ===
+            if (enemy.isElite && enemy.eliteType === 'regen') {
+                const heal = Math.floor(enemy.maxHp * 0.05);
+                if (heal > 0 && enemy.currentHp < enemy.maxHp) {
+                    enemy.currentHp = Math.min(enemy.maxHp, enemy.currentHp + heal);
+                    Utils.showBattleLog(`${enemy.name} 再生恢复了 ${heal} 生命`);
+                    if (enemyEl) Utils.showFloatingNumber(enemyEl, heal, 'heal');
+                }
+            }
 
             // 处理敌人debuff (提前处理，防止晕眩导致不受DOT伤害)
             await this.processEnemyDebuffs(enemy, i);
