@@ -581,11 +581,30 @@ class Battle {
             // energyCost is already card.cost
         }
 
-        // 检查灵力
         if (energyCost > 0 && this.player.currentEnergy < energyCost) {
             Utils.showBattleLog('灵力不足！');
             return;
         }
+
+        // Multi-Enemy Targeting Logic
+        const needsTarget = card.effects && card.effects.some(e => ['damage', 'debuff', 'execute', 'removeBlock', 'goldOnKill', 'maxHpOnKill'].includes(e.type) && (!e.target || e.target === 'enemy' || e.target === 'single'));
+        const hasMultipleEnemies = this.enemies.filter(e => e.currentHp > 0).length > 1;
+
+        if (needsTarget && hasMultipleEnemies) {
+            if (this.targetingMode) {
+                this.endTargetingMode();
+            } else {
+                this.startTargetingMode(cardIndex);
+            }
+            return;
+        }
+
+        let targetIndex = 0;
+        if (needsTarget && !hasMultipleEnemies) {
+            targetIndex = this.enemies.findIndex(e => e.currentHp > 0);
+            if (targetIndex === -1) return;
+        }
+
 
         // 检查奶糖
         if (candyCost > 0 && this.player.milkCandy < candyCost) {
@@ -601,44 +620,7 @@ class Battle {
             }
         }
 
-        // 检查是否需要选择目标
-        // 修改判定逻辑：只要有效果是针对敌人的，且效果类型需要目标，就进入选择模式
-        // 注意：某些效果可能既有对敌也有对己（如武僧打击：伤害敌人+自己护盾）
-        const needsTarget = card.effects.some(e =>
-            (e.target === 'enemy' || e.target === 'allEnemies') &&
-            ['damage', 'penetrate', 'debuff', 'execute', 'randomDamage', 'damageAll', 'removeBlock', 'consumeAllEnergy', 'conditionalDamage', 'damagePerLaw'].includes(e.type)
-        );
-
-        // 如果是群体攻击（target: allEnemies），其实不需要选择目标，直接释放即可
-        // 但如果有些效果是 target: enemy（单体），有些是 allEnemies，则需要选择
-        // 实际上，只要有一个效果需要单体目标，就必须选择
-        const requiresSingleTarget = card.effects.some(e =>
-            e.target === 'enemy' &&
-            ['damage', 'penetrate', 'debuff', 'execute', 'randomDamage', 'removeBlock', 'consumeAllEnergy', 'conditionalDamage', 'damagePerLaw'].includes(e.type)
-        );
-
-        const aliveEnemies = this.enemies.filter(e => e.currentHp > 0);
-
-        // 关键修复：只要有多个敌人（例如召唤了随从），且卡牌支持单体目标，就强制进入选择模式
-        // 即使是混合卡牌（AoE+单体），也需要选择单体目标
-        if (requiresSingleTarget && aliveEnemies.length > 0) {
-            // 如果只有一个敌人，自动选择
-            if (aliveEnemies.length === 1) {
-                const targetIndex = this.enemies.findIndex(e => e.currentHp > 0);
-                this.playCardOnTarget(cardIndex, targetIndex);
-            } else {
-                // 多个敌人，必须选择
-                this.selectedCard = cardIndex;
-                this.targetingMode = true;
-                this.updateHandUI();
-                Utils.showBattleLog('请选择攻击目标');
-            }
-        } else {
-            // 不需要选择目标（如纯AOE、纯自我Buff、纯过牌），直接对首个敌人（作为默认占位）或自身释放
-            // 注意：playCardOnTarget 内部会处理 targetIndex，如果是群体攻击，target参数可能被忽略或只作为参考
-            const targetIndex = this.enemies.findIndex(e => e.currentHp > 0);
-            this.playCardOnTarget(cardIndex, targetIndex);
-        }
+        this.playCardOnTarget(cardIndex, targetIndex);
     }
 
     // 对目标使用卡牌
@@ -1224,6 +1206,45 @@ class Battle {
             if (this.player.triggerTreasureEffect) {
                 this.player.triggerTreasureEffect('onKill', enemy);
             }
+
+            // === Twin Bonds (Dual Boss Vengeance) ===
+            if (enemy.isDualBoss) {
+                const survivor = this.enemies.find(e => e.isDualBoss && e.currentHp > 0 && e !== enemy);
+                if (survivor) {
+                    setTimeout(() => {
+                        Utils.showBattleLog(`【双子羁绊】${survivor.name} 因同伴死亡而暴怒！`);
+
+                        const healAmount = Math.floor(survivor.maxHp * 0.5);
+                        survivor.currentHp = Math.min(survivor.maxHp, survivor.currentHp + healAmount);
+                        Utils.showBattleLog(`${survivor.name} 恢复了 ${healAmount} 点生命！`);
+
+                        survivor.buffs.strength = (survivor.buffs.strength || 0) + 5;
+                        Utils.showBattleLog(`${survivor.name} 力量暴涨！(+5 力量)`);
+
+                        if (this.updateEnemiesUI) this.updateEnemiesUI();
+                    }, 500);
+                }
+            }
+        }
+
+        // === Twin Bonds (Dual Boss Vengeance) ===
+        if (wasAlive && enemy.currentHp <= 0 && enemy.isDualBoss) {
+            const survivor = this.enemies.find(e => e.isDualBoss && e.currentHp > 0 && e !== enemy);
+            if (survivor) {
+                // Delay slightly to let death animation/log play
+                setTimeout(() => {
+                    Utils.showBattleLog(`【双子羁绊】${survivor.name} 因同伴死亡而暴怒！`);
+
+                    const healAmount = Math.floor(survivor.maxHp * 0.5);
+                    survivor.currentHp = Math.min(survivor.maxHp, survivor.currentHp + healAmount);
+                    Utils.showBattleLog(`${survivor.name} 恢复了 ${healAmount} 点生命！`);
+
+                    survivor.buffs.strength = (survivor.buffs.strength || 0) + 5;
+                    Utils.showBattleLog(`${survivor.name} 力量暴涨！(+5 力量)`);
+
+                    if (this.updateEnemiesUI) this.updateEnemiesUI();
+                }, 800);
+            }
         }
 
         return finalDamage;
@@ -1511,6 +1532,22 @@ class Battle {
 
         await this.processEnemyPattern(enemy, pattern, index);
 
+        // === Boss Mechanic: Aggression (Realm 15+) ===
+        // If Boss uses a non-attack move (buff/debuff/heal/defend), follow up with a quick attack
+        if (enemy.isBoss && this.player.realm >= 15) {
+            const nonAttackTypes = ['buff', 'debuff', 'defend', 'heal', 'summon'];
+            if (nonAttackTypes.includes(pattern.type)) {
+                await Utils.sleep(400);
+                Utils.showBattleLog(`${enemy.name} 趁势发动追击！`);
+
+                // Damage scales with realm: 10 + (realm-15)*5
+                const pursuitDamage = 10 + (this.player.realm - 15) * 5;
+                const pursuitAction = { type: 'attack', value: pursuitDamage, intent: '⚔️' };
+
+                await this.processEnemyPattern(enemy, pursuitAction, index);
+            }
+        }
+
         this.updateBattleUI();
     }
 
@@ -1542,6 +1579,19 @@ class Battle {
                     console.error('Enemy attack damage is NaN', pattern);
                     damage = 0;
                 }
+
+                // === Boss Mechanic: True Damage (Realm 10+) ===
+                let isTrueDamage = false;
+                if (enemy.isBoss && this.player.realm >= 10) {
+                    // 30% chance to deal True Damage (ignore block)
+                    if (Math.random() < 0.3) {
+                        isTrueDamage = true;
+                        Utils.showBattleLog(`${enemy.name} 的攻击附带【真实伤害】效果！`);
+                    }
+                }
+
+                // 10-18 heavy bosses always have some piercing? No, random is better.
+                // Realm 18 Chaos Boss always true damage? Maybe too hard. Stick to 30%.
 
                 // 检查吞噬效果 (Realm 15)
                 if (pattern.effect === 'devour') {
@@ -1596,7 +1646,31 @@ class Battle {
                 // 应用心魔滋生
                 damage = this.dealEnemyDamage(enemy, damage);
 
-                const result = this.player.takeDamage(damage);
+                // Handle True Damage
+                let result;
+                if (isTrueDamage) {
+                    // Bypass block logic by temporarily setting block to 0? 
+                    // Or use a modified takeDamage?
+                    // player.takeDamage handles block. We can modify player.takeDamage to accept 'ignoreBlock' flag
+                    // or just subtract HP directly here if dodged is false.
+
+                    // Let's modify logic slightly:
+                    // Call takeDamage but if it hits block, we want to bypass it.
+                    // The cleanest way is to pass a flag to takeDamage, but takeDamage signature is fixed in many places.
+                    // Alternative: Subtract HP directly for damage amount, but handle dodge.
+
+                    // Workaround: Temporarily remove block, take damage, restore block.
+                    const savedBlock = this.player.block;
+                    this.player.block = 0;
+                    result = this.player.takeDamage(damage);
+                    this.player.block = savedBlock; // Restore block
+
+                    if (!result.dodged) {
+                        Utils.showBattleLog(`(护盾被无视)`);
+                    }
+                } else {
+                    result = this.player.takeDamage(damage);
+                }
 
                 if (result.dodged) {
                     Utils.showBattleLog('闪避了攻击！');
@@ -1637,6 +1711,12 @@ class Battle {
                     if (enemy.buffs.strength) {
                         multiDamage += enemy.buffs.strength;
                     }
+
+                    // Check True Damage for MultiAttack as well? 
+                    // Let's say MultiAttack is standard. Except if we want to be mean.
+                    // Let's keep MultiAttack standard for now, as it's already strong.
+
+                    // 检查战斗胜利
 
                     // 应用心魔滋生
                     multiDamage = this.dealEnemyDamage(enemy, multiDamage);
@@ -1721,7 +1801,7 @@ class Battle {
                         const pos = Math.floor(Math.random() * (this.player.drawPile.length + 1));
                         this.player.drawPile.splice(pos, 0, demonCard);
                     }
-                    Utils.showBattleLog(`心魔滋生！牌组中加入了 ${count} 张 ${demonCardDef.name}`);
+                    Utils.showBattleLog(`心魔滋生！牌组中加入了 ${count} 张 ${demonCardDef.name} `);
                 }
                 break;
         }
@@ -1775,7 +1855,7 @@ class Battle {
 
             // 随从入场特效
             setTimeout(() => {
-                const newEnemyEl = document.querySelector(`.enemy[data-index="${this.enemies.length - 1}"]`);
+                const newEnemyEl = document.querySelector(`.enemy[data - index= "${this.enemies.length - 1}"]`);
                 if (newEnemyEl) Utils.addFlashEffect(newEnemyEl);
             }, 100);
         } else {
@@ -1797,7 +1877,7 @@ class Battle {
         if (nextPhase && (enemy.currentHp / enemy.hp) <= nextPhase.threshold) {
             // 触发转阶段
             enemy.currentPhase++; // 增加阶段计数，避免重复触发
-            Utils.showBattleLog(`${enemy.name} 进入${nextPhase.name}形态！`);
+            Utils.showBattleLog(`${enemy.name} 进入${nextPhase.name} 形态！`);
 
             // 更新行动模式
             if (nextPhase.patterns) {
@@ -1806,7 +1886,7 @@ class Battle {
             }
 
             // 播放特效
-            const enemyEl = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`);
+            const enemyEl = document.querySelector(`.enemy[data - index= "${this.enemies.indexOf(enemy)}"]`);
             if (enemyEl) {
                 Utils.addShakeEffect(enemyEl, 'heavy');
                 Utils.addFlashEffect(enemyEl, 'red'); // 狂暴红光
@@ -1820,6 +1900,53 @@ class Battle {
             }
         }
     }
+    // Start Targeting Mode
+    startTargetingMode(cardIndex) {
+        this.targetingMode = true;
+        this.selectedCardIndex = cardIndex;
+
+        // Highlight Enemies
+        const enemyEls = document.querySelectorAll('.enemy');
+        enemyEls.forEach(el => {
+            el.classList.add('targeting-valid');
+            el.style.cursor = 'crosshair';
+            el.style.borderColor = 'var(--accent-gold)';
+            el.style.boxShadow = '0 0 15px var(--accent-gold)';
+            // Add click listener if not handled by global delegation
+            // But usually we rely on existing click handlers checking targetingMode
+        });
+
+        Utils.showBattleLog('请选择目标...');
+        const handEl = document.getElementById('hand-cards');
+        if (handEl) handEl.classList.add('targeting-active');
+    }
+
+    // End Targeting Mode
+    endTargetingMode() {
+        this.targetingMode = false;
+        this.selectedCardIndex = -1;
+
+        const enemyEls = document.querySelectorAll('.enemy');
+        enemyEls.forEach(el => {
+            el.classList.remove('targeting-valid');
+            el.style.cursor = '';
+            el.style.borderColor = '';
+            el.style.boxShadow = '';
+        });
+
+        const handEl = document.getElementById('hand-cards');
+        if (handEl) handEl.classList.remove('targeting-active');
+    }
+
+    // Enemy Click Handler
+    onEnemyClick(enemyIndex) {
+        if (this.targetingMode && this.selectedCardIndex !== -1) {
+            this.playCardOnTarget(this.selectedCardIndex, enemyIndex);
+        } else {
+            // Normal click
+        }
+    }
+
 
     // 更新环境UI
     updateEnvironmentUI() {
@@ -1829,9 +1956,9 @@ class Battle {
         if (this.activeEnvironment) {
             envEl.style.display = 'flex';
             envEl.innerHTML = `
-                <span class="env-icon">${this.activeEnvironment.icon}</span>
-                <span class="env-name">${this.activeEnvironment.name}</span>
-            `;
+    <span class="env-icon">${this.activeEnvironment.icon}</span>
+        <span class="env-name">${this.activeEnvironment.name}</span>
+`;
             envEl.title = this.activeEnvironment.description;
         } else {
             envEl.style.display = 'none';

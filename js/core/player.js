@@ -736,10 +736,10 @@ class Player {
 
         // 检查减伤 Buff (天地同寿等)
         if (this.buffs.damageReduction && this.buffs.damageReduction > 0) {
-            const reduction = Math.min(100, this.buffs.damageReduction);
+            // FIX: Cap reduction at 90% to prevent immunity
+            const reduction = Math.min(90, this.buffs.damageReduction);
             amount = Math.floor(amount * (100 - reduction) / 100);
-            // Fix: Do NOT delete immediately. It should last for the turn.
-            // delete this.buffs.damageReduction; 
+
             Utils.showBattleLog(`减伤生效！抵消了 ${reduction}% 伤害`);
         }
 

@@ -281,10 +281,35 @@ class GameMap {
             bossInstance.maxHp = Math.floor(bossInstance.maxHp * 1.2);
             bossInstance.currentHp = bossInstance.maxHp;
 
-            this.game.currentBattleNode = node;
-            this.game.startBattle([bossInstance], node);
+            // Dual Boss Logic (Realm 10+)
+            const enemies = [];
+            if (realm >= 10) {
+                // Boss A
+                const bossA = JSON.parse(JSON.stringify(bossInstance));
+                bossA.id = (bossA.id || 'boss') + '_A';
+                bossA.name += ' (阴)';
+                bossA.maxHp = Math.floor(bossA.maxHp * 0.7); // 70% HP
+                bossA.currentHp = bossA.maxHp;
+                bossA.isDualBoss = true; // Mark for Twin Bonds logic
+                enemies.push(bossA);
 
-            Utils.showBattleLog(`天劫降临！击败【${bossInstance.name}】以破境！`);
+                // Boss B
+                const bossB = JSON.parse(JSON.stringify(bossInstance));
+                bossB.id = (bossB.id || 'boss') + '_B';
+                bossB.name += ' (阳)';
+                bossB.maxHp = Math.floor(bossB.maxHp * 0.7); // 70% HP
+                bossB.currentHp = bossB.maxHp;
+                bossB.isDualBoss = true;
+                enemies.push(bossB);
+
+                Utils.showBattleLog(`天劫异变！双子魔尊降临！`);
+            } else {
+                enemies.push(bossInstance);
+                Utils.showBattleLog(`天劫降临！击败【${bossInstance.name}】以破境！`);
+            }
+
+            this.game.currentBattleNode = node;
+            this.game.startBattle(enemies, node);
         }
     }
 

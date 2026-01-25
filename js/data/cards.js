@@ -671,10 +671,10 @@ const CARDS = {
         type: 'defense',
         cost: 2,
         icon: '☯️',
-        description: '本回合受到的伤害减半',
+        description: '本回合受到的伤害减少30%（升级后50%）',
         rarity: 'rare',
         effects: [
-            { type: 'buff', buffType: 'damageReduction', value: 50, target: 'self' }
+            { type: 'buff', buffType: 'damageReduction', value: 30, target: 'self' }
         ]
     },
 

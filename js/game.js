@@ -2934,8 +2934,8 @@ class Game {
         const items = [];
         const services = [];
         const realm = this.player.realm || 1;
-        // 价格随天域层数轻微上涨，每重天+5% (原10%)
-        const priceMult = 1 + (realm - 1) * 0.05;
+        // 价格随天域层数上涨，每重天+10% (was 5%)
+        const priceMult = 1 + (realm - 1) * 0.10;
 
         // 1. 生成卡牌 (使用新方法)
         const newCards = this.generateShopCards(5);
@@ -2949,29 +2949,29 @@ class Game {
             name: '灵丹妙药',
             icon: '💖',
             desc: `恢复 ${Math.floor(this.player.maxHp * 0.5)} 点生命`, // 30% -> 50%
-            price: Math.floor(30 * priceMult), // 50 -> 30
+            price: Math.floor(30 * priceMult), // 30
             sold: false
         });
 
-        // 移除卡牌
+        // 移除卡牌 - base price increased
         services.push({
             id: 'remove',
             type: 'service',
             name: '净化仪式',
             icon: '🗑️',
             desc: '移除一张牌',
-            price: Math.floor(50 * (1 + (this.player.removeCount || 0) * 0.5) * priceMult), // 75 -> 50
+            price: Math.floor(75 * (1 + (this.player.removeCount || 0) * 0.5) * priceMult), // 50 -> 75
             sold: false
         });
 
-        // 命环经验
+        // 命环经验 - base price increased
         services.push({
             id: 'exp',
             type: 'service',
             name: '命环充能',
             icon: '⬆️',
-            desc: '命环经验 +100', // 50 -> 100
-            price: Math.floor(50 * priceMult), // 60 -> 50
+            desc: '命环经验 +100', // 100
+            price: Math.floor(80 * priceMult), // 50 -> 80
             sold: false
         });
 
@@ -4394,9 +4394,17 @@ class Game {
 }
 
 // 全局游戏实例
-let game;
+window.game = null;
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', () => {
-    game = new Game();
+    try {
+        console.log('Initializing Game...');
+        window.game = new Game();
+        console.log('Game Initialized:', window.game);
+    } catch (error) {
+        console.error('Game Initialization Failed:', error);
+        Utils.showBattleLog('游戏初始化失败，请检查控制台');
+        alert('游戏初始化失败: ' + error.message);
+    }
 });
