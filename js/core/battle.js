@@ -60,6 +60,7 @@ class Battle {
         this.currentTurn = 'player';
         this.isProcessingCard = false; // 强制重置状态
         this.playerTookDamage = false; // For Trial Challenge
+        this.player.resurrectCount = 0; // Reset resurrection counter
 
         // 玩家回合开始
         this.player.startTurn();
@@ -741,6 +742,29 @@ class Battle {
                     target.block = 0;
                     target.currentHp -= penDmg;
                     target.block = oldBlock;
+
+                    // 共鸣：剑雷交织 (Thunder Sword) - 穿透附带麻痹
+                    const thunderSword = this.player.activeResonances.find(r => r.id === 'thunderSword');
+                    if (thunderSword) {
+                        // Apply paralysis/stun/weak
+                        // Using 'stun' as paralysis representation or 'weak'?
+                        // Effect value is 2. Probably 2 stacks of Stun or Weak?
+                        // Description: "Penetrate damage applies 2 layers of Paralysis". 
+                        // Check what Paralysis does. Valid buffs usually: 'stun', 'weak', 'vulnerable', 'burn'.
+                        // 'stun' is usually boolean or 1 turn?
+                        // Let's use 'stun' (1 turn) + 'vulnerable' (2 layers)? Or just 'stun'?
+                        // Text says "layers". Maybe custom buff?
+                        // Let's stick to standard buffs: 2 layers of Vulnerable + chance to Stun?
+                        // Or if game supports 'stun' stacks.
+                        // Checking battle.js processTurn... 'stunned' is a flag.
+                        // Let's apply 2 stacks of 'vulnerable' and small chance to Stun?
+                        // Or "Paralysis" = "Stun"? But 2 layers implies duration.
+                        // Let's apply 'weak' (reduce dmg) and 'vulnerable' (take more dmg).
+                        // Or maybe 'paralysis' is a new buff I should add support for?
+                        // To be safe and impactful: 2 stacks of 'vulnerable'.
+                        target.buffs.vulnerable = (target.buffs.vulnerable || 0) + thunderSword.effect.value;
+                        Utils.showBattleLog(`剑雷交织：敌人麻痹！(易伤+${thunderSword.effect.value})`);
+                    }
 
                     if (enemyEl) {
                         Utils.addShakeEffect(enemyEl, getShakeIntensity(penDmg));

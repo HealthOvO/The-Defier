@@ -551,6 +551,17 @@ class Player {
             amount = 0;
         }
 
+        // 触发法宝回调 (onBeforeTakeDamage)
+        // 例如：阴阳镜 (Yin Yang Mirror) - 几率转化伤害为治疗
+        const context = { preventDamage: false };
+        if (this.treasures) {
+            this.triggerTreasureEffect('onBeforeTakeDamage', amount, context);
+        }
+
+        if (context.preventDamage) {
+            return { dodged: true, damage: 0 }; // Treated as dodge/prevented
+        }
+
         // 共鸣：风空遁 (Astral Shift) - 闪避抽牌
         const astralShift = this.activeResonances.find(r => r.id === 'astralShift');
 
@@ -639,6 +650,16 @@ class Player {
         }
 
         if (this.currentHp <= 0) {
+            // 共鸣：生命轮回 (Life Reincarnation) - 复活 (每场战斗1次)
+            const reincarnation = this.activeResonances.find(r => r.effect && r.effect.type === 'resurrect');
+            if (reincarnation && (!this.resurrectCount || this.resurrectCount < (reincarnation.effect.value || 1))) {
+                const healPercent = reincarnation.effect.percent || 0.5;
+                this.currentHp = Math.floor(this.maxHp * healPercent);
+                this.resurrectCount = (this.resurrectCount || 0) + 1;
+                Utils.showBattleLog(`生命轮回：涅槃重生！恢复 ${Math.floor(healPercent * 100)}% 生命！`);
+                return { dodged: false, damage: amount - remainingDamage }; // Stop death
+            }
+
             // 9. 生死轮回 (realm 9)
             if (this.realm === 9 && !this.hasRebirthed && Math.random() < 0.5) {
                 this.currentHp = this.maxHp;
@@ -751,8 +772,14 @@ class Player {
             game.playCardEffect(null, card.type);
         }
 
+        // 触发法宝回调 (onCardPlay)
+        const context = { damageModifier: 0 };
+        if (this.treasures) {
+            this.triggerTreasureEffect('onCardPlay', card, context);
+        }
+
         // 执行卡牌效果
-        const results = this.executeCardEffects(card, target);
+        const results = this.executeCardEffects(card, target, context);
 
         // 临时卡 (isTemp) -> 消耗 (Exhaust) 而非弃牌
         // 且需要确认临时卡是否本来就是消耗属性 (exhaust: true). 
@@ -769,18 +796,24 @@ class Player {
     }
 
     // 执行卡牌效果
-    executeCardEffects(card, target) {
+    // 执行卡牌效果
+    executeCardEffects(card, target, context = {}) {
         const results = [];
         for (const effect of card.effects) {
-            const result = this.executeEffect(effect, target);
+            const result = this.executeEffect(effect, target, context);
             results.push(result);
         }
         return results;
     }
 
     // 执行单个效果
-    executeEffect(effect, target) {
+    executeEffect(effect, target, context = {}) {
         let value = effect.value || 0;
+
+        // 应用法宝/Buff上下文加成 (Context Modifiers)
+        if ((effect.type === 'damage' || effect.type === 'damageAll' || effect.type === 'penetrate') && context.damageModifier) {
+            value += context.damageModifier;
+        }
 
         // 8. 天道压制 (realm 8)
         if (this.realm === 8 && (typeof value === 'number')) {
