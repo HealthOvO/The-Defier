@@ -178,6 +178,36 @@ const LAWS = {
     },
 
     // ==================== 新增法则 ====================
+    woodLaw: {
+        id: 'woodLaw',
+        name: '木灵法则',
+        icon: '🌿',
+        description: '剧毒荆棘。受击时30%几率对攻击者施加1层中毒。',
+        rarity: 'rare',
+        element: 'wood',
+        passive: {
+            type: 'poisonThorn',
+            chance: 0.3,
+            value: 1
+        },
+        unlockCards: ['poisonThorn', 'natureGrowth']
+    },
+
+    timeRewindLaw: {
+        id: 'timeRewindLaw',
+        name: '时光回溯',
+        icon: '⏪',
+        description: '时间逆流。洗牌时回复5点生命。',
+        rarity: 'epic',
+        element: 'time',
+        passive: {
+            type: 'reshuffleHeal',
+            value: 5
+        },
+        unlockCards: ['timeRewind']
+    },
+
+    // ==================== 新增法则 ====================
     healingLaw: {
         id: 'healingLaw',
         name: '治愈法则',

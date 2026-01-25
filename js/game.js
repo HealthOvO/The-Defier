@@ -479,65 +479,47 @@ class Game {
         const grid = document.getElementById('collection-grid');
         if (!grid) return;
 
+        // 清空现有内容
         grid.innerHTML = '';
 
+        // --- 1. 渲染法则部分 ---
         for (const lawId in LAWS) {
             const law = LAWS[lawId];
             const collected = this.player.collectedLaws.some(l => l.id === lawId);
 
             const item = document.createElement('div');
-            // 保留 locked 样式用于视觉区分（变灰），但不再隐藏详细信息
             item.className = `collection-item ${collected ? '' : 'locked'}`;
-
-            // 样式调整：允许高度自适应以显示描述
-            item.style.height = 'auto';
-            item.style.minHeight = '140px';
-            item.style.display = 'flex';
-            item.style.flexDirection = 'column';
-            item.style.alignItems = 'center';
-            item.style.padding = '15px';
-            item.style.cursor = collected ? 'pointer' : 'default';
 
             // 构建描述HTML
             let descHtml = '';
             let passiveText = '';
 
-            // 尝试获取被动效果描述（如果函数存在）
+            // 尝试获取被动效果描述
             if (typeof getLawPassiveDescription === 'function') {
                 passiveText = getLawPassiveDescription(law);
             } else if (law.passive) {
-                // 简单的fallback
                 passiveText = `被动: ${law.passive.type} ${law.passive.value}`;
             }
 
             if (collected) {
+                // UI Fix: 仅显示被动效果，不显示Flavor Text
                 descHtml = `
-                    <div class="collection-desc" style="font-size: 0.85rem; color: #ccc; margin-top: 8px; text-align: center; line-height: 1.4;">
-                        ${law.description}
-                    </div>
-                    ${passiveText ? `
-                    <div class="collection-effect" style="font-size: 0.8rem; color: #4ff; margin-top: 8px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 5px;">
-                        ${passiveText}
-                    </div>` : ''}
+                    <div class="collection-desc">${passiveText || law.description}</div>
                 `;
             } else {
                 descHtml = `
-                    <div class="collection-desc" style="font-size: 0.85rem; color: #666; margin-top: 8px; font-style: italic;">
-                        未获得
-                    </div>
+                    <div class="collection-desc" style="font-style: italic;">未获得</div>
                 `;
             }
 
-            // 始终显示名字
             item.innerHTML = `
-                <div class="collection-icon" style="font-size: 2.5rem; margin-bottom: 5px;">${law.icon}</div>
-                <div class="collection-name" style="font-size: 1.1rem; font-weight: bold; color: var(--accent-gold);">${law.name}</div>
+                <div class="collection-icon">${law.icon}</div>
+                <div class="collection-name">${law.name}</div>
                 ${descHtml}
             `;
 
             if (collected) {
                 item.addEventListener('click', () => {
-                    // 详情弹窗
                     let detailMsg = `${law.description}`;
                     if (passiveText) {
                         detailMsg += `\n\n🔎 被动效果:\n${passiveText}`;
@@ -547,6 +529,118 @@ class Game {
             }
 
             grid.appendChild(item);
+        }
+
+        // --- 2. 渲染共鸣手册部分 ---
+        // 检查是否已经存在 resonance-container，避免重复添加 (虽然 grid.innerHTML='' 这里清除的是 grid 内部，
+        // 但如果我们的设计是把共鸣放在 grid 面板后面，我们需要找到 grid 的父容器或者直接追加到 grid 后面?
+        // 查看 HTML 结构：通常 collection-grid 是一个 scrollable div。
+        // 如果把共鸣放在 grid 里面，会被 grid 布局影响。
+        // 最好是在 grid 之后追加一个 section。
+        // 但是 grid.innerHTML = '' 只清空 grid。
+        // 让我们看看 DOM 结构。假设我们只能操作 grid 内部，或者 grid 是整个内容区域。
+        // 如果 grid 是 grid 布局，直接 append 一个全宽元素可能不方便（需 span all）。
+        // 简单方案：把 grid 的 display: grid 改为一个容器，内部包含 .laws-grid 和 .resonance-section。
+        // 但这需要改 HTML 结构。
+        // 或者：我们在 js 里动态调整。
+        // 方案 B: 把 collection-grid 的 CSS 还原为 block，内部包含两个 div: laws-grid (display:grid) 和 resonance-section。
+
+        // 动态改造 grid 容器
+        grid.style.display = 'block';
+        grid.style.overflowY = 'auto'; // Ensure scroll
+
+        // 重新构建 structure
+        // 1. Laws Grid Container
+        const lawsContainer = document.createElement('div');
+        lawsContainer.className = 'collection-subgrid';
+        lawsContainer.style.display = 'grid';
+        lawsContainer.style.gridTemplateColumns = 'repeat(auto-fill, minmax(150px, 1fr))';
+        lawsContainer.style.gap = 'var(--spacing-md)';
+
+        // Move processed items to lawsContainer
+        while (grid.firstChild) {
+            lawsContainer.appendChild(grid.firstChild);
+        }
+        grid.appendChild(lawsContainer);
+
+        // 2. Resonance Section
+        const resSection = document.createElement('div');
+        resSection.className = 'resonance-section';
+
+        resSection.innerHTML = `
+            <div class="resonance-header">🔮 法则共鸣手册</div>
+            <div class="resonance-grid"></div>
+        `;
+
+        const resGrid = resSection.querySelector('.resonance-grid');
+
+        for (const resKey in LAW_RESONANCES) {
+            const res = LAW_RESONANCES[resKey];
+
+            // 检查玩家是否满足条件 (UI高亮显示)
+            const hasResonance = this.player.activeResonances && this.player.activeResonances.some(r => r.id === res.id);
+
+            const resItem = document.createElement('div');
+            resItem.className = `resonance-item ${hasResonance ? 'active' : ''}`;
+            if (hasResonance) resItem.style.borderColor = 'var(--accent-gold)';
+
+            // 构建所需法则图标
+            let lawsHtml = '';
+            if (res.laws) {
+                lawsHtml = res.laws.map(lawId => {
+                    const l = LAWS[lawId];
+                    const hasLaw = this.player.collectedLaws.some(cl => cl.id === lawId);
+                    const color = hasLaw ? 'var(--text-primary)' : 'var(--text-muted)';
+                    const opacity = hasLaw ? '1' : '0.5';
+                    return l ? `<div class="res-law-req" style="color:${color}; opacity:${opacity}">${l.icon} ${l.name}</div>` : '';
+                }).join('');
+            }
+
+            resItem.innerHTML = `
+                <div class="resonance-title">
+                    ${res.name}
+                    ${hasResonance ? '✅' : ''}
+                </div>
+                <div class="resonance-laws">
+                    ${lawsHtml}
+                </div>
+                <div class="resonance-desc">${res.description}</div>
+                ${res.effect ? `<div class="resonance-effect">效果: ${this.formattingResonanceEffect(res.effect)}</div>` : ''}
+            `;
+
+            resGrid.appendChild(resItem);
+        }
+
+        grid.appendChild(resSection);
+    }
+
+    // 辅助：格式化共鸣效果描述
+    formattingResonanceEffect(effect) {
+        if (!effect) return '';
+
+        const terms = {
+            'burn': '灼烧', 'weak': '虚弱', 'vulnerable': '易伤', 'poison': '中毒',
+            'stun': '眩晕', 'freeze': '冰冻', 'slow': '减速', 'random': '随机效果',
+            'thunder': '雷', 'fire': '火', 'ice': '冰', 'wind': '风', 'earth': '土',
+            'costReduce': '减费', 'draw': '抽牌'
+        };
+        const t = (k) => terms[k] || k;
+
+        switch (effect.type) {
+            case 'damageBoostVsDebuff': return `对[${t(effect.debuff)}]敌人伤害+${Math.floor(effect.percent * 100)}%`;
+            case 'dodgeDraw': return `闪避时抽${effect.value}张牌`;
+            case 'stunDebuff': return `眩晕时施加${effect.value}层${t(effect.buffType)}`;
+            case 'shieldHeal': return `回合结束若有护盾，恢复护盾值${Math.floor(effect.percent * 100)}%的生命`;
+            case 'penetrateBonus': return `穿透伤害+${Math.floor(effect.percent * 100)}%`;
+            case 'shuffleDamage': return `洗牌造成${effect.value}伤害+${t(effect.debuff)}`;
+            case 'elementalReaction': return `${t(effect.trigger)}伤触发${Math.floor(effect.damagePercent * 100)}%生命爆炸`;
+            case 'cardPlayTrigger': return `每${effect.count}张牌触发${effect.damage}点${t(effect.element)}伤`;
+            case 'turnStartGamble': return `回合开始：50%几率随机3张牌耗能-1，或抽2张牌`;
+            case 'healOverlowDamage': return `溢出治疗转伤害 (+${Math.floor(effect.healBonus * 100)}%治疗)`;
+            case 'resurrect': return `死亡复活 (${Math.floor(effect.percent * 100)}%血)`;
+            case 'persistentBlock': return `护盾不消失`;
+            case 'penetrateParalysis': return `穿透施加${effect.value}层麻痹`;
+            default: return '特殊效果';
         }
     }
 

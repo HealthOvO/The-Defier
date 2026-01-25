@@ -182,6 +182,62 @@ const CARDS = {
         ]
     },
 
+    // ==================== 补全卡牌 ====================
+    healingTouch: {
+        id: 'healingTouch',
+        name: '治愈之触',
+        type: 'skill',
+        cost: 1,
+        icon: '💚',
+        description: '回复 6 点生命，移除 1 个负面效果',
+        rarity: 'uncommon',
+        effects: [
+            { type: 'heal', value: 6, target: 'self' },
+            { type: 'cleanse', value: 1, target: 'self' }
+        ]
+    },
+
+    bloodBlessing: {
+        id: 'bloodBlessing',
+        name: '鲜血祝福',
+        type: 'power',
+        cost: 2,
+        icon: '🩸',
+        description: '消耗 5 点生命，获得 2 点力量',
+        rarity: 'rare',
+        effects: [
+            { type: 'selfDamage', value: 5, target: 'self' },
+            { type: 'buff', buffType: 'strength', value: 2, target: 'self' }
+        ]
+    },
+
+    poisonThorn: {
+        id: 'poisonThorn',
+        name: '毒刺',
+        type: 'attack',
+        cost: 1,
+        icon: '🌵',
+        description: '造成 4 点伤害，施加 2 层中毒',
+        rarity: 'common',
+        effects: [
+            { type: 'damage', value: 4, target: 'enemy' },
+            { type: 'debuff', buffType: 'poison', value: 2, target: 'enemy' }
+        ]
+    },
+
+    natureGrowth: {
+        id: 'natureGrowth',
+        name: '自然生长',
+        type: 'power',
+        cost: 1,
+        icon: '🌱',
+        description: '每回合结束时，获得 3 点护盾',
+        rarity: 'uncommon',
+        effects: [
+            { type: 'buff', buffType: 'regenBlock', value: 3, target: 'self' }
+        ]
+    },
+
     // ==================== 法则牌（紫色） ====================
     thunderLaw: {
         id: 'thunderLaw',

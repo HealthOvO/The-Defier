@@ -925,7 +925,9 @@ class Battle {
                 if (target && target.block > 0) {
                     const removedBlock = target.block;
                     target.block = 0;
-                    Utils.showBattleLog(`破甲！移除敌人 ${removedBlock} 点护盾！`);
+                    Utils.showBattleLog(`破甲！移除了 ${removedBlock} 点护盾`);
+                    Utils.createFloatingText(target.index, '破甲', '#ff0000');
+                    if (this.updateEnemiesUI) this.updateEnemiesUI();
                 }
                 break;
 
@@ -1243,6 +1245,15 @@ class Battle {
                 enemy.stunned = false;
                 Utils.showBattleLog(`${enemy.name} 被眩晕，跳过回合`);
 
+                // === Boss 霸体机制 ===
+                if (enemy.isBoss) {
+                    enemy.buffs.unstoppable = 1; // 获得1回合霸体
+                    Utils.showBattleLog(`${enemy.name} 获得了霸体，免疫下回合控制！`);
+                    // Floating text for visual
+                    Utils.createFloatingText(i, '霸体', '#ffff00');
+                    if (this.updateEnemiesUI) this.updateEnemiesUI();
+                }
+
                 // 控制抵抗机制 (Realm 16+)
                 if (this.player.realm >= 16) {
                     let resistChance = 0;
@@ -1350,6 +1361,19 @@ class Battle {
         // 减少易伤
         if (enemy.buffs.vulnerable && enemy.buffs.vulnerable > 0) {
             enemy.buffs.vulnerable--;
+        }
+
+        // 减少虚弱
+        if (enemy.buffs.weak && enemy.buffs.weak > 0) {
+            enemy.buffs.weak--;
+        }
+
+        // 减少霸体 (新增)
+        if (enemy.buffs.unstoppable && enemy.buffs.unstoppable > 0) {
+            enemy.buffs.unstoppable--;
+            if (enemy.buffs.unstoppable <= 0) {
+                Utils.showBattleLog(`${enemy.name} 的霸体状态已消失`);
+            }
         }
     }
 

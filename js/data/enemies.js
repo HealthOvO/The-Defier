@@ -85,7 +85,7 @@ const ENEMIES = {
             { type: 'defend', value: 5, intent: '🛡️' }
         ],
         stealChance: 0.2,
-        stealLaw: 'woodLife', // Assuming wood law exists or use null
+        stealLaw: 'woodLaw',
         gold: { min: 18, max: 28 }
     },
 
@@ -246,7 +246,7 @@ const ENEMIES = {
             { type: 'multiAttack', value: 8, count: 4, intent: '🔥' }
         ],
         stealChance: 1.0,
-        stealLaw: 'reversal',
+        stealLaw: 'reversalLaw',
         gold: { min: 800, max: 1200 },
         description: '天道意志的具象化身'
     },
@@ -448,7 +448,7 @@ const ENEMIES = {
             { type: 'multiAttack', value: 12, count: 4, intent: '🔥' }
         ],
         stealChance: 0.4,
-        stealLaw: 'timeRewind',
+        stealLaw: 'timeRewindLaw',
         gold: { min: 150, max: 220 }
     },
 
@@ -470,7 +470,7 @@ const ENEMIES = {
             { type: 'debuff', buffType: 'vulnerable', value: 4, intent: '✨' }
         ],
         stealChance: 0.75,
-        stealLaw: 'karmaKill',
+        stealLaw: 'karmaLaw',
         gold: { min: 500, max: 700 }
     },
 
@@ -505,7 +505,7 @@ const ENEMIES = {
             { type: 'defend', value: 40, intent: '🛡️' }
         ],
         stealChance: 0.45,
-        stealLaw: 'karmaKill',
+        stealLaw: 'karmaLaw',
         gold: { min: 200, max: 320 }
     },
 
@@ -525,7 +525,7 @@ const ENEMIES = {
             { type: 'defend', value: 50, intent: '🛡️' }
         ],
         stealChance: 0.8,
-        stealLaw: 'timeRewind',
+        stealLaw: 'timeRewindLaw',
         gold: { min: 400, max: 600 },
         description: '掌控飞升之力的主宰'
     },
@@ -973,7 +973,7 @@ const ENEMIES = {
             { type: 'debuff', buffType: 'weak', value: 5, intent: '✨' }
         ],
         stealChance: 0.9,
-        stealLaw: 'karmaKill',
+        stealLaw: 'karmaLaw',
         gold: { min: 900, max: 1200 },
         description: '因果循环，报应不爽'
     },
@@ -1027,7 +1027,7 @@ const ENEMIES = {
             { type: 'attack', value: 999, intent: '💀' } // Enrage?
         ],
         stealChance: 1.0,
-        stealLaw: 'reversal',
+        stealLaw: 'reversalLaw',
         gold: { min: 1000, max: 2000 },
         description: '一切的终结与开始'
     },
