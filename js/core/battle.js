@@ -557,23 +557,24 @@ class Battle {
             ['damage', 'penetrate', 'debuff', 'execute', 'randomDamage', 'removeBlock', 'consumeAllEnergy', 'conditionalDamage', 'damagePerLaw'].includes(e.type)
         );
 
-        if (requiresSingleTarget && this.enemies.filter(e => e.currentHp > 0).length > 0) {
-            // 如果只有一个敌人，且没有处于强制选择模式，或许可以直接打出？
-            // 但为了操作统一性，通常还是保持点击卡牌->选择目标（或自动选择唯一目标）
+        const aliveEnemies = this.enemies.filter(e => e.currentHp > 0);
 
-            if (this.enemies.filter(e => e.currentHp > 0).length === 1) {
-                // 只有一个敌人，自动选择
+        // 关键修复：只要有多个敌人（例如召唤了随从），且卡牌支持单体目标，就强制进入选择模式
+        // 即使是混合卡牌（AoE+单体），也需要选择单体目标
+        if (requiresSingleTarget && aliveEnemies.length > 0) {
+            // 如果只有一个敌人，自动选择
+            if (aliveEnemies.length === 1) {
                 const targetIndex = this.enemies.findIndex(e => e.currentHp > 0);
                 this.playCardOnTarget(cardIndex, targetIndex);
             } else {
-                // 进入选择目标模式
+                // 多个敌人，必须选择
                 this.selectedCard = cardIndex;
                 this.targetingMode = true;
                 this.updateHandUI();
-                Utils.showBattleLog('选择目标');
+                Utils.showBattleLog('请选择攻击目标');
             }
         } else {
-            // 不需要选择目标（如群体攻击、纯自我Buff、纯过牌），直接对首个敌人（作为默认占位）或自身释放
+            // 不需要选择目标（如纯AOE、纯自我Buff、纯过牌），直接对首个敌人（作为默认占位）或自身释放
             // 注意：playCardOnTarget 内部会处理 targetIndex，如果是群体攻击，target参数可能被忽略或只作为参考
             const targetIndex = this.enemies.findIndex(e => e.currentHp > 0);
             this.playCardOnTarget(cardIndex, targetIndex);

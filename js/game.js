@@ -194,31 +194,44 @@ class Game {
     // 保存游戏
     // 保存游戏
     saveGame() {
-        const gameState = {
-            version: '3.0.0',
-            player: this.player.getState(),
-            map: {
-                nodes: this.map.nodes,
-                currentNodeIndex: this.map.currentNodeIndex,
-                completedNodes: this.map.completedNodes
-            },
-            unlockedRealms: this.unlockedRealms || [1],
-            currentScreen: this.currentScreen,
-            timestamp: Date.now()
-        };
-        localStorage.setItem('theDefierSave', JSON.stringify(gameState));
-        console.log('游戏已保存 (本地)');
+        try {
+            const gameState = {
+                version: '3.0.0',
+                player: this.player.getState(),
+                map: {
+                    nodes: this.map.nodes,
+                    currentNodeIndex: this.map.currentNodeIndex,
+                    completedNodes: this.map.completedNodes
+                },
+                unlockedRealms: this.unlockedRealms || [1],
+                currentScreen: this.currentScreen,
+                timestamp: Date.now()
+            };
+            localStorage.setItem('theDefierSave', JSON.stringify(gameState));
+            console.log('游戏已保存 (本地)');
 
-        // 如果已登录，且知道当前的存档槽位，自动同步到云端
-        // 防止 unset slot 默认为 0 覆盖了 Slot 1
-        if (AuthService.isLoggedIn() && this.currentSaveSlot !== null && this.currentSaveSlot !== undefined) {
-            AuthService.saveCloudData(gameState, this.currentSaveSlot).then(res => {
-                if (res.success) {
-                    console.log(`游戏已同步 (云端 Slot ${this.currentSaveSlot})`);
-                    // Update cache
-                    this.cachedSlots[this.currentSaveSlot] = gameState;
-                }
-            });
+            // 如果已登录，且知道当前的存档槽位，自动同步到云端
+            // 防止 unset slot 默认为 0 覆盖了 Slot 1
+            if (AuthService.isLoggedIn() && this.currentSaveSlot !== null && this.currentSaveSlot !== undefined) {
+                AuthService.saveCloudData(gameState, this.currentSaveSlot).then(res => {
+                    if (res.success) {
+                        console.log(`游戏已同步 (云端 Slot ${this.currentSaveSlot})`);
+                        // Update cache
+                        this.cachedSlots[this.currentSaveSlot] = gameState;
+                        Utils.showBattleLog('游戏进度已保存到云端');
+                    } else {
+                        console.warn('云端同步失败', res);
+                        Utils.showBattleLog('云端同步失败，仅保存本地');
+                    }
+                }).catch(err => {
+                    console.error('Cloud save error:', err);
+                });
+            } else {
+                // Local only warning if not logged in? No, silent is fine.
+            }
+        } catch (e) {
+            console.error('Save Game Error:', e);
+            Utils.showBattleLog('严重错误：存档失败！请检查存储空间');
         }
     }
 
@@ -1811,13 +1824,13 @@ class Game {
         this.player.floor = 0;
         this.currentBattleNode = null; // 关键修复：防止奖励结算再次触发节点完成
 
-        // 关键修复：不要重置 currentHp 到 maxHp，保留当前状态
-        // 也不要回退到第一层，player.realm 已经 ++ 了
-        // 之前的代码似乎没有重置回第一层，但可能有逻辑错误导致感知错觉？
-        // 或者是 autoSave 读取时的问题？
-        // 检查 loadGame 逻辑，如果有非法数据会被重置，可能是那里
-
+        // 关键修复：立即保存并强制同步
         this.autoSave();
+        if (typeof AuthService !== 'undefined' && AuthService.isLoggedIn()) {
+            // Force sync log
+            console.log('Realm Complete: Forcing Cloud Sync');
+            // autoSave calls saveGame which handles sync, but logging here helps debug
+        }
 
         // 治疗玩家 (小幅回复，而不是回满)
         const healAmount = Math.floor(this.player.maxHp * 0.2);
