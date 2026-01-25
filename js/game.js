@@ -153,6 +153,8 @@ class Game {
         document.querySelectorAll('.modal').forEach(modal => {
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) {
+                    // FIX: 禁止点击没景关闭事件弹窗，防止无限刷经验
+                    if (modal.id === 'event-modal') return;
                     this.closeModal();
                 }
             });
