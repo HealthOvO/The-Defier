@@ -308,12 +308,19 @@ class GameMap {
             this.game.player.gold += 30;
             this.game.player.fateRing.exp += 15;
             Utils.showBattleLog('遭遇神秘迷雾... 捡到 30 灵石');
-            this.completeNode(node);
-            // 确保切回地图，防止卡住
-            // setTimeout(() => this.game.showScreen('map-screen'), 1000); 
-            // completeNode 会 render，但如果当前screen不是map?
-            // 通常 triggerEvent 是在 node click -> battle finish -> map screen 流程中?
-            // 不，event node click 直接触发。
+
+            if (this.game.showRewardModal) {
+                this.game.showRewardModal(
+                    '神秘迷雾',
+                    '迷雾散去，你在地上发现了一些东西...\n获得 30 灵石\n获得 15 命环经验',
+                    '🌫️',
+                    () => {
+                        this.completeNode(node);
+                    }
+                );
+            } else {
+                this.completeNode(node);
+            }
         }
     }
 

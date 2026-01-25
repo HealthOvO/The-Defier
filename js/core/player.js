@@ -57,6 +57,9 @@ class Player {
         // 法宝
         this.treasures = [];
 
+        this.timeStopTriggered = false; // Reset time stop cheat death per battle (via reset)
+        this.resurrectCount = 0;
+
         // 命环
         if (typeof MutatedRing !== 'undefined' && characterId === 'linFeng') {
             this.fateRing = new MutatedRing(this);
@@ -469,6 +472,54 @@ class Player {
             this.heal(healingLaw.passive.value);
             Utils.showBattleLog(`治愈法则：恢复 ${healingLaw.passive.value} 生命`);
         }
+
+        // 混沌法则 (Chaos Law): 随机Buff/Debuff
+        const chaosLaw = this.collectedLaws.find(l => l.id === 'chaosLaw');
+        if (chaosLaw) {
+            const isGood = Math.random() < 0.5;
+            if (isGood) {
+                const buffs = ['strength', 'blockOnAttack', 'energyOnVulnerable', 'nextAttackBonus'];
+                const buff = buffs[Math.floor(Math.random() * buffs.length)];
+                this.addBuff(buff, chaosLaw.passive.value);
+                Utils.showBattleLog(`混沌之触：获得随机强化！`);
+            } else {
+                if (this.game && this.game.battle && this.game.battle.enemies) {
+                    const enemies = this.game.battle.enemies.filter(e => e.currentHp > 0);
+                    if (enemies.length > 0) {
+                        const target = enemies[Math.floor(Math.random() * enemies.length)];
+                        const debuffs = ['vulnerable', 'weak', 'burn', 'poison'];
+                        const debuff = debuffs[Math.floor(Math.random() * debuffs.length)];
+                        target.buffs[debuff] = (target.buffs[debuff] || 0) + chaosLaw.passive.value;
+                        Utils.showBattleLog(`混沌之触：给予敌人随机诅咒！`);
+                        if (this.game.battle.updateBattleUI) this.game.battle.updateBattleUI();
+                    }
+                }
+            }
+        }
+
+        // 共鸣：维度打击 (Dimension Strike)
+        const dimStrike = this.activeResonances.find(r => r.id === 'dimensionStrike');
+        if (dimStrike) {
+            if (Math.random() < dimStrike.effect.chance) {
+                // 选项1: 手牌耗能-1 (本回合)
+                // 由于目前还没抽牌，这里只是设定一个标记，抽牌时生效？
+                // 或者直接给个Buff "dimStrikeActive".
+                // 描述说 "回合开始时"。此时还没抽牌。
+                // 最好是在抽牌后？或者给个Buff让他生效。
+                // 简单起见：直接抽2张牌作为替代方案（因为减费实现复杂）？
+                // 或者：本回合所有手牌减费。我们可以在drawCards后遍历手牌减费。
+                // 但这里是 startTurn，在 drawCards 之前。
+                // 所以我们给个标记 this.dimStrikeActive = true.
+                this.dimStrikeCostReduce = true;
+                Utils.showBattleLog('维度打击：本回合手牌耗能降低！');
+            } else {
+                // 选项2: 抽2张牌
+                this.drawCards(2); // 这里会立即抽
+                Utils.showBattleLog('维度打击：额外抽2张牌！');
+            }
+        } else {
+            this.dimStrikeCostReduce = false;
+        }
     }
 
     // 应用法则被动
@@ -531,7 +582,47 @@ class Player {
             console.error('heal received invalid amount', amount);
             return;
         }
+
+        const oldHp = this.currentHp;
         this.currentHp = Math.min(this.maxHp, this.currentHp + amount);
+        const actualHeal = this.currentHp - oldHp;
+
+        // 共鸣：神魔一念 (GodDemon) - 溢出治疗转伤害
+        if (this.activeResonances) {
+            const godDemon = this.activeResonances.find(r => r.id === 'godDemon');
+            if (godDemon) {
+                // 1. 治疗加成 50% (已经包含在传入amount里？不，这里effect says bonus 50%)
+                // 如果我们要实现bonus，应该在入口加。
+                // 但为了避免递归或复杂，假设传入前未加成？或者在这里加成？
+                // 更好的方式：heal(amount) 是基础方法。
+                // 让我们修改amount。
+                const bonusAmount = Math.floor(amount * godDemon.effect.healBonus); // +50%
+                // 重新计算
+                const potentialTotal = amount + bonusAmount;
+                this.currentHp = Math.min(this.maxHp, oldHp + potentialTotal);
+                const newActualHeal = this.currentHp - oldHp;
+
+                const overflow = potentialTotal - newActualHeal;
+
+                if (overflow > 0 && this.game && this.game.battle && this.game.battle.enemies) {
+                    const enemies = this.game.battle.enemies.filter(e => e.currentHp > 0);
+                    if (enemies.length > 0) {
+                        const target = enemies[Math.floor(Math.random() * enemies.length)];
+                        // 真实伤害
+                        target.currentHp -= overflow;
+                        Utils.showBattleLog(`神魔一念：${overflow} 点溢出治疗化为真实伤害！`);
+                        const enemyEl = document.querySelector(`.enemy[data-index="${this.game.battle.enemies.indexOf(target)}"]`);
+                        if (enemyEl) Utils.showFloatingNumber(enemyEl, overflow, 'damage');
+                    }
+                }
+
+                // Update amount for log if needed, though log usually says "Healed X"
+                // Let's assume the calling function handles logging "Restored X HP"? 
+                // Wait, callers often log themselves (e.g. "Healed 5").
+                // If we boost heal here, external log might be wrong.
+                // But this method doesn't log.
+            }
+        }
     }
 
     // 恢复灵力
@@ -649,13 +740,32 @@ class Player {
 
         if (this.currentHp <= 0) {
             // 共鸣：生命轮回 (Life Reincarnation) - 复活 (每场战斗1次)
+            // 修改为 100% 血量复活
             const reincarnation = this.activeResonances.find(r => r.effect && r.effect.type === 'resurrect');
             if (reincarnation && (!this.resurrectCount || this.resurrectCount < (reincarnation.effect.value || 1))) {
-                const healPercent = reincarnation.effect.percent || 0.5;
+                const healPercent = reincarnation.effect.percent || 1.0; // Default 100%
                 this.currentHp = Math.floor(this.maxHp * healPercent);
                 this.resurrectCount = (this.resurrectCount || 0) + 1;
                 Utils.showBattleLog(`生命轮回：涅槃重生！恢复 ${Math.floor(healPercent * 100)}% 生命！`);
                 return { dodged: false, damage: amount - remainingDamage }; // Stop death
+            }
+
+            // 时间静止 (Time Stop) - 免疫致死并结束回合
+            const timeLaw = this.collectedLaws.find(l => l.id === 'timeStop');
+            if (timeLaw && !this.timeStopTriggered) {
+                this.currentHp = 1; // 保留1血
+                this.timeStopTriggered = true;
+                Utils.showBattleLog('时间静止！免疫了致死伤害！');
+
+                // 强制结束回合 (如果是在敌人回合，应该让敌人停止行动？)
+                // 通过抛出异常或设置标志位？
+                // battle.js checkBattleEnd 会检查。
+                // 我们可以设置一个 flag 让 battle.js 知道要中断。
+                if (this.game && this.game.battle) {
+                    this.game.battle.forceEndEnemyTurn = true;
+                }
+
+                return { dodged: false, damage: amount - remainingDamage };
             }
 
             // 9. 生死轮回 (realm 9)
@@ -727,20 +837,25 @@ class Player {
             return false;
         }
 
-        // 检查奶糖消耗 (如果包含抽牌效果)
-        // 规则: 抽牌卡不消耗灵力，消耗奶糖
-        // 我们检查卡牌是否有 'draw' 或 'drawCalculated' 效果
-        const hasDraw = card.effects.some(e => e.type === 'draw' || e.type === 'drawCalculated' || e.type === 'conditionalDraw' || e.type === 'randomCards');
+        // 检查奶糖消耗
+        // 规则: 明确标记 consumeCandy 的卡牌消耗奶糖，或者为了兼容性保留抽牌卡判定（但要小心）
+        // 新规则: 优先使用 consumeCandy 属性。如果未设置，暂不消耗奶糖（除非为了向后兼容）
+        // 鉴于我们已经修复了 cards.js，我们可以严格检查 consumeCandy
 
         // 计算消耗
         let energyCost = card.cost;
         let candyCost = 0;
 
-        if (hasDraw) {
-            energyCost = 0; // 抽牌卡不消耗灵力
-            // 奶糖消耗：暂定为 1 点 (无论抽多少) 或者 根据抽牌量? 
-            // 用户说 "Consumption by you". Let's make it 1 Candy per Draw Card play.
-            candyCost = 1;
+        if (card.consumeCandy) {
+            candyCost = 1; // 固定消耗1奶糖
+            // 注意: cards.js 中 consumeCandy 的卡牌 cost 通常设为 0
+        } else if (card.effects.some(e => e.type === 'draw' || e.type === 'drawCalculated' || e.type === 'conditionalDraw' || e.type === 'randomCards') && card.cost === 0) {
+            // Fallback: 如果是0费抽牌卡且没标记consumeCandy (可能是旧数据或遗漏)，也消耗奶糖?
+            // 不，ringResonance 就是反例。
+            // 所以，只要没标记 consumeCandy，就不消耗奶糖。
+            // 除非是某些尚未更新的旧卡牌?
+            // 我们已经更新了冥想、快抽等。
+            // 安全起见，只信赖 consumeCandy。
         }
 
         // 检查灵力
@@ -1109,13 +1224,7 @@ class Player {
             case 'executeDamage':
                 return { type: 'executeDamage', value: effect.value, threshold: effect.threshold, target: effect.target };
 
-            // ==================== 新增效果类型 ====================
-            case 'conditionalDamage':
-                // 命环等级条件伤害（林风：逆天意志）
-                if (effect.condition === 'fateRingLevel' && this.fateRing.level >= effect.minLevel) {
-                    return { type: 'damage', value: effect.bonusDamage, target: effect.target };
-                }
-                return { type: 'conditionalDamage', triggered: false };
+
 
             case 'damagePerLaw':
                 // 根据装载法则数量造成伤害（林风：命环共振）
@@ -1240,6 +1349,28 @@ class Player {
                 if (this.discardPile.length === 0) break;
                 this.drawPile = Utils.shuffle([...this.discardPile]);
                 this.discardPile = [];
+
+                // 共鸣：混沌终焉 (Chaotic Storm) - 洗牌触发
+                if (this.activeResonances) {
+                    const storm = this.activeResonances.find(r => r.id === 'chaoticStorm');
+                    if (storm && this.game && this.game.battle) {
+                        const dmg = storm.effect.value;
+                        const enemies = this.game.battle.enemies.filter(e => e.currentHp > 0);
+                        let hitSomething = false;
+                        enemies.forEach(e => {
+                            this.game.battle.dealDamageToEnemy(e, dmg);
+                            // 随机Debuff
+                            const debuffs = ['vulnerable', 'weak', 'burn', 'poison'];
+                            const debuff = debuffs[Math.floor(Math.random() * debuffs.length)];
+                            e.buffs[debuff] = (e.buffs[debuff] || 0) + 1;
+                            hitSomething = true;
+                        });
+                        if (hitSomething) {
+                            Utils.showBattleLog(`混沌终焉：洗牌引发风暴！(伤害+诅咒)`);
+                            if (this.game.battle.updateBattleUI) this.game.battle.updateBattleUI();
+                        }
+                    }
+                }
             }
 
             const card = this.drawPile.pop();
@@ -1252,10 +1383,28 @@ class Player {
                     if (this.buffs.confuse) {
                         // Confuse: Random cost 0-3
                         card.cost = Math.floor(Math.random() * 4);
-                    } else {
-                        // Realm 6: -1 to +1
+                    } else if (this.dimStrikeCostReduce) {
+                        // 维度打击生效中：优先减费
                         const change = Math.floor(Math.random() * 3) - 1;
+                        card.cost = Math.max(0, card.baseCost + change - 1);
+                    } else {
+                        // Realm 6: -1 to +1 (Weighted: 20% -1, 30% 0, 50% +1)
+                        const r = Math.random();
+                        let change = 0;
+                        if (r < 0.2) change = -1;
+                        else if (r < 0.5) change = 0;
+                        else change = 1;
                         card.cost = Math.max(0, card.baseCost + change);
+                    }
+                } else {
+                    // 正常情况
+                    if (card.baseCost === undefined) card.baseCost = card.cost; // Ensure baseCost
+
+                    if (this.dimStrikeCostReduce) {
+                        card.cost = Math.max(0, card.baseCost - 1);
+                    } else {
+                        // 确保 consumeCandy 的卡牌 cost 保持为 0 (或 baseCost)
+                        card.cost = card.baseCost;
                     }
                 }
                 this.hand.push(card);

@@ -1129,7 +1129,7 @@ body {
     /* 允许卡牌悬停时向上突出显示 */
     flex-wrap: nowrap;
     position: relative;
-    z-index: 100;
+    z-index: 10;
     /* 确保手牌区域在其他元素之上 */
 }
 
@@ -4120,4 +4120,19 @@ body {
     color: var(--accent-red);
     font-size: 0.8rem;
     margin-top: 4px;
+}
+
+/* Cheater Button */
+.cheat-btn {
+    background: rgba(220, 53, 69, 0.2);
+    border: 1px solid rgba(220, 53, 69, 0.5);
+    color: #ff6b6b;
+    margin-left: auto;
+}
+
+.cheat-btn:hover {
+    background: rgba(220, 53, 69, 0.4);
+    box-shadow: 0 0 10px rgba(220, 53, 69, 0.4);
+    color: #fff;
+    border-color: #ff4d4d;
 }

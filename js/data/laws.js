@@ -8,13 +8,13 @@ const LAWS = {
         id: 'thunderLaw',
         name: '雷法残章',
         icon: '⚡',
-        description: '掌握雷电之力，攻击附带雷电效果',
+        description: '雷霆之力。攻击时有30%几率触发一道惊雷，对随机敌人造成10点伤害。',
         rarity: 'rare',
         element: 'thunder',
         passive: {
-            type: 'damageBonus',
-            element: 'thunder',
-            value: 2
+            type: 'thunderStrike',
+            chance: 0.3,
+            value: 10
         },
         unlockCards: ['thunderLaw']
     },
@@ -23,12 +23,13 @@ const LAWS = {
         id: 'swordIntent',
         name: '剑意碎片',
         icon: '🗡️',
-        description: '领悟剑道真意，穿透敌人防御',
+        description: '无双剑意。穿透 40% 防御，且穿透伤害增加20%。',
         rarity: 'rare',
         element: 'sword',
         passive: {
             type: 'penetration',
-            value: 0.25
+            value: 0.4,
+            damageBonus: 0.2
         },
         unlockCards: ['swordIntent']
     },
@@ -37,13 +38,13 @@ const LAWS = {
         id: 'flameTruth',
         name: '火焰真意',
         icon: '🔥',
-        description: '驾驭真火，灼烧敌人灵魂',
+        description: '烈焰焚天。攻击必定施加1层灼烧。回合结束若攻击过，对全体敌人造成3点火伤。',
         rarity: 'rare',
         element: 'fire',
         passive: {
-            type: 'burnOnHit',
-            value: 2,
-            chance: 0.4
+            type: 'flameMaster',
+            burnLayers: 1,
+            aoeDamage: 3
         },
         unlockCards: ['flameTruth']
     },
@@ -64,13 +65,14 @@ const LAWS = {
     spaceRift: {
         id: 'spaceRift',
         name: '空间裂隙',
-        icon: '🌀',
-        description: '撕裂空间，闪避致命打击',
+        icon: '🌌',
+        description: '虚空行走。每回合打出的第一张牌若不消耗灵力，抽1张牌。获得10%闪避。',
         rarity: 'rare',
         element: 'space',
         passive: {
-            type: 'dodgeChance',
-            value: 0.15
+            type: 'voidWalk', // New Type
+            dodgeChance: 0.1,
+            condDraw: 1
         },
         unlockCards: ['spaceRift']
     },
@@ -79,12 +81,13 @@ const LAWS = {
         id: 'timeStop',
         name: '时间静止',
         icon: '⏱️',
-        description: '操控时间，让敌人陷入停滞',
+        description: '时光回溯。受致死伤时免疫并结束回合（每战1次）。攻击5%几率眩晕。',
         rarity: 'legendary',
         element: 'time',
         passive: {
-            type: 'stunChance',
-            value: 0.1
+            type: 'timeRecall',
+            stunChance: 0.05,
+            cheatDeath: 1
         },
         unlockCards: ['timeStop']
     },
@@ -107,12 +110,12 @@ const LAWS = {
         id: 'chaosLaw',
         name: '混沌法则',
         icon: '🌀',
-        description: '操控人心，造成混乱',
+        description: '混沌之触。回合开始时，随机获得1个增益或给敌人施加1个负面效果（2层）。',
         rarity: 'legendary',
         element: 'chaos',
         passive: {
-            type: 'chaosControl', // 特殊效果：让敌人攻击其队友？目前单挑，改为强力debuff
-            value: 0.1, // 10%几率让敌人混乱（跳过回合or攻击自己）
+            type: 'chaosTouch',
+            value: 2
         },
         unlockCards: ['chaosControl']
     },
@@ -120,7 +123,7 @@ const LAWS = {
     lifeDrain: {
         id: 'lifeDrain',
         name: '生命汲取',
-        icon: '💉',
+        icon: '🩸',
         description: '汲取敌人生命，恢复自身',
         rarity: 'rare',
         element: 'blood',
@@ -134,7 +137,7 @@ const LAWS = {
     earthShield: {
         id: 'earthShield',
         name: '大地护盾',
-        icon: '🪨',
+        icon: '🛡️',
         description: '大地守护，获得额外护盾',
         rarity: 'rare',
         element: 'earth',
@@ -249,10 +252,10 @@ const REALM_LAWS = {
 const LAW_RESONANCES = {
     plasmaOverload: {
         id: 'plasmaOverload',
-        name: '雷火劫',
+        name: '雷火崩坏',
         laws: ['thunderLaw', 'flameTruth'],
-        description: '雷火交加，毁灭万物。攻击造成伤害时额外造成5点真实伤害。',
-        effect: { type: 'trueDamage', value: 5 }
+        description: '雷引火爆。攻击对拥有“灼烧”的敌人造成额外50%伤害，并触发一次雷击。',
+        effect: { type: 'damageBoostVsDebuff', debuff: 'burn', percent: 0.5, extraEffect: 'thunderStrike' }
     },
     astralShift: {
         id: 'astralShift',
@@ -284,19 +287,47 @@ const LAW_RESONANCES = {
     },
     chaoticStorm: {
         id: 'chaoticStorm',
-        name: '混沌风暴',
+        name: '混沌终焉',
         laws: ['chaosLaw', 'thunderLaw'],
-        description: '不可名状的雷霆。回合开始造成3-8点随机雷属性伤害。',
-        effect: { type: 'turnStartDamage', min: 3, max: 8, element: 'thunder' }
+        description: '乱世雷鸣。每当你洗牌时，对所有敌人造成15点混乱伤害，并随机施加一种负面效果。',
+        effect: { type: 'shuffleDamage', value: 15, debuff: 'random' }
     },
 
     // ==================== 新增法则共鸣 ====================
+    extremeTemp: {
+        id: 'extremeTemp',
+        name: '极温爆裂',
+        laws: ['flameTruth', 'iceFreeze'],
+        description: '冰火不容。当对“冰冻/减速”敌人造成火焰伤害时，触发爆炸（最大生命值5%伤害，BOSS减半）。',
+        effect: { type: 'elementalReaction', trigger: 'fire', targetDebuff: 'slow', damagePercent: 0.05 }
+    },
+    windThunderWing: {
+        id: 'windThunderWing',
+        name: '风雷翼',
+        laws: ['windSpeed', 'thunderLaw'],
+        description: '风助雷势。每打出3张牌，随机对一名敌人造成10点雷属性伤害。',
+        effect: { type: 'cardPlayTrigger', count: 3, damage: 10, element: 'thunder' }
+    },
+    dimensionStrike: {
+        id: 'dimensionStrike',
+        name: '维度打击',
+        laws: ['timeStop', 'spaceRift'],
+        description: '时空扭曲。回合开始时，50%几率让所有手牌耗能-1（本回合），或抽2张牌。',
+        effect: { type: 'turnStartGamble', chance: 0.5, option1: 'costReduce', option2: 'draw' }
+    },
+    godDemon: {
+        id: 'godDemon',
+        name: '神魔一念',
+        laws: ['healingLaw', 'chaosLaw'],
+        description: '圣魔同体。治疗效果提升50%。溢出的治疗量转化为对随机敌人的真实伤害。',
+        effect: { type: 'healOverlowDamage', healBonus: 0.5 }
+    },
     lifeReincarnation: {
         id: 'lifeReincarnation',
         name: '生命轮回',
         laws: ['healingLaw', 'timeStop'],
         description: '生死轮回。死亡时100%复活（每战一次）。',
-        effect: { type: 'resurrect', value: 1, percent: 0.5 }
+        effect: { type: 'resurrect', value: 1, percent: 1.0 }
     },
     ironFortress: {
         id: 'ironFortress',
@@ -309,7 +340,7 @@ const LAW_RESONANCES = {
         id: 'thunderSword',
         name: '剑雷交织',
         laws: ['swordIntent', 'thunderLaw'],
-        description: '电光剑影。穿透伤害附带2层麻痹。',
+        description: '电光剑影。穿透伤害附带2层麻痹（易伤）。',
         effect: { type: 'penetrateParalysis', value: 2 }
     }
 };
@@ -415,8 +446,7 @@ function getLawPassiveDescription(law) {
             return `对生命值低于${Math.floor(passive.value * 100)}%的敌人造成双倍伤害`;
         case 'lifeSteal':
             return `造成伤害时恢复${Math.floor(passive.value * 100)}%生命`;
-        case 'blockBonus':
-            return `获得护盾时额外+${passive.value}`;
+
         case 'extraDraw':
             return `每回合额外抽${passive.value}张牌`;
         case 'slowOnHit':
@@ -430,9 +460,23 @@ function getLawPassiveDescription(law) {
         case 'damageToHeal':
             return `${Math.floor(passive.value * 100)}%几率将承受伤害转化为治疗`;
         case 'persistentBlock':
+        case 'retainBlock':
             return `护盾不会在回合结束时消失`;
         case 'resurrect':
             return `死亡时${Math.floor(passive.percent * 100)}%血量复活（每场战斗${passive.value}次）`;
+        case 'thunderStrike':
+            return `攻击${Math.floor(passive.chance * 100)}%几率触发闪电（${passive.value}伤害）`;
+        case 'flameMaster':
+            return `攻击施加${passive.burnLayers}层灼烧，回合结束造成${passive.aoeDamage}点AOE`;
+        case 'voidWalk':
+            return `首张0耗牌抽${passive.condDraw}张，并获得${Math.floor(passive.dodgeChance * 100)}%闪避`;
+        case 'timeRecall':
+            return `免疫致死伤害（每战${passive.cheatDeath}次），攻击${Math.floor(passive.stunChance * 100)}%几率眩晕`;
+        case 'chaosTouch':
+            return `回合开始施加${passive.value}层随机Buff/Debuff`;
+        case 'blockBonus':
+            if (passive.value < 1) return `获得护盾效果提升${Math.floor(passive.value * 100)}%`;
+            return `获得护盾时额外+${passive.value}`;
         default:
             return '未知效果';
     }

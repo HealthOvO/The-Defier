@@ -20,6 +20,8 @@ class Game {
         this.runStartTime = null;
         this.currentSaveSlot = null; // Default to null (unknown), NOT 0 (Slot 1)
         this.cachedSlots = [null, null, null, null]; // Cache for slots
+        this.debugMode = localStorage.getItem('theDefierDebug') === 'true';
+        setTimeout(() => this.updateDebugUI(), 0);
 
         // Restore slot from session if exists
         const savedSlot = sessionStorage.getItem('currentSaveSlot');
@@ -457,11 +459,11 @@ class Game {
             if (collected) {
                 item.addEventListener('click', () => {
                     // 详情弹窗
-                    let detailMsg = `${law.name}\n\n${law.description}`;
+                    let detailMsg = `${law.description}`;
                     if (passiveText) {
-                        detailMsg += `\n\n被动效果: ${passiveText}`;
+                        detailMsg += `\n\n🔎 被动效果:\n${passiveText}`;
                     }
-                    alert(detailMsg);
+                    this.showAlertModal(detailMsg, law.name);
                 });
             }
 
@@ -550,7 +552,7 @@ class Game {
 
                 // 点击查看详情
                 el.addEventListener('click', () => {
-                    alert(`${t.name}\n\n${desc}`);
+                    this.showAlertModal(desc, t.name);
                 });
 
                 container.appendChild(el);
@@ -2115,7 +2117,87 @@ class Game {
         });
     }
 
+    // 调试模式开关
+    toggleDebug() {
+        this.debugMode = !this.debugMode;
+        localStorage.setItem('theDefierDebug', this.debugMode);
+        this.updateDebugUI();
+        console.log(`Debug Mode: ${this.debugMode ? 'ON' : 'OFF'}`);
+        return this.debugMode ? 'Debug ON' : 'Debug OFF';
+    }
+
+    updateDebugUI() {
+        const btn = document.querySelector('.cheat-btn');
+        if (btn) btn.style.display = this.debugMode ? 'inline-block' : 'none';
+
+        // 可以在这里控制其他调试元素的显隐
+    }
+
     // 显示命环
+    // 作弊功能
+    cheat() {
+        this.showConfirmModal(
+            '确定要启用作弊模式吗？\n这是测试功能，可能会破坏游戏体验。',
+            () => this._performCheat()
+        );
+    }
+
+    _performCheat() {
+        // 1. 暴富
+        this.player.gold += 10000000;
+
+        // 2. 命环满级
+        if (typeof FATE_RING !== 'undefined') {
+            const maxLevel = 10;
+            this.player.fateRing.level = maxLevel;
+            this.player.fateRing.exp = 999999; // 确保是满经验
+
+            // 确保槽位解锁
+            // 只有MutatedRing(林风)和SealedRing(香叶)有不同的maxSlots逻辑
+            // 通用逻辑：根据等级重置
+            if (this.player.fateRing.type === 'sealed') {
+                this.player.fateRing.maxSlots = 12;
+            } else if (this.player.fateRing.type === 'mutated') {
+                this.player.fateRing.maxSlots = 4; // 假设4是满级
+                // check level data
+                if (FATE_RING.levels[10]) this.player.fateRing.maxSlots = FATE_RING.levels[10].slots;
+            } else {
+                if (FATE_RING.levels[10]) this.player.fateRing.maxSlots = FATE_RING.levels[10].slots;
+            }
+
+            if (this.player.fateRing.initSlots) {
+                // initSlots会重置槽位内容？如果是空的就重置，如果不是则保留？
+                // fateRing.initSlots() 会重新生成 slots 数组，可能会清空现有法则。
+                // 我们应该只增加槽位？
+                // initSlots implementation: creates new array loop maxSlots.
+                // 我们还是简单调用 initSlots，反正下一步是获得所有法则。
+                this.player.fateRing.initSlots();
+            }
+        }
+
+        // 3. 获得所有法则
+        if (typeof LAWS !== 'undefined') {
+            // 清空当前收集，全部重新加入
+            this.player.collectedLaws = [];
+            for (const key in LAWS) {
+                // 深拷贝防止引用
+                this.player.collectedLaws.push(JSON.parse(JSON.stringify(LAWS[key])));
+            }
+            this.player.lawsCollected = this.player.collectedLaws.length;
+        }
+
+        // 4. 更新UI
+        this.player.recalculateStats();
+        if (this.currentScreen === 'map-screen' && this.map) {
+            this.map.updateStatusBar();
+        }
+
+        Utils.showBattleLog("【天道崩塌】作弊成功！已获得千万灵石、满级命环及所有法则！");
+
+        // 自动保存并同步云端
+        this.saveGame();
+    }
+
     showFateRing() {
         const modal = document.getElementById('ring-modal');
         const ring = this.player.fateRing;
@@ -2420,11 +2502,14 @@ class Game {
                 if (!slotData.unlocked) {
                     // Check for SealedRing unseal interaction
                     if (ring.type === 'sealed' && ring.canUnseal && ring.canUnseal(index)) {
-                        if (confirm(`该槽位被【逆生咒】封印。\n强制解除将永久损耗生命上限。\n是否解除？`)) {
-                            ring.unseal(index);
-                            this.showFateRing();
-                            this.autoSave();
-                        }
+                        this.showConfirmModal(
+                            `该槽位被【逆生咒】封印。\n强制解除将永久损耗生命上限。\n是否解除？`,
+                            () => {
+                                ring.unseal(index);
+                                this.showFateRing();
+                                this.autoSave();
+                            }
+                        );
                     } else {
                         Utils.showBattleLog('该槽位尚未解锁');
                     }
@@ -2573,34 +2658,55 @@ class Game {
         if (!settingsContainer) return;
 
         settingsContainer.innerHTML = `
-        <div class="game-intro-content" style="text-align: left; line-height: 1.6; max-height: 60vh; overflow-y: auto; padding-right: 10px;">
-            <h3 style="color: var(--accent-gold); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 0;">🔮 版本更新 v4.1 (天道终章)</h3>
-            <p><strong>🔥 核心更新：</strong></p>
-            <ul style="padding-left: 20px; list-style-type: disc;">
-                <li><strong>天域全开 (10-18重)</strong>：开放地仙界至终焉天九大高阶天域。挑战【双子熔岩】、【五行长老】，直至直面【天道终焉】。</li>
-                <li><strong>Boss机制升级</strong>：新增【召唤随从】、【多重行动】与【阶段转换】机制。敌人不再单调，战斗更具策略性。</li>
-                <li><strong>主界面优化</strong>：优化了存档读取逻辑，现在可以更方便地选择开启新轮回或继续冒险。</li>
-                <li><strong>平衡性调整</strong>：调整了过量伤害保护极致（现承受80%溢出伤害），并修复了部分卡牌描述与数值问题。</li>
+        <div class="game-intro-content" style="text-align: left; line-height: 1.6; max-height: 60vh; overflow-y: auto; padding-right: 15px;">
+            <div style="text-align: center; margin-bottom: 20px;">
+                <h2 style="color: var(--accent-gold); margin: 0;">📖 逆命者指南</h2>
+                <div style="font-size: 0.8rem; color: #666;">Cultivation Handbook</div>
+            </div>
+
+            <h3 style="color: var(--accent-purple); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 10px;">🔮 核心玩法</h3>
+            <p><strong>逆天改命的旅途：</strong></p>
+            <ul style="padding-left: 20px; list-style-type: disc; color: #ccc;">
+                <li><strong>十八重天</strong>：从凡尘界层层飞升，直面最终的【天道终焉】。</li>
+                <li><strong>法则盗取</strong>：击败精英或Boss，可使用古玉盗取其核心【法则】，嵌入命环获得强力被动。</li>
+                <li><strong>卡牌构建</strong>：五行生克、物理爆发、以守代攻...构建你的专属流派。</li>
             </ul>
 
-            <h3 style="color: var(--accent-purple); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">🎮 游戏玩法</h3>
-            <p>在这个被天道锁死的修仙世界，你作为【逆命者】，需通过战斗不断吞噬法则，重塑命环。</p>
-            <ul style="padding-left: 20px; list-style-type: disc;">
-                <li><strong>卡牌与法则</strong>：收集卡牌构建流派，击败精英夺取【法则】赋予被动。</li>
-                <li><strong>共鸣系统</strong>：特定法则组合可触发共鸣（如五行俱全、时空扭曲）。</li>
-                <li><strong>策略试炼</strong>：十八重天域，每重天域都有独特的环境效果与守关Boss。</li>
-            </ul>
+            <h3 style="color: var(--accent-gold); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">👥 角色与机制详解</h3>
             
-            <h3 style="color: var(--accent-red); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">👥 角色介绍</h3>
-            <ul style="padding-left: 20px; list-style-type: none;">
-                <li style="margin-bottom: 10px;"><strong>🗡️ 林风</strong>：全能战士，擅长利用命环力量，各方面属性均衡。</li>
-                <li style="margin-bottom: 10px;"><strong>💚 香叶</strong>：医毒圣手，虽生命值较低，但拥有强大的回复能力。</li>
-                <li style="margin-bottom: 10px;"><strong>🪙 无欲</strong>：佛门金刚，自带护盾加成，擅长防守反击与反伤玩法。</li>
-                <li><strong>❄️ 严寒</strong>：极冰修士，擅长控制与削弱，能让敌人寸步难行。</li>
+            <div style="background: rgba(255, 215, 0, 0.05); padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 3px solid var(--accent-gold);">
+                <strong style="color: var(--accent-gold);">🪙 无欲 (佛门金刚) - 功德体系</strong>
+                <p style="font-size: 0.9rem; margin-top: 5px;">无欲拥有独特的【功德金轮】，不以此消彼长，而是双向积累：</p>
+                <ul style="padding-left: 20px; margin-top: 5px;">
+                    <li><strong>🔸 功德 (Merit)</strong>：使用<span style="color:#4ff">防御/回复/辅助牌</span>时积累。
+                        <br>→ 积攒至100点，触发<strong>【金刚法相】</strong>：获得<strong>无敌</strong>一回合，并净化负面状态。</li>
+                    <li><strong>🟣 业力 (Sin)</strong>：使用<span style="color:#f44">攻击牌</span>时积累。
+                        <br>→ 积攒至100点，触发<strong>【明王之怒】</strong>：获得<strong>强力爆发</strong>（如下次攻击伤害x3或巨额力量）。</li>
+                </ul>
+                <p style="font-size: 0.85rem; color: #aaa; margin-top: 5px;">* 策略提示：合理控制出牌节奏，在敌人爆发时触发金身，在虚弱时触发明王怒。</p>
+            </div>
+
+            <div style="margin-bottom: 10px;">
+                <strong>🗡️ 林风 (逆天之环)</strong>：拥有【法则融合】能力，可将两个法则嵌入同一槽位，产生强大的变异效果。
+            </div>
+            <div style="margin-bottom: 10px;">
+                <strong>💚 香叶 (圣手仁心)</strong>：拥有【封印命环】，通过解开自我封印（消耗生命上限）来换取瞬间的爆发与质变。
+            </div>
+            <div>
+                <strong>❄️ 严寒 (真理探索)</strong>：拥有【解析之眼】，战斗越久，对敌人的解析度越高，造成的伤害与控制效果越强。
+            </div>
+
+            <h3 style="color: var(--accent-red); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">⚔️ 战斗百科</h3>
+            <ul style="padding-left: 20px; list-style-type: none; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <li>🛡️ <strong>护盾</strong>：抵挡下一次受到的伤害，回合结束时消失（除非拥有【固守】）。</li>
+                <li>💔 <strong>易伤</strong>：受到的伤害增加 50%。</li>
+                <li>😫 <strong>虚弱</strong>：造成的伤害减少 25%。</li>
+                <li>🔥 <strong>灼烧</strong>：回合开始时受到伤害，层数越高伤害越高。</li>
+                <li>⚡ <strong>感电</strong>：受到攻击时额外承受伤害，并消耗一层。</li>
             </ul>
 
-            <div style="margin-top: 20px; text-align: center; font-size: 0.8rem; color: #888;">
-                当前版本: v4.1 | 逆命轮回·天道终章
+            <div style="margin-top: 20px; text-align: center; font-size: 0.8rem; color: #888; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">
+                当前版本: v4.2 | 逆命轮回·天道终章
             </div>
         </div>
     `;
@@ -2960,6 +3066,46 @@ class Game {
         }
     }
 
+    // 显示奖励弹窗
+    showRewardModal(title, message, icon = '🎁', onClose = null) {
+        let modal = document.getElementById('reward-modal');
+
+        // 动态创建模态框
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'reward-modal';
+            modal.className = 'modal';
+            modal.style.zIndex = '10001'; // 比通用高一点
+            modal.innerHTML = `
+                <div class="modal-content" style="text-align: center; max-width: 360px; padding: 40px; border: 2px solid var(--accent-gold); box-shadow: 0 0 50px rgba(255, 215, 0, 0.2);">
+                    <div id="reward-icon" style="font-size: 4rem; margin-bottom: 20px; animation: bounce 1s infinite;">🎁</div>
+                    <h3 id="reward-title" style="color: var(--accent-gold); margin-bottom: 15px; font-size: 1.5rem;">获得奖励</h3>
+                    <p id="reward-message" style="color: #fff; margin-bottom: 30px; line-height: 1.6; font-size: 1.1rem; white-space: pre-line;"></p>
+                    <button id="reward-confirm-btn" class="menu-btn primary">收下</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            // 绑定事件
+            const btn = modal.querySelector('#reward-confirm-btn');
+            btn.onclick = () => {
+                modal.classList.remove('active');
+                if (modal.onCloseCallback) modal.onCloseCallback();
+                if (typeof audioManager !== 'undefined') audioManager.playSFX('click');
+            };
+        }
+
+        // 更新内容
+        modal.querySelector('#reward-title').textContent = title;
+        modal.querySelector('#reward-message').textContent = message;
+        modal.querySelector('#reward-icon').textContent = icon;
+        modal.onCloseCallback = onClose;
+
+        // 显示
+        modal.classList.add('active');
+        if (typeof audioManager !== 'undefined') audioManager.playSFX('buff'); // 使用buff音效作为奖励音效
+    }
+
     // 显示通用确认弹窗
     showConfirmModal(message, onConfirm, onCancel = null) {
         let modal = document.getElementById('generic-confirm-modal');
@@ -3013,6 +3159,53 @@ class Game {
         }
 
         // 显示
+        modal.classList.add('active');
+    }
+
+    // 显示通用提示弹窗 (Alert)
+    showAlertModal(message, title = '提示', onOk = null) {
+        let modal = document.getElementById('generic-alert-modal');
+
+        // 动态创建模态框
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'generic-alert-modal';
+            modal.className = 'modal';
+            modal.style.zIndex = '10001'; // 比Confirm更高
+            modal.innerHTML = `
+                <div class="modal-content" style="text-align: center; max-width: 400px; padding: 30px;">
+                    <h3 id="generic-alert-title" style="color: var(--accent-gold); margin-bottom: 20px;">提示</h3>
+                    <p id="generic-alert-message" style="color: #ccc; margin-bottom: 30px; line-height: 1.6; font-size: 1.1rem; white-space: pre-line;"></p>
+                    <div style="display: flex; justify-content: center;">
+                        <button id="generic-alert-btn" class="menu-btn primary small" style="min-width: 100px;">确定</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            // 绑定通用关闭
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'modal-close';
+            closeBtn.innerHTML = '×';
+            closeBtn.onclick = () => modal.classList.remove('active');
+            modal.querySelector('.modal-content').appendChild(closeBtn);
+        }
+
+        // 更新内容
+        const msgEl = document.getElementById('generic-alert-message');
+        const titleEl = document.getElementById('generic-alert-title');
+        if (msgEl) msgEl.innerText = message;
+        if (titleEl) titleEl.innerText = title;
+
+        // 按钮事件
+        const okBtn = document.getElementById('generic-alert-btn');
+        if (okBtn) {
+            okBtn.onclick = () => {
+                if (onOk) onOk();
+                modal.classList.remove('active');
+            };
+        }
+
         modal.classList.add('active');
     }
 
@@ -3204,11 +3397,15 @@ class Game {
             case 'heal':
                 if (this.player.currentHp >= this.player.maxHp) {
                     Utils.showBattleLog('生命值已满！');
+                    this.showRewardModal('状态完美', '你的生命值已满，无需治疗。\n保持最佳状态去战斗吧！', '💪');
                     return false;
                 }
                 const healAmount = Math.floor(this.player.maxHp * 0.3);
                 this.player.heal(healAmount);
                 Utils.showBattleLog(`恢复了 ${healAmount} 点生命`);
+
+                // 增强反馈
+                this.showRewardModal('治疗成功', `生命值恢复了 ${healAmount} 点！\n当前状态极佳。`, '💖');
                 return true;
 
             case 'remove':
@@ -3219,12 +3416,14 @@ class Game {
                 this.player.fateRing.exp += 50;
                 this.player.checkFateRingLevelUp();
                 Utils.showBattleLog('命环经验 +50');
+                this.showRewardModal('命环充能', `命环经验 +50！\n距离下一级更近了。`, '⬆️');
                 return true;
 
             case 'law':
                 if (service.data) {
                     this.player.collectLaw(service.data);
                     Utils.showBattleLog(`习得法则：${service.data.name} `);
+                    this.showRewardModal('习得法则', `你领悟了新的法则：\n【${service.data.name}】`, '📜');
                     return true;
                 }
                 return false;
@@ -3233,39 +3432,57 @@ class Game {
                 this.player.maxHp += 5;
                 this.player.currentHp += 5;
                 Utils.showBattleLog('最大生命 +5');
+                this.showRewardModal('体质增强', `最大生命值上限 +5！`, '💊');
                 return true;
 
             case 'strength':
                 this.player.addPermBuff('strength', 1);
                 Utils.showBattleLog('永久力量 +1');
+                this.showRewardModal('力量觉醒', `永久力量 +1！\n你的攻击将更加致命。`, '💪');
                 return true;
 
             case 'refresh':
                 // 刷新卡牌
                 this.shopItems = this.generateShopCards(5);
                 Utils.showBattleLog('商店货物已刷新');
-                // 不在这里 renderShop，由 buyItem 统一处理
+                this.showRewardModal('进货完成', `商店货物已刷新！\n快来看看有什么新宝贝。`, '🔄');
                 return 'repeatable';
 
             case 'gamble':
                 const roll = Math.random();
+                let rewardText = '';
+                let rewardIcon = '🎁';
+                let rewardTitle = '盲盒开启';
+
                 if (roll < 0.5) { // 50% 亏本/保本
                     const goldBack = Utils.random(10, 30);
                     this.player.gold += goldBack;
                     Utils.showBattleLog(`盲盒：获得 ${goldBack} 灵石（亏了...）`);
+                    rewardIcon = '💸';
+                    rewardTitle = '运气平平';
+                    rewardText = `你打开盲盒，里面只有一些碎银子...\n获得 ${goldBack} 灵石。`;
                 } else if (roll < 0.85) { // 35% 获得随机卡牌
                     const randCard = getRandomCard(this.player.realm > 2 ? 'uncommon' : 'common');
                     this.player.addCardToDeck(randCard);
                     Utils.showBattleLog(`盲盒：获得卡牌【${randCard.name}】！`);
+                    rewardIcon = '🎴';
+                    rewardTitle = '获得卡牌';
+                    rewardText = `你获得了一张卡牌：\n【${randCard.name}】`;
                 } else if (roll < 0.98) { // 13% 小奖 (稀有卡或大量金币)
                     if (Math.random() < 0.5) {
                         const rareCard = getRandomCard('rare');
                         this.player.addCardToDeck(rareCard);
                         Utils.showBattleLog(`盲盒：大奖！获得稀有卡牌【${rareCard.name}】！`);
+                        rewardIcon = '🌟';
+                        rewardTitle = '稀有大奖！';
+                        rewardText = `运气爆棚！你获得了一张稀有卡牌：\n【${rareCard.name}】`;
                     } else {
                         const bigGold = Utils.random(80, 150);
                         this.player.gold += bigGold;
                         Utils.showBattleLog(`盲盒：手气不错！获得 ${bigGold} 灵石！`);
+                        rewardIcon = '💰';
+                        rewardTitle = '发财了！';
+                        rewardText = `盒子底部铺满了闪闪发光的灵石！\n获得 ${bigGold} 灵石！`;
                     }
                 } else { // 2% 传说/法宝奖
                     const jackpot = Math.random();
@@ -3273,6 +3490,9 @@ class Game {
                         const legCard = getRandomCard('legendary');
                         this.player.addCardToDeck(legCard);
                         Utils.showBattleLog(`盲盒：传说大奖！！获得【${legCard.name}】！`);
+                        rewardIcon = '👑';
+                        rewardTitle = '传说降世！';
+                        rewardText = `金光乍现！你获得了传说卡牌：\n【${legCard.name}】`;
                     } else {
                         // 尝试给法宝
                         const treasureKeys = Object.keys(TREASURES);
@@ -3281,14 +3501,21 @@ class Game {
                             const tid = unowned[Math.floor(Math.random() * unowned.length)];
                             this.player.addTreasure(tid);
                             Utils.showBattleLog(`盲盒：鸿运当头！获得法宝【${TREASURES[tid].name}】！`);
+                            rewardIcon = '🏺';
+                            rewardTitle = '法宝现世！';
+                            rewardText = `极其罕见！你获得了法宝：\n【${TREASURES[tid].name}】`;
                         } else {
                             this.player.gold += 300;
                             Utils.showBattleLog(`盲盒：传说大奖！获得 300 灵石！`);
+                            rewardIcon = '💎';
+                            rewardTitle = '巨额财富';
+                            rewardText = `虽然没有法宝，但这里有一大笔钱！\n获得 300 灵石！`;
                         }
                     }
                 }
 
-                alert('请查看顶部战斗日志确认盲盒结果 (获得具体物品)');
+                this.showRewardModal(rewardTitle, rewardText, rewardIcon);
+
                 // 盲盒涨价逻辑
                 service.price = Math.floor(service.price * 1.5);
                 service.name = '神秘盲盒 (涨价了)';
@@ -3641,12 +3868,16 @@ class Game {
     // 打开存档选择界面 (同步云端)
     async openSaveSlotsWithSync() {
         if (!AuthService.isLoggedIn()) {
-            if (confirm('尚未登录，是否先登录以同步云端存档？')) {
-                this.showLoginModal();
-                return;
-            }
-            // Guest mode: Just go to character selection (Local only, risk of data loss)
-            this.showCharacterSelection();
+            this.showConfirmModal(
+                '尚未登录，是否先登录以同步云端存档？',
+                () => {
+                    this.showLoginModal();
+                },
+                () => {
+                    // Guest mode
+                    this.showCharacterSelection();
+                }
+            );
             return;
         }
 
@@ -3798,32 +4029,23 @@ class Game {
                 }
             }
         } else if (mode === 'new' || mode === 'overwrite') {
-            let confirmed = true;
-            if (mode === 'overwrite') {
-                confirmed = confirm('确定要覆盖此存档吗？旧进度将丢失！');
-            }
-
-            if (confirmed) {
-                // For new game, we start fresh. 
-                // We should probably go to character selection?
-                // Or just clear current local save and refresh?
-                // The logical flow: Select slot -> Go to Character Select -> Start Game
-
-                // Clear local save to force new game start
+            const doOverwrite = () => {
                 localStorage.removeItem('theDefierSave');
-                this.currentSaveSlot = index; // Persistent? No, reset on reload.
-                // We need to store selected slot in localStorage temporarily so next load knows?
-                // Or just:
+                this.currentSaveSlot = index;
                 modal.classList.remove('active');
 
                 // If we treat "New Game" as "Go to Character Select":
                 this.showCharacterSelection();
-
-                // We must ensure that when the actual game starts, it saves to this slot.
-                // Since `this.currentSaveSlot` is set, `saveGame()` will use it.
-                // But if user refreshes at character select, slot info is lost.
-                // Maybe store active slot in sessionStorage?
                 sessionStorage.setItem('currentSaveSlot', index);
+            };
+
+            if (mode === 'overwrite') {
+                this.showConfirmModal(
+                    '确定要覆盖此存档吗？旧进度将丢失！',
+                    doOverwrite
+                );
+            } else {
+                doOverwrite();
             }
         }
     }

@@ -22,7 +22,10 @@ class Battle {
         this.turnNumber = 0;
         this.selectedCard = null;
         this.targetingMode = false;
+        this.targetingMode = false;
         this.isProcessingCard = false;
+        this.cardsPlayedThisTurn = 0;
+        this.playerAttackedThisTurn = false;
 
         // 创建敌人实例
         if (Array.isArray(enemyData)) {
@@ -59,6 +62,8 @@ class Battle {
         this.isProcessingCard = false; // 强制重置状态
         this.playerTookDamage = false; // For Trial Challenge
         this.player.resurrectCount = 0; // Reset resurrection counter
+        this.cardsPlayedThisTurn = 0;
+        this.playerAttackedThisTurn = false;
 
         // 玩家回合开始
         this.player.startTurn();
@@ -221,8 +226,7 @@ class Battle {
             }
 
             // Check Candy Cost for UI
-            const hasDraw = card.effects && card.effects.some(e => e.type === 'draw' || e.type === 'drawCalculated' || e.type === 'conditionalDraw' || e.type === 'randomCards');
-            if (hasDraw) {
+            if (card.consumeCandy) {
                 if (this.player.milkCandy < 1) playable = false;
             } else {
                 if (card.cost > this.player.currentEnergy) {
@@ -494,17 +498,18 @@ class Battle {
         const card = this.player.hand[cardIndex];
         if (!card) return;
 
-        // 检查奶糖消耗 (如果包含抽牌效果)
-        // 规则: 抽牌卡不消耗灵力，消耗奶糖
-        const hasDraw = card.effects.some(e => e.type === 'draw' || e.type === 'drawCalculated' || e.type === 'conditionalDraw' || e.type === 'randomCards');
-
         // 计算消耗
         let energyCost = card.cost;
         let candyCost = 0;
 
-        if (hasDraw) {
-            energyCost = 0; // 抽牌卡不消耗灵力
-            candyCost = 1;  // 抽牌卡消耗1奶糖
+        if (card.consumeCandy) {
+            // candyCost = 1; // 保持一致，消耗1奶糖
+            // 注意：onCardClick 主要是检查能否打出，具体扣除在 player.playCard
+            // 这里我们只需要检查条件
+            // 但为了 UI提示 (BattleLog)，我们需要知道消耗什么
+            candyCost = 1;
+        } else {
+            // energyCost is already card.cost
         }
 
         // 检查灵力
@@ -660,6 +665,47 @@ class Battle {
 
             // 检查战斗是否结束
             if (this.checkBattleEnd()) return;
+
+            // 计数与追踪
+            this.cardsPlayedThisTurn++;
+            if (card.type === 'attack') this.playerAttackedThisTurn = true;
+
+            // 共鸣：风雷翼 (WindThunderWing) - 每打出3张牌触发雷击
+            const windThunder = this.player.activeResonances && this.player.activeResonances.find(r => r.id === 'windThunderWing');
+            if (windThunder && this.cardsPlayedThisTurn % windThunder.effect.count === 0) {
+                const enemies = this.enemies.filter(e => e.currentHp > 0);
+                if (enemies.length > 0) {
+                    const thunderTarget = enemies[Math.floor(Math.random() * enemies.length)];
+                    const dmg = windThunder.effect.damage;
+                    this.dealDamageToEnemy(thunderTarget, dmg);
+                    Utils.showBattleLog(`风雷翼：引发雷击！造成 ${dmg} 伤害`);
+                    const el = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(thunderTarget)}"]`);
+                    if (el) Utils.showFloatingNumber(el, dmg, 'damage');
+                }
+            }
+
+            // 法则：雷法残章 (ThunderLaw) - 攻击时几率雷击
+            if (card.type === 'attack') {
+                const thunderLaw = this.player.collectedLaws.find(l => l.id === 'thunderLaw');
+                if (thunderLaw && Math.random() < thunderLaw.passive.chance) {
+                    const enemies = this.enemies.filter(e => e.currentHp > 0);
+                    if (enemies.length > 0) {
+                        const tTarget = enemies[Math.floor(Math.random() * enemies.length)];
+                        const dmg = thunderLaw.passive.value;
+                        this.dealDamageToEnemy(tTarget, dmg);
+                        Utils.showBattleLog(`雷霆之力：触发惊雷！造成 ${dmg} 伤害`);
+                        const el = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(tTarget)}"]`);
+                        if (el) Utils.showFloatingNumber(el, dmg, 'damage');
+                    }
+                }
+
+                // 法则：时间静止 (TimeStop) - 攻击几率眩晕
+                const timeLaw = this.player.collectedLaws.find(l => l.id === 'timeStop');
+                if (timeLaw && target && Math.random() < timeLaw.passive.stunChance) {
+                    target.stunned = true;
+                    Utils.showBattleLog('时间静止：敌人被定住了！');
+                }
+            }
 
             // 更新UI
             this.updateBattleUI();
@@ -997,17 +1043,43 @@ class Battle {
             // 除非是某些特殊的一次性力量，但一般力量定义为回合内Buff
         }
 
-        // 共鸣：雷火劫 (Plasma Overload)
+        // 共鸣：雷火崩坏 (Plasma Overload) - 改版：对灼烧敌人增伤
         if (this.player.activeResonances) {
-            const plasmaOverload = this.player.activeResonances.find(r => r.id === 'plasmaOverload');
-            if (plasmaOverload) {
-                // 为了游戏性，我们可以设定为“攻击造成伤害时额外造成”
-                const trueDmg = plasmaOverload.effect.value;
-                enemy.currentHp -= trueDmg;
-                // 显示特效
-                const enemyEl = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`);
-                if (enemyEl) Utils.showFloatingNumber(enemyEl, trueDmg, 'damage');
-                Utils.showBattleLog(`雷火劫：额外 ${trueDmg} 点真实伤害`);
+            const plasma = this.player.activeResonances.find(r => r.id === 'plasmaOverload');
+            if (plasma && enemy.buffs.burn > 0) {
+                const extraDmg = Math.floor(amount * plasma.effect.percent);
+                if (extraDmg > 0) {
+                    enemy.currentHp -= extraDmg; // True damage part? Or add to amount?
+                    // Description says "50% extra damage".
+                    // Let's add it to amount? But amount is already used for calculation.
+                    // Simpler: Deal separate bonus damage.
+                    // And trigger Thunder Strike.
+                    Utils.showBattleLog(`雷火崩坏：过载伤害 +${extraDmg}`);
+                    Utils.showFloatingNumber(document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`), extraDmg, 'damage');
+
+                    // Thunder Strike
+                    this.dealDamageToEnemy(enemy, 10);
+                    Utils.showBattleLog(`雷火崩坏：诱发雷击！`);
+                }
+            }
+
+            // 共鸣：极温爆裂 (Extreme Temp)
+            const extreme = this.player.activeResonances.find(r => r.id === 'extremeTemp');
+            // Check if damage type is fire? 
+            // We don't have explicit damage type passed easily except my custom call.
+            // But let's check if enemy has Burn + Slow/Stun and we just dealt damage?
+            // "When dealing FIRE damage".
+            // If I passed 'fire' as 3rd arg in my custom calls.
+            // Standard attacks might not be fire. 
+            // Hack: If enemy has Burn, assume we are doing fire things? No.
+            // Let's use the arguments.
+            if (extreme && arguments[2] === 'fire') {
+                if (enemy.buffs.weak > 0 || enemy.stunned) { // Weak as Slow proxy
+                    const boom = Math.floor(enemy.maxHp * extreme.effect.damagePercent * (enemy.isBoss ? 0.5 : 1));
+                    enemy.currentHp -= boom;
+                    Utils.showBattleLog(`极温爆裂！温差爆炸造成 ${boom} 伤害！`);
+                    Utils.showFloatingNumber(document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`), boom, 'damage');
+                }
             }
         }
 
@@ -1083,6 +1155,21 @@ class Battle {
         // 玩家回合结束
         this.player.endTurn();
 
+        // 法则：火焰真意 (FlameTruth) - 回合结束AoE
+        const flameLaw = this.player.collectedLaws.find(l => l.id === 'flameTruth');
+        if (flameLaw && this.playerAttackedThisTurn) {
+            Utils.showBattleLog(`烈焰焚天：回合结束爆发火浪！`);
+            for (let i = 0; i < this.enemies.length; i++) {
+                const e = this.enemies[i];
+                if (e.currentHp > 0) {
+                    this.dealDamageToEnemy(e, flameLaw.passive.aoeDamage, 'fire');
+                    // 视觉效果
+                    const el = document.querySelector(`.enemy[data-index="${i}"]`);
+                    if (el) Utils.showFloatingNumber(el, flameLaw.passive.aoeDamage, 'damage');
+                }
+            }
+        }
+
         // 切换到敌人回合
         // 切换到敌人回合
         this.currentTurn = 'enemy';
@@ -1111,7 +1198,12 @@ class Battle {
             // 新回合
             this.turnNumber++;
             this.currentTurn = 'player';
+            // 新回合
+            this.turnNumber++;
+            this.currentTurn = 'player';
             this.isProcessingCard = false; // 关键：重置卡牌处理状态
+            this.cardsPlayedThisTurn = 0;
+            this.playerAttackedThisTurn = false;
 
             // 环境：回合开始效果
             if (this.activeEnvironment && this.activeEnvironment.onTurnStart) {
@@ -1141,40 +1233,7 @@ class Battle {
             const enemy = this.enemies[i];
             if (enemy.currentHp <= 0) continue;
 
-            // 混沌法则判定：混乱效果 (10% 几率)
-            const chaosLaw = this.player.collectedLaws.find(l => l.id === 'chaosLaw');
-            if (chaosLaw && Math.random() < chaosLaw.passive.value) {
-                // 混乱触发
-                Utils.showBattleLog(`${enemy.name} 因混沌之力陷入混乱！`);
-
-                // 随机行为：1. 攻击自己 2. 攻击队友（若有） 3. 跳过
-                const chaosRoll = Math.random();
-                if (chaosRoll < 0.4) {
-                    // 攻击自己
-                    const dmg = 5;
-                    enemy.currentHp -= dmg;
-                    Utils.showBattleLog(`${enemy.name} 攻击了自己，受到 ${dmg} 点伤害！`);
-                    // 显示伤害数字
-                    const enemyEl = document.querySelector(`.enemy-card[data-index="${i}"]`);
-                    if (enemyEl) Utils.showFloatingNumber(enemyEl, dmg, 'damage');
-                } else if (chaosRoll < 0.7 && this.enemies.length > 1) {
-                    // 攻击队友
-                    const teammates = this.enemies.filter(e => e !== enemy && e.currentHp > 0);
-                    if (teammates.length > 0) {
-                        const target = teammates[Math.floor(Math.random() * teammates.length)];
-                        target.currentHp -= 8;
-                        Utils.showBattleLog(`${enemy.name} 误伤了队友 ${target.name}！`);
-                    } else {
-                        Utils.showBattleLog(`${enemy.name} 呆立当场！`);
-                    }
-                } else {
-                    // 跳过
-                    Utils.showBattleLog(`${enemy.name} 因混乱错过了攻击机会！`);
-                }
-
-                await Utils.sleep(800);
-                continue; // 跳过正常行动
-            }
+            // (Chaos Logic Removed - Replaced by new Chaos Law)
 
             // 处理敌人debuff (提前处理，防止晕眩导致不受DOT伤害)
             await this.processEnemyDebuffs(enemy, i);

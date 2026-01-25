@@ -144,7 +144,8 @@ const CARDS = {
         id: 'meditation',
         name: '冥想',
         type: 'energy',
-        cost: 1,
+        cost: 0,
+        consumeCandy: true,
         icon: '🧘',
         description: '消耗1奶糖。抽 2 张牌',
         rarity: 'common',
@@ -445,6 +446,7 @@ const CARDS = {
         type: 'attack',
         character: 'yanHan',
         cost: 0,
+        consumeCandy: true,
         icon: '🔍',
         description: '消耗1奶糖。造成 4 点伤害。抽 1 张牌',
         rarity: 'common',
@@ -624,7 +626,8 @@ const CARDS = {
         id: 'turtleShell',
         name: '乌龟壳',
         type: 'defense',
-        cost: 1,
+        cost: 0,
+        consumeCandy: true,
         icon: '🐢',
         description: '消耗1奶糖。获得 3 点护盾，抽 1 张牌',
         rarity: 'common',
@@ -834,18 +837,7 @@ const CARDS = {
         ]
     },
 
-    quickDraw: {
-        id: 'quickDraw',
-        name: '快抽',
-        type: 'energy',
-        cost: 1,
-        icon: '🃏',
-        description: '抽 1 张牌',
-        rarity: 'common',
-        effects: [
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
+
 
     allIn: {
         id: 'allIn',
@@ -921,33 +913,8 @@ const CARDS = {
     },
 
     // ===== 香叶（治愈法则）- 增益与治疗主题 =====
-    poisonTouch: {
-        id: 'poisonTouch',
-        name: '毒触',
-        type: 'attack',
-        cost: 1,
-        icon: '🤢',
-        description: '造成 3 点伤害，给予 2 层中毒',
-        rarity: 'common',
-        character: 'xiangYe',
-        effects: [
-            { type: 'damage', value: 3, target: 'enemy' },
-            { type: 'debuff', buffType: 'poison', value: 2, target: 'enemy' }
-        ]
-    },
-    minorHeal: {
-        id: 'minorHeal',
-        name: '小治愈术',
-        type: 'skill',
-        cost: 1,
-        icon: '🩹',
-        description: '回复 5 点生命',
-        rarity: 'common',
-        character: 'xiangYe',
-        effects: [
-            { type: 'heal', value: 5, target: 'self' }
-        ]
-    },
+
+
     healingTouch: {
         id: 'healingTouch',
         name: '治愈之触',
@@ -991,20 +958,7 @@ const CARDS = {
     },
 
     // ===== 无欲（佛门）- 反击与控制主题 =====
-    monkStrike: {
-        id: 'monkStrike',
-        name: '武僧打击',
-        type: 'attack',
-        cost: 1,
-        icon: '🙏',
-        description: '造成 6 点伤害，获得 4 点护盾',
-        rarity: 'common',
-        character: 'wuYu',
-        effects: [
-            { type: 'damage', value: 6, target: 'enemy' },
-            { type: 'block', value: 4, target: 'self' }
-        ]
-    },
+
     vajraGlare: {
         id: 'vajraGlare',
         name: '金刚怒目',
@@ -1049,20 +1003,7 @@ const CARDS = {
     },
 
     // ===== 严寒（学者）- 分析与削弱主题 =====
-    analysis: {
-        id: 'analysis',
-        name: '弱点分析',
-        type: 'skill',
-        cost: 1,
-        icon: '🧐',
-        description: '抽 1 张牌，使敌人获得 1 层易伤',
-        rarity: 'common',
-        character: 'yanHan',
-        effects: [
-            { type: 'draw', value: 1, target: 'self' },
-            { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'enemy' }
-        ]
-    },
+
     ringAnalysis: {
         id: 'ringAnalysis',
         name: '命环解析',
@@ -1244,7 +1185,8 @@ const CARDS = {
         id: 'quickDraw',
         name: '快抽',
         type: 'energy',
-        cost: 1,
+        cost: 0,
+        consumeCandy: true,
         icon: '⚡',
         description: '消耗1奶糖。抽 2 张牌',
         rarity: 'common',
@@ -1331,7 +1273,8 @@ const CARDS = {
         name: '弱点分析',
         type: 'skill',
         character: 'yanHan',
-        cost: 1,
+        cost: 0,
+        consumeCandy: true,
         icon: '🧐',
         description: '消耗1奶糖。抽 1 张牌，使敌人获得 1 层易伤',
         rarity: 'common',
@@ -1359,7 +1302,8 @@ const CARDS = {
         name: '法则窥探',
         type: 'skill',
         character: 'yanHan',
-        cost: 2,
+        cost: 0,
+        consumeCandy: true,
         icon: '👁️',
         description: '消耗1奶糖。抽 2 张牌，本战法则盗取率+10%',
         rarity: 'rare',
