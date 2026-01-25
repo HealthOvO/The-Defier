@@ -55,7 +55,9 @@ class Battle {
     // 开始战斗
     startBattle() {
         this.turnNumber = 1;
+        this.turnNumber = 1;
         this.currentTurn = 'player';
+        this.isProcessingCard = false; // 强制重置状态
 
         // 玩家回合开始
         this.player.startTurn();
@@ -498,7 +500,10 @@ class Battle {
 
     // 卡牌点击处理
     onCardClick(cardIndex) {
-        if (this.currentTurn !== 'player' || this.battleEnded || this.isProcessingCard) return;
+        if (this.currentTurn !== 'player' || this.battleEnded || this.isProcessingCard) {
+            console.warn(`Card Click Ignored: Turn=${this.currentTurn}, Ended=${this.battleEnded}, Processing=${this.isProcessingCard}`);
+            return;
+        }
 
         const card = this.player.hand[cardIndex];
         if (!card) return;
@@ -1069,40 +1074,49 @@ class Battle {
         this.player.endTurn();
 
         // 切换到敌人回合
+        // 切换到敌人回合
         this.currentTurn = 'enemy';
         Utils.showBattleLog('敌人回合...');
 
-        await Utils.sleep(500);
+        try {
+            await Utils.sleep(500);
 
-        // 敌人行动
-        await this.enemyTurn();
+            // 敌人行动
+            await this.enemyTurn();
 
-        // 检查战斗是否结束
-        if (this.checkBattleEnd()) return;
-
-        // 环境：回合结束效果
-        if (this.activeEnvironment && this.activeEnvironment.onTurnEnd) {
-            this.activeEnvironment.onTurnEnd(this);
+            // 检查战斗是否结束
             if (this.checkBattleEnd()) return;
+
+            // 环境：回合结束效果
+            if (this.activeEnvironment && this.activeEnvironment.onTurnEnd) {
+                this.activeEnvironment.onTurnEnd(this);
+                if (this.checkBattleEnd()) return;
+            }
+        } catch (error) {
+            console.error('Enemy Turn Error:', error);
+            Utils.showBattleLog('敌人行动异常，跳过...');
+        } finally {
+            // 无论如何都要恢复玩家回合
+
+            // 新回合
+            this.turnNumber++;
+            this.currentTurn = 'player';
+            this.isProcessingCard = false; // 关键：重置卡牌处理状态
+
+            // 环境：回合开始效果
+            if (this.activeEnvironment && this.activeEnvironment.onTurnStart) {
+                this.activeEnvironment.onTurnStart(this);
+                if (this.checkBattleEnd()) return; // 环境伤害可能致死
+            }
+
+            this.player.startTurn();
+
+            // 启用结束回合按钮
+            const endTurnBtn = document.getElementById('end-turn-btn');
+            if (endTurnBtn) endTurnBtn.disabled = false;
+
+            this.updateBattleUI();
         }
-
-        // 新回合
-        this.turnNumber++;
-        this.currentTurn = 'player';
-
-        // 环境：回合开始效果
-        if (this.activeEnvironment && this.activeEnvironment.onTurnStart) {
-            this.activeEnvironment.onTurnStart(this);
-            if (this.checkBattleEnd()) return; // 环境伤害可能致死
-        }
-
-        this.player.startTurn();
-
-        // 启用结束回合按钮
-        const endTurnBtn = document.getElementById('end-turn-btn');
-        if (endTurnBtn) endTurnBtn.disabled = false;
-
-        this.updateBattleUI();
     }
 
     // 敌人回合行动
