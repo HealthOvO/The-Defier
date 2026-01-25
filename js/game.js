@@ -47,7 +47,14 @@ class Game {
         this.loadGameResult = this.loadGame();
 
         // 恢复当前的存档位索引 (修复刷新后无法同步到正确槽位的问题)
-        const savedSlotIndex = sessionStorage.getItem('currentSaveSlot');
+        // 恢复当前的存档位索引 (修复刷新后无法同步到正确槽位的问题)
+        let savedSlotIndex = sessionStorage.getItem('currentSaveSlot');
+
+        // 关键修复：如果会话均无，尝试从本地持久化存储恢复
+        if (savedSlotIndex === null) {
+            savedSlotIndex = localStorage.getItem('lastSaveSlot');
+        }
+
         if (savedSlotIndex !== null) {
             this.currentSaveSlot = parseInt(savedSlotIndex);
             console.log(`已恢复存档位: Slot ${this.currentSaveSlot + 1}`);
@@ -207,6 +214,7 @@ class Game {
                 },
                 unlockedRealms: this.unlockedRealms || [1],
                 currentScreen: this.currentScreen,
+                saveSlot: this.currentSaveSlot, // Persist the slot ID
                 timestamp: Date.now()
             };
             localStorage.setItem('theDefierSave', JSON.stringify(gameState));
@@ -310,6 +318,68 @@ class Game {
                 // Determine class based on type or character
                 let RingClass = FateRing;
                 if (gameState.player.fateRing.type === 'mutated') RingClass = MutatedRing;
+
+                // ... logic handled by assign generally, but methods are lost.
+                // ideally we re-instantiate, but for now assuming data structure is enough
+                // as methods are on prototype. 
+                // Wait, assign doesn't restore prototype. 
+                // Currently code relies on this.player having methods, and we assign properties TO it.
+                // So prototype methods are safe.
+
+
+                // === 关键修复：数据解压与重建 (Rehydration) ===
+
+                // 1. 重建卡牌 (Deck, Hand, Draw, Discard)
+                const hydrateCards = (list) => {
+                    if (!Array.isArray(list)) return [];
+                    return list.map(savedCard => {
+                        // 如果是旧档且包含完整数据，直接使用
+                        if (savedCard.name && savedCard.description) return savedCard;
+
+                        // 获取基础数据
+                        const baseCard = CARDS[savedCard.id];
+                        if (!baseCard) return savedCard; // Fallback
+
+                        // 合并：基础 < 存档
+                        let card = { ...JSON.parse(JSON.stringify(baseCard)), ...savedCard };
+
+                        // 恢复升级状态
+                        if (card.upgraded && typeof upgradeCard === 'function') {
+                            // upgradeCard通常不仅改数值，还改变name和description
+                            // 我们需要在一个纯净的基础卡上应用升级
+                            // 但savedCard包含当前cost。
+                            // 策略：用upgradeCard生成一个新的标准升级卡，然后覆盖savedCard中的特定动态属性
+                            let freshUpgraded = upgradeCard(JSON.parse(JSON.stringify(baseCard)));
+                            card = { ...freshUpgraded, ...savedCard };
+                        }
+
+                        return card;
+                    });
+                };
+
+                this.player.deck = hydrateCards(this.player.deck);
+                this.player.hand = hydrateCards(this.player.hand);
+                this.player.drawPile = hydrateCards(this.player.drawPile);
+                this.player.discardPile = hydrateCards(this.player.discardPile);
+
+                // 2. 重建法宝
+                if (this.player.treasures) {
+                    this.player.treasures = this.player.treasures.map(t => {
+                        if (t.name) return t; // Old format
+                        const baseT = TREASURES[t.id];
+                        if (!baseT) return t;
+                        return { ...baseT, ...t };
+                    });
+                }
+
+                // 3. 重建法则
+                if (this.player.collectedLaws) {
+                    this.player.collectedLaws = this.player.collectedLaws.map(l => {
+                        if (l.name) return l; // Old format
+                        const baseL = LAWS[l.id];
+                        return baseL || l;
+                    });
+                }
                 if (gameState.player.fateRing.type === 'sealed') RingClass = SealedRing;
                 if (gameState.player.fateRing.type === 'karma') RingClass = KarmaRing;
                 if (gameState.player.fateRing.type === 'analysis') RingClass = AnalysisRing;
@@ -366,6 +436,15 @@ class Game {
             this.map.nodes = gameState.map.nodes;
             this.map.currentNodeIndex = gameState.map.currentNodeIndex;
             this.map.completedNodes = gameState.map.completedNodes;
+
+            // 恢复当前的存档位索引 (修复刷新后无法同步到正确槽位的问题)
+            if (this.currentSaveSlot === null && gameState.saveSlot !== undefined) {
+                this.currentSaveSlot = gameState.saveSlot;
+                console.log(`Recovered Save Slot ID from save file: ${this.currentSaveSlot}`);
+                // Re-persist for session
+                sessionStorage.setItem('currentSaveSlot', this.currentSaveSlot);
+                localStorage.setItem('lastSaveSlot', this.currentSaveSlot);
+            }
 
             this.unlockedRealms = gameState.unlockedRealms || [1];
 
@@ -648,7 +727,10 @@ class Game {
         document.getElementById('char-energy').textContent = this.player.baseEnergy;
         document.getElementById('char-draw').textContent = this.player.drawCount;
 
-        // 命环等级
+        // 显示力量 (永久)
+        const permaStrength = (this.player.permaBuffs && this.player.permaBuffs.strength) ? this.player.permaBuffs.strength : 0;
+        const charStrEl = document.getElementById('char-strength');
+        if (charStrEl) charStrEl.textContent = permaStrength;
         const ringName = this.player.fateRing.name;
         // Fix: ID mismatch, HTML uses 'ring-level'
         const ringLevelEl = document.getElementById('ring-level');
@@ -4011,22 +4093,26 @@ class Game {
         const modal = document.getElementById('save-slots-modal');
 
         if (mode === 'load') {
-            const data = this.cachedSlots[index];
-            if (data) {
-                try {
-                    localStorage.setItem('theDefierSave', JSON.stringify(data));
-                    // 标记为手动加载，防止被冲突检测逻辑误判而弹窗
-                    sessionStorage.setItem('justLoadedSave', 'true');
+            const cloudData = this.cachedSlots[index];
+            if (cloudData) {
+                // 移除冲突检测，直接加载选中的存档
+                // 用户要求点击继续时不跳出提醒
 
-                    Utils.showBattleLog(`已加载 存档 ${index + 1}`);
-                    modal.classList.remove('active');
+                const doLoad = () => {
+                    try {
+                        localStorage.setItem('theDefierSave', JSON.stringify(cloudData));
+                        sessionStorage.setItem('justLoadedSave', 'true'); // Prevent loop
 
-                    // Reload game state directly without full refresh if possible, but reload is safer
-                    setTimeout(() => window.location.reload(), 500);
-                } catch (e) {
-                    console.error('Load Save Failed:', e);
-                    alert('加载存档失败：本地存储可能已满，请清理浏览器缓存后重试。');
-                }
+                        Utils.showBattleLog(`已加载 存档 ${index + 1}`);
+                        modal.classList.remove('active');
+                        setTimeout(() => window.location.reload(), 500);
+                    } catch (e) {
+                        console.error('Load Save Failed:', e);
+                        alert('加载存档失败：本地存储可能已满，请清理浏览器缓存后重试。');
+                    }
+                };
+
+                doLoad();
             }
         } else if (mode === 'new' || mode === 'overwrite') {
             const doOverwrite = () => {

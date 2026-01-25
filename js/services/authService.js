@@ -83,44 +83,38 @@ const AuthService = {
 
         try {
             const user = Bmob.User.current();
-            const query = Bmob.Query('_User');
+            const query = Bmob.Query('GameSave');
 
-            // First, fetch current data to preserve other slots
-            // Optimization: If we trust local state, we might not need to fetch, 
-            // but for safety (multi-device), fetch first is better.
-            const userData = await query.get(user.objectId);
-            let currentSlots = [null, null, null, null];
+            // Pointer query: find save for this user and slot
+            query.equalTo('user', '==', user.objectId);
+            query.equalTo('slotIndex', '==', slotIndex);
 
-            if (userData && userData.gameData) {
-                try {
-                    const parsed = JSON.parse(userData.gameData);
-                    if (Array.isArray(parsed.slots)) {
-                        currentSlots = parsed.slots;
-                    } else if (parsed.version) {
-                        // Legacy: single object found, migrate to slot 0
-                        currentSlots[0] = parsed; // Keep old data in slot 0
-                    }
-                } catch (e) { console.error('Parse error', e); }
+            const results = await query.find();
+
+            let saveObj;
+            if (results && results.length > 0) {
+                // Update existing
+                saveObj = query;
+                saveObj.set('id', results[0].objectId);
+            } else {
+                // Create new
+                saveObj = Bmob.Query('GameSave');
+                const userPointer = Bmob.Pointer('_User');
+                const poiID = userPointer.set(user.objectId);
+                saveObj.set('user', poiID);
+                saveObj.set('slotIndex', slotIndex);
             }
 
-            // Update specific slot
-            currentSlots[slotIndex] = gameData;
+            // Save data
+            saveObj.set('saveData', gameData);
+            saveObj.set('saveTime', Date.now());
 
-            // Save back wrapped structure
-            const storageObj = {
-                slots: currentSlots,
-                updatedAt: new Date().getTime()
-            };
-
-            query.set('id', user.objectId);
-            query.set('gameData', JSON.stringify(storageObj));
-            query.set('saveTime', new Date().getTime());
-
-            const result = await query.save();
-            console.log(`Cloud save to slot ${slotIndex} success`);
+            const result = await saveObj.save();
+            console.log(`Cloud save to GameSave table (Slot ${slotIndex}) success`);
             return { success: true, result: result };
         } catch (error) {
             console.error('Cloud save error:', error);
+            // Handle table not exist error (usually auto-created, but just in case)
             return { success: false, error: error };
         }
     },
@@ -130,34 +124,98 @@ const AuthService = {
 
         try {
             const user = Bmob.User.current();
-            const query = Bmob.Query('_User');
-            const userData = await query.get(user.objectId);
+            let finalSlots = [null, null, null, null];
+            let maxTime = 0;
 
-            if (userData && userData.gameData) {
-                try {
-                    const parsed = JSON.parse(userData.gameData);
+            console.log('Fetching cloud data...');
 
-                    // New Format
-                    if (Array.isArray(parsed.slots)) {
-                        return { success: true, slots: parsed.slots, serverTime: userData.saveTime };
-                    }
+            // 1. Fetch New Data (GameSave table)
+            try {
+                const newQuery = Bmob.Query('GameSave');
+                newQuery.equalTo('user', '==', user.objectId);
+                const newResults = await newQuery.find();
 
-                    // Legacy Format (Single Object)
-                    if (parsed.version || parsed.player) {
-                        // Return as Slot 0
-                        return {
-                            success: true,
-                            slots: [parsed, null, null, null],
-                            serverTime: userData.saveTime,
-                            isLegacy: true
-                        };
-                    }
-                } catch (e) {
-                    return { success: false, message: '存档数据损坏' };
+                if (newResults && newResults.length > 0) {
+                    console.log(`Found ${newResults.length} records in GameSave table.`);
+                    newResults.forEach(save => {
+                        if (save.slotIndex >= 0 && save.slotIndex <= 3) {
+                            try {
+                                let data = save.saveData;
+                                if (typeof data === 'string') data = JSON.parse(data);
+                                finalSlots[save.slotIndex] = data;
+                                if (save.saveTime > maxTime) maxTime = save.saveTime;
+                            } catch (e) {
+                                console.error(`Error parsing slot ${save.slotIndex}:`, e);
+                            }
+                        }
+                    });
                 }
+            } catch (e) {
+                console.warn('GameSave table fetch failed or empty (normal for first migration):', e);
             }
-            // No data implies 4 empty slots
-            return { success: true, slots: [null, null, null, null], isEmpty: true };
+
+            // 2. Fetch Legacy Data (_User.gameData)
+            // We always check this to fill in any empty slots
+            try {
+                const userQuery = Bmob.Query('_User');
+                const userData = await userQuery.get(user.objectId);
+
+                if (userData && userData.gameData) {
+                    console.log('Found legacy data in _User table.');
+                    try {
+                        let legacySlots = [null, null, null, null];
+                        // Try to parse as JSON first
+                        let parsed = userData.gameData;
+                        if (typeof parsed === 'string') {
+                            try {
+                                parsed = JSON.parse(parsed);
+                            } catch (e) {
+                                // If parse fails, it might be raw object or invalid
+                                console.warn('Legacy data parse warning:', e);
+                            }
+                        }
+
+                        // Check structure
+                        if (parsed) {
+                            if (Array.isArray(parsed.slots)) {
+                                legacySlots = parsed.slots;
+                            } else if (parsed.version || parsed.player || parsed.stage) {
+                                // Assume it's a single save object from older version
+                                // Default to slot 0 if slot 0 is empty
+                                legacySlots[0] = parsed;
+                            }
+                        }
+
+                        // Merge: Fill empty slots with legacy data
+                        for (let i = 0; i < 4; i++) {
+                            // Only use legacy if we don't have a new save in this slot
+                            if (finalSlots[i] === null && legacySlots[i] !== null) {
+                                console.log(`Restoring slot ${i} from legacy data.`);
+                                finalSlots[i] = legacySlots[i];
+
+                                // Update timestamp references
+                                const legacyTime = userData.saveTime || 0;
+                                if (legacyTime > maxTime) maxTime = legacyTime;
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Legacy data processing error:', e);
+                    }
+                }
+            } catch (e) {
+                console.warn('Legacy _User fetch failed:', e);
+            }
+
+            // Check if we have any data
+            const isEmpty = finalSlots.every(s => s === null);
+
+            return {
+                success: true,
+                slots: finalSlots,
+                serverTime: maxTime,
+                isEmpty: isEmpty
+            };
+
         } catch (error) {
             console.error('Get cloud data error:', error);
             return { success: false, error: error };

@@ -317,8 +317,8 @@ class Player {
         this.buffs = {};
 
         // 应用永久力量加成
-        if (this.permBuffs && this.permBuffs.strength) {
-            this.addBuff('strength', this.permBuffs.strength);
+        if (this.permaBuffs && this.permaBuffs.strength) {
+            this.addBuff('strength', this.permaBuffs.strength);
         }
 
         // 遗物效果：金刚法相 (无欲)
@@ -1313,8 +1313,8 @@ class Player {
 
     // 添加永久属性加成
     addPermBuff(stat, value) {
-        if (!this.permBuffs) this.permBuffs = {};
-        this.permBuffs[stat] = (this.permBuffs[stat] || 0) + value;
+        if (!this.permaBuffs) this.permaBuffs = {};
+        this.permaBuffs[stat] = (this.permaBuffs[stat] || 0) + value;
 
         // 如果是基础属性，立即重新计算
         if (['maxHp', 'energy', 'draw'].includes(stat)) {
@@ -1583,7 +1583,7 @@ class Player {
         return this.currentHp > 0;
     }
 
-    // 获取状态
+    // 获取状态 (压缩版)
     getState() {
         return {
             characterId: this.characterId,
@@ -1593,18 +1593,39 @@ class Player {
             gold: this.gold,
             currentEnergy: this.currentEnergy,
             baseEnergy: this.baseEnergy,
-            hand: this.hand,
-            drawPile: this.drawPile,
-            discardPile: this.discardPile,
-            deck: this.deck,
+            // 压缩卡牌数据：只保存关键属性
+            hand: this.compressCardList(this.hand),
+            drawPile: this.compressCardList(this.drawPile),
+            discardPile: this.compressCardList(this.discardPile),
+            deck: this.compressCardList(this.deck),
+
             buffs: this.buffs,
-            fateRing: this.fateRing,
-            collectedLaws: this.collectedLaws,
+            fateRing: this.fateRing, // FateRing needs its own compression ideally, but it's small usually
+            // 压缩法则列表
+            collectedLaws: this.collectedLaws.map(l => ({ id: l.id })),
+
             realm: this.realm,
             floor: this.floor,
             enemiesDefeated: this.enemiesDefeated,
-            treasures: this.treasures
+            // 压缩法宝
+            treasures: this.treasures.map(t => ({
+                id: t.id,
+                obtainedAt: t.obtainedAt,
+                data: t.data
+            })),
+            permaBuffs: this.permaBuffs
         };
+    }
+
+    // 辅助：压缩卡牌列表
+    compressCardList(list) {
+        return list.map(c => ({
+            id: c.id,
+            instanceId: c.instanceId,
+            upgraded: c.upgraded,
+            cost: c.cost, // Preserve current cost (e.g. randomized)
+            isTemp: c.isTemp
+        }));
     }
 
     // === 法宝系统 ===
