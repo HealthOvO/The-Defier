@@ -2096,6 +2096,9 @@ class Game {
         // 重新生成地图
         this.map.generate(this.player.realm);
 
+        // Check Skill Unlock status (e.g. if restarting at Realm 5+, unlock skill)
+        this.player.checkSkillUnlock();
+
         // 自动保存
         // 关键修复：保存必须在所有状态重置（扣钱、恢复HP、重置层数）之后立即进行
         // 这样如果用户在点击“重修此界”后刷新，加载的存档已经是扣过钱并重置进度的状态
@@ -2127,12 +2130,6 @@ class Game {
             this.unlockedRealms.push(this.player.realm + 1);
         }
 
-        // 解锁主动技能 (通过5, 10, 15重天)
-        // 玩家当前realm即将+1，所以通过Realm 5 = current realm is 5, next is 6.
-        if (this.player.realm === 5) this.player.unlockUltimate(1);
-        if (this.player.realm === 10) this.player.unlockUltimate(2);
-        if (this.player.realm === 15) this.player.unlockUltimate(3);
-
         // 检查是否通关所有天域 (现在是18重)
         if (this.player.realm >= 18) {
             this.showVictoryScreen();
@@ -2144,6 +2141,9 @@ class Game {
         this.player.realm++;
         this.player.floor = 0;
         this.currentBattleNode = null; // 关键修复：防止奖励结算再次触发节点完成
+
+        // 检查技能解锁 (Level up skill upon entering specific realms)
+        this.player.checkSkillUnlock();
 
         // 关键修复：立即保存并强制同步
         this.autoSave();
@@ -3130,7 +3130,13 @@ class Game {
         const nameEl = btn.querySelector('.skill-name');
         const descEl = btn.querySelector('.skill-desc');
         if (nameEl) nameEl.textContent = skill.name + (this.player.skillLevel > 1 ? ` Lv.${this.player.skillLevel}` : '');
-        if (descEl) descEl.textContent = skill.description;
+        if (descEl) {
+            if (skill.getDescription) {
+                descEl.textContent = skill.getDescription(this.player.skillLevel);
+            } else {
+                descEl.textContent = skill.description;
+            }
+        }
 
         // Cooldown
         const overlay = btn.querySelector('.skill-cooldown-overlay');
@@ -3206,7 +3212,12 @@ class Game {
         if (this.player.activeSkill) {
             titleEl.textContent = `${this.player.activeSkill.name}`;
             iconEl.textContent = this.player.activeSkill.icon || '⚡';
-            descEl.textContent = this.player.activeSkill.description;
+
+            if (this.player.activeSkill.getDescription) {
+                descEl.textContent = this.player.activeSkill.getDescription(this.player.skillLevel);
+            } else {
+                descEl.textContent = this.player.activeSkill.description;
+            }
         }
 
         modal.classList.add('active');

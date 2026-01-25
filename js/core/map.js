@@ -151,7 +151,7 @@ class GameMap {
     // 获取天域环境法则
     getRealmEnvironment(realm) {
         const envs = {
-            1: { name: '灵气稀薄', desc: '灵力恢复-1 (每回合开始时)', effect: 'energy_malus' },
+            1: { name: '灵气稀薄', desc: '护盾效果降低 20%', effect: 'shield_malus' },
             2: { name: '雷霆淬体', desc: '每回合受到3点雷属性伤害', effect: 'thunder_damage' },
             3: { name: '重力压制', desc: '抽牌数-1', effect: 'draw_malus' },
             4: { name: '丹火焚心', desc: '回合结束时若有手牌，受到等于手牌数x2的伤害', effect: 'burn_hand' },

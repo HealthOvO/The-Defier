@@ -182,14 +182,13 @@ const Utils = {
             div.addEventListener('touchmove', () => clearTimeout(pressTimer));
         }
 
-        // 检查是否消耗奶糖 (抽牌卡)
-        const hasDraw = card.effects && card.effects.some(e =>
-            e.type === 'draw' || e.type === 'drawCalculated' || e.type === 'conditionalDraw' || e.type === 'randomCards'
-        );
+        // 检查是否消耗奶糖
+        // Fix: Rely strictly on consumeCandy property to match game logic
+        const isCandyCard = card.consumeCandy;
 
         let costHtml = '';
         if (!isReward) {
-            if (hasDraw) {
+            if (isCandyCard) {
                 // 抽牌卡消耗奶糖
                 costHtml = `<div class="card-cost cost-candy">🍬</div>`;
             } else {
@@ -437,9 +436,9 @@ const Utils = {
             <div class="enemy-name">${enemy.name}</div>
             <div class="enemy-hp">
                 <div class="enemy-hp-preview" style="width: 0%"></div>
-                <div class="enemy-hp-fill" style="width: ${(enemy.currentHp / enemy.hp) * 100}%"></div>
+                <div class="enemy-hp-fill" style="width: ${(enemy.currentHp / enemy.maxHp) * 100}%"></div>
             </div>
-            <div class="enemy-hp-text">${enemy.currentHp}/${enemy.hp}</div>
+            <div class="enemy-hp-text">${enemy.currentHp}/${enemy.maxHp}</div>
             ${enemy.block > 0 ? `<div class="enemy-block">🛡️ ${enemy.block}</div>` : ''}
             <div class="buff-list enemy-buffs">
                 ${this.renderBuffs(enemy)}

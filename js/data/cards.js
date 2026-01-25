@@ -344,6 +344,7 @@ const CARDS = {
         name: '命运之轮',
         type: 'chance',
         cost: 1,
+        consumeCandy: true,
         icon: '🎰',
         description: '消耗1奶糖。随机获得 1-3 张临时卡牌',
         rarity: 'rare',

@@ -587,7 +587,12 @@ class Battle {
         }
 
         // Multi-Enemy Targeting Logic
-        const needsTarget = card.effects && card.effects.some(e => ['damage', 'debuff', 'execute', 'removeBlock', 'goldOnKill', 'maxHpOnKill'].includes(e.type) && (!e.target || e.target === 'enemy' || e.target === 'single'));
+        // Multi-Enemy Targeting Logic
+        // Fix: Added 'penetrate', 'steal', 'lifeSteal', 'absorb' to trigger targeting mode
+        const needsTarget = card.effects && card.effects.some(e =>
+            ['damage', 'debuff', 'execute', 'removeBlock', 'goldOnKill', 'maxHpOnKill', 'penetrate', 'steal', 'lifeSteal', 'absorb'].includes(e.type)
+            && (!e.target || e.target === 'enemy' || e.target === 'single')
+        );
         const hasMultipleEnemies = this.enemies.filter(e => e.currentHp > 0).length > 1;
 
         if (needsTarget && hasMultipleEnemies) {
@@ -941,8 +946,12 @@ class Battle {
                         if (target.buffs && target.buffs.unstoppable > 0) {
                             immune = true;
                             Utils.showBattleLog(`${target.name} 拥有霸体，免疫眩晕！`);
-                            // Optional: Consume 1 stack? Usually unstoppable lasts a turn.
-                            // Decrement logic is usually at turn start/end.
+                        }
+
+                        // Fix: Control Immunity Check (Realm 16+)
+                        if (target.buffs && target.buffs.controlImmune > 0) {
+                            immune = true;
+                            Utils.showBattleLog(`${target.name} 免疫控制效果！`);
                         }
 
                         if (!immune) {
@@ -1044,9 +1053,20 @@ class Battle {
                     enemy.buffs[result.buffType] = (enemy.buffs[result.buffType] || 0) + result.value;
                     if (result.buffType === 'stun') {
                         // Fix: Boss Unstoppable check for AoE stun
+                        let immune = false;
+
                         if (enemy.buffs && enemy.buffs.unstoppable > 0) {
+                            immune = true;
                             Utils.showBattleLog(`${enemy.name} 拥有霸体，免疫眩晕！`);
-                        } else {
+                        }
+
+                        // Fix: Control Immunity Check for AoE
+                        if (enemy.buffs && enemy.buffs.controlImmune > 0) {
+                            immune = true;
+                            Utils.showBattleLog(`${enemy.name} 免疫控制效果！`);
+                        }
+
+                        if (!immune) {
                             enemy.stunned = true;
                         }
                     }
@@ -1339,101 +1359,107 @@ class Battle {
             const enemyEl = document.querySelector(`.enemy[data-index="${i}"]`);
             if (enemy.currentHp <= 0) continue;
 
-            // (Chaos Logic Removed - Replaced by new Chaos Law)
+            try {
+                // (Chaos Logic Removed - Replaced by new Chaos Law)
 
-            // === Boss 压迫感增强 (Boss Mechanics 2.0) ===
-            if (enemy.isBoss) {
-                // 每3回合获得1点力量
-                if (this.turnNumber > 0 && this.turnNumber % 3 === 0) {
-                    if (!enemy.buffs.strength) enemy.buffs.strength = 0;
-                    enemy.buffs.strength += 1;
-                    Utils.showBattleLog(`${enemy.name} 怒意增长！(力量+1)`);
-                    Utils.createFloatingText(i, '力量+1', '#ffaa00');
-                }
-
-                // 30% 几率净化一个负面效果
-                if (Math.random() < 0.3) {
-                    const debuffs = Object.keys(enemy.buffs).filter(k =>
-                        ['poison', 'burn', 'weak', 'vulnerable', 'stun', 'freeze'].includes(k) && enemy.buffs[k] > 0
-                    );
-                    if (debuffs.length > 0) {
-                        const remove = debuffs[Math.floor(Math.random() * debuffs.length)];
-                        enemy.buffs[remove] = 0;
-                        Utils.showBattleLog(`${enemy.name} 净化了自身的 ${remove}！`);
-                        Utils.createFloatingText(i, '净化', '#ffffff');
-                    }
-                }
-            }
-
-            // === 精英怪效果: 再生 ===
-            if (enemy.isElite && enemy.eliteType === 'regen') {
-                const heal = Math.floor(enemy.maxHp * 0.05);
-                if (heal > 0 && enemy.currentHp < enemy.maxHp) {
-                    enemy.currentHp = Math.min(enemy.maxHp, enemy.currentHp + heal);
-                    Utils.showBattleLog(`${enemy.name} 再生恢复了 ${heal} 生命`);
-                    if (enemyEl) Utils.showFloatingNumber(enemyEl, heal, 'heal');
-                }
-            }
-
-            // 处理敌人debuff (提前处理，防止晕眩导致不受DOT伤害)
-            await this.processEnemyDebuffs(enemy, i);
-
-            // 检查晕眩
-            if (enemy.stunned) {
-                enemy.stunned = false;
-                Utils.showBattleLog(`${enemy.name} 被眩晕，跳过回合`);
-
-                // === Boss 霸体机制 ===
+                // === Boss 压迫感增强 (Boss Mechanics 2.0) ===
                 if (enemy.isBoss) {
-                    enemy.buffs.unstoppable = 1; // 获得1回合霸体
-                    Utils.showBattleLog(`${enemy.name} 获得了霸体，免疫下回合控制！`);
-                    // Floating text for visual
-                    Utils.createFloatingText(i, '霸体', '#ffff00');
-                    if (this.updateEnemiesUI) this.updateEnemiesUI();
-                }
+                    // 每3回合获得1点力量
+                    if (this.turnNumber > 0 && this.turnNumber % 3 === 0) {
+                        if (!enemy.buffs.strength) enemy.buffs.strength = 0;
+                        enemy.buffs.strength += 1;
+                        Utils.showBattleLog(`${enemy.name} 怒意增长！(力量+1)`);
+                        Utils.createFloatingText(i, '力量+1', '#ffaa00');
+                    }
 
-                // 控制抵抗机制 (Realm 16+)
-                if (this.player.realm >= 16) {
-                    let resistChance = 0;
-                    if (this.player.realm === 16) resistChance = 0.3;
-                    else if (this.player.realm === 17) resistChance = 0.4;
-                    else if (this.player.realm >= 18) resistChance = 0.5;
-
-                    if (Math.random() < resistChance) {
-                        enemy.buffs.controlImmune = 2; // 持续2回合
-                        Utils.showBattleLog(`${enemy.name} 产生了抗性！(免疫控制)`);
+                    // 30% 几率净化一个负面效果
+                    if (Math.random() < 0.3) {
+                        const debuffs = Object.keys(enemy.buffs).filter(k =>
+                            ['poison', 'burn', 'weak', 'vulnerable', 'stun', 'freeze'].includes(k) && enemy.buffs[k] > 0
+                        );
+                        if (debuffs.length > 0) {
+                            const remove = debuffs[Math.floor(Math.random() * debuffs.length)];
+                            enemy.buffs[remove] = 0;
+                            Utils.showBattleLog(`${enemy.name} 净化了自身的 ${remove}！`);
+                            Utils.createFloatingText(i, '净化', '#ffffff');
+                        }
                     }
                 }
 
-                await Utils.sleep(500);
-                continue;
-            }
-
-            // 13. 时光逆流 (realm 13) - 每3回合行动两次
-            let actionCount = 1;
-            if (this.player.realm === 13 && this.turnNumber % 3 === 0) {
-                actionCount = 2;
-                if (i === 0) Utils.showBattleLog('时光逆流：敌人速度加快！');
-            }
-
-            for (let k = 0; k < actionCount; k++) {
-                // 执行敌人行动
-                await this.executeEnemyAction(enemy, i);
-
-                // 检查玩家是否死亡
-                if (!this.player.isAlive()) {
-                    this.battleEnded = true;
-                    return;
+                // === 精英怪效果: 再生 ===
+                if (enemy.isElite && enemy.eliteType === 'regen') {
+                    const heal = Math.floor(enemy.maxHp * 0.05);
+                    if (heal > 0 && enemy.currentHp < enemy.maxHp) {
+                        enemy.currentHp = Math.min(enemy.maxHp, enemy.currentHp + heal);
+                        Utils.showBattleLog(`${enemy.name} 再生恢复了 ${heal} 生命`);
+                        if (enemyEl) Utils.showFloatingNumber(enemyEl, heal, 'heal');
+                    }
                 }
 
-                // 下一个行动模式
-                enemy.currentPatternIndex = (enemy.currentPatternIndex + 1) % enemy.patterns.length;
+                // 处理敌人debuff (提前处理，防止晕眩导致不受DOT伤害)
+                await this.processEnemyDebuffs(enemy, i);
 
-                if (k < actionCount - 1) await Utils.sleep(500);
+                // 检查晕眩
+                if (enemy.stunned) {
+                    enemy.stunned = false;
+                    Utils.showBattleLog(`${enemy.name} 被眩晕，跳过回合`);
+
+                    // === Boss 霸体机制 ===
+                    if (enemy.isBoss) {
+                        enemy.buffs.unstoppable = 1; // 获得1回合霸体
+                        Utils.showBattleLog(`${enemy.name} 获得了霸体，免疫下回合控制！`);
+                        // Floating text for visual
+                        Utils.createFloatingText(i, '霸体', '#ffff00');
+                        if (this.updateEnemiesUI) this.updateEnemiesUI();
+                    }
+
+                    // 控制抵抗机制 (Realm 16+)
+                    if (this.player.realm >= 16) {
+                        let resistChance = 0;
+                        if (this.player.realm === 16) resistChance = 0.3;
+                        else if (this.player.realm === 17) resistChance = 0.4;
+                        else if (this.player.realm >= 18) resistChance = 0.5;
+
+                        if (Math.random() < resistChance) {
+                            enemy.buffs.controlImmune = 2; // 持续2回合
+                            Utils.showBattleLog(`${enemy.name} 产生了抗性！(免疫控制)`);
+                        }
+                    }
+
+                    await Utils.sleep(500);
+                    continue;
+                }
+
+                // 13. 时光逆流 (realm 13) - 每3回合行动两次
+                let actionCount = 1;
+                if (this.player.realm === 13 && this.turnNumber % 3 === 0) {
+                    actionCount = 2;
+                    if (i === 0) Utils.showBattleLog('时光逆流：敌人速度加快！');
+                }
+
+                for (let k = 0; k < actionCount; k++) {
+                    // 执行敌人行动
+                    await this.executeEnemyAction(enemy, i);
+
+                    // 检查玩家是否死亡
+                    if (!this.player.isAlive()) {
+                        this.battleEnded = true;
+                        return;
+                    }
+
+                    // 下一个行动模式
+                    enemy.currentPatternIndex = (enemy.currentPatternIndex + 1) % enemy.patterns.length;
+
+                    if (k < actionCount - 1) await Utils.sleep(500);
+                }
+
+                await Utils.sleep(300);
+            } catch (err) {
+                console.error(`Enemy ${i} action failed:`, err);
+                Utils.showBattleLog(`${enemy.name} 行动异常，跳过`);
             }
-
-            await Utils.sleep(300);
         }
+
 
         // 清除敌人护盾 (moved to start of enemy turn)
         for (const enemy of this.enemies) {

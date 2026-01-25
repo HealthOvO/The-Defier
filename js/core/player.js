@@ -32,6 +32,15 @@ class Player {
         this.skillCooldown = 0;
         this.maxCooldown = 0;
 
+        if (charData.activeSkillId && typeof SKILLS !== 'undefined' && SKILLS[charData.activeSkillId]) {
+            this.activeSkill = SKILLS[charData.activeSkillId];
+            this.skillLevel = 0; // Default Locked
+            this.maxCooldown = this.activeSkill.cooldown;
+
+            // Debug: If realm is already high (e.g. loaded game), check unlock immediately
+            // But reset happens before load. Load will overwrite this.
+        }
+
         // 牌组
         this.deck = [];
         this.hand = [];
@@ -877,14 +886,10 @@ class Player {
         if (card.consumeCandy) {
             candyCost = 1; // 固定消耗1奶糖
             // 注意: cards.js 中 consumeCandy 的卡牌 cost 通常设为 0
-        } else if (card.effects.some(e => e.type === 'draw' || e.type === 'drawCalculated' || e.type === 'conditionalDraw' || e.type === 'randomCards') && card.cost === 0) {
-            // Fallback: 如果是0费抽牌卡且没标记consumeCandy (可能是旧数据或遗漏)，也消耗奶糖?
-            // 不，ringResonance 就是反例。
-            // 所以，只要没标记 consumeCandy，就不消耗奶糖。
-            // 除非是某些尚未更新的旧卡牌?
-            // 我们已经更新了冥想、快抽等。
-            // 安全起见，只信赖 consumeCandy。
         }
+
+        // Removed legacy fallback: "else if (card.effects.some...)"
+        // We now enforce strict 'consumeCandy' property usage.
 
         // 检查灵力
         if (energyCost > 0 && this.currentEnergy < energyCost) {
@@ -1561,6 +1566,40 @@ class Player {
         if (level >= 7 && currentTier < 3) {
             if (this.game && this.game.showEvolutionSelection) {
                 this.game.showEvolutionSelection(3);
+            }
+        }
+    }
+
+    // Check Skill Unlock based on Realm
+    checkSkillUnlock() {
+        if (!this.activeSkill) return;
+
+        let newLevel = this.skillLevel;
+        const realm = this.realm;
+
+        // Realm 18+ -> Lv4
+        if (realm >= 18) newLevel = 4;
+        // Realm 15+ -> Lv3
+        else if (realm >= 15) newLevel = 3;
+        // Realm 10+ -> Lv2
+        else if (realm >= 10) newLevel = 2;
+        // Realm 5+ -> Lv1
+        else if (realm >= 5) newLevel = 1;
+
+        // If upgraded
+        if (newLevel > this.skillLevel) {
+            const oldLevel = this.skillLevel;
+            this.skillLevel = newLevel;
+
+            if (oldLevel === 0) {
+                Utils.showBattleLog(`【逆命觉醒】主动技能已解锁！(Lv${newLevel})`);
+            } else {
+                Utils.showBattleLog(`【境界突破】主动技能升级！(Lv${newLevel})`);
+            }
+
+            // Refresh UI if Game exists
+            if (this.game && this.game.updateActiveSkillUI) {
+                this.game.updateActiveSkillUI();
             }
         }
     }
