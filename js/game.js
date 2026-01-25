@@ -18,7 +18,7 @@ class Game {
         this.comboCount = 0;
         this.lastCardType = null;
         this.runStartTime = null;
-        this.currentSaveSlot = 0; // Default slot
+        this.currentSaveSlot = null; // Default to null (unknown), NOT 0 (Slot 1)
         this.cachedSlots = [null, null, null, null]; // Cache for slots
 
         // Restore slot from session if exists
@@ -63,6 +63,7 @@ class Game {
                 continueBtn.style.display = 'flex';
                 // 当有存档时，新游戏按钮改为“次级”样式或保持原样，但必须显示
                 // 这里我们确保它就在那里，并且文字清晰
+                // 这里我们确保它就在那里，而且文字清晰
             }
         } else {
             if (continueBtn) continueBtn.style.display = 'none';
@@ -71,6 +72,13 @@ class Game {
         // 默认总是留在主菜单，除非特定场景（比如移动端恢复？）
         // 这里我们强制让用户选择，解决了刷新后乱入的问题
         this.showScreen('main-menu');
+
+        // 安全检查：如果已登录但没有选中存档位（例如新标签页打开），强制显示存档选择，防止数据错乱
+        if (AuthService.isLoggedIn() && this.currentSaveSlot === null) {
+            console.log('Logged in but slot unknown. Prompting selection.');
+            // 延迟一点以免与主菜单动画冲突
+            setTimeout(() => this.openSaveSlotsWithSync(), 800);
+        }
 
         console.log('The Defier 2.1 初始化完成！');
     }
@@ -201,8 +209,9 @@ class Game {
         localStorage.setItem('theDefierSave', JSON.stringify(gameState));
         console.log('游戏已保存 (本地)');
 
-        // 如果已登录，自动同步到云端对应槽位
-        if (AuthService.isLoggedIn()) {
+        // 如果已登录，且知道当前的存档槽位，自动同步到云端
+        // 防止 unset slot 默认为 0 覆盖了 Slot 1
+        if (AuthService.isLoggedIn() && this.currentSaveSlot !== null && this.currentSaveSlot !== undefined) {
             AuthService.saveCloudData(gameState, this.currentSaveSlot).then(res => {
                 if (res.success) {
                     console.log(`游戏已同步 (云端 Slot ${this.currentSaveSlot})`);

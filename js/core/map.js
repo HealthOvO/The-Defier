@@ -359,15 +359,26 @@ class GameMap {
     // 完成节点
     completeNode(node) {
         // 标记当前节点为完成
+        let nodeCompletedProcessing = false;
+
         for (const row of this.nodes) {
             for (const n of row) {
                 if (n.id === node.id) {
                     if (n.completed) return; // Prevent double completion
                     n.completed = true;
                     this.completedNodes.push(n.id);
+                    nodeCompletedProcessing = true;
+
+                    // 检查是否完成本层（BOSS击败）
+                    // 必须在这里检查，确保只触发一次
+                    if (node.type === 'boss') {
+                        this.game.onRealmComplete();
+                    }
                 }
             }
         }
+
+        if (!nodeCompletedProcessing) return; // 如果没有找到对应节点或已处理，直接返回
 
         // 解锁下一行节点
         const nextRow = node.row + 1;
@@ -375,11 +386,6 @@ class GameMap {
             for (const n of this.nodes[nextRow]) {
                 n.accessible = true;
             }
-        }
-
-        // 检查是否完成本层（BOSS击败）
-        if (node.type === 'boss') {
-            this.game.onRealmComplete();
         }
 
         this.render();
