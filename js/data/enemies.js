@@ -531,6 +531,39 @@ const ENEMIES = {
     },
 
     // ==================== 第十重·地仙界 ====================
+    magmaSentinel: {
+        id: 'magmaSentinel',
+        name: '岩浆哨兵',
+        icon: '🗿',
+        realm: 10,
+        hp: 300,
+        patterns: [
+            { type: 'defend', value: 40, intent: '🛡️' },
+            { type: 'attack', value: 35, intent: '⚔️' },
+            { type: 'buff', buffType: 'thorns', value: 3, intent: '🌵' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'earthShield',
+        gold: { min: 220, max: 300 }
+    },
+
+    lavaLizard: {
+        id: 'lavaLizard',
+        name: '熔岩巨蜥',
+        icon: '🦎',
+        realm: 10,
+        hp: 280,
+        patterns: [
+            { type: 'attack', value: 30, intent: '⚔️' },
+            { type: 'debuff', buffType: 'burn', value: 3, intent: '🔥' },
+            { type: 'multiAttack', value: 10, count: 3, intent: '🔥' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'flameTruth',
+        gold: { min: 200, max: 280 }
+    },
+
+    // ==================== 第十重·地仙界 ====================
     dualMagmaGuardians: {
         id: 'dualMagmaGuardians',
         name: '双子熔岩守卫',
@@ -568,6 +601,39 @@ const ENEMIES = {
     },
 
     // ==================== 第十一重·天仙界 ====================
+    galeSpirit: {
+        id: 'galeSpirit',
+        name: '狂风之灵',
+        icon: '🌪️',
+        realm: 11,
+        hp: 320,
+        patterns: [
+            { type: 'buff', buffType: 'dodge', value: 1, intent: '💨' },
+            { type: 'attack', value: 35, intent: '⚔️' },
+            { type: 'multiAttack', value: 12, count: 3, intent: '⚔️' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'windSpeed',
+        gold: { min: 250, max: 350 }
+    },
+
+    thunderHawk: {
+        id: 'thunderHawk',
+        name: '雷鹰',
+        icon: '🦅',
+        realm: 11,
+        hp: 300,
+        patterns: [
+            { type: 'attack', value: 40, intent: '⚔️' },
+            { type: 'debuff', buffType: 'vulnerable', value: 2, intent: '✨' },
+            { type: 'attack', value: 45, intent: '⚔️' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'thunderLaw',
+        gold: { min: 250, max: 350 }
+    },
+
+    // ==================== 第十一重·天仙界 ====================
     stormSummoner: {
         id: 'stormSummoner',
         name: '风暴唤灵者',
@@ -585,6 +651,39 @@ const ENEMIES = {
         stealLaw: 'windSpeed',
         gold: { min: 350, max: 450 },
         description: '掌控风暴，召唤元灵'
+    },
+
+    // ==================== 第十二重·金仙界 ====================
+    goldenGuard: {
+        id: 'goldenGuard',
+        name: '金甲卫士',
+        icon: '💂',
+        realm: 12,
+        hp: 400,
+        patterns: [
+            { type: 'defend', value: 50, intent: '🛡️' },
+            { type: 'attack', value: 30, intent: '⚔️' },
+            { type: 'buff', buffType: 'thorns', value: 5, intent: '🌵' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'metalBody',
+        gold: { min: 300, max: 400 }
+    },
+
+    swordPuppet: {
+        id: 'swordPuppet',
+        name: '剑傀儡',
+        icon: '🎎',
+        realm: 12,
+        hp: 350,
+        patterns: [
+            { type: 'attack', value: 50, intent: '⚔️' },
+            { type: 'buff', buffType: 'strength', value: 3, intent: '💪' },
+            { type: 'multiAttack', value: 15, count: 3, intent: '⚔️' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'swordIntent',
+        gold: { min: 300, max: 400 }
     },
 
     // ==================== 第十二重·金仙界 ====================
@@ -613,6 +712,39 @@ const ENEMIES = {
     },
 
     // ==================== 第十三重·大罗天 ====================
+    mirrorReplicant: {
+        id: 'mirrorReplicant',
+        name: '镜中倒影',
+        icon: '👤',
+        realm: 13,
+        hp: 420,
+        patterns: [
+            { type: 'attack', value: 40, intent: '⚔️' },
+            { type: 'buff', buffType: 'reflect', value: 0.5, intent: '🔮' },
+            { type: 'attack', value: 40, intent: '⚔️' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'reversal',
+        gold: { min: 350, max: 450 }
+    },
+
+    mindEater: {
+        id: 'mindEater',
+        name: '噬心魔',
+        icon: '🧠',
+        realm: 13,
+        hp: 400,
+        patterns: [
+            { type: 'debuff', buffType: 'weak', value: 3, intent: '✨' },
+            { type: 'attack', value: 45, intent: '⚔️' },
+            { type: 'debuff', buffType: 'vulnerable', value: 3, intent: '✨' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'chaosLaw',
+        gold: { min: 350, max: 450 }
+    },
+
+    // ==================== 第十三重·大罗天 ====================
     mirrorDemon: {
         id: 'mirrorDemon',
         name: '心魔镜像',
@@ -630,6 +762,39 @@ const ENEMIES = {
         stealLaw: 'chaosLaw', // Changed from chaosControl to match existing law types or chaosLaw if generalized
         gold: { min: 500, max: 650 },
         description: '映照人心，反弹伤害'
+    },
+
+    // ==================== 第十四重·混元天 ====================
+    chaosBeast: {
+        id: 'chaosBeast',
+        name: '混沌巨兽',
+        icon: '🐘',
+        realm: 14,
+        hp: 500,
+        patterns: [
+            { type: 'attack', value: 50, intent: '⚔️' },
+            { type: 'debuff', buffType: 'random', value: 2, intent: '🎲' },
+            { type: 'attack', value: 60, intent: '⚔️' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'chaosLaw',
+        gold: { min: 400, max: 550 }
+    },
+
+    entropyWorm: {
+        id: 'entropyWorm',
+        name: '熵增蠕虫',
+        icon: '🐛',
+        realm: 14,
+        hp: 450,
+        patterns: [
+            { type: 'attack', value: 40, intent: '⚔️' },
+            { type: 'debuff', buffType: 'vulnerable', value: 5, intent: '✨' },
+            { type: 'multiAttack', value: 10, count: 5, intent: '🔥' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'timeStop',
+        gold: { min: 400, max: 550 }
     },
 
     // ==================== 第十四重·混元天 ====================
@@ -653,6 +818,40 @@ const ENEMIES = {
     },
 
     // ==================== 第十五重·无上天 ====================
+    voidStalker: {
+        id: 'voidStalker',
+        name: '虚空潜行者',
+        icon: '🕶️',
+        realm: 15,
+        hp: 550,
+        patterns: [
+            { type: 'buff', buffType: 'dodge', value: 2, intent: '💨' },
+            { type: 'attack', value: 60, intent: '⚔️' },
+            { type: 'attack', value: 80, intent: '⚔️' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'voidEmbrace',
+        gold: { min: 450, max: 600 }
+    },
+
+    abyssHulk: {
+        id: 'abyssHulk',
+        name: '深渊巨尸',
+        icon: '🧟',
+        realm: 15,
+        hp: 700,
+        patterns: [
+            { type: 'attack', value: 50, intent: '⚔️' },
+            { type: 'heal', value: 30, intent: '💚' },
+            { type: 'attack', value: 60, intent: '⚔️' },
+            { type: 'defend', value: 40, intent: '🛡️' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'lifeDrain',
+        gold: { min: 450, max: 600 }
+    },
+
+    // ==================== 第十五重·无上天 ====================
     voidDevourer: {
         id: 'voidDevourer',
         name: '虚空吞噬者',
@@ -670,6 +869,39 @@ const ENEMIES = {
         stealLaw: 'voidEmbrace',
         gold: { min: 700, max: 900 },
         description: '吞噬万物，甚至你的记忆(卡牌)'
+    },
+
+    // ==================== 第十六重·五行天 ====================
+    elementalConstruct: {
+        id: 'elementalConstruct',
+        name: '五行构造体',
+        icon: '🤖',
+        realm: 16,
+        hp: 650,
+        patterns: [
+            { type: 'attack', value: 50, element: 'fire', intent: '🔥' },
+            { type: 'attack', value: 50, element: 'ice', intent: '❄️' },
+            { type: 'defend', value: 50, element: 'earth', intent: '🛡️' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'metalBody',
+        gold: { min: 500, max: 700 }
+    },
+
+    fiveColorPeacock: {
+        id: 'fiveColorPeacock',
+        name: '五色孔雀',
+        icon: '🦚',
+        realm: 16,
+        hp: 600,
+        patterns: [
+            { type: 'multiAttack', value: 15, count: 5, intent: '🔥' },
+            { type: 'debuff', buffType: 'random', value: 2, intent: '🎲' },
+            { type: 'attack', value: 60, intent: '⚔️' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'flameTruth',
+        gold: { min: 500, max: 700 }
     },
 
     // ==================== 第十六重·五行天 ====================
@@ -694,6 +926,39 @@ const ENEMIES = {
     },
 
     // ==================== 第十七重·因果天 ====================
+    karmaSpirit: {
+        id: 'karmaSpirit',
+        name: '业力之灵',
+        icon: '👻',
+        realm: 17,
+        hp: 750,
+        patterns: [
+            { type: 'buff', buffType: 'thorns', value: 10, intent: '🌵' },
+            { type: 'attack', value: 60, intent: '⚔️' },
+            { type: 'attack', value: 70, intent: '⚔️' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'karmaLaw',
+        gold: { min: 600, max: 800 }
+    },
+
+    causeEffectMonk: {
+        id: 'causeEffectMonk',
+        name: '苦行僧',
+        icon: '🙏',
+        realm: 17,
+        hp: 800,
+        patterns: [
+            { type: 'defend', value: 60, intent: '🛡️' },
+            { type: 'heal', value: 40, intent: '💚' },
+            { type: 'attack', value: 50, intent: '⚔️' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'reversalLaw',
+        gold: { min: 600, max: 800 }
+    },
+
+    // ==================== 第十七重·因果天 ====================
     karmaArbiter: {
         id: 'karmaArbiter',
         name: '因果裁决者',
@@ -711,6 +976,39 @@ const ENEMIES = {
         stealLaw: 'karmaKill',
         gold: { min: 900, max: 1200 },
         description: '因果循环，报应不爽'
+    },
+
+    // ==================== 第十八重·终焉天 ====================
+    doomShadow: {
+        id: 'doomShadow',
+        name: '末日之影',
+        icon: '🌑',
+        realm: 18,
+        hp: 900,
+        patterns: [
+            { type: 'attack', value: 80, intent: '⚔️' },
+            { type: 'debuff', buffType: 'vulnerable', value: 5, intent: '✨' },
+            { type: 'attack', value: 100, intent: '💀' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'voidEmbrace',
+        gold: { min: 700, max: 900 }
+    },
+
+    entropyKing: {
+        id: 'entropyKing',
+        name: '熵之君王',
+        icon: '👑',
+        realm: 18,
+        hp: 1000,
+        patterns: [
+            { type: 'multiAttack', value: 20, count: 5, intent: '🔥' },
+            { type: 'debuff', buffType: 'weak', value: 5, intent: '✨' },
+            { type: 'attack', value: 90, intent: '⚔️' }
+        ],
+        stealChance: 0.3,
+        stealLaw: 'chaosLaw',
+        gold: { min: 700, max: 900 }
     },
 
     // ==================== 第十八重·终焉天 ====================
@@ -744,7 +1042,7 @@ const ELITE_MODIFIERS = [
 
 // 根据天域获取敌人
 function getEnemiesForRealm(realm) {
-    return Object.values(ENEMIES).filter(e => e.realm === realm && !e.isBoss);
+    return Object.values(ENEMIES).filter(e => e.realm === realm && !e.isBoss && !e.isMinion);
 }
 
 // 根据天域获取BOSS
