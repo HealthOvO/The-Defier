@@ -657,9 +657,20 @@ class Game {
         const badgeEl = document.querySelector('.imprint-badge') || document.querySelector('.imprint-badge残次');
         if (badgeEl) badgeEl.textContent = ringName;
 
-        const loadedCount = this.player.fateRing.loadedLaws.length;
-        const totalSlots = this.player.fateRing.slots;
-        document.getElementById('loaded-laws').textContent = `${loadedCount}/${totalSlots}`;
+        let loadedCount = 0;
+        let totalSlots = 0;
+
+        // different logic for Class instance vs simple object (fallback/legacy)
+        if (typeof this.player.fateRing.getSocketedLaws === 'function') {
+            loadedCount = this.player.fateRing.getSocketedLaws().length;
+            totalSlots = this.player.fateRing.maxSlots;
+        } else {
+            loadedCount = this.player.fateRing.loadedLaws ? this.player.fateRing.loadedLaws.length : 0;
+            totalSlots = this.player.fateRing.slots;
+        }
+
+        const loadedLawsSpan = document.getElementById('loaded-laws');
+        if (loadedLawsSpan) loadedLawsSpan.textContent = `${loadedCount}/${totalSlots}`;
     }
 
     // 显示角色选择界面
