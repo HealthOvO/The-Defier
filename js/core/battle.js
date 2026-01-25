@@ -76,8 +76,11 @@ class Battle {
 
         // 3. 精英怪机制 (Elite System)
         // 非Boss单位有 20% 几率突变为精英
-        // 增加 isMinion 检查，防止召唤物过于变态? 暂时保留给所有非Boss
-        if (!enemy.isBoss && Math.random() < 0.2) {
+        // 3. 精英怪机制 (Elite System)
+        // 非Boss单位有 20% 几率突变为精英
+        // 增加 isMinion 检查，防止召唤物过于变态
+        // 增加 !enemy.isElite 检查，防止已经是精英的怪再次突变 (Double Elite Bug Fix)
+        if (!enemy.isBoss && !enemy.isMinion && !enemy.isElite && Math.random() < 0.2) {
             enemy.isElite = true;
             enemy.alias = enemy.name; // Keep original name reference if needed
             enemy.name = `【精英】${enemy.name}`;

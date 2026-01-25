@@ -1031,13 +1031,63 @@ const ENEMIES = {
         gold: { min: 1000, max: 2000 },
         description: '一切的终结与开始'
     },
+    // ==================== 特殊BOSS ====================
+    tribulationCloud5: {
+        id: 'tribulationCloud5',
+        name: '五行劫云',
+        icon: '☁️',
+        realm: 5,
+        isBoss: true,
+        hp: 250,
+        patterns: [
+            { type: 'attack', value: 20, intent: '⚡' },
+            { type: 'debuff', buffType: 'vulnerable', value: 2, intent: '✨' },
+            { type: 'multiAttack', value: 8, count: 3, intent: '⛈️' }
+        ],
+        stealChance: 0.5,
+        stealLaw: 'thunderLaw',
+        gold: { min: 300, max: 400 }
+    },
+    tribulationCloud10: {
+        id: 'tribulationCloud10',
+        name: '十方劫云',
+        icon: '🌩️',
+        realm: 10,
+        isBoss: true,
+        hp: 400,
+        patterns: [
+            { type: 'attack', value: 35, intent: '⚡' },
+            { type: 'debuff', buffType: 'paralysis', value: 2, intent: '⚡' },
+            { type: 'multiAttack', value: 15, count: 4, intent: '⛈️' }
+        ],
+        stealChance: 0.6,
+        stealLaw: 'thunderLaw',
+        gold: { min: 500, max: 700 }
+    },
+    tribulationCloud15: {
+        id: 'tribulationCloud15',
+        name: '灭世劫云',
+        icon: '🌨️',
+        realm: 15,
+        isBoss: true,
+        hp: 800,
+        patterns: [
+            { type: 'attack', value: 50, intent: '⚡' },
+            { type: 'debuff', buffType: 'vulnerable', value: 5, intent: '✨' },
+            { type: 'multiAttack', value: 20, count: 5, intent: '⛈️' },
+            { type: 'debuff', buffType: 'stun', value: 1, intent: '💫' }
+        ],
+        stealChance: 0.8,
+        stealLaw: 'thunderLaw',
+        gold: { min: 800, max: 1000 }
+    }
 };
 
 // 精英敌人修饰符
 const ELITE_MODIFIERS = [
     { name: '狂暴', effect: { type: 'strength', value: 2 }, hpMultiplier: 1.3 },
-    { name: '坚韧', effect: { type: 'startBlock', value: 10 }, hpMultiplier: 1.5 },
-    { name: '迅捷', effect: { type: 'extraTurn', value: 0.3 }, hpMultiplier: 1.2 }
+    { name: '坚韧', effect: { type: 'startBlock', value: 15 }, hpMultiplier: 1.5 },
+    { name: '迅捷', effect: { type: 'dodge', value: 0.25 }, hpMultiplier: 1.2 } // Changed to dodge chance
 ];
 
 // 根据天域获取敌人

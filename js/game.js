@@ -386,6 +386,11 @@ class Game {
                 if (gameState.player.fateRing.type === 'karma') RingClass = KarmaRing;
                 if (gameState.player.fateRing.type === 'analysis') RingClass = AnalysisRing;
 
+                // Migration: Fix permBuffs typo from old saves
+                if (gameState.player.permBuffs && !gameState.player.permaBuffs) {
+                    this.player.permaBuffs = gameState.player.permBuffs;
+                }
+
                 // Re-instantiate
                 this.player.fateRing = new RingClass(this.player);
                 this.player.fateRing.loadFromJSON(gameState.player.fateRing);
@@ -401,6 +406,7 @@ class Game {
             if (this.player.realm >= 5) this.player.unlockUltimate(1);
             if (this.player.realm >= 10) this.player.unlockUltimate(2);
             if (this.player.realm >= 15) this.player.unlockUltimate(3);
+            if (this.player.realm >= 18) this.player.unlockUltimate(4);
 
             // Fix: Global Force Sync for Card Data Persistence
             // 强制同步卡牌数据：使用最新代码中的数值覆盖存档中的旧数据，解决旧存档数值不更新的问题

@@ -305,6 +305,18 @@ class Player {
         });
     }
 
+    // 添加卡牌到弃牌堆 (用于状态牌等)
+    addCardToDiscard(cardId) {
+        const cardDef = CARDS[cardId];
+        if (!cardDef) return;
+
+        const newCard = JSON.parse(JSON.stringify(cardDef));
+        newCard.instanceId = this.generateCardId();
+        this.discardPile.push(newCard);
+
+        Utils.showBattleLog(`获得卡牌：${newCard.name}`);
+    }
+
     // 准备战斗
     prepareBattle() {
         // 关键修复：战斗前净化牌组，修复潜在的费用错误
@@ -874,13 +886,19 @@ class Player {
     }
 
     // 使用卡牌
-    playCard(cardIndex, target = null) {
+    playCard(cardIndex, target) {
         const card = this.hand[cardIndex];
         if (!card) return false;
 
-        // 检查是否不可打出
+        // Check if unplayable
         if (card.unplayable) {
-            Utils.showBattleLog('此牌不可打出！');
+            Utils.showBattleLog('此牌无法打出！');
+            return false;
+        }
+
+        // 检查灵力
+        if (card.cost > this.currentEnergy) {
+            Utils.showBattleLog('灵力不足！'); // Changed message to be more accurate for energy
             return false;
         }
 
