@@ -443,7 +443,6 @@ class Player {
         this.processBuffsOnTurnStart();
 
         // 共鸣：混沌风暴
-        const chaoticStorm = this.activeResonances.find(r => r.id === 'chaoticStorm');
         if (chaoticStorm) {
             const dmg = Utils.random(chaoticStorm.effect.min, chaoticStorm.effect.max);
             // 假设game.battle存在且能访问enemies
@@ -455,6 +454,13 @@ class Player {
                     Utils.showBattleLog(`混沌风暴轰击！造成 ${dmg} 点雷伤`);
                 }
             }
+        }
+
+        // 治愈法则 (Healing Law)
+        const healingLaw = this.collectedLaws.find(l => l.id === 'healingLaw');
+        if (healingLaw) {
+            this.heal(healingLaw.passive.value);
+            Utils.showBattleLog(`治愈法则：恢复 ${healingLaw.passive.value} 生命`);
         }
     }
 
@@ -492,6 +498,12 @@ class Player {
         const earthLaw = this.collectedLaws.find(l => l.id === 'earthShield');
         if (earthLaw) {
             amount += earthLaw.passive.value;
+        }
+
+        // 金属法则 (Metal Body)
+        const metalLaw = this.collectedLaws.find(l => l.id === 'metalBody');
+        if (metalLaw) {
+            amount = Math.floor(amount * (1 + metalLaw.passive.value)); // +25%
         }
 
         this.block += amount;
@@ -620,7 +632,42 @@ class Player {
             this.currentHp = 0;
             // 触发死亡事件
         }
-        return { dodged: false, damage: amount - remainingDamage };
+
+        // 因果法则 & 逆转法则 Handler
+        const actualDamageTaken = amount - remainingDamage; // This logic seems flawed locally, let's look at `remainingDamage` usage.
+        // `remainingDamage` is what hits HP. Block absorbed `amount - remainingDamage`.
+        // So HP damage is `remainingDamage`.
+        const hpDamage = remainingDamage > 0 ? remainingDamage : 0;
+
+        if (hpDamage > 0) {
+            // 逆转法则 (Reversal)
+            const reversalLaw = this.collectedLaws.find(l => l.id === 'reversalLaw');
+            if (reversalLaw && Math.random() < reversalLaw.passive.value) {
+                this.heal(hpDamage * 2); // Heal back the damage + extra? Or just negate?
+                // Description says: "Convert damage to healing".
+                // Since we already deducted HP, we need to add it back + add same amount.
+                // So heal(hpDamage * 2).
+                Utils.showBattleLog(`逆转法则：伤害转化为治疗！`);
+            }
+
+            // 因果法则 (Karma)
+            const karmaLaw = this.collectedLaws.find(l => l.id === 'karmaLaw');
+            if (karmaLaw) {
+                const reflectDmg = Math.floor(hpDamage * karmaLaw.passive.value);
+                if (reflectDmg > 0 && this.game && this.game.battle && this.game.battle.enemies) {
+                    // Reflect to random enemy or attacker? We don't have attacker context easily here.
+                    // Let's reflect to random enemy for now.
+                    const enemies = this.game.battle.enemies.filter(e => e.currentHp > 0);
+                    if (enemies.length > 0) {
+                        const target = enemies[Math.floor(Math.random() * enemies.length)];
+                        this.game.battle.dealDamageToEnemy(target, reflectDmg);
+                        Utils.showBattleLog(`因果法则：反弹 ${reflectDmg} 点伤害！`);
+                    }
+                }
+            }
+        }
+
+        return { dodged: false, damage: hpDamage };
     }
 
     // 弃掉所有手牌
@@ -744,7 +791,7 @@ class Player {
             }
         }
 
-        // 应用法则加成
+        // 应用法则加成 (New Implementation)
         if (this.applyLawBonuses) {
             value = this.applyLawBonuses(effect.type, value);
         }

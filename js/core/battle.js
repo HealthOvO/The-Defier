@@ -1122,6 +1122,12 @@ class Battle {
 
     // 敌人回合行动
     async enemyTurn() {
+        // 关键修复：护盾应在敌人回合开始时重置（上一回合保留的护盾失效），
+        // 而不是在敌人回合结束时（否则本回合获得的护盾无法抵挡玩家攻击）
+        for (const enemy of this.enemies) {
+            enemy.block = 0;
+        }
+
         for (let i = 0; i < this.enemies.length; i++) {
             const enemy = this.enemies[i];
             if (enemy.currentHp <= 0) continue;
@@ -1212,9 +1218,9 @@ class Battle {
             await Utils.sleep(300);
         }
 
-        // 清除敌人护盾
+        // 清除敌人护盾 (moved to start of enemy turn)
         for (const enemy of this.enemies) {
-            enemy.block = 0;
+            // enemy.block = 0; // Moved to start of turn
 
             // 16. 太乙神雷 (realm 16) - 敌人每回合获得攻击力+1
             if (this.player.realm === 16) {
@@ -1361,6 +1367,21 @@ class Battle {
                 if (enemy.buffs.weak && enemy.buffs.weak > 0) {
                     damage = Math.floor(damage * 0.75); // 减少25%伤害
                     enemy.buffs.weak--;
+                }
+
+                // 检查火焰真意 (Flame Truth) - Burn on Hit
+                const flameLaw = this.player.collectedLaws.find(l => l.id === 'flameTruth');
+                if (flameLaw && Math.random() < flameLaw.passive.chance) {
+                    enemy.takeDamage(0); // Trigger visual flash if needed? Or just add buff
+                    enemy.buffs.burn = (enemy.buffs.burn || 0) + flameLaw.passive.value;
+                    Utils.showBattleLog('火焰真意：给予敌人灼烧！');
+                }
+
+                // 检查冰封真意 (Ice Freeze) - Slow on Hit
+                const iceLaw = this.player.collectedLaws.find(l => l.id === 'iceFreeze');
+                if (iceLaw && Math.random() < iceLaw.passive.chance) {
+                    enemy.buffs.weak = (enemy.buffs.weak || 0) + iceLaw.passive.value; // Using Weak as proxy for Slow/Freeze debuff
+                    Utils.showBattleLog('冰封真意：敌人动作迟缓！(虚弱)');
                 }
 
                 // 应用心魔滋生

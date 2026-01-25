@@ -1284,10 +1284,15 @@ class Game {
         }
 
         // 使用保存的当前战斗节点
-        if (this.currentBattleNode) {
-            this.map.completeNode(this.currentBattleNode);
-            this.currentBattleNode = null;
-        }
+        // FIX: 在 onBattleWon 中已经调用过 completeNode。
+        //这里再次调用会导致Boss关卡重复结算（因为新地图生成后ID冲突），造成跳关。
+        // if (this.currentBattleNode) {
+        //    this.map.completeNode(this.currentBattleNode);
+        //    this.currentBattleNode = null;
+        // }
+
+        // 确保清除当前节点引用
+        this.currentBattleNode = null;
 
         this.autoSave();
         this.showScreen('map-screen');
