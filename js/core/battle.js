@@ -625,6 +625,7 @@ class Battle {
             // 这里我们只需要检查条件
             // 但为了 UI提示 (BattleLog)，我们需要知道消耗什么
             candyCost = 1;
+            energyCost = 0; // 消耗奶糖的卡牌不需要消耗灵力
         } else {
             // energyCost is already card.cost
         }

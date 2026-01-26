@@ -1010,6 +1010,7 @@ class Player {
 
         if (card.consumeCandy) {
             candyCost = 1; // 固定消耗1奶糖
+            energyCost = 0; // 消耗奶糖的卡牌不需要消耗灵力
             // 注意: cards.js 中 consumeCandy 的卡牌 cost 通常设为 0
         }
 
