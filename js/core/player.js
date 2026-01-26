@@ -1256,7 +1256,7 @@ class Player {
                 return { type: 'damage', value: randValue, target: effect.target };
 
             case 'execute':
-                return { type: 'execute', target: effect.target };
+                return { type: 'execute', value: effect.value, target: effect.target };
 
             case 'percentDamage':
                 if (!target) return { type: 'error', message: '需要目标' };
