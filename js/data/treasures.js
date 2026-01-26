@@ -10,18 +10,7 @@
 
 const TREASURES = {
     // ==================== 五行法宝 ====================
-    fiveElementsPearl: {
-        id: 'fiveElementsPearl',
-        name: '五行珠',
-        description: '战斗开始时随机获得一种元素亲和，该元素伤害+40%。',
-        rarity: 'rare',
-        onBattleStart: (player) => {
-            const elements = ['metal', 'wood', 'water', 'fire', 'earth'];
-            const affinity = elements[Math.floor(Math.random() * elements.length)];
-            player.buffs.elementAffinity = affinity;
-            Utils.showBattleLog(`五行珠：获得【${Utils.getElementIcon(affinity)}】亲和！`);
-        }
-    },
+
 
     metalEssence: {
         id: 'metalEssence',
