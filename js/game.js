@@ -3038,6 +3038,16 @@ class Game {
             case 'drawBonus':
                 this.player.drawCount += path.bonus.value;
                 break;
+            case 'damageBonus':
+                // Store permanent damage bonus from Fate Ring
+                this.player.fateRingDamageBonus = (this.player.fateRingDamageBonus || 0) + path.bonus.value;
+                break;
+            case 'ultimate':
+                // Defiance: 免疫一次致死
+                if (this.player.fateRing) {
+                    this.player.fateRing.deathImmunityCount = (this.player.fateRing.deathImmunityCount || 0) + 1;
+                }
+                break;
         }
     }
 
