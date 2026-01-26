@@ -1478,9 +1478,31 @@ class Game {
             // Boss特定掉落逻辑：检查击败的敌人是否有克制法宝
             if (this.currentBattleNode && this.currentBattleNode.type === 'boss' && this.battle && this.battle.enemies) {
                 const bossEnemy = this.battle.enemies.find(e => e.isBoss);
-                if (bossEnemy && typeof getCounterTreasures === 'function') {
+                if (bossEnemy) {
+                    // 获取原始ID (去除 _A, _B 后缀)
+                    const originalId = bossEnemy.id.replace(/_[AB]$/, '');
+
                     // 获取克制该Boss的法宝
-                    const counterTreasures = getCounterTreasures(bossEnemy.id);
+                    let counterTreasures = [];
+                    if (typeof getCounterTreasures === 'function') {
+                        counterTreasures = getCounterTreasures(originalId);
+                    } else if (typeof BOSS_MECHANICS !== 'undefined' && BOSS_MECHANICS[originalId]) {
+                        counterTreasures = BOSS_MECHANICS[originalId].countersBy || [];
+                        // Convert string IDs to treasure objects if needed, but logic below expects IDs or Objects?
+                        // BOSS_MECHANICS uses string IDs.
+                        // map to objects if needed? No, logic uses t.id check below.
+                        // But BOSS_MECHANICS.countersBy is array of strings usually?
+                        // Let's check BOSS_MECHANICS definition (Step 22).
+                        // countersBy: ['pressure_talisman'] -> Strings.
+                        // Logic below: filter(t => !player.hasTreasure(t.id)) implies t is Object!
+                        // So we must map string IDs to Treasure Objects.
+                        if (counterTreasures.length > 0 && typeof counterTreasures[0] === 'string') {
+                            if (typeof TREASURES !== 'undefined') {
+                                counterTreasures = counterTreasures.map(id => TREASURES[id]).filter(Boolean);
+                            }
+                        }
+                    }
+
                     // 过滤玩家未拥有的
                     const unownedCounters = counterTreasures.filter(t => !this.player.hasTreasure(t.id));
 
@@ -3269,6 +3291,32 @@ class Game {
         return { items, services };
     }
 
+    // 获取加权随机法宝
+    getWeightedRandomTreasure() {
+        if (typeof TREASURES === 'undefined') return null;
+
+        const unowned = Object.values(TREASURES).filter(t => !this.player.hasTreasure(t.id));
+        if (unowned.length === 0) return null;
+
+        // Weights
+        const weights = {
+            common: 60,
+            uncommon: 30,
+            rare: 10,
+            epic: 5,
+            legendary: 2
+        };
+
+        const totalWeight = unowned.reduce((sum, t) => sum + (weights[t.rarity] || 10), 0);
+        let roll = Math.random() * totalWeight;
+
+        for (const t of unowned) {
+            roll -= (weights[t.rarity] || 10);
+            if (roll <= 0) return t;
+        }
+        return unowned[0];
+    }
+
     // 生成商店卡牌 (封装以便刷新使用)
     generateShopCards(count = 5) {
         const items = [];
@@ -4369,7 +4417,7 @@ class Game {
 
             let contentHtml = '';
             if (isEmpty) {
-                contentHtml = `< div class="slot-empty-text" > 空存档</div > `;
+                contentHtml = `<div class="slot-empty-text">空存档</div>`;
             } else {
                 const date = new Date(slotData.timestamp).toLocaleString();
                 const realm = (slotData.player && slotData.player.realm) ? slotData.player.realm : '?';

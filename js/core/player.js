@@ -1035,7 +1035,19 @@ class Player {
             // Update UI for candy? (Will be handled in Game/Battle updateUI)
         }
 
-        // 从手牌移除
+        // 苦行 (Asceticism) - 回合结束若有保留手牌，获得功德
+        if (this.buffs.meritOnRetain) {
+            const retainedCount = this.hand.filter(c => c.retain).length;
+            if (retainedCount > 0) {
+                const meritGain = retainedCount * this.buffs.meritOnRetain;
+                if (this.fateRing && this.fateRing.gainMerit) {
+                    this.fateRing.gainMerit(meritGain);
+                    Utils.showBattleLog(`苦行：保留 ${retainedCount} 张牌，功德 +${meritGain}`);
+                }
+            }
+        }
+
+        // 舍弃手牌（除非有保留效果）
         this.hand.splice(cardIndex, 1);
 
         // 播放卡牌特效
@@ -1509,6 +1521,14 @@ class Player {
             delete this.buffs.nextTurnBlock;
         }
 
+        // 再生 (Regen)
+        if (this.buffs.regen) {
+            this.heal(this.buffs.regen);
+            Utils.showBattleLog(`再生生效！恢复 ${this.buffs.regen} 点生命`);
+        }
+        // The instruction contained a malformed line and an extra brace here.
+        // To maintain syntactic correctness, only the intended change (comment update) is applied.
+
         // 自动格挡/反伤等逻辑...
     }
 
@@ -1613,6 +1633,21 @@ class Player {
 
         if (this.hand.length > 0) {
             Utils.showBattleLog(`保留了 ${this.hand.length} 张手牌`);
+
+            // 苦行 (Asceticism) - 回合结束若有保留手牌，获得功德
+            if (this.buffs.meritOnRetain) {
+                const retainedCount = this.hand.filter(c => c.retain).length; // Only count actual retained cards? 
+                // Description says "If you have retained cards". 
+                // Logic above: `this.hand` IS `cardsToRetain` now.
+                // So use `this.hand.length`.
+                const gain = this.hand.length * this.buffs.meritOnRetain;
+                if (gain > 0) {
+                    if (this.fateRing && this.fateRing.gainMerit) {
+                        this.fateRing.gainMerit(gain);
+                        Utils.showBattleLog(`苦行：保留手牌，功德 +${gain}`);
+                    }
+                }
+            }
         }
 
         // 处理回合结束的buff
@@ -1627,6 +1662,12 @@ class Player {
         if (this.relic && this.relic.id === 'healingBlood') {
             this.heal(2);
             // 简单反馈，实际UI反馈在Battle.js中处理可能更好，但这里改动最小
+        }
+
+        // 自然生长 (Nature Growth) - 回合结束获得护盾
+        if (this.buffs.regenBlock) {
+            this.addBlock(this.buffs.regenBlock);
+            Utils.showBattleLog(`自然生长：获得 ${this.buffs.regenBlock} 点护盾`);
         }
 
         // 力量buff持续
@@ -1977,23 +2018,6 @@ class Player {
         return this.buffs && this.buffs[type] && this.buffs[type] > 0;
     }
 
-    // 添加Buff
-    addBuff(type, value) {
-        if (!this.buffs) this.buffs = {};
-        this.buffs[type] = (this.buffs[type] || 0) + value;
-
-        // 特殊Buff处理
-        if (type === 'strength' && value > 0) {
-            Utils.showBattleLog(`获得 ${value} 点力量`);
-        }
-    }
-
-    // 添加Debuff
-    addDebuff(type, value) {
-        if (!this.debuffs) this.debuffs = {};
-        this.debuffs[type] = (this.debuffs[type] || 0) + value;
-    }
-
     // 移除Buff
     removeBuff(type, value = 0) {
         if (!this.hasBuff(type)) return;
@@ -2005,4 +2029,5 @@ class Player {
         }
     }
 }
+
 

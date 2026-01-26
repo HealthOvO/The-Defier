@@ -607,6 +607,11 @@ class Battle {
             return;
         }
 
+        // Play sound
+        if (typeof audioManager !== 'undefined') {
+            audioManager.playSFX('click');
+        }
+
         const card = this.player.hand[cardIndex];
         if (!card) return;
 
@@ -1471,6 +1476,7 @@ class Battle {
             this.isProcessingCard = false; // 关键：重置卡牌处理状态
             this.cardsPlayedThisTurn = 0;
             this.playerAttackedThisTurn = false;
+            this.tacticalAdvantageTriggerCount = 0; // 重置战术优势计数
 
             // 环境：回合开始效果
             if (this.activeEnvironment && this.activeEnvironment.onTurnStart) {
