@@ -1109,8 +1109,15 @@ class Game {
         this.currentBattleNode = null;
         this.rewardCardSelected = false;
 
-        // 强制重置解锁进度（应用户要求，新轮回如果不继承则重置为1）
-        this.unlockedRealms = [1];
+        // 恢复解锁进度（如果从旧存档继承）
+        if (this.tempPreservedRealms && Array.isArray(this.tempPreservedRealms)) {
+            this.unlockedRealms = this.tempPreservedRealms;
+            this.tempPreservedRealms = null; // Consume
+            console.log('Restored unlocked realms from previous save:', this.unlockedRealms);
+        } else {
+            // 否则初始为1
+            this.unlockedRealms = [1];
+        }
 
         // 应用永久起始加成
         const bonuses = this.achievementSystem.loadStartBonuses();
@@ -4356,12 +4363,22 @@ class Game {
                 if (roleId === 'wuYu') roleName = '无欲';
                 if (roleId === 'yanHan') roleName = '严寒'; // Add others if needed
 
+                // 计算最高进度
+                let maxRealm = 1;
+                if (slotData.unlockedRealms && Array.isArray(slotData.unlockedRealms)) {
+                    maxRealm = Math.max(...slotData.unlockedRealms);
+                } else if (slotData.player && slotData.player.realm) {
+                    maxRealm = slotData.player.realm;
+                }
+
                 contentHtml = `
                     <div class="slot-info-row" style="color:var(--accent-gold); font-weight:bold;">${roleName}</div>
-                    <div class="slot-info-row">🏔️ 第 ${realm} 重天 | ❤️ ${hp}</div>
+                    <div class="slot-info-row">🏔️ 最高记录: 第 ${maxRealm} 重天 | ❤️ ${hp}</div>
                     <div class="slot-info-row" style="font-size:0.8rem; color:#666;">📅 ${date}</div>
+                    <div class="slot-info-row" style="font-size:0.75rem; color:#888;">(当前: 第 ${realm} 重天)</div>
                 `;
             }
+
 
             const actionsHtml = isEmpty ?
                 `<button class="menu-btn small" onclick="game.selectSlot(${index}, 'new')">新建轮回</button>` :
@@ -4418,6 +4435,13 @@ class Game {
             }
         } else if (mode === 'new' || mode === 'overwrite') {
             const doOverwrite = () => {
+                // Preserve unlockedRealms if exists
+                if (this.cachedSlots && this.cachedSlots[index] && this.cachedSlots[index].unlockedRealms) {
+                    this.tempPreservedRealms = this.cachedSlots[index].unlockedRealms;
+                } else {
+                    this.tempPreservedRealms = null;
+                }
+
                 localStorage.removeItem('theDefierSave');
                 this.currentSaveSlot = index;
                 modal.classList.remove('active');
