@@ -993,11 +993,7 @@ class Player {
             return false;
         }
 
-        // 检查灵力
-        if (card.cost > this.currentEnergy) {
-            Utils.showBattleLog('灵力不足！'); // Changed message to be more accurate for energy
-            return false;
-        }
+
 
         // 检查奶糖消耗
         // 规则: 明确标记 consumeCandy 的卡牌消耗奶糖，或者为了兼容性保留抽牌卡判定（但要小心）
