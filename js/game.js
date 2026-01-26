@@ -3688,11 +3688,11 @@ class Game {
             wrapper.className = 'shop-card-wrapper';
 
             const cardEl = Utils.createCardElement(item.card, index);
-            cardEl.classList.add(`rarity - ${item.card.rarity || 'common'} `);
+            cardEl.classList.add(`rarity-${item.card.rarity || 'common'}`);
             if (item.sold) cardEl.classList.add('sold');
 
             const priceBtn = document.createElement('div');
-            priceBtn.className = `card - price ${this.player.gold < item.price || item.sold ? 'cannot-afford' : ''} `;
+            priceBtn.className = `card-price ${this.player.gold < item.price || item.sold ? 'cannot-afford' : ''}`;
             priceBtn.innerHTML = item.sold ? '已售出' : `💰 ${item.price} `;
 
             if (!item.sold) {
@@ -3716,7 +3716,7 @@ class Game {
             if (service.sold) el.style.opacity = '0.5';
 
             el.innerHTML = `
-    < div class="service-icon" > ${service.icon}</div >
+                <div class="service-icon">${service.icon}</div>
                 <div class="service-info">
                     <div class="service-name">${service.name}</div>
                     <div class="service-desc">${service.desc}</div>

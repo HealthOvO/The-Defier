@@ -319,6 +319,8 @@ class Battle {
         handContainer.style.overflowX = 'auto'; // scrollable
         handContainer.style.justifyContent = 'flex-start'; // Align left to allow scroll
         handContainer.style.paddingBottom = '10px'; // Space for scrollbar
+        handContainer.style.paddingRight = '50px'; // Prevent jitter on last card hover
+        handContainer.style.paddingLeft = '10px';
         handContainer.style.width = '100%';
         handContainer.style.scrollbarWidth = 'thin'; // Firefox
 
@@ -980,22 +982,30 @@ class Battle {
                 break;
 
             case 'buff':
-                Utils.showBattleLog(`获得 ${result.buffType} 效果`);
+                const buffNames = {
+                    'vulnerable': '易伤', 'weak': '虚弱', 'poison': '中毒', 'burn': '灼烧', 'stun': '眩晕',
+                    'strength': '力量', 'blockOnAttack': '破法盾', 'energyOnVulnerable': '战术优势',
+                    'retainBlock': '护盾保留', 'regen': '再生', 'thorns': '反伤', 'reflect': '反弹',
+                    'dodge': '闪避', 'dodgeChance': '闪避率', 'freeze': '冰冻', 'slow': '减速',
+                    'paralysis': '麻痹', 'severe_wound': '重伤', 'chaosAura': '混沌光环',
+                    'meritOnRetain': '苦行', 'immunity': '免疫'
+                };
+                Utils.showBattleLog(`获得 ${buffNames[result.buffType] || result.buffType} 效果`);
                 break;
 
             case 'debuff':
                 if (target) {
                     target.buffs[result.buffType] = (target.buffs[result.buffType] || 0) + result.value;
+                    let immune = false;
                     if (result.buffType === 'stun') {
                         // 14. 混元无极 (realm 14) - 50% 免疫眩晕
-                        let immune = false;
                         if (this.player.realm === 14 && Math.random() < 0.5) {
                             immune = true;
-                            Utils.showBattleLog('混元无极：敌人免疫了眩晕！');
+                            Utils.showBattleLog(`${target.name} 抵抗了眩晕！`);
                         }
 
-                        // Fix: Boss Unstoppable (霸体) check
-                        if (target.buffs && target.buffs.unstoppable > 0) {
+                        // Boss Immunity
+                        if (target.isBoss && Math.random() < 0.8) { // Boss 80% resist stun
                             immune = true;
                             Utils.showBattleLog(`${target.name} 拥有霸体，免疫眩晕！`);
                         }
@@ -1019,7 +1029,15 @@ class Battle {
                             }
                         }
                     }
-                    Utils.showBattleLog(`敌人获得 ${result.buffType} 效果`);
+
+                    const debuffNames = {
+                        'vulnerable': '易伤', 'weak': '虚弱', 'poison': '中毒', 'burn': '灼烧', 'stun': '眩晕',
+                        'strength': '力量', 'blockOnAttack': '破法盾', 'energyOnVulnerable': '战术优势',
+                        'retainBlock': '护盾保留', 'regen': '再生', 'thorns': '反伤', 'reflect': '反弹',
+                        'dodge': '闪避', 'dodgeChance': '闪避率', 'freeze': '冰冻', 'slow': '减速',
+                        'paralysis': '麻痹', 'severe_wound': '重伤', 'chaosAura': '混沌光环'
+                    };
+                    Utils.showBattleLog(`敌人获得 ${debuffNames[result.buffType] || result.buffType} 效果`);
                 }
                 break;
 

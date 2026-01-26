@@ -736,10 +736,10 @@ const TREASURES = {
         data: { element: null },
         callbacks: {
             onBattleStart: (player, treasure) => {
-                const elements = ['fire', 'ice', 'thunder', 'earth', 'wind'];
+                const elements = ['fire', 'ice', 'thunder', 'earth', 'wood'];
                 treasure.data.element = elements[Math.floor(Math.random() * elements.length)];
                 player.addBuff('element_affinity', treasure.data.element);
-                const names = { fire: '火', ice: '冰', thunder: '雷', earth: '土', wind: '风' };
+                const names = { fire: '火', ice: '冰', thunder: '雷', earth: '土', wood: '木' };
                 Utils.showBattleLog(`【五行珠】获得${names[treasure.data.element]}元素亲和！`);
             },
             onBeforeDealDamage: (player, amount, context, treasure) => {
