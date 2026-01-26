@@ -1943,7 +1943,12 @@ class Player {
         if (this.realm >= 10) slots++;
         if (this.realm >= 12) slots++;
         if (this.realm >= 15) slots++;
-        return slots;
+
+        // Fix: Slot count should not decrease when returning to earlier realms
+        if (!this._maxTreasureSlots || slots > this._maxTreasureSlots) {
+            this._maxTreasureSlots = slots;
+        }
+        return this._maxTreasureSlots;
     }
 
     // 装备法宝
