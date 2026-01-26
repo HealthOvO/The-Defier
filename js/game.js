@@ -3524,15 +3524,15 @@ class Game {
             modal.className = 'modal';
             modal.style.zIndex = '10000'; // 确保在最上层
             modal.innerHTML = `
-    < div class="modal-content" style = "text-align: center; max-width: 400px; padding: 30px;" >
+                <div class="modal-content" style="text-align: center; max-width: 400px; padding: 30px;">
                     <h3 id="generic-confirm-title" style="color: var(--accent-gold); margin-bottom: 20px;">提示</h3>
                     <p id="generic-confirm-message" style="color: #ccc; margin-bottom: 30px; line-height: 1.6; font-size: 1.1rem; white-space: pre-line;"></p>
                     <div style="display: flex; justify-content: center; gap: 20px;">
                         <button id="generic-confirm-btn" class="menu-btn primary small">确定</button>
                         <button id="generic-cancel-btn" class="menu-btn small">取消</button>
                     </div>
-                </div >
-    `;
+                </div>
+            `;
             document.body.appendChild(modal);
 
             // 绑定通用关闭
