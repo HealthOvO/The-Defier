@@ -913,7 +913,7 @@ class Battle {
             case 'execute':
                 if (target) {
                     // 斩杀 - 造成敌人已损失生命乘以系数的伤害
-                    const lostHp = target.hp - target.currentHp;
+                    const lostHp = Math.max(0, target.maxHp - target.currentHp);
                     const executeMultiplier = result.value || 1; // 使用卡牌定义的系数
                     const executeDamage = Math.floor(lostHp * executeMultiplier);
                     const damage = this.dealDamageToEnemy(target, executeDamage);
