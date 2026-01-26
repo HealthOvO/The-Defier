@@ -4388,30 +4388,30 @@ class Game {
                 }
 
                 contentHtml = `
-    < div class="slot-info-row" style = "color:var(--accent-gold); font-weight:bold;" > ${roleName}</div >
-                    <div class="slot-info-row">🏔️ 最高记录: 第 ${maxRealm} 重天 | ❤️ ${hp}</div>
-                    <div class="slot-info-row" style="font-size:0.8rem; color:#666;">📅 ${date}</div>
-                    <div class="slot-info-row" style="font-size:0.75rem; color:#888;">(当前: 第 ${realm} 重天)</div>
-`;
+                <div class="slot-info-row" style="color:var(--accent-gold); font-weight:bold;">${roleName}</div>
+                <div class="slot-info-row">🏔️ 最高记录: 第 ${maxRealm} 重天 | ❤️ ${hp}</div>
+                <div class="slot-info-row" style="font-size:0.8rem; color:#666;">📅 ${date}</div>
+                <div class="slot-info-row" style="font-size:0.75rem; color:#888;">(当前: 第 ${realm} 重天)</div>
+            `;
             }
 
 
             const actionsHtml = isEmpty ?
-                `< button class="menu-btn small" onclick = "game.selectSlot(${index}, 'new')" > 新建轮回</button > ` :
-                `< button class="menu-btn small primary" onclick = "game.selectSlot(${index}, 'load')" > 继续</button >
-    <button class="menu-btn small" style="border-color:var(--accent-red); color:var(--accent-red)" onclick="game.selectSlot(${index}, 'overwrite')">覆盖</button>`;
+                `<button class="menu-btn small" onclick="game.selectSlot(${index}, 'new')">新建轮回</button>` :
+                `<button class="menu-btn small primary" onclick="game.selectSlot(${index}, 'load')">继续</button>
+                 <button class="menu-btn small" style="border-color:var(--accent-red); color:var(--accent-red)" onclick="game.selectSlot(${index}, 'overwrite')">覆盖</button>`;
 
             slotEl.innerHTML = `
-        < div class="slot-header" >
-            <span>${slotName}</span>
-                </div >
+                <div class="slot-header">
+                    <span>${slotName}</span>
+                </div>
                 <div class="slot-content">
                     ${contentHtml}
                 </div>
                 <div class="slot-actions">
                     ${actionsHtml}
                 </div>
-`;
+            `;
 
             container.appendChild(slotEl);
         });
