@@ -476,6 +476,7 @@ class Game {
 
                 // 同步引用
                 this.player.treasures = this.player.equippedTreasures;
+                this.player.maxRealmReached = gameState.player.maxRealmReached || Math.max(...(gameState.unlockedRealms || [1]), 1);
             }
 
             // Retroactive Skill Unlock (Fix for existing saves)
@@ -2324,6 +2325,11 @@ class Game {
         if (!this.unlockedRealms) this.unlockedRealms = [1];
         if (!this.unlockedRealms.includes(this.player.realm + 1)) {
             this.unlockedRealms.push(this.player.realm + 1);
+        }
+
+        // Update max realm reached (Next unlocked)
+        if (this.player.realm + 1 > this.player.maxRealmReached) {
+            this.player.maxRealmReached = this.player.realm + 1;
         }
 
         // 检查是否通关所有天域 (现在是18重)

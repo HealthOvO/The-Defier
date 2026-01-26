@@ -66,7 +66,17 @@ class GameMap {
             return 'boss';
         }
 
-        // 随机类型
+        // 检查是否通过改关卡 (Current Realm < Max Reached)
+        // Note: realm starts at 1. If maxRealmReached is 2, realm 1 is passed.
+        // User request: "Already passed levels should not have events and shops"
+        const isPassed = this.game.player.maxRealmReached > realm;
+
+        if (isPassed) {
+            // Only monsters (enemy/elite) and boss (handled above)
+            return Math.random() < 0.7 ? 'enemy' : 'elite';
+        }
+
+        // 随机类型 (Normal logic)
         const roll = Math.random();
         if (roll < 0.45) return 'enemy';
         if (roll < 0.60) return 'elite';

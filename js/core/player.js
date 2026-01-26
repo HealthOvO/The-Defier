@@ -71,6 +71,7 @@ class Player {
 
         this.timeStopTriggered = false; // Reset time stop cheat death per battle (via reset)
         this.resurrectCount = 0;
+        this.maxRealmReached = 1; // Track highest realm reached
 
         // 命环
         if (typeof MutatedRing !== 'undefined' && characterId === 'linFeng') {
@@ -1864,7 +1865,9 @@ class Player {
                 data: t.data
             })),
             equippedTreasures: (this.equippedTreasures || []).map(t => t.id), // 只存ID即可
-            permaBuffs: this.permaBuffs
+            equippedTreasures: (this.equippedTreasures || []).map(t => t.id), // 只存ID即可
+            permaBuffs: this.permaBuffs,
+            maxRealmReached: this.maxRealmReached || 1
         };
     }
 
