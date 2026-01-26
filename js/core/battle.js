@@ -411,6 +411,8 @@ class Battle {
 
         // 仅针对攻击卡显示预览
         // 实际上有些技能卡也可能有伤害，检查效果
+        if (!card.effects || !Array.isArray(card.effects)) return;
+
         const damageEffects = card.effects.filter(e =>
             ['damage', 'penetrate', 'randomDamage', 'damageAll', 'execute', 'executeDamage'].includes(e.type)
         );
@@ -1304,7 +1306,34 @@ class Battle {
             }
         }
 
-        // 切换到敌人回合
+        // 处理手牌中的状态牌效果 (End of Turn)
+        // e.g. Heart Demon
+        const statusCards = this.player.hand.filter(c => c.type === 'status');
+        for (const card of statusCards) {
+            if (card.effects) {
+                for (const effect of card.effects) {
+                    if (effect.trigger === 'endTurn' && effect.type === 'selfDamage') {
+                        let damage = effect.value;
+                        if (effect.isPercent) {
+                            damage = Math.ceil(this.player.currentHp * effect.value);
+                            // Support minValue (e.g. for Heart Demon: max(10% HP, 10))
+                            if (effect.minValue) {
+                                damage = Math.max(damage, effect.minValue);
+                            } else {
+                                damage = Math.max(1, damage); // Default at least 1
+                            }
+                        }
+
+                        this.player.takeDamage(damage);
+                        Utils.showBattleLog(`${card.name} 发作！受到 ${damage} 点伤害`);
+                        const playerAvatar = document.querySelector('.player-avatar');
+                        if (playerAvatar) Utils.addShakeEffect(playerAvatar);
+                        await Utils.sleep(300);
+                    }
+                }
+            }
+        }
+
         // 切换到敌人回合
         this.currentTurn = 'enemy';
         Utils.showBattleLog('敌人回合...');
@@ -1599,18 +1628,31 @@ class Battle {
                 if (pattern.actions && Array.isArray(pattern.actions)) {
                     for (const action of pattern.actions) {
                         await this.processEnemyPattern(enemy, action, index);
-                        await Utils.sleep(300); // 动作间歇
+                        await Utils.sleep(200);
                     }
                 }
                 break;
 
-            case 'summon':
+            case 'addStatus': {
+                const cardId = pattern.cardId || 'heartDemon';
+                const count = pattern.count || 1;
+                for (let k = 0; k < count; k++) {
+                    if (this.player.addCardToDiscard) {
+                        this.player.addCardToDiscard(cardId);
+                    }
+                }
+                Utils.showBattleLog(`${enemy.name} 施加了 ${count} 张诅咒卡！`);
+                break;
+            }
+
+            case 'summon': {
                 const summonCount = pattern.count || 1;
                 for (let k = 0; k < summonCount; k++) {
                     this.summonEnemy(pattern.value);
                 }
                 Utils.showBattleLog(`${enemy.name} 召唤了随从！`);
                 break;
+            }
 
             case 'attack':
                 let damage = pattern.value;
@@ -1828,7 +1870,7 @@ class Battle {
                 }
                 break;
 
-            case 'innerDemon':
+            case 'innerDemon': {
                 // 塞入心魔牌
                 const demonCardId = pattern.card;
                 const count = pattern.count || 1;
@@ -1843,6 +1885,7 @@ class Battle {
                     Utils.showBattleLog(`心魔滋生！牌组中加入了 ${count} 张 ${demonCardDef.name} `);
                 }
                 break;
+            }
         }
     }
 

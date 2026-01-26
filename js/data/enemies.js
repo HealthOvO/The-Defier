@@ -1042,6 +1042,7 @@ const ENEMIES = {
         patterns: [
             { type: 'attack', value: 20, intent: '⚡' },
             { type: 'debuff', buffType: 'vulnerable', value: 2, intent: '✨' },
+            { type: 'addStatus', cardId: 'heartDemon', count: 1, intent: '👿' }, // 新增心魔
             { type: 'multiAttack', value: 8, count: 3, intent: '⛈️' }
         ],
         stealChance: 0.5,
@@ -1057,6 +1058,7 @@ const ENEMIES = {
         hp: 400,
         patterns: [
             { type: 'attack', value: 35, intent: '⚡' },
+            { type: 'addStatus', cardId: 'heartDemon', count: 2, intent: '👿' }, // 更多心魔
             { type: 'debuff', buffType: 'paralysis', value: 2, intent: '⚡' },
             { type: 'multiAttack', value: 15, count: 4, intent: '⛈️' }
         ],
@@ -1074,6 +1076,7 @@ const ENEMIES = {
         patterns: [
             { type: 'attack', value: 50, intent: '⚡' },
             { type: 'debuff', buffType: 'vulnerable', value: 5, intent: '✨' },
+            { type: 'addStatus', cardId: 'heartDemon', count: 3, intent: '👿' }, // 大量心魔
             { type: 'multiAttack', value: 20, count: 5, intent: '⛈️' },
             { type: 'debuff', buffType: 'stun', value: 1, intent: '💫' }
         ],

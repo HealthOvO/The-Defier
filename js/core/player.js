@@ -124,7 +124,11 @@ class Player {
     unlockUltimate(level) {
         if (level > this.skillLevel) {
             this.skillLevel = level;
-            Utils.showBattleLog(`境界突破！主动技能等级提升至 Lv.${level}`);
+            // FIX: Safely log only if Utils and UI are ready. 
+            // This prevents crashes during loadGame if DOM isn't ready.
+            if (typeof Utils !== 'undefined' && document.getElementById('battle-log')) {
+                Utils.showBattleLog(`境界突破！主动技能等级提升至 Lv.${level}`);
+            }
             // May reduce cooldown or enhance effect in future
         }
     }
@@ -333,9 +337,30 @@ class Player {
         this.milkCandy = this.maxMilkCandy;
 
         this.turnNumber = 0; // 初始化回合数
+        this.skillCooldown = 0; // 进入战斗时重置技能冷却
 
         // 确保战斗前属性是最新的
         this.recalculateStats();
+
+        // 注入【心魔】卡 (根据用户需求，渡劫后的层数都会携带心魔)
+        // 5-9: 1张, 10-14: 2张, 15+: 3张, 18: 2张
+        let heartDemonCount = 0;
+        if (this.realm === 18) heartDemonCount = 2; // 第十八重特殊处理
+        else if (this.realm >= 15) heartDemonCount = 3;
+        else if (this.realm >= 10) heartDemonCount = 2;
+        else if (this.realm >= 5) heartDemonCount = 1;
+
+        if (heartDemonCount > 0 && CARDS['heartDemon']) {
+            for (let i = 0; i < heartDemonCount; i++) {
+                const demonCard = JSON.parse(JSON.stringify(CARDS['heartDemon']));
+                demonCard.instanceId = this.generateCardId();
+                // 插入抽牌堆并打乱
+                this.drawPile.push(demonCard);
+            }
+            // 重新打乱以确保随机分布
+            this.drawPile = Utils.shuffle(this.drawPile);
+            Utils.showBattleLog(`【心魔来袭】似乎有 ${heartDemonCount} 个不祥的影子混入了牌组...`);
+        }
 
         this.currentEnergy = this.baseEnergy;
         this.buffs = {};
@@ -973,6 +998,11 @@ class Player {
     // 执行卡牌效果
     executeCardEffects(card, target, context = {}) {
         const results = [];
+        if (!card.effects || !Array.isArray(card.effects)) {
+            console.warn('Card has no effects:', card);
+            return results;
+        }
+
         for (const effect of card.effects) {
             const result = this.executeEffect(effect, target, context);
             results.push(result);
@@ -1493,9 +1523,25 @@ class Player {
             }
         }
 
-        // 弃掉所有手牌
-        this.discardPile.push(...this.hand);
-        this.hand = [];
+        // 弃掉所有手牌 (保留带有 retain 属性的卡牌，如心魔)
+        const cardsToDiscard = [];
+        const cardsToRetain = [];
+
+        for (const card of this.hand) {
+            // 检查卡牌静态定义或动态属性是否包含 retain
+            if (card.retain) {
+                cardsToRetain.push(card);
+            } else {
+                cardsToDiscard.push(card);
+            }
+        }
+
+        this.discardPile.push(...cardsToDiscard);
+        this.hand = cardsToRetain;
+
+        if (this.hand.length > 0) {
+            Utils.showBattleLog(`保留了 ${this.hand.length} 张手牌`);
+        }
 
         // 处理回合结束的buff
         this.processBuffsOnTurnEnd();

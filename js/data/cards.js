@@ -154,6 +154,22 @@ const CARDS = {
         ]
     },
 
+    heartDemon: {
+        id: 'heartDemon',
+        name: '心魔',
+        type: 'status',
+        cost: 0,
+        unplayable: true,
+        retain: true, // 不会被自然丢弃
+        occupiesDrawSlot: true, // 占据抽牌位
+        icon: '👿',
+        description: '无法打出。保留在手中。占据抽卡位。回合结束时，受到 Max(10%当前生命, 10) 点真实伤害。效果可叠加。',
+        rarity: 'special',
+        effects: [
+            { type: 'selfDamage', value: 0.1, isPercent: true, trigger: 'endTurn', minValue: 10 }
+        ]
+    },
+
     innerPeace: {
         id: 'innerPeace',
         name: '内心平和',

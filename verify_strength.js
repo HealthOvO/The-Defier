@@ -1,4 +1,4 @@
-const Player = require('./js/core/player.js'); // Pseudo-require, verifying logic conceptually
+1const Player = require('./js/core/player.js'); // Pseudo-require, verifying logic conceptually
 
 // Mocking Player class behavior based on read code
 class MockPlayer {

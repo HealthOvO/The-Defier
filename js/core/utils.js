@@ -163,6 +163,14 @@ const Utils = {
     createCardElement(card, index = 0, isReward = false) {
         const div = document.createElement('div');
         div.className = `card ${card.type} rarity-${card.rarity || 'common'}`;
+
+        // Unplayable visual state
+        if (card.unplayable) {
+            div.classList.add('unplayable');
+            div.style.filter = 'grayscale(100%) brightness(70%)';
+            div.style.cursor = 'not-allowed';
+        }
+
         if (!isReward) {
             div.dataset.index = index;
             // 添加长按/右键查看详情支持
@@ -188,7 +196,9 @@ const Utils = {
 
         let costHtml = '';
         if (!isReward) {
-            if (isCandyCard) {
+            if (card.unplayable) {
+                costHtml = `<div class="card-cost cost-unplayable" style="background:#555">X</div>`;
+            } else if (isCandyCard) {
                 // 抽牌卡消耗奶糖
                 costHtml = `<div class="card-cost cost-candy">🍬</div>`;
             } else {
