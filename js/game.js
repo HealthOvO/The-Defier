@@ -1,5 +1,5 @@
 /**
- * The Defier 2.1 - 逆命者
+ * The Defier 4.2 - 逆命者
  * 主游戏控制器（修复版）
  */
 
@@ -207,7 +207,7 @@ class Game {
     saveGame() {
         try {
             const gameState = {
-                version: '3.0.0',
+                version: '4.2.0',
                 player: this.player.getState(),
                 map: {
                     nodes: this.map.nodes,
@@ -256,7 +256,7 @@ class Game {
             const gameState = JSON.parse(savedData);
 
             // 版本检查
-            const currentVersion = '3.0.0';
+            const currentVersion = '4.2.0';
             if (!gameState.version || gameState.version < '2.2.0') { // 兼容2.2.0存档
                 console.log('检测到旧版本存档，已清除');
                 this.clearSave();
@@ -3008,7 +3008,7 @@ class Game {
         }
     }
 
-    // 显示游戏介绍 (原设置)
+    // 显示游戏介绍 (v4.2)
     showGameIntro() {
         const modal = document.getElementById('settings-modal');
         // 确保模态框存在
@@ -3023,56 +3023,58 @@ class Game {
         settingsContainer.innerHTML = `
         <div class="game-intro-content" style="text-align: left; line-height: 1.6; max-height: 60vh; overflow-y: auto; padding-right: 15px;">
             <div style="text-align: center; margin-bottom: 20px;">
-                <h2 style="color: var(--accent-gold); margin: 0;">📖 逆命者指南</h2>
-                <div style="font-size: 0.8rem; color: #666;">Cultivation Handbook</div>
+                <h2 style="color: var(--accent-gold); margin: 0;">📖 逆命者 v4.2 指南</h2>
+                <div style="font-size: 0.8rem; color: #666;">Defier's Handbook</div>
             </div>
 
-            <h3 style="color: var(--accent-purple); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 10px;">🔮 核心玩法</h3>
-            <p><strong>逆天改命的旅途：</strong></p>
-            <ul style="padding-left: 20px; list-style-type: disc; color: #ccc;">
-                <li><strong>十八重天</strong>：从凡尘界层层飞升，直面最终的【天道终焉】。</li>
-                <li><strong>法则盗取</strong>：击败精英或Boss，可使用古玉盗取其核心【法则】，嵌入命环获得强力被动。</li>
-                <li><strong>卡牌构建</strong>：五行生克、物理爆发、以守代攻...构建你的专属流派。</li>
-            </ul>
-
-            <h3 style="color: var(--accent-gold); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">👥 角色与机制详解</h3>
-            
-            <div style="background: rgba(255, 215, 0, 0.05); padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 3px solid var(--accent-gold);">
-                <strong style="color: var(--accent-gold);">🪙 无欲 (佛门金刚) - 功德体系</strong>
-                <p style="font-size: 0.9rem; margin-top: 5px;">无欲拥有独特的【功德金轮】，不以此消彼长，而是双向积累：</p>
-                <ul style="padding-left: 20px; margin-top: 5px;">
-                    <li><strong>🔸 功德 (Merit)</strong>：使用<span style="color:#4ff">防御/回复/辅助牌</span>时积累。
-                        <br>→ 积攒至100点，触发<strong>【金刚法相】</strong>：获得<strong>无敌</strong>一回合，并净化负面状态。</li>
-                    <li><strong>🟣 业力 (Sin)</strong>：使用<span style="color:#f44">攻击牌</span>时积累。
-                        <br>→ 积攒至100点，触发<strong>【明王之怒】</strong>：获得<strong>强力爆发</strong>（如下次攻击伤害x3或巨额力量）。</li>
+            <div class="intro-section" style="margin-bottom:20px;">
+                <h3 style="color: var(--accent-purple); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">🌌 核心机制 v4.2</h3>
+                <ul style="padding-left: 20px; list-style-type: disc; color: #ddd; margin-top: 10px;">
+                    <li style="margin-bottom: 8px;"><strong>五行相克 (Five Elements)</strong>：
+                        <br>万物皆有属。<strong>金 ⚔️ 木 ⚔️ 土 ⚔️ 水 ⚔️ 火 ⚔️ 金</strong>。
+                        <br>攻击克制属性敌人伤害+50%，被克制则-25%。善用法宝调整属性亲和！</li>
+                    <li style="margin-bottom: 8px;"><strong>稀有度重构 (Rarity 2.0)</strong>：
+                        <br>法宝等级调整：<span style="color:#9e9e9e">凡品</span> < <span style="color:#4fc3f7">灵品</span> < <span style="color:#e040fb">神品 (Purple)</span> < <span style="color:#ffab00">仙品 (Orange, 至尊)</span>。
+                        <br><span style="color:#ffab00">仙品</span>法宝代表逆天改命的终极力量，极为罕见！</li>
+                    <li style="margin-bottom: 8px;"><strong>命环与法则 (Fate Ring)</strong>：
+                        <br>战斗积累经验升级命环，解锁槽位。嵌入【法则】获得强力被动，凑齐同类法则可触发共鸣！</li>
                 </ul>
-                <p style="font-size: 0.85rem; color: #aaa; margin-top: 5px;">* 策略提示：合理控制出牌节奏，在敌人爆发时触发金身，在虚弱时触发明王怒。</p>
             </div>
 
-            <div style="margin-bottom: 10px;">
-                <strong>🗡️ 林风 (逆天之环)</strong>：拥有【法则融合】能力，可将两个法则嵌入同一槽位，产生强大的变异效果。
-            </div>
-            <div style="margin-bottom: 10px;">
-                <strong>💚 香叶 (圣手仁心)</strong>：拥有【封印命环】，通过解开自我封印（消耗生命上限）来换取瞬间的爆发与质变。
-            </div>
-            <div>
-                <strong>❄️ 严寒 (真理探索)</strong>：拥有【解析之眼】，战斗越久，对敌人的解析度越高，造成的伤害与控制效果越强。
+            <div class="intro-section" style="margin-bottom:20px;">
+                <h3 style="color: var(--accent-gold); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">👥 角色特色</h3>
+                
+                <div style="background: rgba(255, 215, 0, 0.05); padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 3px solid var(--accent-gold);">
+                    <strong style="color: var(--accent-gold);">🪙 无欲 (佛门金刚)</strong>
+                    <ul style="padding-left: 20px; margin-top: 5px; font-size: 0.9rem;">
+                        <li><strong>功德 (Merit)</strong>：防守积累，满100触发【金刚法相】（无敌）。</li>
+                        <li><strong>业力 (Sin)</strong>：攻击积累，满100触发【明王之怒】（爆发）。</li>
+                    </ul>
+                </div>
+                
+                 <div style="background: rgba(76, 201, 240, 0.05); padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 3px solid var(--accent-cyan);">
+                    <strong style="color: var(--accent-cyan);">❄️ 严寒 (冰霜剑修)</strong>
+                    <ul style="padding-left: 20px; margin-top: 5px; font-size: 0.9rem;">
+                        <li><strong>寒霜 (Frost)</strong>：对敌施加，每层降低敌人攻击力。</li>
+                        <li><strong>冰爆 (Shatter)</strong>：特定卡牌引爆寒霜，造成巨额穿透伤害。</li>
+                    </ul>
+                </div>
             </div>
 
-            <h3 style="color: var(--accent-red); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-top: 20px;">⚔️ 战斗百科</h3>
-            <ul style="padding-left: 20px; list-style-type: none; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <li>🛡️ <strong>护盾</strong>：抵挡下一次受到的伤害，回合结束时消失（除非拥有【固守】）。</li>
-                <li>💔 <strong>易伤</strong>：受到的伤害增加 50%。</li>
-                <li>😫 <strong>虚弱</strong>：造成的伤害减少 25%。</li>
-                <li>🔥 <strong>灼烧</strong>：回合开始时受到伤害，层数越高伤害越高。</li>
-                <li>⚡ <strong>感电</strong>：受到攻击时额外承受伤害，并消耗一层。</li>
-            </ul>
-
-            <div style="margin-top: 20px; text-align: center; font-size: 0.8rem; color: #888; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">
-                当前版本: v4.2 | 逆命轮回·天道终章
+            <div class="intro-section">
+                <h3 style="color: #4cc9f0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">⚔️ 进阶技巧</h3>
+                <ul style="padding-left: 20px; color: #ccc; font-size: 0.9rem;">
+                    <li><strong>精简卡组</strong>：商店可删除卡牌。卡组越薄，核心Key牌上手率越高。</li>
+                    <li><strong>法则共鸣</strong>：收集 4 个同属性法则，回合开始时触发强力特效（如回血、加攻）。</li>
+                    <li><strong>存档同步</strong>：进度实时云同步，支持多端游玩。</li>
+                </ul>
+            </div>
+            
+            <div style="text-align: center; margin-top: 30px; font-size: 0.8rem; color: #555; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">
+                Current Version: v4.2.0 | Breaking Fate since 2024
             </div>
         </div>
-    `;
+        `;
 
         modal.classList.add('active');
     }
@@ -3197,7 +3199,7 @@ class Game {
                     type: 'item',
                     name: '法则残卷',
                     icon: '📜',
-                    desc: `获得: ${law.name}`,
+                    desc: `获得: ${law.name} `,
                     price: Math.floor(250 * priceMult),
                     sold: false,
                     data: law
@@ -3332,7 +3334,7 @@ class Game {
         // Tooltip
         const nameEl = btn.querySelector('.skill-name');
         const descEl = btn.querySelector('.skill-desc');
-        if (nameEl) nameEl.textContent = skill.name + (this.player.skillLevel > 1 ? ` Lv.${this.player.skillLevel}` : '');
+        if (nameEl) nameEl.textContent = skill.name + (this.player.skillLevel > 1 ? ` Lv.${this.player.skillLevel} ` : '');
         if (descEl) {
             if (skill.getDescription) {
                 descEl.textContent = skill.getDescription(this.player.skillLevel);
@@ -3347,7 +3349,7 @@ class Game {
 
         if (this.player.skillCooldown > 0) {
             const pct = (this.player.skillCooldown / this.player.maxCooldown) * 100;
-            overlay.style.height = `${pct}%`;
+            overlay.style.height = `${pct}% `;
             text.textContent = this.player.skillCooldown;
             btn.classList.add('cooldown');
         } else {
@@ -3362,27 +3364,29 @@ class Game {
             const style = document.createElement('style');
             style.id = 'active-skill-style';
             style.innerHTML = `
-                .active-skill-container {
-                    transition: all 0.3s ease;
-                    border: 2px solid transparent;
+            .active - skill - container {
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+                .active - skill - container.ready {
+            border - color: var(--accent - gold);
+            box - shadow: 0 0 15px var(--accent - gold), 0 0 5px #fff inset;
+            animation: skillPulse 2s infinite;
+            cursor: pointer;
+            transform: scale(1.05);
+        }
+                .active - skill - container.ready:hover {
+            transform: scale(1.15);
+            box - shadow: 0 0 25px var(--accent - gold), 0 0 10px #fff inset;
+        }
+        @keyframes skillPulse {
+            0 % { box- shadow: 0 0 10px var(--accent - gold);
+        }
+        50 % { box- shadow: 0 0 20px var(--accent - gold), 0 0 10px var(--accent - gold);
+    }
+    100% { box- shadow: 0 0 10px var(--accent - gold); }
                 }
-                .active-skill-container.ready {
-                    border-color: var(--accent-gold);
-                    box-shadow: 0 0 15px var(--accent-gold), 0 0 5px #fff inset;
-                    animation: skillPulse 2s infinite;
-                    cursor: pointer;
-                    transform: scale(1.05);
-                }
-                .active-skill-container.ready:hover {
-                    transform: scale(1.15);
-                    box-shadow: 0 0 25px var(--accent-gold), 0 0 10px #fff inset;
-                }
-                @keyframes skillPulse {
-                    0% { box-shadow: 0 0 10px var(--accent-gold); }
-                    50% { box-shadow: 0 0 20px var(--accent-gold), 0 0 10px var(--accent-gold); }
-                    100% { box-shadow: 0 0 10px var(--accent-gold); }
-                }
-            `;
+`;
             document.head.appendChild(style);
         }
     }
@@ -3397,7 +3401,7 @@ class Game {
 
         // 预检查：是否冷却中
         if (this.player.skillCooldown > 0) {
-            Utils.showBattleLog(`技能冷却中 (${this.player.skillCooldown})`);
+            Utils.showBattleLog(`技能冷却中(${this.player.skillCooldown})`);
             return;
         }
 
@@ -3413,7 +3417,7 @@ class Game {
         const descEl = document.getElementById('skill-confirm-desc');
 
         if (this.player.activeSkill) {
-            titleEl.textContent = `${this.player.activeSkill.name}`;
+            titleEl.textContent = `${this.player.activeSkill.name} `;
             iconEl.textContent = this.player.activeSkill.icon || '⚡';
 
             if (this.player.activeSkill.getDescription) {
@@ -3469,13 +3473,13 @@ class Game {
             modal.className = 'modal';
             modal.style.zIndex = '10001'; // 比通用高一点
             modal.innerHTML = `
-                <div class="modal-content" style="text-align: center; max-width: 360px; padding: 40px; border: 2px solid var(--accent-gold); box-shadow: 0 0 50px rgba(255, 215, 0, 0.2);">
+    < div class="modal-content" style = "text-align: center; max-width: 360px; padding: 40px; border: 2px solid var(--accent-gold); box-shadow: 0 0 50px rgba(255, 215, 0, 0.2);" >
                     <div id="reward-icon" style="font-size: 4rem; margin-bottom: 20px; animation: bounce 1s infinite;">🎁</div>
                     <h3 id="reward-title" style="color: var(--accent-gold); margin-bottom: 15px; font-size: 1.5rem;">获得奖励</h3>
                     <p id="reward-message" style="color: #fff; margin-bottom: 30px; line-height: 1.6; font-size: 1.1rem; white-space: pre-line;"></p>
                     <button id="reward-confirm-btn" class="menu-btn primary">收下</button>
-                </div>
-            `;
+                </div >
+    `;
             document.body.appendChild(modal);
 
             // 绑定事件
@@ -3509,15 +3513,15 @@ class Game {
             modal.className = 'modal';
             modal.style.zIndex = '10000'; // 确保在最上层
             modal.innerHTML = `
-                <div class="modal-content" style="text-align: center; max-width: 400px; padding: 30px;">
+    < div class="modal-content" style = "text-align: center; max-width: 400px; padding: 30px;" >
                     <h3 id="generic-confirm-title" style="color: var(--accent-gold); margin-bottom: 20px;">提示</h3>
                     <p id="generic-confirm-message" style="color: #ccc; margin-bottom: 30px; line-height: 1.6; font-size: 1.1rem; white-space: pre-line;"></p>
                     <div style="display: flex; justify-content: center; gap: 20px;">
                         <button id="generic-confirm-btn" class="menu-btn primary small">确定</button>
                         <button id="generic-cancel-btn" class="menu-btn small">取消</button>
                     </div>
-                </div>
-            `;
+                </div >
+    `;
             document.body.appendChild(modal);
 
             // 绑定通用关闭
@@ -3565,14 +3569,14 @@ class Game {
             modal.className = 'modal';
             modal.style.zIndex = '10001'; // 比Confirm更高
             modal.innerHTML = `
-                <div class="modal-content" style="text-align: center; max-width: 400px; padding: 30px;">
+    < div class="modal-content" style = "text-align: center; max-width: 400px; padding: 30px;" >
                     <h3 id="generic-alert-title" style="color: var(--accent-gold); margin-bottom: 20px;">提示</h3>
                     <p id="generic-alert-message" style="color: #ccc; margin-bottom: 30px; line-height: 1.6; font-size: 1.1rem; white-space: pre-line;"></p>
                     <div style="display: flex; justify-content: center;">
                         <button id="generic-alert-btn" class="menu-btn primary small" style="min-width: 100px;">确定</button>
                     </div>
-                </div>
-            `;
+                </div >
+    `;
             document.body.appendChild(modal);
 
             // 绑定通用关闭
@@ -3625,12 +3629,12 @@ class Game {
             wrapper.className = 'shop-card-wrapper';
 
             const cardEl = Utils.createCardElement(item.card, index);
-            cardEl.classList.add(`rarity-${item.card.rarity || 'common'}`);
+            cardEl.classList.add(`rarity - ${item.card.rarity || 'common'} `);
             if (item.sold) cardEl.classList.add('sold');
 
             const priceBtn = document.createElement('div');
-            priceBtn.className = `card-price ${this.player.gold < item.price || item.sold ? 'cannot-afford' : ''}`;
-            priceBtn.innerHTML = item.sold ? '已售出' : `💰 ${item.price}`;
+            priceBtn.className = `card - price ${this.player.gold < item.price || item.sold ? 'cannot-afford' : ''} `;
+            priceBtn.innerHTML = item.sold ? '已售出' : `💰 ${item.price} `;
 
             if (!item.sold) {
                 priceBtn.addEventListener('click', () => this.buyItem('card', index));
@@ -3649,11 +3653,11 @@ class Game {
         this.shopServices.forEach((service, index) => {
             const el = document.createElement('div');
             el.className = 'shop-service';
-            el.id = `service-${service.id}`;
+            el.id = `service - ${service.id} `;
             if (service.sold) el.style.opacity = '0.5';
 
             el.innerHTML = `
-                <div class="service-icon">${service.icon}</div>
+    < div class="service-icon" > ${service.icon}</div >
                 <div class="service-info">
                     <div class="service-name">${service.name}</div>
                     <div class="service-desc">${service.desc}</div>
@@ -3661,7 +3665,7 @@ class Game {
                 <button class="buy-btn ${this.player.gold < service.price || service.sold ? 'disabled' : ''}">
                     <span class="price">${service.sold ? '已售出' : '💰 ' + service.price}</span>
                 </button>
-            `;
+`;
 
             if (!service.sold) {
                 const btn = el.querySelector('.buy-btn');
@@ -3690,7 +3694,7 @@ class Game {
         // 执行购买效果
         if (type === 'card') {
             this.player.addCardToDeck(item.card);
-            Utils.showBattleLog(`购买了 ${item.card.name}`);
+            Utils.showBattleLog(`购买了 ${item.card.name} `);
 
             // 扣款并标记
             this.player.gold -= item.price;
@@ -3750,16 +3754,16 @@ class Game {
             const btn = document.createElement('button');
             btn.className = 'event-choice';
             btn.innerHTML = `
-                <div class="choice-icon">${path.icon || '✨'}</div>
-                <div class="choice-content">
-                    <div class="choice-text">进化：${path.name}</div>
-                    <div class="choice-result">${path.description}</div>
-                </div>
-            `;
+    < div class="choice-icon" > ${path.icon || '✨'}</div >
+        <div class="choice-content">
+            <div class="choice-text">进化：${path.name}</div>
+            <div class="choice-result">${path.description}</div>
+        </div>
+`;
 
             btn.onclick = () => {
                 this.player.evolveFateRing(path.id);
-                Utils.showBattleLog(`命环进化为：${path.name}`);
+                Utils.showBattleLog(`命环进化为：${path.name} `);
                 modal.classList.remove('active');
 
                 // 刷新UI
@@ -3779,7 +3783,7 @@ class Game {
         // 法宝购买逻辑
         if (service.type === 'treasure') {
             if (this.player.addTreasure(service.id)) {
-                Utils.showBattleLog(`获得法宝：${service.name}`);
+                Utils.showBattleLog(`获得法宝：${service.name} `);
                 return true;
             }
             return false;
@@ -3808,7 +3812,7 @@ class Game {
                 this.player.fateRing.exp += 50;
                 this.player.checkFateRingLevelUp();
                 Utils.showBattleLog('命环经验 +50');
-                this.showRewardModal('命环充能', `命环经验 +50！\n距离下一级更近了。`, '⬆️');
+                this.showRewardModal('命环充能', `命环经验 + 50！\n距离下一级更近了。`, '⬆️');
                 return true;
 
             case 'law':
@@ -3824,13 +3828,13 @@ class Game {
                 this.player.maxHp += 5;
                 this.player.currentHp += 5;
                 Utils.showBattleLog('最大生命 +5');
-                this.showRewardModal('体质增强', `最大生命值上限 +5！`, '💊');
+                this.showRewardModal('体质增强', `最大生命值上限 + 5！`, '💊');
                 return true;
 
             case 'strength':
                 this.player.addPermBuff('strength', 1);
                 Utils.showBattleLog('永久力量 +1');
-                this.showRewardModal('力量觉醒', `永久力量 +1！\n你的攻击将更加致命。`, '💪');
+                this.showRewardModal('力量觉醒', `永久力量 + 1！\n你的攻击将更加致命。`, '💪');
                 return true;
 
             case 'refresh':
@@ -3944,12 +3948,12 @@ class Game {
         hint.style.textAlign = 'center';
         hint.style.marginBottom = '10px';
         hint.style.color = 'var(--accent-gold)';
-        hint.textContent = `点击卡牌以移除 (消耗 ${serviceItem.price} 灵石)`;
+        hint.textContent = `点击卡牌以移除(消耗 ${serviceItem.price} 灵石)`;
         container.appendChild(hint);
 
         this.player.deck.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
+            cardEl.classList.add(`rarity - ${card.rarity || 'common'} `);
             cardEl.style.cursor = 'pointer';
 
             // 点击移除
@@ -3964,7 +3968,7 @@ class Game {
                 // Price increase for next time is handled in generateShopData, 
                 // but for current session item is sold.
 
-                Utils.showBattleLog(`已移除 ${card.name}`);
+                Utils.showBattleLog(`已移除 ${card.name} `);
 
                 this.closeModal();
                 // 刷新商店界面
@@ -4015,9 +4019,9 @@ class Game {
         const restBtn = document.createElement('button');
         restBtn.className = 'event-choice';
         restBtn.innerHTML = `
-                    <div>💤 休息(恢复 ${healAmount} HP)</div>
-                        <div class="choice-effect">当前HP: ${this.player.currentHp}/${this.player.maxHp}</div>
-                `;
+    < div >💤 休息(恢复 ${healAmount} HP)</div >
+        <div class="choice-effect">当前HP: ${this.player.currentHp}/${this.player.maxHp}</div>
+`;
         restBtn.onclick = () => this.campfireRest();
         choicesEl.appendChild(restBtn);
 
@@ -4026,9 +4030,9 @@ class Game {
         const upgradeBtn = document.createElement('button');
         upgradeBtn.className = 'event-choice';
         upgradeBtn.innerHTML = `
-                    <div>⬆️ 升级卡牌</div>
-                        <div class="choice-effect">可升级: ${upgradableCount} 张</div>
-                `;
+    < div >⬆️ 升级卡牌</div >
+        <div class="choice-effect">可升级: ${upgradableCount} 张</div>
+`;
         if (upgradableCount > 0) {
             upgradeBtn.onclick = () => this.showCampfireUpgrade();
         } else {
@@ -4043,9 +4047,9 @@ class Game {
             const removeBtn = document.createElement('button');
             removeBtn.className = 'event-choice';
             removeBtn.innerHTML = `
-                    <div>🗑️ 净化(移除一张牌)</div>
-                        <div class="choice-effect">精简牌组，提升效率</div>
-                `;
+    < div >🗑️ 净化(移除一张牌)</div >
+        <div class="choice-effect">精简牌组，提升效率</div>
+`;
             removeBtn.onclick = () => this.showCampfireRemove();
             choicesEl.appendChild(removeBtn);
         }
@@ -4095,14 +4099,14 @@ class Game {
         container.appendChild(previewContainer);
 
         previewContainer.innerHTML = `
-                    <h3 style="color:var(--accent-gold);margin-top:0;">升级预览</h3>
+    < h3 style = "color:var(--accent-gold);margin-top:0;" > 升级预览</h3 >
             <div id="upgrade-preview-placeholder" style="color:#666;margin-top:50px;">
                 鼠标悬浮或点击卡牌<br>查看升级效果
             </div>
             <div id="upgrade-preview-card" style="display:none; transform:scale(1.1); margin: 20px 0;"></div>
             <div id="upgrade-diff-text" style="width:100%; font-size:0.9rem; color:#ddd; margin: 10px 0; background:rgba(0,0,0,0.3); padding:8px; border-radius:4px; display:none;"></div>
             <button id="confirm-upgrade-btn" class="menu-btn" style="margin-top:auto; width:100%;" disabled>确认升级</button>
-                `;
+`;
 
         const confirmBtn = previewContainer.querySelector('#confirm-upgrade-btn');
         const previewCardDiv = previewContainer.querySelector('#upgrade-preview-card');
@@ -4115,7 +4119,7 @@ class Game {
             if (!canUpgradeCard(card)) return;
 
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
+            cardEl.classList.add(`rarity - ${card.rarity || 'common'} `);
             cardEl.style.cursor = 'pointer';
 
             const showPreview = () => {
@@ -4126,13 +4130,13 @@ class Game {
 
                 previewCardDiv.innerHTML = '';
                 const upgradedEl = Utils.createCardElement(upgraded, 999);
-                upgradedEl.classList.add(`rarity-${upgraded.rarity || 'common'}`);
+                upgradedEl.classList.add(`rarity - ${upgraded.rarity || 'common'} `);
                 previewCardDiv.appendChild(upgradedEl);
 
                 previewTextDiv.innerHTML = `
-                    <p style="margin:0;color:var(--accent-green);font-weight:bold;">${card.name} ➤ ${upgraded.name}</p>
-                        <p style="margin:4px 0 0 0;font-size:0.8rem;">${upgraded.description}</p>
-                `;
+    < p style = "margin:0;color:var(--accent-green);font-weight:bold;" > ${card.name} ➤ ${upgraded.name}</p >
+        <p style="margin:4px 0 0 0;font-size:0.8rem;">${upgraded.description}</p>
+`;
             };
 
             cardEl.addEventListener('mouseenter', () => {
@@ -4188,7 +4192,7 @@ class Game {
 
         this.player.deck.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
+            cardEl.classList.add(`rarity - ${card.rarity || 'common'} `);
             cardEl.style.cursor = 'pointer';
             cardEl.addEventListener('click', () => this.campfireRemoveCard(index));
             container.appendChild(cardEl);
@@ -4348,13 +4352,13 @@ class Game {
         slots.forEach((slotData, index) => {
             const slotEl = document.createElement('div');
             const isEmpty = !slotData;
-            slotEl.className = `save-slot ${isEmpty ? 'empty' : ''}`;
+            slotEl.className = `save - slot ${isEmpty ? 'empty' : ''} `;
 
-            const slotName = `存档 ${index + 1}`;
+            const slotName = `存档 ${index + 1} `;
 
             let contentHtml = '';
             if (isEmpty) {
-                contentHtml = `<div class="slot-empty-text">空存档</div>`;
+                contentHtml = `< div class="slot-empty-text" > 空存档</div > `;
             } else {
                 const date = new Date(slotData.timestamp).toLocaleString();
                 const realm = (slotData.player && slotData.player.realm) ? slotData.player.realm : '?';
@@ -4373,30 +4377,30 @@ class Game {
                 }
 
                 contentHtml = `
-                    <div class="slot-info-row" style="color:var(--accent-gold); font-weight:bold;">${roleName}</div>
+    < div class="slot-info-row" style = "color:var(--accent-gold); font-weight:bold;" > ${roleName}</div >
                     <div class="slot-info-row">🏔️ 最高记录: 第 ${maxRealm} 重天 | ❤️ ${hp}</div>
                     <div class="slot-info-row" style="font-size:0.8rem; color:#666;">📅 ${date}</div>
                     <div class="slot-info-row" style="font-size:0.75rem; color:#888;">(当前: 第 ${realm} 重天)</div>
-                `;
+`;
             }
 
 
             const actionsHtml = isEmpty ?
-                `<button class="menu-btn small" onclick="game.selectSlot(${index}, 'new')">新建轮回</button>` :
-                `<button class="menu-btn small primary" onclick="game.selectSlot(${index}, 'load')">继续</button>
-                 <button class="menu-btn small" style="border-color:var(--accent-red); color:var(--accent-red)" onclick="game.selectSlot(${index}, 'overwrite')">覆盖</button>`;
+                `< button class="menu-btn small" onclick = "game.selectSlot(${index}, 'new')" > 新建轮回</button > ` :
+                `< button class="menu-btn small primary" onclick = "game.selectSlot(${index}, 'load')" > 继续</button >
+    <button class="menu-btn small" style="border-color:var(--accent-red); color:var(--accent-red)" onclick="game.selectSlot(${index}, 'overwrite')">覆盖</button>`;
 
             slotEl.innerHTML = `
-                <div class="slot-header">
-                    <span>${slotName}</span>
-                </div>
+        < div class="slot-header" >
+            <span>${slotName}</span>
+                </div >
                 <div class="slot-content">
                     ${contentHtml}
                 </div>
                 <div class="slot-actions">
                     ${actionsHtml}
                 </div>
-            `;
+`;
 
             container.appendChild(slotEl);
         });
@@ -4423,7 +4427,7 @@ class Game {
                         localStorage.setItem('theDefierSave', JSON.stringify(cloudData));
                         sessionStorage.setItem('justLoadedSave', 'true'); // Prevent loop
 
-                        Utils.showBattleLog(`已加载 存档 ${index + 1}`);
+                        Utils.showBattleLog(`已加载 存档 ${index + 1} `);
                         modal.classList.remove('active');
                         setTimeout(() => window.location.reload(), 500);
                     } catch (e) {
@@ -4526,7 +4530,7 @@ class Game {
                 }, 50);
             };
         } else {
-            btn.innerHTML = `<span class="btn-icon">☁️</span><span class="btn-text">登入轮回</span>`;
+            btn.innerHTML = `< span class="btn-icon" >☁️</span > <span class="btn-text">登入轮回</span>`;
             btn.onclick = () => this.showLoginModal();
         }
     }
@@ -4568,10 +4572,10 @@ class Game {
             const hp = (data.player && data.player.currentHp) ? data.player.currentHp : '?';
             const gold = (data.player && data.player.gold) ? data.player.gold : '?';
             return `
-                <div style="margin-bottom:4px">📅 ${date}</div>
+    < div style = "margin-bottom:4px" >📅 ${date}</div >
                 <div style="margin-bottom:4px">🏔️ 第 ${realm} 重天</div>
                 <div>❤️ ${hp} | 💰 ${gold}</div>
-            `;
+`;
         };
 
         if (localInfo) localInfo.innerHTML = formatInfo(localData, localData ? localData.timestamp : null);
@@ -4633,7 +4637,7 @@ class Game {
             modal.id = 'treasure-bag-modal';
             modal.className = 'modal treasure-bag-modal';
             modal.innerHTML = `
-                <div class="modal-content large-modal">
+    < div class="modal-content large-modal" >
                     <span class="close-btn">&times;</span>
                     <h2>🎒 法宝囊</h2>
                     
@@ -4651,8 +4655,8 @@ class Game {
                             <div class="inventory-grid" id="inventory-grid"></div>
                         </div>
                     </div>
-                </div>
-            `;
+                </div >
+    `;
             document.body.appendChild(modal);
 
             // 绑定关闭
