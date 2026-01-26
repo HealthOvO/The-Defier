@@ -298,8 +298,9 @@ class Battle {
 
             // 绑定点击事件
             enemyEl.addEventListener('click', () => {
-                if (this.targetingMode && this.selectedCard !== null) {
-                    this.playCardOnTarget(this.selectedCard, index);
+                // Fix: use selectedCardIndex that matches startTargetingMode
+                if (this.targetingMode && this.selectedCardIndex !== undefined && this.selectedCardIndex !== -1) {
+                    this.playCardOnTarget(this.selectedCardIndex, index);
                 }
             });
 
@@ -636,10 +637,9 @@ class Battle {
         }
 
         // Multi-Enemy Targeting Logic
-        // Multi-Enemy Targeting Logic
-        // Fix: Added 'penetrate', 'steal', 'lifeSteal', 'absorb' to trigger targeting mode
+        // Fix: Added 'penetrate', 'steal', 'lifeSteal', 'absorb', 'swapHpPercent', 'executeDamage', 'percentDamage' to trigger targeting mode
         const needsTarget = card.effects && card.effects.some(e =>
-            ['damage', 'debuff', 'execute', 'removeBlock', 'goldOnKill', 'maxHpOnKill', 'penetrate', 'steal', 'lifeSteal', 'absorb'].includes(e.type)
+            ['damage', 'debuff', 'execute', 'removeBlock', 'goldOnKill', 'maxHpOnKill', 'penetrate', 'steal', 'lifeSteal', 'absorb', 'swapHpPercent', 'executeDamage', 'percentDamage'].includes(e.type)
             && (!e.target || e.target === 'enemy' || e.target === 'single')
         );
         const hasMultipleEnemies = this.enemies.filter(e => e.currentHp > 0).length > 1;
