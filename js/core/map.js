@@ -167,7 +167,7 @@ class GameMap {
             14: { name: '混元无极', desc: '敌人对所有伤害拥有20%抗性，且有50%几率免疫眩晕', effect: 'chaos_immune' },
             15: { name: '大道独行', desc: '最大生命值降低 30%，但造成的伤害提升50%', effect: 'final_trial' },
             16: { name: '太乙神雷', desc: '敌人攻击自带20%吸血，且每回合获得攻击力+1', effect: 'vampire_scaling' },
-            17: { name: '大罗法身', desc: '敌人免疫控制效果，且每回合回复 5% 最大生命', effect: 'immunity_regen' },
+            17: { name: '大罗法身', desc: '敌人免疫控制效果，且每回合回复 20% 最大生命', effect: 'immunity_regen' },
             18: { name: '混沌终焉', desc: '玩家所有属性减半，敌人全属性翻倍', effect: 'chaos_end' }
         };
         return envs[realm] || { name: '平稳', desc: '无特殊效果', effect: 'none' };

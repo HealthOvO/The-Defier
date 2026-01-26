@@ -1321,12 +1321,7 @@ class Battle {
             }
         }
 
-        // 检查敌人减伤Buff (如: Time Stasis)
-        if (enemy.buffs.damageReduction && enemy.buffs.damageReduction > 0) {
-            const reduction = Math.min(90, enemy.buffs.damageReduction);
-            amount = Math.floor(amount * (100 - reduction) / 100);
-            Utils.showBattleLog(`敌人减伤生效！抵消了 ${reduction}% 伤害`);
-        }
+
 
 
         // 6. 五行共鸣伤害加成 (Resonance Damage Bonus)
@@ -1511,7 +1506,9 @@ class Battle {
             }
         }
 
-        // 检查额外回合 (Extra Turn)
+        // 检查额外回合 (Extra Turn) - Debug
+        // Utils.showBattleLog(`DEBUG: Extra Turn Buff: ${this.player.buffs ? this.player.buffs.extraTurn : 'undefined'}`);
+
         if (this.player.buffs && this.player.buffs.extraTurn > 0) {
             this.player.buffs.extraTurn--;
             Utils.showBattleLog('【时间凝滞】额外回合！');
@@ -1726,9 +1723,9 @@ class Battle {
                 Utils.showBattleLog(`${enemy.name} 吸收灵气，攻击力+1`);
             }
 
-            // 17. 大罗法身 (realm 17) - 敌人每回合回复 5% 最大生命
-            if (this.player.realm === 17) {
-                const regen = Math.floor(enemy.maxHp * 0.05);
+            // 17. 大罗法身 (realm 17) - 敌人每回合回复 20% 最大生命
+            if (this.player.realm === 17 && enemy.currentHp > 0) {
+                const regen = Math.floor(enemy.maxHp * 0.20);
                 if (regen > 0 && enemy.currentHp < enemy.maxHp) {
                     enemy.currentHp = Math.min(enemy.maxHp, enemy.currentHp + regen);
                     Utils.showFloatingNumber(document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`), regen, 'heal');
@@ -1938,6 +1935,15 @@ class Battle {
 
                 // 应用心魔滋生
                 damage = this.dealEnemyDamage(enemy, damage);
+
+                // 检查敌人减伤Buff (如: Time Stasis)
+                if (enemy.buffs.damageReduction && enemy.buffs.damageReduction > 0) {
+                    const reduction = Math.min(90, enemy.buffs.damageReduction);
+                    damage = Math.floor(damage * (100 - reduction) / 100);
+                    Utils.showBattleLog(`时间凝滞生效！敌人伤害降低 ${reduction}%`);
+                    // Consume it (Next Attack)
+                    delete enemy.buffs.damageReduction;
+                }
 
                 // Handle True Damage
                 let result;
