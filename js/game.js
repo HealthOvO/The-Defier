@@ -4022,7 +4022,7 @@ class Game {
 
         this.player.deck.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.classList.add(`rarity - ${card.rarity || 'common'} `);
+            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
             cardEl.style.cursor = 'pointer';
 
             // 点击移除

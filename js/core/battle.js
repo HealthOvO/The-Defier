@@ -1321,6 +1321,14 @@ class Battle {
             }
         }
 
+        // 检查敌人减伤Buff (如: Time Stasis)
+        if (enemy.buffs.damageReduction && enemy.buffs.damageReduction > 0) {
+            const reduction = Math.min(90, enemy.buffs.damageReduction);
+            amount = Math.floor(amount * (100 - reduction) / 100);
+            Utils.showBattleLog(`敌人减伤生效！抵消了 ${reduction}% 伤害`);
+        }
+
+
         // 6. 五行共鸣伤害加成 (Resonance Damage Bonus)
         // 检查玩家收集的法则，计算同属性数量
         if (sourceElement && this.player.collectedLaws) {
@@ -1503,8 +1511,37 @@ class Battle {
             }
         }
 
+        // 检查额外回合 (Extra Turn)
+        if (this.player.buffs && this.player.buffs.extraTurn > 0) {
+            this.player.buffs.extraTurn--;
+            Utils.showBattleLog('【时间凝滞】额外回合！');
+
+            // 视觉特效
+            const flash = document.createElement('div');
+            flash.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,255,255,0.2);pointer-events:none;z-index:9999;transition:opacity 0.5s;';
+            document.body.appendChild(flash);
+            setTimeout(() => {
+                flash.style.opacity = '0';
+                setTimeout(() => flash.remove(), 500);
+            }, 100);
+
+            // 重置回合状态，开始新回合
+            this.isProcessingCard = false;
+            this.cardsPlayedThisTurn = 0;
+            this.playerAttackedThisTurn = false;
+            this.player.startTurn();
+
+            // 启用结束回合按钮
+            const endTurnBtn = document.getElementById('end-turn-btn');
+            if (endTurnBtn) endTurnBtn.disabled = false;
+
+            this.updateBattleUI();
+            return; // 直接返回，不进入敌人回合
+        }
+
         // 切换到敌人回合
         this.currentTurn = 'enemy';
+
         Utils.showBattleLog('敌人回合...');
 
         try {
