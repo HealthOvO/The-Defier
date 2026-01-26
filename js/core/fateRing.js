@@ -94,9 +94,13 @@ class FateRing {
             }
         }
 
-        // 调用玩家属性重算
         if (this.player && this.player.recalculateStats) {
             this.player.recalculateStats();
+        }
+
+        // Sync active skill level
+        if (this.player) {
+            this.player.skillLevel = this.level;
         }
 
         // Check legacy evolution triggers
@@ -217,6 +221,11 @@ class FateRing {
                     }
                 });
             }
+        }
+
+        // Sync active skill level with loaded level
+        if (this.player) {
+            this.player.skillLevel = this.level;
         }
     }
 }
