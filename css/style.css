@@ -4387,17 +4387,19 @@ body {
 }
 
 .treasure-slot.rarity-legendary {
-    border-color: #ffab00;
-    background: linear-gradient(135deg, rgba(80, 60, 30, 0.5) 0%, rgba(50, 40, 20, 0.7) 100%);
+    border-color: #e040fb;
+    /* Legendary -> Mythic (Purple) */
+    background: linear-gradient(135deg, rgba(100, 30, 120, 0.4) 0%, rgba(50, 20, 70, 0.6) 100%);
 }
 
 .treasure-slot.rarity-legendary:hover {
-    box-shadow: 0 0 25px rgba(255, 171, 0, 0.5);
+    box-shadow: 0 0 25px rgba(224, 64, 251, 0.5);
 }
 
 .treasure-slot.rarity-mythic {
-    border-color: #e040fb;
-    background: linear-gradient(135deg, rgba(100, 30, 120, 0.4) 0%, rgba(50, 20, 70, 0.6) 100%);
+    border-color: #ffab00;
+    /* Mythic -> Immortal (Orange) */
+    background: linear-gradient(135deg, rgba(80, 60, 30, 0.5) 0%, rgba(50, 40, 20, 0.7) 100%);
     animation: mythicPulse 2s ease-in-out infinite;
 }
 
@@ -4535,21 +4537,21 @@ body {
 }
 
 .inventory-item.rarity-legendary {
-    border-color: rgba(255, 171, 0, 0.6);
-    background: linear-gradient(135deg, rgba(70, 55, 30, 0.7) 0%, rgba(45, 35, 20, 0.8) 100%);
+    border-color: rgba(224, 64, 251, 0.5);
+    background: linear-gradient(135deg, rgba(100, 30, 120, 0.4) 0%, rgba(50, 20, 70, 0.6) 100%);
 }
 
 .inventory-item.rarity-legendary::before {
-    background: linear-gradient(90deg, transparent, rgba(255, 171, 0, 0.6), transparent);
+    background: linear-gradient(90deg, transparent, rgba(224, 64, 251, 0.5), transparent);
 }
 
 .inventory-item.rarity-legendary:hover {
-    border-color: #ffab00;
-    box-shadow: 0 8px 25px rgba(255, 171, 0, 0.4);
+    border-color: #e040fb;
+    box-shadow: 0 8px 25px rgba(224, 64, 251, 0.4);
 }
 
 .inventory-item.rarity-mythic {
-    border-color: rgba(224, 64, 251, 0.5);
+    border-color: rgba(255, 171, 0, 0.6);
 }
 
 .empty-inventory {

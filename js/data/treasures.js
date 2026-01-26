@@ -17,6 +17,7 @@ const TREASURES = {
         name: '金精石',
         description: '金属性伤害+30%，免疫中毒（木属性负面）。',
         rarity: 'rare',
+        icon: '⚔️',
         elementBonus: { element: 'metal', value: 0.3 },
         immuneDebuffs: ['poison']
     },
@@ -26,6 +27,7 @@ const TREASURES = {
         name: '木灵根',
         description: '每回合回复2血，木属性伤害+30%。',
         rarity: 'rare',
+        icon: '🌿',
         elementBonus: { element: 'wood', value: 0.3 },
         onTurnStart: (player) => {
             player.heal(2);
@@ -37,6 +39,7 @@ const TREASURES = {
         name: '水晶髓',
         description: '免疫灼烧，水属性伤害+30%。',
         rarity: 'rare',
+        icon: '💧',
         elementBonus: { element: 'water', value: 0.3 },
         immuneDebuffs: ['burn']
     },
@@ -46,6 +49,7 @@ const TREASURES = {
         name: '火凤羽',
         description: '免疫冰冻/减速，火属性伤害+30%。',
         rarity: 'rare',
+        icon: '🔥',
         elementBonus: { element: 'fire', value: 0.3 },
         immuneDebuffs: ['freeze', 'slow']
     },
@@ -55,6 +59,7 @@ const TREASURES = {
         name: '厚土盾',
         description: '护盾效果+25%，土属性伤害+30%。',
         rarity: 'rare',
+        icon: '🪨',
         elementBonus: { element: 'earth', value: 0.3 },
     },
 

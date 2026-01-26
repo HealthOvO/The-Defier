@@ -1496,7 +1496,8 @@ class Game {
                 tItem.style.cursor = 'help';
                 tItem.title = droppedTreasure.description;
                 const label = this.getRarityLabel ? this.getRarityLabel(droppedTreasure.rarity) : '';
-                tItem.innerHTML = `<span class="icon">${droppedTreasure.icon}</span> <span>获得法宝：${droppedTreasure.name} ${label}</span>`;
+                const icon = droppedTreasure.icon || '📦';
+                tItem.innerHTML = `<span class="icon">${icon}</span> <span>获得法宝：${droppedTreasure.name} ${label}</span>`;
                 resourceContainer.appendChild(tItem);
 
                 Utils.showBattleLog(`战斗胜利！获得法宝: ${droppedTreasure.name}`);
@@ -4881,8 +4882,8 @@ class Game {
         switch (rarity) {
             case 'common': return '<span style="color:#9e9e9e">【凡品】</span>';
             case 'rare': return '<span style="color:#4fc3f7">【灵品】</span>';
-            case 'legendary': return '<span style="color:#ffab00">【仙品】</span>';
-            case 'mythic': return '<span style="color:#e040fb">【神品】</span>';
+            case 'legendary': return '<span style="color:#e040fb">【神品】</span>'; // Legendary -> Mythic (Purple)
+            case 'mythic': return '<span style="color:#ffab00">【仙品】</span>';    // Mythic -> Immortal (Orange)
             default: return '<span style="color:#9e9e9e">【凡品】</span>';
         }
     }
