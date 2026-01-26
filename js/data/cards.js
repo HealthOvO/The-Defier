@@ -1128,125 +1128,8 @@ const CARDS = {
 
 
 
-    // 初始牌组
+    // 初始牌组 (Duplicates removed)
 
-
-    karmaKill: {
-        id: 'karmaKill',
-        name: '因果律杀',
-        type: 'law',
-        cost: 3,
-        icon: '☠️',
-        description: '必定命中，造成敌人最大生命15%的伤害',
-        rarity: 'legendary',
-        lawType: 'karma',
-        effects: [
-            { type: 'percentDamage', value: 0.15, target: 'enemy' }
-        ]
-    },
-    iceFreeze: {
-        id: 'iceFreeze',
-        name: '冰封万里',
-        type: 'law',
-        cost: 2,
-        icon: '❄️',
-        description: '造成 7 点伤害，使敌人下回合伤害-3',
-        rarity: 'rare',
-        lawType: 'ice',
-        effects: [
-            { type: 'damage', value: 7, target: 'enemy' },
-            { type: 'debuff', buffType: 'weak', value: 3, target: 'enemy' }
-        ]
-    },
-
-    // 机缘牌
-    desperateSurvival: {
-        id: 'desperateSurvival',
-        name: '绝处逢生',
-        type: 'chance',
-        cost: 1,
-        icon: '🆘',
-        description: '若生命低于20%，抽3张牌+3灵力',
-        rarity: 'rare',
-        effects: [
-            { type: 'conditionalDraw', condition: 'lowHp', threshold: 0.2, drawValue: 3, energyValue: 3 }
-        ]
-    },
-    windfall: {
-        id: 'windfall',
-        name: '天降横财',
-        type: 'chance',
-        cost: 1,
-        icon: '💰',
-        description: '战斗结束后获得 25-100 灵石',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'bonusGold', min: 25, max: 100 }
-        ]
-    },
-    enlightenment: {
-        id: 'enlightenment',
-        name: '顿悟',
-        type: 'chance',
-        cost: 2,
-        icon: '💡',
-        description: '命环经验+50',
-        rarity: 'rare',
-        effects: [
-            { type: 'ringExp', value: 50 }
-        ]
-    },
-    reversal: {
-        id: 'reversal',
-        name: '逆转乾坤',
-        type: 'chance',
-        cost: 4,
-        icon: '🔄',
-        description: '与敌人交换当前生命值百分比',
-        rarity: 'legendary',
-        effects: [
-            { type: 'swapHpPercent', target: 'enemy' }
-        ]
-    },
-
-    // 技能牌
-    concentration: {
-        id: 'concentration',
-        name: '聚气',
-        type: 'energy',
-        cost: 1,
-        icon: '🎯',
-        description: '下一张攻击牌伤害+5',
-        rarity: 'common',
-        effects: [
-            { type: 'buff', buffType: 'nextAttackBonus', value: 5, target: 'self' }
-        ]
-    },
-    doubleEdge: {
-        id: 'doubleEdge',
-        name: '双刃',
-        type: 'attack',
-        cost: 1,
-        icon: '🔪',
-        description: '造成 10 点伤害，获得 1 层易伤',
-        rarity: 'common',
-        effects: [
-            { type: 'damage', value: 10, target: 'enemy' },
-            { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'self' }
-        ]
-    },
-    powerUp: {
-        id: 'powerUp',
-        name: '蓄力',
-        type: 'energy',
-        cost: 1,
-        icon: '💪',
-        description: '获得 2 点力量（永久）',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'buff', buffType: 'strength', value: 2, target: 'self', permanent: true }
-        ]
-    },
     quickDraw: {
         id: 'quickDraw',
         name: '快抽',
@@ -1260,31 +1143,7 @@ const CARDS = {
             { type: 'draw', value: 2, target: 'self' }
         ]
     },
-    allIn: {
-        id: 'allIn',
-        name: '孤注一掷',
-        type: 'attack',
-        cost: 2,
-        icon: '🎲',
-        description: '消耗所有灵力，每点灵力造成 6 点伤害',
-        rarity: 'rare',
-        effects: [
-            { type: 'damagePerEnergy', multiplier: 6, target: 'enemy' }
-        ]
-    },
-    chaosControl: {
-        id: 'chaosControl',
-        name: '混沌掌控',
-        type: 'skill',
-        cost: 3,
-        icon: '🌀',
-        description: '随机对敌人造成 5-20 伤害，并使其眩晕',
-        rarity: 'legendary',
-        effects: [
-            { type: 'randomDamage', minValue: 5, maxValue: 20, target: 'enemy' },
-            { type: 'debuff', buffType: 'stun', value: 1, target: 'enemy' }
-        ]
-    },
+
 
     // ==================== 多角色专属卡牌 ====================
 
@@ -1349,35 +1208,7 @@ const CARDS = {
             { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'enemy' }
         ]
     },
-    ringAnalysis: {
-        id: 'ringAnalysis',
-        name: '命环解析',
-        type: 'skill',
-        character: 'yanHan',
-        cost: 1,
-        icon: '📊',
-        description: '敌人易伤 2 层，命环经验+15',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'debuff', buffType: 'vulnerable', value: 2, target: 'enemy' },
-            { type: 'ringExp', value: 15 }
-        ]
-    },
-    lawInsight: {
-        id: 'lawInsight',
-        name: '法则窥探',
-        type: 'skill',
-        character: 'yanHan',
-        cost: 0,
-        consumeCandy: true,
-        icon: '👁️',
-        description: '消耗1奶糖。抽 2 张牌，本战法则盗取率+10%',
-        rarity: 'rare',
-        effects: [
-            { type: 'draw', value: 2, target: 'self' },
-            { type: 'buff', buffType: 'stealBonus', value: 0.1, target: 'self' }
-        ]
-    },
+
     demonDoubt: {
         id: 'demonDoubt',
         name: '心魔·疑心',

@@ -1442,23 +1442,62 @@ class Battle {
         for (const card of statusCards) {
             if (card.effects) {
                 for (const effect of card.effects) {
-                    if (effect.trigger === 'endTurn' && effect.type === 'selfDamage') {
-                        let damage = effect.value;
-                        if (effect.isPercent) {
-                            damage = Math.ceil(this.player.currentHp * effect.value);
-                            // Support minValue (e.g. for Heart Demon: max(10% HP, 10))
-                            if (effect.minValue) {
-                                damage = Math.max(damage, effect.minValue);
-                            } else {
-                                damage = Math.max(1, damage); // Default at least 1
+                    if (effect.trigger === 'endTurn') {
+                        if (effect.type === 'selfDamage') {
+                            let damage = effect.value;
+                            if (effect.isPercent) {
+                                damage = Math.ceil(this.player.currentHp * effect.value);
+                                // Support minValue (e.g. for Heart Demon: max(10% HP, 10))
+                                if (effect.minValue) {
+                                    damage = Math.max(damage, effect.minValue);
+                                } else {
+                                    damage = Math.max(1, damage); // Default at least 1
+                                }
+                            }
+
+                            this.player.takeDamage(damage);
+                            Utils.showBattleLog(`${card.name} 发作！受到 ${damage} 点伤害`);
+                            const playerAvatar = document.querySelector('.player-avatar');
+                            if (playerAvatar) Utils.addShakeEffect(playerAvatar);
+                            await Utils.sleep(300);
+                        } else if (effect.type === 'discardRandom') {
+                            const count = effect.value || 1;
+                            // 排除自身，只弃掉其他手牌（以此惩罚玩家保留好牌）
+                            const otherCards = this.player.hand.filter(c => c !== card);
+
+                            if (otherCards.length > 0) {
+                                let discarded = 0;
+                                for (let i = 0; i < count; i++) {
+                                    if (otherCards.length === 0) break;
+                                    const randIdx = Math.floor(Math.random() * otherCards.length);
+                                    const targetCard = otherCards[randIdx];
+
+                                    // Remove from 'otherCards' to avoid double pick
+                                    otherCards.splice(randIdx, 1);
+
+                                    // Remove from actual hand
+                                    const handIdx = this.player.hand.indexOf(targetCard);
+                                    if (handIdx > -1) {
+                                        this.player.hand.splice(handIdx, 1);
+                                        this.player.discardPile.push(targetCard);
+                                        discarded++;
+                                    }
+                                }
+                                if (discarded > 0) {
+                                    Utils.showBattleLog(`${card.name} 发作！随机弃掉了 ${discarded} 张手牌`);
+                                    await Utils.sleep(300);
+                                    this.updateHandUI();
+                                }
+                            }
+                        } else if (effect.type === 'energyLoss') {
+                            const loss = effect.value || 1;
+                            if (this.player.currentEnergy > 0) {
+                                this.player.currentEnergy = Math.max(0, this.player.currentEnergy - loss);
+                                Utils.showBattleLog(`${card.name} 发作！流失 ${loss} 点灵力`);
+                                this.updateEnergyUI();
+                                await Utils.sleep(300);
                             }
                         }
-
-                        this.player.takeDamage(damage);
-                        Utils.showBattleLog(`${card.name} 发作！受到 ${damage} 点伤害`);
-                        const playerAvatar = document.querySelector('.player-avatar');
-                        if (playerAvatar) Utils.addShakeEffect(playerAvatar);
-                        await Utils.sleep(300);
                     }
                 }
             }
