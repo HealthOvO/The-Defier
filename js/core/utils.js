@@ -8,6 +8,56 @@ const Utils = {
         return Math.floor(Math.random() * (max - min + 1)) + min;
     },
 
+    // 五行标准化
+    getCanonicalElement(element) {
+        if (!element) return null;
+        const map = {
+            'thunder': 'metal',
+            'gold': 'metal',
+            'metal': 'metal',
+
+            'wood': 'wood',
+            'poison': 'wood',
+            'wind': 'wood', // 风一般归木
+
+            'water': 'water',
+            'ice': 'water',
+
+            'fire': 'fire',
+
+            'earth': 'earth'
+        };
+        return map[element.toLowerCase()] || 'none';
+    },
+
+    // 获取五行图标
+    getElementIcon(element) {
+        const canonical = this.getCanonicalElement(element);
+        const icons = {
+            'metal': '⚔️',
+            'wood': '🌿',
+            'water': '💧',
+            'fire': '🔥',
+            'earth': '🪨',
+            'none': ''
+        };
+        return icons[canonical] || '';
+    },
+
+    // 获取五行颜色
+    getElementColor(element) {
+        const canonical = this.getCanonicalElement(element);
+        const colors = {
+            'metal': '#FFD700', // Gold
+            'wood': '#4CAF50',  // Green
+            'water': '#2196F3', // Blue
+            'fire': '#FF5722',  // Red / Orange
+            'earth': '#795548', // Brown
+            'none': '#ffffff'
+        };
+        return colors[canonical] || '#ffffff';
+    },
+
     // 洗牌
     shuffle(array) {
         const shuffled = [...array];
@@ -46,6 +96,44 @@ const Utils = {
         }
 
         setTimeout(() => floater.remove(), 1000);
+    },
+
+    // 显示浮动文本
+    createFloatingText(elementOrIndex, text, color = '#fff') {
+        let element = elementOrIndex;
+        // 如果传入的是索引，尝试获取元素
+        if (typeof elementOrIndex === 'number') {
+            element = document.querySelector(`.enemy[data-index="${elementOrIndex}"]`);
+        }
+
+        if (!element) return;
+
+        const floater = document.createElement('div');
+        floater.className = 'damage-number';
+        floater.style.color = color;
+        floater.textContent = text;
+        floater.style.fontSize = '24px';
+        floater.style.fontWeight = 'bold';
+        floater.style.textShadow = '0 0 5px #000';
+        floater.style.zIndex = '100';
+
+        const rect = element.getBoundingClientRect();
+        // 居中并上方显示
+        floater.style.left = `${rect.left + rect.width / 2}px`;
+        floater.style.top = `${rect.top - 30}px`;
+
+        document.body.appendChild(floater);
+
+        const animation = floater.animate([
+            { transform: 'translate(-50%, 0) scale(0.5)', opacity: 0 },
+            { transform: 'translate(-50%, -20px) scale(1.2)', opacity: 1, offset: 0.2 },
+            { transform: 'translate(-50%, -50px) scale(1)', opacity: 0 }
+        ], {
+            duration: 1000,
+            easing: 'ease-out'
+        });
+
+        animation.onfinish = () => floater.remove();
     },
 
     // 生成简单粒子

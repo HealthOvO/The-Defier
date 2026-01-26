@@ -64,7 +64,10 @@ class Player {
         this.relic = charData.relic;
 
         // 法宝
-        this.treasures = [];
+        // 法宝
+        this.collectedTreasures = []; // 所有拥有的法宝
+        this.equippedTreasures = [];  // 当前装备的法宝
+        this.treasures = this.equippedTreasures; // 兼容旧引用的Alias
 
         this.timeStopTriggered = false; // Reset time stop cheat death per battle (via reset)
         this.resurrectCount = 0;
@@ -260,6 +263,20 @@ class Player {
         // 动态计算奶糖上限 (每5层增加1个)
         // 1-5: 3, 6-10: 4, 11-15: 5, 16+: 6
         this.maxMilkCandy = 3 + Math.floor((Math.max(1, this.realm) - 1) / 5);
+    }
+
+    // 获取五行法则计数
+    getElementalCounts() {
+        const counts = { metal: 0, wood: 0, water: 0, fire: 0, earth: 0 };
+        if (this.collectedLaws) {
+            this.collectedLaws.forEach(law => {
+                const element = Utils.getCanonicalElement(law.element);
+                if (counts[element] !== undefined) {
+                    counts[element]++;
+                }
+            });
+        }
+        return counts;
     }
 
     // 检查共鸣状态
@@ -601,6 +618,46 @@ class Player {
                 Utils.showBattleLog('维度打击：额外抽2张牌！');
             }
         }
+
+        // 五行共鸣：4件套 回合开始特效
+        const elCounts = this.getElementalCounts();
+
+        // Fire (4): 烈焰焚天 - 对所有敌人施加2层灼烧
+        if (elCounts.fire >= 4) {
+            if (this.game && this.game.battle && this.game.battle.enemies) {
+                this.game.battle.enemies.forEach(e => {
+                    if (e.isAlive()) {
+                        e.buffs.burn = (e.buffs.burn || 0) + 2;
+                    }
+                });
+                Utils.showBattleLog('【火之共鸣】烈焰缭绕，灼烧全场！');
+            }
+        }
+
+        // Water (4): 柔水滋养 - 恢复3生命，获得3护盾
+        if (elCounts.water >= 4) {
+            this.heal(3);
+            this.addBlock(3);
+            Utils.showBattleLog('【水之共鸣】流水不腐，生生不息！');
+        }
+
+        // Wood (4): 生机勃勃 - 恢复6生命
+        if (elCounts.wood >= 4) {
+            this.heal(6);
+            Utils.showBattleLog('【木之共鸣】万物生长！');
+        }
+
+        // Metal (4): 锋芒毕露 - 获得2力量
+        if (elCounts.metal >= 4) {
+            this.addBuff('strength', 2);
+            Utils.showBattleLog('【金之共鸣】如封似闭，锋芒毕露！');
+        }
+
+        // Earth (4): 不动如山 - 获得10护盾
+        if (elCounts.earth >= 4) {
+            this.addBlock(10);
+            Utils.showBattleLog('【土之共鸣】大地守护！');
+        }
     }
 
     // 应用法则被动
@@ -798,6 +855,18 @@ class Player {
 
             Utils.showBattleLog(`减伤生效！抵消了 ${reduction}% 伤害`);
         }
+
+        // 五行共鸣：3件套减伤 15%
+        const elCounts = this.getElementalCounts();
+        // Check if ANY element has >= 3
+        const hasResonanceDefense = Object.values(elCounts).some(c => c >= 3);
+        if (hasResonanceDefense) {
+            const reduction = Math.floor(amount * 0.15);
+            amount -= reduction;
+            // Utils.showBattleLog(`五行护体！减免 ${reduction} 伤害`);
+        }
+
+
 
         // 伤害保护机制 (One-shot Protection)
         // 单次伤害超过最大生命值 35% 的部分，减免 20% (受到的伤害为 80%)
@@ -1748,11 +1817,12 @@ class Player {
             floor: this.floor,
             enemiesDefeated: this.enemiesDefeated,
             // 压缩法宝
-            treasures: this.treasures.map(t => ({
+            collectedTreasures: (this.collectedTreasures || []).map(t => ({
                 id: t.id,
                 obtainedAt: t.obtainedAt,
                 data: t.data
             })),
+            equippedTreasures: (this.equippedTreasures || []).map(t => t.id), // 只存ID即可
             permaBuffs: this.permaBuffs
         };
     }
@@ -1772,6 +1842,7 @@ class Player {
 
     // 获得法宝
     addTreasure(treasureId) {
+        // 如果已拥有，补偿金币
         if (this.hasTreasure(treasureId)) {
             // 已有，补偿金币
             this.gold += 50;
@@ -1789,7 +1860,22 @@ class Player {
             data: treasureData.data ? { ...treasureData.data } : {} // 运行时数据
         };
 
-        this.treasures.push(treasure);
+        // 存入收集库
+        this.collectedTreasures = this.collectedTreasures || [];
+        this.collectedTreasures.push(treasure);
+
+        // 为了兼容性，this.treasures指向已装备的法宝，或者我们修改逻辑
+        // 方案：this.treasures 改为 this.equippedTreasures 别名，保持旧代码兼容？
+        // 不，最好显式区分。旧代码使用 this.treasures 遍历生效。
+        // 所以我们让 this.treasures 指向 this.equippedTreasures。
+        // 但为了存储，我们需要分开。
+
+        // 自动装备逻辑：如果有空位，自动装备
+        if (this.equippedTreasures.length < this.getMaxTreasureSlots()) {
+            this.equipTreasure(treasureId);
+        } else {
+            Utils.showBattleLog(`获得法宝【${treasure.name}】，已放入法宝囊`);
+        }
 
         // 触发获取回调
         if (treasure.callbacks && treasure.callbacks.onObtain) {
@@ -1799,19 +1885,90 @@ class Player {
         return true;
     }
 
-    // 是否拥有法宝
+    // 是否拥有法宝 (检查收集库)
     hasTreasure(treasureId) {
-        return this.treasures.some(t => t.id === treasureId);
+        return (this.collectedTreasures || []).some(t => t.id === treasureId);
     }
 
-    // 触发法宝效果
+    // 是否装备法宝 (检查装备栏)
+    isTreasureEquipped(treasureId) {
+        return this.equippedTreasures.some(t => t.id === treasureId);
+    }
+
+    // 获取最大法宝槽位
+    getMaxTreasureSlots() {
+        let slots = 2; // 初始
+        if (this.realm >= 5) slots++;
+        if (this.realm >= 10) slots++;
+        if (this.realm >= 12) slots++;
+        if (this.realm >= 15) slots++;
+        return slots;
+    }
+
+    // 装备法宝
+    equipTreasure(treasureId) {
+        if (!this.hasTreasure(treasureId)) return false;
+        if (this.isTreasureEquipped(treasureId)) return false;
+        if (this.equippedTreasures.length >= this.getMaxTreasureSlots()) {
+            Utils.showBattleLog('法宝槽位已满！');
+            return false;
+        }
+
+        const treasure = this.collectedTreasures.find(t => t.id === treasureId);
+        if (treasure) {
+            this.equippedTreasures.push(treasure);
+            // 同步旧属性以保证兼容
+            this.treasures = this.equippedTreasures;
+            Utils.showBattleLog(`已装备法宝：${treasure.name}`);
+            return true;
+        }
+        return false;
+    }
+
+    // 卸下法宝
+    unequipTreasure(treasureId) {
+        const index = this.equippedTreasures.findIndex(t => t.id === treasureId);
+        if (index > -1) {
+            const t = this.equippedTreasures[index];
+            this.equippedTreasures.splice(index, 1);
+            // 同步
+            this.treasures = this.equippedTreasures;
+            Utils.showBattleLog(`已卸下法宝：${t.name}`);
+            return true;
+        }
+        return false;
+    }
+
+    // 触发法宝效果 (只触发装备的)
+    // 支持返回值修改（例如伤害减免）
     triggerTreasureEffect(triggerType, ...args) {
-        this.treasures.forEach(treasure => {
+        let result = null;
+        this.equippedTreasures.forEach(treasure => {
             if (treasure.callbacks && treasure.callbacks[triggerType]) {
-                treasure.callbacks[triggerType](this, ...args, treasure);
+                const callbackResult = treasure.callbacks[triggerType](this, ...args, treasure);
+                // 某些回调可能返回修改后的值
+                if (callbackResult !== undefined) {
+                    result = callbackResult;
+                }
             }
         });
+        return result;
     }
+
+    // 触发法宝效果并返回修改的数值（用于伤害计算等）
+    triggerTreasureValueEffect(triggerType, value, ...args) {
+        let modifiedValue = value;
+        this.equippedTreasures.forEach(treasure => {
+            if (treasure.callbacks && treasure.callbacks[triggerType]) {
+                const result = treasure.callbacks[triggerType](this, modifiedValue, ...args, treasure);
+                if (typeof result === 'number') {
+                    modifiedValue = result;
+                }
+            }
+        });
+        return modifiedValue;
+    }
+
     // 检查Buff
     hasBuff(type) {
         return this.buffs && this.buffs[type] && this.buffs[type] > 0;
@@ -1826,6 +1983,12 @@ class Player {
         if (type === 'strength' && value > 0) {
             Utils.showBattleLog(`获得 ${value} 点力量`);
         }
+    }
+
+    // 添加Debuff
+    addDebuff(type, value) {
+        if (!this.debuffs) this.debuffs = {};
+        this.debuffs[type] = (this.debuffs[type] || 0) + value;
     }
 
     // 移除Buff

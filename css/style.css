@@ -4234,3 +4234,415 @@ body {
     color: #fff;
     border-color: #ff4d4d;
 }
+
+/* ===================================
+   Treasure Bag Modal
+   =================================== */
+.treasure-bag-modal .modal-content {
+    max-width: 700px;
+    width: 95%;
+    max-height: 85vh;
+    background: linear-gradient(180deg, rgba(20, 20, 35, 0.98) 0%, rgba(10, 10, 20, 0.99) 100%);
+    border: 1px solid rgba(207, 170, 112, 0.3);
+    border-radius: var(--radius-lg);
+    box-shadow:
+        0 0 60px rgba(0, 0, 0, 0.8),
+        0 0 30px rgba(207, 170, 112, 0.1) inset;
+    padding: 0;
+    overflow: hidden;
+}
+
+.treasure-bag-modal .modal-content h2 {
+    font-family: var(--font-display);
+    font-size: 1.8rem;
+    color: var(--accent-gold);
+    text-align: center;
+    padding: var(--spacing-lg);
+    margin: 0;
+    background: linear-gradient(180deg, rgba(207, 170, 112, 0.15) 0%, transparent 100%);
+    border-bottom: 1px solid rgba(207, 170, 112, 0.2);
+    text-shadow: 0 0 20px rgba(207, 170, 112, 0.3);
+}
+
+.treasure-bag-modal .close-btn {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    font-size: 1.8rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    z-index: 10;
+}
+
+.treasure-bag-modal .close-btn:hover {
+    color: var(--accent-gold);
+    transform: scale(1.2);
+}
+
+.treasure-bag-layout {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+    padding: var(--spacing-lg);
+    overflow-y: auto;
+    max-height: calc(85vh - 80px);
+}
+
+.equipped-section,
+.inventory-section {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.equipped-section h3,
+.inventory-section h3 {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    color: var(--accent-gold-bright);
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid rgba(207, 170, 112, 0.2);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.equipped-section h3::before {
+    content: '⚔️';
+}
+
+.inventory-section h3::before {
+    content: '📦';
+}
+
+#equipped-count {
+    font-size: 0.9rem;
+    padding: 2px 8px;
+    background: rgba(207, 170, 112, 0.2);
+    border-radius: var(--radius-sm);
+    color: var(--accent-gold);
+}
+
+.equipped-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: var(--spacing-md);
+}
+
+.treasure-slot {
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    border: 2px dashed rgba(255, 255, 255, 0.15);
+    background: rgba(0, 0, 0, 0.2);
+    transition: all var(--transition-fast);
+    cursor: pointer;
+    text-align: center;
+    gap: var(--spacing-sm);
+}
+
+.treasure-slot.empty {
+    border-style: dashed;
+}
+
+.treasure-slot.empty .empty-text {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
+.treasure-slot.filled {
+    border-style: solid;
+    background: linear-gradient(135deg, rgba(40, 40, 60, 0.6) 0%, rgba(20, 20, 35, 0.8) 100%);
+}
+
+.treasure-slot.filled:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Rarity Colors */
+.treasure-slot.rarity-common {
+    border-color: #9e9e9e;
+}
+
+.treasure-slot.rarity-common:hover {
+    box-shadow: 0 0 15px rgba(158, 158, 158, 0.4);
+}
+
+.treasure-slot.rarity-rare {
+    border-color: #4fc3f7;
+    background: linear-gradient(135deg, rgba(30, 60, 80, 0.5) 0%, rgba(20, 30, 50, 0.7) 100%);
+}
+
+.treasure-slot.rarity-rare:hover {
+    box-shadow: 0 0 20px rgba(79, 195, 247, 0.4);
+}
+
+.treasure-slot.rarity-legendary {
+    border-color: #ffab00;
+    background: linear-gradient(135deg, rgba(80, 60, 30, 0.5) 0%, rgba(50, 40, 20, 0.7) 100%);
+}
+
+.treasure-slot.rarity-legendary:hover {
+    box-shadow: 0 0 25px rgba(255, 171, 0, 0.5);
+}
+
+.treasure-slot.rarity-mythic {
+    border-color: #e040fb;
+    background: linear-gradient(135deg, rgba(100, 30, 120, 0.4) 0%, rgba(50, 20, 70, 0.6) 100%);
+    animation: mythicPulse 2s ease-in-out infinite;
+}
+
+@keyframes mythicPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 10px rgba(224, 64, 251, 0.3);
+    }
+
+    50% {
+        box-shadow: 0 0 25px rgba(224, 64, 251, 0.6);
+    }
+}
+
+.treasure-slot .t-icon {
+    font-size: 2.5rem;
+    margin-bottom: var(--spacing-xs);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.treasure-slot .t-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-xs);
+}
+
+.treasure-slot .unequip-btn {
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    background: rgba(255, 100, 100, 0.15);
+    border: 1px solid rgba(255, 100, 100, 0.4);
+    border-radius: var(--radius-sm);
+    color: #ff8a8a;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.treasure-slot .unequip-btn:hover {
+    background: rgba(255, 100, 100, 0.3);
+    border-color: #ff6b6b;
+    color: #fff;
+}
+
+.slot-info {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: var(--spacing-sm);
+    font-style: italic;
+}
+
+/* Inventory Grid */
+.inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: var(--spacing-md);
+    min-height: 80px;
+    padding: var(--spacing-sm);
+}
+
+.inventory-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    background: linear-gradient(135deg, rgba(40, 40, 55, 0.7) 0%, rgba(25, 25, 40, 0.8) 100%);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-align: center;
+    min-height: 100px;
+    position: relative;
+    overflow: hidden;
+}
+
+.inventory-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+}
+
+.inventory-item:hover {
+    background: linear-gradient(135deg, rgba(60, 60, 80, 0.8) 0%, rgba(40, 40, 60, 0.9) 100%);
+    border-color: var(--accent-cyan);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+}
+
+.inventory-item .t-icon {
+    font-size: 2.2rem;
+    margin-bottom: var(--spacing-xs);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.inventory-item .t-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-top: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+/* Rarity backgrounds for inventory */
+.inventory-item.rarity-common {
+    border-color: rgba(158, 158, 158, 0.4);
+}
+
+.inventory-item.rarity-common::before {
+    background: linear-gradient(90deg, transparent, rgba(158, 158, 158, 0.3), transparent);
+}
+
+.inventory-item.rarity-rare {
+    border-color: rgba(79, 195, 247, 0.5);
+    background: linear-gradient(135deg, rgba(30, 50, 70, 0.7) 0%, rgba(20, 35, 55, 0.8) 100%);
+}
+
+.inventory-item.rarity-rare::before {
+    background: linear-gradient(90deg, transparent, rgba(79, 195, 247, 0.5), transparent);
+}
+
+.inventory-item.rarity-rare:hover {
+    border-color: #4fc3f7;
+    box-shadow: 0 8px 25px rgba(79, 195, 247, 0.3);
+}
+
+.inventory-item.rarity-legendary {
+    border-color: rgba(255, 171, 0, 0.6);
+    background: linear-gradient(135deg, rgba(70, 55, 30, 0.7) 0%, rgba(45, 35, 20, 0.8) 100%);
+}
+
+.inventory-item.rarity-legendary::before {
+    background: linear-gradient(90deg, transparent, rgba(255, 171, 0, 0.6), transparent);
+}
+
+.inventory-item.rarity-legendary:hover {
+    border-color: #ffab00;
+    box-shadow: 0 8px 25px rgba(255, 171, 0, 0.4);
+}
+
+.inventory-item.rarity-mythic {
+    border-color: rgba(224, 64, 251, 0.5);
+}
+
+.empty-inventory {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+    padding: var(--spacing-lg);
+}
+
+.inventory-item .t-desc-hint {
+    font-size: 0.65rem;
+    color: var(--accent-cyan);
+    opacity: 0.7;
+    margin-top: 4px;
+    cursor: pointer;
+    transition: opacity var(--transition-fast);
+}
+
+.inventory-item:hover .t-desc-hint {
+    opacity: 1;
+}
+
+/* 已装备法宝的效果描述提示 */
+.treasure-slot .t-effect {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    max-width: 100%;
+    text-align: center;
+    line-height: 1.3;
+    margin-top: 4px;
+    opacity: 0.8;
+}
+
+/* 仓库法宝效果描述 (新) - 与已装备保持一致但适配Grid */
+.inventory-item .t-effect {
+    font-size: 0.7rem;
+    /* 调小字体 */
+    color: var(--text-muted);
+    line-height: 1.3;
+    margin-top: 6px;
+    height: 38px;
+    /* 固定高度，显示两行左右，多余截断 */
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    text-align: center;
+    width: 100%;
+}
+
+.inventory-item {
+    min-height: 140px;
+    /* 增加高度以容纳描述 */
+}
+
+/* Collection Item Tweaks */
+.collection-item {
+    padding: 15px;
+    background: linear-gradient(135deg, rgba(35, 35, 50, 0.8) 0%, rgba(20, 20, 30, 0.9) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.collection-item.locked {
+    background: rgba(20, 20, 25, 0.5);
+    border-style: dashed;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.collection-desc {
+    font-size: 0.75rem;
+    /* 调小字体 */
+    color: var(--text-secondary);
+    text-align: center;
+    line-height: 1.4;
+    margin-top: 8px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    /* 显示更多行 */
+    -webkit-box-orient: vertical;
+    width: 100%;
+    opacity: 0.9;
+}
+
+.collection-item.locked .collection-desc {
+    color: var(--text-muted);
+    font-style: italic;
+    opacity: 0.6;
+}
+
+.collection-item .collection-icon {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+}

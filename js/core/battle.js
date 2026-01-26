@@ -12,7 +12,36 @@ class Battle {
         this.selectedCard = null;
         this.targetingMode = false;
         this.battleEnded = false;
+        this.battleEnded = false;
         this.isProcessingCard = false; // 防止卡牌连点
+
+        // 五行定义
+        this.ELEMENTS = {
+            metal: { name: '金', color: '#FFD700', weak: 'fire', strong: 'wood' },
+            wood: { name: '木', color: '#4CAF50', weak: 'metal', strong: 'earth' },
+            water: { name: '水', color: '#2196F3', weak: 'earth', strong: 'fire' },
+            fire: { name: '火', color: '#FF5722', weak: 'water', strong: 'metal' },
+            earth: { name: '土', color: '#795548', weak: 'wood', strong: 'water' }
+        };
+    }
+
+    // 计算五行克制倍率
+    calcElementalMultiplier(source, target) {
+        if (!source || !target) return 1.0;
+
+        const s = Utils.getCanonicalElement(source);
+        const t = Utils.getCanonicalElement(target);
+
+        if (s === 'none' || t === 'none') return 1.0;
+
+        const sDef = this.ELEMENTS[s];
+        if (!sDef) return 1.0;
+
+        if (sDef.strong === t) return 1.5; // 克制
+        if (sDef.weak === t) return 0.7;   // 被克
+        if (s === t) return 0.8;           // 同属性
+
+        return 1.0;
     }
 
     // 初始化战斗
@@ -174,6 +203,15 @@ class Battle {
                     env.onBattleStart(this);
                 }
             }
+        }
+
+        // Boss机制初始化
+        if (typeof BossMechanicsHandler !== 'undefined') {
+            this.enemies.forEach(enemy => {
+                if (enemy.isBoss) {
+                    BossMechanicsHandler.processBattleStart(this, enemy);
+                }
+            });
         }
 
         // 命环战斗开始钩子 (Analysis Ring)
@@ -720,7 +758,7 @@ class Battle {
             // 处理效果
             if (results && Array.isArray(results)) {
                 for (const result of results) {
-                    await this.processEffect(result, target, targetIndex);
+                    await this.processEffect(result, target, targetIndex, card.element);
                 }
             }
 
@@ -781,7 +819,7 @@ class Battle {
     }
 
     // 处理效果
-    async processEffect(result, target, targetIndex) {
+    async processEffect(result, target, targetIndex, sourceElement = null) {
         const enemyEl = document.querySelector(`.enemy[data-index="${targetIndex}"]`);
 
         // 辅助函数：根据伤害计算震动强度
@@ -795,7 +833,7 @@ class Battle {
             case 'damage':
             case 'randomDamage':
                 if (target) {
-                    const damage = this.dealDamageToEnemy(target, result.value);
+                    const damage = this.dealDamageToEnemy(target, result.value, sourceElement);
                     if (enemyEl) {
                         Utils.addShakeEffect(enemyEl, getShakeIntensity(damage));
                         Utils.showFloatingNumber(enemyEl, damage, 'damage');
@@ -1099,7 +1137,7 @@ class Battle {
     }
 
     // 对敌人造成伤害
-    dealDamageToEnemy(enemy, amount) {
+    dealDamageToEnemy(enemy, amount, sourceElement = null) {
         if (typeof amount !== 'number' || isNaN(amount)) {
             console.error('dealDamageToEnemy received NaN amount', amount);
             amount = 0;
@@ -1212,6 +1250,69 @@ class Battle {
         // 检查易伤
         if (enemy.buffs.vulnerable && enemy.buffs.vulnerable > 0) {
             amount += enemy.buffs.vulnerable;
+        }
+
+        // 5. 五行克制计算
+        if (sourceElement && enemy.element) {
+            const multiplier = this.calcElementalMultiplier(sourceElement, enemy.element);
+
+            // 修正抗性 (Resistances)
+            let resistMod = 0;
+            if (enemy.resistances) {
+                const s = Utils.getCanonicalElement(sourceElement);
+                if (enemy.resistances[s]) resistMod = enemy.resistances[s]; // e.g., 0.5 means 50% resist
+            }
+
+            // 应用克制
+            if (multiplier !== 1.0) {
+                amount = Math.floor(amount * multiplier);
+
+                // 战斗日志
+                const sName = this.ELEMENTS[Utils.getCanonicalElement(sourceElement)].name;
+                const tName = this.ELEMENTS[Utils.getCanonicalElement(enemy.element)].name;
+                const icon = Utils.getElementIcon(sourceElement);
+
+                if (multiplier > 1) {
+                    Utils.showBattleLog(`${icon} ${sName}克${tName}！伤害+50%`);
+                    Utils.createFloatingText(this.enemies.indexOf(enemy), '克制!', '#ff0');
+                } else if (multiplier < 1 && multiplier > 0.75) { // Same element 0.8
+                    Utils.showBattleLog(`${icon} 同属性抵抗！伤害-20%`);
+                } else if (multiplier < 0.8) { // Weak 0.7
+                    Utils.showBattleLog(`${icon} 被${tName}克制！伤害-30%`);
+                    Utils.createFloatingText(this.enemies.indexOf(enemy), '被克', '#888');
+                }
+            }
+
+            // 应用抗性 (Resistances apply after multiplier or independently?)
+            // Usually independent. If resist 0.5, damage * 0.5.
+            if (resistMod !== 0) {
+                amount = Math.floor(amount * (1 - resistMod));
+                if (resistMod > 0) Utils.showBattleLog(`敌方抗性生效！伤害减少 ${Math.floor(resistMod * 100)}%`);
+                else Utils.showBattleLog(`敌方弱点！伤害增加 ${Math.floor(Math.abs(resistMod) * 100)}%`);
+            }
+        }
+
+        // 6. 五行共鸣伤害加成 (Resonance Damage Bonus)
+        // 检查玩家收集的法则，计算同属性数量
+        if (sourceElement && this.player.collectedLaws) {
+            const s = Utils.getCanonicalElement(sourceElement);
+            const count = this.player.collectedLaws.filter(l => Utils.getCanonicalElement(l.element) === s).length;
+
+            let bonus = 0;
+            if (count >= 2) bonus += 0.10; // +10%
+            if (count >= 3) bonus += 0.15; // Total +25%
+            if (count >= 4) bonus += 0.15; // Total +40%
+
+            if (bonus > 0) {
+                const extra = Math.floor(amount * bonus);
+                amount += extra;
+                // Utils.showBattleLog(`五行共鸣(${s})：伤害+${Math.floor(bonus*100)}%`);
+            }
+        }
+
+        // Boss机制伤害处理（减伤、反射等）
+        if (enemy.isBoss && typeof BossMechanicsHandler !== 'undefined') {
+            amount = BossMechanicsHandler.processOnDamage(this, enemy, amount, 'player');
         }
 
         // 默认扣血逻辑
@@ -1399,6 +1500,11 @@ class Battle {
 
             try {
                 // (Chaos Logic Removed - Replaced by new Chaos Law)
+
+                // === Boss机制处理 (回合开始) ===
+                if (enemy.isBoss && typeof BossMechanicsHandler !== 'undefined') {
+                    BossMechanicsHandler.processTurnStart(this, enemy);
+                }
 
                 // === Boss 压迫感增强 (Boss Mechanics 2.0) ===
                 if (enemy.isBoss) {

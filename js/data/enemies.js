@@ -18,6 +18,7 @@ const ENEMIES = {
         ],
         stealChance: 0.1,
         stealLaw: null,
+        element: 'metal',
         gold: { min: 10, max: 20 }
     },
 
@@ -86,6 +87,8 @@ const ENEMIES = {
         ],
         stealChance: 0.2,
         stealLaw: 'woodLaw',
+        element: 'wood',
+        resistances: { fire: -0.3, wood: 0.5 },
         gold: { min: 18, max: 28 }
     },
 
@@ -102,6 +105,8 @@ const ENEMIES = {
         ],
         stealChance: 0.25,
         stealLaw: 'thunderLaw',
+        element: 'thunder',
+        resistances: { fire: -0.2, thunder: 0.5 },
         gold: { min: 20, max: 30 }
     },
 
@@ -155,6 +160,8 @@ const ENEMIES = {
         ],
         stealChance: 0.1,
         stealLaw: 'earthShield',
+        element: 'earth',
+        resistances: { wood: -0.3, earth: 0.5 },
         gold: { min: 30, max: 50 }
     },
 
@@ -210,6 +217,8 @@ const ENEMIES = {
         ],
         stealChance: 0.25,
         stealLaw: 'flameTruth',
+        element: 'fire',
+        resistances: { water: -0.5, fire: 0.5 },
         gold: { min: 35, max: 55 }
     },
 
@@ -247,6 +256,8 @@ const ENEMIES = {
         ],
         stealChance: 1.0,
         stealLaw: 'reversalLaw',
+        element: 'fire',
+        resistances: { water: -0.3, fire: 0.3 },
         gold: { min: 800, max: 1200 },
         description: '天道意志的具象化身'
     },
@@ -579,6 +590,8 @@ const ENEMIES = {
         ],
         stealChance: 0.5,
         stealLaw: 'flameTruth',
+        element: 'fire',
+        resistances: { water: -0.5, fire: 0.8 },
         gold: { min: 300, max: 400 },
         description: '双生一体，火焰共鸣'
     },
@@ -637,6 +650,8 @@ const ENEMIES = {
     stormSummoner: {
         id: 'stormSummoner',
         name: '风暴唤灵者',
+        element: 'wood', // Wind -> Wood
+        resistances: { metal: -0.3, wood: 0.5 },
         icon: '🌪️',
         realm: 11,
         isBoss: true,
@@ -707,6 +722,8 @@ const ENEMIES = {
         ],
         stealChance: 0.6,
         stealLaw: 'metalBody',
+        element: 'metal',
+        resistances: { fire: -0.3, metal: 0.5 },
         gold: { min: 450, max: 550 },
         description: '三首齐动，攻守兼备'
     },

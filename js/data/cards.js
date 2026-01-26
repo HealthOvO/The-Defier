@@ -66,6 +66,7 @@ const CARDS = {
         icon: '💥',
         description: '造成 20 点伤害',
         rarity: 'uncommon',
+        element: 'fire',
         effects: [
             { type: 'damage', value: 20, target: 'enemy' }
         ]
@@ -238,7 +239,8 @@ const CARDS = {
         effects: [
             { type: 'damage', value: 4, target: 'enemy' },
             { type: 'debuff', buffType: 'poison', value: 2, target: 'enemy' }
-        ]
+        ],
+        element: 'wood'
     },
 
     natureGrowth: {
@@ -279,6 +281,7 @@ const CARDS = {
         description: '造成 7 点穿透伤害（无视护盾）',
         rarity: 'rare',
         lawType: 'sword',
+        element: 'metal',
         effects: [
             { type: 'penetrate', value: 7, target: 'enemy' }
         ]
@@ -293,6 +296,7 @@ const CARDS = {
         description: '造成 6 点伤害，使敌人获得 3 层灼烧',
         rarity: 'rare',
         lawType: 'fire',
+        element: 'fire',
         effects: [
             { type: 'damage', value: 6, target: 'enemy' },
             { type: 'debuff', buffType: 'burn', value: 3, target: 'enemy' }
@@ -749,6 +753,7 @@ const CARDS = {
         description: '造成 8 点伤害3次，每次+1灼烧',
         rarity: 'epic',
         lawType: 'fire',
+        element: 'fire',
         effects: [
             { type: 'damage', value: 8, target: 'enemy' },
             { type: 'debuff', buffType: 'burn', value: 1, target: 'enemy' },

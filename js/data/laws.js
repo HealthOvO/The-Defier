@@ -10,7 +10,8 @@ const LAWS = {
         icon: '⚡',
         description: '雷霆之力。攻击时有30%几率触发一道惊雷，对随机敌人造成10点伤害。',
         rarity: 'rare',
-        element: 'thunder',
+        rarity: 'rare',
+        element: 'thunder', // Maps to Metal
         passive: {
             type: 'thunderStrike',
             chance: 0.3,

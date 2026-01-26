@@ -399,6 +399,78 @@ class Game {
                 if (this.player.fateRing.checkLevelUp) {
                     this.player.fateRing.checkLevelUp();
                 }
+
+                // === 4. 重建法宝系统 (New System) ===
+                // 初始化数组
+                this.player.collectedTreasures = [];
+                this.player.equippedTreasures = [];
+
+                // 恢复收集库 (Collected)
+                const hydrateTreasure = (savedT) => {
+                    const baseT = TREASURES[savedT.id];
+                    if (!baseT) {
+                        console.warn('Unknown treasure:', savedT.id);
+                        return savedT; // 未知法宝，保留原样
+                    }
+                    // 基础数据优先，只保留存档中的运行时数据
+                    return {
+                        ...baseT,           // 基础定义（icon, name, description, callbacks等）
+                        id: savedT.id,
+                        obtainedAt: savedT.obtainedAt || Date.now(),
+                        data: savedT.data || (baseT.data ? { ...baseT.data } : {})
+                    };
+                };
+
+                if (gameState.player.collectedTreasures) {
+                    const hydrated = gameState.player.collectedTreasures.map(hydrateTreasure);
+                    // 去重：保留最后获得的或者是第一个？应该根据ID去重
+                    const uniqueMap = new Map();
+                    hydrated.forEach(t => {
+                        if (!uniqueMap.has(t.id)) {
+                            uniqueMap.set(t.id, t);
+                        } else {
+                            // 如果已存在，可以检查是否需要合并数据的逻辑，但目前法宝没有复杂数据
+                            // 简单的保留第一个即可
+                            console.log(`Removed duplicate treasure: ${t.id}`);
+                        }
+                    });
+                    this.player.collectedTreasures = Array.from(uniqueMap.values());
+                } else if (gameState.player.treasures) {
+                    // 兼容旧存档：旧treasures视为"已收集且已装备"
+                    const hydrated = gameState.player.treasures.map(hydrateTreasure);
+                    // 同样去重
+                    const uniqueMap = new Map();
+                    hydrated.forEach(t => {
+                        if (!uniqueMap.has(t.id)) uniqueMap.set(t.id, t);
+                    });
+                    this.player.collectedTreasures = Array.from(uniqueMap.values());
+                }
+
+                // 恢复已装备 (Equipped)
+                if (gameState.player.equippedTreasures) {
+                    // 新存档: 存储的是ID列表
+                    const uniqueEquippedIds = new Set(gameState.player.equippedTreasures);
+                    uniqueEquippedIds.forEach(tid => {
+                        // 兼容性：如果碰巧存的是对象（极其罕见），尝试取id
+                        const id = (typeof tid === 'object' && tid.id) ? tid.id : tid;
+                        const t = this.player.collectedTreasures.find(ct => ct.id === id);
+                        if (t) this.player.equippedTreasures.push(t);
+                    });
+                } else if (gameState.player.treasures) {
+                    // 兼容旧存档：将所有法宝放入收集库，只装备前N个
+                    this.player.equippedTreasures = [...this.player.collectedTreasures];
+                }
+
+                // 修复：确保装备数量不超过槽位上限
+                const maxSlots = this.player.getMaxTreasureSlots();
+                if (this.player.equippedTreasures.length > maxSlots) {
+                    console.log(`载入存档：装备法宝超限 (${this.player.equippedTreasures.length}/${maxSlots})，已自动调整`);
+                    // 超出部分移回仓库（仍在 collectedTreasures 中，只是不在 equippedTreasures 中）
+                    this.player.equippedTreasures = this.player.equippedTreasures.slice(0, maxSlots);
+                }
+
+                // 同步引用
+                this.player.treasures = this.player.equippedTreasures;
             }
 
             // Retroactive Skill Unlock (Fix for existing saves)
@@ -750,7 +822,7 @@ class Game {
         // 更新为18重天
         for (let i = 1; i <= 18; i++) {
             const isUnlocked = this.unlockedRealms && this.unlockedRealms.includes(i);
-            const isCompleted = isUnlocked && this.unlockedRealms.includes(i + 1); // 简单判断
+            const isCompleted = isUnlocked && this.unlockedRealms.includes(i + 1);
 
             const realmCard = document.createElement('div');
             realmCard.className = `realm-card ${isUnlocked ? '' : 'locked'}`;
@@ -758,12 +830,22 @@ class Game {
             const realmName = this.map.getRealmName(i);
             const env = this.map.getRealmEnvironment(i);
 
+            // 获取Boss信息
+            const bossInfo = this.getRealmBossInfo(i);
+
             realmCard.innerHTML = `
                 <div class="realm-icon">${isUnlocked ? (isCompleted ? '🏆' : '⚔️') : '🔒'}</div>
                 <div class="realm-info">
                     <h3>${realmName}</h3>
-                    <p class="realm-env">${env.name}: ${env.desc}</p>
-                    ${isCompleted ? '<span class="replay-tag">重复挑战 (收益减半)</span>' : ''}
+                    <p class="realm-env" style="color: var(--accent-gold);">⚔️ ${env.name}</p>
+                    <p class="realm-env-desc" style="font-size:0.8rem; color:#aaa;">${env.desc}</p>
+                    ${bossInfo.bossName ? `
+                        <div class="boss-info" style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.1);">
+                            <p style="color:#ff6b6b; font-weight:bold; margin-bottom:4px;">👹 ${bossInfo.bossName}</p>
+                            <p style="font-size:0.75rem; color:#ffcc00;">⚠️ ${bossInfo.mechDesc}</p>
+                        </div>
+                    ` : ''}
+                    ${isCompleted ? '<span class="replay-tag" style="display:block; margin-top:8px;">重复挑战 (收益减半)</span>' : ''}
                 </div>
             `;
 
@@ -775,6 +857,53 @@ class Game {
 
             container.appendChild(realmCard);
         }
+    }
+
+    // 获取天域Boss信息
+    getRealmBossInfo(realm) {
+        // 天域与Boss ID对照表
+        const realmBossMap = {
+            1: 'banditLeader',
+            2: 'demonWolf',
+            3: 'swordElder',
+            4: 'danZun',
+            5: 'ancientSpirit',
+            6: 'divineLord',
+            7: 'fusionSovereign',
+            8: 'mahayanaSupreme',
+            9: 'ascensionSovereign',
+            10: 'dualMagmaGuardians',
+            11: 'stormSummoner',
+            12: 'triheadGoldDragon',
+            13: 'mirrorDemon',
+            14: 'chaosEye',
+            15: 'voidDevourer',
+            16: 'elementalElder',
+            17: 'karmaArbiter',
+            18: 'heavenlyDao'
+        };
+
+        const bossId = realmBossMap[realm];
+        if (!bossId || typeof BOSS_MECHANICS === 'undefined' || !BOSS_MECHANICS[bossId]) {
+            return { bossName: null, mechDesc: '', counterTreasure: '' };
+        }
+
+        const boss = BOSS_MECHANICS[bossId];
+        const mechDesc = boss.mechanics?.description || '未知机制';
+
+        // 获取克制法宝名称
+        let counterNames = [];
+        if (boss.countersBy && typeof TREASURES !== 'undefined') {
+            counterNames = boss.countersBy
+                .map(tid => TREASURES[tid]?.name || tid)
+                .slice(0, 2); // 最多显示2个
+        }
+
+        return {
+            bossName: boss.name,
+            mechDesc: mechDesc,
+            counterTreasure: counterNames.length > 0 ? counterNames.join(' / ') : ''
+        };
     }
 
     // 开始指定关卡
@@ -1321,17 +1450,36 @@ class Game {
         const existingTreasures = resourceContainer.querySelectorAll('.reward-treasure-item');
         existingTreasures.forEach(el => el.remove());
 
-        let dropChance = 0.15; // 普通概率提升一点
-        if (this.currentBattleNode && this.currentBattleNode.type === 'elite') dropChance = 0.40;
-        if (this.currentBattleNode && this.currentBattleNode.type === 'boss') dropChance = 1.0;
+        let dropChance = 0.15; // 普通敌人15%
+        if (this.currentBattleNode && this.currentBattleNode.type === 'elite') dropChance = 0.40; // 精英40%
+        if (this.currentBattleNode && this.currentBattleNode.type === 'boss') dropChance = 1.0; // Boss必掉
 
         if (Math.random() < dropChance) {
-            const treasureKeys = Object.keys(TREASURES);
-            const unowned = treasureKeys.filter(k => !this.player.hasTreasure(k));
-            if (unowned.length > 0) {
-                const tid = unowned[Math.floor(Math.random() * unowned.length)];
-                const droppedTreasure = TREASURES[tid];
+            let droppedTreasure = null;
 
+            // Boss特定掉落逻辑：检查击败的敌人是否有克制法宝
+            if (this.currentBattleNode && this.currentBattleNode.type === 'boss' && this.battle && this.battle.enemies) {
+                const bossEnemy = this.battle.enemies.find(e => e.isBoss);
+                if (bossEnemy && typeof getCounterTreasures === 'function') {
+                    // 获取克制该Boss的法宝
+                    const counterTreasures = getCounterTreasures(bossEnemy.id);
+                    // 过滤玩家未拥有的
+                    const unownedCounters = counterTreasures.filter(t => !this.player.hasTreasure(t.id));
+
+                    // 50%概率掉落克制法宝，50%概率随机
+                    if (unownedCounters.length > 0 && Math.random() < 0.5) {
+                        droppedTreasure = unownedCounters[Math.floor(Math.random() * unownedCounters.length)];
+                        Utils.showBattleLog(`【Boss战利品】获得克制法宝！`);
+                    }
+                }
+            }
+
+            // 如果没有特定掉落，使用权重随机
+            if (!droppedTreasure) {
+                droppedTreasure = this.getWeightedRandomTreasure();
+            }
+
+            if (droppedTreasure) {
                 // 自动获取
                 this.player.addTreasure(droppedTreasure.id);
 
@@ -1340,7 +1488,8 @@ class Game {
                 tItem.style.color = 'var(--accent-gold)';
                 tItem.style.cursor = 'help';
                 tItem.title = droppedTreasure.description;
-                tItem.innerHTML = `<span class="icon">${droppedTreasure.icon}</span> <span>获得法宝：${droppedTreasure.name}</span>`;
+                const label = this.getRarityLabel ? this.getRarityLabel(droppedTreasure.rarity) : '';
+                tItem.innerHTML = `<span class="icon">${droppedTreasure.icon}</span> <span>获得法宝：${droppedTreasure.name} ${label}</span>`;
                 resourceContainer.appendChild(tItem);
 
                 Utils.showBattleLog(`战斗胜利！获得法宝: ${droppedTreasure.name}`);
@@ -2337,46 +2486,68 @@ class Game {
             this.player.fateRing.exp = 999999; // 确保是满经验
 
             // 确保槽位解锁
-            // 只有MutatedRing(林风)和SealedRing(香叶)有不同的maxSlots逻辑
-            // 通用逻辑：根据等级重置
             if (this.player.fateRing.type === 'sealed') {
                 this.player.fateRing.maxSlots = 12;
             } else if (this.player.fateRing.type === 'mutated') {
-                this.player.fateRing.maxSlots = 4; // 假设4是满级
-                // check level data
+                this.player.fateRing.maxSlots = 4;
                 if (FATE_RING.levels[10]) this.player.fateRing.maxSlots = FATE_RING.levels[10].slots;
             } else {
                 if (FATE_RING.levels[10]) this.player.fateRing.maxSlots = FATE_RING.levels[10].slots;
             }
 
             if (this.player.fateRing.initSlots) {
-                // initSlots会重置槽位内容？如果是空的就重置，如果不是则保留？
-                // fateRing.initSlots() 会重新生成 slots 数组，可能会清空现有法则。
-                // 我们应该只增加槽位？
-                // initSlots implementation: creates new array loop maxSlots.
-                // 我们还是简单调用 initSlots，反正下一步是获得所有法则。
                 this.player.fateRing.initSlots();
             }
         }
 
         // 3. 获得所有法则
         if (typeof LAWS !== 'undefined') {
-            // 清空当前收集，全部重新加入
             this.player.collectedLaws = [];
             for (const key in LAWS) {
-                // 深拷贝防止引用
                 this.player.collectedLaws.push(JSON.parse(JSON.stringify(LAWS[key])));
             }
             this.player.lawsCollected = this.player.collectedLaws.length;
         }
 
-        // 4. 更新UI
+        // 4. 获得所有法宝
+        if (typeof TREASURES !== 'undefined') {
+            // 清空并重新收集所有法宝
+            this.player.collectedTreasures = [];
+            this.player.equippedTreasures = [];
+
+            for (const key in TREASURES) {
+                const treasure = TREASURES[key];
+                // 深拷贝法宝数据
+                const treasureCopy = JSON.parse(JSON.stringify(treasure));
+                // 确保图标等属性被复制
+                treasureCopy.icon = treasure.icon;
+                treasureCopy.callbacks = treasure.callbacks;
+                treasureCopy.getDesc = treasure.getDesc;
+
+                this.player.collectedTreasures.push(treasureCopy);
+            }
+
+            Utils.showBattleLog(`【天道馈赠】获得所有 ${this.player.collectedTreasures.length} 个法宝！`);
+        }
+
+        // 5. 解锁所有技能（如果有冷却重置）
+        if (this.player.skillCooldown !== undefined) {
+            this.player.skillCooldown = 0;
+        }
+
+        // 6. 恢复满血
+        this.player.currentHp = this.player.maxHp;
+
+        // 7. 更新UI
         this.player.recalculateStats();
         if (this.currentScreen === 'map-screen' && this.map) {
             this.map.updateStatusBar();
         }
 
-        Utils.showBattleLog("【天道崩塌】作弊成功！已获得千万灵石、满级命环及所有法则！");
+        const lawCount = this.player.collectedLaws ? this.player.collectedLaws.length : 0;
+        const treasureCount = this.player.collectedTreasures ? this.player.collectedTreasures.length : 0;
+
+        Utils.showBattleLog(`【天道崩塌】作弊成功！已获得：千万灵石、满级命环、${lawCount}个法则、${treasureCount}个法宝！`);
 
         // 自动保存并同步云端
         this.saveGame();
@@ -2983,10 +3154,32 @@ class Game {
             sold: false
         });
 
-        // 3. 随机商品 (30% 几率刷出法则，20% 几率刷出属性药水)
-        if (Math.random() < 0.3) {
+        // 3. 随机商品 (由原来的随机服务改为固定商品位 + 概率位)
+
+        // --- 必定刷出一个法宝 (如果有未拥有的) ---
+        // 使用加权随机逻辑
+        const treasure = this.getWeightedRandomTreasure();
+
+        if (treasure) {
+            // 计算价格：基础价格 * (1 + 0.1 * (层数-1))
+            let finalPrice = Math.floor((treasure.price || 150) * priceMult);
+
+            services.push({
+                id: treasure.id,
+                type: 'treasure',
+                name: treasure.name,
+                icon: treasure.icon || '🏺',
+                desc: treasure.description,
+                price: finalPrice,
+                sold: false,
+                rarity: treasure.rarity
+            });
+        }
+
+        // 4. 概率商品 (法则/药水/额外法宝)
+        // 降低概率，因为已经必出法宝了
+        if (Math.random() < 0.25) {
             const lawKeys = Object.keys(LAWS);
-            // 尝试找一个未获得的法则
             const uncollected = lawKeys.filter(k => !this.player.collectedLaws.some(l => l.id === k));
             if (uncollected.length > 0) {
                 const randomLawId = uncollected[Math.floor(Math.random() * uncollected.length)];
@@ -3004,7 +3197,7 @@ class Game {
             }
         }
 
-        if (Math.random() < 0.25) {
+        if (Math.random() < 0.2) {
             services.push({
                 id: 'maxHp',
                 type: 'item',
@@ -3058,7 +3251,10 @@ class Game {
     // 生成商店卡牌 (封装以便刷新使用)
     generateShopCards(count = 5) {
         const items = [];
+        // 商店刷新的卡牌价格不随层数膨胀太厉害，主要还是原价打折
         const realm = this.player.realm || 1;
+        // 卡牌本身价格固定，这里Multiplier主要影响折扣力度? 不，这里影响最终售价
+        // 卡牌基础价值较低，这里只微调
         const priceMult = 1 + (realm - 1) * 0.05;
 
         for (let i = 0; i < count; i++) {
@@ -3076,18 +3272,11 @@ class Game {
                 else if (roll < 0.5) rarity = 'uncommon';
             }
 
-            const card = getRandomCard(rarity, this.player.characterId); // Pass characterId for filtering
-            // 之前的 getRandomCard 实现可能不支持参数，稳妥起见我们用旧逻辑并增强筛选
-            // 如果 getRandomCard 不支持，就多随机几次取最好的？
-            // 假设 getRandomCard 虽然支持参数（查看 import/export），但Utils中没看到，可能是全局的。
-            // 检查 game.js 顶部引用... 好像是 data/cards.js 里的helper？
-            // 没关系，我们先用简单逻辑:
+            const card = getRandomCard(rarity, this.player.characterId);
 
-            // 暂且使用全局 getRandomCard，如果不接受参数，我们就在外部过滤
-            // 实际上 cards.js 里的 getRandomCard(rarity) 是支持的（通常）
-            // 如果不支持，我们会得到随机牌。
+            if (!card) continue;
 
-            // 商店特惠：所有卡牌8折
+            // 商店特惠：所有卡牌8折，再乘难度系数
             const basePrice = this.getCardPrice(card);
             const price = Math.floor(basePrice * 0.8 * priceMult);
 
@@ -3389,8 +3578,8 @@ class Game {
         // 更新内容
         const msgEl = document.getElementById('generic-alert-message');
         const titleEl = document.getElementById('generic-alert-title');
-        if (msgEl) msgEl.innerText = message;
-        if (titleEl) titleEl.innerText = title;
+        if (msgEl) msgEl.innerHTML = message.replace(/\n/g, '<br>');
+        if (titleEl) titleEl.textContent = title;
 
         // 按钮事件
         const okBtn = document.getElementById('generic-alert-btn');
@@ -4409,6 +4598,343 @@ class Game {
                 setTimeout(() => window.location.reload(), 500);
             }
         });
+    }
+    // 打开法宝囊
+    showTreasureBag() {
+        // 创建或获取法宝囊模态框
+        let modal = document.getElementById('treasure-bag-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'treasure-bag-modal';
+            modal.className = 'modal treasure-bag-modal';
+            modal.innerHTML = `
+                <div class="modal-content large-modal">
+                    <span class="close-btn">&times;</span>
+                    <h2>🎒 法宝囊</h2>
+                    
+                    <div class="treasure-bag-layout">
+                        <!-- 左侧：已装备 -->
+                        <div class="equipped-section">
+                            <h3>已装备法宝 <span id="equipped-count">0/2</span></h3>
+                            <div class="equipped-grid" id="equipped-grid"></div>
+                            <div class="slot-info">突破境界可解锁更多槽位</div>
+                        </div>
+
+                        <!-- 右侧：仓库 -->
+                        <div class="inventory-section">
+                            <h3>法宝仓库</h3>
+                            <div class="inventory-grid" id="inventory-grid"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            // 绑定关闭
+            const closeBtn = modal.querySelector('.close-btn');
+            closeBtn.onclick = () => {
+                modal.style.display = 'none';
+                if (this.currentScreen === 'map-screen') {
+                    this.updateMapUI(); // 刷新地图上的法宝显示
+                }
+            };
+
+            // 点击背景关闭
+            modal.onclick = (e) => {
+                if (e.target === modal) modal.style.display = 'none';
+            };
+        }
+
+        modal.style.display = 'flex';
+        this.updateTreasureBagUI();
+    }
+
+    // 更新法宝囊界面
+    updateTreasureBagUI() {
+        const modal = document.getElementById('treasure-bag-modal');
+        if (!modal || modal.style.display === 'none') return;
+
+        const maxSlots = this.player.getMaxTreasureSlots();
+        const equippedCountObj = document.getElementById('equipped-count');
+        if (equippedCountObj) {
+            equippedCountObj.innerText = `${this.player.equippedTreasures.length}/${maxSlots}`;
+        }
+
+        const equippedGrid = document.getElementById('equipped-grid');
+        const inventoryGrid = document.getElementById('inventory-grid');
+
+        equippedGrid.innerHTML = '';
+        inventoryGrid.innerHTML = '';
+
+        // 渲染装备槽
+        for (let i = 0; i < maxSlots; i++) {
+            const treasure = this.player.equippedTreasures[i];
+            const slot = document.createElement('div');
+            slot.className = 'treasure-slot';
+
+            if (treasure) {
+                const icon = treasure.icon || '📦';
+                const name = treasure.name || treasure.id;
+                const desc = treasure.description || (treasure.getDesc ? treasure.getDesc(this.player) : '');
+                const shortDesc = desc.length > 25 ? desc.substring(0, 25) + '...' : desc;
+                const rarityLabel = this.getRarityLabel(treasure.rarity || 'common');
+
+                slot.className += ' filled rarity-' + (treasure.rarity || 'common');
+                slot.innerHTML = `
+                    <div class="t-icon">${icon}</div>
+                    <div class="t-name">${name}</div>
+                    <div class="t-rarity" style="font-size:0.7rem; margin-bottom:2px;">${rarityLabel}</div>
+                    <div class="t-effect">${shortDesc}</div>
+                    <button class="unequip-btn">卸下</button>
+                `;
+
+                // Click to view, btn to unequip
+                slot.onclick = (e) => {
+                    if (e.target.className === 'unequip-btn') {
+                        e.stopPropagation();
+                        this.player.unequipTreasure(treasure.id);
+                        if (typeof audioManager !== 'undefined') audioManager.playSFX('click');
+                        this.updateTreasureBagUI();
+                    } else {
+                        // Show full info
+                        this.showAlertModal(desc, name);
+                    }
+                };
+            } else {
+                slot.className += ' empty';
+                slot.innerHTML = '<div class="empty-text">空闲槽位</div>';
+            }
+            equippedGrid.appendChild(slot);
+        }
+
+        // 渲染仓库
+        // 过滤掉已装备的
+        const inventory = this.player.collectedTreasures.filter(t => !this.player.isTreasureEquipped(t.id));
+
+        if (inventory.length === 0) {
+            inventoryGrid.innerHTML = '<div class="empty-inventory">暂无闲置法宝</div>';
+        } else {
+            inventory.forEach(t => {
+                // 确保图标存在，如果不存在则使用默认
+                const icon = t.icon || '📦';
+                const name = t.name || t.id;
+                const desc = t.description || (t.getDesc ? t.getDesc(this.player) : '未知效果');
+                const rarityLabel = this.getRarityLabel(t.rarity || 'common');
+
+                const el = document.createElement('div');
+                el.className = `inventory-item rarity-${t.rarity || 'common'}`;
+                el.innerHTML = `
+                    <div class="t-icon">${icon}</div>
+                    <div class="t-name">${name}</div>
+                    <div class="t-rarity" style="font-size:0.7rem; margin-bottom:2px;">${rarityLabel}</div>
+                    <div class="t-effect">${desc}</div>
+                `;
+                el.title = `${name}: ${desc}`;
+
+                el.onclick = (e) => {
+                    if (this.player.equipTreasure(t.id)) {
+                        if (typeof audioManager !== 'undefined') audioManager.playSFX('equip');
+                        this.updateTreasureBagUI();
+                    } else {
+                        // 装备失败（满）
+                        if (this.player.equippedTreasures.length >= maxSlots) {
+                            this.showAlertModal(`⚠️ 法宝槽位已满！请先卸下其他法宝。`, '无法装备');
+                        }
+                    }
+                };
+                inventoryGrid.appendChild(el);
+            });
+        }
+    }
+
+    // 获取法宝获取途径
+    getTreasureSource(t) {
+        // 特殊法宝的详细来源
+        const specificSources = {
+            // 普通法宝
+            'vitality_stone': '商店购买 (第1重起) · 精英敌人掉落',
+            'sharp_whetstone': '商店购买 (第1重起) · 普通敌人掉落',
+            'pressure_talisman': '商店购买 (第1重起) · 击败山寨头目掉落',
+            'soul_jade': '商店购买 (第1重起) · 击败妖狼王掉落',
+            'qi_gourd': '商店购买 (第1重起) · 奇遇事件奖励',
+            'spirit_stone': '商店购买 (第1重起) · 营地供奉获得',
+            'blood_orb': '商店购买 (第2重起) · 精英敌人掉落',
+            'iron_talisman': '商店购买 (第1重起) · 普通敌人掉落',
+
+            // 稀有法宝
+            'soul_banner': '商店购买 (第2重起) · 精英敌人掉落',
+            'spirit_bead': '商店购买 (第2重起) · 奇遇事件奖励',
+            'ice_spirit_bead': '第3重商店解锁 · 击败丹尊掉落 · 第10重Boss掉落',
+            'heart_mirror': '商店购买 (第2重起) · 击败仙门长老掉落',
+            'seal_soul_bead': '第4重商店解锁 · 击败上古遗灵掉落',
+            'space_anchor': '第5重商店解锁 · 击败化神大能掉落',
+            'wind_bead': '第10重商店解锁 · 击败风暴唤灵者掉落',
+            'ward_jade': '商店购买 (第2重起) · 精英毒蛇敌人掉落',
+            'diamond_amulet': '第3重商店解锁 · 奇遇事件奖励',
+            'phoenix_feather': '第3重商店解锁 · 火焰地带奇遇',
+            'tortoise_shell': '第4重商店解锁 · 击败精英敌人',
+
+            // 传说法宝
+            'flying_dagger': '第5重商店解锁 · Boss首杀奖励',
+            'yin_yang_mirror': '第6重商店解锁 · 奇遇事件奖励',
+            'void_mirror': '第11重商店解锁 · 击败三首金龙掉落',
+            'soul_severing_blade': '第14重商店解锁 · 击败虚空吞噬者掉落',
+            'spirit_turtle_shell': '第6重商店解锁 · 击败合体天尊掉落',
+            'cloud_boots': '第7重商店解锁 · 击败大乘至尊掉落',
+            'thunder_ward': '第8重商店解锁 · 击败飞升主宰掉落 · 雷劫奇遇',
+            'truth_mirror': '第12重商店解锁 · 击败心魔镜像掉落',
+            'clarity_bead': '第13重商店解锁 · 击败混沌之眼掉落',
+            'nine_sword_case': '第9重商店解锁 · 剑冢奇遇事件',
+
+            // 神话法宝
+            'stabilizer_pin': '第16重商店解锁 · 击败因果裁决者掉落 · 隐藏成就奖励',
+            'five_element_bead': '第15重商店解锁 · 击败五行长老掉落',
+            'karma_wheel': '第16重商店解锁 · 击败因果裁决者掉落',
+            'heaven_shard': '仅第17-18重 · 击败天道终焉掉落 · 终极挑战奖励'
+        };
+
+        if (specificSources[t.id]) {
+            return specificSources[t.id];
+        }
+
+        // 通用稀有度判断（fallback）
+        const unlockRealm = TREASURE_CONFIG?.unlockRealm?.[t.id] || 1;
+        switch (t.rarity) {
+            case 'common': return `商店购买 (第${unlockRealm}重起) · 普通/精英敌人掉落`;
+            case 'rare': return `商店购买 (第${unlockRealm}重起) · 精英/Boss敌人掉落`;
+            case 'legendary': return `第${unlockRealm}重商店解锁 · Boss首杀奖励 · 奇遇事件`;
+            case 'mythic': return `第${unlockRealm}重解锁 · Boss掉落 · 隐藏挑战奖励`;
+            default: return '未知来源';
+        }
+    }
+
+    // --- 新增：加权随机获取未拥有法宝 ---
+    getWeightedRandomTreasure() {
+        // 1. 确定当前层级的稀有度权重
+        const realm = this.player.realm || 1;
+        let weights = { common: 100, rare: 0, legendary: 0, mythic: 0 };
+
+        if (realm <= 3) {
+            weights = { common: 90, rare: 9, legendary: 1, mythic: 0 };
+        } else if (realm <= 6) {
+            weights = { common: 60, rare: 35, legendary: 5, mythic: 0 };
+        } else if (realm <= 10) {
+            weights = { common: 30, rare: 50, legendary: 19, mythic: 1 };
+        } else {
+            weights = { common: 10, rare: 40, legendary: 45, mythic: 5 };
+        }
+
+        // 2. 筛选未拥有的法宝
+        const unowned = Object.keys(TREASURES)
+            .map(k => TREASURES[k])
+            .filter(t => !this.player.hasTreasure(t.id));
+
+        if (unowned.length === 0) return null;
+
+        // 3. 尝试按权重抽取稀有度
+        const roll = Math.random() * 100;
+        let targetRarity = 'common';
+        let cumulative = 0;
+
+        if ((cumulative += weights.common) > roll) targetRarity = 'common';
+        else if ((cumulative += weights.rare) > roll) targetRarity = 'rare';
+        else if ((cumulative += weights.legendary) > roll) targetRarity = 'legendary';
+        else targetRarity = 'mythic';
+
+        // 4. 在该稀有度中随机选择
+        let candidates = unowned.filter(t => (t.rarity || 'common') === targetRarity);
+
+        // 如果该稀有度没有未获得的（或者根本没定义该稀有度的法宝），回退到全局随机
+        if (candidates.length === 0) {
+            return unowned[Math.floor(Math.random() * unowned.length)];
+        }
+
+        return candidates[Math.floor(Math.random() * candidates.length)];
+    }
+
+    // 辅助：获取品质名称和颜色
+    getRarityLabel(rarity) {
+        switch (rarity) {
+            case 'common': return '<span style="color:#9e9e9e">【凡品】</span>';
+            case 'rare': return '<span style="color:#4fc3f7">【灵品】</span>';
+            case 'legendary': return '<span style="color:#ffab00">【仙品】</span>';
+            case 'mythic': return '<span style="color:#e040fb">【神品】</span>';
+            default: return '<span style="color:#9e9e9e">【凡品】</span>';
+        }
+    }
+
+    // 显示法宝图鉴
+    showTreasureCompendium() {
+        this.showScreen('treasure-compendium');
+
+        const grid = document.getElementById('treasure-compendium-grid');
+        const statsEl = document.getElementById('treasure-compendium-stats');
+        if (!grid) return;
+
+        grid.innerHTML = '';
+        if (statsEl) statsEl.innerHTML = '';
+
+        // 统计
+        let total = 0;
+        let owned = 0;
+
+        // 遍历所有定义的法宝
+        for (const tid in TREASURES) {
+            total++;
+            const t = TREASURES[tid];
+            const isOwned = this.player.hasTreasure(tid);
+            if (isOwned) owned++;
+
+            const el = document.createElement('div');
+            el.className = `collection-item rarity-${t.rarity || 'common'} ${isOwned ? '' : 'locked'}`;
+
+            const icon = t.icon || '📦';
+            const name = t.name;
+            const rarityLabel = this.getRarityLabel(t.rarity || 'common');
+
+            let desc = t.description;
+            try {
+                if (t.getDesc) desc = t.getDesc(this.player);
+            } catch (e) {
+                console.warn('Desc gen failed for', name);
+            }
+
+            const source = this.getTreasureSource(t);
+            const detailMsg = `${rarityLabel} ${name}\n\n${desc}\n\n📍 获取途径：\n${source}`;
+
+            if (isOwned) {
+                el.innerHTML = `
+                    <div class="collection-icon">${icon}</div>
+                    <div class="collection-name">${name}</div>
+                    <div class="collection-rarity" style="font-size:0.7rem; margin-bottom:4px;">${rarityLabel}</div>
+                    <div class="collection-desc">${desc}</div>
+                `;
+            } else {
+                el.innerHTML = `
+                    <div class="collection-icon" style="filter:grayscale(1); opacity:0.7">${icon}</div>
+                    <div class="collection-name" style="color:var(--text-muted)">${name}</div>
+                    <div class="collection-rarity" style="font-size:0.7rem; margin-bottom:4px; opacity:0.7">${rarityLabel}</div>
+                    <div class="collection-desc">${desc}</div>
+                    <div style="font-size:0.7rem; color:var(--text-muted); margin-top:5px; font-style:italic;">(未解锁)</div>
+                `;
+            }
+
+            el.onclick = () => {
+                this.showAlertModal(detailMsg, name);
+            };
+
+            grid.appendChild(el);
+        }
+
+        // 更新进度及样式
+        if (statsEl) {
+            statsEl.style.textAlign = 'center';
+            statsEl.style.marginBottom = '20px';
+            statsEl.style.fontSize = '1.1rem';
+            statsEl.style.color = 'var(--accent-gold)';
+            statsEl.innerHTML = `收集进度: ${owned} / ${total}`;
+        }
+
     }
 }
 
