@@ -4785,6 +4785,12 @@ class Game {
                         this.showAlertModal(desc, name);
                     }
                 };
+
+                // Add right-click to view details
+                slot.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    this.showAlertModal(desc, name);
+                };
             } else {
                 slot.className += ' empty';
                 slot.innerHTML = '<div class="empty-text">空闲槽位</div>';
@@ -4794,7 +4800,15 @@ class Game {
 
         // 渲染仓库
         // 过滤掉已装备的
-        const inventory = this.player.collectedTreasures.filter(t => !this.player.isTreasureEquipped(t.id));
+        let inventory = this.player.collectedTreasures.filter(t => !this.player.isTreasureEquipped(t.id));
+
+        // 排序：按品质高到低 (仙品 > 神品 > 灵品 > 凡品)
+        const rarityWeights = { 'mythic': 4, 'legendary': 3, 'rare': 2, 'common': 1 };
+        inventory.sort((a, b) => {
+            const wA = rarityWeights[a.rarity || 'common'] || 1;
+            const wB = rarityWeights[b.rarity || 'common'] || 1;
+            return wB - wA;
+        });
 
         if (inventory.length === 0) {
             inventoryGrid.innerHTML = '<div class="empty-inventory">暂无闲置法宝</div>';
@@ -4817,6 +4831,7 @@ class Game {
                 el.title = `${name}: ${desc}`;
 
                 el.onclick = (e) => {
+                    // Left click to equip
                     if (this.player.equipTreasure(t.id)) {
                         if (typeof audioManager !== 'undefined') audioManager.playSFX('equip');
                         this.updateTreasureBagUI();
@@ -4827,6 +4842,15 @@ class Game {
                         }
                     }
                 };
+
+                // Right click to view details - 使用 addEventListener 确保绑定成功
+                el.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation(); // 防止冒泡
+                    this.showAlertModal(desc, name);
+                    return false;
+                });
+
                 inventoryGrid.appendChild(el);
             });
         }

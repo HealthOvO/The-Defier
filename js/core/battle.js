@@ -1189,19 +1189,21 @@ class Battle {
         // 共鸣：雷火崩坏 (Plasma Overload) - 改版：对灼烧敌人增伤
         if (this.player.activeResonances) {
             const plasma = this.player.activeResonances.find(r => r.id === 'plasmaOverload');
-            if (plasma && enemy.buffs.burn > 0 && sourceElement !== 'plasma_proc') {
+            if (plasma && enemy.buffs.burn > 0 && !this._processingPlasma) {
                 const extraDmg = Math.floor(amount * plasma.effect.percent);
                 if (extraDmg > 0) {
-                    enemy.currentHp -= extraDmg; // True damage part? Or add to amount?
-                    // Description says "50% extra damage".
-                    // Let's add it to amount? But amount is already used for calculation.
-                    // Simpler: Deal separate bonus damage.
-                    // And trigger Thunder Strike.
+                    enemy.currentHp -= extraDmg;
                     Utils.showBattleLog(`雷火崩坏：过载伤害 +${extraDmg}`);
-                    Utils.showFloatingNumber(document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`), extraDmg, 'damage');
+                    const enemyEl = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`);
+                    if (enemyEl) Utils.showFloatingNumber(enemyEl, extraDmg, 'damage');
 
                     // Thunder Strike
-                    this.dealDamageToEnemy(enemy, 10, 'plasma_proc');
+                    this._processingPlasma = true;
+                    try {
+                        this.dealDamageToEnemy(enemy, 10, 'plasma_proc');
+                    } finally {
+                        this._processingPlasma = false;
+                    }
                     Utils.showBattleLog(`雷火崩坏：诱发雷击！`);
                 }
             }

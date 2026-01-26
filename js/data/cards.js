@@ -337,11 +337,11 @@ const CARDS = {
         type: 'law',
         cost: 2,
         icon: '🕳️',
-        description: '造成敌人已损失生命值15%的伤害',
+        description: '造成敌人已损失生命值10%的伤害',
         rarity: 'legendary',
         lawType: 'void',
         effects: [
-            { type: 'execute', value: 0.15, target: 'enemy' }
+            { type: 'execute', value: 0.10, target: 'enemy' }
         ]
     },
 
@@ -761,7 +761,8 @@ const CARDS = {
             { type: 'debuff', buffType: 'burn', value: 1, target: 'enemy' },
             { type: 'damage', value: 8, target: 'enemy' },
             { type: 'debuff', buffType: 'burn', value: 1, target: 'enemy' }
-        ]
+        ],
+        descriptionTemplate: '造成 {e0} 点伤害3次，每次+{e1}灼烧'
     },
 
     voidWalk: {
@@ -1129,20 +1130,7 @@ const CARDS = {
 
     // 初始牌组
 
-    voidEmbrace: {
-        id: 'voidEmbrace',
-        name: '虚空拥抱',
-        type: 'law',
-        cost: 3,
-        icon: '🌌',
-        description: '造成 25 点伤害，回复造成伤害 30% 的生命',
-        rarity: 'legendary',
-        lawType: 'void',
-        effects: [
-            { type: 'lifeSteal', value: 0.3, target: 'self' },
-            { type: 'damage', value: 25, target: 'enemy' }
-        ]
-    },
+
     karmaKill: {
         id: 'karmaKill',
         name: '因果律杀',
@@ -1629,8 +1617,8 @@ const UPGRADE_RULES = {
         stormFury: { damage: 2 }, // 4 -> 6
 
         // 修正：虚空拥抱升级不加百分比，改为减费
-        // 修正：虚空拥抱升级 +15% (15% -> 30%)
-        voidEmbrace: { multiplier: 0.15 },
+        // 修正：虚空拥抱升级 +10% (10% -> 20%)
+        voidEmbrace: { multiplier: 0.10 },
         karmaKill: { percent: 0.1 }, // 15% -> 25%
 
         // 修复：融合爆发升级
@@ -1801,6 +1789,13 @@ function upgradeCard(card) {
  * 生成升级后的描述
  */
 function generateUpgradedDescription(card) {
+    if (card.descriptionTemplate) {
+        return card.descriptionTemplate.replace(/{e(\d+)}/g, (match, index) => {
+            const i = parseInt(index);
+            return card.effects[i] ? card.effects[i].value : '?';
+        });
+    }
+
     let desc = '';
     for (const effect of card.effects) {
         switch (effect.type) {

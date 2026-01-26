@@ -4648,3 +4648,113 @@ body {
     font-size: 2.5rem;
     margin-bottom: 10px;
 }
+
+/* Mobile UI Compensation Patch */
+@media (max-width: 768px) {
+
+    /* Life Ring Mobile Fixes */
+    .ring-visual.large {
+        width: 150px;
+        height: 150px;
+    }
+
+    .law-slot {
+        width: 60px;
+        height: 60px;
+    }
+
+    .law-icon {
+        font-size: 1.2rem;
+    }
+
+    .loaded-laws-list {
+        gap: 5px;
+    }
+
+    .ring-large {
+        transform: scale(0.9);
+        margin-bottom: 10px;
+    }
+
+    /* Character Panel Mobile Fixes */
+    .character-panel {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 10px;
+        height: auto;
+        overflow-y: auto;
+    }
+
+    .character-avatar {
+        transform: scale(0.8);
+        margin-bottom: 0;
+    }
+
+    /* Adjust Avatar Ring size for mobile so it doesn't overflow */
+    .avatar-ring {
+        width: 140px;
+        height: 140px;
+        top: 5px;
+        /* Re-center */
+    }
+
+    .avatar-inner {
+        width: 110px;
+        height: 110px;
+        font-size: 1.5rem;
+    }
+
+    .character-info {
+        text-align: center;
+        width: 100%;
+    }
+
+    .character-stats {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .stat {
+        min-width: 60px;
+        padding: 8px;
+    }
+
+    .fate-ring-display {
+        width: 100%;
+        margin-top: 10px;
+        padding: 10px;
+    }
+
+    /* Save Slots Mobile Fixes */
+    .slots-container {
+        grid-template-columns: 1fr;
+    }
+
+    .save-slot {
+        padding: 10px;
+    }
+
+    /* Modal Tweaks */
+    .modal-content {
+        width: 95%;
+        padding: 15px;
+        max-height: 90vh;
+    }
+
+    /* Treasure Bag Mobile */
+    .treasure-bag-layout {
+        padding: 10px;
+    }
+
+    .equipped-grid,
+    .inventory-grid {
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    }
+
+    .treasure-slot,
+    .inventory-item {
+        min-height: 100px;
+    }
+}
