@@ -508,6 +508,10 @@ function getLawPassiveDescription(law) {
         case 'blockBonus':
             if (passive.value < 1) return `获得护盾效果提升${Math.floor(passive.value * 100)}%`;
             return `获得护盾时额外+${passive.value}`;
+        case 'poisonThorn':
+            return `受击时${Math.floor(passive.chance * 100)}%几率对攻击者施加${passive.value}层中毒`;
+        case 'reshuffleHeal':
+            return `洗牌时回复${passive.value}点生命`;
         default:
             return '未知效果';
     }

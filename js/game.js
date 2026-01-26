@@ -346,12 +346,17 @@ class Game {
                         let card = { ...JSON.parse(JSON.stringify(baseCard)), ...savedCard };
 
                         // 恢复升级状态
-                        if (card.upgraded && typeof upgradeCard === 'function') {
+                        if (card.upgraded) {
                             // upgradeCard通常不仅改数值，还改变name和description
                             // 我们需要在一个纯净的基础卡上应用升级
                             // 但savedCard包含当前cost。
                             // 策略：用upgradeCard生成一个新的标准升级卡，然后覆盖savedCard中的特定动态属性
-                            let freshUpgraded = upgradeCard(JSON.parse(JSON.stringify(baseCard)));
+                            let freshUpgraded = card;
+                            if (typeof Utils.upgradeCard === 'function') {
+                                freshUpgraded = Utils.upgradeCard(JSON.parse(JSON.stringify(baseCard)));
+                            } else if (typeof upgradeCard === 'function') {
+                                freshUpgraded = upgradeCard(JSON.parse(JSON.stringify(baseCard)));
+                            }
                             card = { ...freshUpgraded, ...savedCard };
                         }
 
@@ -498,7 +503,13 @@ class Game {
                     if (savedCard.upgraded) {
                         try {
                             // 重新执行升级逻辑，获取最新数值
-                            newCard = upgradeCard(newCard);
+                            if (typeof Utils.upgradeCard === 'function') {
+                                newCard = Utils.upgradeCard(newCard);
+                            } else if (typeof upgradeCard === 'function') {
+                                newCard = upgradeCard(newCard);
+                            } else {
+                                newCard.upgraded = true;
+                            }
                         } catch (e) {
                             console.warn(`Card upgrade sync failed for ${savedCard.name}:`, e);
                             return savedCard; // 出错则回退
@@ -3569,14 +3580,14 @@ class Game {
             modal.className = 'modal';
             modal.style.zIndex = '10001'; // 比Confirm更高
             modal.innerHTML = `
-    < div class="modal-content" style = "text-align: center; max-width: 400px; padding: 30px;" >
+                <div class="modal-content" style="text-align: center; max-width: 400px; padding: 30px;">
                     <h3 id="generic-alert-title" style="color: var(--accent-gold); margin-bottom: 20px;">提示</h3>
                     <p id="generic-alert-message" style="color: #ccc; margin-bottom: 30px; line-height: 1.6; font-size: 1.1rem; white-space: pre-line;"></p>
                     <div style="display: flex; justify-content: center;">
                         <button id="generic-alert-btn" class="menu-btn primary small" style="min-width: 100px;">确定</button>
                     </div>
-                </div >
-    `;
+                </div>
+            `;
             document.body.appendChild(modal);
 
             // 绑定通用关闭
@@ -4530,7 +4541,7 @@ class Game {
                 }, 50);
             };
         } else {
-            btn.innerHTML = `< span class="btn-icon" >☁️</span > <span class="btn-text">登入轮回</span>`;
+            btn.innerHTML = `<span class="btn-icon">☁️</span> <span class="btn-text">登入轮回</span>`;
             btn.onclick = () => this.showLoginModal();
         }
     }
@@ -4572,10 +4583,10 @@ class Game {
             const hp = (data.player && data.player.currentHp) ? data.player.currentHp : '?';
             const gold = (data.player && data.player.gold) ? data.player.gold : '?';
             return `
-    < div style = "margin-bottom:4px" >📅 ${date}</div >
+                <div style="margin-bottom:4px">📅 ${date}</div>
                 <div style="margin-bottom:4px">🏔️ 第 ${realm} 重天</div>
                 <div>❤️ ${hp} | 💰 ${gold}</div>
-`;
+            `;
         };
 
         if (localInfo) localInfo.innerHTML = formatInfo(localData, localData ? localData.timestamp : null);
@@ -4637,7 +4648,7 @@ class Game {
             modal.id = 'treasure-bag-modal';
             modal.className = 'modal treasure-bag-modal';
             modal.innerHTML = `
-    < div class="modal-content large-modal" >
+                <div class="modal-content large-modal">
                     <span class="close-btn">&times;</span>
                     <h2>🎒 法宝囊</h2>
                     
@@ -4655,8 +4666,8 @@ class Game {
                             <div class="inventory-grid" id="inventory-grid"></div>
                         </div>
                     </div>
-                </div >
-    `;
+                </div>
+            `;
             document.body.appendChild(modal);
 
             // 绑定关闭

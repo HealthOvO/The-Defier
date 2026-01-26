@@ -676,6 +676,15 @@ class Battle {
         if (this.isProcessingCard) return;
         this.isProcessingCard = true;
 
+        // Safety timeout
+        const processingTimeout = setTimeout(() => {
+            if (this.isProcessingCard) {
+                console.warn('Card processing timed out, forcing reset');
+                this.isProcessingCard = false;
+                Utils.showBattleLog('操作超时，状态已重置');
+            }
+        }, 3000);
+
         try {
             this.targetingMode = false;
             this.selectedCard = null;
@@ -689,11 +698,10 @@ class Battle {
             if (this.player.realm === 12 && card.type === 'attack') {
                 const bloodTax = Math.max(1, Math.floor(this.player.maxHp * 0.05));
                 this.player.takeDamage(bloodTax);
-                Utils.showBattleLog(`金戈铁马：消耗 ${bloodTax} 点生命以攻击`);
-                // 如果自杀，需要终止吗？暂不终止，允许同归于尽
+                Utils.showBattleLog(`金戈铁马：消耗 ${bloodTax} 点生命`); // Simplified Log
             }
 
-            // 立即给予视觉反馈：卡牌淡出或标记为使用中
+            // 立即给予视觉反馈
             const cardEls = document.querySelectorAll('#hand-cards .card');
             if (cardEls[cardIndex]) {
                 cardEls[cardIndex].style.opacity = '0.5';
@@ -708,13 +716,9 @@ class Battle {
                 game.handleCombo(card.type);
             }
 
-            // 命环资源钩子 (Karma Ring)
+            // 命环资源钩子
             if (this.player.fateRing && this.player.fateRing.type === 'karma') {
-                // 简单规则：卡牌耗能多少就积攒多少？或者固定1点？
-                // 暂定：每次出牌积攒 5 点，耗能越高加成越多 ?
-                // 简化：固定值 + 耗能 * 5
                 const gain = 5 + (card.cost || 0) * 5;
-
                 if (card.type === 'attack') {
                     this.player.fateRing.gainSin(gain);
                 } else if (card.type === 'skill' || card.type === 'power') {
@@ -725,20 +729,19 @@ class Battle {
             // 触发法宝使用卡牌效果
             const context = {
                 damageModifier: 0
-                // 未来可扩展 blockModifier 等，但需修改 player.playCard
             };
 
             if (this.player.triggerTreasureEffect) {
                 this.player.triggerTreasureEffect('onCardPlay', card, context);
             }
 
-            // 破法者 (Lawbreaker) - 攻击获得护盾
+            // 破法者 (Lawbreaker)
             if (card.type === 'attack' && this.player.buffs.blockOnAttack) {
                 this.player.addBlock(this.player.buffs.blockOnAttack);
-                Utils.showBattleLog(`破法者触发！获得 ${this.player.buffs.blockOnAttack} 护盾`);
+                Utils.showBattleLog(`破法者：获得 ${this.player.buffs.blockOnAttack} 护盾`);
             }
 
-            // 播放卡牌
+            // 播放卡牌 (核心逻辑)
             const results = this.player.playCard(cardIndex, target);
 
             // 播放音效
@@ -746,7 +749,7 @@ class Battle {
                 audioManager.playSFX('attack');
             }
 
-            // 应用法宝的伤害修正 (仅对 damage 类型有效，因为 block 等已在 playCard 内部执行)
+            // 应用法宝的伤害修正
             if (results && context.damageModifier !== 0) {
                 results.forEach(res => {
                     if (res.type === 'damage' || res.type === 'penetrate' || res.type === 'damageAll') {
@@ -769,7 +772,7 @@ class Battle {
             this.cardsPlayedThisTurn++;
             if (card.type === 'attack') this.playerAttackedThisTurn = true;
 
-            // 共鸣：风雷翼 (WindThunderWing) - 每打出3张牌触发雷击
+            // 风雷翼
             const windThunder = this.player.activeResonances && this.player.activeResonances.find(r => r.id === 'windThunderWing');
             if (windThunder && this.cardsPlayedThisTurn % windThunder.effect.count === 0) {
                 const enemies = this.enemies.filter(e => e.currentHp > 0);
@@ -777,13 +780,13 @@ class Battle {
                     const thunderTarget = enemies[Math.floor(Math.random() * enemies.length)];
                     const dmg = windThunder.effect.damage;
                     this.dealDamageToEnemy(thunderTarget, dmg);
-                    Utils.showBattleLog(`风雷翼：引发雷击！造成 ${dmg} 伤害`);
+                    Utils.showBattleLog(`风雷翼：造成 ${dmg} 伤害`);
                     const el = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(thunderTarget)}"]`);
                     if (el) Utils.showFloatingNumber(el, dmg, 'damage');
                 }
             }
 
-            // 法则：雷法残章 (ThunderLaw) - 攻击时几率雷击
+            // 雷法残章
             if (card.type === 'attack') {
                 const thunderLaw = this.player.collectedLaws.find(l => l.id === 'thunderLaw');
                 if (thunderLaw && Math.random() < thunderLaw.passive.chance) {
@@ -792,17 +795,17 @@ class Battle {
                         const tTarget = enemies[Math.floor(Math.random() * enemies.length)];
                         const dmg = thunderLaw.passive.value;
                         this.dealDamageToEnemy(tTarget, dmg);
-                        Utils.showBattleLog(`雷霆之力：触发惊雷！造成 ${dmg} 伤害`);
+                        Utils.showBattleLog(`雷霆之力：造成 ${dmg} 伤害`);
                         const el = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(tTarget)}"]`);
                         if (el) Utils.showFloatingNumber(el, dmg, 'damage');
                     }
                 }
 
-                // 法则：时间静止 (TimeStop) - 攻击几率眩晕
+                // 时间静止
                 const timeLaw = this.player.collectedLaws.find(l => l.id === 'timeStop');
                 if (timeLaw && target && Math.random() < timeLaw.passive.stunChance) {
                     target.stunned = true;
-                    Utils.showBattleLog('时间静止：敌人被定住了！');
+                    Utils.showBattleLog('时间静止：敌人眩晕！');
                 }
             }
 
@@ -811,9 +814,9 @@ class Battle {
         } catch (error) {
             console.error('Error playing card:', error);
             Utils.showBattleLog('卡牌使用失败！');
-            // 尝试恢复UI状态
-            this.updateHandUI();
+            this.updateHandUI(); // Reload UI to fix state
         } finally {
+            clearTimeout(processingTimeout);
             this.isProcessingCard = false;
         }
     }

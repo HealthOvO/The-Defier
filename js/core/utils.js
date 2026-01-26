@@ -574,8 +574,66 @@ const Utils = {
         }
     },
 
+    // 升级卡牌逻辑
+    upgradeCard(card) {
+        if (!card) return null;
+        if (card.upgraded) return card; // Prevent double upgrade
+
+        const newCard = JSON.parse(JSON.stringify(card));
+        newCard.upgraded = true;
+        newCard.name += '+';
+
+        // 提升数值 (通用逻辑)
+        // 伤害 / 护盾 +3 或 x1.3
+        if (newCard.effects) {
+            newCard.effects.forEach(e => {
+                if (['damage', 'block', 'heal', 'penetrate'].includes(e.type)) {
+                    if (typeof e.value === 'number') {
+                        // 基础值小于10的加3，大于等于10的加30%
+                        if (e.value < 10) e.value += 3;
+                        else e.value = Math.floor(e.value * 1.3);
+                    }
+                }
+                // Buffs usually +1 stack
+                if (['buff', 'debuff'].includes(e.type)) {
+                    if (typeof e.value === 'number') {
+                        e.value += 1;
+                    }
+                }
+            });
+        }
+
+        // 降低费用? (可选，通常Roguelike升级是数值或减费选其一，这里简单起见只做数值增强)
+        // 如果费用 > 2，升级减1费?
+        // if (newCard.cost > 1) newCard.cost -= 1;
+
+        return newCard;
+    },
+
+    // 节流日志
+    _logTimer: null,
+    showBattleLog(message) {
+        const log = document.getElementById('battle-log');
+        if (!log) return;
+
+        // 简单去重/防抖：如果内容一样且在短时间内，不重复显示?
+        // 或者直接覆盖
+        log.textContent = message;
+        log.classList.remove('show');
+        void log.offsetWidth; // trigger reflow
+        log.classList.add('show');
+
+        if (this._logTimer) clearTimeout(this._logTimer);
+        this._logTimer = setTimeout(() => {
+            log.classList.remove('show');
+        }, 2000);
+    },
+
     // 清除存档
     clearSave() {
         localStorage.removeItem('theDefierSave');
     }
 };
+
+// Expose upgradeCard globally for compatibility
+window.upgradeCard = Utils.upgradeCard.bind(Utils);
