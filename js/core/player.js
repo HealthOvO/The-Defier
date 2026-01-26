@@ -310,11 +310,11 @@ class Player {
 
             // 如果已升级，应用升级效果
             if (card.upgraded) {
-                // upgradeCard 返回新对象，所以我们要小心
-                if (typeof Utils.upgradeCard === 'function') {
-                    freshCard = Utils.upgradeCard(freshCard);
-                } else if (typeof upgradeCard === 'function') {
+                // upgradeCard 返回新对象，优先使用 cards.js 中的详细逻辑
+                if (typeof upgradeCard === 'function') {
                     freshCard = upgradeCard(freshCard);
+                } else if (typeof Utils.upgradeCard === 'function') {
+                    freshCard = Utils.upgradeCard(freshCard);
                 } else {
                     freshCard.upgraded = true; // Fallback
                     freshCard.name += '+'; // Visual

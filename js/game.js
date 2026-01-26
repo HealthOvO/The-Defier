@@ -4078,9 +4078,9 @@ class Game {
         const restBtn = document.createElement('button');
         restBtn.className = 'event-choice';
         restBtn.innerHTML = `
-    < div >💤 休息(恢复 ${healAmount} HP)</div >
-        <div class="choice-effect">当前HP: ${this.player.currentHp}/${this.player.maxHp}</div>
-`;
+            <div>💤 休息(恢复 ${healAmount} HP)</div>
+            <div class="choice-effect">当前HP: ${this.player.currentHp}/${this.player.maxHp}</div>
+        `;
         restBtn.onclick = () => this.campfireRest();
         choicesEl.appendChild(restBtn);
 
@@ -4089,9 +4089,9 @@ class Game {
         const upgradeBtn = document.createElement('button');
         upgradeBtn.className = 'event-choice';
         upgradeBtn.innerHTML = `
-    < div >⬆️ 升级卡牌</div >
-        <div class="choice-effect">可升级: ${upgradableCount} 张</div>
-`;
+            <div>⬆️ 升级卡牌</div>
+            <div class="choice-effect">可升级: ${upgradableCount} 张</div>
+        `;
         if (upgradableCount > 0) {
             upgradeBtn.onclick = () => this.showCampfireUpgrade();
         } else {
@@ -4106,9 +4106,9 @@ class Game {
             const removeBtn = document.createElement('button');
             removeBtn.className = 'event-choice';
             removeBtn.innerHTML = `
-    < div >🗑️ 净化(移除一张牌)</div >
-        <div class="choice-effect">精简牌组，提升效率</div>
-`;
+                <div>🗑️ 净化(移除一张牌)</div>
+                <div class="choice-effect">精简牌组，提升效率</div>
+            `;
             removeBtn.onclick = () => this.showCampfireRemove();
             choicesEl.appendChild(removeBtn);
         }
@@ -4158,14 +4158,14 @@ class Game {
         container.appendChild(previewContainer);
 
         previewContainer.innerHTML = `
-    < h3 style = "color:var(--accent-gold);margin-top:0;" > 升级预览</h3 >
+            <h3 style="color:var(--accent-gold);margin-top:0;">升级预览</h3>
             <div id="upgrade-preview-placeholder" style="color:#666;margin-top:50px;">
                 鼠标悬浮或点击卡牌<br>查看升级效果
             </div>
             <div id="upgrade-preview-card" style="display:none; transform:scale(1.1); margin: 20px 0;"></div>
             <div id="upgrade-diff-text" style="width:100%; font-size:0.9rem; color:#ddd; margin: 10px 0; background:rgba(0,0,0,0.3); padding:8px; border-radius:4px; display:none;"></div>
             <button id="confirm-upgrade-btn" class="menu-btn" style="margin-top:auto; width:100%;" disabled>确认升级</button>
-`;
+        `;
 
         const confirmBtn = previewContainer.querySelector('#confirm-upgrade-btn');
         const previewCardDiv = previewContainer.querySelector('#upgrade-preview-card');
@@ -4178,7 +4178,6 @@ class Game {
             if (!canUpgradeCard(card)) return;
 
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.classList.add(`rarity - ${card.rarity || 'common'} `);
             cardEl.style.cursor = 'pointer';
 
             const showPreview = () => {
@@ -4189,13 +4188,12 @@ class Game {
 
                 previewCardDiv.innerHTML = '';
                 const upgradedEl = Utils.createCardElement(upgraded, 999);
-                upgradedEl.classList.add(`rarity - ${upgraded.rarity || 'common'} `);
                 previewCardDiv.appendChild(upgradedEl);
 
                 previewTextDiv.innerHTML = `
-    < p style = "margin:0;color:var(--accent-green);font-weight:bold;" > ${card.name} ➤ ${upgraded.name}</p >
-        <p style="margin:4px 0 0 0;font-size:0.8rem;">${upgraded.description}</p>
-`;
+                    <p style="margin:0;color:var(--accent-green);font-weight:bold;">${card.name} ➤ ${upgraded.name}</p>
+                    <p style="margin:4px 0 0 0;font-size:0.8rem;">${upgraded.description}</p>
+                `;
             };
 
             cardEl.addEventListener('mouseenter', () => {
@@ -4251,7 +4249,6 @@ class Game {
 
         this.player.deck.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.classList.add(`rarity - ${card.rarity || 'common'} `);
             cardEl.style.cursor = 'pointer';
             cardEl.addEventListener('click', () => this.campfireRemoveCard(index));
             container.appendChild(cardEl);

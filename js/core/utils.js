@@ -636,4 +636,4 @@ const Utils = {
 };
 
 // Expose upgradeCard globally for compatibility
-window.upgradeCard = Utils.upgradeCard.bind(Utils);
+// window.upgradeCard = Utils.upgradeCard.bind(Utils);
