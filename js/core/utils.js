@@ -303,7 +303,15 @@ const Utils = {
             <div class="card-image">${card.icon || '🎴'}</div>
             <div class="card-desc">${card.description}</div>
             <div class="card-type">${typeIcon} ${this.getCardTypeName(card.type)}</div>
+            <!-- 3D光效层 -->
+            <div class="card__shine"></div>
+            <div class="card__glare"></div>
         `;
+
+        // 初始化3D悬浮效果 (延迟到下一帧确保DOM就绪)
+        if (typeof CardEffects !== 'undefined') {
+            requestAnimationFrame(() => CardEffects.init(div));
+        }
 
         return div;
     },
@@ -320,71 +328,85 @@ const Utils = {
         return icons[type] || '';
     },
 
-    // 显示卡牌详情弹窗
+    // 显示卡牌详情弹窗 (Refactored for Void & Ink Theme)
     showCardDetail(card) {
         // 创建或获取详情遮罩层
         let modal = document.getElementById('card-detail-modal');
         if (!modal) {
             modal = document.createElement('div');
             modal.id = 'card-detail-modal';
-            modal.className = 'modal-overlay';
-            modal.style.display = 'none';
-            modal.onclick = () => modal.style.display = 'none';
+            modal.className = 'modal-overlay card-detail-overlay';
+            // Click outside to close
+            modal.onclick = (e) => {
+                if (e.target === modal) modal.style.display = 'none';
+            };
             document.body.appendChild(modal);
-
-            // 添加样式（如果CSS中没有）
-            const style = document.createElement('style');
-            style.textContent = `
-                .modal-overlay {
-                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                    background: rgba(0,0,0,0.8); z-index: 2000;
-                    display: flex; justify-content: center; align-items: center;
-                }
-                .card-detail-view {
-                    background: #2a2a2a; border: 2px solid #d4af37; padding: 20px;
-                    border-radius: 10px; max-width: 400px; color: #fff;
-                    box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
-                }
-                .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #444; padding-bottom: 10px; }
-                .big-card-icon { font-size: 64px; text-align: center; margin: 20px 0; }
-                .detail-type { color: #aaa; font-size: 0.9em; text-align: center; }
-                .detail-desc { font-size: 1.1em; line-height: 1.5; margin: 15px 0; text-align: center; color: #e0e0e0; }
-                .detail-section { background: #333; padding: 10px; border-radius: 5px; margin-top: 15px; }
-                .detail-section ul { padding-left: 20px; margin: 5px 0; }
-                .detail-law { margin-top: 10px; color: #a0c0ff; text-align: right; font-style: italic; }
-                .close-btn { font-size: 24px; cursor: pointer; color: #888; }
-                .close-btn:hover { color: #fff; }
-            `;
-            document.head.appendChild(style);
         }
 
-        // 构建详情内容
         // 解析详细效果数值
         let effectsHtml = '';
         if (card.effects) {
-            effectsHtml = '<div class="detail-section"><strong>效果解析:</strong><ul>';
+            effectsHtml = '<div class="cd-section"><h3><span class="cd-icon">⚡</span> 效果解析</h3><ul class="cd-effects-list">';
             card.effects.forEach(e => {
                 effectsHtml += `<li>${this.getEffectDescription(e)}</li>`;
             });
             effectsHtml += '</ul></div>';
         }
 
+        // Keywords / Lore (Placeholder)
+        const loreHtml = card.lore ? `<div class="cd-section cd-lore">"${card.lore}"</div>` : '';
+
+        // Rarity Color
+        const rarityClass = `rarity-${card.rarity || 'common'}`;
+
         modal.innerHTML = `
-            <div class="modal-content card-detail-view" onclick="event.stopPropagation()">
-                <div class="detail-header">
-                    <h2>${card.name}</h2>
-                    <span class="close-btn" onclick="document.getElementById('card-detail-modal').style.display='none'">&times;</span>
+            <div class="card-detail-container">
+                <!-- Left: 3D Card Preview -->
+                <div class="cd-preview-pane">
+                    <div class="card-preview-wrapper">
+                         <!-- Re-use createCardElement logic but purely visual -->
+                         <div class="card ${card.type} ${rarityClass} big-preview">
+                             <div class="card-cost">${card.cost}</div>
+                             <div class="card-header"><div class="card-name">${card.name}</div></div>
+                             <div class="card-image">${card.icon || '🎴'}</div>
+                             <div class="card-desc">${card.description}</div>
+                             <div class="card-type">${this.getCardTypeIcon(card.type)} ${this.getCardTypeName(card.type)}</div>
+                             <div class="card__shine"></div>
+                         </div>
+                    </div>
                 </div>
-                <div class="detail-body">
-                    <div class="big-card-icon">${card.icon || '🎴'}</div>
-                    <p class="detail-type">类型: ${this.getCardTypeName(card.type)} | 品质: ${this.getCardRarityName(card.rarity)} | 消耗: ${card.cost}</p>
-                    <p class="detail-desc">${card.description}</p>
-                    ${effectsHtml}
-                    ${card.lawType ? `<p class="detail-law">所属法则: ${this.getLawName(card.lawType)}</p>` : ''}
+
+                <!-- Right: Information -->
+                <div class="cd-info-pane">
+                    <div class="cd-header">
+                        <h2>${card.name}</h2>
+                        <div class="cd-badges">
+                            <span class="cd-badge type-${card.type}">${this.getCardTypeName(card.type)}</span>
+                            <span class="cd-badge rarity-${card.rarity}">${this.getCardRarityName(card.rarity)}</span>
+                            ${card.lawType ? `<span class="cd-badge law">${this.getLawName(card.lawType)}</span>` : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="cd-body">
+                        <div class="cd-desc-box">
+                            ${card.description}
+                        </div>
+                        ${effectsHtml}
+                        ${loreHtml}
+                    </div>
+
+                    <button class="cd-close-btn" onclick="document.getElementById('card-detail-modal').style.display='none'">关闭界面</button>
                 </div>
             </div>
         `;
+
         modal.style.display = 'flex';
+
+        // Add minimal animation
+        const container = modal.querySelector('.card-detail-container');
+        if (container) {
+            container.style.animation = 'modalPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+        }
     },
 
     getEffectDescription(effect) {

@@ -313,16 +313,8 @@ class Battle {
         const handContainer = document.getElementById('hand-cards');
         handContainer.innerHTML = '';
 
-        // CSS Force for Scroll
-        handContainer.style.display = 'flex';
-        handContainer.style.flexWrap = 'nowrap';
-        handContainer.style.overflowX = 'auto'; // scrollable
-        handContainer.style.justifyContent = 'flex-start'; // Align left to allow scroll
-        handContainer.style.paddingBottom = '10px'; // Space for scrollbar
-        handContainer.style.paddingRight = '50px'; // Prevent jitter on last card hover
-        handContainer.style.paddingLeft = '10px';
-        handContainer.style.width = '100%';
-        handContainer.style.scrollbarWidth = 'thin'; // Firefox
+        // CSS Force for Scroll - Moved to CSS class .hand-area
+        handContainer.classList.add('hand-active');
 
         this.player.hand.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
@@ -376,19 +368,50 @@ class Battle {
 
         energyText.textContent = `${this.player.currentEnergy}/${this.player.baseEnergy}`;
 
-        // 显示奶糖
+
+        // 显示奶糖 (3D Candy Visualization)
         let candyContainer = document.getElementById('candy-container');
         if (!candyContainer) {
-            candyContainer = document.createElement('div');
-            candyContainer.id = 'candy-container';
-            candyContainer.style.marginLeft = '15px';
-            candyContainer.style.display = 'flex';
-            candyContainer.style.alignItems = 'center';
-            candyContainer.style.color = '#ff9';
-            candyContainer.style.fontSize = '1.2rem';
-            orbsContainer.parentElement.appendChild(candyContainer);
+            const resourcesContainer = document.querySelector('.resources-container');
+            if (resourcesContainer) {
+                candyContainer = document.createElement('div');
+                candyContainer.id = 'candy-container';
+                candyContainer.className = 'candy-display resource-item';
+                candyContainer.dataset.resource = 'candy';
+                resourcesContainer.appendChild(candyContainer);
+            }
         }
-        candyContainer.innerHTML = `<span style="margin-right:5px">🍬</span> ${this.player.milkCandy}`;
+
+        if (candyContainer) {
+            // 清空并重新渲染糖果
+            candyContainer.innerHTML = '';
+            const maxCandies = 5; // 最多显示5颗糖果
+            const candyCount = Math.min(this.player.milkCandy, maxCandies);
+
+            const orbsWrapper = document.createElement('div');
+            orbsWrapper.className = 'candy-orbs';
+
+            for (let i = 0; i < candyCount; i++) {
+                const candy = document.createElement('div');
+                candy.className = 'candy-orb';
+                candy.style.animationDelay = `${i * 0.1}s`;
+                orbsWrapper.appendChild(candy);
+            }
+
+            candyContainer.appendChild(orbsWrapper);
+
+            // 添加数字文本
+            const candyText = document.createElement('span');
+            candyText.className = 'candy-text';
+            candyText.textContent = this.player.milkCandy;
+            candyContainer.appendChild(candyText);
+
+            // 添加tooltip
+            const tooltip = document.createElement('div');
+            tooltip.className = 'resource-tooltip';
+            tooltip.textContent = '奶糖';
+            candyContainer.appendChild(tooltip);
+        }
     }
 
     // 更新牌堆UI

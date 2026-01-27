@@ -3768,54 +3768,57 @@ class Game {
             }
         }
 
-        // Cooldown
+        // Cooldown - Color Recovery Progress
         const overlay = btn.querySelector('.skill-cooldown-overlay');
         const text = btn.querySelector('.skill-cooldown-text');
+        const loreEl = btn.querySelector('.skill-lore');
 
         if (this.player.skillCooldown > 0) {
-            const pct = (this.player.skillCooldown / this.player.maxCooldown) * 100;
-            overlay.style.height = `${pct}% `;
-            text.textContent = this.player.skillCooldown;
+            // 计算恢复进度 (0-1，0表示完全冷却，1表示即将可用)
+            const progress = 1 - (this.player.skillCooldown / this.player.maxCooldown);
+
+            // 不显示CD文本
+            text.textContent = '';
+            text.style.display = 'none';
+
+            // 通过颜色恢复表示进度
+            // 灰度从100%逐渐降低到0%
+            const grayscale = (1 - progress) * 100;
+            // 透明度从0.5逐渐增加到1
+            const opacity = 0.5 + progress * 0.5;
+
+            btn.style.filter = `grayscale(${grayscale}%)`;
+            btn.style.opacity = opacity;
+
+            // Overlay不再使用，设为0
+            overlay.style.height = '0%';
+
             btn.classList.add('cooldown');
+            btn.classList.remove('ready');
+
+            // 在lore位置显示CD信息（仅tooltip可见）
+            if (loreEl) {
+                loreEl.textContent = `冷却中: ${this.player.skillCooldown} 回合`;
+            }
         } else {
             overlay.style.height = '0%';
             text.textContent = '';
+            text.style.display = 'none';
+            btn.style.filter = 'none';
+            btn.style.opacity = '1';
             btn.classList.remove('cooldown');
-            btn.classList.add('ready'); // Add ready class for animation
+            btn.classList.add('ready');
+
+            // 恢复lore文本
+            if (loreEl) {
+                loreEl.textContent = '"逆乱阴阳，颠倒乾坤。"';
+            }
         }
 
-        // CSS Injection for Active Skill Visibility
-        if (!document.getElementById('active-skill-style')) {
-            const style = document.createElement('style');
-            style.id = 'active-skill-style';
-            style.innerHTML = `
-            .active - skill - container {
-            transition: all 0.3s ease;
-            border: 2px solid transparent;
-        }
-                .active - skill - container.ready {
-            border - color: var(--accent - gold);
-            box - shadow: 0 0 15px var(--accent - gold), 0 0 5px #fff inset;
-            animation: skillPulse 2s infinite;
-            cursor: pointer;
-            transform: scale(1.05);
-        }
-                .active - skill - container.ready:hover {
-            transform: scale(1.15);
-            box - shadow: 0 0 25px var(--accent - gold), 0 0 10px #fff inset;
-        }
-        @keyframes skillPulse {
-            0 % { box- shadow: 0 0 10px var(--accent - gold);
-        }
-        50 % { box- shadow: 0 0 20px var(--accent - gold), 0 0 10px var(--accent - gold);
-    }
-    100% { box- shadow: 0 0 10px var(--accent - gold); }
-                }
-`;
-            document.head.appendChild(style);
-        }
+
     }
 
+    // 激活主动技能 - 点击按钮触发
     // 激活主动技能 - 点击按钮触发
     activatePlayerSkill() {
         if (this.currentScreen !== 'battle-screen') return;
@@ -3830,8 +3833,30 @@ class Game {
             return;
         }
 
-        // 显示确认弹窗
-        this.showSkillConfirmModal();
+        // 直接通过验证，执行技能
+        if (this.player.activateSkill(this.battle)) {
+            this.updateActiveSkillUI();
+            this.battle.updateBattleUI();
+            // 增强反馈
+            const btn = document.getElementById('active-skill-btn');
+            if (btn) {
+                Utils.addShakeEffect(btn);
+                btn.classList.remove('ready');
+
+                // Add particle effect customization here if needed
+            }
+
+            // Visual Flash
+            const flash = document.createElement('div');
+            flash.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(255,255,255,0.3);pointer-events:none;z-index:9999;transition:opacity 0.5s;';
+            document.body.appendChild(flash);
+            setTimeout(() => {
+                flash.style.opacity = '0';
+                setTimeout(() => flash.remove(), 500);
+            }, 50);
+
+            if (typeof audioManager !== 'undefined') audioManager.playSFX('buff');
+        }
     }
 
     // 显示技能确认弹窗

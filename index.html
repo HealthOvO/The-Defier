@@ -13,6 +13,7 @@
         rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/animations.css">
+    <link rel="stylesheet" href="css/card-detail.css">
 </head>
 
 <body>
@@ -386,22 +387,45 @@
                         </div>
                     </div>
 
-                    <!-- 主动技能按钮 (Inserted) -->
+                    <!-- 主动技能按钮 (Refactored) -->
                     <div id="active-skill-btn" class="active-skill-container" onclick="game.activatePlayerSkill()">
-                        <div class="skill-icon">⚡</div>
+                        <!-- Visual Effects Layers -->
+                        <div class="skill-halo"></div>
+                        <div class="skill-runes-ring"></div>
+                        <div class="skill-inner-glow"></div>
+
+                        <div class="skill-icon-wrapper">
+                            <div class="skill-icon">⚡</div>
+                        </div>
+
                         <div class="skill-cooldown-overlay"></div>
                         <div class="skill-cooldown-text"></div>
-                        <div class="skill-tooltip">
-                            <div class="skill-name">逆天改命</div>
+
+                        <!-- Ready VFX (Hidden by default) -->
+                        <div class="skill-ready-particles"></div>
+
+                        <div class="skill-tooltip ink-tooltip">
+                            <div class="skill-header">
+                                <div class="skill-name">逆天改命</div>
+                                <div class="skill-type-badge">绝技</div>
+                            </div>
+                            <div class="skill-divider"></div>
                             <div class="skill-desc">丢弃手牌，抽5张牌，回3灵力</div>
+                            <div class="skill-lore">“逆乱阴阳，颠倒乾坤。”</div>
                         </div>
                     </div>
                 </div>
-                <div class="energy-display">
-                    <div class="energy-orbs" id="energy-orbs">
-                        <!-- 动态生成灵力球 -->
+
+                <!-- 资源显示区域 (Vertical Layout) -->
+                <div class="resources-container">
+                    <div class="energy-display resource-item" data-resource="energy">
+                        <div class="energy-orbs" id="energy-orbs">
+                            <!-- 动态生成灵力球 -->
+                        </div>
+                        <span class="energy-text" id="energy-text">3/3</span>
+                        <div class="resource-tooltip">灵力</div>
                     </div>
-                    <span class="energy-text" id="energy-text">3/3</span>
+                    <!-- 奶糖容器会由JS动态创建并添加到这里 -->
                 </div>
             </div>
 
@@ -744,6 +768,7 @@
     <script src="js/data/skills.js"></script>
     <script src="js/data/characters.js"></script>
     <script src="js/core/utils.js"></script>
+    <script src="js/core/card-effects.js"></script>
     <script src="js/core/particles.js"></script>
     <script src="js/core/audio.js"></script>
     <script src="js/core/events.js"></script>
