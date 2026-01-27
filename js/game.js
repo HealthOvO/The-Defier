@@ -568,142 +568,129 @@ class Game {
 
     // 初始化图鉴
     initCollection() {
-        const grid = document.getElementById('collection-grid');
-        if (!grid) return;
+        const lawGrid = document.getElementById('law-archive-grid');
+        const resonanceList = document.getElementById('resonance-manual-list');
 
-        // 清空现有内容
-        grid.innerHTML = '';
+        // 确保容器存在
+        if (!lawGrid || !resonanceList) {
+            console.warn('New Codex UI structure not found.');
+            return;
+        }
 
-        // --- 1. 渲染法则部分 ---
+        // --- 1. 渲染法则库 (Jade Slips) ---
+        lawGrid.innerHTML = '';
+
         for (const lawId in LAWS) {
             const law = LAWS[lawId];
             const collected = this.player.collectedLaws.some(l => l.id === lawId);
 
             const item = document.createElement('div');
-            item.className = `collection-item ${collected ? '' : 'locked'}`;
+            item.className = `law-item ${collected ? '' : 'locked'}`;
 
-            // 构建描述HTML
-            let descHtml = '';
-            let passiveText = '';
+            // 构建内容
+            let contentHtml = '';
 
-            // 尝试获取被动效果描述
-            if (typeof getLawPassiveDescription === 'function') {
-                passiveText = getLawPassiveDescription(law);
-            } else if (law.passive) {
-                passiveText = `被动: ${law.passive.type} ${law.passive.value}`;
+            // Dao Type Mapping based on Rarity
+            let daoType = '小道';
+            if (law.rarity === 'legendary') daoType = '无上大道';
+            else if (law.rarity === 'epic') daoType = '三千大道';
+            else daoType = '旁门小道';
+
+            // 密封层 (Locked)
+            if (!collected) {
+                contentHtml += `<div class="law-seal-overlay">封</div>`;
             }
 
-            if (collected) {
-                // UI Fix: 仅显示被动效果，不显示Flavor Text
-                descHtml = `
-                    <div class="collection-desc">${passiveText || law.description}</div>
-                `;
-            } else {
-                descHtml = `
-                    <div class="collection-desc" style="font-style: italic;">未获得</div>
-                `;
-            }
-
-            item.innerHTML = `
-                <div class="collection-icon">${law.icon}</div>
-                <div class="collection-name">${law.name}</div>
-                ${descHtml}
+            contentHtml += `
+                <div class="law-icon-wrapper">${collected ? law.icon : '?'}</div>
+                <div class="law-name">${collected ? law.name : '？？？'}</div>
+                <div class="law-type-tag ${law.rarity}">${daoType}</div>
             `;
 
+            item.innerHTML = contentHtml;
+
             if (collected) {
+                // 点击查看详情
                 item.addEventListener('click', () => {
+                    // 尝试获取被动效果描述
+                    let passiveText = '';
+                    if (typeof getLawPassiveDescription === 'function') {
+                        passiveText = getLawPassiveDescription(law);
+                    } else if (law.passive) {
+                        passiveText = `被动: ${law.passive.type} ${law.passive.value}`;
+                    }
+
                     let detailMsg = `${law.description}`;
                     if (passiveText) {
                         detailMsg += `\n\n🔎 被动效果:\n${passiveText}`;
                     }
                     this.showAlertModal(detailMsg, law.name);
                 });
+            } else {
+                item.addEventListener('click', () => {
+                    this.showAlertModal('此法则尚处于迷雾之中，需在轮回中窃取获得。', '未解之谜');
+                });
             }
 
-            grid.appendChild(item);
+            lawGrid.appendChild(item);
         }
 
-        // --- 2. 渲染共鸣手册部分 ---
-        // 检查是否已经存在 resonance-container，避免重复添加 (虽然 grid.innerHTML='' 这里清除的是 grid 内部，
-        // 但如果我们的设计是把共鸣放在 grid 面板后面，我们需要找到 grid 的父容器或者直接追加到 grid 后面?
-        // 查看 HTML 结构：通常 collection-grid 是一个 scrollable div。
-        // 如果把共鸣放在 grid 里面，会被 grid 布局影响。
-        // 最好是在 grid 之后追加一个 section。
-        // 但是 grid.innerHTML = '' 只清空 grid。
-        // 让我们看看 DOM 结构。假设我们只能操作 grid 内部，或者 grid 是整个内容区域。
-        // 如果 grid 是 grid 布局，直接 append 一个全宽元素可能不方便（需 span all）。
-        // 简单方案：把 grid 的 display: grid 改为一个容器，内部包含 .laws-grid 和 .resonance-section。
-        // 但这需要改 HTML 结构。
-        // 或者：我们在 js 里动态调整。
-        // 方案 B: 把 collection-grid 的 CSS 还原为 block，内部包含两个 div: laws-grid (display:grid) 和 resonance-section。
+        // --- 2. 渲染共鸣手册 (Bamboo Scrolls) ---
+        resonanceList.innerHTML = '';
 
-        // 动态改造 grid 容器
-        grid.style.display = 'block';
-        grid.style.overflowY = 'auto'; // Ensure scroll
-
-        // 重新构建 structure
-        // 1. Laws Grid Container
-        const lawsContainer = document.createElement('div');
-        lawsContainer.className = 'collection-subgrid';
-        lawsContainer.style.display = 'grid';
-        lawsContainer.style.gridTemplateColumns = 'repeat(auto-fill, minmax(150px, 1fr))';
-        lawsContainer.style.gap = 'var(--spacing-md)';
-
-        // Move processed items to lawsContainer
-        while (grid.firstChild) {
-            lawsContainer.appendChild(grid.firstChild);
+        if (typeof LAW_RESONANCES === 'undefined') {
+            resonanceList.innerHTML = '<div style="padding:20px; color:#666;">暂无记载</div>';
+            return;
         }
-        grid.appendChild(lawsContainer);
-
-        // 2. Resonance Section
-        const resSection = document.createElement('div');
-        resSection.className = 'resonance-section';
-
-        resSection.innerHTML = `
-            <div class="resonance-header">🔮 法则共鸣手册</div>
-            <div class="resonance-grid"></div>
-        `;
-
-        const resGrid = resSection.querySelector('.resonance-grid');
 
         for (const resKey in LAW_RESONANCES) {
             const res = LAW_RESONANCES[resKey];
 
-            // 检查玩家是否满足条件 (UI高亮显示)
-            const hasResonance = this.player.activeResonances && this.player.activeResonances.some(r => r.id === res.id);
+            const isActive = this.player.activeResonances && this.player.activeResonances.some(r => r.id === res.id);
 
-            const resItem = document.createElement('div');
-            resItem.className = `resonance-item ${hasResonance ? 'active' : ''}`;
-            if (hasResonance) resItem.style.borderColor = 'var(--accent-gold)';
+            const resScroll = document.createElement('div');
+            resScroll.className = `resonance-item ${isActive ? 'active' : ''}`;
 
-            // 构建所需法则图标
-            let lawsHtml = '';
+            // 构建法则组件图标 + 名称列表
+            let componentsHtml = '';
+            let reqNames = [];
+
             if (res.laws) {
-                lawsHtml = res.laws.map(lawId => {
+                componentsHtml = res.laws.map(lawId => {
                     const l = LAWS[lawId];
+                    // 在图鉴中，如果玩家收集过该法则，则点亮该组件
                     const hasLaw = this.player.collectedLaws.some(cl => cl.id === lawId);
-                    const color = hasLaw ? 'var(--text-primary)' : 'var(--text-muted)';
-                    const opacity = hasLaw ? '1' : '0.5';
-                    return l ? `<div class="res-law-req" style="color:${color}; opacity:${opacity}">${l.icon} ${l.name}</div>` : '';
+
+                    if (l) reqNames.push(l.name);
+
+                    return `
+                        <div class="res-component-icon ${hasLaw ? 'has-law' : ''}" title="${l ? l.name : lawId}">
+                            ${l ? l.icon : '?'}
+                        </div>
+                    `;
                 }).join('');
             }
 
-            resItem.innerHTML = `
-                <div class="resonance-title">
-                    ${res.name}
-                    ${hasResonance ? '✅' : ''}
+            resScroll.innerHTML = `
+                <div class="resonance-info">
+                    <div class="resonance-title">
+                        ${res.name}
+                        ${isActive ? '<span style="color:var(--accent-gold); font-size:1rem; margin-left:10px;">(当前激活)</span>' : ''}
+                    </div>
+                    <div class="resonance-reqs">
+                        <span style="color:#666; font-size:0.9rem;">所需法则: </span>
+                        <span style="color:var(--accent-gold); font-size:0.9rem;">${reqNames.join(' + ')}</span>
+                    </div>
+                    <div class="resonance-desc">${res.description}</div>
+                    <div class="resonance-effect">📜 效果: ${this.formattingResonanceEffect(res.effect)}</div>
                 </div>
-                <div class="resonance-laws">
-                    ${lawsHtml}
+                <div class="resonance-components">
+                    ${componentsHtml}
                 </div>
-                <div class="resonance-desc">${res.description}</div>
-                ${res.effect ? `<div class="resonance-effect">效果: ${this.formattingResonanceEffect(res.effect)}</div>` : ''}
             `;
 
-            resGrid.appendChild(resItem);
+            resonanceList.appendChild(resScroll);
         }
-
-        grid.appendChild(resSection);
     }
 
     // 辅助：格式化共鸣效果描述
@@ -755,16 +742,24 @@ class Game {
             categories[cat].push(achievement);
         }
 
-        // 添加进度显示
+        // 1. 渲染进度部分 (Cultivation Progress)
         const progress = this.achievementSystem.getProgress();
-        const progressEl = document.createElement('div');
-        progressEl.className = 'achievements-progress';
-        progressEl.innerHTML = `
-            <p>🏆 成就进度: ${progress.completed} / ${progress.total}</p>
-        `;
-        container.appendChild(progressEl);
+        const progressPercent = Math.floor((progress.completed / progress.total) * 100);
 
-        // 渲染每个分类
+        const progressSection = document.createElement('div');
+        progressSection.className = 'achievements-header-stats';
+        progressSection.innerHTML = `
+            <div class="achievement-progress-card">
+                <div class="progress-label">修行进度</div>
+                <div class="progress-track">
+                    <div class="progress-fill" style="width: ${progressPercent}%"></div>
+                </div>
+                <div class="progress-text">${progressPercent}%</div>
+            </div>
+        `;
+        container.appendChild(progressSection);
+
+        // 2. 渲染每个分类
         for (const catId in categories) {
             const catInfo = ACHIEVEMENT_CATEGORIES[catId];
             const catAchievements = categories[catId];
@@ -772,22 +767,67 @@ class Game {
             const catEl = document.createElement('div');
             catEl.className = 'achievement-category';
             catEl.innerHTML = `
-                <h3 class="category-title">${catInfo.icon} ${catInfo.name}</h3>
-                <div class="achievement-list">
-                    ${catAchievements.map(a => `
-                        <div class="achievement-item ${a.unlocked ? 'unlocked' : 'locked'}">
-                            <div class="achievement-icon">${a.icon}</div>
-                            <div class="achievement-details">
-                                <div class="achievement-name">${a.name}</div>
-                                <div class="achievement-desc">${a.description}</div>
+                <div class="category-header">
+                    <h3>${catInfo.icon} ${catInfo.name}</h3>
+                    <div class="ink-decoration"></div>
+                </div>
+                <div class="achievement-grid">
+                    ${catAchievements.map(a => {
+                const statusClass = a.unlocked ? 'unlocked' : 'locked';
+                const rewardText = getAchievementRewardText(a);
+
+                // Condition Met but Reward Not Claimed
+                const canClaim = a.unlocked && !a.claimed;
+                const isClaimed = a.claimed;
+
+                let actionHtml = '';
+                if (canClaim) {
+                    actionHtml = `
+                                <button class="claim-btn pulse" onclick="game.claimAchievement('${a.id}')">
+                                    <span class="btn-text">领取奖励</span>
+                                </button>
+                            `;
+                } else if (isClaimed) {
+                    actionHtml = `<div class="claimed-badge">已领取</div>`;
+                }
+
+                return `
+                        <div class="achievement-card ${statusClass} ${isClaimed ? 'claimed' : ''}">
+                            ${isClaimed ? '<div class="achievement-status-icon">✓</div>' : ''}
+                            <div class="achievement-icon-wrapper">
+                                ${a.icon}
                             </div>
-                            ${a.unlocked ? '<div class="achievement-check">✓</div>' : ''}
+                            <div class="achievement-content">
+                                <div class="achievement-title">${a.name}</div>
+                                <div class="achievement-desc">${a.description}</div>
+                                ${a.unlocked ? `<div class="achievement-reward-tag">${rewardText}</div>` : ''}
+                                ${actionHtml}
+                            </div>
                         </div>
-                    `).join('')}
+                        `;
+            }).join('')}
                 </div>
             `;
 
             container.appendChild(catEl);
+        }
+    }
+
+    // Claim Achievement Wrapper
+    claimAchievement(id) {
+        const result = this.achievementSystem.claimReward(id);
+        if (result.success) {
+            // Re-render UI to show "Claimed" status
+            this.initAchievements();
+            // Optional: Play Sound
+            // this.audio.play('success');
+
+            // Show toast or something?
+            // The AchievementSystem already queues a popup for "Claimed" if we want,
+            // or we can implement a specific visual here.
+            this.achievementSystem.queuePopup(ACHIEVEMENTS[id], 'claimed');
+        } else {
+            console.warn('Cannot claim:', result.reason);
         }
     }
 
@@ -825,49 +865,176 @@ class Game {
         }
     }
 
-    // 初始化关卡选择界面
+    // 初始化关卡选择界面 (Refactored for Ink & Gold UI)
     initRealmSelect() {
-        const container = document.getElementById('realm-select-container');
-        if (!container) return;
+        const listContainer = document.getElementById('realm-list-container');
+        if (!listContainer) return;
 
-        container.innerHTML = '';
-        // 更新为18重天
+        listContainer.innerHTML = '';
+        this.selectedRealmId = null;
+
+        // 生成18重天卡片
         for (let i = 1; i <= 18; i++) {
             const isUnlocked = this.unlockedRealms && this.unlockedRealms.includes(i);
             const isCompleted = isUnlocked && this.unlockedRealms.includes(i + 1);
 
             const realmCard = document.createElement('div');
             realmCard.className = `realm-card ${isUnlocked ? '' : 'locked'}`;
+            realmCard.dataset.id = i;
 
             const realmName = this.map.getRealmName(i);
-            const env = this.map.getRealmEnvironment(i);
 
-            // 获取Boss信息
-            const bossInfo = this.getRealmBossInfo(i);
+            // Icon selection
+            let icon = '🔒';
+            if (isUnlocked) icon = isCompleted ? '🏆' : '⚔️';
+            if (i === 18 && isUnlocked) icon = '🌌'; // Chaos Heaven
 
             realmCard.innerHTML = `
-                <div class="realm-icon">${isUnlocked ? (isCompleted ? '🏆' : '⚔️') : '🔒'}</div>
+                <div class="realm-icon">${icon}</div>
                 <div class="realm-info">
                     <h3>${realmName}</h3>
-                    <p class="realm-env" style="color: var(--accent-gold);">⚔️ ${env.name}</p>
-                    <p class="realm-env-desc" style="font-size:0.8rem; color:#aaa;">${env.desc}</p>
-                    ${bossInfo.bossName ? `
-                        <div class="boss-info" style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.1);">
-                            <p style="color:#ff6b6b; font-weight:bold; margin-bottom:4px;">👹 ${bossInfo.bossName}</p>
-                            <p style="font-size:0.75rem; color:#ffcc00;">⚠️ ${bossInfo.mechDesc}</p>
-                        </div>
-                    ` : ''}
-                    ${isCompleted ? '<span class="replay-tag" style="display:block; margin-top:8px;">重复挑战 (收益减半)</span>' : ''}
+                    ${isCompleted ? '<span class="realm-env-preview" style="color:var(--accent-gold)">已通关</span>' : ''}
                 </div>
             `;
 
             if (isUnlocked) {
                 realmCard.addEventListener('click', () => {
-                    this.startRealm(i, isCompleted);
+                    this.selectRealm(i);
                 });
             }
 
-            container.appendChild(realmCard);
+            listContainer.appendChild(realmCard);
+        }
+
+        // Bind Enter Button
+        const enterBtn = document.getElementById('enter-realm-btn');
+        if (enterBtn) {
+            // Remove old listeners by cloning (simple way) or just reassign onclick
+            enterBtn.onclick = () => {
+                if (this.selectedRealmId) {
+                    const isCompleted = this.unlockedRealms && this.unlockedRealms.includes(this.selectedRealmId + 1);
+                    this.startRealm(this.selectedRealmId, isCompleted);
+                }
+            };
+        }
+
+        // Auto-select logic
+        // Priority: 1. Last Unlocked Realm (if progress made)
+        //           2. Last viewed realm in this session
+        //           3. Max unlocked realm
+
+        let targetRealm = 1;
+        if (this.unlockedRealms && this.unlockedRealms.length > 0) {
+            targetRealm = Math.max(...this.unlockedRealms);
+        }
+
+        // If we have a stored last selection that is valid (unlocked), use it
+        if (this.lastSelectedRealmId && this.unlockedRealms && this.unlockedRealms.includes(this.selectedRealmId)) {
+            targetRealm = this.lastSelectedRealmId;
+        } else if (this.lastSelectedRealmId && (!this.unlockedRealms || !this.unlockedRealms.includes(this.selectedRealmId))) {
+            // If stored is locked (maybe reset?), fallback to max unlocked
+        }
+
+        // Actually, just trust lastSelectedRealmId if it's set in this session
+        if (this.lastSelectedRealmId) {
+            targetRealm = this.lastSelectedRealmId;
+        }
+
+        this.selectRealm(targetRealm);
+    }
+
+    // 选择天域
+    selectRealm(realmId) {
+        if (this.selectedRealmId === realmId) return;
+        this.selectedRealmId = realmId;
+        this.lastSelectedRealmId = realmId; // Persist for this session
+
+        // 1. Highlight UI
+        document.querySelectorAll('.realm-card').forEach(card => {
+            if (parseInt(card.dataset.id) === realmId) {
+                card.classList.add('active');
+                // Scroll into view if needed
+                card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } else {
+                card.classList.remove('active');
+            }
+        });
+
+        // 2. Update Preview
+        this.updateRealmPreview(realmId);
+
+        // 3. Enable Button
+        const enterBtn = document.getElementById('enter-realm-btn');
+        if (enterBtn) {
+            enterBtn.disabled = false;
+        }
+    }
+
+    // 更新预览面板
+    updateRealmPreview(realmId) {
+        const panel = document.getElementById('realm-preview-panel');
+        if (!panel) return;
+
+        const placeholder = panel.querySelector('.realm-preview-placeholder');
+        const content = panel.querySelector('.realm-preview-content');
+
+        // Hide placeholder, show content
+        if (placeholder) placeholder.style.display = 'none';
+        if (content) {
+            content.style.display = 'flex';
+            // Trigger reflow for fade in
+            setTimeout(() => content.style.opacity = 1, 10);
+        }
+
+        // Data
+        const realmName = this.map.getRealmName(realmId);
+        const env = this.map.getRealmEnvironment(realmId);
+
+        // Update Header
+        const titleEl = document.getElementById('preview-title');
+        if (titleEl) titleEl.textContent = realmName;
+
+        const iconEl = document.getElementById('preview-icon');
+        if (iconEl) iconEl.textContent = '⚔️';
+
+        // Update Environment
+        const envEl = document.getElementById('preview-env');
+        if (envEl) {
+            envEl.innerHTML = `
+                <strong style="color:var(--accent-gold)">${env.name}</strong><br>
+                <span style="font-size:0.9em; opacity:0.8">${env.desc}</span>
+            `;
+        }
+
+        // Update Boss
+        const bossInfo = this.getRealmBossInfo(realmId);
+        const bossEl = document.getElementById('preview-boss');
+        if (bossEl) {
+            if (bossInfo.bossName) {
+                bossEl.innerHTML = `
+                    <strong style="color:var(--accent-red)">${bossInfo.bossName}</strong><br>
+                    <span style="font-size:0.9em; opacity:0.8">${bossInfo.mechDesc}</span>
+                    ${bossInfo.counterTreasure ? `<br><span style="color:var(--accent-cyan); font-size:0.85em">💡 克制推荐: ${bossInfo.counterTreasure}</span>` : ''}
+                `;
+            } else {
+                bossEl.textContent = '???';
+            }
+        }
+
+        // Rewards
+        const lootEl = document.getElementById('preview-loot');
+        if (lootEl) {
+            lootEl.innerHTML = '';
+            // Visual flair
+            const loots = ['💰', '🔮'];
+            if (realmId % 5 === 0) loots.push('🏺');
+
+            loots.forEach(icon => {
+                const div = document.createElement('div');
+                div.className = 'loot-icon';
+                div.textContent = icon;
+                lootEl.appendChild(div);
+            });
         }
     }
 
@@ -945,6 +1112,15 @@ class Game {
         if (screen) {
             screen.classList.add('active');
             this.currentScreen = screenId;
+
+            // Particle Control
+            if (typeof particles !== 'undefined') {
+                if (screenId === 'main-menu') {
+                    particles.startMainMenuParticles();
+                } else {
+                    particles.stopMainMenuParticles();
+                }
+            }
 
             // 特殊处理
             if (screenId === 'map-screen') {
@@ -1129,6 +1305,11 @@ class Game {
         } else {
             // 否则初始为1
             this.unlockedRealms = [1];
+        }
+
+        // Initialize Registration Time if new run
+        if (!this.player.registerTime) {
+            this.player.registerTime = Date.now();
         }
 
         // 应用永久起始加成
@@ -1343,19 +1524,13 @@ class Game {
                     // 只是获得卡牌还是获得法则? "reward: law" usually implies getting the law power or card.
                     // Description says "obtain rare law".
                     // Let's force add law to player (if not duplicate)
-                    if (this.player.collectedLaws.some(l => l.id === law.id)) {
-                        this.player.gold += 100; // Fallback
-                        Utils.showBattleLog(`法则已存在，转化为 100 灵石`);
-                    } else {
-                        // Normally stealLaw logic adds checks. Here we force add.
-                        if (this.player.collectedLaws) this.player.collectedLaws.push(law);
+                    if (this.player.collectLaw(law)) {
                         Utils.showBattleLog(`领悟法则：${law.name}`);
-                        // Also add unlock card?
-                        if (law.unlockCards) {
-                            law.unlockCards.forEach(cid => {
-                                if (CARDS[cid]) this.player.deck.push({ ...CARDS[cid], instanceId: this.player.generateCardId() });
-                            });
-                        }
+                        this.achievementSystem.updateStat('lawsCollected', 1); // Update Achievement
+                    } else {
+                        // Fallback if already exists
+                        this.player.gold += 100;
+                        Utils.showBattleLog(`法则已存在，转化为 100 灵石`);
                     }
                 }
             } else {
@@ -1997,6 +2172,7 @@ class Game {
                     const randomLaw = LAWS[lawKeys[Math.floor(Math.random() * lawKeys.length)]];
                     if (randomLaw && this.player.collectLaw({ ...randomLaw })) {
                         this.eventResults.push(`✨ 获得法则: ${randomLaw.name}`);
+                        this.achievementSystem.updateStat('lawsCollected', 1);
                     }
                 }
                 break;
@@ -3058,6 +3234,21 @@ class Game {
     }
 
     // 显示游戏介绍 (v4.2)
+    // 切换游戏介绍标签页
+    switchIntroTab(tabId) {
+        // Update Buttons
+        document.querySelectorAll('.intro-tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.tab === tabId) btn.classList.add('active');
+        });
+
+        // Update Panels
+        document.querySelectorAll('.intro-tab-panel').forEach(panel => {
+            panel.classList.remove('active');
+            if (panel.id === `intro-${tabId}`) panel.classList.add('active');
+        });
+    }
+
     showGameIntro() {
         const modal = document.getElementById('settings-modal');
         // 确保模态框存在
@@ -3069,58 +3260,217 @@ class Game {
         const settingsContainer = document.getElementById('settings-options');
         if (!settingsContainer) return;
 
-        settingsContainer.innerHTML = `
-        <div class="game-intro-content" style="text-align: left; line-height: 1.6; max-height: 60vh; overflow-y: auto; padding-right: 15px;">
-            <div style="text-align: center; margin-bottom: 20px;">
-                <h2 style="color: var(--accent-gold); margin: 0;">📖 逆命者 v4.2 指南</h2>
-                <div style="font-size: 0.8rem; color: #666;">Defier's Handbook</div>
+        // Content for specific tabs
+        // Tab 1: Overview
+        const overviewContent = `
+            <div class="intro-section">
+                <h3><span style="font-size:1.5rem; margin-right:10px;">☯</span> 逆天改命</h3>
+                <p class="intro-text">
+                    天道无情，视万物为刍狗。作为一介凡人，你偶然获得了【残缺命环】，可以通过盗取法则之力，挑战高高在上的妖尊。
+                    这不仅仅是一场战斗，更是一次对命运的宣战。
+                </p>
+                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,215,0,0.1);">
+                    <strong style="color:var(--accent-gold)">游玩目标：</strong>
+                    <ul class="intro-list" style="margin-top:10px;">
+                        <li>闯过 <strong>18层</strong> 试炼天域，击败每一层的镇守妖尊。</li>
+                        <li>收集 <strong>五行法则</strong>，完善你的命环。</li>
+                        <li>构建独一无二的卡牌流派，在大道争锋中存活下来。</li>
+                    </ul>
+                </div>
             </div>
+            
+             <div class="intro-section">
+                <h3>👥 角色图鉴 (4位)</h3>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+                
+                    <!-- Lin Feng -->
+                    <div class="char-highlight" style="border-color: var(--accent-gold);">
+                        <strong style="color: var(--accent-gold); font-size:1.1rem;">🤺 林风 (逆命者)</strong>
+                        <p style="font-size:0.8rem; color:#bbb; margin-top:5px;">"凡人之躯，比肩神明。"</p>
+                        <ul class="intro-list" style="margin-top:10px; font-size:0.85rem;">
+                            <li><strong>均衡 (Balance)</strong>：属性平均，适应性强。</li>
+                            <li><strong>进化 (Evolve)</strong>：命环升级速度更快，擅长后期爆发。</li>
+                        </ul>
+                    </div>
 
-            <div class="intro-section" style="margin-bottom:20px;">
-                <h3 style="color: var(--accent-purple); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">🌌 核心机制 v4.2</h3>
-                <ul style="padding-left: 20px; list-style-type: disc; color: #ddd; margin-top: 10px;">
-                    <li style="margin-bottom: 8px;"><strong>五行相克 (Five Elements)</strong>：
-                        <br>万物皆有属。<strong>金 ⚔️ 木 ⚔️ 土 ⚔️ 水 ⚔️ 火 ⚔️ 金</strong>。
-                        <br>攻击克制属性敌人伤害+50%，被克制则-25%。善用法宝调整属性亲和！</li>
-                    <li style="margin-bottom: 8px;"><strong>稀有度重构 (Rarity 2.0)</strong>：
-                        <br>法宝等级调整：<span style="color:#9e9e9e">凡品</span> < <span style="color:#4fc3f7">灵品</span> < <span style="color:#e040fb">神品 (Purple)</span> < <span style="color:#ffab00">仙品 (Orange, 至尊)</span>。
-                        <br><span style="color:#ffab00">仙品</span>法宝代表逆天改命的终极力量，极为罕见！</li>
-                    <li style="margin-bottom: 8px;"><strong>命环与法则 (Fate Ring)</strong>：
-                        <br>战斗积累经验升级命环，解锁槽位。嵌入【法则】获得强力被动，凑齐同类法则可触发共鸣！</li>
+                    <!-- Xiang Ye -->
+                    <div class="char-highlight" style="border-color: var(--accent-green);">
+                        <strong style="color: var(--accent-green); font-size:1.1rem;">🌿 香叶 (被诅咒的医者)</strong>
+                        <p style="font-size:0.8rem; color:#bbb; margin-top:5px;">"医者仁心，亦可杀人。"</p>
+                        <ul class="intro-list" style="margin-top:10px; font-size:0.85rem;">
+                            <li><strong>毒愈 (Poison/Heal)</strong>：擅长施加持续伤害与自我回复。</li>
+                            <li><strong>逆生 (Reverse)</strong>：将治疗转化为伤害。</li>
+                        </ul>
+                    </div>
+                    
+                    <!-- Wu Yu -->
+                    <div class="char-highlight" style="border-color: var(--accent-red);">
+                        <strong style="color: var(--accent-red); font-size:1.1rem;">📿 无欲 (苦行僧)</strong>
+                        <p style="font-size:0.8rem; color:#bbb; margin-top:5px;">"金刚怒目，只为降魔。"</p>
+                        <ul class="intro-list" style="margin-top:10px; font-size:0.85rem;">
+                            <li><strong>功德 (Merit)</strong>：防守积累，触发【金刚法相】无敌。</li>
+                            <li><strong>业力 (Sin)</strong>：攻击积累，触发【明王之怒】爆发。</li>
+                        </ul>
+                    </div>
+                
+                    <!-- Yan Han -->
+                     <div class="char-highlight" style="border-color: #2196F3;">
+                        <strong style="color: #2196F3; font-size:1.1rem;">📚 严寒 (命环学者)</strong>
+                        <p style="font-size:0.8rem; color:#bbb; margin-top:5px;">"知识，就是这一界最锋利的剑。"</p>
+                        <ul class="intro-list" style="margin-top:10px; font-size:0.85rem;">
+                            <li><strong>解析 (Analysis)</strong>：每回合获得额外的0费技能牌。</li>
+                            <li><strong>真理 (Truth)</strong>：利用手牌数量优势压制敌人。</li>
+                        </ul>
+                    </div>
+                    
+                </div>
+            </div>
+        `;
+
+        // Tab 2: Mechanics
+        const mechanicsContent = `
+             <div class="intro-section">
+                <h3>🌌 五行法则 (Five Elements)</h3>
+                <p class="intro-text">万物生克，循环不息。掌握属性克制是制胜关键。</p>
+                
+                <div class="element-cycle-container">
+                    <span class="element-cycle-text">
+                        <span style="color:#ffcc00">金</span> <span style="color:#666">></span> 
+                        <span style="color:#4caf50">木</span> <span style="color:#666">></span> 
+                        <span style="color:#795548">土</span> <span style="color:#666">></span> 
+                        <span style="color:#2196f3">水</span> <span style="color:#666">></span> 
+                        <span style="color:#f44336">火</span> <span style="color:#666">></span> 
+                        <span style="color:#ffcc00">金</span>
+                    </span>
+                </div>
+                <ul class="intro-list">
+                    <li><strong>克制 (Advantage)</strong>：造成 <strong>+50%</strong> 伤害。</li>
+                    <li><strong>被克 (Disadvantage)</strong>：造成 <strong>-25%</strong> 伤害。</li>
+                    <li><strong>法宝变幻</strong>：装备不同属性的法宝可以改变自身的属性亲和。</li>
                 </ul>
             </div>
 
-            <div class="intro-section" style="margin-bottom:20px;">
-                <h3 style="color: var(--accent-gold); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">👥 角色特色</h3>
-                
-                <div style="background: rgba(255, 215, 0, 0.05); padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 3px solid var(--accent-gold);">
-                    <strong style="color: var(--accent-gold);">🪙 无欲 (佛门金刚)</strong>
-                    <ul style="padding-left: 20px; margin-top: 5px; font-size: 0.9rem;">
-                        <li><strong>功德 (Merit)</strong>：防守积累，满100触发【金刚法相】（无敌）。</li>
-                        <li><strong>业力 (Sin)</strong>：攻击积累，满100触发【明王之怒】（爆发）。</li>
-                    </ul>
-                </div>
-                
-                 <div style="background: rgba(76, 201, 240, 0.05); padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 3px solid var(--accent-cyan);">
-                    <strong style="color: var(--accent-cyan);">❄️ 严寒 (冰霜剑修)</strong>
-                    <ul style="padding-left: 20px; margin-top: 5px; font-size: 0.9rem;">
-                        <li><strong>寒霜 (Frost)</strong>：对敌施加，每层降低敌人攻击力。</li>
-                        <li><strong>冰爆 (Shatter)</strong>：特定卡牌引爆寒霜，造成巨额穿透伤害。</li>
-                    </ul>
+            <div class="intro-section">
+                <h3>⭕ 命环系统 (Fate Ring)</h3>
+                <p class="intro-text">
+                    命环是逆命者的根本。通过战斗汲取灵气（经验），提升命环等级。
+                </p>
+                <div style="display:flex; gap:20px; align-items:center;">
+                    <div class="intro-list">
+                        <li><strong>解锁槽位</strong>：命环升级可解锁新的法则槽位。</li>
+                         <li><strong>法则共鸣</strong>：收集 4 个同系列法则（如：离火、坎水），回合开始时触发强力特效。</li>
+                         <li><strong>神识 (Draw)</strong>：提升命环等级可增加每回合抽牌数。</li>
+                         <li><strong>灵力 (Energy)</strong>：决定每回合可使用的卡牌点数上限。</li>
+                    </div>
                 </div>
             </div>
 
             <div class="intro-section">
-                <h3 style="color: #4cc9f0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">⚔️ 进阶技巧</h3>
-                <ul style="padding-left: 20px; color: #ccc; font-size: 0.9rem;">
-                    <li><strong>精简卡组</strong>：商店可删除卡牌。卡组越薄，核心Key牌上手率越高。</li>
-                    <li><strong>法则共鸣</strong>：收集 4 个同属性法则，回合开始时触发强力特效（如回血、加攻）。</li>
-                    <li><strong>存档同步</strong>：进度实时云同步，支持多端游玩。</li>
+                <h3>📦 法宝品阶 (Treasures)</h3>
+                <p class="intro-text">天地异宝，有德者居之。</p> 
+                <div class="rarity-legend">
+                    <span class="rarity-tag common">凡品 (Common)</span>
+                    <span class="rarity-tag rare">灵品 (Rare)</span>
+                    <span class="rarity-tag epic">神品 (Epic)</span>
+                    <span class="rarity-tag legendary">仙品 (Legendary)</span>
+                </div>
+                <p style="margin-top:10px; font-size:0.9rem; color:#888;">注：仙品法宝拥有改变规则的逆天能力。</p>
+            </div>
+        `;
+
+        // Tab 3: Controls & Tips
+        const controlsContent = `
+             <div class="intro-section">
+                <h3>🎮 操作指南</h3>
+                <ul class="intro-list">
+                    <li><strong>出牌</strong>：拖拽卡牌 到 敌人身上 或 战斗区域中心。</li>
+                    <li><strong>结束回合</strong>：点击右侧“结束回合”按钮。</li>
+                    <li><strong>查看详情</strong>：长按/悬停在 卡牌、状态图标、法宝 上查看详细说明。</li>
+                    <li><strong>神器技能</strong>：点击角色头像旁的技能图标释放角色绝技。</li>
                 </ul>
             </div>
+
+            <div class="intro-section">
+                <h3>💾 存档与云同步</h3>
+                <p class="intro-text">
+                    本游戏支持 <strong>浏览器本地存档</strong> 与 <strong>账号云存档</strong> 双重备份。
+                </p>
+                <ul class="intro-list">
+                    <li><strong>本地</strong>：自动保存进度在当前浏览器中。</li>
+                    <li><strong>云端</strong>：注册登录后，存档将同步至服务器，可在不同设备间无缝切换。</li>
+                    <li><strong>冲突解决</strong>：若发现本地与云端不一致，系统会提示您选择保留哪一份。</li>
+                </ul>
+            </div>
+
+            <div class="intro-section">
+                <h3>💡 逆命心得</h3>
+                 <ul class="intro-list">
+                    <li><strong>精简卡组</strong>：商店可花费灵石 "销毁" 弱卡。卡组越薄，核心Key牌上手率越高。</li>
+                    <li><strong>观察意图</strong>：注意敌人头顶的意图图标（攻击、格挡、Debuff），制定应对策略。</li>
+                    <li><strong>保留灵力</strong>：部分防御牌或法宝需要灵力触发，不要每次都把灵力用光。</li>
+                </ul>
+            </div>
+        `;
+
+        // Tab 4: Updates
+        const updatesContent = `
+             <div class="intro-section">
+                <h3>📜 版本日志 v4.3</h3>
+                <p style="color:var(--accent-gold); margin-bottom:10px;">Update: 逆命轮回·天道崩塌</p>
+                <ul class="intro-list">
+                    <li><strong>[新增]</strong> 全新UI设计 "Ink & Gold"，沉浸式修仙体验。</li>
+                    <li><strong>[新增]</strong> 新角色加入：香叶（毒愈）、严寒（学者）。</li>
+                    <li><strong>[重构]</strong> 命环系统逻辑优化，共鸣效果更加显著。</li>
+                    <li><strong>[优化]</strong> 战斗流程更加流畅，修复了卡顿问题。</li>
+                </ul>
+            </div>
+
+            <div class="intro-section">
+                <h3>👨‍💻 关于开发者</h3>
+                <p class="intro-text">
+                    Designed & Developed by <strong>HealthOvO</strong> Team.
+                </p>
+                <p class="intro-text" style="font-size: 0.9rem;">
+                    本项目致力于打造最硬核、最具东方韵味的卡牌Roguelike。如果您有任何建议或发现BUG，欢迎反馈！
+                </p>
+                <div style="margin-top:20px; text-align:center;">
+                    <a href="https://github.com/HealthOvO/The-Defier" target="_blank" style="color:var(--accent-cyan); text-decoration:none; border-bottom:1px dashed var(--accent-cyan);">GitHub Repository</a>
+                </div>
+            </div>
+        `;
+
+
+        settingsContainer.innerHTML = `
+        <div class="game-intro-container">
+            <div class="intro-header">
+                <h2>📖 逆命者指南</h2>
+                <div class="subtitle">The Defier's Handbook</div>
+            </div>
+
+            <nav class="intro-tabs">
+                <button class="intro-tab-btn active" data-tab="overview" onclick="game.switchIntroTab('overview')">综述</button>
+                <button class="intro-tab-btn" data-tab="mechanics" onclick="game.switchIntroTab('mechanics')">机制</button>
+                <button class="intro-tab-btn" data-tab="controls" onclick="game.switchIntroTab('controls')">操作</button>
+                <button class="intro-tab-btn" data-tab="updates" onclick="game.switchIntroTab('updates')">更新</button>
+            </nav>
+
+            <div class="intro-content-area">
+                <div id="intro-overview" class="intro-tab-panel active">
+                    ${overviewContent}
+                </div>
+                <div id="intro-mechanics" class="intro-tab-panel">
+                    ${mechanicsContent}
+                </div>
+                <div id="intro-controls" class="intro-tab-panel">
+                    ${controlsContent}
+                </div>
+                <div id="intro-updates" class="intro-tab-panel">
+                    ${updatesContent}
+                </div>
+            </div>
             
-            <div style="text-align: center; margin-top: 30px; font-size: 0.8rem; color: #555; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">
-                Current Version: v4.2.0 | Breaking Fate since 2024
+            <div style="text-align: center; margin-top: auto; font-size: 0.8rem; color: rgba(255,255,255,0.2); padding-top: 10px;">
+                v4.3.0 | Breaking Fate since 2024
             </div>
         </div>
         `;
@@ -4413,7 +4763,7 @@ class Game {
         }, 500);
     }
 
-    // 显示存档位选择模态框
+    // 显示存档位选择模态框 (Spirit Tablet Style)
     showSaveSlotsModal(slots) {
         const modal = document.getElementById('save-slots-modal');
         const container = document.getElementById('slots-container');
@@ -4424,23 +4774,33 @@ class Game {
         slots.forEach((slotData, index) => {
             const slotEl = document.createElement('div');
             const isEmpty = !slotData;
-            slotEl.className = `save - slot ${isEmpty ? 'empty' : ''} `;
+            slotEl.className = `save-slot ${isEmpty ? 'empty' : ''}`;
 
-            const slotName = `存档 ${index + 1} `;
+            const slotName = `命 牌 · ${['一', '二', '三', '四'][index] || (index + 1)}`;
 
             let contentHtml = '';
             if (isEmpty) {
-                contentHtml = `<div class="slot-empty-text">空存档</div>`;
+                contentHtml = `
+                    <div class="slot-visual" style="border-color: #555; opacity: 0.5;">?</div>
+                    <div class="slot-empty-text">虚位以待</div>
+                `;
             } else {
-                const date = new Date(slotData.timestamp).toLocaleString();
-                const realm = (slotData.player && slotData.player.realm) ? slotData.player.realm : '?';
+                let date = new Date(slotData.timestamp).toLocaleDateString();
+                let dateLabel = "更新";
+                if (slotData.player && slotData.player.registerTime) {
+                    date = new Date(slotData.player.registerTime).toLocaleDateString();
+                    dateLabel = "注册";
+                }
+                const realm = (slotData.player && slotData.player.realm) ? slotData.player.realm : 1;
                 const hp = (slotData.player && slotData.player.currentHp) ? slotData.player.currentHp : '?';
                 const roleId = (slotData.player && slotData.player.characterId);
-                let roleName = '未知角色';
-                if (roleId === 'wuYu') roleName = '无欲';
-                if (roleId === 'yanHan') roleName = '严寒'; // Add others if needed
 
-                // 计算最高进度
+                let roleName = '未知角色';
+                let roleIcon = '👤';
+                if (roleId === 'wuYu') { roleName = '无欲'; roleIcon = '🧘'; }
+                if (roleId === 'yanHan') { roleName = '严寒'; roleIcon = '❄️'; }
+                if (roleId === 'linFeng') { roleName = '林风'; roleIcon = '🗡️'; }
+
                 let maxRealm = 1;
                 if (slotData.unlockedRealms && Array.isArray(slotData.unlockedRealms)) {
                     maxRealm = Math.max(...slotData.unlockedRealms);
@@ -4449,23 +4809,34 @@ class Game {
                 }
 
                 contentHtml = `
-                <div class="slot-info-row" style="color:var(--accent-gold); font-weight:bold;">${roleName}</div>
-                <div class="slot-info-row">🏔️ 最高记录: 第 ${maxRealm} 重天 | ❤️ ${hp}</div>
-                <div class="slot-info-row" style="font-size:0.8rem; color:#666;">📅 ${date}</div>
-                <div class="slot-info-row" style="font-size:0.75rem; color:#888;">(当前: 第 ${realm} 重天)</div>
-            `;
+                    <div class="slot-visual">${roleIcon}</div>
+                    <div class="slot-info-primary">${roleName} <span style="font-size:0.8em; opacity:0.7">| 第${maxRealm}重天</span></div>
+                    <div class="slot-info-secondary">❤️ ${hp}  📅 ${dateLabel}: ${date}</div>
+                `;
             }
 
-
             const actionsHtml = isEmpty ?
-                `<button class="menu-btn small" onclick="game.selectSlot(${index}, 'new')">新建轮回</button>` :
-                `<button class="menu-btn small primary" onclick="game.selectSlot(${index}, 'load')">继续</button>
-                 <button class="menu-btn small" style="border-color:var(--accent-red); color:var(--accent-red)" onclick="game.selectSlot(${index}, 'overwrite')">覆盖</button>`;
+                `<button class="talisman-btn small" onclick="game.selectSlot(${index}, 'new')">
+                    <div class="talisman-paper"></div>
+                    <div class="talisman-content">
+                        <span class="btn-text">开启轮回</span>
+                    </div>
+                </button>` :
+                `<button class="talisman-btn small primary" onclick="game.selectSlot(${index}, 'load')">
+                    <div class="talisman-paper"></div>
+                    <div class="talisman-content">
+                        <span class="btn-text">继续</span>
+                    </div>
+                </button>
+                 <button class="talisman-btn small" onclick="game.selectSlot(${index}, 'overwrite')" style="margin-top:5px; transform:scale(0.9);">
+                    <div class="talisman-paper" style="border-color:var(--accent-red);"></div>
+                    <div class="talisman-content">
+                        <span class="btn-text" style="color:var(--accent-red);">覆盖</span>
+                    </div>
+                </button>`;
 
             slotEl.innerHTML = `
-                <div class="slot-header">
-                    <span>${slotName}</span>
-                </div>
+                <div class="slot-header">${slotName}</div>
                 <div class="slot-content">
                     ${contentHtml}
                 </div>
@@ -4573,8 +4944,14 @@ class Game {
 
         if (AuthService.isLoggedIn()) {
             const user = AuthService.getCurrentUser();
-            // Change button to show name or Logout
-            btn.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text" style="font-size:0.8rem">${user.username}</span>`;
+            // Refactored to keep button style but show user info
+            btn.innerHTML = `
+                <div class="talisman-paper"></div>
+                <div class="talisman-content">
+                    <span class="btn-icon">👤</span>
+                    <span class="btn-text" style="font-size:0.9rem">${user.username}</span>
+                </div>
+            `;
             btn.onclick = () => {
                 // Muted/Audio handling (delayed slightly for feel)
                 setTimeout(() => {
@@ -4602,7 +4979,13 @@ class Game {
                 }, 50);
             };
         } else {
-            btn.innerHTML = `<span class="btn-icon">☁️</span> <span class="btn-text">登入轮回</span>`;
+            btn.innerHTML = `
+                <div class="talisman-paper"></div>
+                <div class="talisman-content">
+                    <span class="btn-icon">☁️</span>
+                    <span class="btn-text">登入轮回</span>
+                </div>
+            `;
             btn.onclick = () => this.showLoginModal();
         }
     }
@@ -4988,7 +5371,7 @@ class Game {
         }
     }
 
-    // 显示法宝图鉴
+    // 显示法宝图鉴 (重构版)
     showTreasureCompendium() {
         this.showScreen('treasure-compendium');
 
@@ -4999,67 +5382,137 @@ class Game {
         grid.innerHTML = '';
         if (statsEl) statsEl.innerHTML = '';
 
-        // 统计
-        let total = 0;
-        let owned = 0;
+        // 1. 准备数据并排序
+        let allTreasures = [];
+        let ownedCount = 0;
 
-        // 遍历所有定义的法宝
         for (const tid in TREASURES) {
-            total++;
             const t = TREASURES[tid];
             const isOwned = this.player.hasTreasure(tid);
-            if (isOwned) owned++;
+            if (isOwned) ownedCount++;
+
+            allTreasures.push({
+                id: tid,
+                data: t,
+                isOwned: isOwned
+            });
+        }
+
+        // 排序规则: 品质 (Mythic > Legendary > Rare > Common) -> 是否拥有 (已拥有在前) -> ID
+        const rarityScore = { 'mythic': 4, 'legendary': 3, 'rare': 2, 'common': 1 };
+
+        allTreasures.sort((a, b) => {
+            const rA = rarityScore[a.data.rarity || 'common'] || 1;
+            const rB = rarityScore[b.data.rarity || 'common'] || 1;
+            if (rA !== rB) return rB - rA; // 高品质在前
+
+            // if (a.isOwned !== b.isOwned) return b.isOwned - a.isOwned; // 已拥有在前 (可选，暂不启用，保持图鉴顺序统一)
+
+            return a.id.localeCompare(b.id);
+        });
+
+        // 2. 渲染网格
+        allTreasures.forEach(item => {
+            const t = item.data;
+            const isOwned = item.isOwned;
+            const rarity = t.rarity || 'common';
+            // const rarityLabel = this.getRarityLabel(rarity); // Not needed for grid
 
             const el = document.createElement('div');
-            el.className = `collection-item rarity-${t.rarity || 'common'} ${isOwned ? '' : 'locked'}`;
+            el.className = `compendium-item rarity-${rarity} ${isOwned ? 'unlocked' : 'locked'}`;
 
+            // 构建内容 - 即使未解锁也显示真实图标和名字，但会有样式灰化
             const icon = t.icon || '📦';
             const name = t.name;
-            const rarityLabel = this.getRarityLabel(t.rarity || 'common');
 
-            let desc = t.description;
-            try {
-                if (t.getDesc) desc = t.getDesc(this.player);
-            } catch (e) {
-                console.warn('Desc gen failed for', name);
-            }
-
-            const source = this.getTreasureSource(t);
-            const detailMsg = `${rarityLabel} ${name}\n\n${desc}\n\n📍 获取途径：\n${source}`;
-
-            if (isOwned) {
-                el.innerHTML = `
-                    <div class="collection-icon">${icon}</div>
-                    <div class="collection-name">${name}</div>
-                    <div class="collection-rarity" style="font-size:0.7rem; margin-bottom:4px;">${rarityLabel}</div>
-                    <div class="collection-desc">${desc}</div>
-                `;
-            } else {
-                el.innerHTML = `
-                    <div class="collection-icon" style="filter:grayscale(1); opacity:0.7">${icon}</div>
-                    <div class="collection-name" style="color:var(--text-muted)">${name}</div>
-                    <div class="collection-rarity" style="font-size:0.7rem; margin-bottom:4px; opacity:0.7">${rarityLabel}</div>
-                    <div class="collection-desc">${desc}</div>
-                    <div style="font-size:0.7rem; color:var(--text-muted); margin-top:5px; font-style:italic;">(未解锁)</div>
-                `;
-            }
+            el.innerHTML = `
+                <div class="compendium-item-inner">
+                    <div class="compendium-icon ${isOwned ? '' : 'locked'}">${icon}</div>
+                    <div class="compendium-name ${isOwned ? '' : 'locked'}">${name}</div>
+                </div>
+            `;
 
             el.onclick = () => {
-                this.showAlertModal(detailMsg, name);
+                this.showTreasureDetail(t, isOwned);
             };
 
             grid.appendChild(el);
-        }
+        });
 
-        // 更新进度及样式
+        // 3. 更新进度头
         if (statsEl) {
-            statsEl.style.textAlign = 'center';
-            statsEl.style.marginBottom = '20px';
-            statsEl.style.fontSize = '1.1rem';
-            statsEl.style.color = 'var(--accent-gold)';
-            statsEl.innerHTML = `收集进度: ${owned} / ${total}`;
+            statsEl.innerHTML = `
+                <span class="stat-icon">🎒</span>
+                <span class="stat-text">法宝收藏进度: <span style="color:var(--accent-gold); font-weight:bold;">${ownedCount}</span> / ${allTreasures.length}</span>
+            `;
+        }
+    }
+
+    // 显示法宝详情 (新版)
+    showTreasureDetail(treasure, isUnlocked) {
+        const modal = document.getElementById('treasure-detail-modal');
+        if (!modal) return;
+
+        // Elements
+        const elIcon = document.getElementById('detail-icon');
+        const elName = document.getElementById('detail-name');
+        const elRarity = document.getElementById('detail-rarity');
+        const elDesc = document.getElementById('detail-desc');
+        const elLore = document.getElementById('detail-lore');
+        const elSource = document.getElementById('detail-source');
+        const header = modal.querySelector('.detail-header');
+
+        if (!elIcon || !elName) return;
+
+        // Reset classes
+        header.className = 'detail-header';
+
+        // Common logic for filling content (Locked items now show full details too)
+        const rarity = treasure.rarity || 'common';
+        const rarityLabel = this.getRarityLabel(rarity);
+
+        header.classList.add(`rarity-${rarity}`);
+        elIcon.textContent = treasure.icon || '📦';
+        elName.textContent = treasure.name;
+        elRarity.innerHTML = rarityLabel;
+
+        // Description
+        let desc = treasure.description;
+        try {
+            if (treasure.getDesc) desc = treasure.getDesc(this.player);
+        } catch (e) {
+            console.warn('Desc gen failed', e);
+        }
+        // Highlight keywords support
+        desc = desc.replace(/([\d.]+|[+\-]\d+%?)/g, '<span style="color:#ffb74d;">$1</span>');
+        elDesc.innerHTML = desc;
+
+        // Lore
+        elLore.textContent = treasure.lore || "（此物似乎蕴含着某种未知的力量...）";
+        elLore.style.visibility = 'visible';
+
+        // Source
+        const source = this.getTreasureSource(treasure);
+        elSource.innerHTML = source;
+
+        // Visual adjustments for Locked state in modal
+        if (!isUnlocked) {
+            elIcon.style.filter = 'grayscale(1) brightness(0.7)';
+            elName.style.color = '#888'; // Grey out name
+            elRarity.innerHTML += ' <span style="font-size:0.8em; color:#666">(未获取)</span>';
+            // We still show description and source as requested
+        } else {
+            elIcon.style.filter = '';
+            elName.style.color = ''; // Reset to CSS default (gold/rarity color)
         }
 
+        // Show Modal
+        modal.classList.add('active');
+
+        // Play sound
+        if (typeof audioManager !== 'undefined') {
+            audioManager.playSFX('click');
+        }
     }
 }
 

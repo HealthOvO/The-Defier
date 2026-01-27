@@ -6,9 +6,45 @@ class AchievementSystem {
     constructor(game) {
         this.game = game;
         this.unlockedAchievements = this.loadUnlocked();
+        this.claimedAchievements = this.loadClaimed(); // New: Track claimed status
         this.stats = this.loadStats();
         this.pendingPopups = [];
         this.isShowingPopup = false;
+
+        // Legacy Migration: If unlocked but no claimed record (and not empty), assume all unlocked are claimed
+        // This prevents re-claiming old rewards
+        if (this.unlockedAchievements.length > 0 && this.claimedAchievements.length === 0) {
+            // Simple heuristic: if we have unlocked achievements but NO claimed record, 
+            // it's likely a legacy save. Mark all as claimed.
+            // However, for a fresh start (0 unlocked), both are 0, which is fine.
+            // Only issue is if a user unlocked 1 thing but genuinely didn't claim (new system), 
+            // but since new system introduces claimed array, its absence implies legacy.
+            // Wait, if it's a new game, both are empty.
+            // If it's a legacy save, unlocked is populated, claimed is empty (or null/undefined before loadClaimed fix).
+
+            // Check if this is actually a legacy load by checking if storage key existed? 
+            // loadClaimed returns [] if key missing.
+            // Let's rely on a specific flag or just do it once.
+            // For safety: If unlocked > 0 and claimed == 0, copy all.
+            // EXCEPT if the feature works by "If saved == null". loadClaimed returns [] for null.
+            // Let's assume for now backward compatibility: If unlocked > 0 and claimed == 0, copy.
+            // But what if user just unlocked their first item in new system?
+            // To distinguish, we could check a version flag, but we don't have one easily.
+            // Better approach: Since we are deploying this NOW, existing saves have unlocked > 0 and claimed = [].
+            // We should mark them as claimed.
+            // New players start with unlocked = [], claimed = [].
+            // So, (unlocked > 0 && claimed == 0) -> legacy migration.
+            // Edge case: User unlocks achievement, doesn't claim, reloads page. 
+            // Only then claimed would be 0. But localStorage persists. 
+            // So if we save claimed array properly, this only happens once.
+
+            const isLegacy = localStorage.getItem('theDefierClaimedAchievements') === null;
+            if (isLegacy) {
+                this.claimedAchievements = [...this.unlockedAchievements];
+                this.saveClaimed();
+                console.log('Legacy achievements migrated to claimed status.');
+            }
+        }
     }
 
     // 加载已解锁成就
@@ -27,6 +63,25 @@ class AchievementSystem {
             localStorage.setItem('theDefierAchievements', JSON.stringify(this.unlockedAchievements));
         } catch (e) {
             console.error('保存成就失败:', e);
+        }
+    }
+
+    // New: Load Claimed
+    loadClaimed() {
+        try {
+            const saved = localStorage.getItem('theDefierClaimedAchievements');
+            return saved ? JSON.parse(saved) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    // New: Save Claimed
+    saveClaimed() {
+        try {
+            localStorage.setItem('theDefierClaimedAchievements', JSON.stringify(this.claimedAchievements));
+        } catch (e) {
+            console.error('保存已领取记录失败:', e);
         }
     }
 
@@ -130,7 +185,6 @@ class AchievementSystem {
                 return (this.stats[condition.type] || 0) >= condition.value;
 
             case 'realmCleared':
-                // realmCleared 可能是最大通关层数 (mode='max')，所以只需要比较数值
                 return (this.stats.realmCleared || 0) >= condition.value;
 
             case 'uniqueCards':
@@ -139,9 +193,12 @@ class AchievementSystem {
 
             case 'specificLaw':
                 const player = this.game.player;
+                // Safeguard against missing player (init time)
+                if (!player || !player.collectedLaws) return false;
                 return player.collectedLaws.some(l => l.id === condition.lawId);
 
             case 'deckSize':
+                if (!this.game.player || !this.game.player.deck) return false;
                 return this.game.player.deck.length >= condition.value;
 
             case 'minDeckClear':
@@ -158,24 +215,50 @@ class AchievementSystem {
         }
     }
 
-    // 解锁成就
+    // 解锁成就 (Condition Met)
     unlockAchievement(achievementId) {
         const achievement = ACHIEVEMENTS[achievementId];
         if (!achievement) return;
 
+        // If already unlocked, do nothing
+        if (this.unlockedAchievements.includes(achievementId)) return;
+
         this.unlockedAchievements.push(achievementId);
         this.saveUnlocked();
 
-        // 应用奖励
+        // Modified: DO NOT apply reward automatically.
+        // Just notify user.
+        this.queuePopup(achievement, 'unlocked');
+    }
+
+    // New: Claim Reward
+    claimReward(achievementId) {
+        if (!this.unlockedAchievements.includes(achievementId)) {
+            return { success: false, reason: 'locked' };
+        }
+        if (this.claimedAchievements.includes(achievementId)) {
+            return { success: false, reason: 'already_claimed' };
+        }
+
+        const achievement = ACHIEVEMENTS[achievementId];
+
+        // Mark as claimed
+        this.claimedAchievements.push(achievementId);
+        this.saveClaimed();
+
+        // Apply Reward
         this.applyReward(achievement.reward);
 
-        // 显示弹窗
-        this.queuePopup(achievement);
+        // Notify
+        // Maybe a different visual for "Claimed"?
+        // For now standard popup or returns success for UI to animate.
+        return { success: true, reward: achievement.reward };
     }
 
     // 应用奖励
     applyReward(reward) {
         const player = this.game.player;
+        if (!player) return;
 
         switch (reward.type) {
             case 'gold':
@@ -209,14 +292,18 @@ class AchievementSystem {
             case 'unlock':
                 // 解锁特殊内容
                 const unlocks = this.loadUnlocks();
-                unlocks.push(reward.unlockId);
-                this.saveUnlocks(unlocks);
+                if (!unlocks.includes(reward.unlockId)) {
+                    unlocks.push(reward.unlockId);
+                    this.saveUnlocks(unlocks);
+                }
                 break;
 
             case 'cardBack':
                 const cardBacks = this.loadCardBacks();
-                cardBacks.push(reward.backId);
-                this.saveCardBacks(cardBacks);
+                if (!cardBacks.includes(reward.backId)) {
+                    cardBacks.push(reward.backId);
+                    this.saveCardBacks(cardBacks);
+                }
                 break;
         }
     }
@@ -264,8 +351,8 @@ class AchievementSystem {
     }
 
     // 队列弹窗
-    queuePopup(achievement) {
-        this.pendingPopups.push(achievement);
+    queuePopup(achievement, type = 'unlocked') {
+        this.pendingPopups.push({ achievement, type });
         if (!this.isShowingPopup) {
             this.showNextPopup();
         }
@@ -279,19 +366,23 @@ class AchievementSystem {
         }
 
         this.isShowingPopup = true;
-        const achievement = this.pendingPopups.shift();
+        const data = this.pendingPopups.shift();
 
-        this.showAchievementPopup(achievement);
+        this.showAchievementPopup(data.achievement, data.type);
     }
 
     // 显示成就弹窗
-    showAchievementPopup(achievement) {
+    showAchievementPopup(achievement, type) {
         const popup = document.createElement('div');
         popup.className = 'achievement-popup';
+
+        let label = '成就解锁';
+        if (type === 'claimed') label = '奖励已领取';
+
         popup.innerHTML = `
             <div class="achievement-icon">${achievement.icon}</div>
             <div class="achievement-info">
-                <div class="achievement-label">成就解锁</div>
+                <div class="achievement-label">${label}</div>
                 <div class="achievement-name">${achievement.name}</div>
             </div>
         `;
@@ -320,6 +411,7 @@ class AchievementSystem {
         for (const id in ACHIEVEMENTS) {
             const achievement = ACHIEVEMENTS[id];
             const unlocked = this.unlockedAchievements.includes(id);
+            const claimed = this.claimedAchievements.includes(id);
 
             // 隐藏成就只有解锁后才显示详情
             if (achievement.hidden && !unlocked) {
@@ -327,12 +419,14 @@ class AchievementSystem {
                     ...achievement,
                     name: '???',
                     description: '隐藏成就',
-                    unlocked
+                    unlocked,
+                    claimed
                 });
             } else {
                 list.push({
                     ...achievement,
-                    unlocked
+                    unlocked,
+                    claimed
                 });
             }
         }
@@ -340,7 +434,7 @@ class AchievementSystem {
         return list;
     }
 
-    // 获取进度
+    // 获取进度 (Based on UNLOCKED)
     getProgress() {
         const total = getTotalAchievementsCount();
         const completed = this.unlockedAchievements.filter(id =>

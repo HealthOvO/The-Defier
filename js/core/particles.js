@@ -25,6 +25,118 @@ class ParticleSystem {
             overflow: hidden;
         `;
         document.body.appendChild(this.container);
+        document.body.appendChild(this.container);
+
+        this.menuLoopId = null;
+        this.mouseX = 0;
+        this.mouseY = 0;
+        this.trackMouse();
+    }
+
+    trackMouse() {
+        document.addEventListener('mousemove', (e) => {
+            this.mouseX = e.clientX;
+            this.mouseY = e.clientY;
+
+            // Create trail if in menu
+            if (this.menuLoopId && Math.random() > 0.7) {
+                this.createSparkParticle(this.mouseX, this.mouseY);
+            }
+        });
+    }
+
+    startMainMenuParticles() {
+        if (this.menuLoopId) return;
+
+        const container = document.getElementById('void-particles');
+        if (!container) return;
+
+        // Initial burst
+        for (let i = 0; i < 20; i++) {
+            this.createVoidParticle(container);
+        }
+
+        this.menuLoopId = setInterval(() => {
+            if (document.hidden) return;
+            this.createVoidParticle(container);
+
+            if (Math.random() > 0.9) {
+                this.createSparkParticle(
+                    Utils.random(0, window.innerWidth),
+                    Utils.random(0, window.innerHeight)
+                );
+            }
+        }, 200);
+    }
+
+    stopMainMenuParticles() {
+        if (this.menuLoopId) {
+            clearInterval(this.menuLoopId);
+            this.menuLoopId = null;
+        }
+        const container = document.getElementById('void-particles');
+        if (container) container.innerHTML = '';
+    }
+
+    createVoidParticle(container) {
+        if (!container) return;
+
+        const p = document.createElement('div');
+        const size = Utils.random(2, 6);
+        const startX = Utils.random(0, window.innerWidth);
+        const duration = Utils.random(10, 25);
+
+        p.className = 'void-mote';
+        p.style.cssText = `
+            position: absolute;
+            bottom: -20px;
+            left: ${startX}px;
+            width: ${size}px;
+            height: ${size}px;
+            background: rgba(255, 255, 255, ${Utils.random(0.1, 0.3)});
+            border-radius: 50%;
+            pointer-events: none;
+            filter: blur(1px);
+            animation: float-up ${duration}s linear forwards;
+        `;
+
+        container.appendChild(p);
+
+        // CSS Animation for float-up must be defined or injected
+        // See style.css for @keyframes float-up
+
+        setTimeout(() => p.remove(), duration * 1000);
+    }
+
+    createSparkParticle(x, y) {
+        const p = document.createElement('div');
+        const size = Utils.random(2, 4);
+        const angle = Math.random() * Math.PI * 2;
+        const velocity = Utils.random(20, 60);
+
+        p.style.cssText = `
+            position: fixed;
+            left: ${x}px;
+            top: ${y}px;
+            width: ${size}px;
+            height: ${size}px;
+            background: #cfaa70; /* Gold */
+            border-radius: 50%;
+            pointer-events: none;
+            box-shadow: 0 0 10px #cfaa70;
+            z-index: 9999;
+            transition: all 1s ease-out; /* Fallback */
+        `;
+
+        this.container.appendChild(p);
+
+        // Animate
+        requestAnimationFrame(() => {
+            p.style.transform = `translate(${Math.cos(angle) * velocity}px, ${Math.sin(angle) * velocity}px)`;
+            p.style.opacity = 0;
+        });
+
+        setTimeout(() => p.remove(), 1000);
     }
 
     // 创建单个粒子

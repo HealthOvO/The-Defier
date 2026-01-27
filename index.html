@@ -18,53 +18,88 @@
 <body>
     <!-- 主菜单 -->
     <div id="main-menu" class="screen active">
-        <div class="menu-bg"></div>
+        <!-- New Background Layers -->
+        <div class="ink-canvas"></div>
+        <div class="fog-layer layer-1"></div>
+        <div class="fog-layer layer-2"></div>
+        <div class="void-particles" id="void-particles"></div>
+
         <div class="menu-content">
             <div class="game-logo">
-                <h1 class="title-cn">逆命者</h1>
+                <div class="title-container">
+                    <h1 class="title-cn">逆命者</h1>
+                    <div class="ink-stroke"></div>
+                </div>
                 <h2 class="title-en">THE DEFIER</h2>
-                <p class="tagline">天命印记定终生？偏要逆命而行。</p>
             </div>
-            <div class="game-description"
-                style="max-width: 600px; margin: 0 auto 30px; font-size: 1rem; color: var(--text-secondary); line-height: 1.6;">
+
+            <div class="game-description">
                 <p>天道无情，命环枷锁。众生皆为棋子，唯你逆命而行。</p>
-                <p>化身四大逆命者之一，觉醒神秘古玉，在十八重天域中构建绝世卡组，窃取天道法则。</p>
-                <p>炼化神兽，吞噬灵韵，打破生来注定的命运枷锁。这一次，不为长生，只为——逆天改命！</p>
+                <p>三千大道，只取一瓢。以凡人之躯，窃取神魔之力。</p>
+                <p>这一次，不为长生，只为——逆天改命！</p>
             </div>
+
             <div class="menu-buttons">
-                <button class="menu-btn primary" id="continue-game-btn" onclick="game.continueGame()"
+                <!-- Talisman Style Buttons -->
+                <button class="talisman-btn primary" id="continue-game-btn" onclick="game.continueGame()"
                     style="display: none;">
-                    <span class="btn-icon">▶️</span>
-                    <span class="btn-text">继续冒险</span>
+                    <div class="talisman-paper"></div>
+                    <div class="talisman-content">
+                        <span class="btn-icon">▶️</span>
+                        <span class="btn-text">继续冒险</span>
+                    </div>
                 </button>
-                <button class="menu-btn primary" id="new-game-btn" onclick="game.openSaveSlotsWithSync()">
-                    <span class="btn-icon">⚔️</span>
-                    <span class="btn-text">新的轮回</span>
+
+                <button class="talisman-btn primary" id="new-game-btn" onclick="game.openSaveSlotsWithSync()">
+                    <div class="talisman-paper"></div>
+                    <div class="talisman-content">
+                        <span class="btn-icon">⚔️</span>
+                        <span class="btn-text">新的轮回</span>
+                    </div>
                 </button>
-                <button class="menu-btn" id="login-btn" onclick="game.showLoginModal()">
-                    <span class="btn-icon">☁️</span>
-                    <span class="btn-text">登入轮回</span>
+
+                <button class="talisman-btn" id="login-btn" onclick="game.showLoginModal()">
+                    <div class="talisman-paper"></div>
+                    <div class="talisman-content">
+                        <span class="btn-icon">☁️</span>
+                        <span class="btn-text">登入轮回</span>
+                    </div>
                 </button>
             </div>
 
             <div class="menu-utilities">
-                <button class="util-btn" onclick="game.showPlayerInfo()" title="角色信息">
-                    <span class="btn-icon">🧙</span>
-                </button>
-                <button class="util-btn" onclick="game.showScreen('collection')" title="法则图鉴">
-                    <span class="btn-icon">📚</span>
-                </button>
-                <button class="util-btn" onclick="game.showAchievements()" title="成就">
-                    <span class="btn-icon">🏆</span>
-                </button>
-                <button class="util-btn" onclick="game.showGameIntro()" title="游戏介绍">
-                    <span class="btn-icon">📖</span>
-                </button>
-                <button class="util-btn" onclick="game.showTreasureCompendium()" title="法宝图鉴">
-                    <span class="btn-icon">🎒</span>
-                </button>
+                <div class="util-btn-wrapper">
+                    <button class="util-btn" onclick="game.showPlayerInfo()">
+                        <span class="btn-icon">🧙</span>
+                    </button>
+                    <span class="util-label">角色信息</span>
+                </div>
+                <div class="util-btn-wrapper">
+                    <button class="util-btn" onclick="game.showScreen('collection')">
+                        <span class="btn-icon">📚</span>
+                    </button>
+                    <span class="util-label">法则图鉴</span>
+                </div>
+                <div class="util-btn-wrapper">
+                    <button class="util-btn" onclick="game.showAchievements()">
+                        <span class="btn-icon">🏆</span>
+                    </button>
+                    <span class="util-label">成就殿堂</span>
+                </div>
+                <div class="util-btn-wrapper">
+                    <button class="util-btn" onclick="game.showTreasureCompendium()">
+                        <span class="btn-icon">🎒</span>
+                    </button>
+                    <span class="util-label">法宝图鉴</span>
+                </div>
+                <div class="util-btn-wrapper">
+                    <button class="util-btn" onclick="game.showGameIntro()">
+                        <span class="btn-icon">📖</span>
+                    </button>
+                    <span class="util-label">游戏介绍</span>
+                </div>
             </div>
-            <div class="version-info">v4.2 | 逆命轮回·五行觉醒</div>
+            <div class="version-info">v4.3 | 逆命轮回·天道崩塌</div>
         </div>
     </div>
 
@@ -86,53 +121,76 @@
         </div>
     </div>
 
-    <!-- 角色选择/信息界面 -->
+    <!-- 角色选择/信息界面 (Refactored for Ink & Gold) -->
     <div id="character-select" class="screen">
         <div class="screen-header">
             <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
             <h2>角色信息</h2>
         </div>
-        <div class="character-panel">
-            <div class="character-avatar">
-                <div class="avatar-ring"></div>
-                <div class="avatar-inner" id="info-char-avatar">林风</div>
-            </div>
-            <div class="character-info">
-                <h3 id="info-char-name">林风 · 逆命者</h3>
-                <div class="imprint-badge" id="info-char-title">残次印记</div>
-                <p class="character-desc" id="info-char-desc">身负最残次印记，却获得神秘古玉，拥有盗取法则的能力。</p>
-                <div class="character-stats">
-                    <div class="stat">
-                        <span class="stat-icon">❤️</span>
-                        <span class="stat-name">生命</span>
-                        <span class="stat-value" id="char-hp">80</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-icon">⚡</span>
-                        <span class="stat-name">灵力</span>
-                        <span class="stat-value" id="char-energy">3</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-icon">🎴</span>
-                        <span class="stat-name">抽牌</span>
-                        <span class="stat-value" id="char-draw">5</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-icon">💪</span>
-                        <span class="stat-name">力量</span>
-                        <span class="stat-value" id="char-strength">-</span>
+
+        <div class="ink-scroll-container">
+            <div class="ink-scroll-content">
+                <!-- Left Column: Destiny Identity -->
+                <div class="char-identity-col">
+                    <div class="char-name-vertical" id="info-char-name">林风</div>
+                    <div class="imprint-seal" id="info-char-title">残次印记</div>
+
+                    <div class="char-avatar-ink-wrapper">
+                        <div class="ink-splash-bg"></div>
+                        <div class="avatar-ink-inner" id="info-char-avatar">林风</div>
                     </div>
                 </div>
-            </div>
-            <div class="fate-ring-display">
-                <h4>命环状态</h4>
-                <div class="ring-visual">
-                    <div class="ring-core"></div>
-                    <div class="ring-orbit orbit-1"></div>
-                    <div class="ring-orbit orbit-2"></div>
+
+                <!-- Right Column: Cultivation Stats & Biography -->
+                <div class="char-details-col">
+                    <!-- Spirit Tablets (Stats) -->
+                    <div class="spirit-tablets-row">
+                        <div class="spirit-tablet hp">
+                            <span class="tablet-icon">❤️</span>
+                            <span class="tablet-label">生命本源</span>
+                            <span class="tablet-value" id="char-hp">80</span>
+                        </div>
+                        <div class="spirit-tablet energy">
+                            <span class="tablet-icon">⚡</span>
+                            <span class="tablet-label">灵力上限</span>
+                            <span class="tablet-value" id="char-energy">3</span>
+                        </div>
+                        <div class="spirit-tablet draw">
+                            <span class="tablet-icon">🎴</span>
+                            <span class="tablet-label">神识感知</span>
+                            <span class="tablet-value" id="char-draw">5</span>
+                        </div>
+                        <div class="spirit-tablet strength">
+                            <span class="tablet-icon">💪</span>
+                            <span class="tablet-label">道体强度</span>
+                            <span class="tablet-value" id="char-strength">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Biography Scroll -->
+                    <div class="bio-scroll-paper">
+                        <div class="bio-content">
+                            <h4><span class="section-icon">📜</span> 宿命传记</h4>
+                            <p class="character-desc" id="info-char-desc">身负最残次印记，却获得神秘古玉，拥有盗取法则的能力。</p>
+                        </div>
+                    </div>
+
+                    <!-- Fate Ring Hologram (Simplified for Info View) -->
+                    <div class="fate-ring-info-panel">
+                        <div class="ring-info-header">
+                            <h4><span class="section-icon">⭕</span> 命环境界</h4>
+                            <span class="ring-level-badge" id="ring-level">一阶</span>
+                        </div>
+                        <div class="ring-visual-mini">
+                            <div class="ring-core"></div>
+                            <div class="ring-orbit orbit-1"></div>
+                            <div class="ring-orbit orbit-2"></div>
+                        </div>
+                        <div class="ring-stats-text">
+                            <p>法则容量: <span id="loaded-laws">0/3</span></p>
+                        </div>
+                    </div>
                 </div>
-                <p>命环等级: <span id="ring-level">一阶</span></p>
-                <p>已装载法则: <span id="loaded-laws">0/3</span></p>
             </div>
         </div>
     </div>
@@ -143,8 +201,29 @@
             <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
             <h2>法则图鉴</h2>
         </div>
-        <div class="collection-grid" id="collection-grid">
-            <!-- 动态生成 -->
+
+        <div class="codex-scroll-container">
+            <!-- Top Section: Law Archive -->
+            <div class="codex-section">
+                <div class="codex-section-header">
+                    <span class="section-icon">📜</span>
+                    <h3>万法归一 · 法则库</h3>
+                </div>
+                <div class="law-archive-grid" id="law-archive-grid">
+                    <!-- Dynamic Laws -->
+                </div>
+            </div>
+
+            <!-- Bottom Section: Resonance Manual -->
+            <div class="codex-section">
+                <div class="codex-section-header">
+                    <span class="section-icon">🔮</span>
+                    <h3>天道共鸣 · 羁绊录</h3>
+                </div>
+                <div class="resonance-manual-list" id="resonance-manual-list">
+                    <!-- Dynamic Resonances -->
+                </div>
+            </div>
         </div>
     </div>
 
@@ -154,11 +233,21 @@
             <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
             <h2>法宝图鉴</h2>
         </div>
-        <div class="collection-stats" id="treasure-compendium-stats">
-            <!-- 进度统计 -->
-        </div>
-        <div class="collection-grid" id="treasure-compendium-grid">
-            <!-- 动态生成 -->
+
+        <div class="treasure-compendium-layout">
+            <!-- Top Stats Scroll -->
+            <div class="compendium-stats-wrapper">
+                <div class="compendium-stats" id="treasure-compendium-stats">
+                    <!-- 收集进度 -->
+                </div>
+            </div>
+
+            <!-- Main Grid Area -->
+            <div class="compendium-grid-container">
+                <div class="compendium-grid" id="treasure-compendium-grid">
+                    <!-- 动态生成 -->
+                </div>
+            </div>
         </div>
     </div>
 
@@ -168,8 +257,44 @@
             <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
             <h2>选择试炼天域</h2>
         </div>
-        <div class="realm-select-container" id="realm-select-container">
-            <!-- 动态生成 -->
+        <div class="realm-select-layout">
+            <div class="realm-list-container" id="realm-list-container">
+                <!-- Realm Cards Grid/Carousel -->
+            </div>
+            <div class="realm-preview-panel" id="realm-preview-panel">
+                <!-- Selected Realm Details -->
+                <div class="realm-preview-placeholder">
+                    <div class="placeholder-icon">🏔️</div>
+                    <p>请选择一个天域以查看详情</p>
+                </div>
+                <div class="realm-preview-content" style="display:none; opacity: 0;">
+                    <div class="preview-header">
+                        <div class="preview-icon" id="preview-icon"></div>
+                        <h3 id="preview-title"></h3>
+                    </div>
+
+                    <div class="preview-section">
+                        <h4><span class="section-icon">⚔️</span> 环境法则</h4>
+                        <div id="preview-env" class="preview-text"></div>
+                    </div>
+
+                    <div class="preview-section">
+                        <h4><span class="section-icon">👹</span> 镇守妖尊</h4>
+                        <div id="preview-boss" class="preview-text"></div>
+                    </div>
+
+                    <div class="preview-rewards">
+                        <h4><span class="section-icon">🎁</span> 可能掉落</h4>
+                        <div id="preview-loot" class="preview-loot-grid"></div>
+                    </div>
+
+                    <button class="menu-btn primary large" id="enter-realm-btn" disabled>
+                        <span class="btn-text">踏入天域</span>
+                    </button>
+                    <div class="realm-cost-display" id="realm-cost-display"
+                        style="display:none; color: var(--accent-gold); margin-top: 10px; font-size: 0.9rem;"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -523,22 +648,56 @@
 
     <!-- Save Slots Modal -->
     <div id="save-slots-modal" class="modal">
-        <div class="modal-content large" style="width: 800px; max-width: 95%;">
-            <div class="modal-header">
-                <h2>选择存档</h2>
-            </div>
-            <!-- Message area -->
-            <div style="text-align:center; color:var(--text-secondary); margin-bottom:20px;">
-                <p>账号可存储 4 个独立进度。请选择一个存档位开始或继续。</p>
-            </div>
+        <div class="modal-content large" style="width: 1200px; max-width: 95%;">
+            <!-- Header removed for compact layout -->
+            <div style="margin-top: 20px;"></div>
 
             <div class="slots-container" id="slots-container">
                 <!-- Slots will be injected here -->
             </div>
 
-            <div class="modal-footer" style="margin-top: 20px; justify-content: center;">
-                <button class="menu-btn small"
-                    onclick="document.getElementById('save-slots-modal').classList.remove('active')">取消</button>
+            <div class="modal-footer" style="margin-top: 20px; display: flex; justify-content: center;">
+                <button class="talisman-btn small"
+                    onclick="document.getElementById('save-slots-modal').classList.remove('active')"
+                    style="width: 120px;">
+                    <div class="talisman-paper" style="border-color: #666; background: #222;"></div>
+                    <div class="talisman-content">
+                        <span class="btn-text" style="color: #aaa; font-size: 1rem;">取消</span>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 法宝详情弹窗 (New) -->
+    <div id="treasure-detail-modal" class="modal">
+        <div class="modal-content treasure-detail-view">
+            <button class="modal-close" onclick="game.closeModal()">×</button>
+            <div class="treasure-detail-layout">
+                <div class="treasure-visual-col">
+                    <div class="treasure-visual-bg">
+                        <div class="visual-particles"></div>
+                        <div class="treasure-large-icon" id="detail-icon">📦</div>
+                    </div>
+                </div>
+                <div class="treasure-info-col">
+                    <div class="detail-header">
+                        <h2 id="detail-name">法宝名称</h2>
+                        <div class="detail-sub" id="detail-rarity">稀有度</div>
+                    </div>
+                    <div class="detail-body">
+                        <div class="detail-desc-box">
+                            <p id="detail-desc">法宝效果描述...</p>
+                        </div>
+                        <div class="detail-lore">
+                            <i id="detail-lore">“此物乃天地造化，非有缘人不可得。”</i>
+                        </div>
+                        <div class="detail-source">
+                            <span class="source-label">📍 获取途径:</span>
+                            <span id="detail-source">未知</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

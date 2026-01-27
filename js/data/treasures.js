@@ -59,7 +59,7 @@ const TREASURES = {
         name: '厚土盾',
         description: '护盾效果+25%，土属性伤害+30%。',
         rarity: 'rare',
-        icon: '🪨',
+        icon: '🛡️',
         elementBonus: { element: 'earth', value: 0.3 },
     },
 

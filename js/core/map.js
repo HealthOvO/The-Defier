@@ -132,8 +132,17 @@ class GameMap {
     // 渲染地图 (V3 - Ascension Style + Flexbox Fix)
     render() {
         const container = document.getElementById('map-screen');
+        const currentRealm = this.game.player.realm;
+        const existingMap = container.querySelector('.map-screen-v3');
+
+        // Smart Render Check: If map exists and is for the same realm, update in-place
+        if (existingMap && existingMap.dataset.realm == currentRealm) {
+            this.updateMapState();
+            return;
+        }
+
         container.innerHTML = `
-            <div class="map-screen-v3">
+            <div class="map-screen-v3" data-realm="${currentRealm}">
                 <div class="map-bg-layer map-bg-stars"></div>
                 <div class="map-bg-layer map-bg-mist"></div>
                 
@@ -173,8 +182,7 @@ class GameMap {
         this.renderV3Nodes();
         this.updateStatusBar();
 
-        // Auto-scroll to current node
-        // Auto-scroll to best target (Highest Accessible or Completed)
+        // Initial Auto-scroll (Only on full rebuild)
         setTimeout(() => {
             // Find the highest row index that has potential activity
             let targetRowIndex = 0;
@@ -189,7 +197,6 @@ class GameMap {
                 }
                 const hasCompleted = row.some(n => n.completed);
                 if (hasCompleted && targetRowIndex === 0) {
-                    // If we haven't found an active row yet, track the highest completed row as fallback
                     targetRowIndex = r;
                 }
             }
@@ -199,11 +206,39 @@ class GameMap {
             if (targetRowEl) {
                 targetRowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
             } else {
-                // Fallback to bottom if something is weird
                 const scrollContainer = document.getElementById('map-scroll-container');
                 if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
             }
         }, 150);
+    }
+
+    // 更新地图状态 (In-Place Update)
+    updateMapState() {
+        this.updateStatusBar();
+
+        // Update Node Classes
+        this.nodes.forEach(row => {
+            row.forEach(node => {
+                const el = document.querySelector(`.map-node-v3[data-node-id="${node.id}"]`);
+                if (el) {
+                    // Reset State Classes
+                    el.classList.remove('completed', 'locked', 'current', 'accessible');
+
+                    // Apply New State
+                    if (node.completed) el.classList.add('completed');
+                    else if (!node.accessible) el.classList.add('locked');
+                    else {
+                        el.classList.add('current');
+                        // Ensure listener is still valid (it should be, we didn't replace element)
+                        // But if we wanted to be safe we could re-add, but that risks duplication.
+                        // Assuming click listener persists on DOM element.
+                    }
+                }
+            });
+        });
+
+        // Re-draw connections to reflect state changes
+        this.drawConnections();
     }
 
     renderV3Nodes() {

@@ -1371,6 +1371,12 @@ class Battle {
                 this.player.triggerTreasureEffect('onKill', enemy);
             }
 
+            // Update Achievements: Damage
+            if (this.game && this.game.achievementSystem) {
+                this.game.achievementSystem.updateStat('totalDamageDealt', finalDamage);
+                this.game.achievementSystem.updateStat('maxDamageDealt', finalDamage, 'max');
+            }
+
             // Check Battle End Immediately upon kill
             if (this.checkBattleEnd()) return;
 
