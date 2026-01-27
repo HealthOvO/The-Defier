@@ -799,6 +799,294 @@ body {
     box-shadow: 0 0 25px var(--accent-gold);
 }
 
+/* ===================================
+   Map Screen V3 (Ascension Style)
+   =================================== */
+
+.map-screen-v3 {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(to bottom, #0f172a, #312e81, #1e1b4b);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Parallax Background Layers */
+.map-bg-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.map-bg-stars {
+    background-image:
+        radial-gradient(1px 1px at 20px 30px, #ffffff, rgba(0, 0, 0, 0)),
+        radial-gradient(1px 1px at 40px 70px, #ffffff, rgba(0, 0, 0, 0)),
+        radial-gradient(1px 1px at 50px 160px, #ffffff, rgba(0, 0, 0, 0)),
+        radial-gradient(1px 1px at 90px 40px, #ffffff, rgba(0, 0, 0, 0)),
+        radial-gradient(1px 1px at 130px 80px, #ffffff, rgba(0, 0, 0, 0));
+    background-size: 200px 200px;
+    opacity: 0.5;
+}
+
+.map-bg-mist {
+    background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><filter id="cloud"><feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves="5" /><feDisplacementMap in="SourceGraphic" scale="20" /></filter><rect width="100" height="100" filter="url(%23cloud)" opacity="0.2" fill="white"/></svg>');
+    opacity: 0.3;
+    animation: driftMist 60s linear infinite;
+}
+
+@keyframes driftMist {
+    0% {
+        background-position: 0% 0%;
+    }
+
+    100% {
+        background-position: 100% 100%;
+    }
+}
+
+/* Map Header (Floating) */
+.map-v3-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 100;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0) 100%);
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    pointer-events: none;
+    /* Let clicks pass through to map items if needed, but buttons need pointer-events auto */
+}
+
+.map-v3-header>* {
+    pointer-events: auto;
+}
+
+/* Scrollable Content Area */
+.map-scroll-container {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+    z-index: 10;
+    scroll-behavior: smooth;
+    padding-bottom: 100px;
+    /* Space for footer */
+    /* Hide Scrollbar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.map-scroll-container::-webkit-scrollbar {
+    display: none;
+}
+
+/* The Content Wrapper inside Scroll */
+.map-content-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+    /* Removed min-height to align SVG with actual content height */
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    padding: 100px 0;
+}
+
+/* SVG Layer for Curvy Lines */
+.map-connections-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.connection-path {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.15);
+    stroke-width: 2;
+    stroke-dasharray: 5, 5;
+    transition: all 0.5s ease;
+}
+
+.connection-path.active {
+    stroke: var(--accent-gold);
+    stroke-width: 3;
+    stroke-dasharray: none;
+    filter: drop-shadow(0 0 5px var(--accent-gold));
+    animation: flowPulse 2s infinite linear;
+}
+
+.connection-path.completed {
+    stroke: var(--accent-green);
+    stroke-opacity: 0.6;
+    stroke-width: 2;
+}
+
+/* Nodes */
+/* Rows container */
+.node-row-v3 {
+    position: relative;
+    width: 100%;
+    height: 120px;
+    /* Fixed height per row */
+    display: flex;
+    justify-content: center;
+    /* Center nodes in the row */
+    align-items: center;
+    z-index: 2;
+    padding: 0 20px;
+    /* Add padding to sides */
+}
+
+.map-node-v3 {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: #1a1a1a;
+    border: 2px solid #555;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    position: relative;
+    /* Changed from absolute to relative */
+    margin: 0 40px;
+    /* Space between nodes */
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+    z-index: 5;
+    /* Ensure above lines */
+
+    /* Centering without transform conflict */
+    /* Removed negative margins as we are not using absolute centering anymore */
+    /* Removed top: 50%; */
+}
+
+/* Node Types */
+.map-node-v3.enemy {
+    border-color: #ef4444;
+    color: #ef4444;
+    background: radial-gradient(circle at 30% 30%, #450a0a, #000);
+}
+
+.map-node-v3.elite {
+    border-color: #a855f7;
+    color: #a855f7;
+    background: radial-gradient(circle at 30% 30%, #3b0764, #000);
+    transform: scale(1.1);
+}
+
+.map-node-v3.boss {
+    width: 90px;
+    height: 90px;
+    font-size: 40px;
+    border-color: #eab308;
+    color: #eab308;
+    background: radial-gradient(circle at 30% 30%, #422006, #000);
+    box-shadow: 0 0 30px rgba(234, 179, 8, 0.4);
+
+    /* Adjust margin for larger size */
+    /* Remove negative margins as we are not using absolute centering anymore */
+    margin: 0 40px;
+}
+
+.map-node-v3.event {
+    border-color: #06b6d4;
+    color: #06b6d4;
+    background: radial-gradient(circle at 30% 30%, #083344, #000);
+}
+
+.map-node-v3.shop {
+    border-color: #f59e0b;
+    color: #f59e0b;
+    background: radial-gradient(circle at 30% 30%, #451a03, #000);
+}
+
+.map-node-v3.rest {
+    border-color: #10b981;
+    color: #10b981;
+    background: radial-gradient(circle at 30% 30%, #064e3b, #000);
+}
+
+/* States */
+.map-node-v3.locked {
+    filter: grayscale(1) brightness(0.5);
+    cursor: not-allowed;
+    border-style: dashed;
+}
+
+.map-node-v3.completed {
+    filter: brightness(0.6);
+    border-color: #fff;
+    opacity: 0.8;
+}
+
+.map-node-v3.current {
+    box-shadow: 0 0 0 4px rgba(234, 179, 8, 0.3), 0 0 20px rgba(234, 179, 8, 0.6);
+    border-color: var(--accent-gold);
+    color: #fff;
+    transform: scale(1.2);
+    z-index: 10;
+    animation: pulseNode 2s infinite;
+}
+
+@keyframes pulseNode {
+    0% {
+        transform: scale(1.2);
+        box-shadow: 0 0 0 4px rgba(234, 179, 8, 0.3);
+    }
+
+    50% {
+        transform: scale(1.25);
+        box-shadow: 0 0 0 8px rgba(234, 179, 8, 0.1);
+    }
+
+    100% {
+        transform: scale(1.2);
+        box-shadow: 0 0 0 4px rgba(234, 179, 8, 0.3);
+    }
+}
+
+/* Hover Tooltip */
+.node-tooltip {
+    position: absolute;
+    bottom: 110%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid var(--accent-gold);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    color: #fff;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 20;
+}
+
+.map-node-v3:hover .node-tooltip {
+    opacity: 1;
+}
+
+
+
 .map-node.current {
     border-color: var(--accent-gold);
     box-shadow: 0 0 30px var(--accent-gold);
@@ -4753,5 +5041,63 @@ body {
     .treasure-slot,
     .inventory-item {
         min-height: 100px;
+    }
+}
+
+/* Map V3 Mobile Styles */
+@media (max-width: 600px) {
+    .map-content-wrapper {
+        padding: 60px 0;
+        max-width: 100%;
+        overflow-x: hidden;
+        /* Prevent horizontal scroll */
+    }
+
+    .node-row-v3 {
+        height: 100px;
+        /* Reduced row height */
+        padding: 0 5px;
+        gap: 15px;
+        /* Use gap for flex spacing */
+    }
+
+    .map-node-v3 {
+        width: 48px;
+        height: 48px;
+        font-size: 20px;
+        margin: 0;
+        /* Let gap handle spacing */
+        border-width: 2px;
+        flex-shrink: 0;
+        /* Prevent squishing */
+    }
+
+    .map-node-v3.boss {
+        width: 70px;
+        height: 70px;
+        font-size: 30px;
+    }
+
+    .map-v3-header {
+        padding: 10px;
+        flex-direction: column;
+        /* Stack header on very small screens? No, keep inline but compact */
+        align-items: center;
+    }
+
+    .player-status-bar {
+        gap: 8px;
+        font-size: 0.8rem;
+        margin-top: 5px;
+        width: 100%;
+        justify-content: space-around;
+        background: rgba(0, 0, 0, 0.3);
+        padding: 5px;
+        border-radius: 8px;
+    }
+
+    .back-btn {
+        font-size: 0.8rem;
+        padding: 5px 10px;
     }
 }

@@ -1371,6 +1371,9 @@ class Battle {
                 this.player.triggerTreasureEffect('onKill', enemy);
             }
 
+            // Check Battle End Immediately upon kill
+            if (this.checkBattleEnd()) return;
+
             // === Twin Bonds (Dual Boss Vengeance) ===
             if (enemy.isDualBoss) {
                 const survivor = this.enemies.find(e => e.isDualBoss && e.currentHp > 0 && e !== enemy);
@@ -1754,6 +1757,9 @@ class Battle {
             Utils.showBattleLog(`${enemy.name} 受到 ${burnDamage} 点灼烧伤害`);
 
             this.updateBattleUI();
+
+            if (this.checkBattleEnd()) return;
+
             await Utils.sleep(300);
         }
 
@@ -1770,6 +1776,9 @@ class Battle {
             Utils.showBattleLog(`${enemy.name} 受到 ${poisonDamage} 点中毒伤害`);
 
             this.updateBattleUI();
+
+            if (this.checkBattleEnd()) return;
+
             await Utils.sleep(300);
         }
 

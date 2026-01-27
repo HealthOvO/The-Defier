@@ -12,19 +12,39 @@ class GameMap {
 
     // 生成地图
     generate(realm) {
+        // V4.2 Persistence: Check if we have a saved map for this realm
+        if (this.game.player.realmMaps && this.game.player.realmMaps[realm]) {
+            console.log(`Loading cached map for Realm ${realm}`);
+            const cached = this.game.player.realmMaps[realm];
+            this.nodes = cached.nodes;
+            this.completedNodes = cached.completedNodes || [];
+
+            // Re-bind click events (functions are not saved in JSON)
+            // Actually, renderV3Nodes re-binds them based on data.
+            // But we need to ensure the data structure is valid.
+            return this.nodes;
+        }
+
+        console.log(`Generating new map for Realm ${realm}`);
         this.nodes = [];
         this.currentNodeIndex = -1;
         this.completedNodes = [];
 
-        // 每层生成3-4行节点
-        const rows = 4;
-        const nodesPerRow = [2, 3, 2, 1]; // 每行节点数
+        // 获取层配置
+        const config = window.LEVEL_CONFIG ? window.LEVEL_CONFIG.getRealmConfig(realm) : { rows: 8, nodesSequence: [] };
+        const rows = config.rows;
 
         let nodeId = 0;
 
-        for (let row = 0; row < rows; row++) {
+        // 1. 生成普通层
+        for (let row = 0; row < rows - 1; row++) {
             const rowNodes = [];
-            const nodeCount = nodesPerRow[row];
+            let nodeCount = 2;
+            if (config.nodesSequence && config.nodesSequence[row]) {
+                nodeCount = config.nodesSequence[row];
+            } else {
+                nodeCount = Math.random() > 0.5 ? 3 : 2;
+            }
 
             for (let i = 0; i < nodeCount; i++) {
                 const nodeType = this.getRandomNodeType(row, rows, realm);
@@ -34,24 +54,37 @@ class GameMap {
                     type: nodeType,
                     icon: this.getNodeIcon(nodeType),
                     completed: false,
-                    accessible: row === 0 // 只有第一行可访问
+                    accessible: row === 0
                 });
             }
-
             this.nodes.push(rowNodes);
         }
 
-        // 最后一行是BOSS
-        this.nodes[rows - 1] = [{
-            id: nodeId,
+        // 2. 生成BOSS层 (最后一行)
+        this.nodes.push([{
+            id: nodeId++,
             row: rows - 1,
             type: 'boss',
             icon: '👹',
             completed: false,
             accessible: false
-        }];
+        }]);
+
+        // Save initial state to cache
+        this.saveStateToCache(realm);
 
         return this.nodes;
+    }
+
+    // Helper to save state
+    saveStateToCache(realm) {
+        if (!this.game.player.realmMaps) this.game.player.realmMaps = {};
+        this.game.player.realmMaps[realm] = {
+            nodes: this.nodes,
+            completedNodes: this.completedNodes
+        };
+        // Auto-save game to persist this change immediately? 
+        // Better to let local autosave handle it, or trigger it here if critical.
     }
 
     // 获取随机节点类型
@@ -67,8 +100,6 @@ class GameMap {
         }
 
         // 检查是否通过改关卡 (Current Realm < Max Reached)
-        // Note: realm starts at 1. If maxRealmReached is 2, realm 1 is passed.
-        // User request: "Already passed levels should not have events and shops"
         const isPassed = this.game.player.maxRealmReached > realm;
 
         if (isPassed) {
@@ -98,39 +129,227 @@ class GameMap {
         return icons[type] || '❓';
     }
 
-    // 渲染地图
+    // 渲染地图 (V3 - Ascension Style + Flexbox Fix)
     render() {
-        const container = document.getElementById('map-nodes');
-        container.innerHTML = '';
+        const container = document.getElementById('map-screen');
+        container.innerHTML = `
+            <div class="map-screen-v3">
+                <div class="map-bg-layer map-bg-stars"></div>
+                <div class="map-bg-layer map-bg-mist"></div>
+                
+                <div class="map-v3-header">
+                    <button class="back-btn" onclick="game.showScreen('realm-select-screen')">← 返回关卡</button>
+                    <div class="player-status-bar">
+                        <div class="status-item hp">
+                            <span class="icon">❤️</span>
+                            <span id="map-hp">${this.game.player.currentHp}/${this.game.player.maxHp}</span>
+                        </div>
+                        <div class="status-item gold">
+                            <span class="icon">💰</span>
+                            <span id="map-gold">${this.game.player.gold}</span>
+                        </div>
+                        <div class="status-item floor">
+                            <span class="icon">🏔️</span>
+                            <span id="map-floor">${this.getRealmName(this.game.player.realm)}</span>
+                        </div>
+                    </div>
+                </div>
 
-        // 从上到下渲染（反转显示，让BOSS在上方）
-        for (let row = this.nodes.length - 1; row >= 0; row--) {
+                <div class="map-scroll-container" id="map-scroll-container">
+                    <div class="map-content-wrapper" id="map-content-wrapper">
+                        <!-- SVG Layer -->
+                        <svg class="map-connections-svg" id="map-svg-layer"></svg>
+                    </div>
+                </div>
+
+                <div class="map-footer">
+                    <button class="menu-btn small" onclick="game.showDeck()">查看牌组</button>
+                    <button class="menu-btn small" onclick="game.showTreasureBag()">法宝囊</button>
+                    <button class="menu-btn small" onclick="game.showFateRing()">命环</button>
+                </div>
+            </div>
+        `;
+
+        this.renderV3Nodes();
+        this.updateStatusBar();
+
+        // Auto-scroll to current node
+        // Auto-scroll to best target (Highest Accessible or Completed)
+        setTimeout(() => {
+            // Find the highest row index that has potential activity
+            let targetRowIndex = 0;
+
+            // Search from top down
+            for (let r = this.nodes.length - 1; r >= 0; r--) {
+                const row = this.nodes[r];
+                const hasActive = row.some(n => n.accessible && !n.completed);
+                if (hasActive) {
+                    targetRowIndex = r;
+                    break;
+                }
+                const hasCompleted = row.some(n => n.completed);
+                if (hasCompleted && targetRowIndex === 0) {
+                    // If we haven't found an active row yet, track the highest completed row as fallback
+                    targetRowIndex = r;
+                }
+            }
+
+            // Target element in that row
+            const targetRowEl = document.querySelector(`.node-row-v3[data-row-index="${targetRowIndex}"]`);
+            if (targetRowEl) {
+                targetRowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                // Fallback to bottom if something is weird
+                const scrollContainer = document.getElementById('map-scroll-container');
+                if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+            }
+        }, 150);
+    }
+
+    renderV3Nodes() {
+        const wrapper = document.getElementById('map-content-wrapper');
+        const svgLayer = document.getElementById('map-svg-layer');
+        if (!wrapper || !svgLayer) return;
+
+        // V3 Flexbox Layout System (Centered & Robust)
+        this.nodes.forEach((rowNodes, rowIndex) => {
             const rowEl = document.createElement('div');
-            rowEl.className = 'map-row';
+            rowEl.className = 'node-row-v3';
+            rowEl.dataset.rowIndex = rowIndex;
+            // Flex layout handles positioning automatically via justify-content: center
 
-            for (const node of this.nodes[row]) {
+            rowNodes.forEach((node, i) => {
                 const nodeEl = document.createElement('div');
-                nodeEl.className = `map-node ${node.type}`;
+                nodeEl.className = `map-node-v3 ${node.type}`;
                 nodeEl.dataset.nodeId = node.id;
 
-                if (node.completed) {
-                    nodeEl.classList.add('completed');
-                } else if (!node.accessible) {
-                    nodeEl.classList.add('locked');
-                } else {
+                nodeEl.innerHTML = `
+                    <div class="node-icon">${node.icon}</div>
+                    <div class="node-tooltip">${this.getNodeTooltip(node.type)}</div>
+                `;
+
+                if (node.completed) nodeEl.classList.add('completed');
+                else if (!node.accessible) nodeEl.classList.add('locked');
+                else {
                     nodeEl.classList.add('current');
                     nodeEl.addEventListener('click', () => this.onNodeClick(node));
                 }
 
-                nodeEl.textContent = node.icon;
+                // Just append, no manual positioning
                 rowEl.appendChild(nodeEl);
-            }
+            });
 
-            container.appendChild(rowEl);
+            wrapper.appendChild(rowEl);
+        });
+
+        // Draw Lines after DOM update and potential reflow
+        // Use timeout to ensure geometry is final
+        setTimeout(() => this.drawConnections(), 50);
+        // Also redraw on resize
+        if (!this._resizeObserver) {
+            this._resizeObserver = new ResizeObserver(() => {
+                // Throttle drawing
+                if (this._resizeTimeout) clearTimeout(this._resizeTimeout);
+                this._resizeTimeout = setTimeout(() => this.drawConnections(), 100);
+            });
+            this._resizeObserver.observe(wrapper);
+        }
+    }
+
+    drawConnections() {
+        const svg = document.getElementById('map-svg-layer');
+        if (!svg) return;
+
+        // Clear old
+        svg.innerHTML = '';
+
+        // Iterate Rows
+        for (let r = 0; r < this.nodes.length - 1; r++) {
+            const currentRow = this.nodes[r];
+            const nextRow = this.nodes[r + 1];
+
+            currentRow.forEach(sourceNode => {
+                nextRow.forEach(targetNode => {
+                    if (this.shouldConnect(sourceNode, targetNode)) {
+                        this.createPath(svg, r, sourceNode, targetNode);
+                    }
+                });
+            });
+        }
+    }
+
+    shouldConnect(src, tgt) {
+        // Special case: Boss connects to everything
+        if (tgt.type === 'boss' || src.type === 'boss') return true;
+
+        const srcRowNodes = this.nodes[src.row];
+        const tgtRowNodes = this.nodes[tgt.row];
+
+        // Single node rows connect to everything
+        if (srcRowNodes.length === 1 || tgtRowNodes.length === 1) return true;
+
+        const srcIndex = srcRowNodes.findIndex(n => n.id === src.id);
+        const tgtIndex = tgtRowNodes.findIndex(n => n.id === tgt.id);
+
+        const srcNorm = srcIndex / (srcRowNodes.length - 1 || 1);
+        const tgtNorm = tgtIndex / (tgtRowNodes.length - 1 || 1);
+
+        return Math.abs(srcNorm - tgtNorm) <= 0.6; // Allow diagonal connections
+    }
+
+    createPath(svg, rowIndex, src, tgt) {
+        // Calculate Accurate Positions relative to Wrapper
+        // We use DOM geometry instead of assumptions
+        const wrapper = document.getElementById('map-content-wrapper');
+        if (!wrapper) return;
+
+        const srcEl = document.querySelector(`.map-node-v3[data-node-id="${src.id}"]`);
+        const tgtEl = document.querySelector(`.map-node-v3[data-node-id="${tgt.id}"]`);
+
+        if (!srcEl || !tgtEl) return;
+
+        // Get Centers relative to viewport
+        const srcRect = srcEl.getBoundingClientRect();
+        const tgtRect = tgtEl.getBoundingClientRect();
+        const wrapRect = wrapper.getBoundingClientRect();
+
+        // Convert to Wrapper Coordinates
+        // SVG is absolute 0,0 inside Wrapper.
+
+        const srcX = srcRect.left - wrapRect.left + srcRect.width / 2;
+        const srcY = srcRect.top - wrapRect.top + srcRect.height / 2;
+
+        const tgtX = tgtRect.left - wrapRect.left + tgtRect.width / 2;
+        const tgtY = tgtRect.top - wrapRect.top + tgtRect.height / 2;
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        const midY = (srcY + tgtY) / 2;
+
+        // Standard Bezier
+        const d = `M ${srcX} ${srcY} C ${srcX} ${midY}, ${tgtX} ${midY}, ${tgtX} ${tgtY}`;
+
+        path.setAttribute('d', d);
+        path.setAttribute('class', 'connection-path');
+
+        if (src.completed && (tgt.completed || tgt.accessible)) {
+            path.classList.add('completed');
+        } else if (src.completed && tgt.accessible) {
+            path.classList.add('active');
         }
 
-        // 更新状态栏
-        this.updateStatusBar();
+        svg.appendChild(path);
+    }
+
+    getNodeTooltip(type) {
+        const tips = {
+            enemy: '普通敌人：只有战斗才能变强',
+            elite: '精英敌人：高风险，高回报',
+            boss: '天劫：突破境界的必经之路',
+            event: '机缘：祸福相依',
+            shop: '坊市：互通有无',
+            rest: '洞府：休养生息'
+        };
+        return tips[type] || '未知区域';
     }
 
     // 获取天域名称
@@ -189,7 +408,9 @@ class GameMap {
         document.getElementById('map-hp').textContent = `${player.currentHp}/${player.maxHp}`;
         document.getElementById('map-gold').textContent = player.gold;
         document.getElementById('map-floor').textContent = this.getRealmName(player.realm);
-        document.getElementById('realm-title').textContent = this.getRealmName(player.realm);
+        document.getElementById('map-floor').textContent = this.getRealmName(player.realm);
+        const realmTitle = document.getElementById('realm-title');
+        if (realmTitle) realmTitle.textContent = this.getRealmName(player.realm);
 
         // 更新环境法则显示
         const env = this.getRealmEnvironment(player.realm);
@@ -429,6 +650,10 @@ class GameMap {
                 n.accessible = true;
             }
         }
+
+        // V4.2 Persistence: Save progress immediately
+        // We save to cache. The game loop or autosave will persist to localStorage.
+        this.saveStateToCache(this.game.player.realm);
 
         this.render();
     }

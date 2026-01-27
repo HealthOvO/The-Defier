@@ -88,10 +88,8 @@ class EventSystem {
             case 'hp':
                 return player.currentHp >= condition.min;
             case 'awakenRing':
-                if (player.awakenFateRing()) {
-                    return '逆命之环已觉醒！解锁法则盗取！';
-                }
-                return '命环已觉醒';
+                // 仅当命环处于残缺状态时可选
+                return player.fateRing.path === 'crippled';
 
             case 'gold':
                 return player.gold >= condition.min;

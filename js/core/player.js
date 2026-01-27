@@ -48,8 +48,11 @@ class Player {
         this.discardPile = [];
         this.exhaustPile = [];
 
-        // Buff/Debuff
-        this.buffs = {};
+        // Map Persistence (Per-Realm State)
+        this.realmMaps = {};
+
+        // 状态
+        this.buffs = [];
 
         // 永久属性加成 (来自事件)
         this.permaBuffs = {
@@ -1789,7 +1792,16 @@ class Player {
         }
     }
 
-    // 进化命环
+    // 觉醒命环 (用于事件)
+    awakenFateRing() {
+        if (!this.fateRing) return false;
+        if (this.fateRing.path !== 'crippled') return false; // 已经觉醒
+
+        this.evolveFateRing('awakened');
+        // 额外奖励？事件描述说 "修复残缺印记"
+        return true;
+    }
+
     // 进化命环
     evolveFateRing(pathId) {
         if (!this.fateRing) return;
@@ -1855,6 +1867,9 @@ class Player {
             // 压缩法则列表
             collectedLaws: this.collectedLaws.map(l => ({ id: l.id })),
 
+            // V4.2 Persistence: Save per-realm map states
+            realmMaps: this.realmMaps,
+
             realm: this.realm,
             floor: this.floor,
             enemiesDefeated: this.enemiesDefeated,
@@ -1864,7 +1879,6 @@ class Player {
                 obtainedAt: t.obtainedAt,
                 data: t.data
             })),
-            equippedTreasures: (this.equippedTreasures || []).map(t => t.id), // 只存ID即可
             equippedTreasures: (this.equippedTreasures || []).map(t => t.id), // 只存ID即可
             permaBuffs: this.permaBuffs,
             maxRealmReached: this.maxRealmReached || 1
@@ -1942,10 +1956,11 @@ class Player {
     // 获取最大法宝槽位
     getMaxTreasureSlots() {
         let slots = 2; // 初始
-        if (this.realm >= 5) slots++;
-        if (this.realm >= 10) slots++;
-        if (this.realm >= 12) slots++;
-        if (this.realm >= 15) slots++;
+        const r = Math.max(this.realm, this.maxRealmReached || 1);
+        if (r >= 5) slots++;
+        if (r >= 10) slots++;
+        if (r >= 12) slots++;
+        if (r >= 15) slots++;
 
         // Fix: Slot count should not decrease when returning to earlier realms
         if (!this._maxTreasureSlots || slots > this._maxTreasureSlots) {

@@ -1,0 +1,20 @@
+{
+    "card": {
+        "id": "string",
+        "name": "string",
+        "type": "attack|skill|power",
+        "cost": 1,
+        "rarity": "common",
+        "effects": [
+            {
+                "type": "damage",
+                "value": 0
+            }
+        ]
+    },
+    "treasure": {
+        "id": "string",
+        "name": "string",
+        "callbacks": "function(player, battle) {...}"
+    }
+}

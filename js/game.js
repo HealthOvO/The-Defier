@@ -3548,13 +3548,13 @@ class Game {
             modal.className = 'modal';
             modal.style.zIndex = '10001'; // 比通用高一点
             modal.innerHTML = `
-    < div class="modal-content" style = "text-align: center; max-width: 360px; padding: 40px; border: 2px solid var(--accent-gold); box-shadow: 0 0 50px rgba(255, 215, 0, 0.2);" >
+                <div class="modal-content" style="text-align: center; max-width: 360px; padding: 40px; border: 2px solid var(--accent-gold); box-shadow: 0 0 50px rgba(255, 215, 0, 0.2);">
                     <div id="reward-icon" style="font-size: 4rem; margin-bottom: 20px; animation: bounce 1s infinite;">🎁</div>
                     <h3 id="reward-title" style="color: var(--accent-gold); margin-bottom: 15px; font-size: 1.5rem;">获得奖励</h3>
                     <p id="reward-message" style="color: #fff; margin-bottom: 30px; line-height: 1.6; font-size: 1.1rem; white-space: pre-line;"></p>
                     <button id="reward-confirm-btn" class="menu-btn primary">收下</button>
-                </div >
-    `;
+                </div>
+            `;
             document.body.appendChild(modal);
 
             // 绑定事件
