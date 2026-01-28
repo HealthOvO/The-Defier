@@ -38,13 +38,18 @@ class AchievementSystem {
             // Only then claimed would be 0. But localStorage persists. 
             // So if we save claimed array properly, this only happens once.
 
-            const isLegacy = localStorage.getItem('theDefierClaimedAchievements') === null;
             if (isLegacy) {
                 this.claimedAchievements = [...this.unlockedAchievements];
                 this.saveClaimed();
                 console.log('Legacy achievements migrated to claimed status.');
             }
         }
+
+        // Initial Cloud Sync
+        // Delay slightly to ensure Auth is ready if loaded async
+        setTimeout(() => {
+            this.syncFromCloud();
+        }, 2000);
     }
 
     // 加载已解锁成就
@@ -61,6 +66,7 @@ class AchievementSystem {
     saveUnlocked() {
         try {
             localStorage.setItem('theDefierAchievements', JSON.stringify(this.unlockedAchievements));
+            this.triggerCloudSave();
         } catch (e) {
             console.error('保存成就失败:', e);
         }
@@ -80,6 +86,7 @@ class AchievementSystem {
     saveClaimed() {
         try {
             localStorage.setItem('theDefierClaimedAchievements', JSON.stringify(this.claimedAchievements));
+            this.triggerCloudSave();
         } catch (e) {
             console.error('保存已领取记录失败:', e);
         }
@@ -99,8 +106,140 @@ class AchievementSystem {
     saveStats() {
         try {
             localStorage.setItem('theDefierStats', JSON.stringify(this.stats));
+            this.triggerCloudSave();
         } catch (e) {
             console.error('保存统计失败:', e);
+        }
+    }
+
+    // Cloud Sync Integration
+    triggerCloudSave() {
+        // Debounce cloud save (avoid spamming API on every kill)
+        if (this.saveTimeout) clearTimeout(this.saveTimeout);
+
+        this.saveTimeout = setTimeout(() => {
+            this.syncToCloud();
+        }, 5000); // 5 seconds delay
+    }
+
+    async syncToCloud() {
+        if (typeof AuthService === 'undefined' || !AuthService.isLoggedIn()) return;
+
+        console.log('Syncing achievements to cloud...');
+        const data = {
+            unlocked: this.unlockedAchievements,
+            claimed: this.claimedAchievements,
+            stats: this.stats,
+            conf: {
+                startBonuses: this.loadStartBonuses(),
+                unlocks: this.loadUnlocks(),
+                cardBacks: this.loadCardBacks()
+            },
+            lastUpdated: Date.now()
+        };
+
+        await AuthService.saveGlobalData(data);
+    }
+
+    async syncFromCloud() {
+        if (typeof AuthService === 'undefined' || !AuthService.isLoggedIn()) return;
+
+        console.log('Fetching achievements from cloud...');
+        const result = await AuthService.getGlobalData();
+
+        if (result.success && result.data) {
+            const cloud = result.data;
+
+            // Merge Strategy: Union of unlocked/claimed, Max of stats (or overwrite if cloud is newer?)
+            // Achievements are cumulative, so Union is best.
+
+            let changed = false;
+
+            // 1. Merge Unlocked
+            if (Array.isArray(cloud.unlocked)) {
+                cloud.unlocked.forEach(id => {
+                    if (!this.unlockedAchievements.includes(id)) {
+                        this.unlockedAchievements.push(id);
+                        changed = true;
+                    }
+                });
+            }
+
+            // 2. Merge Claimed
+            if (Array.isArray(cloud.claimed)) {
+                cloud.claimed.forEach(id => {
+                    if (!this.claimedAchievements.includes(id)) {
+                        this.claimedAchievements.push(id);
+                        changed = true;
+                    }
+                });
+            }
+
+            // 3. Sync Stats (Max value logic)
+            if (cloud.stats) {
+                // For cumulative stats like kills, we ideally want to sync. 
+                // But blindly taking max might miss local progress if offline. 
+                // Simple approach: Take cloud if cloud > local (assuming playing on multiple devices)
+                // Actually, if we play offline, local > cloud. 
+                // Let's just Max() numeric values.
+                for (const key in cloud.stats) {
+                    if (typeof cloud.stats[key] === 'number') {
+                        if ((cloud.stats[key] || 0) > (this.stats[key] || 0)) {
+                            this.stats[key] = cloud.stats[key];
+                            changed = true;
+                        }
+                    }
+                    // Arrays (unique cards etc)
+                    else if (Array.isArray(cloud.stats[key])) {
+                        if (!this.stats[key]) this.stats[key] = [];
+                        cloud.stats[key].forEach(item => {
+                            if (!this.stats[key].includes(item)) {
+                                this.stats[key].push(item);
+                                changed = true;
+                            }
+                        });
+                    }
+                }
+            }
+
+            // 4. Configs
+            if (cloud.conf) {
+                // Merge Start Bonuses
+                if (cloud.conf.startBonuses) {
+                    const localBonuses = this.loadStartBonuses();
+                    let bonusChanged = false;
+                    for (const k in cloud.conf.startBonuses) {
+                        if ((cloud.conf.startBonuses[k] || 0) > (localBonuses[k] || 0)) {
+                            localBonuses[k] = cloud.conf.startBonuses[k];
+                            bonusChanged = true;
+                        }
+                    }
+                    if (bonusChanged) this.saveStartBonuses(localBonuses);
+                }
+
+                // Merge Unlocks
+                if (cloud.conf.unlocks) {
+                    const localUnlocks = this.loadUnlocks();
+                    let unlockChanged = false;
+                    cloud.conf.unlocks.forEach(u => {
+                        if (!localUnlocks.includes(u)) {
+                            localUnlocks.push(u);
+                            unlockChanged = true;
+                        }
+                    });
+                    if (unlockChanged) this.saveUnlocks(localUnlocks);
+                }
+            }
+
+            if (changed) {
+                this.saveUnlocked();
+                this.saveClaimed();
+                this.saveStats();
+                console.log('Achievements synced from cloud successfully.');
+
+                // Refresh UI if exists
+                // const ui = document.querySelector('achievement-panel');
+            }
         }
     }
 

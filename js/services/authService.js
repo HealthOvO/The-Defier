@@ -221,6 +221,51 @@ const AuthService = {
             return { success: false, error: error };
         }
     }
+    ,
+
+    // Global Data Methods (Achievements, Stats, Settings)
+    // Stored in _User table 'globalData' column (Object)
+
+    async saveGlobalData(data) {
+        if (!this.isLoggedIn()) return { success: false, message: '未登录' };
+
+        try {
+            const user = Bmob.User.current();
+            const query = Bmob.Query('_User');
+            // Update _User directly
+            query.set('id', user.objectId);
+
+            // Validate data size/structure if needed
+            // Bmob Object column has size limits, but for achievements it should be fine
+
+            query.set('globalData', data);
+
+            await query.save();
+            console.log('Global data saved to cloud.');
+            return { success: true };
+        } catch (error) {
+            console.error('Save global data error:', error);
+            return { success: false, error: error };
+        }
+    },
+
+    async getGlobalData() {
+        if (!this.isLoggedIn()) return { success: false, message: '未登录' };
+
+        try {
+            const user = Bmob.User.current();
+            const query = Bmob.Query('_User');
+            const userData = await query.get(user.objectId);
+
+            if (userData && userData.globalData) {
+                return { success: true, data: userData.globalData };
+            }
+            return { success: true, data: null }; // No data found (new user)
+        } catch (error) {
+            console.error('Get global data error:', error);
+            return { success: false, error: error };
+        }
+    }
 };
 
 // Auto init

@@ -10566,4 +10566,116 @@ body {
     font-size: 0.8rem;
     color: var(--text-muted);
     border: 1px solid rgba(255, 255, 255, 0.1);
+}/* Karma UI (Wu Yu) */
+#karma-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 215, 0, 0.2);
+    width: 200px;
+    /* Adjust as needed */
+    pointer-events: none;
+    /* Let clicks pass through */
+}
+
+.karma-resource {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+}
+
+.karma-icon {
+    font-size: 1.2rem;
+    width: 24px;
+    text-align: center;
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
+}
+
+.karma-bar-bg {
+    flex: 1;
+    height: 12px;
+    /* Thicker bars */
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+}
+
+.karma-bar-fill {
+    height: 100%;
+    transition: width 0.3s ease-out;
+    position: relative;
+}
+
+/* Merit - Gold/Yellow */
+.merit-fill {
+    background: linear-gradient(90deg, #FFD700, #FFFACD);
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+/* Sin - Red/Dark */
+.sin-fill {
+    background: linear-gradient(90deg, #8B0000, #FF4500);
+    box-shadow: 0 0 10px rgba(255, 69, 0, 0.5);
+}
+
+.karma-value {
+    font-size: 0.8rem;
+    color: #eee;
+    font-family: 'Cinzel', serif;
+    /* Or game font */
+    min-width: 50px;
+    text-align: right;
+    text-shadow: 1px 1px 2px black;
+}
+
+/* Golden Body Effect Overlay (Optional) */
+.merit-resource.golden-active .karma-icon {
+    animation: pulse-gold 1s infinite;
+}
+
+/* Wrath Effect Overlay (Optional) */
+.sin-resource.wrath-active .karma-icon {
+    animation: shake-red 0.5s infinite;
+}
+
+@keyframes pulse-gold {
+    0% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 2px gold);
+    }
+
+    50% {
+        transform: scale(1.2);
+        filter: drop-shadow(0 0 10px gold);
+    }
+
+    100% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 2px gold);
+    }
+}
+
+@keyframes shake-red {
+    0% {
+        transform: translateX(0);
+    }
+
+    25% {
+        transform: translateX(-2px);
+    }
+
+    75% {
+        transform: translateX(2px);
+    }
+
+    100% {
+        transform: translateX(0);
+    }
 }

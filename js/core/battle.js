@@ -284,6 +284,58 @@ class Battle {
         if (this.game.renderTreasures) {
             this.game.renderTreasures();
         }
+
+        // 渲染无欲 (Wu Yu) 功德/业力 UI
+        const karmaRing = this.player.fateRing;
+        if (karmaRing && karmaRing.type === 'karma' && karmaRing.getKarmaStatus) {
+            this.renderKarmaUI(karmaRing);
+        }
+    }
+
+    // New: Render Karma UI (Wu Yu)
+    renderKarmaUI(karmaRing) {
+        let karmaContainer = document.getElementById('karma-container');
+        if (!karmaContainer) {
+            // Create container if not exists (append to player-area)
+            const playerArea = document.getElementById('player-area');
+            if (playerArea) {
+                karmaContainer = document.createElement('div');
+                karmaContainer.id = 'karma-container';
+                karmaContainer.className = 'karma-display';
+                // Insert after status bars
+                const statusBars = playerArea.querySelector('.status-bars');
+                if (statusBars) {
+                    statusBars.after(karmaContainer);
+                } else {
+                    playerArea.appendChild(karmaContainer);
+                }
+            }
+        }
+
+        if (karmaContainer) {
+            const status = karmaRing.getKarmaStatus();
+            const meritPercent = (status.merit / status.max) * 100;
+            const sinPercent = (status.sin / status.max) * 100;
+
+            karmaContainer.innerHTML = `
+                <div class="karma-resource merit-resource">
+                    <div class="karma-icon">📿</div>
+                    <div class="karma-bar-bg">
+                        <div class="karma-bar-fill merit-fill" style="width: ${meritPercent}%"></div>
+                    </div>
+                    <div class="karma-value">${status.merit}/${status.max}</div>
+                </div>
+                <div class="karma-resource sin-resource">
+                    <div class="karma-icon">🔥</div>
+                    <div class="karma-bar-bg">
+                        <div class="karma-bar-fill sin-fill" style="width: ${sinPercent}%"></div>
+                    </div>
+                    <div class="karma-value">${status.sin}/${status.max}</div>
+                </div>
+            `;
+
+            // Add tooltip/labels if needed
+        }
     }
 
     // 更新敌人UI
