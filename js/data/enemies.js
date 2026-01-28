@@ -1123,7 +1123,22 @@ function getBossForRealm(realm) {
 // 获取随机敌人
 function getRandomEnemy(realm) {
     const enemies = getEnemiesForRealm(realm);
-    if (enemies.length === 0) return null;
+
+    // 防御性检查
+    if (enemies.length === 0) {
+        console.warn(`⚠️ No enemies found for realm ${realm}!`);
+        console.log('Available enemies for this realm:', getEnemiesForRealm(realm));
+        console.log('All realm', realm, 'entities:', Object.values(ENEMIES).filter(e => e.realm === realm));
+
+        // 兜底方案：使用前一个realm的怪物
+        if (realm > 1) {
+            console.log(`Fallback: Using enemies from realm ${realm - 1}`);
+            return getRandomEnemy(realm - 1);
+        }
+
+        return null;
+    }
+
     const enemy = enemies[Math.floor(Math.random() * enemies.length)];
     return JSON.parse(JSON.stringify(enemy)); // 深拷贝
 }

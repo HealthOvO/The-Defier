@@ -2787,11 +2787,16 @@ class Game {
         if (!ring.unlockedPaths) ring.unlockedPaths = ['awakened'];
         if (!ring.path) ring.path = 'awakened';
 
+        // 计算经验进度百分比
+        const nextLevelExp = FATE_RING.levels[ring.level + 1]?.exp || 9999;
+        const expPercent = Math.min(100, (ring.exp / nextLevelExp) * 100);
+        const expDisplay = ring.level >= 10 ? 'Max' : `${ring.exp}/${nextLevelExp}`;
+
         // 使用新的HTML结构
         modal.innerHTML = `
             <div class="modal-content fate-ring-modal-content">
                 <div class="fate-ring-header">
-                    <h2 style="color: var(--accent-gold); margin: 0; font-family: var(--font-display);">命环系统</h2>
+                    <h2>⭕ 命环系统</h2>
                     <div class="modal-close" onclick="game.closeModal()">×</div>
                 </div>
                 
@@ -2799,18 +2804,19 @@ class Game {
                     <!-- 左侧：状态面板 -->
                     <div class="ring-status-panel">
                         <div class="ring-visual">
-                            <div style="font-size: 3rem;">${ring.limitBreaked ? '👑' : '💫'}</div>
+                            <div style="font-size: 3.2rem;">${ring.limitBreaked ? '👑' : '💫'}</div>
                         </div>
                         
                         <div class="ring-level-info">
-                            <h3 style="color: var(--accent-gold); margin-bottom: 5px;">${ring.name}</h3>
-                            <div style="font-size: 0.9rem; color: #aaa;">LV.${ring.level}</div>
+                            <h3>${ring.name}</h3>
+                            <div style="font-size: 1rem; color: #ddd; font-weight: 600; margin-top: 5px;">等级 ${ring.level}</div>
                             
-                            <div style="margin-top: 10px; background: rgba(0,0,0,0.3); height: 6px; border-radius: 3px; overflow: hidden;">
-                                <div style="width: ${Math.min(100, (ring.exp / (FATE_RING.levels[ring.level + 1]?.exp || 9999)) * 100)}%; background: var(--accent-gold); height: 100%;"></div>
+                            <div style="margin-top: 10px; background: rgba(0,0,0,0.3); height: 8px; border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,215,0,0.2);">
+                                <div style="width: ${expPercent}%; background: linear-gradient(90deg, var(--accent-gold), var(--accent-purple)); height: 100%; transition: width 0.5s;"></div>
                             </div>
-                            <div style="font-size: 0.8rem; margin-top: 5px; color: #888;">
-                                经验值: ${ring.exp}/${FATE_RING.levels[ring.level + 1]?.exp || (ring.level >= 10 ? 'Max' : '???')}
+                            <div style="font-size: 0.85rem; margin-top: 6px; color: #aaa; display: flex; justify-content: space-between;">
+                                <span>经验</span>
+                                <span style="color: var(--accent-gold);">${expDisplay}</span>
                             </div>
                         </div>
                         
@@ -2832,26 +2838,26 @@ class Game {
                             ${this.renderRingSlots(ring)}
                         </div>
                         
-                        <div id="slot-action-hint" style="position: absolute; bottom: 20px; color: var(--text-muted); font-size: 0.9rem;">
-                            ${this.selectedRingSlot !== undefined ? '从右侧选择法则装填' : '点击槽位进行操作'}
+                        <div id="slot-action-hint" style="position: absolute; bottom: 25px; color: var(--accent-gold); font-size: 0.95rem; text-shadow: 0 0 8px rgba(207,170,112,0.5); font-weight: 500;">
+                            ${this.selectedRingSlot !== undefined ? '✨ 从右侧选择法则装填' : '💡 点击槽位进行操作'}
                         </div>
                     </div>
                     
                     <!-- 右侧：法则库 -->
                     <div class="law-library-panel">
                         <div class="library-header">
-                            法则库 (${this.player.collectedLaws.length})
+                            📚 法则库 (${this.player.collectedLaws.length})
                         </div>
                         <div class="library-list">
                             ${this.renderLawLibrary(ring)}
                         </div>
                         
                         <!-- 法则共鸣显示 -->
-                        <div class="resonance-panel" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-                            <div class="library-header" style="color: var(--accent-gold);">
-                                法则共鸣
+                        <div class="resonance-panel" style="padding: 15px 15px 10px;">
+                            <div style="font-weight: 600; font-size: 0.95rem; color: var(--accent-gold); margin-bottom: 10px; font-family: var(--font-display);">
+                                ⚡ 法则共鸣
                             </div>
-                            <div class="resonance-list" style="max-height: 150px; overflow-y: auto;">
+                            <div class="resonance-list" style="max-height: 160px; overflow-y: auto; padding-right: 5px;">
                                 ${this.renderResonances(ring)}
                             </div>
                         </div>
@@ -4833,9 +4839,14 @@ class Game {
                     maxRealm = slotData.player.realm;
                 }
 
+                let realmDisplay = `第${maxRealm}重天`;
+                if (maxRealm > 18) {
+                    realmDisplay = `<span style="color:var(--accent-gold); font-weight:bold;">已通关</span>`;
+                }
+
                 contentHtml = `
                     <div class="slot-visual">${roleIcon}</div>
-                    <div class="slot-info-primary">${roleName} <span style="font-size:0.8em; opacity:0.7">| 第${maxRealm}重天</span></div>
+                    <div class="slot-info-primary">${roleName} <span style="font-size:0.8em; opacity:0.7">| ${realmDisplay}</span></div>
                     <div class="slot-info-secondary">❤️ ${hp}  📅 ${dateLabel}: ${date}</div>
                 `;
             }

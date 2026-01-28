@@ -409,6 +409,9 @@ class GameMap {
             17: '第十七重·大罗天',
             18: '第十八重·混沌天'
         };
+
+        if (realm > 18) return '逆天改命·已通关';
+
         return names[realm] || `第${realm}重天`;
     }
 
@@ -492,22 +495,46 @@ class GameMap {
     startEnemyBattle(node) {
         const realm = this.game.player.realm;
         const enemy = getRandomEnemy(realm);
-        if (enemy) {
-            enemy.ringExp = 10 + realm * 5; // 添加命环经验
-            this.game.currentBattleNode = node; // 保存节点
-            this.game.startBattle([enemy], node);
+
+        if (!enemy) {
+            console.error(`无法为第${realm}重生成敌人！`);
+            Utils.showBattleLog(`此处空无一物... 你顺利通过了这个节点`);
+
+            // 自动完成节点，避免卡死
+            setTimeout(() => {
+                this.completeNode(node);
+            }, 1000);
+            return;
         }
+
+        enemy.ringExp = 10 + realm * 5; // 添加命环经验
+        this.game.currentBattleNode = node; // 保存节点
+        this.game.startBattle([enemy], node);
     }
 
     // 开始精英战斗
     startEliteBattle(node) {
         const realm = this.game.player.realm;
         const elite = createEliteEnemy(realm);
-        if (elite) {
-            elite.ringExp = 25 + realm * 10; // 精英给更多经验
-            this.game.currentBattleNode = node;
-            this.game.startBattle([elite], node);
+
+        if (!elite) {
+            console.error(`无法为第${realm}重生成精英敌人！`);
+            Utils.showBattleLog(`精英怪物已经提前逃走... 你获得了一些补偿`);
+
+            // 给予补偿奖励
+            this.game.player.gold += 50 + realm * 10;
+            this.game.player.fateRing.exp += 20 + realm * 5;
+
+            // 自动完成节点
+            setTimeout(() => {
+                this.completeNode(node);
+            }, 1000);
+            return;
         }
+
+        elite.ringExp = 25 + realm * 10; // 精英给更多经验
+        this.game.currentBattleNode = node;
+        this.game.startBattle([elite], node);
     }
 
     // 开始BOSS战斗
