@@ -263,11 +263,12 @@ class GameMap {
                     <div class="node-tooltip">${this.getNodeTooltip(node.type)}</div>
                 `;
 
+                nodeEl.addEventListener('click', () => this.onNodeClick(node));
+
                 if (node.completed) nodeEl.classList.add('completed');
                 else if (!node.accessible) nodeEl.classList.add('locked');
                 else {
                     nodeEl.classList.add('current');
-                    nodeEl.addEventListener('click', () => this.onNodeClick(node));
                 }
 
                 // Just append, no manual positioning
