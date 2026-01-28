@@ -207,7 +207,7 @@ class Game {
     saveGame() {
         try {
             const gameState = {
-                version: '4.2.0',
+                version: '5.0.0',
                 player: this.player.getState(),
                 map: {
                     nodes: this.map.nodes,
