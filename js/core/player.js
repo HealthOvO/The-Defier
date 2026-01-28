@@ -345,6 +345,18 @@ class Player {
         Utils.showBattleLog(`获得卡牌：${newCard.name}`);
     }
 
+    // 重置战斗临时状态 (用于离开战斗或切换场景)
+    resetBattleState() {
+        this.block = 0;
+        this.buffs = {}; // Clear temp buffs
+        this.hand = [];
+        this.drawPile = [];
+        this.discardPile = [];
+        this.exhaustPile = [];
+        this.currentEnergy = this.baseEnergy;
+        this.skillCooldown = 0;
+    }
+
     // 准备战斗
     prepareBattle() {
         // 关键修复：战斗前净化牌组，修复潜在的费用错误
