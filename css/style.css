@@ -2414,36 +2414,25 @@ body {
 
 .energy-orbs {
     display: flex;
-    gap: 6px;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 250px;
+    /* 容纳6个图标：32×6 + 8×5 = 232px */
 }
 
-/* 能量球3D效果 */
+/* 能量球改为emoji显示 */
 .energy-orb {
-    width: 28px;
-    height: 28px;
-    background: radial-gradient(circle at 35% 35%, #b388ff, #7c4dff 40%, var(--accent-purple) 100%);
-    border: 2px solid rgba(179, 136, 255, 0.6);
-    border-radius: 50%;
-    box-shadow:
-        0 0 15px rgba(156, 39, 176, 0.6),
-        inset 0 -8px 15px rgba(0, 0, 0, 0.3),
-        inset 0 4px 8px rgba(255, 255, 255, 0.2);
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
     transition: all var(--transition-fast);
     position: relative;
     animation: orbFloat 2.5s ease-in-out infinite;
-}
-
-/* 能量球高光 */
-.energy-orb::before {
-    content: '';
-    position: absolute;
-    top: 4px;
-    left: 6px;
-    width: 8px;
-    height: 6px;
-    background: rgba(255, 255, 255, 0.5);
-    border-radius: 50%;
-    filter: blur(1px);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
 @keyframes orbFloat {
@@ -2473,17 +2462,6 @@ body {
 
 .energy-orb:nth-child(5) {
     animation-delay: 0.6s;
-}
-
-.energy-orb.empty {
-    background: rgba(100, 100, 100, 0.3);
-    border-color: rgba(100, 100, 100, 0.3);
-    box-shadow: none;
-    animation: none;
-}
-
-.energy-orb.empty::before {
-    display: none;
 }
 
 .energy-text {
@@ -6407,45 +6385,21 @@ body {
 }
 
 /* ===================================
-   Candy Display (3D Orbs)
+   Candy Display (Emoji Icons)
    =================================== */
 
 .candy-orb {
     position: relative;
-    width: 24px;
-    height: 24px;
-    background: radial-gradient(circle at 30% 30%, #ff99cc 0%, #ff66aa 50%, #cc3377 100%);
-    border-radius: 50%;
-    box-shadow:
-        0 2px 8px rgba(255, 105, 180, 0.4),
-        inset 0 -2px 4px rgba(0, 0, 0, 0.3),
-        inset 2px 2px 4px rgba(255, 255, 255, 0.4);
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
     animation: candyFloat 2s ease-in-out infinite;
     cursor: default;
     transition: transform 0.3s;
-}
-
-.candy-orb::before {
-    content: '';
-    position: absolute;
-    top: 4px;
-    left: 4px;
-    width: 8px;
-    height: 8px;
-    background: rgba(255, 255, 255, 0.6);
-    border-radius: 50%;
-    filter: blur(2px);
-}
-
-.candy-orb::after {
-    content: '✦';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 12px;
-    text-shadow: 0 0 3px rgba(255, 255, 255, 0.8);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
 .candy-orb:hover {
@@ -6527,8 +6481,11 @@ body {
 
 .candy-orbs {
     display: flex;
-    gap: 6px;
+    gap: 8px;
+    flex-wrap: wrap;
     justify-content: center;
+    max-width: 230px;
+    /* 容纳6个糖果图标：28×6 + 8×5 = 208px */
 }
 
 .candy-text,

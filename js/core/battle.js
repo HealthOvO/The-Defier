@@ -412,16 +412,34 @@ class Battle {
         const energyText = document.getElementById('energy-text');
 
         orbsContainer.innerHTML = '';
-        for (let i = 0; i < this.player.baseEnergy; i++) {
+
+        const maxIconsBeforeCollapse = 6; // 超过6个时折叠为单图标+数字
+
+        if (this.player.currentEnergy > maxIconsBeforeCollapse) {
+            // 超过6个，只显示一个图标 + 数字
             const orb = document.createElement('div');
-            orb.className = `energy-orb ${i >= this.player.currentEnergy ? 'empty' : ''}`;
+            orb.className = 'energy-orb filled';
+            orb.textContent = '⚡';
             orbsContainer.appendChild(orb);
+
+            if (energyText) {
+                energyText.style.display = 'block';
+                energyText.textContent = `×${this.player.currentEnergy}`;
+            }
+        } else {
+            // 6个及以下，显示对应数量的图标
+            for (let i = 0; i < this.player.currentEnergy; i++) {
+                const orb = document.createElement('div');
+                orb.className = 'energy-orb filled';
+                orb.textContent = '⚡';
+                orbsContainer.appendChild(orb);
+            }
+
+            if (energyText) energyText.style.display = 'none';
         }
 
-        energyText.textContent = `${this.player.currentEnergy}/${this.player.baseEnergy}`;
 
-
-        // 显示奶糖 (3D Candy Visualization)
+        // 显示奶糖 (使用糖果图标)
         let candyContainer = document.getElementById('candy-container');
         if (!candyContainer) {
             const resourcesContainer = document.querySelector('.resources-container');
@@ -437,26 +455,38 @@ class Battle {
         if (candyContainer) {
             // 清空并重新渲染糖果
             candyContainer.innerHTML = '';
-            const maxCandies = 5; // 最多显示5颗糖果
-            const candyCount = Math.min(this.player.milkCandy, maxCandies);
 
             const orbsWrapper = document.createElement('div');
             orbsWrapper.className = 'candy-orbs';
 
-            for (let i = 0; i < candyCount; i++) {
+            const maxCandyBeforeCollapse = 6;
+
+            if (this.player.milkCandy > maxCandyBeforeCollapse) {
+                // 超过6个，只显示一个糖果 + 数字
                 const candy = document.createElement('div');
-                candy.className = 'candy-orb';
-                candy.style.animationDelay = `${i * 0.1}s`;
+                candy.className = 'candy-orb filled';
+                candy.textContent = '🍬';
                 orbsWrapper.appendChild(candy);
+            } else {
+                // 6个及以下，显示对应数量的糖果图标
+                for (let i = 0; i < this.player.milkCandy; i++) {
+                    const candy = document.createElement('div');
+                    candy.className = 'candy-orb filled';
+                    candy.textContent = '🍬';
+                    candy.style.animationDelay = `${i * 0.1}s`;
+                    orbsWrapper.appendChild(candy);
+                }
             }
 
             candyContainer.appendChild(orbsWrapper);
 
-            // 添加数字文本
-            const candyText = document.createElement('span');
-            candyText.className = 'candy-text';
-            candyText.textContent = this.player.milkCandy;
-            candyContainer.appendChild(candyText);
+            // 如果奶糖超过6个，显示数字
+            if (this.player.milkCandy > maxCandyBeforeCollapse) {
+                const candyText = document.createElement('span');
+                candyText.className = 'candy-text';
+                candyText.textContent = `×${this.player.milkCandy}`;
+                candyContainer.appendChild(candyText);
+            }
 
             // 添加tooltip
             const tooltip = document.createElement('div');
