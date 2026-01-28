@@ -182,32 +182,13 @@ body {
     position: relative;
     z-index: 10;
     text-align: center;
-    padding: 40px 60px;
-    max-height: 100vh;
-    overflow-y: auto;
-    /* Glassmorphism removed for "Void" feel, just pure layout or subtle radial */
+    padding: 25px 60px;
     background: radial-gradient(circle, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0) 70%);
-    /* Custom scrollbar */
-    scrollbar-width: thin;
-    scrollbar-color: var(--accent-gold) transparent;
-}
-
-.menu-content::-webkit-scrollbar {
-    width: 6px;
-}
-
-.menu-content::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.menu-content::-webkit-scrollbar-thumb {
-    background: var(--accent-gold);
-    border-radius: 3px;
 }
 
 /* Logo Area */
 .game-logo {
-    margin-bottom: 0px;
+    margin-bottom: 5px;
     position: relative;
     display: inline-block;
 }
@@ -219,17 +200,17 @@ body {
 
 .title-cn {
     font-family: var(--font-display);
-    font-size: 8rem;
+    font-size: 6.5rem;
     color: transparent;
     /* Liquid Gold Gradient */
     background: linear-gradient(180deg, #fff 0%, var(--accent-gold) 40%, #8a6a2a 100%);
     -webkit-background-clip: text;
     background-clip: text;
-    filter: drop-shadow(0 10px 0 rgba(0, 0, 0, 0.5));
+    filter: drop-shadow(0 8px 0 rgba(0, 0, 0, 0.5));
     position: relative;
     z-index: 2;
-    margin-bottom: -20px;
-    letter-spacing: 10px;
+    margin-bottom: -15px;
+    letter-spacing: 9px;
 }
 
 .ink-stroke {
@@ -248,13 +229,13 @@ body {
 
 .title-en {
     font-family: var(--font-body);
-    font-size: 1.4rem;
+    font-size: 1.15rem;
     letter-spacing: 1.2em;
     color: var(--text-muted);
     text-transform: uppercase;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
     margin-left: 1.2em;
-    margin-top: 10px;
+    margin-top: 8px;
     /* visual balance */
     position: relative;
     z-index: 2;
@@ -309,30 +290,30 @@ body {
 
 .game-description {
     max-width: 600px;
-    margin: 0 auto 25px;
-    font-size: 1rem;
+    margin: 0 auto 18px;
+    font-size: 0.92rem;
     color: var(--text-secondary);
-    line-height: 1.7;
+    line-height: 1.6;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
     position: relative;
 }
 
 .game-description p {
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 /* Talisman Buttons */
 .menu-buttons {
     display: flex;
     flex-direction: column;
-    gap: 25px;
+    gap: 18px;
     align-items: center;
 }
 
 .talisman-btn {
     position: relative;
-    width: 320px;
-    height: 70px;
+    width: 300px;
+    height: 60px;
     background: transparent;
     border: none;
     cursor: pointer;
@@ -372,11 +353,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 15px;
+    gap: 13px;
     z-index: 2;
     color: var(--accent-gold);
     font-family: var(--font-display);
-    font-size: 1.5rem;
+    font-size: 1.35rem;
     letter-spacing: 2px;
     transition: color var(--transition-fast);
 }
@@ -421,8 +402,8 @@ body {
 .menu-utilities {
     display: flex;
     justify-content: center;
-    gap: 30px;
-    margin-top: 40px;
+    gap: 26px;
+    margin-top: 25px;
 }
 
 .util-btn-wrapper {
@@ -433,13 +414,13 @@ body {
 }
 
 .util-btn {
-    width: 50px;
-    height: 50px;
+    width: 46px;
+    height: 46px;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: var(--text-muted);
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     cursor: pointer;
     transition: all var(--transition-normal);
     display: flex;
@@ -475,9 +456,9 @@ body {
 }
 
 .version-info {
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     color: var(--text-muted);
-    margin-top: 20px;
+    margin-top: 12px;
     font-family: var(--font-body);
     letter-spacing: 1px;
 }
