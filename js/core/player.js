@@ -797,6 +797,13 @@ class Player {
             amount = 0;
         }
 
+        // 检查金刚法相（无欲 - 功德满值触发）
+        if (this.buffs.impervious && this.buffs.impervious > 0) {
+            this.buffs.impervious--;
+            Utils.showBattleLog('💫 金刚法相庇护！完全免疫伤害！');
+            return { dodged: true, damage: 0, impervious: true };
+        }
+
         // 触发法宝回调 (onBeforeTakeDamage)
         // 例如：阴阳镜 (Yin Yang Mirror) - 几率转化伤害为治疗
         const context = { preventDamage: false };
@@ -1493,7 +1500,9 @@ class Player {
             stun: '眩晕',
             nextAttackBonus: '聚气',
             damageReduction: '减伤',
-            chaosAura: '混乱光环'
+            chaosAura: '混乱光环',
+            impervious: '金刚法相',
+            wrath: '明王之怒'
         };
         if (buffNames[type]) buffName = buffNames[type];
         else if (typeof GameData !== 'undefined' && GameData.getBuffName) buffName = GameData.getBuffName(type);

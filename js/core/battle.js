@@ -317,24 +317,26 @@ class Battle {
             const meritPercent = (status.merit / status.max) * 100;
             const sinPercent = (status.sin / status.max) * 100;
 
+            // 检查buff激活状态
+            const imperviousActive = this.player.buffs.impervious > 0;
+            const wrathActive = this.player.buffs.wrath > 0;
+
             karmaContainer.innerHTML = `
-                <div class="karma-resource merit-resource">
-                    <div class="karma-icon">📿</div>
+                <div class="karma-resource merit-resource ${imperviousActive ? 'buff-active' : ''}" title="功德圆满触发【金刚法相】：完全免疫伤害">
+                    <div class="karma-label">功德${imperviousActive ? ' ✨ 金刚法相' : ''}</div>
                     <div class="karma-bar-bg">
                         <div class="karma-bar-fill merit-fill" style="width: ${meritPercent}%"></div>
                     </div>
                     <div class="karma-value">${status.merit}/${status.max}</div>
                 </div>
-                <div class="karma-resource sin-resource">
-                    <div class="karma-icon">🔥</div>
+                <div class="karma-resource sin-resource ${wrathActive ? 'buff-active' : ''}" title="业力满溢触发【明王之怒】：下次攻击伤害x3">
+                    <div class="karma-label">业力${wrathActive ? ' ⚡ 明王之怒' : ''}</div>
                     <div class="karma-bar-bg">
                         <div class="karma-bar-fill sin-fill" style="width: ${sinPercent}%"></div>
                     </div>
                     <div class="karma-value">${status.sin}/${status.max}</div>
                 </div>
             `;
-
-            // Add tooltip/labels if needed
         }
     }
 
@@ -829,15 +831,7 @@ class Battle {
                 game.handleCombo(card.type);
             }
 
-            // 命环资源钩子
-            if (this.player.fateRing && this.player.fateRing.type === 'karma') {
-                const gain = 5 + (card.cost || 0) * 5;
-                if (card.type === 'attack') {
-                    this.player.fateRing.gainSin(gain);
-                } else if (card.type === 'skill' || card.type === 'power') {
-                    this.player.fateRing.gainMerit(gain);
-                }
-            }
+            // 业力系统完全由卡牌效果 (gainSin/gainMerit) 控制，不使用自动钩子
 
             // 触发法宝使用卡牌效果
             const context = {
@@ -1308,6 +1302,14 @@ class Battle {
             amount += this.player.buffs.strength;
             // 力量通常是本回合持续生效，不需要在这里消耗
             // 除非是某些特殊的一次性力量，但一般力量定义为回合内Buff
+        }
+
+        // 明王之怒（无欲 - 业力满值触发）：下一次攻击伤害x3
+        if (this.player.buffs.wrath && this.player.buffs.wrath > 0) {
+            const originalAmount = amount;
+            amount = Math.floor(amount * 3);
+            this.player.buffs.wrath--;
+            Utils.showBattleLog(`⚡ 明王之怒！伤害暴增！${originalAmount} → ${amount}`);
         }
 
         // 共鸣：雷火崩坏 (Plasma Overload) - 改版：对灼烧敌人增伤
