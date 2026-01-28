@@ -575,27 +575,58 @@
         </div>
     </div>
 
-    <!-- 命环弹窗 -->
+    <!-- 命环弹窗 (New 3D) -->
     <div id="ring-modal" class="modal">
-        <div class="modal-content ring-view">
-            <button class="modal-close" onclick="game.closeModal()">×</button>
-            <h2>命环</h2>
-            <div class="ring-large">
-                <div class="ring-visual large">
-                    <div class="ring-core"></div>
-                    <div class="ring-orbit orbit-1"></div>
-                    <div class="ring-orbit orbit-2"></div>
-                    <div class="ring-slots" id="ring-slots">
-                        <!-- 法则槽位 -->
-                    </div>
+        <div class="ring-scene-container">
+            <button class="modal-close-floating" onclick="game.closeModal()">×</button>
+
+            <!-- 3D Scene Area -->
+            <div class="ring-scene">
+                <div class="ring-system" id="ring-system-3d">
+                    <!-- Dynamics Rings go here -->
                 </div>
             </div>
-            <div class="ring-info">
-                <p>命环等级: <span id="modal-ring-level">一阶</span></p>
-                <p>进化进度: <span id="ring-progress">0/100</span></p>
-            </div>
-            <div class="loaded-laws" id="loaded-laws-list">
-                <!-- 已装载的法则 -->
+
+            <!-- 2D UI Overlay -->
+            <div class="ring-ui-overlay">
+                <!-- Left: Stats -->
+                <div class="ring-ui-panel left">
+                    <div class="panel-header">
+                        <h2 id="modal-ring-name">命环名称</h2>
+                        <div class="ring-level-badge" id="modal-ring-level">一阶</div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="exp-bar-container">
+                            <div class="exp-bar-fill" id="modal-ring-exp-bar"></div>
+                            <span class="exp-text" id="modal-ring-exp-text">0/100</span>
+                        </div>
+                        <div class="stats-list" id="modal-ring-stats">
+                            <!-- Stats -->
+                        </div>
+                        <div class="path-bonus" id="modal-ring-path">
+                            <!-- Path Bonus -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Law Library -->
+                <div class="ring-ui-panel right">
+                    <div class="panel-header">
+                        <h3>法则库</h3>
+                        <span class="count" id="library-count">0</span>
+                    </div>
+                    <div class="law-library-grid" id="modal-law-library">
+                        <!-- Laws -->
+                    </div>
+                    <div class="resonance-area" id="modal-resonance">
+                        <!-- Resonance -->
+                    </div>
+                </div>
+
+                <!-- Bottom: Context Action -->
+                <div class="ring-ui-footer" id="ring-ui-footer">
+                    <p class="instruction-text">点击法则槽位进行装配或卸下</p>
+                </div>
             </div>
         </div>
     </div>

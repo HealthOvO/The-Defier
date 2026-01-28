@@ -2779,97 +2779,309 @@ class Game {
     showFateRing() {
         const modal = document.getElementById('ring-modal');
         const ring = this.player.fateRing;
+        const ringSystem = document.getElementById('ring-system-3d');
 
-        // In-memory fix for missing data (prevents crash if loaded from old save without reload)
+        // Data Initialization
         if (!ring.slots || ring.slots.length === 0) {
             if (ring.initSlots) ring.initSlots();
         }
         if (!ring.unlockedPaths) ring.unlockedPaths = ['awakened'];
         if (!ring.path) ring.path = 'awakened';
 
-        // 计算经验进度百分比
+        // --- Render 3D Scene (Initialize Only Once) ---
+        if (ringSystem.children.length === 0) {
+            ringSystem.innerHTML = ''; // Clear comments/whitespace
+            // 1. Add Decorative Rings with Ink & Gold Styles
+            const layers = ['core', 'inner', 'middle', 'outer'];
+            layers.forEach(layer => {
+                const el = document.createElement('div');
+                el.className = `fate-ring-layer ring-layer-${layer}`;
+                // Add runes
+                if (layer !== 'core') {
+                    for (let i = 0; i < 8; i++) {
+                        const rune = document.createElement('div');
+                        rune.className = 'ring-rune';
+                        rune.innerText = this.getRandomRune();
+                        rune.style.transform = `rotate(${i * 45}deg) translateY(-${(layer === 'inner' ? 120 : (layer === 'middle' ? 200 : 280))}px)`;
+                        el.appendChild(rune);
+                    }
+                }
+                ringSystem.appendChild(el);
+            });
+
+            // 2. Add Slots (3D Positioned)
+            const radius = 220;
+            const slotsCount = ring.slots.length;
+
+            ring.slots.forEach((slot, index) => {
+                const angleDeg = (index / slotsCount) * 360 - 90;
+                const angleRad = angleDeg * (Math.PI / 180);
+                const x = Math.cos(angleRad) * radius;
+                const y = Math.sin(angleRad) * radius;
+
+                const slotEl = document.createElement('div');
+                slotEl.className = `ring-slot-3d`;
+                slotEl.id = `ring-slot-${index}`; // Add ID for easier updates
+
+                // Drag & Drop Attributes
+                slotEl.classList.add('droppable');
+                slotEl.setAttribute('data-slot-index', index);
+
+                slotEl.style.transform = `translate(${x}px, ${y}px)`;
+
+                // Content Placeholder
+                slotEl.innerHTML = '';
+
+                // Force high z-index interaction
+                slotEl.style.zIndex = '2000';
+
+                // Click Interaction
+                slotEl.onclick = (e) => this.handleSlotClick(index, e);
+
+                ringSystem.appendChild(slotEl);
+            });
+
+            // Bind Drag Events (Removed)
+        }
+
+        // --- Update Dynamic Content ---
+        this.updateUIState(ring);
+
+        // --- Render 2D UI Overlay ---
+
+        // 1. Basic Info
+        document.getElementById('modal-ring-name').innerText = ring.name;
+        document.getElementById('modal-ring-level').innerText = `等级 ${ring.level}`;
+
+        // EXP (Polished)
         const nextLevelExp = FATE_RING.levels[ring.level + 1]?.exp || 9999;
         const expPercent = Math.min(100, (ring.exp / nextLevelExp) * 100);
-        const expDisplay = ring.level >= 10 ? 'Max' : `${ring.exp}/${nextLevelExp}`;
+        const isMax = ring.level >= 10;
 
-        // 使用新的HTML结构
-        modal.innerHTML = `
-            <div class="modal-content fate-ring-modal-content">
-                <div class="fate-ring-header">
-                    <h2>⭕ 命环系统</h2>
-                    <div class="modal-close" onclick="game.closeModal()">×</div>
-                </div>
-                
-                <div class="fate-ring-body">
-                    <!-- 左侧：状态面板 -->
-                    <div class="ring-status-panel">
-                        <div class="ring-visual">
-                            <div style="font-size: 3.2rem;">${ring.limitBreaked ? '👑' : '💫'}</div>
-                        </div>
-                        
-                        <div class="ring-level-info">
-                            <h3>${ring.name}</h3>
-                            <div style="font-size: 1rem; color: #ddd; font-weight: 600; margin-top: 5px;">等级 ${ring.level}</div>
-                            
-                            <div style="margin-top: 10px; background: rgba(0,0,0,0.3); height: 8px; border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,215,0,0.2);">
-                                <div style="width: ${expPercent}%; background: linear-gradient(90deg, var(--accent-gold), var(--accent-purple)); height: 100%; transition: width 0.5s;"></div>
-                            </div>
-                            <div style="font-size: 0.85rem; margin-top: 6px; color: #aaa; display: flex; justify-content: space-between;">
-                                <span>经验</span>
-                                <span style="color: var(--accent-gold);">${expDisplay}</span>
-                            </div>
-                        </div>
-                        
-                        <!-- 当前路径加成 -->
-                        ${this.renderCurrentPathInfo(ring)}
+        const expBar = document.getElementById('modal-ring-exp-bar');
+        expBar.style.width = `${expPercent}%`;
+        if (isMax) expBar.classList.add('max');
+        else expBar.classList.remove('max');
 
-                        <!-- 角色专属面板 -->
-                        ${this.renderCharacterSpecifics(ring)}
-                    </div>
-                    
-                    <!-- 中间：槽位展示 -->
-                    <div class="ring-slots-panel">
-                        <div class="slots-circle">
-                            <div class="center-core">
-                                <span>${ring.maxSlots || ring.slots.length}</span>
-                            </div>
-                            
-                            <!-- 动态生成槽位 -->
-                            ${this.renderRingSlots(ring)}
-                        </div>
-                        
-                        <div id="slot-action-hint" style="position: absolute; bottom: 25px; color: var(--accent-gold); font-size: 0.95rem; text-shadow: 0 0 8px rgba(207,170,112,0.5); font-weight: 500;">
-                            ${this.selectedRingSlot !== undefined ? '✨ 从右侧选择法则装填' : '💡 点击槽位进行操作'}
-                        </div>
-                    </div>
-                    
-                    <!-- 右侧：法则库 -->
-                    <div class="law-library-panel">
-                        <div class="library-header">
-                            📚 法则库 (${this.player.collectedLaws.length})
-                        </div>
-                        <div class="library-list">
-                            ${this.renderLawLibrary(ring)}
-                        </div>
-                        
-                        <!-- 法则共鸣显示 -->
-                        <div class="resonance-panel" style="padding: 15px 15px 10px;">
-                            <div style="font-weight: 600; font-size: 0.95rem; color: var(--accent-gold); margin-bottom: 10px; font-family: var(--font-display);">
-                                ⚡ 法则共鸣
-                            </div>
-                            <div class="resonance-list" style="max-height: 160px; overflow-y: auto; padding-right: 5px;">
-                                ${this.renderResonances(ring)}
-                            </div>
-                        </div>
-                    </div>
+        const expText = document.getElementById('modal-ring-exp-text');
+        expText.innerHTML = isMax ? '<span class="value max">MAX</span>' : `<span class="value">${ring.exp}</span> / ${nextLevelExp}`;
+
+        // 2. Bonus Info
+        const statsList = document.getElementById('modal-ring-stats');
+        statsList.innerHTML = '';
+        const bonus = ring.getStatsBonus();
+        if (bonus.maxHp) statsList.innerHTML += this.createStatRow('生命上限', `+${bonus.maxHp}`, '❤️');
+        if (bonus.energy) statsList.innerHTML += this.createStatRow('基础灵力', `+${bonus.energy}`, '⚡');
+        if (bonus.draw) statsList.innerHTML += this.createStatRow('每回合抽牌', `+${bonus.draw}`, '🎴');
+
+        // Character Specifics
+        document.getElementById('modal-ring-path').innerHTML = this.renderCurrentPathInfo(ring) + this.renderCharacterSpecifics(ring);
+
+        // 3. Right Panel (Tabbed Refactor)
+        const rightPanel = document.querySelector('.ring-ui-panel.right');
+        // Check if structure exists, if not recreate (safe to overwrite)
+        rightPanel.innerHTML = `
+            <div class="panel-tabs">
+                <div class="tab active" onclick="game.switchRingTab(this, 'library')">法则库 (${this.player.collectedLaws.length})</div>
+                <div class="tab" onclick="game.switchRingTab(this, 'resonance')">法则共鸣</div>
+            </div>
+            <div class="panel-content-area">
+                <div id="tab-content-library" class="tab-content active">
+                     ${this.renderLawLibrary(ring)}
                 </div>
+                <div id="tab-content-resonance" class="tab-content">
+                     ${this.renderResonances(ring)}
+                </div>
+            </div>
+            <div class="ring-ui-footer" id="ring-ui-footer">
+                <p class="instruction-text">点击空槽位，再选择法则库中的法则进行装配</p>
             </div>
         `;
 
-        // 绑定事件
-        this.bindRingEvents();
+        // Bind Events (Library needs re-binding on update, Drag only on init - handled above)
+        this.bindLibraryEvents();
 
         modal.classList.add('active');
+    }
+
+    // Optimized UI Updater (Full State Refresh without Re-render)
+    updateUIState(ring) {
+        // 1. Update Slots
+        ring.slots.forEach((slot, index) => {
+            const slotEl = document.getElementById(`ring-slot-${index}`);
+            if (!slotEl) return;
+
+            // Update Classes
+            slotEl.className = `ring-slot-3d ${!slot.unlocked ? 'locked' : ''} ${this.selectedRingSlot === index ? 'active' : ''}`;
+
+            // Update Content
+            const law = slot.law ? LAWS[slot.law] : null;
+            const subLaw = slot.subLaw ? LAWS[slot.subLaw] : null;
+
+            let content = '';
+            if (law) {
+                if (subLaw) {
+                    content = `
+                        <div class="slot-inner-icon main">${law.icon}</div>
+                        <div class="slot-fusion-icon" style="position:absolute; bottom:-10px; right:-10px; font-size:1rem; background:#000; border-radius:50%; border:1px solid gold; width:25px; height:25px; display:flex; justify-content:center; align-items:center;">${subLaw.icon}</div>
+                     `;
+                } else {
+                    content = `<div class="slot-inner-icon">${law.icon}</div>`;
+                }
+            } else if (!slot.unlocked) {
+                content = `<div class="slot-inner-icon" style="font-size:1.2rem; filter: grayscale(1);">🔒</div>`;
+            } else {
+                content = `<div class="slot-inner-icon" style="opacity:0.2; font-size: 2rem;">+</div>`;
+            }
+
+            if (slotEl.innerHTML !== content) slotEl.innerHTML = content;
+        });
+
+        // 2. Update Library Items
+        const equippedLaws = ring.getSocketedLaws();
+        const libraryItems = document.querySelectorAll('.law-item-row');
+        libraryItems.forEach(item => {
+            const lawId = item.dataset.id;
+            const isEquipped = equippedLaws.includes(lawId);
+            const statusIcon = item.querySelector('.law-status-icon');
+
+            if (isEquipped) {
+                item.classList.add('equipped');
+                // statusIcon content managed via CSS 'content' but we can safeguard here or leave it generic
+            } else {
+                item.classList.remove('equipped');
+            }
+        });
+
+        // 3. Update Stats (Left Panel) - Lightweight enough to re-render
+        const statsList = document.getElementById('modal-ring-stats');
+        if (statsList) {
+            statsList.innerHTML = '';
+            const bonus = ring.getStatsBonus();
+            if (bonus.maxHp) statsList.innerHTML += this.createStatRow('生命上限', `+${bonus.maxHp}`, '❤️');
+            if (bonus.energy) statsList.innerHTML += this.createStatRow('基础灵力', `+${bonus.energy}`, '⚡');
+            if (bonus.draw) statsList.innerHTML += this.createStatRow('每回合抽牌', `+${bonus.draw}`, '🎴');
+        }
+    }
+
+    // Tab Switcher
+    switchRingTab(tabEl, tabName) {
+        document.querySelectorAll('.panel-tabs .tab').forEach(t => t.classList.remove('active'));
+        tabEl.classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById(`tab-content-${tabName}`).classList.add('active');
+    }
+
+    getRandomRune() {
+        const runes = ['⚡', '🔥', '❄️', '🌪️', '👁️', '⚔️', '🛡️', '🔮', '🌙', '☀️', '☯️', '📜'];
+        return runes[Math.floor(Math.random() * runes.length)];
+    }
+
+    createStatRow(label, value, icon) {
+        return `
+            <div class="stat-row-3d">
+                <span style="color:#aaa"><span style="margin-right:5px">${icon}</span>${label}</span>
+                <span style="color:#fff; font-weight:bold">${value}</span>
+            </div>
+        `;
+    }
+
+    handleSlotClick(index, e) {
+        e.stopPropagation();
+        const ring = this.player.fateRing;
+        const slotData = ring.slots[index];
+
+        if (!slotData.unlocked) {
+            if (ring.type === 'sealed' && ring.canUnseal && ring.canUnseal(index)) {
+                this.showConfirmModal(
+                    `该槽位被【逆生咒】封印。\n强制解除将永久损耗生命上限。\n是否解除？`,
+                    () => {
+                        ring.unseal(index);
+                        this.showFateRing(); // Structure change needs full refresh
+                        this.autoSave();
+                    }
+                );
+            } else {
+                Utils.showBattleLog('该槽位尚未解锁');
+            }
+            return;
+        }
+
+        // Click Logic:
+        // 1. If slot has law -> Unload it
+        // 2. If slot empty -> Select it
+        if (slotData.law) {
+            // Mutated Ring Special: If fusion, remove subLaw first?
+            if (ring.type === 'mutated' && slotData.subLaw) {
+                slotData.subLaw = null;
+                Utils.showBattleLog('融合法则已移除');
+            } else {
+                ring.socketLaw(index, null);
+                Utils.showBattleLog('法则已卸载');
+            }
+            this.player.recalculateStats();
+            this.updateUIState(ring); // Optimized update
+            this.autoSave();
+        } else {
+            this.selectedRingSlot = (this.selectedRingSlot === index) ? undefined : index;
+            this.updateUIState(ring); // Optimized update
+        }
+    }
+
+    // Removed bindRingDragEvents (Interaction removed per user request)
+
+    // Updated bindLibraryEvents for optimized updates
+    bindLibraryEvents() {
+        // Selector matches new structure
+        const items = document.querySelectorAll('.law-item-row');
+        items.forEach(item => {
+            // Remove 'equipped' check to allow selecting equipped items if we want to show info, 
+            // but for equipping logic, we check inside.
+
+            item.onclick = () => {
+                const lawId = item.dataset.id;
+                const ring = this.player.fateRing;
+                // Safe lookup
+                const equippedSlotIndex = ring.slots.findIndex(slot => slot.law === lawId);
+
+                // 1. If already equipped -> Unequip
+                if (equippedSlotIndex !== -1) {
+                    ring.socketLaw(equippedSlotIndex, null);
+                    Utils.showBattleLog('法则已卸载');
+                    this.updateUIState(ring);
+                    this.autoSave();
+                    return;
+                }
+
+                // 2. Equip Logic
+                if (item.classList.contains('equipped')) return; // Should be redundant now but safe
+
+                let targetSlot = this.selectedRingSlot;
+
+                if (targetSlot === undefined) {
+                    // Find first empty
+                    for (let i = 0; i < ring.slots.length; i++) {
+                        if (ring.slots[i].unlocked && !ring.slots[i].law) {
+                            targetSlot = i;
+                            break;
+                        }
+                    }
+                }
+
+                if (targetSlot !== undefined && targetSlot >= 0) {
+                    if (ring.socketLaw(targetSlot, lawId)) {
+                        Utils.showBattleLog(`已装填法则`);
+                        this.selectedRingSlot = undefined;
+                        this.updateUIState(ring); // Optimized update
+                        this.autoSave();
+                    } else {
+                        Utils.showBattleLog('装填失败');
+                    }
+                } else {
+                    Utils.showBattleLog('请先选择一个空槽位');
+                }
+            };
+        });
     }
 
     // 渲染当前路径信息
@@ -2980,96 +3192,73 @@ class Game {
         return '';
     }
 
-    // 渲染环形槽位
-    renderRingSlots(ring) {
-        let html = '';
-        const radius = 105; // 半径
-        const slotsCount = ring.slots.length; // Use array length or maxSlots
 
-        for (let i = 0; i < slotsCount; i++) {
-            const angle = (i / slotsCount) * 2 * Math.PI - Math.PI / 2; // 从上方开始
-            const x = Math.cos(angle) * radius + 120; // +120是偏移量，使其居中 (300/2 - 30)
-            const y = Math.sin(angle) * radius + 120;
 
-            const slot = ring.slots[i];
-            const lawId = slot.law;
-            const law = lawId ? LAWS[lawId] : null;
-            const isSelected = this.selectedRingSlot === i;
-            const isLocked = !slot.unlocked;
-
-            // Mutated Ring Fusion Slot Support
-            const subLawId = slot.subLaw;
-            const subLaw = subLawId ? LAWS[subLawId] : null;
-
-            html += `
-                <div class="law-slot-node ${law ? 'filled' : 'empty'} ${isLocked ? 'locked' : ''}" 
-                     style="left: ${x}px; top: ${y}px; ${isSelected ? 'box-shadow: 0 0 15px var(--accent-green); border-color: var(--accent-green);' : ''}"
-                     data-index="${i}">
-                    ${law ? law.icon : (isLocked ? '🔒' : '+')}
-                    
-                    ${ring.type === 'mutated' && law ? `
-                        <div class="sub-slot ${subLaw ? 'filled' : 'empty'}" 
-                             style="position: absolute; right: -10px; bottom: -10px; width: 20px; height: 20px; border-radius: 50%; background: ${subLaw ? '#2a2a2a' : 'rgba(0,0,0,0.5)'}; border: 1px solid var(--accent-gold); display: flex; align-items: center; justify-content: center; font-size: 0.7rem; z-index: 2;">
-                            ${subLaw ? subLaw.icon : ''}
-                        </div>
-                    ` : ''}
-                </div>
-            `;
-        }
-        return html;
-    }
-
-    // 渲染法则库列表
+    // 渲染法则库列表 (Redesigned)
     renderLawLibrary(ring) {
         if (this.player.collectedLaws.length === 0) {
             return '<div style="padding: 20px; text-align: center; color: #666;">暂无法则</div>';
         }
 
-        return this.player.collectedLaws.map(law => {
+        return `
+            <div class="library-list-container">
+            ${this.player.collectedLaws.map(law => {
             const isEquipped = ring.getSocketedLaws().includes(law.id);
             return `
-                <div class="library-item ${isEquipped ? 'equipped' : ''}" data-id="${law.id}">
-                    <div class="lib-icon">${law.icon}</div>
-                    <div class="lib-info">
-                        <div class="lib-name">${law.name}</div>
-                        <div class="lib-desc">${(typeof getLawPassiveDescription === 'function' ? getLawPassiveDescription(law) : '') || law.description || '效果未知'}</div>
+                    <div class="law-item-row ${isEquipped ? 'equipped' : ''}" data-id="${law.id}">
+                        <div class="law-icon-box">${law.icon}</div>
+                        <div class="law-info">
+                            <div class="law-name">${law.name}</div>
+                            <div class="law-desc-mini">${(typeof getLawPassiveDescription === 'function' ? getLawPassiveDescription(law) : '') || law.description || '效果未知'}</div>
+                        </div>
+                        <div class="law-status-icon"></div>
                     </div>
-                    ${isEquipped ? '<div style="font-size: 0.8rem; color: var(--accent-gold);">已装</div>' : ''}
-                </div>
-            `;
-        }).join('');
+                `;
+        }).join('')}
+            </div>
+        `;
     }
 
-    // 渲染法则共鸣
+    // 渲染法则共鸣 (Redesigned)
     renderResonances(ring) {
         if (!typeof LAW_RESONANCES === 'object') return '';
 
         let activeResonances = [];
+        let html = '';
+
+        html += `<div class="section-label">共鸣检测</div>`;
 
         for (const key in LAW_RESONANCES) {
             const resonance = LAW_RESONANCES[key];
             const equippedLaws = ring.getSocketedLaws();
             const hasAllLaws = resonance.laws.every(lawId => equippedLaws.includes(lawId));
 
-            if (hasAllLaws) {
-                activeResonances.push(resonance);
+            // Calculate progress
+            const matchCount = resonance.laws.filter(lawId => equippedLaws.includes(lawId)).length;
+            const totalCount = resonance.laws.length;
+            const progress = (matchCount / totalCount) * 100;
+
+            if (matchCount > 0) { // Only show relevant ones
+                html += `
+                    <div class="resonance-card ${hasAllLaws ? 'active' : ''}">
+                        <div class="resonance-header">
+                            <span class="resonance-name">${resonance.name}</span>
+                            <span style="font-size:0.8rem; color:${hasAllLaws ? 'var(--accent-gold)' : '#666'}">${matchCount}/${totalCount}</span>
+                        </div>
+                        <div style="font-size:0.8rem; color:#ccc; margin-bottom:5px;">${resonance.description}</div>
+                        <div class="resonance-bar">
+                            <div class="resonance-progress" style="width: ${progress}%"></div>
+                        </div>
+                    </div>
+                `;
             }
         }
 
-        if (activeResonances.length === 0) {
-            return '<div style="padding: 10px; text-align: center; color: #666; font-size: 0.8rem;">暂无激活共鸣</div>';
+        if (html === `<div class="section-label">共鸣检测</div>`) {
+            return `<div class="section-label">共鸣检测</div><div style="text-align:center; color:#666; font-size:0.8rem; padding:10px;">暂无共鸣迹象</div>`;
         }
 
-        return activeResonances.map(res => `
-            <div class="resonance-item" style="padding: 8px; margin-bottom: 8px; background: rgba(255, 215, 0, 0.1); border: 1px solid var(--accent-gold); border-radius: 4px;">
-                <div style="font-weight: bold; color: var(--accent-gold); font-size: 0.9rem; margin-bottom: 4px;">
-                    ⚡ ${res.name}
-                </div>
-                <div style="font-size: 0.8rem; color: #ddd; line-height: 1.3;">
-                    ${res.description}
-                </div>
-            </div>
-        `).join('');
+        return html;
     }
 
     // 绑定命环界面事件
