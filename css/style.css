@@ -10842,3 +10842,625 @@ body {
         transform: translateX(0);
     }
 }
+/* ===================================
+   Mobile Adaptation ( < 768px )
+   =================================== */
+@media (max-width: 768px) {
+    :root {
+        /* Reduce spacing on mobile */
+        --spacing-md: 12px;
+        --spacing-lg: 16px;
+        --spacing-xl: 20px;
+    }
+
+    html, body {
+        /* Slightly larger base text for readability, but controlled */
+        font-size: 14px; 
+    }
+
+    /* --- Main Menu --- */
+    .menu-content {
+        padding: 20px 15px;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        height: 100%; /* Use full height to center content vertically */
+    }
+
+    .game-logo {
+        margin-bottom: 20px;
+        transform: scale(0.85); /* Slight scale down */
+    }
+
+    .title-cn {
+        font-size: 4.5rem; /* Down from 6.5rem */
+        letter-spacing: 5px;
+    }
+
+    .title-en {
+        font-size: 0.9rem;
+        margin-left: 0;
+        text-align: center;
+    }
+
+    .seal-container {
+        transform: scale(0.7) rotate(15deg);
+        right: -20px;
+        top: -20px;
+    }
+    
+    .game-description {
+        font-size: 0.85rem;
+        padding: 0 10px;
+    }
+
+    .menu-buttons {
+        gap: 12px;
+        width: 100%;
+    }
+
+    .talisman-btn {
+        width: 90%; /* Fluid width */
+        max-width: 320px;
+        height: 55px; /* Slightly shorter */
+    }
+    
+    .talisman-content {
+        font-size: 1.2rem;
+    }
+
+    .menu-utilities {
+        gap: 20px;
+        margin-top: 30px;
+    }
+
+    .util-btn {
+        width: 40px;
+        height: 40px;
+    }
+    
+    /* Ensure fog layers don't break layout */
+    .fog-layer {
+        background-size: 200px 200px;
+    }
+    
+    /* --- Modals / Overlays Generic --- */
+    .screen-header {
+        padding: 10px 15px;
+    }
+    
+    .screen-header h2 {
+        font-size: 1.4rem;
+    }
+    
+    /* Fix Character Selection Layout */
+    .character-panel {
+        grid-template-columns: 1fr; /* Stack vertically */
+        grid-template-rows: auto auto auto;
+        padding: 15px;
+        gap: 20px;
+        height: calc(100% - 60px); 
+    }
+    
+    .character-avatar {
+        order: 1;
+    }
+    
+    .avatar-ring {
+        width: 140px;
+        height: 140px;
+    }
+    
+    .avatar-inner {
+        width: 120px;
+        height: 120px;
+        font-size: 1.6rem;
+    }
+    
+    .character-stats {
+        order: 2;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    
+    .stat {
+        min-width: 70px;
+        padding: 10px;
+    }
+    
+    .character-info {
+        order: 3;
+    }
+    
+    .fate-ring-display {
+        display: none; /* Hide complex decoration on mobile if space is tight, or move to bottom */
+    }
+}
+
+/* ===================================
+   Mobile Adaptation: Game Loop Screens
+   =================================== */
+@media (max-width: 768px) {
+
+    /* --- Save Slots --- */
+    .save-slots-container {
+        grid-template-columns: 1fr;
+        gap: 15px;
+        padding: 10px;
+        height: auto;
+        overflow-y: auto;
+    }
+
+    .save-slot-card {
+        width: 100%;
+        max-width: 350px;
+        margin: 0 auto;
+        min-height: 120px; /* Compress height */
+    }
+
+    /* --- Realm / Map Selection --- */
+    #realm-selection-screen .realm-cards {
+        flex-direction: column;
+        align-items: center;
+        overflow-y: auto;
+        padding-bottom: 50px;
+    }
+
+    .realm-card {
+        width: 90%;
+        height: 180px; /* Shorter cards */
+        margin-bottom: 15px;
+    }
+
+    /* --- Battle Interface --- */
+    .battle-screen {
+        grid-template-rows: auto 1fr auto;
+        /* Re-adjust battle layout if it uses grid */
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+
+    /* Enemy Area */
+    .enemy-container {
+        flex-wrap: wrap; 
+        justify-content: center;
+        gap: 5px;
+        padding-top: 50px; /* Space for top bar */
+        transform: scale(0.9); /* Scale down slightly */
+        transform-origin: top center;
+    }
+    
+    .enemy-unit {
+        width: 100px; /* Smaller enemies */
+        height: 140px;
+    }
+
+    /* Hand Area */
+    .hand-container {
+        height: 140px;
+        bottom: 10px;
+        /* Allow horizontal scrolling or tighter stacking */
+        overflow-x: auto;
+        justify-content: flex-start;
+        padding-left: 20px;
+    }
+
+    .card {
+        width: 100px; /* Smaller cards */
+        height: 140px;
+        flex-shrink: 0;
+    }
+
+    .card:hover {
+        transform: translateY(-20px) scale(1.1); /* Reduce hover lift */
+    }
+
+    /* Player Status / Energy */
+    .player-status-area {
+        position: absolute;
+        bottom: 160px; /* Above hand */
+        left: 10px;
+        transform: scale(0.8);
+        transform-origin: bottom left;
+    }
+    
+    .energy-display, .milk-candy-display {
+        font-size: 1rem;
+    }
+
+    /* Map Interface */
+    #map-screen {
+        overflow: hidden; 
+    }
+    
+    .map-container {
+        /* Ensure map is scrollable or fitted */
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+    }
+}
+
+/* ===================================
+   Mobile Adaptation: Management Screens
+   =================================== */
+@media (max-width: 768px) {
+
+    /* --- Deck Builder / Visual --- */
+    #deck-view-screen .deck-content {
+        flex-direction: column;
+    }
+
+    .deck-column {
+        width: 100%;
+        height: auto;
+        min-height: 200px;
+    }
+
+    /* --- Life Ring (Ming Huan) --- */
+    .ming-huan-container {
+        flex-direction: column;
+        overflow-y: auto;
+    }
+    
+    .ring-visual-area, .ring-slots-area {
+        width: 100%;
+        height: auto;
+    }
+    
+    .ring-slots-area {
+        padding-bottom: 40px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+        gap: 10px;
+    }
+
+    /* --- Compendium / Treasure --- */
+    .treasure-grid {
+        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+        gap: 10px;
+    }
+    
+    .treasure-item {
+        width: 80px;
+        height: 80px;
+    }
+
+    /* --- Card Detail Modal --- */
+    #card-detail-modal, #treasure-detail-modal {
+        width: 95% !important; /* Force fit */
+        height: auto;
+        max-height: 90vh;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 15px;
+        overflow-y: auto;
+    }
+    
+    .detail-content {
+        flex-direction: column;
+    }
+    
+    .detail-image, .detail-info {
+        width: 100%;
+    }
+    
+    .detail-image {
+        height: 200px; /* Limit image height */
+        margin-bottom: 15px;
+    }
+}
+
+/* ===================================
+   Mobile Battle UI Fixes - FINAL
+   =================================== */
+@media (max-width: 768px) {
+    /* 1. Reset the Main Grid for Mobile Portrait */
+    .battle-container {
+        display: flex; /* Switch from Grid to Flex Column */
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: center;
+        height: 100vh;
+        overflow: hidden;
+        padding-top: 60px; /* Space for top bar/island */
+    }
+
+    /* 2. Enemy Area (Top) */
+    .enemy-area {
+        width: 100%;
+        height: 25vh; /* Fixed height for enemies */
+        margin-bottom: 20px;
+        align-items: flex-end; /* Align enemies to bottom of their box */
+        transform: scale(0.85); /* Slightly smaller */
+    }
+    
+    .enemy-container {
+        gap: 15px; /* Closer together */
+    }
+
+    /* 3. Player Info & Battle Log (Middle) */
+    .battle-middle {
+        position: absolute;
+        width: 100%;
+        top: 30vh; /* Position log below enemies */
+        height: 50px;
+        z-index: 50;
+    }
+    
+    .player-area {
+        width: 100%;
+        height: auto;
+        flex-direction: column;
+        gap: 10px;
+        padding: 0;
+        margin-bottom: 10px;
+    }
+    
+    .player-character {
+        flex-direction: row; /* Avatar left, Bars right */
+        gap: 15px;
+    }
+    
+    /* Energy Bars - Horizontal Layout */
+    .player-bars {
+        align-items: flex-start;
+    }
+
+    /* Milk Candy / Energy Indicators */
+    .milk-candy-display, .energy-display {
+        flex-direction: row;
+        font-size: 0.9rem;
+    }
+    
+    /* 4. Hand Area (Bottom) */
+    .hand-area {
+        width: 100%;
+        flex: 1; /* Take remaining space */
+        min-height: 180px;
+        align-items: flex-end;
+        padding-bottom: 80px; /* Push cards up from very bottom */
+        overflow-x: auto; /* Allow scrolling if too many cards */
+        overflow-y: visible;
+        justify-content: flex-start; /* Start from left */
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+    
+    .hand-container {
+        width: max-content; /* Allow container to grow wide */
+        display: flex;
+        gap: -30px; /* Overlap cards */
+        padding: 0 10px;
+    }
+    
+    .card {
+        width: 100px;
+        height: 140px;
+        font-size: 0.8rem; /* Smaller text */
+        flex-shrink: 0;
+    }
+    
+    /* 5. End Turn Button & Deck Piles */
+    .end-turn-btn {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: auto;
+        padding: 10px 20px;
+        font-size: 1rem;
+        z-index: 300;
+    }
+    
+    .pile-btn {
+        position: fixed;
+        bottom: 20px;
+        z-index: 300;
+        transform: scale(0.8);
+    }
+    
+    .pile-btn.draw { left: 10px; }
+    .pile-btn.discard { left: 80px; }
+    
+    /* Hide decorative/heavy elements */
+    .void-particles, .fog-layer {
+        display: none;
+    }
+}
+
+/* ===================================
+   Mobile Management UI Fixes - FINAL
+   =================================== */
+@media (max-width: 768px) {
+    /* --- 1. Life Ring (Ming Huan) --- */
+    #fate-ring-screen {
+        overflow-y: auto;
+    }
+
+    /* Force planar view (no 3D rotation) on mobile */
+    .ring-scene-container {
+        height: auto;
+        min-height: 100vh;
+        overflow: visible;
+        perspective: none;
+    }
+    
+    .ring-scene {
+        position: relative;
+        height: 600px; /* Minimum height for ring interaction */
+        width: 100%;
+        overflow: visible; /* Allow scrolling */
+        pointer-events: auto; /* Enable scroll interaction */
+    }
+    
+    .ring-system {
+        transform: rotateX(0deg) rotateY(0deg) !important;
+        width: 100%;
+        height: 100%;
+        /* Scale down to fit width */
+        transform: scale(0.65) !important; 
+        transform-origin: top center;
+        margin-top: 50px;
+    }
+    
+    /* Make slots easier to tap */
+    .ring-slot-3d {
+        width: 80px;
+        height: 80px;
+        margin-left: -40px; 
+        margin-top: -40px;
+    }
+
+    /* --- 2. Deck Builder / Compendium --- */
+    /* Fix layout containers */
+    .compendium-layout, .treasure-compendium-layout {
+        display: flex;
+        flex-direction: column;
+        padding: 10px;
+        height: auto;
+        overflow-y: auto; /* Allow entire screen scroll */
+        padding-bottom: 80px;
+    }
+    
+    .jade-slips-container {
+        height: auto;
+        overflow: visible;
+    }
+    
+    .jade-slips-grid {
+        grid-template-columns: repeat(3, 1fr); /* 3 cols on mobile */
+        gap: 10px;
+        padding: 0;
+        overflow: visible;
+    }
+    
+    .compendium-grid {
+        grid-template-columns: repeat(3, 1fr); /* 3 cols for items */
+        gap: 8px;
+    }
+    
+    /* Hide Resonance Manual sidebar initially? Or stack it */
+    .resonance-manual-container {
+        margin-top: 20px;
+        border-left: none;
+        border-top: 1px solid rgba(255,255,255,0.1);
+        padding-left: 0;
+        padding-top: 20px;
+        height: auto;
+    }
+
+    /* --- 3. Shop / Curator Shelf --- */
+    .curator-shelf-layout {
+        padding: 10px;
+        height: 100vh; /* Fixed height for shop to allow internal scroll */
+    }
+    
+    .treasures-shelf-container {
+        grid-template-columns: repeat(3, 1fr); /* 3 cols */
+        grid-auto-rows: auto;
+        gap: 10px;
+        padding: 10px;
+    }
+    
+    .shelf-slot {
+        height: 90px;
+    }
+    
+    .shelf-stats-header {
+        gap: 15px;
+        flex-wrap: wrap;
+    }
+    
+    .shelf-stat {
+        padding: 5px 15px;
+        flex: 1;
+    }
+
+    /* --- 4. Modals (Detail Views) --- */
+    /* Ensure close buttons are visible & accessible */
+    .cd-close-btn, .modal-close-floating {
+        width: 100%; /* Full width button at bottom for easier close */
+        border-radius: 8px;
+        height: 50px;
+        position: static; /* Flow in document */
+        margin-top: 15px;
+    }
+    
+    .modal-close-floating {
+        margin-bottom: 15px; /* For top close buttons */
+        position: absolute;
+        width: 40px;
+        top: 10px;
+        right: 10px;
+    }
+}
+
+/* ===================================
+   Mobile Battle UI Overlap Fixes
+   =================================== */
+@media (max-width: 768px) {
+    /* Reposition Realm Law/Environmental Effects */
+    .realm-law-indicator {
+        position: absolute;
+        top: 60px; /* Move down below header/treasures */
+        left: 10px;
+        z-index: 100;
+        transform: scale(0.85); /* Slightly smaller */
+        transform-origin: top left;
+        background: rgba(0,0,0,0.6);
+        padding: 5px 10px;
+        border-radius: 4px;
+        max-width: 200px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Adjust Treasures Bar to ensure it stays at top */
+    .treasures-bar.battle-pos {
+        top: 0;
+        padding-top: 10px;
+        height: auto;
+        min-height: 50px;
+        flex-wrap: nowrap;
+        overflow-x: auto; /* Allow scrolling if many treasures */
+        justify-content: flex-start; /* Left align on mobile for better space usage */
+        padding-left: 10px;
+    }
+    
+    .treasure-icon {
+        width: 32px; /* Smaller icons on mobile */
+        height: 32px;
+        font-size: 20px;
+    }
+}
+
+/* ===================================
+   Mobile Battle UI Overlap Fixes - REAL FIX
+   =================================== */
+@media (max-width: 768px) {
+    /* Correct Selector for Battle Screen Environment Display */
+    #battle-environment {
+        position: absolute;
+        top: 60px; /* Move down below header/treasures */
+        left: 10px;
+        z-index: 100;
+        transform: scale(0.85); /* Slightly smaller */
+        transform-origin: top left;
+        background: rgba(0,0,0,0.6);
+        padding: 5px 10px;
+        border-radius: 4px;
+        max-width: 200px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        
+        display: flex; /* Ensure flex layout matches JS setting */
+        align-items: center;
+        gap: 5px;
+    }
+}

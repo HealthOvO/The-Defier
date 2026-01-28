@@ -474,9 +474,14 @@ class Game {
                     this.player.equippedTreasures = this.player.equippedTreasures.slice(0, maxSlots);
                 }
 
-                // 同步引用
+                // Sync references
                 this.player.treasures = this.player.equippedTreasures;
-                this.player.maxRealmReached = gameState.player.maxRealmReached || Math.max(...(gameState.unlockedRealms || [1]), 1);
+
+                // Fix: Robust Max Realm Logic - Prevent Regression
+                const savedMax = gameState.player.maxRealmReached || 1;
+                const derivedMax = Math.max(...(gameState.unlockedRealms || [1]), 1);
+                // Always take the HIGHER value to prevent progress loss
+                this.player.maxRealmReached = Math.max(savedMax, derivedMax, this.player.maxRealmReached || 1);
             }
 
             // Retroactive Skill Unlock (Fix for existing saves)
@@ -5893,4 +5898,39 @@ document.addEventListener('DOMContentLoaded', () => {
         Utils.showBattleLog('游戏初始化失败，请检查控制台');
         alert('游戏初始化失败: ' + error.message);
     }
+});
+
+// --- HOTFIX: Force Cloud Sync Check ---
+// In case cloud data has higher progress than local storage (e.g. cross-device or clear cache)
+document.addEventListener('DOMContentLoaded', () => {
+    // Wait slightly for game init to finish (stack clearing)
+    setTimeout(() => {
+        if (typeof AuthService !== 'undefined' && AuthService.isLoggedIn() && window.game) {
+            const slot = sessionStorage.getItem('currentSaveSlot') || localStorage.getItem('lastSaveSlot');
+            if (slot !== null) {
+                console.log('Attemping to fetch latest cloud save to prevent regression...');
+                AuthService.loadCloudData(parseInt(slot)).then(cloudData => {
+                    if (cloudData && cloudData.player) {
+                        const cloudRealm = cloudData.player.maxRealmReached || 1;
+                        const localRealm = window.game.player.maxRealmReached || 1;
+                        if (cloudRealm > localRealm) {
+                            console.warn(`Cloud progress (Realm ${cloudRealm}) is ahead of local (Realm ${localRealm}). Syncing...`);
+                            // Merge critical progress data
+                            window.game.player.maxRealmReached = cloudRealm;
+                            if (cloudData.unlockedRealms) {
+                                const merged = new Set([...(window.game.unlockedRealms || []), ...cloudData.unlockedRealms]);
+                                window.game.unlockedRealms = Array.from(merged);
+                            }
+                            window.game.saveGame(); // Persist immediately
+
+                            // Visual Notification
+                            if (typeof Utils !== 'undefined') {
+                                Utils.showBattleLog(`已同步云端进度：恢复至第 ${cloudRealm} 重天`);
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    }, 1000);
 });
