@@ -3746,13 +3746,15 @@ class Game {
         // Tab 4: Updates
         const updatesContent = `
              <div class="intro-section">
-                <h3>📜 版本日志 v4.3</h3>
-                <p style="color:var(--accent-gold); margin-bottom:10px;">Update: 逆命轮回·天道崩塌</p>
+                <h3>📜 版本日志 v5.0 最终版</h3>
+                <p style="color:var(--accent-gold); margin-bottom:10px;">Update: 逆命轮回·天道终焉</p>
                 <ul class="intro-list">
-                    <li><strong>[新增]</strong> 全新UI设计 "Ink & Gold"，沉浸式修仙体验。</li>
-                    <li><strong>[新增]</strong> 新角色加入：香叶（毒愈）、严寒（学者）。</li>
-                    <li><strong>[重构]</strong> 命环系统逻辑优化，共鸣效果更加显著。</li>
-                    <li><strong>[优化]</strong> 战斗流程更加流畅，修复了卡顿问题。</li>
+                    <li><strong>[最终版]</strong> 游戏内容全面完善，正式发布！</li>
+                    <li><strong>[新增]</strong> 18层天域试炼，100+独特妖魔。</li>
+                    <li><strong>[新增]</strong> 4大角色，各具特色的命环系统。</li>
+                    <li><strong>[新增]</strong> 300+卡牌，50+法宝，30+法则。</li>
+                    <li><strong>[优化]</strong> 精美的"墨金"UI，沉浸式修仙体验。</li>
+                    <li><strong>[优化]</strong> 云存档支持，多设备无缝切换。</li>
                 </ul>
             </div>
 
@@ -3801,7 +3803,7 @@ class Game {
             </div>
             
             <div style="text-align: center; margin-top: auto; font-size: 0.8rem; color: rgba(255,255,255,0.2); padding-top: 10px;">
-                v4.3.0 | Breaking Fate since 2024
+                v5.0.0 最终版 | Breaking Fate since 2024
             </div>
         </div>
         `;

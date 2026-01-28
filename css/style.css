@@ -182,9 +182,27 @@ body {
     position: relative;
     z-index: 10;
     text-align: center;
-    padding: 60px;
+    padding: 40px 60px;
+    max-height: 100vh;
+    overflow-y: auto;
     /* Glassmorphism removed for "Void" feel, just pure layout or subtle radial */
     background: radial-gradient(circle, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0) 70%);
+    /* Custom scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-gold) transparent;
+}
+
+.menu-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.menu-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.menu-content::-webkit-scrollbar-thumb {
+    background: var(--accent-gold);
+    border-radius: 3px;
 }
 
 /* Logo Area */
@@ -291,16 +309,16 @@ body {
 
 .game-description {
     max-width: 600px;
-    margin: 0 auto 30px;
-    font-size: 1.1rem;
+    margin: 0 auto 25px;
+    font-size: 1rem;
     color: var(--text-secondary);
-    line-height: 1.8;
+    line-height: 1.7;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
     position: relative;
 }
 
 .game-description p {
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
 /* Talisman Buttons */
