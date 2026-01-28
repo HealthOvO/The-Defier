@@ -38,6 +38,9 @@ class AchievementSystem {
             // Only then claimed would be 0. But localStorage persists. 
             // So if we save claimed array properly, this only happens once.
 
+            // Check if this is actually a legacy load by checking if storage key existed
+            const isLegacy = localStorage.getItem('theDefierClaimedAchievements') === null;
+
             if (isLegacy) {
                 this.claimedAchievements = [...this.unlockedAchievements];
                 this.saveClaimed();
