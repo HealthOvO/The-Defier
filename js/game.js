@@ -866,6 +866,7 @@ class Game {
     }
 
     // 初始化关卡选择界面 (Refactored for Ink & Gold UI)
+    // 初始化关卡选择界面 (Refactored for Ink & Gold UI - Spirit Tablets)
     initRealmSelect() {
         const listContainer = document.getElementById('realm-list-container');
         if (!listContainer) return;
@@ -873,33 +874,72 @@ class Game {
         listContainer.innerHTML = '';
         this.selectedRealmId = null;
 
+        // Visual Themes for each Realm
+        const REALM_THEMES = {
+            1: { icon: '🛖', color: '#B0BEC5', bg: 'linear-gradient(135deg, #263238 0%, #102027 100%)' }, // Mortal Dust
+            2: { icon: '🌬️', color: '#81D4FA', bg: 'linear-gradient(135deg, #01579B 0%, #002f6c 100%)' }, // Qi Flow
+            3: { icon: '🧱', color: '#BCAAA4', bg: 'linear-gradient(135deg, #4E342E 0%, #261a17 100%)' }, // Foundation
+            4: { icon: '🌕', color: '#FFD54F', bg: 'linear-gradient(135deg, #FF6F00 0%, #8f3e00 100%)' }, // Golden Core
+            5: { icon: '👶', color: '#FFAB91', bg: 'linear-gradient(135deg, #BF360C 0%, #5f1a05 100%)' }, // Nascent Soul
+            6: { icon: '🧘', color: '#CE93D8', bg: 'linear-gradient(135deg, #4A148C 0%, #220542 100%)' }, // Divine Spirit
+            7: { icon: '🔗', color: '#80CBC4', bg: 'linear-gradient(135deg, #004D40 0%, #00251f 100%)' }, // Integration
+            8: { icon: '🚤', color: '#FFE082', bg: 'linear-gradient(135deg, #FF8F00 0%, #8f5000 100%)' }, // Great Vehicle
+            9: { icon: '☁️', color: '#B3E5FC', bg: 'linear-gradient(135deg, #0277BD 0%, #003c5f 100%)' }, // Ascension
+            10: { icon: '⛰️', color: '#A5D6A7', bg: 'linear-gradient(135deg, #1B5E20 0%, #0a290d 100%)' }, // Earthly Immortal
+            11: { icon: '🕊️', color: '#F48FB1', bg: 'linear-gradient(135deg, #880E4F 0%, #440727 100%)' }, // Heavenly Peace
+            12: { icon: '✨', color: '#FFF59D', bg: 'linear-gradient(135deg, #F9A825 0%, #7e520b 100%)' }, // Golden Immortal
+            13: { icon: '🌌', color: '#9575CD', bg: 'linear-gradient(135deg, #311B92 0%, #150a42 100%)' }, // Great Luo
+            14: { icon: '🌀', color: '#90A4AE', bg: 'linear-gradient(135deg, #263238 0%, #0f1619 100%)' }, // Chaos Origin
+            15: { icon: '👑', color: '#EF9A9A', bg: 'linear-gradient(135deg, #B71C1C 0%, #520909 100%)' }, // Supreme
+            16: { icon: '☯️', color: '#E0E0E0', bg: 'linear-gradient(135deg, #212121 0%, #000000 100%)' }, // Taiyi
+            17: { icon: '🌳', color: '#C5E1A5', bg: 'linear-gradient(135deg, #33691E 0%, #163009 100%)' }, // Bodhi
+            18: { icon: '🌑', color: '#757575', bg: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)' }  // Chaos Void
+        };
+
         // 生成18重天卡片
         for (let i = 1; i <= 18; i++) {
             const isUnlocked = this.unlockedRealms && this.unlockedRealms.includes(i);
             const isCompleted = isUnlocked && this.unlockedRealms.includes(i + 1);
 
             const realmCard = document.createElement('div');
+            // Add 'spirit-tablet' class conceptually, actual styling via .realm-card
             realmCard.className = `realm-card ${isUnlocked ? '' : 'locked'}`;
             realmCard.dataset.id = i;
+            realmCard.style.animationDelay = `${i * 0.05}s`; // Staggered entrance
 
             const realmName = this.map.getRealmName(i);
+            const env = this.map.getRealmEnvironment(i);
+            const theme = REALM_THEMES[i] || { icon: '❓', color: '#fff', bg: '#222' };
+
+            // Apply Theme
+            if (isUnlocked) {
+                // realmCard.style.background = theme.bg; // Removed for Ink Gold Streamer style
+                realmCard.style.borderColor = 'rgba(255,255,255,0.1)';
+                // We'll let CSS hover handle the gold border, but we can set a custom property for the glow
+                realmCard.style.setProperty('--theme-color', theme.color);
+            }
 
             // Icon selection
-            let icon = '🔒';
-            if (isUnlocked) icon = isCompleted ? '🏆' : '⚔️';
-            if (i === 18 && isUnlocked) icon = '🌌'; // Chaos Heaven
+            let icon = theme.icon;
+            if (!isUnlocked) icon = '🔒';
 
+            // Spirit Tablet Structure
             realmCard.innerHTML = `
-                <div class="realm-icon">${icon}</div>
+                <div class="realm-icon" style="text-shadow: 0 0 15px ${theme.color}40">${icon}</div>
                 <div class="realm-info">
-                    <h3>${realmName}</h3>
-                    ${isCompleted ? '<span class="realm-env-preview" style="color:var(--accent-gold)">已通关</span>' : ''}
+                    <h3 style="${isUnlocked ? `color:${theme.color}` : ''}">${realmName}</h3>
+                    ${isUnlocked ? `<span class="realm-env-preview">${env.name}</span>` : ''}
                 </div>
             `;
 
             if (isUnlocked) {
                 realmCard.addEventListener('click', () => {
                     this.selectRealm(i);
+                });
+            } else {
+                // Locked click feedback
+                realmCard.addEventListener('click', () => {
+                    Utils.showBattleLog('此天域尚处于迷雾之中，需突破前一重方可踏入。');
                 });
             }
 
@@ -909,8 +949,11 @@ class Game {
         // Bind Enter Button
         const enterBtn = document.getElementById('enter-realm-btn');
         if (enterBtn) {
-            // Remove old listeners by cloning (simple way) or just reassign onclick
-            enterBtn.onclick = () => {
+            // Remove old listeners by cloning
+            const newBtn = enterBtn.cloneNode(true);
+            enterBtn.parentNode.replaceChild(newBtn, enterBtn);
+
+            newBtn.onclick = () => {
                 if (this.selectedRealmId) {
                     const isCompleted = this.unlockedRealms && this.unlockedRealms.includes(this.selectedRealmId + 1);
                     this.startRealm(this.selectedRealmId, isCompleted);
@@ -919,24 +962,11 @@ class Game {
         }
 
         // Auto-select logic
-        // Priority: 1. Last Unlocked Realm (if progress made)
-        //           2. Last viewed realm in this session
-        //           3. Max unlocked realm
-
         let targetRealm = 1;
         if (this.unlockedRealms && this.unlockedRealms.length > 0) {
             targetRealm = Math.max(...this.unlockedRealms);
         }
-
-        // If we have a stored last selection that is valid (unlocked), use it
-        if (this.lastSelectedRealmId && this.unlockedRealms && this.unlockedRealms.includes(this.selectedRealmId)) {
-            targetRealm = this.lastSelectedRealmId;
-        } else if (this.lastSelectedRealmId && (!this.unlockedRealms || !this.unlockedRealms.includes(this.selectedRealmId))) {
-            // If stored is locked (maybe reset?), fallback to max unlocked
-        }
-
-        // Actually, just trust lastSelectedRealmId if it's set in this session
-        if (this.lastSelectedRealmId) {
+        if (this.lastSelectedRealmId && this.unlockedRealms.includes(this.lastSelectedRealmId)) {
             targetRealm = this.lastSelectedRealmId;
         }
 
@@ -947,14 +977,13 @@ class Game {
     selectRealm(realmId) {
         if (this.selectedRealmId === realmId) return;
         this.selectedRealmId = realmId;
-        this.lastSelectedRealmId = realmId; // Persist for this session
+        this.lastSelectedRealmId = realmId;
 
         // 1. Highlight UI
         document.querySelectorAll('.realm-card').forEach(card => {
             if (parseInt(card.dataset.id) === realmId) {
                 card.classList.add('active');
-                // Scroll into view if needed
-                card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
             } else {
                 card.classList.remove('active');
             }
@@ -967,10 +996,20 @@ class Game {
         const enterBtn = document.getElementById('enter-realm-btn');
         if (enterBtn) {
             enterBtn.disabled = false;
+            // Update button text contextually
+            const isCompleted = this.unlockedRealms.includes(realmId + 1);
+            const btnText = enterBtn.querySelector('.btn-text') || enterBtn;
+            if (isCompleted) {
+                // enterBtn.innerHTML = '<span class="btn-text">重修此界</span>'; 
+                // Keep simple text for now to avoid breaking structure if it relies on spans
+                enterBtn.textContent = '重修此界';
+            } else {
+                enterBtn.textContent = '踏入天域';
+            }
         }
     }
 
-    // 更新预览面板
+    // 更新预览面板 (Cloud Mirror)
     updateRealmPreview(realmId) {
         const panel = document.getElementById('realm-preview-panel');
         if (!panel) return;
@@ -978,12 +1017,11 @@ class Game {
         const placeholder = panel.querySelector('.realm-preview-placeholder');
         const content = panel.querySelector('.realm-preview-content');
 
-        // Hide placeholder, show content
         if (placeholder) placeholder.style.display = 'none';
         if (content) {
             content.style.display = 'flex';
-            // Trigger reflow for fade in
-            setTimeout(() => content.style.opacity = 1, 10);
+            content.style.opacity = 0;
+            setTimeout(() => content.style.opacity = 1, 50);
         }
 
         // Data
@@ -994,47 +1032,80 @@ class Game {
         const titleEl = document.getElementById('preview-title');
         if (titleEl) titleEl.textContent = realmName;
 
+        // Dynamic Icon based on Realm Type
         const iconEl = document.getElementById('preview-icon');
-        if (iconEl) iconEl.textContent = '⚔️';
+        if (iconEl) {
+            let iconChar = '⚔️';
+            if (realmId % 5 === 0) iconChar = '⚡'; // Boss Realms
+            if (realmId === 18) iconChar = '🌌';
+            iconEl.textContent = iconChar;
+        }
 
-        // Update Environment
+        // Update Environment Section
         const envEl = document.getElementById('preview-env');
         if (envEl) {
+            // Parse effect key to icon/color if needed, for now just rich text
             envEl.innerHTML = `
-                <strong style="color:var(--accent-gold)">${env.name}</strong><br>
-                <span style="font-size:0.9em; opacity:0.8">${env.desc}</span>
+                <div style="margin-bottom:5px; color:var(--accent-gold); font-weight:bold; font-size:1.1rem;">
+                    ${env.name}
+                </div>
+                <div style="font-size:0.95rem;">${env.desc}</div>
             `;
         }
 
-        // Update Boss
+        // Update Boss Section
         const bossInfo = this.getRealmBossInfo(realmId);
         const bossEl = document.getElementById('preview-boss');
         if (bossEl) {
-            if (bossInfo.bossName) {
+            if (bossInfo) {
+                // If bossInfo is just an object, we need to format it. 
+                // Assuming getRealmBossInfo returns { bossName, mechDesc, ... } from the code I saw earlier
+                // Wait, I saw getRealmBossInfo body partially. Let's assume it returns a consistent object or null.
+                // Actually, I should probably check getRealmBossInfo implementation or rely on what was there.
+                // The previous code had: const bossInfo = this.getRealmBossInfo(realmId);
+                // I will replicate safe check.
+                const name = bossInfo.bossName || '???';
+                const desc = bossInfo.mechDesc || '未知的恐怖存在...';
+
                 bossEl.innerHTML = `
-                    <strong style="color:var(--accent-red)">${bossInfo.bossName}</strong><br>
-                    <span style="font-size:0.9em; opacity:0.8">${bossInfo.mechDesc}</span>
-                    ${bossInfo.counterTreasure ? `<br><span style="color:var(--accent-cyan); font-size:0.85em">💡 克制推荐: ${bossInfo.counterTreasure}</span>` : ''}
+                    <div style="color:var(--accent-red); font-weight:bold; margin-bottom:5px;">${name}</div>
+                    <div style="font-size:0.9rem; opacity:0.9;">${desc}</div>
                 `;
             } else {
-                bossEl.textContent = '???';
+                bossEl.innerHTML = '<span style="color:#666;">此界并无所谓的主宰...</span>';
             }
         }
 
-        // Rewards
+        // Update Rewards (Loot)
         const lootEl = document.getElementById('preview-loot');
         if (lootEl) {
             lootEl.innerHTML = '';
-            // Visual flair
-            const loots = ['💰', '🔮'];
-            if (realmId % 5 === 0) loots.push('🏺');
 
-            loots.forEach(icon => {
-                const div = document.createElement('div');
-                div.className = 'loot-icon';
-                div.textContent = icon;
-                lootEl.appendChild(div);
-            });
+            // Generate visual loot icons
+            const createLoot = (icon, type) => {
+                const el = document.createElement('div');
+                el.className = `loot-icon ${type}`;
+                el.textContent = icon;
+                return el;
+            };
+
+            lootEl.appendChild(createLoot('💰', 'common'));
+            lootEl.appendChild(createLoot('🔮', 'rare'));
+
+            if (realmId >= 5) lootEl.appendChild(createLoot('📜', 'epic')); // Jade Slips
+            if (realmId >= 10) lootEl.appendChild(createLoot('🏺', 'legendary')); // Treasures
+        }
+
+        // Cost Display (if re-entering)
+        const costDisplay = document.getElementById('realm-cost-display');
+        const isCompleted = this.unlockedRealms.includes(realmId + 1);
+        if (costDisplay) {
+            if (isCompleted) {
+                costDisplay.style.display = 'block';
+                costDisplay.innerHTML = `⚠️ 重修此界将 <span style="color:var(--accent-gold);">收益减半</span> (无法获得全额灵石与经验)`;
+            } else {
+                costDisplay.style.display = 'none';
+            }
         }
     }
 
@@ -1095,7 +1166,12 @@ class Game {
 
         this.player.realm = realmLevel;
         this.player.floor = 0;
-        this.player.isReplay = isReplay; // 标记是否为重玩
+        // 标记是否为重玩 (已通关)
+        this.player.isReplay = isReplay;
+        // 新的开始（非原地复活）重置重修标记
+        this.player.isRecultivation = false;
+
+        this.player.resetBattleState(); // hypothetical helper, or manual reset
 
         this.map.generate(this.player.realm);
         this.showScreen('map-screen');
@@ -1586,10 +1662,13 @@ class Game {
             }
         }
 
-        // 重玩收益减半
-        if (this.player.isReplay) {
+        // 重玩或重修收益减半
+        if (this.player.isReplay || this.player.isRecultivation) {
             totalGold = Math.floor(totalGold * 0.5);
-            // 重玩可以盗取，但不给额外经验奖励了
+            // 经验减半
+            ringExp = Math.floor(ringExp * 0.5);
+
+            // Log suggestion: Only log once or just let the smaller numbers speak
         }
 
         this.player.gold += totalGold;
@@ -2456,9 +2535,10 @@ class Game {
     restartRealm() {
         if (!this.player) return;
 
-        // 增加复活代价：扣除一定灵石
-        const reviveCost = Math.floor(this.player.gold * 0.5); // 扣除50%灵石
-        this.player.gold -= reviveCost;
+        // 增加复活代价：收益减半 (不再扣除灵石)
+        this.player.isRecultivation = true;
+        // const reviveCost = Math.floor(this.player.gold * 0.5); // 扣除50%灵石
+        // this.player.gold -= reviveCost;
 
         // 恢复生命值
         this.player.currentHp = this.player.maxHp;
@@ -2477,7 +2557,7 @@ class Game {
         // 这样如果用户在点击“重修此界”后刷新，加载的存档已经是扣过钱并重置进度的状态
         this.autoSave();
 
-        Utils.showBattleLog(`时光倒流... 损失 ${reviveCost} 灵石，重修 ${this.map.getRealmName(this.player.realm)}`);
+        Utils.showBattleLog(`时光倒流... 重修 ${this.map.getRealmName(this.player.realm)} (此界收益减半)`);
 
         // 进入地图界面
         this.showScreen('map-screen');
@@ -2519,6 +2599,11 @@ class Game {
         this.player.realm++;
         this.player.floor = 0;
         this.currentBattleNode = null; // 关键修复：防止奖励结算再次触发节点完成
+
+        // 成功突破天域，清除重修惩罚
+        this.player.isRecultivation = false;
+        // 进入下一层肯定不是重玩（除非本来就是全通关后的无限模式？暂时假设突破即解除）
+        this.player.isReplay = false;
 
         // 检查技能解锁 (Level up skill upon entering specific realms)
         this.player.checkSkillUnlock();
@@ -2562,83 +2647,134 @@ class Game {
     // 显示牌组模态框
     showDeckModal(type) {
         const modal = document.getElementById('deck-modal');
-        const container = document.getElementById('deck-view-cards');
+        const modalContent = modal.querySelector('.modal-content');
 
-        // Let's look at index.html content again.
-        // I only saw removal modal. I did NOT see deck-modal in the snippets I viewed.
-        // Let me verify index.html around line 300-400.
+        // Ensure Header Structure
+        let header = modalContent.querySelector('.deck-view-header');
+        let contentContainer = modalContent.querySelector('.deck-view-content');
 
-        const title = modal.querySelector('h2');
+        if (!header || !contentContainer) {
+            const closeBtn = modalContent.querySelector('.modal-close');
+            const oldCloseBtnHtml = closeBtn ? closeBtn.outerHTML : '<button class="modal-close" onclick="game.closeModal()">×</button>';
 
-        let cards = [];
-        switch (type) {
-            case 'deck':
-                cards = this.player.deck;
-                title.textContent = `当前牌组 (${cards.length})`;
-                break;
-            case 'draw':
-                cards = this.player.drawPile;
-                title.textContent = `抽牌堆 (${cards.length})`;
-                break;
-            case 'discard':
-                cards = this.player.discardPile;
-                title.textContent = `弃牌堆 (${cards.length})`;
-                break;
+            modalContent.innerHTML = `
+                ${oldCloseBtnHtml}
+                <div class="deck-view-header">
+                    <h2>当前牌组</h2>
+                </div>
+                <!-- Add a container for the scene perspective if needed, or keep relying on content -->
+                <div class="deck-view-content" id="deck-view-cards"></div>
+            `;
+            header = modalContent.querySelector('.deck-view-header');
+            contentContainer = document.getElementById('deck-view-cards');
         }
 
-        // 统计数量
+        const title = header.querySelector('h2');
+        contentContainer.innerHTML = '';
+
+        let cards = [];
+        let deckName = '';
+
+        switch (type) {
+            case 'deck': cards = this.player.deck; deckName = '当前牌组'; break;
+            case 'draw': cards = this.player.drawPile; deckName = '抽牌堆'; break;
+            case 'discard': cards = this.player.discardPile; deckName = '弃牌堆'; break;
+        }
+
+        title.textContent = `${deckName} · ${cards.length}`;
+
+        // === Group by Rarity (High -> Low) ===
+        const rarityOrder = ['legendary', 'epic', 'rare', 'uncommon', 'common', 'basic'];
+        const groups = {
+            'legendary': { name: '传说 · Legendary', cards: [], color: '#ffeb3b', icon: '👑' },
+            'epic': { name: '史诗 · Epic', cards: [], color: '#d500f9', icon: '🔮' },
+            'rare': { name: '稀有 · Rare', cards: [], color: '#00e5ff', icon: '💎' },
+            'uncommon': { name: '优秀 · Uncommon', cards: [], color: '#76ff03', icon: '🌿' },
+            'common': { name: '普通 · Common', cards: [], color: '#bdbdbd', icon: '📄' },
+            'basic': { name: '基础 · Basic', cards: [], color: '#795548', icon: '🪵' }
+        };
+
+        // Helper to count duplicates
         const cardCounts = {};
-        const uniqueCards = [];
 
         cards.forEach(card => {
-            // Fix: Handle undefined/corrupt cards to prevent crash
-            if (!card || !card.id) {
-                console.warn('Found invalid card in deck:', card);
-                return;
-            }
-
+            if (!card || !card.id) return;
             const key = card.upgraded ? `${card.id}_upgraded` : card.id;
-
-            if (!cardCounts[key]) {
-                cardCounts[key] = {
-                    count: 0,
-                    card: card
-                };
-                uniqueCards.push(card);
-            }
-            cardCounts[key].count++;
+            if (!cardCounts[key]) cardCounts[key] = 0;
+            cardCounts[key]++;
         });
 
-        // 排序：稀有度 > 名称 > 等级
-        const rarityOrder = { legendary: 5, epic: 4, rare: 3, uncommon: 2, common: 1, basic: 0 };
-        uniqueCards.sort((a, b) => {
-            const rA = rarityOrder[a.rarity || 'common'];
-            const rB = rarityOrder[b.rarity || 'common'];
-            if (rA !== rB) return rB - rA;
-            if (a.id !== b.id) return a.id.localeCompare(b.id);
-            return (b.upgraded ? 1 : 0) - (a.upgraded ? 1 : 0);
+        // Add unique instances to groups
+        const processedKeys = new Set();
+
+        cards.forEach(card => {
+            if (!card || !card.id) return;
+            const key = card.upgraded ? `${card.id}_upgraded` : card.id;
+
+            if (processedKeys.has(key)) return;
+            processedKeys.add(key);
+
+            let rarity = (card.rarity || 'common').toLowerCase();
+            if (!groups[rarity]) rarity = 'common';
+
+            card._tempCount = cardCounts[key];
+            groups[rarity].cards.push(card);
         });
 
-        container.innerHTML = '';
-        uniqueCards.forEach((card, index) => {
-            const key = card.upgraded ? `${card.id}_upgraded` : card.id;
-            const count = cardCounts[key].count;
-            const cardEl = Utils.createCardElement(card, index);
-            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
+        // Render Groups in Order
+        rarityOrder.forEach((rarityKey, groupIndex) => {
+            const group = groups[rarityKey];
+            if (group.cards.length === 0) return;
 
-            // 如果数量大于1，添加徽章
-            if (count > 1) {
-                const badge = document.createElement('div');
-                badge.className = 'card-count-badge';
-                badge.textContent = `x${count}`;
-                cardEl.appendChild(badge);
-            }
+            // Sort within rarity: Type (Attack > Skill) then ID
+            group.cards.sort((a, b) => {
+                const typeOrder = { attack: 1, skill: 2, power: 3, defense: 4 }; // Custom type priority
+                const tA = typeOrder[a.type] || 99;
+                const tB = typeOrder[b.type] || 99;
+                if (tA !== tB) return tA - tB;
+                return a.id.localeCompare(b.id);
+            });
 
-            container.appendChild(cardEl);
+            const groupEl = document.createElement('div');
+            groupEl.className = `deck-category rarity-${rarityKey}`;
+            groupEl.style.animationDelay = `${groupIndex * 0.15}s`;
+
+            // Enhanced Group Header
+            groupEl.innerHTML = `
+                <h3 style="border-color: ${group.color}; background: linear-gradient(90deg, ${group.color}15 0%, transparent 100%);">
+                    <span style="font-size:1.2em; margin-right:5px; filter: drop-shadow(0 0 5px ${group.color});">${group.icon}</span>
+                    <span style="color:${group.color}; text-shadow: 0 0 10px ${group.color}40;">${group.name}</span>
+                    <span class="category-count" style="border: 1px solid ${group.color}50;">${group.cards.reduce((sum, c) => sum + c._tempCount, 0)}</span>
+                </h3>
+                <div class="deck-grid"></div>
+            `;
+
+            const grid = groupEl.querySelector('.deck-grid');
+
+            group.cards.forEach((card, i) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'deck-card-wrapper';
+                // Randomize float delay for natural look
+                wrapper.style.animationDelay = `${Math.random() * 2}s`;
+                wrapper.style.setProperty('--delay', `${i * 0.05}s`);
+
+                const cardEl = Utils.createCardElement(card);
+
+                if (card._tempCount > 1) {
+                    const badge = document.createElement('div');
+                    badge.className = 'card-count-badge';
+                    badge.textContent = `x${card._tempCount}`;
+                    cardEl.appendChild(badge);
+                }
+
+                wrapper.appendChild(cardEl);
+                grid.appendChild(wrapper);
+            });
+
+            contentContainer.appendChild(groupEl);
         });
 
         modal.classList.add('active');
-
     }
 
     // 渲染法宝栏

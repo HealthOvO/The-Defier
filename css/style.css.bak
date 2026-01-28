@@ -3256,9 +3256,101 @@ body {
 /* ===================================
    关卡选择界面样式
    =================================== */
+#realm-select-screen {
+    background:
+        radial-gradient(circle at 50% 30%, rgba(26, 35, 126, 0.2) 0%, transparent 60%),
+        var(--bg-ink);
+}
 
-/* Legacy Realm Selection Styles Removed (See line 7400+) */
+.realm-select-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-lg);
+    padding: var(--spacing-xl);
+    justify-content: center;
+    overflow-y: auto;
+    max-height: calc(100vh - 80px);
+}
 
+/* Realm Select Cards */
+.realm-card {
+    width: 300px;
+    height: 400px;
+    background: linear-gradient(180deg, rgba(30, 30, 40, 0.9) 0%, rgba(10, 10, 15, 0.95) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.4s ease;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.realm-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at 50% 0%, rgba(255, 215, 0, 0.1), transparent 70%);
+    opacity: 0;
+    transition: 0.4s;
+}
+
+.realm-card:hover {
+    transform: translateY(-15px);
+    border-color: var(--accent-gold);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 20px rgba(255, 215, 0, 0.1);
+}
+
+.realm-card:hover::before {
+    opacity: 1;
+}
+
+.realm-icon {
+    font-size: 5rem;
+    margin-bottom: var(--spacing-lg);
+    filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.2));
+    transition: 0.4s;
+}
+
+.realm-card:hover .realm-icon {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 30px rgba(255, 215, 0, 0.5));
+}
+
+.realm-info {
+    text-align: center;
+}
+
+.realm-info h3 {
+    font-family: var(--font-display);
+    font-size: 1.8rem;
+    color: var(--accent-gold);
+    margin-bottom: var(--spacing-sm);
+}
+
+.realm-env {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-md);
+    line-height: 1.4;
+}
+
+.replay-tag {
+    display: inline-block;
+    padding: 4px 8px;
+    background: rgba(76, 175, 80, 0.2);
+    border: 1px solid var(--accent-green);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: var(--accent-green);
+}
 
 .modal {
     position: fixed;
@@ -3312,190 +3404,81 @@ body {
 }
 
 
-
-/* ===================================
-   Refactored 3D Deck View
-   =================================== */
-/* ===================================
-   Refactored 3D Deck View
-   =================================== */
 .deck-view {
-    min-width: 800px;
-    /* Reduced since cards are smaller */
-    max-width: 90vw;
-    height: 85vh;
-    max-height: 85vh;
-    overflow: hidden;
-    perspective: 1000px;
-    background: radial-gradient(circle at center, #141e30 0%, #000000 100%);
-    /* Opaque Dark Void */
-    box-shadow: 0 0 50px rgba(0, 0, 0, 0.9);
-    border: 1px solid rgba(255, 215, 0, 0.1);
-    border-radius: var(--radius-lg);
-    display: flex;
-    flex-direction: column;
-}
-
-.deck-view-header {
-    text-align: center;
-    margin-bottom: var(--spacing-md);
-    /* Reduced margin */
-    position: relative;
-    z-index: 2;
-    padding-bottom: 15px;
-    /* Reduced padding */
-    border-bottom: 2px solid rgba(207, 170, 112, 0.3);
-}
-
-.deck-view-header h2 {
-    color: var(--accent-gold);
-    font-family: var(--font-display);
-    font-size: 2rem;
-    /* reduced font size */
-    text-shadow: 0 4px 10px rgba(0, 0, 0, 0.8);
-    letter-spacing: 3px;
-}
-
-.deck-view-content {
-    flex: 1;
+    min-width: 600px;
+    max-height: 70vh;
     overflow-y: auto;
-    padding: 0 var(--spacing-lg) 40px;
-    /* Reduced padding */
-    /* Custom Scrollbar */
-    scrollbar-width: thin;
-    scrollbar-color: var(--accent-gold) rgba(0, 0, 0, 0.3);
-    transform-style: preserve-3d;
 }
 
-.deck-view-content::-webkit-scrollbar {
+/* Custom Scrollbar for Deck View */
+.deck-view::-webkit-scrollbar {
     width: 6px;
 }
 
-.deck-view-content::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.3);
+.deck-view::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
 }
 
-.deck-view-content::-webkit-scrollbar-thumb {
+.deck-view::-webkit-scrollbar-thumb {
     background: var(--accent-gold);
     border-radius: 3px;
 }
 
-/* Card Category Section */
-.deck-category {
-    margin-bottom: 25px;
-    /* Reduced margin */
-    opacity: 0;
-    transform: translateY(30px);
-    animation: slide-up-fade 0.5s ease-out forwards;
-}
 
-.deck-category h3 {
+.deck-view h2 {
+    text-align: center;
+    margin-bottom: var(--spacing-lg);
+    color: var(--accent-gold);
     font-family: var(--font-display);
-    color: var(--text-secondary);
-    font-size: 1.3rem;
-    /* reduced font size */
-    margin-bottom: 10px;
-    /* reduced margin */
-    border-left: 4px solid var(--accent-gold);
-    padding-left: 10px;
+}
+
+.deck-cards {
     display: flex;
-    align-items: center;
-    gap: 10px;
-    background: linear-gradient(90deg, rgba(207, 170, 112, 0.1) 0%, transparent 100%);
-    padding: 5px 15px;
-    border-radius: 0 10px 10px 0;
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+    justify-content: center;
 }
 
-.category-count {
-    font-family: var(--font-body);
-    font-size: 0.9rem;
-    color: var(--text-muted);
-    background: rgba(0, 0, 0, 0.4);
-    padding: 2px 8px;
-    border-radius: 10px;
+/* Custom Scrollbar for Deck */
+.deck-cards::-webkit-scrollbar {
+    width: 6px;
 }
 
-/* 3D Grid */
-.deck-grid {
-    display: grid;
-    /* Reduced min-width for smaller cards */
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-    gap: 10px;
-    /* Reduced horizontal gap */
-    row-gap: 25px;
-    /* Reduced vertical gap */
-    perspective: 1200px;
-    padding: 10px;
+.deck-cards::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
 }
 
-/* Card Container */
-.deck-card-wrapper {
-    position: relative;
-    width: 130px;
-    /* Reduced width */
-    height: 175px;
-    /* Reduced height to match scaling */
-    transform-style: preserve-3d;
-    animation: card-float 6s ease-in-out infinite;
+.deck-cards::-webkit-scrollbar-thumb {
+    background: var(--accent-gold);
+    border-radius: 3px;
 }
 
-/*
-   Idle State:
-   - Tilted back (Relaxed posture on the table)
-*/
-.deck-card-wrapper .card {
-    transform: scale(0.75) rotateX(20deg) rotateY(0deg);
-    /* Reduced scale from 0.85 to 0.75 */
-    transform-origin: center bottom;
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    will-change: transform;
-    background: linear-gradient(135deg, var(--card-bg) 0%, #dcd8c8 100%);
+
+.deck-cards .card {
+    transform: scale(0.8);
+    margin-left: 0;
 }
 
-/* Wrapper Hover */
-.deck-card-wrapper:hover {
-    z-index: 50;
-    animation-play-state: paused;
+.deck-cards .card:hover {
+    transform: scale(0.9);
 }
 
-/* Card Hover */
-.deck-card-wrapper:hover .card {
-    /* Reduced hover scale from 1.15 to 1.05 and less translation */
-    background: linear-gradient(135deg, #fffcf5 0%, #ede6d4 100%);
-    transform: scale(1.05) rotateX(0deg) rotateY(0deg) translateY(-20px) !important;
-    box-shadow:
-        0 20px 40px rgba(0, 0, 0, 0.8),
-        0 0 20px rgba(255, 215, 0, 0.3);
-    border-color: var(--accent-gold-bright);
+/* Ring Modal */
+.ring-view {
+    text-align: center;
 }
 
-/* Floating Animation */
-@keyframes card-float {
-
-    0%,
-    100% {
-        transform: translateY(0);
-    }
-
-    50% {
-        transform: translateY(-8px);
-    }
+.ring-view h2 {
+    color: var(--accent-gold);
+    font-family: var(--font-display);
+    margin-bottom: var(--spacing-lg);
 }
 
-/* Entry Animation */
-@keyframes slide-up-fade {
-    from {
-        opacity: 0;
-        transform: translateY(40px) scale(0.95);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
+.ring-large {
+    display: flex;
+    justify-content: center;
+    margin-bottom: var(--spacing-lg);
 }
-
 
 .ring-visual.large {
     width: 200px;
@@ -6336,29 +6319,6 @@ body {
     transform: translateX(-50%) translateY(0);
 }
 
-/* Stats List (Reverted to Flex Column) */
-.stats-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.stat-row-3d {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-/* Polished XP Bar */
-.exp-section {
-    position: relative;
-    padding: 10px;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
 .skill-header {
     display: flex;
     justify-content: space-between;
@@ -7312,281 +7272,158 @@ body {
    Realm Select Screen (New Ink & Gold)
    =================================== */
 
-/* ===================================
-   Realm Select Screen (New Ink & Gold - Spirit Tablets)
-   =================================== */
-
 .realm-select-layout {
     display: flex;
     height: calc(100% - 70px);
+    /* Header height approx */
     padding: var(--spacing-lg);
     gap: var(--spacing-xl);
-    /* Void Background - Deep & Ethereal */
-    background: radial-gradient(circle at 50% 120%, #1a1a20 0%, #050505 60%, #000000 100%);
-    position: relative;
-    overflow: hidden;
+    background: radial-gradient(circle at 70% 50%, rgba(200, 160, 80, 0.05) 0%, transparent 60%);
 }
 
-/* Background Ornamentation - Smoke/Fog */
-.realm-select-layout::before {
+.realm-list-container {
+    flex: 2;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-auto-rows: minmax(160px, auto);
+    /* Flexible height */
+    gap: var(--spacing-lg);
+    /* Increased gap for independence */
+    overflow-y: auto;
+    padding: var(--spacing-md);
+    /* Scrollbar styling */
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-gold) rgba(0, 0, 0, 0.3);
+}
+
+.realm-list-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.realm-list-container::-webkit-scrollbar-thumb {
+    background-color: var(--accent-gold);
+    border-radius: 3px;
+}
+
+/* Realm Card Design */
+.realm-card {
+    position: relative;
+    background: rgba(20, 20, 25, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    overflow: hidden;
+    z-index: 1;
+    margin: 2px;
+    /* Add margin to ensure separation */
+}
+
+.realm-card::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-image:
-        radial-gradient(at 80% 0%, rgba(207, 170, 112, 0.03) 0px, transparent 50%),
-        radial-gradient(at 0% 50%, rgba(255, 255, 255, 0.02) 0px, transparent 50%);
-    pointer-events: none;
+    background: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0 L100 100 M100 0 L0 100' stroke='rgba(255,255,255,0.02)' stroke-width='1'/%3E%3C/svg%3E");
+    opacity: 0.5;
     z-index: 0;
 }
 
-/* Background Ornamentation */
-.realm-select-layout::before {
-    content: '天域';
-    position: absolute;
-    top: -20px;
-    right: 20px;
-    font-family: var(--font-display);
-    font-size: 15rem;
-    color: rgba(255, 255, 255, 0.02);
-    pointer-events: none;
-    z-index: 0;
-}
-
-.realm-list-container {
-    flex: 2;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    grid-auto-rows: 210px;
-    gap: var(--spacing-md);
-    padding: var(--spacing-sm);
-    overflow-y: auto;
-    /* Custom Scrollbar - Gold & Minimal */
-    scrollbar-width: thin;
-    scrollbar-color: #333 transparent;
-    z-index: 1;
-}
-
-.realm-list-container::-webkit-scrollbar {
-    width: 4px;
-}
-
-.realm-list-container::-webkit-scrollbar-thumb {
-    background-color: #444;
-    border-radius: 2px;
-}
-
-/* Spirit Tablet Design (Realm Card) - Refined */
-.realm-card {
-    position: relative;
-    /* Lighter Ink Background */
-    background: linear-gradient(135deg, #1a1a1c 0%, #2a2a2d 100%);
-    border: 1px solid rgba(207, 170, 112, 0.3);
-    border-radius: 4px;
-    /* Sharper corners for tablet feel */
-    padding: var(--spacing-sm);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    cursor: pointer;
-    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
-    overflow: hidden;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
-}
-
-/* Dynamic Theme Application via CSS Variables (set in JS) */
-.realm-card {
-    --theme-color: var(--accent-gold);
-    /* Default */
-}
-
-/* Gold Streamer Effect */
-.realm-card:not(.locked)::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: linear-gradient(45deg,
-            transparent 45%,
-            rgba(207, 170, 112, 0.12) 50%,
-            transparent 55%);
-    transform: rotate(30deg) translateY(100%);
-    animation: streamer-flow 6s infinite linear;
-    pointer-events: none;
-    z-index: 0;
-}
-
-@keyframes streamer-flow {
-    0% {
-        transform: rotate(30deg) translateY(0%);
-    }
-
-    100% {
-        transform: rotate(30deg) translateY(-100%);
-        /* Move upwards/diagonal */
-    }
-}
-
-/* Inner Frame */
-/* Inner Frame */
-.realm-card::after {
-    content: '';
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    right: 3px;
-    bottom: 3px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    pointer-events: none;
-    transition: all 0.4s;
-    z-index: 2;
-}
-
-/* Hover State */
-/* Hover State */
-.realm-card:not(.locked):hover {
-    transform: translateY(-5px);
-    border-color: var(--theme-color);
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.9), 0 0 15px rgba(207, 170, 112, 0.1);
+.realm-card:hover {
+    transform: translateY(-5px) scale(1.02);
+    /* Slight scale, primarily vertical lift */
+    border-color: var(--accent-gold);
+    background: rgba(40, 40, 50, 0.95);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
     z-index: 10;
+    /* Ensure hover is on top */
 }
 
-.realm-card:not(.locked):hover::after {
-    border-color: var(--theme-color);
-    box-shadow: inset 0 0 10px rgba(207, 170, 112, 0.2);
-}
-
-.realm-card:not(.locked):hover::before {
-    background: linear-gradient(45deg,
-            transparent 40%,
-            rgba(207, 170, 112, 0.2) 50%,
-            transparent 60%);
-    animation-duration: 3s;
-    /* Speed up on hover */
-}
-
-/* Active State - Subtle Glow */
 .realm-card.active {
-    border-color: var(--theme-color);
-    background: linear-gradient(135deg, #1c1c24 0%, #000 100%);
-    box-shadow: 0 0 25px rgba(207, 170, 112, 0.3), inset 0 0 20px rgba(0, 0, 0, 0.8);
+    border: 2px solid var(--accent-gold);
+    background: linear-gradient(135deg, rgba(30, 30, 40, 0.95), rgba(50, 40, 20, 0.9));
+    box-shadow: 0 0 20px rgba(207, 170, 112, 0.3);
+    animation: cardFloat 3s ease-in-out infinite;
+    z-index: 5;
+    /* Active above normal */
 }
 
-.realm-card.active::after {
-    border-color: var(--theme-color);
-    box-shadow: inset 0 0 15px rgba(207, 170, 112, 0.1);
+.realm-card.locked {
+    filter: grayscale(1);
+    opacity: 0.6;
+    cursor: not-allowed;
+    border-color: rgba(255, 255, 255, 0.05);
 }
 
-/* Tablet Content */
+@keyframes cardFloat {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-8px);
+    }
+}
+
 .realm-icon {
     font-size: 2.5rem;
-    margin-top: 15px;
-    margin-bottom: 8px;
-    filter: grayscale(0.8);
-    /* Muted by default */
-    transition: all 0.3s ease;
+    margin-bottom: var(--spacing-sm);
     z-index: 1;
-}
-
-.realm-card:hover .realm-icon,
-.realm-card.active .realm-icon {
-    filter: grayscale(0);
-    transform: scale(1.1);
-    text-shadow: 0 0 20px currentColor;
-    /* Uses color from JS inline style */
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 }
 
 .realm-info {
     text-align: center;
-    width: 100%;
-    margin-top: auto;
-    margin-bottom: 10px;
     z-index: 1;
 }
 
 .realm-info h3 {
-    font-family: var(--font-display);
     font-size: 1.1rem;
-    color: #666;
-    margin-bottom: 2px;
-    letter-spacing: 1px;
-    transition: color 0.3s;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    font-family: var(--font-display);
 }
 
-.realm-card:hover .realm-info h3,
-.realm-card.active .realm-info h3 {
-    color: var(--theme-color);
-    text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+.realm-card.active h3 {
+    color: var(--accent-gold);
 }
 
 .realm-env-preview {
-    font-size: 0.75rem;
-    color: #444;
-    display: block;
-    font-family: serif;
-    transition: color 0.3s;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
 }
 
-.realm-card:hover .realm-env-preview,
-.realm-card.active .realm-env-preview {
-    color: #888;
-}
-
-/* Locked State */
-.realm-card.locked {
-    opacity: 0.4;
-    cursor: default;
-    background: #080808;
-    border-color: #222;
-}
-
-.realm-card.locked::before {
-    content: '封';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-family: var(--font-display);
-    font-size: 4rem;
-    color: #222;
-    z-index: 0;
-    pointer-events: none;
-}
-
-/* Cloud Mirror Preview Panel - Refined & Compact */
+/* Preview Panel */
 .realm-preview-panel {
     flex: 1.2;
-    background: rgba(10, 15, 20, 0.8);
+    background: rgba(0, 0, 0, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding: var(--spacing-md);
-    /* Reduced padding */
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
     position: relative;
     display: flex;
     flex-direction: column;
-    backdrop-filter: blur(12px);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    overflow: hidden;
-    max-width: 400px;
-    /* Constrain width slightly more */
+    backdrop-filter: blur(10px);
 }
 
-/* Mirror Shine Effect */
-.realm-preview-panel::before {
+.realm-preview-panel::after {
     content: '';
     position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.03) 0%, transparent 60%);
+    top: 0;
+    RIGHT: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at 100% 0%, rgba(207, 170, 112, 0.1) 0%, transparent 50%);
     pointer-events: none;
-    z-index: 0;
 }
 
 .realm-preview-placeholder {
@@ -7595,186 +7432,121 @@ body {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    color: #555;
-    z-index: 1;
+    color: var(--text-muted);
+    font-size: 1.1rem;
 }
 
-.badge-float {
-    animation: floatBadge 3s infinite ease-in-out;
-}
-
-@keyframes floatBadge {
-
-    0%,
-    100% {
-        transform: translateY(0);
-    }
-
-    50% {
-        transform: translateY(-10px);
-    }
+.placeholder-icon {
+    font-size: 4rem;
+    margin-bottom: var(--spacing-md);
+    opacity: 0.3;
 }
 
 .realm-preview-content {
     display: flex;
     flex-direction: column;
     height: 100%;
-    gap: var(--spacing-sm);
-    /* Tighter gap */
-    z-index: 1;
-    position: relative;
+    gap: var(--spacing-md);
+    transition: opacity 0.3s ease;
 }
 
 .preview-header {
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
-    padding-bottom: var(--spacing-sm);
-    /* Reduced padding */
-    border-bottom: 2px solid rgba(212, 175, 55, 0.3);
-    position: relative;
-}
-
-/* Header Ink Stroke */
-.preview-header::after {
-    content: '';
-    position: absolute;
-    bottom: -2px;
-    left: 0;
-    width: 100%;
-    height: 2px;
-    background: linear-gradient(90deg, var(--accent-gold), transparent);
+    gap: var(--spacing-md);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .preview-icon {
-    font-size: 2.5rem;
-    /* Smaller icon */
+    font-size: 3rem;
     width: 60px;
     height: 60px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid var(--accent-gold);
-    border-radius: 4px;
-    box-shadow: 0 0 15px rgba(212, 175, 55, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 50%;
+    box-shadow: 0 0 15px rgba(207, 170, 112, 0.2);
 }
 
 .preview-header h3 {
     font-family: var(--font-display);
-    font-size: 1.6rem;
-    /* Smaller Font */
+    font-size: 2.5rem;
     color: var(--accent-gold);
-    text-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
-    letter-spacing: 1px;
-}
-
-.preview-inner-container {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-sm);
-    /* Tighter spacing */
-    padding-right: 5px;
-    /* Space for scrollbar */
+    text-shadow: 0 0 15px rgba(207, 170, 112, 0.4);
 }
 
 .preview-section {
     padding: var(--spacing-sm);
     background: rgba(255, 255, 255, 0.03);
-    border-radius: 4px;
-    border-left: 3px solid #555;
-    transition: border-color 0.3s;
-}
-
-.preview-section:hover {
-    border-left-color: var(--accent-gold);
-    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-md);
+    border-left: 3px solid var(--accent-gold);
 }
 
 .preview-section h4 {
-    font-size: 0.8rem;
-    color: #888;
-    margin-bottom: 4px;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: var(--spacing-sm);
     display: flex;
     align-items: center;
-    gap: 6px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+    gap: 8px;
 }
 
 .section-icon {
     color: var(--accent-cyan);
-    filter: drop-shadow(0 0 5px rgba(0, 255, 255, 0.3));
 }
 
 .preview-text {
-    font-size: 0.9rem;
-    /* Smaller text */
-    color: #ddd;
-    line-height: 1.4;
+    font-size: 1rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
 }
 
 .preview-loot-grid {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
     margin-top: 5px;
 }
 
 .loot-icon {
-    width: 36px;
-    /* Smaller loot icons */
-    height: 36px;
-    background: #111;
-    border: 1px solid #333;
+    width: 40px;
+    height: 40px;
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 1.2rem;
     position: relative;
-    transition: all 0.2s;
 }
 
-.loot-icon:hover {
-    transform: scale(1.1);
-    border-color: var(--accent-gold);
-    box-shadow: 0 0 10px rgba(212, 175, 55, 0.3);
+.loot-icon.legendary {
+    border-color: orange;
+    color: orange;
 }
 
-.preview-actions {
-    margin-top: auto;
-    padding-top: var(--spacing-sm);
+.loot-icon.epic {
+    border-color: purple;
+    color: purple;
 }
 
 #enter-realm-btn {
+    margin-top: auto;
     width: 100%;
-    padding: 12px;
-    /* Smaller button padding */
-    font-size: 1.2rem;
+    padding: 15px;
+    font-size: 1.3rem;
     letter-spacing: 2px;
-    font-family: var(--font-display);
-    background: linear-gradient(90deg, #8B0000 0%, #a4161a 100%);
-    border: 1px solid #ff4d4d;
-    box-shadow: 0 0 20px rgba(139, 0, 0, 0.5);
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-}
-
-#enter-realm-btn:hover:not(:disabled) {
-    background: linear-gradient(90deg, #a4161a 0%, #c41e3a 100%);
-    box-shadow: 0 0 30px rgba(255, 0, 0, 0.6);
-    transform: translateY(-2px);
 }
 
 #enter-realm-btn:disabled {
-    opacity: 0.3;
+    opacity: 0.5;
     cursor: not-allowed;
-    background: #222;
-    border-color: #444;
+    background: #333;
+    border-color: #555;
     box-shadow: none;
-    color: #666;
+    color: #888;
 }
 
 /* ===================================
@@ -9683,1206 +9455,5 @@ body {
     to {
         opacity: 1;
         transform: translateY(0);
-    }
-}
-
-/* ===================================
-   3D Fate Ring System (New)
-   =================================== */
-
-/* Container */
-.ring-scene-container {
-    width: 100%;
-    height: 100%;
-    position: relative;
-    background: radial-gradient(circle at center, #1b263b 0%, #000 100%);
-    overflow: hidden;
-    perspective: 1200px;
-}
-
-.modal-close-floating {
-    position: absolute;
-    top: 30px;
-    right: 30px;
-    width: 40px;
-    height: 40px;
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid var(--accent-gold);
-    color: var(--accent-gold);
-    font-size: 24px;
-    border-radius: 50%;
-    cursor: pointer;
-    z-index: 100;
-    transition: all 0.3s ease;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.modal-close-floating:hover {
-    background: var(--accent-gold);
-    color: #000;
-    transform: rotate(90deg);
-}
-
-/* 3D Scene Area - Refactored to Planar Orrery */
-.ring-scene {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    perspective: 1200px;
-    /* Reduced perspective complexity */
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
-    pointer-events: none;
-    /* Container passes clicks */
-}
-
-/* The Rotating System */
-.ring-system {
-    position: relative;
-    width: 500px;
-    height: 500px;
-    transform-style: preserve-3d;
-    transform: rotateX(0deg) rotateY(0deg);
-    /* Flattened view as per user request */
-    transition: transform 0.5s ease-out;
-    pointer-events: auto;
-    /* System catches clicks */
-}
-
-/* Background/Decorative Rings */
-.fate-ring-layer {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    border-radius: 50%;
-    border: 1px solid rgba(255, 215, 0, 0.1);
-    box-shadow: 0 0 15px rgba(255, 215, 0, 0.05);
-    pointer-events: none;
-}
-
-/* Ring Styling Variations */
-.ring-layer-core {
-    width: 100px;
-    height: 100px;
-    background: radial-gradient(circle, rgba(255, 215, 0, 0.2) 0%, transparent 70%);
-    animation: pulse-core 4s infinite ease-in-out;
-}
-
-.ring-layer-inner {
-    width: 240px;
-    height: 240px;
-    border-color: rgba(255, 215, 0, 0.3);
-    animation: rotate-3d-slow 60s linear infinite;
-}
-
-.ring-layer-middle {
-    width: 400px;
-    height: 400px;
-    border-color: rgba(157, 78, 221, 0.3);
-    border-style: dashed;
-    animation: rotate-3d-reverse 80s linear infinite;
-}
-
-.ring-layer-outer {
-    width: 560px;
-    height: 560px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    animation: rotate-3d-slow 120s linear infinite;
-}
-
-/* Runes on rings */
-.ring-rune {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    color: rgba(255, 255, 255, 0.6);
-    font-family: var(--font-display);
-    font-size: 1.2rem;
-    transform-origin: 0 0;
-    /* Important for radial positioning */
-}
-
-/* Slots in 3D Space */
-.ring-slot-3d {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 60px;
-    height: 60px;
-    background: rgba(0, 0, 0, 0.8);
-    border: 2px solid var(--accent-gold);
-    border-radius: 50%;
-    transform-style: preserve-3d;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-    /* Improve alignment: the translate x/y will be applied inline,
-       but we need to offset by -50% to center exactly on the point */
-    margin-left: -30px;
-    margin-top: -30px;
-}
-
-.ring-slot-3d:hover {
-    border-color: #fff;
-    box-shadow: 0 0 30px var(--accent-gold);
-    /* Scale up but maintain the base translation (applied inline via JS) */
-    /* We can't use transform scale here easily without overwriting inline styles.
-       Instead, we'll scale inner content or use a wrapper.
-       Let's use a pseudo element highlight or simply border change for stability.
-       Or use !important for scale if we are careful. */
-    z-index: 100;
-}
-
-.ring-slot-3d.active {
-    border-color: var(--accent-cyan);
-    box-shadow: 0 0 40px var(--accent-cyan);
-    animation: pulse-slot 1.5s infinite;
-}
-
-@keyframes pulse-slot {
-    0% {
-        box-shadow: 0 0 20px var(--accent-cyan);
-    }
-
-    50% {
-        box-shadow: 0 0 40px var(--accent-cyan), inset 0 0 20px var(--accent-cyan);
-    }
-
-    100% {
-        box-shadow: 0 0 20px var(--accent-cyan);
-    }
-}
-
-.ring-slot-3d.locked {
-    border-color: #444;
-    background: #111;
-    cursor: not-allowed;
-    opacity: 0.8;
-}
-
-.slot-inner-icon {
-    font-size: 24px;
-    color: #fff;
-    pointer-events: none;
-}
-
-/* UI Overlay */
-.ring-ui-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    /* Let clicks pass through to 3D scene */
-    display: grid;
-    grid-template-columns: 350px 1fr 350px;
-    grid-template-rows: 1fr 80px;
-}
-
-.ring-ui-panel {
-    background: linear-gradient(90deg, rgba(10, 14, 20, 0.95) 0%, rgba(10, 14, 20, 0.8) 100%);
-    pointer-events: auto;
-    padding: 0;
-    /* Clear padding for custom layout */
-    backdrop-filter: blur(10px);
-    border-right: 1px solid rgba(207, 170, 112, 0.2);
-    display: flex;
-    flex-direction: column;
-    transform: translateX(-100%);
-    transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
-    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
-}
-
-/* Right Panel - Law Treasury Redesign */
-.ring-ui-panel.right {
-    background: linear-gradient(-90deg, rgba(10, 14, 20, 0.98) 0%, rgba(10, 14, 20, 0.9) 100%);
-    /* Make opaque for readability */
-    border-left: 1px solid rgba(207, 170, 112, 0.2);
-    border-right: none;
-    transform: translateX(100%);
-    grid-column: 3;
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    /* Ensure full height */
-}
-
-.right-panel-header {
-    flex: 0 0 auto;
-    padding: 20px;
-    border-bottom: 2px solid rgba(207, 170, 112, 0.3);
-    background: rgba(0, 0, 0, 0.2);
-    text-align: center;
-}
-
-.right-panel-header h3 {
-    font-family: var(--font-display);
-    font-size: 1.8rem;
-    color: var(--accent-gold);
-    letter-spacing: 2px;
-    margin: 0;
-    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
-}
-
-.right-panel-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 15px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    /* Custom Scrollbar */
-    scrollbar-width: thin;
-    scrollbar-color: var(--accent-gold) rgba(0, 0, 0, 0.3);
-}
-
-.right-panel-content::-webkit-scrollbar {
-    width: 5px;
-}
-
-.right-panel-content::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.3);
-}
-
-.right-panel-content::-webkit-scrollbar-thumb {
-    background: var(--accent-gold);
-    border-radius: 3px;
-}
-
-/* Right Panel - Tabbed Interface */
-.panel-tabs {
-    display: flex;
-    background: rgba(0, 0, 0, 0.3);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.tab {
-    flex: 1;
-    text-align: center;
-    padding: 15px;
-    cursor: pointer;
-    font-family: var(--font-display);
-    font-size: 1.2rem;
-    color: #888;
-    transition: all 0.2s;
-    border-bottom: 2px solid transparent;
-}
-
-.tab:hover {
-    color: #ccc;
-    background: rgba(255, 255, 255, 0.05);
-}
-
-.tab.active {
-    color: var(--accent-gold);
-    border-bottom-color: var(--accent-gold);
-    background: linear-gradient(to top, rgba(255, 215, 0, 0.1), transparent);
-    text-shadow: 0 0 8px rgba(207, 170, 112, 0.5);
-}
-
-.panel-content-area {
-    flex: 1;
-    overflow-y: auto;
-    padding: 15px;
-    position: relative;
-    /* Custom Scrollbar */
-    scrollbar-width: thin;
-    scrollbar-color: var(--accent-gold) rgba(0, 0, 0, 0.3);
-}
-
-.panel-content-area::-webkit-scrollbar {
-    width: 5px;
-}
-
-.panel-content-area::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.3);
-}
-
-.panel-content-area::-webkit-scrollbar-thumb {
-    background: var(--accent-gold);
-    border-radius: 3px;
-}
-
-.tab-content {
-    display: none;
-    animation: fadeIn 0.3s ease;
-}
-
-.tab-content.active {
-    display: block;
-}
-
-/* Polish: Left Panel XP Bar "MAX" */
-.exp-bar-container {
-    margin-top: 10px;
-    background: rgba(0, 0, 0, 0.5);
-    height: 10px;
-    border-radius: 5px;
-    overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    position: relative;
-}
-
-.exp-bar-fill {
-    width: 0%;
-    background: linear-gradient(90deg, var(--accent-gold), var(--accent-purple));
-    height: 100%;
-    transition: width 0.5s;
-}
-
-.exp-bar-fill.max {
-    width: 100% !important;
-    background: linear-gradient(90deg, #ff0055, #ffcc00);
-    box-shadow: 0 0 10px #ffcc00;
-}
-
-.exp-text {
-    font-size: 0.8rem;
-    color: #aaa;
-    display: flex;
-    justify-content: space-between;
-    margin-top: 4px;
-}
-
-.exp-text .value {
-    color: var(--accent-gold);
-    font-weight: bold;
-}
-
-.exp-text .value.max {
-    color: #ffcc00;
-    text-shadow: 0 0 5px #ffcc00;
-}
-
-/* Resonance Section (Top) */
-.resonance-section {
-    flex: 0 0 auto;
-}
-
-.section-label {
-    font-size: 0.9rem;
-    color: var(--text-muted);
-    border-left: 3px solid var(--accent-gold);
-    padding-left: 10px;
-    margin-bottom: 15px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.resonance-card {
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.05) 0%, rgba(0, 0, 0, 0.4) 100%);
-    border: 1px solid var(--accent-gold);
-    border-radius: 4px;
-    padding: 12px;
-    margin-bottom: 10px;
-    position: relative;
-    overflow: hidden;
-    transition: all 0.3s ease;
-}
-
-.resonance-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 4px;
-    height: 100%;
-    background: var(--accent-gold);
-}
-
-.resonance-card.active {
-    box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.15) 0%, rgba(0, 0, 0, 0.6) 100%);
-}
-
-.resonance-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 5px;
-}
-
-.resonance-name {
-    color: var(--accent-gold);
-    font-weight: bold;
-    font-family: var(--font-display);
-    font-size: 1.1rem;
-}
-
-.resonance-bar {
-    height: 4px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 2px;
-    overflow: hidden;
-    margin-top: 8px;
-}
-
-.resonance-progress {
-    height: 100%;
-    background: var(--accent-gold);
-    width: 0%;
-    transition: width 0.3s ease;
-}
-
-/* Law Library Grid -> List Transformation */
-.library-list-container {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.law-item-row {
-    display: flex;
-    align-items: center;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    padding: 10px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    gap: 15px;
-}
-
-.law-item-row:hover {
-    background: rgba(255, 215, 0, 0.1);
-    border-color: var(--accent-gold);
-    transform: translateX(-5px);
-}
-
-.law-item-row.equipped {
-    border-color: var(--accent-green);
-    background: rgba(82, 183, 136, 0.1);
-}
-
-.law-icon-box {
-    width: 45px;
-    height: 45px;
-    background: #000;
-    border: 1px solid #444;
-    border-radius: 4px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 1.5rem;
-    flex-shrink: 0;
-}
-
-.law-item-row.equipped .law-icon-box {
-    border-color: var(--accent-green);
-    box-shadow: 0 0 10px rgba(82, 183, 136, 0.3);
-}
-
-.law-info {
-    flex: 1;
-}
-
-.law-name {
-    color: #eee;
-    font-weight: bold;
-    font-size: 1rem;
-    margin-bottom: 3px;
-    font-family: var(--font-body);
-}
-
-.law-desc-mini {
-    color: #999;
-    font-size: 0.8rem;
-    line-height: 1.2;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-.law-status-icon {
-    font-size: 1.2rem;
-    opacity: 0;
-    transition: opacity 0.2s;
-}
-
-.law-item-row.equipped .law-status-icon {
-    opacity: 1;
-}
-
-/* Active state for animation */
-#ring-modal.active .ring-ui-panel {
-    transform: translateX(0);
-}
-
-.panel-header h2 {
-    font-family: var(--font-display);
-    font-size: 2.5rem;
-    color: var(--accent-gold);
-    margin-bottom: 5px;
-}
-
-.ring-level-badge {
-    display: inline-block;
-    padding: 4px 12px;
-    background: var(--accent-purple);
-    color: #fff;
-    border-radius: 12px;
-    font-size: 0.9rem;
-    font-weight: bold;
-    box-shadow: 0 2px 10px rgba(157, 78, 221, 0.4);
-}
-
-/* Valid Stats & Library Styles */
-.stats-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.stat-row-3d {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.law-library-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
-    gap: 10px;
-    overflow-y: auto;
-    max-height: 400px;
-    padding-right: 5px;
-}
-
-.library-card-item {
-    width: 60px;
-    height: 80px;
-    background: #222;
-    border: 1px solid #444;
-    border-radius: 6px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 1.5rem;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.library-card-item:hover {
-    border-color: var(--accent-gold);
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-}
-
-.ring-ui-footer {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    pointer-events: none;
-}
-
-.instruction-text {
-    background: rgba(0, 0, 0, 0.6);
-    padding: 10px 30px;
-    border-radius: 20px;
-    color: var(--text-secondary);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    font-family: var(--font-body);
-}
-
-/* Animations */
-@keyframes rotate-3d-slow {
-    0% {
-        transform: translate(-50%, -50%) rotateZ(0deg) rotateX(0deg);
-    }
-
-    100% {
-        transform: translate(-50%, -50%) rotateZ(360deg) rotateX(10deg);
-    }
-}
-
-@keyframes rotate-3d-reverse {
-    0% {
-        transform: translate(-50%, -50%) rotateZ(360deg) rotateX(0deg);
-    }
-
-    100% {
-        transform: translate(-50%, -50%) rotateZ(0deg) rotateX(-10deg);
-    }
-}
-
-@keyframes pulse-core {
-
-    0%,
-    100% {
-        transform: translate(-50%, -50%) scale(1);
-        opacity: 0.8;
-    }
-
-    50% {
-        transform: translate(-50%, -50%) scale(1.1);
-        opacity: 1;
-    }
-}
-
-/* Responsive adjustments */
-@media (max-width: 1200px) {
-    .ring-ui-overlay {
-        grid-template-columns: 280px 1fr 280px;
-    }
-}
-
-/* ===================================
-   Life Ring UI - Ink & Gold Overhaul
-   =================================== */
-
-/* Modal Container Background */
-#ring-modal .modal-content {
-    background: radial-gradient(circle at center, #1b263b 0%, #050505 100%);
-    box-shadow: 0 0 50px rgba(0, 0, 0, 0.8), inset 0 0 100px rgba(0, 0, 0, 0.9);
-    border: 1px solid var(--accent-gold);
-    width: 95vw;
-    height: 90vh;
-    max-width: 1400px;
-    padding: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: row;
-}
-
-#ring-modal .modal-close-floating {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: var(--text-muted);
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    font-size: 1.5rem;
-    cursor: pointer;
-    z-index: 100;
-    transition: all 0.3s ease;
-}
-
-#ring-modal .modal-close-floating:hover {
-    color: var(--accent-gold);
-    border-color: var(--accent-gold);
-    transform: rotate(90deg);
-}
-
-/* 3D Scene Container */
-.ring-scene-container {
-    display: flex;
-    width: 100%;
-    height: 100%;
-    position: relative;
-    /* Solid dark background to hide game map */
-    background: radial-gradient(circle at center, #1b263b 0%, #050505 100%);
-    z-index: 1;
-}
-
-/* ... existing scene styles ... */
-
-/* Slots - The Interactive Elements */
-.ring-slot-3d {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 50px;
-    /* Reduced slightly to match visual */
-    height: 50px;
-    margin-left: -25px;
-    margin-top: -25px;
-    background: rgba(10, 10, 15, 0.9);
-    border: 2px solid var(--accent-gold);
-    border-radius: 50%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
-    box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
-    z-index: 10;
-    /* Removed transition on container to prevent conflict with inline styles */
-}
-
-/* Apply hover effect to Inner Content or pseudo-element instead */
-.ring-slot-3d .slot-inner-icon,
-.ring-slot-3d .slot-fusion-icon {
-    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.ring-slot-3d:hover {
-    border-color: #fff;
-    box-shadow: 0 0 25px var(--accent-gold);
-    z-index: 20 !important;
-    /* Ensure it pops over others */
-}
-
-.ring-slot-3d:hover .slot-inner-icon {
-    transform: scale(1.3);
-}
-
-.ring-slot-3d.active {
-    border-color: var(--accent-green);
-    box-shadow: 0 0 20px var(--accent-green), inset 0 0 10px var(--accent-green);
-}
-
-.ring-slot-3d.locked {
-    border-color: #555;
-    background: #111;
-    cursor: not-allowed;
-    opacity: 0.7;
-}
-
-.ring-slot-3d.drag-over {
-    border-color: var(--accent-purple);
-    box-shadow: 0 0 30px var(--accent-purple), inset 0 0 20px rgba(157, 78, 221, 0.5);
-    /* Removed scale to prevent hit-test jitter during drag */
-    transform: none !important;
-}
-
-.slot-inner-icon {
-    font-size: 1.8rem;
-    pointer-events: none;
-}
-
-/* UI Overlay Panels */
-.ring-ui-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    /* Let interaction pass to 3d scene */
-    display: flex;
-    justify-content: space-between;
-    padding: 20px;
-}
-
-.ring-ui-panel {
-    pointer-events: auto;
-    /* Re-enable interaction for panels */
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 215, 0, 0.15);
-    border-radius: 12px;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    width: 350px;
-    height: 100%;
-    overflow: hidden;
-    transition: transform 0.3s ease;
-}
-
-.ring-ui-panel.left {
-    transform-origin: left;
-}
-
-.ring-ui-panel.right {
-    transform-origin: right;
-    width: 400px;
-}
-
-.panel-header {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding-bottom: 15px;
-    margin-bottom: 15px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.panel-header h2,
-.panel-header h3 {
-    margin: 0;
-    color: var(--accent-gold);
-    font-family: var(--font-display);
-    font-size: 1.8rem;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
-}
-
-.ring-level-badge,
-.count {
-    background: rgba(255, 215, 0, 0.1);
-    border: 1px solid var(--accent-gold);
-    color: var(--accent-gold);
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.9rem;
-    font-weight: bold;
-}
-
-.panel-body,
-.panel-content-area {
-    flex: 1;
-    overflow-y: auto;
-    padding-right: 5px;
-}
-
-/* Custom Scrollbar */
-.panel-body::-webkit-scrollbar,
-.panel-content-area::-webkit-scrollbar {
-    width: 6px;
-}
-
-.panel-body::-webkit-scrollbar-thumb,
-.panel-content-area::-webkit-scrollbar-thumb {
-    background: rgba(255, 215, 0, 0.3);
-    border-radius: 3px;
-}
-
-/* EXP Bar */
-.exp-bar-container {
-    height: 24px;
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid #444;
-    border-radius: 12px;
-    position: relative;
-    overflow: hidden;
-    margin-bottom: 20px;
-    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.8);
-}
-
-.exp-bar-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%);
-    width: 0%;
-    transition: width 0.5s ease;
-}
-
-.exp-bar-fill.max {
-    background: linear-gradient(90deg, #cfaa70 0%, #fceea7 50%, #cfaa70 100%);
-    box-shadow: 0 0 15px var(--accent-gold);
-}
-
-.exp-text {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 0.8rem;
-    color: #fff;
-    text-shadow: 0 1px 2px #000;
-    z-index: 2;
-    white-space: nowrap;
-}
-
-.exp-text .value.max {
-    color: #fff;
-    font-weight: 800;
-    letter-spacing: 2px;
-}
-
-/* Stats List */
-.stat-row-3d {
-    display: flex;
-    justify-content: space-between;
-    padding: 10px 0;
-    border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
-}
-
-/* Right Panel Tabs */
-.panel-tabs {
-    display: flex;
-    margin-bottom: 15px;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 8px;
-    padding: 4px;
-}
-
-.panel-tabs .tab {
-    flex: 1;
-    text-align: center;
-    padding: 8px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    border-radius: 6px;
-    color: var(--text-muted);
-    transition: all 0.2s;
-}
-
-.panel-tabs .tab.active {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--accent-gold);
-    font-weight: bold;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.tab-content {
-    display: none;
-    animation: fadeIn 0.3s ease;
-}
-
-.tab-content.active {
-    display: block;
-}
-
-/* Library Items (Redesigned - Resonance Style) */
-.library-list-container {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 10px;
-}
-
-.law-item-row {
-    display: flex;
-    align-items: center;
-    padding: 15px;
-    background: rgba(10, 16, 25, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    position: relative;
-    overflow: hidden;
-}
-
-.law-item-row:hover {
-    background: rgba(20, 30, 45, 0.8);
-    border-color: rgba(255, 215, 0, 0.3);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-}
-
-.law-item-row.equipped {
-    background: rgba(10, 25, 20, 0.6);
-    border-color: var(--accent-green);
-    opacity: 1;
-    /* Keep fully visible but marked */
-}
-
-/* Selected state (for future use or multi-select) */
-.law-item-row.selected {
-    border-color: var(--accent-gold);
-    box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
-}
-
-.law-icon-box {
-    width: 45px;
-    height: 45px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 1.6rem;
-    background: #080808;
-    border-radius: 50%;
-    margin-right: 15px;
-    border: 1px solid #333;
-    flex-shrink: 0;
-    color: var(--accent-gold);
-}
-
-.law-info {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-
-.law-info .law-name {
-    font-weight: bold;
-    color: #eee;
-    font-size: 1rem;
-    margin-bottom: 4px;
-    font-family: var(--font-display);
-}
-
-.law-info .law-desc-mini {
-    font-size: 0.8rem;
-    color: #888;
-    line-height: 1.3;
-}
-
-.law-status-icon {
-    width: 24px;
-    height: 24px;
-    border: 2px solid #444;
-    border-radius: 4px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin-left: 15px;
-    transition: all 0.2s;
-    flex-shrink: 0;
-}
-
-/* Checkbox style for equipped */
-.law-item-row.equipped .law-status-icon {
-    background: var(--accent-green);
-    border-color: var(--accent-green);
-    color: #000;
-    font-weight: bold;
-}
-
-.law-item-row.equipped .law-status-icon::after {
-    content: '✓';
-    font-size: 0.9rem;
-}
-
-/* Side accent for resonance style */
-.law-item-row::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    background: transparent;
-    transition: background 0.2s;
-}
-
-.law-item-row:hover::before {
-    background: var(--accent-gold);
-}
-
-.law-item-row.equipped::before {
-    background: var(--accent-green);
-}
-
-/* Footer Hint */
-.ring-ui-footer {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    text-align: center;
-    pointer-events: none;
-    width: 100%;
-}
-
-.instruction-text {
-    background: rgba(0, 0, 0, 0.6);
-    padding: 5px 15px;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* Karma UI (Wu Yu) */
-#karma-container {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 10px;
-    padding: 8px;
-    background: rgba(0, 0, 0, 0.4);
-    border-radius: 8px;
-    border: 1px solid rgba(255, 215, 0, 0.2);
-    width: 200px;
-    /* Adjust as needed */
-    pointer-events: none;
-    /* Let clicks pass through */
-}
-
-.karma-resource {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    position: relative;
-}
-
-.karma-icon {
-    font-size: 1.2rem;
-    width: 24px;
-    text-align: center;
-    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
-}
-
-.karma-bar-bg {
-    flex: 1;
-    height: 12px;
-    /* Thicker bars */
-    background: rgba(0, 0, 0, 0.6);
-    border-radius: 6px;
-    overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    position: relative;
-}
-
-.karma-bar-fill {
-    height: 100%;
-    transition: width 0.3s ease-out;
-    position: relative;
-}
-
-/* Merit - Gold/Yellow */
-.merit-fill {
-    background: linear-gradient(90deg, #FFD700, #FFFACD);
-    box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-}
-
-/* Sin - Red/Dark */
-.sin-fill {
-    background: linear-gradient(90deg, #8B0000, #FF4500);
-    box-shadow: 0 0 10px rgba(255, 69, 0, 0.5);
-}
-
-.karma-value {
-    font-size: 0.8rem;
-    color: #eee;
-    font-family: 'Cinzel', serif;
-    /* Or game font */
-    min-width: 50px;
-    text-align: right;
-    text-shadow: 1px 1px 2px black;
-}
-
-/* Golden Body Effect Overlay (Optional) */
-.merit-resource.golden-active .karma-icon {
-    animation: pulse-gold 1s infinite;
-}
-
-/* Wrath Effect Overlay (Optional) */
-.sin-resource.wrath-active .karma-icon {
-    animation: shake-red 0.5s infinite;
-}
-
-@keyframes pulse-gold {
-    0% {
-        transform: scale(1);
-        filter: drop-shadow(0 0 2px gold);
-    }
-
-    50% {
-        transform: scale(1.2);
-        filter: drop-shadow(0 0 10px gold);
-    }
-
-    100% {
-        transform: scale(1);
-        filter: drop-shadow(0 0 2px gold);
-    }
-}
-
-@keyframes shake-red {
-    0% {
-        transform: translateX(0);
-    }
-
-    25% {
-        transform: translateX(-2px);
-    }
-
-    75% {
-        transform: translateX(2px);
-    }
-
-    100% {
-        transform: translateX(0);
     }
 }
