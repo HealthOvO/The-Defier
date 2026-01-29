@@ -1,0 +1,395 @@
+/* ===================================
+   The Defier - Mobile Adaptation
+   Mobile-specific overrides and adjustments
+   =================================== */
+
+@media screen and (max-width: 768px) {
+
+    /* --- Global Resets & Adjustments --- */
+    :root {
+        --card-width-mobile: 100px;
+        --card-height-mobile: 140px;
+        --spacing-md: 10px;
+        --spacing-lg: 16px;
+        --spacing-xl: 20px;
+    }
+
+    body {
+        font-size: 14px;
+        /* Prevent pull-to-refresh on mobile */
+        overscroll-behavior-y: none;
+    }
+
+    .screen {
+        padding: 0;
+        overflow-x: hidden;
+    }
+
+    button {
+        /* Ensure touch targets are large enough */
+        min-height: 44px;
+    }
+
+    /* --- Main Menu --- */
+    #main-menu .title-cn {
+        font-size: 4rem;
+        /* Reduced from 6.5rem */
+        letter-spacing: 4px;
+        margin-bottom: 0;
+    }
+
+    #main-menu .title-en {
+        font-size: 0.9rem;
+        letter-spacing: 0.5em;
+        margin-left: 0.5em;
+    }
+
+    #main-menu .menu-content {
+        padding: 20px;
+        width: 100%;
+    }
+
+    #main-menu .game-description {
+        font-size: 0.85rem;
+        padding: 0 10px;
+    }
+
+    #main-menu .talisman-btn,
+    #main-menu .menu-btn {
+        width: min(300px, 85vw);
+    }
+
+    #main-menu .menu-utilities {
+        gap: 15px;
+        flex-wrap: wrap;
+    }
+
+    #main-menu .util-btn-wrapper {
+        margin-bottom: 10px;
+    }
+
+    #main-menu .util-label {
+        /* Always show labels on mobile or hide if too cluttered? 
+           Let's keep them but ensure they don't overlap awkwardly. */
+        font-size: 0.7rem;
+        bottom: -20px;
+    }
+
+    /* --- Character Selection --- */
+    #character-selection-screen .character-selection-container {
+        flex-direction: column;
+        align-items: center;
+        overflow-y: auto;
+    }
+
+    #character-select .ink-scroll-content {
+        flex-direction: column;
+        padding: 50px 20px 20px;
+        /* More top padding for "back" button space */
+    }
+
+    #character-select .char-identity-col {
+        border-right: none;
+        border-bottom: 2px dashed rgba(0, 0, 0, 0.1);
+        padding-bottom: 20px;
+        margin-bottom: 20px;
+    }
+
+    /* --- Realm Selection --- */
+    #realm-select-screen .realm-select-layout {
+        flex-direction: column;
+    }
+
+    #realm-select-screen .realm-list-container {
+        display: flex;
+        flex-direction: row;
+        overflow-x: auto;
+        padding: 10px;
+        height: auto;
+        min-height: 200px;
+        width: 100%;
+        scroll-snap-type: x mandatory;
+        padding-bottom: 20px;
+        /* Space for scroll */
+    }
+
+    /* Modify the realm cards to be side-scrolling items */
+    .realm-card {
+        min-width: 85vw;
+        margin-right: 15px;
+        scroll-snap-align: center;
+    }
+
+    #realm-select-screen .realm-preview-panel {
+        width: 100%;
+        height: auto;
+        min-height: 50vh;
+        border-left: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 40px;
+    }
+
+    /* --- Map Screen (Ascension V3) --- */
+    .map-v3-header {
+        padding: 10px;
+    }
+
+    .map-v3-header .back-btn {
+        padding: 5px 10px;
+        font-size: 0.8rem;
+    }
+
+    .player-status-bar {
+        gap: 5px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .status-item {
+        padding: 4px 8px;
+        font-size: 0.8rem;
+    }
+
+    .node-row-v3 {
+        padding: 0 10px;
+        /* Reduce node margin to fit 3 nodes if needed, or 2 */
+    }
+
+    .map-node-v3 {
+        margin: 0 10px;
+        /* Reduced from 40px */
+        width: 50px;
+        height: 50px;
+        font-size: 1.2rem;
+    }
+
+    .map-node-v3.boss {
+        width: 70px;
+        height: 70px;
+        font-size: 2rem;
+    }
+
+    /* --- Battle UI --- */
+    .battle-container {
+        grid-template-rows: 60px 1fr auto auto;
+        /* Header, Enemy, Player, Hand */
+        grid-template-columns: 1fr;
+        padding: 0;
+        overflow: hidden;
+    }
+
+    /* Header / Treasures */
+    #battle-treasures {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        left: auto;
+        transform: scale(0.8);
+        transform-origin: top right;
+        max-width: 50%;
+        z-index: 20;
+    }
+
+    /* Enemy Area */
+    .enemy-area {
+        height: auto;
+        min-height: 35vh;
+        align-items: flex-end;
+        /* Align enemies to bottom of their area */
+        padding-bottom: 2rem;
+    }
+
+    .enemy-container {
+        gap: 10px;
+        /* Reduce gap between enemies */
+    }
+
+    /* Player Area */
+    .player-area {
+        position: relative;
+        height: auto;
+        padding: 10px;
+        z-index: 10;
+        margin-bottom: 120px;
+        /* Space for hand */
+    }
+
+    .player-character {
+        transform: scale(0.9);
+        transform-origin: bottom center;
+        margin-bottom: 0;
+    }
+
+    /* Skill Button - Float it */
+    #active-skill-btn {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        transform: scale(0.8);
+        z-index: 15;
+    }
+
+    /* End turn button - Float it */
+    .end-turn-btn {
+        position: absolute;
+        bottom: 160px;
+        /* Above hand */
+        right: 10px;
+        /* Right aligned */
+        width: auto;
+        padding: 10px 20px;
+        font-size: 1rem;
+        z-index: 50;
+        /* Top most */
+    }
+
+    /* Hand Area */
+    .hand-area {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 140px;
+        padding: 5px;
+        z-index: 100;
+        /* background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); */
+    }
+
+    .hand-cards {
+        justify-content: center;
+        /* Center cards */
+        padding-left: 0;
+        height: 100%;
+        /* Allow scroll if too many cards? No, usually fan. */
+    }
+
+    /* Card sizing in hand */
+    .card {
+        width: var(--card-width-mobile);
+        height: var(--card-height-mobile);
+        font-size: 0.8rem;
+        /* Smaller text */
+    }
+
+    .card .card-cost {
+        width: 24px;
+        height: 24px;
+        font-size: 0.9rem;
+    }
+
+    .card .card-title {
+        font-size: 0.85rem;
+    }
+
+    .card .card-desc {
+        font-size: 0.7rem;
+        line-height: 1.2;
+    }
+
+    /* Reduce overlap on mobile to ensure tap targets are distinguishable */
+    .hand-cards .card {
+        margin-left: -40px;
+        /* Tighter overlap */
+    }
+
+    .hand-cards .card:hover {
+        /* On mobile hover is weird, usually means 'active' or 'focus'. 
+           We rely on click-to-select behavior usually. 
+           But if we pop up, ensure it doesn't go offscreen. */
+        transform: translateY(-80px) scale(1.2) !important;
+        z-index: 100;
+    }
+
+    /* Resources */
+    .resources-container {
+        position: absolute;
+        top: -60px;
+        /* Above player? */
+        flex-direction: row;
+        /* Horizontal */
+        width: auto;
+        height: auto;
+        left: 50%;
+        transform: translateX(-50%);
+        justify-content: center;
+    }
+
+    .energy-display {
+        margin-bottom: 0;
+        margin-right: 10px;
+    }
+
+    /* --- Decks and Inventory --- */
+    .law-archive-grid,
+    .compendium-grid,
+    .shop-cards {
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 10px;
+    }
+
+    /* --- Fate Ring / Life Ring --- */
+    #ring-modal .ring-scene-container {
+        flex-direction: column;
+        /* Stack 3D scene and UI */
+    }
+
+    #ring-modal .ring-scene {
+        width: 100%;
+        height: 40vh;
+        /* Top part is 3D scene */
+    }
+
+    #ring-modal .ring-ui-overlay {
+        position: relative;
+        height: 60vh;
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr;
+        padding: 10px;
+        pointer-events: auto;
+        /* Ensure clickable */
+    }
+
+    #ring-modal .ring-ui-panel.left,
+    #ring-modal .ring-ui-panel.right,
+    #ring-modal .ring-ui-footer {
+        position: relative;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-height: none;
+        margin-bottom: 10px;
+        background: rgba(0, 0, 0, 0.8);
+        /* Darker bg for readability */
+    }
+
+    /* Hide some details on mobile or scroll them */
+    #ring-modal .ring-ui-panel.right {
+        display: none;
+        /* Simplify - maybe show only stats or laws tab? 
+                          Or just stack them. For now let's stack them if possible,
+                          But screen real estate is tight. */
+    }
+
+    /* --- Modals (General) --- */
+    .modal-content {
+        width: 95%;
+        max-width: 95%;
+        margin: 10px auto;
+        padding: 15px;
+    }
+
+    .modal-content.large {
+        width: 98%;
+        height: 95vh;
+    }
+
+    .treasure-detail-layout {
+        flex-direction: column;
+    }
+
+    .treasure-visual-col {
+        height: 200px;
+    }
+}
