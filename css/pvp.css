@@ -794,13 +794,13 @@
     box-shadow: 0 0 15px rgba(207, 170, 112, 0.15);
 }
 
-.card-icon {
+.dao-card .card-icon {
     font-size: 1.5rem;
     margin-bottom: 5px;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
 }
 
-.card-name {
+.dao-card .card-name {
     font-size: 0.9rem;
     color: #ccc;
     font-family: 'Ma Shan Zheng', cursive;
@@ -811,7 +811,7 @@
     color: var(--accent-gold);
 }
 
-.card-desc {
+.dao-card .card-desc {
     font-size: 0.7rem;
     color: #666;
 }
