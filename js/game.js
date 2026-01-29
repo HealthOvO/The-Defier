@@ -94,20 +94,26 @@ class Game {
 
     // 继续游戏
     continueGame() {
+        console.log('[Debug] continueGame called');
         // 强制登录检查
         if (typeof AuthService === 'undefined') {
+            console.error('[Debug] AuthService missing');
             alert('登录系统未就绪，请刷新重试！(AuthService missing)');
             return;
         }
         if (!AuthService.isLoggedIn()) {
+            console.log('[Debug] Not logged in, showing modal');
             this.showLoginModal();
             return;
         }
 
+        console.log('[Debug] Logged in. loadGameResult:', this.loadGameResult);
         if (this.loadGameResult) {
+            console.log('[Debug] Calling showScreen("map-screen")');
             this.showScreen('map-screen');
         } else {
             // 如果加载失败（比如存档被手动删了），刷新页面或提示
+            console.warn('[Debug] loadGameResult false, reloading');
             window.location.reload();
         }
     }
@@ -1185,39 +1191,84 @@ class Game {
 
     // 显示界面
     showScreen(screenId) {
+        console.log(`[Debug] showScreen called for: ${screenId}`);
         document.querySelectorAll('.screen').forEach(screen => {
             screen.classList.remove('active');
         });
 
         const screen = document.getElementById(screenId);
         if (screen) {
+
+            // Safety: Ensure screen is visible before running logic that might crash
             screen.classList.add('active');
             this.currentScreen = screenId;
+            console.log(`[Debug] Screen ${screenId} set to active class.`);
 
-            // Particle Control
-            if (typeof particles !== 'undefined') {
-                if (screenId === 'main-menu') {
-                    particles.startMainMenuParticles();
-                } else {
-                    particles.stopMainMenuParticles();
+            // Use Try-Catch to prevent logical errors from blocking UI rendering (Black Screen Fix)
+            try {
+                // Particle Control
+                if (typeof particles !== 'undefined') {
+                    if (screenId === 'main-menu') {
+                        particles.startMainMenuParticles();
+                    } else {
+                        particles.stopMainMenuParticles();
+                    }
+                }
+
+                // 特殊处理
+                if (screenId === 'map-screen') {
+                    console.log('[Debug] Initializing map-screen logic');
+                    if (this.map) {
+                        console.log('[Debug] Calling this.map.render()');
+                        this.map.render();
+                    } else {
+                        console.error('[Debug] this.map is undefined!');
+                    }
+                    console.log('[Debug] Calling updatePlayerDisplay()');
+                    this.updatePlayerDisplay();
+
+                    // DEBUG: Check DOM state after render
+                    setTimeout(() => {
+                        const mapScreen = document.getElementById('map-screen');
+                        if (mapScreen) {
+                            const style = window.getComputedStyle(mapScreen);
+                            console.log(`[Debug] #map-screen style: display=${style.display}, visibility=${style.visibility}, opacity=${style.opacity}, height=${style.height}, width=${style.width}, z-index=${style.zIndex}`);
+                            console.log(`[Debug] #map-screen Parent: <${mapScreen.parentNode.tagName} id="${mapScreen.parentNode.id}" class="${mapScreen.parentNode.className}">`);
+                            console.log(`[Debug] #map-screen innerHTML length: ${mapScreen.innerHTML.length}`);
+
+                            // Audit body children for overlays
+                            console.log('[Debug] Auditing Body Children for Overlays:');
+                            Array.from(document.body.children).forEach(child => {
+                                const s = window.getComputedStyle(child);
+                                if (s.display !== 'none' && s.visibility !== 'hidden' && parseFloat(s.opacity) > 0) {
+                                    console.log(`[Debug] Visible Child: <${child.tagName} id="${child.id}" class="${child.className}"> Z=${s.zIndex} Pos=${s.position} Rect=${child.getBoundingClientRect().height}x${child.getBoundingClientRect().width}`);
+                                }
+                            });
+                        }
+                    }, 500); // Delayed check
+
+                } else if (screenId === 'battle-screen') {
+                    console.log('[Debug] Initializing battle-screen logic');
+                    this.updatePlayerDisplay();
+                } else if (screenId === 'collection') {
+                    this.initCollection();
+                } else if (screenId === 'achievements-screen') {
+                    this.initAchievements();
+                } else if (screenId === 'character-select') {
+                    this.updateCharacterInfo();
+                } else if (screenId === 'realm-select-screen') {
+                    this.initRealmSelect();
+                }
+                console.log(`[Debug] showScreen logic for ${screenId} completed successfully.`);
+            } catch (e) {
+                console.error(`Error initializing screen ${screenId}:`, e);
+                // Try to show error safely
+                if (typeof Utils !== 'undefined' && Utils.showBattleLog) {
+                    Utils.showBattleLog('界面加载异常: ' + e.message);
                 }
             }
-
-            // 特殊处理
-            if (screenId === 'map-screen') {
-                this.map.render();
-                this.updatePlayerDisplay();
-            } else if (screenId === 'battle-screen') {
-                this.updatePlayerDisplay();
-            } else if (screenId === 'collection') {
-                this.initCollection();
-            } else if (screenId === 'achievements-screen') {
-                this.initAchievements();
-            } else if (screenId === 'character-select') {
-                this.updateCharacterInfo();
-            } else if (screenId === 'realm-select-screen') {
-                this.initRealmSelect();
-            }
+        } else {
+            console.error(`[Debug] Screen element #${screenId} NOT FOUND in DOM!`);
         }
     }
 
@@ -1445,11 +1496,14 @@ class Game {
 
     // 更新界面上的玩家显示（名字、头像等）
     updatePlayerDisplay() {
+        if (!this.player) return;
+
         const charId = this.player.characterId || 'linFeng';
-        const char = CHARACTERS[charId];
+        // Add Fallback for missing character data
+        const char = (typeof CHARACTERS !== 'undefined' && CHARACTERS[charId]) ? CHARACTERS[charId] : { name: '未知修士' };
 
         const battleNameEl = document.getElementById('player-name-display');
-        if (battleNameEl && char) {
+        if (battleNameEl) {
             battleNameEl.textContent = char.name;
         }
 
@@ -1656,11 +1710,33 @@ class Game {
 
         // 计算奖励
         let totalGold = 0;
+
+        // PVP Mode Handling
+        if (this.mode === 'pvp') {
+            // Report PVP Result
+            if (typeof PVPService !== 'undefined') {
+                const oppRank = this.pvpOpponentRank || null;
+                PVPService.reportMatchResult(true, oppRank).then(res => {
+                    const deltaScore = res.delta;
+                    Utils.showBattleLog(`论道胜利！积分 ${deltaScore >= 0 ? '+' : ''}${deltaScore}`);
+                });
+            }
+
+            // Return to PVP Status Screen
+            setTimeout(() => {
+                this.showScreen('pvp-screen');
+                if (window.PVPScene) window.PVPScene.onShow();
+            }, 2000);
+            return; // Skip standard map progression
+        }
+
         let canSteal = false;
         let stealEnemy = null;
 
         for (const enemy of enemies) {
-            totalGold += Utils.random(enemy.gold.min, enemy.gold.max);
+            if (enemy.gold && typeof enemy.gold.min === 'number') {
+                totalGold += Utils.random(enemy.gold.min, enemy.gold.max);
+            }
             if (enemy.stealLaw && enemy.stealChance > 0) {
                 canSteal = true;
                 stealEnemy = enemy;
@@ -5251,12 +5327,7 @@ class Game {
             }
         } else if (mode === 'new' || mode === 'overwrite') {
             const doOverwrite = () => {
-                // Preserve unlockedRealms if exists
-                if (this.cachedSlots && this.cachedSlots[index] && this.cachedSlots[index].unlockedRealms) {
-                    this.tempPreservedRealms = this.cachedSlots[index].unlockedRealms;
-                } else {
-                    this.tempPreservedRealms = null;
-                }
+                this.tempPreservedRealms = null;
 
                 localStorage.removeItem('theDefierSave');
                 this.currentSaveSlot = index;
@@ -5417,16 +5488,33 @@ class Game {
             // Keep Local -> Upload to Cloud
             const localSave = localStorage.getItem('theDefierSave');
             if (localSave) {
-                const data = JSON.parse(localSave);
-                AuthService.saveCloudData(data).then(res => {
-                    if (res.success) {
-                        Utils.showBattleLog('本地存档已覆盖云端！');
-                        modal.classList.remove('active');
-                        // No reload needed
-                    } else {
-                        alert('云端同步失败：' + (res.message || '未知错误'));
+                try {
+                    const data = JSON.parse(localSave);
+                    // 尝试从本地存档中获取槽位ID
+                    let targetSlot = data.saveSlot;
+                    if (targetSlot === undefined || targetSlot === null) {
+                        targetSlot = this.currentSaveSlot;
                     }
-                });
+
+                    if (targetSlot === undefined || targetSlot === null) {
+                        alert('错误：无法确定存档位，请先进入游戏选择存档位后再尝试同步。');
+                        return;
+                    }
+
+                    AuthService.saveCloudData(data, targetSlot).then(res => {
+                        if (res.success) {
+                            Utils.showBattleLog(`本地存档已同步至云端 (Slot ${targetSlot + 1})`);
+                            modal.classList.remove('active');
+                            // Update cache
+                            if (this.cachedSlots) this.cachedSlots[targetSlot] = data;
+                        } else {
+                            alert('云端同步失败：' + (res.message || '未知错误'));
+                        }
+                    });
+                } catch (e) {
+                    console.error('Resolve conflict error:', e);
+                    alert('存档数据异常，无法上传');
+                }
             }
         } else if (choice === 'cloud') {
             // Keep Cloud -> Overwrite Local
@@ -5442,15 +5530,12 @@ class Game {
     }
 
     // 加载云端存档 (无本地时)
+    // 加载云端存档 (Legacy -> Redirect to Slots)
     loadCloudGame() {
-        AuthService.getCloudData().then(res => {
-            if (res.success && res.data) {
-                localStorage.setItem('theDefierSave', JSON.stringify(res.data));
-                Utils.showBattleLog('已拉取云端存档');
-                setTimeout(() => window.location.reload(), 500);
-            }
-        });
+        console.warn('loadCloudGame is deprecated. Opening slot selection.');
+        this.openSaveSlotsWithSync();
     }
+
     // 打开法宝囊
     showTreasureBag() {
         // 创建或获取法宝囊模态框
@@ -5900,37 +5985,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// --- HOTFIX: Force Cloud Sync Check ---
-// In case cloud data has higher progress than local storage (e.g. cross-device or clear cache)
-document.addEventListener('DOMContentLoaded', () => {
-    // Wait slightly for game init to finish (stack clearing)
-    setTimeout(() => {
-        if (typeof AuthService !== 'undefined' && AuthService.isLoggedIn() && window.game) {
-            const slot = sessionStorage.getItem('currentSaveSlot') || localStorage.getItem('lastSaveSlot');
-            if (slot !== null) {
-                console.log('Attemping to fetch latest cloud save to prevent regression...');
-                AuthService.loadCloudData(parseInt(slot)).then(cloudData => {
-                    if (cloudData && cloudData.player) {
-                        const cloudRealm = cloudData.player.maxRealmReached || 1;
-                        const localRealm = window.game.player.maxRealmReached || 1;
-                        if (cloudRealm > localRealm) {
-                            console.warn(`Cloud progress (Realm ${cloudRealm}) is ahead of local (Realm ${localRealm}). Syncing...`);
-                            // Merge critical progress data
-                            window.game.player.maxRealmReached = cloudRealm;
-                            if (cloudData.unlockedRealms) {
-                                const merged = new Set([...(window.game.unlockedRealms || []), ...cloudData.unlockedRealms]);
-                                window.game.unlockedRealms = Array.from(merged);
-                            }
-                            window.game.saveGame(); // Persist immediately
 
-                            // Visual Notification
-                            if (typeof Utils !== 'undefined') {
-                                Utils.showBattleLog(`已同步云端进度：恢复至第 ${cloudRealm} 重天`);
-                            }
-                        }
-                    }
-                });
-            }
-        }
-    }, 1000);
-});

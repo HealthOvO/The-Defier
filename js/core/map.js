@@ -131,15 +131,24 @@ class GameMap {
 
     // 渲染地图 (V3 - Ascension Style + Flexbox Fix)
     render() {
+        console.log('[Debug] Map.render called');
         const container = document.getElementById('map-screen');
+        if (!container) {
+            console.error('[Debug] #map-screen container missing!');
+            return;
+        }
+
         const currentRealm = this.game.player.realm;
         const existingMap = container.querySelector('.map-screen-v3');
 
         // Smart Render Check: If map exists and is for the same realm, update in-place
         if (existingMap && existingMap.dataset.realm == currentRealm) {
+            console.log('[Debug] Updating existing map in-place');
             this.updateMapState();
             return;
         }
+
+        console.log('[Debug] Full map rebuild for realm:', currentRealm);
 
         container.innerHTML = `
             <div class="map-screen-v3" data-realm="${currentRealm}">

@@ -21,10 +21,10 @@ class ParticleSystem {
             width: 100%;
             height: 100%;
             pointer-events: none;
-            z-index: 9000;
+            z-index: 10;
             overflow: hidden;
+            background: transparent !important;
         `;
-        document.body.appendChild(this.container);
         document.body.appendChild(this.container);
 
         this.menuLoopId = null;

@@ -527,7 +527,15 @@ const Utils = {
         enemyEl.className = `enemy ${enemy.isElite ? 'elite' : ''} ${enemy.isBoss ? 'boss' : ''}`;
         enemyEl.dataset.index = index;
 
-        const currentPattern = enemy.patterns[enemy.currentPatternIndex || 0];
+        let currentPattern;
+        if (enemy.isGhost) {
+            currentPattern = enemy.currentIntent || { type: 'unknown', value: '...' };
+        } else {
+            currentPattern = enemy.patterns ? enemy.patterns[enemy.currentPatternIndex || 0] : { type: 'none' };
+        }
+
+        if (!currentPattern) currentPattern = { type: 'none' };
+
         const intentIcon = currentPattern.intent || '❓';
         const intentValue = currentPattern.value ? (currentPattern.count ? `${currentPattern.value}x${currentPattern.count}` : currentPattern.value) : '';
 
@@ -653,9 +661,16 @@ const Utils = {
 
     // 清除存档
     clearSave() {
-        localStorage.removeItem('theDefierSave');
+        localStorage.removeItem('the_defier_save');
+        location.reload();
+    },
+
+    // 异步等待
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 };
+
 
 // Expose upgradeCard globally for compatibility
 // window.upgradeCard = Utils.upgradeCard.bind(Utils);

@@ -74,6 +74,9 @@ class Battle {
 
     // 创建敌人实例
     createEnemyInstance(enemyData) {
+        // PVP: 如果已经是实体（GhostEnemy），直接返回
+        if (enemyData.isGhost) return enemyData;
+
         // 1. 深拷贝行动模式，防止修改污染原始数据 (Deep copy patterns)
         const patterns = enemyData.patterns.map(p => ({ ...p }));
 
@@ -1791,6 +1794,14 @@ class Battle {
 
                     await Utils.sleep(500);
                     continue;
+                }
+
+                // === PVP Ghost Logic ===
+                if (enemy.isGhost) {
+                    // Ghost takes full control of its turn
+                    await enemy.takeTurn(this);
+                    await Utils.sleep(300);
+                    continue; // Skip standard behavior
                 }
 
                 // 13. 时光逆流 (realm 13) - 每3回合行动两次

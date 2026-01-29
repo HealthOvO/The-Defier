@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="css/animations.css">
     <link rel="stylesheet" href="css/card-detail.css">
     <link rel="stylesheet" href="css/mobile.css">
+    <link rel="stylesheet" href="css/pvp.css">
 </head>
 
 <body>
@@ -62,7 +63,15 @@
                     </div>
                 </button>
 
-                <button class="talisman-btn" id="login-btn" onclick="game.showLoginModal()">
+                <button class="talisman-btn" id="pvp-btn" onclick="game.showScreen('pvp-screen'); PVPScene.onShow()">
+                    <div class="talisman-paper"></div>
+                    <div class="talisman-content">
+                        <span class="btn-icon">🌩️</span>
+                        <span class="btn-text">天道榜</span>
+                    </div>
+                </button>
+
+                <button class="talisman-btn secondary" id="login-btn" onclick="game.showLoginModal()">
                     <div class="talisman-paper"></div>
                     <div class="talisman-content">
                         <span class="btn-icon">☁️</span>
@@ -105,6 +114,211 @@
             </div>
             <div class="version-info">v5.0 最终版 | 逆命轮回·天道终焉</div>
         </div>
+    </div>
+
+    <!-- PVP 界面 (天道榜) -->
+    <!-- PVP 界面 (天道榜 - Ink & Gold Redesign) -->
+    <div id="pvp-screen" class="screen">
+        <!-- Background Layers -->
+        <div class="void-bg"></div>
+        <div class="ink-overlay"></div>
+        <div class="void-particles" style="opacity: 0.3;"></div>
+
+        <div class="screen-header transparent">
+            <button class="back-btn" onclick="game.showScreen('main-menu')">
+                <span class="btn-icon">↩</span>
+            </button>
+            <div class="header-title-group">
+                <h2 class="ink-title">天道榜</h2>
+                <div class="sub-title">HEAVENLY RANKING</div>
+            </div>
+            <div class="player-rank-badge">
+                <div class="rank-icon-frame">
+                    <span id="my-rank-tier">潜龙</span>
+                </div>
+                <span id="my-rank-score">1000</span>
+            </div>
+        </div>
+
+        <div class="pvp-layout-split">
+            <!-- Left: Navigation Runes -->
+            <div class="pvp-nav-sidebar">
+                <button class="rune-tab active" onclick="PVPScene.switchTab('ranking')">
+                    <div class="rune-icon-container">
+                        <span class="rune-icon">📜</span>
+                    </div>
+                    <span class="rune-name">天道榜</span>
+                </button>
+                <button class="rune-tab" onclick="PVPScene.switchTab('defense')">
+                    <div class="rune-icon-container">
+                        <span class="rune-icon">🛡️</span>
+                    </div>
+                    <span class="rune-name">护山阵</span>
+                </button>
+                <button class="rune-tab" onclick="PVPScene.switchTab('shop')">
+                    <div class="rune-icon-container">
+                        <span class="rune-icon">🏯</span>
+                    </div>
+                    <span class="rune-name">诸天阁</span>
+                </button>
+            </div>
+
+            <!-- Right: Content Area -->
+            <div class="pvp-content-container">
+                <!-- Ranking Tab -->
+                <div id="tab-ranking" class="pvp-tab-pane active">
+                    <div class="ranking-scroll-area" id="ranking-list">
+                        <!-- Dynamic Jade Slips -->
+                        <div class="loading-ink">
+                            <div class="ink-drop"></div>
+                            <span>读取天机中...</span>
+                        </div>
+                    </div>
+
+                    <div class="pvp-nav-footer">
+                        <button class="challenge-btn pulse" onclick="PVPScene.findMatch()">
+                            <span class="btn-glow"></span>
+                            <span class="text">⚔️ 论道切磋</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Defense Tab -->
+                <!-- Defense Tab (Hushan Formation) -->
+                <div id="tab-defense" class="pvp-tab-pane" style="display:none;">
+                    <div class="defense-layout-split">
+                        <!-- Left: Formation Visualizer -->
+                        <div class="formation-visualizer-panel">
+                            <div class="formation-visual-container">
+                                <div class="formation-core-rings" id="formation-core-rings">
+                                    <div class="rune-ring ring-outer"></div>
+                                    <div class="rune-ring ring-middle"></div>
+                                    <div class="rune-ring ring-inner"></div>
+                                    <div class="core-gem-center">
+                                        <div class="pulse-energy"></div>
+                                    </div>
+                                </div>
+                                <div class="formation-stats-overlay">
+                                    <div class="stat-row">
+                                        <span class="label">阵法强度</span>
+                                        <span class="value" id="def-power-val">---</span>
+                                    </div>
+                                    <div class="stat-row">
+                                        <span class="label">运行状态</span>
+                                        <span class="value status-inactive" id="formation-status-text">未激活</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right: Controls -->
+                        <div class="defense-controls-panel">
+                            <div class="control-group">
+                                <h3 class="control-header">
+                                    <span class="icon">🔮</span> 阵灵道心
+                                </h3>
+                                <div class="dao-heart-selector">
+                                    <div class="dao-card" data-val="balanced"
+                                        onclick="PVPScene.selectPersonality('balanced')">
+                                        <div class="card-icon">⚖️</div>
+                                        <div class="card-name">万法自然</div>
+                                        <div class="card-desc">平衡之道</div>
+                                    </div>
+                                    <div class="dao-card" data-val="slaughter"
+                                        onclick="PVPScene.selectPersonality('slaughter')">
+                                        <div class="card-icon">⚔️</div>
+                                        <div class="card-name">杀伐证道</div>
+                                        <div class="card-desc">进攻优先</div>
+                                    </div>
+                                    <div class="dao-card" data-val="longevity"
+                                        onclick="PVPScene.selectPersonality('longevity')">
+                                        <div class="card-icon">🐢</div>
+                                        <div class="card-name">长生久视</div>
+                                        <div class="card-desc">生存优先</div>
+                                    </div>
+                                </div>
+                                <div class="dao-description-box" id="dao-desc-text">
+                                    请选择阵灵的道心倾向，这将决定护山阵在自动战斗中的策略。
+                                </div>
+                            </div>
+
+                            <div class="control-group">
+                                <h3 class="control-header">
+                                    <span class="icon">🛡️</span> 护山大阵
+                                </h3>
+                                <div class="formation-activation-area">
+                                    <label class="seal-switch-container">
+                                        <input type="checkbox" id="guardian-formation"
+                                            onchange="PVPScene.updateFormationVisuals()">
+                                        <div class="seal-slider">
+                                            <span class="seal-face off">封</span>
+                                            <span class="seal-face on">解</span>
+                                        </div>
+                                    </label>
+                                    <div class="activation-info">
+                                        <p class="highlight">开启后自动应战</p>
+                                        <p class="sub-text">消耗灵石维持运转</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="control-actions">
+                                <button class="ink-btn-large" onclick="PVPScene.uploadDefense()">
+                                    <span class="ink-flow-effect"></span>
+                                    <span class="btn-icon">🌩️</span>
+                                    <span class="btn-text">注入神念 (上传数据)</span>
+                                </button>
+                                <div class="last-sync-time" id="def-time">上次注入: 无记录</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shop Tab (Zhutian Pavilion) -->
+            <div id="tab-shop" class="pvp-tab-pane" style="display:none;">
+                <div class="shop-layout">
+                    <!-- Left: Categories -->
+                    <div class="shop-sidebar">
+                        <div class="shop-category active" onclick="PVPScene.filterShop('all')">
+                            <span class="cat-icon">💠</span>
+                            <span class="cat-name">全部</span>
+                        </div>
+                        <div class="shop-category" onclick="PVPScene.filterShop('cards')">
+                            <span class="cat-icon">📜</span>
+                            <span class="cat-name">秘籍</span>
+                        </div>
+                        <div class="shop-category" onclick="PVPScene.filterShop('items')">
+                            <span class="cat-icon">💊</span>
+                            <span class="cat-name">丹药</span>
+                        </div>
+                        <div class="shop-category" onclick="PVPScene.filterShop('cosmetics')">
+                            <span class="cat-icon">👘</span>
+                            <span class="cat-name">外观</span>
+                        </div>
+                    </div>
+
+                    <!-- Right: Content -->
+                    <div class="shop-content-area">
+                        <div class="shop-header-bar">
+                            <div class="shop-title-rune">诸天万象</div>
+                            <div class="shop-wallet-container">
+                                <span class="wallet-icon">🪙</span>
+                                <span class="wallet-amount" id="shop-wallet-amount">0</span>
+                                <span class="wallet-label">天道币</span>
+                            </div>
+                        </div>
+
+                        <div class="shop-scroll-view">
+                            <div class="shop-unified-grid" id="shop-unified-grid">
+                                <!-- Dynamic Items -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     </div>
 
     <!-- 角色选择界面 -->
@@ -296,7 +510,8 @@
                         <span class="btn-text">踏入天域</span>
                     </button>
                     <div class="realm-cost-display" id="realm-cost-display"
-                        style="display:none; color: var(--accent-gold); margin-top: 10px; font-size: 0.9rem;"></div>
+                        style="display:none; color: var(--accent-gold); margin-top: 10px; font-size: 0.9rem;">
+                    </div>
                 </div>
             </div>
         </div>
@@ -366,7 +581,7 @@
 
             <!-- 中间战斗区域 -->
             <div class="battle-middle">
-                <div class="battle-log" id="battle-log"></div>
+                <div class="battle-log"></div>
             </div>
 
             <!-- 玩家区域 -->
@@ -641,7 +856,8 @@
             <h2 id="skill-confirm-title" style="color: var(--accent-gold); margin-bottom: 20px;">技能确认</h2>
             <div id="skill-confirm-icon" style="font-size: 4rem; margin: 20px 0;">⚡</div>
             <p id="skill-confirm-desc"
-                style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 30px; line-height: 1.6;"></p>
+                style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 30px; line-height: 1.6;">
+            </p>
             <div class="skill-confirm-actions" style="display: flex; justify-content: center; gap: 20px;">
                 <button class="menu-btn primary small" onclick="game.confirmActivateSkill()">释放技能</button>
                 <button class="menu-btn small" onclick="game.closeModal()">取消</button>
@@ -789,6 +1005,8 @@
     <!-- Bmob SDK -->
     <script src="js/libs/bmob.min.js"></script>
     <script src="js/services/authService.js?v=5.0.1"></script>
+    <script src="js/core/elo-calculator.js?v=5.0.1"></script>
+    <script src="js/services/pvp-service.js?v=5.0.1"></script>
     <script src="js/data/cards.js?v=5.0.1"></script>
     <script src="js/data/enemies.js?v=5.0.1"></script>
     <script src="js/data/environments.js?v=5.0.1"></script>
@@ -801,9 +1019,12 @@
     <script src="js/data/achievements.js?v=5.0.1"></script>
     <script src="js/data/skills.js?v=5.0.1"></script>
     <script src="js/data/characters.js?v=5.0.1"></script>
+    <script src="js/data/shop-items.js?v=5.0.1"></script>
     <script src="js/core/utils.js?v=5.0.1"></script>
     <script src="js/core/card-effects.js?v=5.0.1"></script>
     <script src="js/core/particles.js?v=5.0.1"></script>
+    <script src="js/core/ai-controller.js?v=5.0.1"></script>
+    <script src="js/entities/ghost-enemy.js?v=5.0.1"></script>
     <script src="js/core/audio.js?v=5.0.1"></script>
     <script src="js/core/events.js?v=5.0.1"></script>
     <script src="js/core/achievements.js?v=5.0.1"></script>
@@ -811,6 +1032,7 @@
     <script src="js/core/map.js?v=5.0.1"></script>
     <script src="js/core/fateRing.js?v=5.0.1"></script>
     <script src="js/core/player.js?v=5.0.1"></script>
+    <script src="js/scenes/pvp-scene.js?v=5.0.1"></script>
     <script src="js/game.js?v=5.0.1"></script>
 </body>
 

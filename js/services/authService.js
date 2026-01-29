@@ -12,10 +12,11 @@ const AuthService = {
             return;
         }
 
-        // Initialize Bmob with Secret Key and API Security Code
+        // Initialize Bmob with Secret Key, API Security Code, and Master Key
         // User provided Secret Key: 259e1a51585d4437
         // API Safe Code: 1234567891011121
-        Bmob.initialize("259e1a51585d4437", "1234567891011121");
+        // Master Key: ff9662590f7a882ac681014a520c7345
+        Bmob.initialize("259e1a51585d4437", "1234567891011121", "ff9662590f7a882ac681014a520c7345");
         this.isInitialized = true;
 
         // Check current user
@@ -77,8 +78,9 @@ const AuthService = {
     // Cloud Save Methods - Multi Slot Support
     // Data structure: { "slots": [data0, data1, data2, data3], "lastUpdated": timestamp }
 
-    async saveCloudData(gameData, slotIndex = 0) {
+    async saveCloudData(gameData, slotIndex) {
         if (!this.isLoggedIn()) return { success: false, message: '未登录' };
+        if (slotIndex === undefined || slotIndex === null) return { success: false, message: '未指定存档位' };
         if (slotIndex < 0 || slotIndex > 3) return { success: false, message: '非法存档位' };
 
         try {
@@ -94,7 +96,8 @@ const AuthService = {
             let saveObj;
             if (results && results.length > 0) {
                 // Update existing
-                saveObj = query;
+                // FIX: Do NOT reuse 'query' object as it retains filter conditions which breaks update
+                saveObj = Bmob.Query('GameSave');
                 saveObj.set('id', results[0].objectId);
             } else {
                 // Create new
