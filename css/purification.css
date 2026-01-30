@@ -1,0 +1,324 @@
+/* ===================================
+   Purification (Remove Card) UI
+   Style: Ink & Gold (Premium)
+   =================================== */
+
+#purification-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2000;
+    display: none;
+    /* Toggled by JS */
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    font-family: 'Ma Shan Zheng', cursive;
+    color: #f0f0f0;
+}
+
+#purification-modal.active {
+    display: flex;
+    animation: fade-in-modal 0.5s ease-out forwards;
+}
+
+/* Background Layers */
+.purification-bg-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
+    z-index: -2;
+}
+
+.purification-ink-overlay {
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background-image: url('https://raw.githubusercontent.com/googlefonts/noto-emoji/main/png/512/emoji_u2601.png');
+    /* Placeholder textyre */
+    background-size: 800px;
+    opacity: 0.1;
+    animation: rotate-ink 60s linear infinite;
+    z-index: -1;
+    filter: invert(1) contrast(2);
+    pointer-events: none;
+}
+
+/* Main Container */
+.purification-container {
+    width: 90%;
+    max-width: 1400px;
+    height: 85%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 10;
+}
+
+/* Header Section */
+.purification-header {
+    text-align: center;
+    margin-bottom: 40px;
+    position: relative;
+}
+
+.purification-title {
+    font-size: 4rem;
+    color: var(--accent-gold);
+    text-shadow: 0 0 20px rgba(207, 170, 112, 0.4);
+    letter-spacing: 10px;
+    margin-bottom: 5px;
+    background: linear-gradient(180deg, #fff 0%, #cfaa70 60%, #8a6a2a 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.purification-subtitle {
+    font-family: 'Noto Sans SC', sans-serif;
+    font-size: 1rem;
+    color: #888;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+}
+
+.purification-subtitle::before,
+.purification-subtitle::after {
+    content: '';
+    width: 40px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #888, transparent);
+}
+
+/* Card Grid Area */
+.purification-scroll-area {
+    flex: 1;
+    width: 100%;
+    overflow-y: auto;
+    padding: 20px 40px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    /* Custom Scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-gold) rgba(0, 0, 0, 0.3);
+}
+
+.purification-scroll-area::-webkit-scrollbar {
+    width: 6px;
+}
+
+.purification-scroll-area::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.purification-scroll-area::-webkit-scrollbar-thumb {
+    background: var(--accent-gold);
+    border-radius: 3px;
+}
+
+.purification-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 40px 30px;
+    width: 100%;
+    max-width: 1200px;
+    padding-bottom: 100px;
+    /* Space for footer */
+}
+
+/* Card Wrapper Styles */
+.purification-card-wrapper {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    cursor: pointer;
+}
+
+.purification-card-wrapper .card {
+    transition: transform 0.4s ease, box-shadow 0.4s ease, filter 0.3s;
+    transform-origin: center center;
+    filter: grayscale(0.2) brightness(0.9);
+    /* Slightly dimmer by default to pop on hover */
+}
+
+/* Hover Effects */
+.purification-card-wrapper:hover {
+    z-index: 10;
+}
+
+.purification-card-wrapper:hover .card {
+    transform: translateY(-15px) scale(1.1) rotate(2deg);
+    filter: grayscale(0) brightness(1.1);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 0 2px var(--accent-gold);
+}
+
+/* Delete Overlay (Appears on Hover) */
+.delete-intent-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 0;
+    transition: all 0.3s ease;
+    pointer-events: none;
+    z-index: 11;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 50%;
+    border: 2px solid #ff4d4d;
+    box-shadow: 0 0 20px #ff4d4d;
+}
+
+.purification-card-wrapper:hover .delete-intent-overlay {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.delete-icon {
+    font-size: 2rem;
+    color: #ff4d4d;
+    text-shadow: 0 0 10px red;
+}
+
+/* Selection State */
+.purification-card-wrapper.selected .card {
+    transform: translateY(-20px) scale(1.15);
+    filter: sepia(100%) hue-rotate(320deg) saturate(200%);
+    /* Reddish tint */
+    box-shadow: 0 0 30px #ff4d4d;
+    border-color: #ff4d4d;
+}
+
+.purification-card-wrapper.selected .delete-intent-overlay {
+    opacity: 0;
+    /* Hide icon when selected, show global confirm instead? Or keep it? Let's hide to show the card clearly */
+}
+
+/* Footer Controls */
+.purification-footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding: 30px;
+    background: linear-gradient(to top, #000 0%, transparent 100%);
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    pointer-events: none;
+    /* Let clicks pass through to grid */
+}
+
+.purification-footer button {
+    pointer-events: auto;
+}
+
+.purification-btn {
+    padding: 12px 40px;
+    font-size: 1.2rem;
+    font-family: 'Ma Shan Zheng', cursive;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid #444;
+    color: #ccc;
+    cursor: pointer;
+    transition: all 0.3s;
+    border-radius: 4px;
+    letter-spacing: 2px;
+}
+
+.purification-btn:hover {
+    background: #222;
+    border-color: #888;
+    color: #fff;
+}
+
+.purification-btn.confirm {
+    background: linear-gradient(135deg, #3d0000 0%, #1a0505 100%);
+    border: 1px solid #8b0000;
+    color: #ff4d4d;
+    box-shadow: 0 0 20px rgba(139, 0, 0, 0.3);
+}
+
+.purification-btn.confirm:hover {
+    background: linear-gradient(135deg, #5c0000 0%, #2b0000 100%);
+    box-shadow: 0 0 30px rgba(255, 0, 0, 0.5);
+    transform: scale(1.05);
+}
+
+.purification-cost {
+    position: absolute;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1.2rem;
+    color: var(--accent-gold);
+    text-shadow: 0 2px 5px #000;
+}
+
+/* Animation Keyframes */
+@keyframes fade-in-modal {
+    from {
+        opacity: 0;
+        transform: scale(1.05);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes rotate-ink {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Particle Burn Effect (Stylized) */
+.card-burn-effect {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle, #ffcc00, #ff4500, transparent 70%);
+    mix-blend-mode: screen;
+    animation: burn-out 0.8s ease-out forwards;
+    pointer-events: none;
+    z-index: 20;
+}
+
+@keyframes burn-out {
+    0% {
+        transform: scale(0.5);
+        opacity: 0.8;
+    }
+
+    100% {
+        transform: scale(2);
+        opacity: 0;
+    }
+}

@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="css/card-detail.css">
     <link rel="stylesheet" href="css/mobile.css">
     <link rel="stylesheet" href="css/pvp.css">
+    <link rel="stylesheet" href="css/purification.css">
 </head>
 
 <body>
@@ -725,6 +726,34 @@
         </div>
     </div>
 
+    <!-- PVP 结算界面 -->
+    <div id="pvp-result-overlay" class="screen pvp-result-overlay">
+        <div class="pvp-result-container">
+            <div class="result-header">
+                <div class="result-title-bg"></div>
+                <h1 class="result-title" id="pvp-result-title">问道成功</h1>
+            </div>
+
+            <div class="result-content">
+                <div class="pvp-score-change-anim" id="pvp-score-anim-container">
+                    <span class="score-label">道韵</span>
+                    <span class="score-value" id="pvp-current-score">1000</span>
+                    <span class="score-delta" id="pvp-score-delta">+25</span>
+                </div>
+
+                <div class="opponent-info-result">
+                    <span class="vs-text">VS</span>
+                    <span class="opponent-name" id="pvp-result-opponent">对手名字</span>
+                    <span class="opponent-rating" id="pvp-result-opp-score">1050</span>
+                </div>
+            </div>
+
+            <div class="result-actions">
+                <button class="ink-btn-large" onclick="game.closePVPResult()">返回榜单</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 商店界面 -->
     <div id="shop-screen" class="screen">
         <div class="screen-header">
@@ -995,6 +1024,31 @@
         </div>
         <div class="achievements-container" id="achievements-container">
             <!-- 动态生成 -->
+        </div>
+    </div>
+
+    <!-- 净化 (移除卡牌) 莫泰框 (Ink & Gold Redesign) -->
+    <div id="purification-modal">
+        <div class="purification-bg-layer"></div>
+        <div class="purification-ink-overlay"></div>
+
+        <div class="purification-container">
+            <div class="purification-header">
+                <h2 class="purification-title">净化道心</h2>
+                <div class="purification-subtitle">斩断因果 · 去伪存真</div>
+            </div>
+
+            <div class="purification-scroll-area">
+                <div class="purification-grid" id="purification-grid">
+                    <!-- Cards injected here -->
+                </div>
+            </div>
+
+            <div class="purification-footer">
+                <div class="purification-cost" id="purification-cost-display">消耗: 100 灵石</div>
+                <button class="purification-btn" onclick="game.closeModal()">取消 (Cancel)</button>
+                <button class="purification-btn confirm" id="purification-confirm-btn" disabled>确认移除 (Confirm)</button>
+            </div>
         </div>
     </div>
 

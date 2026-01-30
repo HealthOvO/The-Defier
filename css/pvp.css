@@ -1533,3 +1533,209 @@ input:checked+.seal-slider .seal-face.on {
     margin-bottom: 5px;
     border: 1px solid rgba(255, 255, 255, 0.05);
 }
+
+/* =========================================
+   PVP Result Overlay (Settlement)
+   ========================================= */
+.pvp-result-overlay {
+    background: rgba(5, 5, 5, 0.95);
+    /* Deep dark background */
+    display: none;
+    /* Initially hidden */
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    backdrop-filter: blur(10px);
+}
+
+.pvp-result-container {
+    width: 100%;
+    max-width: 600px;
+    padding: 40px;
+    text-align: center;
+    position: relative;
+    border: 1px solid rgba(207, 170, 112, 0.1);
+    background: linear-gradient(180deg, rgba(20, 20, 25, 0.9), rgba(10, 10, 12, 0.95));
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.8), inset 0 0 100px rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
+    animation: dialog-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Victory Mode */
+.pvp-result-overlay.victory .pvp-result-container {
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 60px rgba(207, 170, 112, 0.2), inset 0 0 30px rgba(207, 170, 112, 0.1);
+}
+
+.pvp-result-overlay.victory .result-title {
+    color: var(--accent-gold);
+    text-shadow: 0 0 20px rgba(207, 170, 112, 0.6), 0 0 40px rgba(207, 170, 112, 0.3);
+    background: linear-gradient(to bottom, #fff, var(--accent-gold));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Defeat Mode */
+.pvp-result-overlay.defeat .pvp-result-container {
+    border-color: #555;
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+}
+
+.pvp-result-overlay.defeat .result-title {
+    color: #888;
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+    font-family: 'Ma Shan Zheng', cursive;
+    letter-spacing: 4px;
+}
+
+.result-title {
+    font-size: 4rem;
+    margin-bottom: 30px;
+    font-family: 'Ma Shan Zheng', cursive;
+    animation: title-enter 0.8s ease-out forwards;
+    opacity: 0;
+    transform: scale(0.8);
+}
+
+@keyframes title-enter {
+    0% {
+        opacity: 0;
+        transform: scale(2);
+        filter: blur(10px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1);
+        filter: blur(0);
+    }
+}
+
+.result-content {
+    margin-bottom: 40px;
+}
+
+.pvp-score-change-anim {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 120px;
+    margin-bottom: 20px;
+}
+
+.score-label {
+    font-size: 1rem;
+    color: #666;
+    margin-bottom: 5px;
+    letter-spacing: 2px;
+}
+
+.score-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: #eee;
+    font-family: 'Cinzel', serif;
+}
+
+.score-delta {
+    font-size: 3rem;
+    font-weight: bold;
+    margin-top: 10px;
+    opacity: 0;
+    font-family: 'Cinzel', serif;
+}
+
+/* Victory Delta Animation */
+.pvp-result-overlay.victory .score-delta {
+    color: var(--accent-gold);
+    animation: score-up-anim 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards 0.5s;
+}
+
+@keyframes score-up-anim {
+    0% {
+        opacity: 0;
+        transform: translateY(20px) scale(0.5);
+    }
+
+    30% {
+        opacity: 1;
+        transform: translateY(-10px) scale(1.2);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        text-shadow: 0 0 20px var(--accent-gold);
+    }
+}
+
+/* Defeat Delta Animation */
+.pvp-result-overlay.defeat .score-delta {
+    color: #a4161a;
+    animation: score-down-anim 1s ease-out forwards 0.5s;
+}
+
+@keyframes score-down-anim {
+    0% {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+
+    40% {
+        opacity: 1;
+        transform: translateY(10px);
+    }
+
+    60% {
+        transform: translateY(-5px);
+    }
+
+    80% {
+        transform: translateY(2px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+        color: #888;
+    }
+
+    /* Fade to grey */
+}
+
+.opponent-info-result {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    color: #666;
+    font-size: 0.9rem;
+    margin-top: 30px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 20px;
+}
+
+.vs-text {
+    font-style: italic;
+    opacity: 0.5;
+}
+
+.result-actions button {
+    min-width: 180px;
+    opacity: 0;
+    animation: fade-in-up 0.5s ease-out forwards 1.5s;
+    /* Delay button */
+}
+
+@keyframes fade-in-up {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

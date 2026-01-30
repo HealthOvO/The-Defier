@@ -1611,7 +1611,12 @@ class Game {
     }
 
     // 战斗胜利
-    onBattleWon(enemies) {
+    async onBattleWon(enemies) {
+        if (this.mode === 'pvp') {
+            await this.handlePVPVictory();
+            return;
+        }
+
         this.player.enemiesDefeated += enemies.length;
 
         // 命环获得经验
@@ -1699,37 +1704,128 @@ class Game {
         // 检查BOSS
         for (const enemy of enemies) {
             if (enemy.isBoss) {
-                this.achievementSystem.updateStat('bossesDefeated', 1);
-
-                // 检查低血量击杀BOSS
-                if (this.player.currentHp <= 1) {
-                    this.achievementSystem.updateStat('lowHpBossKill', 1);
-                }
+                await this.handleBossDefeated(enemy);
+                return; // 结束函数，因为 handleBossDefeated 会处理后续界面
             }
         }
 
-        // 计算奖励
-        let totalGold = 0;
+        // 正常显示奖励
+        this.showScreen('reward-screen');
+        this.generateRewards(enemies, ringExp);
+    }
 
-        // PVP Mode Handling
+    // 战斗失败
+    async onBattleLost() {
         if (this.mode === 'pvp') {
-            // Report PVP Result
-            if (typeof PVPService !== 'undefined') {
-                const oppRank = this.pvpOpponentRank || null;
-                PVPService.reportMatchResult(true, oppRank).then(res => {
-                    const deltaScore = res.delta;
-                    Utils.showBattleLog(`论道胜利！积分 ${deltaScore >= 0 ? '+' : ''}${deltaScore}`);
-                });
-            }
-
-            // Return to PVP Status Screen
-            setTimeout(() => {
-                this.showScreen('pvp-screen');
-                if (window.PVPScene) window.PVPScene.onShow();
-            }, 2000);
-            return; // Skip standard map progression
+            await this.handlePVPDefeat();
+            return;
         }
 
+        Utils.showBattleLog('战斗失败...');
+        this.achievementSystem.updateStat('deaths', 1);
+
+        // 自动保存死亡状态？或者直接清除？Roguelike通常清除
+        this.clearSave();
+
+        setTimeout(() => {
+            this.showScreen('game-over-screen');
+            this.updateGameOverStats();
+        }, 1500);
+    }
+
+    // === PVP Result Handlers ===
+
+    async handlePVPVictory() {
+        console.log('PVP Victory!');
+        const overlay = document.getElementById('pvp-result-overlay');
+        const title = document.getElementById('pvp-result-title');
+        const scoreVal = document.getElementById('pvp-current-score');
+        const deltaVal = document.getElementById('pvp-score-delta');
+        const oppName = document.getElementById('pvp-result-opponent');
+        const oppScore = document.getElementById('pvp-result-opp-score');
+
+        // Report
+        let result = { newRating: 1000, ratingChange: 0 };
+        try {
+            if (PVPService) {
+                result = await PVPService.reportMatchResult(true, this.pvpOpponentRank);
+            }
+        } catch (e) {
+            console.error('PVP Report Failed:', e);
+        }
+
+        // Update UI
+        if (overlay) {
+            overlay.className = 'screen pvp-result-overlay victory'; // Add victory class
+            overlay.style.display = 'flex';
+
+            title.textContent = '问道成功';
+            scoreVal.textContent = result.newRating;
+            // Fix: EloCalculator returns 'delta', not 'ratingChange'
+            const change = result.delta !== undefined ? result.delta : (result.ratingChange || 0);
+            deltaVal.textContent = `+${change}`;
+
+            if (this.pvpOpponentRank && this.pvpOpponentRank.user) {
+                oppName.textContent = this.pvpOpponentRank.user.username || '未知对手';
+                oppScore.textContent = this.pvpOpponentRank.score || 1000;
+            }
+        }
+    }
+
+    async handlePVPDefeat() {
+        console.log('PVP Defeat...');
+        const overlay = document.getElementById('pvp-result-overlay');
+        const title = document.getElementById('pvp-result-title');
+        const scoreVal = document.getElementById('pvp-current-score');
+        const deltaVal = document.getElementById('pvp-score-delta');
+        const oppName = document.getElementById('pvp-result-opponent');
+        const oppScore = document.getElementById('pvp-result-opp-score');
+
+        // Report
+        let result = { newRating: 1000, ratingChange: 0 };
+        try {
+            if (PVPService) {
+                result = await PVPService.reportMatchResult(false, this.pvpOpponentRank);
+            }
+        } catch (e) {
+            console.error('PVP Report Failed:', e);
+        }
+
+        // Update UI
+        if (overlay) {
+            overlay.className = 'screen pvp-result-overlay defeat'; // Add defeat class
+            overlay.style.display = 'flex';
+
+            title.textContent = '道心受损';
+            scoreVal.textContent = result.newRating;
+            deltaVal.textContent = `${result.ratingChange}`; // Usually negative
+
+            if (this.pvpOpponentRank && this.pvpOpponentRank.user) {
+                oppName.textContent = this.pvpOpponentRank.user.username || '未知对手';
+                oppScore.textContent = this.pvpOpponentRank.score || 1000;
+            }
+        }
+    }
+
+    closePVPResult() {
+        const overlay = document.getElementById('pvp-result-overlay');
+        if (overlay) overlay.style.display = 'none';
+
+        // Return to PVP Screen
+        this.showScreen('pvp-screen');
+        // Refresh Rank
+        if (window.PVPScene && typeof PVPScene.loadRankings === 'function') {
+            PVPScene.loadRankings();
+        } else if (window.PVPScene && typeof PVPScene.loadRanking === 'function') {
+            // Fallback/Correction just in case
+            PVPScene.loadRanking();
+        } else {
+            // Direct call if available globally or assume standard name
+            if (typeof PVPScene !== 'undefined') PVPScene.loadRankings();
+        }
+    }
+    generateRewards(enemies, ringExp) {
+        let totalGold = 0;
         let canSteal = false;
         let stealEnemy = null;
 
@@ -1746,37 +1842,17 @@ class Game {
         // 重玩或重修收益减半
         if (this.player.isReplay || this.player.isRecultivation) {
             totalGold = Math.floor(totalGold * 0.5);
-            // 经验减半
-            ringExp = Math.floor(ringExp * 0.5);
-
-            // Log suggestion: Only log once or just let the smaller numbers speak
         }
 
         this.player.gold += totalGold;
         this.achievementSystem.updateStat('totalGold', totalGold);
-        this.achievementSystem.updateStat('enemiesDefeated', enemies.length); // 更新击杀数
-        this.achievementSystem.updateStat('realmCleared', this.player.realm, 'max');
-
-        // 计算命环经验奖励 (包含遗物加成)
-        let totalRingExp = ringExp;
-        if (this.player.relic && this.player.relic.id === 'fateRing') {
-            const level = this.player.fateRing ? this.player.fateRing.level : 0;
-            const bonusExp = 20 + (level * 5);
-            totalRingExp += bonusExp;
-            Utils.showBattleLog(`逆命之环生效！额外获得 ${bonusExp} 命环经验`);
-        }
-
-        // 增加经验
-        this.player.fateRing.exp += totalRingExp;
-        this.player.checkFateRingLevelUp();
-
-        // 检查BOSS击杀
-        if (this.currentBattleNode && this.currentBattleNode.type === 'boss') {
-            this.achievementSystem.updateStat('bossesDefeated', 1);
+        this.achievementSystem.updateStat('enemiesDefeated', enemies.length);
+        if (this.player.realm) {
+            this.achievementSystem.updateStat('realmCleared', this.player.realm, 'max');
         }
 
         // 显示奖励界面
-        this.showRewardScreen(totalGold, canSteal, stealEnemy, totalRingExp);
+        this.showRewardScreen(totalGold, canSteal, stealEnemy, ringExp);
     }
 
     // 显示奖励界面
@@ -4786,68 +4862,120 @@ class Game {
         }
     }
 
-    // 显示移除卡牌界面 (Fixed: Use deck-modal which exists)
+    // 显示移除卡牌界面 (Refactored: Ink & Gold Purification UI)
     showRemoveCard(serviceItem) {
-        // 如果钱不够在 buyItem 里已经检查了，但为了安全
-        if (this.player.gold < serviceItem.price) return;
+        if (this.player.gold < serviceItem.price) {
+            Utils.showBattleLog('灵石不足！');
+            return;
+        }
 
-        // 先关闭当前弹窗（如果有）
+        // Close other modals
         this.closeModal();
 
-        const modal = document.getElementById('deck-modal');
-        const container = document.getElementById('deck-view-cards');
-        const title = modal.querySelector('h2');
+        const modal = document.getElementById('purification-modal');
+        const grid = document.getElementById('purification-grid');
+        const costDisplay = document.getElementById('purification-cost-display');
+        const confirmBtn = document.getElementById('purification-confirm-btn');
 
-        // Reset modal content
-        container.innerHTML = '';
-        container.style.display = 'flex';
-        container.style.flexWrap = 'wrap';
-        container.style.justifyContent = 'center'; // Ensure centering
+        if (!modal || !grid) {
+            console.error('Purification UI elements missing!');
+            return;
+        }
 
-        if (title) title.textContent = '选择一张卡牌移除 (净化)';
+        // Reset State
+        grid.innerHTML = '';
+        modal.classList.add('active');
+        costDisplay.textContent = `消耗: ${serviceItem.price} 灵石`;
+        confirmBtn.disabled = true;
+        confirmBtn.onclick = null; // Clear previous listeners
 
-        // Add hint text
-        const hint = document.createElement('p');
-        hint.style.width = '100%';
-        hint.style.textAlign = 'center';
-        hint.style.marginBottom = '10px';
-        hint.style.color = 'var(--accent-gold)';
-        hint.textContent = `点击卡牌以移除(消耗 ${serviceItem.price} 灵石)`;
-        container.appendChild(hint);
+        let selectedIndex = -1;
 
+        // Render Cards
         this.player.deck.forEach((card, index) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'purification-card-wrapper';
+
+            // Create standard card element
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
-            cardEl.style.cursor = 'pointer';
+            // Disable default hover/click behaviors if they conflict, though CSS handles most
+            wrapper.appendChild(cardEl);
 
-            // 点击移除
-            cardEl.addEventListener('click', () => {
-                // Confirm dialog could be nice, but for now direct action as before
-                this.player.deck.splice(index, 1);
-                this.player.gold -= serviceItem.price;
+            // Delete Intent Overlay (Visual)
+            const overlay = document.createElement('div');
+            overlay.className = 'delete-intent-overlay';
+            overlay.innerHTML = '<span class="delete-icon">🔥</span>';
+            wrapper.appendChild(overlay);
 
-                // 增加移除计数，让下次更贵
-                this.player.removeCount = (this.player.removeCount || 0) + 1;
-                serviceItem.sold = true;
-                // Price increase for next time is handled in generateShopData, 
-                // but for current session item is sold.
+            // Selection Logic
+            wrapper.addEventListener('click', () => {
+                // Deselect others
+                document.querySelectorAll('.purification-card-wrapper').forEach(el => el.classList.remove('selected'));
 
-                Utils.showBattleLog(`已移除 ${card.name} `);
+                if (selectedIndex === index) {
+                    // Deselect if clicking same
+                    selectedIndex = -1;
+                    confirmBtn.disabled = true;
+                    confirmBtn.textContent = '确认移除 (Confirm)';
+                } else {
+                    // Select new
+                    selectedIndex = index;
+                    wrapper.classList.add('selected');
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = `确认焚毁 (Burn)`;
 
-                this.closeModal();
-                // 刷新商店界面
-                document.getElementById('shop-gold-display').textContent = this.player.gold;
-                // Re-render shop to show 'Sold' status
-                this.renderShop();
-                // Re-open shop screen (it might be hidden by modal)
-                this.showScreen('shop-screen');
+                    // Sound effect if available
+                    if (typeof audioManager !== 'undefined') {
+                        audioManager.playSFX('click');
+                    }
+                }
             });
 
-            container.appendChild(cardEl);
+            grid.appendChild(wrapper);
         });
 
-        modal.classList.add('active');
+        // Confirm Action
+        confirmBtn.onclick = () => {
+            if (selectedIndex === -1) return;
+
+            const cardName = this.player.deck[selectedIndex].name;
+            const targetWrapper = grid.children[selectedIndex];
+
+            // Visual Burn Effect
+            const burn = document.createElement('div');
+            burn.className = 'card-burn-effect';
+            targetWrapper.appendChild(burn);
+
+            // Audio
+            if (typeof audioManager !== 'undefined') {
+                audioManager.playSFX('fire'); // Assuming 'fire' exists, or 'buff'
+            }
+
+            // Delay actual removal for animation
+            setTimeout(() => {
+                // Remove from deck
+                this.player.deck.splice(selectedIndex, 1);
+                this.player.gold -= serviceItem.price;
+
+                // Update Logic
+                this.player.removeCount = (this.player.removeCount || 0) + 1;
+                serviceItem.sold = true;
+
+                // Close UI
+                modal.classList.remove('active');
+
+                // Feedback
+                Utils.showBattleLog(`【${cardName}】已化为灰烬...`);
+
+                // Refresh shop UI to show sold status
+                this.renderShop();
+                document.getElementById('shop-gold-display').textContent = this.player.gold;
+
+            }, 800);
+        };
     }
+
+
 
     // 剩下的 buyRingExp 等旧方法可以删除，因为已经集成到 applyServiceEffect 中了
 
@@ -4883,9 +5011,9 @@ class Game {
         const restBtn = document.createElement('button');
         restBtn.className = 'event-choice';
         restBtn.innerHTML = `
-            <div>💤 休息(恢复 ${healAmount} HP)</div>
-            <div class="choice-effect">当前HP: ${this.player.currentHp}/${this.player.maxHp}</div>
-        `;
+    < div >💤 休息(恢复 ${healAmount} HP)</div >
+        <div class="choice-effect">当前HP: ${this.player.currentHp}/${this.player.maxHp}</div>
+`;
         restBtn.onclick = () => this.campfireRest();
         choicesEl.appendChild(restBtn);
 
@@ -4894,9 +5022,9 @@ class Game {
         const upgradeBtn = document.createElement('button');
         upgradeBtn.className = 'event-choice';
         upgradeBtn.innerHTML = `
-            <div>⬆️ 升级卡牌</div>
-            <div class="choice-effect">可升级: ${upgradableCount} 张</div>
-        `;
+    < div >⬆️ 升级卡牌</div >
+        <div class="choice-effect">可升级: ${upgradableCount} 张</div>
+`;
         if (upgradableCount > 0) {
             upgradeBtn.onclick = () => this.showCampfireUpgrade();
         } else {
@@ -4911,9 +5039,9 @@ class Game {
             const removeBtn = document.createElement('button');
             removeBtn.className = 'event-choice';
             removeBtn.innerHTML = `
-                <div>🗑️ 净化(移除一张牌)</div>
-                <div class="choice-effect">精简牌组，提升效率</div>
-            `;
+    < div >🗑️ 净化(移除一张牌)</div >
+        <div class="choice-effect">精简牌组，提升效率</div>
+`;
             removeBtn.onclick = () => this.showCampfireRemove();
             choicesEl.appendChild(removeBtn);
         }
@@ -4963,14 +5091,14 @@ class Game {
         container.appendChild(previewContainer);
 
         previewContainer.innerHTML = `
-            <h3 style="color:var(--accent-gold);margin-top:0;">升级预览</h3>
+    < h3 style = "color:var(--accent-gold);margin-top:0;" > 升级预览</h3 >
             <div id="upgrade-preview-placeholder" style="color:#666;margin-top:50px;">
                 鼠标悬浮或点击卡牌<br>查看升级效果
             </div>
             <div id="upgrade-preview-card" style="display:none; transform:scale(1.1); margin: 20px 0;"></div>
             <div id="upgrade-diff-text" style="width:100%; font-size:0.9rem; color:#ddd; margin: 10px 0; background:rgba(0,0,0,0.3); padding:8px; border-radius:4px; display:none;"></div>
             <button id="confirm-upgrade-btn" class="menu-btn" style="margin-top:auto; width:100%;" disabled>确认升级</button>
-        `;
+`;
 
         const confirmBtn = previewContainer.querySelector('#confirm-upgrade-btn');
         const previewCardDiv = previewContainer.querySelector('#upgrade-preview-card');
@@ -4996,9 +5124,9 @@ class Game {
                 previewCardDiv.appendChild(upgradedEl);
 
                 previewTextDiv.innerHTML = `
-                    <p style="margin:0;color:var(--accent-green);font-weight:bold;">${card.name} ➤ ${upgraded.name}</p>
-                    <p style="margin:4px 0 0 0;font-size:0.8rem;">${upgraded.description}</p>
-                `;
+    < p style = "margin:0;color:var(--accent-green);font-weight:bold;" > ${card.name} ➤ ${upgraded.name}</p >
+        <p style="margin:4px 0 0 0;font-size:0.8rem;">${upgraded.description}</p>
+`;
             };
 
             cardEl.addEventListener('mouseenter', () => {
@@ -5213,16 +5341,16 @@ class Game {
         slots.forEach((slotData, index) => {
             const slotEl = document.createElement('div');
             const isEmpty = !slotData;
-            slotEl.className = `save-slot ${isEmpty ? 'empty' : ''}`;
+            slotEl.className = `save - slot ${isEmpty ? 'empty' : ''} `;
 
-            const slotName = `命 牌 · ${['一', '二', '三', '四'][index] || (index + 1)}`;
+            const slotName = `命 牌 · ${['一', '二', '三', '四'][index] || (index + 1)} `;
 
             let contentHtml = '';
             if (isEmpty) {
                 contentHtml = `
-                    <div class="slot-visual" style="border-color: #555; opacity: 0.5;">?</div>
-                    <div class="slot-empty-text">虚位以待</div>
-                `;
+    < div class="slot-visual" style = "border-color: #555; opacity: 0.5;" >?</div >
+        <div class="slot-empty-text">虚位以待</div>
+`;
             } else {
                 let date = new Date(slotData.timestamp).toLocaleDateString();
                 let dateLabel = "更新";
@@ -5247,47 +5375,47 @@ class Game {
                     maxRealm = slotData.player.realm;
                 }
 
-                let realmDisplay = `第${maxRealm}重天`;
+                let realmDisplay = `第${maxRealm} 重天`;
                 if (maxRealm > 18) {
-                    realmDisplay = `<span style="color:var(--accent-gold); font-weight:bold;">已通关</span>`;
+                    realmDisplay = `< span style = "color:var(--accent-gold); font-weight:bold;" > 已通关</span > `;
                 }
 
                 contentHtml = `
-                    <div class="slot-visual">${roleIcon}</div>
+    < div class="slot-visual" > ${roleIcon}</div >
                     <div class="slot-info-primary">${roleName} <span style="font-size:0.8em; opacity:0.7">| ${realmDisplay}</span></div>
                     <div class="slot-info-secondary">❤️ ${hp}  📅 ${dateLabel}: ${date}</div>
-                `;
+`;
             }
 
             const actionsHtml = isEmpty ?
-                `<button class="talisman-btn small" onclick="game.selectSlot(${index}, 'new')">
+                `< button class="talisman-btn small" onclick = "game.selectSlot(${index}, 'new')" >
                     <div class="talisman-paper"></div>
                     <div class="talisman-content">
                         <span class="btn-text">开启轮回</span>
                     </div>
-                </button>` :
-                `<button class="talisman-btn small primary" onclick="game.selectSlot(${index}, 'load')">
+                </button > ` :
+                `< button class="talisman-btn small primary" onclick = "game.selectSlot(${index}, 'load')" >
                     <div class="talisman-paper"></div>
                     <div class="talisman-content">
                         <span class="btn-text">继续</span>
                     </div>
-                </button>
-                 <button class="talisman-btn small" onclick="game.selectSlot(${index}, 'overwrite')" style="margin-top:5px; transform:scale(0.9);">
-                    <div class="talisman-paper" style="border-color:var(--accent-red);"></div>
-                    <div class="talisman-content">
-                        <span class="btn-text" style="color:var(--accent-red);">覆盖</span>
-                    </div>
-                </button>`;
+                </button >
+    <button class="talisman-btn small" onclick="game.selectSlot(${index}, 'overwrite')" style="margin-top:5px; transform:scale(0.9);">
+        <div class="talisman-paper" style="border-color:var(--accent-red);"></div>
+        <div class="talisman-content">
+            <span class="btn-text" style="color:var(--accent-red);">覆盖</span>
+        </div>
+    </button>`;
 
             slotEl.innerHTML = `
-                <div class="slot-header">${slotName}</div>
+        < div class="slot-header" > ${slotName}</div >
                 <div class="slot-content">
                     ${contentHtml}
                 </div>
                 <div class="slot-actions">
                     ${actionsHtml}
                 </div>
-            `;
+`;
 
             container.appendChild(slotEl);
         });
@@ -5385,12 +5513,12 @@ class Game {
             const user = AuthService.getCurrentUser();
             // Refactored to keep button style but show user info
             btn.innerHTML = `
-                <div class="talisman-paper"></div>
-                <div class="talisman-content">
-                    <span class="btn-icon">👤</span>
-                    <span class="btn-text" style="font-size:0.9rem">${user.username}</span>
-                </div>
-            `;
+    < div class="talisman-paper" ></div >
+        <div class="talisman-content">
+            <span class="btn-icon">👤</span>
+            <span class="btn-text" style="font-size:0.9rem">${user.username}</span>
+        </div>
+`;
             btn.onclick = () => {
                 // Muted/Audio handling (delayed slightly for feel)
                 setTimeout(() => {
@@ -5419,12 +5547,12 @@ class Game {
             };
         } else {
             btn.innerHTML = `
-                <div class="talisman-paper"></div>
-                <div class="talisman-content">
-                    <span class="btn-icon">☁️</span>
-                    <span class="btn-text">登入轮回</span>
-                </div>
-            `;
+    < div class="talisman-paper" ></div >
+        <div class="talisman-content">
+            <span class="btn-icon">☁️</span>
+            <span class="btn-text">登入轮回</span>
+        </div>
+`;
             btn.onclick = () => this.showLoginModal();
         }
     }
@@ -5466,10 +5594,10 @@ class Game {
             const hp = (data.player && data.player.currentHp) ? data.player.currentHp : '?';
             const gold = (data.player && data.player.gold) ? data.player.gold : '?';
             return `
-                <div style="margin-bottom:4px">📅 ${date}</div>
+    < div style = "margin-bottom:4px" >📅 ${date}</div >
                 <div style="margin-bottom:4px">🏔️ 第 ${realm} 重天</div>
                 <div>❤️ ${hp} | 💰 ${gold}</div>
-            `;
+`;
         };
 
         if (localInfo) localInfo.innerHTML = formatInfo(localData, localData ? localData.timestamp : null);
@@ -5503,7 +5631,7 @@ class Game {
 
                     AuthService.saveCloudData(data, targetSlot).then(res => {
                         if (res.success) {
-                            Utils.showBattleLog(`本地存档已同步至云端 (Slot ${targetSlot + 1})`);
+                            Utils.showBattleLog(`本地存档已同步至云端(Slot ${targetSlot + 1})`);
                             modal.classList.remove('active');
                             // Update cache
                             if (this.cachedSlots) this.cachedSlots[targetSlot] = data;
@@ -5545,7 +5673,7 @@ class Game {
             modal.id = 'treasure-bag-modal';
             modal.className = 'modal treasure-bag-modal';
             modal.innerHTML = `
-                <div class="modal-content large-modal">
+    < div class="modal-content large-modal" >
                     <span class="close-btn">&times;</span>
                     <h2>🎒 法宝囊</h2>
                     
@@ -5563,8 +5691,8 @@ class Game {
                             <div class="inventory-grid" id="inventory-grid"></div>
                         </div>
                     </div>
-                </div>
-            `;
+                </div >
+    `;
             document.body.appendChild(modal);
 
             // 绑定关闭
