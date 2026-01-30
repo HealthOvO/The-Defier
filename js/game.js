@@ -178,7 +178,34 @@ class Game {
 
     // 初始化动态背景
     initDynamicBackground() {
-        // 删除已存在的
+        // 如果存在当前背景图，使用图片背景
+        this.updateRealmBackground(this.player.realm || 1);
+    }
+
+    // 更新天域背景
+    updateRealmBackground(realm) {
+        // 确保 default 为 1
+        realm = realm || 1;
+
+        // 查找是否有对应的背景图
+        // 映射规则：1-3重天有专属图
+        let bgImage = '';
+        if (realm === 1) bgImage = 'assets/images/realms/realm_bg_1.webp';
+        else if (realm === 2) bgImage = 'assets/images/realms/realm_bg_2.webp';
+        else if (realm === 3) bgImage = 'assets/images/realms/realm_bg_3.webp';
+        else if (realm === 7) bgImage = 'assets/images/bg_realm_7.png';
+        else if (realm === 8) bgImage = 'assets/images/bg_realm_8.png';
+        else if (realm === 9) bgImage = 'assets/images/bg_realm_9.png';
+        else if (realm === 10) bgImage = 'assets/images/bg_realm_10.png';
+        else if (realm === 11) bgImage = 'assets/images/bg_realm_11.png';
+        else if (realm === 12) bgImage = 'assets/images/bg_realm_12.png';
+        else if (realm === 13) bgImage = 'assets/images/bg_realm_13.png';
+        else if (realm === 14) bgImage = 'assets/images/bg_realm_14.png';
+        else if (realm === 15) bgImage = 'assets/images/bg_realm_15.png';
+        else if (realm === 16) bgImage = 'assets/images/bg_realm_16.png';
+        else if (realm === 17) bgImage = 'assets/images/bg_realm_17.png';
+        else if (realm === 18) bgImage = 'assets/images/bg_realm_18.png';
+
         const existing = document.getElementById('dynamic-bg');
         if (existing) existing.remove();
 
@@ -186,23 +213,31 @@ class Game {
         bg.className = 'dynamic-bg';
         bg.id = 'dynamic-bg';
 
-        // 添加星星
-        for (let i = 0; i < 50; i++) {
-            const star = document.createElement('div');
-            star.className = 'bg-star';
-            star.style.left = `${Math.random() * 100}%`;
-            star.style.top = `${Math.random() * 100}%`;
-            star.style.animationDelay = `${Math.random() * 3}s`;
-            bg.appendChild(star);
-        }
-
-        // 添加云雾
-        for (let i = 0; i < 3; i++) {
-            const cloud = document.createElement('div');
-            cloud.className = 'bg-cloud';
-            cloud.style.top = `${20 + i * 25}%`;
-            cloud.style.animationDelay = `${i * 20}s`;
-            bg.appendChild(cloud);
+        if (bgImage) {
+            bg.classList.add('is-image-bg');
+            bg.style.backgroundImage = `url('${bgImage}')`;
+            // 添加遮罩层以确保文字可读性
+            const overlay = document.createElement('div');
+            overlay.className = 'bg-overlay';
+            bg.appendChild(overlay);
+        } else {
+            // Fallback to procedural stars
+            for (let i = 0; i < 50; i++) {
+                const star = document.createElement('div');
+                star.className = 'bg-star';
+                star.style.left = `${Math.random() * 100}%`;
+                star.style.top = `${Math.random() * 100}%`;
+                star.style.animationDelay = `${Math.random() * 3}s`;
+                bg.appendChild(star);
+            }
+            // Cloud layers
+            for (let i = 0; i < 3; i++) {
+                const cloud = document.createElement('div');
+                cloud.className = 'bg-cloud';
+                cloud.style.top = `${20 + i * 25}%`;
+                cloud.style.animationDelay = `${i * 20}s`;
+                bg.appendChild(cloud);
+            }
         }
 
         document.body.prepend(bg);
@@ -887,24 +922,24 @@ class Game {
 
         // Visual Themes for each Realm
         const REALM_THEMES = {
-            1: { icon: '🛖', color: '#B0BEC5', bg: 'linear-gradient(135deg, #263238 0%, #102027 100%)' }, // Mortal Dust
-            2: { icon: '🌬️', color: '#81D4FA', bg: 'linear-gradient(135deg, #01579B 0%, #002f6c 100%)' }, // Qi Flow
-            3: { icon: '🧱', color: '#BCAAA4', bg: 'linear-gradient(135deg, #4E342E 0%, #261a17 100%)' }, // Foundation
-            4: { icon: '🌕', color: '#FFD54F', bg: 'linear-gradient(135deg, #FF6F00 0%, #8f3e00 100%)' }, // Golden Core
-            5: { icon: '👶', color: '#FFAB91', bg: 'linear-gradient(135deg, #BF360C 0%, #5f1a05 100%)' }, // Nascent Soul
-            6: { icon: '🧘', color: '#CE93D8', bg: 'linear-gradient(135deg, #4A148C 0%, #220542 100%)' }, // Divine Spirit
-            7: { icon: '🔗', color: '#80CBC4', bg: 'linear-gradient(135deg, #004D40 0%, #00251f 100%)' }, // Integration
-            8: { icon: '🚤', color: '#FFE082', bg: 'linear-gradient(135deg, #FF8F00 0%, #8f5000 100%)' }, // Great Vehicle
-            9: { icon: '☁️', color: '#B3E5FC', bg: 'linear-gradient(135deg, #0277BD 0%, #003c5f 100%)' }, // Ascension
-            10: { icon: '⛰️', color: '#A5D6A7', bg: 'linear-gradient(135deg, #1B5E20 0%, #0a290d 100%)' }, // Earthly Immortal
-            11: { icon: '🕊️', color: '#F48FB1', bg: 'linear-gradient(135deg, #880E4F 0%, #440727 100%)' }, // Heavenly Peace
-            12: { icon: '✨', color: '#FFF59D', bg: 'linear-gradient(135deg, #F9A825 0%, #7e520b 100%)' }, // Golden Immortal
-            13: { icon: '🌌', color: '#9575CD', bg: 'linear-gradient(135deg, #311B92 0%, #150a42 100%)' }, // Great Luo
-            14: { icon: '🌀', color: '#90A4AE', bg: 'linear-gradient(135deg, #263238 0%, #0f1619 100%)' }, // Chaos Origin
-            15: { icon: '👑', color: '#EF9A9A', bg: 'linear-gradient(135deg, #B71C1C 0%, #520909 100%)' }, // Supreme
-            16: { icon: '☯️', color: '#E0E0E0', bg: 'linear-gradient(135deg, #212121 0%, #000000 100%)' }, // Taiyi
-            17: { icon: '🌳', color: '#C5E1A5', bg: 'linear-gradient(135deg, #33691E 0%, #163009 100%)' }, // Bodhi
-            18: { icon: '🌑', color: '#757575', bg: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)' }  // Chaos Void
+            1: { icon: '🛖', color: '#B0BEC5', bg: 'linear-gradient(135deg, #263238 0%, #102027 100%)', bgImage: 'assets/images/realms/realm_bg_1.webp' }, // Mortal Dust
+            2: { icon: '🌬️', color: '#81D4FA', bg: 'linear-gradient(135deg, #01579B 0%, #002f6c 100%)', bgImage: 'assets/images/realms/realm_bg_2.webp' }, // Qi Flow
+            3: { icon: '🧱', color: '#BCAAA4', bg: 'linear-gradient(135deg, #4E342E 0%, #261a17 100%)', bgImage: 'assets/images/realms/realm_bg_3.webp' }, // Foundation
+            4: { icon: '🌕', color: '#FFD54F', bg: 'linear-gradient(135deg, #FF6F00 0%, #8f3e00 100%)', bgImage: 'assets/images/realms/realm-4-bg.png' }, // Golden Core
+            5: { icon: '👶', color: '#FFAB91', bg: 'linear-gradient(135deg, #BF360C 0%, #5f1a05 100%)', bgImage: 'assets/images/realms/realm-5-bg.png' }, // Nascent Soul
+            6: { icon: '🧘', color: '#CE93D8', bg: 'linear-gradient(135deg, #4A148C 0%, #220542 100%)', bgImage: 'assets/images/realms/realm-6-bg.png' }, // Divine Spirit
+            7: { icon: '🔗', color: '#80CBC4', bg: 'linear-gradient(135deg, #004D40 0%, #00251f 100%)', bgImage: 'assets/images/bg_realm_7.png' }, // Integration
+            8: { icon: '🚤', color: '#FFE082', bg: 'linear-gradient(135deg, #FF8F00 0%, #8f5000 100%)', bgImage: 'assets/images/bg_realm_8.png' }, // Great Vehicle
+            9: { icon: '☁️', color: '#B3E5FC', bg: 'linear-gradient(135deg, #0277BD 0%, #003c5f 100%)', bgImage: 'assets/images/bg_realm_9.png' }, // Ascension
+            10: { icon: '⛰️', color: '#A5D6A7', bg: 'linear-gradient(135deg, #1B5E20 0%, #0a290d 100%)', bgImage: 'assets/images/bg_realm_10.png' }, // Earthly Immortal
+            11: { icon: '🕊️', color: '#F48FB1', bg: 'linear-gradient(135deg, #880E4F 0%, #440727 100%)', bgImage: 'assets/images/bg_realm_11.png' }, // Heavenly Peace
+            12: { icon: '✨', color: '#FFF59D', bg: 'linear-gradient(135deg, #F9A825 0%, #7e520b 100%)', bgImage: 'assets/images/bg_realm_12.png' }, // Golden Immortal
+            13: { icon: '🌌', color: '#9575CD', bg: 'linear-gradient(135deg, #311B92 0%, #150a42 100%)', bgImage: 'assets/images/bg_realm_13.png' }, // Great Luo
+            14: { icon: '🌀', color: '#90A4AE', bg: 'linear-gradient(135deg, #263238 0%, #0f1619 100%)', bgImage: 'assets/images/bg_realm_14.png' }, // Chaos Origin
+            15: { icon: '👑', color: '#EF9A9A', bg: 'linear-gradient(135deg, #B71C1C 0%, #520909 100%)', bgImage: 'assets/images/bg_realm_15.png' }, // Supreme
+            16: { icon: '☯️', color: '#E0E0E0', bg: 'linear-gradient(135deg, #212121 0%, #000000 100%)', bgImage: 'assets/images/bg_realm_16.png' }, // Taiyi
+            17: { icon: '🌳', color: '#C5E1A5', bg: 'linear-gradient(135deg, #33691E 0%, #163009 100%)', bgImage: 'assets/images/bg_realm_17.png' }, // Bodhi
+            18: { icon: '🌑', color: '#757575', bg: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)', bgImage: 'assets/images/bg_realm_18.png' }  // Chaos Void
         };
 
         // 生成18重天卡片
@@ -925,18 +960,30 @@ class Game {
             // Apply Theme
             if (isUnlocked) {
                 // realmCard.style.background = theme.bg; // Removed for Ink Gold Streamer style
+
+                if (theme.bgImage) {
+                    realmCard.style.backgroundImage = `linear-gradient(to bottom, rgba(0,0,0,0) 30%, rgba(0,0,0,0.95) 100%), url('${theme.bgImage}')`;
+                    realmCard.style.backgroundSize = 'cover';
+                    realmCard.style.backgroundPosition = 'center';
+                    realmCard.style.textShadow = '0 2px 4px #000';
+                }
+
                 realmCard.style.borderColor = 'rgba(255,255,255,0.1)';
                 // We'll let CSS hover handle the gold border, but we can set a custom property for the glow
                 realmCard.style.setProperty('--theme-color', theme.color);
             }
 
             // Icon selection
-            let icon = theme.icon;
+            // default to empty for unlocked realms as per user request
+            let icon = '';
             if (!isUnlocked) icon = '🔒';
+
+            // Hide icon if bgImage is present or if it's empty
+            const iconStyle = ((isUnlocked && theme.bgImage) || !icon) ? 'display:none' : `text-shadow: 0 0 15px ${theme.color}40`;
 
             // Spirit Tablet Structure
             realmCard.innerHTML = `
-                <div class="realm-icon" style="text-shadow: 0 0 15px ${theme.color}40">${icon}</div>
+                <div class="realm-icon" style="${iconStyle}">${icon}</div>
                 <div class="realm-info">
                     <h3 style="${isUnlocked ? `color:${theme.color}` : ''}">${realmName}</h3>
                     ${isUnlocked ? `<span class="realm-env-preview">${env.name}</span>` : ''}
@@ -1078,7 +1125,16 @@ class Game {
                 const name = bossInfo.bossName || '???';
                 const desc = bossInfo.mechDesc || '未知的恐怖存在...';
 
+                // Add logo if exists
+                let logoHtml = '';
+                if (bossInfo.logo) {
+                    logoHtml = `<div style="text-align:center; margin-bottom:10px;">
+                        <img src="${bossInfo.logo}" style="width:80px; height:80px; border-radius:50%; border:2px solid var(--accent-red); object-fit:cover;">
+                   </div>`;
+                }
+
                 bossEl.innerHTML = `
+                    ${logoHtml}
                     <div style="color:var(--accent-red); font-weight:bold; margin-bottom:5px;">${name}</div>
                     <div style="font-size:0.9rem; opacity:0.9;">${desc}</div>
                 `;
@@ -1163,7 +1219,8 @@ class Game {
         return {
             bossName: boss.name,
             mechDesc: mechDesc,
-            counterTreasure: counterNames.length > 0 ? counterNames.join(' / ') : ''
+            counterTreasure: counterNames.length > 0 ? counterNames.join(' / ') : '',
+            logo: (typeof ENEMIES !== 'undefined' && ENEMIES[bossId]) ? ENEMIES[bossId].logo : null
         };
     }
 
@@ -3027,8 +3084,10 @@ class Game {
     }
 
     updateDebugUI() {
-        const btn = document.querySelector('.cheat-btn');
-        if (btn) btn.style.display = this.debugMode ? 'inline-block' : 'none';
+        const btns = document.querySelectorAll('.cheat-btn');
+        btns.forEach(btn => {
+            btn.style.display = this.debugMode ? 'inline-block' : 'none';
+        });
 
         // 可以在这里控制其他调试元素的显隐
     }
@@ -3100,6 +3159,110 @@ class Game {
         // 5. 解锁所有技能（如果有冷却重置）
         if (this.player.skillCooldown !== undefined) {
             this.player.skillCooldown = 0;
+        }
+
+        // 6. 解锁所有关卡
+        this.player.maxRealm = 14;
+        if (typeof RealmManager !== 'undefined') {
+            RealmManager.unlockAll();
+        }
+
+        // 7. 打开怪物调试面板
+        this.showCheatMonsterSelector();
+
+        this.updateUI();
+        Utils.showBattleLog('【作弊生效】富可敌国，神功大成，万界通行！');
+    }
+
+    // 作弊：怪物选择器
+    showCheatMonsterSelector() {
+        const modalId = 'cheat-monster-selector';
+        let modal = document.getElementById(modalId);
+
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = modalId;
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.85); z-index: 10000; display: flex;
+                flex-direction: column; padding: 20px; overflow-y: auto;
+                color: #fff; font-family: sans-serif;
+            `;
+            document.body.appendChild(modal);
+        }
+
+        modal.innerHTML = `
+            <div style="display:flex; justify-content:space-between; margin-bottom:20px; border-bottom:1px solid #444; padding-bottom:10px;">
+                <h2 style="margin:0; color:gold;">⚔️ 试炼场 (Debug)</h2>
+                <button onclick="document.getElementById('${modalId}').style.display='none'" style="padding:5px 15px;">关闭</button>
+            </div>
+            <div id="cheat-realm-list" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:15px;"></div>
+        `;
+
+        const list = modal.querySelector('#cheat-realm-list');
+
+        // 遍历所有境界 (1-14)
+        for (let r = 1; r <= 14; r++) {
+            const realmData = REALM_ENVIRONMENTS[r] || { name: `第${r}重天` };
+            const card = document.createElement('div');
+            card.style.cssText = `
+                background: #222; border: 1px solid #555; padding: 10px; border-radius: 4px;
+            `;
+
+            // 添加两个通用测试按钮
+            const btnStyle = "display:block; width:100%; margin:5px 0; padding:8px; background:#333; color:#eee; border:none; cursor:pointer; text-align:left;";
+
+            card.innerHTML = `<h3 style="margin-top:0; color:#ddd;">${r}. ${realmData.name}</h3>`;
+
+            // 1. 生成普通测试怪
+            const normalBtn = document.createElement('button');
+            normalBtn.style.cssText = btnStyle;
+            normalBtn.textContent = "👊 生成随机小怪 (Random)";
+            normalBtn.onclick = () => {
+                this.startDebugBattle(r, 'normal');
+                modal.style.display = 'none';
+            };
+            card.appendChild(normalBtn);
+
+            // 2. 生成 Boss
+            const bossBtn = document.createElement('button');
+            bossBtn.style.cssText = btnStyle;
+            bossBtn.textContent = "💀 生成 Boss";
+            bossBtn.onclick = () => {
+                this.startDebugBattle(r, 'boss');
+                modal.style.display = 'none';
+            };
+            card.appendChild(bossBtn);
+
+            list.appendChild(card);
+        }
+
+        modal.style.display = 'flex';
+    }
+
+    startDebugBattle(realm, type) {
+        // 1. 切换环境
+        this.player.realm = realm;
+        this.updateRealmBackground(); // 确保背景切换
+
+        // 2. 获取敌人数据
+        let enemyData;
+        if (type === 'boss') {
+            // 尝试查找特定境界 Boss，找不到则随机
+            const bosses = Object.values(ENEMIES).filter(e => e.isBoss && (e.realm === realm || !e.realm));
+            enemyData = bosses.length > 0 ? Utils.deepClone(bosses[0]) : Utils.deepClone(ENEMIES.boss_generic || ENEMIES.boss_1);
+            // 强制修正名字以显示测试
+            enemyData.name = `(Test) ${enemyData.name}`;
+        } else {
+            // 随机小怪
+            const minions = Object.values(ENEMIES).filter(e => !e.isBoss && (e.realm === realm || !e.realm));
+            enemyData = minions.length > 0 ? Utils.deepClone(minions[Math.floor(Math.random() * minions.length)]) : Utils.deepClone(ENEMIES.basic_soldier);
+        }
+
+        // 3. 开始战斗
+        this.showScreen('battle-screen');
+        if (this.battle) {
+            this.battle.init([enemyData]);
         }
 
         // 6. 恢复满血
@@ -5771,11 +5934,11 @@ class Game {
             const user = AuthService.getCurrentUser();
             // Refactored to keep button style but show user info
             btn.innerHTML = `
-                    < div class="talisman-paper" ></div >
-                        <div class="talisman-content">
-                            <span class="btn-icon">👤</span>
-                            <span class="btn-text" style="font-size:0.9rem">${user.username}</span>
-                        </div>
+                    <div class="talisman-paper"></div>
+                    <div class="talisman-content">
+                        <span class="btn-icon">👤</span>
+                        <span class="btn-text" style="font-size:0.9rem">${user.username}</span>
+                    </div>
                 `;
             btn.onclick = () => {
                 // Muted/Audio handling (delayed slightly for feel)

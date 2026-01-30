@@ -551,9 +551,18 @@ const Utils = {
             default: intentDesc = '意图：未知';
         }
 
+        // BOSS Image Support (Unified Structure)
+        let avatarStyle = '';
+        let hasImage = false;
+
+        if (enemy.isBoss && enemy.logo) {
+            avatarStyle = `background-image: url('${enemy.logo}'); background-size: cover; background-position: center;`;
+            hasImage = true;
+        }
+
         enemyEl.innerHTML = `
-            <div class="enemy-avatar">
-                ${enemy.icon}
+            <div class="enemy-avatar ${hasImage ? 'has-image' : ''}" style="${avatarStyle}">
+                ${hasImage ? '' : enemy.icon}
                 <div class="enemy-intent ${currentPattern.type}" 
                      onmouseenter="Utils.showTooltip('${intentDesc}', event.clientX, event.clientY)"
                      onmouseleave="Utils.hideTooltip()">
@@ -568,9 +577,9 @@ const Utils = {
             </div>
             <div class="enemy-hp-text">${enemy.currentHp}/${enemy.maxHp}</div>
             ${enemy.block > 0 ? `<div class="enemy-block">🛡️ ${enemy.block}</div>` : ''}
-            <div class="buff-list enemy-buffs">
-                ${this.renderBuffs(enemy)}
-            </div>
+        <div class="buff-list enemy-buffs">
+            ${this.renderBuffs(enemy)}
+        </div>
         `;
 
         return enemyEl;
