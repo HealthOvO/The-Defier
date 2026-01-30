@@ -3979,7 +3979,12 @@ class Game {
     closeModal() {
         document.querySelectorAll('.modal').forEach(modal => {
             modal.classList.remove('active');
+            modal.classList.remove('upgrade-mode'); // Clean up upgrade UI overrides
         });
+
+        // Specific Modals (lacking generic class)
+        const purification = document.getElementById('purification-modal');
+        if (purification) purification.classList.remove('active');
     }
 
     // ========== 商店功能 ==========
@@ -4663,6 +4668,9 @@ class Game {
         // 更新UI
         document.getElementById('shop-gold-display').textContent = this.player.gold;
         this.renderShop();
+
+        // 自动保存 (防止刷新丢进度)
+        this.saveGame();
     }
 
     // 显示命环进化选择
@@ -4765,7 +4773,7 @@ class Game {
                 return false;
 
             case 'maxHp':
-                this.player.maxHp += 5;
+                this.player.addPermaBuff('maxHp', 5);
                 this.player.currentHp += 5;
                 Utils.showBattleLog('最大生命 +5');
                 this.showRewardModal('体质增强', `最大生命值上限 + 5！`, '💊');
@@ -5011,9 +5019,9 @@ class Game {
         const restBtn = document.createElement('button');
         restBtn.className = 'event-choice';
         restBtn.innerHTML = `
-    < div >💤 休息(恢复 ${healAmount} HP)</div >
-        <div class="choice-effect">当前HP: ${this.player.currentHp}/${this.player.maxHp}</div>
-`;
+            <div>💤 休息(恢复 ${healAmount} HP)</div>
+            <div class="choice-effect">当前HP: ${this.player.currentHp}/${this.player.maxHp}</div>
+        `;
         restBtn.onclick = () => this.campfireRest();
         choicesEl.appendChild(restBtn);
 
@@ -5022,9 +5030,9 @@ class Game {
         const upgradeBtn = document.createElement('button');
         upgradeBtn.className = 'event-choice';
         upgradeBtn.innerHTML = `
-    < div >⬆️ 升级卡牌</div >
-        <div class="choice-effect">可升级: ${upgradableCount} 张</div>
-`;
+            <div>⬆️ 升级卡牌</div>
+            <div class="choice-effect">可升级: ${upgradableCount} 张</div>
+        `;
         if (upgradableCount > 0) {
             upgradeBtn.onclick = () => this.showCampfireUpgrade();
         } else {
@@ -5039,9 +5047,9 @@ class Game {
             const removeBtn = document.createElement('button');
             removeBtn.className = 'event-choice';
             removeBtn.innerHTML = `
-    < div >🗑️ 净化(移除一张牌)</div >
-        <div class="choice-effect">精简牌组，提升效率</div>
-`;
+                <div>🗑️ 净化(移除一张牌)</div>
+                <div class="choice-effect">精简牌组，提升效率</div>
+            `;
             removeBtn.onclick = () => this.showCampfireRemove();
             choicesEl.appendChild(removeBtn);
         }
@@ -5059,104 +5067,211 @@ class Game {
         this.completeCampfire();
     }
 
-    // 显示升级卡牌界面 (Campfire Version with Preview)
+    // 显示升级卡牌界面 (Refactored: Ink & Gold Edition)
     showCampfireUpgrade() {
         this.closeModal();
 
         const modal = document.getElementById('deck-modal');
+        // Add specific class for styling override (no scroll on parent)
+        modal.classList.add('upgrade-mode');
+
+        // Ensure we remove this class when modal closes (simple patch: override the close button or handle in general close)
+        // For now, let's attach a one-time listener to the close button to remove the class
+        const closeBtn = modal.querySelector('.close-btn');
+        if (closeBtn) {
+            const originalOnclick = closeBtn.onclick; // Save if any
+            closeBtn.onclick = () => {
+                modal.classList.remove('upgrade-mode');
+                modal.style.display = 'none'; // Default close behavior
+                // Restore original if needed, but usually it's just 'this.closeModal()'
+            };
+        }
         const container = document.getElementById('deck-view-cards');
+
+        // Reset Modal State
         container.innerHTML = '';
-        container.style.display = 'flex';
-        container.style.flexDirection = 'row';
+        container.style.display = 'block'; // Reset flex styles from previous usage
 
-        // Reuse split layout logic
-        const listContainer = document.createElement('div');
-        listContainer.style.flex = '1';
-        listContainer.style.display = 'flex';
-        listContainer.style.flexWrap = 'wrap';
-        listContainer.style.justifyContent = 'center';
-        listContainer.style.alignContent = 'flex-start';
-        listContainer.style.overflowY = 'auto';
-        listContainer.style.maxHeight = '60vh';
+        // --- 1. Main Layout Container ---
+        const layout = document.createElement('div');
+        layout.className = 'upgrade-modal-layout';
 
-        const previewContainer = document.createElement('div');
-        previewContainer.style.width = '300px';
-        previewContainer.style.borderLeft = '1px solid rgba(255,255,255,0.1)';
-        previewContainer.style.padding = '10px';
-        previewContainer.style.display = 'flex';
-        previewContainer.style.flexDirection = 'column';
-        previewContainer.style.alignItems = 'center';
+        // --- 2. Left: Card Grid ---
+        const cardGrid = document.createElement('div');
+        cardGrid.className = 'upgrade-card-grid';
 
-        container.appendChild(listContainer);
-        container.appendChild(previewContainer);
-
-        previewContainer.innerHTML = `
-    < h3 style = "color:var(--accent-gold);margin-top:0;" > 升级预览</h3 >
-            <div id="upgrade-preview-placeholder" style="color:#666;margin-top:50px;">
-                鼠标悬浮或点击卡牌<br>查看升级效果
+        // --- 3. Right: Preview Panel ---
+        const previewPanel = document.createElement('div');
+        previewPanel.className = 'upgrade-preview-panel';
+        previewPanel.innerHTML = `
+            <div class="preview-title">悟道演练</div>
+            <div class="preview-placeholder" id="ug-preview-placeholder">
+                <span style="font-size:3rem; display:block; margin-bottom:20px; opacity:0.3">👆</span>
+                点击左侧卡牌<br>推演进阶效果
             </div>
-            <div id="upgrade-preview-card" style="display:none; transform:scale(1.1); margin: 20px 0;"></div>
-            <div id="upgrade-diff-text" style="width:100%; font-size:0.9rem; color:#ddd; margin: 10px 0; background:rgba(0,0,0,0.3); padding:8px; border-radius:4px; display:none;"></div>
-            <button id="confirm-upgrade-btn" class="menu-btn" style="margin-top:auto; width:100%;" disabled>确认升级</button>
-`;
+            
+            <div id="ug-preview-content" style="display:none; width:100%; flex-direction:column; align-items:center;">
+                <div class="preview-card-container" id="ug-preview-card"></div>
+                
+                <div class="preview-diff-box" id="ug-diff-box">
+                    <!-- Dynamic Rows -->
+                </div>
 
-        const confirmBtn = previewContainer.querySelector('#confirm-upgrade-btn');
-        const previewCardDiv = previewContainer.querySelector('#upgrade-preview-card');
-        const previewTextDiv = previewContainer.querySelector('#upgrade-diff-text');
-        const placeholder = previewContainer.querySelector('#upgrade-preview-placeholder');
+                <button class="confirm-upgrade-btn" id="ug-confirm-btn" disabled>
+                    <span class="btn-text">注灵进阶</span>
+                </button>
+            </div>
+        `;
+
+        layout.appendChild(cardGrid);
+        layout.appendChild(previewPanel);
+        container.appendChild(layout);
+
+        // --- 4. Logic & Interaction ---
+        const placeholder = previewPanel.querySelector('#ug-preview-placeholder');
+        const contentArea = previewPanel.querySelector('#ug-preview-content');
+        const cardContainer = previewPanel.querySelector('#ug-preview-card');
+        const diffBox = previewPanel.querySelector('#ug-diff-box');
+        const confirmBtn = previewPanel.querySelector('#ug-confirm-btn');
 
         let selectedIndex = -1;
+        let selectedCard = null;
 
+        // Render Cards
         this.player.deck.forEach((card, index) => {
-            if (!canUpgradeCard(card)) return;
+            if (!canUpgradeCard(card)) return; // Only show upgradable
 
+            // Create standard card
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.style.cursor = 'pointer';
 
-            const showPreview = () => {
-                const upgraded = upgradeCard(card);
-                placeholder.style.display = 'none';
-                previewCardDiv.style.display = 'flex';
-                previewTextDiv.style.display = 'block';
-
-                previewCardDiv.innerHTML = '';
-                const upgradedEl = Utils.createCardElement(upgraded, 999);
-                previewCardDiv.appendChild(upgradedEl);
-
-                previewTextDiv.innerHTML = `
-    < p style = "margin:0;color:var(--accent-green);font-weight:bold;" > ${card.name} ➤ ${upgraded.name}</p >
-        <p style="margin:4px 0 0 0;font-size:0.8rem;">${upgraded.description}</p>
-`;
-            };
-
-            cardEl.addEventListener('mouseenter', () => {
-                if (selectedIndex === -1) showPreview();
-            });
-
+            // Interaction
             cardEl.addEventListener('click', () => {
-                listContainer.querySelectorAll('.card').forEach(c => c.style.border = '');
-                cardEl.style.border = '3px solid var(--accent-gold)';
+                // Audio
+                if (typeof audioManager !== 'undefined') audioManager.playSFX('click');
+
+                // Highlight Selection
+                cardGrid.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+                cardEl.classList.add('selected');
+
                 selectedIndex = index;
-                showPreview();
-                confirmBtn.disabled = false;
-                confirmBtn.classList.remove('disabled');
+                selectedCard = card;
+
+                // Show Preview
+                this.updateUpgradePreview(card, placeholder, contentArea, cardContainer, diffBox, confirmBtn);
             });
 
-            listContainer.appendChild(cardEl);
+            cardGrid.appendChild(cardEl);
         });
 
-        // Confirm Action
+        // Bind Confirm
         confirmBtn.onclick = () => {
             if (selectedIndex === -1) return;
-            this.campfireUpgradeCard(selectedIndex);
 
-            // Clean up
-            container.style.display = '';
-            container.style.flexDirection = '';
+            // Audio
+            if (typeof audioManager !== 'undefined') audioManager.playSFX('powerup'); // Or 'upgrade'
+
+            // Visual Effect
+            const overlay = document.createElement('div');
+            overlay.className = 'upgrade-flash-overlay';
+            container.appendChild(overlay);
+
+            // Execute Logic
+            setTimeout(() => {
+                const upgradedCard = upgradeCard(selectedCard);
+                // Replace in deck (must handle reference carefully or splice)
+                // Assuming deck is array of objects
+                this.player.deck[selectedIndex] = upgradedCard;
+
+                this.closeModal();
+            }, 500);
         };
 
         modal.classList.add('active');
+
+        // Update Title (Optional override)
+        const title = modal.querySelector('h2');
+        if (title) title.textContent = '🔥 营地 | 悟道进阶';
     }
+
+    // Helper: Update Preview Panel
+    updateUpgradePreview(card, placeholder, contentArea, cardContainer, diffBox, confirmBtn) {
+        placeholder.style.display = 'none';
+        contentArea.style.display = 'flex';
+        confirmBtn.disabled = false;
+
+        // Generate Upgraded Version
+        const upgraded = upgradeCard(card);
+
+        // 1. Render Card Visual
+        cardContainer.innerHTML = '';
+        const upgradedEl = Utils.createCardElement(upgraded, 999);
+        // Remove hover effects on preview card to keep it static
+        upgradedEl.style.transform = 'none';
+        upgradedEl.style.pointerEvents = 'none';
+        cardContainer.appendChild(upgradedEl);
+
+        // 2. Diff Logic
+        let diffHtml = '';
+
+        // Name Diff (if changed)
+        if (card.name !== upgraded.name) {
+            diffHtml += `
+                <div class="diff-row">
+                    <span class="diff-label">名讳</span>
+                    <div>
+                        <span class="diff-val-old">${card.name}</span>
+                        <span class="diff-val-new"> ➤ ${upgraded.name}</span>
+                    </div>
+                </div>`;
+        }
+
+        // Damage Diff
+        if (card.damage !== upgraded.damage && upgraded.damage) {
+            diffHtml += `
+                <div class="diff-row">
+                    <span class="diff-label">威力</span>
+                    <div>
+                        <span class="diff-val-old">${card.damage || 0}</span>
+                        <span class="diff-val-new"> ➤ ${upgraded.damage}</span>
+                    </div>
+                </div>`;
+        }
+
+        // Block Diff
+        if (card.block !== upgraded.block && upgraded.block) {
+            diffHtml += `
+                <div class="diff-row">
+                    <span class="diff-label">护盾</span>
+                    <div>
+                        <span class="diff-val-old">${card.block || 0}</span>
+                        <span class="diff-val-new"> ➤ ${upgraded.block}</span>
+                    </div>
+                </div>`;
+        }
+
+        // Cost Diff
+        if (card.cost !== upgraded.cost) {
+            diffHtml += `
+                <div class="diff-row">
+                    <span class="diff-label">消耗</span>
+                    <div>
+                        <span class="diff-val-old">${card.cost}</span>
+                        <span class="diff-val-new"> ➤ ${upgraded.cost}</span>
+                    </div>
+                </div>`;
+        }
+
+        // Description Diff (Always show as summary)
+        diffHtml += `
+            <div class="diff-row" style="flex-direction:column; border:none; margin-top:5px;">
+                <span class="diff-label" style="margin-bottom:2px;">效果演变</span>
+                <span class="diff-val-new" style="font-size:0.85rem; line-height:1.4">${upgraded.description}</span>
+            </div>
+        `;
+
+        diffBox.innerHTML = diffHtml;
+    }
+
 
     // 升级选中的卡牌
     campfireUpgradeCard(index) {
@@ -5172,31 +5287,105 @@ class Game {
         this.completeCampfire();
     }
 
-    // 显示移除卡牌界面（营地版）
+    // 显示移除卡牌界面（营地版 - Ink & Gold Refactor）
     showCampfireRemove() {
         this.closeModal();
 
-        const modal = document.getElementById('deck-modal');
-        const container = document.getElementById('deck-view-cards');
-        container.innerHTML = '<h3 style="width:100%;text-align:center;margin-bottom:16px;">选择要移除的卡牌</h3>';
+        const modal = document.getElementById('purification-modal');
+        const grid = document.getElementById('purification-grid');
+        const costDisplay = document.getElementById('purification-cost-display');
+        const confirmBtn = document.getElementById('purification-confirm-btn');
 
+        if (!modal || !grid) {
+            console.error('Purification UI elements missing!');
+            return;
+        }
+
+        // Reset State
+        grid.innerHTML = '';
+        modal.classList.add('active');
+
+        // Campfire specific adjustments
+        costDisplay.innerHTML = '<span style="color: var(--accent-green); font-size: 1.1em;">✨ 净化心灵</span>';
+
+        confirmBtn.disabled = true;
+        confirmBtn.onclick = null; // Clear listeners
+
+        let selectedIndex = -1;
+
+        // Render Cards
         this.player.deck.forEach((card, index) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'purification-card-wrapper';
+
+            // Create standard card element
             const cardEl = Utils.createCardElement(card, index);
-            cardEl.style.cursor = 'pointer';
-            cardEl.addEventListener('click', () => this.campfireRemoveCard(index));
-            container.appendChild(cardEl);
+            wrapper.appendChild(cardEl);
+
+            // Delete Intent Overlay (Visual)
+            const overlay = document.createElement('div');
+            overlay.className = 'delete-intent-overlay';
+            overlay.innerHTML = '<span class="delete-icon">🔥</span>';
+            wrapper.appendChild(overlay);
+
+            // Selection Logic
+            wrapper.addEventListener('click', () => {
+                // Deselect others
+                document.querySelectorAll('.purification-card-wrapper').forEach(el => el.classList.remove('selected'));
+
+                if (selectedIndex === index) {
+                    // Deselect
+                    selectedIndex = -1;
+                    confirmBtn.disabled = true;
+                    confirmBtn.textContent = '选择移除对象';
+                } else {
+                    // Select
+                    selectedIndex = index;
+                    wrapper.classList.add('selected');
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = `确认焚毁 (Burn)`;
+
+                    if (typeof audioManager !== 'undefined') audioManager.playSFX('click');
+                }
+            });
+
+            grid.appendChild(wrapper);
         });
 
-        modal.classList.add('active');
+        // Confirm Action
+        confirmBtn.onclick = () => {
+            if (selectedIndex === -1) return;
+
+            const cardName = this.player.deck[selectedIndex].name;
+            const targetWrapper = grid.children[selectedIndex];
+
+            // Visual Burn Effect
+            const burn = document.createElement('div');
+            burn.className = 'card-burn-effect';
+            targetWrapper.appendChild(burn);
+
+            if (typeof audioManager !== 'undefined') audioManager.playSFX('fire');
+
+            // Delay actual removal
+            setTimeout(() => {
+                this.campfireRemoveCard(selectedIndex);
+
+                // Close UI manually here since campfireRemoveCard might need to handle logic differently if we didn't pass params
+                // Actually campfireRemoveCard calls closeModal/completeCampfire, so we are good.
+            }, 800);
+        };
     }
 
-    // 移除选中的卡牌（营地版）
+    // 移除选中的卡牌（营地版 - 逻辑处理）
     campfireRemoveCard(index) {
         const card = this.player.deck[index];
         this.player.deck.splice(index, 1);
 
-        Utils.showBattleLog(`移除了 ${card.name}！`);
+        // Removed tracking count logic if specific to shop, or keep it if global? 
+        // Let's increment global remove count just in case
+        this.player.removeCount = (this.player.removeCount || 0) + 1;
 
+        Utils.showBattleLog(`【${card.name}】已化为灰烬...`);
         this.closeModal();
         this.completeCampfire();
     }

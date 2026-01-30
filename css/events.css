@@ -1,0 +1,275 @@
+/* The Defier - Ink & Gold Event UI */
+:root {
+    --event-bg-dark: #121212;
+    --paper-texture-dark: #1a1a1a;
+    --gold-accent: #cfaa70;
+    --jade-accent: #4ade80;
+    --ink-black: #000000;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+}
+
+/* Modal Layout Adjustments */
+.large-modal {
+    width: 90vw;
+    max-width: 1200px;
+    height: 85vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--event-bg-dark);
+    border: 1px solid var(--gold-accent);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Event Choices Refinement */
+.event-choice {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+    text-align: left;
+}
+
+.event-choice:hover:not(.disabled) {
+    border-color: var(--gold-accent);
+    background: rgba(207, 170, 112, 0.1);
+    transform: translateY(-2px);
+}
+
+.choice-effect {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-top: 0.5rem;
+}
+
+/* Upgrade Screen Layout */
+.upgrade-modal-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    height: 100%;
+}
+
+/* Left: Card Grid */
+.upgrade-card-grid {
+    flex: 2;
+    padding: 2rem;
+    overflow-y: auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1.5rem;
+    align-content: flex-start;
+    background: radial-gradient(circle at center, rgba(30, 30, 30, 0.8), rgba(10, 10, 10, 0.95));
+    /* Custom Scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: var(--gold-accent) var(--event-bg-dark);
+}
+
+.upgrade-card-grid::-webkit-scrollbar {
+    width: 6px;
+}
+
+.upgrade-card-grid::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.upgrade-card-grid::-webkit-scrollbar-thumb {
+    background: var(--gold-accent);
+    border-radius: 3px;
+}
+
+.upgrade-card-grid .card {
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+}
+
+.upgrade-card-grid .card:hover {
+    transform: translateY(-5px) scale(1.05);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+    border-color: rgba(207, 170, 112, 0.5);
+}
+
+.upgrade-card-grid .card.selected {
+    border: 2px solid var(--gold-accent);
+    box-shadow: 0 0 15px var(--gold-accent);
+    transform: scale(1.05);
+}
+
+/* Right: Preview Panel (Jade Slip) */
+.upgrade-preview-panel {
+    flex: 1;
+    min-width: 350px;
+    background: #161616;
+    border-left: 1px solid var(--gold-accent);
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    box-shadow: -5px 0 15px rgba(0, 0, 0, 0.5);
+}
+
+.preview-title {
+    font-family: 'Ma Shan Zheng', cursive;
+    font-size: 2rem;
+    color: var(--gold-accent);
+    margin-bottom: 1rem;
+    text-shadow: 0 0 5px rgba(207, 170, 112, 0.3);
+}
+
+.preview-placeholder {
+    color: var(--text-secondary);
+    text-align: center;
+    font-style: italic;
+    margin-top: 50%;
+    line-height: 1.6;
+}
+
+.preview-card-container {
+    margin: 1.5rem 0;
+    transform: scale(1.2);
+    filter: drop-shadow(0 0 10px rgba(74, 222, 128, 0.2));
+}
+
+.preview-diff-box {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 1rem;
+    width: 100%;
+    margin-top: 1rem;
+}
+
+.diff-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+    padding-bottom: 4px;
+}
+
+.diff-row:last-child {
+    border-bottom: none;
+}
+
+.diff-label {
+    color: #888;
+}
+
+.diff-val-old {
+    color: #aaa;
+    text-decoration: line-through;
+    margin-right: 5px;
+}
+
+.diff-val-new {
+    color: var(--jade-accent);
+    font-weight: bold;
+}
+
+.confirm-upgrade-btn {
+    margin-top: auto;
+    width: 100%;
+    padding: 1rem;
+    background: linear-gradient(90deg, #1a1a1a, #2a2a2a);
+    border: 1px solid var(--gold-accent);
+    color: var(--gold-accent);
+    font-family: 'Ma Shan Zheng', cursive;
+    font-size: 1.4rem;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s;
+}
+
+.confirm-upgrade-btn:not(:disabled):hover {
+    background: var(--gold-accent);
+    color: #000;
+    box-shadow: 0 0 15px var(--gold-accent);
+}
+
+.confirm-upgrade-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    border-color: #444;
+}
+
+/* Particle effect for upgrade */
+@keyframes upgrade-flash {
+    0% {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1.2);
+    }
+
+    100% {
+        opacity: 0;
+        transform: scale(1.5);
+    }
+}
+
+.upgrade-flash-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.8), transparent);
+    pointer-events: none;
+    animation: upgrade-flash 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    z-index: 100;
+}
+
+/* --- Fixes for User Scroll Requests --- */
+
+/* 1. Event Modal: Disable scrolling as requested */
+#event-modal .modal-content {
+    overflow: hidden !important;
+    /* Force no scrollbar */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    /* Center content vertically if space allows */
+}
+
+/* 2. Upgrade Modal: Fix scrolling for card grid */
+/* We need the parent modal to NOT scroll, so the child grid CAN scroll */
+.modal.upgrade-mode .modal-content {
+    overflow: hidden !important;
+    padding: 0 !important;
+    /* Remove padding to let split layout touch edges */
+    height: 85vh !important;
+    max-height: 85vh !important;
+    background: var(--event-bg-dark);
+    display: flex;
+    flex-direction: column;
+}
+
+.modal.upgrade-mode .close-btn {
+    z-index: 10;
+    /* Ensure close button stays on top */
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+}
+
+/* Ensure the view container fills the modal */
+#deck-view-cards {
+    height: 100%;
+    width: 100%;
+}
