@@ -193,52 +193,27 @@ body {
     display: inline-block;
 }
 
-.title-container {
-    position: relative;
-    display: inline-block;
+.logo-img {
+    max-width: 250px;
+    width: 60%;
+    height: auto;
+    filter: drop-shadow(0 0 15px rgba(207, 170, 112, 0.4));
+    animation: logo-float 6s ease-in-out infinite;
+    margin-bottom: 5px;
 }
 
-.title-cn {
-    font-family: var(--font-display);
-    font-size: 6.5rem;
-    color: transparent;
-    /* Liquid Gold Gradient */
-    background: linear-gradient(180deg, #fff 0%, var(--accent-gold) 40%, #8a6a2a 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    filter: drop-shadow(0 8px 0 rgba(0, 0, 0, 0.5));
-    position: relative;
-    z-index: 2;
-    margin-bottom: -15px;
-    letter-spacing: 9px;
-}
+@keyframes logo-float {
 
-.ink-stroke {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) rotate(-5deg);
-    width: 120%;
-    height: 60%;
-    background: #000;
-    opacity: 0.8;
-    z-index: 1;
-    filter: blur(20px);
-    border-radius: 50%;
-}
+    0%,
+    100% {
+        transform: translateY(0);
+        filter: drop-shadow(0 0 15px rgba(207, 170, 112, 0.4));
+    }
 
-.title-en {
-    font-family: var(--font-body);
-    font-size: 1.15rem;
-    letter-spacing: 1.2em;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    margin-bottom: 12px;
-    margin-left: 1.2em;
-    margin-top: 8px;
-    /* visual balance */
-    position: relative;
-    z-index: 2;
+    50% {
+        transform: translateY(-8px);
+        filter: drop-shadow(0 0 25px rgba(207, 170, 112, 0.6));
+    }
 }
 
 .seal-container {
@@ -299,21 +274,21 @@ body {
 }
 
 .game-description p {
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 
 /* Talisman Buttons */
 .menu-buttons {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 10px;
     align-items: center;
 }
 
 .talisman-btn {
     position: relative;
     width: 300px;
-    height: 60px;
+    height: 52px;
     background: transparent;
     border: none;
     cursor: pointer;
@@ -458,7 +433,7 @@ body {
 .version-info {
     font-size: 0.78rem;
     color: var(--text-muted);
-    margin-top: 12px;
+    margin-top: 30px;
     font-family: var(--font-body);
     letter-spacing: 1px;
 }
@@ -2241,6 +2216,31 @@ body {
     box-shadow:
         0 0 25px rgba(207, 170, 112, 0.4),
         inset 0 -15px 25px rgba(0, 0, 0, 0.3);
+}
+
+.player-face-visual {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1;
+    /* Behind text (which needs z-index > 1) */
+    background-position: center top;
+    background-size: cover;
+}
+
+/* Fix z-index for name to be above visual */
+.player-avatar>span,
+.player-avatar>#player-name-display {
+    position: relative;
+    z-index: 5;
+    text-shadow: 0 0 4px #000;
+    /* Enhance readability */
 }
 
 /* 玩家灵气光环 */
@@ -5249,157 +5249,297 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 30px;
-    padding: 20px;
+    padding: 20px 40px;
     height: 100%;
     overflow-y: auto;
     width: 100%;
+    /* Custom Scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-gold) rgba(0, 0, 0, 0.3);
 }
 
 .story-intro {
-    max-width: 800px;
-    width: 90%;
-    background: rgba(0, 0, 0, 0.6);
-    padding: 20px;
-    border-radius: 8px;
-    line-height: 1.6;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    max-width: 900px;
+    width: 100%;
+    background: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.7) 20%, rgba(0, 0, 0, 0.7) 80%, rgba(0, 0, 0, 0));
+    padding: 20px 40px;
+    border-top: 1px solid rgba(207, 170, 112, 0.3);
+    border-bottom: 1px solid rgba(207, 170, 112, 0.3);
+    line-height: 1.8;
+    text-align: center;
     flex-shrink: 0;
+    margin-bottom: 30px;
+}
+
+.story-intro p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin-bottom: 8px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.story-intro strong {
+    color: var(--accent-gold);
+    font-size: 1.1rem;
+    font-weight: normal;
+    font-family: var(--font-display);
+    letter-spacing: 2px;
 }
 
 .character-cards-wrapper {
-    display: flex;
-    gap: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 30px;
     justify-content: center;
-    flex-wrap: wrap;
     width: 100%;
-    padding-bottom: 40px;
+    max-width: 1200px;
+    padding-bottom: 60px;
 }
 
 .character-card {
-    width: 280px;
-    height: 450px;
-    background: linear-gradient(135deg, rgba(30, 30, 30, 0.9) 0%, rgba(10, 10, 10, 0.95) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    padding: 2px;
-    /* For border gradient effect if needed */
     position: relative;
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    display: flex;
-    flex-direction: column;
-}
-
-.character-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border-radius: 12px;
-    border: 2px solid transparent;
-    transition: all 0.3s;
-    pointer-events: none;
-}
-
-.character-card:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-}
-
-.character-card.selected {
-    transform: translateY(-10px) scale(1.05);
-    box-shadow: 0 0 30px var(--accent-gold);
-    border-color: var(--accent-gold);
-}
-
-.character-card.selected::before {
-    border-color: var(--accent-gold);
-}
-
-.card-inner {
-    background: rgba(0, 0, 0, 0.6);
-    border-radius: 10px;
-    height: 100%;
     width: 100%;
-    overflow: hidden;
+    max-width: 320px;
+    height: 480px;
+    margin: 0 auto;
+    background: #0f121a;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
 }
 
+/* 选中状态金边光效 */
+.character-card.selected {
+    border-color: var(--accent-gold);
+    box-shadow:
+        0 15px 35px rgba(0, 0, 0, 0.6),
+        0 0 20px rgba(207, 170, 112, 0.3);
+    transform: translateY(-8px);
+    z-index: 2;
+}
+
+/* 选中标记 - 只有选中时显示 */
+.character-card .selected-mark {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    color: var(--accent-gold);
+    font-size: 1.5rem;
+    opacity: 0;
+    transform: scale(0);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 10;
+    text-shadow: 0 0 10px rgba(207, 170, 112, 0.5);
+}
+
+.character-card.selected .selected-mark {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.character-card:hover:not(.selected):not(.locked) {
+    border-color: rgba(207, 170, 112, 0.5);
+    transform: translateY(-4px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+}
+
+.character-card.locked {
+    filter: grayscale(1) brightness(0.6);
+    cursor: not-allowed;
+    border-style: dashed;
+}
+
+/* 内部容器 */
+.card-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background:
+        linear-gradient(to bottom, rgba(20, 20, 30, 0.2), rgba(10, 14, 20, 0.95)),
+        url('../assets/images/noise.png');
+    /* Optional texture */
+}
+
+/* 顶部头像区 */
 .char-header {
-    height: 120px;
+    height: 180px;
     display: flex;
     align-items: center;
     justify-content: center;
     position: relative;
-    background: radial-gradient(circle at center, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+    overflow: hidden;
+    background: radial-gradient(circle at 50% 40%, rgba(50, 50, 70, 0.3) 0%, transparent 70%);
 }
 
-.char-avatar {
-    font-size: 4rem;
-    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.3));
+/* 水墨背景装饰 */
+.char-ink-bg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 10rem;
+    opacity: 0.1;
+    color: #000;
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(2px);
 }
 
+/* 头像容器 */
+.char-avatar-wrapper {
+    position: relative;
+    z-index: 1;
+    width: 110px;
+    height: 110px;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a24;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    transition: border-color 0.3s ease;
+}
+
+.character-card.selected .char-avatar-wrapper {
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 20px rgba(207, 170, 112, 0.2);
+}
+
+.char-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.char-avatar-emoji {
+    font-size: 3.5rem;
+    line-height: 1;
+}
+
+/* 信息主体 */
 .char-body {
-    padding: 20px;
     flex: 1;
+    padding: 15px 25px;
     display: flex;
     flex-direction: column;
-    gap: 15px;
+    align-items: center;
+    gap: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .char-name {
-    font-size: 1.5rem;
-    font-weight: bold;
-    text-align: center;
-    color: #fff;
-    margin-bottom: 5px;
+    font-family: var(--font-display);
+    font-size: 2rem;
+    color: #e0e0e0;
+    margin-bottom: 0;
+    text-shadow: 0 2px 5px rgba(0, 0, 0, 0.8);
+    letter-spacing: 2px;
+}
+
+.character-card.selected .char-name {
+    color: var(--accent-gold);
 }
 
 .char-title {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-    text-align: center;
-    margin-top: -10px;
-    margin-bottom: 15px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    margin-top: -8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 2px 10px;
+    border-radius: 20px;
+}
+
+.character-card.selected .char-title {
+    border-color: rgba(207, 170, 112, 0.3);
+    color: var(--accent-gold-bright);
 }
 
 .char-desc {
     font-size: 0.85rem;
-    line-height: 1.4;
-    color: var(--text-secondary);
+    color: #999;
     text-align: center;
-    margin-bottom: 10px;
+    line-height: 1.5;
+    margin: 10px 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
+/* 天赋区域 */
+.char-relic-info {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    padding: 10px;
+    margin-top: auto;
+    /* Push to bottom of body if space allows */
+}
+
+.character-card.selected .char-relic-info {
+    background: rgba(207, 170, 112, 0.05);
+    border-color: rgba(207, 170, 112, 0.2);
+}
+
+.relic-name {
+    color: var(--accent-gold);
+    font-size: 0.95rem;
+    font-weight: 500;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.relic-desc {
+    font-size: 0.8rem;
+    color: #aaa;
+    line-height: 1.4;
+}
+
+/* 属性预览 */
 .char-stats-preview {
     display: flex;
-    justify-content: space-around;
-    padding: 10px 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    justify-content: center;
+    gap: 30px;
+    width: 100%;
+    padding-top: 15px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.1);
 }
 
 .stat-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    font-size: 0.8rem;
-}
-
-.stat-item span:first-child {
-    font-size: 1.2rem;
-    margin-bottom: 3px;
-}
-
-.char-relic-preview {
-    font-size: 0.8rem;
-    color: var(--text-gold);
     text-align: center;
-    margin-top: auto;
 }
+
+.stat-value {
+    font-size: 1.2rem;
+    font-family: 'Roboto', sans-serif;
+    /* Use sans-serif for numbers */
+    font-weight: bold;
+    color: #ddd;
+    display: block;
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    color: #666;
+    margin-top: 2px;
+    display: block;
+    text-transform: uppercase;
+}
+
+
 
 .character-selection-footer {
     padding: 20px;
@@ -10842,6 +10982,7 @@ body {
         transform: translateX(0);
     }
 }
+
 /* ===================================
    Mobile Adaptation ( < 768px )
    =================================== */
@@ -10853,9 +10994,10 @@ body {
         --spacing-xl: 20px;
     }
 
-    html, body {
+    html,
+    body {
         /* Slightly larger base text for readability, but controlled */
-        font-size: 14px; 
+        font-size: 14px;
     }
 
     /* --- Main Menu --- */
@@ -10865,16 +11007,19 @@ body {
         display: flex;
         flex-direction: column;
         justify-content: center;
-        height: 100%; /* Use full height to center content vertically */
+        height: 100%;
+        /* Use full height to center content vertically */
     }
 
     .game-logo {
         margin-bottom: 20px;
-        transform: scale(0.85); /* Slight scale down */
+        transform: scale(0.85);
+        /* Slight scale down */
     }
 
     .title-cn {
-        font-size: 4.5rem; /* Down from 6.5rem */
+        font-size: 4.5rem;
+        /* Down from 6.5rem */
         letter-spacing: 5px;
     }
 
@@ -10889,7 +11034,7 @@ body {
         right: -20px;
         top: -20px;
     }
-    
+
     .game-description {
         font-size: 0.85rem;
         padding: 0 10px;
@@ -10901,11 +11046,13 @@ body {
     }
 
     .talisman-btn {
-        width: 90%; /* Fluid width */
+        width: 90%;
+        /* Fluid width */
         max-width: 320px;
-        height: 55px; /* Slightly shorter */
+        height: 55px;
+        /* Slightly shorter */
     }
-    
+
     .talisman-content {
         font-size: 1.2rem;
     }
@@ -10919,63 +11066,65 @@ body {
         width: 40px;
         height: 40px;
     }
-    
+
     /* Ensure fog layers don't break layout */
     .fog-layer {
         background-size: 200px 200px;
     }
-    
+
     /* --- Modals / Overlays Generic --- */
     .screen-header {
         padding: 10px 15px;
     }
-    
+
     .screen-header h2 {
         font-size: 1.4rem;
     }
-    
+
     /* Fix Character Selection Layout */
     .character-panel {
-        grid-template-columns: 1fr; /* Stack vertically */
+        grid-template-columns: 1fr;
+        /* Stack vertically */
         grid-template-rows: auto auto auto;
         padding: 15px;
         gap: 20px;
-        height: calc(100% - 60px); 
+        height: calc(100% - 60px);
     }
-    
+
     .character-avatar {
         order: 1;
     }
-    
+
     .avatar-ring {
         width: 140px;
         height: 140px;
     }
-    
+
     .avatar-inner {
         width: 120px;
         height: 120px;
         font-size: 1.6rem;
     }
-    
+
     .character-stats {
         order: 2;
         justify-content: center;
         flex-wrap: wrap;
         gap: 15px;
     }
-    
+
     .stat {
         min-width: 70px;
         padding: 10px;
     }
-    
+
     .character-info {
         order: 3;
     }
-    
+
     .fate-ring-display {
-        display: none; /* Hide complex decoration on mobile if space is tight, or move to bottom */
+        display: none;
+        /* Hide complex decoration on mobile if space is tight, or move to bottom */
     }
 }
 
@@ -10997,7 +11146,8 @@ body {
         width: 100%;
         max-width: 350px;
         margin: 0 auto;
-        min-height: 120px; /* Compress height */
+        min-height: 120px;
+        /* Compress height */
     }
 
     /* --- Realm / Map Selection --- */
@@ -11010,7 +11160,8 @@ body {
 
     .realm-card {
         width: 90%;
-        height: 180px; /* Shorter cards */
+        height: 180px;
+        /* Shorter cards */
         margin-bottom: 15px;
     }
 
@@ -11025,16 +11176,19 @@ body {
 
     /* Enemy Area */
     .enemy-container {
-        flex-wrap: wrap; 
+        flex-wrap: wrap;
         justify-content: center;
         gap: 5px;
-        padding-top: 50px; /* Space for top bar */
-        transform: scale(0.9); /* Scale down slightly */
+        padding-top: 50px;
+        /* Space for top bar */
+        transform: scale(0.9);
+        /* Scale down slightly */
         transform-origin: top center;
     }
-    
+
     .enemy-unit {
-        width: 100px; /* Smaller enemies */
+        width: 100px;
+        /* Smaller enemies */
         height: 140px;
     }
 
@@ -11049,33 +11203,37 @@ body {
     }
 
     .card {
-        width: 100px; /* Smaller cards */
+        width: 100px;
+        /* Smaller cards */
         height: 140px;
         flex-shrink: 0;
     }
 
     .card:hover {
-        transform: translateY(-20px) scale(1.1); /* Reduce hover lift */
+        transform: translateY(-20px) scale(1.1);
+        /* Reduce hover lift */
     }
 
     /* Player Status / Energy */
     .player-status-area {
         position: absolute;
-        bottom: 160px; /* Above hand */
+        bottom: 160px;
+        /* Above hand */
         left: 10px;
         transform: scale(0.8);
         transform-origin: bottom left;
     }
-    
-    .energy-display, .milk-candy-display {
+
+    .energy-display,
+    .milk-candy-display {
         font-size: 1rem;
     }
 
     /* Map Interface */
     #map-screen {
-        overflow: hidden; 
+        overflow: hidden;
     }
-    
+
     .map-container {
         /* Ensure map is scrollable or fitted */
         width: 100%;
@@ -11105,12 +11263,13 @@ body {
         flex-direction: column;
         overflow-y: auto;
     }
-    
-    .ring-visual-area, .ring-slots-area {
+
+    .ring-visual-area,
+    .ring-slots-area {
         width: 100%;
         height: auto;
     }
-    
+
     .ring-slots-area {
         padding-bottom: 40px;
         display: grid;
@@ -11123,15 +11282,17 @@ body {
         grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
         gap: 10px;
     }
-    
+
     .treasure-item {
         width: 80px;
         height: 80px;
     }
 
     /* --- Card Detail Modal --- */
-    #card-detail-modal, #treasure-detail-modal {
-        width: 95% !important; /* Force fit */
+    #card-detail-modal,
+    #treasure-detail-modal {
+        width: 95% !important;
+        /* Force fit */
         height: auto;
         max-height: 90vh;
         top: 50%;
@@ -11140,17 +11301,19 @@ body {
         padding: 15px;
         overflow-y: auto;
     }
-    
+
     .detail-content {
         flex-direction: column;
     }
-    
-    .detail-image, .detail-info {
+
+    .detail-image,
+    .detail-info {
         width: 100%;
     }
-    
+
     .detail-image {
-        height: 200px; /* Limit image height */
+        height: 200px;
+        /* Limit image height */
         margin-bottom: 15px;
     }
 }
@@ -11159,39 +11322,47 @@ body {
    Mobile Battle UI Fixes - FINAL
    =================================== */
 @media (max-width: 768px) {
+
     /* 1. Reset the Main Grid for Mobile Portrait */
     .battle-container {
-        display: flex; /* Switch from Grid to Flex Column */
+        display: flex;
+        /* Switch from Grid to Flex Column */
         flex-direction: column;
         justify-content: flex-start;
         align-items: center;
         height: 100vh;
         overflow: hidden;
-        padding-top: 60px; /* Space for top bar/island */
+        padding-top: 60px;
+        /* Space for top bar/island */
     }
 
     /* 2. Enemy Area (Top) */
     .enemy-area {
         width: 100%;
-        height: 25vh; /* Fixed height for enemies */
+        height: 25vh;
+        /* Fixed height for enemies */
         margin-bottom: 20px;
-        align-items: flex-end; /* Align enemies to bottom of their box */
-        transform: scale(0.85); /* Slightly smaller */
+        align-items: flex-end;
+        /* Align enemies to bottom of their box */
+        transform: scale(0.85);
+        /* Slightly smaller */
     }
-    
+
     .enemy-container {
-        gap: 15px; /* Closer together */
+        gap: 15px;
+        /* Closer together */
     }
 
     /* 3. Player Info & Battle Log (Middle) */
     .battle-middle {
         position: absolute;
         width: 100%;
-        top: 30vh; /* Position log below enemies */
+        top: 30vh;
+        /* Position log below enemies */
         height: 50px;
         z-index: 50;
     }
-    
+
     .player-area {
         width: 100%;
         height: auto;
@@ -11200,51 +11371,60 @@ body {
         padding: 0;
         margin-bottom: 10px;
     }
-    
+
     .player-character {
-        flex-direction: row; /* Avatar left, Bars right */
+        flex-direction: row;
+        /* Avatar left, Bars right */
         gap: 15px;
     }
-    
+
     /* Energy Bars - Horizontal Layout */
     .player-bars {
         align-items: flex-start;
     }
 
     /* Milk Candy / Energy Indicators */
-    .milk-candy-display, .energy-display {
+    .milk-candy-display,
+    .energy-display {
         flex-direction: row;
         font-size: 0.9rem;
     }
-    
+
     /* 4. Hand Area (Bottom) */
     .hand-area {
         width: 100%;
-        flex: 1; /* Take remaining space */
+        flex: 1;
+        /* Take remaining space */
         min-height: 180px;
         align-items: flex-end;
-        padding-bottom: 80px; /* Push cards up from very bottom */
-        overflow-x: auto; /* Allow scrolling if too many cards */
+        padding-bottom: 80px;
+        /* Push cards up from very bottom */
+        overflow-x: auto;
+        /* Allow scrolling if too many cards */
         overflow-y: visible;
-        justify-content: flex-start; /* Start from left */
+        justify-content: flex-start;
+        /* Start from left */
         padding-left: 20px;
         padding-right: 20px;
     }
-    
+
     .hand-container {
-        width: max-content; /* Allow container to grow wide */
+        width: max-content;
+        /* Allow container to grow wide */
         display: flex;
-        gap: -30px; /* Overlap cards */
+        gap: -30px;
+        /* Overlap cards */
         padding: 0 10px;
     }
-    
+
     .card {
         width: 100px;
         height: 140px;
-        font-size: 0.8rem; /* Smaller text */
+        font-size: 0.8rem;
+        /* Smaller text */
         flex-shrink: 0;
     }
-    
+
     /* 5. End Turn Button & Deck Piles */
     .end-turn-btn {
         position: fixed;
@@ -11255,19 +11435,25 @@ body {
         font-size: 1rem;
         z-index: 300;
     }
-    
+
     .pile-btn {
         position: fixed;
         bottom: 20px;
         z-index: 300;
         transform: scale(0.8);
     }
-    
-    .pile-btn.draw { left: 10px; }
-    .pile-btn.discard { left: 80px; }
-    
+
+    .pile-btn.draw {
+        left: 10px;
+    }
+
+    .pile-btn.discard {
+        left: 80px;
+    }
+
     /* Hide decorative/heavy elements */
-    .void-particles, .fog-layer {
+    .void-particles,
+    .fog-layer {
         display: none;
     }
 }
@@ -11276,6 +11462,7 @@ body {
    Mobile Management UI Fixes - FINAL
    =================================== */
 @media (max-width: 768px) {
+
     /* --- 1. Life Ring (Ming Huan) --- */
     #fate-ring-screen {
         overflow-y: auto;
@@ -11288,66 +11475,73 @@ body {
         overflow: visible;
         perspective: none;
     }
-    
+
     .ring-scene {
         position: relative;
-        height: 600px; /* Minimum height for ring interaction */
+        height: 600px;
+        /* Minimum height for ring interaction */
         width: 100%;
-        overflow: visible; /* Allow scrolling */
-        pointer-events: auto; /* Enable scroll interaction */
+        overflow: visible;
+        /* Allow scrolling */
+        pointer-events: auto;
+        /* Enable scroll interaction */
     }
-    
+
     .ring-system {
         transform: rotateX(0deg) rotateY(0deg) !important;
         width: 100%;
         height: 100%;
         /* Scale down to fit width */
-        transform: scale(0.65) !important; 
+        transform: scale(0.65) !important;
         transform-origin: top center;
         margin-top: 50px;
     }
-    
+
     /* Make slots easier to tap */
     .ring-slot-3d {
         width: 80px;
         height: 80px;
-        margin-left: -40px; 
+        margin-left: -40px;
         margin-top: -40px;
     }
 
     /* --- 2. Deck Builder / Compendium --- */
     /* Fix layout containers */
-    .compendium-layout, .treasure-compendium-layout {
+    .compendium-layout,
+    .treasure-compendium-layout {
         display: flex;
         flex-direction: column;
         padding: 10px;
         height: auto;
-        overflow-y: auto; /* Allow entire screen scroll */
+        overflow-y: auto;
+        /* Allow entire screen scroll */
         padding-bottom: 80px;
     }
-    
+
     .jade-slips-container {
         height: auto;
         overflow: visible;
     }
-    
+
     .jade-slips-grid {
-        grid-template-columns: repeat(3, 1fr); /* 3 cols on mobile */
+        grid-template-columns: repeat(3, 1fr);
+        /* 3 cols on mobile */
         gap: 10px;
         padding: 0;
         overflow: visible;
     }
-    
+
     .compendium-grid {
-        grid-template-columns: repeat(3, 1fr); /* 3 cols for items */
+        grid-template-columns: repeat(3, 1fr);
+        /* 3 cols for items */
         gap: 8px;
     }
-    
+
     /* Hide Resonance Manual sidebar initially? Or stack it */
     .resonance-manual-container {
         margin-top: 20px;
         border-left: none;
-        border-top: 1px solid rgba(255,255,255,0.1);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
         padding-left: 0;
         padding-top: 20px;
         height: auto;
@@ -11356,25 +11550,27 @@ body {
     /* --- 3. Shop / Curator Shelf --- */
     .curator-shelf-layout {
         padding: 10px;
-        height: 100vh; /* Fixed height for shop to allow internal scroll */
+        height: 100vh;
+        /* Fixed height for shop to allow internal scroll */
     }
-    
+
     .treasures-shelf-container {
-        grid-template-columns: repeat(3, 1fr); /* 3 cols */
+        grid-template-columns: repeat(3, 1fr);
+        /* 3 cols */
         grid-auto-rows: auto;
         gap: 10px;
         padding: 10px;
     }
-    
+
     .shelf-slot {
         height: 90px;
     }
-    
+
     .shelf-stats-header {
         gap: 15px;
         flex-wrap: wrap;
     }
-    
+
     .shelf-stat {
         padding: 5px 15px;
         flex: 1;
@@ -11382,16 +11578,25 @@ body {
 
     /* --- 4. Modals (Detail Views) --- */
     /* Ensure close buttons are visible & accessible */
-    .cd-close-btn, .modal-close-floating {
-        width: 100%; /* Full width button at bottom for easier close */
+    .cd-close-btn,
+    .modal-close-floating {
+        width: 100%;
+        /* Full width button at bottom for easier close */
         border-radius: 8px;
         height: 50px;
-        position: static; /* Flow in document */
+        position: static;
+        /* Flow in document */
         margin-top: 15px;
     }
-    
+
+    /* --- Dynamic Avatar Styles --- */
+
+
+
+
     .modal-close-floating {
-        margin-bottom: 15px; /* For top close buttons */
+        margin-bottom: 15px;
+        /* For top close buttons */
         position: absolute;
         width: 40px;
         top: 10px;
@@ -11403,15 +11608,18 @@ body {
    Mobile Battle UI Overlap Fixes
    =================================== */
 @media (max-width: 768px) {
+
     /* Reposition Realm Law/Environmental Effects */
     .realm-law-indicator {
         position: absolute;
-        top: 60px; /* Move down below header/treasures */
+        top: 60px;
+        /* Move down below header/treasures */
         left: 10px;
         z-index: 100;
-        transform: scale(0.85); /* Slightly smaller */
+        transform: scale(0.85);
+        /* Slightly smaller */
         transform-origin: top left;
-        background: rgba(0,0,0,0.6);
+        background: rgba(0, 0, 0, 0.6);
         padding: 5px 10px;
         border-radius: 4px;
         max-width: 200px;
@@ -11427,13 +11635,16 @@ body {
         height: auto;
         min-height: 50px;
         flex-wrap: nowrap;
-        overflow-x: auto; /* Allow scrolling if many treasures */
-        justify-content: flex-start; /* Left align on mobile for better space usage */
+        overflow-x: auto;
+        /* Allow scrolling if many treasures */
+        justify-content: flex-start;
+        /* Left align on mobile for better space usage */
         padding-left: 10px;
     }
-    
+
     .treasure-icon {
-        width: 32px; /* Smaller icons on mobile */
+        width: 32px;
+        /* Smaller icons on mobile */
         height: 32px;
         font-size: 20px;
     }
@@ -11443,24 +11654,100 @@ body {
    Mobile Battle UI Overlap Fixes - REAL FIX
    =================================== */
 @media (max-width: 768px) {
+
     /* Correct Selector for Battle Screen Environment Display */
     #battle-environment {
         position: absolute;
-        top: 60px; /* Move down below header/treasures */
+        top: 60px;
+        /* Move down below header/treasures */
         left: 10px;
         z-index: 100;
-        transform: scale(0.85); /* Slightly smaller */
+        transform: scale(0.85);
+        /* Slightly smaller */
         transform-origin: top left;
-        background: rgba(0,0,0,0.6);
+        background: rgba(0, 0, 0, 0.6);
         padding: 5px 10px;
         border-radius: 4px;
         max-width: 200px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        
-        display: flex; /* Ensure flex layout matches JS setting */
+
+        display: flex;
+        /* Ensure flex layout matches JS setting */
         align-items: center;
         gap: 5px;
     }
+}
+
+/* Character Avatar Image Support */
+.char-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
+    filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.5));
+}
+
+.char-avatar:has(.char-avatar-img) {
+    width: 120px;
+    height: 120px;
+    font-size: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Character Portrait Styles - Added for Wuyu */
+.char-portrait-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.character-card .char-header:has(.char-portrait-img) {
+    height: 140px;
+    align-items: flex-end;
+}
+
+.character-card .char-header .char-avatar:has(.char-portrait-img) {
+    width: 120px;
+    height: 120px;
+    border: 3px solid var(--accent-gold);
+}
+
+/* Battle Avatar Portrait */
+#player-avatar.has-portrait {
+    background: transparent;
+    padding: 0;
+    border: 2px solid var(--accent-gold);
+    overflow: hidden;
+}
+
+.battle-portrait-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* --- Global Dynamic Avatar Styles (Fixed) --- */
+.slot-visual.is-image {
+    background-size: cover;
+    background-position: top center;
+    background-repeat: no-repeat;
+    border: 2px solid var(--accent-gold);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    color: transparent;
+    /* Hide any fallback text */
+    background-color: transparent !important;
+    /* Ensure base background doesn't show */
+}
+
+.player-face-visual.is-image {
+    background-size: cover;
+    background-position: top center;
+    background-repeat: no-repeat;
+    border: 2px solid var(--accent-gold);
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
 }

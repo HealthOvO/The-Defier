@@ -9,6 +9,7 @@ const CHARACTERS = {
         name: '林风',
         title: '逆命者',
         avatar: '🤺',
+        image: 'assets/images/characters/lin_feng.png',
         description: '命环可以进化的逆命者，每次进化都伴随着巨大的风险与机遇。',
         stats: {
             maxHp: 80,
@@ -31,6 +32,7 @@ const CHARACTERS = {
         name: '香叶',
         title: '被诅咒的医者',
         avatar: '🌿',
+        image: 'assets/images/characters/xiang_ye.png',
         description: '身负“逆生咒”的医者，血液中流淌着治愈法则，却需时刻压制体内的力量。',
         stats: {
             maxHp: 65,
@@ -68,13 +70,14 @@ const CHARACTERS = {
         },
         themeColor: 'var(--accent-red)', // Orange-ish Red
         bgImage: 'linear-gradient(135deg, rgba(255,87,34,0.1) 0%, rgba(0,0,0,0.8) 100%)',
-        activeSkillId: 'vajraIndestructible'
+        activeSkillId: 'vajraIndestructible',
+        image: 'assets/images/characters/wuyu.png'
     },
     yanHan: {
         id: 'yanHan',
         name: '严寒',
         title: '命环学者',
-        avatar: '📚',
+        avatar: 'assets/images/characters/yan_han.png',
         description: '潜心研究命环的学者，掌握着早已失传的古老知识，试图用智慧解开命运的谜题。',
         stats: {
             maxHp: 70,

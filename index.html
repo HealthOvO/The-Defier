@@ -8,6 +8,7 @@
     <meta name="description" content="一款基于东方仙侠的卡牌Roguelike游戏，逆天改命，盗取法则，成为真正的逆命者！">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="icon" type="image/png" href="assets/images/logo.png">
     <link
         href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@300;400;500;700&display=swap"
         rel="stylesheet">
@@ -31,18 +32,11 @@
 
         <div class="menu-content">
             <div class="game-logo">
-                <div class="title-container">
-                    <h1 class="title-cn">逆命者</h1>
-                    <div class="ink-stroke"></div>
-                </div>
-                <h2 class="title-en">THE DEFIER</h2>
+                <img src="assets/images/logo.png" alt="逆命者 - The Defier" class="logo-img">
             </div>
 
             <div class="game-description">
                 <p>天道无情，命环为锁，众生皆困囹圄。</p>
-                <p>残次印记者林风，获得神秘古玉，开启【盗取法则】之能。</p>
-                <p>三千大道，只取一瓢。以凡人之躯，窃取天地法则。</p>
-                <p><strong>十八层天域试炼，激战百种妖魔，收集数百张技能牌组。</strong></p>
                 <p>这一次，不为长生，只为——<span style="color: var(--accent-gold); font-weight: bold;">逆天改命！</span></p>
             </div>
 
@@ -590,6 +584,7 @@
             <div class="player-area">
                 <div class="player-character">
                     <div class="player-avatar">
+                        <div id="player-face-display" class="player-face-visual"></div>
                         <div class="avatar-effects"></div>
                         <span id="player-name-display">林风</span>
                         <div id="player-buffs" class="buff-list"

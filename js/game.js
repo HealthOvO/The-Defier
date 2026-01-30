@@ -1333,42 +1333,74 @@ class Game {
 
             for (const charId in CHARACTERS) {
                 const char = CHARACTERS[charId];
+
+                // Check if character is locked
+                let locked = false;
+                let lockReason = '';
+                // Simple unlock logic (example)
+                if (charId !== 'linFeng' && charId !== 'xiangYe' && charId !== 'yanHan' && charId !== 'wuYu') {
+                    // locked = true; // Default lock logic if needed
+                }
+
                 const card = document.createElement('div');
-                card.className = 'character-card';
+                card.className = `character-card ${locked ? 'locked' : ''}`;
                 card.dataset.id = charId;
+
+                // Image handling
+                let avatarHtml = '';
+                if (char.image) {
+                    avatarHtml = `<img src="${char.image}" class="char-avatar-img" alt="${char.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                                  <span class="char-avatar-emoji" style="display:none">${char.avatar}</span>`;
+                } else if (char.portrait) {
+                    avatarHtml = `<img src="${char.portrait}" class="char-avatar-img" alt="${char.name}">`;
+                } else if (char.avatar && (char.avatar.includes('/') || char.avatar.includes('.'))) {
+                    avatarHtml = `<img src="${char.avatar}" class="char-avatar-img" alt="${char.name}">`;
+                } else {
+                    avatarHtml = `<span class="char-avatar-emoji">${char.avatar}</span>`;
+                }
+
                 card.innerHTML = `
+                    <div class="selected-mark">✔</div>
                     <div class="card-inner">
                         <div class="char-header">
-                            <div class="char-avatar">${char.avatar}</div>
+                            <div class="char-ink-bg">✦</div>
+                            <div class="char-avatar-wrapper">
+                                ${avatarHtml}
+                            </div>
                         </div>
                         <div class="char-body">
                             <div class="char-name">${char.name}</div>
                             <div class="char-title">${char.title}</div>
                             <div class="char-desc">${char.description}</div>
-                            <div class="char-relic-info" style="margin: 10px 0; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; border: 1px solid var(--border-color);">
-                                <div style="color: var(--accent-gold); font-size: 0.9em;">✦ 天赋：${char.relic.name}</div>
-                                <div style="font-size: 0.8em; color: #ccc; margin-top: 2px;">${char.relic.desc}</div>
+                            
+                            <div class="char-relic-info">
+                                <div class="relic-name"><span>🔮</span> ${char.relic.name}</div>
+                                <div class="relic-desc">${char.relic.desc}</div>
                             </div>
+                            
                             <div class="char-stats-preview">
                                 <div class="stat-item">
-                                    <span>${char.stats.maxHp}</span>
-                                    <span>HP</span>
+                                    <span class="stat-value">${char.stats.maxHp}</span>
+                                    <span class="stat-label">HP</span>
                                 </div>
                                 <div class="stat-item">
-                                    <span>${char.stats.energy}</span>
-                                    <span>灵力</span>
+                                    <span class="stat-value">${char.stats.energy}</span>
+                                    <span class="stat-label">灵力</span>
                                 </div>
-                            </div>
-                            <div class="char-relic-preview">
-                                🔮 ${char.relic.name}
+                                <div class="stat-item">
+                                    <span class="stat-value">${char.stats.draw || 5}</span>
+                                    <span class="stat-label">抽牌</span>
+                                </div>
                             </div>
                         </div>
                     </div>
                 `;
 
-                card.addEventListener('click', () => {
-                    this.selectCharacter(charId);
-                });
+                if (!locked) {
+                    card.addEventListener('click', () => {
+                        this.selectCharacter(charId);
+                    });
+                }
 
                 cardsContainer.appendChild(card);
             }
@@ -1505,6 +1537,25 @@ class Game {
         const battleNameEl = document.getElementById('player-name-display');
         if (battleNameEl) {
             battleNameEl.textContent = char.name;
+        }
+
+        // Update Avatar (Image or Emoji)
+        const faceEl = document.getElementById('player-face-display');
+        if (faceEl) {
+            // Reset styles
+            faceEl.style.backgroundImage = '';
+            faceEl.textContent = '';
+            faceEl.className = 'player-face-visual';
+
+            // Resolve Image Path: Check .image, .portrait (WuYu), or .avatar (Yan Han if path)
+            const imagePath = char.image || char.portrait || (char.avatar && char.avatar.includes('/') ? char.avatar : null);
+
+            if (imagePath) {
+                faceEl.style.backgroundImage = `url('${imagePath}')`;
+                faceEl.classList.add('is-image');
+            } else {
+                faceEl.textContent = char.avatar || '👤';
+            }
         }
 
         // 更新属性显示
@@ -5473,7 +5524,7 @@ class Game {
 
             // Update cache
             this.cachedSlots = slots;
-            this.showSaveSlotsModal(slots);
+            this.renderSaveSlots(slots);
         } catch (e) {
             console.error('Sync failed', e);
             if (msgBtn) msgBtn.innerHTML = originalText;
@@ -5514,13 +5565,13 @@ class Game {
             }
 
             this.cachedSlots = slots;
-            this.showSaveSlotsModal(slots);
+            this.renderSaveSlots(slots);
 
         }, 500);
     }
 
     // 显示存档位选择模态框 (Spirit Tablet Style)
-    showSaveSlotsModal(slots) {
+    renderSaveSlots(slots) {
         const modal = document.getElementById('save-slots-modal');
         const container = document.getElementById('slots-container');
         if (!modal || !container) return;
@@ -5530,16 +5581,16 @@ class Game {
         slots.forEach((slotData, index) => {
             const slotEl = document.createElement('div');
             const isEmpty = !slotData;
-            slotEl.className = `save - slot ${isEmpty ? 'empty' : ''} `;
+            slotEl.className = `save-slot ${isEmpty ? 'empty' : ''}`;
 
-            const slotName = `命 牌 · ${['一', '二', '三', '四'][index] || (index + 1)} `;
+            const slotName = `命 牌 · ${['一', '二', '三', '四'][index] || (index + 1)}`;
 
             let contentHtml = '';
             if (isEmpty) {
                 contentHtml = `
-    < div class="slot-visual" style = "border-color: #555; opacity: 0.5;" >?</div >
-        <div class="slot-empty-text">虚位以待</div>
-`;
+                    <div class="slot-visual" style="border-color: #555; opacity: 0.5;">?</div>
+                    <div class="slot-empty-text">虚位以待</div>
+                `;
             } else {
                 let date = new Date(slotData.timestamp).toLocaleDateString();
                 let dateLabel = "更新";
@@ -5553,9 +5604,23 @@ class Game {
 
                 let roleName = '未知角色';
                 let roleIcon = '👤';
-                if (roleId === 'wuYu') { roleName = '无欲'; roleIcon = '🧘'; }
-                if (roleId === 'yanHan') { roleName = '严寒'; roleIcon = '❄️'; }
-                if (roleId === 'linFeng') { roleName = '林风'; roleIcon = '🗡️'; }
+                if (roleId && typeof CHARACTERS !== 'undefined' && CHARACTERS[roleId]) {
+                    const c = CHARACTERS[roleId];
+                    roleName = c.name;
+                    // Resolve Image Path: Check .image, .portrait, or .avatar (if path)
+                    const imagePath = c.image || c.portrait || (c.avatar && c.avatar.includes('/') ? c.avatar : null);
+
+                    if (imagePath) {
+                        // Use image
+                        roleIcon = ''; // Clear text icon
+                        // We'll handle image via style in the HTML construction loop below
+                    } else {
+                        roleIcon = c.avatar || '👤';
+                    }
+
+                    // Store for use below
+                    slotData._tempImage = imagePath;
+                }
 
                 let maxRealm = 1;
                 if (slotData.unlockedRealms && Array.isArray(slotData.unlockedRealms)) {
@@ -5564,47 +5629,51 @@ class Game {
                     maxRealm = slotData.player.realm;
                 }
 
-                let realmDisplay = `第${maxRealm} 重天`;
+                let realmDisplay = `第${maxRealm}重天`;
                 if (maxRealm > 18) {
-                    realmDisplay = `< span style = "color:var(--accent-gold); font-weight:bold;" > 已通关</span > `;
+                    realmDisplay = `<span style="color:var(--accent-gold); font-weight:bold;">已通关</span>`;
                 }
 
                 contentHtml = `
-    < div class="slot-visual" > ${roleIcon}</div >
+                    <div class="slot-visual ${slotData._tempImage ? 'is-image' : ''}" 
+                         style="${slotData._tempImage ? `background-image: url('${slotData._tempImage}');` : ''}">
+                        ${slotData._tempImage ? '' : roleIcon}
+                    </div>
+                
                     <div class="slot-info-primary">${roleName} <span style="font-size:0.8em; opacity:0.7">| ${realmDisplay}</span></div>
                     <div class="slot-info-secondary">❤️ ${hp}  📅 ${dateLabel}: ${date}</div>
-`;
+                `;
             }
 
             const actionsHtml = isEmpty ?
-                `< button class="talisman-btn small" onclick = "game.selectSlot(${index}, 'new')" >
+                `<button class="talisman-btn small" onclick="game.selectSlot(${index}, 'new')">
                     <div class="talisman-paper"></div>
                     <div class="talisman-content">
                         <span class="btn-text">开启轮回</span>
                     </div>
-                </button > ` :
-                `< button class="talisman-btn small primary" onclick = "game.selectSlot(${index}, 'load')" >
+                </button>` :
+                `<button class="talisman-btn small primary" onclick="game.selectSlot(${index}, 'load')">
                     <div class="talisman-paper"></div>
                     <div class="talisman-content">
                         <span class="btn-text">继续</span>
                     </div>
-                </button >
-    <button class="talisman-btn small" onclick="game.selectSlot(${index}, 'overwrite')" style="margin-top:5px; transform:scale(0.9);">
-        <div class="talisman-paper" style="border-color:var(--accent-red);"></div>
-        <div class="talisman-content">
-            <span class="btn-text" style="color:var(--accent-red);">覆盖</span>
-        </div>
-    </button>`;
+                </button>
+                <button class="talisman-btn small" onclick="game.selectSlot(${index}, 'overwrite')" style="margin-top:5px; transform:scale(0.9);">
+                    <div class="talisman-paper" style="border-color:var(--accent-red);"></div>
+                    <div class="talisman-content">
+                        <span class="btn-text" style="color:var(--accent-red);">覆盖</span>
+                    </div>
+                </button>`;
 
             slotEl.innerHTML = `
-        < div class="slot-header" > ${slotName}</div >
+                <div class="slot-header">${slotName}</div>
                 <div class="slot-content">
                     ${contentHtml}
                 </div>
                 <div class="slot-actions">
                     ${actionsHtml}
                 </div>
-`;
+            `;
 
             container.appendChild(slotEl);
         });
@@ -5702,12 +5771,12 @@ class Game {
             const user = AuthService.getCurrentUser();
             // Refactored to keep button style but show user info
             btn.innerHTML = `
-    < div class="talisman-paper" ></div >
-        <div class="talisman-content">
-            <span class="btn-icon">👤</span>
-            <span class="btn-text" style="font-size:0.9rem">${user.username}</span>
-        </div>
-`;
+                    < div class="talisman-paper" ></div >
+                        <div class="talisman-content">
+                            <span class="btn-icon">👤</span>
+                            <span class="btn-text" style="font-size:0.9rem">${user.username}</span>
+                        </div>
+                `;
             btn.onclick = () => {
                 // Muted/Audio handling (delayed slightly for feel)
                 setTimeout(() => {
@@ -5736,12 +5805,12 @@ class Game {
             };
         } else {
             btn.innerHTML = `
-    < div class="talisman-paper" ></div >
-        <div class="talisman-content">
-            <span class="btn-icon">☁️</span>
-            <span class="btn-text">登入轮回</span>
-        </div>
-`;
+                    < div class="talisman-paper" ></div >
+                        <div class="talisman-content">
+                            <span class="btn-icon">☁️</span>
+                            <span class="btn-text">登入轮回</span>
+                        </div>
+                `;
             btn.onclick = () => this.showLoginModal();
         }
     }
@@ -5783,10 +5852,10 @@ class Game {
             const hp = (data.player && data.player.currentHp) ? data.player.currentHp : '?';
             const gold = (data.player && data.player.gold) ? data.player.gold : '?';
             return `
-    < div style = "margin-bottom:4px" >📅 ${date}</div >
+                    < div style = "margin-bottom:4px" >📅 ${date}</div >
                 <div style="margin-bottom:4px">🏔️ 第 ${realm} 重天</div>
                 <div>❤️ ${hp} | 💰 ${gold}</div>
-`;
+                `;
         };
 
         if (localInfo) localInfo.innerHTML = formatInfo(localData, localData ? localData.timestamp : null);
@@ -5862,7 +5931,7 @@ class Game {
             modal.id = 'treasure-bag-modal';
             modal.className = 'modal treasure-bag-modal';
             modal.innerHTML = `
-    < div class="modal-content large-modal" >
+            < div class="modal-content large-modal" >
                     <span class="close-btn">&times;</span>
                     <h2>🎒 法宝囊</h2>
                     
@@ -5881,7 +5950,7 @@ class Game {
                         </div>
                     </div>
                 </div >
-    `;
+            `;
             document.body.appendChild(modal);
 
             // 绑定关闭

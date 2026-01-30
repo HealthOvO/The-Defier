@@ -256,13 +256,60 @@ class Battle {
         const blockValue = document.getElementById('block-value');
         const nameDisplay = document.getElementById('player-name-display');
 
-        // 更新名字
+        // 更新名字和头像
         if (nameDisplay) {
             const charId = this.player.characterId || 'linFeng';
-            // 假设 CHARACTERS 是全局变量，如果不是，需要通过 game.CHARACTERS 或 window.CHARACTERS 访问
-            // 根据之前的代码，CHARACTERS 应该是全局的 (加载自 js/data/characters.js)
             if (typeof CHARACTERS !== 'undefined' && CHARACTERS[charId]) {
-                nameDisplay.textContent = CHARACTERS[charId].name;
+                const char = CHARACTERS[charId];
+                nameDisplay.textContent = char.name;
+
+                // Update Avatar Image
+                const avatarEl = document.querySelector('.player-avatar');
+                if (avatarEl) {
+                    let faceVisual = avatarEl.querySelector('.player-face-visual');
+                    if (!faceVisual) {
+                        faceVisual = document.createElement('div');
+                        faceVisual.className = 'player-face-visual';
+                        avatarEl.insertBefore(faceVisual, avatarEl.firstChild);
+                    }
+
+                    if (char.image || (char.avatar && (char.avatar.includes('/') || char.avatar.includes('.')))) {
+                        // Image Avatar
+                        const avatarSrc = char.image || char.avatar;
+                        faceVisual.style.backgroundImage = `url('${avatarSrc}')`;
+                        faceVisual.textContent = '';
+                        avatarEl.classList.add('has-image-avatar');
+                        // Ensure name is visible (handled by CSS z-index)
+                    } else {
+                        // Text/Emoji Avatar
+                        faceVisual.style.backgroundImage = '';
+                        faceVisual.textContent = ''; // Clear visual container
+                        // For text avatar, we might remove the visual or just ensure parent has content?
+                        // Current CSS structure: parent flex centers content.
+                        // If we put text in faceVisual, it might work if centered.
+                        // Or we put text in parent directly?
+                        // Let's reuse faceVisual for background images ONLY.
+                        // If text, remove background from faceVisual and let parent handle text?
+                        // BUT line 275 in original code: avatarEl.textContent = ... which WIPES children.
+                        // So we must be careful not to wipe nameDisplay if it's inside avatarEl?
+                        // nameDisplay is document.getElementById('player-name-display').
+                        // Is it inside avatarEl?
+                        // Index.html: <div class="player-avatar"> ... <span id="player-name-display">...</span> ... </div>
+                        // YES. Setting textContent wipes the name span!
+                        // FIX: Do NOT set avatarEl.textContent.
+
+                        faceVisual.style.backgroundImage = '';
+                        avatarEl.classList.remove('has-image-avatar');
+
+                        // If emoji, we probably need another span or just a text node?
+                        // Let's create/use a dedicated avatar-text element if needed, or put it in faceVisual?
+                        faceVisual.textContent = char.avatar;
+                        faceVisual.style.display = 'flex';
+                        faceVisual.style.justifyContent = 'center';
+                        faceVisual.style.alignItems = 'center';
+                        faceVisual.style.fontSize = '3rem'; // Adjust as needed
+                    }
+                }
             }
         }
 
