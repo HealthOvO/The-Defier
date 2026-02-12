@@ -14,8 +14,8 @@
 
     window.__THE_DEFIER_CONFIG__ = window.__THE_DEFIER_CONFIG__ || {};
     window.__THE_DEFIER_CONFIG__.bmob = window.__THE_DEFIER_CONFIG__.bmob || {
-        secretKey: '',
-        securityCode: '',
+        secretKey: '259e1a51585d4437',
+        securityCode: '1234567891011121',
         masterKey: ''
     };
 })();
