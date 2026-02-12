@@ -4869,7 +4869,7 @@ class Game {
             const btn = document.createElement('button');
             btn.className = 'event-choice';
             btn.innerHTML = `
-    < div class="choice-icon" > ${path.icon || '✨'}</div >
+    <div class="choice-icon">${path.icon || '✨'}</div>
         <div class="choice-content">
             <div class="choice-text">进化：${path.name}</div>
             <div class="choice-result">${path.description}</div>
@@ -5996,7 +5996,7 @@ class Game {
             const hp = (data.player && data.player.currentHp) ? data.player.currentHp : '?';
             const gold = (data.player && data.player.gold) ? data.player.gold : '?';
             return `
-                    < div style = "margin-bottom:4px" >📅 ${date}</div >
+                    <div style="margin-bottom:4px">📅 ${date}</div>
                 <div style="margin-bottom:4px">🏔️ 第 ${realm} 重天</div>
                 <div>❤️ ${hp} | 💰 ${gold}</div>
                 `;
@@ -6075,7 +6075,7 @@ class Game {
             modal.id = 'treasure-bag-modal';
             modal.className = 'modal treasure-bag-modal';
             modal.innerHTML = `
-            < div class="modal-content large-modal" >
+            <div class="modal-content large-modal">
                     <span class="close-btn">&times;</span>
                     <h2>🎒 法宝囊</h2>
                     
@@ -6093,7 +6093,7 @@ class Game {
                             <div class="inventory-grid" id="inventory-grid"></div>
                         </div>
                     </div>
-                </div >
+                </div>
             `;
             document.body.appendChild(modal);
 
