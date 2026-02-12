@@ -52,7 +52,7 @@ class Player {
         this.realmMaps = {};
 
         // 状态
-        this.buffs = [];
+        this.buffs = {};
 
         // 永久属性加成 (来自事件)
         this.permaBuffs = {
@@ -406,6 +406,11 @@ class Player {
             this.addBuff('strength', this.permaBuffs.strength);
         }
 
+        // 命环路径：敏捷之环 - 闪避率 +10%
+        if (this.fateRing && this.fateRing.path === 'agility') {
+            this.addBuff('dodgeChance', 0.1);
+        }
+
         // 遗物效果：金刚法相 (无欲)
         if (this.relic && this.relic.id === 'vajraBody') {
             const level = this.fateRing ? this.fateRing.level : 0;
@@ -708,6 +713,17 @@ class Player {
             return;
         }
 
+        // 环境：古战场 - 无法获得护盾
+        try {
+            const activeBattle = (typeof window !== 'undefined' && window.game && window.game.battle) ? window.game.battle : null;
+            if (activeBattle && activeBattle.environmentState && activeBattle.environmentState.noBlock) {
+                Utils.showBattleLog('古战场：无法获得护盾！');
+                return;
+            }
+        } catch (e) {
+            // Ignore environment check errors
+        }
+
         // 1. 灵气稀薄 (realm 1) - 护盾效果-20%
         if (this.realm === 1) {
             amount = Math.floor(amount * 0.8);
@@ -729,6 +745,15 @@ class Player {
         if (metalLaw) {
             amount = Math.floor(amount * (1 + metalLaw.passive.value)); // +25%
         }
+
+        // 法宝：护盾获得前修正（如铁壁符）
+        if (this.triggerTreasureValueEffect) {
+            amount = this.triggerTreasureValueEffect('onGainBlock', amount);
+        }
+
+        if (typeof amount !== 'number' || isNaN(amount)) return;
+        amount = Math.floor(amount);
+        if (amount <= 0) return;
 
         this.block += amount;
     }
@@ -808,11 +833,14 @@ class Player {
         // 例如：阴阳镜 (Yin Yang Mirror) - 几率转化伤害为治疗
         const context = { preventDamage: false };
         if (this.treasures) {
-            this.triggerTreasureEffect('onBeforeTakeDamage', amount, context);
+            amount = this.triggerTreasureValueEffect('onBeforeTakeDamage', amount, context);
         }
 
         if (context.preventDamage) {
             return { dodged: true, damage: 0 }; // Treated as dodge/prevented
+        }
+        if (typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
+            return { dodged: true, damage: 0 };
         }
 
         // 共鸣：风空遁 (Astral Shift) - 闪避抽牌
@@ -849,7 +877,8 @@ class Player {
 
         // 空间裂隙法则 - 随机闪避
         const spaceLaw = this.collectedLaws.find(l => l.id === 'spaceRift');
-        if (spaceLaw && Math.random() < spaceLaw.passive.value) {
+        const spaceDodgeChance = spaceLaw ? (spaceLaw.passive.dodgeChance ?? spaceLaw.passive.value ?? 0) : 0;
+        if (spaceLaw && Math.random() < spaceDodgeChance) {
             if (astralShift) {
                 this.drawCards(astralShift.effect.value);
                 Utils.showBattleLog(`风空遁触发！闪避并抽牌`);
@@ -918,6 +947,22 @@ class Player {
         }
 
         if (this.currentHp <= 0) {
+            // 法宝：致死前拦截（如定海神针）
+            if (this.triggerTreasureEffect) {
+                const prevented = this.triggerTreasureEffect('onBeforeDeath');
+                if (prevented === true && this.currentHp > 0) {
+                    return { dodged: false, damage: amount - remainingDamage, prevented: true };
+                }
+            }
+
+            // 命环路径：逆天之环 - 免疫一次致死伤害
+            if (this.fateRing && this.fateRing.deathImmunityCount && this.fateRing.deathImmunityCount > 0) {
+                this.fateRing.deathImmunityCount--;
+                this.currentHp = 1;
+                Utils.showBattleLog('逆天之环：免疫致死伤害！');
+                return { dodged: false, damage: amount - remainingDamage };
+            }
+
             // 共鸣：生命轮回 (Life Reincarnation) - 复活 (每场战斗1次)
             // 修改为 100% 血量复活
             const reincarnation = this.activeResonances.find(r => r.effect && r.effect.type === 'resurrect');
@@ -1006,7 +1051,7 @@ class Player {
     }
 
     // 使用卡牌
-    playCard(cardIndex, target) {
+    playCard(cardIndex, target, options = {}) {
         const card = this.hand[cardIndex];
         if (!card) return false;
 
@@ -1024,7 +1069,7 @@ class Player {
         // 鉴于我们已经修复了 cards.js，我们可以严格检查 consumeCandy
 
         // 计算消耗
-        let energyCost = card.cost;
+        let energyCost = (options && typeof options.energyCostOverride === 'number') ? options.energyCostOverride : card.cost;
         let candyCost = 0;
 
         if (card.consumeCandy) {
@@ -1107,6 +1152,9 @@ class Player {
             return results;
         }
 
+        // Keep card reference in context for downstream effects (e.g., environment bonuses)
+        context.card = card;
+
         for (const effect of card.effects) {
             const result = this.executeEffect(effect, target, context);
             results.push(result);
@@ -1139,6 +1187,19 @@ class Player {
         // 15. 大道独行 (realm 15) - 伤害提升50%
         if (this.realm === 15 && (effect.type === 'damage' || effect.type === 'penetrate' || effect.type === 'damageAll')) {
             value = Math.floor(value * 1.5);
+        }
+
+        // 12. 古战场环境 (realm 12) - 攻击伤害 +20%
+        if (effect.type === 'damage' || effect.type === 'penetrate' || effect.type === 'damageAll') {
+            try {
+                const battle = (typeof window !== 'undefined' && window.game && window.game.battle) ? window.game.battle : null;
+                const envBonus = battle && battle.environmentState ? battle.environmentState.damageBonus : 0;
+                if (envBonus && context && context.card && context.card.type === 'attack') {
+                    value = Math.floor(value * (1 + envBonus));
+                }
+            } catch (e) {
+                // Ignore environment check errors
+            }
         }
 
         // 共鸣：虚空斩 (Void Slash) - 穿透加成
@@ -1175,6 +1236,9 @@ class Player {
                 }
                 this.lastDiscardedCount = discardedCount; // Store for chained effects
                 return { type: 'discardHand', value: discardedCount };
+
+            case 'discardRandom':
+                return { type: 'discardRandom', value: effect.value || 1, trigger: effect.trigger };
 
             case 'drawCalculated': {
                 const base = effect.base || 0;
@@ -1262,6 +1326,9 @@ class Player {
             case 'energy':
                 this.currentEnergy += value;
                 return { type: 'energy', value };
+
+            case 'energyLoss':
+                return { type: 'energyLoss', value: effect.value || 1, trigger: effect.trigger };
 
             case 'draw':
                 this.drawCards(value);
@@ -1494,6 +1561,7 @@ class Player {
             burn: '灼烧',
             thorns: '荆棘',
             dodge: '闪避',
+            dodgeChance: '闪避率',
             block: '护盾',
             nextTurnBlock: '固守',
             paralysis: '麻痹',
@@ -1513,6 +1581,52 @@ class Player {
         if (type === 'strength') {
             // Strength logic handled dynamically
         }
+    }
+
+    // 添加Debuff（供Boss机制与外部系统调用）
+    addDebuff(type, value) {
+        if (!type || typeof value !== 'number' || isNaN(value) || value <= 0) return 0;
+
+        // 通用免疫判定
+        const immunityMap = {
+            burn: 'immunity_burn',
+            poison: 'immunity_poison',
+            weak: 'immunity_weak',
+            vulnerable: 'immunity_vulnerable',
+            paralysis: 'immunity_paralysis',
+            slow: 'immunity_slow',
+            stun: 'immunity_stun',
+            discard: 'immunity_discard'
+        };
+        const immunityBuff = immunityMap[type];
+        if (immunityBuff && this.hasBuff(immunityBuff)) {
+            return 0;
+        }
+
+        let finalValue = value;
+        if (type === 'weak' && this.hasBuff('weak_resist')) {
+            finalValue = Math.max(0, Math.floor(value * (1 - this.buffs.weak_resist)));
+        }
+        if (finalValue <= 0) return 0;
+
+        // 天人五衰：负面状态持续额外+1
+        if (this.realm === 11) {
+            finalValue += 1;
+        }
+
+        this.buffs[type] = (this.buffs[type] || 0) + finalValue;
+
+        const debuffNames = {
+            weak: '虚弱',
+            vulnerable: '易伤',
+            poison: '中毒',
+            burn: '灼烧',
+            paralysis: '麻痹',
+            stun: '眩晕',
+            healing_corrupt: '禁疗'
+        };
+        Utils.showBattleLog(`受到${debuffNames[type] || type} x${finalValue}`);
+        return finalValue;
     }
 
     // 添加永久属性加成
@@ -1740,8 +1854,9 @@ class Player {
     // 检查是否升级 (Delegated to FateRing class)
     checkFateRingLevelUp() {
         if (this.fateRing && this.fateRing.checkLevelUp) {
+            const prevLevel = this.fateRing.level;
             this.fateRing.checkLevelUp();
-            return true;
+            return this.fateRing.level > prevLevel;
         }
         return false;
     }
@@ -1838,7 +1953,8 @@ class Player {
         if (!path) return false;
         if (path.requires) {
             for (const req of path.requires) {
-                if (this.fateRing.path !== req && !this.unlockedPaths?.includes(req)) {
+                const unlocked = this.fateRing.unlockedPaths || [];
+                if (this.fateRing.path !== req && !unlocked.includes(req)) {
                     return false;
                 }
             }
@@ -2033,7 +2149,11 @@ class Player {
                 const callbackResult = treasure.callbacks[triggerType](this, ...args, treasure);
                 // 某些回调可能返回修改后的值
                 if (callbackResult !== undefined) {
-                    result = callbackResult;
+                    if (callbackResult === true) {
+                        result = true;
+                    } else if (result !== true) {
+                        result = callbackResult;
+                    }
                 }
             }
         });
@@ -2070,5 +2190,3 @@ class Player {
         }
     }
 }
-
-

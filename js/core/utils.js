@@ -248,7 +248,7 @@ const Utils = {
     },
 
     // 创建卡牌元素
-    createCardElement(card, index = 0, isReward = false) {
+    createCardElement(card, index = 0, isReward = false, options = {}) {
         const div = document.createElement('div');
         div.className = `card ${card.type} rarity-${card.rarity || 'common'}`;
 
@@ -283,6 +283,7 @@ const Utils = {
         const isCandyCard = card.consumeCandy;
 
         let costHtml = '';
+        const displayCost = (options && typeof options.costOverride === 'number') ? options.costOverride : card.cost;
         if (!isReward) {
             if (card.unplayable) {
                 costHtml = `<div class="card-cost cost-unplayable" style="background:#555">X</div>`;
@@ -290,7 +291,7 @@ const Utils = {
                 // 抽牌卡消耗奶糖
                 costHtml = `<div class="card-cost cost-candy">🍬</div>`;
             } else {
-                costHtml = `<div class="card-cost">${card.cost}</div>`;
+                costHtml = `<div class="card-cost">${displayCost}</div>`;
             }
         }
         const typeIcon = this.getCardTypeIcon(card.type);

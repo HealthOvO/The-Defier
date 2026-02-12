@@ -32,12 +32,17 @@ class FateRing {
     initSlots() {
         // 基础命环根据等级解锁槽位
         // 0级: 0槽, 1级: 1槽, 4级: 2槽, 7级: 3槽, 10级: 4槽
+        const existing = Array.isArray(this.slots)
+            ? this.slots.map(s => ({ law: s.law, unlocked: s.unlocked, type: s.type }))
+            : [];
+
         this.slots = [];
         for (let i = 0; i < this.maxSlots; i++) {
+            const prev = existing[i] || {};
             this.slots.push({
-                unlocked: true,
-                law: null, // 镶嵌的法则ID
-                type: 'any' // 槽位类型限制
+                unlocked: prev.unlocked !== undefined ? prev.unlocked : true,
+                law: prev.law || null, // 镶嵌的法则ID
+                type: prev.type || 'any' // 槽位类型限制
             });
         }
     }
@@ -241,13 +246,23 @@ class MutatedRing extends FateRing {
 
     // 初始化槽位 (Override for fusion slots)
     initSlots() {
+        const existing = Array.isArray(this.slots)
+            ? this.slots.map(s => ({
+                law: s.law,
+                subLaw: s.subLaw,
+                unlocked: s.unlocked,
+                type: s.type
+            }))
+            : [];
+
         this.slots = [];
         for (let i = 0; i < this.maxSlots; i++) {
+            const prev = existing[i] || {};
             this.slots.push({
-                unlocked: true,
-                law: null,
-                subLaw: null, // 第二个法则槽 (融合用)
-                type: 'any'
+                unlocked: prev.unlocked !== undefined ? prev.unlocked : true,
+                law: prev.law || null,
+                subLaw: prev.subLaw || null, // 第二个法则槽 (融合用)
+                type: prev.type || 'any'
             });
         }
     }
@@ -530,4 +545,3 @@ class AnalysisRing extends FateRing {
         this.analyzedTypes = data.analyzedTypes || [];
     }
 }
-

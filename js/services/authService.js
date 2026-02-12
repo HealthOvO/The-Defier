@@ -5,19 +5,87 @@
 const AuthService = {
     isInitialized: false,
     currentUser: null,
+    cloudEnabled: false,
+    initError: null,
+
+    getRuntimeConfig() {
+        let config = null;
+
+        // 优先读取宿主注入配置
+        if (typeof window !== 'undefined') {
+            const rootConfig = window.__THE_DEFIER_CONFIG__;
+            if (rootConfig && rootConfig.bmob) {
+                config = rootConfig.bmob;
+            } else if (window.__BMOB_CONFIG__) {
+                config = window.__BMOB_CONFIG__;
+            }
+        }
+
+        // 次优先：读取本地持久化配置（便于本地调试）
+        if (!config && typeof localStorage !== 'undefined') {
+            try {
+                const raw = localStorage.getItem('theDefierBmobConfig');
+                if (raw) config = JSON.parse(raw);
+            } catch (e) {
+                console.warn('Invalid theDefierBmobConfig in localStorage');
+            }
+        }
+
+        if (!config || typeof config !== 'object') return null;
+
+        const secretKey = typeof config.secretKey === 'string' ? config.secretKey.trim() : '';
+        const securityCode = typeof config.securityCode === 'string' ? config.securityCode.trim() : '';
+        const masterKey = typeof config.masterKey === 'string' ? config.masterKey.trim() : '';
+
+        if (!secretKey || !securityCode) return null;
+        return { secretKey, securityCode, masterKey };
+    },
+
+    isCloudEnabled() {
+        return this.cloudEnabled;
+    },
+
+    ensureInitialized() {
+        if (this.isInitialized) return true;
+        this.init();
+        return this.isInitialized;
+    },
 
     init() {
+        this.initError = null;
+        this.cloudEnabled = false;
+
         if (typeof Bmob === 'undefined') {
             console.error('Bmob SDK not loaded');
+            this.initError = 'Bmob SDK 未加载';
             return;
         }
 
-        // Initialize Bmob with Secret Key, API Security Code, and Master Key
-        // User provided Secret Key: 259e1a51585d4437
-        // API Safe Code: 1234567891011121
-        // Master Key: ff9662590f7a882ac681014a520c7345
-        Bmob.initialize("259e1a51585d4437", "1234567891011121", "ff9662590f7a882ac681014a520c7345");
-        this.isInitialized = true;
+        const config = this.getRuntimeConfig();
+        if (!config) {
+            console.warn('Bmob config missing. Cloud auth disabled.');
+            this.initError = '云存档配置缺失';
+            this.isInitialized = false;
+            this.currentUser = null;
+            return;
+        }
+
+        // 安全基线：浏览器端禁止使用 Master Key，避免高权限泄露
+        if (config.masterKey) {
+            console.warn('Master key is ignored on client-side for security reasons.');
+        }
+
+        try {
+            Bmob.initialize(config.secretKey, config.securityCode);
+            this.isInitialized = true;
+            this.cloudEnabled = true;
+        } catch (error) {
+            console.error('Bmob initialization failed:', error);
+            this.initError = '云存档初始化失败';
+            this.isInitialized = false;
+            this.currentUser = null;
+            return;
+        }
 
         // Check current user
         this.currentUser = Bmob.User.current();
@@ -26,7 +94,7 @@ const AuthService = {
 
     getCurrentUser() {
         if (typeof Bmob === 'undefined') return null;
-        if (!this.isInitialized) this.init();
+        if (!this.ensureInitialized()) return null;
         return this.isInitialized ? Bmob.User.current() : null;
     },
 
@@ -34,8 +102,19 @@ const AuthService = {
         return !!this.getCurrentUser();
     },
 
+    // 兼容不同 Bmob SDK 查询参数签名
+    queryEquals(query, key, value) {
+        try {
+            query.equalTo(key, '==', value);
+        } catch (e) {
+            query.equalTo(key, value);
+        }
+    },
+
     async register(username, password) {
-        if (!this.isInitialized) this.init();
+        if (!this.ensureInitialized()) {
+            return { success: false, message: this.initError || '云服务未就绪' };
+        }
         try {
             const params = {
                 username: username,
@@ -55,7 +134,9 @@ const AuthService = {
     },
 
     async login(username, password) {
-        if (!this.isInitialized) this.init();
+        if (!this.ensureInitialized()) {
+            return { success: false, message: this.initError || '云服务未就绪' };
+        }
         try {
             const user = await Bmob.User.login(username, password);
             console.log('Login success:', user);
@@ -70,6 +151,10 @@ const AuthService = {
     },
 
     logout() {
+        if (!this.isInitialized || typeof Bmob === 'undefined') {
+            this.currentUser = null;
+            return;
+        }
         Bmob.User.logout();
         this.currentUser = null;
     },
@@ -79,6 +164,9 @@ const AuthService = {
     // Data structure: { "slots": [data0, data1, data2, data3], "lastUpdated": timestamp }
 
     async saveCloudData(gameData, slotIndex) {
+        if (!this.ensureInitialized()) {
+            return { success: false, message: this.initError || '云服务未就绪' };
+        }
         if (!this.isLoggedIn()) return { success: false, message: '未登录' };
         if (slotIndex === undefined || slotIndex === null) return { success: false, message: '未指定存档位' };
         if (slotIndex < 0 || slotIndex > 3) return { success: false, message: '非法存档位' };
@@ -88,8 +176,8 @@ const AuthService = {
             const query = Bmob.Query('GameSave');
 
             // Pointer query: find save for this user and slot
-            query.equalTo('user', '==', user.objectId);
-            query.equalTo('slotIndex', '==', slotIndex);
+            this.queryEquals(query, 'user', user.objectId);
+            this.queryEquals(query, 'slotIndex', slotIndex);
 
             const results = await query.find();
 
@@ -123,6 +211,9 @@ const AuthService = {
     },
 
     async getCloudData() {
+        if (!this.ensureInitialized()) {
+            return { success: false, message: this.initError || '云服务未就绪' };
+        }
         if (!this.isLoggedIn()) return { success: false, message: '未登录' };
 
         try {
@@ -135,7 +226,7 @@ const AuthService = {
             // 1. Fetch New Data (GameSave table)
             try {
                 const newQuery = Bmob.Query('GameSave');
-                newQuery.equalTo('user', '==', user.objectId);
+                this.queryEquals(newQuery, 'user', user.objectId);
                 const newResults = await newQuery.find();
 
                 if (newResults && newResults.length > 0) {
@@ -230,6 +321,9 @@ const AuthService = {
     // Stored in _User table 'globalData' column (Object)
 
     async saveGlobalData(data) {
+        if (!this.ensureInitialized()) {
+            return { success: false, message: this.initError || '云服务未就绪' };
+        }
         if (!this.isLoggedIn()) return { success: false, message: '未登录' };
 
         try {
@@ -253,6 +347,9 @@ const AuthService = {
     },
 
     async getGlobalData() {
+        if (!this.ensureInitialized()) {
+            return { success: false, message: this.initError || '云服务未就绪' };
+        }
         if (!this.isLoggedIn()) return { success: false, message: '未登录' };
 
         try {

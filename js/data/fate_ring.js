@@ -96,7 +96,7 @@ const FATE_RING = {
             levelReq: 7,
             requiresAny: true,
             requires: ['toughness', 'agility', 'insight', 'destruction', 'wisdom'],
-            description: '逆转天命。全属性大幅提升，免疫一次致死伤害。',
+            description: '逆转天命。攻击大幅提升，免疫一次致死伤害。',
             bonus: { type: 'ultimate' }
         }
     }

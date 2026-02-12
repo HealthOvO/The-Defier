@@ -89,9 +89,9 @@ class GameMap {
 
     // 获取随机节点类型
     getRandomNodeType(row, totalRows, realm) {
-        // 第一行必有战斗
+        // 第一行必有战斗 (Hardcore: 60% enemy / 40% elite)
         if (row === 0) {
-            return Math.random() < 0.7 ? 'enemy' : 'elite';
+            return Math.random() < 0.6 ? 'enemy' : 'elite';
         }
 
         // 最后一行是BOSS
@@ -104,15 +104,16 @@ class GameMap {
 
         if (isPassed) {
             // Only monsters (enemy/elite) and boss (handled above)
-            return Math.random() < 0.7 ? 'enemy' : 'elite';
+            // Hardcore ratio based on 50/20 normalized => ~71.4% enemy / 28.6% elite
+            return Math.random() < (0.5 / 0.7) ? 'enemy' : 'elite';
         }
 
         // 随机类型 (Normal logic)
         const roll = Math.random();
-        if (roll < 0.45) return 'enemy';
-        if (roll < 0.60) return 'elite';
-        if (roll < 0.75) return 'event';
-        if (roll < 0.85) return 'shop';
+        if (roll < 0.50) return 'enemy';
+        if (roll < 0.70) return 'elite';
+        if (roll < 0.82) return 'event';
+        if (roll < 0.90) return 'shop';
         return 'rest';
     }
 
@@ -517,7 +518,7 @@ class GameMap {
             return;
         }
 
-        enemy.ringExp = 10 + realm * 5; // 添加命环经验
+        enemy.ringExp = 8 + realm * 4; // Hardcore: lower exp gain
         this.game.currentBattleNode = node; // 保存节点
         this.game.startBattle([enemy], node);
     }
@@ -542,7 +543,7 @@ class GameMap {
             return;
         }
 
-        elite.ringExp = 25 + realm * 10; // 精英给更多经验
+        elite.ringExp = 20 + realm * 8; // Hardcore: lower exp gain
         this.game.currentBattleNode = node;
         this.game.startBattle([elite], node);
     }
@@ -563,7 +564,7 @@ class GameMap {
                 const tBoss = JSON.parse(JSON.stringify(ENEMIES[tribId]));
                 tBoss.isBoss = true;
                 tBoss.isTribulation = true;
-                tBoss.ringExp = 100 + realm * 20;
+                tBoss.ringExp = 80 + realm * 16; // Hardcore: lower exp gain
 
                 this.game.currentBattleNode = node;
                 this.game.startBattle([tBoss], node);
@@ -578,11 +579,8 @@ class GameMap {
             const bossInstance = JSON.parse(JSON.stringify(boss));
             bossInstance.isBoss = true;
             bossInstance.name = `【天劫】${bossInstance.name}`; // 标记为天劫BOSS
-            bossInstance.ringExp = 50 + realm * 20; // BOSS给大量经验
-
-            // 天劫增强
-            bossInstance.maxHp = Math.floor(bossInstance.maxHp * 1.2);
-            bossInstance.currentHp = bossInstance.maxHp;
+            bossInstance.ringExp = 40 + realm * 16; // Hardcore: lower exp gain
+            const baseHp = bossInstance.hp || bossInstance.maxHp || 0;
 
             // Dual Boss Logic (Realm 10+)
             const enemies = [];
@@ -591,8 +589,7 @@ class GameMap {
                 const bossA = JSON.parse(JSON.stringify(bossInstance));
                 bossA.id = (bossA.id || 'boss') + '_A';
                 bossA.name += ' (阴)';
-                bossA.maxHp = Math.floor(bossA.maxHp * 0.7); // 70% HP
-                bossA.currentHp = bossA.maxHp;
+                bossA.hp = Math.floor(baseHp * 0.7); // 70% HP (battle scaling happens later)
                 bossA.isDualBoss = true; // Mark for Twin Bonds logic
                 enemies.push(bossA);
 
@@ -600,8 +597,7 @@ class GameMap {
                 const bossB = JSON.parse(JSON.stringify(bossInstance));
                 bossB.id = (bossB.id || 'boss') + '_B';
                 bossB.name += ' (阳)';
-                bossB.maxHp = Math.floor(bossB.maxHp * 0.7); // 70% HP
-                bossB.currentHp = bossB.maxHp;
+                bossB.hp = Math.floor(baseHp * 0.7); // 70% HP (battle scaling happens later)
                 bossB.isDualBoss = true;
                 enemies.push(bossB);
 

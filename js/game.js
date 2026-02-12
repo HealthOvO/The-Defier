@@ -6,6 +6,7 @@
 class Game {
     constructor() {
         this.player = new Player();
+        this.player.game = this;
         this.battle = new Battle(this);
         this.map = new GameMap(this);
         this.eventSystem = new EventSystem(this);
@@ -38,7 +39,7 @@ class Game {
             AuthService.init();
             this.checkLoginStatus();
             // 需求：如果未登录，让他去登录
-            if (!AuthService.isLoggedIn()) {
+            if (AuthService.isCloudEnabled && AuthService.isCloudEnabled() && !AuthService.isLoggedIn()) {
                 setTimeout(() => this.showLoginModal(), 1000); // 延迟一点显示，体验更好
             }
         }
@@ -95,13 +96,13 @@ class Game {
     // 继续游戏
     continueGame() {
         console.log('[Debug] continueGame called');
-        // 强制登录检查
+        // 云功能可用时才强制登录
         if (typeof AuthService === 'undefined') {
             console.error('[Debug] AuthService missing');
             alert('登录系统未就绪，请刷新重试！(AuthService missing)');
             return;
         }
-        if (!AuthService.isLoggedIn()) {
+        if (AuthService.isCloudEnabled && AuthService.isCloudEnabled() && !AuthService.isLoggedIn()) {
             console.log('[Debug] Not logged in, showing modal');
             this.showLoginModal();
             return;
@@ -1486,8 +1487,13 @@ class Game {
     confirmCharacterSelection() {
         if (!this.selectedCharacterId) return;
 
-        // 强制登录检查
-        if (typeof AuthService !== 'undefined' && !AuthService.isLoggedIn()) {
+        // 云功能可用时才强制登录
+        if (
+            typeof AuthService !== 'undefined' &&
+            AuthService.isCloudEnabled &&
+            AuthService.isCloudEnabled() &&
+            !AuthService.isLoggedIn()
+        ) {
             this.showLoginModal();
             return;
         }
@@ -1499,12 +1505,12 @@ class Game {
 
     // 开始新游戏
     startNewGame(characterId = 'linFeng') {
-        // 强制登录检查
+        // 云功能可用时才强制登录
         if (typeof AuthService === 'undefined') {
             alert('登录系统未就绪，请刷新重试！');
             return;
         }
-        if (!AuthService.isLoggedIn()) {
+        if (AuthService.isCloudEnabled && AuthService.isCloudEnabled() && !AuthService.isLoggedIn()) {
             this.showLoginModal();
             return;
         }
@@ -1737,7 +1743,7 @@ class Game {
 
         // 遗物：逆命之环（额外获得25%经验）
         if (this.player.relic && this.player.relic.id === 'fateRing') {
-            ringExp = Math.floor(ringExp * 1.25);
+            ringExp = Math.floor(ringExp * 1.10);
         }
 
         // 试炼挑战检测 (Trial Challenge)
@@ -1952,6 +1958,9 @@ class Game {
             totalGold = Math.floor(totalGold * 0.5);
         }
 
+        // Hardcore: 全局战斗灵石收益降低
+        totalGold = Math.floor(totalGold * 0.75);
+
         this.player.gold += totalGold;
         this.achievementSystem.updateStat('totalGold', totalGold);
         this.achievementSystem.updateStat('enemiesDefeated', enemies.length);
@@ -1988,9 +1997,9 @@ class Game {
         const existingTreasures = resourceContainer.querySelectorAll('.reward-treasure-item');
         existingTreasures.forEach(el => el.remove());
 
-        let dropChance = 0.15; // 普通敌人15%
-        if (this.currentBattleNode && this.currentBattleNode.type === 'elite') dropChance = 0.40; // 精英40%
-        if (this.currentBattleNode && this.currentBattleNode.type === 'boss') dropChance = 1.0; // Boss必掉
+        let dropChance = 0.08; // Hardcore: 普通8%
+        if (this.currentBattleNode && this.currentBattleNode.type === 'elite') dropChance = 0.25; // Hardcore: 精英25%
+        if (this.currentBattleNode && this.currentBattleNode.type === 'boss') dropChance = 0.60; // Hardcore: Boss 60%
 
         if (Math.random() < dropChance) {
             let droppedTreasure = null;
@@ -2071,7 +2080,7 @@ class Game {
 
         // 卡牌奖励
         rewardCards.innerHTML = '';
-        const cards = getRewardCards(3, this.player.characterId);
+        const cards = getRewardCards(2, this.player.characterId);
 
         cards.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
@@ -2101,7 +2110,7 @@ class Game {
         // 动态更新跳过按钮文本
         const skipBtn = this.currentScreenElement ? this.currentScreenElement.querySelector('.skip-reward-btn') : document.querySelector('.skip-reward-btn');
         if (skipBtn) {
-            const skipCost = 50 * this.player.realm;
+            const skipCost = 80 * this.player.realm;
             skipBtn.textContent = `跳过卡牌 (扣${skipCost}灵石)`;
             // Visual indicator if affordable
             if (this.player.gold < skipCost) {
@@ -2303,10 +2312,21 @@ class Game {
 
         // 收集效果结果用于显示
         this.eventResults = [];
+        let flowInterrupted = false;
 
         // 执行效果
         if (choice.effects && choice.effects.length > 0) {
-            choice.effects.forEach(effect => this.executeEventEffect(effect));
+            for (const effect of choice.effects) {
+                if (this.executeEventEffect(effect)) {
+                    flowInterrupted = true;
+                    break;
+                }
+            }
+        }
+
+        // 某些效果（如战斗/试炼/升级界面）会切换流程，不再渲染“继续”按钮
+        if (flowInterrupted) {
+            return;
         }
 
         // 在弹窗中显示结果
@@ -2374,7 +2394,15 @@ class Game {
             case 'permaBuff':
                 if (this.player.addPermaBuff) {
                     this.player.addPermaBuff(effect.stat, effect.value);
-                    const statMap = { 'strength': '力量', 'defense': '防御', 'energy': '灵力', 'maxHp': '生命' };
+                } else if (this.player.addPermBuff) {
+                    this.player.addPermBuff(effect.stat, effect.value);
+                } else {
+                    this.player.permaBuffs = this.player.permaBuffs || {};
+                    this.player.permaBuffs[effect.stat] = (this.player.permaBuffs[effect.stat] || 0) + effect.value;
+                    if (this.player.recalculateStats) this.player.recalculateStats();
+                }
+                {
+                    const statMap = { strength: '力量', defense: '防御', energy: '灵力', maxHp: '生命', draw: '抽牌' };
                     this.eventResults.push(`💪 永久${statMap[effect.stat] || effect.stat} ${effect.value > 0 ? '+' : ''}${effect.value}`);
                 }
                 break;
@@ -2415,54 +2443,52 @@ class Game {
                 break;
 
             case 'upgradeCard':
-                // This requires UI interaction which is hard in instant event result.
-                // We should probably set a state 'pendingUpgrade' and show modal AFTER event modal closes?
-                // Or show modal on top.
-                // For simplicity, let's upgrade a random card if no UI available, OR call a hypothetical openUpgradeUI.
-                // But wait, the prompt asks to "implement logic".
-                // I'll check if openUpgradeUI exists. If not, random upgrade.
-                // Checking previous context... I didn't see openUpgradeUI.
-                // Let's upgrade a RANDOM upgradable card for now to ensure effect works, 
-                // OR trigger a flag "this.pendingCardReward = 'upgrade'"?
-
-                // Let's force a random upgrade for now as MVP.
-                const upgradable = this.player.deck.filter(c => !c.upgraded);
-                if (upgradable.length > 0) {
-                    const target = upgradable[Math.floor(Math.random() * upgradable.length)];
-                    target.upgraded = true;
-                    target.name += '+';
-                    target.value = Math.floor((target.value || 0) * 1.3); // Simple buff
-                    if (target.effects) {
-                        target.effects.forEach(e => {
-                            if (e.value) e.value = Math.floor(e.value * 1.3);
-                        });
-                    }
-                    this.eventResults.push(`✨ 升级: ${target.name}`);
-                } else {
-                    this.eventResults.push(`⚠️ 没有可升级的卡牌`);
-                }
-                break;
+                // 进入专用升级选择界面，切换流程
+                this.closeModal();
+                setTimeout(() => {
+                    this.showEventUpgradeCard();
+                }, 100);
+                return true;
 
             case 'treasure':
-                if (effect.random) {
-                    // Add random treasure
-                    // Need access to TREASURES list.
-                    if (typeof TREASURES !== 'undefined') {
-                        const keys = Object.keys(TREASURES);
-                        const randomKey = keys[Math.floor(Math.random() * keys.length)];
-                        const treasureData = TREASURES[randomKey];
-                        // Simple add logic
-                        this.player.treasures.push({ ...treasureData, instanceId: Date.now() });
-                        // Trigger onObtain if exists?
-                        this.eventResults.push(`🏺 获得法宝: ${treasureData.name}`);
+                if (effect.treasureId) {
+                    if (this.player.addTreasure && this.player.addTreasure(effect.treasureId)) {
+                        this.eventResults.push(`🏺 获得法宝: ${TREASURES[effect.treasureId].name}`);
+                    } else {
+                        this.eventResults.push(`已拥有该法宝，获得替代奖励`);
+                    }
+                } else if (effect.random && typeof TREASURES !== 'undefined') {
+                    const tKeys = Object.keys(TREASURES);
+                    const unowned = tKeys.filter(k => !this.player.hasTreasure || !this.player.hasTreasure(k));
+                    if (unowned.length > 0) {
+                        const tid = unowned[Math.floor(Math.random() * unowned.length)];
+                        if (this.player.addTreasure) this.player.addTreasure(tid);
+                        this.eventResults.push(`🏺 获得随机法宝: ${TREASURES[tid].name}`);
+                    } else {
+                        this.player.gold += 100;
+                        this.eventResults.push(`法宝已收集齐，获得 100 灵石`);
                     }
                 }
                 break;
 
             case 'trial':
-                this.activeTrial = effect.trialType; // 'speedKill' or 'noDamage'
-                this.trialData = effect;
-                this.eventResults.push(`⚔️ 试炼开启: ${effect.trialType === 'speedKill' ? '速杀' : '无伤'}`);
+                // 试炼模式 - 设置特殊战斗规则并立即进入战斗
+                this.trialMode = {
+                    type: effect.trialType,
+                    rounds: effect.rounds,
+                    rewardMultiplier: effect.rewardMultiplier || 1,
+                    reward: effect.reward
+                };
+                Utils.showBattleLog(`进入试炼模式: ${effect.trialType}`);
+                const trialEnemy = getRandomEnemy(this.player.realm);
+                if (trialEnemy) {
+                    this.closeModal();
+                    setTimeout(() => {
+                        this.startBattle([trialEnemy], this.currentBattleNode);
+                    }, 300);
+                    return true;
+                }
+                this.eventResults.push('⚠️ 试炼开启失败：未找到试炼目标');
                 break;
 
             case 'ringExp':
@@ -2472,42 +2498,19 @@ class Game {
                 // 如果导致升级，checkFateRingLevelUp 内部会处理并可能弹窗，但这里我们主要关注数值
                 break;
 
-            case 'gold':
-                if (effect.percent) {
-                    const amount = Math.floor(this.player.gold * (effect.percent / 100)); // percent is usually negative or positive e.g. -50
-                    this.player.gold += amount;
-                    this.eventResults.push(`💰 灵石 ${amount > 0 ? '+' : ''}${amount} (${effect.percent}%)`);
-                } else {
-                    this.player.gold += effect.value;
-                    this.eventResults.push(`💰 灵石 ${effect.value > 0 ? '+' : ''}${effect.value}`);
-                }
-                break;
-
             case 'card':
                 let card = null;
                 if (effect.cardId && CARDS[effect.cardId]) {
                     card = { ...CARDS[effect.cardId] };
                 } else if (effect.rarity) {
                     card = getRandomCard(effect.rarity);
+                } else {
+                    card = getRandomCard();
                 }
                 if (card) {
                     this.player.addCardToDeck(card);
                     this.eventResults.push(`🃏 获得卡牌: ${card.name}`);
                 }
-                break;
-
-            case 'maxHp':
-                this.player.maxHp += effect.value;
-                if (effect.value > 0) {
-                    this.player.currentHp += effect.value;
-                }
-                this.eventResults.push(`❤️ 最大HP ${effect.value > 0 ? '+' : ''}${effect.value}`);
-                break;
-
-            case 'permaBuff':
-                if (!this.player.permBuffs) this.player.permBuffs = {};
-                this.player.permBuffs[effect.stat] = (this.player.permBuffs[effect.stat] || 0) + effect.value;
-                this.eventResults.push(`💪 永久${effect.stat === 'strength' ? '力量' : '属性'} ${effect.value > 0 ? '+' : ''}${effect.value}`);
                 break;
 
             case 'law':
@@ -2521,27 +2524,6 @@ class Game {
                 }
                 break;
 
-            case 'treasure':
-                if (effect.treasureId) {
-                    if (this.player.addTreasure(effect.treasureId)) {
-                        this.eventResults.push(`🏺 获得法宝: ${TREASURES[effect.treasureId].name}`);
-                    } else {
-                        this.eventResults.push(`已拥有该法宝，获得替代奖励`);
-                    }
-                } else if (effect.random) {
-                    const tKeys = Object.keys(TREASURES);
-                    const unowned = tKeys.filter(k => !this.player.hasTreasure(k));
-                    if (unowned.length > 0) {
-                        const tid = unowned[Math.floor(Math.random() * unowned.length)];
-                        this.player.addTreasure(tid);
-                        this.eventResults.push(`🏺 获得随机法宝: ${TREASURES[tid].name}`);
-                    } else {
-                        this.player.gold += 100;
-                        this.eventResults.push(`法宝已收集齐，获得 100 灵石`);
-                    }
-                }
-                break;
-
             case 'random':
                 if (effect.options) {
                     const roll = Math.random();
@@ -2550,7 +2532,7 @@ class Game {
                         cumulative += option.chance;
                         if (roll < cumulative) {
                             if (option.type !== 'nothing') {
-                                this.executeEventEffect(option);
+                                return this.executeEventEffect(option);
                             }
                             break;
                         }
@@ -2566,58 +2548,26 @@ class Game {
                     setTimeout(() => {
                         this.startBattle(enemy, this.currentBattleNode);
                     }, 300);
+                    return true;
                 }
-                break;
-
-            case 'trial':
-                // 试炼模式 - 设置特殊战斗规则
-                this.trialMode = {
-                    type: effect.trialType,
-                    rounds: effect.rounds,
-                    rewardMultiplier: effect.rewardMultiplier || 1,
-                    reward: effect.reward
-                };
-                Utils.showBattleLog(`进入试炼模式: ${effect.trialType}`);
-                // 触发战斗（使用当前天域的随机敌人）
-                const trialEnemy = getRandomEnemy(this.player.realm);
-                if (trialEnemy) {
-                    this.closeModal();
-                    setTimeout(() => {
-                        this.startBattle([trialEnemy], this.currentBattleNode);
-                    }, 300);
-                }
-                break;
-
-            case 'upgradeCard':
-                // 升级卡牌效果 - 显示升级选择界面
-                this.closeModal();
-                setTimeout(() => {
-                    this.showEventUpgradeCard();
-                }, 100);
-                return; // 不自动完成事件
-
-            case 'removeCardType':
-                // 移除指定类型的卡牌
-                const cardType = effect.cardType;
-                const removeCount = effect.count || 1;
-                let removed = 0;
-
-                for (let i = this.player.deck.length - 1; i >= 0 && removed < removeCount; i--) {
-                    if (this.player.deck[i].type === cardType) {
-                        const removedCard = this.player.deck.splice(i, 1)[0];
-                        Utils.showBattleLog(`移除了 ${removedCard.name}`);
-                        removed++;
-                    }
-                }
+                this.eventResults.push('⚠️ 战斗触发失败：目标敌人不存在');
                 break;
 
             case 'awakenRing':
                 // 觉醒命环
                 if (this.player.fateRing.level === 0) {
-                    this.player.fateRing.level = 1;
-                    this.player.fateRing.name = '一阶·觉醒';
-                    this.player.fateRing.slots = 1;
-                    this.player.fateRing.path = 'awakened';
+                    const ring = this.player.fateRing;
+                    ring.level = 1;
+                    ring.name = '一阶·觉醒';
+                    ring.path = 'awakened';
+
+                    // 同步槽位结构（避免 slots 变成数字）
+                    const levelData = (typeof FATE_RING !== 'undefined' && FATE_RING.levels) ? FATE_RING.levels[1] : null;
+                    if (levelData && ring.type !== 'sealed') {
+                        ring.maxSlots = levelData.slots;
+                        ring.exp = Math.max(ring.exp || 0, levelData.exp || 0);
+                    }
+                    if (ring.initSlots) ring.initSlots();
                     Utils.showBattleLog('命环觉醒！逆命之路开启！');
                 }
                 break;
@@ -2626,6 +2576,7 @@ class Game {
                 // 未处理的效果类型
                 console.log('未处理的事件效果:', effect.type);
         }
+        return false;
     }
 
     // 事件中升级卡牌 (Revised with Preview)
@@ -4231,8 +4182,8 @@ class Game {
         const items = [];
         const services = [];
         const realm = this.player.realm || 1;
-        // 价格随天域层数上涨，每重天+10% (was 5%)
-        const priceMult = 1 + (realm - 1) * 0.10;
+        // Hardcore: 价格随天域层数上涨，每重天+15%
+        const priceMult = 1 + (realm - 1) * 0.15;
 
         // 1. 生成卡牌 (使用新方法)
         const newCards = this.generateShopCards(5);
@@ -4274,11 +4225,11 @@ class Game {
 
         // 3. 随机商品 (由原来的随机服务改为固定商品位 + 概率位)
 
-        // --- 必定刷出一个法宝 (如果有未拥有的) ---
+        // --- 有概率刷出一个法宝 (如果有未拥有的) ---
         // 使用加权随机逻辑
         const treasure = this.getWeightedRandomTreasure();
 
-        if (treasure) {
+        if (treasure && Math.random() < 0.5) {
             // 计算价格：基础价格 * (1 + 0.1 * (层数-1))
             let finalPrice = Math.floor((treasure.price || 150) * priceMult);
 
@@ -4406,10 +4357,12 @@ class Game {
             let rarity = 'common';
             const roll = Math.random();
             if (realm >= 3) {
-                if (roll < 0.1) rarity = 'legendary'; // 10%
-                else if (roll < 0.35) rarity = 'epic'; // 25%
-                else if (roll < 0.7) rarity = 'rare'; // 35%
-                else rarity = 'uncommon';
+                // Hardcore: 2% legendary, 6% epic, 18% rare, 34% uncommon, 40% common
+                if (roll < 0.02) rarity = 'legendary';
+                else if (roll < 0.08) rarity = 'epic';
+                else if (roll < 0.26) rarity = 'rare';
+                else if (roll < 0.60) rarity = 'uncommon';
+                else rarity = 'common';
             } else {
                 if (roll < 0.05) rarity = 'legendary';
                 else if (roll < 0.2) rarity = 'rare';
@@ -4420,9 +4373,9 @@ class Game {
 
             if (!card) continue;
 
-            // 商店特惠：所有卡牌8折，再乘难度系数
+            // Hardcore: 移除折扣，仅按难度系数
             const basePrice = this.getCardPrice(card);
-            const price = Math.floor(basePrice * 0.8 * priceMult);
+            const price = Math.floor(basePrice * 1.0 * priceMult);
 
             items.push({
                 type: 'card',
@@ -5229,7 +5182,7 @@ class Game {
         choicesEl.innerHTML = '';
 
         // 选项1: 休息恢复HP
-        const healAmount = Math.floor(this.player.maxHp * 0.3);
+        const healAmount = Math.floor(this.player.maxHp * 0.2);
         const restBtn = document.createElement('button');
         restBtn.className = 'event-choice';
         restBtn.innerHTML = `
@@ -5273,7 +5226,7 @@ class Game {
 
     // 营地休息
     campfireRest() {
-        const healAmount = Math.floor(this.player.maxHp * 0.3);
+        const healAmount = Math.floor(this.player.maxHp * 0.2);
         this.player.heal(healAmount);
         Utils.showBattleLog(`休息恢复 ${healAmount} 点生命！`);
 
@@ -5293,11 +5246,9 @@ class Game {
         // For now, let's attach a one-time listener to the close button to remove the class
         const closeBtn = modal.querySelector('.close-btn');
         if (closeBtn) {
-            const originalOnclick = closeBtn.onclick; // Save if any
             closeBtn.onclick = () => {
                 modal.classList.remove('upgrade-mode');
-                modal.style.display = 'none'; // Default close behavior
-                // Restore original if needed, but usually it's just 'this.closeModal()'
+                this.closeModal();
             };
         }
         const container = document.getElementById('deck-view-cards');
@@ -5615,6 +5566,17 @@ class Game {
     }
     // --- Auth System ---
     showLoginModal() {
+        if (
+            typeof AuthService !== 'undefined' &&
+            AuthService.isCloudEnabled &&
+            !AuthService.isCloudEnabled()
+        ) {
+            const modalMsg = document.getElementById('auth-message');
+            if (modalMsg) modalMsg.innerText = '云存档未配置，当前仅可离线游玩';
+            Utils.showBattleLog('云存档未配置，已切换为离线模式');
+            return;
+        }
+
         const modal = document.getElementById('auth-modal');
         if (modal) {
             modal.classList.add('active');
@@ -5655,6 +5617,11 @@ class Game {
 
     // 打开存档选择界面 (同步云端)
     async openSaveSlotsWithSync() {
+        if (AuthService.isCloudEnabled && !AuthService.isCloudEnabled()) {
+            this.showCharacterSelection();
+            return;
+        }
+
         if (!AuthService.isLoggedIn()) {
             this.showConfirmModal(
                 '尚未登录，是否先登录以同步云端存档？',
@@ -5930,7 +5897,9 @@ class Game {
         const btn = document.getElementById('login-btn');
         if (!btn) return;
 
-        if (AuthService.isLoggedIn()) {
+        const cloudEnabled = !(AuthService.isCloudEnabled) || AuthService.isCloudEnabled();
+
+        if (cloudEnabled && AuthService.isLoggedIn()) {
             const user = AuthService.getCurrentUser();
             // Refactored to keep button style but show user info
             btn.innerHTML = `
@@ -5968,13 +5937,25 @@ class Game {
             };
         } else {
             btn.innerHTML = `
-                    < div class="talisman-paper" ></div >
-                        <div class="talisman-content">
-                            <span class="btn-icon">☁️</span>
-                            <span class="btn-text">登入轮回</span>
-                        </div>
+                    <div class="talisman-paper"></div>
+                    <div class="talisman-content">
+                        <span class="btn-icon">☁️</span>
+                        <span class="btn-text">登入轮回</span>
+                    </div>
                 `;
             btn.onclick = () => this.showLoginModal();
+            if (!cloudEnabled) {
+                btn.innerHTML = `
+                    <div class="talisman-paper"></div>
+                    <div class="talisman-content">
+                        <span class="btn-icon">☁️</span>
+                        <span class="btn-text">离线模式</span>
+                    </div>
+                `;
+                btn.onclick = () => {
+                    Utils.showBattleLog('云存档未配置，当前为离线模式');
+                };
+            }
         }
     }
 
@@ -6533,5 +6514,3 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('游戏初始化失败: ' + error.message);
     }
 });
-
-

@@ -65,6 +65,16 @@ class Battle {
             this.enemies.push(this.createEnemyInstance(enemyData));
         }
 
+        // 兼容旧逻辑：部分法宝/系统通过 game.enemies 读取当前敌人
+        if (this.game) {
+            this.game.currentEnemies = this.enemies;
+            this.game.enemies = this.enemies;
+        }
+        if (typeof window !== 'undefined' && window.game) {
+            window.game.currentEnemies = this.enemies;
+            window.game.enemies = this.enemies;
+        }
+
         // 准备玩家战斗状态
         this.player.prepareBattle();
 
@@ -80,15 +90,16 @@ class Battle {
         // 1. 深拷贝行动模式，防止修改污染原始数据 (Deep copy patterns)
         const patterns = enemyData.patterns.map(p => ({ ...p }));
 
-        // 2. 全局数值增强 (Global Scaling)
-        // HP +20%
-        let maxHp = Math.floor(enemyData.hp * 1.2);
+        // 2. 全局数值增强 (Global Scaling - Hardcore)
+        // HP +35%
+        const baseHp = enemyData.maxHp || enemyData.hp || 1;
+        let maxHp = Math.floor(baseHp * 1.35);
 
-        // 伤害 +15%
+        // 伤害 +25%
         patterns.forEach(p => {
             if (p.type === 'attack' || p.type === 'multiAttack') {
                 if (typeof p.value === 'number') {
-                    p.value = Math.floor(p.value * 1.15);
+                    p.value = Math.floor(p.value * 1.25);
                 }
             }
         });
@@ -96,6 +107,7 @@ class Battle {
         // 初始化基本对象
         const enemy = {
             ...enemyData,
+            hp: maxHp,
             maxHp: maxHp,
             currentHp: maxHp,
             patterns: patterns, // 使用修改后的 patterns
@@ -103,7 +115,36 @@ class Battle {
             buffs: {},
             currentPatternIndex: 0,
             stunned: false,
-            isElite: false
+            isElite: false,
+            isAlive() {
+                return this.currentHp > 0;
+            },
+            addBuff(type, value) {
+                if (!type || typeof value !== 'number' || isNaN(value) || value === 0) return;
+                this.buffs[type] = (this.buffs[type] || 0) + value;
+                if (this.buffs[type] <= 0) delete this.buffs[type];
+            },
+            addDebuff(type, value) {
+                this.addBuff(type, value);
+            },
+            heal(amount) {
+                if (typeof amount !== 'number' || isNaN(amount) || amount <= 0) return 0;
+                const before = this.currentHp;
+                this.currentHp = Math.min(this.maxHp, this.currentHp + Math.floor(amount));
+                return this.currentHp - before;
+            },
+            takeDamage(amount, options = {}) {
+                if (typeof amount !== 'number' || isNaN(amount) || amount <= 0) return 0;
+                let finalDamage = Math.floor(amount);
+                if (!options.ignoreBlock && this.block > 0) {
+                    const absorbed = Math.min(this.block, finalDamage);
+                    this.block -= absorbed;
+                    finalDamage -= absorbed;
+                }
+                if (finalDamage <= 0) return 0;
+                this.currentHp = Math.max(0, this.currentHp - finalDamage);
+                return finalDamage;
+            }
         };
 
         // 3. 精英怪机制 (Elite System)
@@ -117,16 +158,17 @@ class Battle {
             enemy.alias = enemy.name; // Keep original name reference if needed
             enemy.name = `【精英】${enemy.name}`;
 
-            // 精英属性加成
-            // HP 额外 +30% (总计 x1.56)
-            enemy.maxHp = Math.floor(enemy.maxHp * 1.3);
+            // 精英属性加成 (Hardcore)
+            // HP 额外 +45%
+            enemy.maxHp = Math.floor(enemy.maxHp * 1.45);
+            enemy.hp = enemy.maxHp;
             enemy.currentHp = enemy.maxHp;
 
-            // 伤害 额外 +20% (总计 x1.38)
+            // 伤害 额外 +35%
             enemy.patterns.forEach(p => {
                 if (p.type === 'attack' || p.type === 'multiAttack') {
                     if (typeof p.value === 'number') {
-                        p.value = Math.floor(p.value * 1.2);
+                        p.value = Math.floor(p.value * 1.35);
                     }
                 }
             });
@@ -150,9 +192,10 @@ class Battle {
             Utils.showBattleLog(`遭遇强敌：${enemy.name} (特性:${type})`);
         }
 
-        // Boss HP 额外增强 +20%
+        // Boss HP 额外增强 +30%
         if (enemy.isBoss) {
-            enemy.maxHp = Math.floor(enemy.maxHp * 1.2);
+            enemy.maxHp = Math.floor(enemy.maxHp * 1.3);
+            enemy.hp = enemy.maxHp;
             enemy.currentHp = enemy.maxHp;
         }
 
@@ -175,7 +218,8 @@ class Battle {
         // 强制检查手牌，如果为空尝试补发（防止Bug）
         if (this.player.hand.length === 0) {
             console.warn('StartBattle: Hand empty, forcing draw.');
-            this.player.drawCards(this.player.baseDraw);
+            const fallbackDraw = this.player.drawCount || 5;
+            this.player.drawCards(fallbackDraw);
         }
 
         // 播放BGM
@@ -206,6 +250,12 @@ class Battle {
                     env.onBattleStart(this);
                 }
             }
+        }
+
+        // 环境：禁止护盾时，清空已有护盾（避免开场护盾绕过）
+        if (this.environmentState && this.environmentState.noBlock) {
+            this.player.block = 0;
+            Utils.showBattleLog('古战场：护盾被战场压制！');
         }
 
         // Boss机制初始化
@@ -421,7 +471,8 @@ class Battle {
         handContainer.classList.add('hand-active');
 
         this.player.hand.forEach((card, index) => {
-            const cardEl = Utils.createCardElement(card, index);
+            const effectiveCost = this.getEffectiveCardCost(card);
+            const cardEl = Utils.createCardElement(card, index, false, { costOverride: effectiveCost });
 
             // 检查是否可用
             let playable = true;
@@ -438,7 +489,7 @@ class Battle {
             if (card.consumeCandy) {
                 if (this.player.milkCandy < 1) playable = false;
             } else {
-                if (card.cost > this.player.currentEnergy) {
+                if (effectiveCost > this.player.currentEnergy) {
                     playable = false;
                 }
             }
@@ -456,6 +507,27 @@ class Battle {
         });
 
         this.bindCardEvents();
+    }
+
+    // 获取环境修正后的卡牌消耗
+    getEffectiveCardCost(card) {
+        if (!card || card.consumeCandy || card.unplayable) return 0;
+
+        let cost = typeof card.cost === 'number' ? card.cost : 0;
+
+        // 环境修正（如第8重重力场：耗能>1 +1）
+        if (this.activeEnvironment && typeof this.activeEnvironment.modifyCardCost === 'function') {
+            try {
+                cost = this.activeEnvironment.modifyCardCost({ ...card, cost });
+            } catch (e) {
+                console.warn('modifyCardCost failed:', e);
+            }
+        } else if (this.environmentState && this.environmentState.gravity && cost > 1) {
+            cost += 1;
+        }
+
+        if (typeof cost !== 'number' || isNaN(cost)) cost = 0;
+        return Math.max(0, cost);
     }
 
     // 更新灵力UI
@@ -655,7 +727,7 @@ class Battle {
             });
 
             if (isTarget && totalDamage > 0) {
-                this.updateDamagePreview(index, totalDamage, enemy.currentHp, enemy.hp);
+                this.updateDamagePreview(index, totalDamage, enemy.currentHp, enemy.maxHp);
             }
         });
     }
@@ -776,7 +848,7 @@ class Battle {
         if (!card) return;
 
         // 计算消耗
-        let energyCost = card.cost;
+        let energyCost = this.getEffectiveCardCost(card);
         let candyCost = 0;
 
         if (card.consumeCandy) {
@@ -899,7 +971,8 @@ class Battle {
             }
 
             // 播放卡牌 (核心逻辑)
-            const results = this.player.playCard(cardIndex, target);
+            const effectiveCost = this.getEffectiveCardCost(card);
+            const results = this.player.playCard(cardIndex, target, { energyCostOverride: effectiveCost });
 
             // 播放音效
             if (typeof audioManager !== 'undefined') {
@@ -1081,7 +1154,8 @@ class Battle {
                 if (target) {
                     let baseDmg = result.value;
                     const threshold = result.threshold || 0.3;
-                    if (target.currentHp / target.hp < threshold) {
+                    const targetMaxHp = target.maxHp || target.hp || 1;
+                    if (target.currentHp / targetMaxHp < threshold) {
                         baseDmg *= 2;
                         Utils.showBattleLog(`斩杀触发！双倍伤害！`);
                     }
@@ -1129,6 +1203,32 @@ class Battle {
             case 'draw':
                 Utils.showBattleLog(`抽取 ${result.value} 张牌`);
                 break;
+
+            case 'discardRandom': {
+                const count = Math.min(result.value || 1, this.player.hand.length);
+                let discarded = 0;
+                for (let i = 0; i < count; i++) {
+                    const idx = Math.floor(Math.random() * this.player.hand.length);
+                    const [card] = this.player.hand.splice(idx, 1);
+                    if (card) {
+                        this.player.discardPile.push(card);
+                        discarded++;
+                    }
+                }
+                if (discarded > 0) {
+                    Utils.showBattleLog(`随机弃掉 ${discarded} 张手牌`);
+                }
+                break;
+            }
+
+            case 'energyLoss': {
+                const loss = Math.max(0, result.value || 0);
+                this.player.currentEnergy = Math.max(0, this.player.currentEnergy - loss);
+                if (loss > 0) {
+                    Utils.showBattleLog(`失去 ${loss} 点灵力`);
+                }
+                break;
+            }
 
             case 'buff':
                 const buffNames = {
@@ -1319,6 +1419,23 @@ class Battle {
             amount = 0;
         }
 
+        // 法宝前置伤害修正（如血煞珠、五行珠）
+        if (this.player && this.player.triggerTreasureValueEffect) {
+            const context = {
+                target: enemy,
+                targetElement: enemy ? enemy.element : null,
+                sourceElement
+            };
+            amount = this.player.triggerTreasureValueEffect('onBeforeDealDamage', amount, context);
+        }
+
+        // 敌人闪避层数：必定闪避一次
+        if (enemy.buffs.dodge && enemy.buffs.dodge > 0) {
+            enemy.buffs.dodge--;
+            Utils.showBattleLog(`${enemy.name} 闪避了攻击！`);
+            return 0;
+        }
+
         // Elite Ability: Swift (Dodge Chance)
         if (enemy.buffs.dodgeChance && Math.random() < enemy.buffs.dodgeChance) {
             Utils.showBattleLog(`${enemy.name} 闪避了攻击！`);
@@ -1425,11 +1542,12 @@ class Battle {
         }
 
         // 应用连击加成
-        if (typeof game !== 'undefined' && game.getComboBonus) {
-            const comboBonus = game.getComboBonus();
-            if (comboBonus > 1) {
-                amount = Math.floor(amount * comboBonus);
-                // Utils.showBattleLog(`连击加成：x${comboBonus.toFixed(1)}`);
+        const comboGame = this.game || (typeof game !== 'undefined' ? game : null);
+        if (comboGame && comboGame.getComboBonus) {
+            const comboBonus = comboGame.getComboBonus();
+            if (comboBonus > 0) {
+                amount = Math.floor(amount * (1 + comboBonus));
+                // Utils.showBattleLog(`连击加成：+${Math.floor(comboBonus * 100)}%`);
             }
         }
 
@@ -1528,6 +1646,12 @@ class Battle {
                 this.player.triggerTreasureEffect('onKill', enemy);
             }
 
+            // 命环路径：洞察之环 - 击杀回复5生命
+            if (this.player.fateRing && this.player.fateRing.path === 'insight') {
+                this.player.heal(5);
+                Utils.showBattleLog('洞察之环：击杀回复 5 点生命');
+            }
+
             // Update Achievements: Damage
             if (this.game && this.game.achievementSystem) {
                 this.game.achievementSystem.updateStat('totalDamageDealt', finalDamage);
@@ -1544,36 +1668,16 @@ class Battle {
                     setTimeout(() => {
                         Utils.showBattleLog(`【双子羁绊】${survivor.name} 因同伴死亡而暴怒！`);
 
-                        const healAmount = Math.floor(survivor.maxHp * 0.5);
+                        const healAmount = Math.floor(survivor.maxHp * 0.6);
                         survivor.currentHp = Math.min(survivor.maxHp, survivor.currentHp + healAmount);
                         Utils.showBattleLog(`${survivor.name} 恢复了 ${healAmount} 点生命！`);
 
-                        survivor.buffs.strength = (survivor.buffs.strength || 0) + 5;
-                        Utils.showBattleLog(`${survivor.name} 力量暴涨！(+5 力量)`);
+                        survivor.buffs.strength = (survivor.buffs.strength || 0) + 7;
+                        Utils.showBattleLog(`${survivor.name} 力量暴涨！(+7 力量)`);
 
                         if (this.updateEnemiesUI) this.updateEnemiesUI();
-                    }, 500);
+                    }, 600);
                 }
-            }
-        }
-
-        // === Twin Bonds (Dual Boss Vengeance) ===
-        if (wasAlive && enemy.currentHp <= 0 && enemy.isDualBoss) {
-            const survivor = this.enemies.find(e => e.isDualBoss && e.currentHp > 0 && e !== enemy);
-            if (survivor) {
-                // Delay slightly to let death animation/log play
-                setTimeout(() => {
-                    Utils.showBattleLog(`【双子羁绊】${survivor.name} 因同伴死亡而暴怒！`);
-
-                    const healAmount = Math.floor(survivor.maxHp * 0.5);
-                    survivor.currentHp = Math.min(survivor.maxHp, survivor.currentHp + healAmount);
-                    Utils.showBattleLog(`${survivor.name} 恢复了 ${healAmount} 点生命！`);
-
-                    survivor.buffs.strength = (survivor.buffs.strength || 0) + 5;
-                    Utils.showBattleLog(`${survivor.name} 力量暴涨！(+5 力量)`);
-
-                    if (this.updateEnemiesUI) this.updateEnemiesUI();
-                }, 800);
             }
         }
 
@@ -1589,6 +1693,11 @@ class Battle {
 
         // 玩家回合结束
         this.player.endTurn();
+
+        // 法宝：玩家回合结束触发
+        if (this.player.triggerTreasureEffect) {
+            this.player.triggerTreasureEffect('onTurnEnd');
+        }
 
         // 法则：火焰真意 (FlameTruth) - 回合结束AoE
         const flameLaw = this.player.collectedLaws.find(l => l.id === 'flameTruth');
@@ -1611,7 +1720,7 @@ class Battle {
         for (const card of statusCards) {
             if (card.effects) {
                 for (const effect of card.effects) {
-                    if (effect.trigger === 'endTurn') {
+                    if (effect.trigger === 'endTurn' || effect.trigger === 'turnEnd') {
                         if (effect.type === 'selfDamage') {
                             let damage = effect.value;
                             if (effect.isPercent) {
@@ -1727,9 +1836,6 @@ class Battle {
         } finally {
             // 无论如何都要恢复玩家回合
 
-            // 新回合
-            this.turnNumber++;
-            this.currentTurn = 'player';
             // 新回合
             this.turnNumber++;
             this.currentTurn = 'player';
@@ -1907,6 +2013,12 @@ class Battle {
                 }
             }
         }
+
+        // 法宝：敌人回合结束触发（如镇魂玉）
+        if (this.player.triggerTreasureEffect) {
+            const aliveEnemies = this.enemies.filter(e => e.currentHp > 0);
+            this.player.triggerTreasureEffect('onEnemyTurnEnd', aliveEnemies);
+        }
     }
 
 
@@ -2052,6 +2164,7 @@ class Battle {
 
                 // === Boss Mechanic: True Damage (Realm 10+) ===
                 let isTrueDamage = false;
+                let isPenetrateAttack = false;
                 if (enemy.isBoss && this.player.realm >= 10) {
                     // 30% chance to deal True Damage (ignore block)
                     if (Math.random() < 0.3) {
@@ -2101,7 +2214,6 @@ class Battle {
                 // 检查火焰真意 (Flame Truth) - Burn on Hit
                 const flameLaw = this.player.collectedLaws.find(l => l.id === 'flameTruth');
                 if (flameLaw && Math.random() < flameLaw.passive.chance) {
-                    enemy.takeDamage(0); // Trigger visual flash if needed? Or just add buff
                     enemy.buffs.burn = (enemy.buffs.burn || 0) + flameLaw.passive.value;
                     Utils.showBattleLog('火焰真意：给予敌人灼烧！');
                 }
@@ -2123,6 +2235,30 @@ class Battle {
                     Utils.showBattleLog(`时间凝滞生效！敌人伤害降低 ${reduction}%`);
                     // Consume it (Next Attack)
                     delete enemy.buffs.damageReduction;
+                }
+
+                // Boss 攻击前机制（如穿透判定）
+                if (enemy.isBoss && typeof BossMechanicsHandler !== 'undefined') {
+                    const beforeAttack = BossMechanicsHandler.processOnAttack(this, enemy, damage, {
+                        stage: 'before',
+                        pattern
+                    }) || {};
+                    if (typeof beforeAttack.damage === 'number' && !isNaN(beforeAttack.damage)) {
+                        damage = beforeAttack.damage;
+                    }
+                    if (beforeAttack.ignoreBlock) {
+                        isTrueDamage = true;
+                    }
+                    if (beforeAttack.isPenetrate) {
+                        isPenetrateAttack = true;
+                    }
+                }
+
+                // 法宝：受到穿透伤害前修正（如护心镜）
+                if (isPenetrateAttack && this.player.triggerTreasureValueEffect) {
+                    damage = this.player.triggerTreasureValueEffect('onBeforeTakePenetrate', damage, {
+                        source: enemy
+                    });
                 }
 
                 // Handle True Damage
@@ -2182,6 +2318,16 @@ class Battle {
                         Utils.showBattleLog(`反弹 ${result.thorns} 点伤害`);
                     }
                 }
+
+                // Boss 攻击后机制（如吸血、禁疗）
+                if (enemy.isBoss && typeof BossMechanicsHandler !== 'undefined') {
+                    BossMechanicsHandler.processOnAttack(this, enemy, result.damage || 0, {
+                        stage: 'after',
+                        pattern,
+                        ignoreBlock: isTrueDamage,
+                        isPenetrate: isPenetrateAttack
+                    });
+                }
                 break;
 
             case 'multiAttack':
@@ -2191,22 +2337,53 @@ class Battle {
                         multiDamage += enemy.buffs.strength;
                     }
 
-                    // Check True Damage for MultiAttack as well? 
-                    // Let's say MultiAttack is standard. Except if we want to be mean.
-                    // Let's keep MultiAttack standard for now, as it's already strong.
-
-                    // 检查战斗胜利
-
                     // 应用心魔滋生
                     multiDamage = this.dealEnemyDamage(enemy, multiDamage);
+                    let multiIgnoreBlock = false;
+                    let multiIsPenetrate = false;
 
-                    const multiResult = this.player.takeDamage(multiDamage);
+                    if (enemy.isBoss && typeof BossMechanicsHandler !== 'undefined') {
+                        const beforeMulti = BossMechanicsHandler.processOnAttack(this, enemy, multiDamage, {
+                            stage: 'before',
+                            pattern
+                        }) || {};
+                        if (typeof beforeMulti.damage === 'number' && !isNaN(beforeMulti.damage)) {
+                            multiDamage = beforeMulti.damage;
+                        }
+                        multiIgnoreBlock = !!beforeMulti.ignoreBlock;
+                        multiIsPenetrate = !!beforeMulti.isPenetrate;
+                    }
+
+                    if (multiIsPenetrate && this.player.triggerTreasureValueEffect) {
+                        multiDamage = this.player.triggerTreasureValueEffect('onBeforeTakePenetrate', multiDamage, {
+                            source: enemy
+                        });
+                    }
+
+                    let multiResult;
+                    if (multiIgnoreBlock) {
+                        const savedBlock = this.player.block;
+                        this.player.block = 0;
+                        multiResult = this.player.takeDamage(multiDamage);
+                        this.player.block = savedBlock;
+                    } else {
+                        multiResult = this.player.takeDamage(multiDamage);
+                    }
 
                     if (playerEl && !multiResult.dodged) {
                         Utils.addShakeEffect(playerEl);
                         if (multiResult.damage > 0) {
                             Utils.showFloatingNumber(playerEl, multiResult.damage, 'damage');
                         }
+                    }
+
+                    if (enemy.isBoss && typeof BossMechanicsHandler !== 'undefined') {
+                        BossMechanicsHandler.processOnAttack(this, enemy, multiResult.damage || 0, {
+                            stage: 'after',
+                            pattern,
+                            ignoreBlock: multiIgnoreBlock,
+                            isPenetrate: multiIsPenetrate
+                        });
                     }
 
                     this.updateBattleUI();
@@ -2245,7 +2422,7 @@ class Battle {
 
             case 'heal':
                 const healVal = (typeof pattern.value === 'number' && !isNaN(pattern.value)) ? pattern.value : 0;
-                enemy.currentHp = Math.min(enemy.hp, enemy.currentHp + healVal);
+                enemy.currentHp = Math.min(enemy.maxHp, enemy.currentHp + healVal);
                 Utils.showBattleLog(`${enemy.name} 恢复了 ${healVal} 点生命`);
                 break;
 
@@ -2335,7 +2512,7 @@ class Battle {
 
             // 随从入场特效
             setTimeout(() => {
-                const newEnemyEl = document.querySelector(`.enemy[data - index= "${this.enemies.length - 1}"]`);
+                const newEnemyEl = document.querySelector(`.enemy[data-index="${this.enemies.length - 1}"]`);
                 if (newEnemyEl) Utils.addFlashEffect(newEnemyEl);
             }, 100);
         } else {
@@ -2354,7 +2531,8 @@ class Battle {
         const nextPhase = enemy.phases[enemy.currentPhase]; // 这里 enemy.currentPhase 初始应为 0，对应 phases[0] 即第一个转阶段配置
 
         // 修正逻辑：如果当前 Hp 比例低于 phase 阈值
-        if (nextPhase && (enemy.currentHp / enemy.hp) <= nextPhase.threshold) {
+        const phaseMaxHp = enemy.maxHp || enemy.hp || 1;
+        if (nextPhase && (enemy.currentHp / phaseMaxHp) <= nextPhase.threshold) {
             // 触发转阶段
             enemy.currentPhase++; // 增加阶段计数，避免重复触发
             Utils.showBattleLog(`${enemy.name} 进入${nextPhase.name} 形态！`);
@@ -2366,7 +2544,7 @@ class Battle {
             }
 
             // 播放特效
-            const enemyEl = document.querySelector(`.enemy[data - index= "${this.enemies.indexOf(enemy)}"]`);
+            const enemyEl = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`);
             if (enemyEl) {
                 Utils.addShakeEffect(enemyEl, 'heavy');
                 Utils.addFlashEffect(enemyEl, 'red'); // 狂暴红光
@@ -2374,8 +2552,8 @@ class Battle {
 
             // 恢复少量生命?
             if (nextPhase.heal) {
-                const healAmt = Math.floor(enemy.hp * nextPhase.heal);
-                enemy.currentHp = Math.min(enemy.hp, enemy.currentHp + healAmt);
+                const healAmt = Math.floor(phaseMaxHp * nextPhase.heal);
+                enemy.currentHp = Math.min(phaseMaxHp, enemy.currentHp + healAmt);
                 Utils.showBattleLog(`${enemy.name} 恢复了力量！`);
             }
         }

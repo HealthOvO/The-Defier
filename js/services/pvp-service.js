@@ -7,6 +7,36 @@ window.PVPService = {
     // 缓存数据
     currentRankData: null,
 
+    // 兼容不同 Bmob SDK 查询参数签名
+    applyFilter(query, key, op, value) {
+        try {
+            query.equalTo(key, op, value);
+            return;
+        } catch (e) {
+            // Fallback to method-style operators if available
+        }
+
+        if (op === '==') {
+            query.equalTo(key, value);
+            return;
+        }
+        if (op === '!=' && typeof query.notEqualTo === 'function') {
+            query.notEqualTo(key, value);
+            return;
+        }
+        if (op === '>=' && typeof query.greaterThanOrEqualTo === 'function') {
+            query.greaterThanOrEqualTo(key, value);
+            return;
+        }
+        if (op === '<=' && typeof query.lessThanOrEqualTo === 'function') {
+            query.lessThanOrEqualTo(key, value);
+            return;
+        }
+
+        // Last try: keep original call pattern for SDKs that only support this form.
+        query.equalTo(key, op, value);
+    },
+
     /**
      * 初始化：检查当前用户并获取榜单信息
      */
@@ -28,8 +58,7 @@ window.PVPService = {
         try {
             const user = Bmob.User.current();
             const query = Bmob.Query('GhostSnapshot');
-            // FIX: Correct query syntax, no '=='
-            query.equalTo('user', '==', user.objectId);
+            this.applyFilter(query, 'user', '==', user.objectId);
 
             let results = [];
             try {
@@ -84,7 +113,7 @@ window.PVPService = {
         try {
             const user = Bmob.User.current();
             const query = Bmob.Query('GhostSnapshot');
-            query.equalTo('user', '==', user.objectId);
+            this.applyFilter(query, 'user', '==', user.objectId);
             const results = await query.find();
 
             if (results && results.length > 0) {
@@ -113,12 +142,12 @@ window.PVPService = {
 
             // 排除自己
             const user = Bmob.User.current();
-            query.equalTo('user', '!=', user.objectId);
+            this.applyFilter(query, 'user', '!=', user.objectId);
 
             // 简单范围查询
             if (myScore) {
-                query.equalTo('score', '>=', myScore - 300);
-                query.equalTo('score', '<=', myScore + 300);
+                this.applyFilter(query, 'score', '>=', myScore - 300);
+                this.applyFilter(query, 'score', '<=', myScore + 300);
             }
             query.limit(10);
             // 必须 include user 才能获取对手名字
@@ -129,7 +158,7 @@ window.PVPService = {
             // 如果没找到，放宽条件
             if (!opponents || opponents.length === 0) {
                 const retryQuery = Bmob.Query('PlayerRank');
-                retryQuery.equalTo('user', '!=', user.objectId);
+                this.applyFilter(retryQuery, 'user', '!=', user.objectId);
                 retryQuery.limit(5);
                 retryQuery.order('-score'); // 找高分的
                 retryQuery.include('user');
@@ -147,7 +176,7 @@ window.PVPService = {
             const ghostQuery = Bmob.Query('GhostSnapshot');
             // 注意：这里需要查 opponentRank.user.objectId
             if (opponentRank.user && opponentRank.user.objectId) {
-                ghostQuery.equalTo('user', '==', opponentRank.user.objectId);
+                this.applyFilter(ghostQuery, 'user', '==', opponentRank.user.objectId);
             } else {
                 return { success: false, message: '对手数据异常' };
             }
@@ -195,7 +224,7 @@ window.PVPService = {
         try {
             const user = Bmob.User.current();
             const query = Bmob.Query('PlayerRank');
-            query.equalTo('user', '==', user.objectId);
+            this.applyFilter(query, 'user', '==', user.objectId);
             const results = await query.find();
 
             if (results && results.length > 0) {
@@ -234,7 +263,7 @@ window.PVPService = {
 
     async getRankByUserId(userId) {
         const query = Bmob.Query('PlayerRank');
-        query.equalTo('user', '==', userId);
+        this.applyFilter(query, 'user', '==', userId);
         const res = await query.find();
         return res[0];
     },

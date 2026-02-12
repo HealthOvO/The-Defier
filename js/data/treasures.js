@@ -448,7 +448,7 @@ const TREASURES = {
             onTurnEnd: (player) => {
                 if (player.block > 0) {
                     const retain = Math.ceil(player.block * 0.4);
-                    player.addBuff('retain_block', retain);
+                    player.buffs.nextTurnBlock = (player.buffs.nextTurnBlock || 0) + retain;
                     Utils.showBattleLog(`【玄武甲】保留${retain}点护盾`);
                 }
             }
@@ -473,8 +473,8 @@ const TREASURES = {
                     const dmg = 10 + (level * 5);
 
                     window.game.enemies.forEach(enemy => {
-                        if (enemy.isAlive()) {
-                            enemy.takeDamage(dmg);
+                        if ((enemy.isAlive && enemy.isAlive()) || enemy.currentHp > 0) {
+                            enemy.takeDamage(dmg, { ignoreBlock: true });
                         }
                     });
                     Utils.showBattleLog(`【斩仙飞刀】造成${dmg}点穿透伤害！`);
@@ -738,7 +738,7 @@ const TREASURES = {
             onBattleStart: (player, treasure) => {
                 const elements = ['fire', 'ice', 'thunder', 'earth', 'wood'];
                 treasure.data.element = elements[Math.floor(Math.random() * elements.length)];
-                player.addBuff('element_affinity', treasure.data.element);
+                player.buffs.element_affinity = treasure.data.element;
                 const names = { fire: '火', ice: '冰', thunder: '雷', earth: '土', wood: '木' };
                 Utils.showBattleLog(`【五行珠】获得${names[treasure.data.element]}元素亲和！`);
             },

@@ -394,6 +394,7 @@ const BossMechanicsHandler = {
         if (!mech || !mech.mechanics) return;
 
         const m = mech.mechanics;
+        let thornsApplied = false;
 
         // 护甲类Boss初始护盾和反伤
         if (m.type === 'armor') {
@@ -402,16 +403,18 @@ const BossMechanicsHandler = {
             }
             if (m.thorns) {
                 enemy.addBuff('thorns', m.thorns);
+                thornsApplied = true;
             }
         }
 
         // 因果类Boss反伤
         if (m.type === 'karma' && m.thorns) {
             enemy.addBuff('thorns', m.thorns);
+            thornsApplied = true;
         }
 
         // 双子熔岩反伤
-        if (m.thorns) {
+        if (m.thorns && !thornsApplied) {
             enemy.addBuff('thorns', m.thorns);
         }
     },
@@ -446,38 +449,51 @@ const BossMechanicsHandler = {
     },
 
     // 处理Boss攻击时的机制
-    processOnAttack: function (battle, enemy, damage) {
+    processOnAttack: function (battle, enemy, damage, options = {}) {
         const mech = BOSS_MECHANICS[enemy.id];
-        if (!mech || !mech.mechanics) return;
+        if (!mech || !mech.mechanics) return {};
 
         const m = mech.mechanics;
         const player = battle.player;
+        const stage = options.stage || 'after';
+        const result = {};
+
+        if (stage === 'before') {
+            // 穿透伤害（剑修Boss）
+            if (m.type === 'penetrate' && Math.random() < m.chance) {
+                result.ignoreBlock = true;
+                result.isPenetrate = true;
+                Utils.showBattleLog(`${enemy.name} 发动穿透斩击！`);
+            }
+            return result;
+        }
 
         // 吸血
-        if (m.type === 'lifesteal') {
+        if (m.type === 'lifesteal' && damage > 0) {
             let healAmount = Math.floor(damage * m.healPercent);
             if (player.hasBuff('anti_heal')) {
                 healAmount = Math.floor(healAmount * 0.5);
             }
-            enemy.heal(healAmount);
-            Utils.showBattleLog(`${enemy.name}吸取了${healAmount}点生命！`);
+            if (healAmount > 0) {
+                const healed = enemy.heal(healAmount);
+                if (healed > 0) {
+                    Utils.showBattleLog(`${enemy.name}吸取了${healed}点生命！`);
+                }
+            }
         }
 
         // 吞噬卡牌
         if (m.type === 'devour') {
-            if (player.drawPile && player.drawPile.length > 0) {
-                player.drawPile.pop();
-                Utils.showBattleLog(`${enemy.name}吞噬了你的一张卡牌！`);
-            }
             if (m.healingBan && !player.hasBuff('healing_corrupt')) {
-                player.addDebuff('healing_corrupt', 1);
+                if (player.addDebuff) {
+                    player.addDebuff('healing_corrupt', 1);
+                } else {
+                    player.addBuff('healing_corrupt', 1);
+                }
+                Utils.showBattleLog(`${enemy.name}施加了禁疗！`);
             }
         }
-
-        // 穿透伤害
-        if (m.type === 'penetrate' && Math.random() < m.chance) {
-            // 在battle.js中处理穿透逻辑
-        }
+        return result;
     },
 
     // 检查阶段转换
@@ -517,7 +533,7 @@ const BossMechanicsHandler = {
     hasCounterTreasure: function (player, bossId) {
         if (!player.treasures || !BOSS_MECHANICS[bossId]) return false;
         const counters = BOSS_MECHANICS[bossId].countersBy || [];
-        return player.treasures.some(t => counters.includes(t));
+        return player.treasures.some(t => counters.includes((t && t.id) || t));
     },
 
     // 获取Boss难度系数

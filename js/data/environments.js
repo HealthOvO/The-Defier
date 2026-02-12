@@ -31,7 +31,7 @@ const REALM_ENVIRONMENTS = {
     8: {
         id: 'heavyGravity',
         name: '重力场',
-        description: '举步维艰。所有耗能 > 1 的卡牌，耗能 +1。',
+        description: '举步维艰。所有耗能 > 1 的卡牌耗能 +1，造成伤害 -20%。',
         icon: '⚖️',
         onBattleStart: (battle) => {
             // 逻辑在 battle.js 或 card.js 中处理，这里只作为标记
