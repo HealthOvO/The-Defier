@@ -10,6 +10,47 @@ const AuthService = {
     NETWORK_RETRY: 2,
     REQUEST_TIMEOUT_MS: 12000,
 
+    getRuntimeConfig() {
+        let config = null;
+
+        // 优先读取宿主注入配置
+        if (typeof window !== 'undefined') {
+            const rootConfig = window.__THE_DEFIER_CONFIG__;
+            if (rootConfig && rootConfig.bmob) {
+                config = rootConfig.bmob;
+            }
+        }
+
+        // 回退读取 localStorage （为了兼容旧版逻辑或独立测试）
+        if (!config && typeof localStorage !== 'undefined') {
+            try {
+                const raw = localStorage.getItem('theDefierBmobConfig');
+                if (raw) config = JSON.parse(raw);
+            } catch (e) {
+                console.warn('Invalid theDefierBmobConfig in localStorage');
+            }
+        }
+
+        if (!config || typeof config !== 'object') return null;
+
+        const secretKey = typeof config.secretKey === 'string' ? config.secretKey.trim() : '';
+        const securityCode = typeof config.securityCode === 'string' ? config.securityCode.trim() : '';
+        const masterKey = typeof config.masterKey === 'string' ? config.masterKey.trim() : '';
+
+        if (!secretKey || !securityCode) return null;
+        return { secretKey, securityCode, masterKey };
+    },
+
+    isCloudEnabled() {
+        return this.cloudEnabled;
+    },
+
+    ensureInitialized() {
+        if (this.isInitialized) return true;
+        this.init();
+        return this.isInitialized;
+    },
+
     init() {
         this.initError = null;
         this.cloudEnabled = false;

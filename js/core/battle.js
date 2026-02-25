@@ -25,6 +25,17 @@ class Battle {
             fire: { name: '火', color: '#FF5722', weak: 'water', strong: 'metal' },
             earth: { name: '土', color: '#795548', weak: 'wood', strong: 'water' }
         };
+
+        this.eventListeners = new Map();
+        this.uiDirty = {
+            player: false,
+            enemies: false,
+            hand: false,
+            energy: false,
+            piles: false,
+            environment: false,
+            activeSkill: false
+        };
     }
 
     // 统一托管战斗中的延时任务，避免战斗结束后旧回调串入新战斗
@@ -391,7 +402,7 @@ class Battle {
     }
 
     on(eventName, listener) {
-        if (!eventName || typeof listener !== 'function') return () => {};
+        if (!eventName || typeof listener !== 'function') return () => { };
         if (!this.eventListeners.has(eventName)) {
             this.eventListeners.set(eventName, new Set());
         }

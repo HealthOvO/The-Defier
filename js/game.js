@@ -962,7 +962,7 @@ class Game {
                 combatMeta: {
                     stance: this.player.stance || 'neutral',
                     ruleVersion: 'combat-v2',
-                    battleUIUpdates: this.performanceStats.battleUIUpdates || 0
+                    battleUIUpdates: (this.performanceStats && this.performanceStats.battleUIUpdates) || 0
                 },
                 pvpMeta: {
                     ruleVersion: 'pvp-v2',
@@ -6932,7 +6932,13 @@ class Game {
             const user = AuthService.getCurrentUser();
             // Change button to show name or Logout
             const username = user && user.username ? user.username : '已登录';
-            btn.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text" style="font-size:0.8rem">${username}</span>`;
+            btn.innerHTML = `
+                <div class="talisman-paper"></div>
+                <div class="talisman-content">
+                    <span class="btn-icon">👤</span>
+                    <span class="btn-text" style="font-size:0.8rem">${username}</span>
+                </div>
+            `;
             btn.onclick = () => {
                 // Muted/Audio handling (delayed slightly for feel)
                 setTimeout(() => {
@@ -7043,16 +7049,9 @@ class Game {
             // Keep Local -> Upload to Cloud
             const localSave = localStorage.getItem('theDefierSave');
             if (localSave) {
-                const data = JSON.parse(localSave);
-                const targetSlot = Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : 0;
-                AuthService.saveCloudData(data, targetSlot).then(res => {
-                    if (res.success) {
-                        Utils.showBattleLog('本地存档已覆盖云端！');
-                        modal.classList.remove('active');
-                        // No reload needed
-                    } else {
-                        alert('云端同步失败：' + (res.message || '未知错误'));
-                    }
+                try {
+                    const data = JSON.parse(localSave);
+                    const targetSlot = Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : 0;
 
                     if (targetSlot === undefined || targetSlot === null) {
                         alert('错误：无法确定存档位，请先进入游戏选择存档位后再尝试同步。');
@@ -7061,7 +7060,7 @@ class Game {
 
                     AuthService.saveCloudData(data, targetSlot).then(res => {
                         if (res.success) {
-                            Utils.showBattleLog(`本地存档已同步至云端(Slot ${targetSlot + 1})`);
+                            Utils.showBattleLog(`本地存档已覆盖云端！(Slot ${targetSlot + 1})`);
                             modal.classList.remove('active');
                             // Update cache
                             if (this.cachedSlots) this.cachedSlots[targetSlot] = data;
