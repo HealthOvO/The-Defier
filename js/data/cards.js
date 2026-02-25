@@ -199,6 +199,435 @@ const CARDS = {
         ]
     },
 
+    // ==================== 战斗深度扩展：流血/破绽/架势 ====================
+    bloodlettingSlash: {
+        id: 'bloodlettingSlash',
+        name: '裂脉斩',
+        type: 'attack',
+        cost: 1,
+        icon: '🩸',
+        description: '造成 6 点伤害并施加 2 层流血',
+        rarity: 'common',
+        keywords: ['bleed'],
+        comboTag: 'bleed',
+        synergyGroup: 'hemorrhage',
+        effects: [
+            { type: 'damage', value: 6, target: 'enemy' },
+            { type: 'applyBleed', value: 2, target: 'enemy' }
+        ]
+    },
+
+    punctureMark: {
+        id: 'punctureMark',
+        name: '破绽刺',
+        type: 'attack',
+        cost: 1,
+        icon: '🎯',
+        description: '造成 4 点伤害并施加 4 层破绽',
+        rarity: 'common',
+        keywords: ['mark'],
+        comboTag: 'mark',
+        synergyGroup: 'precision',
+        effects: [
+            { type: 'damage', value: 4, target: 'enemy' },
+            { type: 'applyMark', value: 4, target: 'enemy' }
+        ]
+    },
+
+    tacticalExpose: {
+        id: 'tacticalExpose',
+        name: '战术破析',
+        type: 'skill',
+        cost: 1,
+        icon: '🧭',
+        description: '施加 6 层破绽并抽 1 张牌',
+        rarity: 'uncommon',
+        keywords: ['mark'],
+        comboTag: 'mark',
+        synergyGroup: 'precision',
+        effects: [
+            { type: 'applyMark', value: 6, target: 'enemy' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    crimsonCascade: {
+        id: 'crimsonCascade',
+        name: '赤瀑连断',
+        type: 'attack',
+        cost: 2,
+        icon: '🌊',
+        description: '造成 9 点伤害并施加 3 层流血',
+        rarity: 'uncommon',
+        keywords: ['bleed'],
+        comboTag: 'bleed',
+        synergyGroup: 'hemorrhage',
+        effects: [
+            { type: 'damage', value: 9, target: 'enemy' },
+            { type: 'applyBleed', value: 3, target: 'enemy' }
+        ]
+    },
+
+    hunterSeal: {
+        id: 'hunterSeal',
+        name: '猎印',
+        type: 'skill',
+        cost: 0,
+        icon: '🪶',
+        description: '施加 3 层破绽，获得 1 点灵力',
+        rarity: 'common',
+        keywords: ['mark', 'tempo'],
+        comboTag: 'mark',
+        synergyGroup: 'precision',
+        effects: [
+            { type: 'applyMark', value: 3, target: 'enemy' },
+            { type: 'energy', value: 1, target: 'self' }
+        ]
+    },
+
+    stanceAggressive: {
+        id: 'stanceAggressive',
+        name: '攻势架势',
+        type: 'power',
+        cost: 1,
+        icon: '🔥',
+        description: '切换到攻势：造成伤害提高，承伤增加',
+        rarity: 'uncommon',
+        keywords: ['stance'],
+        comboTag: 'stance',
+        synergyGroup: 'stance',
+        effects: [
+            { type: 'setStance', stance: 'aggressive', target: 'self' }
+        ]
+    },
+
+    stanceDefensive: {
+        id: 'stanceDefensive',
+        name: '守势架势',
+        type: 'power',
+        cost: 1,
+        icon: '🛡️',
+        description: '切换到守势：承伤降低，输出略降',
+        rarity: 'uncommon',
+        keywords: ['stance'],
+        comboTag: 'stance',
+        synergyGroup: 'stance',
+        effects: [
+            { type: 'setStance', stance: 'defensive', target: 'self' }
+        ]
+    },
+
+    stanceFlow: {
+        id: 'stanceFlow',
+        name: '归一心流',
+        type: 'skill',
+        cost: 0,
+        icon: '☯️',
+        description: '切回中和架势并抽 1 张牌',
+        rarity: 'common',
+        keywords: ['stance'],
+        comboTag: 'stance',
+        synergyGroup: 'stance',
+        effects: [
+            { type: 'setStance', stance: 'neutral', target: 'self' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    guardedRiposte: {
+        id: 'guardedRiposte',
+        name: '守中反击',
+        type: 'defense',
+        cost: 1,
+        icon: '🗡️',
+        description: '获得 8 护盾并施加 2 层破绽',
+        rarity: 'common',
+        keywords: ['stance', 'mark'],
+        comboTag: 'stance',
+        synergyGroup: 'stance',
+        effects: [
+            { type: 'block', value: 8, target: 'self' },
+            { type: 'applyMark', value: 2, target: 'enemy' }
+        ]
+    },
+
+    sunderingNeedle: {
+        id: 'sunderingNeedle',
+        name: '裂界针',
+        type: 'attack',
+        cost: 2,
+        icon: '🪡',
+        description: '造成 10 点穿透伤害并施加 2 层流血',
+        rarity: 'rare',
+        keywords: ['bleed', 'penetrate'],
+        comboTag: 'bleed',
+        synergyGroup: 'hemorrhage',
+        effects: [
+            { type: 'penetrate', value: 10, target: 'enemy' },
+            { type: 'applyBleed', value: 2, target: 'enemy' }
+        ]
+    },
+
+    hemorrhageRain: {
+        id: 'hemorrhageRain',
+        name: '血雨',
+        type: 'attack',
+        cost: 2,
+        icon: '🌧️',
+        description: '对全体造成 5 点伤害，并施加 1 层流血',
+        rarity: 'rare',
+        keywords: ['bleed', 'aoe'],
+        comboTag: 'bleed',
+        synergyGroup: 'hemorrhage',
+        effects: [
+            { type: 'damageAll', value: 5, target: 'allEnemies' },
+            { type: 'applyBleed', value: 1, target: 'enemy' }
+        ]
+    },
+
+    executionDoctrine: {
+        id: 'executionDoctrine',
+        name: '斩决要义',
+        type: 'attack',
+        cost: 2,
+        icon: '📜',
+        description: '造成 8 点伤害；若目标有破绽，额外造成 8 点伤害',
+        rarity: 'rare',
+        keywords: ['mark', 'burst'],
+        comboTag: 'mark',
+        synergyGroup: 'precision',
+        effects: [
+            { type: 'damage', value: 8, target: 'enemy' },
+            { type: 'conditionalDamage', value: 8, condition: 'marked', target: 'enemy' }
+        ]
+    },
+
+    serratedRitual: {
+        id: 'serratedRitual',
+        name: '锯刃仪式',
+        type: 'attack',
+        cost: 1,
+        icon: '🩸',
+        description: '造成 5 点伤害，施加 2 层流血，自身受到 1 点伤害',
+        rarity: 'common',
+        keywords: ['bleed'],
+        comboTag: 'bleed',
+        synergyGroup: 'hemorrhage',
+        effects: [
+            { type: 'damage', value: 5, target: 'enemy' },
+            { type: 'applyBleed', value: 2, target: 'enemy' },
+            { type: 'selfDamage', value: 1, target: 'self' }
+        ]
+    },
+
+    coagulatedGuard: {
+        id: 'coagulatedGuard',
+        name: '凝血守式',
+        type: 'defense',
+        cost: 1,
+        icon: '🛡️',
+        description: '获得 6 点护盾，并施加 1 层流血',
+        rarity: 'common',
+        keywords: ['bleed', 'stance'],
+        comboTag: 'bleed',
+        synergyGroup: 'hemorrhage',
+        effects: [
+            { type: 'block', value: 6, target: 'self' },
+            { type: 'applyBleed', value: 1, target: 'enemy' }
+        ]
+    },
+
+    bloodDebt: {
+        id: 'bloodDebt',
+        name: '血债引燃',
+        type: 'skill',
+        cost: 0,
+        icon: '🧪',
+        description: '失去 3 点生命，获得 2 点灵力并抽 1 张牌',
+        rarity: 'uncommon',
+        keywords: ['bleed', 'tempo'],
+        comboTag: 'bleed',
+        synergyGroup: 'hemorrhage',
+        effects: [
+            { type: 'selfDamage', value: 3, target: 'self' },
+            { type: 'energy', value: 2, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    arteryRupture: {
+        id: 'arteryRupture',
+        name: '断脉贯刺',
+        type: 'attack',
+        cost: 2,
+        icon: '🗡️',
+        description: '造成 8 点穿透伤害并施加 4 层流血',
+        rarity: 'uncommon',
+        keywords: ['bleed', 'penetrate'],
+        comboTag: 'bleed',
+        synergyGroup: 'hemorrhage',
+        effects: [
+            { type: 'penetrate', value: 8, target: 'enemy' },
+            { type: 'applyBleed', value: 4, target: 'enemy' }
+        ]
+    },
+
+    scarletJudgement: {
+        id: 'scarletJudgement',
+        name: '赤裁',
+        type: 'attack',
+        cost: 2,
+        icon: '⚰️',
+        description: '造成 7 点伤害并施加 2 层流血；对半血以下目标造成 10 点处决伤害',
+        rarity: 'rare',
+        keywords: ['bleed', 'burst'],
+        comboTag: 'bleed',
+        synergyGroup: 'hemorrhage',
+        effects: [
+            { type: 'damage', value: 7, target: 'enemy' },
+            { type: 'applyBleed', value: 2, target: 'enemy' },
+            { type: 'executeDamage', value: 10, threshold: 0.5, target: 'enemy' }
+        ]
+    },
+
+    bloodTideOath: {
+        id: 'bloodTideOath',
+        name: '血潮誓约',
+        type: 'attack',
+        cost: 3,
+        icon: '🌊',
+        description: '对全体造成 6 点伤害，抽 1 张牌，自身受到 4 点伤害',
+        rarity: 'rare',
+        keywords: ['bleed', 'aoe'],
+        comboTag: 'bleed',
+        synergyGroup: 'hemorrhage',
+        effects: [
+            { type: 'damageAll', value: 6, target: 'allEnemies' },
+            { type: 'draw', value: 1, target: 'self' },
+            { type: 'selfDamage', value: 4, target: 'self' }
+        ]
+    },
+
+    weakpointSurvey: {
+        id: 'weakpointSurvey',
+        name: '弱点勘测',
+        type: 'skill',
+        cost: 0,
+        icon: '🧭',
+        description: '施加 2 层破绽并抽 1 张牌',
+        rarity: 'common',
+        keywords: ['mark', 'tempo'],
+        comboTag: 'mark',
+        synergyGroup: 'precision',
+        effects: [
+            { type: 'applyMark', value: 2, target: 'enemy' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    duetFeint: {
+        id: 'duetFeint',
+        name: '双式佯攻',
+        type: 'attack',
+        cost: 1,
+        icon: '🪶',
+        description: '造成 5 点伤害并施加 2 层破绽',
+        rarity: 'common',
+        keywords: ['mark'],
+        comboTag: 'mark',
+        synergyGroup: 'precision',
+        effects: [
+            { type: 'damage', value: 5, target: 'enemy' },
+            { type: 'applyMark', value: 2, target: 'enemy' }
+        ]
+    },
+
+    poisedCounter: {
+        id: 'poisedCounter',
+        name: '定式反制',
+        type: 'defense',
+        cost: 1,
+        icon: '⚖️',
+        description: '获得 7 点护盾并施加 2 层破绽',
+        rarity: 'common',
+        keywords: ['mark', 'stance'],
+        comboTag: 'mark',
+        synergyGroup: 'precision',
+        effects: [
+            { type: 'block', value: 7, target: 'self' },
+            { type: 'applyMark', value: 2, target: 'enemy' }
+        ]
+    },
+
+    razorFocus: {
+        id: 'razorFocus',
+        name: '锋念凝聚',
+        type: 'skill',
+        cost: 1,
+        icon: '🎯',
+        description: '施加 5 层破绽并获得 1 点灵力',
+        rarity: 'uncommon',
+        keywords: ['mark'],
+        comboTag: 'mark',
+        synergyGroup: 'precision',
+        effects: [
+            { type: 'applyMark', value: 5, target: 'enemy' },
+            { type: 'energy', value: 1, target: 'self' }
+        ]
+    },
+
+    stancePivot: {
+        id: 'stancePivot',
+        name: '转势',
+        type: 'skill',
+        cost: 0,
+        icon: '☯️',
+        description: '切回中和架势，施加 2 层破绽并抽 1 张牌',
+        rarity: 'uncommon',
+        keywords: ['mark', 'stance'],
+        comboTag: 'stance',
+        synergyGroup: 'precision',
+        effects: [
+            { type: 'setStance', stance: 'neutral', target: 'self' },
+            { type: 'applyMark', value: 2, target: 'enemy' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    focusBreak: {
+        id: 'focusBreak',
+        name: '断念',
+        type: 'attack',
+        cost: 1,
+        icon: '⚔️',
+        description: '造成 6 点伤害；若目标有破绽，额外造成 6 点伤害',
+        rarity: 'uncommon',
+        keywords: ['mark', 'burst'],
+        comboTag: 'mark',
+        synergyGroup: 'precision',
+        effects: [
+            { type: 'damage', value: 6, target: 'enemy' },
+            { type: 'conditionalDamage', value: 6, condition: 'marked', target: 'enemy' }
+        ]
+    },
+
+    verdictNeedle: {
+        id: 'verdictNeedle',
+        name: '裁决针',
+        type: 'attack',
+        cost: 2,
+        icon: '🪡',
+        description: '造成 10 点穿透伤害；若目标有破绽，额外造成 7 点伤害',
+        rarity: 'rare',
+        keywords: ['mark', 'penetrate'],
+        comboTag: 'mark',
+        synergyGroup: 'precision',
+        effects: [
+            { type: 'penetrate', value: 10, target: 'enemy' },
+            { type: 'conditionalDamage', value: 7, condition: 'marked', target: 'enemy' }
+        ]
+    },
+
     // ==================== 补全卡牌 ====================
     healingTouch: {
         id: 'healingTouch',
@@ -1268,14 +1697,18 @@ const CARD_POOL = {
         'heavyStrike', 'quickSlash', 'doubleStrike', 'ironWill', 'shieldBash',
         'spiritBoost', 'meditation', 'armorBreaker', 'goldenBell', 'turtleShell',
         'concentration', 'doubleEdge', 'quickDraw',
+        'bloodlettingSlash', 'punctureMark', 'hunterSeal', 'stanceFlow', 'guardedRiposte',
+        'serratedRitual', 'coagulatedGuard', 'weakpointSurvey', 'duetFeint', 'poisedCounter',
         'poisonTouch', 'minorHeal', 'monkStrike', 'analysis',
         // 角色专属
-        'defianceStrike', 'bloodSeal', 'unchain', 'karmaStrike', 'goldenBell', 'probe'
+        'defianceStrike', 'bloodSeal', 'unchain', 'karmaStrike', 'probe'
     ],
     uncommon: [
         'ragingBlow', 'counterStance', 'innerPeace', 'battleCry', 'luckyStrike',
         'sweepingStrike', 'tripleSlash', 'bloodSlash', 'offenseDefense', 'ironSkin',
         'windfall', 'powerUp',
+        'tacticalExpose', 'crimsonCascade', 'stanceAggressive', 'stanceDefensive',
+        'bloodDebt', 'arteryRupture', 'razorFocus', 'stancePivot', 'focusBreak',
         // 新增角色卡牌
         'defiantWill', 'healingTouch', 'vajraGlare', 'ringAnalysis',
         // 角色专属
@@ -1285,7 +1718,8 @@ const CARD_POOL = {
         'thunderLaw', 'swordIntent', 'flameTruth', 'spaceRift', 'fortuneWheel',
         'miracleHeal', 'earthShatter', 'swordBreaker', 'finishingBlow', 'halfDamage',
         'thunderStorm', 'voidWalk', 'iceFreeze', 'desperateSurvival', 'enlightenment',
-        'allIn',
+        'allIn', 'sunderingNeedle', 'hemorrhageRain', 'executionDoctrine',
+        'scarletJudgement', 'bloodTideOath', 'verdictNeedle',
         // 新增角色卡牌
         'ringResonance', 'breakthrough', 'bloodBlessing', 'lifeSurge', 'zenMeditation', 'lawInsight',
         // 角色专属
@@ -1295,31 +1729,55 @@ const CARD_POOL = {
     legendary: ['timeStop', 'voidEmbrace', 'karmaKill', 'reversal', 'chaosControl']
 };
 
+// 构筑流派模板：用于内容投放和奖励偏置
+const ARCHETYPE_PACKS = {
+    hemorrhage: {
+        id: 'hemorrhage',
+        name: '血蚀连斩',
+        description: '以流血层数和斩杀节奏滚雪球，容忍以血换伤的打法。',
+        cards: [
+            'bloodlettingSlash', 'crimsonCascade', 'sunderingNeedle', 'hemorrhageRain',
+            'serratedRitual', 'coagulatedGuard', 'bloodDebt', 'arteryRupture',
+            'scarletJudgement', 'bloodTideOath', 'bloodSlash', 'bloodBlessing',
+            'finishingBlow', 'ragingBlow', 'earthShatter'
+        ]
+    },
+    precision: {
+        id: 'precision',
+        name: '破绽心眼',
+        description: '围绕破绽叠层与架势切换形成稳定爆发窗口。',
+        cards: [
+            'punctureMark', 'tacticalExpose', 'hunterSeal', 'executionDoctrine',
+            'weakpointSurvey', 'duetFeint', 'poisedCounter', 'razorFocus',
+            'focusBreak', 'verdictNeedle', 'guardedRiposte', 'stanceAggressive',
+            'stanceDefensive', 'stanceFlow', 'stancePivot'
+        ]
+    }
+};
+
+function filterPoolByCharacter(pool, characterId) {
+    return pool.filter(id => {
+        const card = CARDS[id];
+        if (!card) return false;
+        if (!card.character) return true;
+        return card.character === characterId;
+    });
+}
+
+function rollRandomRarity() {
+    const roll = Math.random();
+    if (roll < 0.55) return 'common';
+    if (roll < 0.80) return 'uncommon';
+    if (roll < 0.95) return 'rare';
+    return 'legendary';
+}
+
 // 获取随机卡牌
 function getRandomCard(rarity = null, characterId = null) {
-    let selectedRarity = rarity;
-
-    // 如果未指定稀有度，随机生成
-    if (!selectedRarity) {
-        const roll = Math.random();
-        if (roll < 0.55) selectedRarity = 'common';
-        else if (roll < 0.80) selectedRarity = 'uncommon';
-        else if (roll < 0.95) selectedRarity = 'rare';
-        else selectedRarity = 'legendary';
-    }
+    const selectedRarity = rarity || rollRandomRarity();
 
     if (CARD_POOL[selectedRarity]) {
-        let pool = CARD_POOL[selectedRarity];
-
-        // 过滤角色专属卡牌
-        pool = pool.filter(id => {
-            const card = CARDS[id];
-            if (!card) return false;
-            // 如果卡牌没有专属角色限制，所有人可用
-            if (!card.character) return true;
-            // 如果有，必须匹配
-            return card.character === characterId;
-        });
+        let pool = filterPoolByCharacter(CARD_POOL[selectedRarity], characterId);
 
         if (pool.length === 0) {
             // Fallback if filtering removes all
@@ -1334,14 +1792,87 @@ function getRandomCard(rarity = null, characterId = null) {
     return { ...CARDS['strike'] };
 }
 
-// 获取奖励卡牌选择
-function getRewardCards(count = 3, characterId = null) {
-    const cards = [];
-    for (let i = 0; i < count; i++) {
-        cards.push(getRandomCard(null, characterId));
-    }
-    return cards;
+function getArchetypePack(archetypeId) {
+    if (!archetypeId || !ARCHETYPE_PACKS[archetypeId]) return null;
+    return ARCHETYPE_PACKS[archetypeId];
+}
 
+function getRandomArchetypeCard(archetypeId, rarity = null, characterId = null) {
+    const pack = getArchetypePack(archetypeId);
+    if (!pack) return getRandomCard(rarity, characterId);
+
+    let pool = pack.cards.filter(id => {
+        const card = CARDS[id];
+        if (!card) return false;
+        if (rarity && card.rarity !== rarity) return false;
+        return true;
+    });
+
+    pool = filterPoolByCharacter(pool, characterId);
+    if (pool.length === 0) {
+        return getRandomCard(rarity, characterId);
+    }
+
+    const cardId = pool[Math.floor(Math.random() * pool.length)];
+    return { ...CARDS[cardId] };
+}
+
+function inferDeckArchetype(deck = []) {
+    if (!Array.isArray(deck) || deck.length === 0) return null;
+
+    const scores = { hemorrhage: 0, precision: 0 };
+    const cardIds = new Set(deck.map(c => c && c.id).filter(Boolean));
+
+    deck.forEach(card => {
+        if (!card) return;
+        if (card.synergyGroup === 'hemorrhage') scores.hemorrhage += 3;
+        if (card.synergyGroup === 'precision' || card.synergyGroup === 'stance') scores.precision += 3;
+
+        if (Array.isArray(card.keywords)) {
+            if (card.keywords.includes('bleed')) scores.hemorrhage += 1;
+            if (card.keywords.includes('mark')) scores.precision += 1;
+            if (card.keywords.includes('stance')) scores.precision += 1;
+        }
+    });
+
+    Object.entries(ARCHETYPE_PACKS).forEach(([id, pack]) => {
+        pack.cards.forEach(cardId => {
+            if (cardIds.has(cardId)) scores[id] += 1;
+        });
+    });
+
+    const top = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    if (!top[0] || top[0][1] < 6) return null;
+    return top[0][0];
+}
+
+// 获取奖励卡牌选择
+function getRewardCards(count = 3, characterId = null, deck = []) {
+    const cards = [];
+    const seen = new Set();
+    const preferredArchetype = inferDeckArchetype(deck);
+
+    for (let i = 0; i < count; i++) {
+        let picked = null;
+        for (let attempt = 0; attempt < 8; attempt++) {
+            const favorArchetype = preferredArchetype && Math.random() < 0.55;
+            const candidate = favorArchetype
+                ? getRandomArchetypeCard(preferredArchetype, null, characterId)
+                : getRandomCard(null, characterId);
+            if (!candidate) continue;
+            if (seen.has(candidate.id) && attempt < 7) continue;
+            picked = candidate;
+            break;
+        }
+
+        if (!picked) picked = getRandomCard(null, characterId);
+        if (picked) {
+            cards.push(picked);
+            seen.add(picked.id);
+        }
+    }
+
+    return cards;
 }
 
 // ==================== 卡牌升级系统 ====================
@@ -1453,7 +1984,31 @@ const UPGRADE_RULES = {
         karmaKill: { percent: 0.1 }, // 15% -> 25%
 
         // 修复：融合爆发升级
-        fusionBlast: { draw: 1 }
+        fusionBlast: { draw: 1 },
+
+        // 战斗深度扩展卡
+        bloodlettingSlash: { damage: 2, bleed: 1 },
+        punctureMark: { damage: 2, mark: 2 },
+        tacticalExpose: { mark: 2, draw: 1 },
+        crimsonCascade: { damage: 3, bleed: 1 },
+        hunterSeal: { mark: 2 },
+        guardedRiposte: { block: 2, mark: 1 },
+        sunderingNeedle: { damage: 3, bleed: 1 },
+        hemorrhageRain: { damage: 2, bleed: 1 },
+        executionDoctrine: { damage: 3 },
+        serratedRitual: { damage: 2, bleed: 1 },
+        coagulatedGuard: { block: 2, bleed: 1 },
+        bloodDebt: { energy: 1, draw: 1 },
+        arteryRupture: { damage: 3, bleed: 1 },
+        scarletJudgement: { damage: 3, bleed: 1 },
+        bloodTideOath: { damage: 2, draw: 1 },
+        weakpointSurvey: { mark: 1, draw: 1 },
+        duetFeint: { damage: 2, mark: 1 },
+        poisedCounter: { block: 2, mark: 1 },
+        razorFocus: { mark: 2, energy: 1 },
+        stancePivot: { mark: 1, draw: 1 },
+        focusBreak: { damage: 2 },
+        verdictNeedle: { damage: 3, mark: 1 }
     }
 };
 
@@ -1512,6 +2067,12 @@ function upgradeCard(card) {
             }
             if (effect.type === 'debuff' && effect.buffType === 'paralysis' && specialRule.paralysis) {
                 effect.value += specialRule.paralysis;
+            }
+            if (effect.type === 'applyBleed' && specialRule.bleed) {
+                effect.value += specialRule.bleed;
+            }
+            if (effect.type === 'applyMark' && specialRule.mark) {
+                effect.value += specialRule.mark;
             }
             if (effect.type === 'buff' && effect.buffType === 'thorns' && specialRule.thorns) {
                 effect.value += specialRule.thorns;
@@ -1584,6 +2145,9 @@ function upgradeCard(card) {
             }
             if (effect.type === 'conditionalDamage' && specialRule.bonusDamage) {
                 effect.bonusDamage += specialRule.bonusDamage;
+            }
+            if (effect.type === 'conditionalDamage' && specialRule.damage) {
+                effect.value += specialRule.damage;
             }
             if (effect.type === 'blockFromLostHp' && specialRule.percent) {
                 effect.percent += specialRule.percent;
@@ -1740,12 +2304,25 @@ function generateUpgradedDescription(card) {
             case 'conditionalDamage':
                 if (effect.condition === 'lowHp') {
                     desc += `若生命低于${Math.floor(effect.threshold * 100)}%，伤害翻倍。`;
+                } else if (effect.condition === 'marked') {
+                    desc += `若目标有破绽，额外造成 ${effect.value} 点伤害。`;
                 } else if (effect.condition === 'sealed') {
                     desc += `若有被封印的命环槽，额外造成 ${effect.bonusDamage} 点伤害。`;
                 } else {
                     desc += `若命环≥${effect.minLevel}级，再造成 ${effect.bonusDamage} 点伤害。`;
                 }
                 break;
+            case 'applyBleed':
+                desc += `施加 ${effect.value} 层流血。`;
+                break;
+            case 'applyMark':
+                desc += `施加 ${effect.value} 层破绽。`;
+                break;
+            case 'setStance': {
+                const stanceText = effect.stance === 'aggressive' ? '攻势' : (effect.stance === 'defensive' ? '守势' : '中和');
+                desc += `切换到${stanceText}架势。`;
+                break;
+            }
             case 'blockFromLostHp':
                 desc += `获得等于已损失生命${Math.floor(effect.percent * 100)}%的护盾。`;
                 break;

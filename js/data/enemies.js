@@ -1121,6 +1121,87 @@ const ENEMIES = {
     }
 };
 
+// 为敌人补全扩展元数据：aiProfile / phaseConfig / resistTags
+function enrichEnemyMetadata() {
+    Object.values(ENEMIES).forEach(enemy => {
+        if (!enemy.aiProfile) {
+            if (enemy.isBoss) enemy.aiProfile = 'boss_adaptive';
+            else if ((enemy.patterns || []).some(p => p.type === 'debuff')) enemy.aiProfile = 'control';
+            else if ((enemy.patterns || []).some(p => p.type === 'defend' || p.type === 'heal')) enemy.aiProfile = 'sustain';
+            else enemy.aiProfile = 'aggressive';
+        }
+
+        if (!enemy.resistTags) {
+            enemy.resistTags = enemy.resistances
+                ? Object.entries(enemy.resistances).filter(([, v]) => v > 0).map(([k]) => `resist_${k}`)
+                : [];
+        }
+    });
+
+    const injectPattern = (enemyId, pattern) => {
+        const enemy = ENEMIES[enemyId];
+        if (!enemy || !Array.isArray(enemy.patterns)) return;
+        const duplicated = enemy.patterns.some(p => p.type === pattern.type && p.buffType === pattern.buffType && p.intent === pattern.intent);
+        if (!duplicated) enemy.patterns.push(pattern);
+    };
+
+    // 让部分敌人能够施加新机制相关压力（破绽/流血）
+    injectPattern('bandit', { type: 'debuff', buffType: 'mark', value: 2, intent: '🎯' });
+    injectPattern('venomSnake', { type: 'debuff', buffType: 'bleed', value: 2, intent: '🩸' });
+    injectPattern('thunderBeast', { type: 'debuff', buffType: 'mark', value: 3, intent: '🎯' });
+    injectPattern('talismanMaster', { type: 'debuff', buffType: 'mark', value: 2, intent: '🎯' });
+    injectPattern('flameCultist', { type: 'debuff', buffType: 'bleed', value: 2, intent: '🩸' });
+    injectPattern('crystalGolem', { type: 'debuff', buffType: 'mark', value: 2, intent: '🎯' });
+    injectPattern('demonWolf', { type: 'debuff', buffType: 'bleed', value: 3, intent: '🩸' });
+    injectPattern('swordElder', { type: 'debuff', buffType: 'mark', value: 4, intent: '🎯' });
+
+    const phaseBossIds = [
+        'swordElder',
+        'danZun',
+        'heavenlyDao',
+        'karmaArbiter',
+        'ancientSpirit',
+        'swordSaint',
+        'tribulationCloud10',
+        'tribulationCloud15'
+    ];
+
+    phaseBossIds.forEach(id => {
+        const boss = ENEMIES[id];
+        if (!boss || boss.phaseConfig) return;
+        const basePatterns = boss.patterns || [];
+        boss.phaseConfig = [
+            {
+                threshold: 0.65,
+                name: '怒相',
+                heal: 0.08,
+                patterns: basePatterns.map(p => {
+                    if (p.type === 'attack' || p.type === 'multiAttack') {
+                        return { ...p, value: Math.floor((p.value || 0) * 1.15) };
+                    }
+                    return { ...p };
+                })
+            },
+            {
+                threshold: 0.30,
+                name: '狂相',
+                heal: 0.12,
+                patterns: basePatterns.map(p => {
+                    if (p.type === 'attack' || p.type === 'multiAttack') {
+                        return { ...p, value: Math.floor((p.value || 0) * 1.3) };
+                    }
+                    if (p.type === 'defend') {
+                        return { ...p, value: Math.floor((p.value || 0) * 0.8) };
+                    }
+                    return { ...p };
+                })
+            }
+        ];
+    });
+}
+
+enrichEnemyMetadata();
+
 // 精英敌人修饰符
 const ELITE_MODIFIERS = [
     { name: '狂暴', effect: { type: 'strength', value: 2 }, hpMultiplier: 1.3 },

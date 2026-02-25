@@ -7,6 +7,7 @@ const AuthService = {
     currentUser: null,
     cloudEnabled: false,
     initError: null,
+    slotSaveQueue: new Map(),
 
     getRuntimeConfig() {
         let config = null;
@@ -153,10 +154,12 @@ const AuthService = {
     logout() {
         if (!this.isInitialized || typeof Bmob === 'undefined') {
             this.currentUser = null;
+            this.slotSaveQueue.clear();
             return;
         }
         Bmob.User.logout();
         this.currentUser = null;
+        this.slotSaveQueue.clear();
     },
 
     // Cloud Save Methods
@@ -171,43 +174,69 @@ const AuthService = {
         if (slotIndex === undefined || slotIndex === null) return { success: false, message: '未指定存档位' };
         if (slotIndex < 0 || slotIndex > 3) return { success: false, message: '非法存档位' };
 
-        try {
-            const user = Bmob.User.current();
-            const query = Bmob.Query('GameSave');
+        const user = Bmob.User.current();
+        if (!user || !user.objectId) return { success: false, message: '登录态失效' };
 
-            // Pointer query: find save for this user and slot
-            this.queryEquals(query, 'user', user.objectId);
-            this.queryEquals(query, 'slotIndex', slotIndex);
+        // 同一账号同一槽位写入串行化，避免并发覆盖和重复创建
+        const queueKey = `${user.objectId}:${slotIndex}`;
+        const previousTask = this.slotSaveQueue.get(queueKey) || Promise.resolve();
 
-            const results = await query.find();
+        const currentTask = previousTask.catch(() => undefined).then(async () => {
+            try {
+                const query = Bmob.Query('GameSave');
 
-            let saveObj;
-            if (results && results.length > 0) {
-                // Update existing
-                // FIX: Do NOT reuse 'query' object as it retains filter conditions which breaks update
-                saveObj = Bmob.Query('GameSave');
-                saveObj.set('id', results[0].objectId);
-            } else {
-                // Create new
-                saveObj = Bmob.Query('GameSave');
-                const userPointer = Bmob.Pointer('_User');
-                const poiID = userPointer.set(user.objectId);
-                saveObj.set('user', poiID);
-                saveObj.set('slotIndex', slotIndex);
+                // Pointer query: find save for this user and slot
+                this.queryEquals(query, 'user', user.objectId);
+                this.queryEquals(query, 'slotIndex', slotIndex);
+
+                const results = await query.find();
+
+                let saveObj;
+                if (results && results.length > 0) {
+                    const latest = results.reduce((best, item) => {
+                        if (!best) return item;
+                        const bestTime = Number(best.saveTime) || 0;
+                        const itemTime = Number(item.saveTime) || 0;
+                        return itemTime >= bestTime ? item : best;
+                    }, null);
+                    // 更新最新记录，避免旧记录覆盖
+                    saveObj = Bmob.Query('GameSave');
+                    saveObj.set('id', latest.objectId);
+                    if (results.length > 1) {
+                        console.warn(`Detected duplicate cloud saves for slot ${slotIndex}, using latest record.`);
+                    }
+                } else {
+                    // Create new
+                    saveObj = Bmob.Query('GameSave');
+                    const userPointer = Bmob.Pointer('_User');
+                    const poiID = userPointer.set(user.objectId);
+                    saveObj.set('user', poiID);
+                    saveObj.set('slotIndex', slotIndex);
+                }
+
+                // Save data
+                const now = Date.now();
+                const clientTime = Number(gameData && gameData.timestamp) || now;
+                saveObj.set('saveData', gameData);
+                saveObj.set('saveTime', now);
+                saveObj.set('clientTime', clientTime);
+
+                const result = await saveObj.save();
+                console.log(`Cloud save to GameSave table (Slot ${slotIndex}) success`);
+                return { success: true, result: result };
+            } catch (error) {
+                console.error('Cloud save error:', error);
+                // Handle table not exist error (usually auto-created, but just in case)
+                return { success: false, error: error };
             }
+        });
 
-            // Save data
-            saveObj.set('saveData', gameData);
-            saveObj.set('saveTime', Date.now());
-
-            const result = await saveObj.save();
-            console.log(`Cloud save to GameSave table (Slot ${slotIndex}) success`);
-            return { success: true, result: result };
-        } catch (error) {
-            console.error('Cloud save error:', error);
-            // Handle table not exist error (usually auto-created, but just in case)
-            return { success: false, error: error };
-        }
+        this.slotSaveQueue.set(queueKey, currentTask);
+        return currentTask.finally(() => {
+            if (this.slotSaveQueue.get(queueKey) === currentTask) {
+                this.slotSaveQueue.delete(queueKey);
+            }
+        });
     },
 
     async getCloudData() {
@@ -219,6 +248,7 @@ const AuthService = {
         try {
             const user = Bmob.User.current();
             let finalSlots = [null, null, null, null];
+            const slotTimes = [0, 0, 0, 0];
             let maxTime = 0;
 
             console.log('Fetching cloud data...');
@@ -236,8 +266,12 @@ const AuthService = {
                             try {
                                 let data = save.saveData;
                                 if (typeof data === 'string') data = JSON.parse(data);
-                                finalSlots[save.slotIndex] = data;
-                                if (save.saveTime > maxTime) maxTime = save.saveTime;
+                                const saveTime = Number(save.saveTime) || 0;
+                                if (saveTime >= (slotTimes[save.slotIndex] || 0)) {
+                                    finalSlots[save.slotIndex] = data;
+                                    slotTimes[save.slotIndex] = saveTime;
+                                }
+                                if (saveTime > maxTime) maxTime = saveTime;
                             } catch (e) {
                                 console.error(`Error parsing slot ${save.slotIndex}:`, e);
                             }

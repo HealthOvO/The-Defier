@@ -14,6 +14,7 @@ class Game {
         this.currentScreen = 'main-menu';
         this.currentEnemies = [];
         this.currentBattleNode = null; // 记录当前战斗节点
+        this.pvpMatchTicket = null;
         this.stealAttempted = false;
         this.rewardCardSelected = false; // 防止重复选牌
         this.comboCount = 0;
@@ -21,7 +22,23 @@ class Game {
         this.runStartTime = null;
         this.currentSaveSlot = null; // Default to null (unknown), NOT 0 (Slot 1)
         this.cachedSlots = [null, null, null, null]; // Cache for slots
+        this.guestMode = false;
+        this.guideState = this.loadGuideState();
         this.debugMode = localStorage.getItem('theDefierDebug') === 'true';
+        this.legacyStorageKey = 'theDefierLegacyV1';
+        this.legacyUpgradeCatalog = this.getLegacyUpgradeCatalog();
+        this.legacyProgress = this.loadLegacyProgress();
+        this.lastLegacyGain = 0;
+        this.featureFlags = {
+            combatDepthV2: true,
+            pvpRuleSyncV2: true,
+            mapNodeTrialForge: true
+        };
+        this.performanceStats = {
+            battleUIUpdates: 0,
+            battleTurnDurations: [],
+            pvpLoadDurations: []
+        };
         setTimeout(() => this.updateDebugUI(), 0);
 
         // Restore slot from session if exists
@@ -34,14 +51,11 @@ class Game {
     // 初始化
     init() {
         this.bindGlobalEvents();
+        this.initRuntimeHooks();
         // Initialize Auth
         if (typeof AuthService !== 'undefined') {
             AuthService.init();
             this.checkLoginStatus();
-            // 需求：如果未登录，让他去登录
-            if (AuthService.isCloudEnabled && AuthService.isCloudEnabled() && !AuthService.isLoggedIn()) {
-                setTimeout(() => this.showLoginModal(), 1000); // 延迟一点显示，体验更好
-            }
         }
         this.initCollection();
         this.initDynamicBackground();
@@ -84,13 +98,694 @@ class Game {
         this.showScreen('main-menu');
 
         // 安全检查：如果已登录但没有选中存档位（例如新标签页打开），强制显示存档选择，防止数据错乱
-        if (AuthService.isLoggedIn() && this.currentSaveSlot === null) {
+        if (typeof AuthService !== 'undefined' && AuthService.isLoggedIn() && this.currentSaveSlot === null) {
             console.log('Logged in but slot unknown. Prompting selection.');
             // 延迟一点以免与主菜单动画冲突
             setTimeout(() => this.openSaveSlotsWithSync(), 800);
         }
 
         console.log('The Defier 2.1 初始化完成！');
+    }
+
+    initRuntimeHooks() {
+        // Deterministic-ish stepping hook for automation.
+        window.advanceTime = (ms = 16) => {
+            const delta = Math.max(0, Number(ms) || 0);
+            if (this.battle && this.currentScreen === 'battle-screen' && typeof this.battle.advanceTime === 'function') {
+                this.battle.advanceTime(delta);
+                return;
+            }
+            if (this.battle && this.currentScreen === 'battle-screen' && typeof this.battle.updateBattleUI === 'function') {
+                this.battle.updateBattleUI();
+            }
+        };
+
+        window.render_game_to_text = () => this.renderGameToText();
+    }
+
+    renderGameToText() {
+        const mode = this.currentScreen || 'unknown';
+        const isBattleMode = mode === 'battle-screen';
+        const payload = {
+            coordSystem: 'ui-screen-space, origin top-left, +x right, +y down',
+            mode,
+            player: {
+                hp: this.player?.currentHp ?? 0,
+                maxHp: this.player?.maxHp ?? 0,
+                block: this.player?.block ?? 0,
+                energy: this.player?.currentEnergy ?? 0,
+                maxEnergy: this.player?.baseEnergy ?? 0,
+                hand: Array.isArray(this.player?.hand) ? this.player.hand.length : 0,
+                drawPile: Array.isArray(this.player?.drawPile) ? this.player.drawPile.length : 0,
+                discardPile: Array.isArray(this.player?.discardPile) ? this.player.discardPile.length : 0,
+                stance: this.player?.stance || 'neutral',
+                archetypeResonance: this.player?.archetypeResonance
+                    ? {
+                        id: this.player.archetypeResonance.id,
+                        tier: this.player.archetypeResonance.tier
+                    }
+                    : null
+            },
+            battle: (isBattleMode && this.battle) ? {
+                turn: this.battle.turnNumber || 0,
+                currentTurn: this.battle.currentTurn || 'none',
+                enemies: (this.battle.enemies || []).filter(e => e.currentHp > 0).map((e, idx) => ({
+                    i: idx,
+                    id: e.id,
+                    name: e.name,
+                    hp: e.currentHp,
+                    maxHp: e.maxHp,
+                    block: e.block || 0,
+                    buffs: e.buffs || {},
+                    phase: e.currentPhase || 0
+                }))
+            } : null,
+            map: this.map ? {
+                realm: this.player?.realm || 1,
+                activeNodes: typeof this.map.getAccessibleNodes === 'function'
+                    ? this.map.getAccessibleNodes().map(n => ({ id: n.id, row: n.row, type: n.type }))
+                    : []
+            } : null,
+            legacy: {
+                essence: this.legacyProgress?.essence || 0,
+                unspent: this.getLegacyUnspentEssence(),
+                upgrades: this.legacyProgress?.upgrades || {},
+                lastPreset: this.legacyProgress?.lastPreset || null,
+                doctrine: this.player?.legacyRunDoctrine || null,
+                mission: this.player?.legacyRunMission || null
+            },
+            perf: this.performanceStats
+        };
+
+        return JSON.stringify(payload);
+    }
+
+    shouldForceCloudLogin() {
+        if (this.guestMode) return false;
+        if (typeof AuthService === 'undefined') return false;
+        if (!AuthService.isCloudEnabled || !AuthService.isCloudEnabled()) return false;
+        return !AuthService.isLoggedIn();
+    }
+
+    loadGuideState() {
+        const defaults = {
+            mainMenuIntroSeen: false,
+            firstBattleGuideSeen: false,
+            battleLogHintSeen: false
+        };
+        if (typeof localStorage === 'undefined') return defaults;
+        try {
+            const raw = localStorage.getItem('theDefierGuideStateV1');
+            if (!raw) return defaults;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object') return defaults;
+            return { ...defaults, ...parsed };
+        } catch (e) {
+            console.warn('Guide state parse failed, fallback to defaults.', e);
+            return defaults;
+        }
+    }
+
+    saveGuideState() {
+        if (typeof localStorage === 'undefined') return;
+        try {
+            localStorage.setItem('theDefierGuideStateV1', JSON.stringify(this.guideState || {}));
+        } catch (e) {
+            console.warn('Guide state save failed.', e);
+        }
+    }
+
+    markGuideSeen(key) {
+        if (!this.guideState) this.guideState = this.loadGuideState();
+        if (!Object.prototype.hasOwnProperty.call(this.guideState, key) || this.guideState[key]) return;
+        this.guideState[key] = true;
+        this.saveGuideState();
+    }
+
+    getLegacyDefaults() {
+        return {
+            essence: 0,
+            spent: 0,
+            upgrades: {},
+            lastPreset: null
+        };
+    }
+
+    getLegacyUpgradeCatalog() {
+        return [
+            {
+                id: 'vitalitySeed',
+                name: '命元传承',
+                icon: '❤️',
+                maxLevel: 3,
+                costs: [4, 8, 12],
+                desc: '每级使开局最大生命 +6',
+                effects: { startMaxHp: 6 }
+            },
+            {
+                id: 'spiritPouch',
+                name: '灵石囊',
+                icon: '💰',
+                maxLevel: 3,
+                costs: [3, 6, 9],
+                desc: '每级使开局灵石 +30',
+                effects: { startGold: 30 }
+            },
+            {
+                id: 'battleInsight',
+                name: '先天悟性',
+                icon: '⚡',
+                maxLevel: 2,
+                costs: [7, 11],
+                desc: '每级首回合额外抽 1 张牌',
+                effects: { firstTurnDrawBonus: 1 }
+            },
+            {
+                id: 'forgemind',
+                name: '锻意共鸣',
+                icon: '⚒️',
+                maxLevel: 3,
+                costs: [5, 9, 13],
+                desc: '每级使锻炉消耗降低 6%',
+                effects: { forgeCostDiscount: 0.06 }
+            },
+            {
+                id: 'mindLibrary',
+                name: '识海扩容',
+                icon: '📖',
+                maxLevel: 2,
+                costs: [8, 12],
+                desc: '每级使战斗抽牌基数 +1',
+                effects: { startDraw: 1 }
+            }
+        ];
+    }
+
+    getLegacyPresetCatalog() {
+        return [
+            {
+                id: 'survivor',
+                name: '稳健守成',
+                icon: '🛡️',
+                desc: '优先血量与经济，保证开局容错。',
+                priority: ['vitalitySeed', 'spiritPouch', 'mindLibrary', 'forgemind', 'battleInsight']
+            },
+            {
+                id: 'smith',
+                name: '锻造流',
+                icon: '⚒️',
+                desc: '优先锻炉折扣与资源，强化中期成长。',
+                priority: ['forgemind', 'spiritPouch', 'vitalitySeed', 'mindLibrary', 'battleInsight']
+            },
+            {
+                id: 'tempo',
+                name: '速攻流',
+                icon: '⚡',
+                desc: '优先首回合节奏与抽牌压制。',
+                priority: ['battleInsight', 'mindLibrary', 'spiritPouch', 'forgemind', 'vitalitySeed']
+            }
+        ];
+    }
+
+    getLegacyRunDoctrineForPreset(presetId) {
+        const base = {
+            presetId: presetId || null,
+            openingBattleBlockBonus: 0,
+            firstAttackBonusPerBattle: 0,
+            firstForgeExtraUpgradeOnce: 0,
+            firstForgeBoostUsed: false
+        };
+
+        if (presetId === 'survivor') {
+            return {
+                ...base,
+                openingBattleBlockBonus: 4
+            };
+        }
+
+        if (presetId === 'smith') {
+            return {
+                ...base,
+                firstForgeExtraUpgradeOnce: 1
+            };
+        }
+
+        if (presetId === 'tempo') {
+            return {
+                ...base,
+                firstAttackBonusPerBattle: 3
+            };
+        }
+
+        return base;
+    }
+
+    getLegacyMissionForPreset(presetId) {
+        if (presetId === 'survivor') {
+            return {
+                presetId,
+                id: 'survivor_guard',
+                name: '守成试炼',
+                desc: '本轮累计获得 40 点护盾',
+                eventType: 'gainBlock',
+                target: 40,
+                progress: 0,
+                completed: false,
+                rewardEssence: 6,
+                rewardGranted: false
+            };
+        }
+
+        if (presetId === 'smith') {
+            return {
+                presetId,
+                id: 'smith_forge',
+                name: '锻意试炼',
+                desc: '完成 1 次锻炉抉择',
+                eventType: 'forgeComplete',
+                target: 1,
+                progress: 0,
+                completed: false,
+                rewardEssence: 6,
+                rewardGranted: false
+            };
+        }
+
+        if (presetId === 'tempo') {
+            return {
+                presetId,
+                id: 'tempo_strike',
+                name: '疾势试炼',
+                desc: '触发 3 次首击增伤',
+                eventType: 'tempoFirstStrike',
+                target: 3,
+                progress: 0,
+                completed: false,
+                rewardEssence: 6,
+                rewardGranted: false
+            };
+        }
+
+        return null;
+    }
+
+    normalizeLegacyProgress(raw) {
+        const defaults = this.getLegacyDefaults();
+        const source = raw && typeof raw === 'object' ? raw : {};
+        const normalized = {
+            essence: Math.max(0, Math.floor(Number(source.essence) || 0)),
+            spent: Math.max(0, Math.floor(Number(source.spent) || 0)),
+            upgrades: {},
+            lastPreset: null
+        };
+
+        const inputUpgrades = source.upgrades && typeof source.upgrades === 'object' ? source.upgrades : {};
+        (this.legacyUpgradeCatalog || []).forEach(def => {
+            const level = Math.max(0, Math.floor(Number(inputUpgrades[def.id]) || 0));
+            normalized.upgrades[def.id] = Math.min(def.maxLevel, level);
+        });
+
+        if (normalized.spent > normalized.essence) {
+            normalized.spent = normalized.essence;
+        }
+
+        const validPresetIds = (this.getLegacyPresetCatalog ? this.getLegacyPresetCatalog() : [])
+            .map(p => p.id);
+        if (typeof source.lastPreset === 'string' && validPresetIds.includes(source.lastPreset)) {
+            normalized.lastPreset = source.lastPreset;
+        }
+
+        return { ...defaults, ...normalized };
+    }
+
+    loadLegacyProgress() {
+        const defaults = this.getLegacyDefaults();
+        if (typeof localStorage === 'undefined') return defaults;
+        try {
+            const raw = localStorage.getItem(this.legacyStorageKey);
+            if (!raw) return defaults;
+            return this.normalizeLegacyProgress(JSON.parse(raw));
+        } catch (e) {
+            console.warn('Legacy progress parse failed.', e);
+            return defaults;
+        }
+    }
+
+    saveLegacyProgress() {
+        if (!this.legacyProgress) this.legacyProgress = this.getLegacyDefaults();
+        this.legacyProgress = this.normalizeLegacyProgress(this.legacyProgress);
+        if (typeof localStorage === 'undefined') return;
+        try {
+            localStorage.setItem(this.legacyStorageKey, JSON.stringify(this.legacyProgress));
+        } catch (e) {
+            console.warn('Legacy progress save failed.', e);
+        }
+    }
+
+    getLegacyUpgradeById(upgradeId) {
+        if (!Array.isArray(this.legacyUpgradeCatalog)) return null;
+        return this.legacyUpgradeCatalog.find(u => u.id === upgradeId) || null;
+    }
+
+    getLegacyUpgradeLevel(upgradeId) {
+        if (!this.legacyProgress || !this.legacyProgress.upgrades) return 0;
+        return Math.max(0, Math.floor(Number(this.legacyProgress.upgrades[upgradeId]) || 0));
+    }
+
+    getLegacyUpgradeCost(upgradeId, targetLevel = null) {
+        const def = this.getLegacyUpgradeById(upgradeId);
+        if (!def) return 0;
+        const currentLevel = this.getLegacyUpgradeLevel(upgradeId);
+        const level = targetLevel === null ? currentLevel + 1 : targetLevel;
+        if (level < 1 || level > def.maxLevel) return 0;
+        return def.costs[level - 1] || 0;
+    }
+
+    getLegacyUnspentEssence() {
+        if (!this.legacyProgress) return 0;
+        return Math.max(0, (this.legacyProgress.essence || 0) - (this.legacyProgress.spent || 0));
+    }
+
+    getLegacyBonuses() {
+        const bonuses = {
+            startMaxHp: 0,
+            startGold: 0,
+            startDraw: 0,
+            firstTurnDrawBonus: 0,
+            forgeCostDiscount: 0
+        };
+
+        (this.legacyUpgradeCatalog || []).forEach(def => {
+            const level = this.getLegacyUpgradeLevel(def.id);
+            if (!level || !def.effects) return;
+            Object.keys(def.effects).forEach(key => {
+                bonuses[key] = (bonuses[key] || 0) + (def.effects[key] * level);
+            });
+        });
+
+        bonuses.forgeCostDiscount = Math.min(0.35, bonuses.forgeCostDiscount);
+        return bonuses;
+    }
+
+    applyLegacyRunDoctrine(player, presetId = null) {
+        if (!player) return;
+        const doctrine = this.getLegacyRunDoctrineForPreset(presetId);
+        player.legacyRunDoctrine = { ...doctrine };
+    }
+
+    applyLegacyRunMission(player, presetId = null) {
+        if (!player) return;
+        const mission = this.getLegacyMissionForPreset(presetId);
+        player.legacyRunMission = mission ? { ...mission } : null;
+    }
+
+    handleLegacyMissionProgress(eventType, amount = 1) {
+        if (!this.player || !this.player.legacyRunMission) return false;
+        const mission = this.player.legacyRunMission;
+        if (mission.completed) return false;
+        if (mission.eventType !== eventType) return false;
+
+        const delta = Math.max(0, Number(amount) || 0);
+        if (delta <= 0) return false;
+        const beforeProgress = Math.max(0, Number(mission.progress) || 0);
+        mission.progress = Math.min(mission.target, beforeProgress + delta);
+
+        const target = Math.max(1, Number(mission.target) || 1);
+        const checkpoints = [0.25, 0.5, 0.75];
+        const beforeRatio = beforeProgress / target;
+        const afterRatio = mission.progress / target;
+
+        const shouldBroadcastProgress =
+            target <= 5 ||
+            checkpoints.some(cp => beforeRatio < cp && afterRatio >= cp);
+        if (shouldBroadcastProgress && !mission.completed && typeof Utils !== 'undefined' && Utils.showBattleLog) {
+            Utils.showBattleLog(`传承试炼进度：${mission.name} ${mission.progress}/${mission.target}`);
+        }
+
+        if (mission.progress >= mission.target) {
+            mission.completed = true;
+            if (!mission.rewardGranted) {
+                mission.rewardGranted = true;
+                this.awardLegacyEssence(
+                    mission.rewardEssence || 0,
+                    `完成传承试炼：${mission.name}`
+                );
+                if (typeof Utils !== 'undefined' && Utils.showBattleLog) {
+                    Utils.showBattleLog(`传承试炼达成：${mission.name}`);
+                }
+            }
+        }
+
+        if (typeof this.refreshLegacyMissionTrackers === 'function') {
+            this.refreshLegacyMissionTrackers();
+        }
+        return true;
+    }
+
+    refreshLegacyMissionTrackers() {
+        if (this.battle && this.currentScreen === 'battle-screen' && typeof this.battle.updateLegacyMissionTracker === 'function') {
+            this.battle.updateLegacyMissionTracker();
+        }
+        if (this.map && this.currentScreen === 'map-screen' && typeof this.map.updateLegacyMissionTracker === 'function') {
+            this.map.updateLegacyMissionTracker();
+        }
+    }
+
+    applyLegacyBonusesToPlayer(player, bonuses = null) {
+        if (!player) return;
+        const finalBonuses = bonuses || this.getLegacyBonuses();
+        player.legacyBonuses = { ...finalBonuses };
+
+        if (typeof player.recalculateStats === 'function') {
+            player.recalculateStats();
+        }
+
+        if (finalBonuses.startGold > 0) {
+            player.gold += finalBonuses.startGold;
+        }
+        if (finalBonuses.startMaxHp > 0) {
+            player.currentHp = player.maxHp;
+        }
+    }
+
+    awardLegacyEssence(amount, reason = '轮回感悟', options = {}) {
+        const gain = Math.max(0, Math.floor(Number(amount) || 0));
+        if (gain <= 0) return 0;
+        if (!this.legacyProgress) this.legacyProgress = this.getLegacyDefaults();
+
+        this.legacyProgress.essence = (this.legacyProgress.essence || 0) + gain;
+        this.lastLegacyGain = gain;
+        this.saveLegacyProgress();
+
+        if (!options.silent && typeof Utils !== 'undefined' && Utils.showBattleLog) {
+            Utils.showBattleLog(`【传承】${reason}：轮回精粹 +${gain}`);
+        }
+
+        return gain;
+    }
+
+    buyLegacyUpgrade(upgradeId, options = {}) {
+        const def = this.getLegacyUpgradeById(upgradeId);
+        if (!def) return false;
+
+        const currentLevel = this.getLegacyUpgradeLevel(upgradeId);
+        if (currentLevel >= def.maxLevel) return false;
+
+        const cost = this.getLegacyUpgradeCost(upgradeId, currentLevel + 1);
+        if (this.getLegacyUnspentEssence() < cost) return false;
+
+        this.legacyProgress.upgrades[upgradeId] = currentLevel + 1;
+        this.legacyProgress.spent = (this.legacyProgress.spent || 0) + cost;
+        this.saveLegacyProgress();
+
+        if (!options.silent && typeof Utils !== 'undefined' && Utils.showBattleLog) {
+            Utils.showBattleLog(`传承提升：${def.name} Lv.${currentLevel + 1}`);
+        }
+        return true;
+    }
+
+    applyLegacyPreset(presetId, options = {}) {
+        const presets = this.getLegacyPresetCatalog();
+        const preset = presets.find(p => p.id === presetId);
+        if (!preset) return { success: false, reason: 'preset_not_found', allocated: 0 };
+
+        const resetFirst = options.resetFirst !== false;
+        if (resetFirst) {
+            this.legacyProgress.spent = 0;
+            this.legacyProgress.upgrades = {};
+        }
+
+        const beforeSpent = this.legacyProgress.spent || 0;
+        let changed = true;
+        while (changed) {
+            changed = false;
+            for (const upgradeId of preset.priority) {
+                if (this.buyLegacyUpgrade(upgradeId, { silent: true })) {
+                    changed = true;
+                }
+            }
+        }
+
+        this.legacyProgress.lastPreset = preset.id;
+        this.saveLegacyProgress();
+        const allocated = Math.max(0, (this.legacyProgress.spent || 0) - beforeSpent);
+
+        if (typeof Utils !== 'undefined' && Utils.showBattleLog) {
+            Utils.showBattleLog(`已套用预设【${preset.name}】，投入 ${allocated} 精粹`);
+        }
+        return { success: true, allocated, preset };
+    }
+
+    resetLegacyUpgrades() {
+        if (!this.legacyProgress || (this.legacyProgress.spent || 0) <= 0) return;
+
+        this.showConfirmModal(
+            '重置传承将返还全部已投入精粹，是否继续？',
+            () => {
+                this.legacyProgress.spent = 0;
+                this.legacyProgress.upgrades = {};
+                this.saveLegacyProgress();
+                this.initInheritanceScreen();
+                if (typeof Utils !== 'undefined' && Utils.showBattleLog) {
+                    Utils.showBattleLog('传承已重置，全部精粹已返还。');
+                }
+            }
+        );
+    }
+
+    showLegacyScreen() {
+        this.showScreen('inheritance-screen');
+    }
+
+    initInheritanceScreen() {
+        const summary = document.getElementById('inheritance-summary');
+        const presetsEl = document.getElementById('inheritance-presets');
+        const grid = document.getElementById('inheritance-upgrade-grid');
+        const note = document.getElementById('inheritance-run-note');
+        if (!summary || !grid) return;
+
+        const total = this.legacyProgress?.essence || 0;
+        const spent = this.legacyProgress?.spent || 0;
+        const unspent = this.getLegacyUnspentEssence();
+        const bonuses = this.getLegacyBonuses();
+
+        summary.innerHTML = `
+            <div class="inheritance-stat">
+                <span class="label">轮回精粹</span>
+                <span class="value">${total}</span>
+            </div>
+            <div class="inheritance-stat">
+                <span class="label">可分配</span>
+                <span class="value highlight">${unspent}</span>
+            </div>
+            <div class="inheritance-stat">
+                <span class="label">已投入</span>
+                <span class="value">${spent}</span>
+            </div>
+        `;
+
+        const activePresetId = this.legacyProgress?.lastPreset || null;
+        const presetDefs = this.getLegacyPresetCatalog();
+        const activePreset = presetDefs.find(p => p.id === activePresetId);
+        if (note) {
+            const presetText = activePreset ? `｜当前预设：${activePreset.name}` : '';
+            const mission = this.getLegacyMissionForPreset(activePresetId);
+            const missionText = mission ? `｜本轮试炼：${mission.desc}（奖励 +${mission.rewardEssence} 精粹）` : '';
+            note.textContent = `当前加成：开局HP +${bonuses.startMaxHp}｜开局灵石 +${bonuses.startGold}｜抽牌 +${bonuses.startDraw}｜首回合额外抽牌 +${bonuses.firstTurnDrawBonus}｜锻炉减耗 ${Math.round((bonuses.forgeCostDiscount || 0) * 100)}%${presetText}${missionText}`;
+        }
+
+        if (presetsEl) {
+            presetsEl.innerHTML = '';
+            presetDefs.forEach(preset => {
+                const btn = document.createElement('button');
+                const isActive = activePresetId === preset.id;
+                btn.className = `inheritance-preset-btn ${isActive ? 'active' : ''}`;
+                btn.innerHTML = `
+                    <span class="icon">${preset.icon}</span>
+                    <span class="name">${preset.name}</span>
+                    <span class="desc">${preset.desc}</span>
+                `;
+                btn.onclick = () => {
+                    this.showConfirmModal(
+                        `套用【${preset.name}】将重置当前传承分配并重新投入，是否继续？`,
+                        () => {
+                            this.applyLegacyPreset(preset.id, { resetFirst: true });
+                            this.initInheritanceScreen();
+                        }
+                    );
+                };
+                presetsEl.appendChild(btn);
+            });
+        }
+
+        grid.innerHTML = '';
+        (this.legacyUpgradeCatalog || []).forEach(def => {
+            const level = this.getLegacyUpgradeLevel(def.id);
+            const canLevel = level < def.maxLevel;
+            const nextCost = this.getLegacyUpgradeCost(def.id, level + 1);
+            const affordable = canLevel && unspent >= nextCost;
+
+            const card = document.createElement('div');
+            card.className = `inheritance-card ${canLevel ? '' : 'maxed'}`;
+            card.innerHTML = `
+                <div class="inheritance-card-header">
+                    <div class="icon">${def.icon}</div>
+                    <div class="meta">
+                        <div class="name">${def.name}</div>
+                        <div class="level">Lv.${level}/${def.maxLevel}</div>
+                    </div>
+                </div>
+                <div class="inheritance-desc">${def.desc}</div>
+                <div class="inheritance-card-footer">
+                    <span class="cost">${canLevel ? `消耗 ${nextCost}` : '已满级'}</span>
+                    <button class="menu-btn small ${affordable ? 'primary' : ''}" ${canLevel ? '' : 'disabled'}>
+                        ${canLevel ? '投入精粹' : '已圆满'}
+                    </button>
+                </div>
+            `;
+
+            const btn = card.querySelector('button');
+            if (btn && canLevel) {
+                if (affordable) {
+                    btn.onclick = () => {
+                        if (this.buyLegacyUpgrade(def.id)) {
+                            this.initInheritanceScreen();
+                        }
+                    };
+                } else {
+                    btn.disabled = true;
+                }
+            }
+
+            grid.appendChild(card);
+        });
+    }
+
+    tryShowMainMenuGuide() {
+        if (!this.guideState || this.guideState.mainMenuIntroSeen) return;
+        this.markGuideSeen('mainMenuIntroSeen');
+        setTimeout(() => {
+            Utils.showBattleLog('新手提示：先点“新的轮回”进入选角，游客模式也可直接开局。', {
+                category: 'system',
+                duration: 3400
+            });
+        }, 400);
+    }
+
+    showFirstBattleGuide() {
+        if (!this.guideState || this.guideState.firstBattleGuideSeen) return;
+        this.markGuideSeen('firstBattleGuideSeen');
+
+        const tips = [
+            '新手提示：先看敌方意图，再决定是进攻还是防御。',
+            '新手提示：打完牌后，点击“结束回合”推进战斗。',
+            '新手提示：按 L 可以打开战斗记录，复盘每次触发。'
+        ];
+        tips.forEach((msg, idx) => {
+            setTimeout(() => {
+                Utils.showBattleLog(msg, { category: 'system', duration: 2800 });
+            }, idx * 1700);
+        });
     }
 
     // 继续游戏
@@ -127,6 +822,17 @@ class Game {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 this.closeModal();
+                if (typeof Utils !== 'undefined' && Utils.toggleBattleLogPanel) {
+                    Utils.toggleBattleLogPanel(false);
+                }
+                return;
+            }
+
+            if ((e.key === 'l' || e.key === 'L') && typeof Utils !== 'undefined' && Utils.toggleBattleLogPanel) {
+                const activeTag = document.activeElement ? document.activeElement.tagName : '';
+                if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+                e.preventDefault();
+                Utils.toggleBattleLogPanel();
             }
         });
 
@@ -249,7 +955,7 @@ class Game {
     saveGame() {
         try {
             const gameState = {
-                version: '5.0.0',
+                version: '5.1.0',
                 player: this.player.getState(),
                 map: {
                     nodes: this.map.nodes,
@@ -259,6 +965,18 @@ class Game {
                 unlockedRealms: this.unlockedRealms || [1],
                 currentScreen: this.currentScreen,
                 saveSlot: this.currentSaveSlot, // Persist the slot ID
+                combatMeta: {
+                    stance: this.player.stance || 'neutral',
+                    ruleVersion: 'combat-v2',
+                    battleUIUpdates: this.performanceStats.battleUIUpdates || 0
+                },
+                pvpMeta: {
+                    ruleVersion: 'pvp-v2',
+                    lastKnownDivision: (typeof PVPService !== 'undefined' && PVPService.currentRankData) ? PVPService.currentRankData.division : null
+                },
+                legacyProgress: this.legacyProgress,
+                featureFlags: { ...this.featureFlags },
+                schemaMigratedAt: Date.now(),
                 timestamp: Date.now()
             };
             localStorage.setItem('theDefierSave', JSON.stringify(gameState));
@@ -266,12 +984,13 @@ class Game {
 
             // 如果已登录，且知道当前的存档槽位，自动同步到云端
             // 防止 unset slot 默认为 0 覆盖了 Slot 1
-            if (AuthService.isLoggedIn() && this.currentSaveSlot !== null && this.currentSaveSlot !== undefined) {
-                AuthService.saveCloudData(gameState, this.currentSaveSlot).then(res => {
+            const targetSlot = this.currentSaveSlot;
+            if (AuthService.isLoggedIn() && targetSlot !== null && targetSlot !== undefined) {
+                AuthService.saveCloudData(gameState, targetSlot).then(res => {
                     if (res.success) {
-                        console.log(`游戏已同步 (云端 Slot ${this.currentSaveSlot})`);
+                        console.log(`游戏已同步 (云端 Slot ${targetSlot})`);
                         // Update cache
-                        this.cachedSlots[this.currentSaveSlot] = gameState;
+                        this.cachedSlots[targetSlot] = gameState;
                         Utils.showBattleLog('游戏进度已保存到云端');
                     } else {
                         console.warn('云端同步失败', res);
@@ -289,16 +1008,62 @@ class Game {
         }
     }
 
+    migrateSaveData(rawSave) {
+        const migrated = rawSave && typeof rawSave === 'object' ? rawSave : {};
+        const normalizeLegacy = (source) => {
+            const progress = source && typeof source === 'object' ? source : {};
+            const essence = Math.max(0, Math.floor(Number(progress.essence) || 0));
+            const spent = Math.max(0, Math.floor(Number(progress.spent) || 0));
+            const upgrades = progress.upgrades && typeof progress.upgrades === 'object' ? progress.upgrades : {};
+            return {
+                essence,
+                spent: Math.min(spent, essence),
+                upgrades
+            };
+        };
+        if (!migrated.version) {
+            migrated.version = '5.0.0';
+        }
+
+        const isLegacy = migrated.version < '5.1.0';
+        if (isLegacy) {
+            migrated.combatMeta = migrated.combatMeta || {
+                stance: migrated.player && migrated.player.stance ? migrated.player.stance : 'neutral',
+                ruleVersion: 'combat-v2',
+                battleUIUpdates: 0
+            };
+            migrated.pvpMeta = migrated.pvpMeta || {
+                ruleVersion: 'pvp-v2',
+                lastKnownDivision: null
+            };
+            migrated.legacyProgress = normalizeLegacy(migrated.legacyProgress);
+            migrated.featureFlags = migrated.featureFlags || { ...this.featureFlags };
+            migrated.schemaMigratedAt = Date.now();
+            migrated.version = '5.1.0';
+        } else {
+            migrated.combatMeta = migrated.combatMeta || {};
+            migrated.pvpMeta = migrated.pvpMeta || {};
+            migrated.legacyProgress = normalizeLegacy(migrated.legacyProgress);
+            migrated.featureFlags = migrated.featureFlags || { ...this.featureFlags };
+            migrated.schemaMigratedAt = migrated.schemaMigratedAt || Date.now();
+        }
+
+        return migrated;
+    }
+
     // 加载游戏
     loadGame() {
         const savedData = localStorage.getItem('theDefierSave');
         if (!savedData) return false;
 
         try {
-            const gameState = JSON.parse(savedData);
+            let gameState = JSON.parse(savedData);
+            gameState = this.migrateSaveData(gameState);
+            this.legacyProgress = this.normalizeLegacyProgress(gameState.legacyProgress || this.legacyProgress);
+            this.saveLegacyProgress();
 
             // 版本检查
-            const currentVersion = '4.2.0';
+            const currentVersion = '5.1.0';
             if (!gameState.version || gameState.version < '2.2.0') { // 兼容2.2.0存档
                 console.log('检测到旧版本存档，已清除');
                 this.clearSave();
@@ -332,6 +1097,66 @@ class Game {
 
             // 恢复玩家状态
             Object.assign(this.player, gameState.player);
+            // 存档防篡改与边界修正：关键数值统一钳制
+            const clampInt = (value, min, max, fallback = min) => {
+                const num = Number(value);
+                if (!Number.isFinite(num)) return fallback;
+                return Math.max(min, Math.min(max, Math.floor(num)));
+            };
+            this.player.maxHp = clampInt(this.player.maxHp, 1, 999999, 100);
+            this.player.currentHp = clampInt(this.player.currentHp, 1, this.player.maxHp, this.player.maxHp);
+            this.player.maxEnergy = clampInt(this.player.maxEnergy, 1, 99, 3);
+            this.player.currentEnergy = clampInt(this.player.currentEnergy, 0, this.player.maxEnergy, this.player.maxEnergy);
+            this.player.gold = clampInt(this.player.gold, 0, 999999999, 0);
+            this.player.realm = clampInt(this.player.realm, 1, 18, 1);
+            if (!this.player.buffs || typeof this.player.buffs !== 'object') this.player.buffs = {};
+            if (!Array.isArray(this.player.deck)) this.player.deck = [];
+            if (!Array.isArray(this.player.hand)) this.player.hand = [];
+            if (!Array.isArray(this.player.drawPile)) this.player.drawPile = [];
+            if (!Array.isArray(this.player.discardPile)) this.player.discardPile = [];
+
+            if (!this.player.legacyBonuses || typeof this.player.legacyBonuses !== 'object') {
+                this.player.legacyBonuses = {
+                    startMaxHp: 0,
+                    startGold: 0,
+                    startDraw: 0,
+                    firstTurnDrawBonus: 0,
+                    forgeCostDiscount: 0
+                };
+            }
+            if (!this.player.legacyRunDoctrine || typeof this.player.legacyRunDoctrine !== 'object') {
+                this.applyLegacyRunDoctrine(this.player, this.legacyProgress?.lastPreset || null);
+            } else {
+                const normalizedDoctrine = this.getLegacyRunDoctrineForPreset(
+                    this.player.legacyRunDoctrine.presetId || this.legacyProgress?.lastPreset || null
+                );
+                this.player.legacyRunDoctrine = {
+                    ...normalizedDoctrine,
+                    ...this.player.legacyRunDoctrine,
+                    firstForgeBoostUsed: !!this.player.legacyRunDoctrine.firstForgeBoostUsed
+                };
+            }
+            if (!this.player.legacyRunMission || typeof this.player.legacyRunMission !== 'object') {
+                this.applyLegacyRunMission(this.player, this.player.legacyRunDoctrine?.presetId || this.legacyProgress?.lastPreset || null);
+            } else {
+                const normalizedMission = this.getLegacyMissionForPreset(
+                    this.player.legacyRunMission.presetId || this.player.legacyRunDoctrine?.presetId || this.legacyProgress?.lastPreset || null
+                );
+                if (normalizedMission) {
+                    this.player.legacyRunMission = {
+                        ...normalizedMission,
+                        ...this.player.legacyRunMission,
+                        progress: Math.max(0, Math.min(
+                            normalizedMission.target,
+                            Number(this.player.legacyRunMission.progress) || 0
+                        )),
+                        completed: !!this.player.legacyRunMission.completed,
+                        rewardGranted: !!this.player.legacyRunMission.rewardGranted
+                    };
+                } else {
+                    this.player.legacyRunMission = null;
+                }
+            }
 
             // 重新计算属性，确保版本更新后的加成生效
             // 并且防止旧存档中可能存在的错误叠加
@@ -374,42 +1199,65 @@ class Game {
                 // === 关键修复：数据解压与重建 (Rehydration) ===
 
                 // 1. 重建卡牌 (Deck, Hand, Draw, Discard)
+                const rebuildCard = (savedCard) => {
+                    if (!savedCard || typeof savedCard !== 'object') return null;
+                    const cardId = typeof savedCard.id === 'string' ? savedCard.id : null;
+                    const baseCard = cardId ? CARDS[cardId] : null;
+                    if (!baseCard) {
+                        console.warn('Dropped unknown card from save:', savedCard.id);
+                        return null;
+                    }
+
+                    const deepClone = (value) => JSON.parse(JSON.stringify(value));
+                    let card = deepClone(baseCard);
+                    const upgraded = !!savedCard.upgraded;
+                    if (upgraded) {
+                        if (typeof Utils.upgradeCard === 'function') {
+                            card = Utils.upgradeCard(deepClone(baseCard));
+                        } else if (typeof upgradeCard === 'function') {
+                            card = upgradeCard(deepClone(baseCard));
+                        } else {
+                            card.upgraded = true;
+                        }
+                    }
+
+                    // 仅恢复运行时安全字段，避免被存档注入任意卡牌数据
+                    if (savedCard.instanceId !== undefined && savedCard.instanceId !== null) {
+                        card.instanceId = savedCard.instanceId;
+                    }
+                    if (savedCard.retain === true) card.retain = true;
+                    if (savedCard.exhaust === true) card.exhaust = true;
+                    if (savedCard.isTemp === true) card.isTemp = true;
+                    if (savedCard.ethereal === true) card.ethereal = true;
+
+                    const safeCost = Number(savedCard.cost);
+                    if (Number.isFinite(safeCost)) {
+                        card.cost = Math.max(0, Math.min(10, Math.floor(safeCost)));
+                    }
+                    const safeBaseCost = Number(savedCard.baseCost);
+                    if (Number.isFinite(safeBaseCost)) {
+                        card.baseCost = Math.max(0, Math.min(10, Math.floor(safeBaseCost)));
+                    }
+                    if (card.instanceId === undefined || card.instanceId === null) {
+                        card.instanceId = this.player.generateCardId
+                            ? this.player.generateCardId()
+                            : `${card.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                    }
+                    return card;
+                };
+
                 const hydrateCards = (list) => {
                     if (!Array.isArray(list)) return [];
-                    return list.map(savedCard => {
-                        // 如果是旧档且包含完整数据，直接使用
-                        if (savedCard.name && savedCard.description) return savedCard;
-
-                        // 获取基础数据
-                        const baseCard = CARDS[savedCard.id];
-                        if (!baseCard) return savedCard; // Fallback
-
-                        // 合并：基础 < 存档
-                        let card = { ...JSON.parse(JSON.stringify(baseCard)), ...savedCard };
-
-                        // 恢复升级状态
-                        if (card.upgraded) {
-                            // upgradeCard通常不仅改数值，还改变name和description
-                            // 我们需要在一个纯净的基础卡上应用升级
-                            // 但savedCard包含当前cost。
-                            // 策略：用upgradeCard生成一个新的标准升级卡，然后覆盖savedCard中的特定动态属性
-                            let freshUpgraded = card;
-                            if (typeof Utils.upgradeCard === 'function') {
-                                freshUpgraded = Utils.upgradeCard(JSON.parse(JSON.stringify(baseCard)));
-                            } else if (typeof upgradeCard === 'function') {
-                                freshUpgraded = upgradeCard(JSON.parse(JSON.stringify(baseCard)));
-                            }
-                            card = { ...freshUpgraded, ...savedCard };
-                        }
-
-                        return card;
-                    });
+                    return list.map(rebuildCard).filter(Boolean);
                 };
 
                 this.player.deck = hydrateCards(this.player.deck);
                 this.player.hand = hydrateCards(this.player.hand);
                 this.player.drawPile = hydrateCards(this.player.drawPile);
                 this.player.discardPile = hydrateCards(this.player.discardPile);
+                if (this.player.deck.length < 5) {
+                    throw new Error('存档卡组校验失败：有效卡牌不足');
+                }
 
                 // 2. 重建法宝
                 if (this.player.treasures) {
@@ -593,6 +1441,12 @@ class Game {
                 savedScreen = 'map-screen';
             }
             this.savedScreen = savedScreen;
+            if (gameState.combatMeta && gameState.combatMeta.stance) {
+                this.player.stance = gameState.combatMeta.stance;
+            } else {
+                this.player.stance = this.player.stance || 'neutral';
+            }
+            this.featureFlags = { ...this.featureFlags, ...(gameState.featureFlags || {}) };
 
             console.log('游戏已加载');
             return true;
@@ -1268,6 +2122,7 @@ class Game {
                 if (typeof particles !== 'undefined') {
                     if (screenId === 'main-menu') {
                         particles.startMainMenuParticles();
+                        this.tryShowMainMenuGuide();
                     } else {
                         particles.stopMainMenuParticles();
                     }
@@ -1284,6 +2139,7 @@ class Game {
                     }
                     console.log('[Debug] Calling updatePlayerDisplay()');
                     this.updatePlayerDisplay();
+                    this.refreshLegacyMissionTrackers();
 
                     // DEBUG: Check DOM state after render
                     setTimeout(() => {
@@ -1308,10 +2164,22 @@ class Game {
                 } else if (screenId === 'battle-screen') {
                     console.log('[Debug] Initializing battle-screen logic');
                     this.updatePlayerDisplay();
+                    this.refreshLegacyMissionTrackers();
+                    if (!this.guideState.battleLogHintSeen) {
+                        this.markGuideSeen('battleLogHintSeen');
+                        setTimeout(() => {
+                            Utils.showBattleLog('提示：按 L 可查看战斗记录面板。', {
+                                category: 'system',
+                                duration: 2600
+                            });
+                        }, 350);
+                    }
                 } else if (screenId === 'collection') {
                     this.initCollection();
                 } else if (screenId === 'achievements-screen') {
                     this.initAchievements();
+                } else if (screenId === 'inheritance-screen') {
+                    this.initInheritanceScreen();
                 } else if (screenId === 'character-select') {
                     this.updateCharacterInfo();
                 } else if (screenId === 'realm-select-screen') {
@@ -1488,12 +2356,7 @@ class Game {
         if (!this.selectedCharacterId) return;
 
         // 云功能可用时才强制登录
-        if (
-            typeof AuthService !== 'undefined' &&
-            AuthService.isCloudEnabled &&
-            AuthService.isCloudEnabled() &&
-            !AuthService.isLoggedIn()
-        ) {
+        if (this.shouldForceCloudLogin()) {
             this.showLoginModal();
             return;
         }
@@ -1505,12 +2368,8 @@ class Game {
 
     // 开始新游戏
     startNewGame(characterId = 'linFeng') {
-        // 云功能可用时才强制登录
-        if (typeof AuthService === 'undefined') {
-            alert('登录系统未就绪，请刷新重试！');
-            return;
-        }
-        if (AuthService.isCloudEnabled && AuthService.isCloudEnabled() && !AuthService.isLoggedIn()) {
+        // 游客模式下允许离线开始，不强制登录
+        if (this.shouldForceCloudLogin()) {
             this.showLoginModal();
             return;
         }
@@ -1538,6 +2397,12 @@ class Game {
         if (!this.player.registerTime) {
             this.player.registerTime = Date.now();
         }
+
+        // 应用局外传承加成（仅影响新的一轮）
+        const legacyBonuses = this.getLegacyBonuses();
+        this.applyLegacyBonusesToPlayer(this.player, legacyBonuses);
+        this.applyLegacyRunDoctrine(this.player, this.legacyProgress?.lastPreset || null);
+        this.applyLegacyRunMission(this.player, this.legacyProgress?.lastPreset || null);
 
         // 应用永久起始加成
         const bonuses = this.achievementSystem.loadStartBonuses();
@@ -1746,6 +2611,14 @@ class Game {
             ringExp = Math.floor(ringExp * 1.10);
         }
 
+        // 新节点：试炼节点额外收益
+        if (this.currentBattleNode && this.currentBattleNode.type === 'trial') {
+            ringExp = Math.floor(ringExp * 1.5);
+            const trialGold = 80 + this.player.realm * 15;
+            this.player.gold += trialGold;
+            Utils.showBattleLog(`试炼胜利！额外获得 ${trialGold} 灵石`);
+        }
+
         // 试炼挑战检测 (Trial Challenge)
         if (this.activeTrial) {
             let trialSuccess = false;
@@ -1828,25 +2701,6 @@ class Game {
         this.generateRewards(enemies, ringExp);
     }
 
-    // 战斗失败
-    async onBattleLost() {
-        if (this.mode === 'pvp') {
-            await this.handlePVPDefeat();
-            return;
-        }
-
-        Utils.showBattleLog('战斗失败...');
-        this.achievementSystem.updateStat('deaths', 1);
-
-        // 自动保存死亡状态？或者直接清除？Roguelike通常清除
-        this.clearSave();
-
-        setTimeout(() => {
-            this.showScreen('game-over-screen');
-            this.updateGameOverStats();
-        }, 1500);
-    }
-
     // === PVP Result Handlers ===
 
     async handlePVPVictory() {
@@ -1862,10 +2716,12 @@ class Game {
         let result = { newRating: 1000, ratingChange: 0 };
         try {
             if (PVPService) {
-                result = await PVPService.reportMatchResult(true, this.pvpOpponentRank);
+                result = await PVPService.reportMatchResult(true, this.pvpOpponentRank, this.pvpMatchTicket);
             }
         } catch (e) {
             console.error('PVP Report Failed:', e);
+        } finally {
+            this.pvpMatchTicket = null;
         }
 
         // Update UI
@@ -1899,10 +2755,12 @@ class Game {
         let result = { newRating: 1000, ratingChange: 0 };
         try {
             if (PVPService) {
-                result = await PVPService.reportMatchResult(false, this.pvpOpponentRank);
+                result = await PVPService.reportMatchResult(false, this.pvpOpponentRank, this.pvpMatchTicket);
             }
         } catch (e) {
             console.error('PVP Report Failed:', e);
+        } finally {
+            this.pvpMatchTicket = null;
         }
 
         // Update UI
@@ -2080,7 +2938,8 @@ class Game {
 
         // 卡牌奖励
         rewardCards.innerHTML = '';
-        const cards = getRewardCards(2, this.player.characterId);
+        const rewardCardCount = (this.currentBattleNode && this.currentBattleNode.type === 'trial') ? 3 : 2;
+        const cards = getRewardCards(rewardCardCount, this.player.characterId, this.player.deck);
 
         cards.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
@@ -2294,6 +3153,87 @@ class Game {
 
             if (canChoose) {
                 btn.onclick = () => this.selectEventChoice(index);
+            } else {
+                btn.style.opacity = '0.5';
+                btn.style.cursor = 'not-allowed';
+            }
+
+            choicesEl.appendChild(btn);
+        });
+
+        modal.classList.add('active');
+    }
+
+    showForgeChoiceModal(node, costs = {}) {
+        this.currentBattleNode = node;
+
+        const forgeCost = costs.forgeCost || (55 + this.player.realm * 9);
+        const premiumCost = costs.premiumCost || (forgeCost + 50);
+        const temperCost = costs.temperCost || Math.max(30, Math.floor(forgeCost * 0.6));
+        const upgradableCount = Array.isArray(this.player.deck)
+            ? this.player.deck.filter(c => typeof canUpgradeCard === 'function' && canUpgradeCard(c)).length
+            : 0;
+
+        const modal = document.getElementById('event-modal');
+        document.getElementById('event-icon').textContent = '⚒️';
+        document.getElementById('event-title').textContent = '天工锻炉';
+
+        const descEl = document.getElementById('event-desc');
+        descEl.innerHTML = `
+            炉火正旺，你可以选择不同锻法。<br>
+            当前可强化卡牌：<span style="color:var(--accent-gold)">${upgradableCount}</span> 张
+        `;
+
+        const options = [
+            {
+                id: 'steady',
+                icon: '🔧',
+                text: `精锻（-${forgeCost} 灵石）`,
+                result: '稳定强化 1 张卡牌',
+                canChoose: this.player.gold >= forgeCost
+            },
+            {
+                id: 'overload',
+                icon: '🔥',
+                text: `过载锻造（-${premiumCost} 灵石）`,
+                result: '强化 2 张卡牌并获得命环经验',
+                canChoose: this.player.gold >= premiumCost
+            },
+            {
+                id: 'temper',
+                icon: '📜',
+                text: `淬灵拓印（-${temperCost} 灵石）`,
+                result: '获得 1 张非传说卡并获得命环经验',
+                canChoose: this.player.gold >= temperCost
+            },
+            {
+                id: 'leave',
+                icon: '🚶',
+                text: '暂离锻炉',
+                result: '保留资源，继续前进',
+                canChoose: true
+            }
+        ];
+
+        const choicesEl = document.getElementById('event-choices');
+        choicesEl.innerHTML = '';
+        options.forEach(option => {
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            if (!option.canChoose) btn.classList.add('disabled');
+            btn.innerHTML = `
+                <div>${option.icon} ${option.text}</div>
+                <div class="choice-effect">${option.result}</div>
+            `;
+
+            if (option.canChoose) {
+                btn.onclick = () => {
+                    modal.classList.remove('active');
+                    if (this.map && typeof this.map.applyForgeChoice === 'function') {
+                        this.map.applyForgeChoice(node, option.id, { forgeCost, premiumCost, temperCost });
+                    }
+                    this.autoSave();
+                };
             } else {
                 btn.style.opacity = '0.5';
                 btn.style.cursor = 'not-allowed';
@@ -2719,7 +3659,19 @@ class Game {
     }
 
     // 战斗失败
-    onBattleLost() {
+    async onBattleLost() {
+        if (this.mode === 'pvp') {
+            await this.handlePVPDefeat();
+            return;
+        }
+
+        const reachRealm = this.player && this.player.realm ? this.player.realm : 1;
+        const lossEssence = this.awardLegacyEssence(
+            Math.max(1, Math.floor((reachRealm - 1) / 2)),
+            '败中悟道',
+            { silent: true }
+        );
+
         // 清除存档，防止死亡后还能继续
         // this.clearSave(); // 改为仅在选择重新开始或退出时清除？或者保留存档但标记为已死亡
         // 为了支持重修此界，我们暂时保留内存中的数据，但清除硬盘上的进度以防刷新作弊
@@ -2736,6 +3688,10 @@ class Game {
         document.getElementById('stat-floor').textContent = this.map.getRealmName(this.player.realm);
         document.getElementById('stat-enemies').textContent = this.player.enemiesDefeated;
         document.getElementById('stat-laws').textContent = this.player.collectedLaws.length;
+        const legacyStat = document.getElementById('stat-legacy');
+        if (legacyStat) {
+            legacyStat.textContent = `+${lossEssence}（库存 ${this.legacyProgress.essence}）`;
+        }
 
         // 显示重修此界按钮 (仅在非第一层或有一定进度时？为了体验，总是显示)
         const restartBtn = document.getElementById('restart-realm-btn');
@@ -2781,6 +3737,9 @@ class Game {
 
     // 天域完成
     onRealmComplete() {
+        const currentRealm = this.player.realm;
+        const clearEssence = this.awardLegacyEssence(2 + Math.floor(currentRealm / 2), '破境夺天', { silent: true });
+
         // 更新成就
         this.achievementSystem.updateStat('realmCleared', this.player.realm, 'max');
 
@@ -2806,6 +3765,8 @@ class Game {
 
         // 检查是否通关所有天域 (现在是18重)
         if (this.player.realm >= 18) {
+            const finalEssence = this.awardLegacyEssence(18, '逆天终局', { silent: true });
+            this.lastLegacyGain = clearEssence + finalEssence;
             this.showVictoryScreen();
             return;
         }
@@ -2835,7 +3796,7 @@ class Game {
         // 治疗玩家 (小幅回复，而不是回满)
         const healAmount = Math.floor(this.player.maxHp * 0.2);
         this.player.heal(healAmount);
-        Utils.showBattleLog(`进入下一重天域，恢复 ${healAmount} HP`);
+        Utils.showBattleLog(`进入下一重天域，恢复 ${healAmount} HP，轮回精粹 +${clearEssence}`);
 
         this.map.generate(this.player.realm);
         this.renderTreasures('map-treasures');
@@ -2851,6 +3812,10 @@ class Game {
         document.getElementById('stat-floor').textContent = this.map.getRealmName(this.player.realm);
         document.getElementById('stat-enemies').textContent = this.player.enemiesDefeated;
         document.getElementById('stat-laws').textContent = this.player.collectedLaws.length;
+        const legacyStat = document.getElementById('stat-legacy');
+        if (legacyStat) {
+            legacyStat.textContent = `+${this.lastLegacyGain || 0}（库存 ${this.legacyProgress.essence}）`;
+        }
 
         this.showScreen('game-over-screen');
     }
@@ -5348,6 +6313,7 @@ class Game {
                 this.player.deck[selectedIndex] = upgradedCard;
 
                 this.closeModal();
+                this.completeCampfire();
             }, 500);
         };
 
@@ -5618,6 +6584,7 @@ class Game {
     // 打开存档选择界面 (同步云端)
     async openSaveSlotsWithSync() {
         if (AuthService.isCloudEnabled && !AuthService.isCloudEnabled()) {
+            this.guestMode = true;
             this.showCharacterSelection();
             return;
         }
@@ -5626,15 +6593,19 @@ class Game {
             this.showConfirmModal(
                 '尚未登录，是否先登录以同步云端存档？',
                 () => {
+                    this.guestMode = false;
                     this.showLoginModal();
                 },
                 () => {
                     // Guest mode
+                    this.guestMode = true;
                     this.showCharacterSelection();
                 }
             );
             return;
         }
+
+        this.guestMode = false;
 
         const msgBtn = document.getElementById('new-game-btn');
         const originalText = msgBtn ? msgBtn.innerHTML : '';
@@ -5666,6 +6637,7 @@ class Game {
     onLoginSuccess(messageEl, successMsg) {
         messageEl.innerText = successMsg;
         messageEl.style.color = '#4ff';
+        this.guestMode = false;
         setTimeout(async () => {
             this.closeModal();
             this.checkLoginStatus();

@@ -1564,6 +1564,18 @@ body {
     background: radial-gradient(circle at 30% 30%, #064e3b, #000);
 }
 
+.map-node-v3.trial {
+    border-color: #f43f5e;
+    color: #f43f5e;
+    background: radial-gradient(circle at 30% 30%, #4c0519, #000);
+}
+
+.map-node-v3.forge {
+    border-color: #f97316;
+    color: #f97316;
+    background: radial-gradient(circle at 30% 30%, #431407, #000);
+}
+
 /* States */
 .map-node-v3.locked {
     filter: grayscale(1) brightness(0.5);
@@ -4651,8 +4663,186 @@ body {
    High Priority UI Overlays
    =================================== */
 #battle-log {
+    position: fixed;
+    left: 50%;
+    bottom: 118px;
+    transform: translate(-50%, 8px);
+    max-width: min(86vw, 760px);
+    min-height: 42px;
+    padding: 10px 18px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(5, 10, 22, 0.84);
+    color: #f2f4ff;
+    text-align: center;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     z-index: 2000 !important;
-    /* Ensure it shows above modals */
+}
+
+#battle-log.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+#battle-log.log-damage {
+    border-color: rgba(255, 92, 92, 0.85);
+    box-shadow: 0 0 18px rgba(255, 73, 73, 0.35);
+}
+
+#battle-log.log-status {
+    border-color: rgba(83, 214, 184, 0.85);
+    box-shadow: 0 0 18px rgba(83, 214, 184, 0.28);
+}
+
+#battle-log.log-reward {
+    border-color: rgba(236, 196, 92, 0.85);
+    box-shadow: 0 0 18px rgba(236, 196, 92, 0.28);
+}
+
+#battle-log.log-warning {
+    border-color: rgba(255, 150, 79, 0.9);
+    box-shadow: 0 0 18px rgba(255, 150, 79, 0.32);
+}
+
+#battle-log.log-system {
+    border-color: rgba(122, 156, 255, 0.85);
+    box-shadow: 0 0 18px rgba(122, 156, 255, 0.25);
+}
+
+.battle-log-panel {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    width: min(440px, 92vw);
+    max-height: 46vh;
+    display: none;
+    flex-direction: column;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 12px;
+    background: rgba(3, 9, 20, 0.95);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+    z-index: 2100;
+    overflow: hidden;
+}
+
+.battle-log-panel.active {
+    display: flex;
+}
+
+.battle-log-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    color: #f8f9ff;
+    font-weight: 600;
+}
+
+#battle-log-panel-close {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.08);
+    color: #f8f9ff;
+    cursor: pointer;
+}
+
+.battle-log-panel-filters {
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    flex-wrap: wrap;
+}
+
+.log-filter-btn {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+    color: #d6ddff;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.log-filter-btn.active {
+    border-color: rgba(122, 156, 255, 0.85);
+    background: rgba(122, 156, 255, 0.26);
+    color: #fff;
+}
+
+.battle-log-panel-list {
+    overflow: auto;
+    padding: 8px 10px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.battle-log-item {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.battle-log-item-time {
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 0.72rem;
+    margin-bottom: 3px;
+}
+
+.battle-log-item-text {
+    color: #eef1ff;
+    font-size: 0.86rem;
+    line-height: 1.35;
+}
+
+.battle-log-item.log-damage {
+    border-color: rgba(255, 92, 92, 0.4);
+}
+
+.battle-log-item.log-status {
+    border-color: rgba(83, 214, 184, 0.4);
+}
+
+.battle-log-item.log-reward {
+    border-color: rgba(236, 196, 92, 0.4);
+}
+
+.battle-log-item.log-warning {
+    border-color: rgba(255, 150, 79, 0.5);
+}
+
+.battle-log-item.log-system {
+    border-color: rgba(122, 156, 255, 0.38);
+}
+
+.battle-log-empty {
+    color: rgba(255, 255, 255, 0.55);
+    text-align: center;
+    padding: 22px 10px;
+}
+
+@media (max-width: 768px) {
+    #battle-log {
+        bottom: 96px;
+        max-width: 94vw;
+        font-size: 0.88rem;
+    }
+
+    .battle-log-panel {
+        left: 8px;
+        right: 8px;
+        width: auto;
+        max-height: 52vh;
+    }
 }
 
 /* ===================================
@@ -5362,10 +5552,7 @@ body {
     height: 100%;
     display: flex;
     flex-direction: column;
-    background:
-        linear-gradient(to bottom, rgba(20, 20, 30, 0.2), rgba(10, 14, 20, 0.95)),
-        url('../assets/images/noise.png');
-    /* Optional texture */
+    background: linear-gradient(to bottom, rgba(20, 20, 30, 0.2), rgba(10, 14, 20, 0.95));
 }
 
 /* 顶部头像区 */
@@ -11830,4 +12017,349 @@ body {
     z-index: 5;
     background: rgba(0, 0, 0, 0.8);
     border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* ===================================
+   Inheritance Screen
+   =================================== */
+
+#inheritance-screen {
+    background:
+        radial-gradient(circle at 20% 15%, rgba(212, 170, 72, 0.16) 0%, transparent 35%),
+        radial-gradient(circle at 80% 85%, rgba(74, 127, 250, 0.16) 0%, transparent 32%),
+        linear-gradient(180deg, #0b1126 0%, #070b18 100%);
+    overflow-y: auto;
+}
+
+.inheritance-container {
+    width: min(1080px, 94vw);
+    margin: 18px auto 26px;
+    padding: 10px 0 22px;
+}
+
+.inheritance-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.inheritance-stat {
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(12, 16, 34, 0.75);
+    backdrop-filter: blur(4px);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.inheritance-stat .label {
+    color: rgba(223, 231, 255, 0.7);
+    font-size: 0.9rem;
+}
+
+.inheritance-stat .value {
+    font-size: 1.3rem;
+    color: #f3f6ff;
+    font-weight: 700;
+}
+
+.inheritance-stat .value.highlight {
+    color: var(--accent-gold);
+    text-shadow: 0 0 10px rgba(207, 170, 112, 0.45);
+}
+
+.inheritance-run-note {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(79, 150, 255, 0.4);
+    background: rgba(16, 25, 56, 0.6);
+    color: rgba(226, 237, 255, 0.86);
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+
+.inheritance-presets {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+}
+
+.inheritance-preset-btn {
+    border: 1px solid rgba(126, 166, 255, 0.35);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: rgba(10, 20, 48, 0.7);
+    color: rgba(228, 238, 255, 0.92);
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    column-gap: 8px;
+}
+
+.inheritance-preset-btn .icon {
+    grid-row: span 2;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+}
+
+.inheritance-preset-btn .name {
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.inheritance-preset-btn .desc {
+    margin-top: 2px;
+    font-size: 0.8rem;
+    color: rgba(203, 218, 255, 0.75);
+}
+
+.inheritance-preset-btn:hover {
+    border-color: rgba(207, 170, 112, 0.55);
+    box-shadow: 0 0 14px rgba(207, 170, 112, 0.2);
+    transform: translateY(-1px);
+}
+
+.inheritance-preset-btn.active {
+    border-color: rgba(207, 170, 112, 0.7);
+    background: linear-gradient(145deg, rgba(36, 28, 10, 0.56), rgba(17, 27, 60, 0.82));
+}
+
+.inheritance-upgrade-grid {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 12px;
+}
+
+.inheritance-card {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    padding: 12px;
+    background: linear-gradient(145deg, rgba(14, 22, 49, 0.92), rgba(8, 12, 28, 0.94));
+}
+
+.inheritance-card.maxed {
+    border-color: rgba(207, 170, 112, 0.52);
+    box-shadow: 0 0 18px rgba(207, 170, 112, 0.16);
+}
+
+.inheritance-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.inheritance-card-header .icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 1.2rem;
+    background: rgba(207, 170, 112, 0.22);
+    border: 1px solid rgba(207, 170, 112, 0.38);
+}
+
+.inheritance-card-header .name {
+    font-size: 1.05rem;
+    color: #f4f7ff;
+}
+
+.inheritance-card-header .level {
+    margin-top: 2px;
+    font-size: 0.8rem;
+    color: rgba(215, 226, 255, 0.7);
+}
+
+.inheritance-desc {
+    color: rgba(220, 230, 255, 0.82);
+    font-size: 0.9rem;
+    min-height: 40px;
+}
+
+.inheritance-card-footer {
+    margin-top: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.inheritance-card-footer .cost {
+    color: rgba(255, 225, 160, 0.9);
+    font-size: 0.85rem;
+}
+
+.inheritance-actions {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+    .inheritance-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .inheritance-actions {
+        justify-content: center;
+    }
+}
+
+/* ===================================
+   Legacy Mission Trackers
+   =================================== */
+.legacy-mission-tracker {
+    position: absolute;
+    top: 88px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(460px, 92vw);
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(120, 169, 255, 0.45);
+    background: linear-gradient(145deg, rgba(9, 17, 42, 0.9), rgba(6, 13, 34, 0.9));
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+    z-index: 120;
+}
+
+.legacy-mission-tracker.completed {
+    border-color: rgba(207, 170, 112, 0.7);
+    box-shadow: 0 8px 24px rgba(207, 170, 112, 0.2);
+}
+
+.legacy-mission-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.legacy-mission-tag {
+    color: rgba(156, 199, 255, 0.95);
+    font-size: 0.82rem;
+    letter-spacing: 0.5px;
+}
+
+.legacy-mission-reward {
+    color: rgba(255, 220, 148, 0.95);
+    font-size: 0.82rem;
+}
+
+.legacy-mission-title {
+    margin-top: 4px;
+    color: rgba(236, 244, 255, 0.96);
+    font-size: 0.92rem;
+    line-height: 1.35;
+}
+
+.legacy-mission-progress-track {
+    margin-top: 8px;
+    height: 7px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.legacy-mission-progress-fill {
+    width: 0;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #7f5af0 0%, #46d3ff 100%);
+    transition: width 0.25s ease;
+}
+
+.legacy-mission-tracker.completed .legacy-mission-progress-fill {
+    background: linear-gradient(90deg, #b58c37 0%, #f3d184 100%);
+}
+
+.legacy-mission-progress-text {
+    margin-top: 4px;
+    color: rgba(201, 222, 255, 0.88);
+    font-size: 0.8rem;
+    text-align: right;
+}
+
+.map-header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.map-legacy-mission {
+    width: min(460px, 62vw);
+    padding: 9px 12px;
+    border: 1px solid rgba(120, 169, 255, 0.45);
+    border-radius: 10px;
+    background: linear-gradient(145deg, rgba(8, 16, 42, 0.8), rgba(8, 14, 35, 0.82));
+}
+
+.map-legacy-mission.completed {
+    border-color: rgba(207, 170, 112, 0.68);
+}
+
+.map-legacy-mission .mission-title {
+    color: rgba(232, 241, 255, 0.94);
+    font-size: 0.84rem;
+    font-weight: 600;
+}
+
+.map-legacy-mission .mission-desc {
+    margin-top: 3px;
+    color: rgba(197, 216, 247, 0.8);
+    font-size: 0.76rem;
+    line-height: 1.3;
+}
+
+.map-legacy-mission .mission-track {
+    margin-top: 6px;
+    height: 6px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.map-legacy-mission .mission-fill {
+    width: 0;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #7f5af0 0%, #46d3ff 100%);
+    transition: width 0.25s ease;
+}
+
+.map-legacy-mission.completed .mission-fill {
+    background: linear-gradient(90deg, #b58c37 0%, #f3d184 100%);
+}
+
+.map-legacy-mission .mission-progress {
+    margin-top: 4px;
+    color: rgba(200, 220, 255, 0.86);
+    font-size: 0.74rem;
+    text-align: right;
+}
+
+@media (max-width: 900px) {
+    .legacy-mission-tracker {
+        top: 74px;
+        width: min(420px, 95vw);
+    }
+
+    .map-header-right {
+        width: 100%;
+        align-items: stretch;
+    }
+
+    .map-legacy-mission {
+        width: 100%;
+    }
 }

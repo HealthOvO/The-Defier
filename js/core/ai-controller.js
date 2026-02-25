@@ -30,8 +30,17 @@ class AIController {
         if (type === 'slaughter') { // 杀伐道
             return { ...defaults, survival: 0.5, aggression: 2.5, control: 1.0 };
         }
+        if (type === 'aggressive') {
+            return { ...defaults, survival: 0.7, aggression: 2.2, control: 1.1 };
+        }
         if (type === 'longevity') { // 长生道
             return { ...defaults, survival: 3.0, aggression: 0.8, control: 1.2 };
+        }
+        if (type === 'fortified' || type === 'sustain') {
+            return { ...defaults, survival: 2.6, aggression: 1.0, control: 1.3 };
+        }
+        if (type === 'control') {
+            return { ...defaults, survival: 1.2, aggression: 1.1, control: 2.2 };
         }
 
         return defaults;
@@ -201,6 +210,18 @@ class AIController {
                 const buffType = effect.buffType;
                 if (!target.buffs[buffType]) target.buffs[buffType] = 0;
                 target.buffs[buffType] += value;
+                break;
+
+            case 'applyBleed':
+                opp.buffs.bleed = (opp.buffs.bleed || 0) + value;
+                break;
+
+            case 'applyMark':
+                opp.buffs.mark = (opp.buffs.mark || 0) + value;
+                break;
+
+            case 'setStance':
+                me.stance = effect.stance || 'neutral';
                 break;
 
             case 'selfDamage':

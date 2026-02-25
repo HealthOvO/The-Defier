@@ -477,6 +477,8 @@ const Utils = {
             vulnerable: '易伤', // 受到伤害增加
             strength: '力量', // 造成伤害增加
             poison: '中毒', // 回合开始受伤害
+            bleed: '流血', // 回合开始受伤害并衰减
+            mark: '破绽', // 下次受击强化
             burn: '灼烧', // 受到伤害时减少层数
             paralysis: '麻痹', // 有几率跳过回合
             regeneration: '再生', // 回复生命
@@ -503,6 +505,8 @@ const Utils = {
             vulnerable: '💔', // 易伤:受到伤害增加
             strength: '💪', // 力量:造成伤害增加
             poison: '☠️', // 中毒
+            bleed: '🩸', // 流血
+            mark: '🎯', // 破绽
             burn: '🔥', // 灼烧
             paralysis: '⚡', // 麻痹
             regeneration: '🌿', // 再生
@@ -650,23 +654,171 @@ const Utils = {
         return newCard;
     },
 
-    // 节流日志
+    // 战斗日志系统（分级 + 历史面板）
     _logTimer: null,
-    showBattleLog(message) {
-        const log = document.getElementById('battle-log');
+    _battleLogHistory: [],
+    _battleLogFilter: 'all',
+    _battleLogPanelBound: false,
+
+    classifyBattleLog(message = '') {
+        const text = String(message).toLowerCase();
+        if (!text) return 'system';
+
+        if (
+            text.includes('不足') ||
+            text.includes('失败') ||
+            text.includes('异常') ||
+            text.includes('无法') ||
+            text.includes('免疫')
+        ) {
+            return 'warning';
+        }
+        if (
+            text.includes('伤害') ||
+            text.includes('流血') ||
+            text.includes('中毒') ||
+            text.includes('灼烧') ||
+            text.includes('斩杀')
+        ) {
+            return 'damage';
+        }
+        if (
+            text.includes('恢复') ||
+            text.includes('护盾') ||
+            text.includes('获得') ||
+            text.includes('减益') ||
+            text.includes('强化') ||
+            text.includes('虚弱') ||
+            text.includes('眩晕')
+        ) {
+            return 'status';
+        }
+        if (
+            text.includes('奖励') ||
+            text.includes('掉落') ||
+            text.includes('灵石') ||
+            text.includes('卡牌') ||
+            text.includes('战斗胜利')
+        ) {
+            return 'reward';
+        }
+        return 'system';
+    },
+
+    ensureBattleLogPanel() {
+        let panel = document.getElementById('battle-log-panel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'battle-log-panel';
+            panel.className = 'battle-log-panel';
+            panel.innerHTML = `
+                <div class="battle-log-panel-header">
+                    <span>战斗记录</span>
+                    <button type="button" id="battle-log-panel-close">×</button>
+                </div>
+                <div class="battle-log-panel-filters">
+                    <button type="button" class="log-filter-btn active" data-filter="all">全部</button>
+                    <button type="button" class="log-filter-btn" data-filter="damage">伤害</button>
+                    <button type="button" class="log-filter-btn" data-filter="status">状态</button>
+                    <button type="button" class="log-filter-btn" data-filter="system">系统</button>
+                    <button type="button" class="log-filter-btn" data-filter="warning">警告</button>
+                </div>
+                <div id="battle-log-panel-list" class="battle-log-panel-list"></div>
+            `;
+            document.body.appendChild(panel);
+        }
+
+        if (!this._battleLogPanelBound) {
+            panel.addEventListener('click', (e) => {
+                const btn = e.target.closest('.log-filter-btn');
+                if (btn) {
+                    this._battleLogFilter = btn.dataset.filter || 'all';
+                    panel.querySelectorAll('.log-filter-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    this.renderBattleLogPanel();
+                    return;
+                }
+                if (e.target && e.target.id === 'battle-log-panel-close') {
+                    panel.classList.remove('active');
+                }
+            });
+            this._battleLogPanelBound = true;
+        }
+
+        return panel;
+    },
+
+    renderBattleLogPanel() {
+        const panel = this.ensureBattleLogPanel();
+        const list = panel.querySelector('#battle-log-panel-list');
+        if (!list) return;
+
+        const filter = this._battleLogFilter || 'all';
+        const records = this._battleLogHistory
+            .filter(item => filter === 'all' || item.category === filter)
+            .slice()
+            .reverse();
+
+        if (records.length === 0) {
+            list.innerHTML = '<div class="battle-log-empty">暂无记录</div>';
+            return;
+        }
+
+        list.innerHTML = records.map(item => {
+            const time = new Date(item.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            return `
+                <div class="battle-log-item log-${item.category}">
+                    <div class="battle-log-item-time">${time}</div>
+                    <div class="battle-log-item-text">${item.message}</div>
+                </div>
+            `;
+        }).join('');
+    },
+
+    toggleBattleLogPanel(forceOpen = null) {
+        const panel = this.ensureBattleLogPanel();
+        const shouldOpen = forceOpen === null ? !panel.classList.contains('active') : !!forceOpen;
+        if (shouldOpen) {
+            panel.classList.add('active');
+            this.renderBattleLogPanel();
+        } else {
+            panel.classList.remove('active');
+        }
+    },
+
+    showBattleLog(message, options = {}) {
+        const log = document.getElementById('battle-log') || document.querySelector('.battle-middle .battle-log');
         if (!log) return;
 
-        // 简单去重/防抖：如果内容一样且在短时间内，不重复显示?
-        // 或者直接覆盖
-        log.textContent = message;
-        log.classList.remove('show');
-        void log.offsetWidth; // trigger reflow
-        log.classList.add('show');
+        const text = String(message || '').trim();
+        if (!text) return;
+
+        const category = options.category || this.classifyBattleLog(text);
+        const duration = Math.max(1000, Number(options.duration) || 2200);
+
+        log.textContent = text;
+        log.classList.remove('show', 'log-damage', 'log-status', 'log-system', 'log-reward', 'log-warning');
+        void log.offsetWidth;
+        log.classList.add(`log-${category}`, 'show');
 
         if (this._logTimer) clearTimeout(this._logTimer);
         this._logTimer = setTimeout(() => {
             log.classList.remove('show');
-        }, 2000);
+        }, duration);
+
+        this._battleLogHistory.push({
+            ts: Date.now(),
+            message: text,
+            category
+        });
+        if (this._battleLogHistory.length > 120) {
+            this._battleLogHistory.shift();
+        }
+
+        const panel = document.getElementById('battle-log-panel');
+        if (panel && panel.classList.contains('active')) {
+            this.renderBattleLogPanel();
+        }
     },
 
     // 清除存档

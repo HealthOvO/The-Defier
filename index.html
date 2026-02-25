@@ -96,6 +96,12 @@
                     <span class="util-label">成就殿堂</span>
                 </div>
                 <div class="util-btn-wrapper">
+                    <button class="util-btn" onclick="game.showLegacyScreen()">
+                        <span class="btn-icon">🕯️</span>
+                    </button>
+                    <span class="util-label">传承殿</span>
+                </div>
+                <div class="util-btn-wrapper">
                     <button class="util-btn" onclick="game.showTreasureCompendium()">
                         <span class="btn-icon">🎒</span>
                     </button>
@@ -565,6 +571,17 @@
             <div id="battle-environment" class="environment-display" style="display:none;">
                 <!-- 动态填充 -->
             </div>
+            <div id="legacy-mission-tracker" class="legacy-mission-tracker" style="display:none;">
+                <div class="legacy-mission-header">
+                    <span class="legacy-mission-tag">传承试炼</span>
+                    <span id="legacy-mission-reward" class="legacy-mission-reward">+0 精粹</span>
+                </div>
+                <div id="legacy-mission-title" class="legacy-mission-title">暂无传承试炼</div>
+                <div class="legacy-mission-progress-track">
+                    <div id="legacy-mission-progress-fill" class="legacy-mission-progress-fill"></div>
+                </div>
+                <div id="legacy-mission-progress-text" class="legacy-mission-progress-text">0/0</div>
+            </div>
             <!-- 敌人区域 -->
             <div class="enemy-area">
                 <div class="enemy-container" id="enemy-container">
@@ -715,6 +732,10 @@
                 <div class="stat-row">
                     <span>获得法则</span>
                     <span id="stat-laws">0</span>
+                </div>
+                <div class="stat-row">
+                    <span>轮回精粹</span>
+                    <span id="stat-legacy">+0</span>
                 </div>
             </div>
             <div class="game-over-buttons">
@@ -1024,6 +1045,23 @@
         </div>
         <div class="achievements-container" id="achievements-container">
             <!-- 动态生成 -->
+        </div>
+    </div>
+
+    <!-- 传承界面 -->
+    <div id="inheritance-screen" class="screen">
+        <div class="screen-header">
+            <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
+            <h2>🕯️ 传承殿</h2>
+        </div>
+        <div class="inheritance-container">
+            <div class="inheritance-summary" id="inheritance-summary"></div>
+            <div class="inheritance-run-note" id="inheritance-run-note">当前加成：无</div>
+            <div class="inheritance-presets" id="inheritance-presets"></div>
+            <div class="inheritance-upgrade-grid" id="inheritance-upgrade-grid"></div>
+            <div class="inheritance-actions">
+                <button class="menu-btn secondary" onclick="game.resetLegacyUpgrades()">重置传承（全额返还）</button>
+            </div>
         </div>
     </div>
 

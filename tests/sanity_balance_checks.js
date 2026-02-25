@@ -79,6 +79,7 @@ function assert(cond, msg) {
   const GameMap = vm.runInContext('GameMap', ctx);
   const GhostEnemy = vm.runInContext('GhostEnemy', ctx);
   const BossMechanicsHandler = vm.runInContext('BossMechanicsHandler', ctx);
+  const CARDS = vm.runInContext('CARDS', ctx);
 
   // Test: Environment card cost (+1 for cost>1)
   const player = new Player();
@@ -375,6 +376,181 @@ function assert(cond, msg) {
   ctx.Math.random = oldRandom2;
   assert(penPlayer.block === 10, 'penetrate should bypass block without consuming it');
   assert(penPlayer.currentHp === 24, 'onBeforeTakePenetrate should reduce penetrate damage');
+
+  // New mechanic: stance switching
+  const stanceRes = player.executeEffect({ type: 'setStance', stance: 'aggressive' }, null, {});
+  assert(stanceRes.type === 'stance', 'setStance should return stance result type');
+  assert(player.stance === 'aggressive', 'setStance should update player stance');
+
+  // New mechanic: mark should be consumed on hit
+  const markedEnemy = battle.createEnemyInstance({
+    id: 'markedEnemy',
+    name: 'markedEnemy',
+    hp: 30,
+    patterns: [{ type: 'attack', value: 4, intent: '⚔️' }],
+    isBoss: false
+  });
+  markedEnemy.buffs.mark = 5;
+  const markDamage = battle.dealDamageToEnemy(markedEnemy, 10);
+  assert(markDamage >= 15, 'mark should increase the next incoming damage');
+  assert(!markedEnemy.buffs.mark, 'mark should be consumed after trigger');
+
+  // New mechanic: bleed should tick and decay on enemy debuff phase
+  const bleedEnemy = battle.createEnemyInstance({
+    id: 'bleedEnemy',
+    name: 'bleedEnemy',
+    hp: 40,
+    patterns: [{ type: 'attack', value: 4, intent: '⚔️' }],
+    isBoss: false
+  });
+  bleedEnemy.currentHp = 40;
+  bleedEnemy.buffs.bleed = 3;
+  battle.checkBattleEnd = () => false;
+  await battle.processEnemyDebuffs(bleedEnemy, 0);
+  assert(bleedEnemy.currentHp === 37, 'bleed should deal direct damage at turn tick');
+  assert(bleedEnemy.buffs.bleed === 2, 'bleed should decay by one layer');
+
+  // New mechanic: archetype resonance should be resolved from deck and amplify bleed
+  const resonancePlayer = new Player();
+  resonancePlayer.characterId = 'linFeng';
+  resonancePlayer.deck = [
+    { ...CARDS.bloodlettingSlash }, { ...CARDS.bloodlettingSlash },
+    { ...CARDS.crimsonCascade }, { ...CARDS.serratedRitual },
+    { ...CARDS.coagulatedGuard }, { ...CARDS.arteryRupture },
+    { ...CARDS.scarletJudgement }, { ...CARDS.hemorrhageRain },
+    { ...CARDS.strike }
+  ];
+  resonancePlayer.prepareBattle();
+  assert(resonancePlayer.archetypeResonance && resonancePlayer.archetypeResonance.id === 'hemorrhage', 'hemorrhage resonance should activate');
+  const bleedRes = resonancePlayer.executeEffect({ type: 'applyBleed', value: 2, target: 'enemy' }, null, {});
+  assert(bleedRes.value >= 3, 'hemorrhage resonance should increase bleed application');
+
+  // New mechanic: precision resonance should grant first-mark-hit draw
+  const precisionPlayer = new Player();
+  precisionPlayer.deck = [
+    { ...CARDS.punctureMark }, { ...CARDS.tacticalExpose }, { ...CARDS.hunterSeal },
+    { ...CARDS.weakpointSurvey }, { ...CARDS.duetFeint }, { ...CARDS.poisedCounter },
+    { ...CARDS.razorFocus }, { ...CARDS.focusBreak }, { ...CARDS.defend }
+  ];
+  precisionPlayer.prepareBattle();
+  precisionPlayer.hand = [];
+  precisionPlayer.drawPile = [{ ...CARDS.strike, instanceId: 'tmp-draw-card' }];
+  const precisionGame = { player: precisionPlayer, achievementSystem: { updateStat: () => {} } };
+  const precisionBattle = new Battle(precisionGame);
+  precisionBattle.player = precisionPlayer;
+  precisionBattle.updateBattleUI = () => {};
+  const precisionEnemy = precisionBattle.createEnemyInstance({
+    id: 'precisionEnemy',
+    name: 'precisionEnemy',
+    hp: 30,
+    patterns: [{ type: 'attack', value: 4, intent: '⚔️' }],
+    isBoss: false
+  });
+  precisionEnemy.buffs.mark = 3;
+  precisionBattle.dealDamageToEnemy(precisionEnemy, 6);
+  assert(precisionPlayer.hand.length === 1, 'precision resonance should draw on first marked hit each turn');
+
+  // New mechanic: forge node choices should produce distinct outcomes
+  const forgeGame = {
+    player: new Player(),
+    showShop: () => {},
+    showCampfire: () => {},
+    showEventModal: () => {},
+    startBattle: () => {},
+    onRealmComplete: () => {}
+  };
+  forgeGame.player.characterId = 'linFeng';
+  forgeGame.player.realm = 3;
+  forgeGame.player.gold = 500;
+  forgeGame.player.deck = [{ ...CARDS.strike }, { ...CARDS.defend }, { ...CARDS.heavyStrike }];
+  const forgeMap = new GameMap(forgeGame);
+  forgeMap.completeNode = () => { forgeMap._completed = true; };
+  forgeMap.applyForgeChoice({ id: 1001, row: 2, type: 'forge' }, 'steady', { forgeCost: 50, premiumCost: 120, temperCost: 30 });
+  const upgradedCount = forgeGame.player.deck.filter(c => c.upgraded).length;
+  assert(upgradedCount >= 1, 'steady forge should upgrade at least one card');
+  const deckSizeAfterSteady = forgeGame.player.deck.length;
+  forgeMap.applyForgeChoice({ id: 1002, row: 2, type: 'forge' }, 'temper', { forgeCost: 50, premiumCost: 120, temperCost: 30 });
+  assert(forgeGame.player.deck.length >= deckSizeAfterSteady + 1, 'temper forge should add a card to deck');
+  assert(forgeMap._completed === true, 'forge choice should complete map node');
+
+  // New mechanic: tempo doctrine should grant first-hit bonus once per battle
+  const tempoPlayer = new Player();
+  tempoPlayer.realm = 2;
+  tempoPlayer.legacyRunDoctrine = {
+    presetId: 'tempo',
+    openingBattleBlockBonus: 0,
+    firstAttackBonusPerBattle: 3,
+    firstForgeExtraUpgradeOnce: 0,
+    firstForgeBoostUsed: false
+  };
+  const tempoGame = { player: tempoPlayer, achievementSystem: { updateStat: () => {} } };
+  tempoGame._tempoMissionCount = 0;
+  tempoGame.handleLegacyMissionProgress = (eventType, amount) => {
+    if (eventType === 'tempoFirstStrike') tempoGame._tempoMissionCount += amount;
+  };
+  const tempoBattle = new Battle(tempoGame);
+  tempoBattle.player = tempoPlayer;
+  tempoBattle.updateBattleUI = () => {};
+  const tempoEnemy = tempoBattle.createEnemyInstance({
+    id: 'tempoEnemy',
+    name: 'tempoEnemy',
+    hp: 60,
+    patterns: [{ type: 'attack', value: 4, intent: '⚔️' }],
+    isBoss: false
+  });
+  const firstHit = tempoBattle.dealDamageToEnemy(tempoEnemy, 10);
+  const secondHit = tempoBattle.dealDamageToEnemy(tempoEnemy, 10);
+  assert(firstHit >= 13, 'tempo doctrine should increase first hit damage');
+  assert(secondHit === 10, 'tempo doctrine bonus should only apply once per battle');
+  assert(tempoGame._tempoMissionCount === 1, 'tempo doctrine trigger should report mission progress once');
+
+  // New mechanic: survivor doctrine should grant opening block each battle
+  const survivorPlayer = new Player();
+  survivorPlayer.realm = 2;
+  survivorPlayer.legacyRunDoctrine = {
+    presetId: 'survivor',
+    openingBattleBlockBonus: 4,
+    firstAttackBonusPerBattle: 0,
+    firstForgeExtraUpgradeOnce: 0,
+    firstForgeBoostUsed: false
+  };
+  survivorPlayer.prepareBattle();
+  assert(survivorPlayer.block >= 4, 'survivor doctrine should grant opening block');
+
+  // New mechanic: smith doctrine should grant first forge extra upgrade once
+  const smithGame = {
+    player: new Player(),
+    showShop: () => {},
+    showCampfire: () => {},
+    showEventModal: () => {},
+    startBattle: () => {},
+    onRealmComplete: () => {}
+  };
+  smithGame._forgeMissionCount = 0;
+  smithGame.handleLegacyMissionProgress = (eventType, amount) => {
+    if (eventType === 'forgeComplete') smithGame._forgeMissionCount += amount;
+  };
+  smithGame.player.characterId = 'linFeng';
+  smithGame.player.realm = 3;
+  smithGame.player.gold = 500;
+  smithGame.player.deck = [{ ...CARDS.strike }, { ...CARDS.defend }, { ...CARDS.heavyStrike }, { ...CARDS.quickSlash }];
+  smithGame.player.legacyRunDoctrine = {
+    presetId: 'smith',
+    openingBattleBlockBonus: 0,
+    firstAttackBonusPerBattle: 0,
+    firstForgeExtraUpgradeOnce: 1,
+    firstForgeBoostUsed: false
+  };
+  const smithMap = new GameMap(smithGame);
+  smithMap.completeNode = () => {};
+  smithMap.applyForgeChoice({ id: 2001, row: 2, type: 'forge' }, 'steady', { forgeCost: 50, premiumCost: 120, temperCost: 30 });
+  const smithUpgradedAfterFirst = smithGame.player.deck.filter(c => c.upgraded).length;
+  assert(smithUpgradedAfterFirst >= 2, 'smith doctrine first forge should upgrade one extra card');
+  assert(smithGame.player.legacyRunDoctrine.firstForgeBoostUsed === true, 'smith doctrine should mark first forge boost as used');
+  smithMap.applyForgeChoice({ id: 2002, row: 2, type: 'forge' }, 'steady', { forgeCost: 50, premiumCost: 120, temperCost: 30 });
+  const smithUpgradedAfterSecond = smithGame.player.deck.filter(c => c.upgraded).length;
+  assert(smithUpgradedAfterSecond - smithUpgradedAfterFirst === 1, 'smith doctrine extra upgrade should only apply on first forge');
+  assert(smithGame._forgeMissionCount === 2, 'forge choices should report mission progress');
 
   console.log('All sanity checks passed.');
 })().catch((err) => {

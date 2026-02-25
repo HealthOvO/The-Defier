@@ -5,6 +5,7 @@
 class ParticleSystem {
     constructor() {
         this.container = null;
+        this._handleMouseMove = null;
         this.init();
     }
 
@@ -34,7 +35,10 @@ class ParticleSystem {
     }
 
     trackMouse() {
-        document.addEventListener('mousemove', (e) => {
+        if (this._handleMouseMove) {
+            document.removeEventListener('mousemove', this._handleMouseMove);
+        }
+        this._handleMouseMove = (e) => {
             this.mouseX = e.clientX;
             this.mouseY = e.clientY;
 
@@ -42,7 +46,8 @@ class ParticleSystem {
             if (this.menuLoopId && Math.random() > 0.7) {
                 this.createSparkParticle(this.mouseX, this.mouseY);
             }
-        });
+        };
+        document.addEventListener('mousemove', this._handleMouseMove, { passive: true });
     }
 
     startMainMenuParticles() {
@@ -475,11 +480,32 @@ class ParticleSystem {
             this.container.innerHTML = '';
         }
     }
+
+    destroy() {
+        this.stopMainMenuParticles();
+        if (this._handleMouseMove) {
+            document.removeEventListener('mousemove', this._handleMouseMove);
+            this._handleMouseMove = null;
+        }
+        if (this.container) {
+            this.container.remove();
+            this.container = null;
+        }
+    }
 }
 
 // 全局粒子系统实例
 let particles;
 
 document.addEventListener('DOMContentLoaded', () => {
+    if (particles && typeof particles.destroy === 'function') {
+        particles.destroy();
+    }
     particles = new ParticleSystem();
+});
+
+window.addEventListener('beforeunload', () => {
+    if (particles && typeof particles.destroy === 'function') {
+        particles.destroy();
+    }
 });

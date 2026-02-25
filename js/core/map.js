@@ -108,12 +108,97 @@ class GameMap {
             return Math.random() < (0.5 / 0.7) ? 'enemy' : 'elite';
         }
 
-        // 随机类型 (Normal logic)
+        const weights = this.getDynamicNodeWeights(row, totalRows, realm);
+        return this.rollNodeByWeights(weights);
+    }
+
+    getDynamicNodeWeights(row, totalRows, realm) {
+        const player = this.game && this.game.player ? this.game.player : {};
+        const progress = row / Math.max(1, totalRows - 1);
+        const weights = {
+            enemy: 0.50,
+            elite: 0.20,
+            event: 0.10,
+            shop: 0.08,
+            trial: 0.06,
+            forge: 0.04,
+            rest: 0.02
+        };
+
+        // 中后段提升试炼与锻炉的出现率，强化构筑抉择
+        if (progress >= 0.5) {
+            weights.trial += 0.03;
+            weights.forge += 0.02;
+            weights.enemy -= 0.03;
+            weights.event -= 0.02;
+        }
+        if (progress >= 0.75) {
+            weights.trial += 0.02;
+            weights.forge += 0.01;
+            weights.enemy -= 0.02;
+            weights.shop -= 0.01;
+        }
+
+        // 金币不足时，降低锻炉概率，避免“到点但用不起”的无效体验
+        const forgeDiscount = player && player.legacyBonuses ? (player.legacyBonuses.forgeCostDiscount || 0) : 0;
+        const expectedForgeCost = Math.floor((55 + realm * 9) * (1 - Math.min(0.35, forgeDiscount)));
+        if ((player.gold || 0) < expectedForgeCost) {
+            weights.forge -= 0.02;
+            weights.event += 0.01;
+            weights.rest += 0.01;
+        }
+
+        // 可升级牌较多时，略微提升锻炉价值
+        const deck = Array.isArray(player.deck) ? player.deck : [];
+        const upgradableCount = (typeof canUpgradeCard === 'function')
+            ? deck.filter(card => canUpgradeCard(card)).length
+            : 0;
+        if (upgradableCount >= 4) {
+            weights.forge += 0.02;
+            weights.enemy -= 0.015;
+            weights.event -= 0.005;
+        } else if (upgradableCount <= 1) {
+            weights.forge -= 0.015;
+            weights.rest += 0.01;
+            weights.event += 0.005;
+        }
+
+        return this.normalizeNodeWeights(weights);
+    }
+
+    normalizeNodeWeights(weights) {
+        const normalized = {};
+        let total = 0;
+        Object.keys(weights).forEach(key => {
+            const val = Math.max(0, weights[key] || 0);
+            normalized[key] = val;
+            total += val;
+        });
+        if (total <= 0) {
+            return {
+                enemy: 0.5,
+                elite: 0.2,
+                event: 0.1,
+                shop: 0.08,
+                trial: 0.06,
+                forge: 0.04,
+                rest: 0.02
+            };
+        }
+        Object.keys(normalized).forEach(key => {
+            normalized[key] = normalized[key] / total;
+        });
+        return normalized;
+    }
+
+    rollNodeByWeights(weights) {
         const roll = Math.random();
-        if (roll < 0.50) return 'enemy';
-        if (roll < 0.70) return 'elite';
-        if (roll < 0.82) return 'event';
-        if (roll < 0.90) return 'shop';
+        let cumulative = 0;
+        const order = ['enemy', 'elite', 'event', 'shop', 'trial', 'forge', 'rest'];
+        for (const key of order) {
+            cumulative += weights[key] || 0;
+            if (roll <= cumulative) return key;
+        }
         return 'rest';
     }
 
@@ -125,7 +210,9 @@ class GameMap {
             boss: '👹',
             event: '❓',
             shop: '🏪',
-            rest: '🏕️'
+            rest: '🏕️',
+            trial: '⚖️',
+            forge: '⚒️'
         };
         return icons[type] || '❓';
     }
@@ -158,18 +245,28 @@ class GameMap {
                 
                 <div class="map-v3-header">
                     <button class="back-btn" onclick="game.showScreen('realm-select-screen')">← 返回关卡</button>
-                    <div class="player-status-bar">
-                        <div class="status-item hp">
-                            <span class="icon">❤️</span>
-                            <span id="map-hp">${this.game.player.currentHp}/${this.game.player.maxHp}</span>
+                    <div class="map-header-right">
+                        <div class="player-status-bar">
+                            <div class="status-item hp">
+                                <span class="icon">❤️</span>
+                                <span id="map-hp">${this.game.player.currentHp}/${this.game.player.maxHp}</span>
+                            </div>
+                            <div class="status-item gold">
+                                <span class="icon">💰</span>
+                                <span id="map-gold">${this.game.player.gold}</span>
+                            </div>
+                            <div class="status-item floor">
+                                <span class="icon">🏔️</span>
+                                <span id="map-floor">${this.getRealmName(this.game.player.realm)}</span>
+                            </div>
                         </div>
-                        <div class="status-item gold">
-                            <span class="icon">💰</span>
-                            <span id="map-gold">${this.game.player.gold}</span>
-                        </div>
-                        <div class="status-item floor">
-                            <span class="icon">🏔️</span>
-                            <span id="map-floor">${this.getRealmName(this.game.player.realm)}</span>
+                        <div id="map-legacy-mission" class="map-legacy-mission" style="display:none;">
+                            <div class="mission-title">传承试炼</div>
+                            <div class="mission-desc">暂无进行中的试炼</div>
+                            <div class="mission-track">
+                                <div class="mission-fill"></div>
+                            </div>
+                            <div class="mission-progress">0/0</div>
                         </div>
                     </div>
                 </div>
@@ -191,6 +288,7 @@ class GameMap {
 
         this.renderV3Nodes();
         this.updateStatusBar();
+        this.updateLegacyMissionTracker();
 
         // Initial Auto-scroll (Only on full rebuild)
         setTimeout(() => {
@@ -225,6 +323,7 @@ class GameMap {
     // 更新地图状态 (In-Place Update)
     updateMapState() {
         this.updateStatusBar();
+        this.updateLegacyMissionTracker();
 
         // Update Node Classes
         this.nodes.forEach(row => {
@@ -298,8 +397,9 @@ class GameMap {
                 if (this._resizeTimeout) clearTimeout(this._resizeTimeout);
                 this._resizeTimeout = setTimeout(() => this.drawConnections(), 100);
             });
-            this._resizeObserver.observe(wrapper);
         }
+        this._resizeObserver.disconnect();
+        this._resizeObserver.observe(wrapper);
     }
 
     drawConnections() {
@@ -393,7 +493,9 @@ class GameMap {
             boss: '天劫：突破境界的必经之路',
             event: '机缘：祸福相依',
             shop: '坊市：互通有无',
-            rest: '洞府：休养生息'
+            rest: '洞府：休养生息',
+            trial: '试炼：高风险，高回报',
+            forge: '锻造：支付灵石强化构筑'
         };
         return tips[type] || '未知区域';
     }
@@ -457,7 +559,6 @@ class GameMap {
         document.getElementById('map-hp').textContent = `${player.currentHp}/${player.maxHp}`;
         document.getElementById('map-gold').textContent = player.gold;
         document.getElementById('map-floor').textContent = this.getRealmName(player.realm);
-        document.getElementById('map-floor').textContent = this.getRealmName(player.realm);
         const realmTitle = document.getElementById('realm-title');
         if (realmTitle) realmTitle.textContent = this.getRealmName(player.realm);
 
@@ -471,6 +572,37 @@ class GameMap {
         // 渲染法宝
         if (this.game.renderTreasures) {
             this.game.renderTreasures();
+        }
+    }
+
+    updateLegacyMissionTracker() {
+        const panel = document.getElementById('map-legacy-mission');
+        if (!panel) return;
+
+        const mission = this.game && this.game.player ? this.game.player.legacyRunMission : null;
+        if (!mission || !mission.target) {
+            panel.style.display = 'none';
+            return;
+        }
+
+        const target = Math.max(1, Number(mission.target) || 1);
+        const progress = Math.max(0, Math.min(target, Number(mission.progress) || 0));
+        const percent = Math.round((progress / target) * 100);
+
+        const titleEl = panel.querySelector('.mission-title');
+        const descEl = panel.querySelector('.mission-desc');
+        const fillEl = panel.querySelector('.mission-fill');
+        const progressEl = panel.querySelector('.mission-progress');
+
+        panel.style.display = 'block';
+        panel.classList.toggle('completed', !!mission.completed);
+        if (titleEl) titleEl.textContent = `传承试炼：${mission.name || '未命名试炼'}`;
+        if (descEl) descEl.textContent = mission.desc || '';
+        if (fillEl) fillEl.style.width = `${percent}%`;
+        if (progressEl) {
+            progressEl.textContent = mission.completed
+                ? `已达成 ${target}/${target}`
+                : `${progress}/${target}`;
         }
     }
 
@@ -498,6 +630,12 @@ class GameMap {
                 break;
             case 'rest':
                 this.restAtCamp(node);
+                break;
+            case 'trial':
+                this.startTrialNode(node);
+                break;
+            case 'forge':
+                this.openForgeNode(node);
                 break;
         }
     }
@@ -546,6 +684,30 @@ class GameMap {
         elite.ringExp = 20 + realm * 8; // Hardcore: lower exp gain
         this.game.currentBattleNode = node;
         this.game.startBattle([elite], node);
+    }
+
+    // 试炼节点：强化版精英战
+    startTrialNode(node) {
+        const realm = this.game.player.realm;
+        const trialEnemy = createEliteEnemy(realm) || getRandomEnemy(realm);
+
+        if (!trialEnemy) {
+            this.completeNode(node);
+            return;
+        }
+
+        trialEnemy.name = `【试炼】${trialEnemy.name}`;
+        trialEnemy.hp = Math.floor((trialEnemy.hp || trialEnemy.maxHp || 80) * 1.35);
+        trialEnemy.ringExp = Math.floor((trialEnemy.ringExp || (20 + realm * 6)) * 1.6);
+        trialEnemy.patterns = (trialEnemy.patterns || []).map(pattern => {
+            if (pattern.type === 'attack' || pattern.type === 'multiAttack') {
+                return { ...pattern, value: Math.floor((pattern.value || 0) * 1.2) };
+            }
+            return { ...pattern };
+        });
+
+        this.game.currentBattleNode = node;
+        this.game.startBattle([trialEnemy], node);
     }
 
     // 开始BOSS战斗
@@ -679,6 +841,162 @@ class GameMap {
     openShop(node) {
         this.game.currentBattleNode = node;
         this.game.showShop(node);
+    }
+
+    // 锻造节点：消耗灵石强化构筑
+    openForgeNode(node) {
+        const player = this.game.player;
+        const forgeDiscount = player && player.legacyBonuses ? (player.legacyBonuses.forgeCostDiscount || 0) : 0;
+        const discountMul = 1 - Math.min(0.35, forgeDiscount);
+        const forgeCost = Math.max(20, Math.floor((55 + player.realm * 9) * discountMul));
+        const premiumCost = forgeCost + 50;
+        const temperCost = Math.max(30, Math.floor(forgeCost * 0.6));
+
+        if (this.game && typeof this.game.showForgeChoiceModal === 'function') {
+            this.game.showForgeChoiceModal(node, { forgeCost, premiumCost, temperCost });
+            return;
+        }
+
+        // Fallback: if modal API missing, use balanced default choice.
+        this.applyForgeChoice(node, 'steady', { forgeCost, premiumCost, temperCost });
+    }
+
+    pickAndUpgradeCards(count = 1) {
+        const deck = this.game && this.game.player ? this.game.player.deck : [];
+        const indexed = [];
+        deck.forEach((card, index) => {
+            if (typeof canUpgradeCard === 'function' && canUpgradeCard(card)) {
+                indexed.push({ card, index });
+            }
+        });
+        if (indexed.length === 0) return [];
+
+        const shuffled = typeof Utils !== 'undefined' && Utils.shuffle
+            ? Utils.shuffle(indexed.slice())
+            : indexed.slice().sort(() => Math.random() - 0.5);
+        const picked = shuffled.slice(0, Math.min(count, shuffled.length));
+        const upgradedNames = [];
+
+        picked.forEach(item => {
+            const upgraded = upgradeCard(item.card);
+            this.game.player.deck[item.index] = upgraded;
+            upgradedNames.push(item.card.name);
+        });
+
+        return upgradedNames;
+    }
+
+    grantForgeFallbackExp(base = 10) {
+        const player = this.game.player;
+        const exp = base + player.realm * 2;
+        player.fateRing.exp += exp;
+        if (player.checkFateRingLevelUp) player.checkFateRingLevelUp();
+        return exp;
+    }
+
+    applyForgeChoice(node, choice, costs = {}) {
+        const player = this.game.player;
+        const forgeCost = costs.forgeCost || (55 + player.realm * 9);
+        const premiumCost = costs.premiumCost || (forgeCost + 50);
+        const temperCost = costs.temperCost || Math.max(30, Math.floor(forgeCost * 0.6));
+        const doctrine = player && player.legacyRunDoctrine ? player.legacyRunDoctrine : null;
+        const hasFirstForgeBoost = !!(
+            doctrine &&
+            doctrine.firstForgeExtraUpgradeOnce > 0 &&
+            !doctrine.firstForgeBoostUsed
+        );
+        const extraForgeUpgrade = hasFirstForgeBoost ? doctrine.firstForgeExtraUpgradeOnce : 0;
+        const consumeForgeBoost = () => {
+            if (hasFirstForgeBoost && doctrine) {
+                doctrine.firstForgeBoostUsed = true;
+                Utils.showBattleLog(`传承道统：首个锻炉额外强化 +${extraForgeUpgrade}`);
+            }
+        };
+
+        if (choice === 'steady') {
+            if (player.gold < forgeCost) {
+                const exp = this.grantForgeFallbackExp(10);
+                Utils.showBattleLog(`灵石不足，观摩锻纹：命环经验 +${exp}`);
+                this.completeNode(node);
+                return;
+            }
+
+            player.gold -= forgeCost;
+            const upgradedNames = this.pickAndUpgradeCards(1 + extraForgeUpgrade);
+            consumeForgeBoost();
+            if (upgradedNames.length > 0) {
+                Utils.showBattleLog(`精锻成功：${upgradedNames.join('、')} 得到强化`);
+            } else {
+                const refund = Math.floor(forgeCost * 0.75);
+                player.gold += refund;
+                const exp = this.grantForgeFallbackExp(12);
+                Utils.showBattleLog(`无可强化卡牌，返还 ${refund} 灵石并获得 ${exp} 命环经验`);
+            }
+            if (this.game && typeof this.game.handleLegacyMissionProgress === 'function') {
+                this.game.handleLegacyMissionProgress('forgeComplete', 1);
+            }
+            this.completeNode(node);
+            return;
+        }
+
+        if (choice === 'overload') {
+            if (player.gold < premiumCost) {
+                const exp = this.grantForgeFallbackExp(8);
+                Utils.showBattleLog(`灵石不足以过载锻造，观摩得悟：命环经验 +${exp}`);
+                this.completeNode(node);
+                return;
+            }
+
+            player.gold -= premiumCost;
+            const upgradedNames = this.pickAndUpgradeCards(2 + extraForgeUpgrade);
+            consumeForgeBoost();
+            if (upgradedNames.length > 0) {
+                Utils.showBattleLog(`过载锻造：${upgradedNames.join('、')} 获得强化`);
+                const bonusExp = 15 + player.realm * 2;
+                player.fateRing.exp += bonusExp;
+                if (player.checkFateRingLevelUp) player.checkFateRingLevelUp();
+                Utils.showBattleLog(`锻炉余辉：命环经验 +${bonusExp}`);
+            } else {
+                const refund = Math.floor(premiumCost * 0.6);
+                player.gold += refund;
+                Utils.showBattleLog(`过载失败：无可强化卡牌，返还 ${refund} 灵石`);
+            }
+            if (this.game && typeof this.game.handleLegacyMissionProgress === 'function') {
+                this.game.handleLegacyMissionProgress('forgeComplete', 1);
+            }
+            this.completeNode(node);
+            return;
+        }
+
+        if (choice === 'temper') {
+            if (player.gold < temperCost) {
+                const exp = this.grantForgeFallbackExp(8);
+                Utils.showBattleLog(`灵石不足以拓印，观摩得悟：命环经验 +${exp}`);
+                this.completeNode(node);
+                return;
+            }
+
+            player.gold -= temperCost;
+            consumeForgeBoost();
+            const rarity = Math.random() < 0.7 ? 'uncommon' : 'rare';
+            const card = getRandomCard(rarity, player.characterId);
+            if (card) {
+                player.addCardToDeck(card);
+                Utils.showBattleLog(`淬灵拓印：获得 ${card.name}`);
+            }
+            const exp = 20 + player.realm * 3 + (extraForgeUpgrade * 8);
+            player.fateRing.exp += exp;
+            if (player.checkFateRingLevelUp) player.checkFateRingLevelUp();
+            Utils.showBattleLog(`拓印感悟：命环经验 +${exp}`);
+            if (this.game && typeof this.game.handleLegacyMissionProgress === 'function') {
+                this.game.handleLegacyMissionProgress('forgeComplete', 1);
+            }
+            this.completeNode(node);
+            return;
+        }
+
+        Utils.showBattleLog('你选择暂离锻炉，保留当前资源。');
+        this.completeNode(node);
     }
 
     // 营地休息

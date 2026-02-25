@@ -6,6 +6,8 @@
 window.PVPService = {
     // 缓存数据
     currentRankData: null,
+    ruleVersion: 'pvp-v2',
+    activeMatch: null,
 
     // 兼容不同 Bmob SDK 查询参数签名
     applyFilter(query, key, op, value) {
@@ -84,9 +86,10 @@ window.PVPService = {
             }
 
             // Set Data
+            const normalizedData = this.normalizeBattleData(snapData.data || {});
             ghost.set('powerScore', snapData.powerScore || 100);
             ghost.set('realm', snapData.realm || 1);
-            ghost.set('data', JSON.stringify(snapData.data)); // 完整Battle数据 stringified
+            ghost.set('data', JSON.stringify(normalizedData)); // 完整Battle数据 stringified
             ghost.set('config', {
                 personality: snapData.personality || 'balanced',
                 guardianFormation: snapData.guardianFormation || false
@@ -197,13 +200,25 @@ window.PVPService = {
                 console.error('Parse ghost data failed', e);
                 return { success: false, message: '对手数据损坏' };
             }
+            parsedData = this.normalizeBattleData(parsedData);
+
+            const issuedAt = Date.now();
+            const opponentRankId = opponentRank.objectId || null;
+            const matchTicket = `${user.objectId}:${opponentRankId || 'unknown'}:${issuedAt}:${Math.random().toString(36).slice(2, 10)}`;
+            this.activeMatch = {
+                ticket: matchTicket,
+                issuedAt,
+                opponentRankId,
+                consumed: false
+            };
 
             return {
                 success: true,
                 opponent: {
                     rank: opponentRank,
                     ghost: ghostData,
-                    battleData: parsedData
+                    battleData: parsedData,
+                    matchTicket
                 }
             };
 
@@ -213,6 +228,42 @@ window.PVPService = {
             if (error.code === 101) return { success: false, message: '暂无对手数据 (101)' };
             return { success: false, error };
         }
+    },
+
+    normalizeBattleData(rawData) {
+        const data = rawData && typeof rawData === 'object' ? rawData : {};
+        const deck = Array.isArray(data.deck) ? data.deck : [];
+        const aiProfile = data.aiProfile || this.getDeckArchetype(deck);
+
+        return {
+            me: {
+                maxHp: data.me && data.me.maxHp ? data.me.maxHp : 100,
+                energy: data.me && data.me.energy ? data.me.energy : 3,
+                currEnergy: data.me && data.me.currEnergy ? data.me.currEnergy : (data.me && data.me.energy ? data.me.energy : 3)
+            },
+            deck,
+            aiProfile,
+            deckArchetype: data.deckArchetype || this.getDeckArchetype(deck),
+            ruleVersion: data.ruleVersion || this.ruleVersion
+        };
+    },
+
+    getDeckArchetype(deck) {
+        let attack = 0;
+        let defense = 0;
+        let utility = 0;
+        deck.forEach(card => {
+            const id = typeof card === 'string' ? card : card.id;
+            const cardDef = (typeof CARDS !== 'undefined') ? CARDS[id] : null;
+            const type = cardDef ? cardDef.type : null;
+            if (type === 'attack') attack++;
+            else if (type === 'defense') defense++;
+            else utility++;
+        });
+
+        if (attack >= defense + utility) return 'aggressive';
+        if (defense >= attack) return 'fortified';
+        return 'balanced';
     },
 
     /**
@@ -273,12 +324,31 @@ window.PVPService = {
      * @param {boolean} isWin 
      * @param {Object} opponentRankData 
      */
-    async reportMatchResult(isWin, opponentRankData) {
+    async reportMatchResult(isWin, opponentRankData, matchTicket = null) {
         if (!this.currentRankData) await this.syncRank();
 
-        if (!this.currentRankData) return; // Sync failed
+        if (!this.currentRankData) return { newRating: 1000, delta: 0, rejected: true }; // Sync failed
 
-        const myRating = this.currentRankData.score || 1000;
+        const currentRating = this.currentRankData.score || 1000;
+        const now = Date.now();
+        const active = this.activeMatch;
+        const opponentRankId = opponentRankData ? opponentRankData.objectId : null;
+        const ticketValid = !!(
+            active &&
+            !active.consumed &&
+            matchTicket &&
+            active.ticket === matchTicket &&
+            now - active.issuedAt <= 10 * 60 * 1000 &&
+            (!active.opponentRankId || !opponentRankId || active.opponentRankId === opponentRankId)
+        );
+
+        if (!ticketValid) {
+            console.warn('PVP report rejected: invalid or expired match ticket.');
+            return { newRating: currentRating, delta: 0, rejected: true };
+        }
+        active.consumed = true;
+
+        const myRating = currentRating;
         const oppRating = opponentRankData ? (opponentRankData.score || 1000) : 1000;
 
         // Local Calc
@@ -293,12 +363,17 @@ window.PVPService = {
         let wins = this.currentRankData.wins || 0;
         if (isWin) wins++;
         myQuery.set('wins', wins);
+        let losses = this.currentRankData.losses || 0;
+        if (!isWin) losses++;
+        myQuery.set('losses', losses);
 
         await myQuery.save();
 
         // Sync local
         this.currentRankData.score = calcRes.newRating;
         this.currentRankData.wins = wins;
+        this.currentRankData.losses = losses;
+        this.activeMatch = null;
 
         return calcRes; // Return delta for UI
     },

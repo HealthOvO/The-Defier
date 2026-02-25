@@ -1,0 +1,27 @@
+{
+  "name": "the-defier",
+  "version": "1.0.0",
+  "description": "",
+  "main": "verify_strength.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HealthOvO/The-Defier.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/HealthOvO/The-Defier/issues"
+  },
+  "homepage": "https://github.com/HealthOvO/The-Defier#readme",
+  "dependencies": {
+    "playwright": "^1.58.2"
+  }
+}

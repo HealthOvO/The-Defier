@@ -7,10 +7,19 @@ window.PVPScene = {
     activeTab: 'ranking',
     activeShopCategory: 'all', // Shop Category state
     selectedPersonality: 'balanced', // Default
+    PERSONA_RULES: {
+        balanced: { damageMul: 1.0, takenMul: 1.0, regenEnergyPerTurn: 1, hpMul: 1.0 },
+        slaughter: { damageMul: 1.2, takenMul: 1.1, regenEnergyPerTurn: 0, hpMul: 1.0 },
+        longevity: { damageMul: 0.85, takenMul: 0.95, regenEnergyPerTurn: 0, hpMul: 1.3 }
+    },
 
     onShow() {
         this.updateMyRankInfo();
         this.switchTab('ranking');
+    },
+
+    getPersonalityRuleSet(type) {
+        return this.PERSONA_RULES[type] || this.PERSONA_RULES.balanced;
     },
 
     switchTab(tabName) {
@@ -50,6 +59,7 @@ window.PVPScene = {
     // === Ranking (Jade Slips) ===
     async loadRankings() {
         const listEl = document.getElementById('ranking-list');
+        const startedAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
         // Keep loading spinner if empty, or clear
         listEl.innerHTML = `
             <div class="loading-ink">
@@ -98,6 +108,13 @@ window.PVPScene = {
                 `;
                 listEl.appendChild(row);
             });
+            if (window.game && window.game.performanceStats) {
+                const duration = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - startedAt;
+                const arr = window.game.performanceStats.pvpLoadDurations || [];
+                arr.push(duration);
+                if (arr.length > 20) arr.shift();
+                window.game.performanceStats.pvpLoadDurations = arr;
+            }
         } catch (e) {
             listEl.innerHTML = '<div class="loading-ink" style="color:#f44">读取失败，请检查网络</div>';
             console.error(e);
@@ -138,12 +155,17 @@ window.PVPScene = {
                 deck: ghostData.deck || [],
                 currentHp: ghostData.me ? ghostData.me.maxHp : 100,
                 energy: ghostData.me ? (ghostData.me.energy || 3) : 3,
-                config: ghostConfig
+                config: {
+                    ...ghostConfig,
+                    aiProfile: ghostData.aiProfile || ghostConfig.personality || 'balanced',
+                    personalityRules: ghostData.personalityRules || this.getPersonalityRuleSet(ghostConfig.personality || 'balanced')
+                }
             });
 
             game.showScreen('battle-screen');
             game.mode = 'pvp';
             game.pvpOpponentRank = opponentData.rank;
+            game.pvpMatchTicket = opponentData.matchTicket || null;
 
             // Initialize Battle
             if (game.battle && typeof game.battle.init === 'function') {
@@ -301,11 +323,18 @@ window.PVPScene = {
                     energy: game.player.maxEnergy,
                     currEnergy: game.player.maxEnergy
                 },
-                deck: game.player.deck.map(c => ({ id: c.id, upgraded: c.upgraded, name: c.name }))
+                deck: game.player.deck.map(c => ({ id: c.id, upgraded: c.upgraded, name: c.name })),
+                aiProfile: this.selectedPersonality,
+                deckArchetype: (typeof PVPService !== 'undefined' && PVPService.getDeckArchetype)
+                    ? PVPService.getDeckArchetype(game.player.deck)
+                    : 'balanced',
+                ruleVersion: (typeof PVPService !== 'undefined' && PVPService.ruleVersion) ? PVPService.ruleVersion : 'pvp-v2'
             },
             personality: this.selectedPersonality,
             guardianFormation: formation
         };
+
+        snapshot.data.personalityRules = this.getPersonalityRuleSet(this.selectedPersonality);
 
         // Visual Feedback - Pulse the button
         const btn = document.querySelector('.ink-btn-large span.btn-icon');

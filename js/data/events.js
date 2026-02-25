@@ -504,19 +504,473 @@ const EVENTS = {
                 effects: []
             }
         ]
+    },
+
+    bloodMoonRitual: {
+        id: 'bloodMoonRitual',
+        name: '血月祭仪',
+        icon: '🌕',
+        description: '祭台涌动暗红灵潮，你能感到战意与危险并存。',
+        choices: [
+            {
+                text: '以血换力',
+                icon: '🩸',
+                result: '失去生命，永久力量提升',
+                resultType: 'negative',
+                condition: { type: 'hp', min: 18 },
+                effects: [
+                    { type: 'damage', value: 12 },
+                    { type: 'permaBuff', stat: 'strength', value: 1 }
+                ]
+            },
+            {
+                text: '稳守心神',
+                icon: '🛡️',
+                result: '获得护身之力',
+                resultType: 'positive',
+                effects: [
+                    { type: 'maxHp', value: 6 },
+                    { type: 'heal', value: 8 }
+                ]
+            }
+        ]
+    },
+
+    swordTomb: {
+        id: 'swordTomb',
+        name: '万剑冢',
+        icon: '🗡️',
+        description: '遍地断剑在低鸣，你可以继承其中一缕剑魂。',
+        choices: [
+            {
+                text: '择杀伐剑魂',
+                icon: '⚔️',
+                result: '获得攻击牌',
+                resultType: 'positive',
+                effects: [
+                    { type: 'card', cardId: 'bloodlettingSlash' },
+                    { type: 'card', cardId: 'punctureMark' }
+                ]
+            },
+            {
+                text: '择守御剑魂',
+                icon: '🛡️',
+                result: '获得防御与回复',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'card', cardId: 'guardedRiposte' },
+                    { type: 'heal', value: 12 }
+                ]
+            }
+        ]
+    },
+
+    spiritAuction: {
+        id: 'spiritAuction',
+        name: '灵市暗拍',
+        icon: '🏮',
+        description: '蒙面拍卖师低声询价，稀有宝物稍纵即逝。',
+        choices: [
+            {
+                text: '竞拍秘宝',
+                icon: '💰',
+                result: '花费120灵石，获得随机法宝',
+                resultType: 'neutral',
+                condition: { type: 'gold', min: 120 },
+                effects: [
+                    { type: 'gold', value: -120 },
+                    { type: 'treasure', random: true }
+                ]
+            },
+            {
+                text: '竞拍秘籍',
+                icon: '📜',
+                result: '花费80灵石，获得稀有卡',
+                resultType: 'neutral',
+                condition: { type: 'gold', min: 80 },
+                effects: [
+                    { type: 'gold', value: -80 },
+                    { type: 'card', rarity: 'rare' }
+                ]
+            }
+        ]
+    },
+
+    fallenFormation: {
+        id: 'fallenFormation',
+        name: '残阵遗痕',
+        icon: '🧿',
+        description: '古阵崩坏，仍残留可供利用的法阵节点。',
+        choices: [
+            {
+                text: '重组阵纹',
+                icon: '✨',
+                result: '命环经验提升并恢复生命',
+                resultType: 'positive',
+                effects: [
+                    { type: 'ringExp', value: 45 },
+                    { type: 'heal', value: 10 }
+                ]
+            },
+            {
+                text: '强行突破',
+                icon: '💥',
+                result: '进入高风险试炼',
+                resultType: 'negative',
+                effects: [
+                    { type: 'trial', trialType: 'speedKill', rounds: 4, rewardMultiplier: 1.6 }
+                ]
+            }
+        ]
+    },
+
+    destinyMirror: {
+        id: 'destinyMirror',
+        name: '宿命镜',
+        icon: '🪞',
+        description: '镜中映出多个可能的你，每个都通向不同代价。',
+        choices: [
+            {
+                text: '映照过去',
+                icon: '🧠',
+                result: '移除 1 张防御牌，换取 1 张稀有牌',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'removeCardType', cardType: 'defense', count: 1 },
+                    { type: 'card', rarity: 'rare' }
+                ]
+            },
+            {
+                text: '映照未来',
+                icon: '🔮',
+                result: '命环经验+70，但失去生命',
+                resultType: 'negative',
+                effects: [
+                    { type: 'damage', value: 10 },
+                    { type: 'ringExp', value: 70 }
+                ]
+            }
+        ]
+    },
+
+    wanderingOracle: {
+        id: 'wanderingOracle',
+        name: '行脚卜者',
+        icon: '🧙',
+        description: '卜者愿以天机交换你的抉择。',
+        choices: [
+            {
+                text: '求战运',
+                icon: '⚔️',
+                result: '永久力量+1，最大生命-5',
+                resultType: 'negative',
+                effects: [
+                    { type: 'permaBuff', stat: 'strength', value: 1 },
+                    { type: 'maxHp', value: -5 }
+                ]
+            },
+            {
+                text: '求生运',
+                icon: '🌿',
+                result: '最大生命+8，灵力上限-1',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'maxHp', value: 8 },
+                    { type: 'permaBuff', stat: 'energy', value: -1 }
+                ]
+            }
+        ]
+    },
+
+    demonContract: {
+        id: 'demonContract',
+        name: '魔契残页',
+        icon: '📕',
+        description: '契约承诺你力量，但也索取回报。',
+        choices: [
+            {
+                text: '签订契约',
+                icon: '✒️',
+                result: '获得强力牌与诅咒',
+                resultType: 'negative',
+                effects: [
+                    { type: 'card', cardId: 'executionDoctrine' },
+                    { type: 'damage', value: 8 }
+                ]
+            },
+            {
+                text: '焚毁残页',
+                icon: '🔥',
+                result: '获得灵石',
+                resultType: 'positive',
+                effects: [
+                    { type: 'gold', value: 90 }
+                ]
+            }
+        ]
+    },
+
+    starObservation: {
+        id: 'starObservation',
+        name: '观星台',
+        icon: '🔭',
+        description: '星轨悄然偏转，你有机会重塑牌组节奏。',
+        choices: [
+            {
+                text: '推演星轨',
+                icon: '🌠',
+                result: '升级一张牌并抽象出新思路',
+                resultType: 'positive',
+                effects: [
+                    { type: 'upgradeCard' },
+                    { type: 'ringExp', value: 25 }
+                ]
+            },
+            {
+                text: '凝视深空',
+                icon: '🕳️',
+                result: '获得传奇卡，但受到伤害',
+                resultType: 'negative',
+                effects: [
+                    { type: 'card', rarity: 'legendary' },
+                    { type: 'damage', value: 12 }
+                ]
+            }
+        ]
+    },
+
+    brokenPavilion: {
+        id: 'brokenPavilion',
+        name: '断碑古亭',
+        icon: '🏯',
+        description: '古亭残破，但余下的石刻仍可传道。',
+        choices: [
+            {
+                text: '参悟石刻',
+                icon: '📜',
+                result: '随机法则或命环经验',
+                resultType: 'neutral',
+                effects: [
+                    {
+                        type: 'random', options: [
+                            { type: 'law', random: true, chance: 0.45 },
+                            { type: 'ringExp', value: 60, chance: 0.55 }
+                        ]
+                    }
+                ]
+            },
+            {
+                text: '搜刮残砖',
+                icon: '🪙',
+                result: '获得灵石',
+                resultType: 'positive',
+                effects: [
+                    { type: 'randomGold', min: 40, max: 110 }
+                ]
+            }
+        ]
+    },
+
+    bloodForgeCovenant: {
+        id: 'bloodForgeCovenant',
+        name: '血炉盟约',
+        icon: '🜂',
+        description: '炉火映出你摇摆不定的影子：要么以血喂刃，要么以资换稳。',
+        choices: [
+            {
+                text: '以血喂刃',
+                icon: '🩸',
+                result: '失去生命，获得血蚀核心卡',
+                resultType: 'negative',
+                condition: { type: 'hp', min: 20 },
+                effects: [
+                    { type: 'damage', value: 12 },
+                    { type: 'card', cardId: 'scarletJudgement' },
+                    { type: 'card', cardId: 'serratedRitual' }
+                ]
+            },
+            {
+                text: '以资换稳',
+                icon: '💰',
+                result: '消耗灵石，升级一张牌',
+                resultType: 'neutral',
+                condition: { type: 'gold', min: 80 },
+                effects: [
+                    { type: 'gold', value: -80 },
+                    { type: 'upgradeCard' }
+                ]
+            },
+            {
+                text: '不立盟约',
+                icon: '🚶',
+                result: '你离开了血炉',
+                resultType: 'neutral',
+                effects: []
+            }
+        ]
+    },
+
+    mirrorNeedleDojo: {
+        id: 'mirrorNeedleDojo',
+        name: '镜针道场',
+        icon: '🪞',
+        description: '道场主张“先识破绽，再谈胜负”。',
+        choices: [
+            {
+                text: '研习破势',
+                icon: '🎯',
+                result: '获得破绽流核心卡',
+                resultType: 'positive',
+                effects: [
+                    { type: 'card', cardId: 'weakpointSurvey' },
+                    { type: 'card', cardId: 'focusBreak' }
+                ]
+            },
+            {
+                text: '盲冲试招',
+                icon: '⚔️',
+                result: '进入战斗，胜者得传承',
+                resultType: 'negative',
+                effects: [
+                    { type: 'battle', enemyId: 'swordDisciple' }
+                ]
+            }
+        ]
+    },
+
+    shatteredCompass: {
+        id: 'shatteredCompass',
+        name: '碎命罗盘',
+        icon: '🧭',
+        description: '罗盘裂成两半，一半指向伤害，一半指向掌控。',
+        choices: [
+            {
+                text: '偏向血路',
+                icon: '🩸',
+                result: '生命上限下降，力量提升，获得流血牌',
+                resultType: 'negative',
+                effects: [
+                    { type: 'maxHp', value: -6 },
+                    { type: 'permaBuff', stat: 'strength', value: 1 },
+                    { type: 'card', cardId: 'arteryRupture' }
+                ]
+            },
+            {
+                text: '偏向心眼',
+                icon: '🧠',
+                result: '失去生命，抽牌能力提升，获得破绽牌',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'damage', value: 6 },
+                    { type: 'permaBuff', stat: 'draw', value: 1 },
+                    { type: 'card', cardId: 'razorFocus' }
+                ]
+            },
+            {
+                text: '修复罗盘',
+                icon: '🔧',
+                result: '命环经验提升',
+                resultType: 'positive',
+                effects: [
+                    { type: 'ringExp', value: 55 }
+                ]
+            }
+        ]
+    },
+
+    debtboundAnvil: {
+        id: 'debtboundAnvil',
+        name: '负债神砧',
+        icon: '⚒️',
+        description: '神砧只认代价：你可以用灵石买确定性，也可以用生命赌稀有收益。',
+        choices: [
+            {
+                text: '支付灵石锻造',
+                icon: '💰',
+                result: '消耗灵石，升级并获得一张稀有卡',
+                resultType: 'positive',
+                condition: { type: 'gold', min: 120 },
+                effects: [
+                    { type: 'gold', value: -120 },
+                    { type: 'upgradeCard' },
+                    { type: 'card', rarity: 'rare' }
+                ]
+            },
+            {
+                text: '以命抵债',
+                icon: '☠️',
+                result: '失去生命，获得随机稀有卡',
+                resultType: 'negative',
+                condition: { type: 'hp', min: 24 },
+                effects: [
+                    { type: 'damage', value: 16 },
+                    { type: 'card', rarity: 'rare' }
+                ]
+            }
+        ]
+    },
+
+    hiddenSpring: {
+        id: 'hiddenSpring',
+        name: '隐泉',
+        icon: '💧',
+        description: '泉眼灵气温润，短暂停驻可恢复状态。',
+        choices: [
+            {
+                text: '静养',
+                icon: '🧘',
+                result: '恢复生命并清除一层压力',
+                resultType: 'positive',
+                effects: [
+                    { type: 'heal', value: 20 },
+                    { type: 'gold', value: 20 }
+                ]
+            },
+            {
+                text: '提炼灵液',
+                icon: '🧪',
+                result: '消耗生命，提升抽牌',
+                resultType: 'neutral',
+                condition: { type: 'hp', min: 20 },
+                effects: [
+                    { type: 'damage', value: 10 },
+                    { type: 'permaBuff', stat: 'draw', value: 1 }
+                ]
+            }
+        ]
     }
 };
 
 // 事件池 - 按类型分类
 const EVENT_POOL = {
-    common: ['mysteryChest', 'spiritVein', 'wanderingSmith'],
-    uncommon: ['injuredCultivator', 'mysteryStele', 'celestialGamble'],
-    rare: ['mysteriousMerchant', 'ancientAltar', 'fateChoice', 'ancientLibrary', 'voidRift'],
+    common: ['mysteryChest', 'spiritVein', 'wanderingSmith', 'hiddenSpring', 'brokenPavilion', 'mirrorNeedleDojo'],
+    uncommon: ['injuredCultivator', 'mysteryStele', 'celestialGamble', 'bloodMoonRitual', 'swordTomb', 'wanderingOracle', 'bloodForgeCovenant', 'shatteredCompass'],
+    rare: ['mysteriousMerchant', 'ancientAltar', 'fateChoice', 'ancientLibrary', 'voidRift', 'spiritAuction', 'fallenFormation', 'destinyMirror', 'demonContract', 'starObservation', 'debtboundAnvil'],
     special: ['trialGround']
 };
 
+function canUseDebugEventHooks() {
+    if (typeof window === 'undefined') return false;
+    if (window.__ALLOW_DEBUG_EVENT_HOOKS__ === true) return true;
+    const host = window.location && window.location.hostname;
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    const isGameDebugMode = !!(window.game && window.game.debugMode);
+    return isLocalHost || isGameDebugMode;
+}
+
 // 获取随机事件
 function getRandomEvent() {
+    // Test hook: allow deterministic event replay in browser audits
+    if (canUseDebugEventHooks()) {
+        if (Array.isArray(window.__debugEventQueue) && window.__debugEventQueue.length > 0) {
+            const forcedId = window.__debugEventQueue.shift();
+            if (forcedId && EVENTS[forcedId]) return { ...EVENTS[forcedId] };
+        }
+        if (window.__debugEventId && EVENTS[window.__debugEventId]) {
+            return { ...EVENTS[window.__debugEventId] };
+        }
+    }
+
     const roll = Math.random();
     let pool;
 

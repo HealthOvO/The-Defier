@@ -12,8 +12,21 @@ class Battle {
         this.selectedCard = null;
         this.targetingMode = false;
         this.battleEnded = false;
-        this.battleEnded = false;
+        this.battleResolution = null;
+        this.forceEndEnemyTurn = false;
+        this.eventListeners = new Map();
         this.isProcessingCard = false; // 防止卡牌连点
+        this.uiDirty = {
+            player: true,
+            enemies: true,
+            hand: true,
+            energy: true,
+            piles: true,
+            environment: true,
+            activeSkill: true
+        };
+        this.turnStartTime = 0;
+        this.lastTurnDuration = 0;
 
         // 五行定义
         this.ELEMENTS = {
@@ -48,6 +61,9 @@ class Battle {
     init(enemyData) {
         this.enemies = [];
         this.battleEnded = false;
+        this.battleResolution = null;
+        this.forceEndEnemyTurn = false;
+        this.eventListeners.clear();
         this.turnNumber = 0;
         this.selectedCard = null;
         this.targetingMode = false;
@@ -55,6 +71,15 @@ class Battle {
         this.isProcessingCard = false;
         this.cardsPlayedThisTurn = 0;
         this.playerAttackedThisTurn = false;
+        this.uiDirty = {
+            player: true,
+            enemies: true,
+            hand: true,
+            energy: true,
+            piles: true,
+            environment: true,
+            activeSkill: true
+        };
 
         // 创建敌人实例
         if (Array.isArray(enemyData)) {
@@ -153,7 +178,8 @@ class Battle {
         // 非Boss单位有 20% 几率突变为精英
         // 增加 isMinion 检查，防止召唤物过于变态
         // 增加 !enemy.isElite 检查，防止已经是精英的怪再次突变 (Double Elite Bug Fix)
-        if (!enemy.isBoss && !enemy.isMinion && !enemy.isElite && Math.random() < 0.2) {
+        const canRollElite = !!(typeof ENEMIES !== 'undefined' && enemyData && enemyData.id && ENEMIES[enemyData.id]);
+        if (canRollElite && !enemy.isBoss && !enemy.isMinion && !enemy.isElite && Math.random() < 0.2) {
             enemy.isElite = true;
             enemy.alias = enemy.name; // Keep original name reference if needed
             enemy.name = `【精英】${enemy.name}`;
@@ -199,6 +225,17 @@ class Battle {
             enemy.currentHp = enemy.maxHp;
         }
 
+        // 兼容 phaseConfig -> phases，供阶段切换逻辑复用
+        if (!enemy.phases && Array.isArray(enemy.phaseConfig)) {
+            enemy.phases = enemy.phaseConfig.map(cfg => ({
+                threshold: cfg.threshold,
+                name: cfg.name || '异变',
+                heal: cfg.heal || 0,
+                patterns: cfg.patterns || enemy.patterns
+            }));
+            enemy.currentPhase = 0;
+        }
+
         return enemy;
     }
 
@@ -206,14 +243,33 @@ class Battle {
     startBattle() {
         this.turnNumber = 1;
         this.currentTurn = 'player';
+        this.battleEnded = false;
+        this.battleResolution = null;
+        this.forceEndEnemyTurn = false;
         this.isProcessingCard = false; // 强制重置状态
         this.playerTookDamage = false; // For Trial Challenge
         this.player.resurrectCount = 0; // Reset resurrection counter
         this.cardsPlayedThisTurn = 0;
         this.playerAttackedThisTurn = false;
+        this.playerFirstAttackBoostUsed = false;
+        this.turnStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
         // 玩家回合开始
         this.player.startTurn();
+
+        if (this.player.archetypeResonance) {
+            const res = this.player.archetypeResonance;
+            if (res.id === 'hemorrhage') {
+                Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：流血施加 +${res.applyBleedBonus}`);
+            } else if (res.id === 'precision') {
+                Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：破绽施加 +${res.applyMarkBonus}`);
+            }
+        }
+
+        const doctrine = this.player && this.player.legacyRunDoctrine ? this.player.legacyRunDoctrine : null;
+        if (doctrine && doctrine.firstAttackBonusPerBattle > 0) {
+            Utils.showBattleLog(`传承道统：本场首次攻击伤害 +${doctrine.firstAttackBonusPerBattle}`);
+        }
 
         // 强制检查手牌，如果为空尝试补发（防止Bug）
         if (this.player.hand.length === 0) {
@@ -279,22 +335,135 @@ class Battle {
         }
 
         // 更新UI
+        this.markUIDirty();
         this.updateBattleUI();
         // this.bindCardEvents(); // Removed redundant call, updateHandUI handles this
+
+        if (this.game && typeof this.game.showFirstBattleGuide === 'function') {
+            this.game.showFirstBattleGuide();
+        }
+    }
+
+    markUIDirty(...sections) {
+        if (!sections || sections.length === 0) {
+            this.uiDirty.player = true;
+            this.uiDirty.enemies = true;
+            this.uiDirty.hand = true;
+            this.uiDirty.energy = true;
+            this.uiDirty.piles = true;
+            this.uiDirty.environment = true;
+            this.uiDirty.activeSkill = true;
+            return;
+        }
+
+        sections.forEach(section => {
+            if (this.uiDirty[section] !== undefined) {
+                this.uiDirty[section] = true;
+            }
+        });
+    }
+
+    on(eventName, listener) {
+        if (!eventName || typeof listener !== 'function') return () => {};
+        if (!this.eventListeners.has(eventName)) {
+            this.eventListeners.set(eventName, new Set());
+        }
+        this.eventListeners.get(eventName).add(listener);
+        return () => this.off(eventName, listener);
+    }
+
+    off(eventName, listener) {
+        const listeners = this.eventListeners.get(eventName);
+        if (!listeners) return;
+        listeners.delete(listener);
+        if (listeners.size === 0) {
+            this.eventListeners.delete(eventName);
+        }
+    }
+
+    emit(eventName, payload = {}) {
+        const listeners = this.eventListeners.get(eventName);
+        if (!listeners || listeners.size === 0) return;
+        listeners.forEach((listener) => {
+            try {
+                listener(payload);
+            } catch (err) {
+                console.error(`Battle event listener failed (${eventName}):`, err);
+            }
+        });
+    }
+
+    clearEventListeners() {
+        this.eventListeners.clear();
+    }
+
+    advanceTime(ms = 16) {
+        // This game is mostly event-driven, so advancing time is treated as a UI refresh point.
+        if (this.battleEnded) return;
+        this.markUIDirty();
+        this.updateBattleUI();
     }
 
     // 更新战斗UI
     updateBattleUI() {
-        this.updatePlayerUI();
-        this.updateEnemiesUI();
-        this.updateHandUI();
-        this.updateEnergyUI();
-        this.updatePilesUI();
-        this.updateEnvironmentUI();
+        const hasDirty = Object.values(this.uiDirty).some(Boolean);
+        if (!hasDirty) this.markUIDirty();
+
+        if (this.uiDirty.player) this.updatePlayerUI();
+        if (this.uiDirty.enemies) this.updateEnemiesUI();
+        if (this.uiDirty.hand) this.updateHandUI();
+        if (this.uiDirty.energy) this.updateEnergyUI();
+        if (this.uiDirty.piles) this.updatePilesUI();
+        if (this.uiDirty.environment) this.updateEnvironmentUI();
+        this.updateLegacyMissionTracker();
 
         // Sync active skill UI (Cooldowns etc)
-        if (this.game && this.game.updateActiveSkillUI) {
+        if (this.uiDirty.activeSkill && this.game && this.game.updateActiveSkillUI) {
             this.game.updateActiveSkillUI();
+        }
+
+        this.uiDirty.player = false;
+        this.uiDirty.enemies = false;
+        this.uiDirty.hand = false;
+        this.uiDirty.energy = false;
+        this.uiDirty.piles = false;
+        this.uiDirty.environment = false;
+        this.uiDirty.activeSkill = false;
+
+        if (this.game && this.game.performanceStats) {
+            this.game.performanceStats.battleUIUpdates = (this.game.performanceStats.battleUIUpdates || 0) + 1;
+        }
+    }
+
+    updateLegacyMissionTracker() {
+        const panel = document.getElementById('legacy-mission-tracker');
+        if (!panel) return;
+
+        const mission = this.player && this.player.legacyRunMission ? this.player.legacyRunMission : null;
+        if (!mission || !mission.target) {
+            panel.style.display = 'none';
+            return;
+        }
+
+        const target = Math.max(1, Number(mission.target) || 1);
+        const progress = Math.max(0, Math.min(target, Number(mission.progress) || 0));
+        const percent = Math.round((progress / target) * 100);
+
+        const title = document.getElementById('legacy-mission-title');
+        const reward = document.getElementById('legacy-mission-reward');
+        const progressFill = document.getElementById('legacy-mission-progress-fill');
+        const progressText = document.getElementById('legacy-mission-progress-text');
+
+        panel.style.display = 'block';
+        panel.classList.toggle('completed', !!mission.completed);
+
+        if (title) title.textContent = mission.name ? `${mission.name}：${mission.desc}` : mission.desc;
+        if (reward) reward.textContent = `+${mission.rewardEssence || 0} 精粹`;
+        if (progressFill) progressFill.style.width = `${percent}%`;
+        if (progressText) {
+            progressText.textContent = mission.completed
+                ? `已达成 ${target}/${target}`
+                : `${progress}/${target}`;
         }
     }
 
@@ -628,48 +797,62 @@ class Battle {
 
     // 绑定卡牌事件
     bindCardEvents() {
-        const cards = document.querySelectorAll('#hand-cards .card');
+        const handContainer = document.getElementById('hand-cards');
+        if (!handContainer || this._handEventsBound) return;
+        this._handEventsBound = true;
 
-        cards.forEach((cardEl, index) => {
-            cardEl.addEventListener('click', (e) => {
-                e.stopPropagation();
+        handContainer.addEventListener('click', (e) => {
+            const cardEl = e.target.closest('.card');
+            if (!cardEl || !handContainer.contains(cardEl)) return;
+            const index = parseInt(cardEl.dataset.index, 10);
+            if (Number.isNaN(index)) return;
+            e.stopPropagation();
+            this.onCardClick(index);
+        });
+
+        handContainer.addEventListener('touchstart', (e) => {
+            const cardEl = e.target.closest('.card');
+            if (!cardEl || !handContainer.contains(cardEl) || !e.touches || !e.touches[0]) return;
+            cardEl.dataset.touchStartY = String(e.touches[0].clientY);
+            cardEl.dataset.touchStartTime = String(Date.now());
+        }, { passive: true });
+
+        handContainer.addEventListener('touchend', (e) => {
+            const cardEl = e.target.closest('.card');
+            if (!cardEl || !handContainer.contains(cardEl) || !e.changedTouches || !e.changedTouches[0]) return;
+            const startY = parseFloat(cardEl.dataset.touchStartY || '0');
+            const startTime = parseInt(cardEl.dataset.touchStartTime || '0', 10);
+            if (!startTime) return;
+            const endY = e.changedTouches[0].clientY;
+            const deltaY = endY - startY;
+            const deltaTime = Date.now() - startTime;
+            const index = parseInt(cardEl.dataset.index, 10);
+
+            if (deltaY < -50 && deltaTime < 500 && !Number.isNaN(index)) {
+                if (navigator.vibrate) navigator.vibrate(50);
                 this.onCardClick(index);
-            });
+            }
+        });
 
-            // 手势支持 (上滑出牌)
-            let startY = 0;
-            let startTime = 0;
+        handContainer.addEventListener('mouseover', (e) => {
+            const cardEl = e.target.closest('.card');
+            if (!cardEl || !handContainer.contains(cardEl)) return;
+            const fromEl = e.relatedTarget;
+            if (fromEl && cardEl.contains(fromEl)) return;
+            const index = parseInt(cardEl.dataset.index, 10);
+            if (Number.isNaN(index)) return;
+            if (typeof audioManager !== 'undefined') {
+                audioManager.playSFX('hover');
+            }
+            this.onCardHover(index);
+        });
 
-            cardEl.addEventListener('touchstart', (e) => {
-                startY = e.touches[0].clientY;
-                startTime = Date.now();
-            }, { passive: true });
-
-            cardEl.addEventListener('touchend', (e) => {
-                const endY = e.changedTouches[0].clientY;
-                const endTime = Date.now();
-                const deltaY = endY - startY; // 负值表示向上
-                const deltaTime = endTime - startTime;
-
-                if (deltaY < -50 && deltaTime < 500) {
-                    // 上滑且快速，视为出牌
-                    // 添加震动反馈
-                    if (navigator.vibrate) navigator.vibrate(50);
-                    this.onCardClick(index);
-                }
-            });
-
-            // 悬停音效 & 伤害预览
-            cardEl.addEventListener('mouseenter', () => {
-                if (typeof audioManager !== 'undefined') {
-                    audioManager.playSFX('hover');
-                }
-                this.onCardHover(index);
-            });
-
-            cardEl.addEventListener('mouseleave', () => {
-                this.onCardHoverOut();
-            });
+        handContainer.addEventListener('mouseout', (e) => {
+            const cardEl = e.target.closest('.card');
+            if (!cardEl || !handContainer.contains(cardEl)) return;
+            const toEl = e.relatedTarget;
+            if (toEl && cardEl.contains(toEl)) return;
+            this.onCardHoverOut();
         });
     }
 
@@ -931,13 +1114,6 @@ class Battle {
                 return;
             }
 
-            // 12. 金戈铁马 (realm 12) - 使用攻击牌消耗生命
-            if (this.player.realm === 12 && card.type === 'attack') {
-                const bloodTax = Math.max(1, Math.floor(this.player.maxHp * 0.05));
-                this.player.takeDamage(bloodTax);
-                Utils.showBattleLog(`金戈铁马：消耗 ${bloodTax} 点生命`); // Simplified Log
-            }
-
             // 立即给予视觉反馈
             const cardEls = document.querySelectorAll('#hand-cards .card');
             if (cardEls[cardIndex]) {
@@ -948,44 +1124,36 @@ class Battle {
 
             const target = this.enemies[targetIndex];
 
-            // 触发连击追踪
+            // 播放卡牌 (核心逻辑)
+            const effectiveCost = this.getEffectiveCardCost(card);
+            const results = this.player.playCard(cardIndex, target, { energyCostOverride: effectiveCost });
+            if (results === false) {
+                this.updateHandUI();
+                return;
+            }
+
+            // 12. 金戈铁马 (realm 12) - 使用攻击牌消耗生命
+            if (this.player.realm === 12 && card.type === 'attack') {
+                const bloodTax = Math.max(1, Math.floor(this.player.maxHp * 0.05));
+                this.player.takeDamage(bloodTax);
+                Utils.showBattleLog(`金戈铁马：消耗 ${bloodTax} 点生命`);
+                if (this.checkBattleEnd()) return;
+            }
+
+            // 触发连击追踪（仅成功出牌后）
             if (typeof game !== 'undefined' && game.handleCombo) {
                 game.handleCombo(card.type);
             }
 
-            // 业力系统完全由卡牌效果 (gainSin/gainMerit) 控制，不使用自动钩子
-
-            // 触发法宝使用卡牌效果
-            const context = {
-                damageModifier: 0
-            };
-
-            if (this.player.triggerTreasureEffect) {
-                this.player.triggerTreasureEffect('onCardPlay', card, context);
-            }
-
-            // 破法者 (Lawbreaker)
+            // 破法者 (Lawbreaker)（仅成功出牌后）
             if (card.type === 'attack' && this.player.buffs.blockOnAttack) {
                 this.player.addBlock(this.player.buffs.blockOnAttack);
                 Utils.showBattleLog(`破法者：获得 ${this.player.buffs.blockOnAttack} 护盾`);
             }
 
-            // 播放卡牌 (核心逻辑)
-            const effectiveCost = this.getEffectiveCardCost(card);
-            const results = this.player.playCard(cardIndex, target, { energyCostOverride: effectiveCost });
-
             // 播放音效
             if (typeof audioManager !== 'undefined') {
                 audioManager.playSFX('attack');
-            }
-
-            // 应用法宝的伤害修正
-            if (results && context.damageModifier !== 0) {
-                results.forEach(res => {
-                    if (res.type === 'damage' || res.type === 'penetrate' || res.type === 'damageAll') {
-                        res.value += context.damageModifier;
-                    }
-                });
             }
 
             // 处理效果
@@ -1001,6 +1169,12 @@ class Battle {
             // 计数与追踪
             this.cardsPlayedThisTurn++;
             if (card.type === 'attack') this.playerAttackedThisTurn = true;
+            this.emit('cardPlayed', {
+                card,
+                target,
+                turnNumber: this.turnNumber,
+                cardsPlayedThisTurn: this.cardsPlayedThisTurn
+            });
 
             // 风雷翼
             const windThunder = this.player.activeResonances && this.player.activeResonances.find(r => r.id === 'windThunderWing');
@@ -1284,10 +1458,29 @@ class Battle {
                         'strength': '力量', 'blockOnAttack': '破法盾', 'energyOnVulnerable': '战术优势',
                         'retainBlock': '护盾保留', 'regen': '再生', 'thorns': '反伤', 'reflect': '反弹',
                         'dodge': '闪避', 'dodgeChance': '闪避率', 'freeze': '冰冻', 'slow': '减速',
-                        'paralysis': '麻痹', 'severe_wound': '重伤', 'chaosAura': '混沌光环'
+                        'paralysis': '麻痹', 'severe_wound': '重伤', 'chaosAura': '混沌光环',
+                        'bleed': '流血', 'mark': '破绽'
                     };
                     Utils.showBattleLog(`敌人获得 ${debuffNames[result.buffType] || result.buffType} 效果`);
                 }
+                break;
+
+            case 'bleed':
+                if (target) {
+                    target.buffs.bleed = (target.buffs.bleed || 0) + Math.max(1, result.value || 1);
+                    Utils.showBattleLog(`敌人流血 +${result.value}`);
+                }
+                break;
+
+            case 'mark':
+                if (target) {
+                    target.buffs.mark = (target.buffs.mark || 0) + Math.max(1, result.value || 1);
+                    Utils.showBattleLog(`敌人破绽 +${result.value}`);
+                }
+                break;
+
+            case 'stance':
+                Utils.showBattleLog(`切换架势：${result.value}`);
                 break;
 
             // ========== 新增效果类型处理 ==========
@@ -1409,6 +1602,7 @@ class Battle {
         }
 
         await Utils.sleep(300);
+        this.markUIDirty();
         this.updateBattleUI();
     }
 
@@ -1427,6 +1621,13 @@ class Battle {
                 sourceElement
             };
             amount = this.player.triggerTreasureValueEffect('onBeforeDealDamage', amount, context);
+        }
+
+        // 战斗新机制：架势会影响伤害倍率
+        if (this.player && this.player.stance === 'aggressive') {
+            amount = Math.floor(amount * 1.2);
+        } else if (this.player && this.player.stance === 'defensive') {
+            amount = Math.floor(amount * 0.9);
         }
 
         // 敌人闪避层数：必定闪避一次
@@ -1462,6 +1663,22 @@ class Battle {
         // 14. 混元无极 (realm 14) - 敌人20%抗性
         if (this.player.realm === 14) {
             amount = Math.floor(amount * 0.8);
+        }
+
+        // 传承道统：每场战斗首次攻击增伤
+        const doctrine = this.player && this.player.legacyRunDoctrine ? this.player.legacyRunDoctrine : null;
+        if (
+            doctrine &&
+            doctrine.firstAttackBonusPerBattle > 0 &&
+            !this.playerFirstAttackBoostUsed &&
+            sourceElement !== 'plasma_proc'
+        ) {
+            amount += doctrine.firstAttackBonusPerBattle;
+            this.playerFirstAttackBoostUsed = true;
+            Utils.showBattleLog(`传承道统：首击增伤 +${doctrine.firstAttackBonusPerBattle}`);
+            if (this.game && typeof this.game.handleLegacyMissionProgress === 'function') {
+                this.game.handleLegacyMissionProgress('tempoFirstStrike', 1);
+            }
         }
 
         // 应用力量加成 (Strength)
@@ -1556,6 +1773,26 @@ class Battle {
             amount += enemy.buffs.vulnerable;
         }
 
+        if (enemy.isGhost && enemy.personalityRules && enemy.personalityRules.takenMul) {
+            amount = Math.floor(amount * enemy.personalityRules.takenMul);
+        }
+
+        // 战斗新机制：破绽（Mark）会强化下一次受击并消耗
+        if (enemy.buffs.mark && enemy.buffs.mark > 0) {
+            amount += enemy.buffs.mark;
+            Utils.showBattleLog(`命中破绽！额外伤害 +${enemy.buffs.mark}`);
+            enemy.buffs.mark = 0;
+            delete enemy.buffs.mark;
+
+            const resonance = this.player && this.player.archetypeResonance ? this.player.archetypeResonance : null;
+            if (resonance && resonance.id === 'precision' && !resonance.procUsedThisTurn && resonance.firstMarkHitDraw > 0) {
+                this.player.drawCards(resonance.firstMarkHitDraw);
+                resonance.procUsedThisTurn = true;
+                Utils.showBattleLog(`【破绽心眼】借势抽牌 +${resonance.firstMarkHitDraw}`);
+                this.markUIDirty('hand', 'piles');
+            }
+        }
+
         // 5. 五行克制计算
         if (sourceElement && enemy.element) {
             const multiplier = this.calcElementalMultiplier(sourceElement, enemy.element);
@@ -1640,6 +1877,11 @@ class Battle {
         enemy.currentHp -= finalDamage;
         if (enemy.currentHp < 0) enemy.currentHp = 0;
 
+        // 战斗新机制：阶段化Boss（Phase）切换
+        if (enemy.currentHp > 0 && this.checkPhaseChange) {
+            this.checkPhaseChange(enemy);
+        }
+
         // 击杀触发
         if (wasAlive && enemy.currentHp <= 0) {
             if (this.player.triggerTreasureEffect) {
@@ -1659,7 +1901,7 @@ class Battle {
             }
 
             // Check Battle End Immediately upon kill
-            if (this.checkBattleEnd()) return;
+            if (this.checkBattleEnd()) return finalDamage;
 
             // === Twin Bonds (Dual Boss Vengeance) ===
             if (enemy.isDualBoss) {
@@ -1681,6 +1923,12 @@ class Battle {
             }
         }
 
+        this.emit('damageDealt', {
+            target: enemy,
+            amount: finalDamage,
+            sourceElement,
+            turnNumber: this.turnNumber
+        });
         return finalDamage;
     }
 
@@ -1691,8 +1939,18 @@ class Battle {
         // 禁用结束回合按钮
         document.getElementById('end-turn-btn').disabled = true;
 
+        const turnEndTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        this.lastTurnDuration = Math.max(0, turnEndTime - (this.turnStartTime || turnEndTime));
+        if (this.game && this.game.performanceStats) {
+            const list = this.game.performanceStats.battleTurnDurations || [];
+            list.push(this.lastTurnDuration);
+            if (list.length > 30) list.shift();
+            this.game.performanceStats.battleTurnDurations = list;
+        }
+
         // 玩家回合结束
         this.player.endTurn();
+        this.emit('turnEnd', { turnNumber: this.turnNumber, actor: 'player' });
 
         // 法宝：玩家回合结束触发
         if (this.player.triggerTreasureEffect) {
@@ -1802,6 +2060,7 @@ class Battle {
             this.cardsPlayedThisTurn = 0;
             this.playerAttackedThisTurn = false;
             this.player.startTurn();
+            this.emit('turnStart', { turnNumber: this.turnNumber, actor: 'player' });
 
             // 启用结束回合按钮
             const endTurnBtn = document.getElementById('end-turn-btn');
@@ -1816,6 +2075,7 @@ class Battle {
 
         Utils.showBattleLog('敌人回合...');
 
+        let shouldStartPlayerTurn = false;
         try {
             await Utils.sleep(500);
 
@@ -1830,11 +2090,19 @@ class Battle {
                 this.activeEnvironment.onTurnEnd(this);
                 if (this.checkBattleEnd()) return;
             }
+
+            shouldStartPlayerTurn = true;
         } catch (error) {
             console.error('Enemy Turn Error:', error);
             Utils.showBattleLog('敌人行动异常，跳过...');
+            if (!this.battleEnded) {
+                shouldStartPlayerTurn = true;
+            }
         } finally {
-            // 无论如何都要恢复玩家回合
+            if (!shouldStartPlayerTurn || this.battleEnded) {
+                this.isProcessingCard = false;
+                return;
+            }
 
             // 新回合
             this.turnNumber++;
@@ -1851,17 +2119,26 @@ class Battle {
             }
 
             this.player.startTurn();
+            this.emit('turnStart', { turnNumber: this.turnNumber, actor: 'player' });
+            this.turnStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
             // 启用结束回合按钮
             const endTurnBtn = document.getElementById('end-turn-btn');
             if (endTurnBtn) endTurnBtn.disabled = false;
 
+            this.markUIDirty();
             this.updateBattleUI();
         }
     }
 
     // 敌人回合行动
     async enemyTurn() {
+        if (this.forceEndEnemyTurn) {
+            this.forceEndEnemyTurn = false;
+            Utils.showBattleLog('时间静止：敌方回合被终止');
+            return;
+        }
+
         // 关键修复：护盾应在敌人回合开始时重置（上一回合保留的护盾失效），
         // 而不是在敌人回合结束时（否则本回合获得的护盾无法抵挡玩家攻击）
         for (const enemy of this.enemies) {
@@ -1869,6 +2146,7 @@ class Battle {
         }
 
         for (let i = 0; i < this.enemies.length; i++) {
+            if (this.forceEndEnemyTurn || this.battleEnded) break;
             const enemy = this.enemies[i];
             const enemyEl = document.querySelector(`.enemy[data-index="${i}"]`);
             if (enemy.currentHp <= 0) continue;
@@ -1965,8 +2243,11 @@ class Battle {
                 }
 
                 for (let k = 0; k < actionCount; k++) {
+                    if (this.forceEndEnemyTurn || this.battleEnded) break;
                     // 执行敌人行动
                     await this.executeEnemyAction(enemy, i);
+
+                    if (this.forceEndEnemyTurn || this.battleEnded) break;
 
                     // 检查玩家是否死亡
                     if (!this.player.isAlive()) {
@@ -1980,6 +2261,8 @@ class Battle {
                     if (k < actionCount - 1) await Utils.sleep(500);
                 }
 
+                if (this.forceEndEnemyTurn || this.battleEnded) break;
+
                 await Utils.sleep(300);
             } catch (err) {
                 console.error(`Enemy ${i} action failed:`, err);
@@ -1987,6 +2270,10 @@ class Battle {
             }
         }
 
+        if (this.forceEndEnemyTurn) {
+            this.forceEndEnemyTurn = false;
+            Utils.showBattleLog('时间静止：敌方行动中断');
+        }
 
         // 清除敌人护盾 (moved to start of enemy turn)
         for (const enemy of this.enemies) {
@@ -2027,6 +2314,24 @@ class Battle {
     async processEnemyDebuffs(enemy, enemyIndex) {
         const enemyEl = document.querySelector(`.enemy[data-index="${enemyIndex}"]`);
 
+        // 流血：每回合结算并自然衰减
+        if (enemy.buffs.bleed && enemy.buffs.bleed > 0) {
+            const bleedDamage = enemy.buffs.bleed;
+            enemy.currentHp -= bleedDamage;
+            enemy.buffs.bleed = Math.max(0, enemy.buffs.bleed - 1);
+            if (enemy.buffs.bleed <= 0) delete enemy.buffs.bleed;
+
+            if (enemyEl) {
+                Utils.addFlashEffect(enemyEl, '#a11');
+                Utils.showFloatingNumber(enemyEl, bleedDamage, 'damage');
+            }
+            Utils.showBattleLog(`${enemy.name} 流血，受到 ${bleedDamage} 点伤害`);
+            this.markUIDirty('enemies');
+            this.updateBattleUI();
+            if (this.checkBattleEnd()) return;
+            await Utils.sleep(220);
+        }
+
         // 灼烧
         if (enemy.buffs.burn && enemy.buffs.burn > 0) {
             const burnDamage = enemy.buffs.burn;
@@ -2039,6 +2344,7 @@ class Battle {
             }
             Utils.showBattleLog(`${enemy.name} 受到 ${burnDamage} 点灼烧伤害`);
 
+            this.markUIDirty('enemies');
             this.updateBattleUI();
 
             if (this.checkBattleEnd()) return;
@@ -2058,6 +2364,7 @@ class Battle {
             }
             Utils.showBattleLog(`${enemy.name} 受到 ${poisonDamage} 点中毒伤害`);
 
+            this.markUIDirty('enemies');
             this.updateBattleUI();
 
             if (this.checkBattleEnd()) return;
@@ -2464,24 +2771,41 @@ class Battle {
         }
     }
 
+    finalizeBattle(result) {
+        if (this.battleResolution) return true;
+        this.battleEnded = true;
+        this.battleResolution = result;
+        this.emit('battleEnded', {
+            result,
+            turnNumber: this.turnNumber,
+            enemies: this.enemies
+        });
+        this.clearEventListeners();
+
+        if (result === 'lost') {
+            this.game.onBattleLost();
+        } else if (result === 'won') {
+            this.game.onBattleWon(this.enemies);
+        }
+        return true;
+    }
+
     // 检查战斗是否结束
     checkBattleEnd() {
+        if (this.battleResolution) return true;
+
         // 检查玩家死亡
         if (!this.player.isAlive()) {
-            this.battleEnded = true;
-            this.game.onBattleLost();
-            return true;
+            return this.finalizeBattle('lost');
         }
 
         // 检查所有敌人死亡
-        const allDead = this.enemies.every(e => e.currentHp <= 0);
+        const allDead = this.enemies.length > 0 && this.enemies.every(e => e.currentHp <= 0);
         if (allDead) {
-            this.battleEnded = true;
-            this.game.onBattleWon(this.enemies);
-            return true;
+            return this.finalizeBattle('won');
         }
 
-        return false;
+        return this.battleEnded;
     }
     // 召唤敌人
     summonEnemy(enemyId) {

@@ -1,0 +1,122 @@
+Original prompt: PLEASE IMPLEMENT THIS PLAN: # The Defier 全局优化与丰富计划（内容先行、战斗深度优先、强兼容）
+
+## Work Log
+- Initialized implementation run in Default mode.
+- Baseline repo + tests audited.
+- Implemented M1 foundation: runtime hooks (`window.render_game_to_text`, `window.advanceTime`), save schema bump to 5.1.0, migrateSaveData entry, basic perf telemetry fields.
+- Implemented combat depth core: added bleed/mark/stance effect pipeline across player/battle/AI/ghost; added new cards and upgrade rules.
+- Implemented content enrichment: expanded event pool with 10+ branch events; added map node types `trial` and `forge`.
+- Implemented PVP model upgrade: snapshot normalization + aiProfile/deckArchetype/ruleVersion and personality rule sets.
+- Added new node checks: runtime hooks + save migration + unified `tests/run_node_checks.sh`.
+- Fixed compatibility issue in test VM (`performance` undefined) by hardening battle timing checks with `typeof performance !== 'undefined'` guard.
+- Executed `tests/run_node_checks.sh`: all checks passed.
+- Hardened PVP performance timing to support non-browser contexts (`typeof performance !== 'undefined'`).
+- Re-ran all node checks after final patch: pass.
+- 2026-02-16 QA audit: reran `tests/run_node_checks.sh` (pass).
+- 2026-02-16 QA audit: installed local `playwright` tooling for browser-level smoke checks and executed scripted flows under `output/web-audit/`.
+- 2026-02-16 QA finding: main menu auto-opens `#auth-modal` on boot when cloud config exists; this blocks primary menu interactions until user manually closes modal.
+- 2026-02-16 QA finding: guest path inconsistency. `openSaveSlotsWithSync()` cancel branch sends user to character selection, but `confirmCharacterSelection()`/`startNewGame()` still hard-gate login and bounce back to auth modal.
+- 2026-02-16 QA finding: missing texture asset `assets/images/noise.png` referenced by `css/style.css` causing runtime 404.
+- 2026-02-16 QA finding: `render_game_to_text` reports battle payload on non-battle screens because `this.battle` is always instantiated.
+
+## TODO / Suggestions
+- Align guest mode flow end-to-end: if player chooses guest in `openSaveSlotsWithSync()`, either disable cloud-gate checks for that session or route to a separate offline start path.
+- Revisit startup auth UX: avoid forced login modal at boot; prompt only on explicit cloud actions.
+- Add or remove `assets/images/noise.png` reference to clear 404.
+- Make `renderGameToText().battle` conditional on active battle screen or active enemies.
+- 2026-02-16 Fix: removed startup forced login modal; main menu no longer auto-blocked by auth modal.
+- 2026-02-16 Fix: added `guestMode` flow in Game controller; guest selection now survives character confirm/start and no longer bounces back to login modal.
+- 2026-02-16 Fix: `renderGameToText()` now emits `battle: null` outside `battle-screen`.
+- 2026-02-16 Fix: removed missing texture reference `assets/images/noise.png` from `css/style.css` to eliminate runtime 404.
+- 2026-02-16 Verification: `tests/run_node_checks.sh` pass after fixes.
+- 2026-02-16 Verification: browser audit rerun `output/web-audit-fix/report.json` all workflow checks pass, no console errors.
+- 2026-02-16 Verification: Playwright state sample `output/web-game/fix-check/state-0.json` confirms `mode=main-menu` with `battle=null`.
+- 2026-02-16 M1 implementation: added Codex development blueprint at `docs/codex_development_blueprint.md` (milestones, acceptance criteria, workflow).
+- 2026-02-16 M1 implementation: upgraded battle log system in `js/core/utils.js` with category classification, capped history buffer, toggleable history panel, and filter buttons.
+- 2026-02-16 M1 implementation: enhanced battle log visuals in `css/style.css` (`#battle-log` category states + `.battle-log-panel` styles).
+- 2026-02-16 M1 implementation: added onboarding state machine in `js/game.js` (`guideState` load/save/mark) with one-time main menu hint and first-battle guidance; added `L` hotkey to toggle battle log panel.
+- 2026-02-16 M1 implementation: hooked first battle onboarding trigger in `js/core/battle.js` (`showFirstBattleGuide()`).
+- 2026-02-16 verification: `tests/run_node_checks.sh` passed.
+- 2026-02-16 verification: full browser regression `output/web-audit-dev/report.json` passed with no console errors.
+- 2026-02-16 verification: feature-focused audit `output/web-feature-audit/report.json` passed (onboarding + log panel + filters).
+- 2026-02-16 verification: standard Playwright client check `output/web-game/dev-m1/` generated screenshot/state successfully.
+- 2026-02-16 M2 implementation: expanded archetype card content in `js/data/cards.js`:
+  - Added 13 new cards for two build lines (`hemorrhage` and `precision`) with full metadata (`keywords/comboTag/synergyGroup`), pool integration, and upgrade rules.
+  - Added `ARCHETYPE_PACKS` plus helper APIs (`getArchetypePack`, `getRandomArchetypeCard`, `inferDeckArchetype`) and reward bias in `getRewardCards(..., deck)`.
+- 2026-02-16 M2 implementation: updated reward generation in `js/game.js`:
+  - Reward cards now pass current deck context for archetype bias.
+  - Trial node victories now offer 3 reward card choices (was 2).
+- 2026-02-16 M2 implementation: expanded event content in `js/data/events.js` with 4 new tradeoff events:
+  - `bloodForgeCovenant`, `mirrorNeedleDojo`, `shatteredCompass`, `debtboundAnvil`.
+  - Event pool weights updated to include these events in `common/uncommon/rare`.
+- 2026-02-16 M2 implementation: tuned map risk-reward in `js/core/map.js`:
+  - Added dynamic node weighting by run progress, current gold, and deck upgradable count.
+  - Reworked forge node economy: low-gold fallback EXP, stronger refund path when no upgradable cards, and optional premium double-forge for high-investment runs.
+- 2026-02-16 test: added `tests/sanity_content_archetype_checks.js` (archetype integrity + event wiring + reward bias assertions).
+- 2026-02-16 test: updated `tests/run_node_checks.sh` to include content/archetype sanity checks.
+- 2026-02-16 verification: reran `tests/run_node_checks.sh` (pass).
+- 2026-02-16 verification: reran browser audit `output/web-audit-dev/report.json` (all pass, no console errors).
+- 2026-02-16 verification: reran feature audit `output/web-feature-audit/report.json` (all pass, no console errors).
+- 2026-02-16 verification: Playwright client screenshot/state generated at `output/web-game/dev-m2/`.
+- 2026-02-16 M2 verification tooling: added deterministic event debug hook in `js/data/events.js` (`window.__debugEventQueue` / `window.__debugEventId`) for reproducible browser audits.
+- 2026-02-16 test: added `tests/sanity_map_weight_checks.js` to validate map dynamic weight normalization and expected trial/forge progression via Monte Carlo sampling.
+- 2026-02-16 test: added `tests/browser_event_branch_audit.mjs` for deterministic branch replay of new events (`bloodForgeCovenant`, `mirrorNeedleDojo`, `shatteredCompass`, `debtboundAnvil`) and effect delta assertions.
+- 2026-02-16 test: updated `tests/run_node_checks.sh` to include `sanity_map_weight_checks`.
+- 2026-02-16 verification: reran `tests/run_node_checks.sh` (pass, including new map-weight test).
+- 2026-02-16 verification: ran browser event branch audit `output/web-event-branch-audit/report.json` (all findings pass, no console errors).
+- 2026-02-16 verification: reran browser feature audit `output/web-feature-audit/report.json` (all pass).
+- 2026-02-16 verification: reran browser audit `output/web-audit-dev/report.json` (second run all pass; first run had transient state pollution and was revalidated).
+- 2026-02-16 verification: reran Playwright client capture at `output/web-game/dev-m2b/`.
+
+## TODO / Suggestions
+- Consider adding a visible UI button (not only hotkey) for opening battle log panel on mobile.
+- Add automated assertion for battle log category distribution in long battles to detect noisy logs early.
+- Add coverage for interrupt-type event branches (`battle` / `upgradeCard` / `trial`) in browser audit with dedicated cleanup hooks.
+- 2026-02-16 M3 implementation: added out-of-run progression system `传承殿`:
+  - New state in `js/game.js`: `legacyProgress` (`essence/spent/upgrades`) with local persistence key `theDefierLegacyV1`.
+  - Added upgrade catalog + purchase/reset flow + screen renderer (`showLegacyScreen` / `initInheritanceScreen`).
+  - Added save/migration integration (`legacyProgress` in `saveGame` + `migrateSaveData` + `loadGame` restore).
+  - Added runtime text output section `render_game_to_text().legacy`.
+- 2026-02-16 M3 gameplay integration:
+  - `js/core/player.js`: add `legacyBonuses` runtime field; integrate into `recalculateStats` and first-turn draw logic.
+  - `js/core/map.js`: forge costs now respect `legacyBonuses.forgeCostDiscount` and dynamic map weight affordability check uses discounted expected forge cost.
+  - `js/game.js`: `startNewGame` now applies inheritance bonuses to next run; `onRealmComplete`/`onBattleLost` award legacy essence.
+- 2026-02-16 M3 UI:
+  - `index.html`: added main-menu utility entry `传承殿` and new screen `#inheritance-screen`.
+  - `index.html`: added game-over stat line `#stat-legacy` (legacy gain + current stash display).
+  - `css/style.css`: added dedicated inheritance screen layout/styles (desktop + mobile responsive).
+- 2026-02-16 test: added `tests/sanity_legacy_progression_checks.js` (migration + normalize + bonus aggregation + buy/reset + apply flow).
+- 2026-02-16 test: updated `tests/run_node_checks.sh` to include `sanity_legacy_progression_checks`.
+- 2026-02-16 verification:
+  - `bash tests/run_node_checks.sh` pass (including new legacy checks).
+  - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-dev` pass, no console errors.
+  - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` pass, no console errors.
+  - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4173 output/web-event-branch-audit` pass, no console errors.
+  - `node tests/web_game_playwright_client.mjs ... output/web-game/dev-m3` generated screenshot/state.
+  - `node tests/web_game_playwright_client.mjs ... output/web-game/dev-m3-legacy` confirms `mode=inheritance-screen` in `state-0.json`.
+- Next suggestions:
+  - Add one-click debug grant in inheritance screen (dev-only) to accelerate balance iteration.
+  - Add a dedicated browser audit case that purchases one inheritance level and verifies `startNewGame` start stats delta.
+  - Tune essence economy (current baseline: realm clear `2 + floor(realm/2)`, defeat consolation `floor((realm-1)/2)`).
+- 2026-02-16 M3.1 implementation: added inheritance preset system (one-click auto allocation)
+  - `js/game.js`: new `getLegacyPresetCatalog()` and `applyLegacyPreset(...)`.
+  - Added preset persistence `legacyProgress.lastPreset` and migration-safe normalization.
+  - `buyLegacyUpgrade` now supports silent mode for batch allocation.
+  - `initInheritanceScreen` now renders preset buttons and applies preset through confirm modal.
+- 2026-02-16 M3.1 UI:
+  - `index.html`: added `#inheritance-presets` container.
+  - `css/style.css`: added `.inheritance-presets` + `.inheritance-preset-btn` visual states.
+- 2026-02-16 M3.1 test:
+  - extended `tests/sanity_legacy_progression_checks.js` with preset flow assertions (allocation + lastPreset persistence).
+  - added browser-level preset audit script: `tests/browser_inheritance_audit.mjs`.
+- 2026-02-16 M3.1 verification:
+  - `bash tests/run_node_checks.sh` pass.
+  - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-dev` pass.
+  - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` pass.
+  - `node tests/browser_inheritance_audit.mjs http://127.0.0.1:4173 output/web-inheritance-audit` pass (all findings true, no console errors).
+- 2026-02-24 bugfix: fixed campfire upgrade path in `js/game.js` (`showCampfireUpgrade` confirm callback) to call `completeCampfire()` after upgrading card, so rest-node state is completed and cannot be re-triggered.
+- 2026-02-24 verification: targeted Playwright scenario (elevated) confirms post-upgrade campfire node lock (`nodeCompleted=true`, `modalAfterReclick=false`, no console errors). Artifacts: `output/web-game/campfire-fix-verify/report.json`, `output/web-game/campfire-fix-verify/shot-after-upgrade.png`, `output/web-game/campfire-fix-verify/state.json`.
+- 2026-02-24 verification: ran web-game client `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4180 ... --screenshot-dir output/web-game/campfire-fix`; produced screenshot/state with no `errors-0.json`.
+
+## TODO / Suggestions
+- Add a dedicated automated browser audit case for campfire action variants (rest/upgrade/remove) to prevent regressions where node completion is skipped in any branch.

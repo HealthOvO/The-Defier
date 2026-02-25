@@ -53,6 +53,7 @@ class Player {
 
         // 状态
         this.buffs = {};
+        this.stance = 'neutral';
 
         // 永久属性加成 (来自事件)
         this.permaBuffs = {
@@ -62,6 +63,21 @@ class Player {
             strength: 0,
             defense: 0
         };
+        this.legacyBonuses = {
+            startMaxHp: 0,
+            startGold: 0,
+            startDraw: 0,
+            firstTurnDrawBonus: 0,
+            forgeCostDiscount: 0
+        };
+        this.legacyRunDoctrine = {
+            presetId: null,
+            openingBattleBlockBonus: 0,
+            firstAttackBonusPerBattle: 0,
+            firstForgeExtraUpgradeOnce: 0,
+            firstForgeBoostUsed: false
+        };
+        this.legacyRunMission = null;
 
         // 遗物
         this.relic = charData.relic;
@@ -105,6 +121,7 @@ class Player {
 
         // 激活的共鸣
         this.activeResonances = [];
+        this.archetypeResonance = null;
 
         // 游戏进度
         this.realm = 1;
@@ -238,6 +255,12 @@ class Player {
             newDrawCount += (this.permaBuffs.draw || 0);
         }
 
+        // 4.5 局外传承加成
+        if (this.legacyBonuses) {
+            newMaxHp += (this.legacyBonuses.startMaxHp || 0);
+            newDrawCount += (this.legacyBonuses.startDraw || 0);
+        }
+
         // 5. 天域环境影响
         // Realm 10: 大地束缚 - 灵力上限-1
         if (this.realm === 10) {
@@ -299,6 +322,76 @@ class Player {
                 // Utils.showBattleLog(`法则共鸣激活：${resonance.name}`); // 避免刷屏，仅在变化时提示更好
             }
         }
+    }
+
+    getArchetypeResonanceConfig(archetypeId, matchCount) {
+        if (!archetypeId || matchCount < 8) return null;
+        const tier = matchCount >= 12 ? 2 : 1;
+
+        if (archetypeId === 'hemorrhage') {
+            return {
+                id: 'hemorrhage',
+                name: '血蚀连斩',
+                tier,
+                matchCount,
+                applyBleedBonus: tier,
+                applyMarkBonus: 0,
+                firstMarkHitDraw: 0,
+                openingBlock: tier * 3,
+                procUsedThisTurn: false
+            };
+        }
+
+        if (archetypeId === 'precision') {
+            return {
+                id: 'precision',
+                name: '破绽心眼',
+                tier,
+                matchCount,
+                applyBleedBonus: 0,
+                applyMarkBonus: tier,
+                firstMarkHitDraw: tier,
+                openingBlock: 0,
+                procUsedThisTurn: false
+            };
+        }
+
+        return null;
+    }
+
+    resolveArchetypeResonance() {
+        if (!Array.isArray(this.deck) || this.deck.length === 0) {
+            this.archetypeResonance = null;
+            return null;
+        }
+
+        let archetypeId = null;
+        if (typeof inferDeckArchetype === 'function') {
+            archetypeId = inferDeckArchetype(this.deck);
+        }
+
+        if (!archetypeId) {
+            this.archetypeResonance = null;
+            return null;
+        }
+
+        let matchCount = 0;
+        this.deck.forEach(card => {
+            if (!card) return;
+            if (archetypeId === 'hemorrhage') {
+                const isHemorrhage = card.synergyGroup === 'hemorrhage' ||
+                    (Array.isArray(card.keywords) && card.keywords.includes('bleed'));
+                if (isHemorrhage) matchCount += 1;
+            } else if (archetypeId === 'precision') {
+                const isPrecision = card.synergyGroup === 'precision' ||
+                    card.synergyGroup === 'stance' ||
+                    (Array.isArray(card.keywords) && (card.keywords.includes('mark') || card.keywords.includes('stance')));
+                if (isPrecision) matchCount += 1;
+            }
+        });
+
+        this.archetypeResonance = this.getArchetypeResonanceConfig(archetypeId, matchCount);
+        return this.archetypeResonance;
     }
 
     // 准备战斗
@@ -400,6 +493,7 @@ class Player {
 
         this.currentEnergy = this.baseEnergy;
         this.buffs = {};
+        this.resolveArchetypeResonance();
 
         // 应用永久力量加成
         if (this.permaBuffs && this.permaBuffs.strength) {
@@ -453,6 +547,16 @@ class Player {
             }
             Utils.showBattleLog('智慧之环：获得额外技能牌');
         }
+
+        if (this.archetypeResonance && this.archetypeResonance.openingBlock > 0) {
+            this.addBlock(this.archetypeResonance.openingBlock);
+        }
+
+        // 局外传承预设：每场战斗开场额外护盾
+        if (this.legacyRunDoctrine && this.legacyRunDoctrine.openingBattleBlockBonus > 0) {
+            this.addBlock(this.legacyRunDoctrine.openingBattleBlockBonus);
+            Utils.showBattleLog(`传承道统：开场护盾 +${this.legacyRunDoctrine.openingBattleBlockBonus}`);
+        }
     }
 
     // 应用命环加成 - 已废弃，由recalculateStats替代
@@ -466,6 +570,9 @@ class Player {
 
         this.turnNumber++; // 增加回合计数
         this.currentEnergy = this.baseEnergy;
+        if (this.archetypeResonance) {
+            this.archetypeResonance.procUsedThisTurn = false;
+        }
 
         // 1. 灵气稀薄 (realm 1) - 改为护盾效果-20%，更友好的新手体验
         // 效果在addBlock方法中处理
@@ -514,6 +621,12 @@ class Player {
         if (this.realm === 3 && this.turnNumber === 1) {
             drawAmount = Math.max(0, drawAmount - 1);
             Utils.showBattleLog('重力压制：首回合抽牌-1');
+        }
+
+        // 局外传承：首回合额外抽牌
+        if (this.turnNumber === 1 && this.legacyBonuses && this.legacyBonuses.firstTurnDrawBonus > 0) {
+            drawAmount += this.legacyBonuses.firstTurnDrawBonus;
+            Utils.showBattleLog(`传承启示：首回合额外抽 ${this.legacyBonuses.firstTurnDrawBonus} 张牌`);
         }
 
         // 敏捷之环 - 额外抽牌
@@ -756,6 +869,10 @@ class Player {
         if (amount <= 0) return;
 
         this.block += amount;
+
+        if (this.game && typeof this.game.handleLegacyMissionProgress === 'function') {
+            this.game.handleLegacyMissionProgress('gainBlock', amount);
+        }
     }
 
     // 治疗
@@ -820,6 +937,13 @@ class Player {
         if (typeof amount !== 'number' || isNaN(amount)) {
             console.error('takeDamage received invalid amount', amount);
             amount = 0;
+        }
+
+        // 战斗新机制：架势影响承伤
+        if (this.stance === 'aggressive') {
+            amount = Math.floor(amount * 1.1);
+        } else if (this.stance === 'defensive') {
+            amount = Math.floor(amount * 0.85);
         }
 
         // 检查金刚法相（无欲 - 功德满值触发）
@@ -900,6 +1024,12 @@ class Player {
         // 检查易伤 (Vulnerable)
         if (this.buffs.vulnerable && this.buffs.vulnerable > 0) {
             amount = Math.floor(amount * 1.5);
+        }
+
+        if (this.buffs.mark && this.buffs.mark > 0) {
+            amount += this.buffs.mark;
+            Utils.showBattleLog(`你被抓到破绽！额外受到 ${this.buffs.mark} 伤害`);
+            delete this.buffs.mark;
         }
 
         // 检查减伤 Buff (天地同寿等)
@@ -1229,6 +1359,14 @@ class Player {
                 }
                 return { type: 'gainMerit', value };
 
+            case 'setStance': {
+                const next = effect.stance || effect.value || 'neutral';
+                const stance = ['neutral', 'aggressive', 'defensive'].includes(next) ? next : 'neutral';
+                this.stance = stance;
+                const stanceText = stance === 'aggressive' ? '进攻' : (stance === 'defensive' ? '守势' : '中和');
+                return { type: 'stance', value: stanceText };
+            }
+
             case 'discardHand':
                 const discardedCount = this.hand.length;
                 while (this.hand.length > 0) {
@@ -1255,6 +1393,10 @@ class Player {
 
                 if (effect.condition === 'lowHp') {
                     if (this.currentHp / this.maxHp < (effect.threshold || 0.5)) {
+                        conditionMet = true;
+                    }
+                } else if (effect.condition === 'marked') {
+                    if (target && target.buffs && target.buffs.mark && target.buffs.mark > 0) {
                         conditionMet = true;
                     }
                 } else if (effect.condition === 'sealed') {
@@ -1340,6 +1482,20 @@ class Player {
 
             case 'debuff':
                 return { type: 'debuff', buffType: effect.buffType, value: effect.value, target: effect.target };
+
+            case 'applyBleed':
+                return {
+                    type: 'bleed',
+                    value: Math.max(1, effect.value || 1) + (this.archetypeResonance ? (this.archetypeResonance.applyBleedBonus || 0) : 0),
+                    target: effect.target
+                };
+
+            case 'applyMark':
+                return {
+                    type: 'mark',
+                    value: Math.max(1, effect.value || 1) + (this.archetypeResonance ? (this.archetypeResonance.applyMarkBonus || 0) : 0),
+                    target: effect.target
+                };
 
             case 'randomDamage':
                 const randValue = Utils.random(effect.minValue, effect.maxValue);
@@ -1558,6 +1714,8 @@ class Player {
             weak: '虚弱',
             vulnerable: '易伤',
             poison: '中毒',
+            bleed: '流血',
+            mark: '破绽',
             burn: '灼烧',
             thorns: '荆棘',
             dodge: '闪避',
@@ -1620,6 +1778,8 @@ class Player {
             weak: '虚弱',
             vulnerable: '易伤',
             poison: '中毒',
+            bleed: '流血',
+            mark: '破绽',
             burn: '灼烧',
             paralysis: '麻痹',
             stun: '眩晕',
@@ -1648,6 +1808,13 @@ class Player {
             this.buffs.poison--;
             if (this.buffs.poison <= 0) delete this.buffs.poison;
             Utils.showBattleLog(`受到中毒伤害！剩余 ${this.buffs.poison || 0} 层`);
+        }
+
+        if (this.buffs.bleed) {
+            this.takeDamage(this.buffs.bleed);
+            this.buffs.bleed = Math.max(0, this.buffs.bleed - 1);
+            if (this.buffs.bleed <= 0) delete this.buffs.bleed;
+            Utils.showBattleLog(`流血发作！`);
         }
 
         // 铁布衫：下回合获得护盾
@@ -2000,6 +2167,7 @@ class Player {
             deck: this.compressCardList(this.deck),
 
             buffs: this.buffs,
+            stance: this.stance || 'neutral',
             fateRing: this.fateRing, // FateRing needs its own compression ideally, but it's small usually
             // 压缩法则列表
             collectedLaws: this.collectedLaws.map(l => ({ id: l.id })),
@@ -2018,6 +2186,9 @@ class Player {
             })),
             equippedTreasures: (this.equippedTreasures || []).map(t => t.id), // 只存ID即可
             permaBuffs: this.permaBuffs,
+            legacyBonuses: this.legacyBonuses,
+            legacyRunDoctrine: this.legacyRunDoctrine,
+            legacyRunMission: this.legacyRunMission,
             maxRealmReached: this.maxRealmReached || 1
         };
     }

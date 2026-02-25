@@ -26,7 +26,15 @@ class GhostEnemy {
         this.discardPile = [];
 
         // AI
-        const personality = data.config?.personality || 'balanced';
+        const personality = data.config?.aiProfile || data.config?.personality || 'balanced';
+        this.personalityRules = data.config?.personalityRules || {
+            damageMul: 1.0,
+            takenMul: 1.0,
+            regenEnergyPerTurn: 0,
+            hpMul: 1.0
+        };
+        this.maxHp = Math.floor(this.maxHp * (this.personalityRules.hpMul || 1.0));
+        this.currentHp = Math.min(this.maxHp, this.currentHp);
         this.ai = new AIController({ personality });
 
         // 意图显示 (默认未知)
@@ -99,9 +107,19 @@ class GhostEnemy {
      */
     startTurn() {
         this.energy = this.maxEnergy;
+        if (this.personalityRules.regenEnergyPerTurn) {
+            this.energy += this.personalityRules.regenEnergyPerTurn;
+        }
         this.block = 0; // PVP规则：回合开始护盾清零(除非有保留)
         // Draw cards (Standard 5)
         this.drawCards(5);
+
+        if (this.buffs.bleed && this.buffs.bleed > 0) {
+            const bleedDamage = this.buffs.bleed;
+            this.currentHp = Math.max(0, this.currentHp - bleedDamage);
+            this.buffs.bleed = Math.max(0, this.buffs.bleed - 1);
+            if (this.buffs.bleed <= 0) delete this.buffs.bleed;
+        }
 
         // Process Buffs (Burn, Poison, etc) - simplified, usually handled by Battle.processTurnStart
     }
@@ -217,6 +235,7 @@ class GhostEnemy {
             if (me.buffs.strength) dmg += me.buffs.strength;
             if (player.buffs.vulnerable) dmg += player.buffs.vulnerable;
             if (me.buffs.weak) dmg = Math.floor(dmg * 0.75);
+            if (this.personalityRules.damageMul) dmg = Math.floor(dmg * this.personalityRules.damageMul);
             return Math.max(0, Math.floor(dmg));
         };
 
@@ -384,6 +403,18 @@ class GhostEnemy {
             case 'debuff':
             case 'debuffAll':
                 addBuff(effect.target === 'self' ? me : player, effect.buffType, Math.floor(value));
+                break;
+
+            case 'applyBleed':
+                addBuff(effect.target === 'self' ? me : player, 'bleed', Math.max(1, Math.floor(value)));
+                break;
+
+            case 'applyMark':
+                addBuff(effect.target === 'self' ? me : player, 'mark', Math.max(1, Math.floor(value)));
+                break;
+
+            case 'setStance':
+                me.stance = effect.stance || 'neutral';
                 break;
 
             case 'removeBlock':

@@ -18,6 +18,7 @@ const CardEffects = {
 
     // 状态存储 (使用 WeakMap 避免内存泄漏)
     states: new WeakMap(),
+    trackedElements: new Set(),
 
     /**
      * 初始化单个卡牌的3D效果
@@ -32,20 +33,28 @@ const CardEffects = {
             target: { x: 50, y: 50, rotateX: 0, rotateY: 0 },
             rafId: null,
             isInteracting: false,
-            resetTimer: null
+            resetTimer: null,
+            handlers: {}
         };
         this.states.set(cardElement, state);
+        this.trackedElements.add(cardElement);
 
         // 绑定鼠标事件
-        cardElement.addEventListener('mouseenter', (e) => this.onEnter(e, cardElement));
-        cardElement.addEventListener('mousemove', (e) => this.onMove(e, cardElement));
-        cardElement.addEventListener('mouseleave', (e) => this.onLeave(e, cardElement));
+        state.handlers.onEnter = (e) => this.onEnter(e, cardElement);
+        state.handlers.onMove = (e) => this.onMove(e, cardElement);
+        state.handlers.onLeave = (e) => this.onLeave(e, cardElement);
+        cardElement.addEventListener('mouseenter', state.handlers.onEnter);
+        cardElement.addEventListener('mousemove', state.handlers.onMove);
+        cardElement.addEventListener('mouseleave', state.handlers.onLeave);
 
         // 触摸事件支持
         if (this.config.enableOnMobile) {
-            cardElement.addEventListener('touchstart', (e) => this.onTouchStart(e, cardElement), { passive: true });
-            cardElement.addEventListener('touchmove', (e) => this.onTouchMove(e, cardElement), { passive: true });
-            cardElement.addEventListener('touchend', (e) => this.onLeave(e, cardElement));
+            state.handlers.onTouchStart = (e) => this.onTouchStart(e, cardElement);
+            state.handlers.onTouchMove = (e) => this.onTouchMove(e, cardElement);
+            state.handlers.onTouchEnd = (e) => this.onLeave(e, cardElement);
+            cardElement.addEventListener('touchstart', state.handlers.onTouchStart, { passive: true });
+            cardElement.addEventListener('touchmove', state.handlers.onTouchMove, { passive: true });
+            cardElement.addEventListener('touchend', state.handlers.onTouchEnd);
         }
     },
 
@@ -208,7 +217,16 @@ const CardEffects = {
             if (state.resetTimer) {
                 clearTimeout(state.resetTimer);
             }
+            if (state.handlers) {
+                if (state.handlers.onEnter) cardElement.removeEventListener('mouseenter', state.handlers.onEnter);
+                if (state.handlers.onMove) cardElement.removeEventListener('mousemove', state.handlers.onMove);
+                if (state.handlers.onLeave) cardElement.removeEventListener('mouseleave', state.handlers.onLeave);
+                if (state.handlers.onTouchStart) cardElement.removeEventListener('touchstart', state.handlers.onTouchStart);
+                if (state.handlers.onTouchMove) cardElement.removeEventListener('touchmove', state.handlers.onTouchMove);
+                if (state.handlers.onTouchEnd) cardElement.removeEventListener('touchend', state.handlers.onTouchEnd);
+            }
             this.states.delete(cardElement);
+            this.trackedElements.delete(cardElement);
             cardElement.classList.remove('card--interacting');
         }
     }
@@ -216,11 +234,16 @@ const CardEffects = {
 
 // 导出到全局
 window.CardEffects = CardEffects;
+let cardEffectsObserver = null;
 
 // DOM加载完成后自动初始化已有卡牌
 document.addEventListener('DOMContentLoaded', () => {
+    if (cardEffectsObserver) {
+        cardEffectsObserver.disconnect();
+    }
+
     // 使用 MutationObserver 监听动态添加的卡牌
-    const observer = new MutationObserver((mutations) => {
+    cardEffectsObserver = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
             mutation.addedNodes.forEach((node) => {
                 if (node.nodeType === 1) { // Element node
@@ -236,11 +259,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    observer.observe(document.body, {
+    cardEffectsObserver.observe(document.body, {
         childList: true,
         subtree: true
     });
 
     // 初始化现有卡牌
     CardEffects.initAll();
+});
+
+window.addEventListener('beforeunload', () => {
+    if (cardEffectsObserver) {
+        cardEffectsObserver.disconnect();
+        cardEffectsObserver = null;
+    }
+    CardEffects.trackedElements.forEach((cardEl) => {
+        CardEffects.destroy(cardEl);
+    });
 });
