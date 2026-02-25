@@ -244,6 +244,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 使用 MutationObserver 监听动态添加的卡牌
     cardEffectsObserver = new MutationObserver((mutations) => {
+        const cleanupRemovedNode = (node) => {
+            if (!node || node.nodeType !== 1) return;
+            if (node.classList && node.classList.contains('card')) {
+                CardEffects.destroy(node);
+            }
+            if (node.querySelectorAll) {
+                node.querySelectorAll('.card').forEach(card => CardEffects.destroy(card));
+            }
+        };
+
         mutations.forEach((mutation) => {
             mutation.addedNodes.forEach((node) => {
                 if (node.nodeType === 1) { // Element node
@@ -255,6 +265,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         node.querySelectorAll('.card').forEach(card => CardEffects.init(card));
                     }
                 }
+            });
+
+            mutation.removedNodes.forEach((node) => {
+                cleanupRemovedNode(node);
             });
         });
     });
@@ -273,7 +287,7 @@ window.addEventListener('beforeunload', () => {
         cardEffectsObserver.disconnect();
         cardEffectsObserver = null;
     }
-    CardEffects.trackedElements.forEach((cardEl) => {
+    Array.from(CardEffects.trackedElements).forEach((cardEl) => {
         CardEffects.destroy(cardEl);
     });
 });

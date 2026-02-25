@@ -14,6 +14,8 @@ class Game {
         this.currentScreen = 'main-menu';
         this.currentEnemies = [];
         this.currentBattleNode = null; // 记录当前战斗节点
+        this.mode = 'pve';
+        this.pvpOpponentRank = null;
         this.pvpMatchTicket = null;
         this.stealAttempted = false;
         this.rewardCardSelected = false; // 防止重复选牌
@@ -1813,20 +1815,26 @@ class Game {
             const theme = REALM_THEMES[i] || { icon: '❓', color: '#fff', bg: '#222' };
 
             // Apply Theme
-            if (isUnlocked) {
-                // realmCard.style.background = theme.bg; // Removed for Ink Gold Streamer style
-
+            // 设计要求：未解锁重天也展示背景图，仅通过遮罩和锁定标识区分状态。
+            try {
                 if (theme.bgImage) {
-                    realmCard.style.backgroundImage = `linear-gradient(to bottom, rgba(0,0,0,0) 30%, rgba(0,0,0,0.95) 100%), url('${theme.bgImage}')`;
+                    const overlay = isUnlocked
+                        ? 'linear-gradient(to bottom, rgba(0,0,0,0) 30%, rgba(0,0,0,0.95) 100%)'
+                        : 'linear-gradient(to bottom, rgba(0,0,0,0.35) 20%, rgba(0,0,0,0.92) 100%)';
+                    realmCard.style.backgroundImage = `${overlay}, url('${theme.bgImage}')`;
                     realmCard.style.backgroundSize = 'cover';
                     realmCard.style.backgroundPosition = 'center';
                     realmCard.style.textShadow = '0 2px 4px #000';
+                } else if (theme.bg) {
+                    realmCard.style.background = theme.bg;
                 }
-
-                realmCard.style.borderColor = 'rgba(255,255,255,0.1)';
-                // We'll let CSS hover handle the gold border, but we can set a custom property for the glow
-                realmCard.style.setProperty('--theme-color', theme.color);
+            } catch (e) {
+                console.warn('Realm card theme apply failed:', i, e);
             }
+
+            realmCard.style.borderColor = isUnlocked ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.08)';
+            // We'll let CSS hover handle the gold border, but we can set a custom property for the glow
+            realmCard.style.setProperty('--theme-color', theme.color);
 
             // Icon selection
             // default to empty for unlocked realms as per user request
@@ -1876,10 +1884,13 @@ class Game {
 
         // Auto-select logic
         let targetRealm = 1;
-        if (this.unlockedRealms && this.unlockedRealms.length > 0) {
-            targetRealm = Math.max(...this.unlockedRealms);
+        const unlockedRealms = Array.isArray(this.unlockedRealms) && this.unlockedRealms.length > 0
+            ? this.unlockedRealms
+            : [1];
+        if (unlockedRealms.length > 0) {
+            targetRealm = Math.max(...unlockedRealms);
         }
-        if (this.lastSelectedRealmId && this.unlockedRealms.includes(this.lastSelectedRealmId)) {
+        if (this.lastSelectedRealmId && unlockedRealms.includes(this.lastSelectedRealmId)) {
             targetRealm = this.lastSelectedRealmId;
         }
 
@@ -1910,7 +1921,8 @@ class Game {
         if (enterBtn) {
             enterBtn.disabled = false;
             // Update button text contextually
-            const isCompleted = this.unlockedRealms.includes(realmId + 1);
+            const unlocked = Array.isArray(this.unlockedRealms) ? this.unlockedRealms : [1];
+            const isCompleted = unlocked.includes(realmId + 1);
             const btnText = enterBtn.querySelector('.btn-text') || enterBtn;
             if (isCompleted) {
                 // enterBtn.innerHTML = '<span class="btn-text">重修此界</span>'; 
@@ -2020,7 +2032,8 @@ class Game {
 
         // Cost Display (if re-entering)
         const costDisplay = document.getElementById('realm-cost-display');
-        const isCompleted = this.unlockedRealms.includes(realmId + 1);
+        const unlocked = Array.isArray(this.unlockedRealms) ? this.unlockedRealms : [1];
+        const isCompleted = unlocked.includes(realmId + 1);
         if (costDisplay) {
             if (isCompleted) {
                 costDisplay.style.display = 'block';
@@ -2518,7 +2531,18 @@ class Game {
 
     // 开始战斗 - 保存当前节点
     startBattle(enemies, node = null) {
-        this.currentEnemies = enemies;
+        const enemyList = Array.isArray(enemies) ? enemies : [enemies];
+        const isPvpBattle = enemyList.some(e => e && e.isGhost);
+        this.mode = isPvpBattle ? 'pvp' : 'pve';
+        if (!isPvpBattle) {
+            this.pvpOpponentRank = null;
+            this.pvpMatchTicket = null;
+            if (typeof PVPService !== 'undefined' && typeof PVPService.clearActiveMatch === 'function') {
+                PVPService.clearActiveMatch();
+            }
+        }
+
+        this.currentEnemies = enemyList;
         this.currentBattleNode = node;
         this.stealAttempted = false;
         this.rewardCardSelected = false;
@@ -2526,7 +2550,7 @@ class Game {
         this.lastCardType = null;
 
         this.showScreen('battle-screen');
-        this.battle.init(enemies);
+        this.battle.init(enemyList);
 
         // 隐藏连击显示
         this.hideCombo();
@@ -2713,9 +2737,12 @@ class Game {
         const oppScore = document.getElementById('pvp-result-opp-score');
 
         // Report
-        let result = { newRating: 1000, ratingChange: 0 };
+        let result = {
+            newRating: (typeof PVPService !== 'undefined' && PVPService.currentRankData) ? (PVPService.currentRankData.score || 1000) : 1000,
+            delta: 0
+        };
         try {
-            if (PVPService) {
+            if (typeof PVPService !== 'undefined') {
                 result = await PVPService.reportMatchResult(true, this.pvpOpponentRank, this.pvpMatchTicket);
             }
         } catch (e) {
@@ -2733,12 +2760,15 @@ class Game {
             scoreVal.textContent = result.newRating;
             // Fix: EloCalculator returns 'delta', not 'ratingChange'
             const change = result.delta !== undefined ? result.delta : (result.ratingChange || 0);
-            deltaVal.textContent = `+${change}`;
+            deltaVal.textContent = change >= 0 ? `+${change}` : `${change}`;
 
             if (this.pvpOpponentRank && this.pvpOpponentRank.user) {
                 oppName.textContent = this.pvpOpponentRank.user.username || '未知对手';
                 oppScore.textContent = this.pvpOpponentRank.score || 1000;
             }
+        }
+        if (result && result.rejected) {
+            Utils.showBattleLog('PVP 结算校验未通过，本场积分未变动。');
         }
     }
 
@@ -2752,9 +2782,12 @@ class Game {
         const oppScore = document.getElementById('pvp-result-opp-score');
 
         // Report
-        let result = { newRating: 1000, ratingChange: 0 };
+        let result = {
+            newRating: (typeof PVPService !== 'undefined' && PVPService.currentRankData) ? (PVPService.currentRankData.score || 1000) : 1000,
+            delta: 0
+        };
         try {
-            if (PVPService) {
+            if (typeof PVPService !== 'undefined') {
                 result = await PVPService.reportMatchResult(false, this.pvpOpponentRank, this.pvpMatchTicket);
             }
         } catch (e) {
@@ -2770,18 +2803,28 @@ class Game {
 
             title.textContent = '道心受损';
             scoreVal.textContent = result.newRating;
-            deltaVal.textContent = `${result.ratingChange}`; // Usually negative
+            const change = result.delta !== undefined ? result.delta : (result.ratingChange || 0);
+            deltaVal.textContent = `${change}`; // Usually negative
 
             if (this.pvpOpponentRank && this.pvpOpponentRank.user) {
                 oppName.textContent = this.pvpOpponentRank.user.username || '未知对手';
                 oppScore.textContent = this.pvpOpponentRank.score || 1000;
             }
         }
+        if (result && result.rejected) {
+            Utils.showBattleLog('PVP 结算校验未通过，本场积分未变动。');
+        }
     }
 
     closePVPResult() {
         const overlay = document.getElementById('pvp-result-overlay');
         if (overlay) overlay.style.display = 'none';
+        this.mode = 'pve';
+        this.pvpMatchTicket = null;
+        this.pvpOpponentRank = null;
+        if (typeof PVPService !== 'undefined' && typeof PVPService.clearActiveMatch === 'function') {
+            PVPService.clearActiveMatch();
+        }
 
         // Return to PVP Screen
         this.showScreen('pvp-screen');

@@ -19,8 +19,11 @@ class GhostEnemy {
         this.isGhost = true;
 
         // 资源
-        this.maxEnergy = data.maxEnergy || 3;
-        this.energy = this.maxEnergy;
+        // 兼容历史快照：有些版本仅写入 energy 字段
+        this.maxEnergy = data.maxEnergy || data.energy || 3;
+        this.energy = (typeof data.energy === 'number' && !isNaN(data.energy))
+            ? data.energy
+            : this.maxEnergy;
         this.deck = this.hydrateDeck(data.deck || []);
         this.hand = [];
         this.discardPile = [];

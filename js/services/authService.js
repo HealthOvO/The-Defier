@@ -155,11 +155,17 @@ const AuthService = {
         if (!this.isInitialized || typeof Bmob === 'undefined') {
             this.currentUser = null;
             this.slotSaveQueue.clear();
+            if (typeof window !== 'undefined' && window.PVPService && typeof window.PVPService.clearActiveMatch === 'function') {
+                window.PVPService.clearActiveMatch();
+            }
             return;
         }
         Bmob.User.logout();
         this.currentUser = null;
         this.slotSaveQueue.clear();
+        if (typeof window !== 'undefined' && window.PVPService && typeof window.PVPService.clearActiveMatch === 'function') {
+            window.PVPService.clearActiveMatch();
+        }
     },
 
     // Cloud Save Methods

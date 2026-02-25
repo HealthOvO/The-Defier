@@ -1772,6 +1772,18 @@ function rollRandomRarity() {
     return 'legendary';
 }
 
+function cloneCardTemplate(cardId) {
+    const source = CARDS[cardId];
+    if (!source) return null;
+    try {
+        // 深拷贝模板，避免运行时修改污染静态配置
+        return JSON.parse(JSON.stringify(source));
+    } catch (e) {
+        console.warn('cloneCardTemplate fallback to shallow copy:', cardId, e);
+        return { ...source };
+    }
+}
+
 // 获取随机卡牌
 function getRandomCard(rarity = null, characterId = null) {
     const selectedRarity = rarity || rollRandomRarity();
@@ -1785,11 +1797,11 @@ function getRandomCard(rarity = null, characterId = null) {
         }
 
         const cardId = pool[Math.floor(Math.random() * pool.length)];
-        return { ...CARDS[cardId] };
+        return cloneCardTemplate(cardId);
     }
 
     // Fallback
-    return { ...CARDS['strike'] };
+    return cloneCardTemplate('strike');
 }
 
 function getArchetypePack(archetypeId) {
@@ -1814,7 +1826,7 @@ function getRandomArchetypeCard(archetypeId, rarity = null, characterId = null) 
     }
 
     const cardId = pool[Math.floor(Math.random() * pool.length)];
-    return { ...CARDS[cardId] };
+    return cloneCardTemplate(cardId);
 }
 
 function inferDeckArchetype(deck = []) {

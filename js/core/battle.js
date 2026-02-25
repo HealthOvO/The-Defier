@@ -16,6 +16,9 @@ class Battle {
         this.forceEndEnemyTurn = false;
         this.eventListeners = new Map();
         this.isProcessingCard = false; // 防止卡牌连点
+        this.isTurnTransitioning = false; // 防止回合切换期间输入穿透
+        this.selectedCardIndex = -1;
+        this.currentCardProcessToken = 0; // 防止异步超时回调提前解锁
         this.uiDirty = {
             player: true,
             enemies: true,
@@ -66,9 +69,13 @@ class Battle {
         this.eventListeners.clear();
         this.turnNumber = 0;
         this.selectedCard = null;
+        this.selectedCardIndex = -1;
         this.targetingMode = false;
         this.targetingMode = false;
         this.isProcessingCard = false;
+        this.isTurnTransitioning = false;
+        this.currentCardProcessToken = 0;
+        this.pendingLifeSteal = 0;
         this.cardsPlayedThisTurn = 0;
         this.playerAttackedThisTurn = false;
         this.uiDirty = {
@@ -247,6 +254,10 @@ class Battle {
         this.battleResolution = null;
         this.forceEndEnemyTurn = false;
         this.isProcessingCard = false; // 强制重置状态
+        this.isTurnTransitioning = false;
+        this.currentCardProcessToken = 0;
+        this.pendingLifeSteal = 0;
+        this.selectedCardIndex = -1;
         this.playerTookDamage = false; // For Trial Challenge
         this.player.resurrectCount = 0; // Reset resurrection counter
         this.cardsPlayedThisTurn = 0;
@@ -622,7 +633,15 @@ class Battle {
             // 绑定点击事件
             enemyEl.addEventListener('click', () => {
                 // Fix: use selectedCardIndex that matches startTargetingMode
-                if (this.targetingMode && this.selectedCardIndex !== undefined && this.selectedCardIndex !== -1) {
+                if (
+                    this.currentTurn === 'player' &&
+                    !this.battleEnded &&
+                    !this.isProcessingCard &&
+                    !this.isTurnTransitioning &&
+                    this.targetingMode &&
+                    this.selectedCardIndex !== undefined &&
+                    this.selectedCardIndex !== -1
+                ) {
                     this.playCardOnTarget(this.selectedCardIndex, index);
                 }
             });
@@ -1017,8 +1036,8 @@ class Battle {
 
     // 卡牌点击处理
     onCardClick(cardIndex) {
-        if (this.currentTurn !== 'player' || this.battleEnded || this.isProcessingCard) {
-            console.warn(`Card Click Ignored: Turn=${this.currentTurn}, Ended=${this.battleEnded}, Processing=${this.isProcessingCard}`);
+        if (this.currentTurn !== 'player' || this.battleEnded || this.isProcessingCard || this.isTurnTransitioning) {
+            console.warn(`Card Click Ignored: Turn=${this.currentTurn}, Ended=${this.battleEnded}, Processing=${this.isProcessingCard}, Transitioning=${this.isTurnTransitioning}`);
             return;
         }
 
@@ -1093,20 +1112,25 @@ class Battle {
 
     // 对目标使用卡牌
     async playCardOnTarget(cardIndex, targetIndex) {
+        if (this.currentTurn !== 'player' || this.battleEnded || this.battleResolution || this.isTurnTransitioning) {
+            console.warn(`Play card rejected: turn=${this.currentTurn}, ended=${this.battleEnded}, transitioning=${this.isTurnTransitioning}`);
+            this.endTargetingMode();
+            return;
+        }
         if (this.isProcessingCard) return;
         this.isProcessingCard = true;
+        const processToken = ++this.currentCardProcessToken;
 
         // Safety timeout
         const processingTimeout = setTimeout(() => {
-            if (this.isProcessingCard) {
-                console.warn('Card processing timed out, forcing reset');
-                this.isProcessingCard = false;
-                Utils.showBattleLog('操作超时，状态已重置');
+            // 仅告警，不提前解锁。提前解锁会导致并发出牌竞态。
+            if (this.isProcessingCard && processToken === this.currentCardProcessToken) {
+                console.warn('Card processing is taking longer than expected, lock remains active.');
             }
         }, 3000);
 
         try {
-            this.targetingMode = false;
+            this.endTargetingMode();
             this.selectedCard = null;
 
             const card = this.player.hand[cardIndex];
@@ -1221,7 +1245,9 @@ class Battle {
             this.updateHandUI(); // Reload UI to fix state
         } finally {
             clearTimeout(processingTimeout);
-            this.isProcessingCard = false;
+            if (processToken === this.currentCardProcessToken) {
+                this.isProcessingCard = false;
+            }
         }
     }
 
@@ -1279,7 +1305,9 @@ class Battle {
                     target.block = oldBlock;
 
                     // 共鸣：剑雷交织 (Thunder Sword) - 穿透附带麻痹
-                    const thunderSword = this.player.activeResonances.find(r => r.id === 'thunderSword');
+                    const thunderSword = Array.isArray(this.player.activeResonances)
+                        ? this.player.activeResonances.find(r => r.id === 'thunderSword')
+                        : null;
                     if (thunderSword) {
                         // Apply paralysis/stun/weak
                         // Using 'stun' as paralysis representation or 'weak'?
@@ -1418,7 +1446,7 @@ class Battle {
 
             case 'debuff':
                 if (target) {
-                    target.buffs[result.buffType] = (target.buffs[result.buffType] || 0) + result.value;
+                    target.buffs = target.buffs || {};
                     let immune = false;
                     if (result.buffType === 'stun') {
                         // 14. 混元无极 (realm 14) - 50% 免疫眩晕
@@ -1429,6 +1457,12 @@ class Battle {
 
                         // Boss Immunity
                         if (target.isBoss && Math.random() < 0.8) { // Boss 80% resist stun
+                            immune = true;
+                            Utils.showBattleLog(`${target.name} 拥有霸体，免疫眩晕！`);
+                        }
+
+                        // 霸体免疫
+                        if (target.buffs && target.buffs.unstoppable > 0) {
                             immune = true;
                             Utils.showBattleLog(`${target.name} 拥有霸体，免疫眩晕！`);
                         }
@@ -1453,6 +1487,12 @@ class Battle {
                         }
                     }
 
+                    if (!immune || result.buffType !== 'stun') {
+                        target.buffs[result.buffType] = (target.buffs[result.buffType] || 0) + result.value;
+                    } else {
+                        Utils.showBattleLog(`${target.name} 免疫了眩晕效果`);
+                    }
+
                     const debuffNames = {
                         'vulnerable': '易伤', 'weak': '虚弱', 'poison': '中毒', 'burn': '灼烧', 'stun': '眩晕',
                         'strength': '力量', 'blockOnAttack': '破法盾', 'energyOnVulnerable': '战术优势',
@@ -1461,7 +1501,9 @@ class Battle {
                         'paralysis': '麻痹', 'severe_wound': '重伤', 'chaosAura': '混沌光环',
                         'bleed': '流血', 'mark': '破绽'
                     };
-                    Utils.showBattleLog(`敌人获得 ${debuffNames[result.buffType] || result.buffType} 效果`);
+                    if (!immune || result.buffType !== 'stun') {
+                        Utils.showBattleLog(`敌人获得 ${debuffNames[result.buffType] || result.buffType} 效果`);
+                    }
                 }
                 break;
 
@@ -1506,7 +1548,10 @@ class Battle {
                     const removedBlock = target.block;
                     target.block = 0;
                     Utils.showBattleLog(`破甲！移除了 ${removedBlock} 点护盾`);
-                    Utils.createFloatingText(target.index, '破甲', '#ff0000');
+                    const enemyIndex = this.enemies.indexOf(target);
+                    if (enemyIndex >= 0) {
+                        Utils.createFloatingText(enemyIndex, '破甲', '#ff0000');
+                    }
                     if (this.updateEnemiesUI) this.updateEnemiesUI();
                 }
                 break;
@@ -1562,11 +1607,9 @@ class Battle {
                     const enemy = this.enemies[i];
                     if (enemy.currentHp <= 0) continue;
 
-                    enemy.buffs[result.buffType] = (enemy.buffs[result.buffType] || 0) + result.value;
+                    let immune = false;
                     if (result.buffType === 'stun') {
                         // Fix: Boss Unstoppable check for AoE stun
-                        let immune = false;
-
                         if (enemy.buffs && enemy.buffs.unstoppable > 0) {
                             immune = true;
                             Utils.showBattleLog(`${enemy.name} 拥有霸体，免疫眩晕！`);
@@ -1581,6 +1624,10 @@ class Battle {
                         if (!immune) {
                             enemy.stunned = true;
                         }
+                    }
+
+                    if (!immune || result.buffType !== 'stun') {
+                        enemy.buffs[result.buffType] = (enemy.buffs[result.buffType] || 0) + result.value;
                     }
                 }
                 break;
@@ -1608,6 +1655,12 @@ class Battle {
 
     // 对敌人造成伤害
     dealDamageToEnemy(enemy, amount, sourceElement = null) {
+        if (!enemy) {
+            console.warn('dealDamageToEnemy called with invalid enemy');
+            return 0;
+        }
+        enemy.buffs = enemy.buffs || {};
+
         if (typeof amount !== 'number' || isNaN(amount)) {
             console.error('dealDamageToEnemy received NaN amount', amount);
             amount = 0;
@@ -1860,6 +1913,11 @@ class Battle {
         }
 
         // 默认扣血逻辑
+        if (!Number.isFinite(amount)) {
+            console.warn('dealDamageToEnemy calculated invalid amount, fallback to 0', amount);
+            amount = 0;
+        }
+        amount = Math.max(0, amount);
         let finalDamage = Math.floor(amount);
         const wasAlive = enemy.currentHp > 0;
 
@@ -1934,10 +1992,16 @@ class Battle {
 
     // 结束回合
     async endTurn() {
-        if (this.currentTurn !== 'player' || this.battleEnded || this.isProcessingCard) return;
+        if (this.currentTurn !== 'player' || this.battleEnded || this.isProcessingCard || this.isTurnTransitioning) return;
+        this.isTurnTransitioning = true;
+        this.endTargetingMode();
+        this.selectedCard = null;
 
         // 禁用结束回合按钮
-        document.getElementById('end-turn-btn').disabled = true;
+        const endTurnBtn = document.getElementById('end-turn-btn');
+        if (endTurnBtn) {
+            endTurnBtn.disabled = true;
+        }
 
         const turnEndTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
         this.lastTurnDuration = Math.max(0, turnEndTime - (this.turnStartTime || turnEndTime));
@@ -2067,6 +2131,7 @@ class Battle {
             if (endTurnBtn) endTurnBtn.disabled = false;
 
             this.updateBattleUI();
+            this.isTurnTransitioning = false;
             return; // 直接返回，不进入敌人回合
         }
 
@@ -2101,6 +2166,7 @@ class Battle {
         } finally {
             if (!shouldStartPlayerTurn || this.battleEnded) {
                 this.isProcessingCard = false;
+                this.isTurnTransitioning = false;
                 return;
             }
 
@@ -2128,6 +2194,7 @@ class Battle {
 
             this.markUIDirty();
             this.updateBattleUI();
+            this.isTurnTransitioning = false;
         }
     }
 
@@ -2139,10 +2206,15 @@ class Battle {
             return;
         }
 
-        // 关键修复：护盾应在敌人回合开始时重置（上一回合保留的护盾失效），
-        // 而不是在敌人回合结束时（否则本回合获得的护盾无法抵挡玩家攻击）
+        // 敌方护盾在敌人回合开始时结算：
+        // - 普通护盾重置
+        // - retainBlock 生效时保留并消耗层数
         for (const enemy of this.enemies) {
-            enemy.block = 0;
+            if (enemy.buffs.retainBlock && enemy.buffs.retainBlock > 0) {
+                enemy.buffs.retainBlock--;
+            } else {
+                enemy.block = 0;
+            }
         }
 
         for (let i = 0; i < this.enemies.length; i++) {
@@ -2275,14 +2347,9 @@ class Battle {
             Utils.showBattleLog('时间静止：敌方行动中断');
         }
 
-        // 清除敌人护盾 (moved to start of enemy turn)
+        // 这里只处理回合后续状态，不再清空敌方护盾
+        // 否则敌人在本回合获得的护盾会在玩家回合前被错误清零
         for (const enemy of this.enemies) {
-            if (enemy.buffs.retainBlock && enemy.buffs.retainBlock > 0) {
-                enemy.buffs.retainBlock--;
-            } else {
-                enemy.block = 0;
-            }
-
             // 16. 太乙神雷 (realm 16) - 敌人每回合获得攻击力+1
             if (this.player.realm === 16) {
                 if (!enemy.buffs.strength) enemy.buffs.strength = 0;
@@ -2681,6 +2748,7 @@ class Battle {
                         Utils.addShakeEffect(playerEl);
                         if (multiResult.damage > 0) {
                             Utils.showFloatingNumber(playerEl, multiResult.damage, 'damage');
+                            this.playerTookDamage = true;
                         }
                     }
 
@@ -2739,6 +2807,9 @@ class Battle {
                 if (playerEl) Utils.addFlashEffect(playerEl, 'purple');
                 this.player.currentHp -= pattern.value;
                 if (this.player.currentHp < 0) this.player.currentHp = 0;
+                if (pattern.value > 0) {
+                    this.playerTookDamage = true;
+                }
 
                 if (playerEl) Utils.showFloatingNumber(playerEl, pattern.value, 'damage');
 
@@ -2775,6 +2846,10 @@ class Battle {
         if (this.battleResolution) return true;
         this.battleEnded = true;
         this.battleResolution = result;
+        this.isProcessingCard = false;
+        this.currentCardProcessToken++;
+        this.isTurnTransitioning = false;
+        this.endTargetingMode();
         this.emit('battleEnded', {
             result,
             turnNumber: this.turnNumber,
@@ -2884,6 +2959,10 @@ class Battle {
     }
     // Start Targeting Mode
     startTargetingMode(cardIndex) {
+        if (this.currentTurn !== 'player' || this.battleEnded || this.isProcessingCard || this.isTurnTransitioning) {
+            console.warn('Targeting mode request ignored due to invalid battle state.');
+            return;
+        }
         this.targetingMode = true;
         this.selectedCardIndex = cardIndex;
 
@@ -2907,6 +2986,7 @@ class Battle {
     endTargetingMode() {
         this.targetingMode = false;
         this.selectedCardIndex = -1;
+        this.selectedCard = null;
 
         const enemyEls = document.querySelectorAll('.enemy');
         enemyEls.forEach(el => {

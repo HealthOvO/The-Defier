@@ -1645,8 +1645,15 @@ class Player {
 
 
             case 'damagePerLaw':
-                // 根据装载法则数量造成伤害（林风：命环共振）
-                const loadedLawCount = this.fateRing.loadedLaws.filter(Boolean).length;
+                // 根据装载法则数量造成伤害（兼容新旧命环结构）
+                let loadedLawCount = 0;
+                if (this.fateRing) {
+                    if (typeof this.fateRing.getSocketedLaws === 'function') {
+                        loadedLawCount = this.fateRing.getSocketedLaws().filter(Boolean).length;
+                    } else if (Array.isArray(this.fateRing.loadedLaws)) {
+                        loadedLawCount = this.fateRing.loadedLaws.filter(Boolean).length;
+                    }
+                }
                 const totalDamage = effect.baseDamage + (loadedLawCount * effect.damagePerLaw);
                 return { type: 'damage', value: totalDamage, target: effect.target };
 
@@ -2014,7 +2021,12 @@ class Player {
 
     // 获取当前槽位的法则
     getLawInSlot(index) {
-        const lawId = this.fateRing.loadedLaws[index];
+        let lawId = null;
+        if (this.fateRing && Array.isArray(this.fateRing.slots) && this.fateRing.slots[index]) {
+            lawId = this.fateRing.slots[index].law || null;
+        } else if (this.fateRing && Array.isArray(this.fateRing.loadedLaws)) {
+            lawId = this.fateRing.loadedLaws[index];
+        }
         return lawId ? LAWS[lawId] : null;
     }
 

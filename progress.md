@@ -120,3 +120,48 @@ Original prompt: PLEASE IMPLEMENT THIS PLAN: # The Defier 全局优化与丰富�
 
 ## TODO / Suggestions
 - Add a dedicated automated browser audit case for campfire action variants (rest/upgrade/remove) to prevent regressions where node completion is skipped in any branch.
+- 2026-02-25 stability hotfix: `js/core/battle.js`
+  - Added turn-transition input lock (`isTurnTransitioning`) and stricter guards for `onCardClick`/`playCardOnTarget`.
+  - Force-exit targeting mode at turn end and battle finalize to prevent click-through during async phase shifts.
+  - Fixed enemy block lifecycle: resolve/reset at enemy-turn start (with `retainBlock` support), removed erroneous end-of-turn block wipe.
+- 2026-02-25 compatibility hotfix: `js/core/player.js`
+  - Fixed Fate Ring API mismatch by migrating `damagePerLaw` and `getLawInSlot` to `getSocketedLaws()/slots` with legacy fallback.
+- 2026-02-25 memory leak hotfix: `js/core/card-effects.js`
+  - MutationObserver now cleans removed `.card` nodes and destroys CardEffects handlers/states.
+  - `beforeunload` destroy now iterates over snapshot array to avoid set mutation edge cases.
+- 2026-02-25 pvp consistency/security hotfixes:
+  - `js/services/pvp-service.js`: added persisted `activeMatch` storage/load/clear, user-bound ticket validation, opponent id/user cross-check, server-side opponent rating fetch before Elo calc.
+  - `js/services/authService.js`: clear active pvp match state on logout.
+  - `js/scenes/pvp-scene.js`: hardened null-safe opponent data handling; route pvp entry through `game.startBattle` when available.
+  - `js/game.js`: normalize battle mode lifecycle (`pve`/`pvp`), clear stale pvp state on non-pvp battles, fix defeat delta UI field mismatch (`delta` fallback).
+- 2026-02-25 verification:
+  - `node --check` passed for all modified JS modules.
+  - `bash tests/run_node_checks.sh` passed end-to-end after patches.
+- 2026-02-25 second-round audit summary:
+  - Re-audited `js/core/battle.js`, `js/core/card-effects.js`, `js/core/fateRing.js`, `js/core/events.js`, `js/services/pvp-service.js`, `js/scenes/pvp-scene.js`, `js/core/player.js`, `js/game.js`.
+  - No new high-severity race, memory-leak, or pvp ticket-consistency defects found in audited scope after this patch set.
+- 2026-02-25 round-3 stability hardening:
+  - `js/core/battle.js`: removed timeout-based premature unlock in `playCardOnTarget` (tokenized lock watchdog only); fixed `debuff/debuffAll` stun-immunity application order; guarded resonance lookup in `penetrate`; clamped invalid/negative damage; fixed `removeBlock` floating-text target index; flagged multi-hit/tribulation damage into `playerTookDamage` for no-damage trial correctness.
+  - `js/scenes/pvp-scene.js`: added matchmaking in-flight lock (`isMatching`) to block repeated concurrent matching requests; hardened game instance resolution and crash fallback guards; fixed ghost energy mapping (`maxEnergy` + `currEnergy`).
+  - `js/entities/ghost-enemy.js`: compatibility for legacy snapshot energy field (`energy` fallback for `maxEnergy`).
+  - `js/services/pvp-service.js`: selected latest snapshot/ghost record by `saveTime`; robustly parsed ghost payload for both string/object formats; added auth/runtime guards in result reporting; verified opponent user id against server-fetched rank before accepting rating update.
+  - `js/data/cards.js`: replaced shallow card template returns with deep-clone helper to prevent runtime mutation pollution of static `CARDS` config.
+- 2026-02-25 round-3 verification:
+  - `node --check` passed for `js/core/battle.js`, `js/scenes/pvp-scene.js`, `js/services/pvp-service.js`, `js/entities/ghost-enemy.js`, `js/data/cards.js`.
+  - `bash tests/run_node_checks.sh` passed after all round-3 patches.
+- 2026-02-25 round-3 audit conclusion:
+  - Re-reviewed battle turn sequencing, stun/control immunity branches, pvp matchmaking/reporting, and static card template purity in audited scope.
+  - No additional high-severity crash/race/consistency defects were identified in this scope after the round-3 fixes.
+- 2026-02-25 browser verification (round-3 runtime):
+  - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-round3` pass; all findings true, `consoleErrors=[]`.
+  - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-round3` pass; all findings true, `consoleErrors=[]`.
+  - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4173 output/web-event-branch-audit-round3` pass; all findings true, `consoleErrors=[]`.
+  - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-json '{"steps":[{"buttons":[],"frames":6}]}' ...` produced screenshots/state in `output/web-game/round3-audit/`; no `errors-*.json` generated.
+- 2026-02-25 UI fix (realm selection locked cards):
+  - `js/game.js` `initRealmSelect`: locked realms now also render themed background image (with darker overlay), instead of only plain lock marker.
+  - `css/style.css`: `realm-card.locked` style updated from heavy black/"封" center stamp to lighter dimmed card + top-right `未解锁` badge, preserving map art visibility.
+  - Additional defensive guard: realm select now safely handles missing `unlockedRealms` in selection/preview logic (`[1]` fallback) to avoid `includes` crash in direct screen jump/debug flow.
+- 2026-02-25 verification:
+  - `node --check js/game.js` pass.
+  - `bash tests/run_node_checks.sh` pass.
+  - Visual capture: `output/web-game/realm-locked-visual/realm-screen.png` confirms locked realms display artwork with lock status badge.

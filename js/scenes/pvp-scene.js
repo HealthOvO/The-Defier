@@ -7,6 +7,7 @@ window.PVPScene = {
     activeTab: 'ranking',
     activeShopCategory: 'all', // Shop Category state
     selectedPersonality: 'balanced', // Default
+    isMatching: false, // 匹配锁，防止重复请求导致状态竞争
     PERSONA_RULES: {
         balanced: { damageMul: 1.0, takenMul: 1.0, regenEnergyPerTurn: 1, hpMul: 1.0 },
         slaughter: { damageMul: 1.2, takenMul: 1.1, regenEnergyPerTurn: 0, hpMul: 1.0 },
@@ -122,22 +123,43 @@ window.PVPScene = {
     },
 
     async findMatch() {
-        if (!PVPService.currentRankData) await PVPService.syncRank();
-        const score = PVPService.currentRankData ? PVPService.currentRankData.score : 1000;
-        const realm = PVPService.currentRankData ? PVPService.currentRankData.realm : 1;
+        if (this.isMatching) {
+            Utils.showBattleLog("正在匹配中，请稍候...");
+            return;
+        }
 
-        Utils.showBattleLog("神念搜寻中...");
-        const result = await PVPService.findOpponent(score, realm);
+        this.isMatching = true;
+        try {
+            if (!PVPService.currentRankData) await PVPService.syncRank();
+            const score = PVPService.currentRankData ? PVPService.currentRankData.score : 1000;
+            const realm = PVPService.currentRankData ? PVPService.currentRankData.realm : 1;
 
-        if (result.success) {
-            this.startPVPBattle(result.opponent);
-        } else {
-            Utils.showBattleLog(result.message || "未找到合适的对手");
+            Utils.showBattleLog("神念搜寻中...");
+            const result = await PVPService.findOpponent(score, realm);
+
+            if (result.success) {
+                this.startPVPBattle(result.opponent);
+            } else {
+                Utils.showBattleLog(result.message || "未找到合适的对手");
+            }
+        } catch (e) {
+            console.error("PVP matching failed:", e);
+            Utils.showBattleLog("匹配失败，请稍后重试");
+        } finally {
+            this.isMatching = false;
         }
     },
 
     startPVPBattle(opponentData) {
         try {
+            const gameRef = (typeof game !== 'undefined' && game)
+                ? game
+                : ((typeof window !== 'undefined' && window.game) ? window.game : null);
+            if (!gameRef) {
+                Utils.showBattleLog("游戏实例未就绪，无法开始 PvP");
+                return;
+            }
+
             if (!opponentData || !opponentData.battleData) {
                 console.error("Opponent data invalid", opponentData);
                 Utils.showBattleLog("对手数据异常，无法开始");
@@ -145,16 +167,23 @@ window.PVPScene = {
             }
 
             const ghostData = opponentData.battleData;
-            const ghostConfig = opponentData.ghost.config || {};
+            const ghostConfig = (opponentData.ghost && opponentData.ghost.config) ? opponentData.ghost.config : {};
+            const opponentUserId = (opponentData.ghost && opponentData.ghost.user && opponentData.ghost.user.objectId)
+                || (opponentData.rank && opponentData.rank.user && opponentData.rank.user.objectId)
+                || 'ghost';
+            const opponentUsername = (opponentData.rank && opponentData.rank.user && opponentData.rank.user.username)
+                ? opponentData.rank.user.username
+                : '未知对手';
 
             // Construct Ghost
             const ghost = new GhostEnemy({
-                userId: opponentData.ghost.user.objectId,
-                name: `幻影·${opponentData.rank.user.username}`,
+                userId: opponentUserId,
+                name: `幻影·${opponentUsername}`,
                 maxHp: ghostData.me ? ghostData.me.maxHp : 100, // Fallback
                 deck: ghostData.deck || [],
                 currentHp: ghostData.me ? ghostData.me.maxHp : 100,
-                energy: ghostData.me ? (ghostData.me.energy || 3) : 3,
+                maxEnergy: ghostData.me ? (ghostData.me.energy || 3) : 3,
+                energy: ghostData.me ? (ghostData.me.currEnergy || ghostData.me.energy || 3) : 3,
                 config: {
                     ...ghostConfig,
                     aiProfile: ghostData.aiProfile || ghostConfig.personality || 'balanced',
@@ -162,27 +191,36 @@ window.PVPScene = {
                 }
             });
 
-            game.showScreen('battle-screen');
-            game.mode = 'pvp';
-            game.pvpOpponentRank = opponentData.rank;
-            game.pvpMatchTicket = opponentData.matchTicket || null;
+            gameRef.pvpOpponentRank = opponentData.rank;
+            gameRef.pvpMatchTicket = opponentData.matchTicket || null;
 
             // Initialize Battle
-            if (game.battle && typeof game.battle.init === 'function') {
+            if (typeof gameRef.startBattle === 'function') {
+                gameRef.startBattle([ghost], null);
+            } else if (gameRef.battle && typeof gameRef.battle.init === 'function') {
                 console.log("Initializing PVP Battle with:", ghost);
-                game.battle.init([ghost]);
+                gameRef.mode = 'pvp';
+                gameRef.showScreen('battle-screen');
+                gameRef.battle.init([ghost]);
             } else {
                 console.error("Battle module not ready");
                 Utils.showBattleLog("战斗模块初始化失败");
-                game.showScreen('index'); // Return to safe screen
+                gameRef.showScreen('index'); // Return to safe screen
             }
         } catch (e) {
             console.error("PVP Start Crash:", e);
             Utils.showBattleLog("切磋启动失败，请查看控制台");
+            if (typeof game !== 'undefined' && game) {
+                game.mode = 'pve';
+                game.pvpMatchTicket = null;
+                game.pvpOpponentRank = null;
+            }
             // Attempt to return to PVP screen
             setTimeout(() => {
-                game.showScreen('main-menu');
-                this.switchTab('ranking');
+                if (typeof game !== 'undefined' && game && typeof game.showScreen === 'function') {
+                    game.showScreen('main-menu');
+                    this.switchTab('ranking');
+                }
             }, 1000);
         }
     },
