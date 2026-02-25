@@ -6,7 +6,7 @@
 class Game {
     constructor() {
         this.player = new Player();
-        this.player.game = this;
+        this.player.game = this; // 供 player.js 安全访问当前游戏实例，避免依赖全局变量
         this.battle = new Battle(this);
         this.map = new GameMap(this);
         this.eventSystem = new EventSystem(this);
@@ -27,20 +27,9 @@ class Game {
         this.guestMode = false;
         this.guideState = this.loadGuideState();
         this.debugMode = localStorage.getItem('theDefierDebug') === 'true';
-        this.legacyStorageKey = 'theDefierLegacyV1';
-        this.legacyUpgradeCatalog = this.getLegacyUpgradeCatalog();
-        this.legacyProgress = this.loadLegacyProgress();
-        this.lastLegacyGain = 0;
-        this.featureFlags = {
-            combatDepthV2: true,
-            pvpRuleSyncV2: true,
-            mapNodeTrialForge: true
-        };
-        this.performanceStats = {
-            battleUIUpdates: 0,
-            battleTurnDurations: [],
-            pvpLoadDurations: []
-        };
+        this.boundGlobalEvents = false;
+        this.isAuthBusy = false;
+        this.isSyncingSlots = false;
         setTimeout(() => this.updateDebugUI(), 0);
 
         // Restore slot from session if exists
@@ -820,6 +809,9 @@ class Game {
 
     // 绑定全局事件
     bindGlobalEvents() {
+        if (this.boundGlobalEvents) return;
+        this.boundGlobalEvents = true;
+
         // ESC关闭模态框
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
@@ -6604,7 +6596,9 @@ class Game {
         const passwordInput = document.getElementById('auth-password');
         const messageEl = document.getElementById('auth-message');
 
-        if (!usernameInput || !passwordInput) return;
+        if (!usernameInput || !passwordInput || !messageEl) return;
+        if (this.isAuthBusy) return;
+
         const username = usernameInput.value.trim();
         const password = passwordInput.value.trim();
 
@@ -6614,24 +6608,27 @@ class Game {
         }
 
         messageEl.innerText = '登录中...';
-        AuthService.login(username, password).then(async result => {
+        this.isAuthBusy = true;
+        try {
+            const result = await AuthService.login(username, password);
             if (result.success) {
-                this.onLoginSuccess(messageEl, '登录成功！');
+                await this.onLoginSuccess(messageEl, '登录成功！');
             } else {
                 messageEl.innerText = result.message || '登录失败';
                 messageEl.style.color = '#ff6b6b';
             }
-        });
+        } catch (error) {
+            console.error('handleLogin failed:', error);
+            messageEl.innerText = '登录失败，请稍后再试';
+            messageEl.style.color = '#ff6b6b';
+        } finally {
+            this.isAuthBusy = false;
+        }
     }
 
     // 打开存档选择界面 (同步云端)
     async openSaveSlotsWithSync() {
-        if (AuthService.isCloudEnabled && !AuthService.isCloudEnabled()) {
-            this.guestMode = true;
-            this.showCharacterSelection();
-            return;
-        }
-
+        if (this.isSyncingSlots) return;
         if (!AuthService.isLoggedIn()) {
             this.showConfirmModal(
                 '尚未登录，是否先登录以同步云端存档？',
@@ -6654,6 +6651,7 @@ class Game {
         const originalText = msgBtn ? msgBtn.innerHTML : '';
         if (msgBtn) msgBtn.innerText = '同步中...';
 
+        this.isSyncingSlots = true;
         try {
             const res = await AuthService.getCloudData();
             if (msgBtn) msgBtn.innerHTML = originalText;
@@ -6673,11 +6671,13 @@ class Game {
             console.error('Sync failed', e);
             if (msgBtn) msgBtn.innerHTML = originalText;
             alert('获取云端存档失败，请检查网络');
+        } finally {
+            this.isSyncingSlots = false;
         }
     }
 
     // 统一的登录成功逻辑
-    onLoginSuccess(messageEl, successMsg) {
+    async onLoginSuccess(messageEl, successMsg) {
         messageEl.innerText = successMsg;
         messageEl.style.color = '#4ff';
         this.guestMode = false;
@@ -6686,7 +6686,12 @@ class Game {
             this.checkLoginStatus();
 
             // 登录成功后，获取云端存档列表并展示选择界面
-            const res = await AuthService.getCloudData();
+            let res = { success: false, slots: [null, null, null, null], isEmpty: true };
+            try {
+                res = await AuthService.getCloudData();
+            } catch (error) {
+                console.error('Fetch cloud data after login failed:', error);
+            }
 
             // 检查本地旧存档
             const localSave = localStorage.getItem('theDefierSave');
@@ -6705,7 +6710,9 @@ class Game {
             if (isCloudEmpty && localData) {
                 // 如果云端是新的（空），但本地有数据，自动帮用户填入 Slot 0
                 slots[0] = localData;
-                AuthService.saveCloudData(localData, 0); // Async sync
+                AuthService.saveCloudData(localData, 0).catch(err => {
+                    console.warn('Auto bind local save failed:', err);
+                });
                 Utils.showBattleLog('检测到旧存档，已自动绑定至 存档 1');
             }
 
@@ -6884,6 +6891,8 @@ class Game {
         const username = document.getElementById('auth-username').value;
         const password = document.getElementById('auth-password').value;
         const msg = document.getElementById('auth-message');
+        if (!msg) return;
+        if (this.isAuthBusy) return;
 
         if (!username || !password) {
             msg.innerText = '请输入账号和密码';
@@ -6891,20 +6900,25 @@ class Game {
         }
 
         msg.innerText = '注册中...';
-        const result = await AuthService.register(username, password);
-        if (result.success) {
-            // Auto login logic reuse
-            const loginRes = await AuthService.login(username, password);
-            if (loginRes.success) {
-                // 使用统一的成功处理逻辑，这会自动将本地旧存档上传到新注册的空账号中
-                this.onLoginSuccess(msg, '注册成功！已绑定旧存档');
-            }
-        } else {
-            if (result.error && result.error.code === 202) {
-                msg.innerText = '该用户名已被使用，请换一个';
+        this.isAuthBusy = true;
+        try {
+            const result = await AuthService.register(username, password);
+            if (result.success) {
+                // Auto login logic reuse
+                const loginRes = await AuthService.login(username, password);
+                if (loginRes.success) {
+                    // 使用统一的成功处理逻辑，这会自动将本地旧存档上传到新注册的空账号中
+                    await this.onLoginSuccess(msg, '注册成功！已绑定旧存档');
+                }
             } else {
-                msg.innerText = result.message || '注册失败';
+                if (result.error && result.error.code === 202) {
+                    msg.innerText = '该用户名已被使用，请换一个';
+                } else {
+                    msg.innerText = result.message || '注册失败';
+                }
             }
+        } finally {
+            this.isAuthBusy = false;
         }
     }
 
@@ -6916,14 +6930,9 @@ class Game {
 
         if (cloudEnabled && AuthService.isLoggedIn()) {
             const user = AuthService.getCurrentUser();
-            // Refactored to keep button style but show user info
-            btn.innerHTML = `
-                    <div class="talisman-paper"></div>
-                    <div class="talisman-content">
-                        <span class="btn-icon">👤</span>
-                        <span class="btn-text" style="font-size:0.9rem">${user.username}</span>
-                    </div>
-                `;
+            // Change button to show name or Logout
+            const username = user && user.username ? user.username : '已登录';
+            btn.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text" style="font-size:0.8rem">${username}</span>`;
             btn.onclick = () => {
                 // Muted/Audio handling (delayed slightly for feel)
                 setTimeout(() => {
@@ -6984,14 +6993,15 @@ class Game {
 
         // This is now handled within handleLogin's flow logic, but kept as fallback or for manual checks
         const res = await AuthService.getCloudData();
-        if (res.success && res.data) {
-            const cloudTime = res.saveTime ? new Date(res.saveTime).toLocaleString() : '未知时间';
+        if (res.success && Array.isArray(res.slots)) {
+            const cloudData = res.slots[this.currentSaveSlot || 0];
+            const cloudTime = res.serverTime ? new Date(res.serverTime).toLocaleString() : '未知时间';
             // If we are strictly checking, we might want to show the full modal
             const localSave = localStorage.getItem('theDefierSave');
             let localData = null;
             if (localSave) { try { localData = JSON.parse(localSave); } catch (e) { } }
 
-            this.showSaveConflictModal(localData, res.data, res.saveTime);
+            this.showSaveConflictModal(localData, cloudData, res.serverTime);
         }
     }
 
@@ -7033,12 +7043,15 @@ class Game {
             // Keep Local -> Upload to Cloud
             const localSave = localStorage.getItem('theDefierSave');
             if (localSave) {
-                try {
-                    const data = JSON.parse(localSave);
-                    // 尝试从本地存档中获取槽位ID
-                    let targetSlot = data.saveSlot;
-                    if (targetSlot === undefined || targetSlot === null) {
-                        targetSlot = this.currentSaveSlot;
+                const data = JSON.parse(localSave);
+                const targetSlot = Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : 0;
+                AuthService.saveCloudData(data, targetSlot).then(res => {
+                    if (res.success) {
+                        Utils.showBattleLog('本地存档已覆盖云端！');
+                        modal.classList.remove('active');
+                        // No reload needed
+                    } else {
+                        alert('云端同步失败：' + (res.message || '未知错误'));
                     }
 
                     if (targetSlot === undefined || targetSlot === null) {
@@ -7077,8 +7090,14 @@ class Game {
     // 加载云端存档 (无本地时)
     // 加载云端存档 (Legacy -> Redirect to Slots)
     loadCloudGame() {
-        console.warn('loadCloudGame is deprecated. Opening slot selection.');
-        this.openSaveSlotsWithSync();
+        AuthService.getCloudData().then(res => {
+            const slot = Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : 0;
+            if (res.success && Array.isArray(res.slots) && res.slots[slot]) {
+                localStorage.setItem('theDefierSave', JSON.stringify(res.slots[slot]));
+                Utils.showBattleLog('已拉取云端存档');
+                setTimeout(() => window.location.reload(), 500);
+            }
+        });
     }
 
     // 打开法宝囊
@@ -7521,6 +7540,10 @@ window.game = null;
 document.addEventListener('DOMContentLoaded', () => {
     try {
         console.log('Initializing Game...');
+        if (window.game) {
+            console.warn('Game instance already exists, skip duplicate init.');
+            return;
+        }
         window.game = new Game();
         console.log('Game Initialized:', window.game);
     } catch (error) {

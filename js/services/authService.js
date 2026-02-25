@@ -5,52 +5,10 @@
 const AuthService = {
     isInitialized: false,
     currentUser: null,
-    cloudEnabled: false,
-    initError: null,
-    slotSaveQueue: new Map(),
-
-    getRuntimeConfig() {
-        let config = null;
-
-        // 优先读取宿主注入配置
-        if (typeof window !== 'undefined') {
-            const rootConfig = window.__THE_DEFIER_CONFIG__;
-            if (rootConfig && rootConfig.bmob) {
-                config = rootConfig.bmob;
-            } else if (window.__BMOB_CONFIG__) {
-                config = window.__BMOB_CONFIG__;
-            }
-        }
-
-        // 次优先：读取本地持久化配置（便于本地调试）
-        if (!config && typeof localStorage !== 'undefined') {
-            try {
-                const raw = localStorage.getItem('theDefierBmobConfig');
-                if (raw) config = JSON.parse(raw);
-            } catch (e) {
-                console.warn('Invalid theDefierBmobConfig in localStorage');
-            }
-        }
-
-        if (!config || typeof config !== 'object') return null;
-
-        const secretKey = typeof config.secretKey === 'string' ? config.secretKey.trim() : '';
-        const securityCode = typeof config.securityCode === 'string' ? config.securityCode.trim() : '';
-        const masterKey = typeof config.masterKey === 'string' ? config.masterKey.trim() : '';
-
-        if (!secretKey || !securityCode) return null;
-        return { secretKey, securityCode, masterKey };
-    },
-
-    isCloudEnabled() {
-        return this.cloudEnabled;
-    },
-
-    ensureInitialized() {
-        if (this.isInitialized) return true;
-        this.init();
-        return this.isInitialized;
-    },
+    saveQueueBySlot: {},
+    latestSaveTimeBySlot: {},
+    NETWORK_RETRY: 2,
+    REQUEST_TIMEOUT_MS: 12000,
 
     init() {
         this.initError = null;
@@ -103,13 +61,50 @@ const AuthService = {
         return !!this.getCurrentUser();
     },
 
-    // 兼容不同 Bmob SDK 查询参数签名
-    queryEquals(query, key, value) {
+    cloneData(data) {
+        if (data === undefined || data === null) return null;
         try {
-            query.equalTo(key, '==', value);
-        } catch (e) {
-            query.equalTo(key, value);
+            return JSON.parse(JSON.stringify(data));
+        } catch (error) {
+            console.warn('cloneData fallback to shallow copy:', error);
+            if (Array.isArray(data)) return [...data];
+            if (typeof data === 'object') return { ...data };
+            return data;
         }
+    },
+
+    async runWithTimeout(task, timeoutMs = this.REQUEST_TIMEOUT_MS) {
+        return await Promise.race([
+            Promise.resolve().then(task),
+            new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('network-timeout')), timeoutMs);
+            })
+        ]);
+    },
+
+    shouldRetry(error) {
+        if (!error) return false;
+        const code = error.code;
+        const msg = String(error.message || '').toLowerCase();
+        if (code === 100 || code === 101 || code === 500) return true;
+        if (msg.includes('timeout') || msg.includes('network') || msg.includes('fetch')) return true;
+        return false;
+    },
+
+    async withRetry(task, retries = this.NETWORK_RETRY) {
+        let lastError = null;
+        for (let i = 0; i <= retries; i++) {
+            try {
+                return await task();
+            } catch (error) {
+                lastError = error;
+                if (i === retries || !this.shouldRetry(error)) {
+                    throw error;
+                }
+                await new Promise(resolve => setTimeout(resolve, 300 * (i + 1)));
+            }
+        }
+        throw lastError;
     },
 
     async register(username, password) {
@@ -172,77 +167,72 @@ const AuthService = {
     // Cloud Save Methods - Multi Slot Support
     // Data structure: { "slots": [data0, data1, data2, data3], "lastUpdated": timestamp }
 
-    async saveCloudData(gameData, slotIndex) {
-        if (!this.ensureInitialized()) {
-            return { success: false, message: this.initError || '云服务未就绪' };
-        }
+    async saveCloudData(gameData, slotIndex = 0) {
+        const slot = Number(slotIndex);
         if (!this.isLoggedIn()) return { success: false, message: '未登录' };
-        if (slotIndex === undefined || slotIndex === null) return { success: false, message: '未指定存档位' };
-        if (slotIndex < 0 || slotIndex > 3) return { success: false, message: '非法存档位' };
+        if (!Number.isInteger(slot) || slot < 0 || slot > 3) return { success: false, message: '非法存档位' };
 
-        const user = Bmob.User.current();
-        if (!user || !user.objectId) return { success: false, message: '登录态失效' };
+        const previousTask = this.saveQueueBySlot[slot] || Promise.resolve();
+        const queuedTask = previousTask
+            .catch(() => { })
+            .then(async () => {
+                try {
+                    const user = this.getCurrentUser();
+                    if (!user || !user.objectId) return { success: false, message: '登录状态失效' };
 
-        // 同一账号同一槽位写入串行化，避免并发覆盖和重复创建
-        const queueKey = `${user.objectId}:${slotIndex}`;
-        const previousTask = this.slotSaveQueue.get(queueKey) || Promise.resolve();
-
-        const currentTask = previousTask.catch(() => undefined).then(async () => {
-            try {
-                const query = Bmob.Query('GameSave');
-
-                // Pointer query: find save for this user and slot
-                this.queryEquals(query, 'user', user.objectId);
-                this.queryEquals(query, 'slotIndex', slotIndex);
-
-                const results = await query.find();
-
-                let saveObj;
-                if (results && results.length > 0) {
-                    const latest = results.reduce((best, item) => {
-                        if (!best) return item;
-                        const bestTime = Number(best.saveTime) || 0;
-                        const itemTime = Number(item.saveTime) || 0;
-                        return itemTime >= bestTime ? item : best;
-                    }, null);
-                    // 更新最新记录，避免旧记录覆盖
-                    saveObj = Bmob.Query('GameSave');
-                    saveObj.set('id', latest.objectId);
-                    if (results.length > 1) {
-                        console.warn(`Detected duplicate cloud saves for slot ${slotIndex}, using latest record.`);
+                    const payload = this.cloneData(gameData);
+                    const saveTime = Number.isFinite(payload && payload.timestamp) ? payload.timestamp : Date.now();
+                    if (saveTime < (this.latestSaveTimeBySlot[slot] || 0)) {
+                        return { success: true, skipped: true, message: 'stale-save-ignored' };
                     }
-                } else {
-                    // Create new
-                    saveObj = Bmob.Query('GameSave');
-                    const userPointer = Bmob.Pointer('_User');
-                    const poiID = userPointer.set(user.objectId);
-                    saveObj.set('user', poiID);
-                    saveObj.set('slotIndex', slotIndex);
+
+                    const query = Bmob.Query('GameSave');
+                    query.equalTo('user', '==', user.objectId);
+                    query.equalTo('slotIndex', '==', slot);
+
+                    const results = await this.withRetry(
+                        () => this.runWithTimeout(() => query.find()),
+                        this.NETWORK_RETRY
+                    );
+
+                    let saveObj;
+                    if (results && results.length > 0) {
+                        const latest = results.reduce((acc, item) =>
+                            ((item.saveTime || 0) > (acc.saveTime || 0) ? item : acc), results[0]
+                        );
+                        saveObj = Bmob.Query('GameSave');
+                        saveObj.set('id', latest.objectId);
+                    } else {
+                        saveObj = Bmob.Query('GameSave');
+                        const userPointer = Bmob.Pointer('_User');
+                        const pointer = userPointer.set(user.objectId);
+                        saveObj.set('user', pointer);
+                        saveObj.set('slotIndex', slot);
+                    }
+
+                    saveObj.set('saveData', payload);
+                    saveObj.set('saveTime', saveTime);
+
+                    const result = await this.withRetry(
+                        () => this.runWithTimeout(() => saveObj.save()),
+                        this.NETWORK_RETRY
+                    );
+                    this.latestSaveTimeBySlot[slot] = saveTime;
+                    console.log(`Cloud save to GameSave table (Slot ${slot}) success`);
+                    return { success: true, result: result };
+                } catch (error) {
+                    console.error('Cloud save error:', error);
+                    return { success: false, error: error };
                 }
+            });
 
-                // Save data
-                const now = Date.now();
-                const clientTime = Number(gameData && gameData.timestamp) || now;
-                saveObj.set('saveData', gameData);
-                saveObj.set('saveTime', now);
-                saveObj.set('clientTime', clientTime);
-
-                const result = await saveObj.save();
-                console.log(`Cloud save to GameSave table (Slot ${slotIndex}) success`);
-                return { success: true, result: result };
-            } catch (error) {
-                console.error('Cloud save error:', error);
-                // Handle table not exist error (usually auto-created, but just in case)
-                return { success: false, error: error };
+        this.saveQueueBySlot[slot] = queuedTask.finally(() => {
+            if (this.saveQueueBySlot[slot] === queuedTask) {
+                delete this.saveQueueBySlot[slot];
             }
         });
 
-        this.slotSaveQueue.set(queueKey, currentTask);
-        return currentTask.finally(() => {
-            if (this.slotSaveQueue.get(queueKey) === currentTask) {
-                this.slotSaveQueue.delete(queueKey);
-            }
-        });
+        return queuedTask;
     },
 
     async getCloudData() {
@@ -262,8 +252,11 @@ const AuthService = {
             // 1. Fetch New Data (GameSave table)
             try {
                 const newQuery = Bmob.Query('GameSave');
-                this.queryEquals(newQuery, 'user', user.objectId);
-                const newResults = await newQuery.find();
+                newQuery.equalTo('user', '==', user.objectId);
+                const newResults = await this.withRetry(
+                    () => this.runWithTimeout(() => newQuery.find()),
+                    this.NETWORK_RETRY
+                );
 
                 if (newResults && newResults.length > 0) {
                     console.log(`Found ${newResults.length} records in GameSave table.`);
@@ -272,9 +265,9 @@ const AuthService = {
                             try {
                                 let data = save.saveData;
                                 if (typeof data === 'string') data = JSON.parse(data);
-                                const saveTime = Number(save.saveTime) || 0;
-                                if (saveTime >= (slotTimes[save.slotIndex] || 0)) {
-                                    finalSlots[save.slotIndex] = data;
+                                const saveTime = Number.isFinite(save.saveTime) ? save.saveTime : 0;
+                                if (saveTime >= slotTimes[save.slotIndex]) {
+                                    finalSlots[save.slotIndex] = this.cloneData(data);
                                     slotTimes[save.slotIndex] = saveTime;
                                 }
                                 if (saveTime > maxTime) maxTime = saveTime;
@@ -292,7 +285,10 @@ const AuthService = {
             // We always check this to fill in any empty slots
             try {
                 const userQuery = Bmob.Query('_User');
-                const userData = await userQuery.get(user.objectId);
+                const userData = await this.withRetry(
+                    () => this.runWithTimeout(() => userQuery.get(user.objectId)),
+                    this.NETWORK_RETRY
+                );
 
                 if (userData && userData.gameData) {
                     console.log('Found legacy data in _User table.');
@@ -325,7 +321,7 @@ const AuthService = {
                             // Only use legacy if we don't have a new save in this slot
                             if (finalSlots[i] === null && legacySlots[i] !== null) {
                                 console.log(`Restoring slot ${i} from legacy data.`);
-                                finalSlots[i] = legacySlots[i];
+                                finalSlots[i] = this.cloneData(legacySlots[i]);
 
                                 // Update timestamp references
                                 const legacyTime = userData.saveTime || 0;

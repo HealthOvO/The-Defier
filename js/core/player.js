@@ -1223,54 +1223,72 @@ class Player {
             return false;
         }
 
-        // 消耗资源
-        if (energyCost > 0) this.currentEnergy -= energyCost;
-        if (candyCost > 0) {
-            this.milkCandy -= candyCost;
-            // Update UI for candy? (Will be handled in Game/Battle updateUI)
-        }
+        const prevEnergy = this.currentEnergy;
+        const prevCandy = this.milkCandy;
+        let cardRemovedFromHand = false;
 
-        // 苦行 (Asceticism) - 回合结束若有保留手牌，获得功德
-        if (this.buffs.meritOnRetain) {
-            const retainedCount = this.hand.filter(c => c.retain).length;
-            if (retainedCount > 0) {
-                const meritGain = retainedCount * this.buffs.meritOnRetain;
-                if (this.fateRing && this.fateRing.gainMerit) {
-                    this.fateRing.gainMerit(meritGain);
-                    Utils.showBattleLog(`苦行：保留 ${retainedCount} 张牌，功德 +${meritGain}`);
+        try {
+            // 消耗资源
+            if (energyCost > 0) this.currentEnergy -= energyCost;
+            if (candyCost > 0) {
+                this.milkCandy -= candyCost;
+                // Update UI for candy? (Will be handled in Game/Battle updateUI)
+            }
+
+            // 苦行 (Asceticism) - 回合结束若有保留手牌，获得功德
+            if (this.buffs.meritOnRetain) {
+                const retainedCount = this.hand.filter(c => c.retain).length;
+                if (retainedCount > 0) {
+                    const meritGain = retainedCount * this.buffs.meritOnRetain;
+                    if (this.fateRing && this.fateRing.gainMerit) {
+                        this.fateRing.gainMerit(meritGain);
+                        Utils.showBattleLog(`苦行：保留 ${retainedCount} 张牌，功德 +${meritGain}`);
+                    }
                 }
             }
+
+            // 舍弃手牌（除非有保留效果）
+            this.hand.splice(cardIndex, 1);
+            cardRemovedFromHand = true;
+
+            // 播放卡牌特效
+            const activeGame = this.game || (typeof game !== 'undefined' ? game : null);
+            if (activeGame && activeGame.playCardEffect) {
+                activeGame.playCardEffect(null, card.type);
+            }
+
+            // 触发法宝回调 (onCardPlay)
+            const context = { damageModifier: 0 };
+            if (this.treasures) {
+                this.triggerTreasureEffect('onCardPlay', card, context);
+            }
+
+            // 执行卡牌效果
+            const results = this.executeCardEffects(card, target, context);
+
+            // 临时卡 (isTemp) -> 消耗 (Exhaust) 而非弃牌
+            // 且需要确认临时卡是否本来就是消耗属性 (exhaust: true). 
+            // 用户要求: "Temporary cards ... use and delete".
+            if (card.isTemp || card.exhaust) {
+                this.exhaustPile.push(card);
+                Utils.showBattleLog('卡牌已消耗');
+            } else {
+                // 加入弃牌堆
+                this.discardPile.push(card);
+            }
+
+            return results;
+        } catch (error) {
+            // 中文注释：卡牌流程中途异常时回滚资源与手牌，避免出现“扣费但未出牌”的脏状态
+            console.error('playCard failed:', error);
+            this.currentEnergy = prevEnergy;
+            this.milkCandy = prevCandy;
+            if (cardRemovedFromHand) {
+                this.hand.splice(Math.min(cardIndex, this.hand.length), 0, card);
+            }
+            Utils.showBattleLog('卡牌结算异常，已回滚本次操作');
+            return false;
         }
-
-        // 舍弃手牌（除非有保留效果）
-        this.hand.splice(cardIndex, 1);
-
-        // 播放卡牌特效
-        if (typeof game !== 'undefined' && game.playCardEffect) {
-            game.playCardEffect(null, card.type);
-        }
-
-        // 触发法宝回调 (onCardPlay)
-        const context = { damageModifier: 0 };
-        if (this.treasures) {
-            this.triggerTreasureEffect('onCardPlay', card, context);
-        }
-
-        // 执行卡牌效果
-        const results = this.executeCardEffects(card, target, context);
-
-        // 临时卡 (isTemp) -> 消耗 (Exhaust) 而非弃牌
-        // 且需要确认临时卡是否本来就是消耗属性 (exhaust: true). 
-        // 用户要求: "Temporary cards ... use and delete".
-        if (card.isTemp || card.exhaust) {
-            this.exhaustPile.push(card);
-            Utils.showBattleLog('卡牌已消耗');
-        } else {
-            // 加入弃牌堆
-            this.discardPile.push(card);
-        }
-
-        return results;
     }
 
     // 执行卡牌效果
@@ -1287,13 +1305,16 @@ class Player {
 
         for (const effect of card.effects) {
             const result = this.executeEffect(effect, target, context);
-            results.push(result);
+            if (result !== undefined && result !== null) {
+                results.push(result);
+            }
         }
         return results;
     }
 
     // 执行单个效果
     executeEffect(effect, target, context = {}) {
+        if (!effect || typeof effect !== 'object') return null;
         let value = effect.value || 0;
 
         // 应用法宝/Buff上下文加成 (Context Modifiers)
@@ -1308,7 +1329,7 @@ class Player {
 
         // 命环路径伤害加成
         if (effect.type === 'damage' || effect.type === 'penetrate' || effect.type === 'damageAll') {
-            const path = this.fateRing.path;
+            const path = this.fateRing ? this.fateRing.path : null;
             if (path === 'destruction') value = Math.floor(value * 1.3); // 毁灭: +30%
             if (path === 'insight') value = Math.floor(value * 1.2);    // 洞察: +20%
             if (path === 'defiance') value = Math.floor(value * 1.5);   // 逆天: +50%
@@ -1507,7 +1528,7 @@ class Player {
             case 'percentDamage':
                 if (!target) return { type: 'error', message: '需要目标' };
                 // 造成目标最大生命值一定百分比的伤害
-                const maxHp = target.maxHp || target.hp;
+                const maxHp = target.maxHp || target.hp || 1;
                 const pDamage = Math.floor(maxHp * effect.value);
                 return { type: 'damage', value: pDamage, target: effect.target };
 
@@ -1578,8 +1599,9 @@ class Player {
             case 'conditionalDraw':
                 // 实现条件抽牌
                 let triggered = false;
+                const threshold = effect.threshold || 0.5;
                 if (effect.condition === 'lowHp') {
-                    if (this.currentHp / this.maxHp < effect.threshold) {
+                    if (this.currentHp / this.maxHp < threshold) {
                         triggered = true;
                     }
                 }
@@ -1593,7 +1615,7 @@ class Player {
                     Utils.showBattleLog(`绝处逢生生效！抽${effect.drawValue}牌，回${effect.energyValue}灵力`);
                     return { type: 'conditionalDraw', triggered: true };
                 } else {
-                    Utils.showBattleLog(`条件未满足（生命需低于${Math.floor(effect.threshold * 100)}%）`);
+                    Utils.showBattleLog(`条件未满足（生命需低于${Math.floor(threshold * 100)}%）`);
                     return { type: 'conditionalDraw', triggered: false };
                 }
 
@@ -1602,8 +1624,10 @@ class Player {
                 return { type: 'bonusGold' };
 
             case 'ringExp':
-                this.fateRing.exp += effect.value;
-                this.checkFateRingLevelUp();
+                if (this.fateRing) {
+                    this.fateRing.exp += effect.value;
+                    if (this.checkFateRingLevelUp) this.checkFateRingLevelUp();
+                }
                 return { type: 'ringExp', value: effect.value };
 
             case 'consumeAllEnergy':
@@ -1617,7 +1641,10 @@ class Player {
                 for (let i = 0; i < count; i++) {
                     const randomCard = getRandomCard(); // 假设此函数全局可用，或需要从cards.js导入
                     if (randomCard) {
-                        const tempCard = { ...randomCard, instanceId: this.generateCardId(), isTemp: true, cost: 0 };
+                        const tempCard = JSON.parse(JSON.stringify(randomCard));
+                        tempCard.instanceId = this.generateCardId();
+                        tempCard.isTemp = true;
+                        tempCard.cost = 0;
                         this.hand.push(tempCard);
                         addedCards.push(tempCard);
                     }
@@ -1645,13 +1672,15 @@ class Player {
 
 
             case 'damagePerLaw':
-                // 根据装载法则数量造成伤害（兼容新旧命环结构）
+                // 根据装载法则数量造成伤害（林风：命环共振）
                 let loadedLawCount = 0;
                 if (this.fateRing) {
-                    if (typeof this.fateRing.getSocketedLaws === 'function') {
-                        loadedLawCount = this.fateRing.getSocketedLaws().filter(Boolean).length;
-                    } else if (Array.isArray(this.fateRing.loadedLaws)) {
+                    if (Array.isArray(this.fateRing.loadedLaws)) {
                         loadedLawCount = this.fateRing.loadedLaws.filter(Boolean).length;
+                    } else if (typeof this.fateRing.getSocketedLaws === 'function') {
+                        loadedLawCount = this.fateRing.getSocketedLaws().filter(Boolean).length;
+                    } else if (Array.isArray(this.fateRing.slots)) {
+                        loadedLawCount = this.fateRing.slots.filter(s => s && s.law).length;
                     }
                 }
                 const totalDamage = effect.baseDamage + (loadedLawCount * effect.damagePerLaw);
@@ -2373,3 +2402,4 @@ class Player {
         }
     }
 }
+

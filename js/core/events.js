@@ -6,6 +6,8 @@ class EventSystem {
     constructor(game) {
         this.game = game;
         this.currentEvent = null;
+        this.isExecutingChoice = false;
+        this.closeTimer = null;
     }
 
     // 触发随机事件
@@ -18,6 +20,8 @@ class EventSystem {
 
     // 显示事件
     showEvent(event) {
+        if (!event || !Array.isArray(event.choices)) return;
+
         // Fix: Delegate to main game event modal to prevent duplicates and ensure consistency
         if (this.game && this.game.showEventModal) {
             this.game.showEventModal(event, this.game.currentBattleNode);
@@ -25,6 +29,8 @@ class EventSystem {
         }
 
         // Fallback (Legacy)
+        this.closeEvent();
+        this.isExecutingChoice = false;
         this.currentEvent = event;
 
         // 创建事件模态框
@@ -62,6 +68,7 @@ class EventSystem {
 
     // 渲染选项
     renderChoices(choices) {
+        if (!Array.isArray(choices)) return '';
         return choices.map((choice, index) => {
             const canChoose = this.checkCondition(choice.condition);
             const disabledClass = canChoose ? '' : 'disabled';
@@ -88,8 +95,8 @@ class EventSystem {
             case 'hp':
                 return player.currentHp >= condition.min;
             case 'awakenRing':
-                // 仅当命环处于残缺状态时可选
-                return player.fateRing.path === 'crippled';
+                // 中文注释：条件判断不能触发觉醒本身，否则会出现“仅预览选项就改状态”的隐式副作用
+                return !!(player.fateRing && player.fateRing.level >= 1);
 
             case 'gold':
                 return player.gold >= condition.min;
@@ -106,31 +113,52 @@ class EventSystem {
 
         choiceEls.forEach(el => {
             el.addEventListener('click', () => {
-                const index = parseInt(el.dataset.index);
-                this.executeChoice(choices[index]);
-            });
+                const index = parseInt(el.dataset.index, 10);
+                const choice = choices[index];
+                if (!choice) return;
+                this.executeChoice(choice, modal);
+            }, { once: true });
         });
     }
 
     // 执行选项
-    async executeChoice(choice) {
+    async executeChoice(choice, modal = null) {
+        if (!choice || this.isExecutingChoice) return;
+        this.isExecutingChoice = true;
+
+        const choiceEls = (modal || document).querySelectorAll('.event-choice');
+        choiceEls.forEach(el => {
+            el.style.pointerEvents = 'none';
+            el.classList.add('disabled');
+        });
+
         const results = [];
 
-        for (const effect of choice.effects) {
-            const result = await this.executeEffect(effect);
-            if (result) results.push(result);
+        try {
+            const effects = Array.isArray(choice.effects) ? choice.effects : [];
+            for (const effect of effects) {
+                const result = await this.executeEffect(effect);
+                if (result) results.push(result);
+            }
+        } catch (error) {
+            console.error('Execute choice failed:', error);
+            results.push('事件执行异常，已跳过本次操作');
         }
 
-        // 关闭事件模态框
-        this.closeEvent();
+        try {
+            // 关闭事件模态框
+            this.closeEvent();
 
-        // 显示结果
-        if (results.length > 0) {
-            this.showResults(results);
+            // 显示结果
+            if (results.length > 0) {
+                this.showResults(results);
+            }
+
+            // 完成事件节点
+            this.game.onEventComplete();
+        } finally {
+            this.isExecutingChoice = false;
         }
-
-        // 完成事件节点
-        this.game.onEventComplete();
     }
 
     // 执行效果
@@ -320,11 +348,20 @@ class EventSystem {
 
     // 关闭事件
     closeEvent() {
+        if (this.closeTimer) {
+            clearTimeout(this.closeTimer);
+            this.closeTimer = null;
+        }
+
         const modal = document.getElementById('event-modal');
         if (modal) {
             modal.classList.remove('active');
-            setTimeout(() => modal.remove(), 300);
+            this.closeTimer = setTimeout(() => {
+                modal.remove();
+                this.closeTimer = null;
+            }, 300);
         }
         this.currentEvent = null;
+        this.isExecutingChoice = false;
     }
 }

@@ -1797,65 +1797,12 @@ function getRandomCard(rarity = null, characterId = null) {
         }
 
         const cardId = pool[Math.floor(Math.random() * pool.length)];
-        return cloneCardTemplate(cardId);
+        // 中文注释：必须深拷贝，避免运行时改费用/标记时污染原始卡牌模板
+        return JSON.parse(JSON.stringify(CARDS[cardId]));
     }
 
     // Fallback
-    return cloneCardTemplate('strike');
-}
-
-function getArchetypePack(archetypeId) {
-    if (!archetypeId || !ARCHETYPE_PACKS[archetypeId]) return null;
-    return ARCHETYPE_PACKS[archetypeId];
-}
-
-function getRandomArchetypeCard(archetypeId, rarity = null, characterId = null) {
-    const pack = getArchetypePack(archetypeId);
-    if (!pack) return getRandomCard(rarity, characterId);
-
-    let pool = pack.cards.filter(id => {
-        const card = CARDS[id];
-        if (!card) return false;
-        if (rarity && card.rarity !== rarity) return false;
-        return true;
-    });
-
-    pool = filterPoolByCharacter(pool, characterId);
-    if (pool.length === 0) {
-        return getRandomCard(rarity, characterId);
-    }
-
-    const cardId = pool[Math.floor(Math.random() * pool.length)];
-    return cloneCardTemplate(cardId);
-}
-
-function inferDeckArchetype(deck = []) {
-    if (!Array.isArray(deck) || deck.length === 0) return null;
-
-    const scores = { hemorrhage: 0, precision: 0 };
-    const cardIds = new Set(deck.map(c => c && c.id).filter(Boolean));
-
-    deck.forEach(card => {
-        if (!card) return;
-        if (card.synergyGroup === 'hemorrhage') scores.hemorrhage += 3;
-        if (card.synergyGroup === 'precision' || card.synergyGroup === 'stance') scores.precision += 3;
-
-        if (Array.isArray(card.keywords)) {
-            if (card.keywords.includes('bleed')) scores.hemorrhage += 1;
-            if (card.keywords.includes('mark')) scores.precision += 1;
-            if (card.keywords.includes('stance')) scores.precision += 1;
-        }
-    });
-
-    Object.entries(ARCHETYPE_PACKS).forEach(([id, pack]) => {
-        pack.cards.forEach(cardId => {
-            if (cardIds.has(cardId)) scores[id] += 1;
-        });
-    });
-
-    const top = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-    if (!top[0] || top[0][1] < 6) return null;
-    return top[0][0];
+    return JSON.parse(JSON.stringify(CARDS['strike']));
 }
 
 // 获取奖励卡牌选择

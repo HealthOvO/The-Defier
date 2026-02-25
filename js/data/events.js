@@ -980,5 +980,6 @@ function getRandomEvent() {
     else pool = EVENT_POOL.special;
 
     const eventId = pool[Math.floor(Math.random() * pool.length)];
-    return EVENTS[eventId] ? { ...EVENTS[eventId] } : null;
+    // 中文注释：深拷贝事件，防止事件流程在运行时改写全局模板（尤其 choices/effects 数组）
+    return EVENTS[eventId] ? JSON.parse(JSON.stringify(EVENTS[eventId])) : null;
 }

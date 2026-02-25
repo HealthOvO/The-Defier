@@ -49,6 +49,7 @@ class FateRing {
 
     // 获得经验
     gainExp(amount) {
+        if (!Number.isFinite(amount) || amount <= 0) return;
         this.exp += amount;
         this.checkLevelUp();
     }
@@ -69,7 +70,8 @@ class FateRing {
         let newLevel = this.level;
 
         for (const lvl in levels) {
-            const levelNum = parseInt(lvl);
+            const levelNum = parseInt(lvl, 10);
+            if (!Number.isFinite(levelNum)) continue;
             if (this.exp >= levels[lvl].exp) {
                 if (levelNum > newLevel) {
                     newLevel = levelNum;
@@ -93,8 +95,16 @@ class FateRing {
         if (FATE_RING.levels[this.level]) {
             const levelData = FATE_RING.levels[this.level];
             if (levelData.slots > this.maxSlots) {
+                const oldSlots = Array.isArray(this.slots)
+                    ? this.slots.map(slot => ({ ...(slot || {}) }))
+                    : [];
                 this.maxSlots = levelData.slots;
-                this.initSlots(); // This might reset existing laws! ensure initSlots preserves them
+                this.initSlots();
+                oldSlots.forEach((slot, index) => {
+                    if (this.slots[index]) {
+                        this.slots[index] = { ...this.slots[index], ...slot };
+                    }
+                });
                 Utils.showBattleLog(`命环突破！获得新的法则槽位！`);
             }
         }
@@ -116,6 +126,11 @@ class FateRing {
 
     // 镶嵌法则
     socketLaw(slotIndex, lawId) {
+        if (!lawId) return false;
+        if (typeof CARDS !== 'undefined' && !CARDS[lawId]) {
+            console.warn('socketLaw invalid lawId:', lawId);
+            return false;
+        }
         if (slotIndex < 0 || slotIndex >= this.slots.length) return false;
         if (!this.slots[slotIndex].unlocked) return false;
 
@@ -130,7 +145,9 @@ class FateRing {
         Utils.showBattleLog(`法则 [${lawId}] 已刻印于命环！`);
 
         // 立即触发属性重算
-        this.player.recalculateStats();
+        if (this.player && this.player.recalculateStats) {
+            this.player.recalculateStats();
+        }
 
         return true;
     }
@@ -210,8 +227,14 @@ class FateRing {
 
         // Fix: Compatible with legacy save data where 'slots' was a number
         if (Array.isArray(data.slots)) {
-            this.slots = data.slots;
-            this.maxSlots = this.slots.length;
+            const safeSlots = data.slots.map(slot => ({ ...(slot || {}) }));
+            this.maxSlots = safeSlots.length || this.maxSlots;
+            this.initSlots();
+            safeSlots.forEach((slot, index) => {
+                if (this.slots[index]) {
+                    this.slots[index] = { ...this.slots[index], ...slot };
+                }
+            });
         } else {
             // Legacy format: slots is a number
             this.maxSlots = typeof data.slots === 'number' ? data.slots : 1;
@@ -269,6 +292,8 @@ class MutatedRing extends FateRing {
 
     // 重写镶嵌逻辑，允许双重镶嵌 (融合)
     socketLaw(slotIndex, lawId) {
+        if (!lawId) return false;
+        if (typeof CARDS !== 'undefined' && !CARDS[lawId]) return false;
         if (slotIndex < 0 || slotIndex >= this.slots.length) return false;
 
         const slot = this.slots[slotIndex];
@@ -296,7 +321,9 @@ class MutatedRing extends FateRing {
             Utils.showBattleLog(`法则 [${lawId}] 替换了副融合位！`);
         }
 
-        this.player.recalculateStats();
+        if (this.player && this.player.recalculateStats) {
+            this.player.recalculateStats();
+        }
         return true;
     }
 
@@ -432,6 +459,7 @@ class KarmaRing extends FateRing {
 
     // 增加功德 (防御/辅助牌触发)
     gainMerit(amount) {
+        if (!Number.isFinite(amount) || amount <= 0) return;
         if (this.wrathActive) return; // 愤怒状态下不积攒功德? 或者互斥? 暂时允许共存但触发不同
 
         this.merit = Math.min(this.maxPool, this.merit + amount);
@@ -444,6 +472,7 @@ class KarmaRing extends FateRing {
 
     // 增加业力 (攻击牌触发)
     gainSin(amount) {
+        if (!Number.isFinite(amount) || amount <= 0) return;
         if (this.goldenBodyActive) return; // 金身状态下不积攒业力?
 
         this.sin = Math.min(this.maxPool, this.sin + amount);
@@ -458,7 +487,9 @@ class KarmaRing extends FateRing {
     triggerGoldenBody() {
         this.merit = 0;
         this.goldenBodyActive = true;
-        this.player.addBuff('impervious', 1); // 假设 'impervious' 是无敌buff ID，需确认 battle.js
+        if (this.player && this.player.addBuff) {
+            this.player.addBuff('impervious', 1); // 假设 'impervious' 是无敌buff ID，需确认 battle.js
+        }
         Utils.showBattleLog(`功德圆满！【金刚法相】现世！`);
     }
 
@@ -466,6 +497,7 @@ class KarmaRing extends FateRing {
     triggerWrath() {
         this.sin = 0;
         this.wrathActive = true;
+        if (!this.player || !this.player.addBuff) return;
         this.player.addBuff('strength', 5); // 简单加力量
         // 或者施加一个特殊buff "wrath"，下一次攻击x3
         this.player.addBuff('wrath', 1);
@@ -482,6 +514,7 @@ class KarmaRing extends FateRing {
 
     // 重写反序列化
     loadFromJSON(data) {
+        if (!data) return;
         super.loadFromJSON(data);
         this.merit = data.merit || 0;
         this.sin = data.sin || 0;
@@ -508,27 +541,30 @@ class AnalysisRing extends FateRing {
     scanEnemies(enemies) {
         if (!enemies || enemies.length === 0) return;
 
-        let newDiscovery = false;
+        let preferredType = null;
         enemies.forEach(enemy => {
             const type = enemy.type || 'normal'; // 假设敌人有 type 属性
             if (!this.analyzedTypes.includes(type)) {
                 this.analyzedTypes.push(type);
-                newDiscovery = true;
                 Utils.showBattleLog(`真理之环：解析了新物种【${type}】！`);
             }
 
             // 自动适配战术? 或者需要手动?
             // 简化：自动适配第一个精英/Boss的弱点
-            if (this.analyzedTypes.includes(type)) {
-                // 自动激活针对弱点
-                this.tacticalConfig.damageVsType = type;
+            if (!preferredType || enemy.isBoss || enemy.isElite) {
+                preferredType = type;
             }
         });
+
+        if (preferredType) {
+            this.tacticalConfig.damageVsType = preferredType;
+        }
     }
 
     // 获取针对弱点加成
     getTacticalBonus(targetEnemy) {
-        if (targetEnemy.type === this.tacticalConfig.damageVsType) {
+        if (!targetEnemy || !this.tacticalConfig.damageVsType) return 0;
+        if ((targetEnemy.type || 'normal') === this.tacticalConfig.damageVsType) {
             return this.tacticalConfig.damageBonus;
         }
         return 0;
@@ -541,6 +577,7 @@ class AnalysisRing extends FateRing {
     }
 
     loadFromJSON(data) {
+        if (!data) return;
         super.loadFromJSON(data);
         this.analyzedTypes = data.analyzedTypes || [];
     }

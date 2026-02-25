@@ -1211,12 +1211,15 @@ const ELITE_MODIFIERS = [
 
 // 根据天域获取敌人
 function getEnemiesForRealm(realm) {
-    return Object.values(ENEMIES).filter(e => e.realm === realm && !e.isBoss && !e.isMinion);
+    return Object.values(ENEMIES)
+        .filter(e => e.realm === realm && !e.isBoss && !e.isMinion)
+        .map(e => JSON.parse(JSON.stringify(e)));
 }
 
 // 根据天域获取BOSS
 function getBossForRealm(realm) {
-    return Object.values(ENEMIES).find(e => e.realm === realm && e.isBoss);
+    const boss = Object.values(ENEMIES).find(e => e.realm === realm && e.isBoss);
+    return boss ? JSON.parse(JSON.stringify(boss)) : null;
 }
 
 // 获取随机敌人

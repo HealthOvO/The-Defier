@@ -10,26 +10,12 @@ class Battle {
         this.currentTurn = 'player';
         this.turnNumber = 0;
         this.selectedCard = null;
+        this.selectedCardIndex = -1;
         this.targetingMode = false;
         this.battleEnded = false;
-        this.battleResolution = null;
-        this.forceEndEnemyTurn = false;
-        this.eventListeners = new Map();
         this.isProcessingCard = false; // 防止卡牌连点
-        this.isTurnTransitioning = false; // 防止回合切换期间输入穿透
-        this.selectedCardIndex = -1;
-        this.currentCardProcessToken = 0; // 防止异步超时回调提前解锁
-        this.uiDirty = {
-            player: true,
-            enemies: true,
-            hand: true,
-            energy: true,
-            piles: true,
-            environment: true,
-            activeSkill: true
-        };
-        this.turnStartTime = 0;
-        this.lastTurnDuration = 0;
+        this.pendingTimers = new Set();
+        this.activeCardActionId = 0;
 
         // 五行定义
         this.ELEMENTS = {
@@ -39,6 +25,27 @@ class Battle {
             fire: { name: '火', color: '#FF5722', weak: 'water', strong: 'metal' },
             earth: { name: '土', color: '#795548', weak: 'wood', strong: 'water' }
         };
+    }
+
+    // 统一托管战斗中的延时任务，避免战斗结束后旧回调串入新战斗
+    scheduleBattleTimer(callback, delay) {
+        const timerId = setTimeout(() => {
+            this.pendingTimers.delete(timerId);
+            if (this.battleEnded) return;
+            try {
+                callback();
+            } catch (error) {
+                console.error('Battle timer callback failed:', error);
+            }
+        }, delay);
+
+        this.pendingTimers.add(timerId);
+        return timerId;
+    }
+
+    clearBattleTimers() {
+        this.pendingTimers.forEach(timerId => clearTimeout(timerId));
+        this.pendingTimers.clear();
     }
 
     // 计算五行克制倍率
@@ -62,6 +69,7 @@ class Battle {
 
     // 初始化战斗
     init(enemyData) {
+        this.clearBattleTimers();
         this.enemies = [];
         this.battleEnded = false;
         this.battleResolution = null;
@@ -71,30 +79,29 @@ class Battle {
         this.selectedCard = null;
         this.selectedCardIndex = -1;
         this.targetingMode = false;
-        this.targetingMode = false;
         this.isProcessingCard = false;
         this.isTurnTransitioning = false;
         this.currentCardProcessToken = 0;
         this.pendingLifeSteal = 0;
         this.cardsPlayedThisTurn = 0;
         this.playerAttackedThisTurn = false;
-        this.uiDirty = {
-            player: true,
-            enemies: true,
-            hand: true,
-            energy: true,
-            piles: true,
-            environment: true,
-            activeSkill: true
-        };
+        this.activeCardActionId = 0;
 
         // 创建敌人实例
         if (Array.isArray(enemyData)) {
             for (const data of enemyData) {
-                this.enemies.push(this.createEnemyInstance(data));
+                const enemy = this.createEnemyInstance(data);
+                if (enemy) this.enemies.push(enemy);
             }
         } else {
-            this.enemies.push(this.createEnemyInstance(enemyData));
+            const enemy = this.createEnemyInstance(enemyData);
+            if (enemy) this.enemies.push(enemy);
+        }
+
+        if (this.enemies.length === 0) {
+            this.battleEnded = true;
+            Utils.showBattleLog('战斗初始化失败：未找到有效敌人');
+            return;
         }
 
         // 兼容旧逻辑：部分法宝/系统通过 game.enemies 读取当前敌人
@@ -116,16 +123,24 @@ class Battle {
 
     // 创建敌人实例
     createEnemyInstance(enemyData) {
-        // PVP: 如果已经是实体（GhostEnemy），直接返回
-        if (enemyData.isGhost) return enemyData;
+        if (!enemyData || typeof enemyData !== 'object') {
+            console.error('createEnemyInstance received invalid enemyData:', enemyData);
+            return null;
+        }
 
         // 1. 深拷贝行动模式，防止修改污染原始数据 (Deep copy patterns)
-        const patterns = enemyData.patterns.map(p => ({ ...p }));
+        const sourcePatterns = Array.isArray(enemyData.patterns) ? enemyData.patterns : [];
+        const patterns = sourcePatterns.map(p => ({ ...p }));
 
-        // 2. 全局数值增强 (Global Scaling - Hardcore)
-        // HP +35%
-        const baseHp = enemyData.maxHp || enemyData.hp || 1;
-        let maxHp = Math.floor(baseHp * 1.35);
+        if (patterns.length === 0) {
+            // 中文注释：兜底默认攻击，防止空行动序列导致敌人回合崩溃
+            patterns.push({ type: 'attack', value: 1, intent: '⚔️' });
+        }
+
+        // 2. 全局数值增强 (Global Scaling)
+        // HP +20%
+        const baseHp = Number.isFinite(enemyData.maxHp) ? enemyData.maxHp : enemyData.hp;
+        let maxHp = Math.max(1, Math.floor((baseHp || 1) * 1.2));
 
         // 伤害 +25%
         patterns.forEach(p => {
@@ -144,7 +159,7 @@ class Battle {
             currentHp: maxHp,
             patterns: patterns, // 使用修改后的 patterns
             block: 0,
-            buffs: {},
+            buffs: { ...(enemyData.buffs || {}) },
             currentPatternIndex: 0,
             stunned: false,
             isElite: false,
@@ -248,6 +263,7 @@ class Battle {
 
     // 开始战斗
     startBattle() {
+        this.clearBattleTimers();
         this.turnNumber = 1;
         this.currentTurn = 'player';
         this.battleEnded = false;
@@ -298,7 +314,7 @@ class Battle {
         // Boss出场特效
         const isBoss = this.enemies.some(e => e.isBoss);
         if (isBoss && typeof particles !== 'undefined') {
-            setTimeout(() => particles.bossSpawnEffect(), 500);
+            this.scheduleBattleTimer(() => particles.bossSpawnEffect(), 500);
         }
 
         // 触发法宝战斗开始效果
@@ -486,7 +502,11 @@ class Battle {
         const blockValue = document.getElementById('block-value');
         const nameDisplay = document.getElementById('player-name-display');
 
-        // 更新名字和头像
+        if (!hpBar || !hpText || !blockDisplay || !blockValue) {
+            return;
+        }
+
+        // 更新名字
         if (nameDisplay) {
             const charId = this.player.characterId || 'linFeng';
             if (typeof CHARACTERS !== 'undefined' && CHARACTERS[charId]) {
@@ -623,6 +643,7 @@ class Battle {
     // 更新敌人UI
     updateEnemiesUI() {
         const container = document.getElementById('enemy-container');
+        if (!container) return;
         container.innerHTML = '';
 
         this.enemies.forEach((enemy, index) => {
@@ -653,6 +674,7 @@ class Battle {
     // 更新手牌UI
     updateHandUI() {
         const handContainer = document.getElementById('hand-cards');
+        if (!handContainer) return;
         handContainer.innerHTML = '';
 
         // CSS Force for Scroll - Moved to CSS class .hand-area
@@ -722,6 +744,7 @@ class Battle {
     updateEnergyUI() {
         const orbsContainer = document.getElementById('energy-orbs');
         const energyText = document.getElementById('energy-text');
+        if (!orbsContainer || !energyText) return;
 
         orbsContainer.innerHTML = '';
 
@@ -754,64 +777,25 @@ class Battle {
         // 显示奶糖 (使用糖果图标)
         let candyContainer = document.getElementById('candy-container');
         if (!candyContainer) {
-            const resourcesContainer = document.querySelector('.resources-container');
-            if (resourcesContainer) {
-                candyContainer = document.createElement('div');
-                candyContainer.id = 'candy-container';
-                candyContainer.className = 'candy-display resource-item';
-                candyContainer.dataset.resource = 'candy';
-                resourcesContainer.appendChild(candyContainer);
+            candyContainer = document.createElement('div');
+            candyContainer.id = 'candy-container';
+            candyContainer.style.marginLeft = '15px';
+            candyContainer.style.display = 'flex';
+            candyContainer.style.alignItems = 'center';
+            candyContainer.style.color = '#ff9';
+            candyContainer.style.fontSize = '1.2rem';
+            if (orbsContainer.parentElement) {
+                orbsContainer.parentElement.appendChild(candyContainer);
             }
-        }
-
-        if (candyContainer) {
-            // 清空并重新渲染糖果
-            candyContainer.innerHTML = '';
-
-            const orbsWrapper = document.createElement('div');
-            orbsWrapper.className = 'candy-orbs';
-
-            const maxCandyBeforeCollapse = 6;
-
-            if (this.player.milkCandy > maxCandyBeforeCollapse) {
-                // 超过6个，只显示一个糖果 + 数字
-                const candy = document.createElement('div');
-                candy.className = 'candy-orb filled';
-                candy.textContent = '🍬';
-                orbsWrapper.appendChild(candy);
-            } else {
-                // 6个及以下，显示对应数量的糖果图标
-                for (let i = 0; i < this.player.milkCandy; i++) {
-                    const candy = document.createElement('div');
-                    candy.className = 'candy-orb filled';
-                    candy.textContent = '🍬';
-                    candy.style.animationDelay = `${i * 0.1}s`;
-                    orbsWrapper.appendChild(candy);
-                }
-            }
-
-            candyContainer.appendChild(orbsWrapper);
-
-            // 如果奶糖超过6个，显示数字
-            if (this.player.milkCandy > maxCandyBeforeCollapse) {
-                const candyText = document.createElement('span');
-                candyText.className = 'candy-text';
-                candyText.textContent = `×${this.player.milkCandy}`;
-                candyContainer.appendChild(candyText);
-            }
-
-            // 添加tooltip
-            const tooltip = document.createElement('div');
-            tooltip.className = 'resource-tooltip';
-            tooltip.textContent = '奶糖';
-            candyContainer.appendChild(tooltip);
         }
     }
 
     // 更新牌堆UI
     updatePilesUI() {
-        document.getElementById('deck-count').textContent = this.player.drawPile.length;
-        document.getElementById('discard-count').textContent = this.player.discardPile.length;
+        const deckCountEl = document.getElementById('deck-count');
+        const discardCountEl = document.getElementById('discard-count');
+        if (deckCountEl) deckCountEl.textContent = this.player.drawPile.length;
+        if (discardCountEl) discardCountEl.textContent = this.player.discardPile.length;
     }
 
     // 绑定卡牌事件
@@ -989,6 +973,7 @@ class Battle {
 
     // 计算预估伤害 (仅用于UI预览，不应修改任何游戏状态)
     calculateEffectDamage(effect, target) {
+        if (!target) return 0;
         let value = effect.value || 0;
         if (effect.type === 'randomDamage') value = (effect.minValue + effect.maxValue) / 2;
 
@@ -1112,31 +1097,42 @@ class Battle {
 
     // 对目标使用卡牌
     async playCardOnTarget(cardIndex, targetIndex) {
-        if (this.currentTurn !== 'player' || this.battleEnded || this.battleResolution || this.isTurnTransitioning) {
-            console.warn(`Play card rejected: turn=${this.currentTurn}, ended=${this.battleEnded}, transitioning=${this.isTurnTransitioning}`);
-            this.endTargetingMode();
-            return;
-        }
+        if (this.currentTurn !== 'player' || this.battleEnded) return;
         if (this.isProcessingCard) return;
+
+        const card = this.player.hand[cardIndex];
+        if (!card) return;
+
+        const needsTarget = Array.isArray(card.effects) && card.effects.some(e =>
+            ['damage', 'debuff', 'execute', 'removeBlock', 'goldOnKill', 'maxHpOnKill', 'penetrate', 'steal', 'lifeSteal', 'absorb', 'swapHpPercent', 'executeDamage', 'percentDamage'].includes(e.type)
+            && (!e.target || e.target === 'enemy' || e.target === 'single')
+        );
+
+        let target = null;
+        if (needsTarget) {
+            target = this.enemies[targetIndex];
+            if (!target || target.currentHp <= 0) {
+                Utils.showBattleLog('目标无效，请重新选择');
+                this.endTargetingMode();
+                return;
+            }
+        }
+
         this.isProcessingCard = true;
-        const processToken = ++this.currentCardProcessToken;
+        const actionId = ++this.activeCardActionId;
 
         // Safety timeout
-        const processingTimeout = setTimeout(() => {
-            // 仅告警，不提前解锁。提前解锁会导致并发出牌竞态。
-            if (this.isProcessingCard && processToken === this.currentCardProcessToken) {
-                console.warn('Card processing is taking longer than expected, lock remains active.');
+        const processingTimeout = this.scheduleBattleTimer(() => {
+            if (this.isProcessingCard && this.activeCardActionId === actionId) {
+                // 中文注释：仅报警不强制解锁，避免长动画流程中提前放开锁导致并发出牌
+                console.warn('Card processing is taking too long. Waiting for current action to finish.');
+                Utils.showBattleLog('操作较慢，请稍候...');
             }
-        }, 3000);
+        }, 8000);
 
         try {
             this.endTargetingMode();
             this.selectedCard = null;
-
-            const card = this.player.hand[cardIndex];
-            if (!card) {
-                return;
-            }
 
             // 立即给予视觉反馈
             const cardEls = document.querySelectorAll('#hand-cards .card');
@@ -1146,33 +1142,21 @@ class Battle {
                 cardEls[cardIndex].style.pointerEvents = 'none';
             }
 
-            const target = this.enemies[targetIndex];
-
-            // 播放卡牌 (核心逻辑)
-            const effectiveCost = this.getEffectiveCardCost(card);
-            const results = this.player.playCard(cardIndex, target, { energyCostOverride: effectiveCost });
-            if (results === false) {
-                this.updateHandUI();
-                return;
-            }
-
-            // 12. 金戈铁马 (realm 12) - 使用攻击牌消耗生命
-            if (this.player.realm === 12 && card.type === 'attack') {
-                const bloodTax = Math.max(1, Math.floor(this.player.maxHp * 0.05));
-                this.player.takeDamage(bloodTax);
-                Utils.showBattleLog(`金戈铁马：消耗 ${bloodTax} 点生命`);
-                if (this.checkBattleEnd()) return;
-            }
-
-            // 触发连击追踪（仅成功出牌后）
-            if (typeof game !== 'undefined' && game.handleCombo) {
-                game.handleCombo(card.type);
+            // 触发连击追踪
+            if (this.game && this.game.handleCombo) {
+                this.game.handleCombo(card.type);
             }
 
             // 破法者 (Lawbreaker)（仅成功出牌后）
             if (card.type === 'attack' && this.player.buffs.blockOnAttack) {
                 this.player.addBlock(this.player.buffs.blockOnAttack);
                 Utils.showBattleLog(`破法者：获得 ${this.player.buffs.blockOnAttack} 护盾`);
+            }
+
+            // 播放卡牌 (核心逻辑)
+            const results = this.player.playCard(cardIndex, target);
+            if (results === false) {
+                return;
             }
 
             // 播放音效
@@ -1245,9 +1229,8 @@ class Battle {
             this.updateHandUI(); // Reload UI to fix state
         } finally {
             clearTimeout(processingTimeout);
-            if (processToken === this.currentCardProcessToken) {
-                this.isProcessingCard = false;
-            }
+            this.pendingTimers.delete(processingTimeout);
+            this.isProcessingCard = false;
         }
     }
 
@@ -1357,7 +1340,7 @@ class Battle {
                     let baseDmg = result.value;
                     const threshold = result.threshold || 0.3;
                     const targetMaxHp = target.maxHp || target.hp || 1;
-                    if (target.currentHp / targetMaxHp < threshold) {
+                    if ((target.currentHp / targetMaxHp) < threshold) {
                         baseDmg *= 2;
                         Utils.showBattleLog(`斩杀触发！双倍伤害！`);
                     }
@@ -1474,6 +1457,7 @@ class Battle {
                         }
 
                         if (!immune) {
+                            target.buffs[result.buffType] = (target.buffs[result.buffType] || 0) + result.value;
                             target.stunned = true;
 
                             // 共鸣：绝对零度 (Absolute Zero)
@@ -1485,6 +1469,8 @@ class Battle {
                                 }
                             }
                         }
+                    } else {
+                        target.buffs[result.buffType] = (target.buffs[result.buffType] || 0) + result.value;
                     }
 
                     if (!immune || result.buffType !== 'stun') {
@@ -1548,10 +1534,7 @@ class Battle {
                     const removedBlock = target.block;
                     target.block = 0;
                     Utils.showBattleLog(`破甲！移除了 ${removedBlock} 点护盾`);
-                    const enemyIndex = this.enemies.indexOf(target);
-                    if (enemyIndex >= 0) {
-                        Utils.createFloatingText(enemyIndex, '破甲', '#ff0000');
-                    }
+                    Utils.createFloatingText(targetIndex, '破甲', '#ff0000');
                     if (this.updateEnemiesUI) this.updateEnemiesUI();
                 }
                 break;
@@ -1655,16 +1638,13 @@ class Battle {
 
     // 对敌人造成伤害
     dealDamageToEnemy(enemy, amount, sourceElement = null) {
-        if (!enemy) {
-            console.warn('dealDamageToEnemy called with invalid enemy');
-            return 0;
-        }
-        enemy.buffs = enemy.buffs || {};
-
+        if (!enemy || enemy.currentHp <= 0) return 0;
         if (typeof amount !== 'number' || isNaN(amount)) {
             console.error('dealDamageToEnemy received NaN amount', amount);
             amount = 0;
         }
+        amount = Math.max(0, amount);
+        enemy.buffs = enemy.buffs || {};
 
         // 法宝前置伤害修正（如血煞珠、五行珠）
         if (this.player && this.player.triggerTreasureValueEffect) {
@@ -1752,7 +1732,7 @@ class Battle {
         // 共鸣：雷火崩坏 (Plasma Overload) - 改版：对灼烧敌人增伤
         if (this.player.activeResonances) {
             const plasma = this.player.activeResonances.find(r => r.id === 'plasmaOverload');
-            if (plasma && enemy.buffs.burn > 0 && !this._processingPlasma) {
+            if (plasma && (enemy.buffs.burn || 0) > 0 && !this._processingPlasma) {
                 const extraDmg = Math.floor(amount * plasma.effect.percent);
                 if (extraDmg > 0) {
                     enemy.currentHp -= extraDmg;
@@ -1781,8 +1761,8 @@ class Battle {
             // Standard attacks might not be fire. 
             // Hack: If enemy has Burn, assume we are doing fire things? No.
             // Let's use the arguments.
-            if (extreme && arguments[2] === 'fire') {
-                if (enemy.buffs.weak > 0 || enemy.stunned) { // Weak as Slow proxy
+            if (extreme && sourceElement === 'fire') {
+                if ((enemy.buffs.weak || 0) > 0 || enemy.stunned) { // Weak as Slow proxy
                     const boom = Math.floor(enemy.maxHp * extreme.effect.damagePercent * (enemy.isBoss ? 0.5 : 1));
                     enemy.currentHp -= boom;
                     Utils.showBattleLog(`极温爆裂！温差爆炸造成 ${boom} 伤害！`);
@@ -1792,7 +1772,7 @@ class Battle {
         }
 
         // 战术优势 (Tactical Advantage) - 攻击易伤回能
-        if (this.player.buffs.energyOnVulnerable > 0 && enemy && enemy.buffs && enemy.buffs.vulnerable > 0) {
+        if ((this.player.buffs.energyOnVulnerable || 0) > 0 && enemy && enemy.buffs && enemy.buffs.vulnerable > 0) {
             const gain = this.player.buffs.energyOnVulnerable;
             // 每回合限2次
             if ((this.tacticalAdvantageTriggerCount || 0) < 2) {
@@ -1812,12 +1792,11 @@ class Battle {
         }
 
         // 应用连击加成
-        const comboGame = this.game || (typeof game !== 'undefined' ? game : null);
-        if (comboGame && comboGame.getComboBonus) {
-            const comboBonus = comboGame.getComboBonus();
+        if (this.game && this.game.getComboBonus) {
+            const comboBonus = this.game.getComboBonus();
             if (comboBonus > 0) {
                 amount = Math.floor(amount * (1 + comboBonus));
-                // Utils.showBattleLog(`连击加成：+${Math.floor(comboBonus * 100)}%`);
+                // Utils.showBattleLog(`连击加成：x${comboBonus.toFixed(1)}`);
             }
         }
 
@@ -1911,6 +1890,7 @@ class Battle {
         if (enemy.isBoss && typeof BossMechanicsHandler !== 'undefined') {
             amount = BossMechanicsHandler.processOnDamage(this, enemy, amount, 'player');
         }
+        amount = Math.max(0, amount);
 
         // 默认扣血逻辑
         if (!Number.isFinite(amount)) {
@@ -1965,7 +1945,8 @@ class Battle {
             if (enemy.isDualBoss) {
                 const survivor = this.enemies.find(e => e.isDualBoss && e.currentHp > 0 && e !== enemy);
                 if (survivor) {
-                    setTimeout(() => {
+                    this.scheduleBattleTimer(() => {
+                        if (this.battleEnded || survivor.currentHp <= 0) return;
                         Utils.showBattleLog(`【双子羁绊】${survivor.name} 因同伴死亡而暴怒！`);
 
                         const healAmount = Math.floor(survivor.maxHp * 0.6);
@@ -1981,12 +1962,6 @@ class Battle {
             }
         }
 
-        this.emit('damageDealt', {
-            target: enemy,
-            amount: finalDamage,
-            sourceElement,
-            turnNumber: this.turnNumber
-        });
         return finalDamage;
     }
 
@@ -1999,18 +1974,7 @@ class Battle {
 
         // 禁用结束回合按钮
         const endTurnBtn = document.getElementById('end-turn-btn');
-        if (endTurnBtn) {
-            endTurnBtn.disabled = true;
-        }
-
-        const turnEndTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-        this.lastTurnDuration = Math.max(0, turnEndTime - (this.turnStartTime || turnEndTime));
-        if (this.game && this.game.performanceStats) {
-            const list = this.game.performanceStats.battleTurnDurations || [];
-            list.push(this.lastTurnDuration);
-            if (list.length > 30) list.shift();
-            this.game.performanceStats.battleTurnDurations = list;
-        }
+        if (endTurnBtn) endTurnBtn.disabled = true;
 
         // 玩家回合结束
         this.player.endTurn();
@@ -2114,9 +2078,9 @@ class Battle {
             const flash = document.createElement('div');
             flash.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,255,255,0.2);pointer-events:none;z-index:9999;transition:opacity 0.5s;';
             document.body.appendChild(flash);
-            setTimeout(() => {
+            this.scheduleBattleTimer(() => {
                 flash.style.opacity = '0';
-                setTimeout(() => flash.remove(), 500);
+                this.scheduleBattleTimer(() => flash.remove(), 500);
             }, 100);
 
             // 重置回合状态，开始新回合
@@ -2127,7 +2091,6 @@ class Battle {
             this.emit('turnStart', { turnNumber: this.turnNumber, actor: 'player' });
 
             // 启用结束回合按钮
-            const endTurnBtn = document.getElementById('end-turn-btn');
             if (endTurnBtn) endTurnBtn.disabled = false;
 
             this.updateBattleUI();
@@ -2164,11 +2127,9 @@ class Battle {
                 shouldStartPlayerTurn = true;
             }
         } finally {
-            if (!shouldStartPlayerTurn || this.battleEnded) {
-                this.isProcessingCard = false;
-                this.isTurnTransitioning = false;
-                return;
-            }
+            if (this.battleEnded) return;
+
+            // 无论如何都要恢复玩家回合
 
             // 新回合
             this.turnNumber++;
@@ -2189,7 +2150,6 @@ class Battle {
             this.turnStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
             // 启用结束回合按钮
-            const endTurnBtn = document.getElementById('end-turn-btn');
             if (endTurnBtn) endTurnBtn.disabled = false;
 
             this.markUIDirty();
@@ -2210,6 +2170,7 @@ class Battle {
         // - 普通护盾重置
         // - retainBlock 生效时保留并消耗层数
         for (const enemy of this.enemies) {
+            enemy.buffs = enemy.buffs || {};
             if (enemy.buffs.retainBlock && enemy.buffs.retainBlock > 0) {
                 enemy.buffs.retainBlock--;
             } else {
@@ -2267,6 +2228,10 @@ class Battle {
 
                 // 处理敌人debuff (提前处理，防止晕眩导致不受DOT伤害)
                 await this.processEnemyDebuffs(enemy, i);
+                if (enemy.currentHp <= 0) {
+                    enemy.currentHp = 0;
+                    continue;
+                }
 
                 // 检查晕眩
                 if (enemy.stunned) {
@@ -2328,7 +2293,11 @@ class Battle {
                     }
 
                     // 下一个行动模式
-                    enemy.currentPatternIndex = (enemy.currentPatternIndex + 1) % enemy.patterns.length;
+                    if (Array.isArray(enemy.patterns) && enemy.patterns.length > 0) {
+                        enemy.currentPatternIndex = (enemy.currentPatternIndex + 1) % enemy.patterns.length;
+                    } else {
+                        enemy.currentPatternIndex = 0;
+                    }
 
                     if (k < actionCount - 1) await Utils.sleep(500);
                 }
@@ -2347,8 +2316,7 @@ class Battle {
             Utils.showBattleLog('时间静止：敌方行动中断');
         }
 
-        // 这里只处理回合后续状态，不再清空敌方护盾
-        // 否则敌人在本回合获得的护盾会在玩家回合前被错误清零
+        // 回合结束额外机制
         for (const enemy of this.enemies) {
             // 16. 太乙神雷 (realm 16) - 敌人每回合获得攻击力+1
             if (this.player.realm === 16) {
@@ -2439,6 +2407,10 @@ class Battle {
             await Utils.sleep(300);
         }
 
+        if (enemy.currentHp < 0) {
+            enemy.currentHp = 0;
+        }
+
         // 减少易伤
         if (enemy.buffs.vulnerable && enemy.buffs.vulnerable > 0) {
             enemy.buffs.vulnerable--;
@@ -2469,9 +2441,15 @@ class Battle {
 
     // 执行敌人行动
     async executeEnemyAction(enemy, index) {
-        const pattern = enemy.patterns[enemy.currentPatternIndex];
+        if (!enemy || !Array.isArray(enemy.patterns) || enemy.patterns.length === 0) {
+            console.warn('Enemy has no valid pattern:', enemy);
+            return;
+        }
+
+        const safeIndex = Math.max(0, enemy.currentPatternIndex || 0) % enemy.patterns.length;
+        const pattern = enemy.patterns[safeIndex] || { type: 'attack', value: 1, intent: '⚔️' };
         // 只有主行动才显示日志，避免子行动刷屏
-        Utils.showBattleLog(`${enemy.name} 使用 ${pattern.intent}`);
+        Utils.showBattleLog(`${enemy.name} 使用 ${pattern.intent || pattern.type || '行动'}`);
 
         await this.processEnemyPattern(enemy, pattern, index);
 
@@ -2797,7 +2775,7 @@ class Battle {
 
             case 'heal':
                 const healVal = (typeof pattern.value === 'number' && !isNaN(pattern.value)) ? pattern.value : 0;
-                enemy.currentHp = Math.min(enemy.maxHp, enemy.currentHp + healVal);
+                enemy.currentHp = Math.min(enemy.maxHp || enemy.hp || enemy.currentHp, enemy.currentHp + healVal);
                 Utils.showBattleLog(`${enemy.name} 恢复了 ${healVal} 点生命`);
                 break;
 
@@ -2867,17 +2845,23 @@ class Battle {
 
     // 检查战斗是否结束
     checkBattleEnd() {
-        if (this.battleResolution) return true;
+        if (this.battleEnded) return true;
 
         // 检查玩家死亡
         if (!this.player.isAlive()) {
-            return this.finalizeBattle('lost');
+            this.battleEnded = true;
+            this.clearBattleTimers();
+            this.game.onBattleLost();
+            return true;
         }
 
         // 检查所有敌人死亡
         const allDead = this.enemies.length > 0 && this.enemies.every(e => e.currentHp <= 0);
         if (allDead) {
-            return this.finalizeBattle('won');
+            this.battleEnded = true;
+            this.clearBattleTimers();
+            this.game.onBattleWon(this.enemies);
+            return true;
         }
 
         return this.battleEnded;
@@ -2905,12 +2889,13 @@ class Battle {
 
         if (enemyData) {
             const minion = this.createEnemyInstance(enemyData);
+            if (!minion) return;
             minion.isMinion = true; // 标记为随从
             this.enemies.push(minion);
             this.updateBattleUI();
 
             // 随从入场特效
-            setTimeout(() => {
+            this.scheduleBattleTimer(() => {
                 const newEnemyEl = document.querySelector(`.enemy[data-index="${this.enemies.length - 1}"]`);
                 if (newEnemyEl) Utils.addFlashEffect(newEnemyEl);
             }, 100);
@@ -2922,16 +2907,17 @@ class Battle {
 
     // 检查阶段转换
     checkPhaseChange(enemy) {
-        if (!enemy.phases || enemy.currentPhase >= enemy.phases.length) return;
+        if (!enemy || !enemy.phases) return;
 
         // 初始化 phases
         if (typeof enemy.currentPhase === 'undefined') enemy.currentPhase = 0;
+        if (enemy.currentPhase >= enemy.phases.length) return;
 
         const nextPhase = enemy.phases[enemy.currentPhase]; // 这里 enemy.currentPhase 初始应为 0，对应 phases[0] 即第一个转阶段配置
 
         // 修正逻辑：如果当前 Hp 比例低于 phase 阈值
-        const phaseMaxHp = enemy.maxHp || enemy.hp || 1;
-        if (nextPhase && (enemy.currentHp / phaseMaxHp) <= nextPhase.threshold) {
+        const enemyMaxHp = enemy.maxHp || enemy.hp || 1;
+        if (nextPhase && (enemy.currentHp / enemyMaxHp) <= nextPhase.threshold) {
             // 触发转阶段
             enemy.currentPhase++; // 增加阶段计数，避免重复触发
             Utils.showBattleLog(`${enemy.name} 进入${nextPhase.name} 形态！`);
@@ -2951,18 +2937,20 @@ class Battle {
 
             // 恢复少量生命?
             if (nextPhase.heal) {
-                const healAmt = Math.floor(phaseMaxHp * nextPhase.heal);
-                enemy.currentHp = Math.min(phaseMaxHp, enemy.currentHp + healAmt);
+                const healAmt = Math.floor(enemyMaxHp * nextPhase.heal);
+                enemy.currentHp = Math.min(enemyMaxHp, enemy.currentHp + healAmt);
                 Utils.showBattleLog(`${enemy.name} 恢复了力量！`);
             }
         }
     }
     // Start Targeting Mode
     startTargetingMode(cardIndex) {
-        if (this.currentTurn !== 'player' || this.battleEnded || this.isProcessingCard || this.isTurnTransitioning) {
-            console.warn('Targeting mode request ignored due to invalid battle state.');
+        const aliveEnemies = this.enemies.filter(e => e.currentHp > 0);
+        if (aliveEnemies.length === 0) {
+            Utils.showBattleLog('当前没有可选目标');
             return;
         }
+
         this.targetingMode = true;
         this.selectedCardIndex = cardIndex;
 
@@ -3002,6 +2990,9 @@ class Battle {
 
     // Enemy Click Handler
     onEnemyClick(enemyIndex) {
+        if (this.currentTurn !== 'player' || this.battleEnded || this.isProcessingCard) {
+            return;
+        }
         if (this.targetingMode && this.selectedCardIndex !== -1) {
             this.playCardOnTarget(this.selectedCardIndex, enemyIndex);
         } else {
