@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const vm = require('vm');
 
 function assert(cond, msg) {
@@ -6,7 +7,7 @@ function assert(cond, msg) {
 }
 
 (function run() {
-  const code = fs.readFileSync('/Users/health/workspace/The Defier/js/game.js', 'utf8');
+  const code = fs.readFileSync(path.resolve(__dirname, '../js/game.js'), 'utf8');
   const storage = {};
 
   const ctx = vm.createContext({
@@ -155,13 +156,22 @@ function assert(cond, msg) {
   assert(presetHost.legacyProgress.lastPreset === 'smith', 'preset apply should persist last preset id');
   assert(presetHost.legacyProgress.spent > 0, 'preset apply should spend essence');
   assert((presetHost.legacyProgress.upgrades.forgemind || 0) > 0, 'smith preset should allocate forge upgrade');
+  const presetIds = Game.prototype.getLegacyPresetCatalog.call(presetHost).map((p) => p.id);
+  assert(presetIds.includes('entropy'), 'preset catalog should include entropy');
+  assert(presetIds.includes('bulwark'), 'preset catalog should include bulwark');
 
   // 4.6) Run doctrine mapping should match preset identity
   const doctrineHost = {};
   const doctrineSmith = Game.prototype.getLegacyRunDoctrineForPreset.call(doctrineHost, 'smith');
   const doctrineTempo = Game.prototype.getLegacyRunDoctrineForPreset.call(doctrineHost, 'tempo');
+  const doctrineEntropy = Game.prototype.getLegacyRunDoctrineForPreset.call(doctrineHost, 'entropy');
+  const doctrineBulwark = Game.prototype.getLegacyRunDoctrineForPreset.call(doctrineHost, 'bulwark');
   assert(doctrineSmith.firstForgeExtraUpgradeOnce === 1, 'smith doctrine should grant first forge boost');
   assert(doctrineTempo.firstAttackBonusPerBattle === 3, 'tempo doctrine should grant first attack bonus');
+  assert(doctrineEntropy.entropyLegacyProcEnabled === true, 'entropy doctrine should enable legacy discard proc');
+  assert(doctrineEntropy.entropyLegacyDiscardDamage >= 2, 'entropy doctrine should grant discard damage');
+  assert(doctrineBulwark.bulwarkLegacyProcEnabled === true, 'bulwark doctrine should enable legacy block proc');
+  assert(doctrineBulwark.bulwarkLegacyCounterDamage >= 2, 'bulwark doctrine should grant block counter damage');
 
   const doctrineApplyHost = {
     getLegacyRunDoctrineForPreset(presetId) {
@@ -175,7 +185,11 @@ function assert(cond, msg) {
   // 4.7) Run mission mapping/progress should reward essence once
   const missionHost = {};
   const missionSmith = Game.prototype.getLegacyMissionForPreset.call(missionHost, 'smith');
+  const missionEntropy = Game.prototype.getLegacyMissionForPreset.call(missionHost, 'entropy');
+  const missionBulwark = Game.prototype.getLegacyMissionForPreset.call(missionHost, 'bulwark');
   assert(missionSmith && missionSmith.eventType === 'forgeComplete', 'smith mission should track forge completion');
+  assert(missionEntropy && missionEntropy.eventType === 'entropyDiscardProc', 'entropy mission should track discard proc');
+  assert(missionBulwark && missionBulwark.eventType === 'bulwarkBlockProc', 'bulwark mission should track block proc');
 
   const missionApplyHost = {
     getLegacyMissionForPreset(presetId) {
@@ -185,6 +199,10 @@ function assert(cond, msg) {
   const missionPlayer = {};
   Game.prototype.applyLegacyRunMission.call(missionApplyHost, missionPlayer, 'tempo');
   assert(missionPlayer.legacyRunMission.eventType === 'tempoFirstStrike', 'applyLegacyRunMission should write tempo mission');
+  Game.prototype.applyLegacyRunMission.call(missionApplyHost, missionPlayer, 'entropy');
+  assert(missionPlayer.legacyRunMission.eventType === 'entropyDiscardProc', 'applyLegacyRunMission should write entropy mission');
+  Game.prototype.applyLegacyRunMission.call(missionApplyHost, missionPlayer, 'bulwark');
+  assert(missionPlayer.legacyRunMission.eventType === 'bulwarkBlockProc', 'applyLegacyRunMission should write bulwark mission');
 
   const progressHost = {
     player: {

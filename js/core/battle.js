@@ -233,7 +233,7 @@ class Battle {
             });
 
             // 随机精英词缀
-            const eliteTypes = ['strength', 'toughness', 'thorns', 'regen', 'swift'];
+            const eliteTypes = ['strength', 'toughness', 'thorns', 'regen', 'swift', 'sunder'];
             const type = eliteTypes[Math.floor(Math.random() * eliteTypes.length)];
             enemy.eliteType = type;
 
@@ -247,6 +247,7 @@ class Battle {
             // Regen 和 Swift 在回合逻辑或受击逻辑中处理
             // 为 Swift 添加初始闪避率 (需要在 dealDamage 中支持)
             if (type === 'swift') enemy.buffs.dodgeChance = 0.15; // 自定义属性
+            if (type === 'sunder') enemy.buffs.guardBreak = 1;
 
             Utils.showBattleLog(`遭遇强敌：${enemy.name} (特性:${type})`);
         }
@@ -301,6 +302,10 @@ class Battle {
                 Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：流血施加 +${res.applyBleedBonus}`);
             } else if (res.id === 'precision') {
                 Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：破绽施加 +${res.applyMarkBonus}`);
+            } else if (res.id === 'entropy') {
+                Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：本回合首次弃牌触发抽牌与追击`);
+            } else if (res.id === 'bulwark') {
+                Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：本回合首次获得护盾触发抽牌与反击`);
             }
         }
 
@@ -544,26 +549,11 @@ class Battle {
                     } else {
                         // Text/Emoji Avatar
                         faceVisual.style.backgroundImage = '';
-                        faceVisual.textContent = ''; // Clear visual container
-                        // For text avatar, we might remove the visual or just ensure parent has content?
-                        // Current CSS structure: parent flex centers content.
-                        // If we put text in faceVisual, it might work if centered.
-                        // Or we put text in parent directly?
-                        // Let's reuse faceVisual for background images ONLY.
-                        // If text, remove background from faceVisual and let parent handle text?
-                        // BUT line 275 in original code: avatarEl.textContent = ... which WIPES children.
-                        // So we must be careful not to wipe nameDisplay if it's inside avatarEl?
-                        // nameDisplay is document.getElementById('player-name-display').
-                        // Is it inside avatarEl?
-                        // Index.html: <div class="player-avatar"> ... <span id="player-name-display">...</span> ... </div>
-                        // YES. Setting textContent wipes the name span!
-                        // FIX: Do NOT set avatarEl.textContent.
+                        faceVisual.textContent = '';
 
                         faceVisual.style.backgroundImage = '';
                         avatarEl.classList.remove('has-image-avatar');
 
-                        // If emoji, we probably need another span or just a text node?
-                        // Let's create/use a dedicated avatar-text element if needed, or put it in faceVisual?
                         faceVisual.textContent = char.avatar;
                         faceVisual.style.display = 'flex';
                         faceVisual.style.justifyContent = 'center';
@@ -1115,7 +1105,7 @@ class Battle {
         if (!card) return;
 
         const needsTarget = Array.isArray(card.effects) && card.effects.some(e =>
-            ['damage', 'debuff', 'execute', 'removeBlock', 'goldOnKill', 'maxHpOnKill', 'penetrate', 'steal', 'lifeSteal', 'absorb', 'swapHpPercent', 'executeDamage', 'percentDamage'].includes(e.type)
+            ['damage', 'debuff', 'execute', 'removeBlock', 'goldOnKill', 'maxHpOnKill', 'penetrate', 'steal', 'lifeSteal', 'absorb', 'swapHpPercent', 'executeDamage', 'percentDamage', 'blockBurst'].includes(e.type)
             && (!e.target || e.target === 'enemy' || e.target === 'single')
         );
 
@@ -1290,6 +1280,18 @@ class Battle {
                 }
                 break;
 
+            case 'blockBurst':
+                if (target) {
+                    const burstDamage = this.dealDamageToEnemy(target, result.value, sourceElement);
+                    if (enemyEl) {
+                        Utils.addShakeEffect(enemyEl, getShakeIntensity(burstDamage));
+                        Utils.showFloatingNumber(enemyEl, burstDamage, 'damage');
+                    }
+                    const consumed = Math.max(0, Math.floor(Number(result.consumedBlock) || 0));
+                    Utils.showBattleLog(`护势转攻！消耗 ${consumed} 点护盾，造成 ${burstDamage} 点伤害`);
+                }
+                break;
+
             case 'penetrate':
                 if (target) {
                     const penDmg = (typeof result.value === 'number' && !isNaN(result.value)) ? result.value : 0;
@@ -1303,22 +1305,7 @@ class Battle {
                         ? this.player.activeResonances.find(r => r.id === 'thunderSword')
                         : null;
                     if (thunderSword) {
-                        // Apply paralysis/stun/weak
-                        // Using 'stun' as paralysis representation or 'weak'?
-                        // Effect value is 2. Probably 2 stacks of Stun or Weak?
-                        // Description: "Penetrate damage applies 2 layers of Paralysis". 
-                        // Check what Paralysis does. Valid buffs usually: 'stun', 'weak', 'vulnerable', 'burn'.
-                        // 'stun' is usually boolean or 1 turn?
-                        // Let's use 'stun' (1 turn) + 'vulnerable' (2 layers)? Or just 'stun'?
-                        // Text says "layers". Maybe custom buff?
-                        // Let's stick to standard buffs: 2 layers of Vulnerable + chance to Stun?
-                        // Or if game supports 'stun' stacks.
-                        // Checking battle.js processTurn... 'stunned' is a flag.
-                        // Let's apply 2 stacks of 'vulnerable' and small chance to Stun?
-                        // Or "Paralysis" = "Stun"? But 2 layers implies duration.
-                        // Let's apply 'weak' (reduce dmg) and 'vulnerable' (take more dmg).
-                        // Or maybe 'paralysis' is a new buff I should add support for?
-                        // To be safe and impactful: 2 stacks of 'vulnerable'.
+                        // 穿透命中后附加易伤，作为“麻痹”表现。
                         target.buffs.vulnerable = (target.buffs.vulnerable || 0) + thunderSword.effect.value;
                         Utils.showBattleLog(`剑雷交织：敌人麻痹！(易伤+${thunderSword.effect.value})`);
                     }
@@ -1365,10 +1352,10 @@ class Battle {
 
             case 'reshuffle':
                 if (result.value > 0) {
-                    Utils.showBattleLog(`时光倒流！将 ${result.value} 张牌洗回抽牌堆`);
+                    Utils.showBattleLog(`时光倒流！将 ${result.value} 张牌洗回识海`);
                     this.updatePilesUI();
                 } else {
-                    Utils.showBattleLog(`弃牌堆为空，无需洗牌`);
+                    Utils.showBattleLog(`轮回为空，无需洗牌`);
                 }
                 break;
 
@@ -1412,6 +1399,10 @@ class Battle {
                     }
                 }
                 if (discarded > 0) {
+                    this.player.lastDiscardedCount = discarded;
+                    if (typeof this.player.triggerArchetypeDiscardProc === 'function') {
+                        this.player.triggerArchetypeDiscardProc(discarded);
+                    }
                     Utils.showBattleLog(`随机弃掉 ${discarded} 张手牌`);
                 }
                 break;
@@ -1441,6 +1432,8 @@ class Battle {
             case 'debuff':
                 if (target) {
                     target.buffs = target.buffs || {};
+                    const debuffValue = Math.max(0, Math.floor(Number(result.value) || 0));
+                    if (debuffValue <= 0) break;
                     let immune = false;
                     if (result.buffType === 'stun') {
                         // 14. 混元无极 (realm 14) - 50% 免疫眩晕
@@ -1468,7 +1461,7 @@ class Battle {
                         }
 
                         if (!immune) {
-                            target.buffs[result.buffType] = (target.buffs[result.buffType] || 0) + result.value;
+                            target.buffs[result.buffType] = (target.buffs[result.buffType] || 0) + debuffValue;
                             target.stunned = true;
 
                             // 共鸣：绝对零度 (Absolute Zero)
@@ -1481,12 +1474,10 @@ class Battle {
                             }
                         }
                     } else {
-                        target.buffs[result.buffType] = (target.buffs[result.buffType] || 0) + result.value;
+                        target.buffs[result.buffType] = (target.buffs[result.buffType] || 0) + debuffValue;
                     }
 
-                    if (!immune || result.buffType !== 'stun') {
-                        target.buffs[result.buffType] = (target.buffs[result.buffType] || 0) + result.value;
-                    } else {
+                    if (result.buffType === 'stun' && immune) {
                         Utils.showBattleLog(`${target.name} 免疫了眩晕效果`);
                     }
 
@@ -1597,9 +1588,12 @@ class Battle {
 
             case 'debuffAll':
                 // 对所有敌人施加debuff
+                const debuffAllValue = Math.max(0, Math.floor(Number(result.value) || 0));
+                if (debuffAllValue <= 0) break;
                 for (let i = 0; i < this.enemies.length; i++) {
                     const enemy = this.enemies[i];
                     if (enemy.currentHp <= 0) continue;
+                    enemy.buffs = enemy.buffs || {};
 
                     let immune = false;
                     if (result.buffType === 'stun') {
@@ -1621,7 +1615,7 @@ class Battle {
                     }
 
                     if (!immune || result.buffType !== 'stun') {
-                        enemy.buffs[result.buffType] = (enemy.buffs[result.buffType] || 0) + result.value;
+                        enemy.buffs[result.buffType] = (enemy.buffs[result.buffType] || 0) + debuffAllValue;
                     }
                 }
                 break;
@@ -1764,14 +1758,6 @@ class Battle {
 
             // 共鸣：极温爆裂 (Extreme Temp)
             const extreme = this.player.activeResonances.find(r => r.id === 'extremeTemp');
-            // Check if damage type is fire? 
-            // We don't have explicit damage type passed easily except my custom call.
-            // But let's check if enemy has Burn + Slow/Stun and we just dealt damage?
-            // "When dealing FIRE damage".
-            // If I passed 'fire' as 3rd arg in my custom calls.
-            // Standard attacks might not be fire. 
-            // Hack: If enemy has Burn, assume we are doing fire things? No.
-            // Let's use the arguments.
             if (extreme && sourceElement === 'fire') {
                 if ((enemy.buffs.weak || 0) > 0 || enemy.stunned) { // Weak as Slow proxy
                     const boom = Math.floor(enemy.maxHp * extreme.effect.damagePercent * (enemy.isBoss ? 0.5 : 1));
@@ -1847,7 +1833,6 @@ class Battle {
                 if (enemy.resistances[s]) resistMod = enemy.resistances[s]; // e.g., 0.5 means 50% resist
             }
 
-            // 应用克制
             if (multiplier !== 1.0) {
                 amount = Math.floor(amount * multiplier);
 
@@ -1859,6 +1844,7 @@ class Battle {
                 if (multiplier > 1) {
                     Utils.showBattleLog(`${icon} ${sName}克${tName}！伤害+50%`);
                     Utils.createFloatingText(this.enemies.indexOf(enemy), '克制!', '#ff0');
+                    Utils.addFlashEffect(document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`), 'rgba(255, 0, 0, 0.6)');
                 } else if (multiplier < 1 && multiplier > 0.75) { // Same element 0.8
                     Utils.showBattleLog(`${icon} 同属性抵抗！伤害-20%`);
                 } else if (multiplier < 0.8) { // Weak 0.7
@@ -1925,6 +1911,28 @@ class Battle {
 
         enemy.currentHp -= finalDamage;
         if (enemy.currentHp < 0) enemy.currentHp = 0;
+
+        // --- P0-1: Hit Stop & Screen Shake (顿帧与震屏动画) ---
+        // 如果单次伤害超过怪物最大生命值的25%或者是BOSS且伤害过百，触发顿帧和重度震屏
+        if (enemy.maxHp > 0) {
+            const damagePercent = finalDamage / enemy.maxHp;
+            const enemyEl = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`);
+
+            if (damagePercent >= 0.25 || (enemy.isBoss && finalDamage >= 100)) {
+                if (enemyEl) Utils.addShakeEffect(enemyEl, 'heavy');
+                Utils.addShakeEffect(document.body, 'light'); // 全局轻微震动
+
+                // 强制阻塞主线程/动画极短时间实现顿帧(Hit Stop)
+                // 这里利用已有的 Utils.sleep，不过更好的是在 processPlayerAction 中阻塞，这里我们可以通过一个小 trick 或者等待
+                // 为了保持同步，如果不支持全局暂停，我们可以用一个 CSS 类定格元素
+                if (enemyEl) enemyEl.classList.add('hit-stop-frozen');
+                setTimeout(() => {
+                    if (enemyEl) enemyEl.classList.remove('hit-stop-frozen');
+                }, 150); // 顿帧 0.15s
+            } else if (damagePercent >= 0.1) {
+                if (enemyEl) Utils.addShakeEffect(enemyEl, 'medium');
+            }
+        }
 
         // 战斗新机制：阶段化Boss（Phase）切换
         if (enemy.currentHp > 0 && this.checkPhaseChange) {
@@ -2059,6 +2067,10 @@ class Battle {
                                     }
                                 }
                                 if (discarded > 0) {
+                                    this.player.lastDiscardedCount = discarded;
+                                    if (typeof this.player.triggerArchetypeDiscardProc === 'function') {
+                                        this.player.triggerArchetypeDiscardProc(discarded);
+                                    }
                                     Utils.showBattleLog(`${card.name} 发作！随机弃掉了 ${discarded} 张手牌`);
                                     await Utils.sleep(300);
                                     this.updateHandUI();
@@ -2182,6 +2194,7 @@ class Battle {
         // - retainBlock 生效时保留并消耗层数
         for (const enemy of this.enemies) {
             enemy.buffs = enemy.buffs || {};
+            enemy.guardBreakUsedThisTurn = false;
             if (enemy.buffs.retainBlock && enemy.buffs.retainBlock > 0) {
                 enemy.buffs.retainBlock--;
             } else {
@@ -2450,6 +2463,38 @@ class Battle {
         return amount;
     }
 
+    // 破盾压力：针对高护盾玩法提供对抗面
+    applyGuardBreakPressure(enemy, amount) {
+        if (!enemy || !this.player) return amount;
+        let damage = Math.max(0, Math.floor(Number(amount) || 0));
+        if (damage <= 0) return 0;
+        if (enemy.guardBreakUsedThisTurn) return damage;
+
+        const currentBlock = Math.max(0, Math.floor(Number(this.player.block) || 0));
+        if (currentBlock <= 0) return damage;
+
+        const isSunderElite = enemy.isElite && enemy.eliteType === 'sunder';
+        const isBossPressure = enemy.isBoss && currentBlock >= 18 && Math.random() < 0.35;
+        if (!isSunderElite && !isBossPressure) return damage;
+
+        const shatterCap = isSunderElite ? 12 : 8;
+        const shatterRate = isSunderElite ? 0.45 : 0.3;
+        const shattered = Math.min(
+            currentBlock,
+            Math.max(3, Math.min(shatterCap, Math.floor(currentBlock * shatterRate)))
+        );
+        if (shattered <= 0) return damage;
+
+        this.player.block = Math.max(0, currentBlock - shattered);
+        const bonusDamage = Math.max(1, Math.floor(shattered * (isSunderElite ? 0.6 : 0.4)));
+        damage += bonusDamage;
+        enemy.guardBreakUsedThisTurn = true;
+
+        const tag = isSunderElite ? '破盾词缀' : '压迫破盾';
+        Utils.showBattleLog(`${enemy.name}【${tag}】击碎 ${shattered} 护盾并追加 ${bonusDamage} 伤害`);
+        return damage;
+    }
+
     // 执行敌人行动
     async executeEnemyAction(enemy, index) {
         if (!enemy || !Array.isArray(enemy.patterns) || enemy.patterns.length === 0) {
@@ -2546,8 +2591,8 @@ class Battle {
                         Utils.showBattleLog(`虚空吞噬：${devoured.name} 被吞噬了！`);
                         this.updatePilesUI();
                     } else if (this.player.discardPile.length > 0) {
-                        // 如果抽牌堆为空，吞噬弃牌堆？
-                        // 简单起见，仅吞噬抽牌堆，或者洗牌后吞噬
+                        // 如果识海为空，吞噬轮回？
+                        // 简单起见，仅吞噬识海，或者洗牌后吞噬
                         this.player.drawPile = Utils.shuffle([...this.player.discardPile]);
                         this.player.discardPile = [];
                         const devoured = this.player.drawPile.pop();
@@ -2617,6 +2662,8 @@ class Battle {
                     }
                 }
 
+                damage = this.applyGuardBreakPressure(enemy, damage);
+
                 // 法宝：受到穿透伤害前修正（如护心镜）
                 if (isPenetrateAttack && this.player.triggerTreasureValueEffect) {
                     damage = this.player.triggerTreasureValueEffect('onBeforeTakePenetrate', damage, {
@@ -2627,17 +2674,7 @@ class Battle {
                 // Handle True Damage
                 let result;
                 if (isTrueDamage) {
-                    // Bypass block logic by temporarily setting block to 0? 
-                    // Or use a modified takeDamage?
-                    // player.takeDamage handles block. We can modify player.takeDamage to accept 'ignoreBlock' flag
-                    // or just subtract HP directly here if dodged is false.
-
-                    // Let's modify logic slightly:
-                    // Call takeDamage but if it hits block, we want to bypass it.
-                    // The cleanest way is to pass a flag to takeDamage, but takeDamage signature is fixed in many places.
-                    // Alternative: Subtract HP directly for damage amount, but handle dodge.
-
-                    // Workaround: Temporarily remove block, take damage, restore block.
+                    // 真实伤害仍走 takeDamage 的减伤/闪避链路，但临时绕过护盾。
                     const savedBlock = this.player.block;
                     this.player.block = 0;
                     result = this.player.takeDamage(damage);
@@ -2716,6 +2753,8 @@ class Battle {
                         multiIgnoreBlock = !!beforeMulti.ignoreBlock;
                         multiIsPenetrate = !!beforeMulti.isPenetrate;
                     }
+
+                    multiDamage = this.applyGuardBreakPressure(enemy, multiDamage);
 
                     if (multiIsPenetrate && this.player.triggerTreasureValueEffect) {
                         multiDamage = this.player.triggerTreasureValueEffect('onBeforeTakePenetrate', multiDamage, {

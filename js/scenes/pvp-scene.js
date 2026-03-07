@@ -8,6 +8,7 @@ window.PVPScene = {
     activeShopCategory: 'all', // Shop Category state
     selectedPersonality: 'balanced', // Default
     isMatching: false, // 匹配锁，防止重复请求导致状态竞争
+    matchingTimeoutMs: 8000,
     PERSONA_RULES: {
         balanced: { damageMul: 1.0, takenMul: 1.0, regenEnergyPerTurn: 1, hpMul: 1.0 },
         slaughter: { damageMul: 1.2, takenMul: 1.1, regenEnergyPerTurn: 0, hpMul: 1.0 },
@@ -15,8 +16,27 @@ window.PVPScene = {
     },
 
     onShow() {
+        this.setMatchingState(false);
         this.updateMyRankInfo();
         this.switchTab('ranking');
+    },
+
+    getGameRef() {
+        if (typeof game !== 'undefined' && game) return game;
+        if (typeof window !== 'undefined' && window.game) return window.game;
+        return null;
+    },
+
+    setMatchingState(isBusy) {
+        this.isMatching = !!isBusy;
+        const btn = document.querySelector('#tab-ranking .challenge-btn');
+        const text = btn ? btn.querySelector('.text') : null;
+        if (!btn) return;
+        btn.disabled = !!isBusy;
+        if (text) {
+            text.textContent = isBusy ? '⏳ 神念匹配中...' : '⚔️ 论道切磋';
+        }
+        btn.classList.toggle('is-matching', !!isBusy);
     },
 
     getPersonalityRuleSet(type) {
@@ -49,17 +69,24 @@ window.PVPScene = {
     },
 
     async updateMyRankInfo() {
+        if (!PVPService || typeof PVPService.syncRank !== 'function') return;
         if (!PVPService.currentRankData) await PVPService.syncRank();
-        const info = PVPService.currentRankData;
+        const info = PVPService.currentRankData || null;
+        const tierEl = document.getElementById('my-rank-tier');
+        const scoreEl = document.getElementById('my-rank-score');
         if (info) {
-            document.getElementById('my-rank-tier').textContent = info.division || '潜龙';
-            document.getElementById('my-rank-score').textContent = info.score || 1000;
+            if (tierEl) tierEl.textContent = info.division || (PVPService.getDivisionByScore ? PVPService.getDivisionByScore(info.score || 1000) : '潜龙榜');
+            if (scoreEl) scoreEl.textContent = info.score || 1000;
+        } else {
+            if (tierEl) tierEl.textContent = '潜龙榜';
+            if (scoreEl) scoreEl.textContent = '1000';
         }
     },
 
     // === Ranking (Jade Slips) ===
     async loadRankings() {
         const listEl = document.getElementById('ranking-list');
+        if (!listEl) return;
         const startedAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
         // Keep loading spinner if empty, or clear
         listEl.innerHTML = `
@@ -70,6 +97,9 @@ window.PVPScene = {
         `;
 
         try {
+            if (!PVPService || typeof PVPService.getLeaderboard !== 'function') {
+                throw new Error('PVPService unavailable');
+            }
             const rankings = await PVPService.getLeaderboard();
             listEl.innerHTML = '';
 
@@ -128,16 +158,34 @@ window.PVPScene = {
             return;
         }
 
-        this.isMatching = true;
+        this.setMatchingState(true);
         try {
+            if (!PVPService || typeof PVPService.findOpponent !== 'function') {
+                Utils.showBattleLog("匹配服务未就绪");
+                return;
+            }
             if (!PVPService.currentRankData) await PVPService.syncRank();
             const score = PVPService.currentRankData ? PVPService.currentRankData.score : 1000;
             const realm = PVPService.currentRankData ? PVPService.currentRankData.realm : 1;
 
             Utils.showBattleLog("神念搜寻中...");
-            const result = await PVPService.findOpponent(score, realm);
+            const timeoutMs = Math.max(2000, Number(this.matchingTimeoutMs) || 8000);
+            const timeoutResult = new Promise((resolve) => {
+                setTimeout(() => resolve({ success: false, timeout: true, message: '匹配超时，切换离线演武中...' }), timeoutMs);
+            });
+            let result = await Promise.race([
+                PVPService.findOpponent(score, realm, { allowPractice: true }),
+                timeoutResult
+            ]);
+
+            if (result && result.timeout && typeof PVPService.createPracticeOpponent === 'function') {
+                result = PVPService.createPracticeOpponent(score, realm, 'timeout');
+            }
 
             if (result.success) {
+                if (result.opponent && result.opponent.rank && result.opponent.rank.isLocal) {
+                    Utils.showBattleLog("已进入离线演武匹配");
+                }
                 this.startPVPBattle(result.opponent);
             } else {
                 Utils.showBattleLog(result.message || "未找到合适的对手");
@@ -146,7 +194,7 @@ window.PVPScene = {
             console.error("PVP matching failed:", e);
             Utils.showBattleLog("匹配失败，请稍后重试");
         } finally {
-            this.isMatching = false;
+            this.setMatchingState(false);
         }
     },
 
@@ -345,26 +393,29 @@ window.PVPScene = {
     },
 
     async uploadDefense() {
-        if (!game.player) {
+        const gameRef = this.getGameRef();
+        if (!gameRef || !gameRef.player) {
             Utils.showBattleLog("请先进入游戏选择角色");
             return;
         }
 
-        const formation = document.getElementById('guardian-formation').checked;
+        const toggle = document.getElementById('guardian-formation');
+        const formation = !!(toggle && toggle.checked);
+        const deck = Array.isArray(gameRef.player.deck) ? gameRef.player.deck : [];
 
         const snapshot = {
             powerScore: this.calculatePowerScore(),
-            realm: game.player.realm || 1,
+            realm: gameRef.player.realm || 1,
             data: {
                 me: {
-                    maxHp: game.player.maxHp,
-                    energy: game.player.maxEnergy,
-                    currEnergy: game.player.maxEnergy
+                    maxHp: gameRef.player.maxHp,
+                    energy: gameRef.player.maxEnergy,
+                    currEnergy: gameRef.player.maxEnergy
                 },
-                deck: game.player.deck.map(c => ({ id: c.id, upgraded: c.upgraded, name: c.name })),
+                deck: deck.map(c => ({ id: c.id, upgraded: c.upgraded, name: c.name })),
                 aiProfile: this.selectedPersonality,
                 deckArchetype: (typeof PVPService !== 'undefined' && PVPService.getDeckArchetype)
-                    ? PVPService.getDeckArchetype(game.player.deck)
+                    ? PVPService.getDeckArchetype(deck)
                     : 'balanced',
                 ruleVersion: (typeof PVPService !== 'undefined' && PVPService.ruleVersion) ? PVPService.ruleVersion : 'pvp-v2'
             },
@@ -375,7 +426,7 @@ window.PVPScene = {
         snapshot.data.personalityRules = this.getPersonalityRuleSet(this.selectedPersonality);
 
         // Visual Feedback - Pulse the button
-        const btn = document.querySelector('.ink-btn-large span.btn-icon');
+        const btn = document.querySelector('#tab-defense .ink-btn-large span.btn-icon');
         if (btn) {
             btn.innerHTML = "⏳";
         }
@@ -385,7 +436,7 @@ window.PVPScene = {
         if (btn) btn.innerHTML = "🌩️";
 
         if (res.success) {
-            Utils.showBattleLog("防御幻影上传成功！");
+            Utils.showBattleLog(res.message || "防御幻影上传成功！");
             const now = new Date();
             const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
             const timeEl = document.getElementById('def-time');
@@ -412,14 +463,15 @@ window.PVPScene = {
             }
 
         } else {
-            Utils.showBattleLog("上传失败: " + res.message);
+            Utils.showBattleLog("上传失败: " + (res.message || '未知错误'));
         }
     },
 
     calculatePowerScore() {
-        if (!game.player) return 0;
-        let score = game.player.maxHp * 2;
-        if (game.player.deck) score += game.player.deck.length * 10;
+        const gameRef = this.getGameRef();
+        if (!gameRef || !gameRef.player) return 0;
+        let score = gameRef.player.maxHp * 2;
+        if (gameRef.player.deck) score += gameRef.player.deck.length * 10;
         return Math.floor(score);
     },
 
@@ -466,29 +518,109 @@ window.PVPScene = {
 
         if (displayItems.length === 0) {
             grid.innerHTML = '<div style="grid-column: 1 / -1; text-align:center; color:rgba(255,255,255,0.3); padding-top:100px; font-size:1.2rem;">此分类暂无商品</div>';
+            this.updateShopWallet();
             return;
         }
 
         displayItems.forEach((item, index) => {
-            const el = this.createShopItemElement(item);
+            const state = (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getShopItemState === 'function')
+                ? PVPService.getShopItemState(item.id)
+                : { buyable: false, reason: 'service_unavailable', remainingStock: null };
+            const el = this.createShopItemElement(item, state);
             el.style.animationDelay = `${index * 0.05}s`; // Stagger
             grid.appendChild(el);
         });
 
-        // Update Wallet Display (Mock)
-        const walletEl = document.getElementById('shop-wallet-amount');
-        if (walletEl) walletEl.textContent = "1200";
+        this.updateShopWallet();
     },
 
-    createShopItemElement(item) {
+    updateShopWallet() {
+        const walletEl = document.getElementById('shop-wallet-amount');
+        if (!walletEl) return;
+        if (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getWalletSummary === 'function') {
+            const wallet = PVPService.getWalletSummary();
+            walletEl.textContent = Math.max(0, Math.floor(Number(wallet.coins) || 0));
+            this.updateShopMetaPanels(wallet);
+            return;
+        }
+        walletEl.textContent = '0';
+        this.updateShopMetaPanels(null);
+    },
+
+    updateShopMetaPanels(wallet = null) {
+        const cosmeticEl = document.getElementById('shop-cosmetic-status');
+        const rewardEl = document.getElementById('shop-reward-status');
+        const logEl = document.getElementById('shop-activity-log');
+        const walletData = wallet || ((typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getWalletSummary === 'function')
+            ? PVPService.getWalletSummary()
+            : null);
+
+        let equipped = { skin: null, title: null };
+        if (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getEquippedCosmetics === 'function') {
+            equipped = PVPService.getEquippedCosmetics();
+        }
+        if (cosmeticEl) {
+            const titleText = equipped && equipped.title ? equipped.title.name : '未佩戴称号';
+            const skinText = equipped && equipped.skin ? equipped.skin.name : '未佩戴外观';
+            cosmeticEl.textContent = `称号：${titleText} ｜ 外观：${skinText}`;
+        }
+
+        if (rewardEl) {
+            if (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getRewardPreview === 'function' && walletData) {
+                const previewWin = PVPService.getRewardPreview(true, 1000);
+                const mult = previewWin && previewWin.breakdown
+                    ? Number(previewWin.breakdown.totalMultiplier || 1).toFixed(2)
+                    : '1.00';
+                const seasonName = previewWin && previewWin.season ? (previewWin.season.name || '常驻') : '常驻';
+                const division = previewWin && previewWin.breakdown ? (previewWin.breakdown.myDivision || '潜龙榜') : '潜龙榜';
+                rewardEl.textContent = `赛季：${seasonName} ｜ 段位：${division} ｜ 连胜 ${walletData.winStreak || 0} ｜ 下场胜利预估 +${previewWin.totalReward}（倍率 x${mult}）`;
+            } else {
+                rewardEl.textContent = '暂无奖励预估数据';
+            }
+        }
+
+        if (logEl) {
+            let logs = [];
+            if (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getRecentTransactions === 'function') {
+                logs = PVPService.getRecentTransactions(6);
+            }
+            if (!logs || logs.length === 0) {
+                logEl.innerHTML = '<div class="shop-log-empty">暂无交易记录</div>';
+                return;
+            }
+            logEl.innerHTML = logs.map((entry) => {
+                const at = new Date(entry.at || Date.now());
+                const hh = String(at.getHours()).padStart(2, '0');
+                const mm = String(at.getMinutes()).padStart(2, '0');
+                const sign = entry.coins > 0 ? '+' : '';
+                const coinText = entry.coins ? `${sign}${entry.coins}` : '--';
+                const title = entry.itemName || entry.detail || entry.type || '记录';
+                return `<div class="shop-log-item"><span class="shop-log-time">${hh}:${mm}</span><span class="shop-log-title">${title}</span><span class="shop-log-coin">${coinText}</span></div>`;
+            }).join('');
+        }
+    },
+
+    createShopItemElement(item, itemState = null) {
         const el = document.createElement('div');
         el.className = 'talisman-card';
+        if (item && item.id) {
+            el.dataset.itemId = item.id;
+        }
         // Add fade-in animation class if needed, or rely on CSS default
 
         let typeLabel = "道具";
         if (item.type === 'card') typeLabel = "秘籍";
         if (item.type === 'skin') typeLabel = "外观";
         if (item.type === 'title') typeLabel = "称号";
+        const state = itemState || { buyable: false, reason: 'unknown', remainingStock: null };
+        const remaining = state.remainingStock;
+        const stockText = remaining === null ? '不限量' : `剩余 ${remaining}/${Math.max(0, Math.floor(Number(item.stock) || 0))}`;
+        let buyText = '兑换';
+        if (state.reason === 'owned') buyText = '已拥有';
+        else if (state.reason === 'equippable') buyText = '佩戴';
+        else if (state.reason === 'equipped') buyText = '卸下';
+        else if (state.reason === 'sold_out') buyText = '已售罄';
+        else if (state.reason === 'insufficient') buyText = '币不足';
 
         el.innerHTML = `
             <div class="talisman-top-decor"></div>
@@ -503,11 +635,48 @@ window.PVPScene = {
                     <span class="price-text">${item.price}</span>
                     <span style="font-size: 0.8rem; color: #666;">天道币</span>
                 </div>
+                <div class="shop-stock-info">${stockText}</div>
             </div>
-            <div class="buy-overlay" onclick="Utils.showBattleLog('暂未开放购买: ${item.name}')">
-                <span class="buy-btn-text">兑换</span>
+            <div class="buy-overlay ${state.buyable ? 'buyable' : `state-${state.reason || 'locked'}`}" data-state="${state.reason || 'locked'}">
+                <span class="buy-btn-text">${buyText}</span>
             </div>
         `;
+
+        const overlay = el.querySelector('.buy-overlay');
+        if (overlay) {
+            overlay.dataset.itemId = item.id || '';
+            if (state.buyable || state.reason === 'equippable' || state.reason === 'equipped') {
+                overlay.addEventListener('click', () => this.purchaseShopItem(item.id));
+            }
+        }
+
         return el;
+    },
+
+    purchaseShopItem(itemId) {
+        if (!itemId) return;
+        if (typeof PVPService === 'undefined' || !PVPService || typeof PVPService.handleShopItemAction !== 'function') {
+            Utils.showBattleLog('商店服务未就绪');
+            return;
+        }
+        const result = PVPService.handleShopItemAction(itemId, { game: this.getGameRef() });
+        if (result && result.success) {
+            Utils.showBattleLog(result.message || '兑换成功');
+            if (result.wallet && typeof result.wallet.coins === 'number') {
+                const walletEl = document.getElementById('shop-wallet-amount');
+                if (walletEl) walletEl.textContent = Math.max(0, Math.floor(result.wallet.coins));
+            }
+            this.updateShopMetaPanels(result.wallet || null);
+            if (this.getGameRef() && typeof this.getGameRef().updateCharacterInfo === 'function') {
+                this.getGameRef().updateCharacterInfo();
+            }
+            const gameRef = this.getGameRef();
+            if (gameRef && typeof gameRef.autoSave === 'function') {
+                gameRef.autoSave();
+            }
+        } else {
+            Utils.showBattleLog((result && result.message) ? result.message : '兑换失败');
+        }
+        this.loadShop();
     }
 };

@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const vm = require('vm');
 
 function assert(cond, msg) {
@@ -6,7 +7,7 @@ function assert(cond, msg) {
 }
 
 (async function run() {
-  const code = fs.readFileSync('/Users/health/workspace/The Defier/js/services/authService.js', 'utf8');
+  const code = fs.readFileSync(path.resolve(__dirname, '../js/services/authService.js'), 'utf8');
 
   let initArgs = null;
   const store = new Map();
@@ -62,4 +63,3 @@ function assert(cond, msg) {
   console.error(err);
   process.exit(1);
 });
-

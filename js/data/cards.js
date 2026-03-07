@@ -628,6 +628,384 @@ const CARDS = {
         ]
     },
 
+    recklessMulligan: {
+        id: 'recklessMulligan',
+        name: '孤注换手',
+        type: 'skill',
+        cost: 0,
+        icon: '🎴',
+        description: '丢弃所有手牌，抽 2+弃牌数 张牌',
+        rarity: 'common',
+        keywords: ['discard', 'tempo'],
+        comboTag: 'discard',
+        synergyGroup: 'entropy',
+        effects: [
+            { type: 'discardHand', target: 'self' },
+            { type: 'drawCalculated', base: 2, perDiscard: 1, target: 'self' }
+        ]
+    },
+
+    echoingCut: {
+        id: 'echoingCut',
+        name: '回响斩',
+        type: 'attack',
+        cost: 1,
+        icon: '🗡️',
+        description: '造成 6 点伤害，随机弃 1 张牌并抽 1 张牌',
+        rarity: 'common',
+        keywords: ['discard'],
+        comboTag: 'discard',
+        synergyGroup: 'entropy',
+        effects: [
+            { type: 'damage', value: 6, target: 'enemy' },
+            { type: 'discardRandom', value: 1, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    voidLedger: {
+        id: 'voidLedger',
+        name: '虚账',
+        type: 'skill',
+        cost: 1,
+        icon: '📒',
+        description: '抽 2 张牌，然后随机弃 1 张牌',
+        rarity: 'common',
+        keywords: ['discard'],
+        comboTag: 'discard',
+        synergyGroup: 'entropy',
+        effects: [
+            { type: 'draw', value: 2, target: 'self' },
+            { type: 'discardRandom', value: 1, target: 'self' }
+        ]
+    },
+
+    entropyGuard: {
+        id: 'entropyGuard',
+        name: '熵障',
+        type: 'defense',
+        cost: 1,
+        icon: '🧿',
+        description: '获得 9 点护盾，随机弃 1 张牌并获得 1 点灵力',
+        rarity: 'common',
+        keywords: ['discard'],
+        comboTag: 'discard',
+        synergyGroup: 'entropy',
+        effects: [
+            { type: 'block', value: 9, target: 'self' },
+            { type: 'discardRandom', value: 1, target: 'self' },
+            { type: 'energy', value: 1, target: 'self' }
+        ]
+    },
+
+    debtCollection: {
+        id: 'debtCollection',
+        name: '索偿',
+        type: 'skill',
+        cost: 0,
+        icon: '🩸',
+        description: '自身受到 2 点伤害，抽 2 张牌并获得 1 点灵力',
+        rarity: 'uncommon',
+        keywords: ['discard', 'tempo'],
+        comboTag: 'discard',
+        synergyGroup: 'entropy',
+        effects: [
+            { type: 'selfDamage', value: 2, target: 'self' },
+            { type: 'draw', value: 2, target: 'self' },
+            { type: 'energy', value: 1, target: 'self' }
+        ]
+    },
+
+    recirculation: {
+        id: 'recirculation',
+        name: '再循环',
+        type: 'skill',
+        cost: 1,
+        icon: '🔁',
+        description: '重抽当前手牌（丢弃并抽取等量卡牌）',
+        rarity: 'uncommon',
+        keywords: ['discard'],
+        comboTag: 'discard',
+        synergyGroup: 'entropy',
+        effects: [
+            { type: 'mulligan', target: 'self' }
+        ]
+    },
+
+    calculatedRuin: {
+        id: 'calculatedRuin',
+        name: '筹算崩解',
+        type: 'attack',
+        cost: 2,
+        icon: '📉',
+        description: '每张手牌造成 2 点伤害，随后随机弃 1 张牌',
+        rarity: 'uncommon',
+        keywords: ['discard', 'burst'],
+        comboTag: 'discard',
+        synergyGroup: 'entropy',
+        effects: [
+            { type: 'damagePerCard', value: 2, target: 'enemy' },
+            { type: 'discardRandom', value: 1, target: 'self' }
+        ]
+    },
+
+    oblivionSpiral: {
+        id: 'oblivionSpiral',
+        name: '湮旋',
+        type: 'skill',
+        cost: 2,
+        icon: '🌀',
+        description: '丢弃所有手牌，抽 1+弃牌数 张牌，并对全体造成 7 点伤害',
+        rarity: 'rare',
+        keywords: ['discard', 'aoe'],
+        comboTag: 'discard',
+        synergyGroup: 'entropy',
+        effects: [
+            { type: 'discardHand', target: 'self' },
+            { type: 'drawCalculated', base: 1, perDiscard: 1, target: 'self' },
+            { type: 'damageAll', value: 7, target: 'allEnemies' }
+        ]
+    },
+
+    finalConvergence: {
+        id: 'finalConvergence',
+        name: '终局收束',
+        type: 'attack',
+        cost: 3,
+        icon: '🕳️',
+        description: '消耗所有灵力，每点灵力造成 7 点伤害，然后随机弃 1 张牌',
+        rarity: 'rare',
+        keywords: ['discard', 'burst'],
+        comboTag: 'discard',
+        synergyGroup: 'entropy',
+        effects: [
+            { type: 'consumeAllEnergy', damagePerEnergy: 7, target: 'enemy' },
+            { type: 'discardRandom', value: 1, target: 'self' }
+        ]
+    },
+
+    ironBreath: {
+        id: 'ironBreath',
+        name: '铁息守律',
+        type: 'defense',
+        cost: 1,
+        icon: '🛡️',
+        description: '获得 9 点护盾并净化 1 层负面效果',
+        rarity: 'common',
+        keywords: ['guard', 'cleanse'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'block', value: 9, target: 'self' },
+            { type: 'cleanse', value: 1, target: 'self' }
+        ]
+    },
+
+    mirrorWall: {
+        id: 'mirrorWall',
+        name: '镜壁折锋',
+        type: 'skill',
+        cost: 1,
+        icon: '🪞',
+        description: '获得 6 点护盾并获得 1 层护盾留存',
+        rarity: 'common',
+        keywords: ['guard', 'retain'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'block', value: 6, target: 'self' },
+            { type: 'buff', buffType: 'retainBlock', value: 1, target: 'self' }
+        ]
+    },
+
+    reboundingShell: {
+        id: 'reboundingShell',
+        name: '回壳击',
+        type: 'attack',
+        cost: 1,
+        icon: '🐢',
+        description: '造成 5 点伤害并获得 6 点护盾',
+        rarity: 'common',
+        keywords: ['guard', 'tempo'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'damage', value: 5, target: 'enemy' },
+            { type: 'block', value: 6, target: 'self' }
+        ]
+    },
+
+    bastionStudy: {
+        id: 'bastionStudy',
+        name: '垒势演算',
+        type: 'skill',
+        cost: 0,
+        icon: '📐',
+        description: '抽 1 张牌并获得 4 点护盾',
+        rarity: 'common',
+        keywords: ['guard', 'tempo'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'draw', value: 1, target: 'self' },
+            { type: 'block', value: 4, target: 'self' }
+        ]
+    },
+
+    wardingSweep: {
+        id: 'wardingSweep',
+        name: '镇界横扫',
+        type: 'attack',
+        cost: 1,
+        icon: '🧱',
+        description: '对全体造成 4 点伤害并获得 4 点护盾',
+        rarity: 'common',
+        keywords: ['guard', 'aoe'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'damageAll', value: 4, target: 'allEnemies' },
+            { type: 'block', value: 4, target: 'self' }
+        ]
+    },
+
+    resolveAnchor: {
+        id: 'resolveAnchor',
+        name: '定心锚',
+        type: 'skill',
+        cost: 1,
+        icon: '⚓',
+        description: '下回合开始时获得 7 点护盾并抽 1 张牌',
+        rarity: 'uncommon',
+        keywords: ['guard', 'setup'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'buff', buffType: 'nextTurnBlock', value: 7, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    guardianMantra: {
+        id: 'guardianMantra',
+        name: '守愿咒',
+        type: 'defense',
+        cost: 1,
+        icon: '📿',
+        description: '获得 10 点护盾并获得 1 层护盾留存',
+        rarity: 'uncommon',
+        keywords: ['guard', 'retain'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'block', value: 10, target: 'self' },
+            { type: 'buff', buffType: 'retainBlock', value: 1, target: 'self' }
+        ]
+    },
+
+    shieldTax: {
+        id: 'shieldTax',
+        name: '护势征敛',
+        type: 'skill',
+        cost: 1,
+        icon: '🧾',
+        description: '获得等于已损失生命 30% 的护盾并抽 1 张牌',
+        rarity: 'uncommon',
+        keywords: ['guard', 'recover'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'blockFromLostHp', percent: 0.3, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    bastionCrash: {
+        id: 'bastionCrash',
+        name: '垒势崩落',
+        type: 'attack',
+        cost: 1,
+        icon: '💥',
+        description: '消耗至多 12 点护盾，每点护盾造成 1 点伤害，并抽 1 张牌',
+        rarity: 'uncommon',
+        keywords: ['guard', 'burst'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'blockBurst', ratio: 1, maxConsume: 12, minDamage: 4, target: 'enemy' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    counterEdict: {
+        id: 'counterEdict',
+        name: '反制敕令',
+        type: 'attack',
+        cost: 2,
+        icon: '📜',
+        description: '移除敌人所有护盾并造成 8 点伤害',
+        rarity: 'uncommon',
+        keywords: ['guard', 'counter'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'removeBlock', target: 'enemy' },
+            { type: 'damage', value: 8, target: 'enemy' }
+        ]
+    },
+
+    citadelOath: {
+        id: 'citadelOath',
+        name: '天阙誓垒',
+        type: 'power',
+        cost: 2,
+        icon: '🏯',
+        description: '获得 8 点护盾、2 点荆棘与 2 层护盾留存',
+        rarity: 'rare',
+        keywords: ['guard', 'retain'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'block', value: 8, target: 'self' },
+            { type: 'buff', buffType: 'thorns', value: 2, target: 'self' },
+            { type: 'buff', buffType: 'retainBlock', value: 2, target: 'self' }
+        ]
+    },
+
+    fortressEdict: {
+        id: 'fortressEdict',
+        name: '镇垒断罪',
+        type: 'attack',
+        cost: 2,
+        icon: '⚖️',
+        description: '消耗全部护盾，每点护盾造成 1.3 点伤害，并施加 2 层虚弱',
+        rarity: 'rare',
+        keywords: ['guard', 'burst'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'blockBurst', ratio: 1.3, minDamage: 8, target: 'enemy' },
+            { type: 'debuff', buffType: 'weak', value: 2, target: 'enemy' }
+        ]
+    },
+
+    aegisJudgement: {
+        id: 'aegisJudgement',
+        name: '玄甲裁断',
+        type: 'attack',
+        cost: 2,
+        icon: '⚔️',
+        description: '造成 10 点伤害并获得 8 点护盾',
+        rarity: 'rare',
+        keywords: ['guard', 'burst'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'damage', value: 10, target: 'enemy' },
+            { type: 'block', value: 8, target: 'self' }
+        ]
+    },
+
     // ==================== 补全卡牌 ====================
     healingTouch: {
         id: 'healingTouch',
@@ -1214,7 +1592,7 @@ const CARDS = {
         type: 'law',
         cost: 4,
         icon: '⏪',
-        description: '将弃牌堆洗回抽牌堆',
+        description: '将轮回洗回识海',
         rarity: 'epic',
         lawType: 'time',
         effects: [
@@ -1699,6 +2077,8 @@ const CARD_POOL = {
         'concentration', 'doubleEdge', 'quickDraw',
         'bloodlettingSlash', 'punctureMark', 'hunterSeal', 'stanceFlow', 'guardedRiposte',
         'serratedRitual', 'coagulatedGuard', 'weakpointSurvey', 'duetFeint', 'poisedCounter',
+        'recklessMulligan', 'echoingCut', 'voidLedger', 'entropyGuard',
+        'ironBreath', 'mirrorWall', 'reboundingShell', 'bastionStudy', 'wardingSweep',
         'poisonTouch', 'minorHeal', 'monkStrike', 'analysis',
         // 角色专属
         'defianceStrike', 'bloodSeal', 'unchain', 'karmaStrike', 'probe'
@@ -1709,6 +2089,8 @@ const CARD_POOL = {
         'windfall', 'powerUp',
         'tacticalExpose', 'crimsonCascade', 'stanceAggressive', 'stanceDefensive',
         'bloodDebt', 'arteryRupture', 'razorFocus', 'stancePivot', 'focusBreak',
+        'debtCollection', 'recirculation', 'calculatedRuin',
+        'resolveAnchor', 'guardianMantra', 'shieldTax', 'bastionCrash', 'counterEdict',
         // 新增角色卡牌
         'defiantWill', 'healingTouch', 'vajraGlare', 'ringAnalysis',
         // 角色专属
@@ -1719,7 +2101,8 @@ const CARD_POOL = {
         'miracleHeal', 'earthShatter', 'swordBreaker', 'finishingBlow', 'halfDamage',
         'thunderStorm', 'voidWalk', 'iceFreeze', 'desperateSurvival', 'enlightenment',
         'allIn', 'sunderingNeedle', 'hemorrhageRain', 'executionDoctrine',
-        'scarletJudgement', 'bloodTideOath', 'verdictNeedle',
+        'scarletJudgement', 'bloodTideOath', 'verdictNeedle', 'oblivionSpiral', 'finalConvergence',
+        'citadelOath', 'fortressEdict', 'aegisJudgement',
         // 新增角色卡牌
         'ringResonance', 'breakthrough', 'bloodBlessing', 'lifeSurge', 'zenMeditation', 'lawInsight',
         // 角色专属
@@ -1752,8 +2135,120 @@ const ARCHETYPE_PACKS = {
             'focusBreak', 'verdictNeedle', 'guardedRiposte', 'stanceAggressive',
             'stanceDefensive', 'stanceFlow', 'stancePivot'
         ]
+    },
+    entropy: {
+        id: 'entropy',
+        name: '虚账收束',
+        description: '通过弃牌换节奏，将牌差与伤害转化为爆发终局。',
+        cards: [
+            'recklessMulligan', 'echoingCut', 'voidLedger', 'entropyGuard',
+            'debtCollection', 'recirculation', 'calculatedRuin', 'oblivionSpiral',
+            'finalConvergence', 'quickDraw', 'concentration', 'windfall',
+            'analysis', 'desperateSurvival', 'fortuneWheel'
+        ]
+    },
+    bulwark: {
+        id: 'bulwark',
+        name: '玄甲反击',
+        description: '围绕护盾滚动、护盾留存与稳定反击构建持久压制。',
+        cards: [
+            'ironBreath', 'mirrorWall', 'reboundingShell', 'bastionStudy',
+            'wardingSweep', 'resolveAnchor', 'guardianMantra', 'shieldTax',
+            'bastionCrash', 'counterEdict', 'citadelOath', 'fortressEdict', 'aegisJudgement', 'defend',
+            'ironWill', 'turtleShell', 'counterStance'
+        ]
     }
 };
+
+function getArchetypePack(archetypeId) {
+    if (!archetypeId || !ARCHETYPE_PACKS[archetypeId]) return null;
+    return JSON.parse(JSON.stringify(ARCHETYPE_PACKS[archetypeId]));
+}
+
+function inferDeckArchetype(deck = []) {
+    if (!Array.isArray(deck) || deck.length === 0) return null;
+
+    const scores = {
+        hemorrhage: 0,
+        precision: 0,
+        entropy: 0,
+        bulwark: 0
+    };
+    const hemorrhageSet = new Set(ARCHETYPE_PACKS.hemorrhage.cards);
+    const precisionSet = new Set(ARCHETYPE_PACKS.precision.cards);
+    const entropySet = new Set(ARCHETYPE_PACKS.entropy.cards);
+    const bulwarkSet = new Set(ARCHETYPE_PACKS.bulwark.cards);
+
+    deck.forEach(card => {
+        if (!card) return;
+        const cardId = card.id;
+        const synergy = card.synergyGroup;
+        const keywords = Array.isArray(card.keywords) ? card.keywords : [];
+
+        if (
+            synergy === 'hemorrhage' ||
+            keywords.includes('bleed') ||
+            (cardId && hemorrhageSet.has(cardId))
+        ) {
+            scores.hemorrhage += 1;
+        }
+
+        if (
+            synergy === 'precision' ||
+            synergy === 'stance' ||
+            keywords.includes('mark') ||
+            keywords.includes('stance') ||
+            (cardId && precisionSet.has(cardId))
+        ) {
+            scores.precision += 1;
+        }
+
+        if (
+            synergy === 'entropy' ||
+            keywords.includes('discard') ||
+            keywords.includes('mulligan') ||
+            (cardId && entropySet.has(cardId))
+        ) {
+            scores.entropy += 1;
+        }
+
+        if (
+            synergy === 'bulwark' ||
+            keywords.includes('guard') ||
+            keywords.includes('retain') ||
+            (cardId && bulwarkSet.has(cardId))
+        ) {
+            scores.bulwark += 1;
+        }
+    });
+
+    let preferred = null;
+    let bestScore = 0;
+    Object.keys(scores).forEach(key => {
+        if (scores[key] > bestScore) {
+            bestScore = scores[key];
+            preferred = key;
+        }
+    });
+    return bestScore >= 5 ? preferred : null;
+}
+
+function getRandomArchetypeCard(archetypeId, rarity = null, characterId = null) {
+    const pack = ARCHETYPE_PACKS[archetypeId];
+    if (!pack || !Array.isArray(pack.cards)) return null;
+
+    let candidates = pack.cards.filter(cardId => !!CARDS[cardId]);
+
+    if (rarity) {
+        candidates = candidates.filter(cardId => CARDS[cardId].rarity === rarity);
+    }
+
+    candidates = filterPoolByCharacter(candidates, characterId);
+    if (candidates.length === 0) return null;
+
+    const cardId = candidates[Math.floor(Math.random() * candidates.length)];
+    return cloneCardTemplate(cardId);
+}
 
 function filterPoolByCharacter(pool, characterId) {
     return pool.filter(id => {
@@ -1967,7 +2462,33 @@ const UPGRADE_RULES = {
         razorFocus: { mark: 2, energy: 1 },
         stancePivot: { mark: 1, draw: 1 },
         focusBreak: { damage: 2 },
-        verdictNeedle: { damage: 3, mark: 1 }
+        verdictNeedle: { damage: 3, mark: 1 },
+
+        // 虚账收束流派
+        recklessMulligan: { draw: 1 },
+        echoingCut: { damage: 2 },
+        voidLedger: { draw: 1 },
+        entropyGuard: { block: 2, energy: 1 },
+        debtCollection: { draw: 1 },
+        recirculation: { costReduction: 1 },
+        calculatedRuin: { damage: 1 },
+        oblivionSpiral: { draw: 1, damage: 2 },
+        finalConvergence: { damagePerEnergy: 2 },
+
+        // 玄甲反击流派
+        ironBreath: { block: 2, cleanse: 1 },
+        mirrorWall: { block: 2, retainBlock: 1 },
+        reboundingShell: { damage: 2, block: 2 },
+        bastionStudy: { draw: 1, block: 2 },
+        wardingSweep: { damage: 2, block: 2 },
+        resolveAnchor: { draw: 1, nextBlock: 2 },
+        guardianMantra: { block: 3, retainBlock: 1 },
+        shieldTax: { percent: 0.1, draw: 1 },
+        bastionCrash: { ratio: 0.25, maxConsume: 4, minDamage: 2, draw: 1 },
+        counterEdict: { damage: 3 },
+        citadelOath: { block: 2, thorns: 2, retainBlock: 1 },
+        fortressEdict: { ratio: 0.25, minDamage: 4, weak: 1 },
+        aegisJudgement: { damage: 4, block: 2 }
     }
 };
 
@@ -2005,6 +2526,9 @@ function upgradeCard(card) {
             }
             if (effect.type === 'draw' && specialRule.draw) {
                 effect.value += specialRule.draw;
+            }
+            if (effect.type === 'cleanse' && specialRule.cleanse) {
+                effect.value += specialRule.cleanse;
             }
             if (effect.type === 'drawCalculated' && specialRule.draw) {
                 effect.base = (effect.base || 0) + specialRule.draw;
@@ -2051,6 +2575,9 @@ function upgradeCard(card) {
             }
             if (effect.type === 'buff' && effect.buffType === 'nextTurnBlock' && specialRule.nextBlock) {
                 effect.value += specialRule.nextBlock;
+            }
+            if (effect.type === 'buff' && effect.buffType === 'retainBlock' && specialRule.retainBlock) {
+                effect.value += specialRule.retainBlock;
             }
             if (effect.type === 'buff' && effect.buffType === 'damageReduction' && specialRule.damageReduction) {
                 effect.value += specialRule.damageReduction;
@@ -2110,6 +2637,11 @@ function upgradeCard(card) {
             }
             if (effect.type === 'blockFromLostHp' && specialRule.percent) {
                 effect.percent += specialRule.percent;
+            }
+            if (effect.type === 'blockBurst') {
+                if (specialRule.ratio) effect.ratio += specialRule.ratio;
+                if (specialRule.maxConsume) effect.maxConsume = (effect.maxConsume || 0) + specialRule.maxConsume;
+                if (specialRule.minDamage) effect.minDamage = (effect.minDamage || 0) + specialRule.minDamage;
             }
             if (effect.type === 'buff' && effect.buffType === 'stealBonus' && specialRule.stealBonus) {
                 effect.value += specialRule.stealBonus;
@@ -2196,7 +2728,7 @@ function generateUpgradedDescription(card) {
                 desc += `移除敌人所有护盾。`;
                 break;
             case 'reshuffleDiscard':
-                desc += `将弃牌堆洗回抽牌堆。`;
+                desc += `将轮回洗回识海。`;
                 break;
             case 'swapHpPercent':
                 desc += `与敌人交换当前生命值百分比。`;
@@ -2204,6 +2736,22 @@ function generateUpgradedDescription(card) {
             case 'blockFromStrength':
                 desc += `获得等于你力量值x${effect.multiplier}的护盾（最少${effect.minimum}）。`;
                 break;
+            case 'blockBurst': {
+                const ratio = Number(effect.ratio) || 1;
+                const maxConsume = Number(effect.maxConsume) || 0;
+                const minDamage = Number(effect.minDamage) || 0;
+                const ratioText = Number.isInteger(ratio) ? `${ratio}` : ratio.toFixed(2).replace(/\.?0+$/, '');
+                if (maxConsume > 0) {
+                    desc += `消耗至多 ${maxConsume} 点护盾，每点护盾造成 ${ratioText} 点伤害`;
+                } else {
+                    desc += `消耗全部护盾，每点护盾造成 ${ratioText} 点伤害`;
+                }
+                if (minDamage > 0) {
+                    desc += `（至少 ${minDamage} 点）`;
+                }
+                desc += `。`;
+                break;
+            }
             case 'executeDamage':
                 desc += `造成 ${effect.value} 点伤害，对生命低于${Math.floor((effect.threshold || 0.3) * 100)}%的敌人造成双倍。`;
                 break;
@@ -2233,6 +2781,15 @@ function generateUpgradedDescription(card) {
             case 'drawCalculated':
                 desc += `抽 ${effect.base}+弃牌数x${effect.perDiscard} 张牌。`;
                 break;
+            case 'discardRandom':
+                desc += `随机弃 ${effect.value || 1} 张手牌。`;
+                break;
+            case 'mulligan':
+                desc += `丢弃当前手牌并抽取等量卡牌。`;
+                break;
+            case 'cleanse':
+                desc += `移除 ${effect.value} 个负面状态。`;
+                break;
             case 'debuff':
                 if (effect.buffType === 'burn') desc += `使敌人获得 ${effect.value} 层灼烧。`;
                 else if (effect.buffType === 'poison') desc += `给予 ${effect.value} 层中毒。`;
@@ -2247,6 +2804,7 @@ function generateUpgradedDescription(card) {
                 else if (effect.buffType === 'dodge') desc += `获得 ${effect.value} 层闪避。`;
                 else if (effect.buffType === 'dodgeChance') desc += `获得 ${Math.floor(effect.value * 100)}% 闪避率。`;
                 else if (effect.buffType === 'nextTurnBlock') desc += `下回合开始时获得 ${effect.value} 点护盾。`;
+                else if (effect.buffType === 'retainBlock') desc += `回合结束保留护盾 ${effect.value} 次。`;
                 else if (effect.buffType === 'damageReduction') desc += `本回合受到的伤害减少${effect.value}%。`;
                 else if (effect.buffType === 'nextAttackBonus') desc += `下一张攻击牌伤害+${effect.value}。`;
                 else if (effect.buffType === 'stealBonus') desc += `本战法则盗取率+${Math.floor(effect.value * 100)}%。`;

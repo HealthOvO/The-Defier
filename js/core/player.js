@@ -75,7 +75,17 @@ class Player {
             openingBattleBlockBonus: 0,
             firstAttackBonusPerBattle: 0,
             firstForgeExtraUpgradeOnce: 0,
-            firstForgeBoostUsed: false
+            firstForgeBoostUsed: false,
+            entropyLegacyProcEnabled: false,
+            entropyLegacyDraw: 0,
+            entropyLegacyDiscardDamage: 0,
+            entropyProcUsedThisTurn: false,
+            entropyBonusEnergyOnce: 0,
+            entropyBonusEnergyUsed: false,
+            bulwarkLegacyProcEnabled: false,
+            bulwarkLegacyDraw: 0,
+            bulwarkLegacyCounterDamage: 0,
+            bulwarkProcUsedThisTurn: false
         };
         this.legacyRunMission = null;
 
@@ -142,7 +152,7 @@ class Player {
         if (!SKILLS[skillId]) return;
         this.activeSkill = { ...SKILLS[skillId] };
         this.maxCooldown = this.activeSkill.cooldown;
-        this.skillCooldown = 0; // Ready at start? Or start on cooldown? Let's say Ready.
+        this.skillCooldown = 0;
     }
 
     unlockUltimate(level) {
@@ -356,6 +366,38 @@ class Player {
             };
         }
 
+        if (archetypeId === 'entropy') {
+            return {
+                id: 'entropy',
+                name: '虚账收束',
+                tier,
+                matchCount,
+                applyBleedBonus: 0,
+                applyMarkBonus: 0,
+                firstMarkHitDraw: 0,
+                firstDiscardDraw: tier,
+                discardDamage: 2 + tier,
+                openingBlock: tier * 2,
+                procUsedThisTurn: false
+            };
+        }
+
+        if (archetypeId === 'bulwark') {
+            return {
+                id: 'bulwark',
+                name: '玄甲反击',
+                tier,
+                matchCount,
+                applyBleedBonus: 0,
+                applyMarkBonus: 0,
+                firstMarkHitDraw: 0,
+                openingBlock: tier * 4,
+                firstBlockDraw: tier,
+                blockCounterDamage: 2 + tier,
+                procUsedThisTurn: false
+            };
+        }
+
         return null;
     }
 
@@ -387,11 +429,134 @@ class Player {
                     card.synergyGroup === 'stance' ||
                     (Array.isArray(card.keywords) && (card.keywords.includes('mark') || card.keywords.includes('stance')));
                 if (isPrecision) matchCount += 1;
+            } else if (archetypeId === 'entropy') {
+                const isEntropy = card.synergyGroup === 'entropy' ||
+                    (Array.isArray(card.keywords) && (card.keywords.includes('discard') || card.keywords.includes('mulligan')));
+                if (isEntropy) matchCount += 1;
+            } else if (archetypeId === 'bulwark') {
+                const isBulwark = card.synergyGroup === 'bulwark' ||
+                    (Array.isArray(card.keywords) && (card.keywords.includes('guard') || card.keywords.includes('retain')));
+                if (isBulwark) matchCount += 1;
             }
         });
 
         this.archetypeResonance = this.getArchetypeResonanceConfig(archetypeId, matchCount);
         return this.archetypeResonance;
+    }
+
+    triggerArchetypeDiscardProc(discardedCount = 0) {
+        const count = Math.max(0, Number(discardedCount) || 0);
+        if (count <= 0) return;
+
+        const resonance = this.archetypeResonance;
+        const doctrine = this.legacyRunDoctrine && typeof this.legacyRunDoctrine === 'object'
+            ? this.legacyRunDoctrine
+            : null;
+        const hasEntropyResonance = !!(resonance && resonance.id === 'entropy');
+        const hasLegacyEntropy = !!(doctrine && doctrine.entropyLegacyProcEnabled);
+        if (!hasEntropyResonance && !hasLegacyEntropy) return;
+
+        if (hasEntropyResonance && resonance.procUsedThisTurn) return;
+        if (hasLegacyEntropy && doctrine.entropyProcUsedThisTurn) return;
+
+        if (hasEntropyResonance) resonance.procUsedThisTurn = true;
+        if (hasLegacyEntropy) doctrine.entropyProcUsedThisTurn = true;
+
+        const drawCount = Math.max(
+            hasEntropyResonance ? (resonance.firstDiscardDraw || 0) : 0,
+            hasLegacyEntropy ? (doctrine.entropyLegacyDraw || 0) : 0
+        );
+        if (drawCount > 0) this.drawCards(drawCount);
+        let bonusEnergy = 0;
+        if (hasLegacyEntropy && !doctrine.entropyBonusEnergyUsed && doctrine.entropyBonusEnergyOnce > 0) {
+            bonusEnergy = Math.max(0, Number(doctrine.entropyBonusEnergyOnce) || 0);
+            if (bonusEnergy > 0) {
+                this.gainEnergy(bonusEnergy);
+                doctrine.entropyBonusEnergyUsed = true;
+            }
+        }
+
+        if (this.game && typeof this.game.handleLegacyMissionProgress === 'function' && hasLegacyEntropy) {
+            this.game.handleLegacyMissionProgress('entropyDiscardProc', 1);
+        }
+
+        const battle = (this.game && this.game.battle) ? this.game.battle : null;
+        if (!battle || !Array.isArray(battle.enemies)) {
+            const energyText = bonusEnergy > 0 ? `，回灵 +${bonusEnergy}` : '';
+            Utils.showBattleLog(`【虚账收束】弃牌触发：抽牌 +${drawCount}${energyText}`);
+            return;
+        }
+
+        const aliveEnemies = battle.enemies.filter(e => e && e.currentHp > 0);
+        if (aliveEnemies.length === 0) {
+            const energyText = bonusEnergy > 0 ? `，回灵 +${bonusEnergy}` : '';
+            Utils.showBattleLog(`【虚账收束】弃牌触发：抽牌 +${drawCount}${energyText}`);
+            return;
+        }
+
+        const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+        const bonus = Math.min(2, Math.max(0, count - 1));
+        const baseDamage = Math.max(
+            hasEntropyResonance ? (resonance.discardDamage || 0) : 0,
+            hasLegacyEntropy ? (doctrine.entropyLegacyDiscardDamage || 0) : 0
+        );
+        const damage = Math.max(1, baseDamage + bonus);
+        const dealt = battle.dealDamageToEnemy(target, damage);
+        const energyText = bonusEnergy > 0 ? `，回灵 +${bonusEnergy}` : '';
+        Utils.showBattleLog(`【虚账收束】弃牌触发：抽牌 +${drawCount}${energyText}，并对 ${target.name} 造成 ${dealt} 伤害`);
+        if (typeof battle.markUIDirty === 'function') battle.markUIDirty('hand', 'piles', 'enemies');
+    }
+
+    triggerArchetypeBlockProc(blockGained = 0) {
+        const gained = Math.max(0, Number(blockGained) || 0);
+        if (gained <= 0) return;
+        if (this.turnNumber <= 0) return; // 仅在正式回合内触发，避免开场护盾抢占
+
+        const resonance = this.archetypeResonance;
+        const doctrine = this.legacyRunDoctrine && typeof this.legacyRunDoctrine === 'object'
+            ? this.legacyRunDoctrine
+            : null;
+        const hasBulwarkResonance = !!(resonance && resonance.id === 'bulwark');
+        const hasLegacyBulwark = !!(doctrine && doctrine.bulwarkLegacyProcEnabled);
+        if (!hasBulwarkResonance && !hasLegacyBulwark) return;
+
+        if (hasBulwarkResonance && resonance.procUsedThisTurn) return;
+        if (hasLegacyBulwark && doctrine.bulwarkProcUsedThisTurn) return;
+
+        if (hasBulwarkResonance) resonance.procUsedThisTurn = true;
+        if (hasLegacyBulwark) doctrine.bulwarkProcUsedThisTurn = true;
+
+        const drawCount = Math.max(
+            hasBulwarkResonance ? (resonance.firstBlockDraw || 0) : 0,
+            hasLegacyBulwark ? (doctrine.bulwarkLegacyDraw || 0) : 0
+        );
+        if (drawCount > 0) this.drawCards(drawCount);
+
+        if (this.game && typeof this.game.handleLegacyMissionProgress === 'function' && hasLegacyBulwark) {
+            this.game.handleLegacyMissionProgress('bulwarkBlockProc', 1);
+        }
+
+        const battle = this.game && this.game.battle ? this.game.battle : null;
+        if (!battle || !Array.isArray(battle.enemies)) {
+            Utils.showBattleLog(`【玄甲反击】护势触发：抽牌 +${drawCount}`);
+            return;
+        }
+
+        const aliveEnemies = battle.enemies.filter(e => e && e.currentHp > 0);
+        if (aliveEnemies.length === 0) {
+            Utils.showBattleLog(`【玄甲反击】护势触发：抽牌 +${drawCount}`);
+            return;
+        }
+
+        const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+        const damage = Math.max(
+            hasBulwarkResonance ? (Number(resonance.blockCounterDamage) || 0) : 0,
+            hasLegacyBulwark ? (Number(doctrine.bulwarkLegacyCounterDamage) || 0) : 0,
+            1
+        );
+        const dealt = battle.dealDamageToEnemy(target, damage);
+        Utils.showBattleLog(`【玄甲反击】护势触发：抽牌 +${drawCount}，并对 ${target.name} 造成 ${dealt} 伤害`);
+        if (typeof battle.markUIDirty === 'function') battle.markUIDirty('hand', 'piles', 'enemies');
     }
 
     // 准备战斗
@@ -448,6 +613,11 @@ class Player {
         this.exhaustPile = [];
         this.currentEnergy = this.baseEnergy;
         this.skillCooldown = 0;
+        if (this.legacyRunDoctrine && typeof this.legacyRunDoctrine === 'object') {
+            this.legacyRunDoctrine.entropyProcUsedThisTurn = false;
+            this.legacyRunDoctrine.entropyBonusEnergyUsed = false;
+            this.legacyRunDoctrine.bulwarkProcUsedThisTurn = false;
+        }
     }
 
     // 准备战斗
@@ -462,7 +632,7 @@ class Player {
         this.exhaustPile = [];
         this.block = 0;
 
-        // 战斗开始重置奶糖 (每场战斗/每个敌人重置? 用户说 "Reset per enemy", usually means per battle or per dynamic spawn? Battle.init calls this per battle. So reset here is correct per battle. If "per enemy" means something else, I'll stick to per battle/start.)
+        // 战斗开始重置奶糖
         this.milkCandy = this.maxMilkCandy;
 
         this.turnNumber = 0; // 初始化回合数
@@ -494,6 +664,11 @@ class Player {
         this.currentEnergy = this.baseEnergy;
         this.buffs = {};
         this.resolveArchetypeResonance();
+        if (this.legacyRunDoctrine && typeof this.legacyRunDoctrine === 'object') {
+            this.legacyRunDoctrine.entropyProcUsedThisTurn = false;
+            this.legacyRunDoctrine.entropyBonusEnergyUsed = false;
+            this.legacyRunDoctrine.bulwarkProcUsedThisTurn = false;
+        }
 
         // 应用永久力量加成
         if (this.permaBuffs && this.permaBuffs.strength) {
@@ -525,10 +700,6 @@ class Player {
                 const randomSkill = skills[Math.floor(Math.random() * skills.length)];
                 const card = CARDS[randomSkill];
                 if (card) {
-                    // 临时卡：花费由 playCard 逻辑自动处理 (若是draw则消耗糖，否则消耗灵力)
-                    // 用户说 "Spend, not 0 cost". So we keep original cost? 
-                    // Or "Temporary cards ... need spend". 
-                    // Previously I set cost: 0. Now I remove `cost: 0`.
                     this.hand.push({ ...card, instanceId: this.generateCardId(), isTemp: true });
                 }
             }
@@ -572,6 +743,10 @@ class Player {
         this.currentEnergy = this.baseEnergy;
         if (this.archetypeResonance) {
             this.archetypeResonance.procUsedThisTurn = false;
+        }
+        if (this.legacyRunDoctrine && typeof this.legacyRunDoctrine === 'object') {
+            this.legacyRunDoctrine.entropyProcUsedThisTurn = false;
+            this.legacyRunDoctrine.bulwarkProcUsedThisTurn = false;
         }
 
         // 1. 灵气稀薄 (realm 1) - 改为护盾效果-20%，更友好的新手体验
@@ -733,19 +908,9 @@ class Player {
 
                     selected.forEach(card => {
                         card.cost = Math.max(0, card.cost - 1);
-                        // Visual feedback?
                     });
 
                     Utils.showBattleLog(`维度打击：${count} 张手牌耗能 -1！`);
-                    // Update UI needed? usually handled by battle update cycle or manual update
-                    if (this.game && this.game.verifyHandUI) {
-                        // verifyHandUI isn't a standard method, let's rely on standard UI update from battle.endTurn -> startTurn flow
-                        // But startTurn calls drawCards, calls...
-                        // battle.js calls player.startTurn(). 
-                        // After player.startTurn() returns, battle.js typically updates UI?
-                        // Let's check battle.js line 1220: this.updateBattleUI();
-                        // Yes, UI will be updated.
-                    }
                 } else {
                     Utils.showBattleLog('维度打击：无牌可减费！');
                 }
@@ -869,6 +1034,7 @@ class Player {
         if (amount <= 0) return;
 
         this.block += amount;
+        this.triggerArchetypeBlockProc(amount);
 
         if (this.game && typeof this.game.handleLegacyMissionProgress === 'function') {
             this.game.handleLegacyMissionProgress('gainBlock', amount);
@@ -915,11 +1081,6 @@ class Player {
                     }
                 }
 
-                // Update amount for log if needed, though log usually says "Healed X"
-                // Let's assume the calling function handles logging "Restored X HP"? 
-                // Wait, callers often log themselves (e.g. "Healed 5").
-                // If we boost heal here, external log might be wrong.
-                // But this method doesn't log.
             }
         }
     }
@@ -1144,10 +1305,7 @@ class Player {
             // 逆转法则 (Reversal)
             const reversalLaw = this.collectedLaws.find(l => l.id === 'reversalLaw');
             if (reversalLaw && Math.random() < reversalLaw.passive.value) {
-                this.heal(hpDamage * 2); // Heal back the damage + extra? Or just negate?
-                // Description says: "Convert damage to healing".
-                // Since we already deducted HP, we need to add it back + add same amount.
-                // So heal(hpDamage * 2).
+                this.heal(hpDamage * 2);
                 Utils.showBattleLog(`逆转法则：伤害转化为治疗！`);
             }
 
@@ -1156,8 +1314,6 @@ class Player {
             if (karmaLaw) {
                 const reflectDmg = Math.floor(hpDamage * karmaLaw.passive.value);
                 if (reflectDmg > 0 && this.game && this.game.battle && this.game.battle.enemies) {
-                    // Reflect to random enemy or attacker? We don't have attacker context easily here.
-                    // Let's reflect to random enemy for now.
                     const enemies = this.game.battle.enemies.filter(e => e.currentHp > 0);
                     if (enemies.length > 0) {
                         const target = enemies[Math.floor(Math.random() * enemies.length)];
@@ -1394,6 +1550,7 @@ class Player {
                     this.discardPile.push(this.hand.pop());
                 }
                 this.lastDiscardedCount = discardedCount; // Store for chained effects
+                this.triggerArchetypeDiscardProc(discardedCount);
                 return { type: 'discardHand', value: discardedCount };
 
             case 'discardRandom':
@@ -1442,27 +1599,6 @@ class Player {
                 } else {
                     dmgValue = effect.value || 0;
                 }
-
-                // Apply standard damage logic (modifiers etc. needs to be applied, strictly playCard passes results to battle, battle.dealsDamage)
-                // Wait, playCard executeEffect returns value. 
-                // But wait, standard 'damage' case applies bonuses BEFORE returning?
-                // Line 575+ applies path bonuses and law bonuses to `value`.
-                // So now `dmgValue` is base. I should probably re-apply? 
-                // Actually `value` variable at top of executeEffect ALREADY applied some bonuses?
-                // Yes, lines 567-599 modify `value`.
-                // But `value` comes from `effect.value`. 
-                // `conditionalDamage` has dynamic value. `effect.value` is base.
-                // The bonuses applied at top are to `value`.
-                // If I change value here based on condition, is that correct?
-                // If condition doubles damage, it should double AFTER bonuses? Or BEFORE?
-                // Usually "Doubles damage" implies final damage.
-                // But strict "Base damage x 2" is safer.
-                // Let's assume modifies base.
-
-                // Re-calculating `value` based on condition, using the ALREADY MODIFIED `value` as base?
-                // `value` at this point includes path bonuses etc.
-                // If condition is "Multiplier", we multiply `value`.
-                // If condition is "Bonus", we add to `value`.
 
                 if (conditionMet) {
                     if (effect.multiplier) value = Math.floor(value * effect.multiplier);
@@ -1578,6 +1714,8 @@ class Player {
                 while (this.hand.length > 0) {
                     this.discardPile.push(this.hand.pop());
                 }
+                this.lastDiscardedCount = handSize;
+                this.triggerArchetypeDiscardProc(handSize);
                 // 抽取相同数量
                 this.drawCards(handSize);
                 return { type: 'mulligan', value: handSize };
@@ -1591,6 +1729,20 @@ class Player {
                 const cardsCount = this.hand.length;
                 const dmgVal = cardsCount * value;
                 return { type: 'damage', value: dmgVal, target: effect.target };
+
+            case 'blockBurst': {
+                const ratio = Math.max(0, Number(effect.ratio) || 1);
+                const minDamage = Math.max(0, Math.floor(Number(effect.minDamage) || 0));
+                const maxConsume = effect.maxConsume !== undefined && effect.maxConsume !== null
+                    ? Math.max(0, Math.floor(Number(effect.maxConsume) || 0))
+                    : null;
+                const currentBlock = Math.max(0, Math.floor(Number(this.block) || 0));
+                const consumedBlock = maxConsume === null ? currentBlock : Math.min(currentBlock, maxConsume);
+                const baseDamage = Math.floor(consumedBlock * ratio);
+                const totalDamage = Math.max(minDamage, baseDamage);
+                this.block = Math.max(0, this.block - consumedBlock);
+                return { type: 'blockBurst', value: totalDamage, consumedBlock, target: effect.target };
+            }
 
             case 'lifeSteal':
                 // Ensure value is a number
@@ -1758,6 +1910,7 @@ class Player {
             dodgeChance: '闪避率',
             block: '护盾',
             nextTurnBlock: '固守',
+            retainBlock: '护盾留存',
             paralysis: '麻痹',
             stun: '眩晕',
             nextAttackBonus: '聚气',
@@ -2402,4 +2555,3 @@ class Player {
         }
     }
 }
-

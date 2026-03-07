@@ -510,6 +510,45 @@
 }
 
 /* ===================================
+   战斗重击与顿帧效果 (Hit Stop)
+   =================================== */
+
+.hit-stop-frozen {
+    animation: none !important;
+    transition: none !important;
+    filter: brightness(2) contrast(1.5) saturate(2);
+    transform: scale(1.1) rotate(2deg) !important;
+}
+
+.damage-flash {
+    position: relative;
+}
+
+.damage-flash::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--flash-color, rgba(255, 255, 255, 0.7));
+    z-index: 10;
+    pointer-events: none;
+    border-radius: inherit;
+    animation: quickFadeOut 0.2s ease-out forwards;
+}
+
+@keyframes quickFadeOut {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+/* ===================================
    屏幕震动效果
    =================================== */
 

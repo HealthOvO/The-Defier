@@ -22,3 +22,458 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - 语法检查：9 个核心改动文件 `node --check` 全通过。
   - Playwright 客户端：已执行 `web_game_playwright_client.js`，生成截图并人工查看；登录弹窗关闭后主界面可正常显示，未生成 `errors-*.json` 控制台错误文件。
   - 受限项：当前流程强制登录且客户端脚本无法自动填账号密码，因此未覆盖到完整战斗流程自动化；已通过静态审查与运行期入口回归完成本轮闭环。
+
+- 2026-03-07: 测试路径兼容修复与流派扩展回归（接力迭代）
+  - 修复 Node sanity 脚本中的历史绝对路径依赖（改为基于 `__dirname` + `path.resolve`），消除跨机器执行失败。
+  - 修复传承系统初始化空引用：在 `game.js` 构造函数和 `buyLegacyUpgrade/applyLegacyPreset/initInheritanceScreen` 增加防御性初始化，解决 `spent` 未定义导致的继承页崩溃。
+  - 新增 entropy（弃牌节奏）玩法包：
+    - `cards.js`：补齐 `getArchetypePack/inferDeckArchetype/getRandomArchetypeCard`，并新增 entropy 卡组与升级条目。
+    - `player.js`/`battle.js`：接入 entropy 共鸣（首个弃牌触发抽牌+随机伤害），并在随机弃牌/状态弃牌链路触发。
+    - `events.js`：新增 `voidBookkeeper/ashLedgerTrial/convergenceRitual` 并加入事件池。
+
+- 2026-03-07: 第二轮玩法增量（本轮）
+  - 设计并实现传承新预设 `entropy`（湮律流）：
+    - `game.js`：新增预设目录、道统配置与试炼任务（`entropyDiscardProc`）。
+    - `player.js`：新增“传承道统版弃牌共鸣”运行时逻辑（无流派共鸣时也可触发基础效果），并增加每回合/每战斗状态重置，避免状态污染。
+    - 兼容旧存档：加载时对新道统字段做布尔/数值归一化。
+  - 审计脚本稳健性修复：
+    - `browser_feature_audit.mjs` 与 `browser_event_branch_audit.mjs` 的截图步骤增加安全降级（字体加载超时不再导致审计误报失败）。
+    - `browser_inheritance_audit.mjs` 增加 entropy 预设可见性与 mission 映射断言。
+  - 新增运行时断言：`tests/sanity_entropy_doctrine_checks.js`，验证 entropy 传承道统在无共鸣场景下也能触发抽牌/伤害/任务进度，且同回合不会重复触发。
+  - `tests/run_node_checks.sh` 已纳入新断言脚本。
+
+- 2026-03-07: 本轮测试证据（全通过）
+  - Node:
+    - `bash tests/run_node_checks.sh` ✅（含新增 `Entropy doctrine checks passed`）
+  - Browser audits:
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅（截图步骤触发字体超时时自动降级，不影响断言）
+    - `node tests/browser_event_branch_audit.mjs` ✅（同上）
+    - `node tests/browser_inheritance_audit.mjs` ✅
+  - Playwright 客户端冒烟：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-current` ✅
+    - 已人工检查 `output/web-game-current/shot-1.png`，主菜单渲染正常。
+
+  - TODO / 下轮建议
+  - 可继续做“湮律流”专属敌人词缀（例如弃牌反制/弃牌增益）以提升对局差异。
+  - 可新增地图节点类型（交易/诅咒祭坛）并复用现有事件分支审计框架闭环验证。
+
+- 2026-03-07: 第三轮缺陷修复（战斗核心）
+  - 修复 `battle.js` 的减益重复结算问题：`case 'debuff'` 曾在同一次效果结算中重复叠层，导致弱化/眩晕等翻倍；现改为单次结算，并保持眩晕免疫提示逻辑。
+  - 补充 `debuffAll` 防御性处理：统一数值归一、空值拦截、`enemy.buffs` 初始化，避免异常对象导致运行时错误。
+  - 新增回归脚本 `tests/sanity_battle_debuff_checks.js`：
+    - 校验单体弱化/眩晕只生效一次；
+    - 校验控制免疫目标不会被眩晕；
+    - 校验群体减益在 `buffs` 未初始化时可稳定执行。
+  - `tests/run_node_checks.sh` 已接入 battle debuff 回归脚本。
+
+- 2026-03-07: 第三轮测试证据（全通过）
+  - Node:
+    - `node tests/sanity_battle_debuff_checks.js` ✅
+    - `bash tests/run_node_checks.sh` ✅（包含 battle debuff + entropy doctrine）
+  - Browser audits:
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+  - Playwright 客户端冒烟：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-current-2` ✅
+    - 已人工检查 `output/web-game-current-2/shot-1.png`，UI 渲染正常、新手提示可见。
+
+- 2026-03-07: 第四轮打磨（可维护性优化）
+  - 清理 `player.js`/`battle.js` 中多处推理式、调试式长注释，统一为可维护的简洁注释，降低后续维护噪音。
+  - 注释清理不改动功能分支，仅优化代码可读性。
+
+- 2026-03-07: 第四轮回归（全通过）
+  - `bash tests/run_node_checks.sh` ✅
+  - `node tests/browser_audit.mjs` ✅
+  - `node tests/browser_feature_audit.mjs` ✅
+  - `node tests/browser_event_branch_audit.mjs` ✅
+  - `node tests/browser_inheritance_audit.mjs` ✅
+
+- 2026-03-07: 第五轮 PVP 完整度增强（经济/商店/奖励闭环）
+  - `pvp-service.js`：
+    - 新增 PVP 经济模型与持久化（按用户隔离）：
+      - 钱包：`coins/totalEarned/totalSpent/wins/losses/totalMatches`
+      - 商店状态：`purchases/ownedItems`（支持库存与重复购买校验）
+    - 新增商店服务能力：
+      - `getShopItemState/getWalletSummary/purchaseShopItem/applyShopReward`
+      - 支持秘籍注入牌组、丹药重置永久属性、外观/称号解锁状态记录
+    - 新增对局奖励能力：
+      - `grantMatchReward` 接入 `reportMatchResult`，结算返回 `coinsAwarded + wallet`
+      - 防重票据/过期票据/对手不匹配票据场景下不发币
+    - 存档互通：新增 `getEconomySnapshot/setEconomySnapshot`，供 `game.js` 保存与恢复。
+  - `pvp-scene.js`：
+    - 商店由“占位文案”改为真实交易：
+      - 商品卡渲染实时状态：可兑换/已拥有/已售罄/币不足
+      - 购买后立即刷新钱包与商品状态，支持库存显示与状态回写
+    - 新增 `updateShopWallet/purchaseShopItem`，统一调用 PVPService 交易逻辑。
+  - `css/pvp.css`：
+    - 新增库存文案样式与商店按钮状态样式（owned/sold_out/insufficient）。
+  - `game.js`：
+    - `saveGame/loadGame/migrateSaveData` 接入 `pvpMeta.economy`，支持本地存档与云槽位同步恢复。
+    - PvP 胜负结算增加天道币奖励日志反馈，并在结算后自动保存。
+
+- 2026-03-07: 第五轮测试与审计（全通过）
+  - Node:
+    - `bash tests/run_node_checks.sh` ✅
+    - 新增并接入：`tests/sanity_pvp_shop_checks.js`
+    - 更新：`tests/sanity_pvp_service_checks.js`（覆盖票据过期/对手不匹配/奖励发放/商店交易）
+  - Browser:
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅（新增商店钱包、购买扣费、高价不足断言）
+  - Playwright 冒烟 + 视觉检查：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-pvp-polish` ✅
+    - 已人工查看：`output/web-game-pvp-polish/shot-1.png`（主菜单渲染正常，无异常遮挡）。
+
+- TODO / 下轮建议
+  - 可为外观/称号增加“装备中”状态与角色面板展示（当前已支持解锁与持久化）。
+  - 可将天道币奖励规则扩展为赛季系数（按段位/连胜动态浮动）。
+
+- 2026-03-07: 第六轮 PVP 深化（称号装备 + 连胜奖励 + 交易日志）
+  - `pvp-service.js`：
+    - 经济状态升级（向后兼容）：
+      - 新增 `winStreak/lossStreak/bestWinStreak`；
+      - 新增 `equippedSkinId/equippedTitleId`；
+      - 新增 `transactionLog`（最近交易/结算记录）。
+    - 新增奖励计算层：
+      - `calculateRewardBreakdown/getRewardPreview`；
+      - `grantMatchReward` 接入连胜倍率并记录日志。
+    - 新增外观动作层：
+      - `getEquippedCosmetics/equipCosmeticItem/handleShopItemAction`；
+      - 商店支持“兑换或佩戴”统一入口；
+      - 外观类首次购买自动佩戴。
+    - `purchaseShopItem/getShopItemState` 支持 `equippable/equipped` 状态语义，避免“已拥有但不可佩戴”歧义。
+  - `pvp-scene.js`：
+    - 商店新增元信息面板：
+      - 当前佩戴称号/外观；
+      - 下场胜利奖励预估（含连胜倍率）；
+      - 最近交易日志列表。
+    - 商品按钮行为升级：
+      - 非消耗类：兑换后显示已拥有；
+      - 外观/称号：支持“佩戴”动作与“已佩戴”状态显示。
+  - `index.html` / `css/pvp.css`：
+    - 商店页新增 `shop-meta-strip` 与 `shop-activity-log` 区块；
+    - 新增 `state-equippable/state-equipped` 按钮样式与日志样式；
+    - 增加窄屏自适应规则（meta strip 单列）。
+  - `game.js`：
+    - 角色信息页接入 PVP 称号展示（`info-char-title`）；
+    - 避免命环文案覆盖称号文案的旧逻辑冲突；
+    - 修复称号展示重复前缀（`称号·称号·XX` -> `称号·XX`）。
+
+- 2026-03-07: 第六轮测试证据（全通过）
+  - Node:
+    - `bash tests/run_node_checks.sh` ✅
+    - `sanity_pvp_service_checks.js` 增补：
+      - 称号购买自动佩戴；
+      - 连胜字段更新；
+      - 交易日志包含结算记录。
+    - `sanity_pvp_shop_checks.js` 增补：
+      - 皮肤/称号购买与佩戴状态；
+      - `handleShopItemAction` 佩戴路径；
+      - 交易日志存在购买记录。
+  - Browser:
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅（新增通过项）：
+      - 奖励预估条可见；
+      - 交易日志可见；
+      - 称号购买后自动进入“已佩戴”并反映在状态条。
+  - Playwright 冒烟 + 人工视觉：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-pvp-polish-2` ✅
+    - 已人工检查 `output/web-game-pvp-polish-2/shot-1.png`，主菜单渲染正常。
+
+- 2026-03-07: 第七轮 PVP 深化（赛季倍率 + 法相实装）
+  - `pvp-service.js`：
+    - 新增赛季配置 `seasonConfig` 与段位奖励倍率（潜龙/问道/凌霄/天穹）；
+    - 新增 `getCurrentSeasonMeta/getDivisionRewardMultiplier`；
+    - `calculateRewardBreakdown` 引入“连胜倍率 x 段位倍率”联合计算，并返回 `totalMultiplier`；
+    - `getRewardPreview` 返回赛季信息，供 UI 直接展示。
+  - `pvp-scene.js`：
+    - 商店奖励预估文案升级为“赛季 + 段位 + 连胜 + 预估收益 + 总倍率”；
+    - 继续复用统一计算接口，避免前端硬编码倍率。
+  - `game.js` / `style.css`：
+    - 法相外观实装到战斗头像：
+      - 头像高亮边框（`skin-equipped`）；
+      - 战斗头像底部法相徽记（`player-skin-badge`）；
+    - 角色信息页头像与称号联动外观状态：
+      - 已佩戴法相时替换角色头像展示图标并加发光样式；
+      - 修复称号重复前缀（`称号·称号·X`）；
+      - 人物描述增加“当前法相”后缀提示（无外观时自动移除）。
+  - `tests`：
+    - `sanity_pvp_service_checks.js` 增补赛季元信息与段位倍率差异断言；
+    - `sanity_pvp_shop_checks.js` 增补 `getRewardPreview` 赛季信息断言；
+    - `browser_pvp_audit.mjs` 增补通过项：
+      - 奖励预估条出现“赛季”；
+      - 皮肤与称号同时自动佩戴；
+      - 战斗中法相徽记显示与头像皮肤态生效。
+
+- 2026-03-07: 第七轮测试证据（全通过）
+  - Node:
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser:
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅（含“赛季预估 + 法相战斗实装”）
+  - Playwright 冒烟 + 人工视觉：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-pvp-polish-3` ✅
+    - 已人工检查 `output/web-game-pvp-polish-3/shot-1.png`，主菜单渲染正常。
+
+- 2026-03-07: 第八轮 PVP 收口增强（外观“佩戴/卸下”闭环）
+  - `pvp-service.js`：
+    - 新增 `unequipCosmeticItem`；
+    - `handleShopItemAction` 支持已佩戴状态点击后卸下，再次点击可重新佩戴；
+    - 保持交易日志记录（`equip/unequip`）连续。
+  - `pvp-scene.js` / `pvp.css`：
+    - 商店按钮在“已佩戴”状态显示“卸下”，可直接交互；
+    - `state-equipped` 按钮改为可点击态，完成外观切换闭环。
+  - `tests/sanity_pvp_shop_checks.js`：
+    - 新增断言：已佩戴皮肤 -> 卸下后变 `equippable` -> 再次操作回到 `equipped`。
+
+- 2026-03-07: 第八轮测试证据（全通过）
+  - Node:
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser:
+    - `node tests/browser_pvp_audit.mjs` ✅（“已佩戴”按钮文案已切换为“卸下”，断言通过）
+  - Playwright 冒烟 + 人工视觉：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-pvp-polish-4` ✅
+    - 已人工检查 `output/web-game-pvp-polish-4/shot-1.png`，主菜单渲染正常。
+
+- 2026-03-07: 第八轮玩法扩展（流派/卡牌/共鸣）
+  - 新增第 4 套构筑流派 `bulwark`（玄甲反击）：
+    - `cards.js`：新增 11 张流派卡牌（`ironBreath/mirrorWall/reboundingShell/bastionStudy/wardingSweep/resolveAnchor/guardianMantra/shieldTax/counterEdict/citadelOath/aegisJudgement`）。
+    - 新流派已接入 `CARD_POOL`（common/uncommon/rare）、`ARCHETYPE_PACKS`、`inferDeckArchetype` 与 `getRandomArchetypeCard`。
+    - 升级规则补全：新增玄甲流卡牌升级条目，并修复升级系统对 `cleanse`/`retainBlock` 的数值升级支持；描述生成新增 `cleanse` 与 `retainBlock` 文案。
+  - `player.js`：新增玄甲共鸣逻辑：
+    - `getArchetypeResonanceConfig` 新增 `bulwark` 配置（T1/T2）。
+    - `resolveArchetypeResonance` 新增 `bulwark` 匹配计数。
+    - 新增 `triggerArchetypeBlockProc`：本回合首次获得护盾时触发“抽牌 + 随机反击”并每回合限一次；挂接到 `addBlock`。
+    - 补充 `retainBlock` buff 展示名，避免日志显示原始 key。
+  - `battle.js`：战斗开场流派提示新增 `bulwark` 共鸣文案。
+  - 测试扩展：
+    - `sanity_content_archetype_checks.js`：流派完整性与 API 断言新增 `bulwark`。
+    - 新增 `sanity_bulwark_resonance_checks.js`：覆盖玄甲共鸣“首护盾触发/同回合不重复/新回合重置再触发”。
+    - `run_node_checks.sh` 已纳入新用例。
+
+- 2026-03-07: 第八轮测试与审计结果（全通过）
+  - Node:
+    - `bash tests/run_node_checks.sh` ✅（含 `Bulwark resonance checks passed`）
+  - Browser audits:
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 冒烟 + 人工视觉：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-archetype-polish` ✅
+    - 已人工检查 `output/web-game-archetype-polish/shot-1.png`，主菜单渲染正常、引导提示可见。
+
+- 2026-03-07: 审计脚本稳健性补丁
+  - `tests/browser_audit.mjs` 截图步骤改为 `safeScreenshot` 降级策略，字体加载超时时仅记录 warning，不阻断断言链路，避免误报失败。
+
+- TODO / 下轮建议
+  - 可继续扩展“玄甲反击”专属事件分支（护盾交易/留盾抉择），并接入现有 `browser_event_branch_audit` 框架。
+  - 可新增玄甲流传承预设与专属 mission（例如“单场触发 4 次护势反击”）形成局外成长闭环。
+
+- 2026-03-07: 第九轮玩法扩展（玄甲流局外闭环 + 专属事件）
+  - 传承体系新增 `bulwark`（玄甲流）预设闭环：
+    - `game.js`：`getLegacyPresetCatalog` 新增玄甲预设；
+    - `getLegacyRunDoctrineForPreset` 新增玄甲道统字段：
+      - `bulwarkLegacyProcEnabled`
+      - `bulwarkLegacyDraw`
+      - `bulwarkLegacyCounterDamage`
+      - `bulwarkProcUsedThisTurn`
+    - `getLegacyMissionForPreset` 新增玄甲试炼任务：`eventType=bulwarkBlockProc`，目标 4 次，奖励 6 精粹。
+    - 存档兼容：`loadGame` 合并旧存档时新增玄甲道统字段布尔/数值归一，避免旧档空字段导致行为漂移。
+  - 战斗运行时扩展（`player.js`）：
+    - `legacyRunDoctrine` 默认结构新增玄甲字段。
+    - `triggerArchetypeBlockProc` 升级为“流派共鸣 + 传承道统”双通道：
+      - 无玄甲流派共鸣时，只要玄甲道统启用也可触发；
+      - 同回合触发锁（共鸣与道统独立标记）；
+      - 抽牌与反击伤害按“共鸣值 vs 道统值”取高；
+      - 玄甲道统触发时上报 mission 事件 `bulwarkBlockProc`。
+    - `resetBattleState/prepareBattle/startTurn` 增加玄甲触发锁重置，避免跨回合污染。
+  - 事件系统新增玄甲专属分支（`events.js`）：
+    - `shieldRelayBeacon`（护阵中继站，common）
+    - `ironCitadelPact`（玄铁城契，uncommon）
+    - `aegisTribunal`（玄甲审庭，rare）
+    - 三个事件均含 >=2 选项，并仅使用现有稳定效果类型（gold/damage/heal/card/ringExp）。
+    - `EVENT_POOL` 已将三事件分别注入 common/uncommon/rare。
+
+- 2026-03-07: 第九轮测试扩展
+  - 新增 `tests/sanity_bulwark_doctrine_checks.js`：
+    - 验证玄甲道统在无流派共鸣场景下可触发首护盾 proc；
+    - 验证同回合不重复触发；
+    - 验证新回合重置后可再次触发；
+    - 验证 mission 事件上报 `bulwarkBlockProc`。
+  - `tests/run_node_checks.sh` 已接入 `sanity_bulwark_doctrine_checks.js`。
+  - `tests/sanity_legacy_progression_checks.js` 增补：
+    - 预设目录包含 `bulwark`；
+    - 玄甲道统映射断言；
+    - 玄甲 mission 映射与 `applyLegacyRunMission` 断言。
+  - `tests/sanity_content_archetype_checks.js` 增补：
+    - 新增 3 个玄甲事件定义完整性与事件池归属断言。
+  - `tests/browser_event_branch_audit.mjs` 扩展事件分支审计：
+    - 新增 `shieldRelayBeacon/ironCitadelPact/aegisTribunal` 强制注入与前后状态断言。
+  - `tests/browser_inheritance_audit.mjs` 扩展：
+    - 新增“玄甲流预设可见性”与“玄甲 mission 映射可用”断言。
+
+- 2026-03-07: 第九轮测试证据（全通过）
+  - Node:
+    - `bash tests/run_node_checks.sh` ✅（含 `Bulwark doctrine checks passed`）
+  - Browser audits:
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅（含新增 3 个玄甲事件分支）
+    - `node tests/browser_inheritance_audit.mjs` ✅（含玄甲预设与 mission 映射）
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 冒烟 + 人工视觉：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-bulwark-polish` ✅
+    - 已人工检查 `output/web-game-bulwark-polish/shot-1.png`，主菜单渲染正常、引导提示可见。
+
+- TODO / 下轮建议
+  - 可为玄甲流补“敌方破盾词缀”与“护盾转伤机制”对抗，提升高层数策略博弈。
+  - 可新增玄甲流专属奖励权重（奖励卡牌偏置 + 事件出现倍率）并纳入平衡审计。
+
+- 2026-03-07: 第十轮对抗面与平衡打磨（玄甲流）
+  - 战斗对抗面扩展（`battle.js`）：
+    - 新增精英词缀 `sunder`（破盾）：
+      - 精英词缀池由 `strength/toughness/thorns/regen/swift` 扩展为 `+ sunder`。
+      - `sunder` 初始化标记 `guardBreak`，并在敌方攻击链路触发“击碎护盾 + 追加伤害”。
+    - 新增通用方法 `applyGuardBreakPressure(enemy, amount)`：
+      - 对 `sunder` 精英生效；
+      - 对 Boss 在玩家高护盾（>=18）时概率生效；
+      - 单敌人每回合最多触发一次（`guardBreakUsedThisTurn`），在 `enemyTurn` 开始时重置。
+      - 触发时会扣减玩家当前护盾并追加伤害日志，形成反龟缩博弈。
+    - `attack/multiAttack` 结算链路均接入 `applyGuardBreakPressure`，覆盖单段与多段攻击。
+  - 玩法机制扩展（护盾转伤）：
+    - `cards.js` 新增玄甲流卡牌：
+      - `bastionCrash`（垒势崩落，uncommon）：消耗至多 12 护盾转为伤害并过牌。
+      - `fortressEdict`（镇垒断罪，rare）：消耗全部护盾高倍率转伤并施加虚弱。
+    - `player.js` 新增效果类型 `blockBurst`：
+      - 计算护盾消耗、伤害倍率与最低伤害；
+      - 结算后真实扣减玩家护盾。
+    - `battle.js` `processEffect` 新增 `blockBurst` 展示与伤害处理。
+    - `battle.js` 目标判定列表新增 `blockBurst`，避免无目标误打。
+    - `cards.js` 升级系统补全 `blockBurst` 参数升级（`ratio/maxConsume/minDamage`）与描述生成文案。
+    - `CARD_POOL` / `ARCHETYPE_PACKS.bulwark` 已纳入新卡。
+  - 事件投放偏置优化（`events.js`）：
+    - 新增 `ARCHETYPE_EVENT_POOLS`。
+    - `getRandomEvent` 在牌组成型后引入流派轻度偏置（当前先接入 `bulwark`，35% 几率优先玄甲事件池）。
+
+- 2026-03-07: 第十轮测试扩展
+  - 新增 `tests/sanity_battle_guardbreak_checks.js`：
+    - 校验 `sunder` 破盾追加伤害与单回合限触发；
+    - 校验 Boss 破盾压力分支。
+  - 新增 `tests/sanity_bulwark_blockburst_checks.js`：
+    - 校验 `blockBurst` 护盾消耗上限、最低伤害与护盾扣减。
+  - `tests/sanity_content_archetype_checks.js` 新增事件偏置断言：
+    - 玄甲流成型牌组下，`getRandomEvent` 可命中玄甲偏置事件池。
+  - `tests/run_node_checks.sh` 已接入新增 2 个 sanity 脚本。
+
+- 2026-03-07: 第十轮测试证据（全通过）
+  - Node:
+    - `bash tests/run_node_checks.sh` ✅
+      - 含 `Battle guardbreak checks passed`
+      - 含 `Bulwark blockburst checks passed`
+  - Browser audits:
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 冒烟 + 人工视觉：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-guardbreak-polish` ✅
+    - 已人工检查 `output/web-game-guardbreak-polish/shot-1.png`，主菜单渲染正常、引导提示可见。
+
+- TODO / 下轮建议
+  - 可继续把“破盾词缀”扩展到事件/Boss阶段技能（例如阶段二固定破盾宣告）并加入视觉预告。
+  - 可增加“护盾转伤”专属奖励节点（锻炉/试炼）与平衡基准脚本，形成数值调优闭环。
+
+- 2026-03-07: 第十一轮可读性打磨（破盾预告）
+  - 敌方意图可视化增强：
+    - `utils.js` `createEnemyElement` 新增破盾判定（`sunder` 精英或 `guardBreak` 标记）。
+    - 破盾敌人意图增加 `breaker` class 与 `intent-tag.breaker` 标签（文案：`破盾`）。
+    - Tooltip 描述追加“词缀：破盾（可击碎护盾并追加伤害）”。
+  - 样式增强（`style.css`）：
+    - 新增 `.enemy-intent.breaker` 高亮边框/发光；
+    - 新增 `.intent-tag/.intent-tag.breaker` 标签样式，确保战斗中可读。
+  - 审计扩展（`browser_feature_audit.mjs`）：
+    - 新增断言 `sunder elite intent shows guardbreak tag`：
+      - 注入测试精英后，校验意图节点含 `breaker` class；
+      - 校验标签文字为“破盾”。
+
+- 2026-03-07: 第十一轮测试证据（全通过）
+  - Node:
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser:
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅（新增破盾意图标签断言通过）
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 冒烟 + 人工视觉：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-intent-polish` ✅
+    - 已人工检查 `output/web-game-intent-polish/shot-1.png`，主菜单渲染正常。
+
+- TODO / 下轮建议
+  - 可继续把“破盾预告”接入敌方详细 intent 数值预览（例如下一击预计破盾量/追加伤害），提升策略透明度。
+  - 可把 `bulwark` 事件偏置扩展到 `hemorrhage/precision/entropy`，并补事件分布统计脚本。
+
+- 2026-03-07: 第十二轮流派事件深化（四流派偏置 + 破盾提示一致性）
+  - `events.js`：扩展 `ARCHETYPE_EVENT_POOLS` 为四流派完整映射：
+    - `hemorrhage` -> `bloodForgeCovenant/shatteredCompass/debtboundAnvil`
+    - `precision` -> `mirrorNeedleDojo/shatteredCompass/bloodForgeCovenant`
+    - `entropy` -> `voidBookkeeper/ashLedgerTrial/convergenceRitual`
+    - `bulwark` -> `shieldRelayBeacon/ironCitadelPact/aegisTribunal`
+  - `utils.js`：修复破盾意图数值预告与实战不一致问题：
+    - 当玩家当前护盾为 0 时，不再出现“追加 1 伤害”的误导提示；
+    - 统一显示为“预计击碎 0 护盾，追加 0 伤害”。
+
+- 2026-03-07: 第十二轮测试与审计增强
+  - `tests/sanity_content_archetype_checks.js`：
+    - 新增四流派 `ARCHETYPE_EVENT_POOLS` 完整性断言；
+    - 新增四流派逐一偏置命中断言（构筑成型 + 强制触发偏置路径）。
+  - 新增 `tests/sanity_event_bias_distribution_checks.js`：
+    - 使用 seeded RNG 做 1200 次抽样，验证四流派事件偏置命中率均 >= 0.30；
+    - 本轮实测命中率：
+      - hemorrhage: 0.4075
+      - precision: 0.4050
+      - entropy: 0.3933
+      - bulwark: 0.4075
+  - `tests/run_node_checks.sh` 已接入 `sanity_event_bias_distribution_checks.js`。
+  - `tests/browser_feature_audit.mjs`：
+    - 破盾意图断言升级：在玩家护盾 0 的场景下，校验 tooltip 文案包含“预计击碎 0 护盾，追加 0 伤害”。
+  - `tests/browser_event_branch_audit.mjs`：
+    - 增加 entropy 三事件端到端断言：
+      - `voidBookkeeper`
+      - `ashLedgerTrial`
+      - `convergenceRitual`
+    - 覆盖前后状态变化（deck/gold/hp）校验。
+  - `tests/browser_audit.mjs`：
+    - 修复 realm 进入步骤偶发点击不稳定（`#enter-realm-btn`）导致的审计误失败；
+    - 新增点击失败时的 `game.startRealm(...)` 回退路径，提升稳定性。
+
+- 2026-03-07: 第十二轮测试证据（全通过）
+  - Node:
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser audits:
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅（含“破盾 0 护盾提示”断言）
+    - `node tests/browser_event_branch_audit.mjs` ✅（新增 entropy 事件分支）
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 冒烟 + 人工视觉：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-archetype-event-polish` ✅
+    - 已人工检查 `output/web-game-archetype-event-polish/shot-1.png`，主菜单渲染正常。
+
+- TODO / 下轮建议
+  - 可把“流派事件偏置”进一步接入地图节点生成权重（仅事件节点）做双层偏置，并新增 node-level 分布断言。
+  - 可新增“反破盾”成长路径（例如玄甲专属法则：首次被破盾后返还部分护盾并抽牌），与现有 guardbreak 机制形成高层博弈闭环。

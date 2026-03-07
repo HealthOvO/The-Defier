@@ -54,7 +54,7 @@ function assert(cond, msg) {
   ctx.window = ctx;
   ctx.global = ctx;
 
-  const root = '/Users/health/workspace/The Defier';
+  const root = path.resolve(__dirname, '..');
 
   // Load data dependencies first
   loadFile(ctx, path.join(root, 'js/data/cards.js'));
@@ -449,6 +449,39 @@ function assert(cond, msg) {
   precisionEnemy.buffs.mark = 3;
   precisionBattle.dealDamageToEnemy(precisionEnemy, 6);
   assert(precisionPlayer.hand.length === 1, 'precision resonance should draw on first marked hit each turn');
+
+  // New mechanic: entropy resonance should proc on first discard and convert tempo to pressure
+  const entropyPlayer = new Player();
+  entropyPlayer.deck = [
+    { ...CARDS.recklessMulligan }, { ...CARDS.echoingCut }, { ...CARDS.voidLedger },
+    { ...CARDS.entropyGuard }, { ...CARDS.debtCollection }, { ...CARDS.recirculation },
+    { ...CARDS.calculatedRuin }, { ...CARDS.oblivionSpiral }, { ...CARDS.quickDraw }
+  ];
+  entropyPlayer.prepareBattle();
+  assert(entropyPlayer.archetypeResonance && entropyPlayer.archetypeResonance.id === 'entropy', 'entropy resonance should activate');
+  entropyPlayer.hand = [{ ...CARDS.strike }, { ...CARDS.defend }];
+  entropyPlayer.drawPile = [{ ...CARDS.quickSlash, instanceId: 'entropy-draw-1' }];
+  const entropyGame = { player: entropyPlayer, achievementSystem: { updateStat: () => {} } };
+  const entropyBattle = new Battle(entropyGame);
+  entropyBattle.player = entropyPlayer;
+  entropyBattle.updateBattleUI = () => {};
+  const entropyEnemy = entropyBattle.createEnemyInstance({
+    id: 'entropyEnemy',
+    name: 'entropyEnemy',
+    hp: 30,
+    patterns: [{ type: 'attack', value: 4, intent: '⚔️' }],
+    isBoss: false
+  });
+  entropyEnemy.buffs = {};
+  entropyBattle.enemies = [entropyEnemy];
+  entropyGame.battle = entropyBattle;
+  entropyPlayer.game = entropyGame;
+
+  const entropyBefore = entropyEnemy.currentHp;
+  const discardOutcome = entropyPlayer.executeEffect({ type: 'discardHand', target: 'self' }, entropyEnemy, {});
+  assert(discardOutcome.value === 2, 'discardHand should discard the whole hand');
+  assert(entropyPlayer.hand.length === 1, 'entropy resonance should draw on first discard');
+  assert(entropyEnemy.currentHp < entropyBefore, 'entropy resonance should deal damage on first discard');
 
   // New mechanic: forge node choices should produce distinct outcomes
   const forgeGame = {

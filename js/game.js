@@ -26,6 +26,15 @@ class Game {
         this.cachedSlots = [null, null, null, null]; // Cache for slots
         this.guestMode = false;
         this.guideState = this.loadGuideState();
+        this.legacyStorageKey = 'theDefierLegacyV1';
+        this.legacyUpgradeCatalog = this.getLegacyUpgradeCatalog();
+        this.legacyProgress = this.loadLegacyProgress();
+        this.featureFlags = {
+            combatDepthV2: true,
+            pvpRuleSyncV2: true,
+            mapNodeTrialForge: true
+        };
+        this.lastLegacyGain = 0;
         this.debugMode = localStorage.getItem('theDefierDebug') === 'true';
         this.boundGlobalEvents = false;
         this.isAuthBusy = false;
@@ -294,6 +303,20 @@ class Game {
                 icon: '⚡',
                 desc: '优先首回合节奏与抽牌压制。',
                 priority: ['battleInsight', 'mindLibrary', 'spiritPouch', 'forgemind', 'vitalitySeed']
+            },
+            {
+                id: 'entropy',
+                name: '湮律流',
+                icon: '🌀',
+                desc: '围绕弃牌触发与随机压制展开节奏。',
+                priority: ['mindLibrary', 'battleInsight', 'forgemind', 'spiritPouch', 'vitalitySeed']
+            },
+            {
+                id: 'bulwark',
+                name: '玄甲流',
+                icon: '🛡️',
+                desc: '通过护势共鸣滚动优势，稳态反击压垮对手。',
+                priority: ['vitalitySeed', 'mindLibrary', 'battleInsight', 'forgemind', 'spiritPouch']
             }
         ];
     }
@@ -304,7 +327,17 @@ class Game {
             openingBattleBlockBonus: 0,
             firstAttackBonusPerBattle: 0,
             firstForgeExtraUpgradeOnce: 0,
-            firstForgeBoostUsed: false
+            firstForgeBoostUsed: false,
+            entropyLegacyProcEnabled: false,
+            entropyLegacyDraw: 0,
+            entropyLegacyDiscardDamage: 0,
+            entropyProcUsedThisTurn: false,
+            entropyBonusEnergyOnce: 0,
+            entropyBonusEnergyUsed: false,
+            bulwarkLegacyProcEnabled: false,
+            bulwarkLegacyDraw: 0,
+            bulwarkLegacyCounterDamage: 0,
+            bulwarkProcUsedThisTurn: false
         };
 
         if (presetId === 'survivor') {
@@ -325,6 +358,26 @@ class Game {
             return {
                 ...base,
                 firstAttackBonusPerBattle: 3
+            };
+        }
+
+        if (presetId === 'entropy') {
+            return {
+                ...base,
+                entropyLegacyProcEnabled: true,
+                entropyLegacyDraw: 1,
+                entropyLegacyDiscardDamage: 2,
+                entropyBonusEnergyOnce: 1
+            };
+        }
+
+        if (presetId === 'bulwark') {
+            return {
+                ...base,
+                openingBattleBlockBonus: 2,
+                bulwarkLegacyProcEnabled: true,
+                bulwarkLegacyDraw: 1,
+                bulwarkLegacyCounterDamage: 2
             };
         }
 
@@ -370,6 +423,36 @@ class Game {
                 desc: '触发 3 次首击增伤',
                 eventType: 'tempoFirstStrike',
                 target: 3,
+                progress: 0,
+                completed: false,
+                rewardEssence: 6,
+                rewardGranted: false
+            };
+        }
+
+        if (presetId === 'entropy') {
+            return {
+                presetId,
+                id: 'entropy_flux',
+                name: '湮律试炼',
+                desc: '触发 4 次弃牌共鸣',
+                eventType: 'entropyDiscardProc',
+                target: 4,
+                progress: 0,
+                completed: false,
+                rewardEssence: 6,
+                rewardGranted: false
+            };
+        }
+
+        if (presetId === 'bulwark') {
+            return {
+                presetId,
+                id: 'bulwark_guard',
+                name: '玄甲试炼',
+                desc: '触发 4 次护势共鸣',
+                eventType: 'bulwarkBlockProc',
+                target: 4,
                 progress: 0,
                 completed: false,
                 rewardEssence: 6,
@@ -576,6 +659,13 @@ class Game {
     }
 
     buyLegacyUpgrade(upgradeId, options = {}) {
+        if (!this.legacyProgress || typeof this.legacyProgress !== 'object') {
+            this.legacyProgress = this.getLegacyDefaults();
+        }
+        if (!this.legacyProgress.upgrades || typeof this.legacyProgress.upgrades !== 'object') {
+            this.legacyProgress.upgrades = {};
+        }
+
         const def = this.getLegacyUpgradeById(upgradeId);
         if (!def) return false;
 
@@ -596,6 +686,13 @@ class Game {
     }
 
     applyLegacyPreset(presetId, options = {}) {
+        if (!this.legacyProgress || typeof this.legacyProgress !== 'object') {
+            this.legacyProgress = this.getLegacyDefaults();
+        }
+        if (!this.legacyProgress.upgrades || typeof this.legacyProgress.upgrades !== 'object') {
+            this.legacyProgress.upgrades = {};
+        }
+
         const presets = this.getLegacyPresetCatalog();
         const preset = presets.find(p => p.id === presetId);
         if (!preset) return { success: false, reason: 'preset_not_found', allocated: 0 };
@@ -649,6 +746,11 @@ class Game {
     }
 
     initInheritanceScreen() {
+        if (!this.legacyProgress || typeof this.legacyProgress !== 'object') {
+            this.legacyProgress = this.loadLegacyProgress();
+        }
+        this.legacyProgress = this.normalizeLegacyProgress(this.legacyProgress);
+
         const summary = document.getElementById('inheritance-summary');
         const presetsEl = document.getElementById('inheritance-presets');
         const grid = document.getElementById('inheritance-upgrade-grid');
@@ -948,6 +1050,11 @@ class Game {
     // 保存游戏
     saveGame() {
         try {
+            const pvpEconomySnapshot = (typeof PVPService !== 'undefined'
+                && PVPService
+                && typeof PVPService.getEconomySnapshot === 'function')
+                ? PVPService.getEconomySnapshot()
+                : null;
             const gameState = {
                 version: '5.1.0',
                 player: this.player.getState(),
@@ -966,7 +1073,8 @@ class Game {
                 },
                 pvpMeta: {
                     ruleVersion: 'pvp-v2',
-                    lastKnownDivision: (typeof PVPService !== 'undefined' && PVPService.currentRankData) ? PVPService.currentRankData.division : null
+                    lastKnownDivision: (typeof PVPService !== 'undefined' && PVPService.currentRankData) ? PVPService.currentRankData.division : null,
+                    economy: pvpEconomySnapshot
                 },
                 legacyProgress: this.legacyProgress,
                 featureFlags: { ...this.featureFlags },
@@ -1028,7 +1136,8 @@ class Game {
             };
             migrated.pvpMeta = migrated.pvpMeta || {
                 ruleVersion: 'pvp-v2',
-                lastKnownDivision: null
+                lastKnownDivision: null,
+                economy: null
             };
             migrated.legacyProgress = normalizeLegacy(migrated.legacyProgress);
             migrated.featureFlags = migrated.featureFlags || { ...this.featureFlags };
@@ -1037,6 +1146,9 @@ class Game {
         } else {
             migrated.combatMeta = migrated.combatMeta || {};
             migrated.pvpMeta = migrated.pvpMeta || {};
+            if (!Object.prototype.hasOwnProperty.call(migrated.pvpMeta, 'economy')) {
+                migrated.pvpMeta.economy = null;
+            }
             migrated.legacyProgress = normalizeLegacy(migrated.legacyProgress);
             migrated.featureFlags = migrated.featureFlags || { ...this.featureFlags };
             migrated.schemaMigratedAt = migrated.schemaMigratedAt || Date.now();
@@ -1124,11 +1236,22 @@ class Game {
                 const normalizedDoctrine = this.getLegacyRunDoctrineForPreset(
                     this.player.legacyRunDoctrine.presetId || this.legacyProgress?.lastPreset || null
                 );
-                this.player.legacyRunDoctrine = {
+                const mergedDoctrine = {
                     ...normalizedDoctrine,
                     ...this.player.legacyRunDoctrine,
                     firstForgeBoostUsed: !!this.player.legacyRunDoctrine.firstForgeBoostUsed
                 };
+                mergedDoctrine.entropyLegacyProcEnabled = !!mergedDoctrine.entropyLegacyProcEnabled;
+                mergedDoctrine.entropyProcUsedThisTurn = !!mergedDoctrine.entropyProcUsedThisTurn;
+                mergedDoctrine.entropyBonusEnergyUsed = !!mergedDoctrine.entropyBonusEnergyUsed;
+                mergedDoctrine.entropyLegacyDraw = Math.max(0, Math.floor(Number(mergedDoctrine.entropyLegacyDraw) || 0));
+                mergedDoctrine.entropyLegacyDiscardDamage = Math.max(0, Math.floor(Number(mergedDoctrine.entropyLegacyDiscardDamage) || 0));
+                mergedDoctrine.entropyBonusEnergyOnce = Math.max(0, Math.floor(Number(mergedDoctrine.entropyBonusEnergyOnce) || 0));
+                mergedDoctrine.bulwarkLegacyProcEnabled = !!mergedDoctrine.bulwarkLegacyProcEnabled;
+                mergedDoctrine.bulwarkProcUsedThisTurn = !!mergedDoctrine.bulwarkProcUsedThisTurn;
+                mergedDoctrine.bulwarkLegacyDraw = Math.max(0, Math.floor(Number(mergedDoctrine.bulwarkLegacyDraw) || 0));
+                mergedDoctrine.bulwarkLegacyCounterDamage = Math.max(0, Math.floor(Number(mergedDoctrine.bulwarkLegacyCounterDamage) || 0));
+                this.player.legacyRunDoctrine = mergedDoctrine;
             }
             if (!this.player.legacyRunMission || typeof this.player.legacyRunMission !== 'object') {
                 this.applyLegacyRunMission(this.player, this.player.legacyRunDoctrine?.presetId || this.legacyProgress?.lastPreset || null);
@@ -1439,6 +1562,15 @@ class Game {
                 this.player.stance = gameState.combatMeta.stance;
             } else {
                 this.player.stance = this.player.stance || 'neutral';
+            }
+            if (
+                gameState.pvpMeta
+                && gameState.pvpMeta.economy
+                && typeof PVPService !== 'undefined'
+                && PVPService
+                && typeof PVPService.setEconomySnapshot === 'function'
+            ) {
+                PVPService.setEconomySnapshot(gameState.pvpMeta.economy);
             }
             this.featureFlags = { ...this.featureFlags, ...(gameState.featureFlags || {}) };
 
@@ -2208,6 +2340,35 @@ class Game {
         document.getElementById('char-hp').textContent = this.player.maxHp;
         document.getElementById('char-energy').textContent = this.player.baseEnergy;
         document.getElementById('char-draw').textContent = this.player.drawCount;
+        const charId = this.player.characterId || 'linFeng';
+        const char = (typeof CHARACTERS !== 'undefined' && CHARACTERS[charId]) ? CHARACTERS[charId] : { avatar: '👤' };
+        const cosmetic = this.getEquippedCosmeticsProfile();
+        const titleEl = document.getElementById('info-char-title');
+        const avatarEl = document.getElementById('info-char-avatar');
+        const descEl = document.getElementById('info-char-desc');
+        if (titleEl) {
+            if (cosmetic && cosmetic.title && cosmetic.title.name) {
+                const titleName = String(cosmetic.title.name).replace(/^称号·/, '');
+                titleEl.textContent = `称号·${titleName}`;
+            } else {
+                titleEl.textContent = '逆命印记';
+            }
+            titleEl.className = 'imprint-badge';
+        }
+        if (avatarEl) {
+            const skinIcon = cosmetic && cosmetic.skin ? (cosmetic.skin.icon || '👘') : null;
+            avatarEl.textContent = skinIcon || char.avatar || '👤';
+            avatarEl.classList.toggle('pvp-skin-avatar', !!skinIcon);
+        }
+        if (descEl) {
+            const baseDesc = char.description || descEl.textContent || '';
+            if (cosmetic && cosmetic.skin && cosmetic.skin.name) {
+                const skinName = String(cosmetic.skin.name).replace(/^法相·/, '');
+                descEl.textContent = `${baseDesc}（当前法相：${skinName}）`;
+            } else {
+                descEl.textContent = baseDesc.replace(/（当前法相：.*?）$/, '');
+            }
+        }
 
         // 显示力量 (永久)
         const permaStrength = (this.player.permaBuffs && this.player.permaBuffs.strength) ? this.player.permaBuffs.strength : 0;
@@ -2217,10 +2378,6 @@ class Game {
         // Fix: ID mismatch, HTML uses 'ring-level'
         const ringLevelEl = document.getElementById('ring-level');
         if (ringLevelEl) ringLevelEl.textContent = ringName;
-
-        // Update badge text if it exists
-        const badgeEl = document.querySelector('.imprint-badge') || document.querySelector('.imprint-badge残次');
-        if (badgeEl) badgeEl.textContent = ringName;
 
         let loadedCount = 0;
         let totalSlots = 0;
@@ -2236,6 +2393,21 @@ class Game {
 
         const loadedLawsSpan = document.getElementById('loaded-laws');
         if (loadedLawsSpan) loadedLawsSpan.textContent = `${loadedCount}/${totalSlots}`;
+    }
+
+    getEquippedCosmeticsProfile() {
+        if (
+            typeof PVPService !== 'undefined'
+            && PVPService
+            && typeof PVPService.getEquippedCosmetics === 'function'
+        ) {
+            try {
+                return PVPService.getEquippedCosmetics();
+            } catch (e) {
+                console.warn('Read equipped cosmetics failed:', e);
+            }
+        }
+        return { skin: null, title: null };
     }
 
     // 显示角色选择界面
@@ -2445,11 +2617,22 @@ class Game {
         const descEl = document.getElementById('info-char-desc');
         const hpEl = document.getElementById('char-hp');
         const energyEl = document.getElementById('char-energy');
+        const cosmetic = this.getEquippedCosmeticsProfile();
+        const equippedTitle = cosmetic && cosmetic.title ? cosmetic.title.name : null;
+        const equippedSkin = cosmetic && cosmetic.skin ? cosmetic.skin : null;
 
-        if (avatarEl) avatarEl.textContent = char.avatar;
+        if (avatarEl) {
+            avatarEl.textContent = equippedSkin ? (equippedSkin.icon || '👘') : char.avatar;
+            avatarEl.classList.toggle('pvp-skin-avatar', !!equippedSkin);
+        }
         if (nameEl) nameEl.textContent = `${char.name} · ${char.title}`;
         if (titleEl) {
-            titleEl.textContent = '逆命印记';
+            if (equippedTitle) {
+                const titleName = String(equippedTitle).replace(/^称号·/, '');
+                titleEl.textContent = `称号·${titleName}`;
+            } else {
+                titleEl.textContent = '逆命印记';
+            }
             titleEl.className = 'imprint-badge';
         }
         if (descEl) descEl.textContent = char.description;
@@ -2466,6 +2649,8 @@ class Game {
         const charId = this.player.characterId || 'linFeng';
         // Add Fallback for missing character data
         const char = (typeof CHARACTERS !== 'undefined' && CHARACTERS[charId]) ? CHARACTERS[charId] : { name: '未知修士' };
+        const cosmetic = this.getEquippedCosmeticsProfile();
+        const equippedSkin = cosmetic && cosmetic.skin ? cosmetic.skin : null;
 
         const battleNameEl = document.getElementById('player-name-display');
         if (battleNameEl) {
@@ -2479,6 +2664,7 @@ class Game {
             faceEl.style.backgroundImage = '';
             faceEl.textContent = '';
             faceEl.className = 'player-face-visual';
+            faceEl.removeAttribute('title');
 
             // Resolve Image Path: Check .image, .portrait (WuYu), or .avatar (Yan Han if path)
             const imagePath = char.image || char.portrait || (char.avatar && char.avatar.includes('/') ? char.avatar : null);
@@ -2486,8 +2672,33 @@ class Game {
             if (imagePath) {
                 faceEl.style.backgroundImage = `url('${imagePath}')`;
                 faceEl.classList.add('is-image');
+                if (equippedSkin) {
+                    faceEl.classList.add('skin-equipped');
+                    faceEl.title = `已激活法相：${equippedSkin.name || '未知法相'}`;
+                }
             } else {
-                faceEl.textContent = char.avatar || '👤';
+                faceEl.textContent = equippedSkin ? (equippedSkin.icon || '👘') : (char.avatar || '👤');
+                if (equippedSkin) {
+                    faceEl.classList.add('skin-equipped');
+                    faceEl.title = `已激活法相：${equippedSkin.name || '未知法相'}`;
+                }
+            }
+
+            const avatarWrap = faceEl.closest('.player-avatar');
+            if (avatarWrap) {
+                avatarWrap.classList.toggle('skin-equipped', !!equippedSkin);
+                let badge = avatarWrap.querySelector('.player-skin-badge');
+                if (equippedSkin) {
+                    if (!badge) {
+                        badge = document.createElement('div');
+                        badge.className = 'player-skin-badge';
+                        avatarWrap.appendChild(badge);
+                    }
+                    const skinName = String(equippedSkin.name || '法相').replace(/^法相·/, '');
+                    badge.textContent = `${equippedSkin.icon || '👘'} ${skinName}`;
+                } else if (badge) {
+                    badge.remove();
+                }
             }
         }
 
@@ -2731,7 +2942,8 @@ class Game {
         // Report
         let result = {
             newRating: (typeof PVPService !== 'undefined' && PVPService.currentRankData) ? (PVPService.currentRankData.score || 1000) : 1000,
-            delta: 0
+            delta: 0,
+            coinsAwarded: 0
         };
         try {
             if (typeof PVPService !== 'undefined') {
@@ -2759,9 +2971,13 @@ class Game {
                 oppScore.textContent = this.pvpOpponentRank.score || 1000;
             }
         }
+        if (result && Number(result.coinsAwarded) > 0) {
+            Utils.showBattleLog(`天道币 +${Math.floor(Number(result.coinsAwarded))}`);
+        }
         if (result && result.rejected) {
             Utils.showBattleLog('PVP 结算校验未通过，本场积分未变动。');
         }
+        this.autoSave();
     }
 
     async handlePVPDefeat() {
@@ -2776,7 +2992,8 @@ class Game {
         // Report
         let result = {
             newRating: (typeof PVPService !== 'undefined' && PVPService.currentRankData) ? (PVPService.currentRankData.score || 1000) : 1000,
-            delta: 0
+            delta: 0,
+            coinsAwarded: 0
         };
         try {
             if (typeof PVPService !== 'undefined') {
@@ -2803,9 +3020,13 @@ class Game {
                 oppScore.textContent = this.pvpOpponentRank.score || 1000;
             }
         }
+        if (result && Number(result.coinsAwarded) > 0) {
+            Utils.showBattleLog(`天道币 +${Math.floor(Number(result.coinsAwarded))}`);
+        }
         if (result && result.rejected) {
             Utils.showBattleLog('PVP 结算校验未通过，本场积分未变动。');
         }
+        this.autoSave();
     }
 
     closePVPResult() {
@@ -3893,8 +4114,8 @@ class Game {
 
         switch (type) {
             case 'deck': cards = this.player.deck; deckName = '当前牌组'; break;
-            case 'draw': cards = this.player.drawPile; deckName = '抽牌堆'; break;
-            case 'discard': cards = this.player.discardPile; deckName = '弃牌堆'; break;
+            case 'draw': cards = this.player.drawPile; deckName = '识海'; break;
+            case 'discard': cards = this.player.discardPile; deckName = '轮回'; break;
         }
 
         title.textContent = `${deckName} · ${cards.length}`;

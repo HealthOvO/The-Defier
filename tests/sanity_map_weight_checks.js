@@ -12,7 +12,7 @@ function loadFile(ctx, filePath) {
 }
 
 (function run() {
-  const root = '/Users/health/workspace/The Defier';
+  const root = path.resolve(__dirname, '..');
 
   const ctx = vm.createContext({
     console,

@@ -48,6 +48,17 @@ function add(name, pass, detail = '') {
   const inheritanceMode = await page.evaluate(() => JSON.parse(window.render_game_to_text()).mode);
   add('inheritance screen is reachable', inheritanceMode === 'inheritance-screen', `mode=${inheritanceMode}`);
 
+  const entropyPresetVisible = await page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll('.inheritance-preset-btn .name'));
+    return buttons.some((el) => (el.textContent || '').includes('湮律流'));
+  });
+  add('entropy preset is visible on inheritance screen', entropyPresetVisible, '');
+  const bulwarkPresetVisible = await page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll('.inheritance-preset-btn .name'));
+    return buttons.some((el) => (el.textContent || '').includes('玄甲流'));
+  });
+  add('bulwark preset is visible on inheritance screen', bulwarkPresetVisible, '');
+
   const before = await page.evaluate(() => JSON.parse(window.render_game_to_text()).legacy);
   add('legacy starts with unspent essence', (before?.unspent || 0) >= 40, JSON.stringify(before));
 
@@ -134,6 +145,25 @@ function add(name, pass, detail = '') {
     'preset mission can complete and grant essence',
     (missionProbe?.afterEssence || 0) > (missionProbe?.beforeEssence || 0) && !!missionProbe?.missionAfter?.completed,
     JSON.stringify(missionProbe || null)
+  );
+
+  const entropyMissionProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.getLegacyMissionForPreset !== 'function') return null;
+    return game.getLegacyMissionForPreset('entropy');
+  });
+  add(
+    'entropy preset mission mapping is available',
+    entropyMissionProbe?.eventType === 'entropyDiscardProc' && entropyMissionProbe?.target === 4,
+    JSON.stringify(entropyMissionProbe || null)
+  );
+  const bulwarkMissionProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.getLegacyMissionForPreset !== 'function') return null;
+    return game.getLegacyMissionForPreset('bulwark');
+  });
+  add(
+    'bulwark preset mission mapping is available',
+    bulwarkMissionProbe?.eventType === 'bulwarkBlockProc' && bulwarkMissionProbe?.target === 4,
+    JSON.stringify(bulwarkMissionProbe || null)
   );
 
   await page.screenshot({ path: path.join(outDir, '01-inheritance-after-preset.png'), fullPage: true });

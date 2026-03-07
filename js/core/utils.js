@@ -543,6 +543,16 @@ const Utils = {
 
         const intentIcon = currentPattern.intent || '❓';
         const intentValue = currentPattern.value ? (currentPattern.count ? `${currentPattern.value}x${currentPattern.count}` : currentPattern.value) : '';
+        const isAttackIntent = currentPattern.type === 'attack' || currentPattern.type === 'multiAttack';
+        const playerBlock = Math.max(0, Math.floor(Number(window?.game?.player?.block) || 0));
+        const canBossGuardBreak = !!(enemy.isBoss && isAttackIntent && playerBlock >= 18);
+        const isGuardBreaker = !!(
+            isAttackIntent && (
+                (enemy.isElite && enemy.eliteType === 'sunder') ||
+                (enemy.buffs && enemy.buffs.guardBreak > 0) ||
+                canBossGuardBreak
+            )
+        );
 
         // 意图详细描述
         let intentDesc = '';
@@ -554,6 +564,29 @@ const Utils = {
             case 'debuff': intentDesc = `意图：削弱玩家`; break;
             case 'heal': intentDesc = `意图：恢复 ${currentPattern.value} 点生命`; break;
             default: intentDesc = '意图：未知';
+        }
+        if (isGuardBreaker) {
+            const shatterCap = (enemy.isElite && enemy.eliteType === 'sunder') ? 12 : 8;
+            const shatterRate = (enemy.isElite && enemy.eliteType === 'sunder') ? 0.45 : 0.3;
+            const shattered = playerBlock > 0
+                ? Math.min(
+                    playerBlock,
+                    Math.max(3, Math.min(shatterCap, Math.floor(playerBlock * shatterRate)))
+                )
+                : 0;
+            const bonusDamage = shattered > 0
+                ? Math.max(
+                    1,
+                    Math.floor(shattered * ((enemy.isElite && enemy.eliteType === 'sunder') ? 0.6 : 0.4))
+                )
+                : 0;
+            if (enemy.isElite && enemy.eliteType === 'sunder') {
+                intentDesc += `｜词缀：破盾（预计击碎 ${shattered} 护盾，追加 ${bonusDamage} 伤害）`;
+            } else if (canBossGuardBreak) {
+                intentDesc += `｜压迫破盾（35%）：击碎 ${shattered} 护盾并追加 ${bonusDamage} 伤害`;
+            } else {
+                intentDesc += '｜词缀：破盾（可击碎护盾并追加伤害）';
+            }
         }
 
         // BOSS Image Support (Unified Structure)
@@ -568,11 +601,12 @@ const Utils = {
         enemyEl.innerHTML = `
             <div class="enemy-avatar ${hasImage ? 'has-image' : ''}" style="${avatarStyle}">
                 ${hasImage ? '' : enemy.icon}
-                <div class="enemy-intent ${currentPattern.type}" 
+                <div class="enemy-intent ${currentPattern.type} ${isGuardBreaker ? 'breaker' : ''}" 
                      onmouseenter="Utils.showTooltip('${intentDesc}', event.clientX, event.clientY)"
                      onmouseleave="Utils.hideTooltip()">
                     ${intentIcon}
                     ${intentValue ? `<span class="intent-value">${intentValue}</span>` : ''}
+                    ${isGuardBreaker ? '<span class="intent-tag breaker">破盾</span>' : ''}
                 </div>
             </div>
             <div class="enemy-name">${enemy.name}</div>

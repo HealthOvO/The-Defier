@@ -910,6 +910,190 @@ const EVENTS = {
         ]
     },
 
+    voidBookkeeper: {
+        id: 'voidBookkeeper',
+        name: '虚空账房',
+        icon: '📚',
+        description: '账房先生递来一卷黑册，声称“代价必须记账，但节奏可提前兑现”。',
+        choices: [
+            {
+                text: '签收账册',
+                icon: '✍️',
+                result: '获得弃牌流核心卡组',
+                resultType: 'positive',
+                effects: [
+                    { type: 'card', cardId: 'voidLedger' },
+                    { type: 'card', cardId: 'recklessMulligan' }
+                ]
+            },
+            {
+                text: '借款提速',
+                icon: '💰',
+                result: '损失生命，获得灵石与核心进攻牌',
+                resultType: 'neutral',
+                condition: { type: 'hp', min: 18 },
+                effects: [
+                    { type: 'damage', value: 8 },
+                    { type: 'gold', value: 80 },
+                    { type: 'card', cardId: 'echoingCut' }
+                ]
+            }
+        ]
+    },
+
+    ashLedgerTrial: {
+        id: 'ashLedgerTrial',
+        name: '灰契账页',
+        icon: '📄',
+        description: '账页会在战前预支收益，但要求你在之后偿还手牌质量。',
+        choices: [
+            {
+                text: '立即兑现',
+                icon: '🔥',
+                result: '升级一张牌并获得稀有弃牌牌',
+                resultType: 'positive',
+                effects: [
+                    { type: 'upgradeCard' },
+                    { type: 'card', cardId: 'oblivionSpiral' }
+                ]
+            },
+            {
+                text: '稳妥签注',
+                icon: '🧮',
+                result: '获得两张过牌工具并提升命环经验',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'card', cardId: 'recirculation' },
+                    { type: 'card', cardId: 'debtCollection' },
+                    { type: 'ringExp', value: 35 }
+                ]
+            }
+        ]
+    },
+
+    convergenceRitual: {
+        id: 'convergenceRitual',
+        name: '收束仪式',
+        icon: '🕳️',
+        description: '你可以把分散的资源压成一次终局爆发，代价是立刻失去安全边际。',
+        choices: [
+            {
+                text: '进行收束',
+                icon: '⚔️',
+                result: '获得终局卡并损失生命',
+                resultType: 'negative',
+                condition: { type: 'hp', min: 24 },
+                effects: [
+                    { type: 'damage', value: 14 },
+                    { type: 'card', cardId: 'finalConvergence' }
+                ]
+            },
+            {
+                text: '拆解仪式',
+                icon: '🛠️',
+                result: '获得灵石、经验和弃牌流中坚牌',
+                resultType: 'positive',
+                effects: [
+                    { type: 'gold', value: 90 },
+                    { type: 'ringExp', value: 45 },
+                    { type: 'card', cardId: 'calculatedRuin' }
+                ]
+            }
+        ]
+    },
+
+    shieldRelayBeacon: {
+        id: 'shieldRelayBeacon',
+        name: '护阵中继站',
+        icon: '📡',
+        description: '一座半损的中继阵仍在输送护阵灵流，你可以接管它，或拆解它。',
+        choices: [
+            {
+                text: '拆解阵芯',
+                icon: '⚙️',
+                result: '获得灵石，但受到反震伤害',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'gold', value: 90 },
+                    { type: 'damage', value: 8 }
+                ]
+            },
+            {
+                text: '接入护流',
+                icon: '🛡️',
+                result: '恢复生命并获得守御工具牌',
+                resultType: 'positive',
+                effects: [
+                    { type: 'heal', value: 10 },
+                    { type: 'card', cardId: 'mirrorWall' }
+                ]
+            }
+        ]
+    },
+
+    ironCitadelPact: {
+        id: 'ironCitadelPact',
+        name: '玄铁城契',
+        icon: '🏰',
+        description: '残存守军要求你立下护城誓约，代价是立即承担灵压反噬。',
+        choices: [
+            {
+                text: '签下守契',
+                icon: '✍️',
+                result: '失去生命，获得玄甲核心卡',
+                resultType: 'negative',
+                condition: { type: 'hp', min: 20 },
+                effects: [
+                    { type: 'damage', value: 10 },
+                    { type: 'card', cardId: 'citadelOath' },
+                    { type: 'card', cardId: 'ironBreath' }
+                ]
+            },
+            {
+                text: '稳态改造',
+                icon: '🔧',
+                result: '获得守势牌并提升命环经验',
+                resultType: 'positive',
+                effects: [
+                    { type: 'card', cardId: 'guardianMantra' },
+                    { type: 'ringExp', value: 40 }
+                ]
+            }
+        ]
+    },
+
+    aegisTribunal: {
+        id: 'aegisTribunal',
+        name: '玄甲审庭',
+        icon: '⚖️',
+        description: '审庭要求你在“以财稳局”与“以身换势”之间作出裁断。',
+        choices: [
+            {
+                text: '缴纳裁断费',
+                icon: '💰',
+                result: '消耗灵石，获得两张反制牌',
+                resultType: 'neutral',
+                condition: { type: 'gold', min: 100 },
+                effects: [
+                    { type: 'gold', value: -100 },
+                    { type: 'card', cardId: 'counterEdict' },
+                    { type: 'card', cardId: 'shieldTax' }
+                ]
+            },
+            {
+                text: '承受重压',
+                icon: '🧱',
+                result: '失去生命，获得玄甲裁断',
+                resultType: 'negative',
+                condition: { type: 'hp', min: 18 },
+                effects: [
+                    { type: 'damage', value: 12 },
+                    { type: 'card', cardId: 'aegisJudgement' }
+                ]
+            }
+        ]
+    },
+
     hiddenSpring: {
         id: 'hiddenSpring',
         name: '隐泉',
@@ -943,10 +1127,17 @@ const EVENTS = {
 
 // 事件池 - 按类型分类
 const EVENT_POOL = {
-    common: ['mysteryChest', 'spiritVein', 'wanderingSmith', 'hiddenSpring', 'brokenPavilion', 'mirrorNeedleDojo'],
-    uncommon: ['injuredCultivator', 'mysteryStele', 'celestialGamble', 'bloodMoonRitual', 'swordTomb', 'wanderingOracle', 'bloodForgeCovenant', 'shatteredCompass'],
-    rare: ['mysteriousMerchant', 'ancientAltar', 'fateChoice', 'ancientLibrary', 'voidRift', 'spiritAuction', 'fallenFormation', 'destinyMirror', 'demonContract', 'starObservation', 'debtboundAnvil'],
+    common: ['mysteryChest', 'spiritVein', 'wanderingSmith', 'hiddenSpring', 'brokenPavilion', 'mirrorNeedleDojo', 'voidBookkeeper', 'shieldRelayBeacon'],
+    uncommon: ['injuredCultivator', 'mysteryStele', 'celestialGamble', 'bloodMoonRitual', 'swordTomb', 'wanderingOracle', 'bloodForgeCovenant', 'shatteredCompass', 'ashLedgerTrial', 'ironCitadelPact'],
+    rare: ['mysteriousMerchant', 'ancientAltar', 'fateChoice', 'ancientLibrary', 'voidRift', 'spiritAuction', 'fallenFormation', 'destinyMirror', 'demonContract', 'starObservation', 'debtboundAnvil', 'convergenceRitual', 'aegisTribunal'],
     special: ['trialGround']
+};
+
+const ARCHETYPE_EVENT_POOLS = {
+    hemorrhage: ['bloodForgeCovenant', 'shatteredCompass', 'debtboundAnvil'],
+    precision: ['mirrorNeedleDojo', 'shatteredCompass', 'bloodForgeCovenant'],
+    entropy: ['voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual'],
+    bulwark: ['shieldRelayBeacon', 'ironCitadelPact', 'aegisTribunal']
 };
 
 function canUseDebugEventHooks() {
@@ -969,6 +1160,24 @@ function getRandomEvent() {
         if (window.__debugEventId && EVENTS[window.__debugEventId]) {
             return { ...EVENTS[window.__debugEventId] };
         }
+    }
+
+    // 牌组成型后，事件投放向对应流派轻度偏置，提升构筑连贯性
+    let preferredArchetype = null;
+    try {
+        const deck = window && window.game && window.game.player ? window.game.player.deck : null;
+        if (Array.isArray(deck) && deck.length > 0 && typeof inferDeckArchetype === 'function') {
+            preferredArchetype = inferDeckArchetype(deck);
+        }
+    } catch (e) {
+        preferredArchetype = null;
+    }
+    const archetypePool = preferredArchetype && ARCHETYPE_EVENT_POOLS[preferredArchetype]
+        ? ARCHETYPE_EVENT_POOLS[preferredArchetype].filter(id => !!EVENTS[id])
+        : [];
+    if (archetypePool.length > 0 && Math.random() < 0.35) {
+        const boostedId = archetypePool[Math.floor(Math.random() * archetypePool.length)];
+        return JSON.parse(JSON.stringify(EVENTS[boostedId]));
     }
 
     const roll = Math.random();

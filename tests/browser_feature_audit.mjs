@@ -11,6 +11,14 @@ function add(name, pass, detail = '') {
   findings.push({ name, pass, detail });
 }
 
+async function safeScreenshot(page, outPath) {
+  try {
+    await page.screenshot({ path: outPath, fullPage: true, timeout: 5000 });
+  } catch (err) {
+    console.warn(`[browser_feature_audit] screenshot skipped: ${err?.message || err}`);
+  }
+}
+
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -164,7 +172,49 @@ function add(name, pass, detail = '') {
   });
   add('log filter switch works', systemFilterApplied === 'system', `active=${systemFilterApplied}`);
 
-  await page.screenshot({ path: path.join(outDir, 'feature-audit.png'), fullPage: true });
+  const guardBreakIntentVisible = await page.evaluate(() => {
+    if (!window.game || !game.battle) return { ok: false, reason: 'no_battle' };
+    if (game.player) game.player.block = 0;
+    const enemy = {
+      id: 'audit_sunder',
+      name: '试作破盾精英',
+      icon: '🪓',
+      currentHp: 66,
+      maxHp: 66,
+      block: 0,
+      buffs: { guardBreak: 1 },
+      patterns: [{ type: 'attack', value: 9, intent: '⚔️' }],
+      currentPatternIndex: 0,
+      isElite: true,
+      eliteType: 'sunder'
+    };
+    game.battle.enemies = [enemy];
+    if (typeof game.battle.updateEnemiesUI === 'function') {
+      game.battle.updateEnemiesUI();
+    }
+    const tag = document.querySelector('.enemy .enemy-intent .intent-tag.breaker');
+    const intent = document.querySelector('.enemy .enemy-intent');
+    const tooltipBind = intent ? (intent.getAttribute('onmouseenter') || '') : '';
+    return {
+      ok: !!tag && /破盾/.test(tag.textContent || '') && !!intent && intent.classList.contains('breaker'),
+      tagText: tag ? (tag.textContent || '').trim() : '',
+      className: intent ? intent.className : '',
+      tooltipBind
+    };
+  });
+  add(
+    'sunder elite intent shows guardbreak tag',
+    !!guardBreakIntentVisible?.ok,
+    JSON.stringify(guardBreakIntentVisible || null)
+  );
+  add(
+    'sunder guardbreak tooltip includes shatter preview',
+    /预计击碎 0 护盾/.test(guardBreakIntentVisible?.tooltipBind || '') &&
+      /追加 0 伤害/.test(guardBreakIntentVisible?.tooltipBind || ''),
+    guardBreakIntentVisible?.tooltipBind || ''
+  );
+
+  await safeScreenshot(page, path.join(outDir, 'feature-audit.png'));
 
   const report = {
     url,

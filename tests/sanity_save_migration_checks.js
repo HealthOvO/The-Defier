@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const vm = require('vm');
 
 function assert(cond, msg) {
@@ -6,7 +7,7 @@ function assert(cond, msg) {
 }
 
 (function run() {
-  const code = fs.readFileSync('/Users/health/workspace/The Defier/js/game.js', 'utf8');
+  const code = fs.readFileSync(path.resolve(__dirname, '../js/game.js'), 'utf8');
   const ctx = vm.createContext({
     console,
     window: {},

@@ -11,6 +11,14 @@ function add(name, pass, detail = '') {
   findings.push({ name, pass, detail });
 }
 
+async function safeScreenshot(page, outPath) {
+  try {
+    await page.screenshot({ path: outPath, fullPage: true, timeout: 5000 });
+  } catch (err) {
+    console.warn(`[browser_event_branch_audit] screenshot skipped: ${err?.message || err}`);
+  }
+}
+
 async function getSnapshot(page) {
   return page.evaluate(() => ({
     mode: window.game?.currentScreen || null,
@@ -114,6 +122,52 @@ async function bootstrapRun(page) {
         after.hp < before.hp &&
         after.deck >= before.deck + 1,
       detail: 'hp down and deck +1'
+    },
+    {
+      eventId: 'voidBookkeeper',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        after.deck >= before.deck + 2,
+      detail: 'deck +2'
+    },
+    {
+      eventId: 'ashLedgerTrial',
+      choiceIndex: 1,
+      expect: (before, after) =>
+        after.deck >= before.deck + 2,
+      detail: 'deck +2'
+    },
+    {
+      eventId: 'convergenceRitual',
+      choiceIndex: 1,
+      expect: (before, after) =>
+        after.gold > before.gold &&
+        after.deck >= before.deck + 1,
+      detail: 'gold up and deck +1'
+    },
+    {
+      eventId: 'shieldRelayBeacon',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        after.hp < before.hp &&
+        after.gold > before.gold,
+      detail: 'hp down and gold up'
+    },
+    {
+      eventId: 'ironCitadelPact',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        after.hp < before.hp &&
+        after.deck >= before.deck + 2,
+      detail: 'hp down and deck +2'
+    },
+    {
+      eventId: 'aegisTribunal',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        after.gold < before.gold &&
+        after.deck >= before.deck + 2,
+      detail: 'gold down and deck +2'
     }
   ];
 
@@ -163,7 +217,7 @@ async function bootstrapRun(page) {
     await page.waitForTimeout(150);
   }
 
-  await page.screenshot({ path: path.join(outDir, 'event-branch-audit.png'), fullPage: true });
+  await safeScreenshot(page, path.join(outDir, 'event-branch-audit.png'));
 
   const report = {
     url,
