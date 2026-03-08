@@ -86,6 +86,19 @@ function add(name, pass, detail = '') {
   });
   add('preset id persisted to local storage', localPresetState?.lastPreset === 'smith', JSON.stringify(localPresetState));
 
+  // Apply secondary preset via right-click (new dual-doctrine flow)
+  await page.click('.inheritance-preset-btn:nth-child(3)', { timeout: 5000, force: true, button: 'right' });
+  await page.waitForTimeout(250);
+  const secondaryConfirmVisible = await page.locator('#generic-confirm-modal.active #generic-confirm-btn').isVisible().catch(() => false);
+  add('secondary preset apply opens confirm modal on right-click', secondaryConfirmVisible, '');
+  if (secondaryConfirmVisible) {
+    await page.click('#generic-confirm-btn', { timeout: 3000, force: true });
+    await page.waitForTimeout(450);
+  }
+
+  const afterSecondary = await page.evaluate(() => JSON.parse(window.render_game_to_text()).legacy);
+  add('secondary preset persists after apply', afterSecondary?.secondaryPreset === 'tempo', JSON.stringify(afterSecondary || null));
+
   // Start a new game and verify bonuses are applied to player runtime state
   const newRun = await page.evaluate(() => {
     if (!window.game) return null;

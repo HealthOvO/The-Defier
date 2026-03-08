@@ -442,6 +442,100 @@ const AuthService = {
             console.error('Get global data error:', error);
             return { success: false, error: error };
         }
+    },
+
+    // ==========================================
+    // --- P1 机制：异步 PVP 残影 (Ghost Data) ---
+    // ==========================================
+
+    /**
+     * 上传玩家残影数据 (Ghost)
+     * @param {Object} player - 当前玩家对象
+     * @param {number} realm - 当前抵达的层数/境界
+     */
+    async uploadGhostData(player, realm) {
+        if (!this.ensureInitialized()) return { success: false, message: '云服务未就绪' };
+        if (!this.isLoggedIn()) return { success: false, message: '未登录' };
+
+        try {
+            const user = Bmob.User.current();
+            if (!user || !user.objectId) return { success: false, message: '登录状态失效' };
+
+            const safeDeck = Array.isArray(player && player.deck)
+                ? player.deck.slice(0, 60).map(card => ({
+                    id: card && card.id ? card.id : 'unknown',
+                    upgraded: !!(card && card.upgraded),
+                    cost: Number.isFinite(card && card.cost) ? card.cost : undefined,
+                    element: card && card.element ? card.element : undefined
+                }))
+                : [];
+
+            // 剥离循环引用，抽取核心战斗属性
+            const ghostPayload = {
+                name: player && player.characterId ? player.characterId : 'unknown',
+                maxHp: Math.max(1, Math.floor(Number(player && player.maxHp) || 100)),
+                hp: Math.max(1, Math.floor(Number(player && player.currentHp) || 100)),
+                deck: safeDeck,
+                treasures: this.cloneData(player && player.treasures ? player.treasures : []),
+                laws: this.cloneData(player && player.collectedLaws ? player.collectedLaws : []),
+                fateRing: this.cloneData(player && player.fateRing ? player.fateRing : null),
+                legacy: this.cloneData(player && player.legacyRunMission ? player.legacyRunMission : null)
+            };
+
+            const query = Bmob.Query('GameGhost');
+            const userPointer = Bmob.Pointer('_User');
+            query.set('user', userPointer.set(user.objectId));
+            query.set('userId', user.objectId);
+            query.set('userName', user.username || '神秘修仙者');
+            query.set('realm', Math.max(1, Math.floor(Number(realm) || 1)));
+            query.set('ghostData', ghostPayload);
+            query.set('uploadTime', Date.now());
+
+            await query.save();
+            console.log('Ghost data uploaded successfully.');
+            return { success: true };
+        } catch (error) {
+            console.error('Upload ghost data error:', error);
+            return { success: false, error: error };
+        }
+    },
+
+    /**
+     * 随机拉取一条当前层数附近的残影数据
+     * @param {number} currentRealm - 玩家当前层数
+     */
+    async fetchRandomGhost(currentRealm) {
+        if (!this.ensureInitialized()) return { success: false, message: '云服务未就绪' };
+
+        try {
+            const query = Bmob.Query('GameGhost');
+            const numericRealm = Math.max(1, Math.floor(Number(currentRealm) || 1));
+            // 获取前后2层的Ghost数据
+            query.equalTo('realm', '>=', Math.max(1, numericRealm - 2));
+            query.equalTo('realm', '<=', numericRealm + 2);
+            // 避免拉到自己的Ghost
+            if (this.isLoggedIn()) {
+                const currentUser = Bmob.User.current();
+                if (currentUser && currentUser.objectId) {
+                    query.equalTo('userId', '!=', currentUser.objectId);
+                }
+            }
+            // 随机拉取几条来避免每次打同一个人
+            query.limit(10);
+            const results = await query.find();
+
+            if (results && results.length > 0) {
+                // 随机选一个
+                const randomIdx = Math.floor(Math.random() * results.length);
+                const ghost = results[randomIdx];
+                return { success: true, data: ghost };
+            }
+
+            return { success: false, message: '未找到合适的对手残影' };
+        } catch (error) {
+            console.error('Fetch ghost data error:', error);
+            return { success: false, error: error };
+        }
     }
 };
 

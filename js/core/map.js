@@ -48,13 +48,25 @@ class GameMap {
 
             for (let i = 0; i < nodeCount; i++) {
                 const nodeType = this.getRandomNodeType(row, rows, realm);
+                // --- P0 机制：地图路线污染 (Route Pollution) ---
+                // 非第一层、非BOSS层的节点，有15%概率被污染，且必须是可包含污染类型的战斗或精英节点(也可以是事件)
+                const isPolluted = row > 0 && row < rows - 1 && Math.random() < 0.15 && ['enemy', 'elite', 'event'].includes(nodeType);
+
+                // --- P1 机制：心魔对决 (Ghost Duel) ---
+                // 有一定概率（比如根据玩家Karma或业力，这里给固定15%概率）将精英节点替换为残影挑战
+                let finalNodeType = nodeType;
+                if (nodeType === 'elite' && Math.random() < 0.15) {
+                    finalNodeType = 'ghost_duel';
+                }
+
                 rowNodes.push({
                     id: nodeId++,
                     row: row,
-                    type: nodeType,
-                    icon: this.getNodeIcon(nodeType),
+                    type: finalNodeType,
+                    icon: this.getNodeIcon(finalNodeType),
                     completed: false,
-                    accessible: row === 0
+                    accessible: row === 0,
+                    polluted: isPolluted
                 });
             }
             this.nodes.push(rowNodes);
@@ -163,7 +175,40 @@ class GameMap {
             weights.event += 0.005;
         }
 
+        // 流派成型后，地图层面轻度提升事件节点出现率（与事件池偏置形成双层引导）
+        // 仅做温和调整，避免路线被单一节点类型挤占。
+        const preferredArchetype = this.getPreferredArchetypeId(player);
+        if (preferredArchetype && progress >= 0.2 && progress <= 0.9) {
+            weights.event += 0.03;
+            weights.enemy -= 0.015;
+            weights.shop -= 0.01;
+            weights.rest -= 0.005;
+        }
+
         return this.normalizeNodeWeights(weights);
+    }
+
+    getPreferredArchetypeId(player = null) {
+        const source = player || (this.game && this.game.player ? this.game.player : null);
+        if (!source) return null;
+
+        const resonanceId = source.archetypeResonance && source.archetypeResonance.id;
+        if (typeof resonanceId === 'string' && resonanceId.length > 0) {
+            return resonanceId;
+        }
+
+        if (typeof inferDeckArchetype === 'function') {
+            try {
+                const inferred = inferDeckArchetype(Array.isArray(source.deck) ? source.deck : []);
+                if (typeof inferred === 'string' && inferred.length > 0) {
+                    return inferred;
+                }
+            } catch (e) {
+                console.warn('Map archetype inference failed:', e);
+            }
+        }
+
+        return null;
     }
 
     normalizeNodeWeights(weights) {
@@ -208,6 +253,7 @@ class GameMap {
             enemy: '⚔️',
             elite: '💀',
             boss: '👹',
+            ghost_duel: '👻',
             event: '❓',
             shop: '🏪',
             rest: '🏕️',
@@ -369,7 +415,8 @@ class GameMap {
 
                 nodeEl.innerHTML = `
                     <div class="node-icon">${node.icon}</div>
-                    <div class="node-tooltip">${this.getNodeTooltip(node.type)}</div>
+                    ${node.polluted ? '<div class="pollution-mark">☠️</div>' : ''}
+                    <div class="node-tooltip">${this.getNodeTooltip(node.type)}${node.polluted ? '<br><span style="color:#ff4444">[煞气激荡] 此处灵脉受损，不可恢复生命，且能量消耗增加。</span>' : ''}</div>
                 `;
 
                 nodeEl.addEventListener('click', () => this.onNodeClick(node));
@@ -491,6 +538,7 @@ class GameMap {
             enemy: '普通敌人：只有战斗才能变强',
             elite: '精英敌人：高风险，高回报',
             boss: '天劫：突破境界的必经之路',
+            ghost_duel: '心魔对决：挑战其他修士残影',
             event: '机缘：祸福相依',
             shop: '坊市：互通有无',
             rest: '洞府：休养生息',
@@ -622,6 +670,9 @@ class GameMap {
             case 'boss':
                 this.startBossBattle(node);
                 break;
+            case 'ghost_duel':
+                this.startGhostDuel(node);
+                break;
             case 'event':
                 this.triggerEvent(node);
                 break;
@@ -659,6 +710,67 @@ class GameMap {
         enemy.ringExp = 8 + realm * 4; // Hardcore: lower exp gain
         this.game.currentBattleNode = node; // 保存节点
         this.game.startBattle([enemy], node);
+    }
+
+    // --- P1: 心魔对决 ---
+    async startGhostDuel(node) {
+        Utils.showBattleLog(`正在感知周遭残影...`, 'info');
+        const realm = this.game.player.realm;
+
+        let ghostData = null;
+        if (typeof AuthService !== 'undefined' && AuthService.fetchRandomGhost) {
+            try {
+                const res = await AuthService.fetchRandomGhost(realm);
+                if (res.success && res.data) {
+                    ghostData = res.data;
+                }
+            } catch (error) {
+                console.warn('fetchRandomGhost failed, fallback to compensation flow:', error);
+            }
+        }
+
+        if (!ghostData) {
+            Utils.showBattleLog(`这片虚空异常宁静，心魔已然散去...`);
+            this.game.player.gold += 100; // 补偿
+            setTimeout(() => this.completeNode(node), 1000);
+            return;
+        }
+
+        // 构造幽灵Boss
+        const readField = (obj, key, fallback = null) => {
+            if (!obj) return fallback;
+            if (obj[key] !== undefined) return obj[key];
+            if (typeof obj.get === 'function') {
+                const val = obj.get(key);
+                return val !== undefined ? val : fallback;
+            }
+            return fallback;
+        };
+
+        const ghostPayload = readField(ghostData, 'ghostData', {}) || {};
+        const ghostName = readField(ghostData, 'userName', '未知残影') || '未知残影';
+        const ghostHp = ghostPayload.maxHp || 150;
+
+        const ghostEnemy = {
+            id: 'ghost_demon',
+            name: `【心魔】${ghostName}`,
+            maxHp: Math.floor(ghostHp * 1.5), // 作为心魔Boss略微强化血量
+            hp: Math.floor(ghostHp * 1.5),
+            type: 'elite', // 以精英或BOSS的强度对待
+            ringExp: 50 + realm * 10,
+            gold: 30 + realm * 10,
+            icon: '👻',
+            // P1 TODO: 我们也可以在这里直接保存 ghostPayload 以供 battle.js 解析动作
+            ghostPayload: ghostPayload,
+            // 基础初始库
+            patterns: [
+                { type: 'attack', value: 10 + realm * 2, weight: 1, intent: '剑意（攻击）' },
+                { type: 'defend', value: 15 + realm * 2, weight: 1, intent: '罡气（护盾）' }
+            ]
+        };
+
+        this.game.currentBattleNode = node;
+        this.game.startBattle([ghostEnemy], node);
     }
 
     // 开始精英战斗

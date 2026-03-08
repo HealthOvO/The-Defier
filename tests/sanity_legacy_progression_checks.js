@@ -64,10 +64,13 @@ function assert(cond, msg) {
   const normalized = Game.prototype.normalizeLegacyProgress.call(normalizeHost, {
     essence: 10,
     spent: 99,
-    upgrades: { vitalitySeed: 99 }
+    upgrades: { vitalitySeed: 99 },
+    lastPreset: 'smith',
+    secondaryPreset: 'smith'
   });
   assert(normalized.spent === 10, 'normalize should clamp spent <= essence');
   assert(normalized.upgrades.vitalitySeed === 3, 'normalize should clamp upgrade level');
+  assert(normalized.secondaryPreset === null, 'normalize should prevent duplicate primary/secondary preset');
 
   // 3) Bonus aggregation should respect selected levels
   const bonusHost = {
@@ -126,7 +129,7 @@ function assert(cond, msg) {
   const presetHost = {
     legacyStorageKey: 'theDefierLegacyV1',
     legacyUpgradeCatalog: normalizeHost.legacyUpgradeCatalog,
-    legacyProgress: { essence: 40, spent: 0, upgrades: {}, lastPreset: null },
+    legacyProgress: { essence: 40, spent: 0, upgrades: {}, lastPreset: null, secondaryPreset: null },
     getLegacyDefaults: Game.prototype.getLegacyDefaults,
     normalizeLegacyProgress: Game.prototype.normalizeLegacyProgress,
     getLegacyPresetCatalog() {
@@ -156,6 +159,10 @@ function assert(cond, msg) {
   assert(presetHost.legacyProgress.lastPreset === 'smith', 'preset apply should persist last preset id');
   assert(presetHost.legacyProgress.spent > 0, 'preset apply should spend essence');
   assert((presetHost.legacyProgress.upgrades.forgemind || 0) > 0, 'smith preset should allocate forge upgrade');
+  const secondaryPresetResult = Game.prototype.applyLegacyPreset.call(presetHost, 'tempo', { isSecondary: true });
+  assert(secondaryPresetResult.success === true, 'secondary preset apply should succeed');
+  assert(presetHost.legacyProgress.lastPreset === 'smith', 'secondary apply should keep primary preset');
+  assert(presetHost.legacyProgress.secondaryPreset === 'tempo', 'secondary preset id should persist');
   const presetIds = Game.prototype.getLegacyPresetCatalog.call(presetHost).map((p) => p.id);
   assert(presetIds.includes('entropy'), 'preset catalog should include entropy');
   assert(presetIds.includes('bulwark'), 'preset catalog should include bulwark');
@@ -174,13 +181,15 @@ function assert(cond, msg) {
   assert(doctrineBulwark.bulwarkLegacyCounterDamage >= 2, 'bulwark doctrine should grant block counter damage');
 
   const doctrineApplyHost = {
+    legacyProgress: { lastPreset: 'smith', secondaryPreset: 'tempo' },
     getLegacyRunDoctrineForPreset(presetId) {
       return Game.prototype.getLegacyRunDoctrineForPreset.call(this, presetId);
     }
   };
   const doctrinePlayer = {};
-  Game.prototype.applyLegacyRunDoctrine.call(doctrineApplyHost, doctrinePlayer, 'survivor');
-  assert(doctrinePlayer.legacyRunDoctrine.openingBattleBlockBonus === 4, 'applyLegacyRunDoctrine should write survivor opening block');
+  Game.prototype.applyLegacyRunDoctrine.call(doctrineApplyHost, doctrinePlayer, 'smith', 'tempo');
+  assert(doctrinePlayer.legacyRunDoctrine.firstForgeExtraUpgradeOnce === 1, 'primary doctrine should keep smith forge boost');
+  assert(doctrinePlayer.legacyRunDoctrine.firstAttackBonusPerBattle === 2, 'secondary doctrine should grant half tempo attack bonus');
 
   // 4.7) Run mission mapping/progress should reward essence once
   const missionHost = {};

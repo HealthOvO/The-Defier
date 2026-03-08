@@ -465,6 +465,24 @@ const BossMechanicsHandler = {
                 result.isPenetrate = true;
                 Utils.showBattleLog(`${enemy.name} 发动穿透斩击！`);
             }
+
+            // --- P0 机制：对高强度玄甲流的反制 (Shield Siphon) ---
+            // 当玩家拥有超过 60 点护盾时（针对超高护盾），Boss强行吸取一定比例护盾化为生命/伤害
+            if (player.block >= 60 && !player.hasBuff('unstealable_block')) { // 可扩展防吸BUFF
+                const siphonAmount = Math.floor(player.block * 0.4); // 吸取40%
+                player.block -= siphonAmount;
+                enemy.heal(siphonAmount);
+                result.damage = (damage || 0) + Math.floor(siphonAmount * 0.5); // 吸取的护盾有一半转化为本次攻击的穿透伤害
+                result.ignoreBlock = true; // 虹吸伴随真伤打击
+                Utils.showBattleLog(`【破甲虹吸】${enemy.name} 撕裂了你坚不可摧的护盾，吸取了 ${siphonAmount} 点护盾值！`);
+
+                const playerEl = document.querySelector('.player-avatar');
+                if (playerEl) {
+                    Utils.addFlashEffect(playerEl, 'red');
+                    Utils.showFloatingNumber(playerEl, siphonAmount, 'damage'); // 视觉反馈
+                }
+            }
+
             return result;
         }
 

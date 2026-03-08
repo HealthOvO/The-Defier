@@ -477,3 +477,49 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 - TODO / 下轮建议
   - 可把“流派事件偏置”进一步接入地图节点生成权重（仅事件节点）做双层偏置，并新增 node-level 分布断言。
   - 可新增“反破盾”成长路径（例如玄甲专属法则：首次被破盾后返还部分护盾并抽牌），与现有 guardbreak 机制形成高层博弈闭环。
+
+- 2026-03-08: 第十三轮回归修复（传承副道统持久化审计）
+  - 发现并修复一处真实审计回归：
+    - `browser_inheritance_audit` 的“secondary preset persists after apply”断言失败；
+    - 根因是 `render_game_to_text().legacy` 未输出 `secondaryPreset`，导致审计无法观测到已保存的副道统状态。
+  - 修复内容：
+    - `js/game.js`：在 `render_game_to_text` 的 `legacy` 节点新增 `secondaryPreset` 字段输出。
+  - 复测结果（全通过）：
+    - Node:
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser audits:
+      - `node tests/browser_audit.mjs` ✅
+      - `node tests/browser_feature_audit.mjs` ✅
+      - `node tests/browser_event_branch_audit.mjs` ✅
+      - `node tests/browser_inheritance_audit.mjs` ✅（副道统持久化断言恢复通过）
+      - `node tests/browser_pvp_audit.mjs` ✅
+    - Playwright 冒烟 + 人工视觉：
+      - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-polish-current-2` ✅
+      - 已人工检查 `output/web-game-polish-current-2/shot-1.png`，主菜单渲染正常、无异常遮挡。
+
+- 2026-03-08: 第十四轮玩法扩展（地图节点双层流派偏置）
+  - 新增玩法机制：
+    - `js/core/map.js` 在 `getDynamicNodeWeights` 中接入“流派成型后事件节点权重提升”：
+      - 在中段路线（20%~90%进度）温和提升 `event`，并小幅回收 `enemy/shop/rest`；
+      - 与 `events.js` 中已有的流派事件池偏置形成“节点层 + 事件池层”双层引导。
+    - 新增 `getPreferredArchetypeId`：
+      - 优先读取 `player.archetypeResonance.id`；
+      - 回退到 `inferDeckArchetype(player.deck)`；
+      - 加入防御性异常保护，避免推断失败影响地图生成。
+  - 测试增强：
+    - `tests/sanity_map_weight_checks.js` 新增两类断言：
+      - 流派成型时 `event` 权重应高于无流派基线；
+      - 采样统计下事件节点命中率应显著提升（> +0.02）。
+  - 本轮回归（全通过）：
+    - Node:
+      - `node tests/sanity_map_weight_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser audits:
+      - `node tests/browser_audit.mjs` ✅
+      - `node tests/browser_feature_audit.mjs` ✅
+      - `node tests/browser_event_branch_audit.mjs` ✅
+      - `node tests/browser_inheritance_audit.mjs` ✅
+      - `node tests/browser_pvp_audit.mjs` ✅
+    - Playwright 冒烟 + 人工视觉：
+      - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-polish-current-3` ✅
+      - 已人工检查 `output/web-game-polish-current-3/shot-1.png`，主菜单渲染稳定。

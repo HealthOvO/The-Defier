@@ -9,9 +9,11 @@ node tests/sanity_balance_checks.js
 node tests/sanity_event_flow_checks.js
 node tests/sanity_content_archetype_checks.js
 node tests/sanity_event_bias_distribution_checks.js
+node tests/sanity_battle_pollution_checks.js
 node tests/sanity_battle_debuff_checks.js
 node tests/sanity_battle_guardbreak_checks.js
 node tests/sanity_map_weight_checks.js
+node tests/sanity_map_ghost_duel_checks.js
 node tests/sanity_legacy_progression_checks.js
 node tests/sanity_entropy_doctrine_checks.js
 node tests/sanity_bulwark_resonance_checks.js

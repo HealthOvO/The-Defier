@@ -28,7 +28,12 @@ function loadFile(ctx, filePath) {
     Utils: {
       showBattleLog: () => {}
     },
-    canUpgradeCard: (card) => !!card && !card.upgraded
+    canUpgradeCard: (card) => !!card && !card.upgraded,
+    inferDeckArchetype: (deck = []) => {
+      if (!Array.isArray(deck) || deck.length === 0) return null;
+      const first = deck[0];
+      return first && typeof first.archetypeHint === 'string' ? first.archetypeHint : null;
+    }
   });
   ctx.window = ctx;
   ctx.global = ctx;
@@ -112,6 +117,31 @@ function loadFile(ctx, filePath) {
   const earlyRate = sampleRate(early);
   const lateRate = sampleRate(late);
   assert(lateRate > earlyRate + 0.02, `late trial+forge rate should be higher (${earlyRate} -> ${lateRate})`);
+
+  // 6) 流派成型时，地图事件节点权重应提高（双层偏置中的节点层）
+  const mapNoArchetype = createMapForPlayer({
+    deck: [{ upgraded: false }, { upgraded: false }, { upgraded: false }]
+  });
+  const mapEntropyArchetype = createMapForPlayer({
+    deck: [{ upgraded: false, archetypeHint: 'entropy' }, { upgraded: false }, { upgraded: false }]
+  });
+  const noArchetypeW = mapNoArchetype.getDynamicNodeWeights(4, totalRows, realm);
+  const entropyW = mapEntropyArchetype.getDynamicNodeWeights(4, totalRows, realm);
+  assert(entropyW.event > noArchetypeW.event, `archetype map bias should raise event weight (${noArchetypeW.event} -> ${entropyW.event})`);
+
+  // 7) 采样模拟：流派成型后，事件节点命中率应可观提升
+  function sampleEventRate(weights, iterations = 8000) {
+    const map = createMapForPlayer();
+    let hit = 0;
+    for (let i = 0; i < iterations; i += 1) {
+      const node = map.rollNodeByWeights(weights);
+      if (node === 'event') hit += 1;
+    }
+    return hit / iterations;
+  }
+  const eventRateBase = sampleEventRate(noArchetypeW);
+  const eventRateEntropy = sampleEventRate(entropyW);
+  assert(eventRateEntropy > eventRateBase + 0.02, `archetype event rate should increase (${eventRateBase} -> ${eventRateEntropy})`);
 
   console.log('Map weight sanity checks passed.');
 })();

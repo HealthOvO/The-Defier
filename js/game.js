@@ -171,6 +171,7 @@ class Game {
                 unspent: this.getLegacyUnspentEssence(),
                 upgrades: this.legacyProgress?.upgrades || {},
                 lastPreset: this.legacyProgress?.lastPreset || null,
+                secondaryPreset: this.legacyProgress?.secondaryPreset || null,
                 doctrine: this.player?.legacyRunDoctrine || null,
                 mission: this.player?.legacyRunMission || null
             },
@@ -227,7 +228,8 @@ class Game {
             essence: 0,
             spent: 0,
             upgrades: {},
-            lastPreset: null
+            lastPreset: null,
+            secondaryPreset: null
         };
     }
 
@@ -470,7 +472,8 @@ class Game {
             essence: Math.max(0, Math.floor(Number(source.essence) || 0)),
             spent: Math.max(0, Math.floor(Number(source.spent) || 0)),
             upgrades: {},
-            lastPreset: null
+            lastPreset: null,
+            secondaryPreset: null
         };
 
         const inputUpgrades = source.upgrades && typeof source.upgrades === 'object' ? source.upgrades : {};
@@ -487,6 +490,13 @@ class Game {
             .map(p => p.id);
         if (typeof source.lastPreset === 'string' && validPresetIds.includes(source.lastPreset)) {
             normalized.lastPreset = source.lastPreset;
+        }
+        if (
+            typeof source.secondaryPreset === 'string' &&
+            validPresetIds.includes(source.secondaryPreset) &&
+            source.secondaryPreset !== normalized.lastPreset
+        ) {
+            normalized.secondaryPreset = source.secondaryPreset;
         }
 
         return { ...defaults, ...normalized };
@@ -561,10 +571,35 @@ class Game {
         return bonuses;
     }
 
-    applyLegacyRunDoctrine(player, presetId = null) {
+    applyLegacyRunDoctrine(player, presetId = null, secondaryPresetId = null) {
         if (!player) return;
-        const doctrine = this.getLegacyRunDoctrineForPreset(presetId);
-        player.legacyRunDoctrine = { ...doctrine };
+
+        const p1Id = presetId || this.legacyProgress?.lastPreset || null;
+        const p2Id = secondaryPresetId !== undefined && secondaryPresetId !== null
+            ? secondaryPresetId
+            : (this.legacyProgress?.secondaryPreset || null);
+
+        const d1 = this.getLegacyRunDoctrineForPreset(p1Id);
+        const d2 = this.getLegacyRunDoctrineForPreset(p2Id);
+
+        const merged = { ...d1 };
+        merged.presetId = p1Id; // 以主道统为核心标记
+
+        // P1：合并副道统 (50%效能，向上取整保证基础获取)
+        merged.openingBattleBlockBonus += Math.ceil(d2.openingBattleBlockBonus * 0.5);
+        merged.firstAttackBonusPerBattle += Math.ceil(d2.firstAttackBonusPerBattle * 0.5);
+        merged.firstForgeExtraUpgradeOnce += Math.ceil(d2.firstForgeExtraUpgradeOnce * 0.5);
+
+        merged.entropyLegacyProcEnabled = merged.entropyLegacyProcEnabled || d2.entropyLegacyProcEnabled;
+        merged.entropyLegacyDraw += Math.ceil(d2.entropyLegacyDraw * 0.5);
+        merged.entropyLegacyDiscardDamage += Math.ceil(d2.entropyLegacyDiscardDamage * 0.5);
+        merged.entropyBonusEnergyOnce += Math.ceil(d2.entropyBonusEnergyOnce * 0.5);
+
+        merged.bulwarkLegacyProcEnabled = merged.bulwarkLegacyProcEnabled || d2.bulwarkLegacyProcEnabled;
+        merged.bulwarkLegacyDraw += Math.ceil(d2.bulwarkLegacyDraw * 0.5);
+        merged.bulwarkLegacyCounterDamage += Math.ceil(d2.bulwarkLegacyCounterDamage * 0.5);
+
+        player.legacyRunDoctrine = merged;
     }
 
     applyLegacyRunMission(player, presetId = null) {
@@ -695,31 +730,63 @@ class Game {
 
         const presets = this.getLegacyPresetCatalog();
         const preset = presets.find(p => p.id === presetId);
-        if (!preset) return { success: false, reason: 'preset_not_found', allocated: 0 };
+        if (!preset && presetId !== null) return { success: false, reason: 'preset_not_found', allocated: 0 };
 
-        const resetFirst = options.resetFirst !== false;
-        if (resetFirst) {
-            this.legacyProgress.spent = 0;
-            this.legacyProgress.upgrades = {};
+        const isSecondary = options.isSecondary;
+
+        if (presetId === null) {
+            if (isSecondary) this.legacyProgress.secondaryPreset = null;
+            else this.legacyProgress.lastPreset = null;
+        } else {
+            if (isSecondary) {
+                if (this.legacyProgress.lastPreset === preset.id) {
+                    this.legacyProgress.lastPreset = null; // Cannot be both
+                }
+                this.legacyProgress.secondaryPreset = preset.id;
+            } else {
+                if (this.legacyProgress.secondaryPreset === preset.id) {
+                    this.legacyProgress.secondaryPreset = null;
+                }
+                this.legacyProgress.lastPreset = preset.id;
+            }
         }
 
-        const beforeSpent = this.legacyProgress.spent || 0;
+        // P1 重构：根据主副道统重新分配精粹
+        this.legacyProgress.spent = 0;
+        this.legacyProgress.upgrades = {};
+
+        const beforeSpent = 0;
         let changed = true;
-        while (changed) {
-            changed = false;
-            for (const upgradeId of preset.priority) {
-                if (this.buyLegacyUpgrade(upgradeId, { silent: true })) {
-                    changed = true;
+
+        // 1. 先满足主道统
+        const p1 = presets.find(p => p.id === this.legacyProgress.lastPreset);
+        if (p1) {
+            changed = true;
+            while (changed) {
+                changed = false;
+                for (const upgradeId of p1.priority) {
+                    if (this.buyLegacyUpgrade(upgradeId, { silent: true })) changed = true;
                 }
             }
         }
 
-        this.legacyProgress.lastPreset = preset.id;
-        this.saveLegacyProgress();
-        const allocated = Math.max(0, (this.legacyProgress.spent || 0) - beforeSpent);
+        // 2. 再满足副道统 (使用剩余精粹)
+        const p2 = presets.find(p => p.id === this.legacyProgress.secondaryPreset);
+        if (p2) {
+            changed = true;
+            while (changed) {
+                changed = false;
+                for (const upgradeId of p2.priority) {
+                    if (this.buyLegacyUpgrade(upgradeId, { silent: true })) changed = true;
+                }
+            }
+        }
 
-        if (typeof Utils !== 'undefined' && Utils.showBattleLog) {
-            Utils.showBattleLog(`已套用预设【${preset.name}】，投入 ${allocated} 精粹`);
+        this.saveLegacyProgress();
+        const allocated = this.legacyProgress.spent || 0;
+
+        if (typeof Utils !== 'undefined' && Utils.showBattleLog && preset) {
+            Utils.showBattleLog(`已装备道统【${preset.name}】(${isSecondary ? '副' : '主'})，共投入 ${allocated} 精粹`);
         }
         return { success: true, allocated, preset };
     }
@@ -778,31 +845,49 @@ class Game {
         `;
 
         const activePresetId = this.legacyProgress?.lastPreset || null;
+        const secondaryPresetId = this.legacyProgress?.secondaryPreset || null;
         const presetDefs = this.getLegacyPresetCatalog();
         const activePreset = presetDefs.find(p => p.id === activePresetId);
+        const secondaryPreset = presetDefs.find(p => p.id === secondaryPresetId);
         if (note) {
-            const presetText = activePreset ? `｜当前预设：${activePreset.name}` : '';
+            const presetText = activePreset ? `｜主道统：${activePreset.name}` : '';
+            const secText = secondaryPreset ? `｜副道统：${secondaryPreset.name} (50%效能)` : '';
             const mission = this.getLegacyMissionForPreset(activePresetId);
-            const missionText = mission ? `｜本轮试炼：${mission.desc}（奖励 +${mission.rewardEssence} 精粹）` : '';
-            note.textContent = `当前加成：开局HP +${bonuses.startMaxHp}｜开局灵石 +${bonuses.startGold}｜抽牌 +${bonuses.startDraw}｜首回合额外抽牌 +${bonuses.firstTurnDrawBonus}｜锻炉减耗 ${Math.round((bonuses.forgeCostDiscount || 0) * 100)}%${presetText}${missionText}`;
+            const missionText = mission ? `｜本轮试炼：${mission.desc}` : '';
+            note.textContent = `当前加成：开局HP +${bonuses.startMaxHp}｜开局灵石 +${bonuses.startGold}｜抽牌 +${bonuses.startDraw}｜首回合额外抽牌 +${bonuses.firstTurnDrawBonus}｜锻炉减耗 ${Math.round((bonuses.forgeCostDiscount || 0) * 100)}%${presetText}${secText}${missionText}｜提示：右键可将道统装备为副道统`;
         }
 
         if (presetsEl) {
             presetsEl.innerHTML = '';
             presetDefs.forEach(preset => {
                 const btn = document.createElement('button');
-                const isActive = activePresetId === preset.id;
-                btn.className = `inheritance-preset-btn ${isActive ? 'active' : ''}`;
+                const isPrimary = activePresetId === preset.id;
+                const isSecondary = secondaryPresetId === preset.id;
+                let activeClass = '';
+                if (isPrimary) activeClass = 'active';
+                if (isSecondary) activeClass = 'active secondary';
+
+                btn.className = `inheritance-preset-btn ${activeClass}`;
                 btn.innerHTML = `
                     <span class="icon">${preset.icon}</span>
-                    <span class="name">${preset.name}</span>
+                    <span class="name">${preset.name} ${isPrimary ? '(主)' : isSecondary ? '(副)' : ''}</span>
                     <span class="desc">${preset.desc}</span>
                 `;
                 btn.onclick = () => {
                     this.showConfirmModal(
-                        `套用【${preset.name}】将重置当前传承分配并重新投入，是否继续？`,
+                        `装备【${preset.name}】为主道统将重配当前传承投入，是否继续？`,
                         () => {
-                            this.applyLegacyPreset(preset.id, { resetFirst: true });
+                            this.applyLegacyPreset(preset.id, { isSecondary: false });
+                            this.initInheritanceScreen();
+                        }
+                    );
+                };
+                btn.oncontextmenu = (event) => {
+                    event.preventDefault();
+                    this.showConfirmModal(
+                        `装备【${preset.name}】为副道统（50%效能）将重配当前传承投入，是否继续？`,
+                        () => {
+                            this.applyLegacyPreset(preset.id, { isSecondary: true });
                             this.initInheritanceScreen();
                         }
                     );
@@ -1231,11 +1316,18 @@ class Game {
                 };
             }
             if (!this.player.legacyRunDoctrine || typeof this.player.legacyRunDoctrine !== 'object') {
-                this.applyLegacyRunDoctrine(this.player, this.legacyProgress?.lastPreset || null);
-            } else {
-                const normalizedDoctrine = this.getLegacyRunDoctrineForPreset(
-                    this.player.legacyRunDoctrine.presetId || this.legacyProgress?.lastPreset || null
+                this.applyLegacyRunDoctrine(
+                    this.player,
+                    this.legacyProgress?.lastPreset || null,
+                    this.legacyProgress?.secondaryPreset || null
                 );
+            } else {
+                this.applyLegacyRunDoctrine(
+                    this.player,
+                    this.player.legacyRunDoctrine.presetId || this.legacyProgress?.lastPreset || null,
+                    this.legacyProgress?.secondaryPreset || null
+                );
+                const normalizedDoctrine = this.player.legacyRunDoctrine || {};
                 const mergedDoctrine = {
                     ...normalizedDoctrine,
                     ...this.player.legacyRunDoctrine,
@@ -2578,7 +2670,11 @@ class Game {
         // 应用局外传承加成（仅影响新的一轮）
         const legacyBonuses = this.getLegacyBonuses();
         this.applyLegacyBonusesToPlayer(this.player, legacyBonuses);
-        this.applyLegacyRunDoctrine(this.player, this.legacyProgress?.lastPreset || null);
+        this.applyLegacyRunDoctrine(
+            this.player,
+            this.legacyProgress?.lastPreset || null,
+            this.legacyProgress?.secondaryPreset || null
+        );
         this.applyLegacyRunMission(this.player, this.legacyProgress?.lastPreset || null);
 
         // 应用永久起始加成
@@ -3937,6 +4033,12 @@ class Game {
         // 标记玩家已死亡，即使被非法恢复，也会在加载时被拦截
         this.player.currentHp = 0;
 
+        // --- P1: 异步 PVP 残影上传 ---
+        if (typeof AuthService !== 'undefined' && AuthService.uploadGhostData) {
+            // 将最后一刻的残影数据上传
+            AuthService.uploadGhostData(this.player, this.player.realm).catch(e => console.error(e));
+        }
+
         document.getElementById('game-over-title').textContent = '陨落...';
         document.getElementById('game-over-title').classList.remove('victory');
         document.getElementById('game-over-text').textContent = '逆命之路，暂时中断';
@@ -3993,6 +4095,11 @@ class Game {
 
     // 天域完成
     onRealmComplete() {
+        // --- P1: 异步 PVP 残影上传 ---
+        if (typeof AuthService !== 'undefined' && AuthService.uploadGhostData) {
+            AuthService.uploadGhostData(this.player, this.player.realm).catch(e => console.error(e));
+        }
+
         const currentRealm = this.player.realm;
         const clearEssence = this.awardLegacyEssence(2 + Math.floor(currentRealm / 2), '破境夺天', { silent: true });
 
@@ -4673,11 +4780,19 @@ class Game {
         if (!slotData.unlocked) {
             if (ring.type === 'sealed' && ring.canUnseal && ring.canUnseal(index)) {
                 this.showConfirmModal(
-                    `该槽位被【逆生咒】封印。\n强制解除将永久损耗生命上限。\n是否解除？`,
+                    `该槽位被【逆生咒】封印。\n强制血契解封将永久扣除当前最大生命值的30%！\n是否解封并获得灵力与抽牌增益？`,
                     () => {
-                        ring.unseal(index);
-                        this.showFateRing(); // Structure change needs full refresh
-                        this.autoSave();
+                        if (ring.sacrificeUnseal) {
+                            const success = ring.sacrificeUnseal(index);
+                            if (success) {
+                                this.showFateRing(); // Structure change needs full refresh
+                                this.autoSave();
+                            }
+                        } else {
+                            ring.unseal(index);
+                            this.showFateRing();
+                            this.autoSave();
+                        }
                     }
                 );
             } else {

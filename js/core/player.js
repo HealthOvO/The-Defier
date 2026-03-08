@@ -825,6 +825,17 @@ class Player {
 
         this.drawCards(drawAmount);
 
+        // --- P0 机制：地图污染 (Map Pollution) 首回合消耗一张手牌 ---
+        const battleNode = this.game && this.game.currentBattleNode ? this.game.currentBattleNode : null;
+        if (battleNode && battleNode.polluted && this.turnNumber === 1 && this.hand.length > 0) {
+            const randomIdx = Math.floor(Math.random() * this.hand.length);
+            const exCard = this.hand.splice(randomIdx, 1)[0];
+            if (!this.exhaustPile) this.exhaustPile = [];
+            this.exhaustPile.push(exCard);
+            const cardName = exCard && exCard.name ? exCard.name : '未知卡牌';
+            Utils.showBattleLog(`【煞气侵蚀】灵气紊乱，你的 [${cardName}] 意外消散了！`, 'danger');
+        }
+
         // 2. 雷霆淬体 (realm 2)
         if (this.realm === 2) {
             this.takeDamage(3);
@@ -1043,6 +1054,13 @@ class Player {
 
     // 治疗
     heal(amount) {
+        // --- P0 机制：地图路线污染 (Map Route Pollution) ---
+        const battleNode = this.game ? this.game.currentBattleNode : null;
+        if (battleNode && battleNode.polluted) {
+            Utils.showBattleLog('【煞气侵蚀】灵脉污染，无法恢复生命！', 'danger');
+            return;
+        }
+
         if (typeof amount !== 'number' || isNaN(amount)) {
             console.error('heal received invalid amount', amount);
             return;

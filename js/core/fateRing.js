@@ -414,9 +414,6 @@ class SealedRing extends FateRing {
 
             // 施加逆生咒代价: 扣除最大生命值上限
             if (this.player) {
-                // 每解封一层，permanent maxHp cost?
-                // 或者施加永久debuff
-                // Cost: 10 + index * 5 HP
                 const cost = 10 + index * 5;
                 this.player.maxHp = Math.max(1, this.player.maxHp - cost);
                 this.player.currentHp = Math.min(this.player.currentHp, this.player.maxHp);
@@ -424,7 +421,38 @@ class SealedRing extends FateRing {
                 Utils.showBattleLog(`逆生咒：解封第${index + 1}环，最大生命减少 ${cost}！`);
             }
 
-            // Trigger UI update
+            if (this.player.recalculateStats) this.player.recalculateStats();
+            return true;
+        }
+        return false;
+    }
+
+    // P1机制：强行献祭解封
+    sacrificeUnseal(index) {
+        if (this.canUnseal(index)) {
+            if (!this.player) return false;
+            // 扣除当前最大生命值的30%（永久）
+            const cost = Math.floor(this.player.maxHp * 0.3);
+            if (this.player.maxHp <= cost + 5) {
+                Utils.showBattleLog("生命本源已如风中残烛，无法承受献祭之重！", "warning");
+                return false;
+            }
+
+            this.player.maxHp -= cost;
+            if (this.player.currentHp > this.player.maxHp) {
+                this.player.currentHp = this.player.maxHp;
+            }
+
+            this.slots[index].isSealed = false;
+            this.slots[index].unlocked = true;
+            this.level += 1; // 提升等级以获得对应数值奖励
+
+            Utils.showBattleLog(`【血契献祭】玉碎瓦全！消耗 ${cost} 点生命本源，强行冲破了第 ${index + 1} 环的封印！`, 'warning');
+
+            // 获得被动补偿
+            this.player.extraEnergy = (this.player.extraEnergy || 0) + 1;
+            this.player.drawCount = (this.player.drawCount || 5) + 1;
+
             if (this.player.recalculateStats) this.player.recalculateStats();
             return true;
         }
@@ -460,27 +488,61 @@ class KarmaRing extends FateRing {
     // 增加功德 (防御/辅助牌触发)
     gainMerit(amount) {
         if (!Number.isFinite(amount) || amount <= 0) return;
-        if (this.wrathActive) return; // 愤怒状态下不积攒功德? 或者互斥? 暂时允许共存但触发不同
-
         this.merit = Math.min(this.maxPool, this.merit + amount);
 
-        // 检查满值触发
-        if (this.merit >= this.maxPool) {
-            this.triggerGoldenBody();
-        }
+        this.checkUltimateState();
     }
 
     // 增加业力 (攻击牌触发)
     gainSin(amount) {
         if (!Number.isFinite(amount) || amount <= 0) return;
-        if (this.goldenBodyActive) return; // 金身状态下不积攒业力?
-
         this.sin = Math.min(this.maxPool, this.sin + amount);
 
-        // 检查满值触发
-        if (this.sin >= this.maxPool) {
+        this.checkUltimateState();
+    }
+
+    // 检查极态
+    checkUltimateState() {
+        if (this.merit >= this.maxPool && this.sin >= this.maxPool) {
+            this.triggerNonGodNonDemon();
+        } else if (this.merit >= this.maxPool && !this.goldenBodyActive && !this.wrathActive) {
+            this.triggerGoldenBody();
+        } else if (this.sin >= this.maxPool && !this.wrathActive && !this.goldenBodyActive) {
             this.triggerWrath();
         }
+    }
+
+    // 触发非神非魔 (极态)
+    triggerNonGodNonDemon() {
+        this.goldenBodyActive = true;
+        this.wrathActive = true;
+
+        if (this.player && this.player.addBuff) {
+            this.player.addBuff('impervious', 1);
+            this.player.addBuff('strength', 5);
+        }
+
+        Utils.showBattleLog(`【极态】非神非魔！诸法空相，唯我独尊！`, 'warning');
+
+        // 爆发真实伤害
+        if (this.player && this.player.game && this.player.game.battle) {
+            const battle = this.player.game.battle;
+            const dmg = this.maxPool + (this.maxPool * 5);
+            battle.enemies.forEach((e, idx) => {
+                if (e.currentHp > 0) {
+                    e.currentHp -= dmg;
+                    const el = document.querySelector(`.enemy[data-index="${idx}"]`);
+                    if (el) {
+                        Utils.addFlashEffect(el, '#ffffff');
+                        Utils.showFloatingNumber(el, dmg, 'damage');
+                    }
+                }
+            });
+            Utils.showBattleLog(`天道震颤，极态对所有敌人造成了 ${dmg} 点真实伤害！`);
+        }
+
+        this.merit = 0;
+        this.sin = 0;
     }
 
     // 触发金身 (无敌)

@@ -97,6 +97,8 @@ class Battle {
         this.cardsPlayedThisTurn = 0;
         this.playerAttackedThisTurn = false;
         this.activeCardActionId = 0;
+        // --- P0 机制：五行融合化境 (Elemental Combo) 追踪器 ---
+        this.elementalTracker = [];
 
         // 创建敌人实例
         if (Array.isArray(enemyData)) {
@@ -130,6 +132,99 @@ class Battle {
 
         // 开始战斗
         this.startBattle();
+    }
+
+    // ==========================================
+    // --- P0 机制：五行融合化境 (Elemental Combo) ---
+    // ==========================================
+    async processElementalCombos(target, targetIndex) {
+        if (!this.elementalTracker || this.elementalTracker.length < 3) return;
+
+        // 获取最近的三次元素释放记录
+        const len = this.elementalTracker.length;
+        const combo = [
+            this.elementalTracker[len - 3],
+            this.elementalTracker[len - 2],
+            this.elementalTracker[len - 1]
+        ].map(Utils.getCanonicalElement).join('+');
+
+        let comboTriggered = false;
+
+        // 灰烬领域 (Ash Domain): 火 + 木 + 土
+        if (combo === 'fire+wood+earth') {
+            Utils.showBattleLog('【五行化境】触发：灰烬领域！', 'warning');
+            for (let i = 0; i < this.enemies.length; i++) {
+                const enemy = this.enemies[i];
+                if (enemy.currentHp <= 0) continue;
+                if (!enemy.buffs || typeof enemy.buffs !== 'object') enemy.buffs = {};
+
+                // 施加 2 层灼烧与 1 层虚弱
+                enemy.buffs.burn = (enemy.buffs.burn || 0) + 2;
+                enemy.buffs.weak = (enemy.buffs.weak || 0) + 1;
+
+                const el = document.querySelector(`.enemy[data-index="${i}"]`);
+                if (el) Utils.addFlashEffect(el, '#ff6600');
+            }
+            comboTriggered = true;
+        }
+
+        // 冰霜风暴 (Frost Storm): 水 + 水 + 风(可以用金/木代替？目前假设水+水+水暂定)
+        else if (combo === 'water+water+water') {
+            Utils.showBattleLog('【五行化境】触发：极寒冰狱！', 'warning');
+            for (let i = 0; i < this.enemies.length; i++) {
+                const enemy = this.enemies[i];
+                if (enemy.currentHp <= 0) continue;
+
+                if (enemy.isBoss) {
+                    enemy.currentHp -= 10;
+                } else {
+                    enemy.stunned = true;
+                }
+                const el = document.querySelector(`.enemy[data-index="${i}"]`);
+                if (el) Utils.addFlashEffect(el, '#00ffff');
+            }
+            comboTriggered = true;
+        }
+
+        // 可以添加更多组合：
+        // 锋锐雷阵 (Metal+Fire+Metal): 针对首个目标爆发高额穿透伤害
+        else if (combo === 'metal+fire+metal' && target) {
+            Utils.showBattleLog('【五行化境】触发：煌雷剑阵！', 'warning');
+            const dmg = 15;
+            const enemyEl = document.querySelector(`.enemy[data-index="${targetIndex}"]`);
+
+            const oldBlock = target.block;
+            target.block = 0;
+            target.currentHp -= dmg;
+            target.block = oldBlock;
+
+            if (enemyEl) {
+                Utils.addShakeEffect(enemyEl, 'heavy');
+                Utils.showFloatingNumber(enemyEl, dmg, 'damage');
+            }
+            comboTriggered = true;
+        }
+        // 生命萌发 (Water+Wood+Wood): 恢复生命与护盾
+        else if (combo === 'water+wood+wood') {
+            Utils.showBattleLog('【五行化境】触发：森罗万象！', 'warning');
+            this.player.heal(10);
+            this.player.addBlock(10);
+            comboTriggered = true;
+        }
+        // 绝对壁垒 (Earth+Metal+Earth): 大额护盾且保留一回合
+        else if (combo === 'earth+metal+earth') {
+            Utils.showBattleLog('【五行化境】触发：绝对壁垒！', 'warning');
+            this.player.addBlock(20);
+            this.player.buffs.retainBlock = (this.player.buffs.retainBlock || 0) + 1;
+            comboTriggered = true;
+        }
+
+        if (comboTriggered) {
+            // 触发后清空近期追踪记录（或保留最后几个？为了防止连续触发，通常清空）
+            this.elementalTracker = [];
+            this.updateBattleUI();
+            await Utils.sleep(500); // 视觉停留动画
+        }
     }
 
     // 创建敌人实例
@@ -233,7 +328,7 @@ class Battle {
             });
 
             // 随机精英词缀
-            const eliteTypes = ['strength', 'toughness', 'thorns', 'regen', 'swift', 'sunder'];
+            const eliteTypes = ['strength', 'toughness', 'thorns', 'regen', 'swift', 'sunder', 'voidGazers'];
             const type = eliteTypes[Math.floor(Math.random() * eliteTypes.length)];
             enemy.eliteType = type;
 
@@ -248,6 +343,7 @@ class Battle {
             // 为 Swift 添加初始闪避率 (需要在 dealDamage 中支持)
             if (type === 'swift') enemy.buffs.dodgeChance = 0.15; // 自定义属性
             if (type === 'sunder') enemy.buffs.guardBreak = 1;
+            if (type === 'voidGazers') enemy.buffs.voidGazers = 1;
 
             Utils.showBattleLog(`遭遇强敌：${enemy.name} (特性:${type})`);
         }
@@ -292,6 +388,13 @@ class Battle {
         this.playerAttackedThisTurn = false;
         this.playerFirstAttackBoostUsed = false;
         this.turnStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+
+        // --- P1 机制：解析残影 (Ghost) 行为库 ---
+        for (let enemy of this.enemies) {
+            if (enemy.id === 'ghost_demon' && enemy.ghostPayload) {
+                this.parseGhostPatterns(enemy);
+            }
+        }
 
         // 玩家回合开始
         this.player.startTurn();
@@ -356,6 +459,10 @@ class Battle {
             this.player.block = 0;
             Utils.showBattleLog('古战场：护盾被战场压制！');
         }
+        const battleNode = this.game && this.game.currentBattleNode ? this.game.currentBattleNode : null;
+        if (battleNode && battleNode.polluted) {
+            Utils.showBattleLog('【煞气激荡】污染战斗：恢复被压制，卡牌消耗+1，首回合随机耗散1张手牌。');
+        }
 
         // Boss机制初始化
         if (typeof BossMechanicsHandler !== 'undefined') {
@@ -371,6 +478,31 @@ class Battle {
             this.player.fateRing.scanEnemies(this.enemies);
         }
 
+        // --- P0 机制：虚空凝视者 (Anti-Entropy Meta) ---
+        // 检测场上是否有 voidGazers 精英怪
+        const hasVoidGazers = this.enemies.some(e => e.buffs && e.buffs.voidGazers > 0);
+        if (hasVoidGazers) {
+            Utils.showBattleLog('【虚空凝视】：过度运转灵力将招致反噬！');
+            this.on('cardPlayed', (payload) => {
+                if (payload.cardsPlayedThisTurn > 6) {
+                    const voidDamage = 8 + (payload.cardsPlayedThisTurn - 6) * 4;
+                    Utils.showBattleLog(`【反噬】你的高频施法激怒了虚空！受到 ${voidDamage} 点真实伤害！`);
+                    // 采用绕过护盾的真实伤害
+                    const savedBlock = this.player.block;
+                    this.player.block = 0;
+                    this.player.takeDamage(voidDamage);
+                    this.player.block = savedBlock;
+
+                    const playerEl = document.querySelector('.player-avatar');
+                    if (playerEl) {
+                        Utils.addFlashEffect(playerEl, 'purple');
+                        Utils.showFloatingNumber(playerEl, voidDamage, 'damage');
+                    }
+                    this.updatePlayerUI();
+                }
+            });
+        }
+
         // 确保结束回合按钮可用
         const endTurnBtn = document.getElementById('end-turn-btn');
         if (endTurnBtn) {
@@ -384,6 +516,56 @@ class Battle {
 
         if (this.game && typeof this.game.showFirstBattleGuide === 'function') {
             this.game.showFirstBattleGuide();
+        }
+    }
+
+    // --- P1 机制：解析残影 (Ghost) 行为库 ---
+    // 将玩家的历史残影牌库粗略提取为敌对BOSS的攻击逻辑
+    parseGhostPatterns(enemy) {
+        const payload = enemy.ghostPayload;
+        if (!payload || !payload.deck || payload.deck.length === 0) return;
+
+        let attacks = [];
+        let defends = [];
+        let magics = [];
+
+        // 分类计算卡牌基础数值
+        payload.deck.forEach(card => {
+            const rawCard = window.CARDS ? window.CARDS[card.id] : null;
+            if (!rawCard) return;
+            const isUpgraded = card.upgraded;
+            let val = rawCard.value || 0;
+            if (isUpgraded && rawCard.upgradeBonus) val += rawCard.upgradeBonus;
+
+            if (rawCard.type === 'attack') attacks.push(val);
+            else if (rawCard.type === 'defend') defends.push(val);
+            else magics.push(val);
+        });
+
+        // 算出平均值
+        const avgAtk = attacks.length > 0 ? attacks.reduce((a, b) => a + b, 0) / attacks.length : 5;
+        const avgDef = defends.length > 0 ? defends.reduce((a, b) => a + b, 0) / defends.length : 5;
+        const avgMag = magics.length > 0 ? magics.reduce((a, b) => a + b, 0) / magics.length : 5;
+        const realmMultiplier = this.player.realm * 0.5;
+
+        enemy.patterns = [];
+
+        // 攻击模式
+        if (attacks.length > 0) {
+            enemy.patterns.push({ type: 'attack', value: Math.floor(avgAtk + 10 + realmMultiplier * 4), intent: '残影绝学', effect: 'pierce' });
+        }
+        // 防护模式
+        if (defends.length > 0) {
+            enemy.patterns.push({ type: 'defend', value: Math.floor(avgDef + 15 + realmMultiplier * 5), intent: '残影罡气' });
+        }
+        // 法术模式 (多段打击)
+        if (magics.length > 0) {
+            enemy.patterns.push({ type: 'attack', value: Math.floor(avgMag + 5 + realmMultiplier * 2), intent: '残影法器', count: 2 });
+        }
+
+        // 兜底设计：必定拥有基本攻击
+        if (enemy.patterns.length === 0) {
+            enemy.patterns.push({ type: 'attack', value: 15 + this.player.realm * 2, intent: '求生意志' });
         }
     }
 
@@ -575,6 +757,34 @@ class Battle {
             blockDisplay.classList.remove('show');
         }
 
+        // --- P0 机制：五行施法序列追踪器UI ---
+        let comboTracker = document.getElementById('elemental-combo-tracker');
+        if (!comboTracker && this.elementalTracker && this.elementalTracker.length > 0) {
+            comboTracker = document.createElement('div');
+            comboTracker.id = 'elemental-combo-tracker';
+            comboTracker.className = 'elemental-combo-tracker';
+            const statsContainer = document.querySelector('.player-stats');
+            if (statsContainer) {
+                statsContainer.appendChild(comboTracker);
+            }
+        }
+
+        if (comboTracker) {
+            if (!this.elementalTracker || this.elementalTracker.length === 0) {
+                comboTracker.style.display = 'none';
+                comboTracker.innerHTML = '';
+            } else {
+                comboTracker.style.display = 'flex';
+                comboTracker.innerHTML = '';
+                this.elementalTracker.forEach(elem => {
+                    const elDiv = document.createElement('div');
+                    elDiv.className = `element-orb element-${elem}`;
+                    elDiv.textContent = Utils.getElementIcon(elem);
+                    comboTracker.appendChild(elDiv);
+                });
+            }
+        }
+
         // 更新 Buffs
         const buffsContainer = document.getElementById('player-buffs');
         if (buffsContainer) {
@@ -734,6 +944,12 @@ class Battle {
                 console.warn('modifyCardCost failed:', e);
             }
         } else if (this.environmentState && this.environmentState.gravity && cost > 1) {
+            cost += 1;
+        }
+
+        // 地图污染：在污染节点中，所有非0费法术额外 +1 消耗
+        const battleNode = this.game && this.game.currentBattleNode ? this.game.currentBattleNode : null;
+        if (battleNode && battleNode.polluted && cost > 0) {
             cost += 1;
         }
 
@@ -1170,6 +1386,15 @@ class Battle {
                 for (const result of results) {
                     await this.processEffect(result, target, targetIndex, card.element);
                 }
+            }
+
+            // --- P0 机制：五行融合化境 (Elemental Combo) ---
+            if (card.element && card.element !== 'none') {
+                this.elementalTracker.push(card.element);
+                if (this.elementalTracker.length > 5) {
+                    this.elementalTracker.shift(); // 保持最近5个元素
+                }
+                await this.processElementalCombos(target, targetIndex);
             }
 
             // 检查战斗是否结束
@@ -1994,6 +2219,9 @@ class Battle {
         // 禁用结束回合按钮
         const endTurnBtn = document.getElementById('end-turn-btn');
         if (endTurnBtn) endTurnBtn.disabled = true;
+
+        // --- 清空五行追踪器 ---
+        this.elementalTracker = [];
 
         // 玩家回合结束
         this.player.endTurn();
