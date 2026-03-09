@@ -12338,6 +12338,28 @@ body {
     #battle-command-panel .battle-command-meta {
         font-size: 0.64rem;
     }
+
+    #battle-command-panel .battle-command-right {
+        gap: 5px;
+    }
+
+    #battle-command-panel .battle-advisor-toggle {
+        font-size: 0.62rem;
+        padding: 4px 7px;
+    }
+
+    #battle-command-panel .battle-advisor-title {
+        font-size: 0.68rem;
+    }
+
+    #battle-command-panel .battle-advisor-line {
+        font-size: 0.63rem;
+    }
+
+    #battle-command-panel .battle-advisor-matrix-btn {
+        font-size: 0.6rem;
+        padding: 4px 7px;
+    }
 }
 
 /* Character Avatar Image Support */
@@ -12793,6 +12815,29 @@ body {
     color: rgba(255, 229, 165, 0.95);
 }
 
+.battle-command-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.battle-advisor-toggle {
+    border: 1px solid rgba(118, 190, 255, 0.52);
+    border-radius: 999px;
+    background: rgba(23, 55, 101, 0.78);
+    color: rgba(219, 236, 255, 0.95);
+    font-size: 0.66rem;
+    line-height: 1;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.battle-advisor-toggle:hover {
+    border-color: rgba(154, 219, 255, 0.82);
+    background: rgba(31, 72, 128, 0.86);
+}
+
 .battle-command-track {
     margin-top: 7px;
     width: 100%;
@@ -12869,6 +12914,138 @@ body {
 .battle-command-meta {
     font-size: 0.68rem;
     color: rgba(197, 219, 245, 0.87);
+}
+
+.battle-tactical-advisor {
+    margin-top: 8px;
+    border-radius: 9px;
+    border: 1px solid rgba(96, 176, 255, 0.35);
+    background: linear-gradient(145deg, rgba(9, 24, 52, 0.74), rgba(8, 20, 42, 0.82));
+    padding: 7px 8px;
+}
+
+.battle-tactical-advisor.collapsed {
+    padding-bottom: 6px;
+}
+
+.battle-advisor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.battle-advisor-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.35px;
+    color: rgba(161, 221, 255, 0.95);
+}
+
+.battle-advisor-threat-list {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+}
+
+.battle-advisor-threat-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(123, 180, 246, 0.4);
+    background: rgba(24, 56, 96, 0.52);
+    color: rgba(226, 239, 255, 0.94);
+    font-size: 0.66rem;
+    line-height: 1.15;
+}
+
+.battle-advisor-threat-chip.chip-defend {
+    border-color: rgba(255, 171, 129, 0.6);
+    background: rgba(108, 49, 26, 0.52);
+    color: rgba(255, 227, 205, 0.95);
+}
+
+.battle-advisor-threat-chip.chip-break {
+    border-color: rgba(255, 214, 128, 0.58);
+    background: rgba(97, 73, 24, 0.5);
+    color: rgba(255, 238, 197, 0.95);
+}
+
+.battle-advisor-threat-chip.chip-cleanse {
+    border-color: rgba(144, 232, 199, 0.58);
+    background: rgba(20, 76, 61, 0.5);
+    color: rgba(210, 255, 238, 0.95);
+}
+
+.battle-advisor-threat-chip.chip-burst {
+    border-color: rgba(245, 145, 175, 0.56);
+    background: rgba(92, 32, 53, 0.48);
+    color: rgba(255, 219, 232, 0.95);
+}
+
+.battle-advisor-threat-chip.chip-stable {
+    border-color: rgba(151, 202, 255, 0.52);
+    background: rgba(24, 58, 102, 0.45);
+}
+
+.battle-advisor-line {
+    margin-top: 5px;
+    font-size: 0.68rem;
+    line-height: 1.32;
+    color: rgba(204, 225, 247, 0.9);
+}
+
+.battle-advisor-recommend {
+    color: rgba(219, 238, 255, 0.96);
+}
+
+.battle-advisor-readiness {
+    color: rgba(255, 233, 179, 0.94);
+}
+
+.battle-advisor-matrix {
+    color: rgba(191, 237, 255, 0.94);
+}
+
+.battle-advisor-pending-mode {
+    color: rgba(166, 232, 221, 0.95);
+}
+
+.battle-advisor-matrix-controls {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+}
+
+.battle-advisor-matrix-btn {
+    border: 1px solid rgba(106, 182, 255, 0.44);
+    border-radius: 999px;
+    background: rgba(17, 45, 85, 0.6);
+    color: rgba(216, 234, 255, 0.95);
+    font-size: 0.64rem;
+    line-height: 1;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
+}
+
+.battle-advisor-matrix-btn:hover {
+    border-color: rgba(149, 214, 255, 0.76);
+    background: rgba(28, 70, 122, 0.72);
+}
+
+.battle-advisor-matrix-btn.active {
+    border-color: rgba(255, 210, 131, 0.82);
+    background: linear-gradient(145deg, rgba(97, 67, 23, 0.76), rgba(65, 44, 13, 0.82));
+    color: rgba(255, 236, 198, 0.96);
+    transform: translateY(-1px);
+}
+
+.battle-advisor-last {
+    color: rgba(198, 214, 239, 0.9);
 }
 
 .map-header-right {
@@ -13131,6 +13308,10 @@ body {
 
     .battle-command-list {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .battle-advisor-toggle {
+        font-size: 0.64rem;
     }
 
     .map-header-right {

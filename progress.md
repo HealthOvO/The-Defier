@@ -1837,3 +1837,39 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - `node --check js/game.js` ✅
   - `bash tests/run_node_checks.sh` ✅
   - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-intro` ✅
+
+- 2026-03-09: 第三十二轮战斗可玩性扩展（战术助手 + 命环模式预设）
+  - `js/core/battle.js`：战场指令面板新增“战术助手”模块
+    - 基于 `resolveCounterplayThreatProfile` 实时生成威胁标签（高爆发/守势壁垒/控场干扰/节奏窗口）；
+    - 新增回路建议与可用性提示（可用指令数量、槽能缺口、冷却提示）；
+    - 新增收起/展开交互（`toggleTacticalAdvisor`），避免信息过载。
+  - `js/core/battle.js`：命环共振新增“模式预设”链路
+    - 新增 `resolvePendingResonanceMatrixSignalMode` 与 `setResonanceMatrixSignalMode`；
+    - 战术助手内可直接预设 `自适应/守势/破阵/净域/歼灭`，并显示“模式预设”状态；
+    - 预设通过信号 buff 注入，仍沿用原有 `consumeResonanceMatrixSignalMode` 消费机制，保证旧联动兼容。
+  - `css/style.css`：新增战术助手样式与移动端适配
+    - 新增回路提示、威胁 chip、命环预设按钮组（含 active 态）样式；
+    - 在 `@media (max-width:768px)` 下压缩按钮字号与间距，防止窄屏拥挤。
+  - `tests/browser_feature_audit.mjs`：新增浏览器级断言
+    - `battle command panel...` 探针扩展：校验战术助手可见、推荐文案、威胁标签数、收起交互；
+    - 新增 `resonance matrix tactical advisor preset can queue and consume selected mode`，校验预设模式高亮、信号写入与消费闭环。
+  - `tests/sanity_battle_command_synergy_checks.js`：新增运行时断言
+    - 校验 `setResonanceMatrixSignalMode('cleanse')` 能正确写入信号并被消费。
+
+- 2026-03-09: 第三十二轮测试证据（全通过）
+  - Node:
+    - `node tests/sanity_battle_command_synergy_checks.js` ✅
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser:
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` ✅
+    - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-fix` ✅
+    - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4173 output/web-event-branch-audit` ✅
+    - `node tests/browser_inheritance_audit.mjs http://127.0.0.1:4173 output/web-inheritance-audit` ✅
+    - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4173 output/web-pvp-audit` ✅
+  - Playwright 冒烟 + 视觉检查：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-latest` ✅
+    - 已人工查看 `output/web-game-latest/shot-1.png`（主菜单渲染正常，无错位遮挡）。
+
+- TODO / 下轮建议
+  - 可为战术助手加入“敌方下一回合高危目标预测”（按 intent 队列排序）并对手牌高亮优先级做更精细分层（S/A/B）。
+  - 可将命环模式预设接入键盘热键（例如 `1-5`）并增加对局内新手提示。

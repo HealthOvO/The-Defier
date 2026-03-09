@@ -352,6 +352,16 @@ function makePlayer() {
     'anti-draw should reduce horizon barter card draw ceiling'
   );
 
+  // 命环共振预设：战术助手可写入并消费下一次回路信号
+  game.player.buffs = {};
+  const presetMode = battle.setResonanceMatrixSignalMode('cleanse', { silent: true });
+  assert(presetMode === 'cleanse', 'matrix preset should normalize to cleanse mode');
+  assert((game.player.buffs.matrixCleanseSignal || 0) === 1, 'matrix preset should apply signal buff');
+  assert(battle.resolvePendingResonanceMatrixSignalMode() === 'cleanse', 'pending signal mode should reflect preset');
+  const consumedPreset = battle.consumeResonanceMatrixSignalMode();
+  assert(!!consumedPreset && consumedPreset.id === 'cleanse', 'consume signal should return preset mode');
+  assert((game.player.buffs.matrixCleanseSignal || 0) === 0, 'signal should be consumed after resolve');
+
   // 命环共振：破阵回路（敌方高护盾时应优先破阵）
   battle.enemies = [{
     ...makeEnemy('matrix-break', 180),

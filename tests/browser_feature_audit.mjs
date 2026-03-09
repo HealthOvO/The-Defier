@@ -197,9 +197,31 @@ async function safeScreenshot(page, outPath) {
     }
     if (typeof game.battle.updateBattleUI === 'function') game.battle.updateBattleUI();
 
-    const panel = document.getElementById('battle-command-panel');
+    let panel = document.getElementById('battle-command-panel');
     const title = panel ? (panel.querySelector('.battle-command-title')?.textContent || '').trim() : '';
     const buttons = panel ? panel.querySelectorAll('.battle-command-btn').length : 0;
+    const advisor = panel ? panel.querySelector('#battle-tactical-advisor') : null;
+    const advisorTitle = advisor ? (advisor.querySelector('.battle-advisor-title')?.textContent || '').trim() : '';
+    const advisorRecommend = advisor ? (advisor.querySelector('.battle-advisor-recommend')?.textContent || '').trim() : '';
+    const advisorReadiness = advisor ? (advisor.querySelector('.battle-advisor-readiness')?.textContent || '').trim() : '';
+    const advisorThreatChips = advisor ? advisor.querySelectorAll('.battle-advisor-threat-chip').length : 0;
+    let advisorCollapsedAfterToggle = false;
+    const toggleBtn = panel ? panel.querySelector('.battle-advisor-toggle') : null;
+    if (toggleBtn && typeof toggleBtn.click === 'function') {
+      toggleBtn.click();
+      if (typeof game.battle.updateBattleUI === 'function') game.battle.updateBattleUI();
+      panel = document.getElementById('battle-command-panel');
+      const advisorAfterToggle = panel ? panel.querySelector('#battle-tactical-advisor') : null;
+      advisorCollapsedAfterToggle = !!(advisorAfterToggle && advisorAfterToggle.classList.contains('collapsed'));
+
+      const toggleBackBtn = panel ? panel.querySelector('.battle-advisor-toggle') : null;
+      if (toggleBackBtn && typeof toggleBackBtn.click === 'function') {
+        toggleBackBtn.click();
+        if (typeof game.battle.updateBattleUI === 'function') game.battle.updateBattleUI();
+      }
+      panel = document.getElementById('battle-command-panel');
+    }
+
     const commandId = state.commands[0].id;
     const before = {
       points: state.points,
@@ -236,6 +258,11 @@ async function safeScreenshot(page, outPath) {
         ),
       title,
       buttons,
+      advisorTitle,
+      advisorRecommend,
+      advisorReadiness,
+      advisorThreatChips,
+      advisorCollapsedAfterToggle,
       commandId,
       before,
       after,
@@ -247,7 +274,12 @@ async function safeScreenshot(page, outPath) {
     !!battleCommandProbe &&
       !!battleCommandProbe.ok &&
       Number(battleCommandProbe.buttons || 0) >= 3 &&
-      /战场指令/.test(battleCommandProbe.title || ''),
+      /战场指令/.test(battleCommandProbe.title || '') &&
+      /战术助手/.test(battleCommandProbe.advisorTitle || '') &&
+      /回路/.test(battleCommandProbe.advisorRecommend || '') &&
+      Number(battleCommandProbe.advisorThreatChips || 0) >= 1 &&
+      /建议|指令|回合|命环/.test(battleCommandProbe.advisorReadiness || '') &&
+      !!battleCommandProbe.advisorCollapsedAfterToggle,
     JSON.stringify(battleCommandProbe || null)
   );
 
@@ -809,6 +841,88 @@ async function safeScreenshot(page, outPath) {
     'resonance matrix supports forced strategy mode to override auto branch',
     !!resonanceMatrixStrategyProbe?.ok,
     JSON.stringify(resonanceMatrixStrategyProbe || null)
+  );
+
+  const resonanceMatrixPresetProbe = await page.evaluate(() => {
+    if (!window.game || !game.battle || !game.player) return { ok: false, reason: 'no_battle' };
+    const prevIsEndlessActive = game.isEndlessActive;
+    const prevEnsureEndlessState = game.ensureEndlessState;
+    const endlessMeta = { active: true, pressure: 7, currentCycle: 6 };
+    game.isEndlessActive = () => true;
+    game.ensureEndlessState = () => endlessMeta;
+
+    game.player.fateRing = game.player.fateRing || {};
+    game.player.fateRing.path = 'convergence';
+    game.player.buffs = {};
+    game.battle.currentTurn = 'player';
+    game.battle.battleEnded = false;
+    game.battle.isProcessingCard = false;
+    game.battle.isTurnTransitioning = false;
+    game.battle.enemies = [{
+      id: 'audit_matrix_preset_enemy',
+      name: '试作矩阵敌',
+      icon: '🧪',
+      currentHp: 160,
+      maxHp: 160,
+      block: 20,
+      buffs: {},
+      patterns: [
+        { type: 'defend', value: 12, intent: '🛡️固守' },
+        { type: 'attack', value: 10, intent: '⚔️斩击' }
+      ],
+      currentPatternIndex: 0
+    }];
+
+    if (typeof game.battle.initializeBattleCommandSystem === 'function') game.battle.initializeBattleCommandSystem();
+    const state = game.battle.commandState;
+    if (!state || !state.enabled || !Array.isArray(state.commands)) {
+      if (typeof prevIsEndlessActive === 'function') game.isEndlessActive = prevIsEndlessActive;
+      if (typeof prevEnsureEndlessState === 'function') game.ensureEndlessState = prevEnsureEndlessState;
+      return { ok: false, reason: 'no_command_state' };
+    }
+    const matrix = state.commands.find((command) => command && command.id === 'resonance_matrix_order');
+    if (!matrix) {
+      if (typeof prevIsEndlessActive === 'function') game.isEndlessActive = prevIsEndlessActive;
+      if (typeof prevEnsureEndlessState === 'function') game.ensureEndlessState = prevEnsureEndlessState;
+      return { ok: false, reason: 'no_matrix_command' };
+    }
+    state.points = Math.max(8, Number(state.maxPoints) || 12);
+    state.commands.forEach((command) => {
+      if (!command) return;
+      command.cooldownRemaining = 0;
+    });
+
+    if (typeof game.battle.setResonanceMatrixSignalMode === 'function') {
+      game.battle.setResonanceMatrixSignalMode('break', { silent: true });
+    }
+    if (typeof game.battle.markUIDirty === 'function') game.battle.markUIDirty('command', 'enemies');
+    if (typeof game.battle.updateBattleUI === 'function') game.battle.updateBattleUI();
+
+    const panel = document.getElementById('battle-command-panel');
+    const activeMode = panel?.querySelector('.battle-advisor-matrix-btn.active')?.getAttribute('data-mode') || '';
+    const pendingText = (panel?.querySelector('.battle-advisor-pending-mode')?.textContent || '').trim();
+    const queuedBefore = Number(game.player?.buffs?.matrixBreakSignal) || 0;
+    const consumed = typeof game.battle.consumeResonanceMatrixSignalMode === 'function'
+      ? game.battle.consumeResonanceMatrixSignalMode()
+      : null;
+    const queuedAfter = Number(game.player?.buffs?.matrixBreakSignal) || 0;
+
+    if (typeof prevIsEndlessActive === 'function') game.isEndlessActive = prevIsEndlessActive;
+    if (typeof prevEnsureEndlessState === 'function') game.ensureEndlessState = prevEnsureEndlessState;
+
+    return {
+      ok: queuedBefore > 0 && queuedAfter === 0 && activeMode === 'break' && /破阵/.test(pendingText) && consumed?.id === 'break',
+      activeMode,
+      pendingText,
+      queuedBefore,
+      queuedAfter,
+      consumedId: consumed?.id || ''
+    };
+  });
+  add(
+    'resonance matrix tactical advisor preset can queue and consume selected mode',
+    !!resonanceMatrixPresetProbe?.ok,
+    JSON.stringify(resonanceMatrixPresetProbe || null)
   );
 
   const endlessAffixExtensionProbe = await page.evaluate(() => {

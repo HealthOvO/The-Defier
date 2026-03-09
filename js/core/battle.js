@@ -19,6 +19,7 @@ class Battle {
         this.activeEncounterTheme = null;
         this.encounterRewardConsumed = false;
         this.commandState = this.createDefaultBattleCommandState();
+        this.tacticalAdvisorCollapsed = false;
 
         // 五行定义
         this.ELEMENTS = {
@@ -104,6 +105,7 @@ class Battle {
         this.activeEncounterTheme = null;
         this.encounterRewardConsumed = false;
         this.commandState = this.createDefaultBattleCommandState();
+        this.tacticalAdvisorCollapsed = false;
         // --- P0 机制：五行融合化境 (Elemental Combo) 追踪器 ---
         this.elementalTracker = [];
 
@@ -1574,6 +1576,58 @@ class Battle {
             return this.getResonanceMatrixModeProfile(signal.mode);
         }
         return null;
+    }
+
+    resolvePendingResonanceMatrixSignalMode() {
+        if (!this.player || !this.player.buffs || typeof this.player.buffs !== 'object') return 'auto';
+        const signalOrder = [
+            { buff: 'matrixGuardSignal', mode: 'guard' },
+            { buff: 'matrixBreakSignal', mode: 'break' },
+            { buff: 'matrixCleanseSignal', mode: 'cleanse' },
+            { buff: 'matrixBurstSignal', mode: 'burst' }
+        ];
+        for (let i = 0; i < signalOrder.length; i += 1) {
+            const signal = signalOrder[i];
+            const stack = Math.max(0, Math.floor(Number(this.player.buffs[signal.buff]) || 0));
+            if (stack > 0) return signal.mode;
+        }
+        return 'auto';
+    }
+
+    setResonanceMatrixSignalMode(modeId = 'auto', options = {}) {
+        if (!this.player) return 'auto';
+        if (!this.player.buffs || typeof this.player.buffs !== 'object') {
+            this.player.buffs = {};
+        }
+        const mode = String(modeId || 'auto');
+        const modeToBuff = {
+            guard: 'matrixGuardSignal',
+            break: 'matrixBreakSignal',
+            cleanse: 'matrixCleanseSignal',
+            burst: 'matrixBurstSignal'
+        };
+        Object.values(modeToBuff).forEach((buffKey) => {
+            if (this.player.buffs[buffKey] !== undefined) {
+                delete this.player.buffs[buffKey];
+            }
+        });
+
+        const normalizedMode = modeToBuff[mode] ? mode : 'auto';
+        if (modeToBuff[normalizedMode]) {
+            this.player.buffs[modeToBuff[normalizedMode]] = 1;
+        }
+        const silent = !!(options && options.silent);
+        if (!silent) {
+            const profile = this.getResonanceMatrixModeProfile(normalizedMode);
+            if (normalizedMode === 'auto') {
+                Utils.showBattleLog('战术助手：命环共振改为自适应模式');
+            } else {
+                Utils.showBattleLog(`战术助手：已预设命环回路为「${profile.label}」`);
+            }
+        }
+        this.markUIDirty('command');
+        this.updateBattleUI();
+        return normalizedMode;
     }
 
     async resolveResonanceMatrixMode(command = null, threatProfile = null) {
@@ -5721,6 +5775,168 @@ class Battle {
         }
     }
 
+    resolveTacticalAdvisorRecommendation(threatProfile = null) {
+        const profile = threatProfile && typeof threatProfile === 'object'
+            ? threatProfile
+            : this.resolveCounterplayThreatProfile();
+        if (profile.needDefend) {
+            return {
+                id: 'guard',
+                label: '守势回路',
+                shortLabel: '守势',
+                desc: '高爆发威胁较高，优先护盾与净化，避免被一波带走。'
+            };
+        }
+        if (profile.needBreak) {
+            return {
+                id: 'break',
+                label: '破阵回路',
+                shortLabel: '破阵',
+                desc: '敌方护盾或防守动作偏多，先破防再追击收益更高。'
+            };
+        }
+        if (profile.needCleanse) {
+            return {
+                id: 'cleanse',
+                label: '净域回路',
+                shortLabel: '净域',
+                desc: '对方控场倾向明显，优先净化并保持手牌流转。'
+            };
+        }
+        return {
+            id: 'burst',
+            label: '歼灭回路',
+            shortLabel: '歼灭',
+            desc: '当前态势可主动压节奏，集中输出尽快收割。'
+        };
+    }
+
+    resolveBattleTacticalAdvisorSnapshot(state = null, threatProfile = null) {
+        const profile = threatProfile && typeof threatProfile === 'object'
+            ? threatProfile
+            : this.resolveCounterplayThreatProfile();
+        const runtimeState = state && typeof state === 'object'
+            ? state
+            : (this.commandState || this.createDefaultBattleCommandState());
+        const recommendation = this.resolveTacticalAdvisorRecommendation(profile);
+
+        const threatChips = [];
+        if (profile.needDefend) {
+            threatChips.push({ id: 'defend', label: '高爆发压制', tip: '建议保留护盾、避免裸吃连击。' });
+        }
+        if (profile.needBreak) {
+            threatChips.push({ id: 'break', label: '守势壁垒', tip: '敌方偏防守，优先破盾与易伤。' });
+        }
+        if (profile.needCleanse) {
+            threatChips.push({ id: 'cleanse', label: '控场干扰', tip: '净化优先级上升，防止行动被锁。' });
+        }
+        if (profile.needBurst) {
+            threatChips.push({ id: 'burst', label: '节奏窗口', tip: '存在可抢节奏点，适合集中爆发。' });
+        }
+        if (threatChips.length === 0) {
+            threatChips.push({ id: 'stable', label: '态势平稳', tip: '暂无高危信号，可按构筑常规展开。' });
+        }
+
+        const points = Math.max(0, Math.floor(Number(runtimeState.points) || 0));
+        const commands = Array.isArray(runtimeState.commands) ? runtimeState.commands : [];
+        const commandMeta = commands.map((command) => {
+            const cost = this.resolveBattleCommandEffectiveCost(command);
+            const cooldownRemaining = Math.max(0, Math.floor(Number(command?.cooldownRemaining) || 0));
+            const ready = (
+                this.currentTurn === 'player'
+                && !this.battleEnded
+                && !this.isProcessingCard
+                && !this.isTurnTransitioning
+                && cooldownRemaining === 0
+                && points >= cost
+            );
+            return { command, cost, cooldownRemaining, ready };
+        });
+
+        const readyCount = commandMeta.filter((item) => item.ready).length;
+        let readiness = '当前无可用指令，建议先用卡牌控节奏并攒槽。';
+        if (this.battleEnded) {
+            readiness = '战斗已结束，战术助手等待下一场战斗。';
+        } else if (this.currentTurn !== 'player') {
+            readiness = '敌方回合中，优先观察意图并预留反击资源。';
+        } else if (readyCount > 0) {
+            readiness = `当前可用指令 ${readyCount} 项，建议优先 ${recommendation.shortLabel} 回路。`;
+        } else {
+            let minGap = Infinity;
+            let minCooldown = Infinity;
+            commandMeta.forEach((item) => {
+                if (!item) return;
+                const gap = Math.max(0, item.cost - points);
+                minGap = Math.min(minGap, gap);
+                if (item.cooldownRemaining > 0) {
+                    minCooldown = Math.min(minCooldown, item.cooldownRemaining);
+                }
+            });
+            if (Number.isFinite(minGap) && minGap > 0) {
+                readiness = `指令槽不足，还差 ${minGap} 点可启动关键指令。`;
+            } else if (Number.isFinite(minCooldown)) {
+                readiness = `暂无可用指令，最短冷却剩余 ${minCooldown} 回合。`;
+            }
+        }
+
+        const matrixMeta = commandMeta.find((item) => item && item.command && item.command.id === 'resonance_matrix_order') || null;
+        const endlessActive = !!(this.game && typeof this.game.isEndlessActive === 'function' && this.game.isEndlessActive());
+        let matrixHint = '';
+        let lastModeLabel = '';
+        let pendingModeLabel = '';
+        const matrixControls = [];
+        if (matrixMeta) {
+            const modeId = String(runtimeState.lastResonanceMatrixMode || 'auto');
+            const modeProfile = this.getResonanceMatrixModeProfile(modeId);
+            if (modeProfile && modeProfile.label) {
+                lastModeLabel = modeProfile.label;
+            }
+            const pendingModeId = this.resolvePendingResonanceMatrixSignalMode();
+            const pendingMode = this.getResonanceMatrixModeProfile(pendingModeId);
+            pendingModeLabel = pendingModeId === 'auto'
+                ? '自动判断'
+                : `已预设 ${pendingMode.label}`;
+            const modeChoices = [
+                { id: 'auto', label: '自适应' },
+                { id: 'guard', label: '守势' },
+                { id: 'break', label: '破阵' },
+                { id: 'cleanse', label: '净域' },
+                { id: 'burst', label: '歼灭' }
+            ];
+            modeChoices.forEach((choice) => {
+                matrixControls.push({
+                    ...choice,
+                    active: choice.id === pendingModeId
+                });
+            });
+            if (matrixMeta.cooldownRemaining > 0) {
+                matrixHint = `命环共振冷却中（${matrixMeta.cooldownRemaining} 回合）。`;
+            } else if (matrixMeta.cost > points) {
+                matrixHint = `命环共振需 ${matrixMeta.cost} 槽，当前还差 ${Math.max(0, matrixMeta.cost - points)}。`;
+            } else {
+                matrixHint = `命环共振可发动，建议走 ${recommendation.shortLabel} 回路。`;
+            }
+        } else if (endlessActive) {
+            matrixHint = '本场未抽到命环共振，先用其他战场指令稳住节奏。';
+        }
+
+        return {
+            recommendation,
+            threatChips,
+            readiness,
+            matrixHint,
+            lastModeLabel,
+            pendingModeLabel,
+            matrixControls
+        };
+    }
+
+    toggleTacticalAdvisor() {
+        this.tacticalAdvisorCollapsed = !this.tacticalAdvisorCollapsed;
+        this.markUIDirty('command');
+        this.updateBattleUI();
+    }
+
     updateBattleCommandUI() {
         const panelId = 'battle-command-panel';
         let panel = document.getElementById(panelId);
@@ -5761,6 +5977,8 @@ class Battle {
         const points = Math.max(0, Math.floor(Number(state.points) || 0));
         const maxPoints = Math.max(1, Math.floor(Number(state.maxPoints) || 12));
         const progress = Math.max(0, Math.min(100, Math.round((points / maxPoints) * 100)));
+        const threatProfile = this.resolveCounterplayThreatProfile();
+        const advisor = this.resolveBattleTacticalAdvisorSnapshot(state, threatProfile);
 
         const commandButtons = state.commands.map((command) => {
             const cost = this.resolveBattleCommandEffectiveCost(command);
@@ -5794,15 +6012,56 @@ class Battle {
             `;
         }).join('');
 
+        const threatChips = advisor.threatChips.map((chip) => `
+            <span class="battle-advisor-threat-chip chip-${escapeHtml(chip.id)}"
+                  title="${escapeHtml(chip.tip)}">${escapeHtml(chip.label)}</span>
+        `).join('');
+
+        const matrixControls = Array.isArray(advisor.matrixControls)
+            ? advisor.matrixControls.map((mode) => `
+                <button type="button"
+                        class="battle-advisor-matrix-btn ${mode.active ? 'active' : ''}"
+                        data-mode="${escapeHtml(mode.id)}"
+                        onclick="window.game && game.battle && game.battle.setResonanceMatrixSignalMode('${escapeHtml(mode.id)}')">
+                    ${escapeHtml(mode.label)}
+                </button>
+            `).join('')
+            : '';
+
+        const advisorBody = this.tacticalAdvisorCollapsed
+            ? ''
+            : `
+                <div class="battle-advisor-threat-list">${threatChips}</div>
+                <p class="battle-advisor-line battle-advisor-recommend">建议回路：${escapeHtml(advisor.recommendation.label)} · ${escapeHtml(advisor.recommendation.desc)}</p>
+                <p class="battle-advisor-line battle-advisor-readiness">${escapeHtml(advisor.readiness)}</p>
+                ${advisor.matrixHint ? `<p class="battle-advisor-line battle-advisor-matrix">${escapeHtml(advisor.matrixHint)}</p>` : ''}
+                ${advisor.pendingModeLabel ? `<p class="battle-advisor-line battle-advisor-pending-mode">模式预设：${escapeHtml(advisor.pendingModeLabel)}</p>` : ''}
+                ${matrixControls ? `<div class="battle-advisor-matrix-controls">${matrixControls}</div>` : ''}
+                ${advisor.lastModeLabel ? `<p class="battle-advisor-line battle-advisor-last">上次命环模式：${escapeHtml(advisor.lastModeLabel)}</p>` : ''}
+            `;
+
         panel.innerHTML = `
             <div class="battle-command-header">
                 <span class="battle-command-title">战场指令</span>
-                <span class="battle-command-points">${points}/${maxPoints}</span>
+                <span class="battle-command-right">
+                    <span class="battle-command-points">${points}/${maxPoints}</span>
+                    <button type="button" class="battle-advisor-toggle"
+                            onclick="window.game && game.battle && game.battle.toggleTacticalAdvisor()">
+                        ${this.tacticalAdvisorCollapsed ? '展开助手' : '收起助手'}
+                    </button>
+                </span>
             </div>
             <div class="battle-command-track">
                 <div class="battle-command-fill" style="width:${progress}%"></div>
             </div>
             <div class="battle-command-list">${commandButtons}</div>
+            <section id="battle-tactical-advisor"
+                     class="battle-tactical-advisor ${this.tacticalAdvisorCollapsed ? 'collapsed' : ''}">
+                <div class="battle-advisor-header">
+                    <span class="battle-advisor-title">战术助手</span>
+                </div>
+                ${advisorBody}
+            </section>
         `;
     }
 
