@@ -7479,7 +7479,7 @@ class Game {
         }
     }
 
-    // 显示游戏介绍 (v4.2)
+    // 显示游戏介绍 (v5.1)
     // 切换游戏介绍标签页
     switchIntroTab(tabId) {
         // Update Buttons
@@ -7510,176 +7510,169 @@ class Game {
         // Tab 1: Overview
         const overviewContent = `
             <div class="intro-section">
-                <h3><span style="font-size:1.5rem; margin-right:10px;">☯</span> 逆天改命</h3>
+                <h3><span style="font-size:1.5rem; margin-right:10px;">☯</span> 游戏定位</h3>
                 <p class="intro-text">
-                    天道无情，视万物为刍狗。作为一介凡人，你偶然获得了【残缺命环】，可以通过盗取法则之力，挑战高高在上的妖尊。
-                    这不仅仅是一场战斗，更是一次对命运的宣战。
+                    《逆命者 The Defier》是一款东方仙侠题材的卡牌 Roguelike。你将在随机地图中构筑卡组、收集法宝、推进命环成长，
+                    在不断变化的战斗与事件中完成“逆天改命”。
                 </p>
-                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,215,0,0.1);">
-                    <strong style="color:var(--accent-gold)">游玩目标：</strong>
-                    <ul class="intro-list" style="margin-top:10px;">
-                        <li>闯过 <strong>18层</strong> 试炼天域，击败每一层的镇守妖尊。</li>
-                        <li>收集 <strong>五行法则</strong>，完善你的命环。</li>
-                        <li>构建独一无二的卡牌流派，在大道争锋中存活下来。</li>
-                    </ul>
-                </div>
+                <ul class="intro-list">
+                    <li><strong>主线挑战</strong>：闯过 18 层天域，击败镇守强敌。</li>
+                    <li><strong>长线玩法</strong>：无尽轮回高压成长，挑战更高轮次。</li>
+                    <li><strong>对抗玩法</strong>：PVP 天道榜，镜像对战与赛季奖励并行。</li>
+                </ul>
             </div>
-            
-             <div class="intro-section">
-                <h3>👥 角色图鉴 (4位)</h3>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
-                
-                    <!-- Lin Feng -->
-                    <div class="char-highlight" style="border-color: var(--accent-gold);">
-                        <strong style="color: var(--accent-gold); font-size:1.1rem;">🤺 林风 (逆命者)</strong>
-                        <p style="font-size:0.8rem; color:#bbb; margin-top:5px;">"凡人之躯，比肩神明。"</p>
-                        <ul class="intro-list" style="margin-top:10px; font-size:0.85rem;">
-                            <li><strong>均衡 (Balance)</strong>：属性平均，适应性强。</li>
-                            <li><strong>进化 (Evolve)</strong>：命环升级速度更快，擅长后期爆发。</li>
-                        </ul>
-                    </div>
 
-                    <!-- Xiang Ye -->
+            <div class="intro-section">
+                <h3>🚀 30秒上手</h3>
+                <ul class="intro-list">
+                    <li>点击「新的轮回」进入选角，游客模式可直接开局。</li>
+                    <li>进入战斗后先看敌方意图，再决定攻防节奏。</li>
+                    <li>优先围绕 1-2 套核心机制构筑，不要平均拿牌。</li>
+                    <li>打完牌后点击「结束回合」，逐步滚起资源优势。</li>
+                </ul>
+            </div>
+
+            <div class="intro-section">
+                <h3>👥 可选角色（6位）</h3>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="char-highlight" style="border-color: var(--accent-gold);">
+                        <strong style="color: var(--accent-gold);">🤺 林风 · 逆命者</strong>
+                        <p style="font-size: 0.85rem; margin-top: 6px;">命环成长收益高，后期上限强。</p>
+                    </div>
                     <div class="char-highlight" style="border-color: var(--accent-green);">
-                        <strong style="color: var(--accent-green); font-size:1.1rem;">🌿 香叶 (被诅咒的医者)</strong>
-                        <p style="font-size:0.8rem; color:#bbb; margin-top:5px;">"医者仁心，亦可杀人。"</p>
-                        <ul class="intro-list" style="margin-top:10px; font-size:0.85rem;">
-                            <li><strong>毒愈 (Poison/Heal)</strong>：擅长施加持续伤害与自我回复。</li>
-                            <li><strong>逆生 (Reverse)</strong>：将治疗转化为伤害。</li>
-                        </ul>
+                        <strong style="color: var(--accent-green);">🌿 香叶 · 被诅咒的医者</strong>
+                        <p style="font-size: 0.85rem; margin-top: 6px;">治疗与持续压制并存，续航稳定。</p>
                     </div>
-                    
-                    <!-- Wu Yu -->
                     <div class="char-highlight" style="border-color: var(--accent-red);">
-                        <strong style="color: var(--accent-red); font-size:1.1rem;">📿 无欲 (苦行僧)</strong>
-                        <p style="font-size:0.8rem; color:#bbb; margin-top:5px;">"金刚怒目，只为降魔。"</p>
-                        <ul class="intro-list" style="margin-top:10px; font-size:0.85rem;">
-                            <li><strong>功德 (Merit)</strong>：防守积累，触发【金刚法相】无敌。</li>
-                            <li><strong>业力 (Sin)</strong>：攻击积累，触发【明王之怒】爆发。</li>
-                        </ul>
+                        <strong style="color: var(--accent-red);">📿 无欲 · 苦行僧</strong>
+                        <p style="font-size: 0.85rem; margin-top: 6px;">功德/业力双资源，攻守切换明显。</p>
                     </div>
-                
-                    <!-- Yan Han -->
-                     <div class="char-highlight" style="border-color: #2196F3;">
-                        <strong style="color: #2196F3; font-size:1.1rem;">📚 严寒 (命环学者)</strong>
-                        <p style="font-size:0.8rem; color:#bbb; margin-top:5px;">"知识，就是这一界最锋利的剑。"</p>
-                        <ul class="intro-list" style="margin-top:10px; font-size:0.85rem;">
-                            <li><strong>解析 (Analysis)</strong>：每回合获得额外的0费技能牌。</li>
-                            <li><strong>真理 (Truth)</strong>：利用手牌数量优势压制敌人。</li>
-                        </ul>
+                    <div class="char-highlight" style="border-color: #2196F3;">
+                        <strong style="color: #2196F3;">📚 严寒 · 命环学者</strong>
+                        <p style="font-size: 0.85rem; margin-top: 6px;">解析与技能联动，节奏控制强。</p>
                     </div>
-                    
+                    <div class="char-highlight" style="border-color: #8aa4ff;">
+                        <strong style="color: #8aa4ff;">🌠 墨尘 · 星律巡使</strong>
+                        <p style="font-size: 0.85rem; margin-top: 6px;">围绕命环节奏与标记链条展开。</p>
+                    </div>
+                    <div class="char-highlight" style="border-color: #4ecdc4;">
+                        <strong style="color: #4ecdc4;">🪬 宁玄 · 灵器行者</strong>
+                        <p style="font-size: 0.85rem; margin-top: 6px;">法宝与攻防同频，回合质量高。</p>
+                    </div>
                 </div>
             </div>
         `;
 
         // Tab 2: Mechanics
         const mechanicsContent = `
-             <div class="intro-section">
-                <h3>🌌 五行法则 (Five Elements)</h3>
-                <p class="intro-text">万物生克，循环不息。掌握属性克制是制胜关键。</p>
-                
-                <div class="element-cycle-container">
-                    <span class="element-cycle-text">
-                        <span style="color:#ffcc00">金</span> <span style="color:#666">></span> 
-                        <span style="color:#4caf50">木</span> <span style="color:#666">></span> 
-                        <span style="color:#795548">土</span> <span style="color:#666">></span> 
-                        <span style="color:#2196f3">水</span> <span style="color:#666">></span> 
-                        <span style="color:#f44336">火</span> <span style="color:#666">></span> 
-                        <span style="color:#ffcc00">金</span>
-                    </span>
-                </div>
+            <div class="intro-section">
+                <h3>⚔️ 战斗资源与回合节奏</h3>
                 <ul class="intro-list">
-                    <li><strong>克制 (Advantage)</strong>：造成 <strong>+50%</strong> 伤害。</li>
-                    <li><strong>被克 (Disadvantage)</strong>：造成 <strong>-25%</strong> 伤害。</li>
-                    <li><strong>法宝变幻</strong>：装备不同属性的法宝可以改变自身的属性亲和。</li>
+                    <li><strong>灵力</strong>：决定当回合可打出的卡牌总费用。</li>
+                    <li><strong>奶糖</strong>：用于特定卡牌与无尽指令交易，属于关键节奏资源。</li>
+                    <li><strong>战场指令</strong>：中后期核心资源，可在关键回合完成“稳压/破阵/斩杀”反转。</li>
+                    <li><strong>敌方意图</strong>：先看意图再出牌，能显著降低无效损失。</li>
                 </ul>
             </div>
 
             <div class="intro-section">
-                <h3>⭕ 命环系统 (Fate Ring)</h3>
-                <p class="intro-text">
-                    命环是逆命者的根本。通过战斗汲取灵气（经验），提升命环等级。
-                </p>
-                <div style="display:flex; gap:20px; align-items:center;">
-                    <div class="intro-list">
-                        <li><strong>解锁槽位</strong>：命环升级可解锁新的法则槽位。</li>
-                         <li><strong>法则共鸣</strong>：收集 4 个同系列法则（如：离火、坎水），回合开始时触发强力特效。</li>
-                         <li><strong>神识 (Draw)</strong>：提升命环等级可增加每回合抽牌数。</li>
-                         <li><strong>灵力 (Energy)</strong>：决定每回合可使用的卡牌点数上限。</li>
-                    </div>
-                </div>
+                <h3>⭕ 命环系统与路径</h3>
+                <ul class="intro-list">
+                    <li>命环升级可提升基础属性并解锁更多法则槽位。</li>
+                    <li>不同路径决定你的战斗身份与长期收益。</li>
+                    <li>命环、法则、法宝、构筑流派会形成联动增益。</li>
+                </ul>
             </div>
 
             <div class="intro-section">
-                <h3>📦 法宝品阶 (Treasures)</h3>
-                <p class="intro-text">天地异宝，有德者居之。</p> 
-                <div class="rarity-legend">
-                    <span class="rarity-tag common">凡品 (Common)</span>
-                    <span class="rarity-tag rare">灵品 (Rare)</span>
-                    <span class="rarity-tag epic">神品 (Epic)</span>
-                    <span class="rarity-tag legendary">仙品 (Legendary)</span>
-                </div>
-                <p style="margin-top:10px; font-size:0.9rem; color:#888;">注：仙品法宝拥有改变规则的逆天能力。</p>
+                <h3>🌌 五行法则与共鸣</h3>
+                <p class="intro-text">金→木→土→水→火→金。属性克制是前中期最稳定的增伤来源之一。</p>
+                <ul class="intro-list">
+                    <li><strong>克制</strong>：伤害显著提高。</li>
+                    <li><strong>被克</strong>：伤害明显衰减。</li>
+                    <li><strong>法则共鸣</strong>：同系法则与套装协同可触发额外效果。</li>
+                </ul>
+            </div>
+
+            <div class="intro-section">
+                <h3>♾️ 无尽与 🏆 PVP</h3>
+                <ul class="intro-list">
+                    <li><strong>无尽轮回</strong>：以压力系统驱动高压成长，强调稳压与爆发平衡。</li>
+                    <li><strong>天道榜（PVP）</strong>：镜像对战、段位奖励、商店外观与经济循环。</li>
+                    <li><strong>传承系统</strong>：局外成长可强化下一轮开局强度与构筑容错。</li>
+                </ul>
             </div>
         `;
 
         // Tab 3: Controls & Tips
         const controlsContent = `
-             <div class="intro-section">
+            <div class="intro-section">
                 <h3>🎮 操作指南</h3>
                 <ul class="intro-list">
-                    <li><strong>出牌</strong>：拖拽卡牌 到 敌人身上 或 战斗区域中心。</li>
-                    <li><strong>结束回合</strong>：点击右侧“结束回合”按钮。</li>
-                    <li><strong>查看详情</strong>：长按/悬停在 卡牌、状态图标、法宝 上查看详细说明。</li>
-                    <li><strong>神器技能</strong>：点击角色头像旁的技能图标释放角色绝技。</li>
+                    <li><strong>出牌</strong>：拖拽卡牌到敌人或目标区域。</li>
+                    <li><strong>结束回合</strong>：点击右侧按钮推进回合。</li>
+                    <li><strong>目标切换</strong>：优先处理高威胁意图目标。</li>
+                    <li><strong>详情查看</strong>：悬停卡牌/图标查看完整说明。</li>
                 </ul>
             </div>
 
             <div class="intro-section">
-                <h3>💾 存档与云同步</h3>
-                <p class="intro-text">
-                    本游戏支持 <strong>浏览器本地存档</strong> 与 <strong>账号云存档</strong> 双重备份。
-                </p>
+                <h3>⌨️ 常用快捷键</h3>
                 <ul class="intro-list">
-                    <li><strong>本地</strong>：自动保存进度在当前浏览器中。</li>
-                    <li><strong>云端</strong>：注册登录后，存档将同步至服务器，可在不同设备间无缝切换。</li>
-                    <li><strong>冲突解决</strong>：若发现本地与云端不一致，系统会提示您选择保留哪一份。</li>
+                    <li><strong>L</strong>：打开/关闭战斗日志面板。</li>
+                    <li><strong>F</strong>：切换全屏模式。</li>
+                    <li><strong>Esc</strong>：退出全屏或关闭当前弹窗。</li>
                 </ul>
             </div>
 
             <div class="intro-section">
-                <h3>💡 逆命心得</h3>
-                 <ul class="intro-list">
-                    <li><strong>精简卡组</strong>：商店可花费灵石 "销毁" 弱卡。卡组越薄，核心Key牌上手率越高。</li>
-                    <li><strong>观察意图</strong>：注意敌人头顶的意图图标（攻击、格挡、Debuff），制定应对策略。</li>
-                    <li><strong>保留灵力</strong>：部分防御牌或法宝需要灵力触发，不要每次都把灵力用光。</li>
+                <h3>💾 存档与同步</h3>
+                <ul class="intro-list">
+                    <li><strong>本地存档</strong>：自动保存，离线可玩。</li>
+                    <li><strong>云存档</strong>：登录后可跨设备同步。</li>
+                    <li><strong>冲突处理</strong>：系统会在冲突时提示保留版本。</li>
+                </ul>
+            </div>
+
+            <div class="intro-section">
+                <h3>💡 实战建议</h3>
+                <ul class="intro-list">
+                    <li><strong>先保命后爆发</strong>：面对高威胁回合优先防守与净化。</li>
+                    <li><strong>集中构筑</strong>：围绕单一核心机制拿牌，避免功能分散。</li>
+                    <li><strong>关注资源峰值</strong>：灵力、奶糖、指令槽留给关键回合。</li>
                 </ul>
             </div>
         `;
 
         // Tab 4: Updates
         const updatesContent = `
-             <div class="intro-section">
-                <h3>📜 版本日志 v5.0 最终版</h3>
-                <p style="color:var(--accent-gold); margin-bottom:10px;">Update: 逆命轮回·天道终焉</p>
+            <div class="intro-section">
+                <h3>📜 内容总览（当前版本）</h3>
                 <ul class="intro-list">
-                    <li><strong>[最终版]</strong> 游戏内容全面完善，正式发布！</li>
-                    <li><strong>[新增]</strong> 18层天域试炼，100+独特妖魔。</li>
-                    <li><strong>[新增]</strong> 4大角色，各具特色的命环系统。</li>
-                    <li><strong>[新增]</strong> 300+卡牌，50+法宝，30+法则。</li>
-                    <li><strong>[优化]</strong> 精美的"墨金"UI，沉浸式修仙体验。</li>
-                    <li><strong>[优化]</strong> 云存档支持，多设备无缝切换。</li>
+                    <li>6 位角色，差异化开局与专属遗物。</li>
+                    <li>18 层天域 + 无尽轮回，支持长期刷构筑。</li>
+                    <li>300+ 卡牌、50+ 法宝、30+ 法则与多套流派。</li>
+                    <li>战场指令、遭遇主题、地图事件与营地联动强化可玩性。</li>
+                    <li>PVP 天道榜 + 商店经济 + 外观佩戴系统。</li>
                 </ul>
             </div>
 
             <div class="intro-section">
-                <h3>👨‍💻 关于开发者</h3>
+                <h3>🧭 版本方向</h3>
+                <ul class="intro-list">
+                    <li><strong>稳定性优先</strong>：持续回归测试，减少版本回退风险。</li>
+                    <li><strong>玩法扩展</strong>：强化流派差异、事件分支与无尽中后期深度。</li>
+                    <li><strong>可读性优化</strong>：提升战斗提示、指令反馈和新手引导体验。</li>
+                </ul>
+            </div>
+
+            <div class="intro-section">
+                <h3>👨‍💻 项目与反馈</h3>
                 <p class="intro-text">
                     Designed & Developed by <strong>HealthOvO</strong> Team.
                 </p>
                 <p class="intro-text" style="font-size: 0.9rem;">
-                    本项目致力于打造最硬核、最具东方韵味的卡牌Roguelike。如果您有任何建议或发现BUG，欢迎反馈！
+                    若你遇到问题或有玩法建议，欢迎在仓库提交 issue/讨论。
                 </p>
                 <div style="margin-top:20px; text-align:center;">
                     <a href="https://github.com/HealthOvO/The-Defier" target="_blank" style="color:var(--accent-cyan); text-decoration:none; border-bottom:1px dashed var(--accent-cyan);">GitHub Repository</a>
@@ -7718,7 +7711,7 @@ class Game {
             </div>
             
             <div style="text-align: center; margin-top: auto; font-size: 0.8rem; color: rgba(255,255,255,0.2); padding-top: 10px;">
-                v5.0.0 最终版 | Breaking Fate since 2024
+                v5.1 介绍更新 | Breaking Fate since 2024
             </div>
         </div>
         `;

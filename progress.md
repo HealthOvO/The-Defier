@@ -1819,3 +1819,21 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - Playwright 客户端冒烟 + 视觉检查：
     - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-latest` ✅
     - 人工检查 `output/web-game-latest/shot-1.png`：主菜单渲染正常，无错位遮挡。
+
+- 2026-03-09: 第三十一轮内容打磨（游戏介绍/指南文案完善）
+  - `js/game.js`：重写 `showGameIntro()` 四个标签页文案（综述/机制/操作/更新）
+    - 角色列表更新为当前 6 角色（含墨尘、宁玄）
+    - 新增无尽模式、PVP 天道榜、传承系统、战场资源（灵力/奶糖/指令）说明
+    - 新增快捷键说明（L/F/Esc）与更明确的新手流程建议
+    - 更新尾注版本标识为“v5.1 介绍更新”
+  - `game-intro.html`：独立介绍页全面同步到当前版本
+    - 移除过时角色描述（如“乐音”），改为现行角色与机制
+    - 增补无尽、PVP、构筑策略与内容规模介绍
+  - `index.html`：主菜单入口文案优化
+    - “游戏介绍”调整为“游戏指南”
+    - 弹窗标题调整为“游戏介绍与指南”
+
+- 2026-03-09: 本轮测试证据（通过）
+  - `node --check js/game.js` ✅
+  - `bash tests/run_node_checks.sh` ✅
+  - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-intro` ✅
