@@ -2124,8 +2124,21 @@ class Game {
                 return;
             }
 
+            const activeTag = document.activeElement ? document.activeElement.tagName : '';
+            if (
+                this.currentScreen === 'battle-screen'
+                && (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA' && activeTag !== 'SELECT')
+                && this.battle
+                && typeof this.battle.handleTacticalAdvisorHotkey === 'function'
+            ) {
+                const consumed = this.battle.handleTacticalAdvisorHotkey(e.key);
+                if (consumed) {
+                    e.preventDefault();
+                    return;
+                }
+            }
+
             if ((e.key === 'l' || e.key === 'L') && typeof Utils !== 'undefined' && Utils.toggleBattleLogPanel) {
-                const activeTag = document.activeElement ? document.activeElement.tagName : '';
                 if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
                 e.preventDefault();
                 Utils.toggleBattleLogPanel();

@@ -362,6 +362,20 @@ function makePlayer() {
   assert(!!consumedPreset && consumedPreset.id === 'cleanse', 'consume signal should return preset mode');
   assert((game.player.buffs.matrixCleanseSignal || 0) === 0, 'signal should be consumed after resolve');
 
+  if (!battle.commandState.commands.some((command) => command && command.id === 'resonance_matrix_order')) {
+    battle.commandState.commands.push({
+      id: 'resonance_matrix_order',
+      cost: 5,
+      cooldown: 3,
+      cooldownRemaining: 0
+    });
+  }
+  game.player.buffs = {};
+  const hotkeyApplied = battle.handleTacticalAdvisorHotkey('3');
+  assert(hotkeyApplied === true, 'tactical advisor hotkey should be consumed when matrix command exists');
+  assert((game.player.buffs.matrixBreakSignal || 0) === 1, 'hotkey 3 should preset break mode');
+  assert(battle.handleTacticalAdvisorHotkey('9') === false, 'unsupported hotkey should be ignored');
+
   // 命环共振：破阵回路（敌方高护盾时应优先破阵）
   battle.enemies = [{
     ...makeEnemy('matrix-break', 180),

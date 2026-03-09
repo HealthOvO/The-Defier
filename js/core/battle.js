@@ -1630,6 +1630,25 @@ class Battle {
         return normalizedMode;
     }
 
+    handleTacticalAdvisorHotkey(rawKey = '') {
+        const key = String(rawKey || '').trim();
+        const modeByKey = {
+            '1': 'auto',
+            '2': 'guard',
+            '3': 'break',
+            '4': 'cleanse',
+            '5': 'burst'
+        };
+        const modeId = modeByKey[key];
+        if (!modeId) return false;
+        const state = this.commandState || this.createDefaultBattleCommandState();
+        const hasMatrixCommand = Array.isArray(state.commands)
+            && state.commands.some((command) => command && command.id === 'resonance_matrix_order');
+        if (!state.enabled || !hasMatrixCommand) return false;
+        this.setResonanceMatrixSignalMode(modeId);
+        return true;
+    }
+
     async resolveResonanceMatrixMode(command = null, threatProfile = null) {
         if (command && typeof command.strategy === 'string') {
             return this.getResonanceMatrixModeProfile(command.strategy);
@@ -6037,6 +6056,7 @@ class Battle {
                 ${advisor.matrixHint ? `<p class="battle-advisor-line battle-advisor-matrix">${escapeHtml(advisor.matrixHint)}</p>` : ''}
                 ${advisor.pendingModeLabel ? `<p class="battle-advisor-line battle-advisor-pending-mode">模式预设：${escapeHtml(advisor.pendingModeLabel)}</p>` : ''}
                 ${matrixControls ? `<div class="battle-advisor-matrix-controls">${matrixControls}</div>` : ''}
+                ${matrixControls ? '<p class="battle-advisor-line battle-advisor-hotkey">快捷预设：1自适应 2守势 3破阵 4净域 5歼灭</p>' : ''}
                 ${advisor.lastModeLabel ? `<p class="battle-advisor-line battle-advisor-last">上次命环模式：${escapeHtml(advisor.lastModeLabel)}</p>` : ''}
             `;
 

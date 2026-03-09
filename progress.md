@@ -1873,3 +1873,29 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 - TODO / 下轮建议
   - 可为战术助手加入“敌方下一回合高危目标预测”（按 intent 队列排序）并对手牌高亮优先级做更精细分层（S/A/B）。
   - 可将命环模式预设接入键盘热键（例如 `1-5`）并增加对局内新手提示。
+
+- 2026-03-09: 第三十三轮战术打磨（命环预设热键 + 审计稳定性修复）
+  - `js/core/battle.js`
+    - 新增 `handleTacticalAdvisorHotkey`：在战斗中支持 `1~5` 快捷预设命环回路（1自适应/2守势/3破阵/4净域/5歼灭）。
+    - 战术助手中新增热键提示文案，并补齐预设状态渲染（`battle-advisor-hotkey`）。
+  - `js/game.js`
+    - 全局键盘监听接入战斗热键分发：当处于 `battle-screen` 且非输入框焦点时，将 `1~5` 交由 `battle.handleTacticalAdvisorHotkey` 处理。
+  - `tests/sanity_battle_command_synergy_checks.js`
+    - 新增断言：热键 `3` 可正确写入 `matrixBreakSignal`，非法热键忽略。
+  - `tests/browser_feature_audit.mjs`
+    - 扩展命环预设探针：验证按钮预设 + 键盘预设（`2`）均可高亮并成功消费。
+    - 修复“轮回祷告”断言边界：在 `boonHistory` 达到上限且抽到即时赐福时，使用“祷告成功日志”作为稳定成功信号，避免误报。
+
+- 2026-03-09: 第三十三轮测试证据（全通过）
+  - Node:
+    - `node tests/sanity_battle_command_synergy_checks.js` ✅
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser:
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` ✅
+    - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-fix` ✅
+    - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4173 output/web-event-branch-audit` ✅
+    - `node tests/browser_inheritance_audit.mjs http://127.0.0.1:4173 output/web-inheritance-audit` ✅
+    - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4173 output/web-pvp-audit` ✅
+  - Playwright 冒烟 + 视觉检查：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-latest` ✅
+    - 已人工查看 `output/web-game-latest/shot-1.png`（主菜单渲染稳定，无遮挡错位）。

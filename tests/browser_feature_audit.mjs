@@ -898,24 +898,47 @@ async function safeScreenshot(page, outPath) {
     if (typeof game.battle.markUIDirty === 'function') game.battle.markUIDirty('command', 'enemies');
     if (typeof game.battle.updateBattleUI === 'function') game.battle.updateBattleUI();
 
-    const panel = document.getElementById('battle-command-panel');
+    let panel = document.getElementById('battle-command-panel');
     const activeMode = panel?.querySelector('.battle-advisor-matrix-btn.active')?.getAttribute('data-mode') || '';
     const pendingText = (panel?.querySelector('.battle-advisor-pending-mode')?.textContent || '').trim();
     const queuedBefore = Number(game.player?.buffs?.matrixBreakSignal) || 0;
+    const hotkeyEvent = new KeyboardEvent('keydown', { key: '2', bubbles: true });
+    document.dispatchEvent(hotkeyEvent);
+    panel = document.getElementById('battle-command-panel');
+    const activeModeAfterHotkey = panel?.querySelector('.battle-advisor-matrix-btn.active')?.getAttribute('data-mode') || '';
+    const pendingAfterHotkey = (panel?.querySelector('.battle-advisor-pending-mode')?.textContent || '').trim();
+    const queuedGuardBeforeConsume = Number(game.player?.buffs?.matrixGuardSignal) || 0;
     const consumed = typeof game.battle.consumeResonanceMatrixSignalMode === 'function'
       ? game.battle.consumeResonanceMatrixSignalMode()
       : null;
     const queuedAfter = Number(game.player?.buffs?.matrixBreakSignal) || 0;
+    const queuedGuardAfter = Number(game.player?.buffs?.matrixGuardSignal) || 0;
+    const hotkeyHint = (panel?.querySelector('.battle-advisor-hotkey')?.textContent || '').trim();
 
     if (typeof prevIsEndlessActive === 'function') game.isEndlessActive = prevIsEndlessActive;
     if (typeof prevEnsureEndlessState === 'function') game.ensureEndlessState = prevEnsureEndlessState;
 
     return {
-      ok: queuedBefore > 0 && queuedAfter === 0 && activeMode === 'break' && /破阵/.test(pendingText) && consumed?.id === 'break',
+      ok:
+        queuedBefore > 0
+        && activeMode === 'break'
+        && /破阵/.test(pendingText)
+        && activeModeAfterHotkey === 'guard'
+        && /守势/.test(pendingAfterHotkey)
+        && queuedGuardBeforeConsume > 0
+        && queuedAfter === 0
+        && queuedGuardAfter === 0
+        && consumed?.id === 'guard'
+        && /1自适应/.test(hotkeyHint),
       activeMode,
       pendingText,
+      activeModeAfterHotkey,
+      pendingAfterHotkey,
       queuedBefore,
       queuedAfter,
+      queuedGuardBeforeConsume,
+      queuedGuardAfter,
+      hotkeyHint,
       consumedId: consumed?.id || ''
     };
   });
@@ -1740,6 +1763,7 @@ async function safeScreenshot(page, outPath) {
     const afterHistory = Array.isArray(afterState.boonHistory) ? afterState.boonHistory.length : 0;
     const afterStats = JSON.stringify(afterState.boonStats || {});
     const soldFlag = (game.shopServices || []).some((service) => service && service.id === 'endlessBlessing' && service.sold);
+    const battleLogText = (document.getElementById('battle-log')?.textContent || '').replace(/\s+/g, ' ').trim();
     game.closeModal?.();
     return {
       hasBlessingService,
@@ -1749,7 +1773,8 @@ async function safeScreenshot(page, outPath) {
       beforeHistory,
       afterHistory,
       boonStatsChanged: beforeStats !== afterStats,
-      soldFlag
+      soldFlag,
+      logApplied: /轮回祷告：获得赐福/.test(battleLogText)
     };
   });
   add(
@@ -1760,7 +1785,8 @@ async function safeScreenshot(page, outPath) {
       endlessShopBlessingProbe.afterGold < endlessShopBlessingProbe.beforeGold &&
       (
         endlessShopBlessingProbe.afterHistory === endlessShopBlessingProbe.beforeHistory + 1 ||
-        !!endlessShopBlessingProbe.boonStatsChanged
+        !!endlessShopBlessingProbe.boonStatsChanged ||
+        !!endlessShopBlessingProbe.logApplied
       ) &&
       endlessShopBlessingProbe.soldFlag,
     JSON.stringify(endlessShopBlessingProbe || null)
