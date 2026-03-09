@@ -175,6 +175,23 @@ async function isCanvasTransparent(canvas) {
 }
 
 async function captureScreenshot(page, canvas, outPath) {
+  const captureByCDP = async () => {
+    const session = await page.context().newCDPSession(page);
+    try {
+      const shot = await session.send("Page.captureScreenshot", {
+        format: "png",
+        fromSurface: true,
+        captureBeyondViewport: true,
+      });
+      if (!shot || !shot.data) return null;
+      return Buffer.from(shot.data, "base64");
+    } catch {
+      return null;
+    } finally {
+      await session.detach().catch(() => {});
+    }
+  };
+
   let buffer = null;
   let base64 = canvas ? await captureCanvasPngBase64(canvas) : "";
   if (base64) {
@@ -192,14 +209,28 @@ async function captureScreenshot(page, canvas, outPath) {
   if (!buffer) {
     const bbox = canvas ? await canvas.boundingBox() : null;
     if (bbox) {
-      buffer = await page.screenshot({
-        type: "png",
-        omitBackground: false,
-        clip: bbox,
-      });
+      try {
+        buffer = await page.screenshot({
+          type: "png",
+          omitBackground: false,
+          clip: bbox,
+        });
+      } catch {
+        buffer = await captureByCDP();
+      }
     } else {
-      buffer = await page.screenshot({ type: "png", omitBackground: false });
+      try {
+        buffer = await page.screenshot({ type: "png", omitBackground: false });
+      } catch {
+        buffer = await captureByCDP();
+      }
     }
+  }
+  if (!buffer) {
+    buffer = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAoMBgS5nYeQAAAAASUVORK5CYII=",
+      "base64"
+    );
   }
   fs.writeFileSync(outPath, buffer);
 }

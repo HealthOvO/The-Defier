@@ -16,6 +16,9 @@ class Battle {
         this.isProcessingCard = false; // 防止卡牌连点
         this.pendingTimers = new Set();
         this.activeCardActionId = 0;
+        this.activeEncounterTheme = null;
+        this.encounterRewardConsumed = false;
+        this.commandState = this.createDefaultBattleCommandState();
 
         // 五行定义
         this.ELEMENTS = {
@@ -34,7 +37,8 @@ class Battle {
             energy: false,
             piles: false,
             environment: false,
-            activeSkill: false
+            activeSkill: false,
+            command: false
         };
     }
 
@@ -97,6 +101,9 @@ class Battle {
         this.cardsPlayedThisTurn = 0;
         this.playerAttackedThisTurn = false;
         this.activeCardActionId = 0;
+        this.activeEncounterTheme = null;
+        this.encounterRewardConsumed = false;
+        this.commandState = this.createDefaultBattleCommandState();
         // --- P0 机制：五行融合化境 (Elemental Combo) 追踪器 ---
         this.elementalTracker = [];
 
@@ -227,6 +234,2191 @@ class Battle {
         }
     }
 
+    // 根据行动构成识别敌人作战倾向，用于注入差异化战术
+    resolveEnemyCombatArchetype(patterns = []) {
+        if (!Array.isArray(patterns) || patterns.length === 0) return 'balanced';
+        const countBy = { attack: 0, defend: 0, debuff: 0, utility: 0 };
+
+        patterns.forEach((pattern) => {
+            if (!pattern || typeof pattern !== 'object') return;
+            if (pattern.type === 'attack' || pattern.type === 'multiAttack' || pattern.type === 'executeDamage') {
+                countBy.attack += 1;
+            } else if (pattern.type === 'defend' || (pattern.type === 'buff' && pattern.buffType === 'block')) {
+                countBy.defend += 1;
+            } else if (pattern.type === 'debuff' || pattern.type === 'addStatus') {
+                countBy.debuff += 1;
+            } else {
+                countBy.utility += 1;
+            }
+        });
+
+        if (countBy.debuff >= 2 || (countBy.debuff >= 1 && countBy.attack <= 1)) return 'hexer';
+        if (countBy.defend >= 2 || (countBy.defend > countBy.attack && countBy.defend >= 1)) return 'guardian';
+        if (countBy.attack >= 2 && countBy.attack >= countBy.defend + countBy.debuff) return 'striker';
+        return 'balanced';
+    }
+
+    // 按天域与敌人倾向构建“战术变体”，降低同层敌人同质化
+    getEnemyVariationBlueprint(enemyData, patterns = [], maxHp = 1) {
+        if (!enemyData || typeof enemyData !== 'object') return null;
+        if (enemyData.isBoss || enemyData.isGhost || enemyData.isMinion) return null;
+        const realm = Math.max(1, Math.floor(Number(this.player?.realm) || 1));
+        const archetype = this.resolveEnemyCombatArchetype(patterns);
+
+        const attackValues = (Array.isArray(patterns) ? patterns : [])
+            .filter((pattern) => pattern && typeof pattern === 'object' && Number.isFinite(Number(pattern.value))
+                && (pattern.type === 'attack' || pattern.type === 'multiAttack' || pattern.type === 'executeDamage'))
+            .map((pattern) => Math.max(1, Math.floor(Number(pattern.value) || 1)));
+        const avgAttack = attackValues.length > 0
+            ? Math.max(2, Math.floor(attackValues.reduce((sum, val) => sum + val, 0) / attackValues.length))
+            : Math.max(2, Math.floor(realm * 0.75 + 2));
+
+        const seedSource = `${enemyData.id || enemyData.name || 'enemy'}:${realm}:${patterns.length}:${archetype}`;
+        let seed = 0;
+        for (let i = 0; i < seedSource.length; i += 1) {
+            seed = (seed * 31 + seedSource.charCodeAt(i)) % 2147483647;
+        }
+
+        const tier = realm >= 13 ? 'late' : realm >= 7 ? 'mid' : 'early';
+        const variantPool = {
+            early: [
+                {
+                    id: 'rush_edge',
+                    tag: '急袭',
+                    roles: ['striker', 'balanced'],
+                    attackMul: 1.08,
+                    appendPatterns: [
+                        { type: 'attack', value: Math.max(3, avgAttack + 2), intent: '⚔️急袭' }
+                    ]
+                },
+                {
+                    id: 'guard_shell',
+                    tag: '守势',
+                    roles: ['guardian', 'any'],
+                    openingBlock: 8,
+                    appendPatterns: [
+                        { type: 'defend', value: Math.max(6, Math.floor(avgAttack * 1.2)), intent: '🛡️固守' }
+                    ]
+                },
+                {
+                    id: 'hex_nudge',
+                    tag: '扰法',
+                    roles: ['hexer', 'balanced', 'any'],
+                    attackMul: 1.04,
+                    appendPatterns: [
+                        { type: 'debuff', buffType: 'weak', value: 1, intent: '🌀扰法' }
+                    ]
+                }
+            ],
+            mid: [
+                {
+                    id: 'rupture_combo',
+                    tag: '裂阵',
+                    roles: ['striker', 'balanced'],
+                    attackMul: 1.1,
+                    appendPatterns: [
+                        { type: 'multiAttack', value: Math.max(3, Math.floor(avgAttack * 0.76)), count: 2, intent: '⚔️裂阵连击' }
+                    ]
+                },
+                {
+                    id: 'anchor_ward',
+                    tag: '稳压',
+                    roles: ['guardian', 'any'],
+                    openingBlock: 10,
+                    openingStrength: 1,
+                    appendPatterns: [
+                        { type: 'defend', value: Math.max(8, Math.floor(avgAttack * 1.3)), intent: '🧿稳压护体' }
+                    ]
+                },
+                {
+                    id: 'siphon_curse',
+                    tag: '侵蚀',
+                    roles: ['hexer', 'balanced', 'any'],
+                    appendPatterns: [
+                        { type: 'debuff', buffType: 'vulnerable', value: 1, intent: '🩸侵蚀咒印' }
+                    ]
+                }
+            ],
+            late: [
+                {
+                    id: 'skywrath',
+                    tag: '天威',
+                    roles: ['striker', 'balanced'],
+                    attackMul: 1.13,
+                    openingStrength: 1,
+                    appendPatterns: [
+                        {
+                            type: 'multiAttack',
+                            value: Math.max(4, Math.floor(avgAttack * 0.82)),
+                            count: realm >= 16 ? 3 : 2,
+                            intent: '⚡天威连斩'
+                        }
+                    ]
+                },
+                {
+                    id: 'doom_seal',
+                    tag: '煞咒',
+                    roles: ['hexer', 'any'],
+                    openingBlock: 6,
+                    appendPatterns: [
+                        { type: 'debuff', buffType: 'vulnerable', value: 1, intent: '🩸终厄咒印' },
+                        { type: 'addStatus', cardId: 'heartDemon', count: 1, intent: '🕳️心魔侵染' }
+                    ]
+                },
+                {
+                    id: 'tide_recover',
+                    tag: '回潮',
+                    roles: ['guardian', 'balanced', 'any'],
+                    openingBlock: 12,
+                    appendPatterns: [
+                        { type: 'heal', value: Math.max(12, Math.floor(Math.max(1, maxHp) * 0.1)), intent: '🌊回潮修复' }
+                    ]
+                }
+            ]
+        };
+
+        const pool = variantPool[tier] || variantPool.early;
+        const candidates = pool.filter((variant) => Array.isArray(variant.roles) && (
+            variant.roles.includes(archetype) || variant.roles.includes('any')
+        ));
+        const source = candidates.length > 0 ? candidates : pool;
+        const pick = source[seed % source.length];
+        if (!pick) return null;
+
+        const appendPatterns = (pick.appendPatterns || [])
+            .filter((pattern) => !!pattern && typeof pattern === 'object')
+            .map((pattern) => ({ ...pattern }));
+        if (typeof CARDS === 'undefined') {
+            // 在测试环境里可能没有完整卡牌表，避免注入无效 addStatus
+            for (let i = appendPatterns.length - 1; i >= 0; i -= 1) {
+                if (appendPatterns[i].type === 'addStatus') appendPatterns.splice(i, 1);
+            }
+        }
+
+        return {
+            id: pick.id,
+            tag: pick.tag || '变体',
+            archetype,
+            tier,
+            attackMul: Math.max(1, Number(pick.attackMul) || 1),
+            openingBlock: Math.max(0, Math.floor(Number(pick.openingBlock) || 0)),
+            openingStrength: Math.max(0, Math.floor(Number(pick.openingStrength) || 0)),
+            appendPatterns
+        };
+    }
+
+    // 构建本场遭遇主题（仅PVE普通/精英/试炼战斗），进一步降低同层战斗同质化
+    resolveEncounterThemeProfile() {
+        if (!Array.isArray(this.enemies) || this.enemies.length === 0) return null;
+        if (this.enemies.some((enemy) => enemy && (enemy.isBoss || enemy.isGhost || enemy.isMinion))) return null;
+        if (!this.game || String(this.game.mode || 'pve') === 'pvp') return null;
+        if (typeof this.game.isEndlessActive === 'function' && this.game.isEndlessActive()) return null;
+
+        const node = this.game.currentBattleNode || null;
+        if (!node || !['enemy', 'elite', 'trial'].includes(node.type)) return null;
+
+        const realm = Math.max(1, Math.floor(Number(this.player?.realm) || 1));
+        const tier = realm >= 13 ? 'late' : realm >= 7 ? 'mid' : 'early';
+        const poolByTier = {
+            early: [
+                {
+                    id: 'stormfront_skirmish',
+                    name: '疾雷遭遇',
+                    icon: '⚡',
+                    shortTag: '疾雷',
+                    description: '敌方攻势更急，但你开场获得少量护盾稳住节奏。',
+                    attackMul: 1.06,
+                    openingBlock: 0,
+                    playerOpeningBlock: 5
+                },
+                {
+                    id: 'iron_checkpoint',
+                    name: '铁关据守',
+                    icon: '🧱',
+                    shortTag: '据守',
+                    description: '敌方开场护盾提升，战斗会更偏向拉锯。',
+                    attackMul: 1,
+                    openingBlock: 10,
+                    playerOpeningBlock: 3
+                },
+                {
+                    id: 'haze_ritual',
+                    name: '蚀雾术场',
+                    icon: '🌫️',
+                    shortTag: '蚀雾',
+                    description: '敌方术式会补上减益段，考验净化与爆发窗口。',
+                    attackMul: 1.03,
+                    openingBlock: 4,
+                    injectDebuffType: 'weak',
+                    injectDebuffValue: 1,
+                    injectDebuffIntent: '🌫️蚀雾侵压',
+                    playerOpeningBlock: 4
+                }
+            ],
+            mid: [
+                {
+                    id: 'thunder_vanguard',
+                    name: '雷锋突进',
+                    icon: '⛈️',
+                    shortTag: '雷锋',
+                    description: '敌方攻击倍率上浮，需提前规划防御节奏。',
+                    attackMul: 1.08,
+                    openingBlock: 2,
+                    playerOpeningBlock: 6
+                },
+                {
+                    id: 'citadel_grind',
+                    name: '玄垒消耗战',
+                    icon: '🏯',
+                    shortTag: '玄垒',
+                    description: '敌方起手护盾与基础威能并存，战线明显拉长。',
+                    attackMul: 1.04,
+                    openingBlock: 12,
+                    playerOpeningBlock: 5
+                },
+                {
+                    id: 'curse_current',
+                    name: '咒流压场',
+                    icon: '🕸️',
+                    shortTag: '咒流',
+                    description: '敌方更容易打出易伤压制，需主动抢节奏。',
+                    attackMul: 1.05,
+                    openingBlock: 6,
+                    injectDebuffType: 'vulnerable',
+                    injectDebuffValue: 1,
+                    injectDebuffIntent: '🕸️咒流缚印',
+                    playerOpeningBlock: 5
+                }
+            ],
+            late: [
+                {
+                    id: 'doomsurge_raid',
+                    name: '天灾突袭',
+                    icon: '🌩️',
+                    shortTag: '天灾',
+                    description: '高压突袭型遭遇，敌方伤害显著抬升。',
+                    attackMul: 1.1,
+                    openingBlock: 4,
+                    playerOpeningBlock: 7
+                },
+                {
+                    id: 'obsidian_fortress',
+                    name: '黑曜战垒',
+                    icon: '🛡️',
+                    shortTag: '战垒',
+                    description: '敌方进入重护盾拉扯形态，必须把握破绽回合。',
+                    attackMul: 1.05,
+                    openingBlock: 14,
+                    playerOpeningBlock: 6
+                },
+                {
+                    id: 'void_miasma',
+                    name: '虚蚀迷域',
+                    icon: '☠️',
+                    shortTag: '虚蚀',
+                    description: '敌方补入减益咒段并提升压迫值，拖战风险上升。',
+                    attackMul: 1.06,
+                    openingBlock: 8,
+                    injectDebuffType: 'weak',
+                    injectDebuffValue: 2,
+                    injectDebuffIntent: '☠️虚蚀咒印',
+                    playerOpeningBlock: 6
+                }
+            ]
+        };
+
+        const tierPool = poolByTier[tier] || poolByTier.early;
+        if (!Array.isArray(tierPool) || tierPool.length === 0) return null;
+
+        const nodeTypeWeight = node.type === 'elite' ? 'elite' : node.type === 'trial' ? 'trial' : 'enemy';
+        const preferredPool = tierPool.filter((theme) => {
+            if (!theme || typeof theme !== 'object') return false;
+            if (nodeTypeWeight === 'enemy') return true;
+            if (nodeTypeWeight === 'elite') return Number(theme.attackMul || 1) >= 1.05 || Number(theme.openingBlock || 0) >= 10;
+            return Number(theme.injectDebuffValue || 0) > 0;
+        });
+        const sourcePool = preferredPool.length > 0 ? preferredPool : tierPool;
+        if (sourcePool.length === 0) return null;
+
+        const encounterState = (this.game && typeof this.game.ensureEncounterState === 'function')
+            ? this.game.ensureEncounterState()
+            : null;
+        const lastThemeId = encounterState && typeof encounterState.currentStreakId === 'string'
+            ? encounterState.currentStreakId
+            : '';
+        const lastThemeStreak = encounterState
+            ? Math.max(0, Math.floor(Number(encounterState.currentStreak) || 0))
+            : 0;
+
+        const seedSource = [
+            realm,
+            node.id || 0,
+            node.row || 0,
+            node.col || 0,
+            node.type || 'enemy',
+            this.enemies.length
+        ].join(':');
+        let seed = 0;
+        for (let i = 0; i < seedSource.length; i += 1) {
+            seed = (seed * 33 + seedSource.charCodeAt(i)) % 2147483647;
+        }
+        let pick = sourcePool[seed % sourcePool.length];
+        if (lastThemeId && lastThemeStreak > 0) {
+            const sameTheme = sourcePool.find((theme) => theme && theme.id === lastThemeId);
+            const streakRoll = seed % 100;
+            // 让同主题连续遭遇有稳定概率出现，支持 II/III 阶成长体验
+            if (sameTheme && streakRoll < 38) {
+                pick = sameTheme;
+            }
+        }
+        if (!pick) return null;
+
+        return {
+            ...pick,
+            tier,
+            nodeType: node.type
+        };
+    }
+
+    getEncounterTierScale(tierStage = 1) {
+        const stage = Math.max(1, Math.min(3, Math.floor(Number(tierStage) || 1)));
+        if (stage >= 3) return 1.22;
+        if (stage >= 2) return 1.1;
+        return 1;
+    }
+
+    applyEncounterSignatureAffix(enemy, theme, tierStage = 1) {
+        if (!enemy || enemy.currentHp <= 0) return;
+        if (enemy.isBoss || enemy.isGhost || enemy.isMinion) return;
+        if (!Array.isArray(enemy.patterns)) enemy.patterns = [];
+
+        const stage = Math.max(1, Math.min(3, Math.floor(Number(tierStage) || 1)));
+        const counterAffix = this.getEncounterCounterAffixPayload(stage);
+        if (counterAffix) {
+            this.applyEncounterAffixPayload(enemy, counterAffix);
+            return;
+        }
+
+        const hasDebuffTheme = !!(theme && theme.injectDebuffType && Number(theme.injectDebuffValue) > 0);
+        const hasFortressTheme = !!(theme && Number(theme.openingBlock || 0) >= 10);
+
+        if (hasDebuffTheme) {
+            const debuffType = String(theme.injectDebuffType || 'weak');
+            const appendPatterns = [{
+                type: 'debuff',
+                buffType: debuffType,
+                value: Math.max(1, stage),
+                intent: '🕸️咒潮侵压'
+            }];
+            if (typeof CARDS !== 'undefined' && CARDS.heartDemon) {
+                appendPatterns.push({
+                    type: 'addStatus',
+                    cardId: 'heartDemon',
+                    count: stage >= 3 ? 2 : 1,
+                    intent: '🕳️咒潮侵染'
+                });
+            }
+            this.applyEncounterAffixPayload(enemy, {
+                id: 'hex_surge',
+                tag: '咒潮',
+                desc: '每轮遭遇补充压制减益并可能塞入状态牌。',
+                appendPatterns
+            });
+            return;
+        }
+
+        if (hasFortressTheme) {
+            const hasDefendPattern = enemy.patterns.some((pattern) => pattern && pattern.type === 'defend');
+            const appendPatterns = [];
+            if (!hasDefendPattern) {
+                appendPatterns.push({
+                    type: 'defend',
+                    value: 10 + stage * 3,
+                    intent: '🛡️战垒回护'
+                });
+            }
+            this.applyEncounterAffixPayload(enemy, {
+                id: 'aegis_spire',
+                tag: '战垒',
+                desc: '开场重甲并附带反制能力，适合拖入拉锯。',
+                openingBlock: 6 + (stage - 1) * 3,
+                thorns: stage,
+                appendPatterns
+            });
+            return;
+        }
+
+        const attackValues = enemy.patterns
+            .filter((pattern) => pattern && (pattern.type === 'attack' || pattern.type === 'multiAttack'))
+            .map((pattern) => Math.max(1, Math.floor(Number(pattern.value) || 1)));
+        const maxAttack = attackValues.length > 0 ? Math.max(...attackValues) : 8;
+        this.applyEncounterAffixPayload(enemy, {
+            id: 'storm_pursuit',
+            tag: '追猎',
+            desc: '增加追击段，伤害节奏更紧凑。',
+            appendPatterns: [{
+                type: 'multiAttack',
+                value: Math.max(4, Math.floor(maxAttack * (0.38 + stage * 0.06))),
+                count: Math.min(3, 1 + stage),
+                intent: '⚡裂闪追猎'
+            }]
+        });
+    }
+
+    getPlayerPreferredArchetypeId() {
+        const resonanceId = String(this.player?.archetypeResonance?.id || '');
+        if (resonanceId) return resonanceId;
+        if (typeof inferDeckArchetype === 'function' && Array.isArray(this.player?.deck) && this.player.deck.length > 0) {
+            try {
+                const inferred = inferDeckArchetype(this.player.deck);
+                return typeof inferred === 'string' ? inferred : '';
+            } catch (e) {
+                return '';
+            }
+        }
+        return '';
+    }
+
+    getEncounterCounterAffixPayload(stage = 1) {
+        const archetypeId = this.getPlayerPreferredArchetypeId();
+        if (!archetypeId) return null;
+        const s = Math.max(1, Math.min(3, Math.floor(Number(stage) || 1)));
+
+        if (archetypeId === 'stormcraft' || archetypeId === 'precision') {
+            return {
+                id: 'insulated_shell',
+                tag: '绝缘',
+                desc: '通过绝缘防护削弱破窗节奏，逼迫改用持续压制。',
+                openingBlock: 5 + s * 3,
+                appendPatterns: [
+                    {
+                        type: 'defend',
+                        value: 8 + s * 3,
+                        intent: '🔌绝缘护壳'
+                    },
+                    {
+                        type: 'debuff',
+                        buffType: 'weak',
+                        value: 1 + (s >= 3 ? 1 : 0),
+                        intent: '🔻节奏钳制'
+                    }
+                ]
+            };
+        }
+
+        if (archetypeId === 'vitalweave' || archetypeId === 'bulwark') {
+            return {
+                id: 'severed_meridian',
+                tag: '断脉',
+                desc: '敌方断脉压制会施加禁疗，并撕开防守窗口。',
+                openingBlock: 3 + s * 2,
+                appendPatterns: [
+                    {
+                        type: 'debuff',
+                        buffType: 'healing_corrupt',
+                        value: 1 + (s >= 2 ? 1 : 0),
+                        intent: '🩻断脉封疗'
+                    },
+                    {
+                        type: 'debuff',
+                        buffType: 'vulnerable',
+                        value: 1,
+                        intent: '🩸断脉裂隙'
+                    }
+                ]
+            };
+        }
+
+        if (archetypeId === 'entropy') {
+            const appendPatterns = [{
+                type: 'debuff',
+                buffType: 'weak',
+                value: 1 + (s >= 2 ? 1 : 0),
+                intent: '🧠锁念干扰'
+            }];
+            if (typeof CARDS !== 'undefined' && CARDS.heartDemon) {
+                appendPatterns.push({
+                    type: 'addStatus',
+                    cardId: 'heartDemon',
+                    count: s >= 3 ? 2 : 1,
+                    intent: '🕳️锁念侵染'
+                });
+            }
+            return {
+                id: 'mind_lock',
+                tag: '锁念',
+                desc: '通过状态侵染与虚弱压制，限制弃牌节奏循环。',
+                appendPatterns
+            };
+        }
+
+        if (archetypeId === 'hemorrhage') {
+            return {
+                id: 'coagulate_grid',
+                tag: '止血',
+                desc: '敌方止血格栅会强化护甲与反制，延缓流血滚雪球。',
+                openingBlock: 6 + s * 2,
+                thorns: s,
+                appendPatterns: [
+                    {
+                        type: 'defend',
+                        value: 10 + s * 2,
+                        intent: '🩸止血回护'
+                    }
+                ]
+            };
+        }
+
+        return null;
+    }
+
+    applyEncounterAffixPayload(enemy, payload) {
+        if (!enemy || !payload || typeof payload !== 'object') return;
+        enemy.encounterAffixId = String(payload.id || 'encounter_affix');
+        enemy.encounterAffixTag = String(payload.tag || '异象');
+        enemy.encounterAffixDesc = String(payload.desc || '高阶遭遇词缀生效中。');
+
+        const openingBlock = Math.max(0, Math.floor(Number(payload.openingBlock) || 0));
+        if (openingBlock > 0) {
+            enemy.block = Math.max(0, Number(enemy.block) || 0) + openingBlock;
+        }
+
+        const thorns = Math.max(0, Math.floor(Number(payload.thorns) || 0));
+        if (thorns > 0) {
+            if (!enemy.buffs || typeof enemy.buffs !== 'object') enemy.buffs = {};
+            enemy.buffs.thorns = Math.max(0, Number(enemy.buffs.thorns) || 0) + thorns;
+        }
+
+        if (Array.isArray(payload.appendPatterns) && payload.appendPatterns.length > 0) {
+            enemy.patterns.push(...payload.appendPatterns.filter((pattern) => pattern && typeof pattern === 'object').map((pattern) => ({ ...pattern })));
+        }
+    }
+
+    applyEncounterThemeProfile(theme) {
+        this.activeEncounterTheme = null;
+        if (!theme || typeof theme !== 'object' || !Array.isArray(this.enemies)) return;
+
+        const tierStage = (this.game && typeof this.game.registerEncounterThemeStart === 'function')
+            ? this.game.registerEncounterThemeStart(theme.id)
+            : 1;
+        const stage = Math.max(1, Math.min(3, Math.floor(Number(tierStage) || 1)));
+        const stageScale = this.getEncounterTierScale(stage);
+
+        const attackMul = Math.max(1, Number(theme.attackMul) || 1) * (1 + (stage - 1) * 0.04);
+        const openingBlock = Math.max(0, Math.floor((Number(theme.openingBlock) || 0) * stageScale));
+        const playerOpeningBlock = Math.max(0, Math.floor((Number(theme.playerOpeningBlock) || 0) * (1 + (stage - 1) * 0.12)));
+        const injectDebuffType = String(theme.injectDebuffType || '').trim();
+        const injectDebuffValue = Math.max(0, Math.floor((Number(theme.injectDebuffValue) || 0) * stageScale));
+        const realm = Math.max(1, Math.floor(Number(this.player?.realm) || 1));
+
+        this.enemies.forEach((enemy) => {
+            if (!enemy || enemy.currentHp <= 0 || enemy.isBoss || enemy.isGhost || enemy.isMinion) return;
+            enemy.encounterThemeId = theme.id || 'encounter';
+            enemy.encounterThemeTag = theme.shortTag || theme.name || '遭遇';
+            enemy.encounterThemeDesc = theme.description || '';
+            enemy.encounterThemeTier = stage;
+
+            if (openingBlock > 0) {
+                enemy.block = Math.max(0, Number(enemy.block) || 0) + openingBlock;
+            }
+
+            if (attackMul > 1 && Array.isArray(enemy.patterns)) {
+                enemy.patterns.forEach((pattern) => {
+                    if (!pattern || typeof pattern !== 'object') return;
+                    if (pattern.type === 'attack' || pattern.type === 'multiAttack' || pattern.type === 'executeDamage') {
+                        const value = Number(pattern.value);
+                        if (Number.isFinite(value) && value > 0) {
+                            pattern.value = Math.max(1, Math.floor(value * attackMul));
+                        }
+                    }
+                });
+            }
+
+            if (injectDebuffType && injectDebuffValue > 0 && Array.isArray(enemy.patterns)) {
+                const hasDebuffAction = enemy.patterns.some((pattern) => {
+                    if (!pattern || typeof pattern !== 'object') return false;
+                    return pattern.type === 'debuff' || pattern.type === 'addStatus';
+                });
+                if (!hasDebuffAction) {
+                    enemy.patterns.push({
+                        type: 'debuff',
+                        buffType: injectDebuffType,
+                        value: injectDebuffValue,
+                        intent: theme.injectDebuffIntent || '🌀压迫咒印'
+                    });
+                }
+            }
+
+            if (realm >= 12) {
+                this.applyEncounterSignatureAffix(enemy, theme, stage);
+            }
+
+            this.refreshEnemyTacticalPlan(enemy, true);
+        });
+
+        if (playerOpeningBlock > 0 && this.player) {
+            if (typeof this.player.addBlock === 'function') {
+                this.player.addBlock(playerOpeningBlock);
+            } else {
+                this.player.block = Math.max(0, Number(this.player.block) || 0) + playerOpeningBlock;
+            }
+        }
+
+        this.activeEncounterTheme = {
+            id: theme.id || 'encounter',
+            name: theme.name || '未知遭遇',
+            icon: theme.icon || '⚔️',
+            shortTag: theme.shortTag || theme.name || '遭遇',
+            description: theme.description || '',
+            tier: theme.tier || 'early',
+            nodeType: theme.nodeType || 'enemy',
+            tierStage: stage,
+            attackMul,
+            openingBlock,
+            playerOpeningBlock
+        };
+        Utils.showBattleLog(`【遭遇·${this.activeEncounterTheme.name} ${'I'.repeat(stage)}阶】${this.activeEncounterTheme.description}`);
+        this.markUIDirty('environment', 'enemies', 'player');
+    }
+
+    consumeEncounterVictoryBonusSummary() {
+        if (this.encounterRewardConsumed) return null;
+        const theme = this.activeEncounterTheme;
+        if (!theme || typeof theme !== 'object') return null;
+
+        const stage = Math.max(1, Math.min(3, Math.floor(Number(theme.tierStage) || 1)));
+        const nodeType = String(theme.nodeType || 'enemy');
+        let baseGold = 14;
+        let baseExp = 6;
+        if (nodeType === 'elite') {
+            baseGold = 26;
+            baseExp = 10;
+        } else if (nodeType === 'trial') {
+            baseGold = 36;
+            baseExp = 14;
+        }
+
+        const stageScale = this.getEncounterTierScale(stage);
+        let goldBonus = Math.max(0, Math.floor(baseGold * stageScale));
+        let ringExpBonus = Math.max(0, Math.floor(baseExp * stageScale));
+        if (Number(theme.openingBlock || 0) >= 10) {
+            goldBonus += 4 * stage;
+        }
+        if (Number(theme.attackMul || 1) >= 1.08) {
+            ringExpBonus += 3 * stage;
+        }
+
+        const adventureBuffRewards = [];
+        if (theme.injectDebuffType) {
+            adventureBuffRewards.push({
+                id: 'openingBlockBoostBattles',
+                charges: 1,
+                label: '开场护盾'
+            });
+        }
+        if (stage >= 2) {
+            adventureBuffRewards.push({
+                id: 'ringExpBoostBattles',
+                charges: 1,
+                label: '命环经验'
+            });
+        }
+
+        const result = {
+            themeId: theme.id || 'encounter',
+            themeName: theme.name || '未知遭遇',
+            tierStage: stage,
+            nodeType,
+            goldBonus,
+            ringExpBonus,
+            adventureBuffRewards
+        };
+        this.encounterRewardConsumed = true;
+        return result;
+    }
+
+    createDefaultBattleCommandState() {
+        return {
+            enabled: false,
+            initialized: false,
+            points: 0,
+            maxPoints: 12,
+            turnCommandsUsed: 0,
+            totalCommandsUsed: 0,
+            totalPointsGained: 0,
+            totalPointsSpent: 0,
+            lastCommandId: '',
+            lastResonanceMatrixMode: 'auto',
+            firstCommandDiscountUsed: false,
+            commands: []
+        };
+    }
+
+    getBattleCommandCatalog() {
+        const baseCatalog = [
+            {
+                id: 'assault_order',
+                icon: '⚔️',
+                name: '锋矢强袭',
+                cost: 4,
+                cooldown: 2,
+                desc: '对全体敌人造成伤害并施加易伤。'
+            },
+            {
+                id: 'bulwark_order',
+                icon: '🛡️',
+                name: '玄甲整阵',
+                cost: 3,
+                cooldown: 2,
+                desc: '获得大量护盾并净化减益。'
+            },
+            {
+                id: 'tempo_order',
+                icon: '⚡',
+                name: '疾策回转',
+                cost: 5,
+                cooldown: 3,
+                desc: '抽牌回能并强化下一次攻击。'
+            },
+            {
+                id: 'suppress_order',
+                icon: '🌀',
+                name: '压制领域',
+                cost: 4,
+                cooldown: 2,
+                desc: '削减敌方护盾并附加虚弱。'
+            },
+            {
+                id: 'hunt_order',
+                icon: '🎯',
+                name: '猎杀标记',
+                cost: 5,
+                cooldown: 3,
+                desc: '锁定高威胁目标并叠加破绽。'
+            }
+        ];
+        if (this.game && typeof this.game.isEndlessActive === 'function' && this.game.isEndlessActive()) {
+            baseCatalog.push({
+                id: 'rift_surge_order',
+                icon: '🜂',
+                name: '裂隙潮汐',
+                cost: 5,
+                cooldown: 3,
+                desc: '无尽专属：按压力对全体造成伤害，回收少量指令槽并在高压力时稳压。'
+            });
+            baseCatalog.push({
+                id: 'phase_anchor_order',
+                icon: '🜁',
+                name: '相位锚定',
+                cost: 4,
+                cooldown: 3,
+                desc: '无尽专属：获得护盾并净化，高压时可稳压但会暴露破绽。'
+            });
+            baseCatalog.push({
+                id: 'void_pursuit_order',
+                icon: '🜃',
+                name: '裂界追猎',
+                cost: 6,
+                cooldown: 4,
+                desc: '无尽专属：猎杀高血目标并扩散余震，超高压下可强制稳压但需支付生命代价。'
+            });
+            baseCatalog.push({
+                id: 'horizon_barter_order',
+                icon: '🜄',
+                name: '界隙交易',
+                cost: 4,
+                cooldown: 2,
+                desc: '无尽专属：消耗奶糖换取抽牌、回能与斩击，资源不足会引发压力反噬。'
+            });
+            baseCatalog.push({
+                id: 'resonance_matrix_order',
+                icon: '🜇',
+                name: '命环共振',
+                cost: 5,
+                cooldown: 3,
+                desc: '无尽专属：根据敌方威胁自适应切换战术回路（守势/破阵/净域/歼灭）。'
+            });
+        }
+        return baseCatalog;
+    }
+
+    resolveBattleCommandLoadout() {
+        const catalog = this.getBattleCommandCatalog();
+        if (!Array.isArray(catalog) || catalog.length === 0) return [];
+        const endlessActive = this.game && typeof this.game.isEndlessActive === 'function' && this.game.isEndlessActive();
+
+        const node = this.game && this.game.currentBattleNode ? this.game.currentBattleNode : null;
+        const idSource = (Array.isArray(this.enemies) ? this.enemies : [])
+            .map((enemy) => String(enemy && (enemy.id || enemy.name) || 'enemy'))
+            .join('|');
+        const seedSource = [
+            this.player && this.player.realm ? this.player.realm : 1,
+            node ? node.id : 0,
+            node ? node.type : 'battle',
+            idSource
+        ].join(':');
+
+        let seed = 0;
+        for (let i = 0; i < seedSource.length; i += 1) {
+            seed = (seed * 37 + seedSource.charCodeAt(i)) % 2147483647;
+        }
+
+        const pool = catalog.map((item) => ({ ...item }));
+        const loadout = [];
+        const maxCommands = Math.min(endlessActive ? 4 : 3, pool.length);
+
+        if (endlessActive) {
+            const forcedEndlessIds = ['rift_surge_order'];
+            forcedEndlessIds.forEach((id) => {
+                const endlessIndex = pool.findIndex((item) => item && item.id === id);
+                if (endlessIndex >= 0 && loadout.length < maxCommands) {
+                    loadout.push(pool[endlessIndex]);
+                    pool.splice(endlessIndex, 1);
+                }
+            });
+
+            const extraEndlessPool = pool.filter((item) => item && (
+                item.id === 'phase_anchor_order'
+                || item.id === 'void_pursuit_order'
+                || item.id === 'horizon_barter_order'
+                || item.id === 'resonance_matrix_order'
+            ));
+            if (extraEndlessPool.length > 0 && loadout.length < maxCommands) {
+                const extraIndex = seed % extraEndlessPool.length;
+                const picked = extraEndlessPool[extraIndex];
+                loadout.push(picked);
+                const rawIndex = pool.findIndex((item) => item && item.id === picked.id);
+                if (rawIndex >= 0) pool.splice(rawIndex, 1);
+                seed = (seed * 1103515245 + 12345) % 2147483647;
+            }
+        }
+        while (pool.length > 0 && loadout.length < maxCommands) {
+            const index = seed % pool.length;
+            loadout.push(pool[index]);
+            pool.splice(index, 1);
+            seed = (seed * 1103515245 + 12345) % 2147483647;
+        }
+
+        return loadout.map((command) => ({
+            ...command,
+            cost: Math.max(1, Math.floor(Number(command.cost) || 1)),
+            cooldown: Math.max(0, Math.floor(Number(command.cooldown) || 0)),
+            cooldownRemaining: 0,
+            uses: 0
+        }));
+    }
+
+    getBattleCommandPowerScale(command = null) {
+        const realm = Math.max(1, Math.floor(Number(this.player && this.player.realm) || 1));
+        const realmBonus = Math.min(0.48, Math.floor((realm - 1) / 3) * 0.06);
+        const encounterStage = this.activeEncounterTheme
+            ? Math.max(1, Math.min(3, Math.floor(Number(this.activeEncounterTheme.tierStage) || 1)))
+            : 1;
+        const encounterBonus = (encounterStage - 1) * 0.05;
+        const path = String(this.player?.fateRing?.path || '');
+        const doctrineProfile = this.getPathDoctrineProfile(path);
+        const resonanceId = String(this.player?.archetypeResonance?.id || '');
+        const hpRatio = Number(this.player?.maxHp) > 0
+            ? (Number(this.player?.currentHp) || 0) / Number(this.player.maxHp)
+            : 1;
+        let synergyBonus = 0;
+
+        if (path === 'destruction' || path === 'defiance') synergyBonus += 0.08;
+        if (path === 'convergence' && command && String(command.id) === 'hunt_order') synergyBonus += 0.06;
+        if (path === 'resonance' && command && String(command.id) === 'tempo_order') synergyBonus += 0.06;
+        if (path === 'insight' && hpRatio <= 0.5) synergyBonus += 0.05;
+        if (path === 'destruction' && doctrineProfile.tier > 0 && Math.max(0, Math.floor(Number(this.player?.block) || 0)) <= 5) {
+            synergyBonus += 0.02 + doctrineProfile.tier * 0.02;
+        }
+        if (path === 'convergence' && doctrineProfile.tier > 0 && command && String(command.id) === 'hunt_order') {
+            synergyBonus += doctrineProfile.tier * 0.02;
+        }
+        if (path === 'resonance' && doctrineProfile.tier > 0 && command && String(command.id) === 'tempo_order') {
+            synergyBonus += doctrineProfile.tier * 0.02;
+        }
+
+        if (resonanceId === 'precision' && command && String(command.id) === 'hunt_order') synergyBonus += 0.05;
+        if (resonanceId === 'bulwark' && command && String(command.id) === 'bulwark_order') synergyBonus += 0.05;
+        if (resonanceId === 'entropy' && command && String(command.id) === 'tempo_order') synergyBonus += 0.05;
+
+        const treasureCount = Array.isArray(this.player?.equippedTreasures)
+            ? this.player.equippedTreasures.length
+            : (Array.isArray(this.player?.treasures) ? this.player.treasures.length : 0);
+        if (treasureCount >= 4) synergyBonus += 0.04;
+
+        const pressure = this.getBattleCommandEndlessPressure();
+        if (pressure >= 6) synergyBonus += 0.04;
+        if (pressure >= 8) synergyBonus += 0.04;
+
+        return 1 + realmBonus + encounterBonus + synergyBonus;
+    }
+
+    getBattleCommandEndlessPressure() {
+        if (!this.game || typeof this.game.isEndlessActive !== 'function' || !this.game.isEndlessActive()) return 0;
+        if (typeof this.game.ensureEndlessState !== 'function') return 0;
+        const state = this.game.ensureEndlessState();
+        return Math.max(0, Math.min(9, Math.floor(Number(state?.pressure) || 0)));
+    }
+
+    getPathDoctrineProfile(pathId = null) {
+        if (this.player && typeof this.player.getPathDoctrineProfile === 'function') {
+            return this.player.getPathDoctrineProfile(pathId);
+        }
+        return {
+            path: String(pathId || this.player?.fateRing?.path || ''),
+            tier: 0,
+            commandCostDiscount: 0,
+            commandGainBonus: 0,
+            lowBlockDamageBonus: 0
+        };
+    }
+
+    resolveBattleCommandEffectiveCost(command) {
+        if (!command || typeof command !== 'object') return 0;
+        const baseCost = Math.max(1, Math.floor(Number(command.cost) || 1));
+        const path = String(this.player?.fateRing?.path || '');
+        const doctrineProfile = this.getPathDoctrineProfile(path);
+        const hpRatio = Number(this.player?.maxHp) > 0
+            ? (Number(this.player?.currentHp) || 0) / Number(this.player.maxHp)
+            : 1;
+        let discount = 0;
+
+        if (path === 'wisdom' && (command.id === 'tempo_order' || command.id === 'suppress_order')) {
+            discount += 1;
+            discount += Math.max(0, Math.floor(Number(doctrineProfile.commandCostDiscount) || 0));
+        }
+        if (path === 'convergence' && command.id === 'hunt_order') {
+            discount += Math.max(0, Math.floor(Number(doctrineProfile.commandCostDiscount) || 0));
+        }
+        if (
+            path === 'destruction' &&
+            Math.max(0, Math.floor(Number(this.player?.block) || 0)) <= 5
+        ) {
+            discount += Math.max(0, Math.floor(Number(doctrineProfile.commandCostDiscount) || 0));
+        }
+        if (path === 'defiance' && hpRatio <= 0.5) {
+            discount += 1;
+        }
+        if (this.commandState && !this.commandState.firstCommandDiscountUsed) {
+            const treasureCount = Array.isArray(this.player?.equippedTreasures)
+                ? this.player.equippedTreasures.length
+                : (Array.isArray(this.player?.treasures) ? this.player.treasures.length : 0);
+            if (treasureCount >= 3) discount += 1;
+        }
+        if (this.getBattleCommandEndlessPressure() >= 8) {
+            discount += 1;
+        }
+
+        return Math.max(1, baseCost - discount);
+    }
+
+    getBattleCommandById(commandId) {
+        if (!this.commandState || !Array.isArray(this.commandState.commands)) return null;
+        return this.commandState.commands.find((command) => command && command.id === commandId) || null;
+    }
+
+    initializeBattleCommandSystem() {
+        this.commandState = this.createDefaultBattleCommandState();
+        const mode = String(this.game && this.game.mode || 'pve');
+        if (mode === 'pvp') {
+            this.markUIDirty('command');
+            return;
+        }
+
+        const loadout = this.resolveBattleCommandLoadout();
+        if (!Array.isArray(loadout) || loadout.length === 0) {
+            this.markUIDirty('command');
+            return;
+        }
+
+        this.commandState.enabled = true;
+        this.commandState.initialized = true;
+        const path = String(this.player?.fateRing?.path || '');
+        const pressure = this.getBattleCommandEndlessPressure();
+        const baseCap = pressure >= 6 ? 14 : 12;
+        this.commandState.maxPoints = baseCap + (path === 'insight' ? 1 : 0);
+        this.commandState.points = Math.min(this.commandState.maxPoints, 3 + (pressure >= 8 ? 1 : 0));
+        this.commandState.commands = loadout;
+        this.commandState.turnCommandsUsed = 0;
+        this.commandState.totalCommandsUsed = 0;
+        this.commandState.totalPointsGained = this.commandState.points;
+        this.commandState.totalPointsSpent = 0;
+        this.commandState.lastCommandId = '';
+        this.commandState.lastResonanceMatrixMode = 'auto';
+        this.commandState.firstCommandDiscountUsed = false;
+
+        this.on('cardPlayed', (payload) => {
+            const card = payload && payload.card ? payload.card : null;
+            if (!card) return;
+            const path = String(this.player?.fateRing?.path || '');
+            const doctrineProfile = this.getPathDoctrineProfile(path);
+            const archetype = String(this.player?.archetypeResonance?.id || '');
+
+            let gain = 1;
+            if (card.type === 'attack') gain += 1;
+            if (card.consumeCandy) gain += 1;
+            if (path === 'convergence' && card.type === 'attack') {
+                gain += 1 + Math.max(0, Math.floor(Number(doctrineProfile.commandGainBonus) || 0));
+            }
+            if (path === 'resonance' && card.type === 'skill') {
+                gain += 1 + Math.max(0, Math.floor(Number(doctrineProfile.commandGainBonus) || 0));
+            }
+            if (archetype === 'entropy' && card.type === 'skill') gain += 1;
+            if (archetype === 'bulwark' && card.type === 'defend') gain += 1;
+            if (this.cardsPlayedThisTurn >= 4) gain += 1;
+            this.gainBattleCommandPoints(gain, 'card');
+        });
+
+        this.markUIDirty('command');
+    }
+
+    gainBattleCommandPoints(amount, source = 'generic') {
+        if (!this.commandState || !this.commandState.enabled) return 0;
+        const gain = Math.max(0, Math.floor(Number(amount) || 0));
+        if (gain <= 0) return 0;
+
+        const state = this.commandState;
+        const before = Math.max(0, Math.floor(Number(state.points) || 0));
+        const cap = Math.max(1, Math.floor(Number(state.maxPoints) || 12));
+        const after = Math.min(cap, before + gain);
+        const gained = Math.max(0, after - before);
+        if (gained <= 0) return 0;
+
+        state.points = after;
+        state.totalPointsGained = Math.max(0, Math.floor(Number(state.totalPointsGained) || 0)) + gained;
+
+        if (source === 'kill') {
+            Utils.showBattleLog(`战场指令槽 +${gained}（斩敌充能）`);
+        } else if (source === 'turnStart') {
+            Utils.showBattleLog(`战场指令槽 +${gained}（回合整备）`);
+        } else if (after === cap) {
+            Utils.showBattleLog('战场指令槽已充满！');
+        }
+
+        this.markUIDirty('command');
+        return gained;
+    }
+
+    onBattleCommandTurnStart() {
+        if (!this.commandState || !this.commandState.enabled) return;
+        const state = this.commandState;
+        state.turnCommandsUsed = 0;
+        if (Array.isArray(state.commands)) {
+            state.commands.forEach((command) => {
+                if (!command) return;
+                command.cooldownRemaining = Math.max(0, Math.floor(Number(command.cooldownRemaining) || 0) - 1);
+            });
+        }
+
+        let baseGain = 1;
+        const hpRatio = this.player && Number(this.player.maxHp) > 0
+            ? (Number(this.player.currentHp) || 0) / Number(this.player.maxHp)
+            : 1;
+        if (hpRatio <= 0.45) baseGain += 1;
+        if (this.activeEncounterTheme && Number(this.activeEncounterTheme.tierStage || 1) >= 3) {
+            baseGain += 1;
+        }
+        const pressure = this.getBattleCommandEndlessPressure();
+        if (pressure >= 5) baseGain += 1;
+        this.gainBattleCommandPoints(baseGain, 'turnStart');
+    }
+
+    onBattleCommandEnemyKilled(enemy) {
+        if (!this.commandState || !this.commandState.enabled) return;
+        const bonus = enemy && enemy.isBoss ? 4 : 2;
+        this.gainBattleCommandPoints(bonus, 'kill');
+    }
+
+    async activateBattleCommand(commandId) {
+        if (!this.commandState || !this.commandState.enabled) return false;
+        if (this.currentTurn !== 'player' || this.battleEnded || this.isTurnTransitioning || this.isProcessingCard) {
+            Utils.showBattleLog('当前无法发动战场指令');
+            return false;
+        }
+        const command = this.getBattleCommandById(commandId);
+        if (!command) return false;
+
+        const cost = this.resolveBattleCommandEffectiveCost(command);
+        const cooldownRemaining = Math.max(0, Math.floor(Number(command.cooldownRemaining) || 0));
+        if (cooldownRemaining > 0) {
+            Utils.showBattleLog(`【${command.name}】冷却中 (${cooldownRemaining} 回合)`);
+            return false;
+        }
+        if ((this.commandState.points || 0) < cost) {
+            Utils.showBattleLog(`指令槽不足，发动【${command.name}】需要 ${cost}`);
+            return false;
+        }
+
+        const prevFirstDiscountUsed = !!this.commandState.firstCommandDiscountUsed;
+        this.commandState.points -= cost;
+        this.commandState.totalPointsSpent = Math.max(0, Math.floor(Number(this.commandState.totalPointsSpent) || 0)) + cost;
+        this.commandState.totalCommandsUsed = Math.max(0, Math.floor(Number(this.commandState.totalCommandsUsed) || 0)) + 1;
+        this.commandState.turnCommandsUsed = Math.max(0, Math.floor(Number(this.commandState.turnCommandsUsed) || 0)) + 1;
+        this.commandState.lastCommandId = command.id;
+        if (!this.commandState.firstCommandDiscountUsed) {
+            this.commandState.firstCommandDiscountUsed = true;
+        }
+        command.uses = Math.max(0, Math.floor(Number(command.uses) || 0)) + 1;
+        let effectiveCooldown = Math.max(0, Math.floor(Number(command.cooldown) || 0));
+        if (String(this.player?.fateRing?.path || '') === 'resonance') {
+            effectiveCooldown = Math.max(0, effectiveCooldown - 1);
+        }
+        command.cooldownRemaining = effectiveCooldown;
+
+        Utils.showBattleLog(`【战场指令】${command.icon} ${command.name} 发动！`);
+        const ok = await this.executeBattleCommandEffect(command);
+        if (!ok) {
+            // 保底回退，防止未知错误吞资源
+            this.commandState.points = Math.min(
+                Math.max(1, Math.floor(Number(this.commandState.maxPoints) || 12)),
+                this.commandState.points + cost
+            );
+            command.cooldownRemaining = 0;
+            command.uses = Math.max(0, command.uses - 1);
+            this.commandState.totalCommandsUsed = Math.max(0, this.commandState.totalCommandsUsed - 1);
+            this.commandState.turnCommandsUsed = Math.max(0, this.commandState.turnCommandsUsed - 1);
+            this.commandState.totalPointsSpent = Math.max(0, this.commandState.totalPointsSpent - cost);
+            this.commandState.firstCommandDiscountUsed = prevFirstDiscountUsed;
+            Utils.showBattleLog('战场指令未生效，已返还指令槽');
+        }
+
+        this.markUIDirty('command', 'player', 'enemies', 'hand', 'energy', 'piles');
+        this.updateBattleUI();
+        return ok;
+    }
+
+    cleansePlayerDebuffs(limit = 2) {
+        if (!this.player || !this.player.buffs || typeof this.player.buffs !== 'object') return 0;
+        const order = ['vulnerable', 'weak', 'burn', 'poison', 'bleed', 'freeze', 'paralysis'];
+        let cleaned = 0;
+        const maxClean = Math.max(0, Math.floor(Number(limit) || 0));
+        for (let i = 0; i < order.length; i += 1) {
+            if (cleaned >= maxClean) break;
+            const key = order[i];
+            const stack = Math.max(0, Math.floor(Number(this.player.buffs[key]) || 0));
+            if (stack <= 0) continue;
+            this.player.buffs[key] = Math.max(0, stack - 1);
+            if (this.player.buffs[key] <= 0) delete this.player.buffs[key];
+            cleaned += 1;
+        }
+        return cleaned;
+    }
+
+    getHorizonBarterModeProfiles() {
+        return {
+            conservative: {
+                id: 'conservative',
+                label: '保守交易',
+                desc: '低投入，稳定续航，优先过牌与控压。',
+                spendCap: 1,
+                drawBonus: 1,
+                energyBonus: 0,
+                damageMul: 0.86,
+                stabilizeNeed: 1,
+                backlash: 0
+            },
+            balanced: {
+                id: 'balanced',
+                label: '均衡交易',
+                desc: '均衡收益，攻防两端都可接受。',
+                spendCap: 2,
+                drawBonus: 0,
+                energyBonus: 0,
+                damageMul: 1,
+                stabilizeNeed: 2,
+                backlash: 1
+            },
+            aggressive: {
+                id: 'aggressive',
+                label: '激进交易',
+                desc: '高投入高爆发，空转会引发更强反噬。',
+                spendCap: 3,
+                drawBonus: 0,
+                energyBonus: 1,
+                damageMul: 1.2,
+                stabilizeNeed: 2,
+                backlash: 2
+            }
+        };
+    }
+
+    getHorizonBarterModeProfile(modeId = 'balanced') {
+        const profiles = this.getHorizonBarterModeProfiles();
+        const key = String(modeId || 'balanced');
+        return profiles[key] || profiles.balanced;
+    }
+
+    async resolveHorizonBarterMode(command = null) {
+        if (command && typeof command.mode === 'string') {
+            return this.getHorizonBarterModeProfile(command.mode);
+        }
+        if (typeof navigator !== 'undefined' && navigator && navigator.webdriver) {
+            return this.getHorizonBarterModeProfile('balanced');
+        }
+        if (typeof document === 'undefined' || !document.body || typeof document.createElement !== 'function') {
+            return this.getHorizonBarterModeProfile('balanced');
+        }
+
+        const modalId = 'horizon-barter-modal';
+        const oldModal = document.getElementById(modalId);
+        if (oldModal && oldModal.parentElement) oldModal.parentElement.removeChild(oldModal);
+        const modal = document.createElement('div');
+        modal.id = modalId;
+        modal.className = 'modal';
+        modal.style.zIndex = '10040';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 440px; text-align: center; padding: 24px;">
+                <h2 style="margin-bottom: 10px;">界隙交易</h2>
+                <p style="opacity: .85; margin-bottom: 14px;">选择本次交易档位</p>
+                <div id="horizon-barter-choices" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                <button id="horizon-barter-cancel" class="event-choice" style="margin-top: 10px;">
+                    <div>取消交易</div>
+                    <div class="choice-effect">不发动本次指令</div>
+                </button>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        modal.classList.add('active');
+
+        const choicesEl = modal.querySelector('#horizon-barter-choices');
+        const profiles = this.getHorizonBarterModeProfiles();
+        const profileList = [profiles.conservative, profiles.balanced, profiles.aggressive];
+
+        return new Promise((resolve) => {
+            const finalize = (result) => {
+                modal.classList.remove('active');
+                if (modal.parentElement) modal.parentElement.removeChild(modal);
+                resolve(result);
+            };
+
+            if (!choicesEl) {
+                finalize(this.getHorizonBarterModeProfile('balanced'));
+                return;
+            }
+
+            profileList.forEach((profile) => {
+                const btn = document.createElement('button');
+                btn.className = 'event-choice';
+                btn.innerHTML = `
+                    <div>${profile.label}</div>
+                    <div class="choice-effect">${profile.desc}</div>
+                `;
+                btn.onclick = () => finalize(profile);
+                choicesEl.appendChild(btn);
+            });
+
+            const cancelBtn = modal.querySelector('#horizon-barter-cancel');
+            if (cancelBtn) cancelBtn.onclick = () => finalize(null);
+        });
+    }
+
+    getResonanceMatrixModeProfiles() {
+        return {
+            auto: {
+                id: 'auto',
+                label: '自适应回路',
+                desc: '根据敌我态势自动选择守势/破阵/净域/歼灭。',
+                forceBranch: 'auto'
+            },
+            guard: {
+                id: 'guard',
+                label: '守势优先',
+                desc: '强制优先触发守势回路，稳住血线与减益。',
+                forceBranch: 'guard'
+            },
+            break: {
+                id: 'break',
+                label: '破阵优先',
+                desc: '强制优先触发破阵回路，先拆盾再开口。',
+                forceBranch: 'break'
+            },
+            cleanse: {
+                id: 'cleanse',
+                label: '净域优先',
+                desc: '强制优先触发净域回路，优先解控与稳压。',
+                forceBranch: 'cleanse'
+            },
+            burst: {
+                id: 'burst',
+                label: '歼灭优先',
+                desc: '强制优先触发歼灭回路，抢节奏打爆发。',
+                forceBranch: 'burst'
+            }
+        };
+    }
+
+    getResonanceMatrixModeProfile(modeId = 'auto') {
+        const profiles = this.getResonanceMatrixModeProfiles();
+        const key = String(modeId || 'auto');
+        return profiles[key] || profiles.auto;
+    }
+
+    consumeResonanceMatrixSignalMode() {
+        if (!this.player || !this.player.buffs || typeof this.player.buffs !== 'object') return null;
+        const signalOrder = [
+            { buff: 'matrixGuardSignal', mode: 'guard' },
+            { buff: 'matrixBreakSignal', mode: 'break' },
+            { buff: 'matrixCleanseSignal', mode: 'cleanse' },
+            { buff: 'matrixBurstSignal', mode: 'burst' }
+        ];
+        for (let i = 0; i < signalOrder.length; i += 1) {
+            const signal = signalOrder[i];
+            const stack = Math.max(0, Math.floor(Number(this.player.buffs[signal.buff]) || 0));
+            if (stack <= 0) continue;
+            const next = stack - 1;
+            if (next <= 0) {
+                delete this.player.buffs[signal.buff];
+            } else {
+                this.player.buffs[signal.buff] = next;
+            }
+            return this.getResonanceMatrixModeProfile(signal.mode);
+        }
+        return null;
+    }
+
+    async resolveResonanceMatrixMode(command = null, threatProfile = null) {
+        if (command && typeof command.strategy === 'string') {
+            return this.getResonanceMatrixModeProfile(command.strategy);
+        }
+        if (command && typeof command.mode === 'string') {
+            return this.getResonanceMatrixModeProfile(command.mode);
+        }
+
+        const signalMode = this.consumeResonanceMatrixSignalMode();
+        if (signalMode) return signalMode;
+
+        if (typeof navigator !== 'undefined' && navigator && navigator.webdriver) {
+            return this.getResonanceMatrixModeProfile('auto');
+        }
+        if (typeof document === 'undefined' || !document.body || typeof document.createElement !== 'function') {
+            return this.getResonanceMatrixModeProfile('auto');
+        }
+
+        const profile = threatProfile && typeof threatProfile === 'object'
+            ? threatProfile
+            : this.resolveCounterplayThreatProfile();
+        const recommendId = profile.needDefend
+            ? 'guard'
+            : (profile.needBreak ? 'break' : (profile.needCleanse ? 'cleanse' : 'burst'));
+        const recommend = this.getResonanceMatrixModeProfile(recommendId);
+
+        const modalId = 'resonance-matrix-modal';
+        const oldModal = document.getElementById(modalId);
+        if (oldModal && oldModal.parentElement) oldModal.parentElement.removeChild(oldModal);
+        const modal = document.createElement('div');
+        modal.id = modalId;
+        modal.className = 'modal';
+        modal.style.zIndex = '10042';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 460px; text-align: center; padding: 24px;">
+                <h2 style="margin-bottom: 10px;">命环共振</h2>
+                <p style="opacity: .85; margin-bottom: 6px;">选择本次回路策略</p>
+                <p style="opacity: .7; margin-bottom: 14px;">战术建议：${recommend.label}</p>
+                <div id="resonance-matrix-choices" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                <button id="resonance-matrix-cancel" class="event-choice" style="margin-top: 10px;">
+                    <div>取消指令</div>
+                    <div class="choice-effect">不发动本次命环共振</div>
+                </button>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        modal.classList.add('active');
+
+        const choicesEl = modal.querySelector('#resonance-matrix-choices');
+        const profiles = this.getResonanceMatrixModeProfiles();
+        const profileList = [profiles.auto, profiles.guard, profiles.break, profiles.cleanse, profiles.burst];
+        return new Promise((resolve) => {
+            const finalize = (result) => {
+                modal.classList.remove('active');
+                if (modal.parentElement) modal.parentElement.removeChild(modal);
+                resolve(result);
+            };
+            if (!choicesEl) {
+                finalize(this.getResonanceMatrixModeProfile('auto'));
+                return;
+            }
+            profileList.forEach((item) => {
+                const btn = document.createElement('button');
+                btn.className = 'event-choice';
+                btn.innerHTML = `
+                    <div>${item.label}</div>
+                    <div class="choice-effect">${item.desc}</div>
+                `;
+                btn.onclick = () => finalize(item);
+                choicesEl.appendChild(btn);
+            });
+            const cancelBtn = modal.querySelector('#resonance-matrix-cancel');
+            if (cancelBtn) cancelBtn.onclick = () => finalize(null);
+        });
+    }
+
+    resolveCommandRefundAfterCounter(baseRefund = 0, antiRefund = 0) {
+        const refund = Math.max(0, Math.floor(Number(baseRefund) || 0));
+        const anti = Math.max(0, Math.floor(Number(antiRefund) || 0));
+        return Math.max(0, refund - anti);
+    }
+
+    resolveBurstDamageAfterCounter(baseDamage = 0, antiBurst = 0, floor = 1) {
+        const damage = Math.max(0, Math.floor(Number(baseDamage) || 0));
+        const anti = Math.max(0, Math.floor(Number(antiBurst) || 0));
+        if (anti <= 0) return damage;
+        const ratio = Math.max(0.55, 1 - anti * 0.16);
+        return Math.max(Math.max(0, Math.floor(Number(floor) || 0)), Math.floor(damage * ratio));
+    }
+
+    async executeBattleCommandEffect(command) {
+        if (!command || !command.id) return false;
+        const scale = this.getBattleCommandPowerScale(command);
+
+        if (command.id === 'assault_order') {
+            const aliveEnemies = this.enemies.filter((enemy) => enemy && enemy.currentHp > 0);
+            if (aliveEnemies.length === 0) return false;
+
+            const baseDamage = Math.max(6, Math.floor((7 + this.turnNumber * 1.2 + (this.player.realm || 1) * 0.55) * scale));
+            let totalDamage = 0;
+            for (let i = 0; i < this.enemies.length; i += 1) {
+                const enemy = this.enemies[i];
+                if (!enemy || enemy.currentHp <= 0) continue;
+                enemy.buffs = enemy.buffs || {};
+                enemy.buffs.vulnerable = (enemy.buffs.vulnerable || 0) + 1;
+                const bonus = (enemy.block || 0) > 0 ? 3 : 0;
+                const damage = this.dealDamageToEnemy(enemy, baseDamage + bonus, 'metal');
+                totalDamage += Math.max(0, damage);
+                const enemyEl = document.querySelector(`.enemy[data-index="${i}"]`);
+                if (enemyEl) {
+                    Utils.addShakeEffect(enemyEl, damage >= 18 ? 'heavy' : 'medium');
+                    Utils.showFloatingNumber(enemyEl, damage, 'damage');
+                }
+            }
+            Utils.showBattleLog(`锋矢强袭命中全体，累计造成 ${totalDamage} 伤害并施加易伤`);
+            await Utils.sleep(180);
+            return true;
+        }
+
+        if (command.id === 'bulwark_order') {
+            const block = Math.max(10, Math.floor((14 + this.turnNumber * 0.9 + (this.player.realm || 1) * 0.35) * scale));
+            if (typeof this.player.addBlock === 'function') {
+                this.player.addBlock(block);
+            } else {
+                this.player.block = Math.max(0, Math.floor(Number(this.player.block) || 0)) + block;
+            }
+            const cleaned = this.cleansePlayerDebuffs(2);
+            Utils.showBattleLog(`玄甲整阵：获得 ${block} 护盾${cleaned > 0 ? `，并净化 ${cleaned} 层减益` : ''}`);
+            await Utils.sleep(140);
+            return true;
+        }
+
+        if (command.id === 'tempo_order') {
+            const drawCount = Math.max(1, Math.floor(2 + (scale >= 1.25 ? 1 : 0)));
+            if (typeof this.player.drawCards === 'function') {
+                this.player.drawCards(drawCount);
+            }
+            const energyGain = 1 + (scale >= 1.35 ? 1 : 0);
+            this.player.currentEnergy = Math.max(0, Math.floor(Number(this.player.currentEnergy) || 0) + energyGain);
+            if (typeof this.player.maxMilkCandy === 'number') {
+                const maxCandy = Math.max(0, Math.floor(Number(this.player.maxMilkCandy) || 0));
+                this.player.milkCandy = Math.min(maxCandy, Math.max(0, Math.floor(Number(this.player.milkCandy) || 0)) + 1);
+            }
+            const nextHitBonus = Math.max(4, Math.floor((5 + this.turnNumber * 0.45) * scale));
+            this.player.buffs = this.player.buffs || {};
+            this.player.buffs.nextAttackBonus = Math.max(
+                Math.floor(Number(this.player.buffs.nextAttackBonus) || 0),
+                nextHitBonus
+            );
+            Utils.showBattleLog(`疾策回转：抽 ${drawCount}，回能 ${energyGain}，并强化下一次攻击 +${nextHitBonus}`);
+            await Utils.sleep(120);
+            return true;
+        }
+
+        if (command.id === 'suppress_order') {
+            const aliveEnemies = this.enemies.filter((enemy) => enemy && enemy.currentHp > 0);
+            if (aliveEnemies.length === 0) return false;
+
+            let removedBlock = 0;
+            for (const enemy of aliveEnemies) {
+                enemy.buffs = enemy.buffs || {};
+                const block = Math.max(0, Math.floor(Number(enemy.block) || 0));
+                const remove = Math.max(0, Math.floor(block * 0.6));
+                if (remove > 0) {
+                    enemy.block = Math.max(0, block - remove);
+                    removedBlock += remove;
+                }
+                enemy.buffs.weak = (enemy.buffs.weak || 0) + 1;
+            }
+            Utils.showBattleLog(`压制领域：削减敌方护盾 ${removedBlock} 点，并施加全体虚弱`);
+            await Utils.sleep(120);
+            return true;
+        }
+
+        if (command.id === 'hunt_order') {
+            const aliveEnemies = this.enemies.filter((enemy) => enemy && enemy.currentHp > 0);
+            if (aliveEnemies.length === 0) return false;
+            let target = aliveEnemies[0];
+            for (let i = 1; i < aliveEnemies.length; i += 1) {
+                if ((aliveEnemies[i].currentHp || 0) > (target.currentHp || 0)) {
+                    target = aliveEnemies[i];
+                }
+            }
+            const targetIndex = this.enemies.indexOf(target);
+            const strike = Math.max(8, Math.floor((11 + this.turnNumber * 1.1) * scale));
+            target.buffs = target.buffs || {};
+            target.buffs.mark = (target.buffs.mark || 0) + 3;
+            const damage = this.dealDamageToEnemy(target, strike, 'fire');
+            const enemyEl = document.querySelector(`.enemy[data-index="${targetIndex}"]`);
+            if (enemyEl) {
+                Utils.addShakeEffect(enemyEl, damage >= 20 ? 'heavy' : 'medium');
+                Utils.showFloatingNumber(enemyEl, damage, 'damage');
+            }
+            Utils.showBattleLog(`猎杀标记锁定 ${target.name}：造成 ${damage} 伤害并叠加 3 层破绽`);
+            await Utils.sleep(160);
+            return true;
+        }
+
+        if (command.id === 'rift_surge_order') {
+            const aliveEnemies = this.enemies.filter((enemy) => enemy && enemy.currentHp > 0);
+            if (aliveEnemies.length === 0) return false;
+            const pressure = this.getBattleCommandEndlessPressure();
+            const base = Math.max(8, Math.floor((10 + pressure * 1.8 + this.turnNumber * 0.8) * scale));
+            let totalDamage = 0;
+            for (let i = 0; i < this.enemies.length; i += 1) {
+                const enemy = this.enemies[i];
+                if (!enemy || enemy.currentHp <= 0) continue;
+                const damage = this.dealDamageToEnemy(enemy, base, 'water');
+                totalDamage += Math.max(0, damage);
+                const enemyEl = document.querySelector(`.enemy[data-index="${i}"]`);
+                if (enemyEl) {
+                    Utils.addShakeEffect(enemyEl, damage >= 20 ? 'heavy' : 'medium');
+                    Utils.showFloatingNumber(enemyEl, damage, 'damage');
+                }
+            }
+            const refund = pressure >= 7 ? 2 : 1;
+            this.gainBattleCommandPoints(refund, 'rift');
+            const heal = Math.max(0, Math.floor((pressure + 1) * 0.8));
+            if (heal > 0 && typeof this.player?.heal === 'function') {
+                this.player.heal(heal);
+            }
+            if (pressure >= 6 && this.game && typeof this.game.ensureEndlessState === 'function') {
+                const state = this.game.ensureEndlessState();
+                const before = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
+                state.pressure = Math.max(0, before - 1);
+                Utils.showBattleLog(`裂隙潮汐稳定战局：轮回压力 ${before}→${state.pressure}`);
+            }
+            Utils.showBattleLog(`裂隙潮汐：全体共受 ${totalDamage} 伤害，回收指令槽 +${refund}${heal > 0 ? `，恢复 ${heal} 生命` : ''}`);
+            await Utils.sleep(170);
+            return true;
+        }
+
+        if (command.id === 'phase_anchor_order') {
+            const path = String(this.player?.fateRing?.path || '');
+            const doctrineProfile = this.getPathDoctrineProfile(path);
+            const doctrineTier = Math.max(0, Math.floor(Number(doctrineProfile?.tier) || 0));
+            const pressure = this.getBattleCommandEndlessPressure();
+            const blockGain = Math.max(10, Math.floor((12 + pressure * 1.6 + this.turnNumber * 0.45) * scale));
+            if (typeof this.player?.addBlock === 'function') {
+                this.player.addBlock(blockGain);
+            } else {
+                this.player.block = Math.max(0, Math.floor(Number(this.player?.block) || 0)) + blockGain;
+            }
+            let cleanseCap = 2 + (pressure >= 7 ? 1 : 0);
+            if (path === 'wisdom' && doctrineTier > 0) cleanseCap += 1;
+            if (path === 'resonance' && doctrineTier >= 2) cleanseCap += 1;
+            const cleaned = this.cleansePlayerDebuffs(cleanseCap);
+
+            let pressureShift = 0;
+            if (pressure >= 6 && this.game && typeof this.game.ensureEndlessState === 'function') {
+                const state = this.game.ensureEndlessState();
+                const before = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
+                state.pressure = Math.max(0, before - 1);
+                pressureShift = before - state.pressure;
+            }
+
+            let exposed = 0;
+            const exposedThreshold = (path === 'wisdom' && doctrineTier > 0) ? 9 : 8;
+            if (pressure >= exposedThreshold) {
+                this.player.buffs = this.player.buffs || {};
+                this.player.buffs.vulnerable = Math.max(0, Math.floor(Number(this.player.buffs.vulnerable) || 0)) + 1;
+                exposed = 1;
+            }
+            if (path === 'resonance' && doctrineTier > 0) {
+                this.gainBattleCommandPoints(1, 'phaseAnchor');
+            }
+            if (path === 'wisdom' && doctrineTier >= 2 && typeof this.player?.drawCards === 'function') {
+                this.player.drawCards(1);
+            }
+            if (path === 'destruction' && doctrineTier > 0) {
+                this.player.buffs = this.player.buffs || {};
+                this.player.buffs.strength = Math.max(0, Math.floor(Number(this.player.buffs.strength) || 0)) + doctrineTier;
+            }
+
+            Utils.showBattleLog(
+                `相位锚定：获得 ${blockGain} 护盾，净化 ${cleaned} 层减益`
+                + `${pressureShift > 0 ? `，轮回压力 -${pressureShift}` : ''}`
+                + `${path === 'resonance' && doctrineTier > 0 ? '，回响教义回收 1 点指令槽' : ''}`
+                + `${path === 'wisdom' && doctrineTier >= 2 ? '，并获得 1 次战术过牌' : ''}`
+                + `${path === 'destruction' && doctrineTier > 0 ? `，毁灭教义提升 ${doctrineTier} 点力量` : ''}`
+                + `${exposed > 0 ? '，但自身暴露 1 层易伤' : ''}`
+            );
+            await Utils.sleep(160);
+            return true;
+        }
+
+        if (command.id === 'void_pursuit_order') {
+            const aliveEnemies = this.enemies.filter((enemy) => enemy && enemy.currentHp > 0);
+            if (aliveEnemies.length === 0) return false;
+
+            const path = String(this.player?.fateRing?.path || '');
+            const doctrineProfile = this.getPathDoctrineProfile(path);
+            const doctrineTier = Math.max(0, Math.floor(Number(doctrineProfile?.tier) || 0));
+            const pressure = this.getBattleCommandEndlessPressure();
+            const antiBurst = aliveEnemies.reduce((max, enemy) => Math.max(max, Math.floor(Number(enemy?.__endlessAntiBurst) || 0)), 0);
+            const antiRefund = aliveEnemies.reduce((max, enemy) => Math.max(max, Math.floor(Number(enemy?.__endlessAntiRefund) || 0)), 0);
+            let target = aliveEnemies[0];
+            for (let i = 1; i < aliveEnemies.length; i += 1) {
+                if ((aliveEnemies[i].currentHp || 0) > (target.currentHp || 0)) {
+                    target = aliveEnemies[i];
+                }
+            }
+            const targetIndex = this.enemies.indexOf(target);
+            target.buffs = target.buffs || {};
+
+            const extraScale = (path === 'destruction' && doctrineTier > 0)
+                ? (1 + doctrineTier * 0.06)
+                : 1;
+            const primaryDamageRaw = Math.max(
+                14,
+                Math.floor((16 + pressure * 1.9 + this.turnNumber * 0.75) * scale * extraScale)
+            );
+            const primaryDamage = this.resolveBurstDamageAfterCounter(primaryDamageRaw, antiBurst, 8);
+            const dealtPrimary = this.dealDamageToEnemy(target, primaryDamage, 'metal');
+            const markStack = (pressure >= 6 ? 3 : 2) + (
+                path === 'convergence' && doctrineTier > 0 ? doctrineTier : 0
+            );
+            target.buffs.mark = Math.max(0, Math.floor(Number(target.buffs.mark) || 0)) + markStack;
+
+            let splashTotal = 0;
+            if (pressure >= 5) {
+                const splashRatioBase = pressure >= 8 ? 0.45 : 0.35;
+                const splashRatio = Math.min(
+                    0.6,
+                    splashRatioBase + (path === 'wisdom' && doctrineTier > 0 ? doctrineTier * 0.03 : 0)
+                );
+                const splashRaw = Math.max(6, Math.floor(primaryDamage * splashRatio));
+                const splash = this.resolveBurstDamageAfterCounter(splashRaw, antiBurst, 4);
+                for (let i = 0; i < this.enemies.length; i += 1) {
+                    const enemy = this.enemies[i];
+                    if (!enemy || enemy.currentHp <= 0 || enemy === target) continue;
+                    const damage = this.dealDamageToEnemy(enemy, splash, 'fire');
+                    splashTotal += Math.max(0, damage);
+                    const enemyEl = document.querySelector(`.enemy[data-index="${i}"]`);
+                    if (enemyEl) {
+                        Utils.addShakeEffect(enemyEl, damage >= 16 ? 'heavy' : 'medium');
+                        Utils.showFloatingNumber(enemyEl, damage, 'damage');
+                    }
+                }
+            }
+
+            let hpCost = 0;
+            if (pressure >= 8) {
+                hpCost = Math.max(4, Math.floor((Number(this.player?.maxHp) || 1) * 0.1));
+                if (path === 'destruction' && doctrineTier > 0) hpCost += doctrineTier * 2;
+                if (path === 'wisdom' && doctrineTier > 0) hpCost = Math.max(0, hpCost - doctrineTier * 2);
+                this.player.currentHp = Math.max(1, Math.floor(Number(this.player?.currentHp) || 1) - hpCost);
+                if (this.game && typeof this.game.ensureEndlessState === 'function') {
+                    const state = this.game.ensureEndlessState();
+                    const before = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
+                    state.pressure = Math.max(0, before - 1);
+                }
+            }
+            if (
+                path === 'convergence'
+                && doctrineTier > 0
+                && target.currentHp <= 0
+            ) {
+                const refund = this.resolveCommandRefundAfterCounter(1, antiRefund);
+                if (refund > 0) {
+                    this.gainBattleCommandPoints(refund, 'voidPursuit');
+                }
+            }
+            if (
+                path === 'resonance'
+                && doctrineTier > 0
+                && splashTotal > 0
+                && typeof this.player?.drawCards === 'function'
+            ) {
+                this.player.drawCards(1);
+            }
+
+            const targetEl = document.querySelector(`.enemy[data-index="${targetIndex}"]`);
+            if (targetEl) {
+                Utils.addShakeEffect(targetEl, dealtPrimary >= 22 ? 'heavy' : 'medium');
+                Utils.showFloatingNumber(targetEl, dealtPrimary, 'damage');
+            }
+
+            Utils.showBattleLog(
+                `裂界追猎：重击 ${target.name} 造成 ${Math.max(0, dealtPrimary)} 伤害`
+                + `${splashTotal > 0 ? `，余震扩散 ${splashTotal}` : ''}`
+                + `${path === 'convergence' && doctrineTier > 0 ? `，并叠加 ${markStack} 层破绽` : ''}`
+                + `${path === 'resonance' && doctrineTier > 0 && splashTotal > 0 ? '，回响教义抽取 1 张牌' : ''}`
+                + `${antiBurst > 0 ? '，敌方爆发抑制削弱了伤害' : ''}`
+                + `${hpCost > 0 ? `，并消耗 ${hpCost} 生命稳压` : ''}`
+            );
+            await Utils.sleep(180);
+            return true;
+        }
+
+        if (command.id === 'resonance_matrix_order') {
+            const aliveEnemies = this.enemies.filter((enemy) => enemy && enemy.currentHp > 0);
+            if (aliveEnemies.length === 0) return false;
+
+            const path = String(this.player?.fateRing?.path || '');
+            const doctrineProfile = this.getPathDoctrineProfile(path);
+            const doctrineTier = Math.max(0, Math.floor(Number(doctrineProfile?.tier) || 0));
+            const pressure = this.getBattleCommandEndlessPressure();
+            const threatProfile = this.resolveCounterplayThreatProfile();
+            const modeProfile = await this.resolveResonanceMatrixMode(command, threatProfile);
+            if (!modeProfile) return false;
+            if (this.commandState && this.commandState.enabled) {
+                this.commandState.lastResonanceMatrixMode = String(modeProfile.id || 'auto');
+            }
+            const antiDraw = aliveEnemies.reduce((max, enemy) => Math.max(max, Math.floor(Number(enemy?.__endlessAntiDraw) || 0)), 0);
+            const antiStabilize = aliveEnemies.some((enemy) => Number(enemy?.__endlessAntiStabilize) > 0);
+            const antiRefund = aliveEnemies.reduce((max, enemy) => Math.max(max, Math.floor(Number(enemy?.__endlessAntiRefund) || 0)), 0);
+            const antiBurst = aliveEnemies.reduce((max, enemy) => Math.max(max, Math.floor(Number(enemy?.__endlessAntiBurst) || 0)), 0);
+            const hpRatio = Number(this.player?.maxHp) > 0
+                ? (Number(this.player?.currentHp) || 0) / Number(this.player.maxHp)
+                : 1;
+
+            const shouldDefend = !!threatProfile.needDefend && (hpRatio <= 0.72 || pressure >= 7);
+            const forcedBranch = String(modeProfile.forceBranch || 'auto');
+            let branchId = 'burst';
+            if (forcedBranch === 'guard' || forcedBranch === 'break' || forcedBranch === 'cleanse' || forcedBranch === 'burst') {
+                branchId = forcedBranch;
+            } else if (shouldDefend) {
+                branchId = 'guard';
+            } else if (threatProfile.needBreak) {
+                branchId = 'break';
+            } else if (threatProfile.needCleanse) {
+                branchId = 'cleanse';
+            }
+            const modeText = modeProfile.id !== 'auto' ? `（策略：${modeProfile.label}）` : '';
+
+            if (branchId === 'guard') {
+                const blockGain = Math.max(12, Math.floor((14 + pressure * 1.2 + this.turnNumber * 0.5) * scale));
+                if (typeof this.player?.addBlock === 'function') {
+                    this.player.addBlock(blockGain);
+                } else {
+                    this.player.block = Math.max(0, Math.floor(Number(this.player?.block) || 0)) + blockGain;
+                }
+                const cleanCap = 1 + (path === 'wisdom' && doctrineTier > 0 ? 1 : 0);
+                const cleaned = this.cleansePlayerDebuffs(cleanCap);
+                if (path === 'resonance' && doctrineTier > 0 && typeof this.player?.drawCards === 'function') {
+                    this.player.drawCards(1);
+                }
+                const guardRefund = (path === 'convergence' && doctrineTier >= 2)
+                    ? this.resolveCommandRefundAfterCounter(1, antiRefund)
+                    : 0;
+                if (guardRefund > 0) {
+                    this.gainBattleCommandPoints(guardRefund, 'resonanceMatrixGuard');
+                }
+                Utils.showBattleLog(
+                    `命环共振·守势回路${modeText}：获得 ${blockGain} 护盾，净化 ${cleaned} 层减益`
+                    + `${path === 'resonance' && doctrineTier > 0 ? '，并抽取 1 张牌' : ''}`
+                    + `${path === 'convergence' && doctrineTier >= 2 && guardRefund <= 0 && antiRefund > 0 ? '，但回收被敌方封锁' : ''}`
+                );
+                await Utils.sleep(160);
+                return true;
+            }
+
+            if (branchId === 'break') {
+                let target = aliveEnemies[0];
+                for (let i = 1; i < aliveEnemies.length; i += 1) {
+                    const challenger = aliveEnemies[i];
+                    const challengerBlock = Math.max(0, Math.floor(Number(challenger?.block) || 0));
+                    const targetBlock = Math.max(0, Math.floor(Number(target?.block) || 0));
+                    if (challengerBlock > targetBlock) {
+                        target = challenger;
+                        continue;
+                    }
+                    if (challengerBlock === targetBlock && (challenger.currentHp || 0) > (target.currentHp || 0)) {
+                        target = challenger;
+                    }
+                }
+                const targetIndex = this.enemies.indexOf(target);
+                target.buffs = target.buffs || {};
+                const beforeBlock = Math.max(0, Math.floor(Number(target.block) || 0));
+                const breakAmount = Math.max(6, Math.floor(beforeBlock * 0.72) + Math.floor(pressure * 0.5));
+                target.block = Math.max(0, beforeBlock - breakAmount);
+                const vulnStack = 1 + (path === 'convergence' && doctrineTier > 0 ? 1 : 0);
+                target.buffs.vulnerable = Math.max(0, Math.floor(Number(target.buffs.vulnerable) || 0)) + vulnStack;
+
+                const damageScale = path === 'destruction' && doctrineTier > 0 ? (1 + doctrineTier * 0.05) : 1;
+                const strikeRaw = Math.max(9, Math.floor((10 + pressure * 1.1 + this.turnNumber * 0.6) * scale * damageScale));
+                const strike = this.resolveBurstDamageAfterCounter(strikeRaw, antiBurst, 6);
+                const damage = this.dealDamageToEnemy(target, strike, 'metal');
+                if (path === 'resonance' && doctrineTier > 0 && breakAmount >= 10 && typeof this.player?.drawCards === 'function') {
+                    this.player.drawCards(1);
+                }
+                const breakRefund = (path === 'convergence' && doctrineTier >= 2 && breakAmount >= 10)
+                    ? this.resolveCommandRefundAfterCounter(1, antiRefund)
+                    : 0;
+                if (breakRefund > 0) {
+                    this.gainBattleCommandPoints(breakRefund, 'resonanceMatrixBreak');
+                }
+                const targetEl = document.querySelector(`.enemy[data-index="${targetIndex}"]`);
+                if (targetEl) {
+                    Utils.addShakeEffect(targetEl, damage >= 18 ? 'heavy' : 'medium');
+                    Utils.showFloatingNumber(targetEl, damage, 'damage');
+                }
+                Utils.showBattleLog(
+                    `命环共振·破阵回路${modeText}：击碎 ${target.name} 护盾 ${Math.min(beforeBlock, breakAmount)} 点，造成 ${Math.max(0, damage)} 伤害并施加 ${vulnStack} 层易伤`
+                    + `${path === 'resonance' && doctrineTier > 0 && breakAmount >= 10 ? '，并抽取 1 张牌' : ''}`
+                    + `${antiBurst > 0 ? '，敌方爆发抑制生效' : ''}`
+                    + `${path === 'convergence' && doctrineTier >= 2 && breakRefund <= 0 && antiRefund > 0 ? '，但回收被敌方封锁' : ''}`
+                );
+                await Utils.sleep(170);
+                return true;
+            }
+
+            if (branchId === 'cleanse') {
+                const cleanCap = 2 + (path === 'wisdom' && doctrineTier > 0 ? 1 : 0);
+                const cleaned = this.cleansePlayerDebuffs(cleanCap);
+                const drawCount = Math.max(
+                    1,
+                    2 + (path === 'resonance' && doctrineTier > 0 ? 1 : 0) - antiDraw
+                );
+                if (typeof this.player?.drawCards === 'function') {
+                    this.player.drawCards(drawCount);
+                }
+                let pressureDelta = 0;
+                if (!antiStabilize && cleaned >= 2 && this.game && typeof this.game.ensureEndlessState === 'function') {
+                    const state = this.game.ensureEndlessState();
+                    const before = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
+                    if (before >= 6) {
+                        state.pressure = Math.max(0, before - 1);
+                        pressureDelta = state.pressure - before;
+                    }
+                }
+                const cleanseRefund = (path === 'convergence' && doctrineTier > 0)
+                    ? this.resolveCommandRefundAfterCounter(1, antiRefund)
+                    : 0;
+                if (cleanseRefund > 0) {
+                    this.gainBattleCommandPoints(cleanseRefund, 'resonanceMatrixCleanse');
+                }
+                Utils.showBattleLog(
+                    `命环共振·净域回路${modeText}：净化 ${cleaned} 层减益并抽 ${drawCount}`
+                    + `${pressureDelta < 0 ? `，轮回压力 ${pressureDelta}` : ''}`
+                    + `${antiStabilize ? '，敌方稳压封锁生效' : ''}`
+                    + `${path === 'convergence' && doctrineTier > 0 && cleanseRefund <= 0 && antiRefund > 0 ? '，且回收被敌方封锁' : ''}`
+                );
+                await Utils.sleep(150);
+                return true;
+            }
+
+            let target = aliveEnemies[0];
+            for (let i = 1; i < aliveEnemies.length; i += 1) {
+                if ((aliveEnemies[i].currentHp || 0) > (target.currentHp || 0)) {
+                    target = aliveEnemies[i];
+                }
+            }
+            const targetIndex = this.enemies.indexOf(target);
+            const burstScale = path === 'destruction' && doctrineTier > 0 ? (1 + doctrineTier * 0.07) : 1;
+            const primaryRaw = Math.max(12, Math.floor((13 + pressure * 1.3 + this.turnNumber * 0.7) * scale * burstScale));
+            const primary = this.resolveBurstDamageAfterCounter(primaryRaw, antiBurst, 8);
+            const primaryDamage = this.dealDamageToEnemy(target, primary, 'fire');
+            let splashTotal = 0;
+            const splashRaw = Math.max(5, Math.floor(primary * 0.35));
+            const splash = this.resolveBurstDamageAfterCounter(splashRaw, antiBurst, 3);
+            for (let i = 0; i < this.enemies.length; i += 1) {
+                const enemy = this.enemies[i];
+                if (!enemy || enemy.currentHp <= 0 || enemy === target) continue;
+                const damage = this.dealDamageToEnemy(enemy, splash, 'fire');
+                splashTotal += Math.max(0, damage);
+            }
+            const burstRefund = (path === 'convergence' && doctrineTier > 0 && primaryDamage >= 16)
+                ? this.resolveCommandRefundAfterCounter(1, antiRefund)
+                : 0;
+            if (burstRefund > 0) {
+                this.gainBattleCommandPoints(burstRefund, 'resonanceMatrixBurst');
+            }
+            const targetEl = document.querySelector(`.enemy[data-index="${targetIndex}"]`);
+            if (targetEl) {
+                Utils.addShakeEffect(targetEl, primaryDamage >= 20 ? 'heavy' : 'medium');
+                Utils.showFloatingNumber(targetEl, primaryDamage, 'damage');
+            }
+            Utils.showBattleLog(
+                `命环共振·歼灭回路${modeText}：重创 ${target.name} ${Math.max(0, primaryDamage)} 并余震扩散 ${splashTotal}`
+                + `${burstRefund > 0 ? `，回收指令槽 +${burstRefund}` : ''}`
+                + `${path === 'convergence' && doctrineTier > 0 && primaryDamage >= 16 && burstRefund <= 0 && antiRefund > 0 ? '，但回收被敌方封锁' : ''}`
+                + `${antiBurst > 0 ? '，敌方爆发抑制生效' : ''}`
+            );
+            await Utils.sleep(170);
+            return true;
+        }
+
+        if (command.id === 'horizon_barter_order') {
+            const aliveEnemies = this.enemies.filter((enemy) => enemy && enemy.currentHp > 0);
+            if (aliveEnemies.length === 0) return false;
+
+            const modeProfile = await this.resolveHorizonBarterMode(command);
+            if (!modeProfile) return false;
+            const path = String(this.player?.fateRing?.path || '');
+            const doctrineProfile = this.getPathDoctrineProfile(path);
+            const doctrineTier = Math.max(0, Math.floor(Number(doctrineProfile?.tier) || 0));
+            const pressure = this.getBattleCommandEndlessPressure();
+
+            const currentCandy = Math.max(0, Math.floor(Number(this.player?.milkCandy) || 0));
+            const maxSpend = Math.max(1, Math.floor(Number(modeProfile.spendCap) || 2) + (path === 'wisdom' && doctrineTier >= 2 ? 1 : 0));
+            const spentCandy = Math.min(maxSpend, currentCandy);
+            this.player.milkCandy = Math.max(0, currentCandy - spentCandy);
+
+            const antiCandy = aliveEnemies.reduce((max, enemy) => Math.max(max, Math.floor(Number(enemy?.__endlessAntiCandy) || 0)), 0);
+            const antiDraw = aliveEnemies.reduce((max, enemy) => Math.max(max, Math.floor(Number(enemy?.__endlessAntiDraw) || 0)), 0);
+            const antiStabilize = aliveEnemies.some((enemy) => Number(enemy?.__endlessAntiStabilize) > 0);
+            const antiEnergy = aliveEnemies.reduce((max, enemy) => Math.max(max, Math.floor(Number(enemy?.__endlessAntiEnergy) || 0)), 0);
+            const antiRefund = aliveEnemies.reduce((max, enemy) => Math.max(max, Math.floor(Number(enemy?.__endlessAntiRefund) || 0)), 0);
+            const antiBurst = aliveEnemies.reduce((max, enemy) => Math.max(max, Math.floor(Number(enemy?.__endlessAntiBurst) || 0)), 0);
+            const effectiveCandy = Math.max(0, spentCandy - antiCandy);
+
+            const drawCount = Math.max(
+                1,
+                1 + effectiveCandy + Math.max(0, Math.floor(Number(modeProfile.drawBonus) || 0))
+                + (path === 'resonance' && doctrineTier > 0 ? 1 : 0)
+                - antiDraw
+            );
+            if (typeof this.player?.drawCards === 'function') {
+                this.player.drawCards(drawCount);
+            }
+            const rawEnergyGain = Math.max(
+                1,
+                1 + (effectiveCandy >= 2 ? 1 : 0)
+                + Math.max(0, Math.floor(Number(modeProfile.energyBonus) || 0))
+                + (path === 'convergence' && doctrineTier >= 2 ? 1 : 0)
+            );
+            const energyGain = Math.max(0, rawEnergyGain - antiEnergy);
+            this.player.currentEnergy = Math.max(0, Math.floor(Number(this.player?.currentEnergy) || 0) + energyGain);
+
+            let target = aliveEnemies[0];
+            for (let i = 1; i < aliveEnemies.length; i += 1) {
+                if ((aliveEnemies[i].currentHp || 0) > (target.currentHp || 0)) {
+                    target = aliveEnemies[i];
+                }
+            }
+            const targetIndex = this.enemies.indexOf(target);
+            const damageScale = path === 'destruction' && doctrineTier > 0 ? (1 + doctrineTier * 0.04) : 1;
+            const primaryRaw = Math.max(
+                8,
+                Math.floor((9 + pressure * 1.4 + effectiveCandy * 3 + this.turnNumber * 0.5) * scale * damageScale * Math.max(0.6, Number(modeProfile.damageMul) || 1))
+            );
+            const primary = this.resolveBurstDamageAfterCounter(primaryRaw, antiBurst, 5);
+            const primaryDamage = this.dealDamageToEnemy(target, primary, 'thunder');
+
+            let splashTotal = 0;
+            if (effectiveCandy >= 2) {
+                const splashRaw = Math.max(5, Math.floor(primary * 0.4));
+                const splash = this.resolveBurstDamageAfterCounter(splashRaw, antiBurst, 3);
+                for (let i = 0; i < this.enemies.length; i += 1) {
+                    const enemy = this.enemies[i];
+                    if (!enemy || enemy.currentHp <= 0 || enemy === target) continue;
+                    const damage = this.dealDamageToEnemy(enemy, splash, 'thunder');
+                    splashTotal += Math.max(0, damage);
+                }
+            }
+
+            let pressureDelta = 0;
+            if (this.game && typeof this.game.ensureEndlessState === 'function') {
+                const state = this.game.ensureEndlessState();
+                const before = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
+                let after = before;
+                if (!antiStabilize && effectiveCandy >= Math.max(1, Math.floor(Number(modeProfile.stabilizeNeed) || 2)) && before >= 5) {
+                    after = Math.max(0, before - 1);
+                } else if (spentCandy <= 0 && before <= 8 && !(path === 'wisdom' && doctrineTier > 0)) {
+                    after = Math.min(9, before + Math.max(0, Math.floor(Number(modeProfile.backlash) || 0)));
+                }
+                state.pressure = after;
+                pressureDelta = after - before;
+                const currentHeat = Math.max(0, Math.min(9, Math.floor(Number(state.barterHeat) || 0)));
+                const heatDelta = spentCandy > 0 ? (spentCandy >= 2 ? 2 : 1) : -1;
+                state.barterHeat = Math.max(0, Math.min(9, currentHeat + heatDelta));
+            }
+
+            const rawRefund = effectiveCandy >= 1
+                ? (1 + (path === 'convergence' && doctrineTier > 0 ? 1 : 0))
+                : 0;
+            const refund = this.resolveCommandRefundAfterCounter(rawRefund, antiRefund);
+            if (refund > 0) {
+                this.gainBattleCommandPoints(refund, 'horizonBarter');
+            }
+
+            if (path === 'wisdom' && doctrineTier > 0 && spentCandy <= 0) {
+                this.cleansePlayerDebuffs(1);
+            }
+
+            const targetEl = document.querySelector(`.enemy[data-index="${targetIndex}"]`);
+            if (targetEl) {
+                Utils.addShakeEffect(targetEl, primaryDamage >= 18 ? 'heavy' : 'medium');
+                Utils.showFloatingNumber(targetEl, primaryDamage, 'damage');
+            }
+
+            Utils.showBattleLog(
+                `界隙交易（${modeProfile.label}）：耗费 ${spentCandy} 点奶糖${antiCandy > 0 ? `（受压制有效 ${effectiveCandy}）` : ''}，抽 ${drawCount} 并回能 ${energyGain}，对 ${target.name} 造成 ${Math.max(0, primaryDamage)} 伤害`
+                + `${splashTotal > 0 ? `（扩散 ${splashTotal}）` : ''}`
+                + `${refund > 0 ? `，回收指令槽 +${refund}` : ''}`
+                + `${rawRefund > 0 && refund <= 0 && antiRefund > 0 ? '，回收被敌方封锁' : ''}`
+                + `${pressureDelta < 0 ? `，轮回压力 ${pressureDelta}` : ''}`
+                + `${pressureDelta > 0 ? `，轮回压力 +${pressureDelta}` : ''}`
+                + `${antiStabilize ? '，敌方稳压封锁生效' : ''}`
+                + `${antiEnergy > 0 ? '，敌方断流抑制生效' : ''}`
+                + `${antiBurst > 0 ? '，敌方爆发抑制生效' : ''}`
+            );
+            await Utils.sleep(170);
+            return true;
+        }
+
+        return false;
+    }
+
+    getBattleCommandSnapshot() {
+        const state = this.commandState || this.createDefaultBattleCommandState();
+        return {
+            enabled: !!state.enabled,
+            points: Math.max(0, Math.floor(Number(state.points) || 0)),
+            maxPoints: Math.max(1, Math.floor(Number(state.maxPoints) || 12)),
+            totalCommandsUsed: Math.max(0, Math.floor(Number(state.totalCommandsUsed) || 0)),
+            lastResonanceMatrixMode: String(state.lastResonanceMatrixMode || 'auto'),
+            endlessPressure: this.getBattleCommandEndlessPressure(),
+            commandCount: Array.isArray(state.commands) ? state.commands.length : 0,
+            commands: Array.isArray(state.commands)
+                ? state.commands.map((command) => ({
+                    id: command.id,
+                    name: command.name,
+                    cost: this.resolveBattleCommandEffectiveCost(command),
+                    baseCost: command.cost,
+                    cooldown: command.cooldown,
+                    cooldownRemaining: command.cooldownRemaining,
+                    uses: command.uses || 0
+                }))
+                : []
+        };
+    }
+
+    createEnemyTacticalPlan(enemy) {
+        if (!enemy || !Array.isArray(enemy.patterns) || enemy.patterns.length === 0) {
+            return { id: 'balanced_cycle', label: '均衡轮转', queue: [0] };
+        }
+
+        const patterns = enemy.patterns;
+        const attackIndexes = [];
+        const defendIndexes = [];
+        const debuffIndexes = [];
+        const utilityIndexes = [];
+
+        patterns.forEach((pattern, index) => {
+            if (!pattern || typeof pattern !== 'object') return;
+            if (pattern.type === 'attack' || pattern.type === 'multiAttack' || pattern.type === 'executeDamage') {
+                attackIndexes.push(index);
+            } else if (pattern.type === 'defend' || pattern.type === 'heal') {
+                defendIndexes.push(index);
+            } else if (pattern.type === 'debuff' || pattern.type === 'addStatus') {
+                debuffIndexes.push(index);
+            } else {
+                utilityIndexes.push(index);
+            }
+        });
+
+        const take = (arr, fallback = 0, cursor = 0) => {
+            if (Array.isArray(arr) && arr.length > 0) {
+                return arr[Math.max(0, cursor) % arr.length];
+            }
+            return Math.max(0, Math.min(patterns.length - 1, fallback));
+        };
+        const firstAttack = take(attackIndexes, 0, 0);
+        const firstDefend = take(defendIndexes, firstAttack, 0);
+        const firstDebuff = take(debuffIndexes, firstAttack, 0);
+        const firstUtility = take(utilityIndexes, firstAttack, 0);
+
+        const role = String(enemy.enemyVariantRole || this.resolveEnemyCombatArchetype(patterns) || 'balanced');
+        let id = 'balanced_cycle';
+        let label = '均衡轮转';
+        let queue = [firstAttack, firstDefend, firstDebuff, take(attackIndexes, firstAttack, 1)];
+
+        if (role === 'striker') {
+            id = 'strike_chain';
+            label = '疾攻链';
+            queue = [
+                firstAttack,
+                take(attackIndexes, firstAttack, 1),
+                firstDebuff,
+                take(attackIndexes, firstAttack, 2),
+                firstUtility,
+                take(attackIndexes, firstAttack, 3)
+            ];
+        } else if (role === 'guardian') {
+            id = 'guard_cycle';
+            label = '守御轮转';
+            queue = [
+                firstDefend,
+                firstAttack,
+                take(defendIndexes, firstDefend, 1),
+                firstUtility,
+                take(attackIndexes, firstAttack, 1),
+                firstDebuff
+            ];
+        } else if (role === 'hexer') {
+            id = 'hex_rotation';
+            label = '咒压轮换';
+            queue = [
+                firstDebuff,
+                firstAttack,
+                take(debuffIndexes, firstDebuff, 1),
+                firstUtility,
+                take(attackIndexes, firstAttack, 1),
+                firstDefend
+            ];
+        }
+
+        const sanitized = queue
+            .map((idx) => Math.max(0, Math.min(patterns.length - 1, Math.floor(Number(idx) || 0))))
+            .filter((idx, pos, source) => source.length <= 1 || pos === 0 || idx !== source[pos - 1]);
+
+        return {
+            id,
+            label,
+            queue: sanitized.length > 0 ? sanitized : [0]
+        };
+    }
+
+    refreshEnemyTacticalPlan(enemy, force = false) {
+        if (!enemy || !Array.isArray(enemy.patterns) || enemy.patterns.length === 0) return;
+        const needRefresh = force
+            || !enemy.tacticalPlanId
+            || !Array.isArray(enemy.tacticalQueue)
+            || enemy.__tacticalPatternCount !== enemy.patterns.length;
+        if (!needRefresh) return;
+
+        const plan = this.createEnemyTacticalPlan(enemy);
+        enemy.tacticalPlanId = plan.id;
+        enemy.tacticalPlanLabel = plan.label;
+        enemy.tacticalQueue = Array.isArray(plan.queue) ? plan.queue.slice() : [0];
+        enemy.tacticalCursor = 0;
+        enemy.__tacticalPatternCount = enemy.patterns.length;
+    }
+
+    getNextEnemyPatternIndex(enemy) {
+        if (!enemy || !Array.isArray(enemy.patterns) || enemy.patterns.length === 0) return 0;
+        this.refreshEnemyTacticalPlan(enemy);
+
+        if (!Array.isArray(enemy.tacticalQueue) || enemy.tacticalQueue.length === 0) {
+            enemy.currentPatternIndex = Math.max(0, enemy.currentPatternIndex || 0) % enemy.patterns.length;
+            return enemy.currentPatternIndex;
+        }
+
+        const cursor = Math.max(0, Math.floor(Number(enemy.tacticalCursor) || 0));
+        const idx = enemy.tacticalQueue[cursor % enemy.tacticalQueue.length];
+        enemy.tacticalCursor = cursor + 1;
+        enemy.currentPatternIndex = Math.max(0, Math.min(enemy.patterns.length - 1, Math.floor(Number(idx) || 0)));
+        return enemy.currentPatternIndex;
+    }
+
     // 创建敌人实例
     createEnemyInstance(enemyData) {
         if (!enemyData || typeof enemyData !== 'object') {
@@ -300,6 +2492,35 @@ class Battle {
             }
         };
 
+        const variation = this.getEnemyVariationBlueprint(enemyData, enemy.patterns, enemy.maxHp);
+        if (variation) {
+            enemy.enemyVariantId = variation.id;
+            enemy.enemyVariantTier = variation.tier;
+            enemy.enemyVariantRole = variation.archetype;
+            enemy.enemyVariantTag = variation.tag;
+            enemy.name = `${enemy.name}·${variation.tag}`;
+
+            if (variation.attackMul > 1) {
+                enemy.patterns.forEach((pattern) => {
+                    if (!pattern || typeof pattern !== 'object') return;
+                    if (pattern.type === 'attack' || pattern.type === 'multiAttack' || pattern.type === 'executeDamage') {
+                        if (Number.isFinite(Number(pattern.value))) {
+                            pattern.value = Math.max(1, Math.floor(Number(pattern.value) * variation.attackMul));
+                        }
+                    }
+                });
+            }
+            if (variation.openingBlock > 0) {
+                enemy.block = Math.max(enemy.block || 0, variation.openingBlock);
+            }
+            if (variation.openingStrength > 0) {
+                enemy.buffs.strength = Math.max(0, Number(enemy.buffs.strength) || 0) + variation.openingStrength;
+            }
+            if (Array.isArray(variation.appendPatterns) && variation.appendPatterns.length > 0) {
+                enemy.patterns.push(...variation.appendPatterns.map((pattern) => ({ ...pattern })));
+            }
+        }
+
         // 3. 精英怪机制 (Elite System)
         // 非Boss单位有 20% 几率突变为精英
         // 3. 精英怪机制 (Elite System)
@@ -366,6 +2587,8 @@ class Battle {
             enemy.currentPhase = 0;
         }
 
+        this.refreshEnemyTacticalPlan(enemy, true);
+
         return enemy;
     }
 
@@ -388,6 +2611,7 @@ class Battle {
         this.playerAttackedThisTurn = false;
         this.playerFirstAttackBoostUsed = false;
         this.turnStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        this.encounterRewardConsumed = false;
 
         // --- P1 机制：解析残影 (Ghost) 行为库 ---
         for (let enemy of this.enemies) {
@@ -407,6 +2631,10 @@ class Battle {
                 Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：破绽施加 +${res.applyMarkBonus}`);
             } else if (res.id === 'entropy') {
                 Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：本回合首次弃牌触发抽牌与追击`);
+            } else if (res.id === 'stormcraft') {
+                Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：本回合首次命中易伤目标触发追击`);
+            } else if (res.id === 'vitalweave') {
+                Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：本回合首次治疗触发护脉反击`);
             } else if (res.id === 'bulwark') {
                 Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：本回合首次获得护盾触发抽牌与反击`);
             }
@@ -453,6 +2681,13 @@ class Battle {
                 }
             }
         }
+
+        const encounterTheme = this.resolveEncounterThemeProfile();
+        if (encounterTheme) {
+            this.applyEncounterThemeProfile(encounterTheme);
+        }
+        this.initializeBattleCommandSystem();
+        this.onBattleCommandTurnStart();
 
         // 环境：禁止护盾时，清空已有护盾（避免开场护盾绕过）
         if (this.environmentState && this.environmentState.noBlock) {
@@ -578,6 +2813,7 @@ class Battle {
             this.uiDirty.piles = true;
             this.uiDirty.environment = true;
             this.uiDirty.activeSkill = true;
+            this.uiDirty.command = true;
             return;
         }
 
@@ -640,6 +2876,7 @@ class Battle {
         if (this.uiDirty.energy) this.updateEnergyUI();
         if (this.uiDirty.piles) this.updatePilesUI();
         if (this.uiDirty.environment) this.updateEnvironmentUI();
+        if (this.uiDirty.command) this.updateBattleCommandUI();
         this.updateLegacyMissionTracker();
 
         // Sync active skill UI (Cooldowns etc)
@@ -654,6 +2891,7 @@ class Battle {
         this.uiDirty.piles = false;
         this.uiDirty.environment = false;
         this.uiDirty.activeSkill = false;
+        this.uiDirty.command = false;
 
         if (this.game && this.game.performanceStats) {
             this.game.performanceStats.battleUIUpdates = (this.game.performanceStats.battleUIUpdates || 0) + 1;
@@ -882,6 +3120,128 @@ class Battle {
         });
     }
 
+    resolveCounterplayThreatProfile() {
+        const profile = {
+            needCleanse: false,
+            needBreak: false,
+            needDefend: false,
+            needBurst: false
+        };
+        const aliveEnemies = (Array.isArray(this.enemies) ? this.enemies : [])
+            .filter((enemy) => enemy && enemy.currentHp > 0);
+        if (aliveEnemies.length === 0) return profile;
+
+        let debuffActions = 0;
+        let defendActions = 0;
+        let healActions = 0;
+        let summonActions = 0;
+        let burstScore = 0;
+        let hasGuardBreak = false;
+        let strikerRoleCount = 0;
+        let guardianRoleCount = 0;
+        let hexerRoleCount = 0;
+
+        const scanPattern = (pattern) => {
+            if (!pattern || typeof pattern !== 'object') return;
+            if (pattern.type === 'debuff' || pattern.type === 'addStatus') debuffActions += 1;
+            if (pattern.type === 'defend') defendActions += 1;
+            if (pattern.type === 'heal') healActions += 1;
+            if (pattern.type === 'summon' || (pattern.type === 'addStatus' && Number(pattern.count) >= 2)) summonActions += 1;
+            if (pattern.type === 'multiAction' && Array.isArray(pattern.actions)) {
+                pattern.actions.forEach((action) => scanPattern(action));
+            }
+            if (pattern.type === 'attack') {
+                burstScore = Math.max(burstScore, Math.max(0, Math.floor(Number(pattern.value) || 0)));
+            } else if (pattern.type === 'executeDamage') {
+                burstScore = Math.max(burstScore, Math.max(0, Math.floor(Number(pattern.value) || 0)));
+            } else if (pattern.type === 'multiAttack') {
+                const value = Math.max(0, Math.floor(Number(pattern.value) || 0));
+                const count = Math.max(1, Math.floor(Number(pattern.count) || 1));
+                burstScore = Math.max(burstScore, value * count);
+            }
+        };
+
+        aliveEnemies.forEach((enemy) => {
+            if (!enemy || !Array.isArray(enemy.patterns)) return;
+            const roleId = String(enemy.enemyVariantRole || this.resolveEnemyCombatArchetype(enemy.patterns) || 'balanced');
+            if (roleId === 'striker') strikerRoleCount += 1;
+            if (roleId === 'guardian') guardianRoleCount += 1;
+            if (roleId === 'hexer') hexerRoleCount += 1;
+            if (
+                (enemy.isElite && enemy.eliteType === 'sunder')
+                || Math.max(0, Math.floor(Number(enemy?.buffs?.guardBreak) || 0)) > 0
+            ) {
+                hasGuardBreak = true;
+            }
+            enemy.patterns.forEach((pattern) => scanPattern(pattern));
+        });
+
+        const heavyBlockEnemy = aliveEnemies.some((enemy) => Math.max(0, Math.floor(Number(enemy.block) || 0)) >= 10);
+        profile.needCleanse = debuffActions >= 2 || hexerRoleCount >= 1;
+        profile.needBreak = heavyBlockEnemy || defendActions + healActions >= 2 || guardianRoleCount >= 1;
+        profile.needDefend = burstScore >= 18 || hasGuardBreak;
+        profile.needBurst = summonActions >= 1 || strikerRoleCount >= 1 || (defendActions + healActions >= 2);
+        return profile;
+    }
+
+    resolveCardCounterTags(card, threatProfile = null) {
+        if (!card || typeof card !== 'object') return [];
+        const profile = threatProfile && typeof threatProfile === 'object'
+            ? threatProfile
+            : this.resolveCounterplayThreatProfile();
+        const effects = Array.isArray(card.effects) ? card.effects : [];
+        const keywords = Array.isArray(card.keywords) ? card.keywords.map((kw) => String(kw || '')) : [];
+        const tags = [];
+        const pushTag = (id, label, tip) => {
+            if (!id || !label || !tip) return;
+            if (tags.some((item) => item.id === id)) return;
+            tags.push({ id, label, tip });
+        };
+
+        const hasCleanse = keywords.includes('cleanse') || effects.some((effect) => effect && effect.type === 'cleanse');
+        const hasBreak = keywords.includes('penetrate') || keywords.includes('execute') || effects.some((effect) => {
+            if (!effect || typeof effect !== 'object') return false;
+            return ['removeBlock', 'blockBurst', 'penetrate', 'executeDamage', 'percentDamage'].includes(effect.type);
+        });
+        const hasDefend = card.type === 'defense'
+            || Number(card.block) > 0
+            || effects.some((effect) => effect && (
+                effect.type === 'block' || (effect.type === 'buff' && effect.buffType === 'nextTurnBlock')
+            ));
+        const hasBurst = (card.type === 'attack' && Math.max(0, Number(card.damage) || 0) >= 10)
+            || keywords.includes('burst')
+            || keywords.includes('chain')
+            || keywords.includes('vulnerable')
+            || keywords.includes('execute')
+            || effects.some((effect) => {
+                if (!effect || typeof effect !== 'object') return false;
+                if (effect.type === 'damage' || effect.type === 'executeDamage' || effect.type === 'percentDamage') {
+                    return Math.max(0, Number(effect.value) || 0) >= 10;
+                }
+                if (effect.type === 'multiAttack') {
+                    const v = Math.max(0, Number(effect.value) || 0);
+                    const c = Math.max(1, Number(effect.count) || 1);
+                    return v * c >= 12;
+                }
+                return false;
+            });
+
+        if (profile.needCleanse && hasCleanse) {
+            pushTag('cleanse', '净化', '当前敌方偏控场，这张牌可用于解控与止损。');
+        }
+        if (profile.needBreak && hasBreak) {
+            pushTag('break', '破盾', '当前敌方偏防守，这张牌适合破防开口。');
+        }
+        if (profile.needDefend && hasDefend) {
+            pushTag('defend', '防守', '当前有高爆发威胁，建议优先保命。');
+        }
+        if (profile.needBurst && hasBurst) {
+            pushTag('burst', '爆发', '当前适合抢节奏，这张牌可用于快速压血。');
+        }
+
+        return tags.slice(0, 2);
+    }
+
     // 更新手牌UI
     updateHandUI() {
         const handContainer = document.getElementById('hand-cards');
@@ -890,10 +3250,15 @@ class Battle {
 
         // CSS Force for Scroll - Moved to CSS class .hand-area
         handContainer.classList.add('hand-active');
+        const threatProfile = this.resolveCounterplayThreatProfile();
 
         this.player.hand.forEach((card, index) => {
             const effectiveCost = this.getEffectiveCardCost(card);
-            const cardEl = Utils.createCardElement(card, index, false, { costOverride: effectiveCost });
+            const counterTags = this.resolveCardCounterTags(card, threatProfile);
+            const cardEl = Utils.createCardElement(card, index, false, {
+                costOverride: effectiveCost,
+                battleTags: counterTags
+            });
 
             // 检查是否可用
             let playable = true;
@@ -917,6 +3282,9 @@ class Battle {
 
             if (!playable) {
                 cardEl.classList.add('unplayable');
+            }
+            if (playable && counterTags.length > 0) {
+                cardEl.classList.add('priority-play', `priority-${counterTags[0].id}`);
             }
 
             // 如果被选中
@@ -996,15 +3364,63 @@ class Battle {
         if (!candyContainer) {
             candyContainer = document.createElement('div');
             candyContainer.id = 'candy-container';
-            candyContainer.style.marginLeft = '15px';
-            candyContainer.style.display = 'flex';
-            candyContainer.style.alignItems = 'center';
-            candyContainer.style.color = '#ff9';
-            candyContainer.style.fontSize = '1.2rem';
-            if (orbsContainer.parentElement) {
+            candyContainer.className = 'resource-item candy-display';
+
+            const resourcesContainer = orbsContainer.closest('.resources-container');
+            if (resourcesContainer) {
+                resourcesContainer.appendChild(candyContainer);
+            } else if (orbsContainer.parentElement) {
                 orbsContainer.parentElement.appendChild(candyContainer);
             }
         }
+
+        if (!candyContainer.querySelector('#candy-orbs')) {
+            candyContainer.innerHTML = `
+                <div class="candy-orbs" id="candy-orbs"></div>
+                <span class="candy-text" id="candy-text">0/0</span>
+                <div class="resource-tooltip">奶糖</div>
+            `;
+        }
+
+        const candyOrbs = candyContainer.querySelector('#candy-orbs');
+        const candyText = candyContainer.querySelector('#candy-text');
+        if (!candyOrbs || !candyText) return;
+
+        const candySnapshot = this.getCandyDisplaySnapshot(maxIconsBeforeCollapse);
+        const currentCandy = candySnapshot.current;
+        const maxCandy = candySnapshot.max;
+        candyOrbs.innerHTML = '';
+
+        if (!candySnapshot.collapsed) {
+            for (let i = 0; i < candySnapshot.iconCount; i += 1) {
+                const orb = document.createElement('div');
+                orb.className = 'candy-orb';
+                orb.textContent = '🍬';
+                candyOrbs.appendChild(orb);
+            }
+        } else {
+            const orb = document.createElement('div');
+            orb.className = 'candy-orb';
+            orb.textContent = '🍬';
+            candyOrbs.appendChild(orb);
+        }
+
+        candyText.style.display = 'block';
+        candyText.textContent = candySnapshot.text;
+        candyContainer.title = `奶糖 ${currentCandy}/${maxCandy}`;
+    }
+
+    getCandyDisplaySnapshot(maxIconsBeforeCollapse = 6) {
+        const current = Math.max(0, Math.floor(Number(this.player?.milkCandy) || 0));
+        const max = Math.max(current, Math.floor(Number(this.player?.maxMilkCandy) || 0));
+        const collapsed = current > Math.max(1, Math.floor(Number(maxIconsBeforeCollapse) || 6));
+        return {
+            current,
+            max,
+            collapsed,
+            iconCount: collapsed ? 1 : current,
+            text: `${current}/${max}`
+        };
     }
 
     // 更新牌堆UI
@@ -2025,6 +4441,36 @@ class Battle {
         // 检查易伤
         if (enemy.buffs.vulnerable && enemy.buffs.vulnerable > 0) {
             amount += enemy.buffs.vulnerable;
+
+            const resonance = this.player && this.player.archetypeResonance ? this.player.archetypeResonance : null;
+            const doctrine = this.player && this.player.legacyRunDoctrine ? this.player.legacyRunDoctrine : null;
+            const hasStormcraftResonance = !!(resonance && resonance.id === 'stormcraft');
+            const hasStormcraftDoctrine = !!(doctrine && doctrine.stormcraftLegacyProcEnabled);
+            const resonanceUsed = hasStormcraftResonance ? !!resonance.procUsedThisTurn : false;
+            const doctrineUsed = hasStormcraftDoctrine ? !!doctrine.stormcraftProcUsedThisTurn : false;
+            if ((hasStormcraftResonance || hasStormcraftDoctrine) && !resonanceUsed && !doctrineUsed) {
+                const bonusDamage = Math.max(
+                    1,
+                    hasStormcraftResonance ? (Math.floor(Number(resonance.vulnerableBonusDamage) || 0)) : 0,
+                    hasStormcraftDoctrine ? (Math.floor(Number(doctrine.stormcraftLegacyBonusDamage) || 0)) : 0
+                );
+                amount += bonusDamage;
+                if (hasStormcraftResonance) resonance.procUsedThisTurn = true;
+                if (hasStormcraftDoctrine) doctrine.stormcraftProcUsedThisTurn = true;
+
+                const drawCount = Math.max(
+                    hasStormcraftResonance ? (Math.floor(Number(resonance.firstVulnerableHitDraw) || 0)) : 0,
+                    hasStormcraftDoctrine ? (Math.floor(Number(doctrine.stormcraftLegacyDraw) || 0)) : 0
+                );
+                if (drawCount > 0) {
+                    this.player.drawCards(drawCount);
+                    this.markUIDirty('hand', 'piles');
+                }
+                if (hasStormcraftDoctrine && this.game && typeof this.game.handleLegacyMissionProgress === 'function') {
+                    this.game.handleLegacyMissionProgress('stormcraftVulnerableProc', 1);
+                }
+                Utils.showBattleLog(`【雷策连锁】破窗追击：伤害 +${bonusDamage}${drawCount > 0 ? `，抽牌 +${drawCount}` : ''}`);
+            }
         }
 
         if (enemy.isGhost && enemy.personalityRules && enemy.personalityRules.takenMul) {
@@ -2166,6 +4612,7 @@ class Battle {
 
         // 击杀触发
         if (wasAlive && enemy.currentHp <= 0) {
+            this.onBattleCommandEnemyKilled(enemy);
             if (this.player.triggerTreasureEffect) {
                 this.player.triggerTreasureEffect('onKill', enemy);
             }
@@ -2340,6 +4787,7 @@ class Battle {
             this.playerAttackedThisTurn = false;
             this.player.startTurn();
             this.emit('turnStart', { turnNumber: this.turnNumber, actor: 'player' });
+            this.onBattleCommandTurnStart();
 
             // 启用结束回合按钮
             if (endTurnBtn) endTurnBtn.disabled = false;
@@ -2398,6 +4846,7 @@ class Battle {
 
             this.player.startTurn();
             this.emit('turnStart', { turnNumber: this.turnNumber, actor: 'player' });
+            this.onBattleCommandTurnStart();
             this.turnStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
             // 启用结束回合按钮
@@ -2542,13 +4991,6 @@ class Battle {
                     if (!this.player.isAlive()) {
                         this.battleEnded = true;
                         return;
-                    }
-
-                    // 下一个行动模式
-                    if (Array.isArray(enemy.patterns) && enemy.patterns.length > 0) {
-                        enemy.currentPatternIndex = (enemy.currentPatternIndex + 1) % enemy.patterns.length;
-                    } else {
-                        enemy.currentPatternIndex = 0;
                     }
 
                     if (k < actionCount - 1) await Utils.sleep(500);
@@ -2730,7 +5172,7 @@ class Battle {
             return;
         }
 
-        const safeIndex = Math.max(0, enemy.currentPatternIndex || 0) % enemy.patterns.length;
+        const safeIndex = this.getNextEnemyPatternIndex(enemy);
         const pattern = enemy.patterns[safeIndex] || { type: 'attack', value: 1, intent: '⚔️' };
         // 只有主行动才显示日志，避免子行动刷屏
         Utils.showBattleLog(`${enemy.name} 使用 ${pattern.intent || pattern.type || '行动'}`);
@@ -3204,6 +5646,7 @@ class Battle {
             if (nextPhase.patterns) {
                 enemy.patterns = nextPhase.patterns;
                 enemy.currentPatternIndex = 0; // 重置循环
+                this.refreshEnemyTacticalPlan(enemy, true);
             }
 
             // 播放特效
@@ -3278,19 +5721,128 @@ class Battle {
         }
     }
 
+    updateBattleCommandUI() {
+        const panelId = 'battle-command-panel';
+        let panel = document.getElementById(panelId);
+        const state = this.commandState || this.createDefaultBattleCommandState();
+
+        if (!state.enabled || !Array.isArray(state.commands) || state.commands.length === 0) {
+            if (panel && panel.parentElement) {
+                panel.parentElement.removeChild(panel);
+            }
+            return;
+        }
+
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = panelId;
+            panel.className = 'battle-command-panel';
+            const battleContainer = document.querySelector('#battle-screen .battle-container') || document.querySelector('.battle-container');
+            if (battleContainer) {
+                const envEl = document.getElementById('battle-environment');
+                const missionEl = document.getElementById('legacy-mission-tracker');
+                if (missionEl && missionEl.parentElement === battleContainer) {
+                    missionEl.insertAdjacentElement('afterend', panel);
+                } else if (envEl && envEl.parentElement === battleContainer) {
+                    envEl.insertAdjacentElement('afterend', panel);
+                } else {
+                    battleContainer.insertBefore(panel, battleContainer.firstChild);
+                }
+            }
+        }
+        if (!panel) return;
+
+        const escapeHtml = (value) => String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+
+        const points = Math.max(0, Math.floor(Number(state.points) || 0));
+        const maxPoints = Math.max(1, Math.floor(Number(state.maxPoints) || 12));
+        const progress = Math.max(0, Math.min(100, Math.round((points / maxPoints) * 100)));
+
+        const commandButtons = state.commands.map((command) => {
+            const cost = this.resolveBattleCommandEffectiveCost(command);
+            const cooldownRemaining = Math.max(0, Math.floor(Number(command.cooldownRemaining) || 0));
+            const disabled = this.currentTurn !== 'player'
+                || this.battleEnded
+                || this.isProcessingCard
+                || this.isTurnTransitioning
+                || cooldownRemaining > 0
+                || points < cost;
+            const statusText = cooldownRemaining > 0
+                ? `冷却 ${cooldownRemaining}`
+                : (points >= cost ? '可发动' : '槽能不足');
+            const classes = [
+                'battle-command-btn',
+                cooldownRemaining > 0 ? 'cooldown' : '',
+                points >= cost && cooldownRemaining === 0 ? 'ready' : '',
+                disabled ? 'disabled' : ''
+            ].filter(Boolean).join(' ');
+
+            return `
+                <button class="${classes}" ${disabled ? 'disabled' : ''}
+                        onclick="window.game && game.battle && game.battle.activateBattleCommand('${escapeHtml(command.id)}')"
+                        title="${escapeHtml(command.desc)}">
+                    <span class="battle-command-head">
+                        <span class="battle-command-icon">${escapeHtml(command.icon)}</span>
+                        <span class="battle-command-name">${escapeHtml(command.name)}</span>
+                    </span>
+                    <span class="battle-command-meta">消耗 ${cost} ｜ ${escapeHtml(statusText)}</span>
+                </button>
+            `;
+        }).join('');
+
+        panel.innerHTML = `
+            <div class="battle-command-header">
+                <span class="battle-command-title">战场指令</span>
+                <span class="battle-command-points">${points}/${maxPoints}</span>
+            </div>
+            <div class="battle-command-track">
+                <div class="battle-command-fill" style="width:${progress}%"></div>
+            </div>
+            <div class="battle-command-list">${commandButtons}</div>
+        `;
+    }
+
 
     // 更新环境UI
     updateEnvironmentUI() {
         const envEl = document.getElementById('battle-environment');
         if (!envEl) return;
 
-        if (this.activeEnvironment) {
+        const envName = this.activeEnvironment ? this.activeEnvironment.name : '';
+        const envIcon = this.activeEnvironment ? this.activeEnvironment.icon : '';
+        const envDesc = this.activeEnvironment ? this.activeEnvironment.description : '';
+        const encounter = this.activeEncounterTheme || null;
+
+        const escapeHtml = (value) => String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+
+        if (this.activeEnvironment || encounter) {
             envEl.style.display = 'flex';
             envEl.innerHTML = `
-    <span class="env-icon">${this.activeEnvironment.icon}</span>
-        <span class="env-name">${this.activeEnvironment.name}</span>
+                ${this.activeEnvironment
+                ? `<span class="env-main"><span class="env-icon">${envIcon}</span><span class="env-name">${escapeHtml(envName)}</span></span>`
+                : ''}
+                ${encounter
+                ? `<span class="encounter-theme-chip" title="${escapeHtml(encounter.description)}">
+                        <span class="encounter-icon">${escapeHtml(encounter.icon)}</span>
+                        <span class="encounter-name">遭遇·${escapeHtml(encounter.name)} ${'I'.repeat(Math.max(1, Math.min(3, Number(encounter.tierStage) || 1)))}阶</span>
+                    </span>`
+                : ''}
 `;
-            envEl.title = this.activeEnvironment.description;
+            const titleSegments = [];
+            if (envDesc) titleSegments.push(`环境：${envDesc}`);
+            if (encounter && encounter.description) {
+                const stage = Math.max(1, Math.min(3, Number(encounter.tierStage) || 1));
+                titleSegments.push(`遭遇（${'I'.repeat(stage)}阶）：${encounter.description}`);
+            }
+            envEl.title = titleSegments.join(' ｜ ');
         } else {
             envEl.style.display = 'none';
         }

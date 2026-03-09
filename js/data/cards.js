@@ -784,6 +784,520 @@ const CARDS = {
         ]
     },
 
+    lightningProbe: {
+        id: 'lightningProbe',
+        name: '雷策试探',
+        type: 'attack',
+        cost: 1,
+        icon: '⚡',
+        description: '造成 5 点伤害，并施加 1 层易伤',
+        rarity: 'common',
+        keywords: ['storm', 'vulnerable'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'damage', value: 5, target: 'enemy' },
+            { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'enemy' }
+        ]
+    },
+
+    chainArc: {
+        id: 'chainArc',
+        name: '链弧斩',
+        type: 'attack',
+        cost: 1,
+        icon: '🔗',
+        description: '造成 4 点伤害，并施加 2 层破绽',
+        rarity: 'common',
+        keywords: ['storm', 'mark'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'damage', value: 4, target: 'enemy' },
+            { type: 'applyMark', value: 2, target: 'enemy' }
+        ]
+    },
+
+    stormDraft: {
+        id: 'stormDraft',
+        name: '雷图推演',
+        type: 'skill',
+        cost: 0,
+        icon: '🗺️',
+        description: '抽 1 张牌，并施加 1 层易伤',
+        rarity: 'common',
+        keywords: ['storm', 'tempo'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'draw', value: 1, target: 'self' },
+            { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'enemy' }
+        ]
+    },
+
+    ionReserve: {
+        id: 'ionReserve',
+        name: '离子蓄势',
+        type: 'skill',
+        cost: 1,
+        icon: '🔋',
+        description: '获得 1 点灵力，并施加 1 层破绽',
+        rarity: 'common',
+        keywords: ['storm', 'mark'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'energy', value: 1, target: 'self' },
+            { type: 'applyMark', value: 1, target: 'enemy' }
+        ]
+    },
+
+    surgeStep: {
+        id: 'surgeStep',
+        name: '疾电步',
+        type: 'skill',
+        cost: 1,
+        icon: '🌀',
+        description: '获得 6 点护盾，并抽 1 张牌',
+        rarity: 'common',
+        keywords: ['storm', 'guard'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'block', value: 6, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    forkedNeedle: {
+        id: 'forkedNeedle',
+        name: '分岔雷针',
+        type: 'attack',
+        cost: 1,
+        icon: '🪡',
+        description: '连续造成 3 点伤害 2 次',
+        rarity: 'common',
+        keywords: ['storm', 'chain'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'damage', value: 3, target: 'enemy' },
+            { type: 'damage', value: 3, target: 'enemy' }
+        ]
+    },
+
+    pressureSpark: {
+        id: 'pressureSpark',
+        name: '压电火花',
+        type: 'attack',
+        cost: 0,
+        icon: '✨',
+        description: '造成 4 点伤害；若目标有破绽，额外造成 4 点伤害',
+        rarity: 'common',
+        keywords: ['storm', 'mark'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'damage', value: 4, target: 'enemy' },
+            { type: 'conditionalDamage', value: 4, condition: 'marked', target: 'enemy' }
+        ]
+    },
+
+    thunderLattice: {
+        id: 'thunderLattice',
+        name: '雷网矩阵',
+        type: 'skill',
+        cost: 1,
+        icon: '🕸️',
+        description: '施加 4 层破绽并抽 1 张牌',
+        rarity: 'uncommon',
+        keywords: ['storm', 'mark'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'applyMark', value: 4, target: 'enemy' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    exposedCircuit: {
+        id: 'exposedCircuit',
+        name: '裸露回路',
+        type: 'attack',
+        cost: 1,
+        icon: '🧨',
+        description: '造成 8 点伤害；若目标有破绽，额外造成 5 点伤害',
+        rarity: 'uncommon',
+        keywords: ['storm', 'mark', 'burst'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'damage', value: 8, target: 'enemy' },
+            { type: 'conditionalDamage', value: 5, condition: 'marked', target: 'enemy' }
+        ]
+    },
+
+    flashRelay: {
+        id: 'flashRelay',
+        name: '闪继回路',
+        type: 'skill',
+        cost: 1,
+        icon: '📡',
+        description: '抽 2 张牌，并施加 1 层易伤',
+        rarity: 'uncommon',
+        keywords: ['storm', 'tempo'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'draw', value: 2, target: 'self' },
+            { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'enemy' }
+        ]
+    },
+
+    stormWard: {
+        id: 'stormWard',
+        name: '雷障',
+        type: 'defense',
+        cost: 1,
+        icon: '🛡️',
+        description: '获得 8 点护盾，并施加 1 层虚弱',
+        rarity: 'uncommon',
+        keywords: ['storm', 'guard'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'block', value: 8, target: 'self' },
+            { type: 'debuff', buffType: 'weak', value: 1, target: 'enemy' }
+        ]
+    },
+
+    cascadeVolt: {
+        id: 'cascadeVolt',
+        name: '级联伏特',
+        type: 'attack',
+        cost: 2,
+        icon: '⚙️',
+        description: '对全体造成 6 点伤害并抽 1 张牌',
+        rarity: 'uncommon',
+        keywords: ['storm', 'aoe'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'damageAll', value: 6, target: 'allEnemies' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    skybreakerArray: {
+        id: 'skybreakerArray',
+        name: '裂穹雷列',
+        type: 'attack',
+        cost: 2,
+        icon: '🌩️',
+        description: '造成 10 点伤害并施加 3 层破绽',
+        rarity: 'rare',
+        keywords: ['storm', 'mark', 'burst'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'damage', value: 10, target: 'enemy' },
+            { type: 'applyMark', value: 3, target: 'enemy' }
+        ]
+    },
+
+    resonanceTempest: {
+        id: 'resonanceTempest',
+        name: '共振风暴',
+        type: 'power',
+        cost: 2,
+        icon: '🌪️',
+        description: '获得 1 点力量，抽 1 张牌并对全体造成 4 点伤害',
+        rarity: 'rare',
+        keywords: ['storm', 'aoe'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'buff', buffType: 'strength', value: 1, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' },
+            { type: 'damageAll', value: 4, target: 'allEnemies' }
+        ]
+    },
+
+    executionThunder: {
+        id: 'executionThunder',
+        name: '断庭雷裁',
+        type: 'attack',
+        cost: 3,
+        icon: '⚖️',
+        description: '若目标生命低于 40%，造成 14 点斩杀伤害',
+        rarity: 'rare',
+        keywords: ['storm', 'execute'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'executeDamage', value: 14, threshold: 0.4, target: 'enemy' }
+        ]
+    },
+
+    mendThread: {
+        id: 'mendThread',
+        name: '续命丝',
+        type: 'skill',
+        cost: 1,
+        icon: '🧵',
+        description: '恢复 5 点生命，并获得 4 点护盾',
+        rarity: 'common',
+        keywords: ['vital', 'heal'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'heal', value: 5, target: 'self' },
+            { type: 'block', value: 4, target: 'self' }
+        ]
+    },
+
+    pulseBandage: {
+        id: 'pulseBandage',
+        name: '脉冲绷带',
+        type: 'skill',
+        cost: 0,
+        icon: '🩹',
+        description: '恢复 3 点生命，并施加 1 层破绽',
+        rarity: 'common',
+        keywords: ['vital', 'heal', 'mark'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'heal', value: 3, target: 'self' },
+            { type: 'applyMark', value: 1, target: 'enemy' }
+        ]
+    },
+
+    transfuseStrike: {
+        id: 'transfuseStrike',
+        name: '输生斩',
+        type: 'attack',
+        cost: 1,
+        icon: '🩸',
+        description: '失去 2 点生命，造成 8 点伤害并恢复 2 点生命',
+        rarity: 'common',
+        keywords: ['vital', 'heal', 'bleed'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'selfDamage', value: 2, target: 'self' },
+            { type: 'damage', value: 8, target: 'enemy' },
+            { type: 'heal', value: 2, target: 'self' }
+        ]
+    },
+
+    wardingHerb: {
+        id: 'wardingHerb',
+        name: '护脉草',
+        type: 'defense',
+        cost: 1,
+        icon: '🌿',
+        description: '获得 7 点护盾并恢复 2 点生命',
+        rarity: 'common',
+        keywords: ['vital', 'guard'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'block', value: 7, target: 'self' },
+            { type: 'heal', value: 2, target: 'self' }
+        ]
+    },
+
+    renewalChord: {
+        id: 'renewalChord',
+        name: '回生律',
+        type: 'skill',
+        cost: 1,
+        icon: '🎵',
+        description: '恢复 4 点生命并抽 1 张牌',
+        rarity: 'common',
+        keywords: ['vital', 'heal', 'tempo'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'heal', value: 4, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    bloodBloom: {
+        id: 'bloodBloom',
+        name: '血华',
+        type: 'attack',
+        cost: 1,
+        icon: '🌺',
+        description: '失去 3 点生命，造成 9 点伤害',
+        rarity: 'common',
+        keywords: ['vital', 'bleed'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'selfDamage', value: 3, target: 'self' },
+            { type: 'damage', value: 9, target: 'enemy' }
+        ]
+    },
+
+    mercyNeedle: {
+        id: 'mercyNeedle',
+        name: '慈脉针',
+        type: 'attack',
+        cost: 0,
+        icon: '🪡',
+        description: '造成 4 点伤害并恢复 2 点生命',
+        rarity: 'common',
+        keywords: ['vital', 'heal'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'damage', value: 4, target: 'enemy' },
+            { type: 'heal', value: 2, target: 'self' }
+        ]
+    },
+
+    lifelinkWeave: {
+        id: 'lifelinkWeave',
+        name: '生链织构',
+        type: 'skill',
+        cost: 1,
+        icon: '🧶',
+        description: '恢复 6 点生命，并获得下回合 4 点护盾',
+        rarity: 'uncommon',
+        keywords: ['vital', 'heal', 'guard'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'heal', value: 6, target: 'self' },
+            { type: 'buff', buffType: 'nextTurnBlock', value: 4, target: 'self' }
+        ]
+    },
+
+    hospiceEdict: {
+        id: 'hospiceEdict',
+        name: '护生敕令',
+        type: 'skill',
+        cost: 1,
+        icon: '📜',
+        description: '恢复 5 点生命，并施加 2 层虚弱',
+        rarity: 'uncommon',
+        keywords: ['vital', 'heal', 'control'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'heal', value: 5, target: 'self' },
+            { type: 'debuff', buffType: 'weak', value: 2, target: 'enemy' }
+        ]
+    },
+
+    rebirthSpiral: {
+        id: 'rebirthSpiral',
+        name: '回生螺旋',
+        type: 'attack',
+        cost: 2,
+        icon: '🌀',
+        description: '造成 7 点伤害并恢复 7 点生命',
+        rarity: 'uncommon',
+        keywords: ['vital', 'heal', 'burst'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'damage', value: 7, target: 'enemy' },
+            { type: 'heal', value: 7, target: 'self' }
+        ]
+    },
+
+    thornedRemedy: {
+        id: 'thornedRemedy',
+        name: '刺脉疗法',
+        type: 'attack',
+        cost: 1,
+        icon: '🌵',
+        description: '恢复 4 点生命，并对全体造成 4 点伤害',
+        rarity: 'uncommon',
+        keywords: ['vital', 'heal', 'aoe'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'heal', value: 4, target: 'self' },
+            { type: 'damageAll', value: 4, target: 'allEnemies' }
+        ]
+    },
+
+    vitalPivot: {
+        id: 'vitalPivot',
+        name: '生息转枢',
+        type: 'skill',
+        cost: 1,
+        icon: '🔄',
+        description: '恢复 3 点生命，获得 1 点灵力并施加 2 层破绽',
+        rarity: 'uncommon',
+        keywords: ['vital', 'heal', 'mark'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'heal', value: 3, target: 'self' },
+            { type: 'energy', value: 1, target: 'self' },
+            { type: 'applyMark', value: 2, target: 'enemy' }
+        ]
+    },
+
+    soulSuture: {
+        id: 'soulSuture',
+        name: '魂缝',
+        type: 'power',
+        cost: 2,
+        icon: '🪢',
+        description: '恢复 8 点生命，获得 1 层护盾留存并抽 1 张牌',
+        rarity: 'rare',
+        keywords: ['vital', 'heal', 'retain'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'heal', value: 8, target: 'self' },
+            { type: 'buff', buffType: 'retainBlock', value: 1, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    reversalPulse: {
+        id: 'reversalPulse',
+        name: '逆脉冲',
+        type: 'attack',
+        cost: 2,
+        icon: '💢',
+        description: '失去 4 点生命，造成 12 点伤害并恢复 6 点生命',
+        rarity: 'rare',
+        keywords: ['vital', 'heal', 'burst'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'selfDamage', value: 4, target: 'self' },
+            { type: 'damage', value: 12, target: 'enemy' },
+            { type: 'heal', value: 6, target: 'self' }
+        ]
+    },
+
+    phoenixReprieve: {
+        id: 'phoenixReprieve',
+        name: '回生凤返',
+        type: 'skill',
+        cost: 3,
+        icon: '🕊️',
+        description: '恢复 15 点生命，并对全体造成 10 点伤害',
+        rarity: 'rare',
+        keywords: ['vital', 'heal', 'aoe'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'heal', value: 15, target: 'self' },
+            { type: 'damageAll', value: 10, target: 'allEnemies' }
+        ]
+    },
+
     ironBreath: {
         id: 'ironBreath',
         name: '铁息守律',
@@ -1933,6 +2447,149 @@ const CARDS = {
         ]
     },
 
+    // ===== 墨尘（星律）- 标记与命环节奏主题 =====
+    starNeedle: {
+        id: 'starNeedle',
+        name: '星痕针',
+        type: 'attack',
+        character: 'moChen',
+        cost: 1,
+        icon: '🌠',
+        description: '造成 7 点伤害，并施加 2 层破绽。',
+        rarity: 'common',
+        effects: [
+            { type: 'damage', value: 7, target: 'enemy' },
+            { type: 'applyMark', value: 2, target: 'enemy' }
+        ]
+    },
+    omenBarrier: {
+        id: 'omenBarrier',
+        name: '星兆护幕',
+        type: 'defense',
+        character: 'moChen',
+        cost: 1,
+        icon: '🛡️',
+        description: '获得 9 点护盾，抽 1 张牌。',
+        rarity: 'uncommon',
+        effects: [
+            { type: 'block', value: 9, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+    ringCatalyst: {
+        id: 'ringCatalyst',
+        name: '命环催化',
+        type: 'skill',
+        character: 'moChen',
+        cost: 1,
+        icon: '🔭',
+        description: '命环经验 +20，并获得 1 点力量。',
+        rarity: 'rare',
+        effects: [
+            { type: 'ringExp', value: 20 },
+            { type: 'buff', buffType: 'strength', value: 1, target: 'self' }
+        ]
+    },
+    artifactBolt: {
+        id: 'artifactBolt',
+        name: '灵器矢',
+        type: 'attack',
+        character: 'ningXuan',
+        cost: 1,
+        icon: '🪬',
+        description: '造成 6 点伤害，获得 3 点护盾。',
+        rarity: 'common',
+        keywords: ['guard'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'damage', value: 6, target: 'enemy' },
+            { type: 'block', value: 3, target: 'self' }
+        ]
+    },
+    echoWard: {
+        id: 'echoWard',
+        name: '回响障壁',
+        type: 'defense',
+        character: 'ningXuan',
+        cost: 1,
+        icon: '🧱',
+        description: '获得 10 点护盾并抽 1 张牌。',
+        rarity: 'uncommon',
+        keywords: ['guard'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'block', value: 10, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+    ringInfusion: {
+        id: 'ringInfusion',
+        name: '命环灌注',
+        type: 'skill',
+        character: 'ningXuan',
+        cost: 1,
+        icon: '⚗️',
+        description: '命环经验 +16，获得 1 点灵力。',
+        rarity: 'rare',
+        effects: [
+            { type: 'ringExp', value: 16 },
+            { type: 'energy', value: 1, target: 'self' }
+        ]
+    },
+    matrixGuardProtocol: {
+        id: 'matrixGuardProtocol',
+        name: '命环矩阵·守式',
+        type: 'defense',
+        cost: 1,
+        icon: '🧩',
+        description: '获得 11 点护盾，净化 1 层减益，并为命环共振注入守势信号。',
+        rarity: 'uncommon',
+        keywords: ['guard', 'cleanse', 'matrix'],
+        comboTag: 'guard',
+        synergyGroup: 'bulwark',
+        effects: [
+            { type: 'block', value: 11, target: 'self' },
+            { type: 'cleanse', value: 1, target: 'self' },
+            { type: 'buff', buffType: 'matrixGuardSignal', value: 1, target: 'self' }
+        ]
+    },
+    matrixShatterVector: {
+        id: 'matrixShatterVector',
+        name: '命环矩阵·破式',
+        type: 'attack',
+        cost: 1,
+        icon: '🪓',
+        description: '移除目标所有护盾并造成 10 点伤害，并为命环共振注入破阵信号。',
+        rarity: 'uncommon',
+        keywords: ['penetrate', 'burst', 'matrix'],
+        comboTag: 'storm',
+        synergyGroup: 'stormcraft',
+        effects: [
+            { type: 'removeBlock', target: 'enemy' },
+            { type: 'damage', value: 10, target: 'enemy' },
+            { type: 'buff', buffType: 'matrixBreakSignal', value: 1, target: 'self' }
+        ]
+    },
+    matrixPurgeLoop: {
+        id: 'matrixPurgeLoop',
+        name: '命环矩阵·净式',
+        type: 'skill',
+        cost: 1,
+        icon: '🫧',
+        description: '净化 2 层减益并抽 1 张牌，并为命环共振注入净域信号。',
+        rarity: 'rare',
+        keywords: ['cleanse', 'tempo', 'matrix'],
+        comboTag: 'vital',
+        synergyGroup: 'vitalweave',
+        effects: [
+            { type: 'cleanse', value: 2, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' },
+            { type: 'buff', buffType: 'matrixCleanseSignal', value: 1, target: 'self' }
+        ]
+    },
+
 
 
     // 初始牌组 (Duplicates removed)
@@ -2078,10 +2735,14 @@ const CARD_POOL = {
         'bloodlettingSlash', 'punctureMark', 'hunterSeal', 'stanceFlow', 'guardedRiposte',
         'serratedRitual', 'coagulatedGuard', 'weakpointSurvey', 'duetFeint', 'poisedCounter',
         'recklessMulligan', 'echoingCut', 'voidLedger', 'entropyGuard',
+        'lightningProbe', 'chainArc', 'stormDraft', 'ionReserve', 'surgeStep',
+        'forkedNeedle', 'pressureSpark',
+        'mendThread', 'pulseBandage', 'transfuseStrike', 'wardingHerb', 'renewalChord',
+        'bloodBloom', 'mercyNeedle',
         'ironBreath', 'mirrorWall', 'reboundingShell', 'bastionStudy', 'wardingSweep',
         'poisonTouch', 'minorHeal', 'monkStrike', 'analysis',
         // 角色专属
-        'defianceStrike', 'bloodSeal', 'unchain', 'karmaStrike', 'probe'
+        'defianceStrike', 'bloodSeal', 'unchain', 'karmaStrike', 'probe', 'starNeedle', 'artifactBolt'
     ],
     uncommon: [
         'ragingBlow', 'counterStance', 'innerPeace', 'battleCry', 'luckyStrike',
@@ -2090,11 +2751,14 @@ const CARD_POOL = {
         'tacticalExpose', 'crimsonCascade', 'stanceAggressive', 'stanceDefensive',
         'bloodDebt', 'arteryRupture', 'razorFocus', 'stancePivot', 'focusBreak',
         'debtCollection', 'recirculation', 'calculatedRuin',
+        'thunderLattice', 'exposedCircuit', 'flashRelay', 'stormWard', 'cascadeVolt',
+        'lifelinkWeave', 'hospiceEdict', 'rebirthSpiral', 'thornedRemedy', 'vitalPivot',
         'resolveAnchor', 'guardianMantra', 'shieldTax', 'bastionCrash', 'counterEdict',
+        'matrixGuardProtocol', 'matrixShatterVector',
         // 新增角色卡牌
         'defiantWill', 'healingTouch', 'vajraGlare', 'ringAnalysis',
         // 角色专属
-        'fusionBlast', 'vitalityBloom', 'asceticism', 'analyzeWeakness'
+        'fusionBlast', 'vitalityBloom', 'asceticism', 'analyzeWeakness', 'omenBarrier', 'echoWard'
     ],
     rare: [
         'thunderLaw', 'swordIntent', 'flameTruth', 'spaceRift', 'fortuneWheel',
@@ -2102,11 +2766,14 @@ const CARD_POOL = {
         'thunderStorm', 'voidWalk', 'iceFreeze', 'desperateSurvival', 'enlightenment',
         'allIn', 'sunderingNeedle', 'hemorrhageRain', 'executionDoctrine',
         'scarletJudgement', 'bloodTideOath', 'verdictNeedle', 'oblivionSpiral', 'finalConvergence',
+        'skybreakerArray', 'resonanceTempest', 'executionThunder',
+        'soulSuture', 'reversalPulse', 'phoenixReprieve',
         'citadelOath', 'fortressEdict', 'aegisJudgement',
+        'matrixPurgeLoop',
         // 新增角色卡牌
         'ringResonance', 'breakthrough', 'bloodBlessing', 'lifeSurge', 'zenMeditation', 'lawInsight',
         // 角色专属
-        'lawbreaker', 'tacticalAdvantage'
+        'lawbreaker', 'tacticalAdvantage', 'ringCatalyst', 'ringInfusion'
     ],
     epic: ['inferno', 'timeRewind', 'salvation', 'timeStasis'],
     legendary: ['timeStop', 'voidEmbrace', 'karmaKill', 'reversal', 'chaosControl']
@@ -2147,6 +2814,28 @@ const ARCHETYPE_PACKS = {
             'analysis', 'desperateSurvival', 'fortuneWheel'
         ]
     },
+    stormcraft: {
+        id: 'stormcraft',
+        name: '雷策连锁',
+        description: '围绕易伤窗口、多段打击与破绽连锁组织雷策爆发。',
+        cards: [
+            'lightningProbe', 'chainArc', 'stormDraft', 'ionReserve', 'surgeStep',
+            'forkedNeedle', 'pressureSpark', 'thunderLattice', 'exposedCircuit', 'flashRelay',
+            'stormWard', 'cascadeVolt', 'skybreakerArray', 'resonanceTempest', 'executionThunder',
+            'punctureMark', 'tacticalExpose', 'duetFeint', 'verdictNeedle', 'matrixShatterVector'
+        ]
+    },
+    vitalweave: {
+        id: 'vitalweave',
+        name: '回生织脉',
+        description: '将治疗、护盾与反击节奏串联，形成续航转爆发的回生循环。',
+        cards: [
+            'mendThread', 'pulseBandage', 'transfuseStrike', 'wardingHerb', 'renewalChord',
+            'bloodBloom', 'mercyNeedle', 'lifelinkWeave', 'hospiceEdict', 'rebirthSpiral',
+            'thornedRemedy', 'vitalPivot', 'soulSuture', 'reversalPulse', 'phoenixReprieve',
+            'minorHeal', 'healingTouch', 'guardedRiposte', 'coagulatedGuard', 'matrixPurgeLoop'
+        ]
+    },
     bulwark: {
         id: 'bulwark',
         name: '玄甲反击',
@@ -2155,7 +2844,7 @@ const ARCHETYPE_PACKS = {
             'ironBreath', 'mirrorWall', 'reboundingShell', 'bastionStudy',
             'wardingSweep', 'resolveAnchor', 'guardianMantra', 'shieldTax',
             'bastionCrash', 'counterEdict', 'citadelOath', 'fortressEdict', 'aegisJudgement', 'defend',
-            'ironWill', 'turtleShell', 'counterStance'
+            'ironWill', 'turtleShell', 'counterStance', 'artifactBolt', 'echoWard', 'matrixGuardProtocol'
         ]
     }
 };
@@ -2172,11 +2861,15 @@ function inferDeckArchetype(deck = []) {
         hemorrhage: 0,
         precision: 0,
         entropy: 0,
+        stormcraft: 0,
+        vitalweave: 0,
         bulwark: 0
     };
     const hemorrhageSet = new Set(ARCHETYPE_PACKS.hemorrhage.cards);
     const precisionSet = new Set(ARCHETYPE_PACKS.precision.cards);
     const entropySet = new Set(ARCHETYPE_PACKS.entropy.cards);
+    const stormcraftSet = new Set(ARCHETYPE_PACKS.stormcraft.cards);
+    const vitalweaveSet = new Set(ARCHETYPE_PACKS.vitalweave.cards);
     const bulwarkSet = new Set(ARCHETYPE_PACKS.bulwark.cards);
 
     deck.forEach(card => {
@@ -2210,6 +2903,26 @@ function inferDeckArchetype(deck = []) {
             (cardId && entropySet.has(cardId))
         ) {
             scores.entropy += 1;
+        }
+
+        if (
+            synergy === 'stormcraft' ||
+            keywords.includes('storm') ||
+            keywords.includes('vulnerable') ||
+            keywords.includes('chain') ||
+            (cardId && stormcraftSet.has(cardId))
+        ) {
+            scores.stormcraft += 1;
+        }
+
+        if (
+            synergy === 'vitalweave' ||
+            keywords.includes('vital') ||
+            keywords.includes('heal') ||
+            keywords.includes('sustain') ||
+            (cardId && vitalweaveSet.has(cardId))
+        ) {
+            scores.vitalweave += 1;
         }
 
         if (
@@ -2425,6 +3138,14 @@ const UPGRADE_RULES = {
         ringAnalysis: { vulnerable: 1, exp: 10 }, // 2/15 -> 3/25
         lawInsight: { draw: 1, stealBonus: 0.05 }, // 2/10% -> 3/15%
         timeStasis: { damageReduction: 25 },  // 50% -> 75%
+        // 墨尘
+        starNeedle: { damage: 2, mark: 1 }, // 7+2mark -> 9+3mark
+        omenBarrier: { block: 3, draw: 1 }, // 9/1 -> 12/2
+        ringCatalyst: { exp: 15, strength: 1 }, // 20exp+1力量 -> 35exp+2力量
+        // 宁玄
+        artifactBolt: { damage: 2, block: 2 }, // 6/3 -> 8/5
+        echoWard: { block: 3, draw: 1 }, // 10/1 -> 13/2
+        ringInfusion: { exp: 14, energy: 1 }, // 16exp+1灵力 -> 30exp+2灵力
 
         // 新增卡牌升级
         soulHarvest: { damage: 5, maxHp: 1 }, // 12/2 -> 17/3
@@ -2474,6 +3195,40 @@ const UPGRADE_RULES = {
         calculatedRuin: { damage: 1 },
         oblivionSpiral: { draw: 1, damage: 2 },
         finalConvergence: { damagePerEnergy: 2 },
+
+        // 雷策连锁流派
+        lightningProbe: { damage: 2, vulnerable: 1 },
+        chainArc: { damage: 2, mark: 1 },
+        stormDraft: { draw: 1, vulnerable: 1 },
+        ionReserve: { energy: 1, mark: 1 },
+        surgeStep: { block: 2, draw: 1 },
+        forkedNeedle: { damage: 1 },
+        pressureSpark: { damage: 2 },
+        thunderLattice: { mark: 2, draw: 1 },
+        exposedCircuit: { damage: 2 },
+        flashRelay: { draw: 1, vulnerable: 1 },
+        stormWard: { block: 2, weak: 1 },
+        cascadeVolt: { damage: 2, draw: 1 },
+        skybreakerArray: { damage: 3, mark: 1 },
+        resonanceTempest: { damage: 1, strength: 1 },
+        executionThunder: { damage: 4 },
+
+        // 回生织脉流派
+        mendThread: { heal: 2, block: 2 },
+        pulseBandage: { heal: 2, mark: 1 },
+        transfuseStrike: { damage: 2, heal: 2 },
+        wardingHerb: { block: 2, heal: 1 },
+        renewalChord: { heal: 2, draw: 1 },
+        bloodBloom: { damage: 3 },
+        mercyNeedle: { damage: 2, heal: 1 },
+        lifelinkWeave: { heal: 2, nextBlock: 2 },
+        hospiceEdict: { heal: 2, weak: 1 },
+        rebirthSpiral: { damage: 2, heal: 2 },
+        thornedRemedy: { heal: 2, damage: 2 },
+        vitalPivot: { heal: 2, energy: 1, mark: 1 },
+        soulSuture: { heal: 3, draw: 1, retainBlock: 1 },
+        reversalPulse: { damage: 3, heal: 2 },
+        phoenixReprieve: { heal: 4, damage: 3 },
 
         // 玄甲反击流派
         ironBreath: { block: 2, cleanse: 1 },

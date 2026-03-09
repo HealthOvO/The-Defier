@@ -49,7 +49,8 @@ function assert(cond, msg) {
     featureFlags: {
       combatDepthV2: true,
       pvpRuleSyncV2: true,
-      mapNodeTrialForge: true
+      mapNodeTrialForge: true,
+      endlessModeV1: true
     }
   }, legacySave);
 
@@ -57,6 +58,9 @@ function assert(cond, msg) {
   assert(migrated.combatMeta && migrated.combatMeta.ruleVersion === 'combat-v2', 'combatMeta should be attached');
   assert(migrated.pvpMeta && migrated.pvpMeta.ruleVersion === 'pvp-v2', 'pvpMeta should be attached');
   assert(migrated.featureFlags && migrated.featureFlags.combatDepthV2 === true, 'featureFlags should be attached');
+  assert(migrated.featureFlags && migrated.featureFlags.endlessModeV1 === true, 'endless flag should be attached');
+  assert(migrated.endlessMeta && typeof migrated.endlessMeta === 'object', 'endless meta should be attached');
+  assert(Number(migrated.endlessMeta.pressure) === 0, 'endless pressure should default to 0 in migrated saves');
   assert(typeof migrated.schemaMigratedAt === 'number', 'schemaMigratedAt should be timestamp');
 
   console.log('Save migration sanity checks passed.');

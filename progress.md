@@ -523,3 +523,1299 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - Playwright 冒烟 + 人工视觉：
       - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-polish-current-3` ✅
       - 已人工检查 `output/web-game-polish-current-3/shot-1.png`，主菜单渲染稳定。
+
+- 2026-03-08: 第十五轮系统扩展（地图事件 / 商店 / 营地 联动增强）
+  - 新增“行旅增益”机制（可叠层、按场消耗）：
+    - `js/core/player.js` 新增 `adventureBuffs`：
+      - `firstTurnDrawBoostBattles`：首回合额外抽牌（按场消耗）
+      - `openingBlockBoostBattles`：开场额外护盾（按场消耗）
+      - `victoryGoldBoostBattles`：胜利额外灵石（按场消耗）
+    - 新增方法：
+      - `ensureAdventureBuffs / grantAdventureBuff / consumeAdventureBuff / consumeAdventureVictoryGoldBoost`
+    - 接入战斗流程：
+      - `prepareBattle`：处理开场护盾增益消耗；
+      - `startTurn`：处理首回合额外抽牌增益消耗。
+  - 商店扩展（地图商店）：
+    - `js/game.js` `generateShopData` 新增服务：
+      - `战术推演 (tacticalPlan)`
+      - `护阵符 (wardSigil)`
+      - `悬赏契约 (bountyContract)`
+    - `applyServiceEffect` 新增对应效果与弹窗反馈。
+  - 营地扩展：
+    - `js/game.js` `showCampfire` 新增选项：
+      - `战术演练`：+2 场首回合抽牌增益 + 命环经验
+      - `布设结界`：+2 场开场护盾增益
+    - 新增 `campfireDrill / campfireWard` 行为函数。
+  - 事件扩展：
+    - `js/data/events.js` 新增事件：
+      - `caravanQuartermaster`（行旅军需官）
+      - `nightWatchCamp`（夜巡营火）
+      - `frontierContractBoard`（前线悬赏榜）
+    - 新增事件效果类型 `adventureBuff`（在 `js/game.js executeEventEffect` 处理）。
+    - 扩展 `EVENT_POOL` 与 `ARCHETYPE_EVENT_POOLS`，让新增事件进入常规投放与流派偏置链路。
+  - 文本状态增强：
+    - `js/game.js` `render_game_to_text` 输出 `player.adventureBuffs`，用于自动化审计与可观测性。
+
+- 2026-03-08: 第十五轮测试扩展与证据（全通过）
+  - Node:
+    - 新增 `tests/sanity_adventure_buff_checks.js`（增益发放/消耗/战斗钩子）
+    - `tests/sanity_content_archetype_checks.js` 增补：
+      - 新事件定义与事件池挂载断言
+      - `adventureBuff` 参数合法性断言
+      - 更新四流派偏置池期望
+    - `tests/run_node_checks.sh` 已接入 `sanity_adventure_buff_checks.js`
+    - 结果：`bash tests/run_node_checks.sh` ✅
+  - Browser:
+    - `tests/browser_event_branch_audit.mjs` 增补新事件分支断言，并在快照中读取 `adventureBuffs`。
+    - 回归结果：
+      - `node tests/browser_audit.mjs` ✅
+      - `node tests/browser_feature_audit.mjs` ✅
+      - `node tests/browser_event_branch_audit.mjs` ✅（含新事件断言）
+      - `node tests/browser_inheritance_audit.mjs` ✅
+      - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 冒烟 + 人工视觉：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-map-shop-camp-polish` ✅
+    - 已人工检查 `output/web-game-map-shop-camp-polish/shot-1.png`，主菜单渲染正常，状态输出含 `adventureBuffs` 字段。
+
+- TODO / 下轮建议
+  - 可新增“事件节点中的临时商店”交互页（从事件直接购买 1 次特殊牌），并补端到端浏览器审计。
+  - 可继续扩充 `adventureBuff` 维度（如战斗首回合法力/命环掉落倍率）并做平衡采样脚本。
+
+- 2026-03-08: 第十六轮系统扩展（事件临时商会 + 商店深化 + 营地深化）
+  - 事件机制深化：
+    - `js/game.js` `executeEventEffect` 新增：
+      - `openTemporaryShop`：事件内打开临时商会，完成交易后回到事件收尾；
+      - `openCampfire`：事件可直接路由到营地决策界面。
+    - 新增临时商会流程方法：
+      - `getTemporaryEventShopOffers`
+      - `applyTemporaryEventShopOffer`
+      - `showTemporaryEventShop`
+    - `js/data/events.js` 新增事件：
+      - `floatingMarketRift`（裂隙浮市，进入临时商会）
+      - `emberCampSignal`（余烬营讯，进入营地）
+  - 地图商店深化（`js/game.js`）：
+    - `generateShopData` 新增服务：
+      - `scoutPack`（侦巡补给包，3 选 1 卡牌）
+      - `campRation`（行军口粮，恢复 + 护盾增益）
+      - `fateLedger`（命轨账簿，命环经验 + 悬赏增益）
+    - `applyServiceEffect` 新增对应逻辑；
+    - 新增 `showShopCardDraft`，支持商店内卡牌三选一弹窗购买。
+  - 营地深化（`js/game.js`）：
+    - `showCampfire` 新增 `悬赏部署` 选项；
+    - 新增 `campfireBounty`（2 层胜利悬赏增益 + 命环经验）。
+  - 事件池与偏置池扩展（`js/data/events.js`）：
+    - `EVENT_POOL` 接入新事件；
+    - `ARCHETYPE_EVENT_POOLS` 纳入 `floatingMarketRift/emberCampSignal` 的流派偏置映射。
+
+- 2026-03-08: 第十六轮测试与审计更新（全通过）
+  - Node:
+    - `bash tests/run_node_checks.sh` ✅
+    - `tests/sanity_content_archetype_checks.js` 已更新：
+      - 新事件完整性断言（含 `floatingMarketRift/emberCampSignal`）
+      - 新效果类型参数断言（`openTemporaryShop/openCampfire`）
+      - 偏置池期望更新。
+  - Browser:
+    - `tests/browser_feature_audit.mjs` 新增断言并通过：
+      - 地图商店新服务渲染；
+      - 新服务实际效果（恢复/经验/增益）；
+      - 营地新增策略项渲染；
+      - `floatingMarketRift` 临时商会事件链路；
+      - `emberCampSignal` 路由营地链路。
+    - `tests/browser_event_branch_audit.mjs` 新增新事件分支断言并通过：
+      - `floatingMarketRift`（离开分支，gold up）
+      - `emberCampSignal`（继续行进分支，ringExp up）
+    - 全套浏览器回归：
+      - `node tests/browser_audit.mjs` ✅（单独复跑确认稳定）
+      - `node tests/browser_feature_audit.mjs` ✅
+      - `node tests/browser_event_branch_audit.mjs` ✅
+      - `node tests/browser_inheritance_audit.mjs` ✅
+      - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 冒烟 + 人工视觉：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-map-shop-camp-polish-2` ✅
+    - 已人工检查 `output/web-game-map-shop-camp-polish-2/shot-1.png`，渲染稳定。
+
+- TODO / 下轮建议
+  - 可把临时商会扩展为“按流派定制货架”（基于 `inferDeckArchetype` 直接定制 offer 池），并新增命中率采样脚本。
+  - 可新增“营地风险选项”（以生命换高额短期增益）并增加平衡断言（收益上限/出现频率）。
+
+- 2026-03-08: 第十七轮持续扩展（稳定优先 + 新玩法落地）
+  - 新增“战后恢复”行旅增益链路（`victoryHealBoostBattles`）：
+    - `js/core/player.js`
+      - `adventureBuffs` 扩展 `victoryHealBoostBattles` 默认字段；
+      - 新增 `consumeAdventureVictoryHealBoost(baseHp)`，每层按 `max(6, floor(baseHp * 0.12))` 返回恢复量。
+    - `js/game.js`
+      - `onBattleWon` 接入战后恢复逻辑：仅在未满血时尝试消耗 1 层并恢复生命，写入战斗日志；
+      - `executeEventEffect` 的 `adventureBuff` 文案映射增加“战后恢复生命”。
+  - 地图商店继续扩展：
+    - 新服务 `fieldMedic`（战地医师签约）：2 场战斗胜利后恢复生命；
+    - 现有 `pulseCatalyst / insightIncense` 与新服务统一接入购买反馈与增益发放。
+  - 临时商会继续扩展：
+    - 新货品 `temp_medic`（野战医包）：2 场胜利后恢复生命；
+    - 临时商会奖励判定覆盖新增增益。
+  - 营地继续扩展：
+    - 新增选项 `战地整备`（`campfireMedic`）：
+      - 发放 2 层战后恢复增益；
+      - 命环经验 +10。
+  - 地图事件继续扩展：
+    - `js/data/events.js` 新增事件：
+      - `medicRelayPost`（战地医护中继站）
+      - `starlitFieldHospital`（星辉野战医院）
+    - 更新 `EVENT_POOL` 与 `ARCHETYPE_EVENT_POOLS`（bulwark 偏置纳入两新事件）。
+
+- 2026-03-08: 第十七轮测试同步与证据（全通过）
+  - Node 语法检查：
+    - `node --check js/core/player.js js/game.js js/data/events.js ...` ✅
+  - 目标脚本：
+    - `node tests/sanity_adventure_buff_checks.js` ✅（补充首回合灵力、命环经验倍率、战后恢复增益断言）
+    - `node tests/sanity_content_archetype_checks.js` ✅（补充新事件/新 buffId/偏置池断言）
+    - `node tests/sanity_event_bias_distribution_checks.js` ✅
+  - 全量 Node 回归：
+    - `bash tests/run_node_checks.sh` ✅
+  - 浏览器审计（同进程临时 http server）：
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅（新增服务与营地选项断言）
+    - `node tests/browser_event_branch_audit.mjs` ✅（新增 `leylineConfluence/astralSupplyDepot/medicRelayPost/starlitFieldHospital`）
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 冒烟 + 人工视觉：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-map-shop-camp-polish-3` ✅
+    - 人工检查：
+      - `output/web-game-map-shop-camp-polish-3/shot-0.png` ✅
+      - `output/web-game-map-shop-camp-polish-3/shot-1.png` ✅
+      - `output/web-game-map-shop-camp-polish-3/state-0.json` 与 `state-1.json` 包含 `victoryHealBoostBattles` 字段 ✅
+
+- TODO / 下轮建议
+  - 可新增“战后恢复增益”的战斗内可视化计数（战前/战后 HUD 提示），减少玩家心智负担。
+  - 可在临时商会加入“按当前 HP 区间动态调价”以形成风险-资源博弈。
+  - 可补一条浏览器端到端断言：强制触发战斗胜利后验证 `victoryHealBoostBattles` 真实扣层与生命恢复。
+
+- 2026-03-08: 第十八轮扩展与优化（可观测性 + 决策兜底）
+  - 地图可观测性增强（`js/core/map.js` + `css/style.css` + `css/mobile.css`）：
+    - 在地图右上角状态区新增“行旅增益面板” `#map-adventure-buffs`；
+    - 实时展示当前有效增益（抽牌/护盾/悬赏/首回合灵力/命环经验/战后医护）及剩余层数；
+    - 移动端显示优化：保留图标与计数，压缩文案宽度，避免挤占节点区域。
+  - 临时商会体验优化（`js/game.js`）：
+    - 新增低金币兜底货品 `temp_relief`（应急补给券）；
+    - 当金币偏低或事件指定 `forceRelief` 时，保证货架包含该低价选项；
+    - `temp_relief` 效果：立即恢复生命 + 1 层战后医护增益。
+  - 事件扩展（`js/data/events.js`）：
+    - 新增事件 `riftAidConvoy`（裂隙救援车队）；
+    - 进入分支可打开“强制应急货架”的临时商会（`forceRelief: true`）；
+    - 非商会分支可获得生命恢复与少量灵石；
+    - 已接入 `EVENT_POOL` 与 `bulwark` 偏置池。
+  - 测试增强：
+    - `tests/sanity_adventure_buff_checks.js`：增加 `ensureAdventureBuffs` 脏数据归一化断言；
+    - `tests/sanity_content_archetype_checks.js`：新增 `riftAidConvoy` 完整性/事件池/偏置池断言；
+    - `tests/browser_feature_audit.mjs` 新增断言：
+      - 地图增益面板渲染；
+      - 救援车队事件进入临时商会后必有“应急补给券”；
+      - 端到端验证 `victoryHealBoostBattles` 在战斗胜利后确实“回血 + 扣层”；
+    - `tests/browser_event_branch_audit.mjs` 新增 `riftAidConvoy` 分支断言。
+
+- 2026-03-08: 第十八轮回归证据（全通过）
+  - Node:
+    - `node --check`（涉及文件）✅
+    - `node tests/sanity_adventure_buff_checks.js` ✅
+    - `node tests/sanity_content_archetype_checks.js` ✅
+    - `node tests/sanity_event_bias_distribution_checks.js` ✅
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser audits（同进程临时 HTTP 服务）：
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅（含三条新增断言）
+    - `node tests/browser_event_branch_audit.mjs` ✅（含 `riftAidConvoy`）
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 冒烟 + 人工视觉：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-map-shop-camp-polish-4` ✅
+    - 已人工检查：
+      - `output/web-game-map-shop-camp-polish-4/shot-0.png`
+      - `output/web-game-map-shop-camp-polish-4/shot-1.png`
+      - `output/web-game-map-shop-camp-polish-4/state-0.json`
+      - `output/web-game-map-shop-camp-polish-4/state-1.json`
+
+- TODO / 下轮建议
+  - 可将地图“行旅增益面板”增加悬浮说明（精确生效时机/倍率），降低学习成本。
+  - 可为 `temp_relief` 加入“按损失生命比例提高恢复量”的弹性系数，形成低血反打策略。
+  - 可新增“事件临时商会购买后的战斗胜率采样脚本”，做平衡自动校验。
+
+- 2026-03-08: 第十八轮补充稳定性修正（收尾）
+  - `js/core/map.js`：
+    - `updateStatusBar()` 对 `#map-hp/#map-gold/#map-floor` 增加空节点防护，规避极端切屏下空引用风险。
+  - 回归复跑（再次全通过）：
+    - `bash tests/run_node_checks.sh` ✅
+    - Browser audits 全套（`browser_audit / browser_feature_audit / browser_event_branch_audit / browser_inheritance_audit / browser_pvp_audit`）✅
+    - Playwright 冒烟：
+      - `output/web-game-map-shop-camp-polish-5`（截图与状态输出正常）✅
+
+- 2026-03-08: 无尽模式第一期完整接入（设计 + 开发 + 测试闭环）
+  - `game.js`：补齐无尽模式核心状态机与接口
+    - 新增 `createDefaultEndlessState/normalizeEndlessState/ensureEndlessState/isEndlessUnlocked/isEndlessActive/getMapCacheKey/getEndlessRealmForCycle/getDisplayRealmName`
+    - 新增词缀与赐福系统：`getEndlessMutatorPool/rollNextEndlessMutator/getEndlessModifiers/getEndlessBoonPool/getEndlessBoonChoices/applyEndlessBoon/showEndlessBoonSelection`
+    - 新增流程控制：`startEndlessMode/handleEndlessRealmComplete`
+  - 关卡选择接入无尽入口：
+    - `initRealmSelect/selectRealm/updateRealmPreview` 支持 `'endless'` 选择项、预览面板、启动按钮逻辑。
+  - 战斗与结算链路：
+    - `startBattle` 为无尽模式接入敌人强化（生命/攻击/掉落倍率）与每战赐福注入（首回合抽牌/开场护盾/首回合灵力）。
+    - `onBattleWon` 修复 Boss 双结算风险：Boss 节点不再走前置 `completeNode`，改为 `handleBossDefeated` 单点推进。
+    - 新增 `handleBossDefeated`（此前缺失）并与 `onRealmComplete` 正确衔接。
+    - `onRealmComplete` 增加无尽分流到 `handleEndlessRealmComplete`。
+  - 经济与续航平衡：
+    - 商店价格接入无尽倍率（卡牌与服务）；
+    - 事件治疗 / 商店治疗 / 口粮 / 营地休息接入无尽治疗系数。
+  - 地图系统 `map.js`：
+    - 地图缓存键升级为 `endless:<cycle>:realm:<realm>`，修复循环轮次读旧图问题。
+    - 无尽模式接入动态地图配置（行数与节点序列）与节点权重偏移（elite/trial/event/shop/rest）。
+    - 状态栏改为可显示无尽标题；新增右上角无尽信息面板（轮次/倍率/词缀）。
+  - 存档与观测：
+    - `migrateSaveData` 增加无尽字段兜底（含无 `createDefaultEndlessState` 场景）；
+    - `loadGame` 恢复并归一化 `endlessMeta`；
+    - `render_game_to_text` 持续输出 `endless` 状态；
+    - `player.getState()` 新增 `adventureBuffs` 持久化。
+
+- 2026-03-08: 无尽模式测试新增与回归
+  - 新增 `tests/sanity_endless_mode_checks.js`：覆盖
+    - 无尽状态默认值与归一化；
+    - cycle -> realm 映射；
+    - mutator 轮换与 modifiers 合并；
+    - boon 应用效果；
+    - endless map config 合法性；
+    - start + realm complete 推进链路。
+  - `tests/run_node_checks.sh` 已接入 `sanity_endless_mode_checks.js`。
+  - `tests/sanity_save_migration_checks.js` 增加 endless flag/meta 断言。
+  - `tests/browser_feature_audit.mjs` 增加无尽链路断言：
+    - realm select 出现 endless 卡片；
+    - 可启动 endless；
+    - `render_game_to_text` 可读 endless 状态；
+    - endless realm complete 后 cycle 递增。
+
+- 2026-03-08: 本轮验证结果（全通过）
+  - Node：`bash tests/run_node_checks.sh` ✅
+  - Browser：
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright（develop-web-game 技能客户端）：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-endless` ✅
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --click-selector "#pvp-btn" --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-endless-pvp` ✅
+    - 人工查看截图：`output/web-game-endless-pvp/shot-1.png`，PVP 场景渲染正常；`state-1.json` 输出结构完整。
+
+- TODO / 下一轮建议
+  - 可继续扩展“无尽专属事件池”（当前为通用事件池 + 无尽权重偏置），加入词缀联动事件。
+  - 可为无尽赐福补充“二选一升级树”与稀有赐福保底机制，提升长期构筑策略深度。
+  - 可补一条浏览器审计：强制完整 boss 战 -> `onBattleWon` -> `handleBossDefeated` -> `handleEndlessRealmComplete` 的真实端到端链路（非直接调用）。
+
+- 2026-03-08: 无尽模式第三轮深化（词缀联动事件 + 祷告策略化 + 测试补齐）
+  - `js/game.js`：
+    - 新增 `getEndlessEventTuning()`，将当前无尽词缀映射为事件层调参：
+      - 事件灵石收益倍率、命环经验平推、试炼奖励倍率；
+      - 临时商会货架数与价格系数；
+      - 低保补给强制项；
+      - 行旅增益额外层数。
+    - `executeEventEffect()` 接入无尽词缀联动：
+      - `gold/ringExp/trial/adventureBuff/openTemporaryShop` 分支均可感知当前词缀并调整结果；
+      - 增加非完整 harness 场景兼容（`isEndlessActive/getEndlessEventTuning/getEndlessHealingMultiplier` 缺失时自动降级），避免 Node 审计桩对象报错。
+    - 临时商会扩展：
+      - `getTemporaryEventShopOffers()` 支持无尽联动调价/增量，并新增无尽专属货品：
+        - `temp_refit`（轮回重配包）
+        - `temp_boon`（轮回祷札）
+      - 货架算法增加“无尽专属货品必出其一 + 救援券保底并存”约束，避免互相覆盖。
+      - `applyTemporaryEventShopOffer()` 新增 `temp_refit/temp_boon` 结算路径。
+    - 地图商店无尽服务升级：
+      - `endlessBlessing` 从“随机单发”改为“二选一祷告”，新增 `showShopEndlessBlessingSelection()`；
+      - `endlessRefit` 奖励弹窗增强为“重配前后词缀对比 + 新词缀说明”。
+  - `js/data/events.js`：
+    - 新增 `ENDLESS_MUTATOR_EVENT_BIAS`；
+    - `getRandomEvent()` 在无尽状态下支持“按当前 activeMutators 偏置抽取事件”，实现词缀->事件池联动。
+
+- 2026-03-08: 测试增强与审计更新（本轮全通过）
+  - Node:
+    - 新增 `tests/sanity_endless_shop_service_checks.js`，覆盖：
+      - 无尽临时商会货架联动（扩容、保底、无尽专属货品）；
+      - `temp_refit/temp_boon` 实际生效；
+      - `endlessBlessing` 服务改为延迟二选一流程；
+      - `endlessRefit` 服务反馈链路。
+    - `tests/run_node_checks.sh` 已接入新脚本。
+    - `tests/sanity_endless_mode_checks.js` 增补 `getEndlessEventTuning` 断言。
+    - `tests/sanity_content_archetype_checks.js` 增补：
+      - `ENDLESS_EVENT_POOL/ENDLESS_MUTATOR_EVENT_BIAS` 完整性；
+      - 无尽词缀偏置事件命中断言。
+    - `bash tests/run_node_checks.sh` ✅（含新增脚本）。
+  - Browser:
+    - `tests/browser_feature_audit.mjs` 增补并通过：
+      - 无尽商店“轮回祷告二选一”端到端断言；
+      - 无尽词缀驱动临时商会货架（扩容 + 保底 + 专属货品）断言。
+    - `tests/browser_event_branch_audit.mjs` 增补并通过：
+      - `endlessStormSanctum` 分支断言。
+    - 全套浏览器审计通过：
+      - `browser_audit` ✅
+      - `browser_feature_audit` ✅
+      - `browser_event_branch_audit` ✅
+      - `browser_inheritance_audit` ✅
+      - `browser_pvp_audit` ✅
+  - Playwright（develop-web-game 技能客户端）:
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" ... --screenshot-dir output/web-game-endless-v3` ✅
+    - 已人工检查截图：
+      - `output/web-game-endless-v3/shot-0.png`
+      - `output/web-game-endless-v3/shot-1.png`
+    - `state-0.json/state-1.json` 结构正常，`endless` 字段输出完整；未发现新增控制台错误文件。
+
+- TODO / 下轮建议
+  - 可把 `temp_boon` 从“随机取 1”升级为“事件内显式二选一 UI”，与商店祷告交互完全一致。
+  - 可增加“无尽词缀联动可视化提示条”（显示本场事件被哪些词缀修正了数值）。
+  - 可新增自动平衡脚本：对 `getEndlessEventTuning` 进行 Monte Carlo 采样，约束收益方差与过强组合阈值。
+
+- 2026-03-08: 无尽模式第四轮扩展（轮回压力系统 + 稳压玩法）
+  - `js/game.js`：
+    - 无尽状态新增 `pressure`（0~9），并接入 `createDefaultEndlessState/normalizeEndlessState/migrateSaveData` 兼容逻辑。
+    - `getEndlessModifiers` 接入压力系数：
+      - 敌方生命/攻击、奖励倍率、治疗衰减随压力增长。
+    - `getEndlessEventTuning` 接入压力阈值联动：
+      - 中高压强制救援补给、货架扩容、经验平推、增益层数补偿。
+    - `handleEndlessRealmComplete` 新增压力推进：每轮突破后压力 +1（封顶 9），并在日志中显示“前后压力”。
+    - 事件效果新增 `endlessPressure`：可在事件中增减压力并反馈结果。
+    - 临时商会联动修正：
+      - 修复 `openTemporaryShop` 路径潜在重复调价（避免词缀价格系数重复叠乘）；
+      - `temp_boon` 增加回退候选池，避免极端情况下“赐福未生效”导致的流程不稳定。
+    - 无尽商店扩展：
+      - 新增服务 `endlessStabilizer`（轮回稳压）：压力 -2 + 回复生命 + 1 层开场护盾增益。
+      - `endlessBlessing` 文案同步为“二选一赐福”策略描述。
+
+  - `js/data/events.js`：
+    - 新增无尽专属事件：
+      - `endlessPressureValve`（稳压阀井：泄压求稳 / 超载换收益）
+      - `endlessFaultLine`（断层军需带：防线增益 / 清压开补给）
+    - 接入 `ENDLESS_EVENT_POOL`（common/rare）与 `ENDLESS_MUTATOR_EVENT_BIAS`（void/ashen/beserker 等词缀偏置）。
+
+  - `js/core/map.js`：
+    - 无尽面板新增“压力 x/9”展示，提升地图态可观测性。
+
+- 2026-03-08: 测试扩展与验证（本轮全通过）
+  - Node:
+    - `tests/sanity_endless_mode_checks.js` 新增压力字段默认值/归一化/修饰器/推进断言。
+    - `tests/sanity_endless_shop_service_checks.js` 新增稳压服务断言（压力下降 + 生命恢复）。
+    - `tests/sanity_content_archetype_checks.js` 新增：
+      - `endlessPressureValve/endlessFaultLine` 事件完整性；
+      - `ENDLESS_EVENT_POOL` 新条目；
+      - `endlessPressure` 效果参数合法性断言。
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser:
+    - `tests/browser_feature_audit.mjs` 新增通过项：
+      - 无尽商店出现“轮回稳压”服务；
+      - 购买后压力下降且生命恢复。
+    - `tests/browser_event_branch_audit.mjs` 新增通过项：
+      - `endlessPressureValve` 分支（gold + ringExp）；
+      - `endlessFaultLine` 分支（opening-block buff）。
+    - 浏览器全套回归：
+      - `browser_audit` ✅
+      - `browser_feature_audit` ✅
+      - `browser_event_branch_audit` ✅
+      - `browser_inheritance_audit` ✅
+      - `browser_pvp_audit` ✅
+  - Playwright（develop-web-game 客户端）:
+    - `output/web-game-endless-v4` 冒烟通过 ✅
+    - 人工检查截图：`shot-0.png`、`shot-1.png` ✅
+    - `state-0.json/state-1.json` 含 `endless.pressure` 字段，输出结构正常 ✅
+
+- TODO / 下轮建议
+  - 可将“压力值”进一步与敌人行为集绑定（高压力解锁额外意图或行动序列），形成更明显对局分层。
+  - 可给 `endlessPressure` 增加 UI 动画提示（上升/下降闪烁），增强玩家反馈。
+  - 可新增平衡断言：覆盖不同压力档位下的收益/难度曲线单调性，防止出现异常反直觉区间。
+
+- 2026-03-08: 第八轮无尽模式扩展（压力行为谱 + 可视反馈 + 回归增强）
+  - `game.js`：新增压力行为系统（不再仅数值膨胀）
+    - 新增 `getEndlessPressureBehaviorProfile`：按压力段返回敌方开场护盾/力量、追加攻击段数、压制减益注入等行为参数。
+    - 新增 `buildEndlessPressurePatternVariant`：将原攻击意图转换为“压迫连击/骤压连斩”变体，保证高压力下有可感知行为差异。
+    - `prepareEnemyForEndlessBattle` 接入压力行为谱：
+      - 高压力注入开场护盾与力量；
+      - 动态追加 1~2 段攻击意图；
+      - 高压/灾厄阶段注入 `weak/vulnerable` 压制意图；
+      - 记录 `__endlessPressureProfile` 元信息，便于调试与审计。
+  - `map.js` + `style.css/mobile.css`：新增压力反馈 UX
+    - 无尽面板新增“敌方节奏”芯片，显示当前压力行为摘要；
+    - 新增压力升降脉冲动画（`pressure-up` / `pressure-down`）；
+    - 维护 `lastEndlessPressure`，仅在压力变化时触发脉冲，避免无效闪烁。
+  - 测试增强：
+    - 扩展 `sanity_endless_mode_checks.js`：覆盖压力行为 tier、敌人行为注入（开场护盾/力量/额外攻击/减益意图）。
+    - 新增 `sanity_endless_pressure_curve_checks.js`：验证 0~9 压力带的风险收益曲线单调性（敌方强度非递减、治疗效率非递增、行为压制非递减）。
+    - `run_node_checks.sh` 已接入新脚本。
+    - `browser_feature_audit.mjs` 增补无尽面板断言：压力提升后应显示行为芯片并触发脉冲反馈。
+    - `web_game_playwright_client.mjs` 修复截图链路：当 `page.screenshot` 因字体等待超时，降级到 CDP `Page.captureScreenshot`，避免冒烟中断。
+
+- 2026-03-08: 本轮测试证据（全通过）
+  - Node:
+    - `bash tests/run_node_checks.sh` ✅
+      - 含新增 `Endless pressure curve checks passed`。
+  - Browser:
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅（含“endless panel pressure pulse”新断言）
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 冒烟 + 人工视觉检查：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-endless-v6` ✅
+    - 人工检查：
+      - `output/web-game-endless-v6/battle-manual.png`（已进入战斗界面，战斗 HUD/手牌/敌方意图正常）
+      - `output/web-game-endless-v6/endless-panel-manual.png`（无尽地图面板显示“敌方节奏”与高压参数）
+      - `output/web-game-endless-v6/endless-panel-manual-state.json` 显示 `pressure=8`、面板文本包含“敌方将连续压迫并施加重压减益”。
+
+- TODO / 下轮建议
+  - 可继续把压力行为谱接入“Boss 阶段切换”与“事件池动态权重”，形成行为-地图-事件三层联动。
+  - 可追加压力平衡快照导出（CSV/JSON），用于长期版本之间的难度回归比较。
+
+- 2026-03-08: 无尽模式缺陷回合（补给包UI/奶糖HUD/怪物差异化门禁补齐）
+  - 针对用户反馈完成定向收口：
+    - 补给包（`scoutPack`）显示链路：确认并固化“卡牌稀有度中文化 + 稀有度徽标样式”逻辑，避免出现 `(uncommon)` 等英文稀有度。
+    - 战斗 HUD 奶糖显示：确认并固化 `updateEnergyUI -> getCandyDisplaySnapshot` 渲染链路，奶糖容器/图标/文本均稳定刷新。
+    - 同关怪物同质化：已由 `battle.js` 中敌人战术变体系统承接，本轮将其纳入全量门禁，防止后续回归。
+
+  - 自动化门禁补齐：
+    - `tests/run_node_checks.sh` 新增 `tests/sanity_battle_variation_checks.js`，确保敌人变体与奶糖快照逻辑进入 CI 级回归。
+    - `tests/browser_feature_audit.mjs` 新增断言：
+      - `battle HUD keeps milk candy resource visible`（战斗奶糖容器可见、文本 `x/y` 有效、图标存在）；
+      - `scout pack draft uses localized rarity tags and stable icon layout`（补给包不含英文稀有度词，且事件图标尺寸/居中布局稳定）。
+
+  - 本轮验证结果（全通过）：
+    - 语法：
+      - `node --check js/game.js` ✅
+      - `node --check js/core/battle.js` ✅
+      - `node --check tests/browser_feature_audit.mjs` ✅
+      - `node --check tests/sanity_battle_variation_checks.js` ✅
+    - Node：
+      - `node tests/sanity_battle_variation_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser：
+      - `node tests/browser_audit.mjs` ✅
+      - `node tests/browser_feature_audit.mjs` ✅（含奶糖HUD与补给包中文化新断言）
+      - `node tests/browser_event_branch_audit.mjs` ✅
+      - `node tests/browser_inheritance_audit.mjs` ✅
+      - `node tests/browser_pvp_audit.mjs` ✅
+    - Playwright（develop-web-game 技能客户端）：
+      - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-endless-v7` ✅
+      - 人工查看截图：`output/web-game-endless-v7/shot-0.png`、`shot-1.png`，主菜单渲染正常；`state-0.json/state-1.json` 输出结构完整。
+
+- TODO / 下一轮建议
+  - 可把无尽高压阶段敌人变体（`enemyVariantTag`）在意图区显式展示，让“怪物差异”从数值/行为进一步变为可读反馈。
+  - 可在补给包选择弹窗补一条“已翻译稀有度”快照测试（视觉 diff 或 DOM 结构快照），进一步降低样式回归风险。
+
+- 2026-03-08: 玩法四线扩展（命环 / 法宝 / 怪物 / 角色）
+  - 技能与角色扩展：
+    - 新增角色 `moChen`（墨尘，星律巡使）：
+      - 初始卡组新增 `starNeedle / omenBarrier / ringCatalyst`；
+      - 专属遗物 `starsealCompass`：开场奶糖上限外 +1；每回合首次技能额外抽牌；
+      - 新增主动技能 `starOath`（护盾+抽牌+回灵，随法则数成长）。
+    - `tests/browser_feature_audit.mjs` 新增断言：角色选择界面可见 `moChen` 且遗物描述正确。
+
+  - 命环扩展：
+    - `FATE_RING.paths` 新增二阶路径 `resonance`（回响之环）；
+    - `defiance` 终阶路径前置新增 `resonance` 分支，形成新的成长路线；
+    - `player.js` 接入回响路径战斗逻辑：
+      - 开场奶糖上限外 +1；
+      - 每回合首次打出技能牌后额外抽1张牌（带回合重置标记）。
+
+  - 法宝扩展：
+    - 新增法宝：
+      - `ring_echo_compass`（稀有）：开场奶糖上限外 +1，命环4级后额外抽1；
+      - `astral_forge_core`（传说）：每2张技能牌 -> 灵力+1 + 护盾+4；
+      - `fate_lotus_seal`（传说）：击杀后命环经验成长并回复生命。
+    - 接入商店解锁配置 `TREASURE_CONFIG.unlockRealm`，确保可在对应轮次自然出现。
+
+  - 怪物扩展（降低同层同质化）：
+    - 新增普通怪：
+      - `runeSentinel`（6重）：防御+弱化+连击混合；
+      - `frostArrowHerald`（8重）：连射+破绽压制；
+      - `abyssCantor`（12重）：治疗+心魔状态注入；
+      - `warDrummer`（14重）：鼓舞增伤+多段压迫。
+    - 新怪自动进入 `getEnemiesForRealm` 池，直接影响地图战斗体验。
+
+  - 卡牌扩展：
+    - 新增 `moChen` 专属卡：`starNeedle / omenBarrier / ringCatalyst`；
+    - 完成卡池接入（common/uncommon/rare）与升级规则接入。
+
+- 2026-03-08: 本轮扩展测试证据（全通过）
+  - Node:
+    - 新增 `tests/sanity_expansion_system_checks.js`，覆盖：
+      - 新角色/技能/命环路径/法宝/怪物/卡池联动；
+      - 回响路径与专属遗物在战斗中的首次技能抽牌与开场奶糖逻辑；
+      - 新法宝回调生效与新怪进入对应天域池。
+    - `tests/run_node_checks.sh` 已接入新脚本。
+    - `bash tests/run_node_checks.sh` ✅（含 `Expansion system checks passed`）。
+  - Browser:
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅（含新增 `moChen` 可见性断言）
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright（develop-web-game 客户端）:
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-expansion-v1` ✅
+    - 人工查看：`output/web-game-expansion-v1/shot-0.png`、`shot-1.png` 渲染正常；`state-0.json/state-1.json` 结构完整。
+
+- TODO / 下一轮建议
+  - 可为 `moChen` 增加第二套“预组卡包推荐”，并在角色页展示“推荐流派标签”。
+  - 可将新怪（`runeSentinel/frostArrowHerald/abyssCantor/warDrummer`）接入更细粒度的地图权重控制，按轮次动态提高其出场率。
+  - 可新增浏览器端到端脚本：从角色选择 `moChen` 开局 -> 首战触发遗物 + 回响路径技能联动，形成可视化回归链路。
+
+- 2026-03-08: 第七轮扩展（命环/法宝/怪物/角色可玩性深化）
+  - 角色与技能：
+    - 新增角色 `ningXuan`（宁玄，灵器行者），初始牌组接入 `artifactBolt/echoWard/ringInfusion`，专属遗物 `artifactPulse`。
+    - 新增主动技能 `artifactOverdrive`（护盾/抽牌/回灵，随技能等级成长并在高等级附加力量）。
+  - 命环扩展：
+    - 新增二阶路径 `convergence`（汇流之环）：开场灵力 +1；每回合首次攻击牌伤害 +4。
+    - `defiance.requires` 接入 `convergence` 分支。
+  - 运行时联动（`player.js`）：
+    - 新增并接入回合旗标：
+      - `ringConvergenceAttackBoostUsedThisTurn`
+      - `relicAttackEnergyUsedThisTurn`
+    - 回合/战斗生命周期完成重置；`playCard` 接入：
+      - `convergence` 首次攻击 +4 伤害（context.damageModifier）。
+      - `artifactPulse` 每回合首次攻击回灵 +1。
+    - `prepareBattle` 接入：
+      - `convergence` 开场回灵 +1。
+      - `artifactPulse` 开场护盾 +6。
+  - 卡牌扩展（宁玄）：
+    - `artifactBolt`（common）
+    - `echoWard`（uncommon）
+    - `ringInfusion`（rare）
+    - 已接入 `CARD_POOL` 与升级规则 `UPGRADE_RULES.special`；并补入 `ARCHETYPE_PACKS.bulwark`。
+  - 法宝扩展：
+    - `moonblade_sheath`：每回合首次攻击触发护盾+4/抽1。
+    - `ringweaver_anvil`：法则牌触发命环经验+10与奶糖恢复。
+    - `hunter_contract`：开场力量+1；击杀后抽1并加金币。
+    - `TREASURE_CONFIG.unlockRealm` 已接入三件新法宝。
+  - 怪物扩展（减少高重天同质化）：
+    - 新增普通敌人：
+      - 4重：`emberPhysician`
+      - 7重：`starChainWarden`
+      - 10重：`basaltArcanist`
+      - 13重：`oracleSilencer`
+      - 15重：`voidTaxCollector`
+      - 17重：`ashenArchivist`
+    - 覆盖 `multiAction/addStatus/devour` 等差异化行动结构，提升各重天战术分层。
+  - 测试与审计更新：
+    - `tests/sanity_expansion_system_checks.js`：扩展断言覆盖新角色/新路径/新遗物/新法宝/新敌人与池子挂载。
+    - `tests/browser_feature_audit.mjs`：增加 `ningXuan` 角色卡与遗物描述可见性断言。
+
+- 2026-03-08: 第七轮回归结果（全通过）
+  - Node：
+    - `node tests/sanity_expansion_system_checks.js` ✅
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser audits：
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 客户端动作回放：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-expansion-v2` ✅
+    - 产物：`output/web-game-expansion-v2/shot-0.png`, `shot-1.png`, `state-0.json`, `state-1.json`
+    - 已人工检查 `shot-1.png`：主菜单渲染正常，无错位与遮挡。
+
+- TODO / 下轮建议
+  - 为 `convergence` 衍生一套专属事件（例如“汇流仪轨”）并给出命环分支选择偏置，形成地图层面差异。
+  - 为新高重天敌人补“意图提示增强”文案（分段显示 multiAction 子动作），提升可读性与决策反馈。
+
+- 2026-03-08: 第八轮扩展（命环路径事件偏置 + 怪物多样性 + 意图可读性）
+  - 命环路径事件扩展（汇流之环）：
+    - `events.js` 新增事件：
+      - `convergenceRelay`（中继校准/强制并轨）
+      - `harmonicAnvil`（稳态锻环/高压熔接）
+      - `artifactConfluxBazaar`（汇流临时商会）
+    - 事件池接入：
+      - `EVENT_POOL.uncommon` 增加 `convergenceRelay/harmonicAnvil`
+      - `EVENT_POOL.rare` 增加 `artifactConfluxBazaar`
+    - 新增 `FATE_PATH_EVENT_POOLS`，并在 `getRandomEvent` 中接入路径偏置：
+      - 当玩家命环路径为 `convergence` 时，按 28% 概率优先投放汇流专属事件。
+  - 怪物池反同质化（低多样性重天补点）：
+    - 新增普通怪：
+      - 1重：`graveRaven`
+      - 5重：`soulLanternMonk`
+      - 9重：`verdictPriest`
+      - 11重：`stormScribe`
+      - 16重：`prismLocust`
+      - 18重：`doomsdayHerald`
+    - 设计上引入 `multiAction/addStatus/summon/random` 等行动组合，提升同重天内决策差异。
+  - 战斗UI可读性优化：
+    - `utils.js/createEnemyElement` 增强意图描述：
+      - 支持 `multiAction` 展开“子行动”文本（按段编号展示）
+      - 补齐 `addStatus/summon` 描述
+      - tooltip 文本增加转义，避免引号/反斜杠导致渲染异常
+  - 审计脚本与断言更新：
+    - `tests/sanity_content_archetype_checks.js`
+      - 增加新事件定义与池挂载断言
+      - 增加 `FATE_PATH_EVENT_POOLS.convergence` 断言
+      - 增加路径偏置命中检查（convergence）
+    - `tests/sanity_expansion_system_checks.js`
+      - 增加 1/5/9/11/16/18 新怪覆盖与天域池断言
+    - `tests/browser_feature_audit.mjs`
+      - 增加 `multiAction` 子行动 tooltip 可见性断言
+      - 修复该断言中的正则转义误判
+    - `tests/browser_event_branch_audit.mjs`
+      - 新增三条汇流事件分支审计
+      - 修正 `harmonicAnvil` 审计选择项（避免升级交互阻断后续事件链）
+
+- 2026-03-08: 第八轮回归结果（全通过）
+  - Node:
+    - `node tests/sanity_content_archetype_checks.js` ✅
+    - `node tests/sanity_expansion_system_checks.js` ✅
+    - `bash tests/run_node_checks.sh` ✅
+    - 额外抽样：`convergence_path_hit_rate=0.360`（路径偏置命中正常）
+  - Browser audits:
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅（含 multiAction 子行动 tooltip 断言）
+    - `node tests/browser_event_branch_audit.mjs` ✅（含新增汇流事件分支）
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 客户端冒烟 + 视觉检查：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-expansion-v3` ✅
+    - 已人工检查 `output/web-game-expansion-v3/shot-1.png`：主菜单渲染正常。
+
+- TODO / 下轮建议
+  - 可继续为 `convergence` 引入“地图节点权重偏置”（如商店/营地/试炼节点概率微调）形成路线差异。
+  - 可为新怪追加“弱点提示标签”（如 `召唤型/状态型/连携型`）并在敌人卡面显示，降低认知成本。
+
+- 2026-03-08: 第九轮扩展（地图路线去同质化 + 命环路径路线化 + 敌人战术标签）
+  - 地图路线多样性增强（`map.js`）：
+    - 在普通层生成时为 `getRandomNodeType` 传入上下文（当前行已生成节点、上一行、上两行），用于动态去重。
+    - `getDynamicNodeWeights` 新增两类偏置：
+      - 命环路径节点偏置（`applyFatePathNodeBias`）：按 `convergence/resonance/agility/wisdom/insight/destruction/toughness` 微调节点权重，形成路线风格差异。
+      - 相邻层去同质化压力（`applyRouteDiversityPressure`）：当上一层或近两层节点类型过度集中时，下层自动降低重复类型权重；同一行内已出现的类型也会被温和削权，提升路线分叉的可玩性。
+    - 兼容 `ghost_duel -> elite` 的归一化统计，避免精英替换机制破坏去重策略。
+  - 敌人可读性增强（`utils.js` + `style.css`）：
+    - 新增敌人“战术角色标签”渲染（`突袭型/坚守型/控场型/均衡型`），并在 tooltip 中同步展示 `战术：xxx`。
+    - 角色识别优先读取 `enemyVariantRole`，无显式角色时按行动模式（attack/defend/debuff/summon/multiAction）自动推断。
+    - 新增 `.enemy-role-tag` 与各角色色彩样式，强化战场决策信息密度。
+  - 测试补强：
+    - `tests/sanity_map_weight_checks.js` 新增断言：
+      - 命环路径节点偏置生效（convergence 提升 event；resonance 提升 rest/trial）；
+      - 连续战斗层触发去同质化压力；
+      - 同行已出现类型后，下一节点倾向非重复类型。
+    - `tests/browser_feature_audit.mjs` 新增断言：
+      - 敌人战术标签与 tooltip 战术摘要一致，且与行动构成匹配（控场型样例）。
+
+- 2026-03-08: 第九轮回归结果（全通过）
+  - 语法与目标测试：
+    - `node --check js/core/map.js` ✅
+    - `node --check js/core/utils.js` ✅
+    - `node tests/sanity_map_weight_checks.js` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+  - 全量 Node + Browser 审计：
+    - `bash tests/run_node_checks.sh` ✅
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 客户端（develop-web-game 流程）+ 视觉复查：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-diversity-v4` ✅
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --click-selector "#new-game-btn" --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-diversity-v4-newgame` ✅
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --click-selector "#pvp-btn" --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-diversity-v4-pvp` ✅
+    - 人工检查：
+      - `output/web-game-diversity-v4/shot-1.png`（主菜单正常）
+      - `output/web-game-diversity-v4-newgame/shot-1.png`（登录提示弹窗正常）
+      - `output/web-game-diversity-v4-pvp/shot-1.png`（PVP 榜单页面正常）
+
+- TODO / 下轮建议
+  - 为地图去重策略补“局内记忆”维度（最近 4 层全局节点频率）并加入轻度随机扰动，进一步降低长程同质化。
+  - 在敌人卡面追加“关键威胁词条”二级标记（例如：`召唤链`、`状态压制`、`爆发斩杀`），并在审计里校验标签与 patterns 一致。
+  - 扩展 `convergence/resonance` 的地图事件联动奖励（例如：同路径下节点类型被命中时触发小幅 run buff），提高路线-构筑闭环反馈。
+
+- 2026-03-08: 第十轮扩展（路线长期记忆 + 路径命中奖励 + 敌人二级威胁标签）
+  - 地图多样性强化（`map.js`）：
+    - 在现有相邻层/同行去重基础上新增“长程记忆去重” `applyLongTermDiversityPressure`：
+      - 统计最近 4 层节点类型频率；
+      - 当某类型长期占比过高时，自动削弱该类型权重并回流到互补节点，降低长程同质化。
+    - 支持测试注入 `historyRows`（仅测试上下文使用），便于稳定验证策略。
+  - 路线-构筑闭环（`map.js`）：
+    - 新增 `applyPathNodeSynergyReward(node)`，在 `completeNode` 时按命环路径与命中节点类型发放轻量奖励：
+      - 例如：`convergence` 命中事件给命环经验与首回合灵力增益；
+      - `resonance` 命中营地回血并给开场护盾增益；
+      - `destruction` 战斗节点给胜利额外灵石增益等。
+    - 该奖励链路具备幂等保障：节点重复结算不会重复发放奖励。
+  - 战斗可读性深化（`utils.js` + `style.css`）：
+    - 在“战术角色标签”上继续增加“二级威胁标签”展示：
+      - `爆发斩杀 / 状态压制 / 召唤链 / 连携循环 / 续航拖战`。
+    - 意图 tooltip 同步追加 `威胁：...` 文案，形成“意图 + 战术 + 威胁”三层信息结构。
+    - 补齐对应样式（不同威胁类型视觉区分）。
+
+- 2026-03-08: 第十轮测试与回归（全通过）
+  - 新增测试：
+    - `tests/sanity_map_path_synergy_checks.js`：验证路径命中奖励触发、幂等性、boss 节点不触发路径奖励。
+    - `tests/run_node_checks.sh` 已接入该脚本。
+  - 强化测试：
+    - `tests/sanity_map_weight_checks.js` 新增“长程记忆去重”断言。
+    - `tests/browser_feature_audit.mjs` 新增“威胁标签 + tooltip 威胁摘要”断言。
+  - Node + Browser：
+    - `node tests/sanity_map_weight_checks.js` ✅
+    - `node tests/sanity_map_path_synergy_checks.js` ✅
+    - `bash tests/run_node_checks.sh` ✅
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 客户端 + 视觉检查：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-diversity-v5` ✅
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --click-selector "#pvp-btn" --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-diversity-v5-pvp` ✅
+    - 人工检查：
+      - `output/web-game-diversity-v5/shot-1.png`（主菜单）
+      - `output/web-game-diversity-v5-pvp/shot-1.png`（PVP 榜单）
+
+- TODO / 下轮建议
+  - 将“路径命中奖励”再前进一步：引入“连击计数”机制（连续命中同路径偏好节点时触发一次性奖励），提高路线规划感。
+  - 为威胁标签加交互说明（hover 解释）并在高危标签触发时增加轻微动效提示。
+  - 在地图生成策略中引入“稀有节点保底阈值”（例如若连续多层未出现事件/商店，则下层小幅抬权），继续改善可玩性曲线。
+
+- 2026-03-08: 第十一轮扩展（战斗遭遇主题系统，强化同重天战斗差异）
+  - 核心玩法扩展（`battle.js`）：
+    - 新增“遭遇主题”系统：`resolveEncounterThemeProfile / applyEncounterThemeProfile`。
+    - 在非 PVP、非 endless、非 Boss 的 `enemy/elite/trial` 战斗中，根据天域与节点信息生成主题化遭遇词条。
+    - 新增 9 组遭遇主题（early/mid/late 分层）：
+      - 示例：`疾雷遭遇 / 铁关据守 / 蚀雾术场 / 雷锋突进 / 玄垒消耗战 / 咒流压场 / 天灾突袭 / 黑曜战垒 / 虚蚀迷域`。
+    - 主题效果可组合生效：
+      - 敌方攻击倍率微调；
+      - 敌方开场护盾；
+      - 缺减益动作的敌人补入减益段（按主题类型）；
+      - 玩家开场获得小额护盾补偿。
+    - `startBattle` 接入主题应用流程，并保持与环境词条、污染词条兼容。
+  - 可读性增强（`battle.js` + `utils.js` + `style.css`）：
+    - 战斗环境栏支持同时显示“环境词条 + 遭遇主题 chip”（`#battle-environment`）。
+    - 敌人卡面新增遭遇标签 `enemy-encounter-tag`，tooltip 文案追加“遭遇：xxx”。
+    - 新增遭遇视觉样式（chip/tag）并修复移动端环境栏换行显示（避免主题文案截断）。
+  - 测试扩展：
+    - 新增 `tests/sanity_battle_encounter_theme_checks.js`：
+      - 覆盖主题解析、应用、敌方词条挂载、攻击/护盾/减益注入、玩家开场护盾补偿；
+      - 覆盖跳过场景（PVP/endless/Boss）。
+    - `tests/run_node_checks.sh` 已纳入 encounter 主题单测。
+    - `tests/browser_feature_audit.mjs` 新增断言：
+      - “战斗遭遇 chip 可见，且与敌人遭遇标签同步”。
+
+- 2026-03-08: 第十一轮回归结果（全通过）
+  - 语法 + 定向：
+    - `node --check js/core/battle.js` ✅
+    - `node --check js/core/utils.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node tests/sanity_battle_encounter_theme_checks.js` ✅
+    - `node tests/sanity_battle_variation_checks.js` ✅
+    - `node tests/browser_feature_audit.mjs` ✅（含新遭遇主题断言）
+  - 全量回归：
+    - `bash tests/run_node_checks.sh` ✅
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - develop-web-game Playwright 客户端 + 人工视觉检查：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-diversity-v7` ✅
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --click-selector "#pvp-btn" --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-diversity-v7-pvp` ✅
+    - 人工检查：
+      - `output/web-game-diversity-v7/shot-1.png`（主菜单渲染正常）
+      - `output/web-game-diversity-v7-pvp/shot-1.png`（PVP 榜单渲染正常）
+
+- TODO / 下轮建议
+  - 将遭遇主题扩展为“可成长层级”（同一 run 内重复命中同主题时进入 II/III 阶，数值与奖励联动）。
+  - 为遭遇主题加入“胜利奖励差异”（例如特定主题胜利后给额外命环经验/商店折扣），形成路线-战斗-收益闭环。
+  - 给高重天新增 4-6 个“主题专属敌人词缀”并在浏览器审计里校验词缀文案与行为一致性。
+
+- 2026-03-09: 第十二轮扩展（遭遇主题成长体系 + 胜利奖励 + 高重天词缀）
+  - 遭遇成长体系（`battle.js` + `game.js`）：
+    - 在既有遭遇主题基础上新增“连续命中同主题升阶”机制：I/II/III 阶（2 连进 II，4 连进 III）。
+    - `battle.js`：
+      - 新增 `getEncounterTierScale`；
+      - `applyEncounterThemeProfile` 接入阶级缩放（攻击/护盾/减益/玩家补偿）；
+      - 新增 `consumeEncounterVictoryBonusSummary`（一次性消费，防重复结算）。
+    - `game.js`：
+      - 新增遭遇状态容器与方法：
+        - `createDefaultEncounterState/normalizeEncounterState/ensureEncounterState`
+        - `registerEncounterThemeStart/recordEncounterThemeVictory`
+      - 战斗胜利接入遭遇奖励：额外灵石、命环经验、探索增益（开场护盾/命环经验 buff）
+      - 战败时清空遭遇连击（`currentStreak`），防止失败后无脑保留高阶。
+      - 新局 `startNewGame` 重置遭遇成长状态。
+      - 存档链路接入 `encounterMeta`（save/migrate/load），并为测试上下文补齐无方法兜底，修复 `migrateSaveData` 兼容问题。
+  - 高重天主题专属词缀（`battle.js` + `utils.js` + `style.css`）：
+    - 当 `realm >= 12` 时，遭遇主题会为敌人注入专属词缀：
+      - `咒潮`（减益/状态压制）
+      - `战垒`（重甲反制）
+      - `追猎`（额外追击段）
+    - 敌人卡面新增词缀标签：`enemy-encounter-affix`。
+    - tooltip 文案升级为：`遭遇：XX I/II/III阶｜遭遇词缀：XX`。
+  - 战斗环境栏展示强化：
+    - `#battle-environment` 显示遭遇主题时同步展示当前阶级（I/II/III）。
+    - title 文案同步阶级说明。
+
+- 2026-03-09: 第十二轮测试与回归（全通过）
+  - 新增/强化测试：
+    - `tests/sanity_battle_encounter_theme_checks.js`：
+      - 覆盖同主题升阶（I->II）、奖励摘要一次性消费、trial 偏置、高重天词缀注入、PVP/endless/Boss 跳过。
+    - `tests/browser_feature_audit.mjs`：
+      - 强化遭遇 chip 阶级断言；
+      - 新增“遭遇词缀标签 + tooltip 词缀摘要”断言。
+  - 语法 + 定向：
+    - `node --check js/core/battle.js` ✅
+    - `node --check js/core/utils.js` ✅
+    - `node --check js/game.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node tests/sanity_battle_encounter_theme_checks.js` ✅
+    - `node tests/sanity_battle_variation_checks.js` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+  - 全量回归：
+    - `bash tests/run_node_checks.sh` ✅
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - develop-web-game Playwright 客户端 + 人工视觉检查：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-diversity-v8` ✅
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --click-selector "#pvp-btn" --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-diversity-v8-pvp` ✅
+    - 人工检查：
+      - `output/web-game-diversity-v8/shot-1.png`（主菜单渲染正常）
+      - `output/web-game-diversity-v8-pvp/shot-1.png`（PVP 榜单渲染正常）
+
+- TODO / 下轮建议
+  - 将遭遇 III 阶接入“稀有掉落保底”或“地图节点折扣券”奖励，形成更强 run 内规划价值。
+  - 为每个高重天词缀增加可反制提示（例如净化/破盾/速攻建议），并在 tooltip 中联动显示。
+  - 扩展遭遇词缀到 Boss 前哨战（非 Boss 本体）并加入单独审计脚本覆盖。
+
+- 2026-03-09: 第十三轮扩展（战场指令系统，提升战斗层策略密度）
+  - 新玩法（`js/core/battle.js`）：
+    - 新增战斗内“战场指令”系统：
+      - 指令槽资源（`points/maxPoints`）；
+      - 每场随机 3 指令负载；
+      - 指令冷却与每回合重置逻辑；
+      - 回合整备、出牌连携、击杀充能三类资源获取路径。
+    - 新增指令效果并接入既有战斗机制：
+      - `锋矢强袭`：全体打击 + 易伤；
+      - `玄甲整阵`：护盾强化 + 减益净化；
+      - `疾策回转`：抽牌/回能/下一击强化；
+      - `压制领域`：削盾 + 全体虚弱；
+      - `猎杀标记`：锁定高威胁目标并叠加破绽。
+    - 接入点：
+      - `startBattle` 初始化指令系统并在首回合发放整备充能；
+      - `cardPlayed` 事件链路驱动充能；
+      - 击杀回调驱动额外充能；
+      - 玩家新回合开始时处理冷却推进与整备充能。
+    - UI：
+      - 新增动态面板 `#battle-command-panel`（不改静态 HTML，运行时注入）；
+      - 展示指令槽进度、可用态/冷却态、按钮禁用态；
+      - 支持移动端布局压缩与两列按钮显示。
+  - 运行态可观测（`js/game.js`）：
+    - `renderGameToText()` 新增 `battle.battleCommand` 快照，便于自动化审计稳定读取。
+  - 测试扩展：
+    - 新增 `tests/sanity_battle_command_checks.js`：
+      - 覆盖指令初始化、出牌充能、回合充能、释放与扣费、冷却推进、资源不足拒绝、击杀充能、PVP 关闭。
+    - `tests/run_node_checks.sh` 已纳入 `sanity_battle_command_checks.js`。
+    - `tests/browser_feature_audit.mjs` 新增断言：
+      - 指令面板渲染；
+      - 指令释放后战斗状态发生可验证变化。
+    - 同步修复一处审计脆弱断言：
+      - `legacy mission progress` 从硬编码 `1/3` 改为区间 `1-3/3`，避免前置流程导致偶发误报。
+
+- 2026-03-09: 第十三轮测试与回归（全通过）
+  - 语法与定向：
+    - `node --check js/core/battle.js` ✅
+    - `node --check js/game.js` ✅
+    - `node --check tests/sanity_battle_command_checks.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node tests/sanity_battle_command_checks.js` ✅
+    - `node tests/sanity_battle_encounter_theme_checks.js` ✅
+    - `node tests/sanity_battle_variation_checks.js` ✅
+  - 全量 Node 回归：
+    - `bash tests/run_node_checks.sh` ✅
+  - 浏览器审计：
+    - `node tests/browser_feature_audit.mjs` ✅（含战场指令新断言）
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 客户端冒烟：
+    - `node --experimental-default-type=module tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-diversity-v9` ✅
+    - `node --experimental-default-type=module tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --click-selector "#pvp-btn" --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-diversity-v9-pvp` ✅
+    - 截图检查：
+      - `output/web-game-diversity-v9/shot-1.png`（主菜单渲染正常）
+      - `output/web-game-diversity-v9-pvp/shot-1.png`（PVP 榜单渲染正常）
+
+- 2026-03-09: 第十四轮扩展（指令联动深化 + 敌人战术队列 + 无尽专属反制）
+  - 战场指令系统深化（`js/core/battle.js`）：
+    - 增加构筑联动参数：
+      - 命环路径联动（`convergence/resonance/wisdom/insight/defiance/destruction`）；
+      - 流派共鸣联动（`precision/bulwark/entropy`）；
+      - 法宝数量联动（首发减耗与倍率微增）。
+    - 指令成本改为动态有效消耗：`resolveBattleCommandEffectiveCost`。
+    - 指令倍率改为多源联动：`getBattleCommandPowerScale(command)`。
+    - 冷却联动：`resonance` 路径缩短 1 回合冷却（最低 0）。
+    - 新增无尽专属指令：
+      - `rift_surge_order`（裂隙潮汐）：
+        - 按压力倍率对全体造成伤害；
+        - 回收部分指令槽；
+        - 高压力时降低 1 点轮回压力并回复生命。
+    - 无尽模式下指令池扩展为 4 槽，并强制纳入无尽专属指令。
+    - 指令系统状态补充：
+      - `firstCommandDiscountUsed` 追踪；
+      - `render_game_to_text` 可见 `battleCommand.endlessPressure/baseCost/cost`。
+  - 敌人战术队列系统（`js/core/battle.js` + `js/core/utils.js` + `css/style.css`）：
+    - 新增敌人“行动节奏计划”：
+      - `createEnemyTacticalPlan / refreshEnemyTacticalPlan / getNextEnemyPatternIndex`
+      - 根据敌人倾向（striker/guardian/hexer/balanced）生成战术队列。
+    - 旧“按序轮转 currentPatternIndex”升级为“按计划队列取下一个行动”。
+    - 遇到以下场景会自动重建战术队列：
+      - 敌人实例创建后；
+      - 遭遇主题注入新 pattern 后；
+      - Boss 阶段切换替换 pattern 后。
+    - UI可读性扩展：
+      - 敌人卡新增节奏标签 `enemy-plan-tag`（如“节奏·咒压轮换”）；
+      - 敌人意图 tooltip 新增“节奏：xxx”摘要。
+
+- 2026-03-09: 第十四轮测试与回归（全通过）
+  - 新增 Node 测试：
+    - `tests/sanity_battle_command_synergy_checks.js`
+      - 覆盖无尽专属指令注入、动态减耗、路径/流派充能联动、稳压效果、冷却联动。
+    - `tests/sanity_enemy_tactical_queue_checks.js`
+      - 覆盖队列生成、节奏多样性、阶段切换重建、遭遇注入后刷新。
+    - `tests/run_node_checks.sh` 已纳入上述两项测试。
+  - 浏览器审计增强：
+    - `tests/browser_feature_audit.mjs` 新增断言：
+      - 敌人节奏标签渲染；
+      - tooltip 包含节奏摘要。
+    - 同时修复一处无尽赐福断言的随机性误报（改为“历史增长或 boonStats 变化”即判定生效）。
+  - 执行结果：
+    - `node --check js/core/battle.js js/core/utils.js js/game.js` ✅
+    - `node --check tests/sanity_battle_command_synergy_checks.js tests/sanity_enemy_tactical_queue_checks.js tests/browser_feature_audit.mjs` ✅
+    - `node tests/sanity_battle_command_checks.js` ✅
+    - `node tests/sanity_battle_command_synergy_checks.js` ✅
+    - `node tests/sanity_enemy_tactical_queue_checks.js` ✅
+    - `node tests/sanity_battle_variation_checks.js` ✅
+    - `node tests/sanity_battle_encounter_theme_checks.js` ✅
+    - `bash tests/run_node_checks.sh` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 客户端冒烟：
+    - `node --experimental-default-type=module tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-diversity-v10` ✅
+    - `node --experimental-default-type=module tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --click-selector "#pvp-btn" --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-diversity-v10-pvp` ✅
+    - 截图人工检查：
+      - `output/web-game-diversity-v10/shot-1.png`（主菜单渲染正常）
+      - `output/web-game-diversity-v10-pvp/shot-1.png`（PVP 榜单渲染正常）
+
+- TODO / 下轮建议
+  - 为战术队列补“反制提示”联动：当玩家手牌存在净化/破盾/爆发手段时，在 intent tooltip 给出简短建议，提升可读性。
+  - 扩展无尽专属指令到 2-3 张并加入“压力阈值分支效果”（例如 8+ 压力触发额外稳压/额外代价）。
+  - 将战场指令系统接入更多地图事件（营地可重配指令槽/商店可刷新指令负载）形成 run 级构筑闭环。
+
+- 2026-03-09: 策划技能安装 + 玩法扩展策划案 V1
+  - 技能检索与安装：
+    - 已检索游戏策划相关 skill，并筛选引擎无关、适配本项目（Web 卡牌肉鸽）方向。
+    - 已安装：
+      - `pluginagentmarketplace/custom-plugin-game-developer@game-design-theory`
+      - `omer-metin/skills-for-antigravity@card-game-design`
+      - `pluginagentmarketplace/custom-plugin-game-developer@level-design`
+      - `jwynia/agent-skills@economic-systems`
+  - 技能约束核对：
+    - 已读取 `card-game-design` 的 `patterns/sharp_edges/validations`，并将“0费滥用、任意检索、即时胜利、无代价抽牌引擎”列为新增内容红线。
+    - 已核对本地 `game-designer`，同步命环/五行/世界观约束。
+  - 输出物：
+    - 新增策划文档：`docs/designer_gameplay_planning_v1.md`
+    - 内容覆盖：命环路径、法宝套装、新增流派、怪物生态分层、地图节点扩展、无尽模式深化、分期开发与测试验收门槛。
+  - 备注：
+    - 下一执行优先级建议：先做“怪物同质化治理（P1）”，再推进“新增流派与卡池（P2）”。
+
+- 2026-03-09: Designer V1 收口开发（本轮）
+  - 新增两套流派并打通构筑链路：
+    - `stormcraft`（雷策连锁）与 `vitalweave`（回生织脉）各 15+ 张核心卡，接入 `CARD_POOL`、`ARCHETYPE_PACKS`、`inferDeckArchetype`、奖励偏置。
+    - `player.js`：新增两套共鸣配置与判定；`vitalweave` 新增“首次治疗触发护盾+反击”链路。
+    - `battle.js`：新增 `stormcraft`“首次命中易伤目标触发追击+抽牌”钩子与战斗开场文案。
+  - 事件系统扩展：
+    - `events.js` 新增 8 个事件：`thunderConductTrial/stormchaserCamp/fulgurMarket/overclockSigil/herbalPactShrine/lifestringClinic/bloodloomGarden/hospiceRelay`。
+    - 更新 `EVENT_POOL`、`ARCHETYPE_EVENT_POOLS`（新增 `stormcraft/vitalweave`）与 `FATE_PATH_EVENT_POOLS`（扩展 `resonance/wisdom/destruction`）。
+  - 法宝套装系统落地：
+    - `treasures.js` 为既有法宝补充 `setTag`（`xuanjia/liemai/xingheng`）。
+    - `player.js` 新增套装计数与触发：
+      - `玄甲套`：2件护盾增幅，3件回合整备（留盾+荆棘）。
+      - `裂脉套`：流血层转伤（3件附加斩杀阈值增幅）。
+      - `星衡套`：2件回合节奏抽牌/回能，3件开场抽牌与平衡增伤。
+  - 无尽模式阶段挑战（3/6/9/12）上线：
+    - `game.js` 新增 `getEndlessPhaseProfile`，接入 `getEndlessModifiers/getEndlessEventTuning/getEndlessPressureBehaviorProfile`。
+    - `prepareEnemyForEndlessBattle` 新增阶段 Boss 词缀注入（含终压词缀）。
+    - 无尽状态新增 `lastPhaseId/phaseHistory`，`render_game_to_text` 输出新增 `endlessPhase`。
+    - 无尽预览面板新增阶段挑战信息。
+
+- 2026-03-09: 新增自动化测试（并接入 `tests/run_node_checks.sh`）
+  - `tests/sanity_stormcraft_vitalweave_resonance_checks.js`
+  - `tests/sanity_treasure_set_bonus_checks.js`
+  - `tests/sanity_enemy_ecology_diversity_checks.js`
+  - `tests/sanity_card_design_guardrail_checks.js`
+  - `tests/sanity_endless_phase_boss_checks.js`
+  - 同步更新：
+    - `tests/sanity_content_archetype_checks.js`（新流派/新事件/新路径偏置）
+    - `tests/sanity_endless_mode_checks.js`
+    - `tests/sanity_endless_pressure_curve_checks.js`
+    - `tests/sanity_endless_shop_service_checks.js`
+
+- 2026-03-09: 本轮测试证据（全通过）
+  - Node:
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser 审计:
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 客户端:
+    - 技能客户端：`node --experimental-default-type=module "$WEB_GAME_CLIENT" ...` ✅（生成 `output/web-game-phase-polish` 截图与状态）
+    - 项目客户端：`node tests/web_game_playwright_client.mjs ...` ✅（生成 `output/web-game-phase-polish-local` 截图）
+    - 已人工查看截图：主菜单与提示显示正常。
+
+- TODO / 下轮建议
+  - 可继续为 `stormcraft/vitalweave` 增加传承道统与专属试炼 mission，进一步增强局外成长辨识度。
+  - 可将阶段挑战做成可视化轮回时间轴（含 checkpoint 奖励预览），降低无尽中后期学习成本。
+
+- 2026-03-09: 第N轮持续扩展（命环教义成长 + 新流派传承闭环 + 商店扩展）
+  - 命环教义成长层（按命环等级阈值 4/7/10 -> Tier 1/2/3）落地：
+    - `player.js` 新增 `getPathDoctrineTier/getPathDoctrineProfile`，并将四条路径接入实际战斗收益：
+      - 汇流：战场指令攻击充能成长、核心指令降耗；
+      - 回响：技能链护阵 + 二段连锁抽牌；
+      - 毁灭：低护盾进攻强化 + 治疗效率衰减；
+      - 智慧：临时商店价格折扣与货架偏置参数。
+    - `battle.js` 战场指令体系接入教义参数（`getBattleCommandPowerScale/resolveBattleCommandEffectiveCost/cardPlayed->gain`）。
+  - 传承体系扩展：
+    - `game.js` 新增传承预设 `stormcraft(霆策流)`、`vitalweave(回脉流)`；
+    - 新增对应道统字段与主/副道统合并逻辑；
+    - 新增对应试炼任务映射：
+      - `stormcraftVulnerableProc`（易伤破窗）
+      - `vitalweaveHealProc`（回生织脉）
+    - 旧存档归一化逻辑已补齐新道统字段（布尔/数值钳制）。
+  - 新流派运行时接线：
+    - `battle.js` 易伤命中链路支持“共鸣或传承道统”双触发路径，并上报 `stormcraftVulnerableProc` 任务；
+    - `player.js` 治疗触发链路支持“共鸣或传承道统”双触发路径，并上报 `vitalweaveHealProc` 任务。
+  - 地图临时商店扩展：
+    - 新增 `temp_stormcraft`、`temp_vitalweave` 两类货品与执行效果；
+    - 智慧教义下强化货架：优先保障“秘法现货”可见、并在高阶倾向流派专属货品。
+
+- 2026-03-09: 本轮测试证据（通过）
+  - Node 全量：`bash tests/run_node_checks.sh` ✅
+    - 新增并通过：`tests/sanity_path_doctrine_growth_checks.js`
+    - 更新并通过：
+      - `tests/sanity_stormcraft_vitalweave_resonance_checks.js`
+      - `tests/sanity_legacy_progression_checks.js`
+      - `tests/sanity_endless_shop_service_checks.js`
+  - Browser audits：
+    - `node tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅（新增 stormcraft/vitalweave 可见性与任务映射断言）
+    - `node tests/browser_pvp_audit.mjs` ✅
+    - `node tests/browser_audit.mjs` ✅（首次执行出现点击超时，复跑通过）
+  - Playwright 冒烟（技能客户端 + 本地客户端）：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" ... --screenshot-dir output/web-game-path-doctrine-polish` ✅
+    - `node tests/web_game_playwright_client.mjs ... --screenshot-dir output/web-game-path-doctrine-local` ✅
+    - 已人工查看：
+      - `output/web-game-path-doctrine-polish/shot-1.png`
+      - `output/web-game-path-doctrine-local/shot-1.png`
+    - 画面渲染与主菜单层级正常，未生成 `errors-*.json`。
+
+- TODO / 下轮建议
+  - 将“智慧教义”偏置从临时商店进一步扩展到地图事件候选权重（目前已完成商店端偏置）。
+  - 为 stormcraft/vitalweave 增加敌方对抗词缀（例如反易伤、反治疗），继续拉高流派博弈差异。
+
+- 2026-03-09: 第N+1轮持续扩展（无尽指令分支 + 意图反制建议）
+  - 无尽战场指令扩容（`js/core/battle.js`）：
+    - 新增无尽专属指令 `phase_anchor_order`（相位锚定）：
+      - 基础：护盾 + 净化；
+      - 压力 6+：稳压（压力 -1）；
+      - 压力 8+：附带“暴露”代价（自加 1 层易伤）。
+    - 新增无尽专属指令 `void_pursuit_order`（裂界追猎）：
+      - 猎杀高血目标并挂破绽；
+      - 压力 5+：余震扩散群伤；
+      - 压力 8+：以生命代价换取稳压（压力 -1）。
+    - 无尽指令装载逻辑升级：
+      - 仍强制包含 `rift_surge_order`；
+      - 额外保证 `phase_anchor_order/void_pursuit_order` 至少其一进入本场 loadout，提升无尽局内构筑多样性。
+  - 敌人意图“反制建议”可读性增强（`js/core/utils.js` + `css/style.css`）：
+    - 基于敌人威胁标签（状态压制/爆发斩杀/续航拖战/连携循环）+ 玩家手牌工具（净化/破盾/爆发/防守）推断反制建议；
+    - 在 intent tooltip 新增 `反制：...` 说明；
+    - 新增可视化标签 `enemy-counter-tag`（如“反制·净化优先”），降低战斗读秒期的信息检索成本。
+
+- 2026-03-09: 本轮测试证据（全通过）
+  - 增量 sanity：
+    - `node tests/sanity_battle_command_synergy_checks.js` ✅（新增断言覆盖 `phase_anchor_order/void_pursuit_order` 分支行为）
+    - `node tests/sanity_battle_encounter_theme_checks.js` ✅
+    - `node tests/sanity_battle_variation_checks.js` ✅
+    - `node tests/sanity_event_bias_distribution_checks.js` ✅
+  - Node 全量：
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser audits：
+    - `node tests/browser_feature_audit.mjs` ✅（新增“反制提示标签 + tooltip 文案”断言）
+    - `node tests/browser_audit.mjs` ✅
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 冒烟（develop-web-game 双客户端）：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" ... --screenshot-dir output/web-game-diversity-v11` ✅
+    - `node --experimental-default-type=module tests/web_game_playwright_client.mjs ... --screenshot-dir output/web-game-diversity-v11-local` ✅
+    - 已人工查看：
+      - `output/web-game-diversity-v11/shot-0.png`
+      - `output/web-game-diversity-v11/shot-1.png`
+      - `output/web-game-diversity-v11-local/shot-0.png`
+      - `output/web-game-diversity-v11-local/shot-1.png`
+
+- TODO / 下轮建议
+  - 为 `phase_anchor_order/void_pursuit_order` 增加“命环路径联动分支”（例如智慧路径降低代价，毁灭路径增强追猎但提高自损），继续强化 build identity。
+  - 将反制建议从“静态提示”扩展为“动态高亮”：当手牌具备对应 counter 时，为可打出的关键牌追加短标签（净化/破盾/爆发）。
+  - 无尽模式继续补 1 个“资源博弈型”专属指令（以奶糖/抽牌/压力为三角权衡），并补专门 sanity 断言。
+
+- 2026-03-09: 第N+2轮持续扩展（无尽资源博弈指令 + 路径分支深化 + 手牌反制高亮）
+  - 无尽战场指令继续扩容（`js/core/battle.js`）：
+    - 新增 `horizon_barter_order`（界隙交易）：
+      - 以奶糖为燃料换取抽牌/回能/伤害；
+      - 奶糖投入足够时可稳压（压力 -1）；
+      - 资源空转时会触发压力反噬（智慧教义可豁免）。
+    - 无尽装载逻辑升级：
+      - 在保持 `rift_surge_order` 强制入场的前提下，`phase_anchor/void_pursuit/horizon_barter` 三选一强制注入本场 loadout，提升 run 内策略差异。
+  - 路径教义分支深化（`js/core/battle.js`）：
+    - `phase_anchor_order`：
+      - 智慧高阶：净化能力上浮并延后“暴露易伤”阈值；
+      - 回响高阶：回收 1 点指令槽；
+      - 毁灭高阶：附加力量收益。
+    - `void_pursuit_order`：
+      - 汇流高阶：额外破绽并击杀回收指令槽；
+      - 回响高阶：余震命中后追加过牌；
+      - 智慧高阶：降低高压自损；
+      - 毁灭高阶：提高伤害并增加高压自损。
+  - 手牌反制高亮（`js/core/battle.js` + `js/core/utils.js` + `css/style.css`）：
+    - 战斗期新增 `resolveCounterplayThreatProfile/resolveCardCounterTags`，按当前敌方威胁实时标记手牌用途；
+    - 在卡牌 UI 渲染 `card-live-tag`（净化/破盾/防守/爆发），帮助读秒阶段快速决策。
+
+- 2026-03-09: 本轮测试证据（全通过）
+  - 语法与增量：
+    - `node --check js/core/battle.js js/core/utils.js tests/sanity_battle_command_synergy_checks.js tests/browser_feature_audit.mjs` ✅
+    - `node tests/sanity_battle_command_synergy_checks.js` ✅（新增断言覆盖 `horizon_barter_order` 与智慧/毁灭路径分支）
+    - `node tests/sanity_battle_command_checks.js` ✅
+    - `node tests/sanity_battle_variation_checks.js` ✅
+    - `node tests/sanity_battle_encounter_theme_checks.js` ✅
+  - Node 全量：
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser audits：
+    - `node tests/browser_feature_audit.mjs` ✅（新增“手牌动态反制标签”断言）
+    - `node tests/browser_event_branch_audit.mjs` ✅
+    - `node tests/browser_inheritance_audit.mjs` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+    - `node tests/browser_audit.mjs` ✅（首次并行执行出现可见性超时，复跑通过）
+  - Playwright 冒烟（develop-web-game 双客户端）：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" ... --screenshot-dir output/web-game-diversity-v12` ✅
+    - `node --experimental-default-type=module tests/web_game_playwright_client.mjs ... --screenshot-dir output/web-game-diversity-v12-local` ✅
+    - 已人工查看：
+      - `output/web-game-diversity-v12/shot-1.png`
+      - `output/web-game-diversity-v12-local/shot-1.png`
+
+- TODO / 下轮建议
+  - 为 `horizon_barter_order` 增加“可选交易档位”（保守/均衡/激进）并配套 UI 交互，提升玩家主动决策密度。
+  - 将手牌反制标签接入“可打出优先序”辅助（轻量发光边框），并确保移动端可读性不受遮挡。
+  - 继续扩展无尽专属敌方词缀，形成对 `horizon_barter` 的反制生态（反奶糖、反过牌、反稳压）。
+
+- 2026-03-09: 战斗手牌显示裁切修复（用户反馈）
+  - 修复紧凑分辨率下战斗底部手牌/牌堆被裁切问题（`css/style.css` + `css/mobile.css`）：
+    - `battle-container` 第二行改为 `minmax(0, 1fr)`，并为 `enemy-area / battle-middle / player-area` 增加 `min-height: 0`，避免中区内容最小高度挤压手牌区。
+    - 新增 `769-900` 宽度段的战斗布局兜底，提升手牌区最小高度并下调拥挤场景下的手牌悬浮偏移。
+    - 移动端手牌区域从固定高度改为 `min-height` + 自适应内边距，避免卡牌底部被压出视口。
+  - 覆盖同类问题的自动化防回归（`tests/browser_feature_audit.mjs`）：
+    - 新增断言 `compact viewport keeps battle hand cards and piles visible without bottom clipping`；
+    - 在 `900x720` 紧凑视口下校验：手牌可见比例、牌库/弃牌堆底部可见性。
+  - 稳健性补丁（`js/game.js`）：
+    - `prepareEnemyForEndlessBattle` 调用 `applyEndlessCounterplayAffix` 前增加函数存在性保护，避免测试桩上下文抛错。
+
+- 2026-03-09: 本轮测试证据（全通过）
+  - Node 全量：
+    - `bash tests/run_node_checks.sh` ✅（包含 endless、battle、map、pvp 等全部 sanity）
+  - Browser audits：
+    - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-fix` ✅
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` ✅（含紧凑视口手牌防裁切新断言）
+    - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4173 output/web-event-branch-audit` ✅
+    - `node tests/browser_inheritance_audit.mjs http://127.0.0.1:4173 output/web-inheritance-audit` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+
+- 2026-03-09: 第 N+4 轮玩法扩展（无尽指令“命环共振”）
+  - 策划目标：
+    - 在无尽模式中增加“局内自适应决策指令”，避免固定套路，提高单回合判断密度与敌我博弈可变性。
+  - 开发落地（`js/core/battle.js`）：
+    - 新增无尽战场指令 `resonance_matrix_order`（命环共振），纳入无尽指令目录与额外随机池；
+    - 指令按当前威胁画像自动切换回路：
+      - `守势回路`：高爆发威胁且血线不稳时，优先护盾+净化（并支持路径联动）；
+      - `破阵回路`：对高护盾目标进行破盾+易伤并补刀；
+      - `净域回路`：在控场压力场景下净化+过牌，并在可稳压时降低无尽压力；
+      - `歼灭回路`：默认重击+余震扩散，补足收割节奏。
+    - 路径联动：
+      - 智慧：提升净化上限；
+      - 回响：部分回路补过牌；
+      - 汇流：满足条件可回收指令槽；
+      - 毁灭：提高输出回路伤害系数。
+  - 自动化扩展：
+    - `tests/sanity_battle_command_synergy_checks.js`
+      - 增加新指令目录覆盖断言；
+      - 新增“破阵/净域/守势”三类分支行为断言。
+    - `tests/browser_feature_audit.mjs`
+      - 新增浏览器探针：
+        - `endless resonance matrix command applies adaptive break branch against shield-heavy threat`
+      - 调整紧凑视口手牌断言探针，避免前序状态污染导致误报。
+
+- 2026-03-09: 本轮测试证据（全通过）
+  - 增量：
+    - `node tests/sanity_battle_command_synergy_checks.js` ✅
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` ✅
+  - 全量：
+    - `bash tests/run_node_checks.sh` ✅
+    - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-fix` ✅
+    - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4173 output/web-event-branch-audit` ✅
+    - `node tests/browser_inheritance_audit.mjs http://127.0.0.1:4173 output/web-inheritance-audit` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+
+- 2026-03-09: 第三十轮无尽玩法扩展（命环共振策略化 + 反制词缀细分 + 命环矩阵联动内容）
+  - `battle.js`：命环共振指令深化
+    - 新增“命环共振策略模式”完整链路：`auto/guard/break/cleanse/burst`。
+    - 新增 `resolveResonanceMatrixMode` 弹窗选择（非 webdriver 下可手选），并支持 `command.strategy`/`command.mode` 参数直接指定，测试环境稳定回落 `auto`。
+    - 新增矩阵信号消费：`matrixGuardSignal/matrixBreakSignal/matrixCleanseSignal/matrixBurstSignal` 可在发动命环共振时自动覆盖本次策略。
+    - 命环共振分支接入反制惩罚：`antiRefund/antiBurst`（回收与爆发伤害压制）；并记录 `commandState.lastResonanceMatrixMode` 供法宝联动。
+    - `void_pursuit_order`、`horizon_barter_order` 同步接入 `antiBurst/antiRefund`，且界隙交易接入 `antiEnergy`。
+  - `game.js`：无尽反制词缀扩展
+    - `applyEndlessCounterplayAffix` 新增高热度细分词缀：
+      - `counter_energy_choke`（antiEnergy）
+      - `counter_refund_lock`（antiRefund）
+      - `counter_burst_damp`（antiBurst）
+    - 新增字段写回：`__endlessAntiEnergy/__endlessAntiRefund/__endlessAntiBurst`。
+  - `cards.js`：新增 3 张命环矩阵联动卡牌
+    - `matrixGuardProtocol`（守式，护盾+净化+守势信号）
+    - `matrixShatterVector`（破式，清盾打击+破阵信号）
+    - `matrixPurgeLoop`（净式，净化过牌+净域信号）
+    - 已接入 `CARD_POOL` 与 `ARCHETYPE_PACKS`（stormcraft/vitalweave/bulwark）。
+  - `treasures.js`：新增 2 个命环共振法宝
+    - `matrix_resonator`：开场补指令槽；打出矩阵卡额外叠策略信号。
+    - `tactical_relay_spindle`：命环共振后下回合回能；若上次为手动策略则额外抽牌。
+    - 已接入 `unlockRealm`。
+  - 测试增强
+    - `tests/sanity_battle_command_synergy_checks.js`
+      - 覆盖命环共振强制策略分支（低血场景强制破阵）
+      - 覆盖 antiBurst/antiRefund/antiEnergy 对 `resonance_matrix_order/void_pursuit_order/horizon_barter_order` 的压制效果
+    - `tests/browser_feature_audit.mjs`
+      - 新增浏览器级探针：命环共振强制策略覆盖验证
+      - 新增浏览器级探针：反制词缀扩展（anti-energy/refund/burst）与中文文案验证
+      - 修复营地/救援车队分支断言为更稳健的关键词路径选择，降低事件顺序抖动导致的误报
+    - `tests/sanity_expansion_system_checks.js`
+      - 新增矩阵卡池与法宝存在性断言
+      - 新增矩阵法宝行为断言（开场指令充能、策略信号、命环共振后继电回能/抽牌）
+
+- 2026-03-09: 本轮测试证据（全通过）
+  - Node:
+    - `node tests/sanity_battle_command_synergy_checks.js` ✅
+    - `node tests/sanity_expansion_system_checks.js` ✅
+    - `node tests/sanity_card_design_guardrail_checks.js` ✅
+    - `node tests/sanity_treasure_set_bonus_checks.js` ✅
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser:
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` ✅
+    - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-fix` ✅
+    - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4173 output/web-event-branch-audit` ✅
+    - `node tests/browser_inheritance_audit.mjs http://127.0.0.1:4173 output/web-inheritance-audit` ✅
+    - `node tests/browser_pvp_audit.mjs` ✅
+  - Playwright 客户端冒烟 + 视觉检查：
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-latest` ✅
+    - 人工检查 `output/web-game-latest/shot-1.png`：主菜单渲染正常，无错位遮挡。

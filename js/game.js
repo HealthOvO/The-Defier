@@ -32,8 +32,11 @@ class Game {
         this.featureFlags = {
             combatDepthV2: true,
             pvpRuleSyncV2: true,
-            mapNodeTrialForge: true
+            mapNodeTrialForge: true,
+            endlessModeV1: true
         };
+        this.endlessState = this.createDefaultEndlessState();
+        this.encounterState = this.createDefaultEncounterState();
         this.lastLegacyGain = 0;
         this.debugMode = localStorage.getItem('theDefierDebug') === 'true';
         this.boundGlobalEvents = false;
@@ -144,11 +147,22 @@ class Game {
                         id: this.player.archetypeResonance.id,
                         tier: this.player.archetypeResonance.tier
                     }
-                    : null
+                    : null,
+                adventureBuffs: this.player?.adventureBuffs || null
             },
             battle: (isBattleMode && this.battle) ? {
                 turn: this.battle.turnNumber || 0,
                 currentTurn: this.battle.currentTurn || 'none',
+                encounterTheme: this.battle.activeEncounterTheme
+                    ? {
+                        id: this.battle.activeEncounterTheme.id,
+                        name: this.battle.activeEncounterTheme.name,
+                        tierStage: this.battle.activeEncounterTheme.tierStage || 1
+                    }
+                    : null,
+                battleCommand: (typeof this.battle.getBattleCommandSnapshot === 'function')
+                    ? this.battle.getBattleCommandSnapshot()
+                    : null,
                 enemies: (this.battle.enemies || []).filter(e => e.currentHp > 0).map((e, idx) => ({
                     i: idx,
                     id: e.id,
@@ -157,7 +171,8 @@ class Game {
                     maxHp: e.maxHp,
                     block: e.block || 0,
                     buffs: e.buffs || {},
-                    phase: e.currentPhase || 0
+                    phase: e.currentPhase || 0,
+                    tactic: e.tacticalPlanLabel || null
                 }))
             } : null,
             map: this.map ? {
@@ -175,6 +190,9 @@ class Game {
                 doctrine: this.player?.legacyRunDoctrine || null,
                 mission: this.player?.legacyRunMission || null
             },
+            endless: this.ensureEndlessState(),
+            endlessPhase: this.getEndlessPhaseProfile(),
+            encounter: this.ensureEncounterState(),
             perf: this.performanceStats
         };
 
@@ -231,6 +249,1019 @@ class Game {
             lastPreset: null,
             secondaryPreset: null
         };
+    }
+
+    createDefaultEndlessState() {
+        return {
+            unlocked: false,
+            active: false,
+            currentCycle: 0,
+            clearedCycles: 0,
+            pressure: 0,
+            totalBossDefeated: 0,
+            totalEndlessScore: 0,
+            activeMutators: [],
+            lastMutatorId: null,
+            lastPhaseId: null,
+            phaseHistory: [],
+            boonHistory: [],
+            boonRarePity: 0,
+            boonRareGuaranteedEvery: 3,
+            barterHeat: 0,
+            boonStats: {
+                rewardGoldMul: 0,
+                rewardExpMul: 0,
+                shopDiscountMul: 0,
+                healMul: 0,
+                battleFirstTurnDraw: 0,
+                battleOpeningBlock: 0,
+                battleFirstTurnEnergy: 0
+            }
+        };
+    }
+
+    createDefaultEncounterState() {
+        return {
+            battles: 0,
+            wins: 0,
+            currentStreakId: null,
+            currentStreak: 0,
+            maxStreak: 0,
+            recentThemes: [],
+            themeStats: {},
+            totalBonusGold: 0,
+            totalBonusExp: 0
+        };
+    }
+
+    normalizeEncounterState(rawState = null) {
+        const defaults = this.createDefaultEncounterState();
+        const source = rawState && typeof rawState === 'object' ? rawState : {};
+        const toInt = (value, fallback = 0) => {
+            const num = Number(value);
+            if (!Number.isFinite(num)) return fallback;
+            return Math.max(0, Math.floor(num));
+        };
+
+        const themeStats = {};
+        const rawThemeStats = source.themeStats && typeof source.themeStats === 'object'
+            ? source.themeStats
+            : {};
+        Object.keys(rawThemeStats).forEach((themeId) => {
+            if (typeof themeId !== 'string' || !themeId) return;
+            const entry = rawThemeStats[themeId];
+            const winCount = toInt(entry && entry.wins, 0);
+            const seenCount = toInt(entry && entry.seen, 0);
+            if (winCount <= 0 && seenCount <= 0) return;
+            themeStats[themeId] = {
+                seen: Math.max(seenCount, winCount),
+                wins: Math.min(winCount, Math.max(seenCount, winCount)),
+                bestTier: Math.max(1, Math.min(3, toInt(entry && entry.bestTier, 1) || 1))
+            };
+        });
+
+        const currentStreak = toInt(source.currentStreak, 0);
+        const normalized = {
+            ...defaults,
+            battles: toInt(source.battles, 0),
+            wins: toInt(source.wins, 0),
+            currentStreakId: typeof source.currentStreakId === 'string' && source.currentStreakId ? source.currentStreakId : null,
+            currentStreak,
+            maxStreak: Math.max(currentStreak, toInt(source.maxStreak, currentStreak)),
+            recentThemes: Array.isArray(source.recentThemes)
+                ? source.recentThemes.filter((id) => typeof id === 'string' && id).slice(-10)
+                : [],
+            themeStats,
+            totalBonusGold: toInt(source.totalBonusGold, 0),
+            totalBonusExp: toInt(source.totalBonusExp, 0)
+        };
+
+        if (normalized.currentStreak <= 0) {
+            normalized.currentStreak = 0;
+            normalized.currentStreakId = null;
+        }
+        return normalized;
+    }
+
+    ensureEncounterState() {
+        this.encounterState = this.normalizeEncounterState(this.encounterState);
+        return this.encounterState;
+    }
+
+    registerEncounterThemeStart(themeId) {
+        const state = this.ensureEncounterState();
+        const id = typeof themeId === 'string' ? themeId : '';
+        if (!id) return 1;
+
+        state.battles += 1;
+        if (state.currentStreakId === id) {
+            state.currentStreak += 1;
+        } else {
+            state.currentStreakId = id;
+            state.currentStreak = 1;
+        }
+        state.maxStreak = Math.max(state.maxStreak, state.currentStreak);
+        state.recentThemes.push(id);
+        if (state.recentThemes.length > 10) state.recentThemes.shift();
+
+        const stats = state.themeStats[id] || { seen: 0, wins: 0, bestTier: 1 };
+        stats.seen = Math.max(0, Number(stats.seen) || 0) + 1;
+        const stage = state.currentStreak >= 4 ? 3 : state.currentStreak >= 2 ? 2 : 1;
+        stats.bestTier = Math.max(stats.bestTier || 1, stage);
+        state.themeStats[id] = stats;
+        return stage;
+    }
+
+    recordEncounterThemeVictory(summary) {
+        if (!summary || typeof summary !== 'object') return;
+        const state = this.ensureEncounterState();
+        state.wins += 1;
+
+        const id = typeof summary.themeId === 'string' ? summary.themeId : '';
+        if (id) {
+            const stats = state.themeStats[id] || { seen: 0, wins: 0, bestTier: 1 };
+            stats.wins = Math.max(0, Number(stats.wins) || 0) + 1;
+            stats.seen = Math.max(stats.seen || 0, stats.wins);
+            stats.bestTier = Math.max(
+                stats.bestTier || 1,
+                Math.max(1, Math.min(3, Math.floor(Number(summary.tierStage) || 1)))
+            );
+            state.themeStats[id] = stats;
+        }
+
+        state.totalBonusGold += Math.max(0, Math.floor(Number(summary.goldBonus) || 0));
+        state.totalBonusExp += Math.max(0, Math.floor(Number(summary.ringExpBonus) || 0));
+    }
+
+    normalizeEndlessState(rawState = null) {
+        const defaults = this.createDefaultEndlessState();
+        const source = rawState && typeof rawState === 'object' ? rawState : {};
+        const progressionRealm = Math.max(
+            Number(this.player?.maxRealmReached) || 1,
+            Math.max(...((Array.isArray(this.unlockedRealms) && this.unlockedRealms.length > 0) ? this.unlockedRealms : [1]))
+        );
+
+        const normalizeInt = (value, fallback = 0) => {
+            const num = Number(value);
+            if (!Number.isFinite(num)) return fallback;
+            return Math.max(0, Math.floor(num));
+        };
+        const sanitizeRate = (value) => {
+            const num = Number(value);
+            if (!Number.isFinite(num)) return 0;
+            return Math.max(0, Math.min(0.9, num));
+        };
+
+        const boonStatsRaw = source.boonStats && typeof source.boonStats === 'object'
+            ? source.boonStats
+            : {};
+        const boonStats = {
+            rewardGoldMul: sanitizeRate(boonStatsRaw.rewardGoldMul),
+            rewardExpMul: sanitizeRate(boonStatsRaw.rewardExpMul),
+            shopDiscountMul: sanitizeRate(boonStatsRaw.shopDiscountMul),
+            healMul: sanitizeRate(boonStatsRaw.healMul),
+            battleFirstTurnDraw: normalizeInt(boonStatsRaw.battleFirstTurnDraw),
+            battleOpeningBlock: normalizeInt(boonStatsRaw.battleOpeningBlock),
+            battleFirstTurnEnergy: normalizeInt(boonStatsRaw.battleFirstTurnEnergy)
+        };
+
+        const unlockedByProgress = progressionRealm >= 6;
+        const sourceUnlocked = !!source.unlocked;
+        const unlocked = sourceUnlocked || unlockedByProgress;
+
+        const cycle = normalizeInt(source.currentCycle);
+        const normalized = {
+            ...defaults,
+            ...source,
+            unlocked,
+            active: !!source.active && unlocked,
+            currentCycle: cycle,
+            clearedCycles: normalizeInt(source.clearedCycles, cycle),
+            pressure: Math.max(0, Math.min(9, normalizeInt(source.pressure))),
+            totalBossDefeated: normalizeInt(source.totalBossDefeated, cycle),
+            totalEndlessScore: normalizeInt(source.totalEndlessScore),
+            activeMutators: Array.isArray(source.activeMutators)
+                ? source.activeMutators.filter((id) => typeof id === 'string').slice(-3)
+                : [],
+            lastMutatorId: typeof source.lastMutatorId === 'string' ? source.lastMutatorId : null,
+            lastPhaseId: typeof source.lastPhaseId === 'string' ? source.lastPhaseId : null,
+            phaseHistory: Array.isArray(source.phaseHistory)
+                ? source.phaseHistory
+                    .filter((entry) => entry && typeof entry.id === 'string' && Number.isFinite(Number(entry.cycle)))
+                    .map((entry) => ({
+                        id: entry.id,
+                        cycle: Math.max(0, Math.floor(Number(entry.cycle) || 0))
+                    }))
+                    .slice(-20)
+                : [],
+            boonHistory: Array.isArray(source.boonHistory)
+                ? source.boonHistory.filter((id) => typeof id === 'string').slice(-20)
+                : [],
+            boonRarePity: normalizeInt(source.boonRarePity),
+            boonRareGuaranteedEvery: Math.max(2, Math.min(6, normalizeInt(source.boonRareGuaranteedEvery, 3) || 3)),
+            barterHeat: Math.max(0, Math.min(9, normalizeInt(source.barterHeat, 0))),
+            boonStats
+        };
+
+        return normalized;
+    }
+
+    ensureEndlessState() {
+        this.endlessState = this.normalizeEndlessState(this.endlessState);
+        return this.endlessState;
+    }
+
+    isEndlessUnlocked() {
+        const state = this.ensureEndlessState();
+        if (state.unlocked) return true;
+
+        const progressionRealm = Math.max(
+            Number(this.player?.maxRealmReached) || 1,
+            Math.max(...((Array.isArray(this.unlockedRealms) && this.unlockedRealms.length > 0) ? this.unlockedRealms : [1]))
+        );
+        if (progressionRealm >= 6) {
+            state.unlocked = true;
+        }
+        return !!state.unlocked;
+    }
+
+    isEndlessActive() {
+        if (!this.featureFlags || !this.featureFlags.endlessModeV1) return false;
+        const state = this.ensureEndlessState();
+        return !!state.active && this.isEndlessUnlocked();
+    }
+
+    getMapCacheKey(realm) {
+        if (this.isEndlessActive()) {
+            const state = this.ensureEndlessState();
+            return `endless:${state.currentCycle}:realm:${realm}`;
+        }
+        return `realm:${realm}`;
+    }
+
+    getEndlessRealmForCycle(cycle = 0) {
+        const sequence = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
+        const safeCycle = Math.max(0, Math.floor(Number(cycle) || 0));
+        return sequence[safeCycle % sequence.length];
+    }
+
+    getDisplayRealmName(realm) {
+        const fallbackName = this.map && typeof this.map.getRealmName === 'function'
+            ? this.map.getRealmName(realm)
+            : `第${realm}重天`;
+        if (!this.isEndlessActive()) return fallbackName;
+        const state = this.ensureEndlessState();
+        return `无尽轮回·第${state.currentCycle + 1}轮｜${fallbackName}`;
+    }
+
+    getEndlessMutatorPool() {
+        return [
+            {
+                id: 'iron_wall',
+                name: '铁幕甲壳',
+                desc: '敌人生命提升，奖励略增。',
+                mods: { enemyHpMul: 1.22, rewardGoldMul: 1.08, rewardExpMul: 1.06 }
+            },
+            {
+                id: 'berserker_tide',
+                name: '狂潮杀意',
+                desc: '敌人攻击提升，收益同步提升。',
+                mods: { enemyAtkMul: 1.2, rewardGoldMul: 1.12, rewardExpMul: 1.1 }
+            },
+            {
+                id: 'void_tax',
+                name: '虚空税契',
+                desc: '治疗效率下降，但事件更易出现。',
+                mods: {
+                    healMul: 0.82,
+                    rewardGoldMul: 1.14,
+                    mapWeightShift: { event: 0.04, rest: -0.02 }
+                }
+            },
+            {
+                id: 'war_market',
+                name: '战时供给',
+                desc: '商店更贵，但商店节点显著增加。',
+                mods: {
+                    shopPriceMul: 1.2,
+                    mapWeightShift: { shop: 0.08, event: -0.03, enemy: -0.02 }
+                }
+            },
+            {
+                id: 'trial_inferno',
+                name: '焚心试炼',
+                desc: '试炼和精英更多，回报更高。',
+                mods: {
+                    rewardGoldMul: 1.12,
+                    rewardExpMul: 1.16,
+                    mapWeightShift: { trial: 0.06, elite: 0.04, rest: -0.03, shop: -0.02 }
+                }
+            },
+            {
+                id: 'ashen_camp',
+                name: '焦土行军',
+                desc: '营地更稀少，但金币与经验提升。',
+                mods: {
+                    rewardGoldMul: 1.15,
+                    rewardExpMul: 1.08,
+                    mapWeightShift: { rest: -0.05, enemy: 0.03, elite: 0.02 }
+                }
+            }
+        ];
+    }
+
+    rollNextEndlessMutator() {
+        const state = this.ensureEndlessState();
+        const pool = this.getEndlessMutatorPool();
+        if (!Array.isArray(pool) || pool.length === 0) return null;
+
+        const activeSet = new Set(state.activeMutators || []);
+        const candidates = pool.filter((m) => m && m.id && !activeSet.has(m.id));
+        const rollPool = candidates.length > 0 ? candidates : pool;
+        const pick = rollPool[Math.floor(Math.random() * rollPool.length)];
+        if (!pick || !pick.id) return null;
+
+        state.activeMutators = Array.isArray(state.activeMutators) ? state.activeMutators : [];
+        state.activeMutators.push(pick.id);
+        if (state.activeMutators.length > 3) {
+            state.activeMutators = state.activeMutators.slice(state.activeMutators.length - 3);
+        }
+        state.lastMutatorId = pick.id;
+        return pick;
+    }
+
+    getEndlessPhaseProfile(cycleOverride = null) {
+        const state = this.ensureEndlessState();
+        const rawCycle = cycleOverride === null || cycleOverride === undefined
+            ? state.currentCycle
+            : cycleOverride;
+        const cycle = Math.max(0, Math.floor(Number(rawCycle) || 0));
+        const loopIndex = (cycle % 13) + 1;
+
+        const fallback = {
+            id: 'stabilize',
+            name: '稳态区间',
+            active: false,
+            cycle,
+            loopIndex,
+            checkpoint: 0,
+            desc: '当前轮回处于稳态区间。',
+            enemyHpMul: 1,
+            enemyAtkMul: 1,
+            rewardGoldMul: 1,
+            rewardExpMul: 1,
+            shopPriceMul: 1,
+            enemyOpeningBlock: 0,
+            enemyOpeningStrength: 0,
+            extraAttackPatterns: 0,
+            attackBoostMul: 1,
+            injectDebuffPattern: false,
+            boonRareBonusRate: 0,
+            bossAffix: null
+        };
+
+        const phaseMap = {
+            3: {
+                id: 'phase_surge',
+                name: '相位·突流',
+                checkpoint: 3,
+                desc: '敌方进攻节奏加快，适合作战试探与资源试压。',
+                enemyHpMul: 1.06,
+                enemyAtkMul: 1.1,
+                rewardGoldMul: 1.06,
+                rewardExpMul: 1.06,
+                shopPriceMul: 0.98,
+                enemyOpeningBlock: 2,
+                enemyOpeningStrength: 0,
+                extraAttackPatterns: 1,
+                attackBoostMul: 1.04,
+                injectDebuffPattern: false,
+                boonRareBonusRate: 0.02,
+                bossAffix: 'surge'
+            },
+            6: {
+                id: 'phase_siege',
+                name: '相位·围压',
+                checkpoint: 6,
+                desc: '敌方获得护势强化并穿插减益动作，压制持久战。',
+                enemyHpMul: 1.12,
+                enemyAtkMul: 1.14,
+                rewardGoldMul: 1.08,
+                rewardExpMul: 1.1,
+                shopPriceMul: 0.96,
+                enemyOpeningBlock: 4,
+                enemyOpeningStrength: 1,
+                extraAttackPatterns: 1,
+                attackBoostMul: 1.08,
+                injectDebuffPattern: true,
+                boonRareBonusRate: 0.04,
+                bossAffix: 'siege'
+            },
+            9: {
+                id: 'phase_rift',
+                name: '相位·裂潮',
+                checkpoint: 9,
+                desc: '敌方伤害结构更激进，收益同步提升，考验爆发与续航平衡。',
+                enemyHpMul: 1.18,
+                enemyAtkMul: 1.18,
+                rewardGoldMul: 1.12,
+                rewardExpMul: 1.14,
+                shopPriceMul: 1.02,
+                enemyOpeningBlock: 5,
+                enemyOpeningStrength: 1,
+                extraAttackPatterns: 2,
+                attackBoostMul: 1.11,
+                injectDebuffPattern: true,
+                boonRareBonusRate: 0.06,
+                bossAffix: 'rift'
+            },
+            12: {
+                id: 'phase_apex',
+                name: '相位·终压',
+                checkpoint: 12,
+                desc: '轮回高压峰值，Boss 获得专属终压词缀，奖励显著提高。',
+                enemyHpMul: 1.25,
+                enemyAtkMul: 1.22,
+                rewardGoldMul: 1.16,
+                rewardExpMul: 1.18,
+                shopPriceMul: 1.08,
+                enemyOpeningBlock: 6,
+                enemyOpeningStrength: 2,
+                extraAttackPatterns: 2,
+                attackBoostMul: 1.14,
+                injectDebuffPattern: true,
+                boonRareBonusRate: 0.1,
+                bossAffix: 'apex'
+            }
+        };
+
+        const active = phaseMap[loopIndex];
+        if (!active) return fallback;
+        return {
+            ...fallback,
+            ...active,
+            active: true,
+            cycle,
+            loopIndex,
+            checkpoint: loopIndex
+        };
+    }
+
+    getEndlessModifiers() {
+        if (!this.isEndlessActive()) {
+            return {
+                enemyHpMul: 1,
+                enemyAtkMul: 1,
+                rewardGoldMul: 1,
+                rewardExpMul: 1,
+                shopPriceMul: 1,
+                healMul: 1,
+                mapWeightShift: {}
+            };
+        }
+
+        const state = this.ensureEndlessState();
+        const cycle = Math.max(0, Math.floor(Number(state.currentCycle) || 0));
+        const loopTier = Math.floor(cycle / 13);
+        const pressure = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
+        const phaseProfile = this.getEndlessPhaseProfile(cycle);
+
+        const result = {
+            enemyHpMul: 1 + cycle * 0.12 + loopTier * 0.08 + pressure * 0.025,
+            enemyAtkMul: 1 + cycle * 0.08 + loopTier * 0.05 + pressure * 0.02,
+            rewardGoldMul: 1 + cycle * 0.09 + pressure * 0.014,
+            rewardExpMul: 1 + cycle * 0.07 + pressure * 0.012,
+            shopPriceMul: 1 + cycle * 0.04,
+            healMul: Math.max(0.58, 1 - cycle * 0.03 - pressure * 0.015),
+            mapWeightShift: {
+                elite: Math.min(0.14, cycle * 0.008),
+                trial: Math.min(0.12, cycle * 0.007),
+                rest: -Math.min(0.08, cycle * 0.006)
+            }
+        };
+
+        const mutatorMap = new Map(this.getEndlessMutatorPool().map((item) => [item.id, item]));
+        (state.activeMutators || []).forEach((mutatorId) => {
+            const mutator = mutatorMap.get(mutatorId);
+            if (!mutator || !mutator.mods) return;
+            const mods = mutator.mods;
+            if (Number.isFinite(mods.enemyHpMul)) result.enemyHpMul *= mods.enemyHpMul;
+            if (Number.isFinite(mods.enemyAtkMul)) result.enemyAtkMul *= mods.enemyAtkMul;
+            if (Number.isFinite(mods.rewardGoldMul)) result.rewardGoldMul *= mods.rewardGoldMul;
+            if (Number.isFinite(mods.rewardExpMul)) result.rewardExpMul *= mods.rewardExpMul;
+            if (Number.isFinite(mods.shopPriceMul)) result.shopPriceMul *= mods.shopPriceMul;
+            if (Number.isFinite(mods.healMul)) result.healMul *= mods.healMul;
+            if (mods.mapWeightShift && typeof mods.mapWeightShift === 'object') {
+                Object.keys(mods.mapWeightShift).forEach((key) => {
+                    const delta = Number(mods.mapWeightShift[key]);
+                    if (!Number.isFinite(delta)) return;
+                    result.mapWeightShift[key] = (result.mapWeightShift[key] || 0) + delta;
+                });
+            }
+        });
+
+        const boonStats = state.boonStats || {};
+        result.rewardGoldMul *= (1 + (Number(boonStats.rewardGoldMul) || 0));
+        result.rewardExpMul *= (1 + (Number(boonStats.rewardExpMul) || 0));
+        result.shopPriceMul *= Math.max(0.35, 1 - (Number(boonStats.shopDiscountMul) || 0));
+        result.healMul *= (1 + (Number(boonStats.healMul) || 0));
+
+        if (phaseProfile && phaseProfile.active) {
+            result.enemyHpMul *= Math.max(1, Number(phaseProfile.enemyHpMul) || 1);
+            result.enemyAtkMul *= Math.max(1, Number(phaseProfile.enemyAtkMul) || 1);
+            result.rewardGoldMul *= Math.max(1, Number(phaseProfile.rewardGoldMul) || 1);
+            result.rewardExpMul *= Math.max(1, Number(phaseProfile.rewardExpMul) || 1);
+            result.shopPriceMul *= Math.max(0.75, Number(phaseProfile.shopPriceMul) || 1);
+            result.mapWeightShift.elite = (result.mapWeightShift.elite || 0) + 0.02;
+            result.mapWeightShift.trial = (result.mapWeightShift.trial || 0) + 0.02;
+        }
+
+        result.enemyHpMul = Math.max(1, result.enemyHpMul);
+        result.enemyAtkMul = Math.max(1, result.enemyAtkMul);
+        result.rewardGoldMul = Math.max(1, result.rewardGoldMul);
+        result.rewardExpMul = Math.max(1, result.rewardExpMul);
+        result.shopPriceMul = Math.max(0.75, result.shopPriceMul);
+        result.healMul = Math.max(0.45, Math.min(1.35, result.healMul));
+
+        return result;
+    }
+
+    getEndlessHealingMultiplier() {
+        if (!this.isEndlessActive()) return 1;
+        const mods = this.getEndlessModifiers();
+        return Math.max(0.45, Math.min(1.35, Number(mods.healMul) || 1));
+    }
+
+    getEndlessEventTuning() {
+        const tuning = {
+            goldGainMul: 1,
+            ringExpFlat: 0,
+            trialRewardMul: 1,
+            tempShopOfferBonus: 0,
+            tempShopPriceMul: 1,
+            forceRelief: false,
+            bonusAdventureBuffCharges: 0,
+            boonRareBonusRate: 0,
+            forceRareBoonChoice: false
+        };
+        if (!this.isEndlessActive()) return tuning;
+
+        const state = this.ensureEndlessState();
+        const activeMutators = new Set(Array.isArray(state?.activeMutators) ? state.activeMutators : []);
+        const pressure = Math.max(0, Math.min(9, Math.floor(Number(state?.pressure) || 0)));
+        const phaseProfile = this.getEndlessPhaseProfile(state.currentCycle);
+
+        if (activeMutators.has('war_market')) {
+            tuning.tempShopOfferBonus += 1;
+            tuning.tempShopPriceMul *= 0.88;
+        }
+        if (activeMutators.has('trial_inferno')) {
+            tuning.tempShopOfferBonus += 1;
+            tuning.trialRewardMul *= 1.22;
+            tuning.ringExpFlat += 18;
+        }
+        if (activeMutators.has('void_tax')) {
+            tuning.forceRelief = true;
+            tuning.goldGainMul *= 1.08;
+        }
+        if (activeMutators.has('berserker_tide')) {
+            tuning.goldGainMul *= 1.12;
+            tuning.boonRareBonusRate += 0.06;
+        }
+        if (activeMutators.has('ashen_camp')) {
+            tuning.bonusAdventureBuffCharges += 1;
+        }
+        if (activeMutators.has('iron_wall')) {
+            tuning.bonusAdventureBuffCharges += 1;
+        }
+        if (activeMutators.has('trial_inferno')) {
+            tuning.boonRareBonusRate += 0.08;
+        }
+        if (pressure >= 3) {
+            tuning.forceRelief = true;
+            tuning.tempShopOfferBonus += 1;
+        }
+        if (pressure >= 6) {
+            tuning.tempShopPriceMul *= 0.92;
+            tuning.ringExpFlat += 12;
+            tuning.boonRareBonusRate += 0.08;
+        }
+        if (pressure >= 8) {
+            tuning.goldGainMul *= 1.05;
+            tuning.bonusAdventureBuffCharges += 1;
+            tuning.boonRareBonusRate += 0.1;
+            tuning.forceRareBoonChoice = true;
+        }
+        if (phaseProfile && phaseProfile.active) {
+            tuning.trialRewardMul *= 1.06;
+            tuning.boonRareBonusRate += Math.max(0, Number(phaseProfile.boonRareBonusRate) || 0);
+            if (phaseProfile.checkpoint >= 9) {
+                tuning.tempShopOfferBonus += 1;
+            }
+            if (phaseProfile.checkpoint >= 12) {
+                tuning.forceRareBoonChoice = true;
+            }
+        }
+
+        tuning.tempShopOfferBonus = Math.max(0, Math.min(2, Math.floor(Number(tuning.tempShopOfferBonus) || 0)));
+        tuning.bonusAdventureBuffCharges = Math.max(0, Math.min(2, Math.floor(Number(tuning.bonusAdventureBuffCharges) || 0)));
+        tuning.tempShopPriceMul = Math.max(0.65, Math.min(1.05, Number(tuning.tempShopPriceMul) || 1));
+        tuning.goldGainMul = Math.max(1, Math.min(1.5, Number(tuning.goldGainMul) || 1));
+        tuning.trialRewardMul = Math.max(1, Math.min(2.4, Number(tuning.trialRewardMul) || 1));
+        tuning.ringExpFlat = Math.max(0, Math.min(120, Math.floor(Number(tuning.ringExpFlat) || 0)));
+        tuning.boonRareBonusRate = Math.max(0, Math.min(0.5, Number(tuning.boonRareBonusRate) || 0));
+        tuning.forceRareBoonChoice = !!tuning.forceRareBoonChoice;
+        return tuning;
+    }
+
+    getEndlessPressureBehaviorProfile() {
+        const fallback = {
+            pressure: 0,
+            tierId: 'calm',
+            tierName: '常压',
+            enemyOpeningBlock: 0,
+            enemyOpeningStrength: 0,
+            extraAttackPatterns: 0,
+            attackBoostMul: 1,
+            injectDebuffPattern: false,
+            summary: '敌方行动维持常态'
+        };
+        if (!this.isEndlessActive()) return fallback;
+
+        const state = this.ensureEndlessState();
+        const pressure = Math.max(0, Math.min(9, Math.floor(Number(state?.pressure) || 0)));
+        const phaseProfile = this.getEndlessPhaseProfile(state.currentCycle);
+        const profile = {
+            ...fallback,
+            pressure
+        };
+
+        if (pressure >= 3) {
+            profile.tierId = 'tense';
+            profile.tierName = '紧绷';
+            profile.enemyOpeningBlock = 6;
+            profile.extraAttackPatterns = 1;
+            profile.attackBoostMul = 1.08;
+            profile.summary = '敌方会追加 1 段压迫攻击';
+        }
+        if (pressure >= 6) {
+            profile.tierId = 'hazard';
+            profile.tierName = '高压';
+            profile.enemyOpeningBlock = 10;
+            profile.enemyOpeningStrength = 1;
+            profile.extraAttackPatterns = 1;
+            profile.attackBoostMul = 1.12;
+            profile.injectDebuffPattern = true;
+            profile.summary = '敌方开场强化并附带压制咒印';
+        }
+        if (pressure >= 8) {
+            profile.tierId = 'cataclysm';
+            profile.tierName = '灾厄';
+            profile.enemyOpeningBlock = 14;
+            profile.enemyOpeningStrength = 2;
+            profile.extraAttackPatterns = 2;
+            profile.attackBoostMul = 1.16;
+            profile.injectDebuffPattern = true;
+            profile.summary = '敌方将连续压迫并施加重压减益';
+        }
+
+        if (phaseProfile && phaseProfile.active) {
+            profile.enemyOpeningBlock += Math.max(0, Math.floor(Number(phaseProfile.enemyOpeningBlock) || 0));
+            profile.enemyOpeningStrength += Math.max(0, Math.floor(Number(phaseProfile.enemyOpeningStrength) || 0));
+            profile.extraAttackPatterns += Math.max(0, Math.floor(Number(phaseProfile.extraAttackPatterns) || 0));
+            profile.attackBoostMul *= Math.max(1, Number(phaseProfile.attackBoostMul) || 1);
+            profile.injectDebuffPattern = profile.injectDebuffPattern || !!phaseProfile.injectDebuffPattern;
+            profile.summary += `｜阶段挑战：${phaseProfile.name}`;
+        }
+
+        profile.enemyOpeningBlock = Math.max(0, Math.floor(Number(profile.enemyOpeningBlock) || 0));
+        profile.enemyOpeningStrength = Math.max(0, Math.floor(Number(profile.enemyOpeningStrength) || 0));
+        profile.extraAttackPatterns = Math.max(0, Math.min(4, Math.floor(Number(profile.extraAttackPatterns) || 0)));
+        profile.attackBoostMul = Math.max(1, Math.min(1.4, Number(profile.attackBoostMul) || 1));
+        profile.injectDebuffPattern = !!profile.injectDebuffPattern;
+        if (phaseProfile && phaseProfile.active) {
+            profile.phaseId = phaseProfile.id;
+            profile.phaseName = phaseProfile.name;
+            profile.phaseCheckpoint = phaseProfile.checkpoint;
+        } else {
+            profile.phaseId = null;
+            profile.phaseName = null;
+            profile.phaseCheckpoint = 0;
+        }
+        return profile;
+    }
+
+    buildEndlessPressurePatternVariant(pattern, profile, variantIndex = 0) {
+        if (!pattern || typeof pattern !== 'object' || !profile || typeof profile !== 'object') return null;
+        const pressure = Math.max(0, Math.min(9, Math.floor(Number(profile.pressure) || 0)));
+        const scale = Math.max(1, Number(profile.attackBoostMul) || 1);
+        const extraCount = pressure >= 8 ? 1 : 0;
+        const loopBoost = Math.max(0, Math.floor(Number(variantIndex) || 0));
+
+        if (pattern.type === 'multiAttack' && Number.isFinite(Number(pattern.value))) {
+            const baseCount = Math.max(1, Math.floor(Number(pattern.count) || 2));
+            return {
+                type: 'multiAttack',
+                value: Math.max(1, Math.floor(Number(pattern.value) * scale)),
+                count: Math.min(5, baseCount + extraCount + Math.min(1, loopBoost)),
+                intent: pressure >= 8 ? '🩸连环压制' : '⚔️压迫连击'
+            };
+        }
+
+        if ((pattern.type === 'attack' || pattern.type === 'executeDamage') && Number.isFinite(Number(pattern.value))) {
+            const baseValue = Math.max(1, Math.floor(Number(pattern.value) * scale));
+            if (pressure >= 8) {
+                return {
+                    type: 'multiAttack',
+                    value: Math.max(1, Math.floor(baseValue * 0.7)),
+                    count: Math.min(4, 2 + Math.min(1, loopBoost)),
+                    intent: '🩸骤压连斩'
+                };
+            }
+            return {
+                type: 'attack',
+                value: baseValue,
+                intent: '⚔️压迫斩击'
+            };
+        }
+
+        return null;
+    }
+
+    getEndlessMapConfig(realm) {
+        const state = this.ensureEndlessState();
+        const cycle = Math.max(0, Math.floor(Number(state.currentCycle) || 0));
+        const rows = Math.max(8, Math.min(12, 8 + Math.floor(cycle / 2)));
+        const mods = this.getEndlessModifiers();
+        const eventBias = (mods.mapWeightShift && Number(mods.mapWeightShift.event)) || 0;
+        const trialBias = (mods.mapWeightShift && Number(mods.mapWeightShift.trial)) || 0;
+
+        const nodesSequence = [];
+        for (let row = 0; row < rows - 1; row += 1) {
+            let count = 2;
+            if ((row + cycle) % 3 === 1) count += 1;
+            if (row > rows * 0.55 && (row + cycle) % 4 === 0) count += 1;
+            if (eventBias > 0.05 && row % 3 === 0) count += 1;
+            if (trialBias > 0.05 && row >= rows - 3) count += 1;
+            nodesSequence.push(Math.max(2, Math.min(4, count)));
+        }
+
+        return { realm, rows, nodesSequence };
+    }
+
+    getEndlessBoonPool() {
+        return [
+            { id: 'golden_ledger', name: '金账符印', rarity: 'common', desc: '所有战斗灵石奖励 +12%。', effect: { rewardGoldMul: 0.12 } },
+            { id: 'insight_torch', name: '悟火灯芯', rarity: 'common', desc: '所有战斗命环经验 +10%。', effect: { rewardExpMul: 0.1 } },
+            { id: 'merchant_seal', name: '商盟玉符', rarity: 'common', desc: '商店价格 -8%。', effect: { shopDiscountMul: 0.08 } },
+            { id: 'renewal_prayer', name: '回春祷言', rarity: 'common', desc: '所有治疗效果 +12%。', effect: { healMul: 0.12 } },
+            { id: 'warding_banner', name: '护阵军旗', rarity: 'common', desc: '每场战斗额外获得 1 层开场护盾增益。', effect: { battleOpeningBlock: 1 } },
+            { id: 'swift_page', name: '迅思残页', rarity: 'common', desc: '每场战斗额外获得 1 层首回合抽牌增益。', effect: { battleFirstTurnDraw: 1 } },
+            { id: 'pulse_core', name: '灵息核', rarity: 'common', desc: '每场战斗额外获得 1 层首回合灵力增益。', effect: { battleFirstTurnEnergy: 1 } },
+            { id: 'vitality_root', name: '命元根', rarity: 'common', desc: '最大生命 +10，并立即恢复 20% 最大生命。', immediate: 'maxHpBoost' },
+            { id: 'fortune_cache', name: '应急粮仓', rarity: 'common', desc: '立即获得一笔灵石补给。', immediate: 'goldBurst' },
+            { id: 'arcane_draft', name: '秘卷补录', rarity: 'common', desc: '立即获得 1 张稀有卡牌。', immediate: 'cardDraft' },
+            { id: 'astral_tithe', name: '星税契', rarity: 'rare', desc: '所有战斗灵石奖励 +22%，命环经验 +12%。', effect: { rewardGoldMul: 0.22, rewardExpMul: 0.12 } },
+            { id: 'eternal_aegis', name: '永恒壁垒', rarity: 'rare', desc: '治疗 +15%，每场战斗额外获得 2 层开场护盾。', effect: { healMul: 0.15, battleOpeningBlock: 2 } },
+            { id: 'genesis_spark', name: '原初火花', rarity: 'rare', desc: '每场战斗额外获得 1 层首回合灵力与抽牌增益。', effect: { battleFirstTurnEnergy: 1, battleFirstTurnDraw: 1 } },
+            { id: 'void_codex', name: '虚空圣典', rarity: 'rare', desc: '立即获得 1 张史诗卡牌，并提高命环经验收益。', immediate: 'epicCardDraft', effect: { rewardExpMul: 0.1 } }
+        ];
+    }
+
+    getEndlessBoonChoices() {
+        const pool = this.getEndlessBoonPool();
+        if (!Array.isArray(pool) || pool.length <= 3) return pool.slice(0, 3);
+
+        const state = this.ensureEndlessState();
+        const tuning = this.isEndlessActive() ? this.getEndlessEventTuning() : null;
+        const recent = new Set((state.boonHistory || []).slice(-4));
+        const preferred = pool.filter((boon) => boon && boon.id && !recent.has(boon.id));
+        const source = preferred.length >= 3 ? preferred : pool.slice();
+        const rarePool = source.filter((boon) => boon.rarity === 'rare');
+        const commonPool = source.filter((boon) => boon.rarity !== 'rare');
+        const picks = [];
+        const limit = Math.max(2, Math.floor(Number(state.boonRareGuaranteedEvery) || 3));
+        const shouldGuaranteeRare = rarePool.length > 0 && (Number(state.boonRarePity) || 0) >= (limit - 1);
+        const shouldForceRare = rarePool.length > 0 && !!tuning?.forceRareBoonChoice;
+        const rareChance = Math.min(0.72, 0.28 + (Number(tuning?.boonRareBonusRate) || 0));
+
+        const pickUniqueFrom = (arr) => {
+            const available = arr.filter((boon) => boon && boon.id && !picks.some((picked) => picked.id === boon.id));
+            if (available.length === 0) return null;
+            return available[Math.floor(Math.random() * available.length)];
+        };
+
+        if (shouldGuaranteeRare || shouldForceRare) {
+            const guaranteed = pickUniqueFrom(rarePool);
+            if (guaranteed) picks.push(guaranteed);
+        } else if (rarePool.length > 0 && Math.random() < rareChance) {
+            const rare = pickUniqueFrom(rarePool);
+            if (rare) picks.push(rare);
+        }
+
+        while (picks.length < 3) {
+            const preferCommon = commonPool.length > 0 && Math.random() < 0.78;
+            const picked = pickUniqueFrom(preferCommon ? commonPool : source) || pickUniqueFrom(source);
+            if (!picked) break;
+            picks.push(picked);
+        }
+
+        return picks.slice(0, 3);
+    }
+
+    applyEndlessBoon(boonId) {
+        const pool = this.getEndlessBoonPool();
+        const boon = pool.find((item) => item && item.id === boonId);
+        if (!boon) return null;
+
+        const state = this.ensureEndlessState();
+        if (!state.boonStats || typeof state.boonStats !== 'object') {
+            state.boonStats = { ...this.createDefaultEndlessState().boonStats };
+        }
+
+        if (boon.effect && typeof boon.effect === 'object') {
+            Object.keys(boon.effect).forEach((key) => {
+                const value = Number(boon.effect[key]) || 0;
+                if (value === 0) return;
+                const current = Number(state.boonStats[key]) || 0;
+                state.boonStats[key] = Math.max(0, current + value);
+            });
+        }
+
+        if (boon.immediate === 'maxHpBoost') {
+            this.player.maxHp += 10;
+            const healAmount = Math.max(8, Math.floor(this.player.maxHp * 0.2));
+            this.player.heal(healAmount);
+        } else if (boon.immediate === 'goldBurst') {
+            const goldGain = 140 + this.ensureEndlessState().currentCycle * 20;
+            this.player.gold += goldGain;
+            Utils.showBattleLog(`无尽祝福：获得 ${goldGain} 灵石补给`);
+        } else if (boon.immediate === 'cardDraft') {
+            const card = getRandomCard('rare', this.player.characterId);
+            if (card) {
+                this.player.addCardToDeck(card);
+                Utils.showBattleLog(`无尽祝福：获得卡牌【${card.name}】`);
+            }
+        } else if (boon.immediate === 'epicCardDraft') {
+            const card = getRandomCard('epic', this.player.characterId);
+            if (card) {
+                this.player.addCardToDeck(card);
+                Utils.showBattleLog(`无尽祝福：获得史诗卡牌【${card.name}】`);
+            }
+        }
+
+        state.boonHistory = Array.isArray(state.boonHistory) ? state.boonHistory : [];
+        state.boonHistory.push(boon.id);
+        if (state.boonHistory.length > 20) {
+            state.boonHistory = state.boonHistory.slice(state.boonHistory.length - 20);
+        }
+        if (boon.rarity === 'rare') {
+            state.boonRarePity = 0;
+        } else {
+            state.boonRarePity = Math.min(99, Math.max(0, Number(state.boonRarePity) || 0) + 1);
+        }
+
+        return boon;
+    }
+
+    showEndlessBoonSelection(onDone = null) {
+        const choices = this.getEndlessBoonChoices();
+        if (!choices || choices.length === 0) {
+            if (typeof onDone === 'function') onDone();
+            return;
+        }
+
+        const modal = document.getElementById('event-modal');
+        const titleEl = document.getElementById('event-title');
+        const iconEl = document.getElementById('event-icon');
+        const descEl = document.getElementById('event-desc');
+        const choicesEl = document.getElementById('event-choices');
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
+            this.applyEndlessBoon(choices[0].id);
+            if (typeof onDone === 'function') onDone();
+            return;
+        }
+
+        titleEl.textContent = '无尽赐福';
+        iconEl.textContent = '♾️';
+        descEl.innerHTML = '你突破了本轮天劫，命环共鸣为你显化三道赐福。<br>请选择其一并继续前进。';
+        choicesEl.innerHTML = '';
+
+        choices.forEach((boon) => {
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            const rarityTag = boon.rarity === 'rare'
+                ? '<span style="color:#ffb866;">【稀有】</span> '
+                : '';
+            btn.innerHTML = `
+                <div>${rarityTag}${boon.name}</div>
+                <div class="choice-effect">${boon.desc}</div>
+            `;
+            btn.onclick = () => {
+                const applied = this.applyEndlessBoon(boon.id);
+                modal.classList.remove('active');
+                if (applied) {
+                    Utils.showBattleLog(`无尽赐福已生效：${applied.name}`);
+                }
+                if (typeof onDone === 'function') onDone();
+            };
+            choicesEl.appendChild(btn);
+        });
+
+        modal.classList.add('active');
+    }
+
+    applyEndlessPreBattleBonuses() {
+        if (!this.isEndlessActive() || !this.player || typeof this.player.grantAdventureBuff !== 'function') return;
+        const state = this.ensureEndlessState();
+        const boonStats = state.boonStats || {};
+        const drawStacks = Math.max(0, Math.floor(Number(boonStats.battleFirstTurnDraw) || 0));
+        const blockStacks = Math.max(0, Math.floor(Number(boonStats.battleOpeningBlock) || 0));
+        const energyStacks = Math.max(0, Math.floor(Number(boonStats.battleFirstTurnEnergy) || 0));
+        if (drawStacks > 0) this.player.grantAdventureBuff('firstTurnDrawBoostBattles', drawStacks);
+        if (blockStacks > 0) this.player.grantAdventureBuff('openingBlockBoostBattles', blockStacks);
+        if (energyStacks > 0) this.player.grantAdventureBuff('firstTurnEnergyBoostBattles', energyStacks);
+    }
+
+    startEndlessMode() {
+        if (!this.isEndlessUnlocked()) {
+            Utils.showBattleLog('无尽轮回尚未解锁：至少突破至第六重天后开启。');
+            return false;
+        }
+
+        const state = this.ensureEndlessState();
+        state.unlocked = true;
+        state.active = true;
+        if (!Array.isArray(state.activeMutators) || state.activeMutators.length === 0) {
+            this.rollNextEndlessMutator();
+        }
+
+        this.player.isReplay = false;
+        this.player.isRecultivation = false;
+        this.player.floor = 0;
+        this.player.realm = this.getEndlessRealmForCycle(state.currentCycle);
+        this.player.currentHp = this.player.maxHp;
+        this.currentBattleNode = null;
+
+        this.map.generate(this.player.realm);
+        this.showScreen('map-screen');
+        this.autoSave();
+        Utils.showBattleLog(`无尽轮回开启：第 ${state.currentCycle + 1} 轮`);
+        return true;
+    }
+
+    handleEndlessRealmComplete() {
+        if (!this.isEndlessActive()) return;
+        const state = this.ensureEndlessState();
+        const prevPressure = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
+        const prevBarterHeat = Math.max(0, Math.min(9, Math.floor(Number(state.barterHeat) || 0)));
+        state.totalBossDefeated += 1;
+        state.clearedCycles += 1;
+        state.pressure = Math.max(0, Math.min(9, prevPressure + 1));
+        state.barterHeat = Math.max(0, prevBarterHeat - 1);
+
+        const mods = this.getEndlessModifiers();
+        const cycleGold = Math.max(60, Math.floor((140 + state.currentCycle * 25) * mods.rewardGoldMul));
+        this.player.gold += cycleGold;
+        const healAmount = Math.max(10, Math.floor(this.player.maxHp * 0.2 * mods.healMul));
+        this.player.heal(healAmount);
+        const cycleScore = Math.max(100, Math.floor((100 + state.currentCycle * 38) * (mods.enemyHpMul * 0.55 + mods.enemyAtkMul * 0.45)));
+        state.totalEndlessScore = Math.max(0, Math.floor(Number(state.totalEndlessScore) || 0)) + cycleScore;
+
+        const essenceGain = Math.max(1, Math.floor((state.currentCycle + 2) / 3));
+        this.awardLegacyEssence(essenceGain, '无尽感悟', { silent: true });
+        Utils.showBattleLog(`无尽突破：灵石 +${cycleGold}，恢复 ${healAmount} 生命，轮回精粹 +${essenceGain}，无尽积分 +${cycleScore}，轮回压力 ${prevPressure}→${state.pressure}`);
+
+        const rolledMutator = this.rollNextEndlessMutator();
+        if (rolledMutator) {
+            Utils.showBattleLog(`轮回异变：${rolledMutator.name}（${rolledMutator.desc}）`);
+        }
+
+        const nextCycle = state.currentCycle + 1;
+        const nextPhase = this.getEndlessPhaseProfile(nextCycle);
+        if (nextPhase && nextPhase.active) {
+            state.lastPhaseId = nextPhase.id;
+            state.phaseHistory = Array.isArray(state.phaseHistory) ? state.phaseHistory : [];
+            state.phaseHistory.push({ id: nextPhase.id, cycle: nextCycle });
+            if (state.phaseHistory.length > 20) {
+                state.phaseHistory = state.phaseHistory.slice(state.phaseHistory.length - 20);
+            }
+            Utils.showBattleLog(`阶段挑战启动：${nextPhase.name}（第 ${nextCycle + 1} 轮）`);
+        }
+        const finalizeAdvance = () => {
+            const latestState = this.ensureEndlessState();
+            latestState.currentCycle = nextCycle;
+            this.player.realm = this.getEndlessRealmForCycle(latestState.currentCycle);
+            this.player.floor = 0;
+            this.currentBattleNode = null;
+            this.player.checkSkillUnlock();
+            this.map.generate(this.player.realm);
+            this.renderTreasures('map-treasures');
+            this.showScreen('map-screen');
+            this.autoSave();
+        };
+
+        this.showEndlessBoonSelection(finalizeAdvance);
     }
 
     getLegacyUpgradeCatalog() {
@@ -319,6 +1350,20 @@ class Game {
                 icon: '🛡️',
                 desc: '通过护势共鸣滚动优势，稳态反击压垮对手。',
                 priority: ['vitalitySeed', 'mindLibrary', 'battleInsight', 'forgemind', 'spiritPouch']
+            },
+            {
+                id: 'stormcraft',
+                name: '霆策流',
+                icon: '⚡',
+                desc: '围绕易伤破窗与连锁追击展开爆发。',
+                priority: ['battleInsight', 'mindLibrary', 'forgemind', 'spiritPouch', 'vitalitySeed']
+            },
+            {
+                id: 'vitalweave',
+                name: '回脉流',
+                icon: '💚',
+                desc: '围绕治疗转化护阵与反击，构建持续战线。',
+                priority: ['vitalitySeed', 'mindLibrary', 'spiritPouch', 'forgemind', 'battleInsight']
             }
         ];
     }
@@ -339,7 +1384,16 @@ class Game {
             bulwarkLegacyProcEnabled: false,
             bulwarkLegacyDraw: 0,
             bulwarkLegacyCounterDamage: 0,
-            bulwarkProcUsedThisTurn: false
+            bulwarkProcUsedThisTurn: false,
+            stormcraftLegacyProcEnabled: false,
+            stormcraftLegacyBonusDamage: 0,
+            stormcraftLegacyDraw: 0,
+            stormcraftProcUsedThisTurn: false,
+            vitalweaveLegacyProcEnabled: false,
+            vitalweaveLegacyBlockRatio: 0,
+            vitalweaveLegacyBurstDamage: 0,
+            vitalweaveLegacyDraw: 0,
+            vitalweaveProcUsedThisTurn: false
         };
 
         if (presetId === 'survivor') {
@@ -380,6 +1434,27 @@ class Game {
                 bulwarkLegacyProcEnabled: true,
                 bulwarkLegacyDraw: 1,
                 bulwarkLegacyCounterDamage: 2
+            };
+        }
+
+        if (presetId === 'stormcraft') {
+            return {
+                ...base,
+                firstAttackBonusPerBattle: 1,
+                stormcraftLegacyProcEnabled: true,
+                stormcraftLegacyBonusDamage: 3,
+                stormcraftLegacyDraw: 1
+            };
+        }
+
+        if (presetId === 'vitalweave') {
+            return {
+                ...base,
+                openingBattleBlockBonus: 2,
+                vitalweaveLegacyProcEnabled: true,
+                vitalweaveLegacyBlockRatio: 0.6,
+                vitalweaveLegacyBurstDamage: 4,
+                vitalweaveLegacyDraw: 1
             };
         }
 
@@ -454,6 +1529,36 @@ class Game {
                 name: '玄甲试炼',
                 desc: '触发 4 次护势共鸣',
                 eventType: 'bulwarkBlockProc',
+                target: 4,
+                progress: 0,
+                completed: false,
+                rewardEssence: 6,
+                rewardGranted: false
+            };
+        }
+
+        if (presetId === 'stormcraft') {
+            return {
+                presetId,
+                id: 'stormcraft_chain',
+                name: '霆策试炼',
+                desc: '触发 4 次易伤破窗追击',
+                eventType: 'stormcraftVulnerableProc',
+                target: 4,
+                progress: 0,
+                completed: false,
+                rewardEssence: 6,
+                rewardGranted: false
+            };
+        }
+
+        if (presetId === 'vitalweave') {
+            return {
+                presetId,
+                id: 'vitalweave_mend',
+                name: '回脉试炼',
+                desc: '触发 4 次回生织脉',
+                eventType: 'vitalweaveHealProc',
                 target: 4,
                 progress: 0,
                 completed: false,
@@ -598,6 +1703,16 @@ class Game {
         merged.bulwarkLegacyProcEnabled = merged.bulwarkLegacyProcEnabled || d2.bulwarkLegacyProcEnabled;
         merged.bulwarkLegacyDraw += Math.ceil(d2.bulwarkLegacyDraw * 0.5);
         merged.bulwarkLegacyCounterDamage += Math.ceil(d2.bulwarkLegacyCounterDamage * 0.5);
+
+        merged.stormcraftLegacyProcEnabled = merged.stormcraftLegacyProcEnabled || d2.stormcraftLegacyProcEnabled;
+        merged.stormcraftLegacyBonusDamage += Math.ceil(d2.stormcraftLegacyBonusDamage * 0.5);
+        merged.stormcraftLegacyDraw += Math.ceil(d2.stormcraftLegacyDraw * 0.5);
+
+        merged.vitalweaveLegacyProcEnabled = merged.vitalweaveLegacyProcEnabled || d2.vitalweaveLegacyProcEnabled;
+        merged.vitalweaveLegacyBlockRatio += (Number(d2.vitalweaveLegacyBlockRatio) || 0) * 0.5;
+        merged.vitalweaveLegacyBurstDamage += Math.ceil(d2.vitalweaveLegacyBurstDamage * 0.5);
+        merged.vitalweaveLegacyDraw += Math.ceil(d2.vitalweaveLegacyDraw * 0.5);
+        merged.vitalweaveLegacyBlockRatio = Math.max(0, Math.min(2, Number(merged.vitalweaveLegacyBlockRatio) || 0));
 
         player.legacyRunDoctrine = merged;
     }
@@ -1163,6 +2278,8 @@ class Game {
                 },
                 legacyProgress: this.legacyProgress,
                 featureFlags: { ...this.featureFlags },
+                endlessMeta: this.ensureEndlessState(),
+                encounterMeta: this.ensureEncounterState(),
                 schemaMigratedAt: Date.now(),
                 timestamp: Date.now()
             };
@@ -1197,6 +2314,52 @@ class Game {
 
     migrateSaveData(rawSave) {
         const migrated = rawSave && typeof rawSave === 'object' ? rawSave : {};
+        const buildDefaultEndless = () => {
+            if (typeof this.createDefaultEndlessState === 'function') {
+                return this.createDefaultEndlessState();
+            }
+            return {
+                unlocked: false,
+                active: false,
+                currentCycle: 0,
+                clearedCycles: 0,
+                pressure: 0,
+                totalBossDefeated: 0,
+                totalEndlessScore: 0,
+                activeMutators: [],
+                lastMutatorId: null,
+                lastPhaseId: null,
+                phaseHistory: [],
+                boonHistory: [],
+                boonRarePity: 0,
+                boonRareGuaranteedEvery: 3,
+                boonStats: {
+                    rewardGoldMul: 0,
+                    rewardExpMul: 0,
+                    shopDiscountMul: 0,
+                    healMul: 0,
+                    battleFirstTurnDraw: 0,
+                    battleOpeningBlock: 0,
+                    battleFirstTurnEnergy: 0
+                }
+            };
+        };
+        const buildDefaultEncounter = () => {
+            if (typeof this.createDefaultEncounterState === 'function') {
+                return this.createDefaultEncounterState();
+            }
+            return {
+                battles: 0,
+                wins: 0,
+                currentStreakId: null,
+                currentStreak: 0,
+                maxStreak: 0,
+                recentThemes: [],
+                themeStats: {},
+                totalBonusGold: 0,
+                totalBonusExp: 0
+            };
+        };
         const normalizeLegacy = (source) => {
             const progress = source && typeof source === 'object' ? source : {};
             const essence = Math.max(0, Math.floor(Number(progress.essence) || 0));
@@ -1225,7 +2388,9 @@ class Game {
                 economy: null
             };
             migrated.legacyProgress = normalizeLegacy(migrated.legacyProgress);
-            migrated.featureFlags = migrated.featureFlags || { ...this.featureFlags };
+            migrated.featureFlags = { ...(this.featureFlags || {}), ...(migrated.featureFlags || {}) };
+            migrated.endlessMeta = migrated.endlessMeta || buildDefaultEndless();
+            migrated.encounterMeta = migrated.encounterMeta || buildDefaultEncounter();
             migrated.schemaMigratedAt = Date.now();
             migrated.version = '5.1.0';
         } else {
@@ -1235,8 +2400,17 @@ class Game {
                 migrated.pvpMeta.economy = null;
             }
             migrated.legacyProgress = normalizeLegacy(migrated.legacyProgress);
-            migrated.featureFlags = migrated.featureFlags || { ...this.featureFlags };
+            migrated.featureFlags = { ...(this.featureFlags || {}), ...(migrated.featureFlags || {}) };
+            migrated.endlessMeta = migrated.endlessMeta || buildDefaultEndless();
+            migrated.encounterMeta = migrated.encounterMeta || buildDefaultEncounter();
             migrated.schemaMigratedAt = migrated.schemaMigratedAt || Date.now();
+        }
+
+        if (typeof this.normalizeEndlessState === 'function') {
+            migrated.endlessMeta = this.normalizeEndlessState(migrated.endlessMeta);
+        }
+        if (typeof this.normalizeEncounterState === 'function') {
+            migrated.encounterMeta = this.normalizeEncounterState(migrated.encounterMeta);
         }
 
         return migrated;
@@ -1343,6 +2517,15 @@ class Game {
                 mergedDoctrine.bulwarkProcUsedThisTurn = !!mergedDoctrine.bulwarkProcUsedThisTurn;
                 mergedDoctrine.bulwarkLegacyDraw = Math.max(0, Math.floor(Number(mergedDoctrine.bulwarkLegacyDraw) || 0));
                 mergedDoctrine.bulwarkLegacyCounterDamage = Math.max(0, Math.floor(Number(mergedDoctrine.bulwarkLegacyCounterDamage) || 0));
+                mergedDoctrine.stormcraftLegacyProcEnabled = !!mergedDoctrine.stormcraftLegacyProcEnabled;
+                mergedDoctrine.stormcraftProcUsedThisTurn = !!mergedDoctrine.stormcraftProcUsedThisTurn;
+                mergedDoctrine.stormcraftLegacyBonusDamage = Math.max(0, Math.floor(Number(mergedDoctrine.stormcraftLegacyBonusDamage) || 0));
+                mergedDoctrine.stormcraftLegacyDraw = Math.max(0, Math.floor(Number(mergedDoctrine.stormcraftLegacyDraw) || 0));
+                mergedDoctrine.vitalweaveLegacyProcEnabled = !!mergedDoctrine.vitalweaveLegacyProcEnabled;
+                mergedDoctrine.vitalweaveProcUsedThisTurn = !!mergedDoctrine.vitalweaveProcUsedThisTurn;
+                mergedDoctrine.vitalweaveLegacyBlockRatio = Math.max(0, Math.min(2, Number(mergedDoctrine.vitalweaveLegacyBlockRatio) || 0));
+                mergedDoctrine.vitalweaveLegacyBurstDamage = Math.max(0, Math.floor(Number(mergedDoctrine.vitalweaveLegacyBurstDamage) || 0));
+                mergedDoctrine.vitalweaveLegacyDraw = Math.max(0, Math.floor(Number(mergedDoctrine.vitalweaveLegacyDraw) || 0));
                 this.player.legacyRunDoctrine = mergedDoctrine;
             }
             if (!this.player.legacyRunMission || typeof this.player.legacyRunMission !== 'object') {
@@ -1665,6 +2848,11 @@ class Game {
                 PVPService.setEconomySnapshot(gameState.pvpMeta.economy);
             }
             this.featureFlags = { ...this.featureFlags, ...(gameState.featureFlags || {}) };
+            this.endlessState = this.normalizeEndlessState(gameState.endlessMeta || this.endlessState);
+            this.encounterState = this.normalizeEncounterState(gameState.encounterMeta || this.encounterState);
+            if (this.player && typeof this.player.ensureAdventureBuffs === 'function') {
+                this.player.ensureAdventureBuffs();
+            }
 
             console.log('游戏已加载');
             return true;
@@ -2083,6 +3271,25 @@ class Game {
             listContainer.appendChild(realmCard);
         }
 
+        if (this.isEndlessUnlocked()) {
+            const endlessCard = document.createElement('div');
+            endlessCard.className = 'realm-card endless-card';
+            endlessCard.dataset.id = 'endless';
+            endlessCard.style.animationDelay = '0.95s';
+            endlessCard.style.background = 'linear-gradient(145deg, #0d1f36 0%, #040811 100%)';
+            endlessCard.style.borderColor = 'rgba(84, 200, 255, 0.55)';
+            endlessCard.style.setProperty('--theme-color', '#5dd9ff');
+            endlessCard.innerHTML = `
+                <div class="realm-icon" style="display:block;filter:none;text-shadow:0 0 12px rgba(93,217,255,0.75)">♾️</div>
+                <div class="realm-info">
+                    <h3 style="color:#9ce9ff">无尽轮回</h3>
+                    <span class="realm-env-preview">动态词缀 / 赐福构筑 / 无限挑战</span>
+                </div>
+            `;
+            endlessCard.addEventListener('click', () => this.selectRealm('endless'));
+            listContainer.appendChild(endlessCard);
+        }
+
         // Bind Enter Button
         const enterBtn = document.getElementById('enter-realm-btn');
         if (enterBtn) {
@@ -2091,7 +3298,11 @@ class Game {
             enterBtn.parentNode.replaceChild(newBtn, enterBtn);
 
             newBtn.onclick = () => {
-                if (this.selectedRealmId) {
+                if (this.selectedRealmId !== null && this.selectedRealmId !== undefined) {
+                    if (this.selectedRealmId === 'endless') {
+                        this.startEndlessMode();
+                        return;
+                    }
                     const isCompleted = this.unlockedRealms && this.unlockedRealms.includes(this.selectedRealmId + 1);
                     this.startRealm(this.selectedRealmId, isCompleted);
                 }
@@ -2109,6 +3320,12 @@ class Game {
         if (this.lastSelectedRealmId && unlockedRealms.includes(this.lastSelectedRealmId)) {
             targetRealm = this.lastSelectedRealmId;
         }
+        if (this.isEndlessActive() && this.isEndlessUnlocked()) {
+            targetRealm = 'endless';
+        }
+        if (this.lastSelectedRealmId === 'endless' && this.isEndlessUnlocked()) {
+            targetRealm = 'endless';
+        }
 
         this.selectRealm(targetRealm);
     }
@@ -2121,7 +3338,8 @@ class Game {
 
         // 1. Highlight UI
         document.querySelectorAll('.realm-card').forEach(card => {
-            if (parseInt(card.dataset.id) === realmId) {
+            const cardId = card.dataset.id === 'endless' ? 'endless' : parseInt(card.dataset.id, 10);
+            if (cardId === realmId) {
                 card.classList.add('active');
                 card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
             } else {
@@ -2136,16 +3354,16 @@ class Game {
         const enterBtn = document.getElementById('enter-realm-btn');
         if (enterBtn) {
             enterBtn.disabled = false;
-            // Update button text contextually
-            const unlocked = Array.isArray(this.unlockedRealms) ? this.unlockedRealms : [1];
-            const isCompleted = unlocked.includes(realmId + 1);
-            const btnText = enterBtn.querySelector('.btn-text') || enterBtn;
-            if (isCompleted) {
-                // enterBtn.innerHTML = '<span class="btn-text">重修此界</span>'; 
-                // Keep simple text for now to avoid breaking structure if it relies on spans
-                enterBtn.textContent = '重修此界';
+            if (realmId === 'endless') {
+                enterBtn.textContent = '开启无尽';
             } else {
-                enterBtn.textContent = '踏入天域';
+                const unlocked = Array.isArray(this.unlockedRealms) ? this.unlockedRealms : [1];
+                const isCompleted = unlocked.includes(realmId + 1);
+                if (isCompleted) {
+                    enterBtn.textContent = '重修此界';
+                } else {
+                    enterBtn.textContent = '踏入天域';
+                }
             }
         }
     }
@@ -2163,6 +3381,73 @@ class Game {
             content.style.display = 'flex';
             content.style.opacity = 0;
             setTimeout(() => content.style.opacity = 1, 50);
+        }
+
+        if (realmId === 'endless') {
+            const state = this.ensureEndlessState();
+            const modifiers = this.getEndlessModifiers();
+            const phaseProfile = this.getEndlessPhaseProfile(state.currentCycle);
+            const realm = this.getEndlessRealmForCycle(state.currentCycle);
+            const realmName = this.map.getRealmName(realm);
+            const activeMutators = (state.activeMutators || [])
+                .map((id) => this.getEndlessMutatorPool().find((m) => m.id === id))
+                .filter(Boolean);
+
+            const titleEl = document.getElementById('preview-title');
+            if (titleEl) titleEl.textContent = `无尽轮回 · 第 ${state.currentCycle + 1} 轮`;
+
+            const iconEl = document.getElementById('preview-icon');
+            if (iconEl) iconEl.textContent = '♾️';
+
+            const envEl = document.getElementById('preview-env');
+            if (envEl) {
+                const phaseText = phaseProfile && phaseProfile.active
+                    ? `<br><span style="color:#ffd48a;">阶段挑战：${phaseProfile.name}（第${phaseProfile.checkpoint}轮）</span>`
+                    : '<br><span style="color:#7fb5c8;">阶段挑战：稳态区间</span>';
+                envEl.innerHTML = `
+                    <div style="margin-bottom:5px; color:#8fe8ff; font-weight:bold; font-size:1.05rem;">
+                        当前映射：${realmName}
+                    </div>
+                    <div style="font-size:0.9rem; line-height:1.5;">
+                        敌人生命 x${modifiers.enemyHpMul.toFixed(2)}｜敌人攻击 x${modifiers.enemyAtkMul.toFixed(2)}<br>
+                        灵石奖励 x${modifiers.rewardGoldMul.toFixed(2)}｜命环经验 x${modifiers.rewardExpMul.toFixed(2)}<br>
+                        商店价格 x${modifiers.shopPriceMul.toFixed(2)}｜治疗效率 x${modifiers.healMul.toFixed(2)}
+                        ${phaseText}
+                    </div>
+                `;
+            }
+
+            const bossEl = document.getElementById('preview-boss');
+            if (bossEl) {
+                if (activeMutators.length > 0) {
+                    bossEl.innerHTML = activeMutators.map((mutator) => `
+                        <div style="margin-bottom:8px;">
+                            <div style="color:var(--accent-red);font-weight:700;">${mutator.name}</div>
+                            <div style="font-size:0.88rem;opacity:0.9;">${mutator.desc}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    bossEl.innerHTML = '<span style="color:#6ccdf2;">当前无额外词缀，进入后将自动生成。</span>';
+                }
+            }
+
+            const lootEl = document.getElementById('preview-loot');
+            if (lootEl) {
+                lootEl.innerHTML = '';
+                ['💰', '🔮', '🧿', '🃏', '♾️'].forEach((icon, idx) => {
+                    const el = document.createElement('div');
+                    el.className = `loot-icon ${idx >= 3 ? 'epic' : 'rare'}`;
+                    el.textContent = icon;
+                    lootEl.appendChild(el);
+                });
+            }
+
+            const costDisplay = document.getElementById('realm-cost-display');
+            if (costDisplay) {
+                costDisplay.style.display = 'block';
+                costDisplay.innerHTML = `当前累计突破 <span style="color:#8fe8ff;">${state.totalBossDefeated}</span> 次，已完成 <span style="color:#8fe8ff;">${state.clearedCycles}</span> 轮。`;
+            }
+            return;
         }
 
         // Data
@@ -2310,13 +3595,17 @@ class Game {
 
     // 开始指定关卡
     startRealm(realmLevel, isReplay = false) {
+        const targetRealm = Math.max(1, Math.min(18, Math.floor(Number(realmLevel) || 1)));
         // 如果点击的是当前正在进行的关卡，且并未死亡，则直接返回地图
-        if (this.player.realm === realmLevel && this.map.nodes.length > 0 && this.player.currentHp > 0) {
+        if (!this.isEndlessActive() && this.player.realm === targetRealm && this.map.nodes.length > 0 && this.player.currentHp > 0) {
             this.showScreen('map-screen');
             return;
         }
 
-        this.player.realm = realmLevel;
+        const endlessState = this.ensureEndlessState();
+        endlessState.active = false;
+
+        this.player.realm = targetRealm;
         this.player.floor = 0;
         // 标记是否为重玩 (已通关)
         this.player.isReplay = isReplay;
@@ -2651,6 +3940,7 @@ class Game {
         this.runStartTime = Date.now();
         this.currentBattleNode = null;
         this.rewardCardSelected = false;
+        this.encounterState = this.createDefaultEncounterState();
 
         // 恢复解锁进度（如果从旧存档继承）
         if (this.tempPreservedRealms && Array.isArray(this.tempPreservedRealms)) {
@@ -2828,9 +4118,292 @@ class Game {
         }
     }
 
+    prepareEnemyForEndlessBattle(enemy, modifiers) {
+        if (!enemy || typeof enemy !== 'object') return enemy;
+        let cloned = null;
+        try {
+            cloned = JSON.parse(JSON.stringify(enemy));
+        } catch (e) {
+            cloned = { ...enemy };
+            if (Array.isArray(enemy.patterns)) {
+                cloned.patterns = enemy.patterns.map((pattern) => ({ ...pattern }));
+            }
+            if (enemy.gold && typeof enemy.gold === 'object') {
+                cloned.gold = { ...enemy.gold };
+            }
+        }
+
+        if (!cloned.buffs || typeof cloned.buffs !== 'object') {
+            cloned.buffs = {};
+        }
+
+        const hpMul = Math.max(1, Number(modifiers.enemyHpMul) || 1);
+        const atkMul = Math.max(1, Number(modifiers.enemyAtkMul) || 1);
+        const goldMul = Math.max(1, Number(modifiers.rewardGoldMul) || 1);
+        const pressureProfile = (typeof this.getEndlessPressureBehaviorProfile === 'function')
+            ? this.getEndlessPressureBehaviorProfile()
+            : null;
+        const phaseProfile = (typeof this.getEndlessPhaseProfile === 'function')
+            ? this.getEndlessPhaseProfile()
+            : null;
+
+        const baseHp = Number(cloned.maxHp || cloned.hp || cloned.currentHp || 1);
+        const nextHp = Math.max(1, Math.floor(baseHp * hpMul));
+        cloned.maxHp = nextHp;
+        cloned.hp = nextHp;
+        cloned.currentHp = nextHp;
+
+        if (Array.isArray(cloned.patterns)) {
+            cloned.patterns = cloned.patterns.map((pattern) => {
+                if (!pattern || typeof pattern !== 'object') return pattern;
+                const next = { ...pattern };
+                if ((next.type === 'attack' || next.type === 'multiAttack' || next.type === 'executeDamage')
+                    && Number.isFinite(next.value)) {
+                    next.value = Math.max(1, Math.floor(next.value * atkMul));
+                }
+                return next;
+            });
+        }
+
+        if (pressureProfile && pressureProfile.enemyOpeningBlock > 0) {
+            const currentBlock = Math.max(0, Math.floor(Number(cloned.block) || 0));
+            cloned.block = Math.max(currentBlock, pressureProfile.enemyOpeningBlock);
+        }
+        if (pressureProfile && pressureProfile.enemyOpeningStrength > 0) {
+            const currentStrength = Math.max(0, Math.floor(Number(cloned.buffs.strength) || 0));
+            cloned.buffs.strength = currentStrength + pressureProfile.enemyOpeningStrength;
+        }
+
+        if (pressureProfile && Array.isArray(cloned.patterns) && cloned.patterns.length > 0) {
+            const attackPatterns = cloned.patterns.filter((pattern) =>
+                pattern &&
+                typeof pattern === 'object' &&
+                (pattern.type === 'attack' || pattern.type === 'multiAttack' || pattern.type === 'executeDamage') &&
+                Number.isFinite(Number(pattern.value))
+            );
+
+            if (attackPatterns.length > 0 && pressureProfile.extraAttackPatterns > 0) {
+                const sortedAttackPatterns = attackPatterns
+                    .slice()
+                    .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
+
+                for (let i = 0; i < pressureProfile.extraAttackPatterns; i += 1) {
+                    const seed = sortedAttackPatterns[i % sortedAttackPatterns.length];
+                    const variant = this.buildEndlessPressurePatternVariant(seed, pressureProfile, i);
+                    if (variant) cloned.patterns.push(variant);
+                }
+            }
+
+            if (pressureProfile.injectDebuffPattern) {
+                cloned.patterns.push({
+                    type: 'debuff',
+                    buffType: pressureProfile.pressure >= 8 ? 'vulnerable' : 'weak',
+                    value: 1,
+                    intent: pressureProfile.pressure >= 8 ? '🩸重压咒印' : '🌀压制咒印'
+                });
+            }
+        }
+
+        if (phaseProfile && phaseProfile.active && cloned.isBoss && Array.isArray(cloned.patterns)) {
+            const baseStrike = Math.max(8, Math.floor(10 * atkMul));
+            if (phaseProfile.bossAffix === 'surge') {
+                cloned.patterns.push({
+                    type: 'multiAttack',
+                    value: Math.max(6, Math.floor(baseStrike * 0.75)),
+                    count: 2,
+                    intent: '⚡相位突流'
+                });
+            } else if (phaseProfile.bossAffix === 'siege') {
+                cloned.patterns.push({
+                    type: 'defend',
+                    value: Math.max(10, Math.floor(baseStrike * 0.9)),
+                    intent: '🛡️相位围压'
+                });
+                cloned.buffs.thorns = Math.max(0, Math.floor(Number(cloned.buffs.thorns) || 0)) + 1;
+            } else if (phaseProfile.bossAffix === 'rift') {
+                cloned.patterns.push({
+                    type: 'executeDamage',
+                    value: Math.max(12, Math.floor(baseStrike * 1.1)),
+                    threshold: 0.45,
+                    intent: '🌊相位裂潮'
+                });
+            } else if (phaseProfile.bossAffix === 'apex') {
+                cloned.patterns.push({
+                    type: 'multiAttack',
+                    value: Math.max(8, Math.floor(baseStrike * 0.8)),
+                    count: 3,
+                    intent: '☄️终压连斩'
+                });
+                cloned.patterns.push({
+                    type: 'debuff',
+                    buffType: 'vulnerable',
+                    value: 2,
+                    intent: '☄️终压咒印'
+                });
+            }
+            cloned.__endlessBossAffix = phaseProfile.bossAffix;
+        }
+
+        if (typeof this.applyEndlessCounterplayAffix === 'function') {
+            this.applyEndlessCounterplayAffix(cloned, pressureProfile);
+        }
+
+        if (cloned.gold && typeof cloned.gold === 'object') {
+            const min = Number(cloned.gold.min);
+            const max = Number(cloned.gold.max);
+            if (Number.isFinite(min) && Number.isFinite(max)) {
+                cloned.gold = {
+                    min: Math.max(0, Math.floor(min * goldMul)),
+                    max: Math.max(0, Math.floor(max * goldMul))
+                };
+            }
+        } else if (Number.isFinite(Number(cloned.gold))) {
+            cloned.gold = Math.max(0, Math.floor(Number(cloned.gold) * goldMul));
+        }
+
+        cloned.__endlessScaled = true;
+        if (pressureProfile) {
+            cloned.__endlessPressureProfile = {
+                pressure: pressureProfile.pressure,
+                tierId: pressureProfile.tierId,
+                tierName: pressureProfile.tierName
+            };
+        }
+        if (phaseProfile && phaseProfile.active) {
+            cloned.__endlessPhaseProfile = {
+                id: phaseProfile.id,
+                name: phaseProfile.name,
+                checkpoint: phaseProfile.checkpoint
+            };
+        }
+        return cloned;
+    }
+
+    applyEndlessCounterplayAffix(enemy, pressureProfile = null) {
+        if (!enemy || typeof enemy !== 'object' || enemy.isBoss || !Array.isArray(enemy.patterns)) return;
+        const state = this.ensureEndlessState();
+        const heat = Math.max(0, Math.min(9, Math.floor(Number(state?.barterHeat) || 0)));
+        const pressure = Math.max(0, Math.min(9, Math.floor(Number(pressureProfile?.pressure) || 0)));
+        if (pressure < 6 || heat < 2) return;
+
+        const pool = [];
+        if (heat >= 2) {
+            pool.push({
+                id: 'counter_candy_drain',
+                tag: '戒糖枷',
+                desc: '界隙交易将被抑制奶糖转化效率，稳压阈值更难达成。',
+                antiCandy: 1,
+                appendPattern: {
+                    type: 'debuff',
+                    buffType: 'weak',
+                    value: 1,
+                    intent: '🍬戒糖封脉'
+                }
+            });
+        }
+        if (heat >= 3) {
+            pool.push({
+                id: 'counter_draw_tithe',
+                tag: '抽税',
+                desc: '过牌收益被抽税，拖慢指令节奏迭代。',
+                antiDraw: 1,
+                appendPattern: {
+                    type: 'addStatus',
+                    cardId: 'heartDemon',
+                    count: 1,
+                    intent: '📜抽税侵识'
+                }
+            });
+        }
+        if (heat >= 4) {
+            pool.push({
+                id: 'counter_pressure_anchor',
+                tag: '稳压锚',
+                desc: '敌方将锁定稳压窗口，界隙交易难以直接降低压力。',
+                antiStabilize: 1,
+                openingBlock: 5 + Math.floor((pressure - 5) * 1.5),
+                appendPattern: {
+                    type: 'defend',
+                    value: 8 + Math.max(0, pressure - 5) * 2,
+                    intent: '⚓稳压封锁'
+                }
+            });
+        }
+        if (heat >= 5) {
+            pool.push({
+                id: 'counter_energy_choke',
+                tag: '断流闸',
+                desc: '敌方会切断能量回流，指令回能效率显著下滑。',
+                antiEnergy: 1,
+                appendPattern: {
+                    type: 'debuff',
+                    buffType: pressure >= 8 ? 'weak' : 'vulnerable',
+                    value: 1,
+                    intent: '⚡断流封识'
+                }
+            });
+        }
+        if (heat >= 6) {
+            pool.push({
+                id: 'counter_refund_lock',
+                tag: '回收锁',
+                desc: '敌方回收干扰生效，指令槽返还会被截断。',
+                antiRefund: 1,
+                openingBlock: 4 + Math.max(0, pressure - 6),
+                appendPattern: {
+                    type: 'defend',
+                    value: 7 + Math.max(0, pressure - 5),
+                    intent: '🧷回收封锁'
+                }
+            });
+        }
+        if (heat >= 7) {
+            pool.push({
+                id: 'counter_burst_damp',
+                tag: '爆发阻尼',
+                desc: '敌方爆发阻尼场会压低高爆发输出，迫使你改走循环战。',
+                antiBurst: 1,
+                appendPattern: {
+                    type: 'multiAttack',
+                    value: 6 + Math.max(0, pressure - 7),
+                    count: 2,
+                    intent: '🌫️阻尼压击'
+                }
+            });
+        }
+        if (pool.length <= 0) return;
+
+        const seedSource = `${enemy.id || enemy.name || 'enemy'}:${state.currentCycle || 0}:${pressure}:${heat}`;
+        let seed = 0;
+        for (let i = 0; i < seedSource.length; i += 1) {
+            seed = (seed * 31 + seedSource.charCodeAt(i)) % 2147483647;
+        }
+        const picked = pool[seed % pool.length];
+        if (!picked) return;
+
+        enemy.__endlessCounterAffixId = picked.id;
+        enemy.__endlessAntiCandy = Math.max(0, Math.floor(Number(picked.antiCandy) || 0));
+        enemy.__endlessAntiDraw = Math.max(0, Math.floor(Number(picked.antiDraw) || 0));
+        enemy.__endlessAntiStabilize = Math.max(0, Math.floor(Number(picked.antiStabilize) || 0));
+        enemy.__endlessAntiEnergy = Math.max(0, Math.floor(Number(picked.antiEnergy) || 0));
+        enemy.__endlessAntiRefund = Math.max(0, Math.floor(Number(picked.antiRefund) || 0));
+        enemy.__endlessAntiBurst = Math.max(0, Math.floor(Number(picked.antiBurst) || 0));
+        enemy.encounterAffixTag = picked.tag;
+        enemy.encounterAffixDesc = picked.desc;
+
+        if (Number.isFinite(Number(picked.openingBlock)) && Number(picked.openingBlock) > 0) {
+            const block = Math.max(0, Math.floor(Number(picked.openingBlock) || 0));
+            enemy.block = Math.max(0, Math.floor(Number(enemy.block) || 0)) + block;
+        }
+        if (picked.appendPattern && typeof picked.appendPattern === 'object') {
+            enemy.patterns.push({ ...picked.appendPattern });
+        }
+    }
+
     // 开始战斗 - 保存当前节点
     startBattle(enemies, node = null) {
-        const enemyList = Array.isArray(enemies) ? enemies : [enemies];
+        const rawEnemyList = Array.isArray(enemies) ? enemies : [enemies];
+        const enemyList = rawEnemyList.filter(Boolean);
         const isPvpBattle = enemyList.some(e => e && e.isGhost);
         this.mode = isPvpBattle ? 'pvp' : 'pve';
         if (!isPvpBattle) {
@@ -2841,7 +4414,14 @@ class Game {
             }
         }
 
-        this.currentEnemies = enemyList;
+        let battleEnemies = enemyList;
+        if (!isPvpBattle && this.isEndlessActive()) {
+            const mods = this.getEndlessModifiers();
+            battleEnemies = enemyList.map((enemy) => this.prepareEnemyForEndlessBattle(enemy, mods));
+            this.applyEndlessPreBattleBonuses();
+        }
+
+        this.currentEnemies = battleEnemies;
         this.currentBattleNode = node;
         this.stealAttempted = false;
         this.rewardCardSelected = false;
@@ -2849,7 +4429,7 @@ class Game {
         this.lastCardType = null;
 
         this.showScreen('battle-screen');
-        this.battle.init(enemyList);
+        this.battle.init(battleEnemies);
 
         // 隐藏连击显示
         this.hideCombo();
@@ -2919,10 +4499,13 @@ class Game {
             return;
         }
 
-        this.player.enemiesDefeated += enemies.length;
+        const enemyList = Array.isArray(enemies) ? enemies.filter(Boolean) : [enemies].filter(Boolean);
+        const isBossBattle = enemyList.some((enemy) => !!enemy && !!enemy.isBoss);
+        const endlessMods = this.isEndlessActive() ? this.getEndlessModifiers() : null;
+        this.player.enemiesDefeated += enemyList.length;
 
         // 命环获得经验
-        let ringExp = enemies.reduce((sum, e) => sum + (e.ringExp || 10), 0);
+        let ringExp = enemyList.reduce((sum, e) => sum + (e.ringExp || 10), 0);
 
         // 重玩收益减半
         if (this.player.isReplay) {
@@ -2937,7 +4520,8 @@ class Game {
         // 新节点：试炼节点额外收益
         if (this.currentBattleNode && this.currentBattleNode.type === 'trial') {
             ringExp = Math.floor(ringExp * 1.5);
-            const trialGold = 80 + this.player.realm * 15;
+            const trialGoldMultiplier = endlessMods ? Math.max(1, endlessMods.rewardGoldMul) : 1;
+            const trialGold = Math.floor((80 + this.player.realm * 15) * trialGoldMultiplier);
             this.player.gold += trialGold;
             Utils.showBattleLog(`试炼胜利！额外获得 ${trialGold} 灵石`);
         }
@@ -2991,6 +4575,73 @@ class Game {
             this.trialData = null;
         }
 
+        if (endlessMods) {
+            const prevExp = ringExp;
+            ringExp = Math.max(1, Math.floor(ringExp * Math.max(1, endlessMods.rewardExpMul)));
+            if (ringExp > prevExp) {
+                Utils.showBattleLog(`无尽轮回：命环经验倍率生效（x${endlessMods.rewardExpMul.toFixed(2)}）`);
+            }
+        }
+
+        const encounterVictory = (this.battle && typeof this.battle.consumeEncounterVictoryBonusSummary === 'function')
+            ? this.battle.consumeEncounterVictoryBonusSummary()
+            : null;
+        if (encounterVictory) {
+            const bonusGold = Math.max(0, Math.floor(Number(encounterVictory.goldBonus) || 0));
+            const bonusExp = Math.max(0, Math.floor(Number(encounterVictory.ringExpBonus) || 0));
+            if (bonusGold > 0) {
+                this.player.gold += bonusGold;
+                Utils.showBattleLog(`遭遇战利·${encounterVictory.themeName}：额外获得 ${bonusGold} 灵石`);
+            }
+            if (bonusExp > 0) {
+                ringExp += bonusExp;
+                Utils.showBattleLog(`遭遇战利·${encounterVictory.themeName}：命环经验 +${bonusExp}`);
+            }
+            if (Array.isArray(encounterVictory.adventureBuffRewards) && this.player && typeof this.player.grantAdventureBuff === 'function') {
+                encounterVictory.adventureBuffRewards.forEach((item) => {
+                    if (!item || !item.id) return;
+                    const ok = this.player.grantAdventureBuff(item.id, item.charges || 1);
+                    if (ok) {
+                        const shownCharges = Math.max(1, Math.floor(Number(item.charges) || 1));
+                        Utils.showBattleLog(`遭遇馈赠：${item.label || item.id} x${shownCharges}`);
+                    }
+                });
+            }
+            if (typeof this.recordEncounterThemeVictory === 'function') {
+                this.recordEncounterThemeVictory(encounterVictory);
+            }
+        }
+
+        const adventureGoldBonus = (this.player && typeof this.player.consumeAdventureVictoryGoldBoost === 'function')
+            ? this.player.consumeAdventureVictoryGoldBoost(40 + this.player.realm * 12)
+            : 0;
+        if (adventureGoldBonus > 0) {
+            this.player.gold += adventureGoldBonus;
+            Utils.showBattleLog(`悬赏契约：额外获得 ${adventureGoldBonus} 灵石`);
+        }
+
+        const adventureExpBonus = (this.player && typeof this.player.consumeAdventureRingExpBoost === 'function')
+            ? this.player.consumeAdventureRingExpBoost(ringExp)
+            : 0;
+        if (adventureExpBonus > 0) {
+            ringExp += adventureExpBonus;
+            Utils.showBattleLog(`行旅悟境：本场命环经验额外 +${adventureExpBonus}`);
+        }
+
+        if (this.player.currentHp < this.player.maxHp) {
+            const adventureHealBonus = (this.player && typeof this.player.consumeAdventureVictoryHealBoost === 'function')
+                ? this.player.consumeAdventureVictoryHealBoost(this.player.maxHp)
+                : 0;
+            if (adventureHealBonus > 0) {
+                const hpBefore = this.player.currentHp;
+                this.player.heal(adventureHealBonus);
+                const restored = this.player.currentHp - hpBefore;
+                if (restored > 0) {
+                    Utils.showBattleLog(`战地医护：战后恢复 ${restored} 生命`);
+                }
+            }
+        }
+
         this.player.fateRing.exp += ringExp;
         const levelUp = this.player.checkFateRingLevelUp();
 
@@ -3000,28 +4651,50 @@ class Game {
             // 将来可以在这里根据level触发特定事件或对话
         }
 
-        // 立即标记节点完成，防止意外退出导致进度丢失
-        if (this.currentBattleNode) {
+        // 非Boss节点即时完成；Boss改由 handleBossDefeated 统一处理，避免双重结算。
+        if (this.currentBattleNode && !isBossBattle) {
             this.map.completeNode(this.currentBattleNode);
         }
 
-        // 自动保存
-        this.autoSave();
+        if (!isBossBattle) {
+            // 自动保存
+            this.autoSave();
+        }
 
         // 更新成就统计
-        this.achievementSystem.updateStat('enemiesDefeated', enemies.length);
+        this.achievementSystem.updateStat('enemiesDefeated', enemyList.length);
 
-        // 检查BOSS
-        for (const enemy of enemies) {
-            if (enemy.isBoss) {
-                await this.handleBossDefeated(enemy);
-                return; // 结束函数，因为 handleBossDefeated 会处理后续界面
-            }
+        if (isBossBattle) {
+            const bossEnemy = enemyList.find((enemy) => enemy && enemy.isBoss) || enemyList[0] || null;
+            await this.handleBossDefeated(bossEnemy, enemyList, ringExp);
+            return;
         }
 
         // 正常显示奖励
         this.showScreen('reward-screen');
-        this.generateRewards(enemies, ringExp);
+        this.generateRewards(enemyList, ringExp);
+    }
+
+    async handleBossDefeated(bossEnemy = null, enemyList = [], ringExp = 0) {
+        const bossName = bossEnemy && bossEnemy.name ? bossEnemy.name : '天劫主宰';
+        if (ringExp > 0) {
+            Utils.showBattleLog(`击破 ${bossName}，命环经验 +${ringExp}`);
+        } else {
+            Utils.showBattleLog(`击破 ${bossName}！`);
+        }
+
+        const node = this.currentBattleNode;
+        if (node && !node.completed) {
+            this.map.completeNode(node);
+        } else if (!node) {
+            // 兜底：若节点丢失则仍推进关卡，避免卡死在战斗界面
+            this.onRealmComplete();
+        }
+        this.currentBattleNode = null;
+
+        if (!this.isEndlessActive()) {
+            this.autoSave();
+        }
     }
 
     // === PVP Result Handlers ===
@@ -3646,22 +5319,55 @@ class Game {
 
     // 执行事件效果
     executeEventEffect(effect) {
+        const endlessActive = typeof this.isEndlessActive === 'function' && this.isEndlessActive();
+        const getEventTuning = () => {
+            if (!endlessActive || typeof this.getEndlessEventTuning !== 'function') return null;
+            return this.getEndlessEventTuning();
+        };
+        const getEventHealMultiplier = () => {
+            if (typeof this.getEndlessHealingMultiplier === 'function') {
+                return this.getEndlessHealingMultiplier();
+            }
+            return 1;
+        };
         switch (effect.type) {
             case 'gold':
+            {
+                const endlessTuning = getEventTuning();
+                const scalePositiveGold = (value) => {
+                    const base = Math.max(0, Math.floor(Number(value) || 0));
+                    if (!endlessTuning || base <= 0) return base;
+                    return Math.max(base, Math.floor(base * (Number(endlessTuning.goldGainMul) || 1)));
+                };
                 if (effect.percent) {
                     const amount = Math.floor(this.player.gold * (Math.abs(effect.percent) / 100));
                     if (effect.percent < 0) {
                         this.player.gold -= amount;
                         this.eventResults.push(`💰 灵石 -${amount} (${Math.abs(effect.percent)}%)`);
                     } else {
-                        this.player.gold += amount;
-                        this.eventResults.push(`💰 灵石 +${amount} (${effect.percent}%)`);
+                        const scaled = scalePositiveGold(amount);
+                        this.player.gold += scaled;
+                        this.eventResults.push(`💰 灵石 +${scaled} (${effect.percent}%)`);
+                        if (scaled > amount) {
+                            this.eventResults.push(`♾️ 无尽词缀联动：额外获得 ${scaled - amount} 灵石`);
+                        }
                     }
                 } else {
-                    this.player.gold += effect.value;
-                    this.eventResults.push(`💰 灵石 ${effect.value > 0 ? '+' : ''}${effect.value}`);
+                    const raw = Math.floor(Number(effect.value) || 0);
+                    if (raw > 0) {
+                        const scaled = scalePositiveGold(raw);
+                        this.player.gold += scaled;
+                        this.eventResults.push(`💰 灵石 +${scaled}`);
+                        if (scaled > raw) {
+                            this.eventResults.push(`♾️ 无尽词缀联动：额外获得 ${scaled - raw} 灵石`);
+                        }
+                    } else {
+                        this.player.gold += raw;
+                        this.eventResults.push(`💰 灵石 ${raw}`);
+                    }
                 }
                 break;
+            }
 
             case 'randomGold':
                 const goldAmount = Math.floor(Math.random() * (effect.max - effect.min + 1)) + effect.min;
@@ -3670,8 +5376,17 @@ class Game {
                 break;
 
             case 'heal':
-                this.player.heal(effect.value); // Use existing heal method
-                this.eventResults.push(`💚 恢复 ${effect.value} HP`);
+                {
+                    const baseHeal = Math.max(1, Math.floor(Number(effect.value) || 0));
+                    const healMultiplier = getEventHealMultiplier();
+                    const finalHeal = Math.max(1, Math.floor(baseHeal * healMultiplier));
+                    this.player.heal(finalHeal);
+                    if (endlessActive && finalHeal !== baseHeal) {
+                        this.eventResults.push(`💚 恢复 ${finalHeal} HP（无尽修正 x${healMultiplier.toFixed(2)}）`);
+                    } else {
+                        this.eventResults.push(`💚 恢复 ${finalHeal} HP`);
+                    }
+                }
                 break;
 
             case 'maxHp':
@@ -3698,6 +5413,59 @@ class Game {
                     this.eventResults.push(`💪 永久${statMap[effect.stat] || effect.stat} ${effect.value > 0 ? '+' : ''}${effect.value}`);
                 }
                 break;
+
+            case 'adventureBuff': {
+                const buffId = effect.buffId || '';
+                const baseCharges = Math.max(1, Math.floor(Number(effect.charges) || 1));
+                const endlessTuning = getEventTuning();
+                const extraCharges = endlessTuning
+                    ? Math.max(0, Math.floor(Number(endlessTuning.bonusAdventureBuffCharges) || 0))
+                    : 0;
+                const charges = Math.max(1, Math.min(5, baseCharges + extraCharges));
+                let applied = false;
+                if (this.player && typeof this.player.grantAdventureBuff === 'function') {
+                    applied = this.player.grantAdventureBuff(buffId, charges);
+                }
+                const buffTextMap = {
+                    firstTurnDrawBoostBattles: '首回合额外抽牌',
+                    openingBlockBoostBattles: '开场护盾强化',
+                    victoryGoldBoostBattles: '胜利额外灵石',
+                    firstTurnEnergyBoostBattles: '首回合灵力强化',
+                    ringExpBoostBattles: '命环经验倍率',
+                    victoryHealBoostBattles: '战后恢复生命'
+                };
+                if (applied) {
+                    this.eventResults.push(`🧭 获得行旅增益：${buffTextMap[buffId] || '未知增益'} (${charges} 场)`);
+                    if (charges > baseCharges) {
+                        this.eventResults.push(`♾️ 无尽词缀联动：额外层数 +${charges - baseCharges}`);
+                    }
+                } else {
+                    this.eventResults.push('⚠️ 未能获得行旅增益');
+                }
+                break;
+            }
+
+            case 'openTemporaryShop':
+                {
+                const tunedEffect = { ...(effect || {}) };
+                if (endlessActive) {
+                    const endlessTuning = getEventTuning() || { forceRelief: false, tempShopPriceMul: 1 };
+                    tunedEffect.forceRelief = !!tunedEffect.forceRelief || !!endlessTuning.forceRelief;
+                }
+                this.closeModal();
+                setTimeout(() => {
+                        this.showTemporaryEventShop(tunedEffect);
+                }, 120);
+                return true;
+                }
+
+            case 'openCampfire':
+                this.closeModal();
+                setTimeout(() => {
+                    const node = this.currentBattleNode || { id: `event-camp-${Date.now()}`, row: 0, type: 'event' };
+                    this.showCampfire(node);
+                }, 120);
+                return true;
 
             case 'damage':
                 this.player.takeDamage(effect.value);
@@ -3765,10 +5533,19 @@ class Game {
 
             case 'trial':
                 // 试炼模式 - 设置特殊战斗规则并立即进入战斗
+                {
+                let rewardMultiplier = Number(effect.rewardMultiplier) || 1;
+                if (endlessActive) {
+                    const endlessTuning = getEventTuning() || { trialRewardMul: 1 };
+                    rewardMultiplier *= Math.max(1, Number(endlessTuning.trialRewardMul) || 1);
+                    if (rewardMultiplier > (Number(effect.rewardMultiplier) || 1)) {
+                        Utils.showBattleLog(`无尽词缀联动：试炼奖励倍率提升至 x${rewardMultiplier.toFixed(2)}`);
+                    }
+                }
                 this.trialMode = {
                     type: effect.trialType,
                     rounds: effect.rounds,
-                    rewardMultiplier: effect.rewardMultiplier || 1,
+                        rewardMultiplier,
                     reward: effect.reward
                 };
                 Utils.showBattleLog(`进入试炼模式: ${effect.trialType}`);
@@ -3782,13 +5559,39 @@ class Game {
                 }
                 this.eventResults.push('⚠️ 试炼开启失败：未找到试炼目标');
                 break;
+                }
 
             case 'ringExp':
-                this.player.fateRing.exp += effect.value;
+                {
+                const baseExp = Math.max(0, Math.floor(Number(effect.value) || 0));
+                let finalExp = baseExp;
+                if (baseExp > 0 && endlessActive) {
+                    const endlessTuning = getEventTuning() || { ringExpFlat: 0 };
+                    finalExp += Math.max(0, Math.floor(Number(endlessTuning.ringExpFlat) || 0));
+                }
+                this.player.fateRing.exp += finalExp;
                 this.player.checkFateRingLevelUp();
-                this.eventResults.push(`🔮 命环经验 +${effect.value}`);
+                this.eventResults.push(`🔮 命环经验 +${finalExp}`);
+                if (finalExp > baseExp) {
+                    this.eventResults.push(`♾️ 无尽词缀联动：额外命环经验 +${finalExp - baseExp}`);
+                }
                 // 如果导致升级，checkFateRingLevelUp 内部会处理并可能弹窗，但这里我们主要关注数值
                 break;
+                }
+
+            case 'endlessPressure': {
+                if (typeof this.ensureEndlessState !== 'function') {
+                    this.eventResults.push('⚠️ 轮回压力系统不可用');
+                    break;
+                }
+                const state = this.ensureEndlessState();
+                const before = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
+                const delta = Math.floor(Number(effect.value) || 0);
+                state.pressure = Math.max(0, Math.min(9, before + delta));
+                const prefix = delta >= 0 ? '+' : '';
+                this.eventResults.push(`♨️ 轮回压力 ${before} → ${state.pressure}（${prefix}${delta}）`);
+                break;
+            }
 
             case 'card':
                 let card = null;
@@ -3869,6 +5672,445 @@ class Game {
                 console.log('未处理的事件效果:', effect.type);
         }
         return false;
+    }
+
+    getTemporaryEventShopOffers(effect = {}) {
+        const realm = this.player?.realm || 1;
+        const endlessTuning = this.isEndlessActive() ? this.getEndlessEventTuning() : null;
+        const pathDoctrineProfile = (this.player && typeof this.player.getPathDoctrineProfile === 'function')
+            ? this.player.getPathDoctrineProfile()
+            : null;
+        const wisdomTier = (pathDoctrineProfile && pathDoctrineProfile.path === 'wisdom')
+            ? Math.max(0, Math.floor(Number(pathDoctrineProfile.tier) || 0))
+            : 0;
+        const wisdomPriceMultiplier = wisdomTier > 0
+            ? Math.max(0.78, Number(pathDoctrineProfile.shopPriceMultiplier) || 1)
+            : 1;
+        const injectedPriceMultiplier = Number(effect.priceMultiplier);
+        const combinedPriceMultiplier = (
+            (1 + (realm - 1) * 0.08) *
+            (Number.isFinite(injectedPriceMultiplier) ? injectedPriceMultiplier : 1) *
+            (endlessTuning ? (Number(endlessTuning.tempShopPriceMul) || 1) : 1) *
+            wisdomPriceMultiplier
+        );
+        const priceMul = Math.max(0.65, combinedPriceMultiplier);
+        const baseOffers = [
+            {
+                id: 'temp_draw',
+                icon: '📘',
+                name: '战术补给',
+                price: Math.floor(60 * priceMul),
+                desc: '接下来 2 场战斗：首回合额外抽 1 张牌'
+            },
+            {
+                id: 'temp_block',
+                icon: '🧿',
+                name: '护阵折符',
+                price: Math.floor(75 * priceMul),
+                desc: '接下来 2 场战斗：开场获得 10 护盾'
+            },
+            {
+                id: 'temp_bounty',
+                icon: '📜',
+                name: '悬赏短契',
+                price: Math.floor(85 * priceMul),
+                desc: '接下来 2 场战斗：胜利额外获得灵石'
+            },
+            {
+                id: 'temp_energy',
+                icon: '⚡',
+                name: '灵息导体',
+                price: Math.floor(92 * priceMul),
+                desc: '接下来 2 场战斗：首回合灵力 +1'
+            },
+            {
+                id: 'temp_expboost',
+                icon: '🕯️',
+                name: '悟境熏香',
+                price: Math.floor(98 * priceMul),
+                desc: '接下来 2 场战斗：命环经验额外 +30%'
+            },
+            {
+                id: 'temp_medic',
+                icon: '🩹',
+                name: '野战医包',
+                price: Math.floor(96 * priceMul),
+                desc: '接下来 2 场战斗：胜利后恢复生命'
+            },
+            {
+                id: 'temp_card',
+                icon: '🃏',
+                name: '秘法现货',
+                price: Math.floor(95 * priceMul),
+                desc: '获得 1 张随机稀有卡牌'
+            }
+        ];
+        const endlessExclusiveOffers = this.isEndlessActive()
+            ? [
+                {
+                    id: 'temp_refit',
+                    icon: '🧬',
+                    name: '轮回重配包',
+                    price: Math.floor(122 * priceMul),
+                    desc: '重配 1 个无尽词缀，并返还少量灵石'
+                },
+                {
+                    id: 'temp_boon',
+                    icon: '🕯️',
+                    name: '轮回祷札',
+                    price: Math.floor(138 * priceMul),
+                    desc: '从 2 个无尽赐福中随机获得其一'
+                }
+            ]
+            : [];
+        const reliefOffer = {
+            id: 'temp_relief',
+            icon: '🧰',
+            name: '应急补给券',
+            price: Math.max(18, Math.floor(24 * priceMul)),
+            desc: '立即恢复生命，并获得 1 层战后医护增益'
+        };
+
+        const preferredArchetype = (() => {
+            try {
+                if (typeof inferDeckArchetype === 'function') {
+                    return inferDeckArchetype(this.player?.deck || []);
+                }
+            } catch (e) {
+                return null;
+            }
+            return null;
+        })();
+
+        const archetypeExtras = {
+            precision: {
+                id: 'temp_precision',
+                icon: '🎯',
+                name: '镜针校准包',
+                price: Math.floor(108 * priceMul),
+                desc: '获得 1 张稀有/史诗攻击牌，并获得 1 层首回合灵力增益'
+            },
+            entropy: {
+                id: 'temp_entropy',
+                icon: '🌀',
+                name: '湮流应急包',
+                price: Math.floor(106 * priceMul),
+                desc: '获得 1 层首回合抽牌增益 + 1 层胜利悬赏增益'
+            },
+            bulwark: {
+                id: 'temp_bulwark',
+                icon: '🛡️',
+                name: '玄甲防线包',
+                price: Math.floor(104 * priceMul),
+                desc: '获得 2 层开场护盾增益并恢复少量生命'
+            },
+            stormcraft: {
+                id: 'temp_stormcraft',
+                icon: '⚡',
+                name: '霆策脉冲包',
+                price: Math.floor(109 * priceMul),
+                desc: '获得 1 张连锁攻势卡，并获得 1 层首回合灵力与抽牌增益'
+            },
+            vitalweave: {
+                id: 'temp_vitalweave',
+                icon: '💚',
+                name: '回脉救援包',
+                price: Math.floor(107 * priceMul),
+                desc: '立即恢复生命，并获得开场护盾与战后医护增益'
+            },
+            hemorrhage: {
+                id: 'temp_hemorrhage',
+                icon: '🩸',
+                name: '血炉突击包',
+                price: Math.floor(102 * priceMul),
+                desc: '获得 1 张进攻牌，并获得 1 层胜利悬赏增益'
+            }
+        };
+
+        const offers = baseOffers.slice();
+        if (preferredArchetype && archetypeExtras[preferredArchetype]) {
+            offers.push(archetypeExtras[preferredArchetype]);
+        }
+        if (endlessExclusiveOffers.length > 0) {
+            offers.push(...endlessExclusiveOffers);
+        }
+
+        const playerGold = Math.max(0, Math.floor(Number(this.player?.gold) || 0));
+        const lowGoldThreshold = Math.floor(90 * priceMul);
+        const shouldForceRelief = !!effect.forceRelief || !!endlessTuning?.forceRelief || playerGold < lowGoldThreshold;
+        if (shouldForceRelief) {
+            offers.push(reliefOffer);
+        }
+
+        const baseCount = Math.max(2, Math.min(4, Math.floor(Number(effect.offerCount) || 3)));
+        const wisdomOfferBonus = wisdomTier > 0
+            ? Math.max(0, Math.floor(Number(pathDoctrineProfile?.shopOfferBonus) || 0))
+            : 0;
+        const count = Math.max(
+            2,
+            Math.min(
+                5,
+                baseCount +
+                (endlessTuning ? Math.max(0, Math.floor(Number(endlessTuning.tempShopOfferBonus) || 0)) : 0) +
+                wisdomOfferBonus
+            )
+        );
+        const shuffled = (typeof Utils !== 'undefined' && Utils.shuffle)
+            ? Utils.shuffle(offers.slice())
+            : offers.slice().sort(() => Math.random() - 0.5);
+        const picked = shuffled.slice(0, count);
+        if (endlessExclusiveOffers.length > 0 && !picked.some((offer) => offer && (offer.id === 'temp_refit' || offer.id === 'temp_boon'))) {
+            const endlessOffer = endlessExclusiveOffers[Math.floor(Math.random() * endlessExclusiveOffers.length)];
+            if (endlessOffer) {
+                let replaceIndex = picked.length - 1;
+                if (shouldForceRelief && picked.length > 1 && picked[replaceIndex]?.id === 'temp_relief') {
+                    replaceIndex = picked[0]?.id === 'temp_relief' ? 1 : 0;
+                }
+                if (picked.length === 0) {
+                    picked.push(endlessOffer);
+                } else {
+                    picked[replaceIndex] = endlessOffer;
+                }
+            }
+        }
+        if (shouldForceRelief && !picked.some((offer) => offer && offer.id === 'temp_relief')) {
+            let replaceIndex = picked.length - 1;
+            if (picked.length > 1) {
+                const nonEndlessIndex = picked.findIndex(
+                    (offer) => !(offer && (offer.id === 'temp_refit' || offer.id === 'temp_boon'))
+                );
+                if (nonEndlessIndex >= 0) replaceIndex = nonEndlessIndex;
+            }
+            picked[replaceIndex] = reliefOffer;
+        }
+
+        const resolveReplaceIndex = () => {
+            if (picked.length <= 1) return Math.max(0, picked.length - 1);
+            const index = picked.findIndex((offer) => {
+                if (!offer) return true;
+                if (offer.id === 'temp_refit' || offer.id === 'temp_boon') return false;
+                if (shouldForceRelief && offer.id === 'temp_relief') return false;
+                return true;
+            });
+            return index >= 0 ? index : Math.max(0, picked.length - 1);
+        };
+
+        if (wisdomTier >= 1 && !picked.some((offer) => offer && offer.id === 'temp_card')) {
+            const cardOffer = baseOffers.find((offer) => offer && offer.id === 'temp_card');
+            if (cardOffer) {
+                if (picked.length === 0) picked.push(cardOffer);
+                else picked[resolveReplaceIndex()] = cardOffer;
+            }
+        }
+        if (
+            wisdomTier >= 2 &&
+            preferredArchetype &&
+            archetypeExtras[preferredArchetype] &&
+            !picked.some((offer) => offer && offer.id === archetypeExtras[preferredArchetype].id)
+        ) {
+            const biasOffer = archetypeExtras[preferredArchetype];
+            if (picked.length === 0) picked.push(biasOffer);
+            else picked[resolveReplaceIndex()] = biasOffer;
+        }
+        return picked;
+    }
+
+    applyTemporaryEventShopOffer(offer) {
+        if (!offer || typeof offer !== 'object') return '交易失败';
+        switch (offer.id) {
+            case 'temp_draw':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('firstTurnDrawBoostBattles', 2);
+                }
+                return '获得行旅增益：首回合额外抽牌（2 场）';
+            case 'temp_block':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('openingBlockBoostBattles', 2);
+                }
+                return '获得行旅增益：开场护盾强化（2 场）';
+            case 'temp_bounty':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('victoryGoldBoostBattles', 2);
+                }
+                return '获得行旅增益：胜利悬赏（2 场）';
+            case 'temp_energy':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('firstTurnEnergyBoostBattles', 2);
+                }
+                return '获得行旅增益：首回合灵力强化（2 场）';
+            case 'temp_expboost':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('ringExpBoostBattles', 2);
+                }
+                return '获得行旅增益：命环经验倍率（2 场）';
+            case 'temp_medic':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('victoryHealBoostBattles', 2);
+                }
+                return '获得行旅增益：战后恢复生命（2 场）';
+            case 'temp_card': {
+                const rarity = Math.random() < 0.7 ? 'rare' : 'epic';
+                const card = getRandomCard(rarity, this.player?.characterId || null);
+                if (!card) return '货品短缺，交易作废';
+                this.player.addCardToDeck(card);
+                return `获得卡牌：${card.name}`;
+            }
+            case 'temp_relief': {
+                const healAmount = Math.max(10, Math.floor((this.player?.maxHp || 80) * 0.12));
+                this.player.heal(healAmount);
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('victoryHealBoostBattles', 1);
+                }
+                return `补给完成：恢复 ${healAmount} 生命，并获得 1 层战后医护增益`;
+            }
+            case 'temp_precision': {
+                const rarity = Math.random() < 0.6 ? 'rare' : 'epic';
+                const card = getRandomCard(rarity, this.player?.characterId || null);
+                if (card) this.player.addCardToDeck(card);
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('firstTurnEnergyBoostBattles', 1);
+                }
+                return `获得战术卡${card ? `：${card.name}` : ''}，并获得 1 层首回合灵力增益`;
+            }
+            case 'temp_entropy':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('firstTurnDrawBoostBattles', 1);
+                    this.player.grantAdventureBuff('victoryGoldBoostBattles', 1);
+                }
+                return '获得湮流增益：首回合抽牌 +1 与胜利悬赏（各 1 场）';
+            case 'temp_bulwark':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('openingBlockBoostBattles', 2);
+                }
+                this.player.heal(8);
+                return '获得玄甲增益：开场护盾强化（2 场）并恢复 8 生命';
+            case 'temp_stormcraft': {
+                const rarity = Math.random() < 0.6 ? 'rare' : 'epic';
+                const card = getRandomCard(rarity, this.player?.characterId || null);
+                if (card) this.player.addCardToDeck(card);
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('firstTurnEnergyBoostBattles', 1);
+                    this.player.grantAdventureBuff('firstTurnDrawBoostBattles', 1);
+                }
+                return `获得霆策卡${card ? `：${card.name}` : ''}，并获得 1 层首回合灵力与抽牌增益`;
+            }
+            case 'temp_vitalweave': {
+                const healAmount = Math.max(9, Math.floor((this.player?.maxHp || 80) * 0.1));
+                this.player.heal(healAmount);
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('openingBlockBoostBattles', 1);
+                    this.player.grantAdventureBuff('victoryHealBoostBattles', 1);
+                }
+                return `获得回脉补给：恢复 ${healAmount} 生命，并获得开场护盾与战后医护增益`;
+            }
+            case 'temp_hemorrhage': {
+                const rarity = Math.random() < 0.7 ? 'uncommon' : 'rare';
+                const card = getRandomCard(rarity, this.player?.characterId || null);
+                if (card) this.player.addCardToDeck(card);
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('victoryGoldBoostBattles', 1);
+                }
+                return `获得突击卡${card ? `：${card.name}` : ''}，并获得 1 层胜利悬赏增益`;
+            }
+            case 'temp_refit': {
+                if (!this.isEndlessActive()) return '当前并非无尽轮回，重配失败';
+                const state = this.ensureEndlessState();
+                if (!Array.isArray(state.activeMutators)) state.activeMutators = [];
+                if (state.activeMutators.length > 0) state.activeMutators.pop();
+                const rolled = this.rollNextEndlessMutator();
+                if (!rolled) return '重配失败：未找到可接入的词缀';
+                const goldRefund = Math.max(8, Math.floor((this.player?.realm || 1) * 4));
+                this.player.gold += goldRefund;
+                return `重配完成：接入【${rolled.name}】，返还 ${goldRefund} 灵石`;
+            }
+            case 'temp_boon': {
+                if (!this.isEndlessActive()) return '当前并非无尽轮回，无法祷告';
+                const choices = this.getEndlessBoonChoices();
+                const picks = Array.isArray(choices) ? choices.slice(0, 2) : [];
+                if (picks.length === 0) return '祷告失败：暂无可用赐福';
+                const fallbackPool = this.getEndlessBoonPool().filter((boon) => boon && boon.id);
+                const candidateIds = [
+                    ...picks.map((boon) => boon && boon.id).filter((id) => typeof id === 'string'),
+                    ...fallbackPool.map((boon) => boon.id).filter((id) => typeof id === 'string')
+                ];
+                let applied = null;
+                while (candidateIds.length > 0 && !applied) {
+                    const idx = Math.floor(Math.random() * candidateIds.length);
+                    const [boonId] = candidateIds.splice(idx, 1);
+                    applied = boonId ? this.applyEndlessBoon(boonId) : null;
+                }
+                if (!applied) return '祷告失败：赐福未生效';
+                const rarityText = applied.rarity === 'rare' ? '【稀有】' : '';
+                return `获得无尽赐福：${rarityText}${applied.name}`;
+            }
+            default:
+                return '交易完成';
+        }
+    }
+
+    showTemporaryEventShop(effect = {}) {
+        const modal = document.getElementById('event-modal');
+        const titleEl = document.getElementById('event-title');
+        const iconEl = document.getElementById('event-icon');
+        const descEl = document.getElementById('event-desc');
+        const choicesEl = document.getElementById('event-choices');
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) return;
+
+        const offers = this.getTemporaryEventShopOffers(effect);
+        const continueFromMarket = () => {
+            modal.classList.remove('active');
+            this.onEventComplete();
+        };
+
+        titleEl.textContent = effect.title || '裂隙行商';
+        iconEl.textContent = effect.icon || '🛒';
+        descEl.textContent = effect.desc || '行商从裂隙中取出几件短期军需，你只能带走其中一件。';
+        choicesEl.innerHTML = '';
+
+        offers.forEach((offer) => {
+            const canBuy = this.player.gold >= offer.price;
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            if (!canBuy) btn.classList.add('disabled');
+            btn.innerHTML = `
+                <div>${offer.icon} ${offer.name}（-${offer.price} 灵石）</div>
+                <div class="choice-effect">${offer.desc}</div>
+            `;
+
+            if (canBuy) {
+                btn.onclick = () => {
+                    this.player.gold -= offer.price;
+                    const resultText = this.applyTemporaryEventShopOffer(offer);
+                    this.updatePlayerDisplay();
+                    this.autoSave();
+                    descEl.innerHTML = `
+                        <div style=\"color:var(--accent-gold);\">交易完成</div>
+                        <div style=\"margin-top:8px;\">${resultText}</div>
+                    `;
+                    choicesEl.innerHTML = '';
+                    const doneBtn = document.createElement('button');
+                    doneBtn.className = 'event-choice';
+                    doneBtn.innerHTML = '<div>▶ 继续前进</div>';
+                    doneBtn.onclick = continueFromMarket;
+                    choicesEl.appendChild(doneBtn);
+                };
+            } else {
+                btn.style.opacity = '0.5';
+                btn.style.cursor = 'not-allowed';
+            }
+            choicesEl.appendChild(btn);
+        });
+
+        const leaveBtn = document.createElement('button');
+        leaveBtn.className = 'event-choice';
+        leaveBtn.innerHTML = `
+            <div>🚶 不做交易</div>
+            <div class="choice-effect">保持资源，继续前进</div>
+        `;
+        leaveBtn.onclick = continueFromMarket;
+        choicesEl.appendChild(leaveBtn);
+
+        modal.classList.add('active');
     }
 
     // 事件中升级卡牌 (Revised with Preview)
@@ -4017,6 +6259,16 @@ class Game {
             return;
         }
 
+        const encounterState = this.ensureEncounterState();
+        encounterState.currentStreak = 0;
+        encounterState.currentStreakId = null;
+
+        if (this.isEndlessActive()) {
+            const state = this.ensureEndlessState();
+            state.active = false;
+            Utils.showBattleLog(`无尽轮回中断：已坚持到第 ${state.currentCycle + 1} 轮。`);
+        }
+
         const reachRealm = this.player && this.player.realm ? this.player.realm : 1;
         const lossEssence = this.awardLegacyEssence(
             Math.max(1, Math.floor((reachRealm - 1) / 2)),
@@ -4095,6 +6347,11 @@ class Game {
 
     // 天域完成
     onRealmComplete() {
+        if (this.isEndlessActive()) {
+            this.handleEndlessRealmComplete();
+            return;
+        }
+
         // --- P1: 异步 PVP 残影上传 ---
         if (typeof AuthService !== 'undefined' && AuthService.uploadGhostData) {
             AuthService.uploadGhostData(this.player, this.player.realm).catch(e => console.error(e));
@@ -5518,8 +7775,12 @@ class Game {
         const items = [];
         const services = [];
         const realm = this.player.realm || 1;
+        const endlessMods = this.isEndlessActive() ? this.getEndlessModifiers() : null;
         // Hardcore: 价格随天域层数上涨，每重天+15%
-        const priceMult = 1 + (realm - 1) * 0.15;
+        let priceMult = 1 + (realm - 1) * 0.15;
+        if (endlessMods) {
+            priceMult *= Math.max(0.75, Number(endlessMods.shopPriceMul) || 1);
+        }
 
         // 1. 生成卡牌 (使用新方法)
         const newCards = this.generateShopCards(5);
@@ -5558,6 +7819,135 @@ class Game {
             price: Math.floor(80 * priceMult), // 50 -> 80
             sold: false
         });
+
+        services.push({
+            id: 'tacticalPlan',
+            type: 'service',
+            name: '战术推演',
+            icon: '📘',
+            desc: '接下来 2 场战斗：首回合额外抽 1 张牌',
+            price: Math.floor(95 * priceMult),
+            sold: false
+        });
+
+        services.push({
+            id: 'wardSigil',
+            type: 'service',
+            name: '护阵符',
+            icon: '🧿',
+            desc: '接下来 2 场战斗：开场获得 10 护盾',
+            price: Math.floor(110 * priceMult),
+            sold: false
+        });
+
+        services.push({
+            id: 'bountyContract',
+            type: 'service',
+            name: '悬赏契约',
+            icon: '📜',
+            desc: '接下来 2 场战斗：胜利时额外获得灵石',
+            price: Math.floor(125 * priceMult),
+            sold: false
+        });
+
+        services.push({
+            id: 'scoutPack',
+            type: 'service',
+            name: '侦巡补给包',
+            icon: '🎒',
+            desc: '支付灵石后，从 3 张随机卡牌中选择 1 张',
+            price: Math.floor(105 * priceMult),
+            sold: false
+        });
+
+        services.push({
+            id: 'campRation',
+            type: 'service',
+            name: '行军口粮',
+            icon: '🥣',
+            desc: '恢复生命并获得 1 层开场护盾增益',
+            price: Math.floor(85 * priceMult),
+            sold: false
+        });
+
+        services.push({
+            id: 'fateLedger',
+            type: 'service',
+            name: '命轨账簿',
+            icon: '📚',
+            desc: '命环经验 +45，并获得 1 层胜利悬赏增益',
+            price: Math.floor(115 * priceMult),
+            sold: false
+        });
+
+        services.push({
+            id: 'pulseCatalyst',
+            type: 'service',
+            name: '灵息催化剂',
+            icon: '⚡',
+            desc: '接下来 2 场战斗：首回合灵力 +1',
+            price: Math.floor(118 * priceMult),
+            sold: false
+        });
+
+        services.push({
+            id: 'insightIncense',
+            type: 'service',
+            name: '悟境香',
+            icon: '🕯️',
+            desc: '接下来 2 场战斗：命环经验额外 +30%',
+            price: Math.floor(128 * priceMult),
+            sold: false
+        });
+
+        services.push({
+            id: 'fieldMedic',
+            type: 'service',
+            name: '战地医师签约',
+            icon: '🩹',
+            desc: '接下来 2 场战斗：胜利后恢复生命',
+            price: Math.floor(112 * priceMult),
+            sold: false
+        });
+
+        if (this.isEndlessActive()) {
+            services.push({
+                id: 'endlessRefit',
+                type: 'service',
+                name: '相位校准',
+                icon: '🧬',
+                desc: '替换一个当前无尽词缀',
+                price: Math.floor(170 * priceMult),
+                sold: false
+            });
+            services.push({
+                id: 'endlessStabilizer',
+                type: 'service',
+                name: '轮回稳压',
+                icon: '🧯',
+                desc: '轮回压力 -2，并恢复生命',
+                price: Math.floor(160 * priceMult),
+                sold: false
+            });
+            services.push({
+                id: 'endlessOverclock',
+                type: 'service',
+                name: '轮回过载',
+                icon: '🔥',
+                desc: '轮回压力 +2，立即获得稀有赐福与额外灵石',
+                price: Math.floor(188 * priceMult),
+                sold: false
+            });
+            services.push({
+                id: 'endlessBlessing',
+                type: 'service',
+                name: '轮回祷告',
+                icon: '🕯️',
+                desc: '从 2 项无尽赐福中选择 1 项',
+                price: Math.floor(210 * priceMult),
+                sold: false
+            });
+        }
 
         // 3. 随机商品 (由原来的随机服务改为固定商品位 + 概率位)
 
@@ -5684,9 +8074,13 @@ class Game {
         const items = [];
         // 商店刷新的卡牌价格不随层数膨胀太厉害，主要还是原价打折
         const realm = this.player.realm || 1;
+        const endlessMods = this.isEndlessActive() ? this.getEndlessModifiers() : null;
         // 卡牌本身价格固定，这里Multiplier主要影响折扣力度? 不，这里影响最终售价
         // 卡牌基础价值较低，这里只微调
-        const priceMult = 1 + (realm - 1) * 0.05;
+        let priceMult = 1 + (realm - 1) * 0.05;
+        if (endlessMods) {
+            priceMult *= Math.max(0.75, Number(endlessMods.shopPriceMul) || 1);
+        }
 
         for (let i = 0; i < count; i++) {
             // 随层数提升稀有度
@@ -6066,6 +8460,19 @@ class Game {
         return rarityPrices[card.rarity] || 60;
     }
 
+    getCardRarityLabel(rarity = 'common') {
+        const normalized = String(rarity || 'common').toLowerCase();
+        const map = {
+            basic: '基础',
+            common: '普通',
+            uncommon: '优秀',
+            rare: '稀有',
+            epic: '史诗',
+            legendary: '传说'
+        };
+        return map[normalized] || map.common;
+    }
+
     // 渲染商店
     renderShop() {
         // 1. 渲染卡牌
@@ -6247,7 +8654,7 @@ class Game {
                     this.showRewardModal('状态完美', '你的生命值已满，无需治疗。\n保持最佳状态去战斗吧！', '💪');
                     return false;
                 }
-                const healAmount = Math.floor(this.player.maxHp * 0.3);
+                const healAmount = Math.max(1, Math.floor(this.player.maxHp * 0.3 * this.getEndlessHealingMultiplier()));
                 this.player.heal(healAmount);
                 Utils.showBattleLog(`恢复了 ${healAmount} 点生命`);
 
@@ -6265,6 +8672,181 @@ class Game {
                 Utils.showBattleLog('命环经验 +50');
                 this.showRewardModal('命环充能', `命环经验 + 50！\n距离下一级更近了。`, '⬆️');
                 return true;
+
+            case 'tacticalPlan':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('firstTurnDrawBoostBattles', 2);
+                }
+                Utils.showBattleLog('获得行旅增益：接下来 2 场战斗首回合额外抽牌');
+                this.showRewardModal('战术推演完成', '接下来 2 场战斗：\n首回合额外抽 1 张牌。', '📘');
+                return true;
+
+            case 'wardSigil':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('openingBlockBoostBattles', 2);
+                }
+                Utils.showBattleLog('获得行旅增益：接下来 2 场战斗开场护盾 +10');
+                this.showRewardModal('护阵符生效', '接下来 2 场战斗：\n开场获得 10 护盾。', '🧿');
+                return true;
+
+            case 'bountyContract':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('victoryGoldBoostBattles', 2);
+                }
+                Utils.showBattleLog('获得行旅增益：接下来 2 场战斗胜利额外灵石');
+                this.showRewardModal('悬赏契约签订', '接下来 2 场战斗：\n胜利额外获得灵石。', '📜');
+                return true;
+
+            case 'scoutPack':
+                this.showShopCardDraft(service);
+                return 'deferred';
+
+            case 'campRation': {
+                const healAmount = Math.max(8, Math.floor(this.player.maxHp * 0.18 * this.getEndlessHealingMultiplier()));
+                this.player.heal(healAmount);
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('openingBlockBoostBattles', 1);
+                }
+                Utils.showBattleLog(`行军口粮：恢复 ${healAmount} 生命，并获得 1 层开场护盾增益`);
+                this.showRewardModal('补给完成', `恢复 ${healAmount} 生命。\n接下来 1 场战斗开场获得护盾。`, '🥣');
+                return true;
+            }
+
+            case 'fateLedger':
+                this.player.fateRing.exp += 45;
+                this.player.checkFateRingLevelUp();
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('victoryGoldBoostBattles', 1);
+                }
+                Utils.showBattleLog('命轨账簿：命环经验 +45，并获得 1 层悬赏增益');
+                this.showRewardModal('账簿校准', '命环经验 +45。\n接下来 1 场战斗胜利额外获得灵石。', '📚');
+                return true;
+
+            case 'pulseCatalyst':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('firstTurnEnergyBoostBattles', 2);
+                }
+                Utils.showBattleLog('灵息催化剂：接下来 2 场战斗首回合灵力 +1');
+                this.showRewardModal('灵息回路稳定', '接下来 2 场战斗：\n首回合灵力 +1。', '⚡');
+                return true;
+
+            case 'insightIncense':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('ringExpBoostBattles', 2);
+                }
+                Utils.showBattleLog('悟境香：接下来 2 场战斗命环经验额外提升');
+                this.showRewardModal('悟境加持', '接下来 2 场战斗：\n命环经验额外 +30%。', '🕯️');
+                return true;
+
+            case 'fieldMedic':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('victoryHealBoostBattles', 2);
+                }
+                Utils.showBattleLog('战地医师签约完成：接下来 2 场战斗胜利后恢复生命');
+                this.showRewardModal('医护协议生效', '接下来 2 场战斗：\n胜利后恢复生命。', '🩹');
+                return true;
+
+            case 'endlessStabilizer': {
+                if (!this.isEndlessActive()) {
+                    Utils.showBattleLog('当前并非无尽轮回，无法执行轮回稳压。');
+                    return false;
+                }
+                const state = this.ensureEndlessState();
+                const before = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
+                state.pressure = Math.max(0, before - 2);
+                const healAmount = Math.max(8, Math.floor(this.player.maxHp * 0.14));
+                this.player.heal(healAmount);
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('openingBlockBoostBattles', 1);
+                }
+                Utils.showBattleLog(`轮回稳压完成：压力 ${before}→${state.pressure}，恢复 ${healAmount} 生命`);
+                this.showRewardModal(
+                    '轮回稳压完成',
+                    `轮回压力：${before} → ${state.pressure}\n恢复 ${healAmount} 生命，并获得 1 层开场护盾增益。`,
+                    '🧯'
+                );
+                return true;
+            }
+
+            case 'endlessOverclock': {
+                if (!this.isEndlessActive()) {
+                    Utils.showBattleLog('当前并非无尽轮回，无法执行轮回过载。');
+                    return false;
+                }
+                const state = this.ensureEndlessState();
+                const beforePressure = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
+                state.pressure = Math.max(0, Math.min(9, beforePressure + 2));
+
+                const rarePool = this.getEndlessBoonPool().filter((boon) => boon && boon.rarity === 'rare');
+                let applied = null;
+                if (rarePool.length > 0) {
+                    const pick = rarePool[Math.floor(Math.random() * rarePool.length)];
+                    applied = pick ? this.applyEndlessBoon(pick.id) : null;
+                }
+                if (!applied) {
+                    const fallback = this.getEndlessBoonChoices();
+                    const pick = Array.isArray(fallback) ? fallback[0] : null;
+                    applied = pick ? this.applyEndlessBoon(pick.id) : null;
+                }
+
+                const overclockGold = Math.max(60, 80 + beforePressure * 12);
+                this.player.gold += overclockGold;
+                Utils.showBattleLog(
+                    `轮回过载启动：压力 ${beforePressure}→${state.pressure}，额外灵石 +${overclockGold}` +
+                    `${applied ? `，获得赐福【${applied.name}】` : ''}`
+                );
+                this.showRewardModal(
+                    '轮回过载完成',
+                    `轮回压力：${beforePressure} → ${state.pressure}\n` +
+                    `额外获得灵石：${overclockGold}\n` +
+                    `${applied ? `赐福：${applied.name}\n${applied.desc}` : '赐福接入失败（已记录）。'}`,
+                    '🔥'
+                );
+                return true;
+            }
+
+            case 'endlessRefit': {
+                if (!this.isEndlessActive()) {
+                    Utils.showBattleLog('当前并非无尽轮回，无法执行相位校准。');
+                    return false;
+                }
+                const state = this.ensureEndlessState();
+                if (!Array.isArray(state.activeMutators)) state.activeMutators = [];
+                const beforeIds = state.activeMutators.slice();
+                if (state.activeMutators.length > 0) state.activeMutators.pop();
+                const mutator = this.rollNextEndlessMutator();
+                if (mutator) {
+                    const mutatorMap = new Map(this.getEndlessMutatorPool().map((item) => [item.id, item]));
+                    const beforeNames = beforeIds
+                        .map((id) => mutatorMap.get(id))
+                        .filter((item) => !!item)
+                        .map((item) => item.name);
+                    const afterNames = (state.activeMutators || [])
+                        .map((id) => mutatorMap.get(id))
+                        .filter((item) => !!item)
+                        .map((item) => item.name);
+                    Utils.showBattleLog(`相位校准完成：新词缀【${mutator.name}】已接入。`);
+                    this.showRewardModal(
+                        '相位校准完成',
+                        `重配前：${beforeNames.length > 0 ? beforeNames.join('、') : '无'}\n` +
+                        `重配后：${afterNames.length > 0 ? afterNames.join('、') : '无'}\n` +
+                        `新接入词缀：${mutator.name}\n${mutator.desc}`,
+                        '🧬'
+                    );
+                    return true;
+                }
+                Utils.showBattleLog('相位校准失败：未生成新词缀。');
+                return false;
+            }
+
+            case 'endlessBlessing': {
+                if (!this.isEndlessActive()) {
+                    Utils.showBattleLog('当前并非无尽轮回，无法执行轮回祷告。');
+                    return false;
+                }
+                this.showShopEndlessBlessingSelection(service);
+                return 'deferred';
+            }
 
             case 'law':
                 if (service.data) {
@@ -6371,6 +8953,159 @@ class Game {
             default:
                 return false;
         }
+    }
+
+    showShopEndlessBlessingSelection(serviceItem) {
+        if (!serviceItem) return;
+        if (!this.isEndlessActive()) {
+            Utils.showBattleLog('当前并非无尽轮回，无法执行轮回祷告。');
+            return;
+        }
+        if (this.player.gold < serviceItem.price) {
+            Utils.showBattleLog('灵石不足！');
+            return;
+        }
+
+        const choices = this.getEndlessBoonChoices();
+        const picks = Array.isArray(choices) ? choices.slice(0, 2) : [];
+        if (picks.length < 2) {
+            const fallbackPool = this.getEndlessBoonPool();
+            for (let i = 0; i < fallbackPool.length && picks.length < 2; i += 1) {
+                const boon = fallbackPool[i];
+                if (!boon || picks.some((item) => item.id === boon.id)) continue;
+                picks.push(boon);
+            }
+        }
+        if (picks.length === 0) {
+            Utils.showBattleLog('轮回祷告失败：暂无可用赐福。');
+            return;
+        }
+
+        const modal = document.getElementById('event-modal');
+        const titleEl = document.getElementById('event-title');
+        const iconEl = document.getElementById('event-icon');
+        const descEl = document.getElementById('event-desc');
+        const choicesEl = document.getElementById('event-choices');
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
+            const fallback = picks[0];
+            const applied = fallback ? this.applyEndlessBoon(fallback.id) : null;
+            if (!applied) return;
+            this.player.gold -= serviceItem.price;
+            serviceItem.sold = true;
+            this.renderShop();
+            const goldEl = document.getElementById('shop-gold-display');
+            if (goldEl) goldEl.textContent = this.player.gold;
+            this.saveGame();
+            return;
+        }
+
+        titleEl.textContent = '轮回祷告';
+        iconEl.textContent = '🕯️';
+        descEl.innerHTML = `支付 <span style=\"color:var(--accent-gold)\">${serviceItem.price}</span> 灵石，从 2 项赐福中选择 1 项。`;
+        choicesEl.innerHTML = '';
+
+        picks.slice(0, 2).forEach((boon) => {
+            const rarityTag = boon.rarity === 'rare' ? '<span style="color:#ffb866;">【稀有】</span> ' : '';
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            btn.innerHTML = `
+                <div>${rarityTag}${boon.name}</div>
+                <div class="choice-effect">${boon.desc}</div>
+            `;
+            btn.onclick = () => {
+                const applied = this.applyEndlessBoon(boon.id);
+                if (!applied) return;
+                this.player.gold -= serviceItem.price;
+                serviceItem.sold = true;
+                this.closeModal();
+                Utils.showBattleLog(`轮回祷告：获得赐福【${applied.name}】`);
+                this.showRewardModal('轮回祷告成功', `你获得了赐福：${applied.name}\n${applied.desc}`, '🕯️');
+                const goldEl = document.getElementById('shop-gold-display');
+                if (goldEl) goldEl.textContent = this.player.gold;
+                this.renderShop();
+                this.saveGame();
+            };
+            choicesEl.appendChild(btn);
+        });
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'event-choice';
+        cancelBtn.innerHTML = `
+            <div>🚶 取消祷告</div>
+            <div class="choice-effect">保留灵石，返回商店</div>
+        `;
+        cancelBtn.onclick = () => this.closeModal();
+        choicesEl.appendChild(cancelBtn);
+
+        modal.classList.add('active');
+    }
+
+    showShopCardDraft(serviceItem) {
+        if (!serviceItem) return;
+        if (this.player.gold < serviceItem.price) {
+            Utils.showBattleLog('灵石不足！');
+            return;
+        }
+
+        const rarityPool = ['common', 'uncommon', 'uncommon', 'rare'];
+        const cards = [];
+        for (let i = 0; i < 3; i += 1) {
+            const rarity = rarityPool[Math.floor(Math.random() * rarityPool.length)];
+            const card = getRandomCard(rarity, this.player.characterId);
+            if (card) cards.push(card);
+        }
+        if (cards.length === 0) {
+            Utils.showBattleLog('补给包空空如也，交易取消。');
+            return;
+        }
+
+        const modal = document.getElementById('event-modal');
+        const titleEl = document.getElementById('event-title');
+        const iconEl = document.getElementById('event-icon');
+        const descEl = document.getElementById('event-desc');
+        const choicesEl = document.getElementById('event-choices');
+
+        titleEl.textContent = '侦巡补给包';
+        iconEl.textContent = '🎒';
+        descEl.innerHTML = `支付 <span style=\"color:var(--accent-gold)\">${serviceItem.price}</span> 灵石，选择 1 张补给卡牌。`;
+        choicesEl.innerHTML = '';
+
+        cards.forEach((card) => {
+            const rarityKey = String(card.rarity || 'common').toLowerCase();
+            const rarityLabel = this.getCardRarityLabel(rarityKey);
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            btn.innerHTML = `
+                <div class="choice-title">
+                    <span class="choice-name">${card.icon || '🃏'} ${card.name}</span>
+                    <span class="choice-rarity rarity-${rarityKey}">【${rarityLabel}】</span>
+                </div>
+                <div class="choice-effect">${card.description || '获得这张卡牌'}</div>
+            `;
+            btn.onclick = () => {
+                this.player.gold -= serviceItem.price;
+                this.player.addCardToDeck(card);
+                serviceItem.sold = true;
+                this.closeModal();
+                Utils.showBattleLog(`补给采购完成：获得【${card.name}】`);
+                const goldEl = document.getElementById('shop-gold-display');
+                if (goldEl) goldEl.textContent = this.player.gold;
+                this.renderShop();
+                this.saveGame();
+            };
+            choicesEl.appendChild(btn);
+        });
+
+        const leaveBtn = document.createElement('button');
+        leaveBtn.className = 'event-choice';
+        leaveBtn.innerHTML = `
+            <div>🚶 取消采购</div>
+            <div class="choice-effect">保留灵石，返回商店</div>
+        `;
+        leaveBtn.onclick = () => this.closeModal();
+        choicesEl.appendChild(leaveBtn);
+
+        modal.classList.add('active');
     }
 
     // 显示移除卡牌界面 (Refactored: Ink & Gold Purification UI)
@@ -6545,7 +9280,70 @@ class Game {
         }
         choicesEl.appendChild(upgradeBtn);
 
-        // 选项3: 移除卡牌（如果牌组足够大）
+        // 选项3: 战术演练（未来两战首回合额外抽牌）
+        const drillBtn = document.createElement('button');
+        drillBtn.className = 'event-choice';
+        drillBtn.innerHTML = `
+            <div>📘 战术演练</div>
+            <div class="choice-effect">接下来 2 场战斗：首回合额外抽 1 张牌，并获得命环经验</div>
+        `;
+        drillBtn.onclick = () => this.campfireDrill();
+        choicesEl.appendChild(drillBtn);
+
+        // 选项4: 布设结界（未来两战开场护盾）
+        const wardBtn = document.createElement('button');
+        wardBtn.className = 'event-choice';
+        wardBtn.innerHTML = `
+            <div>🧿 布设结界</div>
+            <div class="choice-effect">接下来 2 场战斗：开场获得 10 护盾</div>
+        `;
+        wardBtn.onclick = () => this.campfireWard();
+        choicesEl.appendChild(wardBtn);
+
+        const bountyBtn = document.createElement('button');
+        bountyBtn.className = 'event-choice';
+        bountyBtn.innerHTML = `
+            <div>📜 悬赏部署</div>
+            <div class="choice-effect">接下来 2 场战斗：胜利额外获得灵石</div>
+        `;
+        bountyBtn.onclick = () => this.campfireBounty();
+        choicesEl.appendChild(bountyBtn);
+
+        const pulseBtn = document.createElement('button');
+        pulseBtn.className = 'event-choice';
+        pulseBtn.innerHTML = `
+            <div>⚡ 灵息调和</div>
+            <div class="choice-effect">接下来 2 场战斗：首回合灵力 +1</div>
+        `;
+        pulseBtn.onclick = () => this.campfirePulse();
+        choicesEl.appendChild(pulseBtn);
+
+        const medicBtn = document.createElement('button');
+        medicBtn.className = 'event-choice';
+        medicBtn.innerHTML = `
+            <div>🩹 战地整备</div>
+            <div class="choice-effect">接下来 2 场战斗：胜利后恢复生命</div>
+        `;
+        medicBtn.onclick = () => this.campfireMedic();
+        choicesEl.appendChild(medicBtn);
+
+        const insightCostHp = Math.max(6, Math.floor(this.player.maxHp * 0.1));
+        const insightBtn = document.createElement('button');
+        insightBtn.className = 'event-choice';
+        insightBtn.innerHTML = `
+            <div>🕯️ 逆炼冥想（-${insightCostHp} HP）</div>
+            <div class="choice-effect">接下来 3 场战斗：命环经验额外 +30%</div>
+        `;
+        if (this.player.currentHp > insightCostHp + 1) {
+            insightBtn.onclick = () => this.campfireInsight(insightCostHp);
+        } else {
+            insightBtn.classList.add('disabled');
+            insightBtn.style.opacity = '0.5';
+            insightBtn.style.cursor = 'not-allowed';
+        }
+        choicesEl.appendChild(insightBtn);
+
+        // 选项5: 移除卡牌（如果牌组足够大）
         if (this.player.deck.length > 5) {
             const removeBtn = document.createElement('button');
             removeBtn.className = 'event-choice';
@@ -6562,10 +9360,72 @@ class Game {
 
     // 营地休息
     campfireRest() {
-        const healAmount = Math.floor(this.player.maxHp * 0.2);
+        const healAmount = Math.max(1, Math.floor(this.player.maxHp * 0.2 * this.getEndlessHealingMultiplier()));
         this.player.heal(healAmount);
         Utils.showBattleLog(`休息恢复 ${healAmount} 点生命！`);
 
+        this.closeModal();
+        this.completeCampfire();
+    }
+
+    campfireDrill() {
+        if (typeof this.player.grantAdventureBuff === 'function') {
+            this.player.grantAdventureBuff('firstTurnDrawBoostBattles', 2);
+        }
+        this.player.fateRing.exp += 20;
+        this.player.checkFateRingLevelUp();
+        Utils.showBattleLog('营地演练完成：接下来 2 场战斗首回合额外抽牌，命环经验 +20');
+        this.closeModal();
+        this.completeCampfire();
+    }
+
+    campfireWard() {
+        if (typeof this.player.grantAdventureBuff === 'function') {
+            this.player.grantAdventureBuff('openingBlockBoostBattles', 2);
+        }
+        Utils.showBattleLog('营地结界生效：接下来 2 场战斗开场护盾 +10');
+        this.closeModal();
+        this.completeCampfire();
+    }
+
+    campfireBounty() {
+        if (typeof this.player.grantAdventureBuff === 'function') {
+            this.player.grantAdventureBuff('victoryGoldBoostBattles', 2);
+        }
+        this.player.fateRing.exp += 12;
+        this.player.checkFateRingLevelUp();
+        Utils.showBattleLog('悬赏部署完成：接下来 2 场战斗胜利额外灵石，命环经验 +12');
+        this.closeModal();
+        this.completeCampfire();
+    }
+
+    campfirePulse() {
+        if (typeof this.player.grantAdventureBuff === 'function') {
+            this.player.grantAdventureBuff('firstTurnEnergyBoostBattles', 2);
+        }
+        Utils.showBattleLog('灵息调和完成：接下来 2 场战斗首回合灵力 +1');
+        this.closeModal();
+        this.completeCampfire();
+    }
+
+    campfireMedic() {
+        if (typeof this.player.grantAdventureBuff === 'function') {
+            this.player.grantAdventureBuff('victoryHealBoostBattles', 2);
+        }
+        this.player.fateRing.exp += 10;
+        this.player.checkFateRingLevelUp();
+        Utils.showBattleLog('战地整备完成：接下来 2 场战斗胜利后恢复生命，命环经验 +10');
+        this.closeModal();
+        this.completeCampfire();
+    }
+
+    campfireInsight(costHp = 8) {
+        const hpCost = Math.max(1, Math.floor(Number(costHp) || 8));
+        this.player.currentHp = Math.max(1, this.player.currentHp - hpCost);
+        if (typeof this.player.grantAdventureBuff === 'function') {
+            this.player.grantAdventureBuff('ringExpBoostBattles', 3);
+        }
+        Utils.showBattleLog(`逆炼冥想成功：失去 ${hpCost} 生命，接下来 3 场战斗命环经验额外提升`);
         this.closeModal();
         this.completeCampfire();
     }

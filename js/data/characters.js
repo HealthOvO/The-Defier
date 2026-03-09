@@ -94,5 +94,47 @@ const CHARACTERS = {
         themeColor: '#2196F3',
         bgImage: 'linear-gradient(135deg, rgba(33,150,243,0.1) 0%, rgba(0,0,0,0.8) 100%)',
         activeSkillId: 'absoluteTruth'
+    },
+    moChen: {
+        id: 'moChen',
+        name: '墨尘',
+        title: '星律巡使',
+        avatar: '🌠',
+        description: '游走于诸天裂隙的巡使，擅长以命环律动叠加战术节奏，越战越强。',
+        stats: {
+            maxHp: 74,
+            gold: 120,
+            energy: 3
+        },
+        deck: ['strike', 'strike', 'defend', 'defend', 'defend', 'spiritBoost', 'starNeedle', 'omenBarrier', 'ringCatalyst', 'quickDraw'],
+        relic: {
+            id: 'starsealCompass',
+            name: '星封罗盘',
+            desc: '战斗开始时奶糖上限外 +1；每回合首次打出技能牌，额外抽1张牌。'
+        },
+        themeColor: '#8aa4ff',
+        bgImage: 'linear-gradient(135deg, rgba(76, 104, 255, 0.20) 0%, rgba(0,0,0,0.82) 100%)',
+        activeSkillId: 'starOath'
+    },
+    ningXuan: {
+        id: 'ningXuan',
+        name: '宁玄',
+        title: '灵器行者',
+        avatar: '🪬',
+        description: '游历诸界的灵器行者，擅长以法宝与命环同频，将攻防节奏压入同一回合。',
+        stats: {
+            maxHp: 78,
+            gold: 110,
+            energy: 3
+        },
+        deck: ['strike', 'strike', 'defend', 'defend', 'defend', 'spiritBoost', 'artifactBolt', 'echoWard', 'ringInfusion', 'quickDraw'],
+        relic: {
+            id: 'artifactPulse',
+            name: '灵器脉印',
+            desc: '战斗开始时获得6点护盾；每回合首次打出攻击牌，获得1点灵力。'
+        },
+        themeColor: '#4ecdc4',
+        bgImage: 'linear-gradient(135deg, rgba(47, 209, 182, 0.22) 0%, rgba(0,0,0,0.82) 100%)',
+        activeSkillId: 'artifactOverdrive'
     }
 };

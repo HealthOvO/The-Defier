@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "skills": {
+    "card-game-design": {
+      "source": "omer-metin/skills-for-antigravity",
+      "sourceType": "github",
+      "computedHash": "3b20bf062941268d97bc4ff3d4bd6dc6e6f195fcfc9a44378ac000ad76d24dbc"
+    },
+    "economic-systems": {
+      "source": "jwynia/agent-skills",
+      "sourceType": "github",
+      "computedHash": "60c0bc5184963317694572ff9cdb10a02c368d90ec169b9102e492cdd462bada"
+    },
+    "game-design-theory": {
+      "source": "pluginagentmarketplace/custom-plugin-game-developer",
+      "sourceType": "github",
+      "computedHash": "e87a16b82d8379b1389c94b15b16d2f52a611338467291aeeec4f72a73a7fd96"
+    },
+    "level-design": {
+      "source": "pluginagentmarketplace/custom-plugin-game-developer",
+      "sourceType": "github",
+      "computedHash": "38da1df6988ebff0cdf597e21be2b00124fa63cd45901b0d34aabe94ad697883"
+    }
+  }
+}

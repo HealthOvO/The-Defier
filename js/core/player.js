@@ -25,6 +25,12 @@ class Player {
         // 奶糖 (Milk Candy) - 抽牌资源
         this.milkCandy = 0;
         this.maxMilkCandy = 3; // 初始上限
+        this.ringResonanceSkillDrawUsedThisTurn = false;
+        this.relicSkillDrawUsedThisTurn = false;
+        this.ringConvergenceAttackBoostUsedThisTurn = false;
+        this.relicAttackEnergyUsedThisTurn = false;
+        this.pathDoctrineSkillChainCountThisTurn = 0;
+        this.pathDoctrineSkillChainDrawUsedThisTurn = false;
 
         // 主动技能
         this.activeSkill = null;
@@ -85,9 +91,26 @@ class Player {
             bulwarkLegacyProcEnabled: false,
             bulwarkLegacyDraw: 0,
             bulwarkLegacyCounterDamage: 0,
-            bulwarkProcUsedThisTurn: false
+            bulwarkProcUsedThisTurn: false,
+            stormcraftLegacyProcEnabled: false,
+            stormcraftLegacyBonusDamage: 0,
+            stormcraftLegacyDraw: 0,
+            stormcraftProcUsedThisTurn: false,
+            vitalweaveLegacyProcEnabled: false,
+            vitalweaveLegacyBlockRatio: 0,
+            vitalweaveLegacyBurstDamage: 0,
+            vitalweaveLegacyDraw: 0,
+            vitalweaveProcUsedThisTurn: false
         };
         this.legacyRunMission = null;
+        this.adventureBuffs = {
+            firstTurnDrawBoostBattles: 0,
+            openingBlockBoostBattles: 0,
+            victoryGoldBoostBattles: 0,
+            firstTurnEnergyBoostBattles: 0,
+            ringExpBoostBattles: 0,
+            victoryHealBoostBattles: 0
+        };
 
         // 遗物
         this.relic = charData.relic;
@@ -153,6 +176,67 @@ class Player {
         this.activeSkill = { ...SKILLS[skillId] };
         this.maxCooldown = this.activeSkill.cooldown;
         this.skillCooldown = 0;
+    }
+
+    ensureAdventureBuffs() {
+        const defaults = {
+            firstTurnDrawBoostBattles: 0,
+            openingBlockBoostBattles: 0,
+            victoryGoldBoostBattles: 0,
+            firstTurnEnergyBoostBattles: 0,
+            ringExpBoostBattles: 0,
+            victoryHealBoostBattles: 0
+        };
+
+        if (!this.adventureBuffs || typeof this.adventureBuffs !== 'object') {
+            this.adventureBuffs = { ...defaults };
+            return this.adventureBuffs;
+        }
+
+        Object.keys(defaults).forEach((key) => {
+            const value = Math.max(0, Math.floor(Number(this.adventureBuffs[key]) || 0));
+            this.adventureBuffs[key] = value;
+        });
+        return this.adventureBuffs;
+    }
+
+    grantAdventureBuff(buffId, charges = 1) {
+        const buffs = this.ensureAdventureBuffs();
+        if (!Object.prototype.hasOwnProperty.call(buffs, buffId)) return false;
+        const add = Math.max(0, Math.floor(Number(charges) || 0));
+        if (add <= 0) return false;
+        buffs[buffId] += add;
+        return true;
+    }
+
+    consumeAdventureBuff(buffId, amount = 1) {
+        const buffs = this.ensureAdventureBuffs();
+        if (!Object.prototype.hasOwnProperty.call(buffs, buffId)) return false;
+        const cost = Math.max(1, Math.floor(Number(amount) || 1));
+        if (buffs[buffId] < cost) return false;
+        buffs[buffId] -= cost;
+        return true;
+    }
+
+    consumeAdventureVictoryGoldBoost(baseGold) {
+        const base = Math.max(0, Math.floor(Number(baseGold) || 0));
+        if (base <= 0) return 0;
+        if (!this.consumeAdventureBuff('victoryGoldBoostBattles', 1)) return 0;
+        return Math.max(1, Math.floor(base * 0.5));
+    }
+
+    consumeAdventureRingExpBoost(baseExp) {
+        const base = Math.max(0, Math.floor(Number(baseExp) || 0));
+        if (base <= 0) return 0;
+        if (!this.consumeAdventureBuff('ringExpBoostBattles', 1)) return 0;
+        return Math.max(1, Math.floor(base * 0.3));
+    }
+
+    consumeAdventureVictoryHealBoost(baseHp) {
+        const base = Math.max(0, Math.floor(Number(baseHp) || 0));
+        if (base <= 0) return 0;
+        if (!this.consumeAdventureBuff('victoryHealBoostBattles', 1)) return 0;
+        return Math.max(6, Math.floor(base * 0.12));
     }
 
     unlockUltimate(level) {
@@ -334,6 +418,61 @@ class Player {
         }
     }
 
+    getPathDoctrineTier() {
+        const level = Math.max(0, Math.floor(Number(this.fateRing?.level) || 0));
+        if (level >= 10) return 3;
+        if (level >= 7) return 2;
+        if (level >= 4) return 1;
+        return 0;
+    }
+
+    getPathDoctrineProfile(pathId = null) {
+        const path = String(pathId || this.fateRing?.path || '');
+        const tier = this.getPathDoctrineTier();
+        const profile = {
+            path,
+            tier,
+            commandCostDiscount: 0,
+            commandGainBonus: 0,
+            skillChainBlock: 0,
+            skillChainDraw: 0,
+            lowBlockDamageBonus: 0,
+            healEfficiency: 1,
+            shopOfferBonus: 0,
+            shopPriceMultiplier: 1
+        };
+        if (tier <= 0) return profile;
+
+        if (path === 'convergence') {
+            profile.commandCostDiscount = tier >= 2 ? 1 : 0;
+            profile.commandGainBonus = tier >= 3 ? 2 : 1;
+            return profile;
+        }
+
+        if (path === 'resonance') {
+            profile.skillChainBlock = 2 + tier;
+            profile.skillChainDraw = tier >= 2 ? 1 : 0;
+            profile.commandGainBonus = tier >= 3 ? 1 : 0;
+            return profile;
+        }
+
+        if (path === 'destruction') {
+            profile.lowBlockDamageBonus = 0.08 + tier * 0.03;
+            profile.healEfficiency = [1, 0.92, 0.86, 0.8][tier] || 0.8;
+            profile.commandCostDiscount = tier >= 2 ? 1 : 0;
+            return profile;
+        }
+
+        if (path === 'wisdom') {
+            profile.commandCostDiscount = tier >= 3 ? 1 : 0;
+            profile.shopOfferBonus = tier >= 2 ? 1 : 0;
+            profile.shopPriceMultiplier = Math.max(0.78, 1 - tier * 0.04);
+            return profile;
+        }
+
+        return profile;
+    }
+
     getArchetypeResonanceConfig(archetypeId, matchCount) {
         if (!archetypeId || matchCount < 8) return null;
         const tier = matchCount >= 12 ? 2 : 1;
@@ -377,6 +516,39 @@ class Player {
                 firstMarkHitDraw: 0,
                 firstDiscardDraw: tier,
                 discardDamage: 2 + tier,
+                openingBlock: tier * 2,
+                procUsedThisTurn: false
+            };
+        }
+
+        if (archetypeId === 'stormcraft') {
+            return {
+                id: 'stormcraft',
+                name: '雷策连锁',
+                tier,
+                matchCount,
+                applyBleedBonus: 0,
+                applyMarkBonus: tier,
+                firstMarkHitDraw: 0,
+                firstVulnerableHitDraw: tier,
+                vulnerableBonusDamage: 2 + tier,
+                openingBlock: tier,
+                procUsedThisTurn: false
+            };
+        }
+
+        if (archetypeId === 'vitalweave') {
+            return {
+                id: 'vitalweave',
+                name: '回生织脉',
+                tier,
+                matchCount,
+                applyBleedBonus: 0,
+                applyMarkBonus: 0,
+                firstMarkHitDraw: 0,
+                firstHealDraw: tier >= 2 ? 1 : 0,
+                firstHealBlockRatio: tier >= 2 ? 0.75 : 0.6,
+                healBurstDamage: 2 + tier,
                 openingBlock: tier * 2,
                 procUsedThisTurn: false
             };
@@ -433,6 +605,16 @@ class Player {
                 const isEntropy = card.synergyGroup === 'entropy' ||
                     (Array.isArray(card.keywords) && (card.keywords.includes('discard') || card.keywords.includes('mulligan')));
                 if (isEntropy) matchCount += 1;
+            } else if (archetypeId === 'stormcraft') {
+                const isStormcraft = card.synergyGroup === 'stormcraft' ||
+                    (Array.isArray(card.keywords) &&
+                        (card.keywords.includes('storm') || card.keywords.includes('vulnerable') || card.keywords.includes('chain')));
+                if (isStormcraft) matchCount += 1;
+            } else if (archetypeId === 'vitalweave') {
+                const isVitalweave = card.synergyGroup === 'vitalweave' ||
+                    (Array.isArray(card.keywords) &&
+                        (card.keywords.includes('vital') || card.keywords.includes('heal') || card.keywords.includes('sustain')));
+                if (isVitalweave) matchCount += 1;
             } else if (archetypeId === 'bulwark') {
                 const isBulwark = card.synergyGroup === 'bulwark' ||
                     (Array.isArray(card.keywords) && (card.keywords.includes('guard') || card.keywords.includes('retain')));
@@ -559,6 +741,66 @@ class Player {
         if (typeof battle.markUIDirty === 'function') battle.markUIDirty('hand', 'piles', 'enemies');
     }
 
+    triggerArchetypeHealProc(actualHeal = 0) {
+        const healed = Math.max(0, Math.floor(Number(actualHeal) || 0));
+        if (healed <= 0) return;
+        if (this.turnNumber <= 0) return;
+
+        const resonance = this.archetypeResonance;
+        const doctrine = this.legacyRunDoctrine && typeof this.legacyRunDoctrine === 'object'
+            ? this.legacyRunDoctrine
+            : null;
+        const hasVitalResonance = !!(resonance && resonance.id === 'vitalweave');
+        const hasLegacyVitalweave = !!(doctrine && doctrine.vitalweaveLegacyProcEnabled);
+        if (!hasVitalResonance && !hasLegacyVitalweave) return;
+
+        if (hasVitalResonance && resonance.procUsedThisTurn) return;
+        if (hasLegacyVitalweave && doctrine.vitalweaveProcUsedThisTurn) return;
+
+        if (hasVitalResonance) resonance.procUsedThisTurn = true;
+        if (hasLegacyVitalweave) doctrine.vitalweaveProcUsedThisTurn = true;
+
+        const ratio = Math.max(
+            hasVitalResonance ? (Number(resonance.firstHealBlockRatio) || 0) : 0,
+            hasLegacyVitalweave ? (Number(doctrine.vitalweaveLegacyBlockRatio) || 0) : 0
+        );
+        const bonusBlock = Math.max(1, Math.floor(healed * ratio));
+        const drawCount = Math.max(
+            hasVitalResonance ? (Math.floor(Number(resonance.firstHealDraw) || 0)) : 0,
+            hasLegacyVitalweave ? (Math.floor(Number(doctrine.vitalweaveLegacyDraw) || 0)) : 0
+        );
+        const burstBase = Math.max(
+            hasVitalResonance ? (Math.floor(Number(resonance.healBurstDamage) || 0)) : 0,
+            hasLegacyVitalweave ? (Math.floor(Number(doctrine.vitalweaveLegacyBurstDamage) || 0)) : 0
+        );
+        const burstDamage = Math.max(1, burstBase + Math.floor(healed / 4));
+        this.addBlock(bonusBlock);
+        if (drawCount > 0) this.drawCards(drawCount);
+        if (this.game && typeof this.game.handleLegacyMissionProgress === 'function' && hasLegacyVitalweave) {
+            this.game.handleLegacyMissionProgress('vitalweaveHealProc', 1);
+        }
+
+        const battle = this.game && this.game.battle ? this.game.battle : null;
+        if (!battle || !Array.isArray(battle.enemies)) {
+            Utils.showBattleLog(`【回生织脉】回生触发：护盾 +${bonusBlock}${drawCount > 0 ? `，抽牌 +${drawCount}` : ''}`);
+            return;
+        }
+
+        const aliveEnemies = battle.enemies.filter(e => e && e.currentHp > 0);
+        if (aliveEnemies.length === 0) {
+            Utils.showBattleLog(`【回生织脉】回生触发：护盾 +${bonusBlock}${drawCount > 0 ? `，抽牌 +${drawCount}` : ''}`);
+            return;
+        }
+
+        const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+        const dealt = battle.dealDamageToEnemy(target, burstDamage);
+        Utils.showBattleLog(
+            `【回生织脉】回生触发：护盾 +${bonusBlock}${drawCount > 0 ? `，抽牌 +${drawCount}` : ''}` +
+            `，并对 ${target.name} 造成 ${dealt} 伤害`
+        );
+        if (typeof battle.markUIDirty === 'function') battle.markUIDirty('player', 'hand', 'piles', 'enemies');
+    }
+
     // 准备战斗
     // 修复牌组数据（每次战斗前重置，防止费用永久变更）
     sanitizeDeck() {
@@ -613,15 +855,24 @@ class Player {
         this.exhaustPile = [];
         this.currentEnergy = this.baseEnergy;
         this.skillCooldown = 0;
+        this.ringResonanceSkillDrawUsedThisTurn = false;
+        this.relicSkillDrawUsedThisTurn = false;
+        this.ringConvergenceAttackBoostUsedThisTurn = false;
+        this.relicAttackEnergyUsedThisTurn = false;
+        this.pathDoctrineSkillChainCountThisTurn = 0;
+        this.pathDoctrineSkillChainDrawUsedThisTurn = false;
         if (this.legacyRunDoctrine && typeof this.legacyRunDoctrine === 'object') {
             this.legacyRunDoctrine.entropyProcUsedThisTurn = false;
             this.legacyRunDoctrine.entropyBonusEnergyUsed = false;
             this.legacyRunDoctrine.bulwarkProcUsedThisTurn = false;
+            this.legacyRunDoctrine.stormcraftProcUsedThisTurn = false;
+            this.legacyRunDoctrine.vitalweaveProcUsedThisTurn = false;
         }
     }
 
     // 准备战斗
     prepareBattle() {
+        this.ensureAdventureBuffs();
         // 关键修复：战斗前净化牌组，修复潜在的费用错误
         this.sanitizeDeck();
 
@@ -634,6 +885,12 @@ class Player {
 
         // 战斗开始重置奶糖
         this.milkCandy = this.maxMilkCandy;
+        this.ringResonanceSkillDrawUsedThisTurn = false;
+        this.relicSkillDrawUsedThisTurn = false;
+        this.ringConvergenceAttackBoostUsedThisTurn = false;
+        this.relicAttackEnergyUsedThisTurn = false;
+        this.pathDoctrineSkillChainCountThisTurn = 0;
+        this.pathDoctrineSkillChainDrawUsedThisTurn = false;
 
         this.turnNumber = 0; // 初始化回合数
         this.skillCooldown = 0; // 进入战斗时重置技能冷却
@@ -668,6 +925,8 @@ class Player {
             this.legacyRunDoctrine.entropyProcUsedThisTurn = false;
             this.legacyRunDoctrine.entropyBonusEnergyUsed = false;
             this.legacyRunDoctrine.bulwarkProcUsedThisTurn = false;
+            this.legacyRunDoctrine.stormcraftProcUsedThisTurn = false;
+            this.legacyRunDoctrine.vitalweaveProcUsedThisTurn = false;
         }
 
         // 应用永久力量加成
@@ -678,6 +937,15 @@ class Player {
         // 命环路径：敏捷之环 - 闪避率 +10%
         if (this.fateRing && this.fateRing.path === 'agility') {
             this.addBuff('dodgeChance', 0.1);
+        }
+        // 命环路径：回响之环 - 开场获得上限外奶糖
+        if (this.fateRing && this.fateRing.path === 'resonance') {
+            this.milkCandy = Math.min(this.maxMilkCandy + 2, this.milkCandy + 1);
+            Utils.showBattleLog('回响之环：开场奶糖 +1');
+        }
+        if (this.fateRing && this.fateRing.path === 'convergence') {
+            this.gainEnergy(1);
+            Utils.showBattleLog('汇流之环：开场灵力 +1');
         }
 
         // 遗物效果：金刚法相 (无欲)
@@ -705,6 +973,14 @@ class Player {
             }
             Utils.showBattleLog(`真理之镜：获得 ${count} 张临时技能牌`);
         }
+        if (this.relic && this.relic.id === 'starsealCompass') {
+            this.milkCandy = Math.min(this.maxMilkCandy + 2, this.milkCandy + 1);
+            Utils.showBattleLog('星封罗盘：开场奶糖 +1');
+        }
+        if (this.relic && this.relic.id === 'artifactPulse') {
+            this.addBlock(6);
+            Utils.showBattleLog('灵器脉印：开场护盾 +6');
+        }
 
         // 命环路径：智慧之环 (额外获得2张随机技能牌)
         if (this.fateRing.path === 'wisdom') {
@@ -728,6 +1004,11 @@ class Player {
             this.addBlock(this.legacyRunDoctrine.openingBattleBlockBonus);
             Utils.showBattleLog(`传承道统：开场护盾 +${this.legacyRunDoctrine.openingBattleBlockBonus}`);
         }
+
+        if (this.consumeAdventureBuff('openingBlockBoostBattles', 1)) {
+            this.addBlock(10);
+            Utils.showBattleLog('行旅增益：结界余韵生效，开场护盾 +10');
+        }
     }
 
     // 应用命环加成 - 已废弃，由recalculateStats替代
@@ -735,6 +1016,7 @@ class Player {
 
     // 开始回合
     startTurn() {
+        this.ensureAdventureBuffs();
         if (this.skillCooldown > 0) {
             this.skillCooldown--;
         }
@@ -744,9 +1026,17 @@ class Player {
         if (this.archetypeResonance) {
             this.archetypeResonance.procUsedThisTurn = false;
         }
+        this.ringResonanceSkillDrawUsedThisTurn = false;
+        this.relicSkillDrawUsedThisTurn = false;
+        this.ringConvergenceAttackBoostUsedThisTurn = false;
+        this.relicAttackEnergyUsedThisTurn = false;
+        this.pathDoctrineSkillChainCountThisTurn = 0;
+        this.pathDoctrineSkillChainDrawUsedThisTurn = false;
         if (this.legacyRunDoctrine && typeof this.legacyRunDoctrine === 'object') {
             this.legacyRunDoctrine.entropyProcUsedThisTurn = false;
             this.legacyRunDoctrine.bulwarkProcUsedThisTurn = false;
+            this.legacyRunDoctrine.stormcraftProcUsedThisTurn = false;
+            this.legacyRunDoctrine.vitalweaveProcUsedThisTurn = false;
         }
 
         // 1. 灵气稀薄 (realm 1) - 改为护盾效果-20%，更友好的新手体验
@@ -802,6 +1092,14 @@ class Player {
         if (this.turnNumber === 1 && this.legacyBonuses && this.legacyBonuses.firstTurnDrawBonus > 0) {
             drawAmount += this.legacyBonuses.firstTurnDrawBonus;
             Utils.showBattleLog(`传承启示：首回合额外抽 ${this.legacyBonuses.firstTurnDrawBonus} 张牌`);
+        }
+        if (this.turnNumber === 1 && this.consumeAdventureBuff('firstTurnDrawBoostBattles', 1)) {
+            drawAmount += 1;
+            Utils.showBattleLog('行旅增益：战术推演生效，首回合额外抽 1 张牌');
+        }
+        if (this.turnNumber === 1 && this.consumeAdventureBuff('firstTurnEnergyBoostBattles', 1)) {
+            this.currentEnergy += 1;
+            Utils.showBattleLog('行旅增益：灵息协同生效，首回合灵力 +1');
         }
 
         // 敏捷之环 - 额外抽牌
@@ -1065,10 +1363,18 @@ class Player {
             console.error('heal received invalid amount', amount);
             return;
         }
+        const doctrineProfile = this.getPathDoctrineProfile();
+        if (doctrineProfile.path === 'destruction' && doctrineProfile.tier > 0) {
+            const adjusted = Math.max(0, Math.floor(amount * doctrineProfile.healEfficiency));
+            if (adjusted < amount) {
+                Utils.showBattleLog(`毁灭教义：治疗效率降低至 ${Math.round(doctrineProfile.healEfficiency * 100)}%`);
+            }
+            amount = adjusted;
+        }
 
         const oldHp = this.currentHp;
         this.currentHp = Math.min(this.maxHp, this.currentHp + amount);
-        const actualHeal = this.currentHp - oldHp;
+        let finalActualHeal = this.currentHp - oldHp;
 
         // 共鸣：神魔一念 (GodDemon) - 溢出治疗转伤害
         if (this.activeResonances) {
@@ -1084,6 +1390,7 @@ class Player {
                 const potentialTotal = amount + bonusAmount;
                 this.currentHp = Math.min(this.maxHp, oldHp + potentialTotal);
                 const newActualHeal = this.currentHp - oldHp;
+                finalActualHeal = newActualHeal;
 
                 const overflow = potentialTotal - newActualHeal;
 
@@ -1101,6 +1408,8 @@ class Player {
 
             }
         }
+        this.triggerArchetypeHealProc(finalActualHeal);
+        return finalActualHeal;
     }
 
     // 恢复灵力
@@ -1425,6 +1734,44 @@ class Player {
             this.hand.splice(cardIndex, 1);
             cardRemovedFromHand = true;
 
+            if (card.type === 'skill') {
+                if (this.fateRing && this.fateRing.path === 'resonance' && !this.ringResonanceSkillDrawUsedThisTurn) {
+                    this.drawCards(1);
+                    this.ringResonanceSkillDrawUsedThisTurn = true;
+                    Utils.showBattleLog('回响之环：首次技能额外抽 1');
+                }
+                if (this.relic && this.relic.id === 'starsealCompass' && !this.relicSkillDrawUsedThisTurn) {
+                    this.drawCards(1);
+                    this.relicSkillDrawUsedThisTurn = true;
+                    Utils.showBattleLog('星封罗盘：首次技能额外抽 1');
+                }
+                const doctrineProfile = this.getPathDoctrineProfile();
+                if (doctrineProfile.path === 'resonance' && doctrineProfile.tier > 0) {
+                    this.pathDoctrineSkillChainCountThisTurn = Math.max(0, Math.floor(Number(this.pathDoctrineSkillChainCountThisTurn) || 0)) + 1;
+                    const chainLimit = doctrineProfile.tier >= 3 ? 2 : 1;
+                    if (this.pathDoctrineSkillChainCountThisTurn <= chainLimit) {
+                        this.addBlock(doctrineProfile.skillChainBlock);
+                        Utils.showBattleLog(`回响教义：技能连锁护阵 +${doctrineProfile.skillChainBlock}`);
+                    }
+                    if (
+                        doctrineProfile.skillChainDraw > 0 &&
+                        this.pathDoctrineSkillChainCountThisTurn >= 2 &&
+                        !this.pathDoctrineSkillChainDrawUsedThisTurn
+                    ) {
+                        this.drawCards(doctrineProfile.skillChainDraw);
+                        this.pathDoctrineSkillChainDrawUsedThisTurn = true;
+                        Utils.showBattleLog(`回响教义：技能连锁抽牌 +${doctrineProfile.skillChainDraw}`);
+                    }
+                }
+            }
+            if (card.type === 'attack') {
+                if (this.relic && this.relic.id === 'artifactPulse' && !this.relicAttackEnergyUsedThisTurn) {
+                    this.gainEnergy(1);
+                    this.relicAttackEnergyUsedThisTurn = true;
+                    Utils.showBattleLog('灵器脉印：首次攻击回灵 +1');
+                }
+            }
+
             // 播放卡牌特效
             const activeGame = this.game || (typeof game !== 'undefined' ? game : null);
             if (activeGame && activeGame.playCardEffect) {
@@ -1433,6 +1780,11 @@ class Player {
 
             // 触发法宝回调 (onCardPlay)
             const context = { damageModifier: 0 };
+            if (card.type === 'attack' && this.fateRing && this.fateRing.path === 'convergence' && !this.ringConvergenceAttackBoostUsedThisTurn) {
+                context.damageModifier += 4;
+                this.ringConvergenceAttackBoostUsedThisTurn = true;
+                Utils.showBattleLog('汇流之环：首次攻击伤害 +4');
+            }
             if (this.treasures) {
                 this.triggerTreasureEffect('onCardPlay', card, context);
             }
@@ -1507,6 +1859,14 @@ class Player {
             if (path === 'destruction') value = Math.floor(value * 1.3); // 毁灭: +30%
             if (path === 'insight') value = Math.floor(value * 1.2);    // 洞察: +20%
             if (path === 'defiance') value = Math.floor(value * 1.5);   // 逆天: +50%
+            const doctrineProfile = this.getPathDoctrineProfile(path);
+            if (
+                doctrineProfile.path === 'destruction' &&
+                doctrineProfile.tier > 0 &&
+                Math.max(0, Math.floor(Number(this.block) || 0)) <= 5
+            ) {
+                value = Math.floor(value * (1 + doctrineProfile.lowBlockDamageBonus));
+            }
         }
 
         // 15. 大道独行 (realm 15) - 伤害提升50%
@@ -2401,6 +2761,7 @@ class Player {
             legacyBonuses: this.legacyBonuses,
             legacyRunDoctrine: this.legacyRunDoctrine,
             legacyRunMission: this.legacyRunMission,
+            adventureBuffs: this.ensureAdventureBuffs(),
             maxRealmReached: this.maxRealmReached || 1
         };
     }
@@ -2417,6 +2778,25 @@ class Player {
     }
 
     // === 法宝系统 ===
+
+    getEquippedTreasureSetCounts() {
+        const counts = {};
+        const equipped = Array.isArray(this.equippedTreasures) ? this.equippedTreasures : [];
+        equipped.forEach((treasure) => {
+            const setTag = treasure && typeof treasure.setTag === 'string'
+                ? treasure.setTag.trim()
+                : '';
+            if (!setTag) return;
+            counts[setTag] = (counts[setTag] || 0) + 1;
+        });
+        return counts;
+    }
+
+    getTreasureSetPieces(setTag) {
+        if (!setTag || typeof setTag !== 'string') return 0;
+        const counts = this.getEquippedTreasureSetCounts();
+        return Math.max(0, Math.floor(Number(counts[setTag]) || 0));
+    }
 
     // 获得法宝
     addTreasure(treasureId) {
@@ -2540,6 +2920,40 @@ class Player {
                 }
             }
         });
+
+        const setCounts = this.getEquippedTreasureSetCounts();
+        const xuanjiaPieces = Math.max(0, Math.floor(Number(setCounts.xuanjia) || 0));
+        const liemaiPieces = Math.max(0, Math.floor(Number(setCounts.liemai) || 0));
+        const xinghengPieces = Math.max(0, Math.floor(Number(setCounts.xingheng) || 0));
+
+        if (triggerType === 'onBattleStart') {
+            if (xinghengPieces >= 3) {
+                this.drawCards(1);
+                Utils.showBattleLog('【星衡套·3】开场校准：抽牌 +1');
+            }
+        } else if (triggerType === 'onTurnStart') {
+            if (xuanjiaPieces >= 3) {
+                this.addBuff('retainBlock', 1);
+                this.addBuff('thorns', 1);
+                Utils.showBattleLog('【玄甲套·3】护势整备：获得护盾留存与反击荆棘');
+            }
+
+            if (xinghengPieces >= 2) {
+                if ((this.currentEnergy || 0) <= Math.max(0, (this.baseEnergy || 0) - 1)) {
+                    this.gainEnergy(1);
+                    Utils.showBattleLog('【星衡套·2】节奏回补：灵力 +1');
+                } else {
+                    this.drawCards(1);
+                    Utils.showBattleLog('【星衡套·2】节奏前推：抽牌 +1');
+                }
+            }
+        } else if (triggerType === 'onKill') {
+            if (liemaiPieces >= 2) {
+                this.heal(2);
+                Utils.showBattleLog('【裂脉套·2】斩获回生：恢复 2 生命');
+            }
+        }
+
         return result;
     }
 
@@ -2554,6 +2968,43 @@ class Player {
                 }
             }
         });
+
+        const setCounts = this.getEquippedTreasureSetCounts();
+        const xuanjiaPieces = Math.max(0, Math.floor(Number(setCounts.xuanjia) || 0));
+        const liemaiPieces = Math.max(0, Math.floor(Number(setCounts.liemai) || 0));
+        const xinghengPieces = Math.max(0, Math.floor(Number(setCounts.xingheng) || 0));
+
+        if (triggerType === 'onGainBlock' && xuanjiaPieces >= 2) {
+            modifiedValue = Math.max(0, Math.floor(Number(modifiedValue || 0) * 1.2));
+        }
+
+        if (triggerType === 'onBeforeTakeDamage' && xuanjiaPieces >= 3) {
+            modifiedValue = Math.max(0, Math.floor(Number(modifiedValue || 0)) - 1);
+        }
+
+        if (triggerType === 'onBeforeDealDamage') {
+            const context = args && args[0] && typeof args[0] === 'object' ? args[0] : null;
+            const target = context && context.target && typeof context.target === 'object'
+                ? context.target
+                : null;
+            const bleedStacks = target && target.buffs
+                ? Math.max(0, Math.floor(Number(target.buffs.bleed) || 0))
+                : 0;
+
+            if (liemaiPieces >= 2 && bleedStacks > 0) {
+                let bonus = Math.max(1, Math.floor(bleedStacks * 0.5));
+                if (liemaiPieces >= 3 && bleedStacks >= 6) {
+                    const maxHp = Math.max(1, Math.floor(Number(target?.maxHp || target?.hp || 1)));
+                    bonus += Math.max(2, Math.floor(maxHp * 0.06));
+                }
+                modifiedValue = Math.max(0, Math.floor(Number(modifiedValue) || 0) + bonus);
+            }
+
+            if (xinghengPieces >= 3 && Math.floor(Number(this.currentEnergy) || 0) === Math.floor(Number(this.baseEnergy) || 0)) {
+                modifiedValue = Math.max(0, Math.floor(Number(modifiedValue) || 0) + 2);
+            }
+        }
+
         return modifiedValue;
     }
 

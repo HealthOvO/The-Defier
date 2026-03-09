@@ -88,6 +88,26 @@ const FATE_RING = {
             description: '法力无边。灵力上限+1，且战斗开始时额外获得2张随机技能牌。',
             bonus: { type: 'energyBonus', value: 1 }
         },
+        resonance: {
+            id: 'resonance',
+            name: '回响之环',
+            icon: '🎼',
+            tier: 2,
+            levelReq: 3,
+            requires: ['awakened'],
+            description: '命轨回响。战斗开始时奶糖上限外 +1；每回合首次打出技能牌后额外抽1张牌。',
+            bonus: null
+        },
+        convergence: {
+            id: 'convergence',
+            name: '汇流之环',
+            icon: '🌀',
+            tier: 2,
+            levelReq: 3,
+            requires: ['awakened'],
+            description: '势能汇流。战斗开始获得1点灵力；每回合首次打出攻击牌，伤害+4。',
+            bonus: null
+        },
         defiance: {
             id: 'defiance',
             name: '逆天之环',
@@ -95,7 +115,7 @@ const FATE_RING = {
             tier: 3,
             levelReq: 7,
             requiresAny: true,
-            requires: ['toughness', 'agility', 'insight', 'destruction', 'wisdom'],
+            requires: ['toughness', 'agility', 'insight', 'destruction', 'wisdom', 'resonance', 'convergence'],
             description: '逆转天命。攻击大幅提升，免疫一次致死伤害。',
             bonus: { type: 'ultimate' }
         }

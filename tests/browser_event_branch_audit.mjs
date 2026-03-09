@@ -25,7 +25,11 @@ async function getSnapshot(page) {
     hp: window.game?.player?.currentHp ?? null,
     maxHp: window.game?.player?.maxHp ?? null,
     gold: window.game?.player?.gold ?? null,
-    deck: Array.isArray(window.game?.player?.deck) ? window.game.player.deck.length : null
+    deck: Array.isArray(window.game?.player?.deck) ? window.game.player.deck.length : null,
+    ringExp: window.game?.player?.fateRing?.exp ?? null,
+    adventureBuffs: window.game?.player?.adventureBuffs
+      ? { ...window.game.player.adventureBuffs }
+      : null
   }));
 }
 
@@ -146,6 +150,30 @@ async function bootstrapRun(page) {
       detail: 'gold up and deck +1'
     },
     {
+      eventId: 'convergenceRelay',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        after.ringExp > before.ringExp &&
+        (after.adventureBuffs?.firstTurnEnergyBoostBattles || 0) > (before.adventureBuffs?.firstTurnEnergyBoostBattles || 0),
+      detail: 'ringExp up and first-turn energy buff up'
+    },
+    {
+      eventId: 'harmonicAnvil',
+      choiceIndex: 1,
+      expect: (before, after) =>
+        after.hp < before.hp &&
+        after.deck >= before.deck + 2,
+      detail: 'hp down and deck +2'
+    },
+    {
+      eventId: 'artifactConfluxBazaar',
+      choiceIndex: 1,
+      expect: (before, after) =>
+        after.gold > before.gold &&
+        after.ringExp > before.ringExp,
+      detail: 'gold up and ringExp up'
+    },
+    {
       eventId: 'shieldRelayBeacon',
       choiceIndex: 0,
       expect: (before, after) =>
@@ -168,6 +196,139 @@ async function bootstrapRun(page) {
         after.gold < before.gold &&
         after.deck >= before.deck + 2,
       detail: 'gold down and deck +2'
+    },
+    {
+      eventId: 'caravanQuartermaster',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        after.gold < before.gold &&
+        (after.adventureBuffs?.firstTurnDrawBoostBattles || 0) > (before.adventureBuffs?.firstTurnDrawBoostBattles || 0),
+      detail: 'gold down and first-turn draw buff up'
+    },
+    {
+      eventId: 'nightWatchCamp',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        after.hp < before.hp &&
+        (after.adventureBuffs?.openingBlockBoostBattles || 0) > (before.adventureBuffs?.openingBlockBoostBattles || 0),
+      detail: 'hp down and opening-block buff up'
+    },
+    {
+      eventId: 'frontierContractBoard',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        (after.adventureBuffs?.victoryGoldBoostBattles || 0) > (before.adventureBuffs?.victoryGoldBoostBattles || 0),
+      detail: 'victory-gold buff up'
+    },
+    {
+      eventId: 'floatingMarketRift',
+      choiceIndex: 1,
+      expect: (before, after) =>
+        after.gold > before.gold,
+      detail: 'gold up'
+    },
+    {
+      eventId: 'emberCampSignal',
+      choiceIndex: 1,
+      expect: (before, after) =>
+        after.ringExp > before.ringExp,
+      detail: 'ringExp up'
+    },
+    {
+      eventId: 'leylineConfluence',
+      choiceIndex: 1,
+      expect: (before, after) =>
+        after.hp < before.hp &&
+        (after.adventureBuffs?.ringExpBoostBattles || 0) > (before.adventureBuffs?.ringExpBoostBattles || 0),
+      detail: 'hp down and ringExp buff up'
+    },
+    {
+      eventId: 'astralSupplyDepot',
+      choiceIndex: 1,
+      expect: (before, after) =>
+        after.gold > before.gold &&
+        after.ringExp > before.ringExp,
+      detail: 'gold up and ringExp up'
+    },
+    {
+      eventId: 'medicRelayPost',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        after.gold < before.gold &&
+        (after.adventureBuffs?.victoryHealBoostBattles || 0) > (before.adventureBuffs?.victoryHealBoostBattles || 0),
+      detail: 'gold down and victory-heal buff up'
+    },
+    {
+      eventId: 'starlitFieldHospital',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        (after.adventureBuffs?.victoryHealBoostBattles || 0) > (before.adventureBuffs?.victoryHealBoostBattles || 0) &&
+        (after.adventureBuffs?.openingBlockBoostBattles || 0) > (before.adventureBuffs?.openingBlockBoostBattles || 0),
+      detail: 'victory-heal and opening-block buffs up'
+    },
+    {
+      eventId: 'riftAidConvoy',
+      choiceIndex: 1,
+      expect: (before, after) =>
+        after.gold > before.gold &&
+        after.hp >= before.hp,
+      detail: 'gold up and hp not lower'
+    },
+    {
+      eventId: 'endlessChronicleBroker',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        after.gold < before.gold &&
+        after.ringExp > before.ringExp &&
+        (after.adventureBuffs?.firstTurnDrawBoostBattles || 0) > (before.adventureBuffs?.firstTurnDrawBoostBattles || 0) &&
+        (after.adventureBuffs?.firstTurnEnergyBoostBattles || 0) > (before.adventureBuffs?.firstTurnEnergyBoostBattles || 0),
+      detail: 'gold down, ringExp up, draw+energy buffs up'
+    },
+    {
+      eventId: 'endlessStormSanctum',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        (after.adventureBuffs?.openingBlockBoostBattles || 0) > (before.adventureBuffs?.openingBlockBoostBattles || 0),
+      detail: 'opening-block buff up'
+    },
+    {
+      eventId: 'endlessMutatorWorkshop',
+      choiceIndex: 1,
+      expect: (before, after) =>
+        after.gold > before.gold &&
+        (after.adventureBuffs?.victoryGoldBoostBattles || 0) > (before.adventureBuffs?.victoryGoldBoostBattles || 0),
+      detail: 'gold up and victory-gold buff up'
+    },
+    {
+      eventId: 'endlessMemoryVault',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        after.ringExp > before.ringExp &&
+        (after.adventureBuffs?.victoryHealBoostBattles || 0) > (before.adventureBuffs?.victoryHealBoostBattles || 0),
+      detail: 'ringExp up and victory-heal buff up'
+    },
+    {
+      eventId: 'endlessPressureValve',
+      choiceIndex: 1,
+      expect: (before, after) =>
+        after.gold > before.gold &&
+        after.ringExp > before.ringExp,
+      detail: 'gold up and ringExp up'
+    },
+    {
+      eventId: 'endlessFaultLine',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        (after.adventureBuffs?.openingBlockBoostBattles || 0) > (before.adventureBuffs?.openingBlockBoostBattles || 0),
+      detail: 'opening-block buff up'
+    },
+    {
+      eventId: 'endlessOverclockAltar',
+      choiceIndex: 0,
+      expect: (before, after) =>
+        after.gold > before.gold &&
+        (after.adventureBuffs?.firstTurnEnergyBoostBattles || 0) > (before.adventureBuffs?.firstTurnEnergyBoostBattles || 0),
+      detail: 'gold up and first-turn-energy buff up'
     }
   ];
 

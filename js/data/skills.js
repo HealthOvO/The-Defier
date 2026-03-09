@@ -115,5 +115,109 @@ const SKILLS = {
             player.drawCards(draw);
             return true;
         }
+    },
+
+    // 墨尘：星阙誓约
+    starOath: {
+        id: 'starOath',
+        name: '星阙誓约',
+        cooldown: 5,
+        icon: '🌌',
+        getDescription: (level) => {
+            let blockBase = 8;
+            let draw = 1;
+            let energy = 1;
+            if (level >= 4) {
+                blockBase = 16;
+                draw = 2;
+                energy = 2;
+            } else if (level === 3) {
+                blockBase = 13;
+                draw = 2;
+            } else if (level === 2) {
+                blockBase = 11;
+            }
+            return `获得 ${blockBase}+法则数 的护盾，抽 ${draw} 张牌，获得 ${energy} 点灵力。`;
+        },
+        effect: (player, battle) => {
+            const level = player.skillLevel;
+            let blockBase = 8;
+            let draw = 1;
+            let energy = 1;
+            if (level >= 4) {
+                blockBase = 16;
+                draw = 2;
+                energy = 2;
+            } else if (level === 3) {
+                blockBase = 13;
+                draw = 2;
+            } else if (level === 2) {
+                blockBase = 11;
+            }
+
+            const lawCount = typeof player?.fateRing?.getSocketedLaws === 'function'
+                ? player.fateRing.getSocketedLaws().length
+                : 0;
+            player.addBlock(blockBase + lawCount);
+            player.drawCards(draw);
+            player.gainEnergy(energy);
+            return true;
+        }
+    },
+
+    // 宁玄：灵器超频
+    artifactOverdrive: {
+        id: 'artifactOverdrive',
+        name: '灵器超频',
+        cooldown: 5,
+        icon: '🪬',
+        getDescription: (level) => {
+            let block = 8;
+            let draw = 1;
+            let energy = 1;
+            let strength = 0;
+            if (level >= 4) {
+                block = 18;
+                draw = 2;
+                energy = 2;
+                strength = 2;
+            } else if (level === 3) {
+                block = 14;
+                draw = 2;
+                strength = 1;
+            } else if (level === 2) {
+                block = 11;
+                strength = 1;
+            }
+            const strengthText = strength > 0 ? `，获得 ${strength} 点力量` : '';
+            return `获得 ${block} 点护盾，抽 ${draw} 张牌，获得 ${energy} 点灵力${strengthText}。`;
+        },
+        effect: (player, battle) => {
+            const level = player.skillLevel;
+            let block = 8;
+            let draw = 1;
+            let energy = 1;
+            let strength = 0;
+
+            if (level >= 4) {
+                block = 18;
+                draw = 2;
+                energy = 2;
+                strength = 2;
+            } else if (level === 3) {
+                block = 14;
+                draw = 2;
+                strength = 1;
+            } else if (level === 2) {
+                block = 11;
+                strength = 1;
+            }
+
+            player.addBlock(block);
+            player.drawCards(draw);
+            player.gainEnergy(energy);
+            if (strength > 0) player.addBuff('strength', strength);
+            return true;
+        }
     }
 };

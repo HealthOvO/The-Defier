@@ -73,6 +73,7 @@ const TREASURES = {
         name: '气血石',
         description: '战斗开始时，获得 5+(等级x2) 点护盾。',
         rarity: 'common',
+        setTag: 'xuanjia',
         icon: '🪨',
         price: 50,
         callbacks: {
@@ -206,6 +207,7 @@ const TREASURES = {
         name: '血煞珠',
         description: '生命值低于50%时，攻击伤害+25%。',
         rarity: 'common',
+        setTag: 'liemai',
         icon: '🔴',
         price: 70,
         callbacks: {
@@ -226,6 +228,7 @@ const TREASURES = {
         name: '铁壁符',
         description: '护盾获得量+15%。',
         rarity: 'common',
+        setTag: 'xuanjia',
         icon: '🔶',
         price: 55,
         callbacks: {
@@ -245,6 +248,7 @@ const TREASURES = {
         name: '吸魂幡',
         description: '每击杀一个敌人，最大生命值+2。',
         rarity: 'rare',
+        setTag: 'liemai',
         icon: '🏴',
         price: 150,
         callbacks: {
@@ -442,6 +446,7 @@ const TREASURES = {
         name: '玄武甲',
         description: '回合结束时，保留40%护盾（向上取整）。',
         rarity: 'rare',
+        setTag: 'xuanjia',
         icon: '🐢',
         price: 230,
         callbacks: {
@@ -553,6 +558,7 @@ const TREASURES = {
         name: '灵龟壳',
         description: '免疫[减速]、[麻痹]效果。回合开始时获得等同于命环等级的护盾。',
         rarity: 'legendary',
+        setTag: 'xuanjia',
         icon: '🐚',
         price: 350,
         counters: ['fusionSovereign', 'thunderTribulation'],
@@ -787,6 +793,217 @@ const TREASURES = {
         }
     },
 
+    // [NEW] 星轨罗盘 - 命环节奏法宝
+    'ring_echo_compass': {
+        id: 'ring_echo_compass',
+        name: '星轨罗盘',
+        description: '战斗开始时奶糖上限外 +1；命环达到4级时额外抽1张牌。',
+        rarity: 'rare',
+        setTag: 'xingheng',
+        icon: '🧭',
+        price: 230,
+        callbacks: {
+            onBattleStart: (player) => {
+                player.milkCandy = Math.min((player.maxMilkCandy || 0) + 2, (player.milkCandy || 0) + 1);
+                const ringLevel = player?.fateRing?.level || 0;
+                if (ringLevel >= 4) {
+                    player.drawCards(1);
+                }
+                Utils.showBattleLog('【星轨罗盘】校准命轨，补充奶糖并调整手牌节奏');
+            }
+        }
+    },
+
+    // [NEW] 星熔炉心 - 技能链推进法宝
+    'astral_forge_core': {
+        id: 'astral_forge_core',
+        name: '星熔炉心',
+        description: '每打出2张技能牌，获得1点灵力并获得4点护盾。',
+        rarity: 'legendary',
+        setTag: 'xingheng',
+        icon: '🌋',
+        price: 380,
+        data: { skillCounter: 0 },
+        callbacks: {
+            onBattleStart: (player, treasure) => {
+                if (treasure && treasure.data) treasure.data.skillCounter = 0;
+            },
+            onCardPlay: (player, card, context, treasure) => {
+                if (!treasure || !treasure.data || !card || card.type !== 'skill') return;
+                treasure.data.skillCounter = Math.max(0, Math.floor(Number(treasure.data.skillCounter) || 0)) + 1;
+                if (treasure.data.skillCounter >= 2) {
+                    treasure.data.skillCounter = 0;
+                    player.gainEnergy(1);
+                    player.addBlock(4);
+                    Utils.showBattleLog('【星熔炉心】技能链闭环：灵力+1，护盾+4');
+                }
+            }
+        }
+    },
+
+    // [NEW] 命契莲印 - 击杀成长法宝
+    'fate_lotus_seal': {
+        id: 'fate_lotus_seal',
+        name: '命契莲印',
+        description: '每次击杀敌人，命环经验+12+2x等级，并回复3点生命。',
+        rarity: 'legendary',
+        setTag: 'liemai',
+        icon: '🪷',
+        price: 410,
+        callbacks: {
+            onKill: (player) => {
+                const ringLevel = Math.max(0, Math.floor(Number(player?.fateRing?.level) || 0));
+                const gainExp = 12 + ringLevel * 2;
+                if (player && player.fateRing) {
+                    player.fateRing.exp += gainExp;
+                    if (typeof player.checkFateRingLevelUp === 'function') player.checkFateRingLevelUp();
+                }
+                player.heal(3);
+                Utils.showBattleLog(`【命契莲印】击杀回响：命环经验 +${gainExp}，回复3生命`);
+            }
+        }
+    },
+    'moonblade_sheath': {
+        id: 'moonblade_sheath',
+        name: '月刃鞘',
+        description: '每回合首次打出攻击牌时，获得4点护盾并抽1张牌。',
+        rarity: 'rare',
+        setTag: 'xingheng',
+        icon: '🌙',
+        price: 260,
+        data: { attackProcUsed: false },
+        callbacks: {
+            onBattleStart: (player, treasure) => {
+                if (treasure && treasure.data) treasure.data.attackProcUsed = false;
+            },
+            onTurnStart: (player, treasure) => {
+                if (treasure && treasure.data) treasure.data.attackProcUsed = false;
+            },
+            onCardPlay: (player, card, context, treasure) => {
+                if (!treasure || !treasure.data || !card || card.type !== 'attack') return;
+                if (treasure.data.attackProcUsed) return;
+                treasure.data.attackProcUsed = true;
+                player.addBlock(4);
+                player.drawCards(1);
+                Utils.showBattleLog('【月刃鞘】攻势引流：护盾+4，抽牌+1');
+            }
+        }
+    },
+    'ringweaver_anvil': {
+        id: 'ringweaver_anvil',
+        name: '织环砧',
+        description: '每次打出法则牌，命环经验+10，并回复1点奶糖（可溢出1点）。',
+        rarity: 'legendary',
+        setTag: 'xingheng',
+        icon: '⚒️',
+        price: 420,
+        callbacks: {
+            onCardPlay: (player, card) => {
+                if (!card || card.type !== 'law' || !player || !player.fateRing) return;
+                player.fateRing.exp += 10;
+                if (typeof player.checkFateRingLevelUp === 'function') player.checkFateRingLevelUp();
+                player.milkCandy = Math.min((player.maxMilkCandy || 0) + 1, (player.milkCandy || 0) + 1);
+                Utils.showBattleLog('【织环砧】法则共振：命环经验+10，奶糖+1');
+            }
+        }
+    },
+    'hunter_contract': {
+        id: 'hunter_contract',
+        name: '猎征契',
+        description: '战斗开始获得1点力量。每次击杀敌人，抽1张牌并额外获得10灵石。',
+        rarity: 'rare',
+        setTag: 'liemai',
+        icon: '📜',
+        price: 245,
+        callbacks: {
+            onBattleStart: (player) => {
+                player.addBuff('strength', 1);
+                Utils.showBattleLog('【猎征契】狩猎契约生效：力量+1');
+            },
+            onKill: (player) => {
+                player.drawCards(1);
+                player.gold = Math.max(0, Math.floor(Number(player.gold) || 0)) + 10;
+                Utils.showBattleLog('【猎征契】击杀结算：抽牌+1，灵石+10');
+            }
+        }
+    },
+    'matrix_resonator': {
+        id: 'matrix_resonator',
+        name: '矩阵谐振核',
+        description: '战斗开始获得1点指令槽。打出命环矩阵卡牌后，额外装填1层对应策略信号。',
+        rarity: 'rare',
+        setTag: 'xingheng',
+        icon: '🜇',
+        price: 285,
+        callbacks: {
+            onBattleStart: (player) => {
+                const battle = player?.game?.battle;
+                if (!battle || !battle.commandState || !battle.commandState.enabled) return;
+                if (typeof battle.gainBattleCommandPoints === 'function') {
+                    battle.gainBattleCommandPoints(1, 'matrixResonator');
+                    Utils.showBattleLog('【矩阵谐振核】开场校准：指令槽 +1');
+                }
+            },
+            onCardPlay: (player, card) => {
+                if (!player || !card || typeof card !== 'object') return;
+                const battle = player?.game?.battle;
+                if (!battle || !battle.commandState || !battle.commandState.enabled) return;
+                const signalMap = {
+                    matrixGuardProtocol: 'matrixGuardSignal',
+                    matrixShatterVector: 'matrixBreakSignal',
+                    matrixPurgeLoop: 'matrixCleanseSignal'
+                };
+                const signalBuff = signalMap[String(card.id || '')];
+                if (!signalBuff) return;
+                if (typeof player.addBuff === 'function') {
+                    player.addBuff(signalBuff, 1);
+                } else {
+                    player.buffs = player.buffs || {};
+                    player.buffs[signalBuff] = Math.max(0, Math.floor(Number(player.buffs[signalBuff]) || 0)) + 1;
+                }
+                Utils.showBattleLog('【矩阵谐振核】矩阵信号叠加：下次命环共振策略已强化');
+            }
+        }
+    },
+    'tactical_relay_spindle': {
+        id: 'tactical_relay_spindle',
+        name: '战术继电梭',
+        description: '每次命环共振结算后，下一回合开始灵力+1；若上次为手动策略，再抽1张牌。',
+        rarity: 'legendary',
+        setTag: 'xingheng',
+        icon: '🧵',
+        price: 430,
+        data: { lastTriggeredUseCount: 0 },
+        callbacks: {
+            onBattleStart: (player, treasure) => {
+                if (!treasure || !treasure.data) return;
+                treasure.data.lastTriggeredUseCount = 0;
+            },
+            onTurnStart: (player, treasure) => {
+                if (!player || !treasure || !treasure.data) return;
+                const battle = player?.game?.battle;
+                if (!battle || !battle.commandState || !battle.commandState.enabled) return;
+                const totalUsed = Math.max(0, Math.floor(Number(battle.commandState.totalCommandsUsed) || 0));
+                if (totalUsed <= Math.max(0, Math.floor(Number(treasure.data.lastTriggeredUseCount) || 0))) return;
+                if (String(battle.commandState.lastCommandId || '') !== 'resonance_matrix_order') return;
+                treasure.data.lastTriggeredUseCount = totalUsed;
+
+                if (typeof player.gainEnergy === 'function') {
+                    player.gainEnergy(1);
+                } else {
+                    player.currentEnergy = Math.max(0, Math.floor(Number(player.currentEnergy) || 0) + 1);
+                }
+                const usedManualMode = String(battle.commandState.lastResonanceMatrixMode || 'auto') !== 'auto';
+                if (usedManualMode && typeof player.drawCards === 'function') {
+                    player.drawCards(1);
+                }
+                Utils.showBattleLog(
+                    `【战术继电梭】承接命环共振：灵力 +1${usedManualMode ? '，抽牌 +1' : ''}`
+                );
+            }
+        }
+    },
+
     // [NEW] 天道碎片 - 终极法宝
     'heaven_shard': {
         id: 'heaven_shard',
@@ -885,6 +1102,14 @@ const TREASURE_CONFIG = {
         'stabilizer_pin': 16,
         'five_element_bead': 15,
         'karma_wheel': 16,
+        'ring_echo_compass': 7,
+        'astral_forge_core': 11,
+        'fate_lotus_seal': 12,
+        'moonblade_sheath': 6,
+        'ringweaver_anvil': 10,
+        'hunter_contract': 8,
+        'matrix_resonator': 9,
+        'tactical_relay_spindle': 12,
         'heaven_shard': 17
     }
 };

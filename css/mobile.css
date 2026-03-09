@@ -150,6 +150,53 @@
         font-size: 0.8rem;
     }
 
+    .map-adventure-buffs {
+        margin-top: 4px;
+        gap: 4px;
+    }
+
+    .map-endless-panel {
+        margin-top: 4px;
+        padding: 8px 9px;
+    }
+
+    .map-endless-panel .endless-stats {
+        gap: 4px;
+    }
+
+    .map-endless-panel .endless-stats span {
+        font-size: 0.64rem;
+    }
+
+    .map-endless-panel .endless-mutator-chip {
+        font-size: 0.62rem;
+    }
+
+    .map-endless-panel .endless-pressure-chip {
+        font-size: 0.6rem;
+        line-height: 1.2;
+        white-space: normal;
+    }
+
+    .map-buff-chip {
+        padding: 4px 7px;
+        font-size: 0.66rem;
+    }
+
+    .map-buff-name {
+        display: none;
+    }
+
+    .event-choice .choice-title {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .event-choice .choice-rarity {
+        font-size: 0.74rem;
+    }
+
     .node-row-v3 {
         padding: 0 10px;
         /* Reduce node margin to fit 3 nodes if needed, or 2 */
@@ -249,9 +296,13 @@
         bottom: 0;
         left: 0;
         width: 100%;
-        height: 140px;
-        padding: 5px;
+        height: auto;
+        min-height: 170px;
+        padding: 8px 8px 14px;
+        display: flex;
+        align-items: flex-end;
         z-index: 100;
+        overflow: visible;
         /* background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); */
     }
 
@@ -259,7 +310,12 @@
         justify-content: center;
         /* Center cards */
         padding-left: 0;
-        height: 100%;
+        padding-bottom: 6px;
+        min-height: 140px;
+        height: auto;
+        overflow-x: auto;
+        overflow-y: visible;
+        align-items: flex-end;
         /* Allow scroll if too many cards? No, usually fan. */
     }
 
@@ -288,7 +344,7 @@
 
     /* Reduce overlap on mobile to ensure tap targets are distinguishable */
     .hand-cards .card {
-        margin-left: -40px;
+        margin-left: -32px;
         /* Tighter overlap */
     }
 
@@ -296,7 +352,7 @@
         /* On mobile hover is weird, usually means 'active' or 'focus'. 
            We rely on click-to-select behavior usually. 
            But if we pop up, ensure it doesn't go offscreen. */
-        transform: translateY(-80px) scale(1.2) !important;
+        transform: translateY(-56px) scale(1.14) !important;
         z-index: 100;
     }
 

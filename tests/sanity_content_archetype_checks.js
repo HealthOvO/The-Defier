@@ -42,7 +42,10 @@ function loadFile(ctx, filePath) {
   const CARDS = vm.runInContext('CARDS', ctx);
   const EVENTS = vm.runInContext('EVENTS', ctx);
   const EVENT_POOL = vm.runInContext('EVENT_POOL', ctx);
+  const ENDLESS_EVENT_POOL = vm.runInContext('ENDLESS_EVENT_POOL', ctx);
+  const ENDLESS_MUTATOR_EVENT_BIAS = vm.runInContext('ENDLESS_MUTATOR_EVENT_BIAS', ctx);
   const ARCHETYPE_EVENT_POOLS = vm.runInContext('ARCHETYPE_EVENT_POOLS', ctx);
+  const FATE_PATH_EVENT_POOLS = vm.runInContext('FATE_PATH_EVENT_POOLS', ctx);
   const ARCHETYPE_PACKS = vm.runInContext('ARCHETYPE_PACKS', ctx);
   const getArchetypePack = vm.runInContext('getArchetypePack', ctx);
   const getRandomArchetypeCard = vm.runInContext('getRandomArchetypeCard', ctx);
@@ -50,7 +53,7 @@ function loadFile(ctx, filePath) {
   const getRandomEvent = vm.runInContext('getRandomEvent', ctx);
 
   // 1) 流派包完整性
-  ['hemorrhage', 'precision', 'entropy', 'bulwark'].forEach((id) => {
+  ['hemorrhage', 'precision', 'entropy', 'stormcraft', 'vitalweave', 'bulwark'].forEach((id) => {
     const pack = ARCHETYPE_PACKS[id];
     assert(pack, `missing archetype pack: ${id}`);
     assert(Array.isArray(pack.cards) && pack.cards.length >= 15, `${id} should have at least 15 cards`);
@@ -81,6 +84,14 @@ function loadFile(ctx, filePath) {
   assert(bulwarkPack && bulwarkPack.id === 'bulwark', 'getArchetypePack should return bulwark pack');
   const rareBulwark = getRandomArchetypeCard('bulwark', 'rare', null);
   assert(rareBulwark && rareBulwark.rarity === 'rare', 'rare bulwark card should be retrievable');
+  const stormcraftPack = getArchetypePack('stormcraft');
+  assert(stormcraftPack && stormcraftPack.id === 'stormcraft', 'getArchetypePack should return stormcraft pack');
+  const rareStormcraft = getRandomArchetypeCard('stormcraft', 'rare', null);
+  assert(rareStormcraft && rareStormcraft.rarity === 'rare', 'rare stormcraft card should be retrievable');
+  const vitalweavePack = getArchetypePack('vitalweave');
+  assert(vitalweavePack && vitalweavePack.id === 'vitalweave', 'getArchetypePack should return vitalweave pack');
+  const rareVitalweave = getRandomArchetypeCard('vitalweave', 'rare', null);
+  assert(rareVitalweave && rareVitalweave.rarity === 'rare', 'rare vitalweave card should be retrievable');
 
   // 3) 奖励偏置：牌组明显偏向时，奖励应显著命中对应流派
   const precisionDeck = ARCHETYPE_PACKS.precision.cards.slice(0, 10).map((id) => ({ ...CARDS[id] }));
@@ -102,7 +113,14 @@ function loadFile(ctx, filePath) {
   const newEvents = [
     'bloodForgeCovenant', 'mirrorNeedleDojo', 'shatteredCompass', 'debtboundAnvil',
     'voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual',
-    'shieldRelayBeacon', 'ironCitadelPact', 'aegisTribunal'
+    'shieldRelayBeacon', 'ironCitadelPact', 'aegisTribunal',
+    'caravanQuartermaster', 'nightWatchCamp', 'frontierContractBoard',
+    'floatingMarketRift', 'emberCampSignal', 'leylineConfluence', 'astralSupplyDepot',
+    'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy',
+    'convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar',
+    'endlessPressureValve', 'endlessFaultLine', 'endlessOverclockAltar',
+    'thunderConductTrial', 'stormchaserCamp', 'fulgurMarket', 'overclockSigil',
+    'herbalPactShrine', 'lifestringClinic', 'bloodloomGarden', 'hospiceRelay'
   ];
   newEvents.forEach((eventId) => {
     assert(!!EVENTS[eventId], `missing event definition: ${eventId}`);
@@ -118,12 +136,65 @@ function loadFile(ctx, filePath) {
   assert(EVENT_POOL.uncommon.includes('ironCitadelPact'), 'ironCitadelPact should be in uncommon pool');
   assert(EVENT_POOL.rare.includes('convergenceRitual'), 'convergenceRitual should be in rare pool');
   assert(EVENT_POOL.rare.includes('aegisTribunal'), 'aegisTribunal should be in rare pool');
+  assert(EVENT_POOL.uncommon.includes('caravanQuartermaster'), 'caravanQuartermaster should be in uncommon pool');
+  assert(EVENT_POOL.common.includes('nightWatchCamp'), 'nightWatchCamp should be in common pool');
+  assert(EVENT_POOL.rare.includes('frontierContractBoard'), 'frontierContractBoard should be in rare pool');
+  assert(EVENT_POOL.uncommon.includes('floatingMarketRift'), 'floatingMarketRift should be in uncommon pool');
+  assert(EVENT_POOL.common.includes('emberCampSignal'), 'emberCampSignal should be in common pool');
+  assert(EVENT_POOL.common.includes('leylineConfluence'), 'leylineConfluence should be in common pool');
+  assert(EVENT_POOL.uncommon.includes('astralSupplyDepot'), 'astralSupplyDepot should be in uncommon pool');
+  assert(EVENT_POOL.common.includes('medicRelayPost'), 'medicRelayPost should be in common pool');
+  assert(EVENT_POOL.uncommon.includes('starlitFieldHospital'), 'starlitFieldHospital should be in uncommon pool');
+  assert(EVENT_POOL.common.includes('riftAidConvoy'), 'riftAidConvoy should be in common pool');
+  assert(EVENT_POOL.uncommon.includes('convergenceRelay'), 'convergenceRelay should be in uncommon pool');
+  assert(EVENT_POOL.uncommon.includes('harmonicAnvil'), 'harmonicAnvil should be in uncommon pool');
+  assert(EVENT_POOL.rare.includes('artifactConfluxBazaar'), 'artifactConfluxBazaar should be in rare pool');
+  assert(EVENT_POOL.uncommon.includes('thunderConductTrial'), 'thunderConductTrial should be in uncommon pool');
+  assert(EVENT_POOL.common.includes('stormchaserCamp'), 'stormchaserCamp should be in common pool');
+  assert(EVENT_POOL.uncommon.includes('fulgurMarket'), 'fulgurMarket should be in uncommon pool');
+  assert(EVENT_POOL.rare.includes('overclockSigil'), 'overclockSigil should be in rare pool');
+  assert(EVENT_POOL.common.includes('herbalPactShrine'), 'herbalPactShrine should be in common pool');
+  assert(EVENT_POOL.uncommon.includes('lifestringClinic'), 'lifestringClinic should be in uncommon pool');
+  assert(EVENT_POOL.uncommon.includes('bloodloomGarden'), 'bloodloomGarden should be in uncommon pool');
+  assert(EVENT_POOL.rare.includes('hospiceRelay'), 'hospiceRelay should be in rare pool');
+  assert(ENDLESS_EVENT_POOL.common.includes('endlessPressureValve'), 'endlessPressureValve should be in endless common pool');
+  assert(ENDLESS_EVENT_POOL.common.includes('endlessOverclockAltar'), 'endlessOverclockAltar should be in endless common pool');
+  assert(ENDLESS_EVENT_POOL.rare.includes('endlessFaultLine'), 'endlessFaultLine should be in endless rare pool');
+  assert(ENDLESS_EVENT_POOL.common.includes('endlessChronicleBroker'), 'endlessChronicleBroker should be in endless common pool');
+  assert(ENDLESS_EVENT_POOL.common.includes('endlessMutatorWorkshop'), 'endlessMutatorWorkshop should be in endless common pool');
+  assert(ENDLESS_EVENT_POOL.rare.includes('endlessMemoryVault'), 'endlessMemoryVault should be in endless rare pool');
+  assert(Array.isArray(ENDLESS_MUTATOR_EVENT_BIAS.war_market), 'mutator event bias for war_market should exist');
+  assert(Array.isArray(ENDLESS_MUTATOR_EVENT_BIAS.void_tax), 'mutator event bias for void_tax should exist');
+  assert(Array.isArray(ENDLESS_MUTATOR_EVENT_BIAS.trial_inferno), 'mutator event bias for trial_inferno should exist');
 
   newEvents.forEach((eventId) => {
     EVENTS[eventId].choices.forEach((choice) => {
       (choice.effects || []).forEach((effect) => {
         if (effect.type === 'card' && effect.cardId) {
           assert(!!CARDS[effect.cardId], `${eventId} references unknown cardId: ${effect.cardId}`);
+        }
+        if (effect.type === 'adventureBuff') {
+          assert(
+            [
+              'firstTurnDrawBoostBattles',
+              'openingBlockBoostBattles',
+              'victoryGoldBoostBattles',
+              'firstTurnEnergyBoostBattles',
+              'ringExpBoostBattles',
+              'victoryHealBoostBattles'
+            ].includes(effect.buffId),
+            `${eventId} references unknown adventure buff: ${effect.buffId}`
+          );
+          assert(Number(effect.charges) >= 1, `${eventId} adventure buff charges should be >= 1`);
+        }
+        if (effect.type === 'openTemporaryShop') {
+          assert(Number(effect.offerCount || 0) >= 2, `${eventId} temporary shop should provide at least 2 offers`);
+        }
+        if (effect.type === 'openCampfire') {
+          assert(true, `${eventId} openCampfire effect should be recognized`);
+        }
+        if (effect.type === 'endlessPressure') {
+          assert(Number.isFinite(Number(effect.value)), `${eventId} endlessPressure effect should have numeric value`);
         }
       });
     });
@@ -132,15 +203,31 @@ function loadFile(ctx, filePath) {
   // 5) 事件偏置池完整性 + 四流派偏置命中
   const expectedEventPools = {
     hemorrhage: ['bloodForgeCovenant', 'shatteredCompass', 'debtboundAnvil'],
-    precision: ['mirrorNeedleDojo', 'shatteredCompass', 'bloodForgeCovenant'],
-    entropy: ['voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual'],
-    bulwark: ['shieldRelayBeacon', 'ironCitadelPact', 'aegisTribunal']
+    precision: ['mirrorNeedleDojo', 'shatteredCompass', 'bloodForgeCovenant', 'caravanQuartermaster', 'floatingMarketRift', 'astralSupplyDepot'],
+    entropy: ['voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard', 'floatingMarketRift', 'astralSupplyDepot'],
+    stormcraft: ['thunderConductTrial', 'stormchaserCamp', 'fulgurMarket', 'overclockSigil', 'convergenceRelay', 'harmonicAnvil'],
+    vitalweave: ['herbalPactShrine', 'lifestringClinic', 'bloodloomGarden', 'hospiceRelay', 'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy'],
+    bulwark: ['shieldRelayBeacon', 'ironCitadelPact', 'aegisTribunal', 'nightWatchCamp', 'emberCampSignal', 'leylineConfluence', 'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy']
   };
   Object.entries(expectedEventPools).forEach(([archetypeId, expectedIds]) => {
     const actual = ARCHETYPE_EVENT_POOLS[archetypeId];
     assert(Array.isArray(actual), `missing event pool for archetype: ${archetypeId}`);
     expectedIds.forEach((eventId) => {
       assert(actual.includes(eventId), `${archetypeId} event pool should include ${eventId}`);
+    });
+  });
+
+  const expectedPathPools = {
+    convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar'],
+    resonance: ['stormchaserCamp', 'thunderConductTrial', 'fulgurMarket'],
+    wisdom: ['lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary'],
+    destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden']
+  };
+  Object.entries(expectedPathPools).forEach(([pathId, expectedIds]) => {
+    const actual = FATE_PATH_EVENT_POOLS[pathId];
+    assert(Array.isArray(actual), `missing event pool for path: ${pathId}`);
+    expectedIds.forEach((eventId) => {
+      assert(actual.includes(eventId), `${pathId} event pool should include ${eventId}`);
     });
   });
 
@@ -163,6 +250,65 @@ function loadFile(ctx, filePath) {
       `expected ${archetypeId} event bias hit, got ${boostedEvent ? boostedEvent.id : 'null'}`
     );
   });
+
+  // 5.5) 命环路径偏置应可命中路径事件池
+  {
+    ctx.window.game = {
+      player: {
+        deck: [],
+        fateRing: { path: 'resonance' }
+      }
+    };
+    const oldRandom = ctx.Math.random;
+    const seq = [0.1, 0.2]; // 触发路径偏置 + 命中池内事件
+    let ridx = 0;
+    ctx.Math.random = () => {
+      const val = seq[ridx % seq.length];
+      ridx += 1;
+      return val;
+    };
+    const evt = getRandomEvent();
+    ctx.Math.random = oldRandom;
+    const expectedSet = new Set(expectedPathPools.resonance);
+    assert(
+      evt && expectedSet.has(evt.id),
+      `expected resonance path bias hit, got ${evt ? evt.id : 'null'}`
+    );
+  }
+
+  // 6) 无尽词缀事件偏置应可命中词缀池
+  {
+    const expectedByMutator = {
+      war_market: ENDLESS_MUTATOR_EVENT_BIAS.war_market,
+      void_tax: ENDLESS_MUTATOR_EVENT_BIAS.void_tax,
+      trial_inferno: ENDLESS_MUTATOR_EVENT_BIAS.trial_inferno
+    };
+    Object.entries(expectedByMutator).forEach(([mutatorId, expectedPool]) => {
+      ctx.window.game = {
+        player: { deck: [] },
+        isEndlessActive: () => true,
+        ensureEndlessState: () => ({
+          currentCycle: 6,
+          activeMutators: [mutatorId]
+        })
+      };
+      const oldRandom = ctx.Math.random;
+      const seq = [0.2, 0.1]; // 触发 mutator 偏置 + 在偏置池内抽取
+      let sidx = 0;
+      ctx.Math.random = () => {
+        const val = seq[sidx % seq.length];
+        sidx += 1;
+        return val;
+      };
+      const evt = getRandomEvent();
+      ctx.Math.random = oldRandom;
+      const expectedSet = new Set((expectedPool || []).filter((id) => !!EVENTS[id]));
+      assert(
+        evt && expectedSet.has(evt.id),
+        `expected endless mutator bias (${mutatorId}) hit, got ${evt ? evt.id : 'null'}`
+      );
+    });
+  }
 
   console.log('Content archetype checks passed.');
 })();

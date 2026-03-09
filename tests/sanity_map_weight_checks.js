@@ -143,5 +143,118 @@ function loadFile(ctx, filePath) {
   const eventRateEntropy = sampleEventRate(entropyW);
   assert(eventRateEntropy > eventRateBase + 0.02, `archetype event rate should increase (${eventRateBase} -> ${eventRateEntropy})`);
 
+  // 8) 命环路径应在节点层面形成差异化路线
+  const mapConvergencePath = createMapForPlayer({
+    fateRing: { path: 'convergence' }
+  });
+  const mapResonancePath = createMapForPlayer({
+    fateRing: { path: 'resonance' }
+  });
+  const mapNeutralPath = createMapForPlayer({
+    fateRing: { path: 'crippled' }
+  });
+  const neutralPathW = mapNeutralPath.getDynamicNodeWeights(4, totalRows, realm);
+  const convergencePathW = mapConvergencePath.getDynamicNodeWeights(4, totalRows, realm);
+  const resonancePathW = mapResonancePath.getDynamicNodeWeights(4, totalRows, realm);
+  assert(
+    convergencePathW.event > neutralPathW.event,
+    `convergence path should raise event weight (${neutralPathW.event} -> ${convergencePathW.event})`
+  );
+  assert(
+    resonancePathW.rest > neutralPathW.rest && resonancePathW.trial > neutralPathW.trial,
+    `resonance path should raise rest/trial (${neutralPathW.rest}, ${neutralPathW.trial}) -> (${resonancePathW.rest}, ${resonancePathW.trial})`
+  );
+
+  // 9) 相邻层同质化压力：连续战斗倾向后应降低敌人权重并抬升功能节点
+  const mapDiversity = createMapForPlayer();
+  const baselineW = mapDiversity.getDynamicNodeWeights(4, totalRows, realm);
+  const pressuredW = mapDiversity.getDynamicNodeWeights(4, totalRows, realm, {
+    previousRowNodes: [{ type: 'enemy' }, { type: 'enemy' }, { type: 'elite' }],
+    previousTwoRowNodes: [{ type: 'enemy' }, { type: 'enemy' }],
+    currentRowNodes: []
+  });
+  assert(
+    pressuredW.enemy < baselineW.enemy,
+    `diversity pressure should lower enemy weight (${baselineW.enemy} -> ${pressuredW.enemy})`
+  );
+  assert(
+    pressuredW.event > baselineW.event && pressuredW.trial > baselineW.trial,
+    `diversity pressure should raise event/trial (${baselineW.event}, ${baselineW.trial}) -> (${pressuredW.event}, ${pressuredW.trial})`
+  );
+
+  // 10) 同一行已出现节点类型后，下一个节点应倾向不同类型
+  const inRowBaselineW = mapDiversity.getDynamicNodeWeights(4, totalRows, realm, {
+    previousRowNodes: [],
+    previousTwoRowNodes: [],
+    currentRowNodes: []
+  });
+  const inRowPressuredW = mapDiversity.getDynamicNodeWeights(4, totalRows, realm, {
+    previousRowNodes: [],
+    previousTwoRowNodes: [],
+    currentRowNodes: [{ type: 'enemy' }]
+  });
+  assert(
+    inRowPressuredW.enemy < inRowBaselineW.enemy,
+    `in-row pressure should lower repeated enemy pick weight (${inRowBaselineW.enemy} -> ${inRowPressuredW.enemy})`
+  );
+  assert(
+    inRowPressuredW.shop > inRowBaselineW.shop || inRowPressuredW.event > inRowBaselineW.event,
+    `in-row pressure should increase non-combat options (shop ${inRowBaselineW.shop} -> ${inRowPressuredW.shop}, event ${inRowBaselineW.event} -> ${inRowPressuredW.event})`
+  );
+
+  // 11) 长程记忆去重：最近多层长期偏向同类型时，后续应抑制该类型
+  mapDiversity.nodes = [
+    [{ type: 'enemy' }, { type: 'elite' }, { type: 'enemy' }],
+    [{ type: 'enemy' }, { type: 'enemy' }],
+    [{ type: 'elite' }, { type: 'enemy' }],
+    [{ type: 'enemy' }, { type: 'event' }]
+  ];
+  const longMemoryNeutralW = mapDiversity.getDynamicNodeWeights(4, totalRows, realm, {
+    previousRowNodes: [],
+    previousTwoRowNodes: [],
+    currentRowNodes: []
+  });
+  const longMemoryPressuredW = mapDiversity.getDynamicNodeWeights(5, totalRows, realm, {
+    previousRowNodes: [{ type: 'enemy' }, { type: 'enemy' }],
+    previousTwoRowNodes: [{ type: 'enemy' }, { type: 'elite' }],
+    currentRowNodes: []
+  });
+  assert(
+    longMemoryPressuredW.enemy < longMemoryNeutralW.enemy,
+    `long-term pressure should reduce dominant enemy weight (${longMemoryNeutralW.enemy} -> ${longMemoryPressuredW.enemy})`
+  );
+  assert(
+    longMemoryPressuredW.trial > longMemoryNeutralW.trial || longMemoryPressuredW.event > longMemoryNeutralW.event,
+    `long-term pressure should push utility nodes (trial ${longMemoryNeutralW.trial} -> ${longMemoryPressuredW.trial}, event ${longMemoryNeutralW.event} -> ${longMemoryPressuredW.event})`
+  );
+
+  // 12) 稀有节点保底：连续多层未出现事件/商店时应抬升对应权重
+  const pityBaseW = mapDiversity.getDynamicNodeWeights(5, totalRows, realm, {
+    historyRows: [
+      [{ type: 'enemy' }, { type: 'event' }],
+      [{ type: 'elite' }, { type: 'shop' }],
+      [{ type: 'trial' }, { type: 'enemy' }],
+      [{ type: 'forge' }, { type: 'rest' }]
+    ],
+    currentRowNodes: []
+  });
+  const pityBoostW = mapDiversity.getDynamicNodeWeights(5, totalRows, realm, {
+    historyRows: [
+      [{ type: 'enemy' }, { type: 'elite' }],
+      [{ type: 'enemy' }, { type: 'trial' }],
+      [{ type: 'elite' }, { type: 'forge' }],
+      [{ type: 'enemy' }, { type: 'trial' }]
+    ],
+    currentRowNodes: []
+  });
+  assert(
+    pityBoostW.event > pityBaseW.event,
+    `event pity should boost event weight (${pityBaseW.event} -> ${pityBoostW.event})`
+  );
+  assert(
+    pityBoostW.shop > pityBaseW.shop,
+    `shop pity should boost shop weight (${pityBaseW.shop} -> ${pityBoostW.shop})`
+  );
+
   console.log('Map weight sanity checks passed.');
 })();

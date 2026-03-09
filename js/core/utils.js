@@ -251,6 +251,11 @@ const Utils = {
     createCardElement(card, index = 0, isReward = false, options = {}) {
         const div = document.createElement('div');
         div.className = `card ${card.type} rarity-${card.rarity || 'common'}`;
+        const escapeHtml = (value) => String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
 
         // Unplayable visual state
         if (card.unplayable) {
@@ -284,6 +289,21 @@ const Utils = {
 
         let costHtml = '';
         const displayCost = (options && typeof options.costOverride === 'number') ? options.costOverride : card.cost;
+        const battleTags = Array.isArray(options?.battleTags)
+            ? options.battleTags
+                .filter((tag) => tag && typeof tag === 'object' && tag.label)
+                .map((tag) => ({
+                    id: String(tag.id || 'hint'),
+                    label: String(tag.label || ''),
+                    tip: String(tag.tip || '')
+                }))
+                .slice(0, 2)
+            : [];
+        const battleTagHtml = !isReward && battleTags.length > 0
+            ? `<div class="card-live-tags">${battleTags.map((tag) => `
+                <span class="card-live-tag tag-${escapeHtml(tag.id)}" title="${escapeHtml(tag.tip)}">${escapeHtml(tag.label)}</span>
+            `).join('')}</div>`
+            : '';
         if (!isReward) {
             if (card.unplayable) {
                 costHtml = `<div class="card-cost cost-unplayable" style="background:#555">X</div>`;
@@ -298,6 +318,7 @@ const Utils = {
 
         div.innerHTML = `
             ${costHtml}
+            ${battleTagHtml}
             <div class="card-header">
                 <div class="card-name">${card.name}</div>
             </div>
@@ -554,16 +575,280 @@ const Utils = {
             )
         );
 
+        const describePattern = (pattern) => {
+            if (!pattern || typeof pattern !== 'object') return '未知行动';
+            switch (pattern.type) {
+                case 'attack': return `攻击 ${pattern.value} 点伤害`;
+                case 'multiAttack': return `连击 ${pattern.value} x ${pattern.count} 次`;
+                case 'defend': return `获得 ${pattern.value} 点护盾`;
+                case 'buff': return `强化自身（${pattern.buffType || '增益'}）`;
+                case 'debuff': return `施加减益（${pattern.buffType || '负面状态'}）`;
+                case 'heal': return `恢复 ${pattern.value} 点生命`;
+                case 'addStatus': return `塞入 ${pattern.count || 1} 张状态牌`;
+                case 'summon': return `召唤 ${pattern.count || 1} 个随从`;
+                case 'multiAction': return `连续执行 ${(pattern.actions || []).length} 段行动`;
+                default: return pattern.intent || '未知行动';
+            }
+        };
+
+        const resolveEnemyRole = (targetEnemy, activePattern) => {
+            const roleLabels = {
+                striker: '突袭型',
+                guardian: '坚守型',
+                hexer: '控场型',
+                balanced: '均衡型'
+            };
+            const role = (targetEnemy && typeof targetEnemy.enemyVariantRole === 'string' && roleLabels[targetEnemy.enemyVariantRole])
+                ? targetEnemy.enemyVariantRole
+                : (() => {
+                    const sourcePatterns = Array.isArray(targetEnemy?.patterns) && targetEnemy.patterns.length > 0
+                        ? targetEnemy.patterns
+                        : [activePattern];
+                    const stat = { attack: 0, defend: 0, debuff: 0 };
+                    sourcePatterns.forEach((pattern) => {
+                        if (!pattern || typeof pattern !== 'object') return;
+                        if (pattern.type === 'attack' || pattern.type === 'multiAttack' || pattern.type === 'executeDamage') {
+                            stat.attack += 1;
+                        } else if (
+                            pattern.type === 'defend' ||
+                            pattern.type === 'heal' ||
+                            (pattern.type === 'buff' && pattern.buffType === 'block')
+                        ) {
+                            stat.defend += 1;
+                        } else if (
+                            pattern.type === 'debuff' ||
+                            pattern.type === 'addStatus' ||
+                            pattern.type === 'summon' ||
+                            pattern.type === 'multiAction'
+                        ) {
+                            stat.debuff += 1;
+                        }
+                    });
+
+                    if (stat.debuff >= 2 || (stat.debuff >= 1 && stat.attack <= 1)) return 'hexer';
+                    if (stat.defend >= 2 || (stat.defend > stat.attack && stat.defend >= 1)) return 'guardian';
+                    if (stat.attack >= 2 && stat.attack >= stat.debuff + stat.defend) return 'striker';
+                    return 'balanced';
+                })();
+
+            return {
+                id: role,
+                label: roleLabels[role] || roleLabels.balanced
+            };
+        };
+
+        const enemyRole = resolveEnemyRole(enemy, currentPattern);
+        const resolvePlayerCounterTools = () => {
+            const player = window?.game?.player || {};
+            const hand = Array.isArray(player?.hand) ? player.hand : [];
+            const tools = {
+                cleanse: false,
+                breakBlock: false,
+                burst: false,
+                defend: false,
+                draw: false
+            };
+
+            const markBurstByPattern = (pattern) => {
+                if (!pattern || typeof pattern !== 'object') return;
+                const value = Math.max(0, Number(pattern.value) || 0);
+                if (
+                    (pattern.type === 'attack' || pattern.type === 'damage' || pattern.type === 'executeDamage')
+                    && value >= 10
+                ) {
+                    tools.burst = true;
+                }
+                if (pattern.type === 'multiAttack') {
+                    const count = Math.max(1, Math.floor(Number(pattern.count) || 1));
+                    if (value * count >= 12) tools.burst = true;
+                }
+            };
+
+            hand.forEach((card) => {
+                if (!card || typeof card !== 'object') return;
+                const effects = Array.isArray(card.effects) ? card.effects : [];
+                const keywords = Array.isArray(card.keywords) ? card.keywords.map((kw) => String(kw || '')) : [];
+
+                if (keywords.includes('cleanse')) tools.cleanse = true;
+                if (keywords.includes('vulnerable') || keywords.includes('chain') || keywords.includes('burst')) {
+                    tools.burst = true;
+                }
+                if (card.type === 'defense' || Number(card.block) >= 8) tools.defend = true;
+                if (card.type === 'skill' && Number(card.draw) >= 1) tools.draw = true;
+                markBurstByPattern(card);
+
+                effects.forEach((effect) => {
+                    if (!effect || typeof effect !== 'object') return;
+                    if (effect.type === 'cleanse') tools.cleanse = true;
+                    if (effect.type === 'draw') tools.draw = true;
+                    if (effect.type === 'buff' && effect.buffType === 'nextTurnBlock') tools.defend = true;
+                    if (['removeBlock', 'blockBurst', 'penetrate', 'executeDamage', 'percentDamage'].includes(effect.type)) {
+                        tools.breakBlock = true;
+                    }
+                    markBurstByPattern(effect);
+                });
+            });
+
+            if (Math.max(0, Math.floor(Number(player?.block) || 0)) >= 12) {
+                tools.defend = true;
+            }
+            return tools;
+        };
+        const playerCounterTools = resolvePlayerCounterTools();
+        const resolveThreatTags = (targetEnemy) => {
+            const sourcePatterns = Array.isArray(targetEnemy?.patterns) ? targetEnemy.patterns : [];
+            if (sourcePatterns.length === 0) return [];
+
+            const tags = [];
+            const pushTag = (id, label, desc = '', severity = 'normal') => {
+                if (!id || !label) return;
+                if (tags.some((tag) => tag.id === id)) return;
+                tags.push({ id, label, desc, severity });
+            };
+
+            let debuffActions = 0;
+            let summonActions = 0;
+            let defendActions = 0;
+            let healActions = 0;
+            let hasMultiAction = false;
+            let burstScore = 0;
+
+            sourcePatterns.forEach((pattern) => {
+                if (!pattern || typeof pattern !== 'object') return;
+
+                if (pattern.type === 'debuff' || pattern.type === 'addStatus') debuffActions += 1;
+                if (pattern.type === 'summon' || (pattern.type === 'addStatus' && Number(pattern.count) >= 2)) summonActions += 1;
+                if (pattern.type === 'defend') defendActions += 1;
+                if (pattern.type === 'heal') healActions += 1;
+                if (pattern.type === 'multiAction') {
+                    hasMultiAction = true;
+                    if (Array.isArray(pattern.actions)) {
+                        pattern.actions.forEach((action) => {
+                            if (!action || typeof action !== 'object') return;
+                            if (action.type === 'debuff' || action.type === 'addStatus') debuffActions += 1;
+                            if (action.type === 'summon') summonActions += 1;
+                            if (action.type === 'defend') defendActions += 1;
+                            if (action.type === 'heal') healActions += 1;
+                            if (action.type === 'attack') {
+                                burstScore = Math.max(burstScore, Math.floor(Number(action.value) || 0));
+                            } else if (action.type === 'multiAttack') {
+                                burstScore = Math.max(
+                                    burstScore,
+                                    Math.floor((Number(action.value) || 0) * Math.max(1, Number(action.count) || 1))
+                                );
+                            }
+                        });
+                    }
+                }
+
+                if (pattern.type === 'attack') {
+                    burstScore = Math.max(burstScore, Math.floor(Number(pattern.value) || 0));
+                } else if (pattern.type === 'multiAttack') {
+                    burstScore = Math.max(
+                        burstScore,
+                        Math.floor((Number(pattern.value) || 0) * Math.max(1, Number(pattern.count) || 1))
+                    );
+                } else if (pattern.type === 'executeDamage') {
+                    burstScore = Math.max(burstScore, Math.floor(Number(pattern.value) || 0));
+                }
+            });
+
+            if (burstScore >= 18) {
+                pushTag('burst-kill', '爆发斩杀', '单次或连段伤害偏高，需预留护盾/减伤应对。', 'high');
+            }
+            if (debuffActions >= 2) {
+                pushTag('status-lock', '状态压制', '连续施加减益或状态牌，建议优先净化与速攻。', 'high');
+            }
+            if (summonActions >= 1) {
+                pushTag('summon-chain', '召唤链', '可能不断补位或注入状态单位，需尽快打断节奏。', 'normal');
+            }
+            if (hasMultiAction) {
+                pushTag('combo-loop', '连携循环', '单回合多段行动，需保留防御应对后续段。', 'normal');
+            }
+            if (defendActions + healActions >= 2) {
+                pushTag('sustain', '续航拖战', '具备防御/恢复循环，建议把握爆发窗口。', 'normal');
+            }
+
+            return tags.slice(0, 2);
+        };
+        const threatTags = resolveThreatTags(enemy);
+        const resolveCounterHints = (targetEnemy, role, tags, tools) => {
+            const hints = [];
+            const hasTag = (id) => Array.isArray(tags) && tags.some((item) => item && item.id === id);
+            const pushHint = (label, detail) => {
+                if (!label || !detail) return;
+                if (hints.some((item) => item.label === label)) return;
+                hints.push({ label, detail });
+            };
+
+            const targetBlock = Math.max(0, Math.floor(Number(targetEnemy?.block) || 0));
+            if (hasTag('status-lock') || role.id === 'hexer') {
+                if (tools.cleanse) {
+                    pushHint('净化优先', '你手里有净化资源，可优先解控避免减益连锁。');
+                } else {
+                    pushHint('先保状态', '建议先补护盾并保留解控手段，避免被状态压制滚雪球。');
+                }
+            }
+            if (hasTag('sustain') || role.id === 'guardian' || targetBlock >= 10) {
+                if (tools.breakBlock) {
+                    pushHint('破盾开口', '可先打出破盾/穿透效果，再接爆发牌收割。');
+                } else {
+                    pushHint('先叠破绽', '缺破盾手段时先叠易伤/破绽，再用高伤牌破防。');
+                }
+            }
+            if (hasTag('burst-kill') || isGuardBreaker) {
+                if (tools.defend) {
+                    pushHint('先守后攻', '本回合优先交防御牌，避免被高爆发直接压穿。');
+                } else {
+                    pushHint('稳血量', '当前防守资源不足，建议保留指令槽或治疗应对斩杀线。');
+                }
+            }
+            if (hasTag('combo-loop') || role.id === 'striker') {
+                if (tools.burst) {
+                    pushHint('抢节奏斩杀', '你手里有爆发组件，可抢在连段前压低关键目标血线。');
+                } else if (tools.draw) {
+                    pushHint('先找关键牌', '优先过牌找防御或爆发组件，避免被连携压回合。');
+                }
+            }
+
+            if (hints.length === 0 && tools.cleanse) {
+                pushHint('净化留手', '维持净化资源，优先处理对方减益或状态牌注入。');
+            }
+
+            return hints.slice(0, 2);
+        };
+        const counterHints = resolveCounterHints(enemy, enemyRole, threatTags, playerCounterTools);
+
         // 意图详细描述
-        let intentDesc = '';
-        switch (currentPattern.type) {
-            case 'attack': intentDesc = `意图：攻击 ${currentPattern.value} 点伤害`; break;
-            case 'multiAttack': intentDesc = `意图：连击 ${currentPattern.value} x ${currentPattern.count} 次`; break;
-            case 'defend': intentDesc = `意图：获得 ${currentPattern.value} 点护盾`; break;
-            case 'buff': intentDesc = `意图：强化自身`; break;
-            case 'debuff': intentDesc = `意图：削弱玩家`; break;
-            case 'heal': intentDesc = `意图：恢复 ${currentPattern.value} 点生命`; break;
-            default: intentDesc = '意图：未知';
+        let intentDesc = `意图：${describePattern(currentPattern)}`;
+        intentDesc += `｜战术：${enemyRole.label}`;
+        const tacticalPlanLabel = String(enemy.tacticalPlanLabel || '').trim();
+        if (tacticalPlanLabel) {
+            intentDesc += `｜节奏：${tacticalPlanLabel}`;
+        }
+        if (threatTags.length > 0) {
+            intentDesc += `｜威胁：${threatTags.map((item) => item.label).join('、')}`;
+        }
+        if (counterHints.length > 0) {
+            intentDesc += `｜反制：${counterHints.map((item) => item.detail).join('；')}`;
+        }
+        const encounterTag = String(enemy.encounterThemeTag || '').trim();
+        const encounterDesc = String(enemy.encounterThemeDesc || '').trim();
+        const encounterTierStage = Math.max(1, Math.min(3, Math.floor(Number(enemy.encounterThemeTier) || 1)));
+        const encounterTierText = `${'I'.repeat(encounterTierStage)}阶`;
+        const encounterAffixTag = String(enemy.encounterAffixTag || '').trim();
+        const encounterAffixDesc = String(enemy.encounterAffixDesc || '').trim();
+        if (encounterTag) {
+            intentDesc += `｜遭遇：${encounterTag} ${encounterTierText}`;
+        }
+        if (encounterAffixTag) {
+            intentDesc += `｜遭遇词缀：${encounterAffixTag}`;
+        }
+        if (currentPattern.type === 'multiAction' && Array.isArray(currentPattern.actions) && currentPattern.actions.length > 0) {
+            const segments = currentPattern.actions
+                .map((act, idx) => `${idx + 1}.${describePattern(act)}`)
+                .join('；');
+            intentDesc += `｜子行动：${segments}`;
         }
         if (isGuardBreaker) {
             const shatterCap = (enemy.isElite && enemy.eliteType === 'sunder') ? 12 : 8;
@@ -588,6 +873,27 @@ const Utils = {
                 intentDesc += '｜词缀：破盾（可击碎护盾并追加伤害）';
             }
         }
+        const tooltipSafe = String(intentDesc)
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'")
+            .replace(/\n/g, ' ');
+        const encounterDescSafe = encounterDesc
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        const encounterAffixDescSafe = encounterAffixDesc
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        const counterHintTitleSafe = counterHints
+            .map((item) => String(item.detail || ''))
+            .join(' | ')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
 
         // BOSS Image Support (Unified Structure)
         let avatarStyle = '';
@@ -602,7 +908,7 @@ const Utils = {
             <div class="enemy-avatar ${hasImage ? 'has-image' : ''}" style="${avatarStyle}">
                 ${hasImage ? '' : enemy.icon}
                 <div class="enemy-intent ${currentPattern.type} ${isGuardBreaker ? 'breaker' : ''}" 
-                     onmouseenter="Utils.showTooltip('${intentDesc}', event.clientX, event.clientY)"
+                     onmouseenter="Utils.showTooltip('${tooltipSafe}', event.clientX, event.clientY)"
                      onmouseleave="Utils.hideTooltip()">
                     ${intentIcon}
                     ${intentValue ? `<span class="intent-value">${intentValue}</span>` : ''}
@@ -610,6 +916,32 @@ const Utils = {
                 </div>
             </div>
             <div class="enemy-name">${enemy.name}</div>
+            <div class="enemy-role-tag role-${enemyRole.id}">${enemyRole.label}</div>
+            ${tacticalPlanLabel
+                ? `<div class="enemy-plan-tag" title="行动节奏：${tacticalPlanLabel}">节奏·${tacticalPlanLabel}</div>`
+                : ''}
+            ${encounterTag
+                ? `<div class="enemy-encounter-tag" title="${encounterDescSafe || '本场遭遇词条生效中'}">⚔️ 遭遇·${encounterTag} ${encounterTierText}</div>`
+                : ''}
+            ${encounterAffixTag
+                ? `<div class="enemy-encounter-affix" title="${encounterAffixDescSafe || '高阶遭遇词缀生效中'}">✦ 词缀·${encounterAffixTag}</div>`
+                : ''}
+            ${counterHints.length > 0
+                ? `<div class="enemy-counter-tag" title="${counterHintTitleSafe}">反制·${counterHints[0].label}</div>`
+                : ''}
+            ${threatTags.length > 0
+                ? `<div class="enemy-threat-tags">${threatTags
+                    .map((item) => {
+                        const safeDesc = String(item.desc || '')
+                            .replace(/&/g, '&amp;')
+                            .replace(/"/g, '&quot;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;');
+                        const riskClass = item.severity === 'high' ? 'high-risk' : '';
+                        return `<span class="enemy-threat-tag tag-${item.id} ${riskClass}" title="${safeDesc}">${item.label}</span>`;
+                    })
+                    .join('')}</div>`
+                : ''}
             <div class="enemy-hp">
                 <div class="enemy-hp-preview" style="width: 0%"></div>
                 <div class="enemy-hp-fill" style="width: ${(enemy.currentHp / enemy.maxHp) * 100}%"></div>

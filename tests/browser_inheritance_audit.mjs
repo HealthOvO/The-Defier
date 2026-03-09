@@ -13,6 +13,14 @@ function add(name, pass, detail = '') {
   findings.push({ name, pass, detail });
 }
 
+async function safeScreenshot(page, outPath) {
+  try {
+    await page.screenshot({ path: outPath, fullPage: true, timeout: 5000 });
+  } catch (err) {
+    console.warn(`[browser_inheritance_audit] screenshot skipped: ${err?.message || err}`);
+  }
+}
+
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -40,7 +48,7 @@ function add(name, pass, detail = '') {
 
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
-  await page.screenshot({ path: path.join(outDir, '00-main-menu.png'), fullPage: true });
+  await safeScreenshot(page, path.join(outDir, '00-main-menu.png'));
 
   // Open inheritance screen
   await page.click('button[onclick="game.showLegacyScreen()"]', { timeout: 5000, force: true });
@@ -58,6 +66,16 @@ function add(name, pass, detail = '') {
     return buttons.some((el) => (el.textContent || '').includes('玄甲流'));
   });
   add('bulwark preset is visible on inheritance screen', bulwarkPresetVisible, '');
+  const stormcraftPresetVisible = await page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll('.inheritance-preset-btn .name'));
+    return buttons.some((el) => (el.textContent || '').includes('霆策流'));
+  });
+  add('stormcraft preset is visible on inheritance screen', stormcraftPresetVisible, '');
+  const vitalweavePresetVisible = await page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll('.inheritance-preset-btn .name'));
+    return buttons.some((el) => (el.textContent || '').includes('回脉流'));
+  });
+  add('vitalweave preset is visible on inheritance screen', vitalweavePresetVisible, '');
 
   const before = await page.evaluate(() => JSON.parse(window.render_game_to_text()).legacy);
   add('legacy starts with unspent essence', (before?.unspent || 0) >= 40, JSON.stringify(before));
@@ -178,8 +196,26 @@ function add(name, pass, detail = '') {
     bulwarkMissionProbe?.eventType === 'bulwarkBlockProc' && bulwarkMissionProbe?.target === 4,
     JSON.stringify(bulwarkMissionProbe || null)
   );
+  const stormcraftMissionProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.getLegacyMissionForPreset !== 'function') return null;
+    return game.getLegacyMissionForPreset('stormcraft');
+  });
+  add(
+    'stormcraft preset mission mapping is available',
+    stormcraftMissionProbe?.eventType === 'stormcraftVulnerableProc' && stormcraftMissionProbe?.target === 4,
+    JSON.stringify(stormcraftMissionProbe || null)
+  );
+  const vitalweaveMissionProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.getLegacyMissionForPreset !== 'function') return null;
+    return game.getLegacyMissionForPreset('vitalweave');
+  });
+  add(
+    'vitalweave preset mission mapping is available',
+    vitalweaveMissionProbe?.eventType === 'vitalweaveHealProc' && vitalweaveMissionProbe?.target === 4,
+    JSON.stringify(vitalweaveMissionProbe || null)
+  );
 
-  await page.screenshot({ path: path.join(outDir, '01-inheritance-after-preset.png'), fullPage: true });
+  await safeScreenshot(page, path.join(outDir, '01-inheritance-after-preset.png'));
 
   const report = {
     url,

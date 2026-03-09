@@ -8,14 +8,25 @@ class GameMap {
         this.nodes = [];
         this.currentNodeIndex = -1;
         this.completedNodes = [];
+        this.lastEndlessPressure = null;
+        this.endlessPressurePulseTimer = null;
     }
 
     // 生成地图
     generate(realm) {
+        const cacheKey = (this.game && typeof this.game.getMapCacheKey === 'function')
+            ? this.game.getMapCacheKey(realm)
+            : `realm:${realm}`;
+        const endlessActive = !!(this.game && typeof this.game.isEndlessActive === 'function' && this.game.isEndlessActive());
+        const cachePool = (this.game && this.game.player && this.game.player.realmMaps) ? this.game.player.realmMaps : null;
+        const cachedMap = cachePool
+            ? (cachePool[cacheKey] || (!endlessActive ? cachePool[realm] : null))
+            : null;
+
         // V4.2 Persistence: Check if we have a saved map for this realm
-        if (this.game.player.realmMaps && this.game.player.realmMaps[realm]) {
-            console.log(`Loading cached map for Realm ${realm}`);
-            const cached = this.game.player.realmMaps[realm];
+        if (cachedMap) {
+            console.log(`Loading cached map for ${cacheKey}`);
+            const cached = cachedMap;
             this.nodes = cached.nodes;
             this.completedNodes = cached.completedNodes || [];
 
@@ -31,7 +42,12 @@ class GameMap {
         this.completedNodes = [];
 
         // 获取层配置
-        const config = window.LEVEL_CONFIG ? window.LEVEL_CONFIG.getRealmConfig(realm) : { rows: 8, nodesSequence: [] };
+        let config = window.LEVEL_CONFIG ? window.LEVEL_CONFIG.getRealmConfig(realm) : { rows: 8, nodesSequence: [] };
+        if (this.game && typeof this.game.isEndlessActive === 'function' && this.game.isEndlessActive()) {
+            if (typeof this.game.getEndlessMapConfig === 'function') {
+                config = this.game.getEndlessMapConfig(realm) || config;
+            }
+        }
         const rows = config.rows;
 
         let nodeId = 0;
@@ -47,7 +63,11 @@ class GameMap {
             }
 
             for (let i = 0; i < nodeCount; i++) {
-                const nodeType = this.getRandomNodeType(row, rows, realm);
+                const nodeType = this.getRandomNodeType(row, rows, realm, {
+                    currentRowNodes: rowNodes,
+                    previousRowNodes: row > 0 ? this.nodes[row - 1] : [],
+                    previousTwoRowNodes: row > 1 ? this.nodes[row - 2] : []
+                });
                 // --- P0 机制：地图路线污染 (Route Pollution) ---
                 // 非第一层、非BOSS层的节点，有15%概率被污染，且必须是可包含污染类型的战斗或精英节点(也可以是事件)
                 const isPolluted = row > 0 && row < rows - 1 && Math.random() < 0.15 && ['enemy', 'elite', 'event'].includes(nodeType);
@@ -83,15 +103,18 @@ class GameMap {
         }]);
 
         // Save initial state to cache
-        this.saveStateToCache(realm);
+        this.saveStateToCache(cacheKey);
 
         return this.nodes;
     }
 
     // Helper to save state
-    saveStateToCache(realm) {
+    saveStateToCache(cacheKey) {
         if (!this.game.player.realmMaps) this.game.player.realmMaps = {};
-        this.game.player.realmMaps[realm] = {
+        const key = cacheKey || (this.game && typeof this.game.getMapCacheKey === 'function'
+            ? this.game.getMapCacheKey(this.game.player.realm)
+            : this.game.player.realm);
+        this.game.player.realmMaps[key] = {
             nodes: this.nodes,
             completedNodes: this.completedNodes
         };
@@ -100,7 +123,7 @@ class GameMap {
     }
 
     // 获取随机节点类型
-    getRandomNodeType(row, totalRows, realm) {
+    getRandomNodeType(row, totalRows, realm, context = null) {
         // 第一行必有战斗 (Hardcore: 60% enemy / 40% elite)
         if (row === 0) {
             return Math.random() < 0.6 ? 'enemy' : 'elite';
@@ -112,7 +135,8 @@ class GameMap {
         }
 
         // 检查是否通过改关卡 (Current Realm < Max Reached)
-        const isPassed = this.game.player.maxRealmReached > realm;
+        const endlessActive = !!(this.game && typeof this.game.isEndlessActive === 'function' && this.game.isEndlessActive());
+        const isPassed = !endlessActive && this.game.player.maxRealmReached > realm;
 
         if (isPassed) {
             // Only monsters (enemy/elite) and boss (handled above)
@@ -120,11 +144,11 @@ class GameMap {
             return Math.random() < (0.5 / 0.7) ? 'enemy' : 'elite';
         }
 
-        const weights = this.getDynamicNodeWeights(row, totalRows, realm);
+        const weights = this.getDynamicNodeWeights(row, totalRows, realm, context);
         return this.rollNodeByWeights(weights);
     }
 
-    getDynamicNodeWeights(row, totalRows, realm) {
+    getDynamicNodeWeights(row, totalRows, realm, context = null) {
         const player = this.game && this.game.player ? this.game.player : {};
         const progress = row / Math.max(1, totalRows - 1);
         const weights = {
@@ -185,6 +209,31 @@ class GameMap {
             weights.rest -= 0.005;
         }
 
+        const fateRingPath = this.getFateRingPath(player);
+        const pathDoctrineProfile = (player && typeof player.getPathDoctrineProfile === 'function')
+            ? player.getPathDoctrineProfile()
+            : null;
+        this.applyFatePathNodeBias(weights, fateRingPath, progress, pathDoctrineProfile);
+
+        if (this.game && typeof this.game.isEndlessActive === 'function' && this.game.isEndlessActive()) {
+            const modifiers = (typeof this.game.getEndlessModifiers === 'function')
+                ? this.game.getEndlessModifiers()
+                : null;
+            const shift = modifiers && modifiers.mapWeightShift && typeof modifiers.mapWeightShift === 'object'
+                ? modifiers.mapWeightShift
+                : {};
+            Object.keys(shift).forEach((key) => {
+                if (!Object.prototype.hasOwnProperty.call(weights, key)) return;
+                const delta = Number(shift[key]);
+                if (!Number.isFinite(delta)) return;
+                weights[key] += delta;
+            });
+        }
+
+        this.applyRouteDiversityPressure(weights, row, totalRows, context);
+        this.applyLongTermDiversityPressure(weights, row, totalRows, context);
+        this.applyNodePityPressure(weights, row, totalRows, context);
+
         return this.normalizeNodeWeights(weights);
     }
 
@@ -209,6 +258,650 @@ class GameMap {
         }
 
         return null;
+    }
+
+    getFateRingPath(player = null) {
+        const source = player || (this.game && this.game.player ? this.game.player : null);
+        if (!source || !source.fateRing) return null;
+        const path = source.fateRing.path;
+        return (typeof path === 'string' && path.length > 0) ? path : null;
+    }
+
+    applyFatePathNodeBias(weights, path, progress = 0, doctrineProfile = null) {
+        if (!path || typeof path !== 'string' || path === 'crippled') return;
+
+        const pathShift = {
+            convergence: { event: 0.022, trial: 0.012, enemy: -0.016, rest: -0.006, shop: -0.004, forge: -0.008 },
+            resonance: { trial: 0.018, rest: 0.014, enemy: -0.015, elite: -0.009, forge: -0.004, event: -0.004 },
+            agility: { enemy: 0.018, elite: 0.012, event: -0.01, rest: -0.012, shop: -0.008 },
+            wisdom: { event: 0.02, shop: 0.008, enemy: -0.012, elite: -0.006, rest: -0.004, trial: -0.006 },
+            insight: { event: 0.016, trial: 0.012, enemy: -0.012, shop: -0.006, forge: -0.006, rest: -0.004 },
+            destruction: { enemy: 0.02, elite: 0.014, rest: -0.01, shop: -0.008, event: -0.008, trial: -0.008 },
+            toughness: { rest: 0.016, forge: 0.01, event: 0.008, enemy: -0.012, elite: -0.008, trial: -0.006 }
+        };
+
+        const shift = pathShift[path];
+        if (!shift || typeof shift !== 'object') return;
+
+        Object.keys(shift).forEach((key) => {
+            if (!Object.prototype.hasOwnProperty.call(weights, key)) return;
+            const delta = Number(shift[key]);
+            if (!Number.isFinite(delta)) return;
+            weights[key] += delta;
+        });
+
+        if (path === 'convergence' && progress >= 0.45) {
+            weights.trial += 0.008;
+            weights.enemy -= 0.006;
+            weights.shop -= 0.002;
+        }
+
+        if (path === 'resonance' && progress >= 0.6) {
+            weights.rest += 0.008;
+            weights.enemy -= 0.006;
+            weights.elite -= 0.002;
+        }
+
+        const doctrineTier = (
+            doctrineProfile &&
+            doctrineProfile.path === path &&
+            Number.isFinite(Number(doctrineProfile.tier))
+        )
+            ? Math.max(0, Math.floor(Number(doctrineProfile.tier) || 0))
+            : 0;
+        if (doctrineTier <= 0) return;
+
+        if (path === 'wisdom') {
+            // 智慧教义：提升功能节点出现，稳定形成事件/商店驱动路线
+            const eventBoost = 0.006 + doctrineTier * 0.006;
+            const shopBoost = 0.003 + doctrineTier * 0.004;
+            const trialBoost = doctrineTier >= 2 ? 0.003 * (doctrineTier - 1) : 0;
+            weights.event += eventBoost;
+            weights.shop += shopBoost;
+            weights.trial += trialBoost;
+            weights.enemy -= 0.007 + doctrineTier * 0.004;
+            weights.elite -= 0.003 + doctrineTier * 0.002;
+            weights.rest -= 0.0015 * doctrineTier;
+            return;
+        }
+
+        if (path === 'convergence') {
+            weights.trial += 0.002 + doctrineTier * 0.002;
+            weights.forge += doctrineTier >= 2 ? 0.0015 * doctrineTier : 0;
+            weights.enemy -= 0.002 + doctrineTier * 0.0015;
+            return;
+        }
+
+        if (path === 'resonance') {
+            weights.rest += 0.002 + doctrineTier * 0.002;
+            weights.event += doctrineTier >= 2 ? 0.0015 * doctrineTier : 0;
+            weights.enemy -= 0.002 + doctrineTier * 0.0015;
+            return;
+        }
+    }
+
+    normalizeNodeTypeForWeights(type) {
+        if (type === 'ghost_duel') return 'elite';
+        if (type === 'boss') return null;
+        return type;
+    }
+
+    collectNodeTypeCounts(nodes = []) {
+        const counts = {};
+        if (!Array.isArray(nodes)) return counts;
+        nodes.forEach((node) => {
+            const rawType = (node && typeof node === 'object') ? node.type : node;
+            if (typeof rawType !== 'string') return;
+            const type = this.normalizeNodeTypeForWeights(rawType);
+            if (!type || !Object.prototype.hasOwnProperty.call({
+                enemy: true,
+                elite: true,
+                event: true,
+                shop: true,
+                trial: true,
+                forge: true,
+                rest: true
+            }, type)) return;
+            counts[type] = (counts[type] || 0) + 1;
+        });
+        return counts;
+    }
+
+    getDominantNodeType(nodes = []) {
+        const counts = this.collectNodeTypeCounts(nodes);
+        const entries = Object.entries(counts);
+        if (entries.length === 0) return null;
+
+        let dominantType = null;
+        let dominantCount = 0;
+        let total = 0;
+        entries.forEach(([type, count]) => {
+            total += count;
+            if (count > dominantCount) {
+                dominantCount = count;
+                dominantType = type;
+            }
+        });
+
+        if (!dominantType || dominantCount < 2) return null;
+        if (dominantCount / Math.max(1, total) < 0.5) return null;
+        return dominantType;
+    }
+
+    applyWeightPenaltyAndRedistribute(weights, targetType, penalty, boostPlan = []) {
+        if (!weights || typeof weights !== 'object') return;
+        if (!Object.prototype.hasOwnProperty.call(weights, targetType)) return;
+
+        const current = Math.max(0, Number(weights[targetType]) || 0);
+        if (current <= 0) return;
+
+        const desiredPenalty = Math.max(0, Number(penalty) || 0);
+        if (desiredPenalty <= 0) return;
+        const actualPenalty = Math.min(desiredPenalty, current * 0.58);
+        if (actualPenalty <= 0) return;
+
+        weights[targetType] = current - actualPenalty;
+
+        const validBoosts = Array.isArray(boostPlan)
+            ? boostPlan.filter(([type, factor]) => (
+                type !== targetType &&
+                Object.prototype.hasOwnProperty.call(weights, type) &&
+                Number.isFinite(Number(factor)) &&
+                Number(factor) > 0
+            ))
+            : [];
+
+        if (validBoosts.length === 0) {
+            weights.event += actualPenalty * 0.4;
+            weights.trial += actualPenalty * 0.25;
+            weights.shop += actualPenalty * 0.2;
+            weights.rest += actualPenalty * 0.15;
+            return;
+        }
+
+        const sumFactor = validBoosts.reduce((sum, [, factor]) => sum + Number(factor), 0);
+        validBoosts.forEach(([type, factor]) => {
+            weights[type] += actualPenalty * (Number(factor) / Math.max(1e-6, sumFactor));
+        });
+    }
+
+    applyRouteDiversityPressure(weights, row, totalRows, context = null) {
+        if (!weights || typeof weights !== 'object') return;
+        if (!context || typeof context !== 'object') return;
+        if (row <= 0 || row >= totalRows - 1) return;
+
+        const isCombat = (type) => type === 'enemy' || type === 'elite';
+        const dominantToBoostPlan = (type) => {
+            if (isCombat(type)) {
+                return [
+                    ['event', 0.3],
+                    ['trial', 0.24],
+                    ['shop', 0.2],
+                    ['forge', 0.16],
+                    ['rest', 0.1]
+                ];
+            }
+            return [
+                ['enemy', 0.34],
+                ['elite', 0.2],
+                ['event', 0.16],
+                ['trial', 0.16],
+                ['shop', 0.14]
+            ];
+        };
+
+        const prevType = this.getDominantNodeType(context.previousRowNodes || []);
+        const prev2Type = this.getDominantNodeType(context.previousTwoRowNodes || []);
+        if (prevType) {
+            this.applyWeightPenaltyAndRedistribute(weights, prevType, 0.045, dominantToBoostPlan(prevType));
+        }
+        if (prevType && prev2Type && prevType === prev2Type) {
+            this.applyWeightPenaltyAndRedistribute(weights, prevType, 0.03, dominantToBoostPlan(prevType));
+        }
+
+        const currentCounts = this.collectNodeTypeCounts(context.currentRowNodes || []);
+        Object.keys(currentCounts).forEach((type) => {
+            const count = Math.max(0, Number(currentCounts[type]) || 0);
+            if (count <= 0) return;
+
+            const penalty = Math.min(0.07, 0.03 * count);
+            const inRowBoostPlan = isCombat(type)
+                ? [
+                    ['event', 0.32],
+                    ['trial', 0.24],
+                    ['shop', 0.2],
+                    ['forge', 0.14],
+                    ['rest', 0.1]
+                ]
+                : [
+                    ['enemy', 0.36],
+                    ['elite', 0.22],
+                    ['trial', 0.16],
+                    ['event', 0.14],
+                    ['shop', 0.12]
+                ];
+            this.applyWeightPenaltyAndRedistribute(weights, type, penalty, inRowBoostPlan);
+        });
+    }
+
+    collectRecentTypeCounts(row, lookback = 4, context = null) {
+        const rows = [];
+        const requestedRows = Array.isArray(context?.historyRows)
+            ? context.historyRows
+            : null;
+
+        if (requestedRows && requestedRows.length > 0) {
+            requestedRows.forEach((historyRow) => {
+                if (Array.isArray(historyRow) && historyRow.length > 0) rows.push(historyRow);
+            });
+        } else {
+            const start = Math.max(0, row - Math.max(1, Math.floor(Number(lookback) || 4)));
+            for (let r = start; r < row; r += 1) {
+                const historyRow = this.nodes[r];
+                if (Array.isArray(historyRow) && historyRow.length > 0) rows.push(historyRow);
+            }
+        }
+
+        if (Array.isArray(context?.currentRowNodes) && context.currentRowNodes.length > 0) {
+            rows.push(context.currentRowNodes);
+        }
+
+        const counts = {};
+        let total = 0;
+        rows.forEach((rowNodes) => {
+            const part = this.collectNodeTypeCounts(rowNodes);
+            Object.entries(part).forEach(([type, value]) => {
+                const numeric = Math.max(0, Number(value) || 0);
+                if (numeric <= 0) return;
+                counts[type] = (counts[type] || 0) + numeric;
+                total += numeric;
+            });
+        });
+        return { counts, total };
+    }
+
+    applyLongTermDiversityPressure(weights, row, totalRows, context = null) {
+        if (!weights || typeof weights !== 'object') return;
+        if (row <= 1 || row >= totalRows - 1) return;
+
+        const { counts, total } = this.collectRecentTypeCounts(row, 4, context);
+        if (total < 6) return;
+
+        const entries = Object.entries(counts).sort((a, b) => Number(b[1]) - Number(a[1]));
+        if (entries.length === 0) return;
+
+        const topRatio = Number(entries[0][1]) / Math.max(1, total);
+        if (topRatio < 0.36) return;
+
+        const isCombat = (type) => type === 'enemy' || type === 'elite';
+        const planByType = (type) => {
+            if (isCombat(type)) {
+                return [
+                    ['event', 0.3],
+                    ['trial', 0.24],
+                    ['forge', 0.16],
+                    ['shop', 0.16],
+                    ['rest', 0.14]
+                ];
+            }
+            return [
+                ['enemy', 0.34],
+                ['elite', 0.22],
+                ['trial', 0.18],
+                ['event', 0.12],
+                ['shop', 0.14]
+            ];
+        };
+
+        const topType = entries[0][0];
+        const topPenalty = topRatio >= 0.45 ? 0.04 : 0.025;
+        this.applyWeightPenaltyAndRedistribute(weights, topType, topPenalty, planByType(topType));
+
+        if (entries.length >= 2) {
+            const secondType = entries[1][0];
+            const secondRatio = Number(entries[1][1]) / Math.max(1, total);
+            if (secondType !== topType && secondRatio >= 0.28) {
+                this.applyWeightPenaltyAndRedistribute(weights, secondType, 0.015, planByType(secondType));
+            }
+        }
+    }
+
+    getRecentRowsForBias(row, lookback = 4, context = null) {
+        const rows = [];
+        const requestedRows = Array.isArray(context?.historyRows) ? context.historyRows : null;
+        if (requestedRows && requestedRows.length > 0) {
+            requestedRows.forEach((historyRow) => {
+                if (Array.isArray(historyRow) && historyRow.length > 0) rows.push(historyRow);
+            });
+            return rows;
+        }
+
+        const start = Math.max(0, row - Math.max(1, Math.floor(Number(lookback) || 4)));
+        for (let r = start; r < row; r += 1) {
+            if (Array.isArray(this.nodes[r]) && this.nodes[r].length > 0) {
+                rows.push(this.nodes[r]);
+            }
+        }
+        if (Array.isArray(context?.currentRowNodes) && context.currentRowNodes.length > 0) {
+            rows.push(context.currentRowNodes);
+        }
+        return rows;
+    }
+
+    rowContainsType(rowNodes = [], type) {
+        if (!Array.isArray(rowNodes) || rowNodes.length === 0) return false;
+        return rowNodes.some((node) => {
+            const rawType = (node && typeof node === 'object') ? node.type : node;
+            if (typeof rawType !== 'string') return false;
+            return this.normalizeNodeTypeForWeights(rawType) === type;
+        });
+    }
+
+    applyNodePityPressure(weights, row, totalRows, context = null) {
+        if (!weights || typeof weights !== 'object') return;
+        if (row <= 1 || row >= totalRows - 1) return;
+
+        const recentRows = this.getRecentRowsForBias(row, 4, context);
+        if (recentRows.length < 3) return;
+
+        const containsEvent = recentRows.some((rowNodes) => this.rowContainsType(rowNodes, 'event'));
+        const containsShop = recentRows.some((rowNodes) => this.rowContainsType(rowNodes, 'shop'));
+        const containsRest = recentRows.some((rowNodes) => this.rowContainsType(rowNodes, 'rest'));
+        const progress = row / Math.max(1, totalRows - 1);
+
+        if (!containsEvent) {
+            weights.event += 0.028;
+            weights.enemy -= 0.012;
+            weights.elite -= 0.006;
+            weights.trial -= 0.006;
+            weights.forge -= 0.004;
+        }
+        if (!containsShop) {
+            weights.shop += 0.024;
+            weights.enemy -= 0.01;
+            weights.elite -= 0.006;
+            weights.event -= 0.004;
+            weights.rest -= 0.004;
+        }
+        if (!containsRest && progress >= 0.35) {
+            weights.rest += 0.014;
+            weights.enemy -= 0.007;
+            weights.elite -= 0.004;
+            weights.event -= 0.003;
+        }
+    }
+
+    ensurePathSynergyState(player) {
+        if (!player || typeof player !== 'object') return {
+            path: null,
+            streak: 0,
+            lastNodeType: null,
+            lastGrantedStage: 0
+        };
+
+        if (!player.pathSynergyState || typeof player.pathSynergyState !== 'object') {
+            player.pathSynergyState = {
+                path: null,
+                streak: 0,
+                lastNodeType: null,
+                lastGrantedStage: 0
+            };
+        }
+
+        const state = player.pathSynergyState;
+        state.path = typeof state.path === 'string' ? state.path : null;
+        state.streak = Math.max(0, Math.floor(Number(state.streak) || 0));
+        state.lastNodeType = typeof state.lastNodeType === 'string' ? state.lastNodeType : null;
+        state.lastGrantedStage = Math.max(0, Math.floor(Number(state.lastGrantedStage) || 0));
+        return state;
+    }
+
+    applyPathSynergyComboBonus(player, path, node, qualifiedHit) {
+        if (!player || !path) return;
+        const state = this.ensurePathSynergyState(player);
+
+        if (state.path !== path) {
+            state.path = path;
+            state.streak = 0;
+            state.lastNodeType = null;
+            state.lastGrantedStage = 0;
+        }
+
+        const nodeType = node && typeof node.type === 'string' ? node.type : null;
+        if (!qualifiedHit) {
+            state.streak = Math.max(0, state.streak - 1);
+            state.lastNodeType = nodeType;
+            return;
+        }
+
+        state.streak += 1;
+        state.lastNodeType = nodeType;
+
+        const stage = state.streak >= 4 ? 2 : state.streak >= 2 ? 1 : 0;
+        if (stage <= 0 || stage <= state.lastGrantedStage) return;
+
+        const grantBuff = (buffId, stacks = 1, logText = '') => {
+            if (typeof player.grantAdventureBuff !== 'function') return false;
+            const ok = player.grantAdventureBuff(buffId, stacks);
+            if (ok && logText && typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+                Utils.showBattleLog(logText);
+            }
+            return ok;
+        };
+        const gainRingExp = (amount, logText = '') => {
+            const exp = Math.max(0, Math.floor(Number(amount) || 0));
+            if (exp <= 0 || !player.fateRing) return;
+            player.fateRing.exp = Math.max(0, Math.floor(Number(player.fateRing.exp) || 0)) + exp;
+            if (typeof player.checkFateRingLevelUp === 'function') player.checkFateRingLevelUp();
+            if (logText && typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+                Utils.showBattleLog(logText);
+            }
+        };
+        const gainGold = (amount, logText = '') => {
+            const gold = Math.max(0, Math.floor(Number(amount) || 0));
+            if (gold <= 0) return;
+            player.gold = Math.max(0, Math.floor(Number(player.gold) || 0)) + gold;
+            if (logText && typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+                Utils.showBattleLog(logText);
+            }
+        };
+        const healPlayer = (amount, logText = '') => {
+            const heal = Math.max(0, Math.floor(Number(amount) || 0));
+            if (heal <= 0) return;
+            player.currentHp = Math.min(
+                Math.max(1, Math.floor(Number(player.maxHp) || 1)),
+                Math.max(0, Math.floor(Number(player.currentHp) || 0)) + heal
+            );
+            if (logText && typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+                Utils.showBattleLog(logText);
+            }
+        };
+
+        const stageTag = stage === 1 ? '共鸣连携' : '共鸣连携·极';
+
+        switch (path) {
+            case 'convergence':
+                if (stage === 1) {
+                    gainRingExp(10, `${stageTag}：命环经验 +10`);
+                    grantBuff('firstTurnDrawBoostBattles', 1, `${stageTag}：首回合抽牌 +1 层`);
+                } else {
+                    gainRingExp(16, `${stageTag}：命环经验 +16`);
+                    grantBuff('firstTurnEnergyBoostBattles', 1, `${stageTag}：首回合灵力强化 +1 层`);
+                }
+                break;
+            case 'resonance':
+                if (stage === 1) {
+                    grantBuff('openingBlockBoostBattles', 1, `${stageTag}：开场护盾强化 +1 层`);
+                } else {
+                    grantBuff('victoryHealBoostBattles', 1, `${stageTag}：战后医护 +1 层`);
+                    healPlayer(Math.max(6, Math.floor((Number(player.maxHp) || 0) * 0.06)), `${stageTag}：即时调息恢复`);
+                }
+                break;
+            case 'agility':
+                if (stage === 1) {
+                    gainGold(18, `${stageTag}：获得 18 灵石`);
+                } else {
+                    gainGold(30, `${stageTag}：获得 30 灵石`);
+                    grantBuff('firstTurnEnergyBoostBattles', 1, `${stageTag}：首回合灵力强化 +1 层`);
+                }
+                break;
+            case 'wisdom':
+                if (stage === 1) {
+                    gainRingExp(12, `${stageTag}：命环经验 +12`);
+                } else {
+                    gainRingExp(20, `${stageTag}：命环经验 +20`);
+                    grantBuff('firstTurnDrawBoostBattles', 1, `${stageTag}：首回合抽牌 +1 层`);
+                }
+                break;
+            case 'insight':
+                if (stage === 1) {
+                    grantBuff('ringExpBoostBattles', 1, `${stageTag}：命环经验倍率 +1 层`);
+                } else {
+                    gainRingExp(18, `${stageTag}：命环经验 +18`);
+                    grantBuff('ringExpBoostBattles', 1, `${stageTag}：命环经验倍率 +1 层`);
+                }
+                break;
+            case 'destruction':
+                if (stage === 1) {
+                    grantBuff('victoryGoldBoostBattles', 1, `${stageTag}：胜利额外灵石 +1 层`);
+                } else {
+                    grantBuff('victoryGoldBoostBattles', 1, `${stageTag}：胜利额外灵石 +1 层`);
+                    gainGold(20, `${stageTag}：获得 20 灵石`);
+                }
+                break;
+            case 'toughness':
+                if (stage === 1) {
+                    grantBuff('victoryHealBoostBattles', 1, `${stageTag}：战后医护 +1 层`);
+                } else {
+                    grantBuff('victoryHealBoostBattles', 1, `${stageTag}：战后医护 +1 层`);
+                    grantBuff('openingBlockBoostBattles', 1, `${stageTag}：开场护盾强化 +1 层`);
+                }
+                break;
+            default:
+                break;
+        }
+
+        state.lastGrantedStage = stage;
+        if (state.streak >= 4) {
+            state.streak = 0;
+            state.lastGrantedStage = 0;
+            state.lastNodeType = null;
+        }
+    }
+
+    applyPathNodeSynergyReward(node) {
+        const player = this.game && this.game.player ? this.game.player : null;
+        if (!player || !player.fateRing || !node || node.type === 'boss') return;
+
+        const path = player.fateRing.path;
+        if (!path || typeof path !== 'string' || path === 'crippled') return;
+
+        const isCombatNode = ['enemy', 'elite', 'ghost_duel', 'trial'].includes(node.type);
+        const grantBuff = (buffId, stacks, logText) => {
+            if (typeof player.grantAdventureBuff !== 'function') return false;
+            const ok = player.grantAdventureBuff(buffId, stacks);
+            if (ok && logText && typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+                Utils.showBattleLog(logText);
+            }
+            return ok;
+        };
+        const gainRingExp = (amount, logText) => {
+            const exp = Math.max(0, Math.floor(Number(amount) || 0));
+            if (exp <= 0) return;
+            if (player.fateRing) {
+                player.fateRing.exp = Math.max(0, Math.floor(Number(player.fateRing.exp) || 0)) + exp;
+                if (typeof player.checkFateRingLevelUp === 'function') player.checkFateRingLevelUp();
+            }
+            if (logText && typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+                Utils.showBattleLog(logText);
+            }
+        };
+        const gainGold = (amount, logText) => {
+            const gold = Math.max(0, Math.floor(Number(amount) || 0));
+            if (gold <= 0) return;
+            player.gold = Math.max(0, Math.floor(Number(player.gold) || 0)) + gold;
+            if (logText && typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+                Utils.showBattleLog(logText);
+            }
+        };
+        const healPlayer = (amount, logText) => {
+            const heal = Math.max(0, Math.floor(Number(amount) || 0));
+            if (heal <= 0) return;
+            player.currentHp = Math.min(
+                Math.max(1, Math.floor(Number(player.maxHp) || 1)),
+                Math.max(0, Math.floor(Number(player.currentHp) || 0)) + heal
+            );
+            if (logText && typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+                Utils.showBattleLog(logText);
+            }
+        };
+
+        let qualifiedHit = false;
+        switch (path) {
+            case 'convergence':
+                if (node.type === 'event') {
+                    qualifiedHit = true;
+                    gainRingExp(12, '汇流节点共鸣：命环经验 +12');
+                    grantBuff('firstTurnEnergyBoostBattles', 1, '汇流增幅：首回合灵力强化 +1 层');
+                } else if (node.type === 'trial' || node.type === 'forge') {
+                    qualifiedHit = true;
+                    gainRingExp(8, '汇流校准：命环经验 +8');
+                }
+                break;
+            case 'resonance':
+                if (node.type === 'rest') {
+                    qualifiedHit = true;
+                    const heal = Math.max(6, Math.floor((Number(player.maxHp) || 0) * 0.08));
+                    healPlayer(heal, `共鸣回响：恢复 ${heal} 生命`);
+                    grantBuff('openingBlockBoostBattles', 1, '共鸣护场：开场护盾强化 +1 层');
+                } else if (node.type === 'trial') {
+                    qualifiedHit = true;
+                    grantBuff('firstTurnDrawBoostBattles', 1, '共鸣洞察：首回合抽牌 +1 层');
+                }
+                break;
+            case 'agility':
+                if (isCombatNode) {
+                    qualifiedHit = true;
+                    gainGold(14, '迅捷猎获：获得 14 灵石');
+                }
+                break;
+            case 'wisdom':
+                if (node.type === 'event' || node.type === 'shop') {
+                    qualifiedHit = true;
+                    gainRingExp(9, '悟境推演：命环经验 +9');
+                }
+                break;
+            case 'insight':
+                if (node.type === 'event' || node.type === 'trial') {
+                    qualifiedHit = true;
+                    gainRingExp(10, '洞察归纳：命环经验 +10');
+                    grantBuff('ringExpBoostBattles', 1, '洞察预热：命环经验倍率 +1 层');
+                }
+                break;
+            case 'destruction':
+                if (isCombatNode) {
+                    qualifiedHit = true;
+                    grantBuff('victoryGoldBoostBattles', 1, '毁灭掠夺：胜利额外灵石 +1 层');
+                    if (node.type === 'elite' || node.type === 'trial') {
+                        gainGold(12, '毁灭追猎：额外获得 12 灵石');
+                    }
+                }
+                break;
+            case 'toughness':
+                if (node.type === 'rest' || node.type === 'forge') {
+                    qualifiedHit = true;
+                    grantBuff('victoryHealBoostBattles', 1, '坚韧养势：战后医护 +1 层');
+                    if (node.type === 'rest') {
+                        const heal = Math.max(5, Math.floor((Number(player.maxHp) || 0) * 0.06));
+                        healPlayer(heal, `坚韧调息：恢复 ${heal} 生命`);
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+
+        this.applyPathSynergyComboBonus(player, path, node, qualifiedHit);
     }
 
     normalizeNodeWeights(weights) {
@@ -273,10 +966,13 @@ class GameMap {
         }
 
         const currentRealm = this.game.player.realm;
+        const mapKey = (this.game && typeof this.game.getMapCacheKey === 'function')
+            ? this.game.getMapCacheKey(currentRealm)
+            : String(currentRealm);
         const existingMap = container.querySelector('.map-screen-v3');
 
         // Smart Render Check: If map exists and is for the same realm, update in-place
-        if (existingMap && existingMap.dataset.realm == currentRealm) {
+        if (existingMap && existingMap.dataset.mapKey === mapKey) {
             console.log('[Debug] Updating existing map in-place');
             this.updateMapState();
             return;
@@ -285,7 +981,7 @@ class GameMap {
         console.log('[Debug] Full map rebuild for realm:', currentRealm);
 
         container.innerHTML = `
-            <div class="map-screen-v3" data-realm="${currentRealm}">
+            <div class="map-screen-v3" data-realm="${currentRealm}" data-map-key="${mapKey}">
                 <div class="map-bg-layer map-bg-stars"></div>
                 <div class="map-bg-layer map-bg-mist"></div>
                 
@@ -306,6 +1002,9 @@ class GameMap {
                                 <span id="map-floor">${this.getRealmName(this.game.player.realm)}</span>
                             </div>
                         </div>
+                        <div id="map-adventure-buffs" class="map-adventure-buffs" style="display:none;"></div>
+                        <div id="map-route-hints" class="map-route-hints" style="display:none;"></div>
+                        <div id="map-endless-panel" class="map-endless-panel" style="display:none;"></div>
                         <div id="map-legacy-mission" class="map-legacy-mission" style="display:none;">
                             <div class="mission-title">传承试炼</div>
                             <div class="mission-desc">暂无进行中的试炼</div>
@@ -370,6 +1069,8 @@ class GameMap {
     updateMapState() {
         this.updateStatusBar();
         this.updateLegacyMissionTracker();
+        this.updateEndlessPanel();
+        this.updateRouteHintPanel();
 
         // Update Node Classes
         this.nodes.forEach(row => {
@@ -604,11 +1305,17 @@ class GameMap {
     // 更新状态栏
     updateStatusBar() {
         const player = this.game.player;
-        document.getElementById('map-hp').textContent = `${player.currentHp}/${player.maxHp}`;
-        document.getElementById('map-gold').textContent = player.gold;
-        document.getElementById('map-floor').textContent = this.getRealmName(player.realm);
+        const hpEl = document.getElementById('map-hp');
+        const goldEl = document.getElementById('map-gold');
+        const floorEl = document.getElementById('map-floor');
+        const displayRealmName = (this.game && typeof this.game.getDisplayRealmName === 'function')
+            ? this.game.getDisplayRealmName(player.realm)
+            : this.getRealmName(player.realm);
+        if (hpEl) hpEl.textContent = `${player.currentHp}/${player.maxHp}`;
+        if (goldEl) goldEl.textContent = player.gold;
+        if (floorEl) floorEl.textContent = displayRealmName;
         const realmTitle = document.getElementById('realm-title');
-        if (realmTitle) realmTitle.textContent = this.getRealmName(player.realm);
+        if (realmTitle) realmTitle.textContent = displayRealmName;
 
         // 更新环境法则显示
         const env = this.getRealmEnvironment(player.realm);
@@ -621,6 +1328,214 @@ class GameMap {
         if (this.game.renderTreasures) {
             this.game.renderTreasures();
         }
+
+        this.updateAdventureBuffPanel();
+        this.updateRouteHintPanel();
+        this.updateEndlessPanel();
+    }
+
+    updateAdventureBuffPanel() {
+        const container = document.getElementById('map-adventure-buffs');
+        if (!container) return;
+
+        const buffs = (this.game.player && this.game.player.adventureBuffs && typeof this.game.player.adventureBuffs === 'object')
+            ? this.game.player.adventureBuffs
+            : {};
+        const buffDefs = [
+            { id: 'firstTurnDrawBoostBattles', icon: '📘', name: '首回合抽牌' },
+            { id: 'openingBlockBoostBattles', icon: '🧿', name: '开场护盾' },
+            { id: 'victoryGoldBoostBattles', icon: '📜', name: '胜利悬赏' },
+            { id: 'firstTurnEnergyBoostBattles', icon: '⚡', name: '首回合灵力' },
+            { id: 'ringExpBoostBattles', icon: '🕯️', name: '命环经验' },
+            { id: 'victoryHealBoostBattles', icon: '🩹', name: '战后医护' }
+        ];
+
+        const active = buffDefs
+            .map((def) => {
+                const value = Math.max(0, Math.floor(Number(buffs[def.id]) || 0));
+                return { ...def, value };
+            })
+            .filter((item) => item.value > 0);
+
+        if (active.length === 0) {
+            container.style.display = 'none';
+            container.innerHTML = '';
+            return;
+        }
+
+        container.style.display = 'flex';
+        container.innerHTML = active
+            .map((item) => `
+                <div class="map-buff-chip" title="${item.name}">
+                    <span class="map-buff-icon">${item.icon}</span>
+                    <span class="map-buff-name">${item.name}</span>
+                    <span class="map-buff-count">x${item.value}</span>
+                </div>
+            `)
+            .join('');
+    }
+
+    getRouteHintProfile() {
+        const rows = Array.isArray(this.nodes) ? this.nodes : [];
+        if (rows.length === 0) return { chips: [] };
+
+        let frontierRow = -1;
+        rows.forEach((rowNodes, rowIndex) => {
+            if (!Array.isArray(rowNodes)) return;
+            const hasAccessible = rowNodes.some((node) => !!(node && node.accessible && !node.completed));
+            if (hasAccessible) frontierRow = Math.max(frontierRow, rowIndex);
+        });
+        if (frontierRow < 0) {
+            rows.forEach((rowNodes, rowIndex) => {
+                if (!Array.isArray(rowNodes)) return;
+                const hasCompleted = rowNodes.some((node) => !!(node && node.completed));
+                if (hasCompleted) frontierRow = Math.max(frontierRow, rowIndex + 1);
+            });
+        }
+        if (frontierRow < 0) frontierRow = Math.min(rows.length - 1, 1);
+
+        const start = Math.max(0, frontierRow - 4);
+        const recentRows = rows.slice(start, frontierRow).filter((rowNodes) => Array.isArray(rowNodes) && rowNodes.length > 0);
+        if (recentRows.length < 3) return { chips: [] };
+
+        const chips = [];
+        const hasTypeInRows = (type) => recentRows.some((rowNodes) => this.rowContainsType(rowNodes, type));
+        if (!hasTypeInRows('event')) {
+            chips.push({
+                id: 'event-pity',
+                icon: '❓',
+                label: '机缘保底已激活'
+            });
+        }
+        if (!hasTypeInRows('shop')) {
+            chips.push({
+                id: 'shop-pity',
+                icon: '🏪',
+                label: '商路保底已激活'
+            });
+        }
+        const progress = frontierRow / Math.max(1, rows.length - 1);
+        if (!hasTypeInRows('rest') && progress >= 0.35) {
+            chips.push({
+                id: 'rest-pity',
+                icon: '🏕️',
+                label: '营地舒压权重上调'
+            });
+        }
+
+        const counts = this.collectRecentTypeCounts(frontierRow, 4, { historyRows: recentRows });
+        const combatCount = Math.max(0, Number(counts.counts.enemy || 0) + Number(counts.counts.elite || 0));
+        const combatRatio = counts.total > 0 ? combatCount / counts.total : 0;
+        if (combatRatio >= 0.62) {
+            chips.push({
+                id: 'combat-dense',
+                icon: '⚖️',
+                label: '战斗稠密，功能节点补偿中'
+            });
+        }
+
+        return { chips };
+    }
+
+    updateRouteHintPanel() {
+        const panel = document.getElementById('map-route-hints');
+        if (!panel) return;
+
+        const profile = this.getRouteHintProfile();
+        const chips = Array.isArray(profile?.chips) ? profile.chips : [];
+        if (chips.length === 0) {
+            panel.style.display = 'none';
+            panel.innerHTML = '';
+            return;
+        }
+
+        panel.style.display = 'flex';
+        panel.innerHTML = chips.map((chip) => `
+            <div class="map-route-chip route-${chip.id}" title="${chip.label}">
+                <span class="route-icon">${chip.icon}</span>
+                <span class="route-label">${chip.label}</span>
+            </div>
+        `).join('');
+    }
+
+    updateEndlessPanel() {
+        const panel = document.getElementById('map-endless-panel');
+        if (!panel) return;
+        if (!this.game || typeof this.game.isEndlessActive !== 'function' || !this.game.isEndlessActive()) {
+            panel.style.display = 'none';
+            panel.innerHTML = '';
+            panel.classList.remove('pressure-up', 'pressure-down');
+            this.lastEndlessPressure = null;
+            if (this.endlessPressurePulseTimer) {
+                clearTimeout(this.endlessPressurePulseTimer);
+                this.endlessPressurePulseTimer = null;
+            }
+            return;
+        }
+
+        const state = typeof this.game.ensureEndlessState === 'function'
+            ? this.game.ensureEndlessState()
+            : null;
+        const mods = typeof this.game.getEndlessModifiers === 'function'
+            ? this.game.getEndlessModifiers()
+            : {
+                enemyHpMul: 1,
+                enemyAtkMul: 1,
+                rewardGoldMul: 1,
+                rewardExpMul: 1
+            };
+        const pressureProfile = (typeof this.game.getEndlessPressureBehaviorProfile === 'function')
+            ? this.game.getEndlessPressureBehaviorProfile()
+            : null;
+
+        const mutators = (state && Array.isArray(state.activeMutators) && typeof this.game.getEndlessMutatorPool === 'function')
+            ? state.activeMutators
+                .map((id) => this.game.getEndlessMutatorPool().find((item) => item.id === id))
+                .filter(Boolean)
+            : [];
+
+        panel.style.display = 'block';
+        const score = Math.max(0, Math.floor(Number(state?.totalEndlessScore) || 0));
+        const pressure = Math.max(0, Math.min(9, Math.floor(Number(state?.pressure) || 0)));
+        const pressureTier = pressure >= 8 ? '灾厄' : pressure >= 5 ? '高压' : pressure >= 2 ? '紧张' : '平稳';
+        const rarePity = Math.max(0, Math.floor(Number(state?.boonRarePity) || 0));
+        const rareEvery = Math.max(2, Math.floor(Number(state?.boonRareGuaranteedEvery) || 3));
+        const behaviorTier = (pressureProfile && pressureProfile.tierId) ? pressureProfile.tierId : 'calm';
+        const behaviorHint = (pressureProfile && pressureProfile.summary)
+            ? pressureProfile.summary
+            : '敌方行动维持常态';
+        panel.innerHTML = `
+            <div class="endless-title">无尽轮回 · 第${(state?.currentCycle || 0) + 1}轮</div>
+            <div class="endless-stats">
+                <span>生命 x${(mods.enemyHpMul || 1).toFixed(2)}</span>
+                <span>攻击 x${(mods.enemyAtkMul || 1).toFixed(2)}</span>
+                <span>灵石 x${(mods.rewardGoldMul || 1).toFixed(2)}</span>
+                <span>经验 x${(mods.rewardExpMul || 1).toFixed(2)}</span>
+                <span>积分 ${score}</span>
+                <span>压力 ${pressure}/9</span>
+                <span>压阶 ${pressureTier}</span>
+                <span>稀有保底 ${Math.max(0, rareEvery - 1 - rarePity)}/ ${Math.max(1, rareEvery - 1)}</span>
+                <span class="endless-pressure-chip tier-${behaviorTier}">敌方节奏：${behaviorHint}</span>
+            </div>
+            <div class="endless-mutators">
+                ${mutators.length > 0
+        ? mutators.map((item) => `<span class="endless-mutator-chip" title="${item.desc}">${item.name}</span>`).join('')
+        : '<span class="endless-mutator-chip">当前无词缀</span>'
+}
+            </div>
+        `;
+        panel.dataset.pressure = String(pressure);
+        panel.classList.remove('pressure-up', 'pressure-down');
+        if (this.lastEndlessPressure !== null && this.lastEndlessPressure !== pressure) {
+            panel.classList.add(pressure > this.lastEndlessPressure ? 'pressure-up' : 'pressure-down');
+            if (this.endlessPressurePulseTimer) {
+                clearTimeout(this.endlessPressurePulseTimer);
+            }
+            this.endlessPressurePulseTimer = setTimeout(() => {
+                panel.classList.remove('pressure-up', 'pressure-down');
+            }, 900);
+        }
+        this.lastEndlessPressure = pressure;
     }
 
     updateLegacyMissionTracker() {
@@ -1141,6 +2056,8 @@ class GameMap {
 
         if (!nodeCompletedProcessing) return; // 如果没有找到对应节点或已处理，直接返回
 
+        this.applyPathNodeSynergyReward(node);
+
         // 解锁下一行节点
         const nextRow = node.row + 1;
         if (nextRow < this.nodes.length) {
@@ -1151,7 +2068,10 @@ class GameMap {
 
         // V4.2 Persistence: Save progress immediately
         // We save to cache. The game loop or autosave will persist to localStorage.
-        this.saveStateToCache(this.game.player.realm);
+        const cacheKey = (this.game && typeof this.game.getMapCacheKey === 'function')
+            ? this.game.getMapCacheKey(this.game.player.realm)
+            : this.game.player.realm;
+        this.saveStateToCache(cacheKey);
 
         this.render();
     }

@@ -166,6 +166,8 @@ function assert(cond, msg) {
   const presetIds = Game.prototype.getLegacyPresetCatalog.call(presetHost).map((p) => p.id);
   assert(presetIds.includes('entropy'), 'preset catalog should include entropy');
   assert(presetIds.includes('bulwark'), 'preset catalog should include bulwark');
+  assert(presetIds.includes('stormcraft'), 'preset catalog should include stormcraft');
+  assert(presetIds.includes('vitalweave'), 'preset catalog should include vitalweave');
 
   // 4.6) Run doctrine mapping should match preset identity
   const doctrineHost = {};
@@ -173,12 +175,18 @@ function assert(cond, msg) {
   const doctrineTempo = Game.prototype.getLegacyRunDoctrineForPreset.call(doctrineHost, 'tempo');
   const doctrineEntropy = Game.prototype.getLegacyRunDoctrineForPreset.call(doctrineHost, 'entropy');
   const doctrineBulwark = Game.prototype.getLegacyRunDoctrineForPreset.call(doctrineHost, 'bulwark');
+  const doctrineStormcraft = Game.prototype.getLegacyRunDoctrineForPreset.call(doctrineHost, 'stormcraft');
+  const doctrineVitalweave = Game.prototype.getLegacyRunDoctrineForPreset.call(doctrineHost, 'vitalweave');
   assert(doctrineSmith.firstForgeExtraUpgradeOnce === 1, 'smith doctrine should grant first forge boost');
   assert(doctrineTempo.firstAttackBonusPerBattle === 3, 'tempo doctrine should grant first attack bonus');
   assert(doctrineEntropy.entropyLegacyProcEnabled === true, 'entropy doctrine should enable legacy discard proc');
   assert(doctrineEntropy.entropyLegacyDiscardDamage >= 2, 'entropy doctrine should grant discard damage');
   assert(doctrineBulwark.bulwarkLegacyProcEnabled === true, 'bulwark doctrine should enable legacy block proc');
   assert(doctrineBulwark.bulwarkLegacyCounterDamage >= 2, 'bulwark doctrine should grant block counter damage');
+  assert(doctrineStormcraft.stormcraftLegacyProcEnabled === true, 'stormcraft doctrine should enable vulnerable proc');
+  assert(doctrineStormcraft.stormcraftLegacyBonusDamage >= 3, 'stormcraft doctrine should grant vulnerable burst damage');
+  assert(doctrineVitalweave.vitalweaveLegacyProcEnabled === true, 'vitalweave doctrine should enable heal proc');
+  assert(doctrineVitalweave.vitalweaveLegacyBlockRatio >= 0.6, 'vitalweave doctrine should grant heal-to-block ratio');
 
   const doctrineApplyHost = {
     legacyProgress: { lastPreset: 'smith', secondaryPreset: 'tempo' },
@@ -196,9 +204,13 @@ function assert(cond, msg) {
   const missionSmith = Game.prototype.getLegacyMissionForPreset.call(missionHost, 'smith');
   const missionEntropy = Game.prototype.getLegacyMissionForPreset.call(missionHost, 'entropy');
   const missionBulwark = Game.prototype.getLegacyMissionForPreset.call(missionHost, 'bulwark');
+  const missionStormcraft = Game.prototype.getLegacyMissionForPreset.call(missionHost, 'stormcraft');
+  const missionVitalweave = Game.prototype.getLegacyMissionForPreset.call(missionHost, 'vitalweave');
   assert(missionSmith && missionSmith.eventType === 'forgeComplete', 'smith mission should track forge completion');
   assert(missionEntropy && missionEntropy.eventType === 'entropyDiscardProc', 'entropy mission should track discard proc');
   assert(missionBulwark && missionBulwark.eventType === 'bulwarkBlockProc', 'bulwark mission should track block proc');
+  assert(missionStormcraft && missionStormcraft.eventType === 'stormcraftVulnerableProc', 'stormcraft mission should track vulnerable proc');
+  assert(missionVitalweave && missionVitalweave.eventType === 'vitalweaveHealProc', 'vitalweave mission should track heal proc');
 
   const missionApplyHost = {
     getLegacyMissionForPreset(presetId) {
@@ -212,6 +224,10 @@ function assert(cond, msg) {
   assert(missionPlayer.legacyRunMission.eventType === 'entropyDiscardProc', 'applyLegacyRunMission should write entropy mission');
   Game.prototype.applyLegacyRunMission.call(missionApplyHost, missionPlayer, 'bulwark');
   assert(missionPlayer.legacyRunMission.eventType === 'bulwarkBlockProc', 'applyLegacyRunMission should write bulwark mission');
+  Game.prototype.applyLegacyRunMission.call(missionApplyHost, missionPlayer, 'stormcraft');
+  assert(missionPlayer.legacyRunMission.eventType === 'stormcraftVulnerableProc', 'applyLegacyRunMission should write stormcraft mission');
+  Game.prototype.applyLegacyRunMission.call(missionApplyHost, missionPlayer, 'vitalweave');
+  assert(missionPlayer.legacyRunMission.eventType === 'vitalweaveHealProc', 'applyLegacyRunMission should write vitalweave mission');
 
   const progressHost = {
     player: {

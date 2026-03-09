@@ -37,6 +37,21 @@ const ENEMIES = {
         stealLaw: null,
         gold: { min: 8, max: 15 }
     },
+    graveRaven: {
+        id: 'graveRaven',
+        name: '墓羽鸦',
+        icon: '🐦‍⬛',
+        realm: 1,
+        hp: 28,
+        patterns: [
+            { type: 'debuff', buffType: 'weak', value: 1, intent: '🪶噪鸣' },
+            { type: 'attack', value: 7, intent: '⚔️啄击' },
+            { type: 'multiAttack', value: 4, count: 2, intent: '🪶连啄' }
+        ],
+        stealChance: 0.08,
+        stealLaw: null,
+        gold: { min: 9, max: 16 }
+    },
 
     banditLeader: {
         id: 'banditLeader',
@@ -241,6 +256,29 @@ const ENEMIES = {
         stealLaw: null,
         gold: { min: 40, max: 60 }
     },
+    emberPhysician: {
+        id: 'emberPhysician',
+        name: '焰脉医修',
+        icon: '🧪',
+        realm: 4,
+        hp: 58,
+        patterns: [
+            {
+                type: 'multiAction',
+                intent: '🔥焰脉诊断',
+                actions: [
+                    { type: 'debuff', buffType: 'burn', value: 2, intent: '🔥灼印' },
+                    { type: 'attack', value: 9, intent: '⚔️灼切' }
+                ]
+            },
+            { type: 'heal', value: 12, intent: '💚回元' },
+            { type: 'attack', value: 16, intent: '⚔️' },
+            { type: 'defend', value: 10, intent: '🛡️' }
+        ],
+        stealChance: 0.22,
+        stealLaw: 'flameTruth',
+        gold: { min: 38, max: 58 }
+    },
 
     danZun: {
         id: 'danZun',
@@ -299,6 +337,22 @@ const ENEMIES = {
         stealLaw: 'windSpeed',
         gold: { min: 60, max: 90 }
     },
+    soulLanternMonk: {
+        id: 'soulLanternMonk',
+        name: '引魂灯僧',
+        icon: '🏮',
+        realm: 5,
+        hp: 76,
+        patterns: [
+            { type: 'addStatus', cardId: 'heartDemon', count: 1, intent: '🕳️引魂' },
+            { type: 'debuff', buffType: 'vulnerable', value: 2, intent: '✨摄念' },
+            { type: 'attack', value: 19, intent: '⚔️灯焰击' },
+            { type: 'heal', value: 8, intent: '💚回灯' }
+        ],
+        stealChance: 0.32,
+        stealLaw: 'timeStop',
+        gold: { min: 58, max: 92 }
+    },
 
     ancientSpirit: {
         id: 'ancientSpirit',
@@ -354,6 +408,22 @@ const ENEMIES = {
         stealChance: 0.4,
         stealLaw: 'thunderLaw',
         gold: { min: 65, max: 100 }
+    },
+    runeSentinel: {
+        id: 'runeSentinel',
+        name: '符阵守卫',
+        icon: '🧿',
+        realm: 6,
+        hp: 96,
+        patterns: [
+            { type: 'defend', value: 20, intent: '🛡️' },
+            { type: 'debuff', buffType: 'weak', value: 2, intent: '🌀' },
+            { type: 'attack', value: 24, intent: '⚔️' },
+            { type: 'multiAttack', value: 10, count: 2, intent: '✴️连刺' }
+        ],
+        stealChance: 0.34,
+        stealLaw: 'spaceRift',
+        gold: { min: 72, max: 108 }
     },
 
     divineLord: {
@@ -412,6 +482,22 @@ const ENEMIES = {
         stealLaw: 'spaceRift',
         gold: { min: 100, max: 160 }
     },
+    starChainWarden: {
+        id: 'starChainWarden',
+        name: '锁星卫',
+        icon: '⛓️',
+        realm: 7,
+        hp: 142,
+        patterns: [
+            { type: 'defend', value: 22, intent: '🛡️锁界' },
+            { type: 'addStatus', cardId: 'heartDemon', count: 1, intent: '🕳️缚念' },
+            { type: 'multiAttack', value: 11, count: 3, intent: '⚔️星链连击' },
+            { type: 'attack', value: 26, intent: '💥星坠' }
+        ],
+        stealChance: 0.37,
+        stealLaw: 'spaceRift',
+        gold: { min: 102, max: 162 }
+    },
 
     fusionSovereign: {
         id: 'fusionSovereign',
@@ -468,6 +554,22 @@ const ENEMIES = {
         stealChance: 0.4,
         stealLaw: 'timeRewindLaw',
         gold: { min: 150, max: 220 }
+    },
+    frostArrowHerald: {
+        id: 'frostArrowHerald',
+        name: '霜翎信使',
+        icon: '🏹',
+        realm: 8,
+        hp: 188,
+        patterns: [
+            { type: 'attack', value: 26, intent: '❄️霜箭' },
+            { type: 'multiAttack', value: 9, count: 3, intent: '🏹连射' },
+            { type: 'debuff', buffType: 'vulnerable', value: 3, intent: '🎯破绽' },
+            { type: 'defend', value: 22, intent: '🛡️' }
+        ],
+        stealChance: 0.46,
+        stealLaw: 'windSpeed',
+        gold: { min: 142, max: 215 }
     },
 
     mahayanaSupreme: {
@@ -527,6 +629,28 @@ const ENEMIES = {
         stealLaw: 'karmaLaw',
         gold: { min: 200, max: 320 }
     },
+    verdictPriest: {
+        id: 'verdictPriest',
+        name: '裁令祭司',
+        icon: '📘',
+        realm: 9,
+        hp: 266,
+        patterns: [
+            { type: 'debuff', buffType: 'weak', value: 2, intent: '📜裁令' },
+            {
+                type: 'multiAction',
+                intent: '⚖️裁决链',
+                actions: [
+                    { type: 'attack', value: 24, intent: '⚔️判斩' },
+                    { type: 'defend', value: 18, intent: '🛡️护典' }
+                ]
+            },
+            { type: 'multiAttack', value: 11, count: 3, intent: '🔥律火连击' }
+        ],
+        stealChance: 0.47,
+        stealLaw: 'karmaLaw',
+        gold: { min: 192, max: 314 }
+    },
 
     ascensionSovereign: {
         id: 'ascensionSovereign',
@@ -581,6 +705,29 @@ const ENEMIES = {
         stealChance: 0.3,
         stealLaw: 'flameTruth',
         gold: { min: 200, max: 280 }
+    },
+    basaltArcanist: {
+        id: 'basaltArcanist',
+        name: '玄武岩术士',
+        icon: '🪨',
+        realm: 10,
+        hp: 292,
+        patterns: [
+            { type: 'defend', value: 36, intent: '🛡️岩护' },
+            { type: 'buff', buffType: 'thorns', value: 2, intent: '🌵岩刺' },
+            {
+                type: 'multiAction',
+                intent: '🌋岩火共振',
+                actions: [
+                    { type: 'debuff', buffType: 'burn', value: 2, intent: '🔥焚蚀' },
+                    { type: 'attack', value: 28, intent: '⚔️砾爆' }
+                ]
+            },
+            { type: 'attack', value: 34, intent: '⚔️' }
+        ],
+        stealChance: 0.31,
+        stealLaw: 'earthShield',
+        gold: { min: 210, max: 292 }
     },
 
     // ==================== 第十重·地仙界 ====================
@@ -655,6 +802,22 @@ const ENEMIES = {
         stealLaw: 'thunderLaw',
         gold: { min: 250, max: 350 }
     },
+    stormScribe: {
+        id: 'stormScribe',
+        name: '风暴抄录者',
+        icon: '📚',
+        realm: 11,
+        hp: 312,
+        patterns: [
+            { type: 'summon', value: 'windSpirit', count: 1, intent: '👻引灵' },
+            { type: 'debuff', buffType: 'vulnerable', value: 2, intent: '✨裂风注' },
+            { type: 'attack', value: 39, intent: '⚔️风压斩' },
+            { type: 'defend', value: 28, intent: '🛡️风幕' }
+        ],
+        stealChance: 0.31,
+        stealLaw: 'windSpeed',
+        gold: { min: 248, max: 346 }
+    },
 
     // ==================== 第十一重·天仙界 ====================
     stormSummoner: {
@@ -710,6 +873,22 @@ const ENEMIES = {
         stealChance: 0.3,
         stealLaw: 'swordIntent',
         gold: { min: 300, max: 400 }
+    },
+    abyssCantor: {
+        id: 'abyssCantor',
+        name: '渊咏祭司',
+        icon: '🕯️',
+        realm: 12,
+        hp: 372,
+        patterns: [
+            { type: 'debuff', buffType: 'weak', value: 3, intent: '📿咏诵' },
+            { type: 'heal', value: 24, intent: '💚修复' },
+            { type: 'attack', value: 42, intent: '⚔️' },
+            { type: 'addStatus', cardId: 'heartDemon', count: 1, intent: '🕳️侵染' }
+        ],
+        stealChance: 0.33,
+        stealLaw: 'voidEmbrace',
+        gold: { min: 308, max: 418 }
     },
 
     // ==================== 第十二重·金仙界 ====================
@@ -772,6 +951,22 @@ const ENEMIES = {
         stealLaw: 'chaosLaw',
         gold: { min: 350, max: 450 }
     },
+    oracleSilencer: {
+        id: 'oracleSilencer',
+        name: '缄言卜者',
+        icon: '📴',
+        realm: 13,
+        hp: 408,
+        patterns: [
+            { type: 'debuff', buffType: 'random', value: 2, intent: '🎲噪讯' },
+            { type: 'addStatus', cardId: 'heartDemon', count: 1, intent: '🕳️噤声印' },
+            { type: 'attack', value: 44, intent: '⚔️默裁' },
+            { type: 'defend', value: 28, intent: '🛡️静域' }
+        ],
+        stealChance: 0.31,
+        stealLaw: 'chaosLaw',
+        gold: { min: 352, max: 458 }
+    },
 
     // ==================== 第十三重·大罗天 ====================
     mirrorDemon: {
@@ -825,6 +1020,22 @@ const ENEMIES = {
         stealChance: 0.3,
         stealLaw: 'timeStop',
         gold: { min: 400, max: 550 }
+    },
+    warDrummer: {
+        id: 'warDrummer',
+        name: '裂阵战鼓手',
+        icon: '🥁',
+        realm: 14,
+        hp: 462,
+        patterns: [
+            { type: 'buff', buffType: 'strength', value: 3, intent: '🥁鼓舞' },
+            { type: 'multiAttack', value: 12, count: 3, intent: '⚔️疾击' },
+            { type: 'debuff', buffType: 'vulnerable', value: 2, intent: '🎯破防' },
+            { type: 'attack', value: 52, intent: '💥重锤' }
+        ],
+        stealChance: 0.31,
+        stealLaw: 'swordIntent',
+        gold: { min: 410, max: 560 }
     },
 
     // ==================== 第十四重·混元天 ====================
@@ -881,6 +1092,29 @@ const ENEMIES = {
         stealLaw: 'lifeDrain',
         gold: { min: 450, max: 600 }
     },
+    voidTaxCollector: {
+        id: 'voidTaxCollector',
+        name: '虚空征税使',
+        icon: '🧾',
+        realm: 15,
+        hp: 620,
+        patterns: [
+            {
+                type: 'multiAction',
+                intent: '🌀征收判令',
+                actions: [
+                    { type: 'debuff', buffType: 'weak', value: 2, intent: '🌀税压' },
+                    { type: 'attack', value: 36, intent: '⚔️催缴' }
+                ]
+            },
+            { type: 'attack', value: 58, effect: 'devour', intent: '🍽️吞缴' },
+            { type: 'heal', value: 24, intent: '💚回收' },
+            { type: 'multiAttack', value: 15, count: 3, intent: '⚔️清算连斩' }
+        ],
+        stealChance: 0.34,
+        stealLaw: 'voidEmbrace',
+        gold: { min: 462, max: 622 }
+    },
 
     // ==================== 第十五重·无上天 ====================
     voidDevourer: {
@@ -934,6 +1168,22 @@ const ENEMIES = {
         stealChance: 0.3,
         stealLaw: 'flameTruth',
         gold: { min: 500, max: 700 }
+    },
+    prismLocust: {
+        id: 'prismLocust',
+        name: '棱镜蚀蝗',
+        icon: '🦗',
+        realm: 16,
+        hp: 632,
+        patterns: [
+            { type: 'multiAttack', value: 14, count: 4, intent: '⚔️棱芒群袭' },
+            { type: 'debuff', buffType: 'random', value: 2, intent: '🎲棱蚀' },
+            { type: 'attack', value: 58, intent: '💥折光重击' },
+            { type: 'defend', value: 34, intent: '🛡️折反甲壳' }
+        ],
+        stealChance: 0.32,
+        stealLaw: 'chaosLaw',
+        gold: { min: 512, max: 712 }
     },
 
     // ==================== 第十六重·五行天 ====================
@@ -990,6 +1240,22 @@ const ENEMIES = {
         stealLaw: 'reversalLaw',
         gold: { min: 600, max: 800 }
     },
+    ashenArchivist: {
+        id: 'ashenArchivist',
+        name: '灰烬档案官',
+        icon: '📚',
+        realm: 17,
+        hp: 770,
+        patterns: [
+            { type: 'debuff', buffType: 'vulnerable', value: 3, intent: '📎裁定注记' },
+            { type: 'heal', value: 35, intent: '💚修典' },
+            { type: 'multiAttack', value: 16, count: 3, intent: '⚔️卷页切割' },
+            { type: 'attack', value: 64, intent: '💥裁断' }
+        ],
+        stealChance: 0.33,
+        stealLaw: 'karmaLaw',
+        gold: { min: 620, max: 820 }
+    },
 
     // ==================== 第十七重·因果天 ====================
     karmaArbiter: {
@@ -1043,6 +1309,22 @@ const ENEMIES = {
         stealChance: 0.3,
         stealLaw: 'chaosLaw',
         gold: { min: 700, max: 900 }
+    },
+    doomsdayHerald: {
+        id: 'doomsdayHerald',
+        name: '终焉司兆',
+        icon: '🕯️',
+        realm: 18,
+        hp: 920,
+        patterns: [
+            { type: 'addStatus', cardId: 'heartDemon', count: 1, intent: '🕳️终兆侵染' },
+            { type: 'debuff', buffType: 'vulnerable', value: 4, intent: '✨衰灭宣告' },
+            { type: 'multiAttack', value: 18, count: 3, intent: '⚔️终祷连斩' },
+            { type: 'attack', value: 96, intent: '💀末兆裁决' }
+        ],
+        stealChance: 0.34,
+        stealLaw: 'voidEmbrace',
+        gold: { min: 710, max: 910 }
     },
 
     // ==================== 第十八重·终焉天 ====================
