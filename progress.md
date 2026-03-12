@@ -2906,3 +2906,18 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - Playwright / 冒烟：
       - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-release-pass-5` ✅
       - 已目检截图 `output/web-game-client-release-pass-5/shot-1.png`：游客确认弹窗正常弹出，画面与 `state-1.json` 一致。
+
+- 2026-03-12: 第五十五轮 GitHub Pages 部署修复
+  - 处理结论
+    - 确认仓库此前没有自定义 `.github/workflows`，GitHub Pages 走的是默认 Jekyll 系统构建链；该链路在远端 runner 下载 `actions/jekyll-build-pages` 时返回 `401 Unauthorized`，属于 Pages/Actions 构建链问题，不是游戏前端代码运行错误。
+    - 新增自定义 Pages 工作流 `.github/workflows/pages.yml`，改为静态站点发布：`checkout -> configure-pages -> prepare-pages -> upload-pages-artifact -> deploy-pages`，彻底绕开 `actions/jekyll-build-pages`。
+    - 新增 `scripts/prepare-pages.sh`，仅打包运行必需文件（`index.html`、`game-intro.html`、`assets`、`audio`、`css`、`js`），避免把测试、输出截图与本地杂项带上线上。
+    - 新增根目录 `.nojekyll`，并在 Pages 产物中自动生成 `.nojekyll` 与 `404.html`，提高静态托管兼容性。
+    - `package.json` 增加 `prepare:pages` 脚本，便于本地复现同一份发布产物。
+  - 本轮验证（全通过）
+    - Pages 产物：
+      - `bash scripts/prepare-pages.sh .site` ✅
+      - 已确认 `.site` 内包含运行所需的 `assets/audio/css/js/index.html/game-intro.html`。
+    - Browser：
+      - 使用 `.site` 本地预览后执行 `node tests/browser_audit.mjs http://127.0.0.1:4180 output/web-audit-pages-preview-pass-1` ✅
+      - 已确认 Pages 产物预览下，主菜单、游客新游戏、PVP、地图与战斗链路全部通过。

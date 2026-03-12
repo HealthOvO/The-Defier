@@ -7,7 +7,8 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare:pages": "bash scripts/prepare-pages.sh .site"
   },
   "repository": {
     "type": "git",
