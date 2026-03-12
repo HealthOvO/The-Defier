@@ -89,7 +89,7 @@ async function safeScreenshot(page, targetPath) {
 
   // Collection screen
   try {
-    await page.click("button[onclick=\"game.showScreen('collection')\"]", { timeout: 3000 });
+    await page.locator("button[onclick=\"game.showCollection()\"], button[onclick=\"game.showScreen('collection')\"]").first().click({ timeout: 3000 });
     await page.waitForTimeout(300);
   } catch (e) {
     add('can open collection', false, String(e));

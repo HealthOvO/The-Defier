@@ -566,7 +566,7 @@
 }
 
 #boss-act-panel {
-    width: 100%;
+    max-width: 100%;
 }
 
 .boss-act-panel {
@@ -587,6 +587,16 @@
 
 .boss-act-chip {
     padding: 8px 9px;
+}
+
+.boss-act-counter-chips {
+    margin-top: 6px;
+    gap: 4px;
+}
+
+.boss-act-counter-chip {
+    font-size: 0.58rem;
+    padding: 3px 7px;
 }
 
 .boss-act-chip-index {
@@ -739,6 +749,16 @@
         margin-top: 5px;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 5px;
+    }
+
+    #boss-act-panel .boss-act-counter-chips {
+        margin-top: 4px;
+        gap: 4px;
+    }
+
+    #boss-act-panel .boss-act-counter-chip {
+        font-size: 0.52rem;
+        padding: 2px 6px;
     }
 
     #boss-act-panel .boss-act-chip {

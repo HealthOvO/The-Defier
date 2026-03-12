@@ -210,6 +210,15 @@ async function safeScreenshot(page, outPath) {
     const advisorReadiness = advisor ? (advisor.querySelector('.battle-advisor-readiness')?.textContent || '').trim() : '';
     const advisorFormation = advisor ? (advisor.querySelector('.battle-advisor-formation')?.textContent || '').trim() : '';
     const advisorCardPlan = advisor ? (advisor.querySelector('.battle-advisor-cardplan')?.textContent || '').trim() : '';
+    const advisorTempoSegments = advisor ? advisor.querySelectorAll('.battle-advisor-tempo-segment').length : 0;
+    const advisorActiveTempo = advisor ? (advisor.querySelector('.battle-advisor-tempo-segment.active .battle-advisor-tempo-label')?.textContent || '').trim() : '';
+    const advisorStatusChips = advisor ? advisor.querySelectorAll('.battle-advisor-status-chip').length : 0;
+    const advisorChain = advisor ? advisor.querySelector('.battle-advisor-chain') : null;
+    const advisorChainTitle = advisorChain ? (advisorChain.querySelector('.battle-advisor-chain-title')?.textContent || '').trim() : '';
+    const advisorChainKicker = advisorChain ? (advisorChain.querySelector('.battle-advisor-section-title')?.textContent || '').trim() : '';
+    const advisorChainSteps = advisorChain ? advisorChain.querySelectorAll('.battle-advisor-chain-step').length : 0;
+    const advisorChainTags = advisorChain ? advisorChain.querySelectorAll('.battle-advisor-chain-tag').length : 0;
+    const advisorChainCardIndex = advisorChain ? String(advisorChain.getAttribute('data-card-index') || '') : '';
     const advisorCardSteps = advisor ? Array.from(advisor.querySelectorAll('.battle-advisor-cardstep-btn')) : [];
     const advisorCardStepCount = advisorCardSteps.length;
     let advisorFocusApplied = false;
@@ -226,8 +235,20 @@ async function safeScreenshot(page, outPath) {
       advisorPreviewApplied = !!selectedCard && String(selectedCard.getAttribute('data-index') || '') === advisorFocusedIndex;
       advisorTargetingPreview = !!document.querySelector('#hand-cards.targeting-active');
     }
+    let advisorChainChangesOnHover = false;
+    let advisorHoverChainCardIndex = advisorChainCardIndex;
+    const hoverProbeCard = Array.from(document.querySelectorAll('#hand-cards .card')).find((card) => String(card.getAttribute('data-index') || '') !== advisorChainCardIndex);
+    if (hoverProbeCard) {
+      hoverProbeCard.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      const hoverChain = document.querySelector('#battle-tactical-advisor .battle-advisor-chain');
+      const hoverKicker = hoverChain ? (hoverChain.querySelector('.battle-advisor-section-title')?.textContent || '').trim() : '';
+      advisorHoverChainCardIndex = hoverChain ? String(hoverChain.getAttribute('data-card-index') || '') : advisorChainCardIndex;
+      advisorChainChangesOnHover = !!hoverChain && advisorHoverChainCardIndex !== advisorChainCardIndex && /悬停预判/.test(hoverKicker);
+      hoverProbeCard.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+    }
     const advisorThreatChips = advisor ? advisor.querySelectorAll('.battle-advisor-threat-chip').length : 0;
     let advisorCollapsedAfterToggle = false;
+    let advisorStaysCollapsedWhileHovered = false;
     let advisorDragged = false;
     let advisorDragDelta = { x: 0, y: 0 };
     const toggleBtn = panel ? panel.querySelector('.battle-advisor-toggle') : null;
@@ -237,6 +258,11 @@ async function safeScreenshot(page, outPath) {
       panel = document.getElementById('battle-command-panel');
       const advisorAfterToggle = panel ? panel.querySelector('#battle-tactical-advisor') : null;
       advisorCollapsedAfterToggle = !!(advisorAfterToggle && advisorAfterToggle.classList.contains('collapsed'));
+      if (advisorAfterToggle) {
+        advisorAfterToggle.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+        advisorStaysCollapsedWhileHovered = advisorAfterToggle.classList.contains('collapsed');
+        advisorAfterToggle.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+      }
 
       const toggleBackBtn = panel ? panel.querySelector('.battle-advisor-toggle') : null;
       if (toggleBackBtn && typeof toggleBackBtn.click === 'function') {
@@ -331,6 +357,16 @@ async function safeScreenshot(page, outPath) {
       advisorReadiness,
       advisorFormation,
       advisorCardPlan,
+      advisorTempoSegments,
+      advisorActiveTempo,
+      advisorStatusChips,
+      advisorChainTitle,
+      advisorChainKicker,
+      advisorChainSteps,
+      advisorChainTags,
+      advisorChainCardIndex,
+      advisorChainChangesOnHover,
+      advisorHoverChainCardIndex,
       advisorCardStepCount,
       advisorFocusApplied,
       advisorPreviewApplied,
@@ -338,6 +374,7 @@ async function safeScreenshot(page, outPath) {
       advisorFocusedIndex,
       advisorThreatChips,
       advisorCollapsedAfterToggle,
+      advisorStaysCollapsedWhileHovered,
       advisorDragged,
       advisorDragDelta,
       commandId,
@@ -355,6 +392,14 @@ async function safeScreenshot(page, outPath) {
       /战术助手/.test(battleCommandProbe.advisorTitle || '') &&
       /回路/.test(battleCommandProbe.advisorRecommend || '') &&
       Number(battleCommandProbe.advisorThreatChips || 0) >= 1 &&
+      Number(battleCommandProbe.advisorTempoSegments || 0) >= 4 &&
+      /守势|破阵|净域|歼灭/.test(battleCommandProbe.advisorActiveTempo || '') &&
+      Number(battleCommandProbe.advisorStatusChips || 0) >= 3 &&
+      /执行链：/.test(battleCommandProbe.advisorChainTitle || '') &&
+      /建议|当前预选|悬停预判|默认巡检/.test(battleCommandProbe.advisorChainKicker || '') &&
+      Number(battleCommandProbe.advisorChainSteps || 0) >= 2 &&
+      Number(battleCommandProbe.advisorChainTags || 0) >= 0 &&
+      !!battleCommandProbe.advisorChainChangesOnHover &&
       /建议|指令|回合|命环/.test(battleCommandProbe.advisorReadiness || '') &&
       /敌阵画像|轮段研判/.test(battleCommandProbe.advisorFormation || '') &&
       /手牌执行|优先打|先打/.test(battleCommandProbe.advisorCardPlan || '') &&
@@ -362,6 +407,7 @@ async function safeScreenshot(page, outPath) {
       !!battleCommandProbe.advisorFocusApplied &&
       (!!battleCommandProbe.advisorPreviewApplied || !!battleCommandProbe.advisorTargetingPreview) &&
       !!battleCommandProbe.advisorCollapsedAfterToggle &&
+      !!battleCommandProbe.advisorStaysCollapsedWhileHovered &&
       !!battleCommandProbe.advisorDragged,
     JSON.stringify(battleCommandProbe || null)
   );
@@ -2491,6 +2537,7 @@ async function safeScreenshot(page, outPath) {
         title: panel ? (panel.querySelector('.boss-act-title')?.textContent || '').trim() : '',
         subtitle: panel ? (panel.querySelector('.boss-act-subtitle')?.textContent || '').trim() : '',
         chips: Array.from(panel?.querySelectorAll('.boss-act-chip') || []).map((chip) => (chip.textContent || '').trim()),
+        counterChips: Array.from(panel?.querySelectorAll('.boss-act-counter-chip') || []).map((chip) => (chip.textContent || '').trim()),
         activeChip: (panel?.querySelector('.boss-act-chip.active')?.textContent || '').trim(),
         failLine: (panel?.querySelector('.boss-act-line.fail .value')?.textContent || '').trim()
       };
@@ -2511,8 +2558,11 @@ async function safeScreenshot(page, outPath) {
       ok:
         initial.visible &&
         initial.chips.length === 3 &&
+        initial.counterChips.length >= 2 &&
         /宣告/.test(initial.subtitle || '') &&
+        actTwo.counterChips.length >= 2 &&
         /对抗/.test(actTwo.subtitle || '') &&
+        actThree.counterChips.length >= 2 &&
         /逆转/.test(actThree.subtitle || '') &&
         /失败|节奏|拖延/.test(actThree.failLine || ''),
       bossId: boss.id || '',
@@ -2548,6 +2598,7 @@ async function safeScreenshot(page, outPath) {
     const commandPanel = document.getElementById('battle-command-panel');
     const missionPanel = document.getElementById('legacy-mission-tracker');
     const enemyArea = document.querySelector('.enemy-area');
+    const enemyIntent = document.querySelector('.enemy .enemy-intent');
     const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
 
     const rectToObj = (rect) => rect ? ({ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height, centerX: rect.left + rect.width / 2 }) : null;
@@ -2556,27 +2607,36 @@ async function safeScreenshot(page, outPath) {
     const commandRect = commandPanel ? rectToObj(commandPanel.getBoundingClientRect()) : null;
     const missionRect = missionPanel ? rectToObj(missionPanel.getBoundingClientRect()) : null;
     const enemyRect = enemyArea ? rectToObj(enemyArea.getBoundingClientRect()) : null;
+    const enemyIntentRect = enemyIntent ? rectToObj(enemyIntent.getBoundingClientRect()) : null;
 
     const commandOnLeftRail = !!commandRect && commandRect.centerX < viewportWidth * 0.34;
     const missionOnRightRail = !!missionRect && missionRect.centerX > viewportWidth * 0.72;
     const bossCentered = !!bossRect && Math.abs(bossRect.centerX - viewportWidth / 2) < viewportWidth * 0.12;
     const commandAvoidsCore = !!commandRect && (!enemyRect || commandRect.right <= enemyRect.left + enemyRect.width * 0.38);
+    const bossCompact = !!bossRect && bossRect.width < viewportWidth * 0.72;
+    const bossAvoidsEnemyIntent = !bossRect || !enemyIntentRect
+      || bossRect.right <= enemyIntentRect.left - 12
+      || bossRect.bottom <= enemyIntentRect.top - 10
+      || bossRect.left >= enemyIntentRect.right + 12;
 
     return {
-      ok: commandOnLeftRail && missionOnRightRail && bossCentered && commandAvoidsCore,
+      ok: commandOnLeftRail && missionOnRightRail && bossCentered && commandAvoidsCore && bossCompact && bossAvoidsEnemyIntent,
       viewportWidth,
       commandOnLeftRail,
       missionOnRightRail,
       bossCentered,
       commandAvoidsCore,
+      bossCompact,
+      bossAvoidsEnemyIntent,
       bossRect,
       commandRect,
       missionRect,
-      enemyRect
+      enemyRect,
+      enemyIntentRect
     };
   });
   add(
-    'battle overlay layout keeps boss info centered while command and mission stay off the battlefield core',
+    'battle overlay layout keeps boss info centered without covering enemy intent lane',
     !!battleOverlayLayoutProbe && !!battleOverlayLayoutProbe.ok,
     JSON.stringify(battleOverlayLayoutProbe || null)
   );
@@ -2588,6 +2648,7 @@ async function safeScreenshot(page, outPath) {
     if (!battle || typeof battle.updateBattleUI !== 'function') return { ok: false, reason: 'no_battle' };
     battle.tacticalAdvisorCollapsed = true;
     battle.tacticalAdvisorHoverExpanded = false;
+    battle.tacticalAdvisorHoverLocked = true;
     battle.updateBattleUI();
     const panel = document.getElementById('battle-command-panel');
     const advisor = document.getElementById('battle-tactical-advisor');
@@ -2597,7 +2658,7 @@ async function safeScreenshot(page, outPath) {
     battle.handleTacticalAdvisorHotkey('h');
     const hotkeyHeight = advisor ? advisor.getBoundingClientRect().height : 0;
     return {
-      ok: !!panel && !!advisor && collapsedHeight < hoverHeight && hotkeyHeight >= hoverHeight - 2,
+      ok: !!panel && !!advisor && hoverHeight <= collapsedHeight + 1 && hotkeyHeight >= collapsedHeight + 20,
       collapsedHeight,
       hoverHeight,
       hotkeyHeight,
@@ -2606,7 +2667,7 @@ async function safeScreenshot(page, outPath) {
     };
   });
   add(
-    'battle advisor supports layered expansion via hover and H hotkey on desktop',
+    'battle advisor stays collapsed until explicit reopen and H hotkey restores it on desktop',
     !!advisorHierarchyProbe && !!advisorHierarchyProbe.ok,
     JSON.stringify(advisorHierarchyProbe || null)
   );

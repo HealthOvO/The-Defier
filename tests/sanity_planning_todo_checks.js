@@ -103,24 +103,38 @@ function loadFile(ctx, filePath) {
       { id: 'heal', type: 'service', name: '灵丹妙药', price: 30, currency: 'gold', sold: false },
       { id: 'remove', type: 'service', name: '净化仪式', price: 75, currency: 'gold', sold: false }
     ],
+    lawCodexFilterState: { query: '', status: 'all', element: 'all', resonance: 'all' },
     treasureCompendiumFilterState: { status: 'all', rarities: [], sources: [] },
     treasureCompendiumFilter: 'all',
     treasureCompendiumSort: 'rarity_desc',
+    treasureCompendiumSearchQuery: '',
     treasureCompendiumPresetStorageKey: 'theDefierTreasureCompendiumPresetsV1',
     treasureCompendiumPresetCache: null,
     showTreasureCompendium: () => {}
   };
 
   [
+    'getLawElementLabel',
+    'getLawRarityText',
     'getLawRelatedResonances',
     'getLawResonanceAvailability',
+    'normalizeLawCodexFilterState',
+    'getLawCodexFilterState',
+    'getLawCodexFilterLabels',
+    'resolveLawCodexResonanceState',
+    'resolveLawCodexResonanceRecordState',
+    'passesLawCodexLawFilter',
+    'passesLawCodexResonanceFilter',
     'getLawReadinessActions',
     'normalizeTreasureCompendiumFilterState',
     'getTreasureCompendiumFilterState',
     'getTreasureSource',
     'getTreasureSourceTags',
+    'getRarityLabel',
     'getTreasureCompendiumQuickFilterValue',
     'getTreasureCompendiumFilterLabels',
+    'setTreasureCompendiumSearchQuery',
+    'getTreasureCompendiumSearchQuery',
     'getTreasureCompendiumPresetStorageKey',
     'serializeTreasureCompendiumFilterState',
     'getTreasureCompendiumPresets',
@@ -141,6 +155,7 @@ function loadFile(ctx, filePath) {
     'evaluateShopServiceFit',
     'getMapNodeTypeLabel',
     'getShopNextNodeForecast',
+    'getShopEconomyOutlook',
     'buildShopSpendRecommendation'
   ].forEach((name) => {
     harness[name] = Game.prototype[name];
@@ -156,13 +171,46 @@ function loadFile(ctx, filePath) {
   });
   assert(readinessActions.some((action) => action.type === 'law' && action.lawId === 'iceFreeze'), 'readiness actions should expose missing law jump');
 
+  harness.lawCodexFilterState = harness.normalizeLawCodexFilterState({
+    query: '火',
+    status: 'owned',
+    element: 'fire',
+    resonance: 'active'
+  });
+  const flameEntry = {
+    lawId: 'flameTruth',
+    law: ctx.LAWS.flameTruth,
+    collected: true,
+    readinessList: harness.getLawResonanceAvailability(ctx.LAWS.flameTruth),
+    resonanceState: harness.resolveLawCodexResonanceState(harness.getLawResonanceAvailability(ctx.LAWS.flameTruth))
+  };
+  const thunderEntry = {
+    lawId: 'thunderLaw',
+    law: ctx.LAWS.thunderLaw,
+    collected: true,
+    readinessList: harness.getLawResonanceAvailability(ctx.LAWS.thunderLaw),
+    resonanceState: harness.resolveLawCodexResonanceState(harness.getLawResonanceAvailability(ctx.LAWS.thunderLaw))
+  };
+  assert(harness.passesLawCodexLawFilter(flameEntry) === true, 'fire law should match owned+fire+active+keyword filter');
+  assert(harness.passesLawCodexLawFilter(thunderEntry) === false, 'thunder law should be excluded by fire filter');
+  const resonanceEntry = {
+    resonance: ctx.LAW_RESONANCES.plasmaOverload,
+    state: harness.resolveLawCodexResonanceRecordState(ctx.LAW_RESONANCES.plasmaOverload)
+  };
+  assert(harness.passesLawCodexResonanceFilter(resonanceEntry) === true, 'active fire resonance should pass resonance filter');
+  const lawCodexLabels = harness.getLawCodexFilterLabels();
+  assert(lawCodexLabels.some((label) => /关键词/.test(label)), 'law codex labels should mention query');
+  assert(lawCodexLabels.some((label) => /火属性/.test(label)), 'law codex labels should mention element');
+
   harness.toggleTreasureCompendiumFilterChip('status', 'owned');
   harness.toggleTreasureCompendiumFilterChip('rarity', 'rare');
   harness.toggleTreasureCompendiumFilterChip('source', 'shop');
+  harness.setTreasureCompendiumSearchQuery('魂');
   const filterState = harness.getTreasureCompendiumFilterState();
   assert(filterState.status === 'owned', `expected owned status, got ${filterState.status}`);
   assert(filterState.rarities.includes('rare'), `expected rare rarity filter, got ${JSON.stringify(filterState.rarities)}`);
   assert(filterState.sources.includes('shop'), `expected shop source filter, got ${JSON.stringify(filterState.sources)}`);
+  assert(harness.getTreasureCompendiumSearchQuery() === '魂', `expected treasure search query to persist, got ${harness.getTreasureCompendiumSearchQuery()}`);
   assert(
     harness.passesTreasureCompendiumFilter({ id: 'soul_banner', data: ctx.TREASURES.soul_banner, isOwned: true }) === true,
     'rare owned shop treasure should pass combined filter'
@@ -177,25 +225,36 @@ function loadFile(ctx, filePath) {
   assert(harness.treasureCompendiumFilter === 'all', 'clearTreasureCompendiumFilters should reset quick filter');
   assert(harness.applyTreasureCompendiumPreset(0) === true, 'saved preset should be loadable');
   assert(harness.getTreasureCompendiumFilterState().rarities.includes('rare'), 'preset should restore rarity filter');
+  assert(harness.getTreasureCompendiumSearchQuery() === '魂', 'preset should restore search query');
   assert(harness.isTreasureCompendiumPresetActive(0) === true, 'restored preset should become active');
   assert(/预设 1/.test(harness.getTreasureCompendiumPresetLabel(0)), 'preset label should be generated');
+  assert(/搜「魂」/.test(harness.getTreasureCompendiumPresetLabel(0)), 'preset label should include search query');
 
   const eliteForecast = harness.getShopNextNodeForecast();
   assert(eliteForecast && eliteForecast.primaryType === 'elite', `expected elite forecast, got ${JSON.stringify(eliteForecast)}`);
+  const eliteEconomy = harness.getShopEconomyOutlook();
+  assert(eliteEconomy.reserveTarget >= 80, `expected elevated reserve target at low hp + elite forecast, got ${JSON.stringify(eliteEconomy)}`);
+  assert(eliteEconomy.spendCeiling <= 100, `expected constrained spending window at low hp + elite forecast, got ${JSON.stringify(eliteEconomy)}`);
 
   const lowHpAdvice = harness.buildShopSpendRecommendation();
   assert(lowHpAdvice.action === '更适合买服务', `expected service advice at low hp, got ${JSON.stringify(lowHpAdvice)}`);
   assert(/下一批节点/.test(lowHpAdvice.reason), 'service advice should include node forecast hint');
+  assert(lowHpAdvice.economy && typeof lowHpAdvice.economy.note === 'string' && lowHpAdvice.economy.note.length > 0, 'service advice should expose economy note');
 
   harness.player.currentHp = 56;
   harness.map.getAccessibleNodes = () => [{ id: 'rest_1', row: 3, type: 'rest' }, { id: 'event_1', row: 3, type: 'event' }];
+  const restEconomy = harness.getShopEconomyOutlook();
+  assert(restEconomy.status === 'stable', `expected stable economy outlook before rest/event nodes, got ${JSON.stringify(restEconomy)}`);
+  assert(restEconomy.spendCeiling >= 100, `expected roomy spend ceiling, got ${JSON.stringify(restEconomy)}`);
   const highHpAdvice = harness.buildShopSpendRecommendation();
   assert(highHpAdvice.action === '更适合买卡', `expected card advice at high hp, got ${JSON.stringify(highHpAdvice)}`);
+  assert(highHpAdvice.economy && highHpAdvice.economy.status === 'stable', `expected stable economy on card advice, got ${JSON.stringify(highHpAdvice)}`);
 
   harness.player.gold = 50;
   harness.map.getAccessibleNodes = () => [{ id: 'boss_1', row: 3, type: 'boss' }];
   const saveAdvice = harness.buildShopSpendRecommendation();
   assert(saveAdvice.action === '建议留钱', `expected save advice before boss with tight gold, got ${JSON.stringify(saveAdvice)}`);
+  assert(saveAdvice.economy && saveAdvice.economy.status === 'critical', `expected critical economy on save advice, got ${JSON.stringify(saveAdvice)}`);
 
   console.log('Planning todo checks passed.');
 })();

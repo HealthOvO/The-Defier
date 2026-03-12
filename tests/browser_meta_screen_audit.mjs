@@ -418,8 +418,11 @@ async function safeScreenshot(page, outPath) {
       game.guestMode = true;
       game.startNewGame('linFeng');
     }
-    if (typeof game.initCollection === 'function') game.initCollection();
-    game.showScreen('collection');
+    if (typeof game.showCollection === 'function') game.showCollection();
+    else {
+      if (typeof game.initCollection === 'function') game.initCollection();
+      game.showScreen('collection');
+    }
     const main = document.querySelector('.codex-main-column');
     const side = document.querySelector('.codex-side-column');
     const summary = document.getElementById('law-codex-summary');
@@ -445,6 +448,50 @@ async function safeScreenshot(page, outPath) {
     JSON.stringify(collectionProbe || null)
   );
   await safeScreenshot(page, path.join(outDir, 'law-codex-layout.png'));
+
+  const lawCodexFilterProbe = await page.evaluate(() => {
+    if (!window.game || !game.player || typeof game.showCollection !== 'function') return { ok: false, reason: 'no_game' };
+    const fireLaw = typeof LAWS !== 'undefined' ? LAWS.flameTruth || Object.values(LAWS)[0] : null;
+    const thunderLaw = typeof LAWS !== 'undefined' ? LAWS.thunderLaw || Object.values(LAWS)[1] : null;
+    if (!fireLaw || !thunderLaw) return { ok: false, reason: 'missing_laws' };
+    if (typeof game.player.collectLaw === 'function') {
+      game.player.collectLaw(fireLaw);
+      game.player.collectLaw(thunderLaw);
+    }
+    if (game.player?.fateRing) {
+      game.player.fateRing.getSocketedLaws = () => [fireLaw.id, thunderLaw.id];
+    }
+    game.showCollection();
+    if (typeof game.setLawCodexSearchQuery === 'function') game.setLawCodexSearchQuery('火');
+    if (typeof game.setLawCodexStatusFilter === 'function') game.setLawCodexStatusFilter('owned');
+    if (typeof game.setLawCodexElementFilter === 'function') game.setLawCodexElementFilter('fire');
+    if (typeof game.setLawCodexResonanceFilter === 'function') game.setLawCodexResonanceFilter('active');
+    const lawNames = Array.from(document.querySelectorAll('#law-archive-grid .law-item .law-name')).map((el) => (el.textContent || '').trim()).filter(Boolean);
+    const resonanceNames = Array.from(document.querySelectorAll('#resonance-manual-list .resonance-title')).map((el) => (el.textContent || '').trim()).filter(Boolean);
+    const summaryText = (document.getElementById('law-codex-summary')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const resonanceText = (document.getElementById('law-codex-resonance-summary')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const searchValue = document.getElementById('law-codex-search')?.value || '';
+    return {
+      ok:
+        searchValue === '火' &&
+        lawNames.length === 1 &&
+        /火/.test(lawNames[0] || '') &&
+        resonanceNames.length >= 1 &&
+        /火属性/.test(summaryText) &&
+        /已掌握/.test(summaryText) &&
+        /当前结果/.test(resonanceText),
+      searchValue,
+      lawNames,
+      resonanceNames,
+      summaryText,
+      resonanceText
+    };
+  });
+  add(
+    'law codex search and filters narrow visible laws and resonance chains',
+    !!lawCodexFilterProbe?.ok,
+    JSON.stringify(lawCodexFilterProbe || null)
+  );
 
   const lawDetailProbe = await page.evaluate(() => {
     if (!window.game || !game.player) return { ok: false, reason: 'no_game' };
@@ -555,6 +602,7 @@ async function safeScreenshot(page, outPath) {
     }
     game.setTreasureCompendiumFilter('owned');
     game.treasureCompendiumSort = 'name_asc';
+    if (typeof game.setTreasureCompendiumSearchQuery === 'function') game.setTreasureCompendiumSearchQuery('魂');
     game.showTreasureCompendium();
     const ownedCount = document.querySelectorAll('#treasure-compendium-grid .compendium-item').length;
     const firstOwnedName = (document.querySelector('#treasure-compendium-grid .compendium-name')?.textContent || '').trim();
@@ -572,12 +620,24 @@ async function safeScreenshot(page, outPath) {
     const summaryText = (document.getElementById('treasure-compendium-summary')?.textContent || '').replace(/\s+/g, ' ').trim();
     const activeChips = document.querySelectorAll('#treasure-compendium .compendium-chip.active').length;
     const presetText = (document.getElementById('treasure-preset-slot-0')?.textContent || '').trim();
+    const searchValue = document.getElementById('treasure-search-input')?.value || '';
     return {
-      ok: ownedCount >= 2 && comboCount >= 1 && activeChips >= 2 && /当前筛选结果/.test(summaryText) && /灵品|商店/.test(summaryText) && /预设 1/.test(presetText),
+      ok:
+        ownedCount >= 1 &&
+        /魂/.test(firstOwnedName) &&
+        comboCount >= 1 &&
+        activeChips >= 2 &&
+        /当前筛选结果/.test(summaryText) &&
+        /灵品|商店/.test(summaryText) &&
+        /关键词「魂」/.test(summaryText) &&
+        /预设 1/.test(presetText) &&
+        /搜「魂」/.test(presetText) &&
+        searchValue === '魂',
       ownedCount,
       firstOwnedName,
       comboCount,
       activeChips,
+      searchValue,
       presetText,
       summaryText
     };
@@ -676,6 +736,8 @@ async function safeScreenshot(page, outPath) {
     const adviceBadge = summary ? summary.querySelector('.shop-advice-badge') : null;
     const adviceText = summary ? summary.querySelector('.shop-advice-text') : null;
     const forecast = summary ? summary.querySelector('.shop-advice-forecast') : null;
+    const economyChips = summary ? Array.from(summary.querySelectorAll('.shop-economy-chip')) : [];
+    const economyNote = summary ? summary.querySelector('.shop-advice-note') : null;
     const serviceNote = document.querySelector('.service-fit-note');
     return {
       ok:
@@ -683,19 +745,26 @@ async function safeScreenshot(page, outPath) {
         !!adviceBadge &&
         !!adviceText &&
         !!forecast &&
+        economyChips.length >= 3 &&
+        !!economyNote &&
         /更适合买卡|更适合买服务|建议留钱/.test(adviceBadge.textContent || '') &&
         /下一批节点/.test(forecast.textContent || '') &&
+        economyChips.some((chip) => /储备线/.test(chip.textContent || '')) &&
+        economyChips.some((chip) => /建议单次/.test(chip.textContent || '')) &&
         (adviceText.textContent || '').trim().length > 0 &&
+        /灵石|消费|预算/.test(economyNote.textContent || '') &&
         !!serviceNote &&
         (serviceNote.textContent || '').trim().length > 0,
       badgeText: (adviceBadge?.textContent || '').trim(),
       adviceText: (adviceText?.textContent || '').replace(/\s+/g, ' ').trim(),
       forecastText: (forecast?.textContent || '').replace(/\s+/g, ' ').trim(),
+      economyText: economyChips.map((chip) => (chip.textContent || '').replace(/\s+/g, ' ').trim()),
+      economyNote: (economyNote?.textContent || '').replace(/\s+/g, ' ').trim(),
       serviceNote: (serviceNote?.textContent || '').replace(/\s+/g, ' ').trim()
     };
   });
   add(
-    'shop summary shows buy card or service guidance and service fit notes',
+    'shop summary shows buy card or service guidance with economy reserve cues',
     !!shopAdviceProbe?.ok,
     JSON.stringify(shopAdviceProbe || null)
   );

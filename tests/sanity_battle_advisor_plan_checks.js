@@ -138,11 +138,40 @@ function loadFile(ctx, filePath) {
     typeof snapshot.cardPlanHint === 'string' && snapshot.cardPlanHint.length > 0,
     'snapshot should expose tactical card plan hint'
   );
+  assert(
+    snapshot.tempoRail && Array.isArray(snapshot.tempoRail.segments) && snapshot.tempoRail.segments.length === 4,
+    'snapshot should expose tempo rail with four tactical lanes'
+  );
+  assert(
+    Array.isArray(snapshot.statusIslands) && snapshot.statusIslands.length >= 3,
+    'snapshot should expose battle status islands'
+  );
+  assert(
+    snapshot.executionChain && Number(snapshot.executionChain.index) === 1 && /穿甲震击/.test(snapshot.executionChain.title || ''),
+    `execution chain should default to suggested break card, got ${JSON.stringify(snapshot.executionChain)}`
+  );
   const telemetryAfterSnapshot = battle.ensureTurnAdvisorTelemetry();
   assert(
     Array.isArray(telemetryAfterSnapshot.suggestedStepKeys) && telemetryAfterSnapshot.suggestedStepKeys.length >= 1,
     'snapshot should persist suggested step keys for review'
   );
+
+  // 3b) 悬停其他手牌时，执行链应切换到对应卡牌
+  battle.hoveredBattleCardIndex = 2;
+  const hoverSnapshot = battle.resolveBattleTacticalAdvisorSnapshot(
+    {
+      enabled: true,
+      points: 6,
+      maxPoints: 12,
+      commands: []
+    },
+    breakProfile
+  );
+  assert(
+    hoverSnapshot.executionChain && Number(hoverSnapshot.executionChain.index) === 2 && /归元护体/.test(hoverSnapshot.executionChain.title || ''),
+    `hover execution chain should follow hovered card, got ${JSON.stringify(hoverSnapshot.executionChain)}`
+  );
+  battle.hoveredBattleCardIndex = -1;
 
   // 4) 本回合未按建议出牌时，应给出对应复盘文案
   battle.resetTurnAdvisorTelemetry();

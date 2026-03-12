@@ -22,8 +22,10 @@ class Battle {
         this.commandState = this.createDefaultBattleCommandState();
         this.tacticalAdvisorCollapsed = false;
         this.tacticalAdvisorHoverExpanded = false;
+        this.tacticalAdvisorHoverLocked = false;
         this.activeSquadEcology = null;
         this.advisorFocusTimer = null;
+        this.hoveredBattleCardIndex = -1;
         this.turnAdvisorTelemetry = null;
         this.battleCommandPanelPosition = null;
         this.battleCommandDragState = null;
@@ -353,6 +355,58 @@ class Battle {
         };
     }
 
+    resolveBossActCounterChips(displayState) {
+        if (!displayState || !displayState.state || !displayState.act) return [];
+        const { state, act } = displayState;
+        const chips = [];
+
+        const pushChip = (id, label, tip) => {
+            if (!label) return;
+            if (chips.some((chip) => chip.id === id || chip.label === label)) return;
+            chips.push({ id, label, tip: tip || label });
+        };
+
+        if (act.id === 'declaration') {
+            pushChip('observe', '先看宣告', '先确认本幕规则与惩罚，再决定资源投入。');
+        } else if (act.id === 'confrontation') {
+            pushChip('tempo', '抢对抗节奏', '对抗阶段要尽快建立优势，避免被拖进逆转。');
+        } else if (act.id === 'reversal') {
+            pushChip('finish', '尽快收官', '逆转阶段惩罚会被放大，应优先寻找收尾窗口。');
+        }
+
+        switch (state.memoryKey) {
+            case 'seal_card':
+                pushChip('protect_core', '保护核心牌', '优先用低价值牌承压，避免关键牌被封签。');
+                pushChip('cycle', '留过牌手段', '预留过牌/弃牌窗口，减少被锁牌后的节奏断档。');
+                break;
+            case 'tribute_choice':
+                pushChip('hand_buffer', '保手牌厚度', '保持冗余牌，避免被索供逼到核心资源。');
+                pushChip('hp_buffer', '稳血线', '控制血线，避免掉血与弃牌惩罚同时失控。');
+                break;
+            case 'siphon_block':
+                pushChip('burst_first', '少纯叠盾', '避免把整回合价值压在护盾上，优先打节奏交换。');
+                pushChip('pressure', '先手压血', '通过爆发抢先压血，削弱 Boss 的滚雪球空间。');
+                break;
+            case 'echo_last_card':
+                pushChip('careful_finish', '谨慎收尾', '回合最后一张牌尽量不要交高价值启动或防守牌。');
+                pushChip('avoid_value', '别送白嫖收益', '避免让 Boss 复制到护盾、回复或高额收益。');
+                break;
+            default:
+                pushChip('adapt', '按机制拆招', '先按当前记忆点拆解规则，再决定是否抢节奏。');
+                break;
+        }
+
+        if (state.counterTreasure) {
+            pushChip('treasure', `法宝·${state.counterTreasure}`, `当前 Boss 记忆点可借助法宝【${state.counterTreasure}】缓压。`);
+        }
+
+        if ((act.counter || '').includes('低价值牌')) pushChip('low_value', '边角牌承压', act.counter);
+        if ((act.counter || '').includes('过牌') || (act.counter || '').includes('弃牌')) pushChip('cycle_tools', '保循环资源', act.counter);
+        if ((act.counter || '').includes('爆发') || (act.counter || '').includes('进攻')) pushChip('burst_window', '抓爆发窗口', act.counter);
+
+        return chips.slice(0, 4);
+    }
+
     shouldUseCompactBattleHud() {
         if (typeof window === 'undefined' || typeof window.innerWidth !== 'number') return false;
         return window.innerWidth <= 768;
@@ -385,6 +439,7 @@ class Battle {
         }
 
         const { boss, state, index, act, hpPercent } = displayState;
+        const counterChips = this.resolveBossActCounterChips(displayState);
         panel.style.display = 'block';
         panel.innerHTML = `
             <div class="boss-act-header">
@@ -402,6 +457,13 @@ class Battle {
                     </div>
                 `).join('')}
             </div>
+            ${counterChips.length > 0 ? `
+                <div class="boss-act-counter-chips">
+                    ${counterChips.map((chip) => `
+                        <span class="boss-act-counter-chip chip-${chip.id}" title="${chip.tip}">${chip.label}</span>
+                    `).join('')}
+                </div>
+            ` : ''}
             <div class="boss-act-body">
                 <div class="boss-act-line signal"><span class="label">明确信号</span><span class="value">${act.signal}</span></div>
                 <div class="boss-act-line rule"><span class="label">当前规则</span><span class="value">${act.rule}</span></div>
@@ -4038,11 +4100,24 @@ class Battle {
             needCleanse: false,
             needBreak: false,
             needDefend: false,
-            needBurst: false
+            needBurst: false,
+            aliveEnemyCount: 0,
+            debuffActions: 0,
+            defendActions: 0,
+            healActions: 0,
+            summonActions: 0,
+            burstScore: 0,
+            totalEnemyBlock: 0,
+            lowestEnemyHp: 0,
+            hasGuardBreak: false,
+            strikerRoleCount: 0,
+            guardianRoleCount: 0,
+            hexerRoleCount: 0
         };
         const aliveEnemies = (Array.isArray(this.enemies) ? this.enemies : [])
             .filter((enemy) => enemy && enemy.currentHp > 0);
         if (aliveEnemies.length === 0) return profile;
+        profile.aliveEnemyCount = aliveEnemies.length;
 
         let debuffActions = 0;
         let defendActions = 0;
@@ -4080,6 +4155,12 @@ class Battle {
             if (roleId === 'striker') strikerRoleCount += 1;
             if (roleId === 'guardian') guardianRoleCount += 1;
             if (roleId === 'hexer') hexerRoleCount += 1;
+            const currentHp = Math.max(0, Math.floor(Number(enemy.currentHp) || 0));
+            const currentBlock = Math.max(0, Math.floor(Number(enemy.block) || 0));
+            profile.totalEnemyBlock += currentBlock;
+            if (profile.lowestEnemyHp <= 0 || (currentHp > 0 && currentHp < profile.lowestEnemyHp)) {
+                profile.lowestEnemyHp = currentHp;
+            }
             if (
                 (enemy.isElite && enemy.eliteType === 'sunder')
                 || Math.max(0, Math.floor(Number(enemy?.buffs?.guardBreak) || 0)) > 0
@@ -4094,6 +4175,15 @@ class Battle {
         profile.needBreak = heavyBlockEnemy || defendActions + healActions >= 2 || guardianRoleCount >= 1;
         profile.needDefend = burstScore >= 18 || hasGuardBreak;
         profile.needBurst = summonActions >= 1 || strikerRoleCount >= 1 || (defendActions + healActions >= 2);
+        profile.debuffActions = debuffActions;
+        profile.defendActions = defendActions;
+        profile.healActions = healActions;
+        profile.summonActions = summonActions;
+        profile.burstScore = burstScore;
+        profile.hasGuardBreak = hasGuardBreak;
+        profile.strikerRoleCount = strikerRoleCount;
+        profile.guardianRoleCount = guardianRoleCount;
+        profile.hexerRoleCount = hexerRoleCount;
         return profile;
     }
 
@@ -4153,6 +4243,337 @@ class Battle {
         }
 
         return tags.slice(0, 2);
+    }
+
+    resolveBattleTempoRail(threatProfile = null, recommendation = null) {
+        const profile = threatProfile && typeof threatProfile === 'object'
+            ? threatProfile
+            : this.resolveCounterplayThreatProfile();
+        const pickedRecommendation = recommendation && typeof recommendation === 'object'
+            ? recommendation
+            : this.resolveTacticalAdvisorRecommendation(profile);
+        const commandState = this.commandState || this.createDefaultBattleCommandState();
+        const commandPoints = Math.max(0, Math.floor(Number(commandState.points) || 0));
+        const playerBlock = Math.max(0, Math.floor(Number(this.player?.block) || 0));
+        const clamp = (value) => Math.max(8, Math.min(100, Math.round(Number(value) || 0)));
+
+        const guardScore = clamp(
+            (profile.needDefend ? 54 : 18)
+            + Math.min(24, Math.max(0, Math.floor(Number(profile.burstScore) || 0)))
+            + (profile.hasGuardBreak ? 16 : 0)
+            + Math.max(0, Math.floor(Number(profile.aliveEnemyCount) || 0) - 1) * 6
+            - Math.min(16, Math.floor(playerBlock / 3))
+        );
+        const breakScore = clamp(
+            (profile.needBreak ? 56 : 16)
+            + Math.min(28, Math.floor((Number(profile.totalEnemyBlock) || 0) * 1.5))
+            + Math.max(0, Math.floor(Number(profile.guardianRoleCount) || 0)) * 12
+            + Math.max(0, Math.floor(Number(profile.healActions) || 0)) * 10
+        );
+        const cleanseScore = clamp(
+            (profile.needCleanse ? 58 : 14)
+            + Math.max(0, Math.floor(Number(profile.debuffActions) || 0)) * 14
+            + Math.max(0, Math.floor(Number(profile.hexerRoleCount) || 0)) * 16
+        );
+        const burstScore = clamp(
+            (profile.needBurst ? 48 : 22)
+            + Math.max(0, Math.floor(Number(profile.strikerRoleCount) || 0)) * 12
+            + Math.max(0, Math.floor(Number(profile.summonActions) || 0)) * 14
+            + ((Number(profile.lowestEnemyHp) || 999) <= 24 ? 14 : 0)
+            + Math.min(10, commandPoints * 2)
+        );
+
+        const segments = [
+            { id: 'guard', label: '守势', score: guardScore, tip: '先稳血线，避免被敌方抢到斩杀窗口。' },
+            { id: 'break', label: '破阵', score: breakScore, tip: '先打开护势缺口，再把伤害压上去。' },
+            { id: 'cleanse', label: '净域', score: cleanseScore, tip: '优先处理控制与减益，确保行动链不断。' },
+            { id: 'burst', label: '歼灭', score: burstScore, tip: '当前可以主动抢节奏，尽快压低敌方血线。' }
+        ].map((item) => ({
+            ...item,
+            active: item.id === pickedRecommendation.id
+        }));
+
+        const summaryMap = {
+            guard: '先稳血线，再找爆发窗口。',
+            break: '先破防线，再集中输出。',
+            cleanse: '先解控保手牌，再续回合链。',
+            burst: '窗口已开，优先压血或收头。'
+        };
+
+        return {
+            summary: summaryMap[pickedRecommendation.id] || '按当前局势选择最强回路展开。',
+            segments
+        };
+    }
+
+    resolveBattleStatusIslands(state = null, threatProfile = null) {
+        const profile = threatProfile && typeof threatProfile === 'object'
+            ? threatProfile
+            : this.resolveCounterplayThreatProfile();
+        const runtimeState = state && typeof state === 'object'
+            ? state
+            : (this.commandState || this.createDefaultBattleCommandState());
+        const points = Math.max(0, Math.floor(Number(runtimeState.points) || 0));
+        const maxPoints = Math.max(1, Math.floor(Number(runtimeState.maxPoints) || 12));
+        const commands = Array.isArray(runtimeState.commands) ? runtimeState.commands : [];
+        const readyCount = commands.reduce((count, command) => {
+            if (!command) return count;
+            const cost = this.resolveBattleCommandEffectiveCost(command);
+            const cooldownRemaining = Math.max(0, Math.floor(Number(command.cooldownRemaining) || 0));
+            const ready = (
+                this.currentTurn === 'player'
+                && !this.battleEnded
+                && !this.isProcessingCard
+                && !this.isTurnTransitioning
+                && cooldownRemaining === 0
+                && points >= cost
+            );
+            return count + (ready ? 1 : 0);
+        }, 0);
+        const playerBlock = Math.max(0, Math.floor(Number(this.player?.block) || 0));
+        const resonance = this.player?.archetypeResonance || null;
+        const bossDisplay = this.getBossActDisplayState();
+        const islands = [];
+        const pushIsland = (id, label, value, tone) => {
+            if (!label || !value) return;
+            islands.push({
+                id: String(id || tone || 'state'),
+                label: String(label),
+                value: String(value),
+                tone: String(tone || id || 'state')
+            });
+        };
+
+        pushIsland(
+            'command',
+            '指令',
+            readyCount > 0 ? `${readyCount} 项就绪` : `${points}/${maxPoints} 槽`,
+            readyCount > 0 ? 'command_ready' : 'command'
+        );
+        pushIsland(
+            'guard',
+            '护势',
+            playerBlock > 0 ? `${playerBlock} 护盾` : (profile.needDefend ? '需补盾' : '平稳'),
+            playerBlock > 0 ? 'guard' : (profile.needDefend ? 'warning' : 'calm')
+        );
+        if (resonance && (resonance.name || resonance.id)) {
+            pushIsland(
+                'resonance',
+                '共鸣',
+                `${resonance.name || resonance.id} T${Math.max(1, Math.floor(Number(resonance.tier) || 1))}`,
+                'resonance'
+            );
+        } else {
+            pushIsland('resonance', '共鸣', '未成型', 'muted');
+        }
+        if (bossDisplay && bossDisplay.act) {
+            pushIsland('boss', 'Boss幕', bossDisplay.act.name || `第${Math.max(1, Number(bossDisplay.index) + 1)}幕`, 'boss');
+        } else if (Number(profile.lowestEnemyHp) > 0) {
+            pushIsland(
+                'finish',
+                '收束',
+                Number(profile.lowestEnemyHp) <= 20 ? `可收头 ${profile.lowestEnemyHp}` : `最低血 ${profile.lowestEnemyHp}`,
+                Number(profile.lowestEnemyHp) <= 20 ? 'finish' : 'enemy'
+            );
+        }
+
+        return islands.slice(0, 4);
+    }
+
+    resolveBattleAdvisorInspectCardIndex(cardPlanSteps = null) {
+        const hand = Array.isArray(this.player?.hand) ? this.player.hand : [];
+        const isValidIndex = (value) => Number.isInteger(value) && value >= 0 && value < hand.length;
+        const normalizeIndex = (value) => {
+            if (value == null || value === '') return -1;
+            const numeric = Number(value);
+            return Number.isFinite(numeric) ? Math.floor(numeric) : -1;
+        };
+        const hoveredIndex = normalizeIndex(this.hoveredBattleCardIndex);
+        if (isValidIndex(hoveredIndex)) {
+            return { index: hoveredIndex, source: 'hover' };
+        }
+
+        const selectedIndex = normalizeIndex(this.selectedCardIndex);
+        if (isValidIndex(selectedIndex)) {
+            return { index: selectedIndex, source: this.targetingMode ? 'selected' : 'preview' };
+        }
+
+        const selectedCard = normalizeIndex(this.selectedCard);
+        if (isValidIndex(selectedCard)) {
+            return { index: selectedCard, source: 'selected' };
+        }
+
+        const telemetry = this.ensureTurnAdvisorTelemetry();
+        if (telemetry && telemetry.focusedCardKey) {
+            const focusedIndex = hand.findIndex((card) => this.getAdvisorCardKey(card) === telemetry.focusedCardKey);
+            if (isValidIndex(focusedIndex)) {
+                return { index: focusedIndex, source: 'focused' };
+            }
+        }
+
+        if (Array.isArray(cardPlanSteps) && cardPlanSteps.length > 0) {
+            const suggestedIndex = Math.max(0, Math.floor(Number(cardPlanSteps[0]?.index) || 0));
+            if (isValidIndex(suggestedIndex)) {
+                return { index: suggestedIndex, source: 'suggested' };
+            }
+        }
+
+        if (hand.length > 0) {
+            return { index: 0, source: 'fallback' };
+        }
+
+        return { index: -1, source: 'empty' };
+    }
+
+    describeBattleAdvisorEffect(effect) {
+        if (!effect || typeof effect !== 'object') return '';
+        const target = String(effect.target || '').toLowerCase();
+        const value = Math.max(0, Math.floor(Number(effect.value) || 0));
+        const count = Math.max(0, Math.floor(Number(effect.count) || 0));
+        const buffNames = {
+            vulnerable: '易伤',
+            weak: '虚弱',
+            poison: '中毒',
+            burn: '灼烧',
+            stun: '眩晕',
+            bleed: '流血',
+            mark: '破绽',
+            strength: '力量',
+            retainBlock: '护盾保留',
+            regen: '再生',
+            thorns: '反伤',
+            dodge: '闪避',
+            dodgeChance: '闪避率',
+            slow: '减速',
+            paralysis: '麻痹',
+            freeze: '冰冻'
+        };
+        switch (effect.type) {
+            case 'damage':
+                return `单体伤害 ${value}`;
+            case 'damageAll':
+                return `群体伤害 ${value}`;
+            case 'multiAttack':
+                return `连击 ${Math.max(1, count)} 段（总计 ${Math.max(1, count) * value}）`;
+            case 'randomDamage':
+                return `随机伤害 ${Math.max(0, Math.floor(Number(effect.minValue) || 0))}-${Math.max(0, Math.floor(Number(effect.maxValue) || 0))}`;
+            case 'block':
+                return `获得 ${value} 护盾`;
+            case 'blockBurst':
+                return '护势转攻';
+            case 'removeBlock':
+                return `破盾 ${value}`;
+            case 'penetrate':
+                return `穿透 ${value}`;
+            case 'execute':
+                return '按已损生命斩杀';
+            case 'executeDamage':
+                return `斩杀线打击 ${value}`;
+            case 'draw':
+                return `抽牌 ${value}`;
+            case 'heal':
+                return `恢复 ${value}`;
+            case 'energy':
+                return `回灵 ${value}`;
+            case 'cleanse':
+                return `净化 ${Math.max(1, value || 1)}`;
+            case 'discardHand':
+                return `弃牌 ${Math.max(1, value || 1)}`;
+            case 'discardRandom':
+                return `随机弃牌 ${Math.max(1, value || 1)}`;
+            case 'buff':
+                return `获得 ${buffNames[effect.buffType] || effect.buffType || '增益'} ${Math.max(1, value || 1)}`;
+            case 'debuff':
+                return `${target === 'allenemies' ? '全体施加' : '施加'} ${buffNames[effect.buffType] || effect.buffType || '减益'} ${Math.max(1, value || 1)}`;
+            default:
+                return '';
+        }
+    }
+
+    resolveBattleAdvisorExecutionChain(threatProfile = null, recommendation = null, cardPlanSteps = null) {
+        const profile = threatProfile && typeof threatProfile === 'object'
+            ? threatProfile
+            : this.resolveCounterplayThreatProfile();
+        const pickedRecommendation = recommendation && typeof recommendation === 'object'
+            ? recommendation
+            : this.resolveTacticalAdvisorRecommendation(profile);
+        const hand = Array.isArray(this.player?.hand) ? this.player.hand : [];
+        const inspect = this.resolveBattleAdvisorInspectCardIndex(cardPlanSteps);
+        const card = inspect.index >= 0 ? hand[inspect.index] : null;
+        if (!card) {
+            return {
+                index: -1,
+                source: inspect.source,
+                kicker: '执行链',
+                title: '暂无可分析手牌',
+                summary: '抽牌或等待下一回合后，可在此查看卡牌触发链。',
+                tags: [],
+                items: []
+            };
+        }
+
+        const counterTags = this.resolveCardCounterTags(card, profile);
+        const items = [];
+        if (card.type === 'attack' && Math.max(0, Number(card.damage) || 0) > 0) {
+            items.push(`基础伤害 ${Math.max(0, Math.floor(Number(card.damage) || 0))}`);
+        }
+        if (card.type === 'defense' && Math.max(0, Number(card.block) || 0) > 0) {
+            items.push(`基础护盾 ${Math.max(0, Math.floor(Number(card.block) || 0))}`);
+        }
+        const effectItems = Array.isArray(card.effects)
+            ? card.effects
+                .map((effect) => this.describeBattleAdvisorEffect(effect))
+                .filter(Boolean)
+            : [];
+        effectItems.forEach((text) => {
+            if (!items.includes(text)) items.push(text);
+        });
+
+        const resonance = this.player?.archetypeResonance || null;
+        if (resonance && card.synergyGroup && String(card.synergyGroup) === String(resonance.id || '')) {
+            items.push(`承接 ${resonance.name || resonance.id} 共鸣链`);
+        }
+        if (counterTags.length > 0) {
+            items.push(`贴合当前窗口：${counterTags.map((tag) => tag.label).join(' / ')}`);
+        } else {
+            items.push(`当前建议：${pickedRecommendation.shortLabel || pickedRecommendation.label || '顺势展开'}`);
+        }
+
+        const needsTarget = Array.isArray(card.effects) && card.effects.some((effect) =>
+            effect && ['damage', 'debuff', 'execute', 'removeBlock', 'goldOnKill', 'maxHpOnKill', 'penetrate', 'steal', 'lifeSteal', 'absorb', 'swapHpPercent', 'executeDamage', 'percentDamage', 'blockBurst'].includes(effect.type)
+            && (!effect.target || effect.target === 'enemy' || effect.target === 'single')
+        );
+        const hasMultipleEnemies = (Array.isArray(this.enemies) ? this.enemies : []).filter((enemy) => enemy && enemy.currentHp > 0).length > 1;
+        const costText = card.consumeCandy
+            ? '消耗奶糖'
+            : `消耗 ${Math.max(0, Math.floor(Number(this.getEffectiveCardCost(card)) || 0))} 灵力`;
+        const summaryParts = [costText];
+        if (needsTarget && hasMultipleEnemies) {
+            summaryParts.push('需选目标');
+        }
+        if (card.__bossSealed) {
+            summaryParts.push('当前被 Boss 封签');
+        }
+
+        const kickerMap = {
+            hover: '悬停预判',
+            preview: '当前预选',
+            selected: '当前预选',
+            focused: '焦点卡牌',
+            suggested: '助手建议',
+            fallback: '默认巡检',
+            empty: '执行链'
+        };
+
+        return {
+            index: inspect.index,
+            source: inspect.source,
+            kicker: kickerMap[inspect.source] || '执行链',
+            title: `执行链：${card.name || '未知卡牌'}`,
+            summary: summaryParts.join(' · '),
+            tags: counterTags.slice(0, 2),
+            items: items.slice(0, 4)
+        };
     }
 
     createDefaultTurnAdvisorTelemetry() {
@@ -4428,7 +4849,8 @@ class Battle {
             this.startTargetingMode(index);
             this.selectedCard = index;
         }
-        this.updateHandUI();
+        this.markUIDirty('hand', 'command');
+        this.updateBattleUI();
         this.focusAdvisorCard(index);
         return true;
     }
@@ -4470,6 +4892,9 @@ class Battle {
         const handContainer = document.getElementById('hand-cards');
         if (!handContainer) return;
         handContainer.innerHTML = '';
+        if (Math.max(-1, Math.floor(Number(this.hoveredBattleCardIndex) || -1)) >= this.player.hand.length) {
+            this.hoveredBattleCardIndex = -1;
+        }
 
         // CSS Force for Scroll - Moved to CSS class .hand-area
         handContainer.classList.add('hand-active');
@@ -4729,6 +5154,12 @@ class Battle {
         if (this.battleEnded) return;
         const card = this.player.hand[cardIndex];
         if (!card) return;
+        const nextHoverIndex = Math.max(0, Math.floor(Number(cardIndex) || 0));
+        if (this.hoveredBattleCardIndex !== nextHoverIndex) {
+            this.hoveredBattleCardIndex = nextHoverIndex;
+            this.markUIDirty('command');
+            this.updateBattleUI();
+        }
 
         // 仅针对攻击卡显示预览
         // 实际上有些技能卡也可能有伤害，检查效果
@@ -4785,6 +5216,11 @@ class Battle {
 
     // 结束悬停
     onCardHoverOut() {
+        if (this.hoveredBattleCardIndex !== -1) {
+            this.hoveredBattleCardIndex = -1;
+            this.markUIDirty('command');
+            this.updateBattleUI();
+        }
         // 清除所有预览
         const previews = document.querySelectorAll('.enemy-hp-preview');
         previews.forEach(el => el.style.width = '0%');
@@ -6945,6 +7381,7 @@ class Battle {
 
         this.targetingMode = true;
         this.selectedCardIndex = cardIndex;
+        this.selectedCard = cardIndex;
 
         // Highlight Enemies
         const enemyEls = document.querySelectorAll('.enemy');
@@ -6960,6 +7397,8 @@ class Battle {
         Utils.showBattleLog('请选择目标...');
         const handEl = document.getElementById('hand-cards');
         if (handEl) handEl.classList.add('targeting-active');
+        this.markUIDirty('command');
+        this.updateBattleUI();
     }
 
     // End Targeting Mode
@@ -6978,6 +7417,8 @@ class Battle {
 
         const handEl = document.getElementById('hand-cards');
         if (handEl) handEl.classList.remove('targeting-active');
+        this.markUIDirty('command');
+        this.updateBattleUI();
     }
 
     // Enemy Click Handler
@@ -7115,6 +7556,9 @@ class Battle {
                     reason: String(item.reason || '')
                 }))
             : [];
+        const tempoRail = this.resolveBattleTempoRail(profile, recommendation);
+        const statusIslands = this.resolveBattleStatusIslands(runtimeState, profile);
+        const executionChain = this.resolveBattleAdvisorExecutionChain(profile, recommendation, cardPlanSteps);
         telemetry.suggestedStepKeys = cardPlanSteps
             .map((item) => this.getAdvisorCardKey(Array.isArray(this.player?.hand) ? this.player.hand[item.index] : null))
             .filter(Boolean);
@@ -7199,6 +7643,9 @@ class Battle {
             formationHint,
             cardPlanHint,
             cardPlanSteps,
+            tempoRail,
+            statusIslands,
+            executionChain,
             matrixHint,
             lastModeLabel,
             pendingModeLabel,
@@ -7295,10 +7742,13 @@ class Battle {
         if (!event || (typeof event.button === 'number' && event.button !== 0)) return false;
 
         const handle = event.target && typeof event.target.closest === 'function'
-            ? event.target.closest('.battle-advisor-drag-handle')
+            ? event.target.closest('.battle-advisor-drag-handle, .battle-advisor-header')
             : null;
         const panel = document.getElementById('battle-command-panel');
         if (!handle || !panel) return false;
+        if (event.target && typeof event.target.closest === 'function' && event.target.closest('.battle-advisor-cardstep-btn, .battle-advisor-matrix-btn, .battle-advisor-toggle')) {
+            return false;
+        }
 
         const rect = panel.getBoundingClientRect();
         const clamped = this.clampBattleCommandPanelPosition(rect.left, rect.top, rect.width || panel.offsetWidth, rect.height || panel.offsetHeight);
@@ -7309,6 +7759,7 @@ class Battle {
         panel.classList.add('custom-position', 'dragging');
 
         this.tacticalAdvisorHoverExpanded = false;
+        this.tacticalAdvisorHoverLocked = true;
         this.syncTacticalAdvisorPresentation();
 
         const startX = Number(event.clientX) || 0;
@@ -7372,6 +7823,7 @@ class Battle {
     toggleTacticalAdvisor() {
         this.tacticalAdvisorCollapsed = !this.tacticalAdvisorCollapsed;
         this.tacticalAdvisorHoverExpanded = false;
+        this.tacticalAdvisorHoverLocked = this.tacticalAdvisorCollapsed;
         if (!this.syncTacticalAdvisorPresentation()) {
             this.markUIDirty('command');
             this.updateBattleUI();
@@ -7381,6 +7833,8 @@ class Battle {
     setTacticalAdvisorHoverExpanded(active = false) {
         const next = !!active;
         if (this.shouldUseCompactBattleHud() || !this.tacticalAdvisorCollapsed || this.battleCommandDragState) return;
+        if (next && this.tacticalAdvisorHoverLocked) return;
+        if (!next) this.tacticalAdvisorHoverLocked = false;
         if (this.tacticalAdvisorHoverExpanded === next) return;
         this.tacticalAdvisorHoverExpanded = next;
         if (!this.syncTacticalAdvisorPresentation()) {
@@ -7490,15 +7944,82 @@ class Battle {
                 </button>
             `).join('')
             : '';
+        const tempoRail = advisor.tempoRail && Array.isArray(advisor.tempoRail.segments)
+            ? advisor.tempoRail.segments.map((segment) => `
+                <div class="battle-advisor-tempo-segment ${segment.active ? 'active' : ''} tone-${escapeHtml(segment.id)}"
+                     title="${escapeHtml(segment.tip || '')}">
+                    <div class="battle-advisor-tempo-row">
+                        <span class="battle-advisor-tempo-label">${escapeHtml(segment.label)}</span>
+                        <span class="battle-advisor-tempo-score">${Math.max(0, Math.floor(Number(segment.score) || 0))}%</span>
+                    </div>
+                    <div class="battle-advisor-tempo-track">
+                        <span class="battle-advisor-tempo-fill" style="width:${Math.max(0, Math.min(100, Math.floor(Number(segment.score) || 0)))}%"></span>
+                    </div>
+                </div>
+            `).join('')
+            : '';
+        const statusIslands = Array.isArray(advisor.statusIslands)
+            ? advisor.statusIslands.map((item) => `
+                <span class="battle-advisor-status-chip tone-${escapeHtml(item.tone || item.id || 'state')}"
+                      title="${escapeHtml(item.label)}">
+                    <span class="battle-advisor-status-label">${escapeHtml(item.label)}</span>
+                    <span class="battle-advisor-status-value">${escapeHtml(item.value)}</span>
+                </span>
+            `).join('')
+            : '';
+        const executionChainItems = Array.isArray(advisor.executionChain?.items)
+            ? advisor.executionChain.items.map((item) => `
+                <span class="battle-advisor-chain-step">${escapeHtml(item)}</span>
+            `).join('<span class="battle-advisor-chain-arrow">→</span>')
+            : '';
+        const executionChainTags = Array.isArray(advisor.executionChain?.tags)
+            ? advisor.executionChain.tags.map((tag) => `
+                <span class="battle-advisor-chain-tag tone-${escapeHtml(tag.id || 'tag')}"
+                      title="${escapeHtml(tag.tip || '')}">${escapeHtml(tag.label || '')}</span>
+            `).join('')
+            : '';
+        const executionChainIndex = advisor.executionChain && advisor.executionChain.index != null && Number.isFinite(Number(advisor.executionChain.index))
+            ? Math.floor(Number(advisor.executionChain.index))
+            : -1;
 
         const advisorExpanded = !this.tacticalAdvisorCollapsed || this.tacticalAdvisorHoverExpanded;
         const advisorBody = `
+                ${tempoRail ? `
+                    <div class="battle-advisor-block battle-advisor-tempo-block">
+                        <div class="battle-advisor-section-head">
+                            <span class="battle-advisor-section-title">回合节奏条</span>
+                            <span class="battle-advisor-section-note">${escapeHtml(advisor.tempoRail?.summary || '')}</span>
+                        </div>
+                        <div class="battle-advisor-tempo-grid">${tempoRail}</div>
+                    </div>
+                ` : ''}
+                ${statusIslands ? `
+                    <div class="battle-advisor-block battle-advisor-status-block">
+                        <div class="battle-advisor-section-head">
+                            <span class="battle-advisor-section-title">关键状态岛</span>
+                            <span class="battle-advisor-section-note">把资源、共鸣与 Boss 节奏聚合查看。</span>
+                        </div>
+                        <div class="battle-advisor-status-strip">${statusIslands}</div>
+                    </div>
+                ` : ''}
                 <div class="battle-advisor-threat-list">${threatChips}</div>
                 <p class="battle-advisor-line battle-advisor-recommend">建议回路：${escapeHtml(advisor.recommendation.label)} · ${escapeHtml(advisor.recommendation.desc)}</p>
                 <p class="battle-advisor-line battle-advisor-readiness">${escapeHtml(advisor.readiness)}</p>
                 ${advisor.formationHint ? `<p class="battle-advisor-line battle-advisor-formation">${escapeHtml(advisor.formationHint)}</p>` : ''}
                 ${advisor.cardPlanHint ? `<p class="battle-advisor-line battle-advisor-cardplan">${escapeHtml(advisor.cardPlanHint)}</p>` : ''}
                 ${cardPlanSteps ? `<div class="battle-advisor-cardplan-steps">${cardPlanSteps}</div>` : ''}
+                ${executionChainItems ? `
+                    <div class="battle-advisor-block battle-advisor-chain"
+                         data-card-index="${executionChainIndex}">
+                        <div class="battle-advisor-section-head">
+                            <span class="battle-advisor-section-title">${escapeHtml(advisor.executionChain?.kicker || '执行链')}</span>
+                            <span class="battle-advisor-section-note">${escapeHtml(advisor.executionChain?.summary || '')}</span>
+                        </div>
+                        <div class="battle-advisor-chain-title">${escapeHtml(advisor.executionChain?.title || '')}</div>
+                        ${executionChainTags ? `<div class="battle-advisor-chain-tags">${executionChainTags}</div>` : ''}
+                        <div class="battle-advisor-chain-steps">${executionChainItems}</div>
+                    </div>
+                ` : ''}
                 ${advisor.matrixHint ? `<p class="battle-advisor-line battle-advisor-matrix">${escapeHtml(advisor.matrixHint)}</p>` : ''}
                 ${advisor.pendingModeLabel ? `<p class="battle-advisor-line battle-advisor-pending-mode">模式预设：${escapeHtml(advisor.pendingModeLabel)}</p>` : ''}
                 ${matrixControls ? `<div class="battle-advisor-matrix-controls">${matrixControls}</div>` : ''}
@@ -7545,20 +8066,17 @@ class Battle {
         if (dragHandle) {
             dragHandle.onpointerdown = (event) => this.beginBattleCommandPanelDrag(event);
         }
-
-        if (!this.shouldUseCompactBattleHud() && advisorEl) {
-            advisorEl.onmouseenter = () => this.setTacticalAdvisorHoverExpanded(true);
-            advisorEl.onmouseleave = () => this.setTacticalAdvisorHoverExpanded(false);
-            panel.onmouseenter = null;
-            panel.onmouseleave = null;
-        } else {
-            if (advisorEl) {
-                advisorEl.onmouseenter = null;
-                advisorEl.onmouseleave = null;
-            }
-            panel.onmouseenter = null;
-            panel.onmouseleave = null;
+        const advisorHeader = panel.querySelector('.battle-advisor-header');
+        if (advisorHeader) {
+            advisorHeader.onpointerdown = (event) => this.beginBattleCommandPanelDrag(event);
         }
+
+        if (advisorEl) {
+            advisorEl.onmouseenter = null;
+            advisorEl.onmouseleave = null;
+        }
+        panel.onmouseenter = null;
+        panel.onmouseleave = null;
     }
 
 

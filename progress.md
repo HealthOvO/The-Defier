@@ -2921,3 +2921,82 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - Browser：
       - 使用 `.site` 本地预览后执行 `node tests/browser_audit.mjs http://127.0.0.1:4180 output/web-audit-pages-preview-pass-1` ✅
       - 已确认 Pages 产物预览下，主菜单、游客新游戏、PVP、地图与战斗链路全部通过。
+
+- 2026-03-12: 第五十六轮 商店长期经济建议升级（预算 / 储备线 / 单次消费上限）
+  - 处理结论
+    - `js/game.js`
+      - 新增 `getShopEconomyOutlook()`，把当前灵石、血线、下一批地图节点风险、恢复服务可负担性整合为长期经济视角。
+      - `buildShopSpendRecommendation()` 接入经济储备线与单次消费上限，不再只看“当前最适配”，而会同步评估“买完后是否还留得住应急资金”。
+      - 商店摘要区新增经济提示条：`预算 / 储备线 / 建议单次 ≤ / 经济状态`，并追加解释文案，帮助玩家理解为什么此刻该买卡、买服务或留钱。
+    - `css/style.css`
+      - 新增商店经济提示 chip 与说明样式，按 `stable / tight / critical` 三档显示不同视觉状态。
+    - `tests/sanity_planning_todo_checks.js`
+      - 增补长期经济 sanity：覆盖高压前线的高储备目标、休整节点前的宽松消费窗口，以及 Boss 前低预算下的留钱建议。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 商店摘要审计升级为同时检查经济 chip、储备线文案和解释说明，确保 UI 与策略建议同步可见。
+  - 本轮验证（全通过）
+    - 语法 / Sanity：
+      - `node --check js/game.js` ✅
+      - `node --check tests/sanity_planning_todo_checks.js` ✅
+      - `node --check tests/browser_meta_screen_audit.mjs` ✅
+      - `node tests/sanity_planning_todo_checks.js` ✅
+    - Node：
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser：
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit-economy-pass-1` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-economy-pass-1` ✅
+      - 已确认新增审计项 `shop summary shows buy card or service guidance with economy reserve cues` 通过。
+    - Playwright / 本地目检：
+      - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-economy-pass-1` ✅
+      - 已目检 `output/web-game-client-economy-pass-1/shot-1.png`：主菜单与游客提示弹窗正常显示，`state-1.json` 为 `mode=main-menu`，与截图一致。
+  - 后续事项
+    - 可继续把长期经济建议接入“服务详情弹窗”，让每个服务直接显示“买后剩余 / 是否跌破储备线”。
+    - 可继续把该模型扩展到无尽模式的压力倍率与折扣逻辑，形成更完整的商店经济环。
+
+- 2026-03-12: 第五十七轮 战斗情报中枢升级（回合节奏条 / 关键状态岛 / 执行链）
+  - 处理结论
+    - `js/core/battle.js`
+      - 扩展 `resolveCounterplayThreatProfile()` 数值画像，补充敌方爆发、护盾、减益、召唤、最低血线等指标，供 UI 直接读用。
+      - 新增战术助手 3 个战斗中枢模块：
+        - `resolveBattleTempoRail()`：输出 `守势 / 破阵 / 净域 / 歼灭` 四路节奏条，直观展示当前回合优先级。
+        - `resolveBattleStatusIslands()`：聚合 `指令就绪 / 护势 / 共鸣 / Boss幕 / 收束线` 等关键战斗状态。
+        - `resolveBattleAdvisorExecutionChain()`：基于助手建议、当前预选牌或鼠标悬停牌，展示卡牌执行链、窗口标签与触发路径。
+      - 执行链支持真实交互切换：
+        - 悬停手牌会刷新助手中的执行链；
+        - 点击助手推荐牌后，执行链会切换到当前预选牌；
+        - 目标选择模式开始 / 结束时，助手状态同步刷新。
+      - 修复执行链索引展示边界：避免第 `0` 张手牌被误写成 `-1`，确保浏览器审计能正确识别 hover 切换。
+    - `css/style.css`
+      - 为战术助手新增分区样式：
+        - `battle-advisor-tempo-*` 回合节奏条；
+        - `battle-advisor-status-*` 关键状态岛；
+        - `battle-advisor-chain-*` 执行链条目 / 标签 / 箭头。
+      - 补充窄屏桌面压缩规则，避免新模块加入后文本挤压或视觉层级失衡。
+    - `tests/sanity_battle_advisor_plan_checks.js`
+      - 新增断言：快照必须包含四路节奏条、关键状态岛，以及默认建议牌 / hover 牌的执行链切换。
+    - `tests/browser_feature_audit.mjs`
+      - 强化战斗助手审计：
+        - 节奏条段数与激活路由可见；
+        - 关键状态岛可见；
+        - 执行链标题、步骤、hover 切换行为通过。
+  - 本轮验证
+    - 语法 / 定向 Sanity：
+      - `node --check js/core/battle.js` ✅
+      - `node --check tests/sanity_battle_advisor_plan_checks.js` ✅
+      - `node --check tests/browser_feature_audit.mjs` ✅
+      - `node tests/sanity_battle_advisor_plan_checks.js` ✅
+    - Browser：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit` ✅
+      - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/web-mobile-layout-audit` ✅（需沙箱外运行）
+    - Playwright / 视觉：
+      - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client` ✅（需沙箱外运行）
+      - 已目检：
+        - `output/web-audit/03-battle.png`：主流程战斗 HUD 无明显遮挡，结束回合按钮与手牌区分离正常。
+        - `output/web-feature-audit/feature-audit-compact-hand.png`：紧凑战斗视图下，指令面板与手牌区层级正常。
+        - `output/web-game-client/shot-1.png`：主菜单游客确认弹窗显示稳定，截图与交互预期一致。
+    - 全量 Node 备注：
+      - `bash tests/run_node_checks.sh` 本轮再次执行时仍在既有断言 `tests/sanity_endless_shop_service_checks.js` 的 `temp_boon should append boon history` 失败，与本轮战斗助手 / HUD 改动无直接关联。
+  - 后续事项
+    - 可继续把执行链接入卡牌详情弹窗，形成“悬停看摘要、长按看全链”的双层阅读体验。
+    - 可继续为移动端补一个底部抽屉式战斗助手，把桌面执行链裁剪为点按展开版。

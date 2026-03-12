@@ -84,7 +84,7 @@
                     <span class="util-label">角色信息</span>
                 </div>
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showScreen('collection')">
+                    <button class="util-btn" onclick="game.showCollection()">
                         <span class="btn-icon">📚</span>
                     </button>
                     <span class="util-label">法则图鉴</span>
@@ -436,7 +436,57 @@
         <div class="codex-shell">
             <div class="codex-scroll-container">
                 <div class="codex-layout">
-                    <div class="codex-main-column">
+                <div class="codex-main-column">
+                    <div class="compendium-toolbar codex-toolbar">
+                        <label class="compendium-control compendium-control-wide">
+                            <span>检索法则 / 共鸣</span>
+                            <input id="law-codex-search" type="search" placeholder="输入法则名、元素、共鸣或描述关键词"
+                                oninput="game.setLawCodexSearchQuery(this.value)">
+                        </label>
+                        <label class="compendium-control">
+                            <span>收录状态</span>
+                            <select id="law-codex-status-filter" onchange="game.setLawCodexStatusFilter(this.value)">
+                                <option value="all">全部法则</option>
+                                <option value="owned">仅已掌握</option>
+                                <option value="unowned">仅未掌握</option>
+                            </select>
+                        </label>
+                        <label class="compendium-control">
+                            <span>元素</span>
+                            <select id="law-codex-element-filter" onchange="game.setLawCodexElementFilter(this.value)">
+                                <option value="all">全部元素</option>
+                                <option value="thunder">雷</option>
+                                <option value="fire">火</option>
+                                <option value="ice">冰</option>
+                                <option value="sword">剑</option>
+                                <option value="void">虚空</option>
+                                <option value="chaos">混沌</option>
+                                <option value="blood">血</option>
+                                <option value="life">生命</option>
+                                <option value="earth">土</option>
+                                <option value="wind">风</option>
+                                <option value="time">时间</option>
+                                <option value="space">空间</option>
+                                <option value="karma">因果</option>
+                                <option value="reversal">逆转</option>
+                                <option value="metal">金</option>
+                                <option value="wood">木</option>
+                            </select>
+                        </label>
+                        <label class="compendium-control">
+                            <span>共鸣进度</span>
+                            <select id="law-codex-resonance-filter" onchange="game.setLawCodexResonanceFilter(this.value)">
+                                <option value="all">全部共鸣状态</option>
+                                <option value="active">已激活</option>
+                                <option value="ready">待装配</option>
+                                <option value="near">差 1 枚</option>
+                                <option value="locked">未成型</option>
+                            </select>
+                        </label>
+                        <button type="button" class="compendium-chip utility" id="law-codex-filter-clear"
+                            onclick="game.clearLawCodexFilters()">清空检索</button>
+                    </div>
+
                         <div class="codex-section">
                             <div class="codex-section-header">
                                 <span class="section-icon">📜</span>
@@ -501,6 +551,11 @@
                     </div>
 
                     <div class="compendium-toolbar">
+                        <label class="compendium-control compendium-control-wide">
+                            <span>检索法宝</span>
+                            <input id="treasure-search-input" type="search" placeholder="输入法宝名、效果、出处或逸闻关键词"
+                                oninput="game.setTreasureCompendiumSearchQuery(this.value)">
+                        </label>
                         <label class="compendium-control">
                             <span>筛选</span>
                             <select id="treasure-filter-select" onchange="game.setTreasureCompendiumFilter(this.value)">

@@ -38,8 +38,15 @@ class Game {
         };
         this.endlessState = this.createDefaultEndlessState();
         this.encounterState = this.createDefaultEncounterState();
+        this.lawCodexFilterState = {
+            query: '',
+            status: 'all',
+            element: 'all',
+            resonance: 'all'
+        };
         this.treasureCompendiumFilter = 'all';
         this.treasureCompendiumSort = 'rarity_desc';
+        this.treasureCompendiumSearchQuery = '';
         this.treasureCompendiumFilterState = {
             status: 'all',
             rarities: [],
@@ -3578,18 +3585,108 @@ class Game {
         this.saveGame();
     }
 
+    showCollection() {
+        this.showScreen('collection');
+        this.initCollection();
+    }
+
+    normalizeLawCodexFilterState(rawState = null) {
+        const source = rawState && typeof rawState === 'object' ? rawState : {};
+        const normalizeQuery = (value) => String(value || '').trim().slice(0, 60);
+        const allowedElements = [
+            'all', 'thunder', 'fire', 'ice', 'sword', 'void', 'chaos', 'blood',
+            'life', 'earth', 'wind', 'time', 'space', 'karma', 'reversal', 'metal', 'wood'
+        ];
+        const allowedResonanceStates = ['all', 'active', 'ready', 'near', 'locked'];
+        return {
+            query: normalizeQuery(source.query),
+            status: ['all', 'owned', 'unowned'].includes(source.status) ? source.status : 'all',
+            element: allowedElements.includes(source.element) ? source.element : 'all',
+            resonance: allowedResonanceStates.includes(source.resonance) ? source.resonance : 'all'
+        };
+    }
+
+    getLawCodexFilterState() {
+        this.lawCodexFilterState = this.normalizeLawCodexFilterState(this.lawCodexFilterState);
+        return this.lawCodexFilterState;
+    }
+
+    getLawCodexFilterLabels(state = null) {
+        const currentState = this.normalizeLawCodexFilterState(state || this.getLawCodexFilterState());
+        const labels = [];
+        if (currentState.query) labels.push(`关键词「${currentState.query}」`);
+        if (currentState.status === 'owned') labels.push('仅已掌握');
+        if (currentState.status === 'unowned') labels.push('仅未掌握');
+        if (currentState.element !== 'all') labels.push(`${this.getLawElementLabel(currentState.element)}属性`);
+        const resonanceLabelMap = {
+            active: '已激活共鸣',
+            ready: '待装配共鸣',
+            near: '差 1 枚共鸣',
+            locked: '未成型共鸣'
+        };
+        if (currentState.resonance !== 'all') labels.push(resonanceLabelMap[currentState.resonance] || currentState.resonance);
+        return labels;
+    }
+
+    setLawCodexSearchQuery(query = '') {
+        this.lawCodexFilterState = this.normalizeLawCodexFilterState({
+            ...this.getLawCodexFilterState(),
+            query
+        });
+        this.initCollection();
+    }
+
+    setLawCodexStatusFilter(value = 'all') {
+        this.lawCodexFilterState = this.normalizeLawCodexFilterState({
+            ...this.getLawCodexFilterState(),
+            status: value
+        });
+        this.initCollection();
+    }
+
+    setLawCodexElementFilter(value = 'all') {
+        this.lawCodexFilterState = this.normalizeLawCodexFilterState({
+            ...this.getLawCodexFilterState(),
+            element: value
+        });
+        this.initCollection();
+    }
+
+    setLawCodexResonanceFilter(value = 'all') {
+        this.lawCodexFilterState = this.normalizeLawCodexFilterState({
+            ...this.getLawCodexFilterState(),
+            resonance: value
+        });
+        this.initCollection();
+    }
+
+    clearLawCodexFilters() {
+        this.lawCodexFilterState = this.normalizeLawCodexFilterState();
+        this.initCollection();
+    }
+
     // 初始化图鉴
     initCollection() {
         const lawGrid = document.getElementById('law-archive-grid');
         const resonanceList = document.getElementById('resonance-manual-list');
         const summaryEl = document.getElementById('law-codex-summary');
         const resonanceSummaryEl = document.getElementById('law-codex-resonance-summary');
+        const searchInput = document.getElementById('law-codex-search');
+        const statusSelect = document.getElementById('law-codex-status-filter');
+        const elementSelect = document.getElementById('law-codex-element-filter');
+        const resonanceSelect = document.getElementById('law-codex-resonance-filter');
 
         // 确保容器存在
         if (!lawGrid || !resonanceList) {
             console.warn('New Codex UI structure not found.');
             return;
         }
+
+        const filterState = this.getLawCodexFilterState();
+        if (searchInput && searchInput.value !== filterState.query) searchInput.value = filterState.query;
+        if (statusSelect && statusSelect.value !== filterState.status) statusSelect.value = filterState.status;
+        if (elementSelect && elementSelect.value !== filterState.element) elementSelect.value = filterState.element;
+        if (resonanceSelect && resonanceSelect.value !== filterState.resonance) resonanceSelect.value = filterState.resonance;
 
         const allLawIds = Object.keys(LAWS || {});
         const totalLawCount = allLawIds.length;
@@ -3599,6 +3696,30 @@ class Game {
             : 0;
         const activeResonanceCount = Array.isArray(this.player.activeResonances) ? this.player.activeResonances.length : 0;
         const lawProgress = totalLawCount > 0 ? Math.round((collectedLawCount / totalLawCount) * 100) : 0;
+        const lawFilterLabels = this.getLawCodexFilterLabels(filterState);
+
+        const lawEntries = allLawIds.map((lawId) => {
+            const law = LAWS[lawId];
+            const collected = this.player.collectedLaws.some((entry) => entry.id === lawId);
+            const readinessList = this.getLawResonanceAvailability(law);
+            const resonanceState = this.resolveLawCodexResonanceState(readinessList);
+            return {
+                lawId,
+                law,
+                collected,
+                readinessList,
+                resonanceState
+            };
+        });
+        const filteredLawEntries = lawEntries.filter((entry) => this.passesLawCodexLawFilter(entry));
+
+        const resonanceEntries = (typeof LAW_RESONANCES !== 'undefined' && LAW_RESONANCES)
+            ? Object.values(LAW_RESONANCES).map((resonance) => ({
+                resonance,
+                state: this.resolveLawCodexResonanceRecordState(resonance)
+            }))
+            : [];
+        const filteredResonanceEntries = resonanceEntries.filter((entry) => this.passesLawCodexResonanceFilter(entry));
 
         if (summaryEl) {
             summaryEl.innerHTML = [
@@ -3608,29 +3729,34 @@ class Game {
                 `<div class="codex-progress-track"><div class="codex-progress-fill" style="width:${lawProgress}%"></div></div>`,
                 '<ul class="codex-side-list compact">',
                 `<li>完成度 ${lawProgress}% · 越接近满库，共鸣路线越完整。</li>`,
+                `<li>当前检索结果 ${filteredLawEntries.length} 条${lawFilterLabels.length > 0 ? ` · 条件 ${lawFilterLabels.join(' / ')}` : ' · 条件 全部法则'}。</li>`,
                 '<li>未收录法则会保留在主区，便于直观看到缺口。</li>',
                 '</ul>'
             ].join('');
         }
 
         if (resonanceSummaryEl) {
+            const visibleActiveResonances = filteredResonanceEntries.filter((entry) => entry.state === 'active').length;
             resonanceSummaryEl.innerHTML = [
                 '<span class="codex-side-kicker">当前共鸣</span>',
                 '<h3>羁绊装配</h3>',
                 '<div class="codex-summary-grid two-cols">',
-                `<div class="codex-summary-chip"><strong>${activeResonanceCount}</strong><span>激活中</span></div>`,
-                `<div class="codex-summary-chip"><strong>${totalResonanceCount}</strong><span>总条目</span></div>`,
+                `<div class="codex-summary-chip"><strong>${visibleActiveResonances}</strong><span>激活中</span></div>`,
+                `<div class="codex-summary-chip"><strong>${filteredResonanceEntries.length}</strong><span>当前结果 / ${totalResonanceCount}</span></div>`,
                 '</div>',
-                '<p class="codex-side-note">优先补齐同元素法则，可更快点亮主力共鸣链。</p>'
+                `<p class="codex-side-note">${lawFilterLabels.length > 0 ? `当前已按 ${lawFilterLabels.join(' / ')} 检索。` : '优先补齐同元素法则，可更快点亮主力共鸣链。'}</p>`
             ].join('');
         }
 
         // --- 1. 渲染法则库 (Jade Slips) ---
         lawGrid.innerHTML = '';
 
-        for (const lawId in LAWS) {
-            const law = LAWS[lawId];
-            const collected = this.player.collectedLaws.some(l => l.id === lawId);
+        if (filteredLawEntries.length === 0) {
+            lawGrid.innerHTML = '<div class="codex-empty-state">当前检索条件下没有匹配的法则，试试清空关键词或放宽元素 / 共鸣条件。</div>';
+        }
+
+        for (const entry of filteredLawEntries) {
+            const { lawId, law, collected } = entry;
 
             const item = document.createElement('div');
             item.className = `law-item ${collected ? '' : 'locked'}`;
@@ -3691,10 +3817,14 @@ class Game {
             return;
         }
 
-        for (const resKey in LAW_RESONANCES) {
-            const res = LAW_RESONANCES[resKey];
+        if (filteredResonanceEntries.length === 0) {
+            resonanceList.innerHTML = '<div class="codex-empty-state">当前检索条件下没有匹配的共鸣链路，可尝试切换关键词或共鸣进度。</div>';
+        }
 
-            const isActive = this.player.activeResonances && this.player.activeResonances.some(r => r.id === res.id);
+        for (const entry of filteredResonanceEntries) {
+            const res = entry.resonance;
+
+            const isActive = entry.state === 'active';
 
             const resScroll = document.createElement('div');
             resScroll.className = `resonance-item ${isActive ? 'active' : ''}`;
@@ -3766,6 +3896,79 @@ class Game {
     getLawRelatedResonances(law) {
         if (!law || typeof LAW_RESONANCES === 'undefined' || !LAW_RESONANCES) return [];
         return Object.values(LAW_RESONANCES).filter((resonance) => Array.isArray(resonance.laws) && resonance.laws.includes(law.id));
+    }
+
+    resolveLawCodexResonanceState(readinessList = []) {
+        if (!Array.isArray(readinessList) || readinessList.length <= 0) return 'locked';
+        if (readinessList.some((entry) => entry?.state === 'active')) return 'active';
+        if (readinessList.some((entry) => entry?.state === 'ready')) return 'ready';
+        if (readinessList.some((entry) => entry?.state === 'near')) return 'near';
+        return 'locked';
+    }
+
+    resolveLawCodexResonanceRecordState(resonance) {
+        if (!resonance) return 'locked';
+        const requiredLaws = Array.isArray(resonance.laws) ? resonance.laws.filter(Boolean) : [];
+        const collectedIds = new Set(
+            Array.isArray(this.player?.collectedLaws)
+                ? this.player.collectedLaws.map((entry) => entry?.id).filter(Boolean)
+                : []
+        );
+        const socketedIds = new Set(
+            this.player?.fateRing && typeof this.player.fateRing.getSocketedLaws === 'function'
+                ? this.player.fateRing.getSocketedLaws().filter(Boolean)
+                : []
+        );
+        const missingCollected = requiredLaws.filter((lawId) => !collectedIds.has(lawId));
+        const missingSocketed = requiredLaws.filter((lawId) => !socketedIds.has(lawId));
+        if (requiredLaws.length > 0 && missingSocketed.length === 0) return 'active';
+        if (requiredLaws.length > 0 && missingCollected.length === 0) return 'ready';
+        if (missingCollected.length === 1) return 'near';
+        return 'locked';
+    }
+
+    passesLawCodexLawFilter(entry) {
+        const filterState = this.getLawCodexFilterState();
+        if (!entry || !entry.law) return false;
+        if (filterState.status === 'owned' && !entry.collected) return false;
+        if (filterState.status === 'unowned' && entry.collected) return false;
+        if (filterState.element !== 'all' && entry.law.element !== filterState.element) return false;
+        if (filterState.resonance !== 'all' && entry.resonanceState !== filterState.resonance) return false;
+        if (!filterState.query) return true;
+
+        const relatedResonanceNames = this.getLawRelatedResonances(entry.law).map((resonance) => resonance?.name || '');
+        const haystack = [
+            entry.law.id,
+            entry.law.name,
+            entry.law.description,
+            this.getLawElementLabel(entry.law.element),
+            this.getLawRarityText(entry.law.rarity),
+            ...relatedResonanceNames,
+            ...(Array.isArray(entry.law.unlockCards) ? entry.law.unlockCards : [])
+        ].join(' ').toLowerCase();
+
+        return haystack.includes(filterState.query.toLowerCase());
+    }
+
+    passesLawCodexResonanceFilter(entry) {
+        const filterState = this.getLawCodexFilterState();
+        if (!entry || !entry.resonance) return false;
+        if (filterState.resonance !== 'all' && entry.state !== filterState.resonance) return false;
+        if (filterState.element !== 'all') {
+            const hasElement = (entry.resonance.laws || []).some((lawId) => LAWS?.[lawId]?.element === filterState.element);
+            if (!hasElement) return false;
+        }
+        if (!filterState.query) return true;
+
+        const lawNames = (entry.resonance.laws || []).map((lawId) => LAWS?.[lawId]?.name || lawId);
+        const haystack = [
+            entry.resonance.id,
+            entry.resonance.name,
+            entry.resonance.description,
+            ...lawNames
+        ].join(' ').toLowerCase();
+
+        return haystack.includes(filterState.query.toLowerCase());
     }
 
     getLawResonanceAvailability(law) {
@@ -4010,6 +4213,15 @@ class Game {
         this.showTreasureCompendium();
     }
 
+    setTreasureCompendiumSearchQuery(query = '') {
+        this.treasureCompendiumSearchQuery = String(query || '').trim().slice(0, 80);
+        this.showTreasureCompendium();
+    }
+
+    getTreasureCompendiumSearchQuery() {
+        return String(this.treasureCompendiumSearchQuery || '').trim();
+    }
+
 
     getTreasureCompendiumPresetStorageKey() {
         return this.treasureCompendiumPresetStorageKey || 'theDefierTreasureCompendiumPresetsV1';
@@ -4018,7 +4230,8 @@ class Game {
     serializeTreasureCompendiumFilterState(state = null, sort = null) {
         return JSON.stringify({
             state: this.normalizeTreasureCompendiumFilterState(state || this.getTreasureCompendiumFilterState()),
-            sort: String(sort || this.treasureCompendiumSort || 'rarity_desc')
+            sort: String(sort || this.treasureCompendiumSort || 'rarity_desc'),
+            query: this.getTreasureCompendiumSearchQuery()
         });
     }
 
@@ -4033,6 +4246,7 @@ class Game {
                     ? {
                         state: this.normalizeTreasureCompendiumFilterState(entry.state),
                         sort: String(entry.sort || 'rarity_desc'),
+                        query: String(entry.query || ''),
                         savedAt: Number(entry.savedAt) || 0
                     }
                     : null)
@@ -4052,8 +4266,9 @@ class Game {
         }
     }
 
-    getTreasureCompendiumPresetSummary(state = null) {
+    getTreasureCompendiumPresetSummary(state = null, query = '') {
         const labels = this.getTreasureCompendiumFilterLabels(state || this.getTreasureCompendiumFilterState());
+        if (query) labels.unshift(`搜「${query}」`);
         return labels.length > 0 ? labels.join(' / ') : '全部法宝';
     }
 
@@ -4063,6 +4278,7 @@ class Game {
         presets[index] = {
             state: this.normalizeTreasureCompendiumFilterState(this.getTreasureCompendiumFilterState()),
             sort: String(this.treasureCompendiumSort || 'rarity_desc'),
+            query: this.getTreasureCompendiumSearchQuery(),
             savedAt: Date.now()
         };
         this.persistTreasureCompendiumPresets();
@@ -4083,6 +4299,7 @@ class Game {
         }
         this.treasureCompendiumFilterState = this.normalizeTreasureCompendiumFilterState(preset.state);
         this.treasureCompendiumSort = String(preset.sort || 'rarity_desc');
+        this.treasureCompendiumSearchQuery = String(preset.query || '');
         this.treasureCompendiumFilter = this.getTreasureCompendiumQuickFilterValue();
         this.showTreasureCompendium();
         return true;
@@ -4092,6 +4309,7 @@ class Game {
         this.treasureCompendiumFilterState = this.normalizeTreasureCompendiumFilterState();
         this.treasureCompendiumFilter = 'all';
         this.treasureCompendiumSort = 'rarity_desc';
+        this.treasureCompendiumSearchQuery = '';
         this.showTreasureCompendium();
     }
 
@@ -4104,7 +4322,7 @@ class Game {
     getTreasureCompendiumPresetLabel(slot = 0) {
         const preset = this.getTreasureCompendiumPresets()[slot];
         if (!preset?.state) return `预设 ${slot + 1}（空）`;
-        return `预设 ${slot + 1} · ${this.getTreasureCompendiumPresetSummary(preset.state)}`;
+        return `预设 ${slot + 1} · ${this.getTreasureCompendiumPresetSummary(preset.state, preset.query || '')}`;
     }
 
     normalizeTreasureCompendiumFilterState(rawState = null) {
@@ -4179,10 +4397,23 @@ class Game {
         const state = this.getTreasureCompendiumFilterState();
         const rarity = item?.data?.rarity || 'common';
         const sourceTags = this.getTreasureSourceTags(item?.data || {});
+        const query = this.getTreasureCompendiumSearchQuery().toLowerCase();
         if (state.status === 'owned' && !item?.isOwned) return false;
         if (state.status === 'unowned' && item?.isOwned) return false;
         if (state.rarities.length > 0 && !state.rarities.includes(rarity)) return false;
         if (state.sources.length > 0 && !state.sources.some((tag) => sourceTags.includes(tag))) return false;
+        if (query) {
+            const haystack = [
+                item?.id,
+                item?.data?.name,
+                item?.data?.description,
+                item?.data?.lore,
+                this.getTreasureSource(item?.data || {}),
+                ...sourceTags,
+                this.getRarityLabel(rarity).replace(/<[^>]+>/g, '')
+            ].join(' ').toLowerCase();
+            if (!haystack.includes(query)) return false;
+        }
         return true;
     }
 
@@ -4407,6 +4638,58 @@ class Game {
         };
     }
 
+    getShopEconomyOutlook() {
+        const budget = typeof this.getStrategicCurrencyAmount === 'function'
+            ? this.getStrategicCurrencyAmount('gold')
+            : (Number(this.player?.gold) || 0);
+        const hpRatio = this.player?.maxHp > 0 ? (this.player.currentHp / this.player.maxHp) : 1;
+        const forecast = this.getShopNextNodeForecast();
+        const services = Array.isArray(this.shopServices) ? this.shopServices.filter((item) => item && !item.sold) : [];
+        const recoveryServiceIds = new Set(['heal', 'campRation', 'fieldMedic', 'endlessStabilizer']);
+        const availableRecoveryServices = services.filter((item) => recoveryServiceIds.has(item.id));
+        const affordableRecoveryService = availableRecoveryServices.some((item) => this.canAffordShopItem(item));
+
+        let reserveTarget = this.isEndlessActive && this.isEndlessActive() ? 48 : 36;
+        if (hpRatio <= 0.4) reserveTarget += 24;
+        else if (hpRatio <= 0.6) reserveTarget += 16;
+        else if (hpRatio <= 0.8) reserveTarget += 8;
+
+        if (forecast?.danger === 'high') reserveTarget += hpRatio <= 0.6 ? 22 : 14;
+        else if (forecast?.danger === 'medium') reserveTarget += 7;
+        else if (forecast?.primaryType === 'rest') reserveTarget -= 12;
+        else if (forecast?.primaryType === 'event' || forecast?.primaryType === 'shop' || forecast?.primaryType === 'forge') reserveTarget -= 5;
+
+        if (availableRecoveryServices.length > 0 && !affordableRecoveryService && hpRatio <= 0.72) {
+            reserveTarget += 8;
+        }
+
+        reserveTarget = Math.max(18, Math.min(120, Math.round(reserveTarget)));
+        const spendCeiling = Math.max(0, budget - reserveTarget);
+        const status = spendCeiling <= 0 ? 'critical' : (spendCeiling < 35 ? 'tight' : 'stable');
+        const statusLabelMap = {
+            critical: '必须囤钱',
+            tight: '谨慎消费',
+            stable: '可灵活投入'
+        };
+        const note = status === 'critical'
+            ? `建议至少保留 ${reserveTarget} 灵石，用于${forecast?.primaryLabel || '后续节点'}前的恢复与应急。`
+            : status === 'tight'
+                ? `本次更适合把单次消费控制在 ${spendCeiling} 灵石以内，避免下一批节点前失去回转空间。`
+                : `当前可支配约 ${spendCeiling} 灵石，可优先买下真正高适配的卡牌或关键服务。`;
+
+        return {
+            budget,
+            reserveTarget,
+            spendCeiling,
+            status,
+            statusLabel: statusLabelMap[status] || '谨慎消费',
+            note,
+            forecast,
+            hpRatio,
+            affordableRecoveryService
+        };
+    }
+
     buildShopSpendRecommendation() {
         const availableCards = Array.isArray(this.shopItems) ? this.shopItems.filter((item) => item && !item.sold) : [];
         const availableServices = Array.isArray(this.shopServices) ? this.shopServices.filter((item) => item && !item.sold) : [];
@@ -4421,11 +4704,37 @@ class Game {
 
         const bestCard = affordableCards[0] || null;
         const bestService = affordableServices[0] || null;
-        const goldBudget = typeof this.getStrategicCurrencyAmount === 'function' ? this.getStrategicCurrencyAmount('gold') : (Number(this.player?.gold) || 0);
-        const hpRatio = this.player?.maxHp > 0 ? (this.player.currentHp / this.player.maxHp) : 1;
-        const forecast = this.getShopNextNodeForecast();
+        const economy = this.getShopEconomyOutlook();
+        const goldBudget = economy.budget;
+        const hpRatio = economy.hpRatio;
+        const forecast = economy.forecast;
         let bestCardScore = bestCard?.fit?.score || 0;
         let bestServiceScore = bestService?.fit?.score || 0;
+        const serviceRecoveryIds = new Set(['heal', 'campRation', 'fieldMedic', 'endlessStabilizer']);
+
+        if (bestCard) {
+            const cardPrice = Math.max(0, Number(bestCard.item?.price) || 0);
+            if (cardPrice > economy.spendCeiling) {
+                bestCardScore -= 0.9 + ((cardPrice - economy.spendCeiling) / 20);
+            } else if (economy.status === 'stable') {
+                bestCardScore += 0.35;
+            }
+            if (economy.status === 'critical') bestCardScore -= 0.85;
+            else if (economy.status === 'tight') bestCardScore -= 0.25;
+        }
+
+        if (bestService) {
+            const servicePrice = Math.max(0, Number(bestService.item?.price) || 0);
+            const isRecoveryService = serviceRecoveryIds.has(bestService.item?.id);
+            if (servicePrice > economy.spendCeiling) {
+                bestServiceScore -= (isRecoveryService ? 0.25 : 0.65) + ((servicePrice - economy.spendCeiling) / (isRecoveryService ? 42 : 26));
+            } else if (isRecoveryService && economy.status !== 'stable' && hpRatio <= 0.65) {
+                bestServiceScore += 0.55;
+            }
+            if (!isRecoveryService && economy.status === 'critical') {
+                bestServiceScore -= 0.35;
+            }
+        }
 
         if (forecast?.danger === 'high') {
             bestServiceScore += hpRatio <= 0.7 ? 1.2 : 0.55;
@@ -4446,7 +4755,8 @@ class Game {
                 reason: (goldBudget <= 40 ? '当前资源太紧，先留钱应对后续恢复与关键节点。' : '本页暂无高适配且可负担的选项，先观察下一次货架更稳。') + forecastHint,
                 bestCard: null,
                 bestService: null,
-                forecast
+                forecast,
+                economy
             };
         }
 
@@ -4457,7 +4767,8 @@ class Game {
                 reason: `${bestService.item.name}：${bestService.fit.reason}${forecastHint}`,
                 bestCard,
                 bestService,
-                forecast
+                forecast,
+                economy
             };
         }
 
@@ -4468,7 +4779,8 @@ class Game {
                 reason: `下一批更接近${forecast.primaryLabel}，当前灵石偏紧，先保留恢复或应急资金更稳。`,
                 bestCard,
                 bestService,
-                forecast
+                forecast,
+                economy
             };
         }
 
@@ -4479,7 +4791,8 @@ class Game {
                 reason: `${bestService.item.name}：${bestService.fit.reason}${forecastHint}`,
                 bestCard,
                 bestService,
-                forecast
+                forecast,
+                economy
             };
         }
 
@@ -4490,7 +4803,8 @@ class Game {
                 reason: `${bestCard.item.card.name}：${bestCard.fit.reason}${forecastHint}`,
                 bestCard,
                 bestService,
-                forecast
+                forecast,
+                economy
             };
         }
 
@@ -4500,7 +4814,8 @@ class Game {
             reason: `当前买卡与买服务的收益接近，若资源吃紧可先保留弹性。${forecastHint}`,
             bestCard,
             bestService,
-            forecast
+            forecast,
+            economy
         };
     }
     // 辅助：格式化共鸣效果描述
@@ -10706,6 +11021,15 @@ class Game {
                     <span class="shop-advice-badge">${advice.action}</span>
                     <div class="shop-advice-text">${advice.reason}</div>
                     ${advice.forecast?.summary ? `<div class="shop-advice-forecast ${advice.forecast.danger || 'low'}">${advice.forecast.summary}</div>` : ''}
+                    ${advice.economy ? `
+                        <div class="shop-advice-economy">
+                            <span class="shop-economy-chip ${advice.economy.status || 'tight'}">预算 ${advice.economy.budget}</span>
+                            <span class="shop-economy-chip ${advice.economy.status || 'tight'}">储备线 ${advice.economy.reserveTarget}</span>
+                            <span class="shop-economy-chip ${advice.economy.status || 'tight'}">建议单次 ≤ ${advice.economy.spendCeiling}</span>
+                            <span class="shop-economy-chip ${advice.economy.status || 'tight'}">${advice.economy.statusLabel}</span>
+                        </div>
+                        <div class="shop-advice-note">${advice.economy.note}</div>
+                    ` : ''}
                     <div class="shop-advice-meta">
                         <span>最佳卡牌：${advice.bestCard?.item?.card?.name || '暂无'}</span>
                         <span>最佳服务：${advice.bestService?.item?.name || '暂无'}</span>
@@ -13012,13 +13336,16 @@ ${treasure ? `获得法宝：${treasure.name}
         const statsEl = document.getElementById('treasure-compendium-stats');
         const filterSelect = document.getElementById('treasure-filter-select');
         const sortSelect = document.getElementById('treasure-sort-select');
+        const searchInput = document.getElementById('treasure-search-input');
         if (!grid) return;
 
         const filterState = this.getTreasureCompendiumFilterState();
         this.treasureCompendiumFilter = this.getTreasureCompendiumQuickFilterValue();
         this.treasureCompendiumSort = this.treasureCompendiumSort || 'rarity_desc';
+        const searchQuery = this.getTreasureCompendiumSearchQuery();
         if (filterSelect) filterSelect.value = this.treasureCompendiumFilter;
         if (sortSelect) sortSelect.value = this.treasureCompendiumSort;
+        if (searchInput && searchInput.value !== searchQuery) searchInput.value = searchQuery;
         [0, 1, 2].forEach((slot) => {
             const applyBtn = document.getElementById(`treasure-preset-slot-${slot}`);
             const saveBtn = document.getElementById(`treasure-preset-save-${slot}`);
@@ -13056,6 +13383,10 @@ ${treasure ? `获得法宝：${treasure.name}
 
         const filteredTreasures = this.sortTreasureCompendiumItems(allTreasures.filter((item) => this.passesTreasureCompendiumFilter(item)));
 
+        if (filteredTreasures.length === 0) {
+            grid.innerHTML = '<div class="codex-empty-state">当前检索条件下没有匹配的法宝，试试清空关键词或切换来源 / 品质筛选。</div>';
+        }
+
         filteredTreasures.forEach((item) => {
             const t = item.data;
             const isOwned = item.isOwned;
@@ -13088,6 +13419,7 @@ ${treasure ? `获得法宝：${treasure.name}
         const rarityNameMap = { common: '凡品', rare: '灵品', legendary: '神品', mythic: '仙品' };
         const sortLabelMap = { rarity_desc: '品质优先', owned_first: '已收录优先', realm_asc: '解锁层数优先', name_asc: '名称排序' };
         const activeFilterLabels = this.getTreasureCompendiumFilterLabels();
+        if (searchQuery) activeFilterLabels.unshift(`关键词「${searchQuery}」`);
         const rarityCounts = rarityOrder.map((rarity) => {
             const total = allTreasures.filter((item) => (item.data.rarity || 'common') === rarity).length;
             const owned = allTreasures.filter((item) => (item.data.rarity || 'common') === rarity && item.isOwned).length;
