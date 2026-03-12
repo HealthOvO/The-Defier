@@ -54,7 +54,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-current` ✅
     - 已人工检查 `output/web-game-current/shot-1.png`，主菜单渲染正常。
 
-  - TODO / 下轮建议
+  - 历史建议（已归档）
   - 可继续做“湮律流”专属敌人词缀（例如弃牌反制/弃牌增益）以提升对局差异。
   - 可新增地图节点类型（交易/诅咒祭坛）并复用现有事件分支审计框架闭环验证。
 
@@ -129,7 +129,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-pvp-polish` ✅
     - 已人工查看：`output/web-game-pvp-polish/shot-1.png`（主菜单渲染正常，无异常遮挡）。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可为外观/称号增加“装备中”状态与角色面板展示（当前已支持解锁与持久化）。
   - 可将天道币奖励规则扩展为赛季系数（按段位/连胜动态浮动）。
 
@@ -278,7 +278,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 - 2026-03-07: 审计脚本稳健性补丁
   - `tests/browser_audit.mjs` 截图步骤改为 `safeScreenshot` 降级策略，字体加载超时时仅记录 warning，不阻断断言链路，避免误报失败。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可继续扩展“玄甲反击”专属事件分支（护盾交易/留盾抉择），并接入现有 `browser_event_branch_audit` 框架。
   - 可新增玄甲流传承预设与专属 mission（例如“单场触发 4 次护势反击”）形成局外成长闭环。
 
@@ -338,7 +338,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-bulwark-polish` ✅
     - 已人工检查 `output/web-game-bulwark-polish/shot-1.png`，主菜单渲染正常、引导提示可见。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可为玄甲流补“敌方破盾词缀”与“护盾转伤机制”对抗，提升高层数策略博弈。
   - 可新增玄甲流专属奖励权重（奖励卡牌偏置 + 事件出现倍率）并纳入平衡审计。
 
@@ -393,7 +393,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-guardbreak-polish` ✅
     - 已人工检查 `output/web-game-guardbreak-polish/shot-1.png`，主菜单渲染正常、引导提示可见。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可继续把“破盾词缀”扩展到事件/Boss阶段技能（例如阶段二固定破盾宣告）并加入视觉预告。
   - 可增加“护盾转伤”专属奖励节点（锻炉/试炼）与平衡基准脚本，形成数值调优闭环。
 
@@ -423,7 +423,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-intent-polish` ✅
     - 已人工检查 `output/web-game-intent-polish/shot-1.png`，主菜单渲染正常。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可继续把“破盾预告”接入敌方详细 intent 数值预览（例如下一击预计破盾量/追加伤害），提升策略透明度。
   - 可把 `bulwark` 事件偏置扩展到 `hemorrhage/precision/entropy`，并补事件分布统计脚本。
 
@@ -474,7 +474,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-archetype-event-polish` ✅
     - 已人工检查 `output/web-game-archetype-event-polish/shot-1.png`，主菜单渲染正常。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可把“流派事件偏置”进一步接入地图节点生成权重（仅事件节点）做双层偏置，并新增 node-level 分布断言。
   - 可新增“反破盾”成长路径（例如玄甲专属法则：首次被破盾后返还部分护盾并抽牌），与现有 guardbreak 机制形成高层博弈闭环。
 
@@ -577,7 +577,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-map-shop-camp-polish` ✅
     - 已人工检查 `output/web-game-map-shop-camp-polish/shot-1.png`，主菜单渲染正常，状态输出含 `adventureBuffs` 字段。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可新增“事件节点中的临时商店”交互页（从事件直接购买 1 次特殊牌），并补端到端浏览器审计。
   - 可继续扩充 `adventureBuff` 维度（如战斗首回合法力/命环掉落倍率）并做平衡采样脚本。
 
@@ -634,7 +634,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-map-shop-camp-polish-2` ✅
     - 已人工检查 `output/web-game-map-shop-camp-polish-2/shot-1.png`，渲染稳定。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可把临时商会扩展为“按流派定制货架”（基于 `inferDeckArchetype` 直接定制 offer 池），并新增命中率采样脚本。
   - 可新增“营地风险选项”（以生命换高额短期增益）并增加平衡断言（收益上限/出现频率）。
 
@@ -684,7 +684,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - `output/web-game-map-shop-camp-polish-3/shot-1.png` ✅
       - `output/web-game-map-shop-camp-polish-3/state-0.json` 与 `state-1.json` 包含 `victoryHealBoostBattles` 字段 ✅
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可新增“战后恢复增益”的战斗内可视化计数（战前/战后 HUD 提示），减少玩家心智负担。
   - 可在临时商会加入“按当前 HP 区间动态调价”以形成风险-资源博弈。
   - 可补一条浏览器端到端断言：强制触发战斗胜利后验证 `victoryHealBoostBattles` 真实扣层与生命恢复。
@@ -733,7 +733,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - `output/web-game-map-shop-camp-polish-4/state-0.json`
       - `output/web-game-map-shop-camp-polish-4/state-1.json`
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可将地图“行旅增益面板”增加悬浮说明（精确生效时机/倍率），降低学习成本。
   - 可为 `temp_relief` 加入“按损失生命比例提高恢复量”的弹性系数，形成低血反打策略。
   - 可新增“事件临时商会购买后的战斗胜率采样脚本”，做平衡自动校验。
@@ -801,7 +801,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --click-selector "#pvp-btn" --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-endless-pvp` ✅
     - 人工查看截图：`output/web-game-endless-pvp/shot-1.png`，PVP 场景渲染正常；`state-1.json` 输出结构完整。
 
-- TODO / 下一轮建议
+- 历史建议（已归档）
   - 可继续扩展“无尽专属事件池”（当前为通用事件池 + 无尽权重偏置），加入词缀联动事件。
   - 可为无尽赐福补充“二选一升级树”与稀有赐福保底机制，提升长期构筑策略深度。
   - 可补一条浏览器审计：强制完整 boss 战 -> `onBattleWon` -> `handleBossDefeated` -> `handleEndlessRealmComplete` 的真实端到端链路（非直接调用）。
@@ -861,7 +861,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - `output/web-game-endless-v3/shot-1.png`
     - `state-0.json/state-1.json` 结构正常，`endless` 字段输出完整；未发现新增控制台错误文件。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可把 `temp_boon` 从“随机取 1”升级为“事件内显式二选一 UI”，与商店祷告交互完全一致。
   - 可增加“无尽词缀联动可视化提示条”（显示本场事件被哪些词缀修正了数值）。
   - 可新增自动平衡脚本：对 `getEndlessEventTuning` 进行 Monte Carlo 采样，约束收益方差与过强组合阈值。
@@ -918,7 +918,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 人工检查截图：`shot-0.png`、`shot-1.png` ✅
     - `state-0.json/state-1.json` 含 `endless.pressure` 字段，输出结构正常 ✅
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可将“压力值”进一步与敌人行为集绑定（高压力解锁额外意图或行动序列），形成更明显对局分层。
   - 可给 `endlessPressure` 增加 UI 动画提示（上升/下降闪烁），增强玩家反馈。
   - 可新增平衡断言：覆盖不同压力档位下的收益/难度曲线单调性，防止出现异常反直觉区间。
@@ -960,7 +960,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - `output/web-game-endless-v6/endless-panel-manual.png`（无尽地图面板显示“敌方节奏”与高压参数）
       - `output/web-game-endless-v6/endless-panel-manual-state.json` 显示 `pressure=8`、面板文本包含“敌方将连续压迫并施加重压减益”。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可继续把压力行为谱接入“Boss 阶段切换”与“事件池动态权重”，形成行为-地图-事件三层联动。
   - 可追加压力平衡快照导出（CSV/JSON），用于长期版本之间的难度回归比较。
 
@@ -995,7 +995,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-endless-v7` ✅
       - 人工查看截图：`output/web-game-endless-v7/shot-0.png`、`shot-1.png`，主菜单渲染正常；`state-0.json/state-1.json` 输出结构完整。
 
-- TODO / 下一轮建议
+- 历史建议（已归档）
   - 可把无尽高压阶段敌人变体（`enemyVariantTag`）在意图区显式展示，让“怪物差异”从数值/行为进一步变为可读反馈。
   - 可在补给包选择弹窗补一条“已翻译稀有度”快照测试（视觉 diff 或 DOM 结构快照），进一步降低样式回归风险。
 
@@ -1051,7 +1051,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-expansion-v1` ✅
     - 人工查看：`output/web-game-expansion-v1/shot-0.png`、`shot-1.png` 渲染正常；`state-0.json/state-1.json` 结构完整。
 
-- TODO / 下一轮建议
+- 历史建议（已归档）
   - 可为 `moChen` 增加第二套“预组卡包推荐”，并在角色页展示“推荐流派标签”。
   - 可将新怪（`runeSentinel/frostArrowHerald/abyssCantor/warDrummer`）接入更细粒度的地图权重控制，按轮次动态提高其出场率。
   - 可新增浏览器端到端脚本：从角色选择 `moChen` 开局 -> 首战触发遗物 + 回响路径技能联动，形成可视化回归链路。
@@ -1111,7 +1111,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 产物：`output/web-game-expansion-v2/shot-0.png`, `shot-1.png`, `state-0.json`, `state-1.json`
     - 已人工检查 `shot-1.png`：主菜单渲染正常，无错位与遮挡。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 为 `convergence` 衍生一套专属事件（例如“汇流仪轨”）并给出命环分支选择偏置，形成地图层面差异。
   - 为新高重天敌人补“意图提示增强”文案（分段显示 multiAction 子动作），提升可读性与决策反馈。
 
@@ -1170,7 +1170,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-expansion-v3` ✅
     - 已人工检查 `output/web-game-expansion-v3/shot-1.png`：主菜单渲染正常。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可继续为 `convergence` 引入“地图节点权重偏置”（如商店/营地/试炼节点概率微调）形成路线差异。
   - 可为新怪追加“弱点提示标签”（如 `召唤型/状态型/连携型`）并在敌人卡面显示，降低认知成本。
 
@@ -1215,7 +1215,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - `output/web-game-diversity-v4-newgame/shot-1.png`（登录提示弹窗正常）
       - `output/web-game-diversity-v4-pvp/shot-1.png`（PVP 榜单页面正常）
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 为地图去重策略补“局内记忆”维度（最近 4 层全局节点频率）并加入轻度随机扰动，进一步降低长程同质化。
   - 在敌人卡面追加“关键威胁词条”二级标记（例如：`召唤链`、`状态压制`、`爆发斩杀`），并在审计里校验标签与 patterns 一致。
   - 扩展 `convergence/resonance` 的地图事件联动奖励（例如：同路径下节点类型被命中时触发小幅 run buff），提高路线-构筑闭环反馈。
@@ -1261,7 +1261,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - `output/web-game-diversity-v5/shot-1.png`（主菜单）
       - `output/web-game-diversity-v5-pvp/shot-1.png`（PVP 榜单）
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 将“路径命中奖励”再前进一步：引入“连击计数”机制（连续命中同路径偏好节点时触发一次性奖励），提高路线规划感。
   - 为威胁标签加交互说明（hover 解释）并在高危标签触发时增加轻微动效提示。
   - 在地图生成策略中引入“稀有节点保底阈值”（例如若连续多层未出现事件/商店，则下层小幅抬权），继续改善可玩性曲线。
@@ -1312,7 +1312,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - `output/web-game-diversity-v7/shot-1.png`（主菜单渲染正常）
       - `output/web-game-diversity-v7-pvp/shot-1.png`（PVP 榜单渲染正常）
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 将遭遇主题扩展为“可成长层级”（同一 run 内重复命中同主题时进入 II/III 阶，数值与奖励联动）。
   - 为遭遇主题加入“胜利奖励差异”（例如特定主题胜利后给额外命环经验/商店折扣），形成路线-战斗-收益闭环。
   - 给高重天新增 4-6 个“主题专属敌人词缀”并在浏览器审计里校验词缀文案与行为一致性。
@@ -1372,7 +1372,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - `output/web-game-diversity-v8/shot-1.png`（主菜单渲染正常）
       - `output/web-game-diversity-v8-pvp/shot-1.png`（PVP 榜单渲染正常）
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 将遭遇 III 阶接入“稀有掉落保底”或“地图节点折扣券”奖励，形成更强 run 内规划价值。
   - 为每个高重天词缀增加可反制提示（例如净化/破盾/速攻建议），并在 tooltip 中联动显示。
   - 扩展遭遇词缀到 Boss 前哨战（非 Boss 本体）并加入单独审计脚本覆盖。
@@ -1499,7 +1499,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - `output/web-game-diversity-v10/shot-1.png`（主菜单渲染正常）
       - `output/web-game-diversity-v10-pvp/shot-1.png`（PVP 榜单渲染正常）
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 为战术队列补“反制提示”联动：当玩家手牌存在净化/破盾/爆发手段时，在 intent tooltip 给出简短建议，提升可读性。
   - 扩展无尽专属指令到 2-3 张并加入“压力阈值分支效果”（例如 8+ 压力触发额外稳压/额外代价）。
   - 将战场指令系统接入更多地图事件（营地可重配指令槽/商店可刷新指令负载）形成 run 级构筑闭环。
@@ -1567,7 +1567,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 项目客户端：`node tests/web_game_playwright_client.mjs ...` ✅（生成 `output/web-game-phase-polish-local` 截图）
     - 已人工查看截图：主菜单与提示显示正常。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可继续为 `stormcraft/vitalweave` 增加传承道统与专属试炼 mission，进一步增强局外成长辨识度。
   - 可将阶段挑战做成可视化轮回时间轴（含 checkpoint 奖励预览），降低无尽中后期学习成本。
 
@@ -1614,7 +1614,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - `output/web-game-path-doctrine-local/shot-1.png`
     - 画面渲染与主菜单层级正常，未生成 `errors-*.json`。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 将“智慧教义”偏置从临时商店进一步扩展到地图事件候选权重（目前已完成商店端偏置）。
   - 为 stormcraft/vitalweave 增加敌方对抗词缀（例如反易伤、反治疗），继续拉高流派博弈差异。
 
@@ -1659,7 +1659,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - `output/web-game-diversity-v11-local/shot-0.png`
       - `output/web-game-diversity-v11-local/shot-1.png`
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 为 `phase_anchor_order/void_pursuit_order` 增加“命环路径联动分支”（例如智慧路径降低代价，毁灭路径增强追猎但提高自损），继续强化 build identity。
   - 将反制建议从“静态提示”扩展为“动态高亮”：当手牌具备对应 counter 时，为可打出的关键牌追加短标签（净化/破盾/爆发）。
   - 无尽模式继续补 1 个“资源博弈型”专属指令（以奶糖/抽牌/压力为三角权衡），并补专门 sanity 断言。
@@ -1708,7 +1708,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - `output/web-game-diversity-v12/shot-1.png`
       - `output/web-game-diversity-v12-local/shot-1.png`
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 为 `horizon_barter_order` 增加“可选交易档位”（保守/均衡/激进）并配套 UI 交互，提升玩家主动决策密度。
   - 将手牌反制标签接入“可打出优先序”辅助（轻量发光边框），并确保移动端可读性不受遮挡。
   - 继续扩展无尽专属敌方词缀，形成对 `horizon_barter` 的反制生态（反奶糖、反过牌、反稳压）。
@@ -1870,7 +1870,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-latest` ✅
     - 已人工查看 `output/web-game-latest/shot-1.png`（主菜单渲染正常，无错位遮挡）。
 
-- TODO / 下轮建议
+- 历史建议（已归档）
   - 可为战术助手加入“敌方下一回合高危目标预测”（按 intent 队列排序）并对手牌高亮优先级做更精细分层（S/A/B）。
   - 可将命环模式预设接入键盘热键（例如 `1-5`）并增加对局内新手提示。
 
@@ -1899,3 +1899,1010 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - Playwright 冒烟 + 视觉检查：
     - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-latest` ✅
     - 已人工查看 `output/web-game-latest/shot-1.png`（主菜单渲染稳定，无遮挡错位）。
+
+- 2026-03-10: 第三十四轮无尽生态扩展（轮段主题系统 + 敌阵编队生态）
+  - 无尽轮段主题系统（`js/game.js`）
+    - 新增 `getEndlessCycleThemeProfile(cycleOverride)`：实现 5 段轮回主题（压能锻潮 / 召潮群猎 / 反制晶格 / 狂潮裂斩 / 垒潮回稳），统一输出数值、事件、行为、敌方指令画像。
+    - 将轮段主题接入：
+      - `getEndlessModifiers()`：叠加主题倍率、治疗系数与地图权重偏移，并暴露 `cycleTheme` 元数据；
+      - `getEndlessEventTuning()`：叠加轮段商店、命环经验、稀有赐福、舒压触发等参数；
+      - `getEndlessPressureBehaviorProfile()`：叠加开场护势/强化/额外攻击/减益注入与主题摘要；
+      - `prepareEnemyForEndlessBattle()`：按轮段策略注入敌方行为（锻潮前压、群猎连段、反制晶印、裂斩追命、垒潮回护），并写回 `__endlessCycleTheme` 元数据。
+    - 持久化兼容：
+      - 无尽状态新增 `lastThemeId/themeHistory`，并接入 `createDefaultEndlessState/normalizeEndlessState/migrateSaveData`；
+      - `handleEndlessRealmComplete()` 新增轮段切换记录与日志提示。
+    - 展示层联动：
+      - `render_game_to_text` 增加 `endlessTheme`；
+      - 选关预览面板补充“轮段主题 + 描述”。
+
+  - 地图无尽面板可视化增强（`js/core/map.js`, `css/style.css`, `css/mobile.css`）
+    - `updateEndlessPanel()` 新增轮段 chip 与轮段描述区块：
+      - 新增 `.endless-theme-chip.segment-[1..5]` 主题色样式；
+      - 新增 `.endless-theme-desc` 简介文案；
+      - 与原压力 chip 同时展示，支持压力脉冲反馈。
+
+  - 敌阵生态扩展（`js/core/battle.js`, `js/core/utils.js`, `css/style.css`）
+    - 新增“编队生态”流程：
+      - `applyEnemySquadEcology()` 在战斗初始化时为多敌遭遇分配编队；
+      - `resolveEnemySquadFormation()` 依据敌人倾向/节点/重天做稳定选型（钳袭/壁垒/咒织/接力）；
+      - 编队会注入分工化动作与属性（阵核/前锋/扰阵/策应），并刷新战术队列。
+    - 战斗日志新增敌阵提示：`【敌阵生态】...`。
+    - 敌人卡片新增编队标签展示：`enemy-squad-tag`（含编队名与角色分工）。
+
+  - 测试与审计补强
+    - Node 用例更新：
+      - `tests/sanity_endless_mode_checks.js`：新增轮段映射覆盖与主题元数据断言；
+      - `tests/sanity_endless_pressure_curve_checks.js`：新增主题元数据断言；
+      - `tests/sanity_endless_phase_boss_checks.js`：新增 Boss 轮段元数据断言；
+      - `tests/sanity_battle_variation_checks.js`：新增编队生态应用与行为丰富度断言；
+      - `tests/sanity_endless_shop_service_checks.js`：修复 harness 缺失新方法导致的回归（补挂 `getEndlessCycleThemeProfile`）。
+    - 浏览器审计更新：
+      - `tests/browser_feature_audit.mjs`：
+        - 新增“敌阵编队标签与角色分工”探针；
+        - 扩展无尽面板探针，验证轮段 chip/描述可见且随轮次变化。
+
+- 2026-03-10: 本轮测试证据（全通过）
+  - 语法检查：
+    - `node --check js/game.js` ✅
+    - `node --check js/core/battle.js` ✅
+    - `node --check js/core/map.js` ✅
+    - `node --check js/core/utils.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node --check tests/sanity_battle_variation_checks.js` ✅
+    - `node --check tests/sanity_endless_mode_checks.js` ✅
+    - `node --check tests/sanity_endless_phase_boss_checks.js` ✅
+    - `node --check tests/sanity_endless_pressure_curve_checks.js` ✅
+  - Node 增量：
+    - `node tests/sanity_endless_mode_checks.js` ✅
+    - `node tests/sanity_endless_phase_boss_checks.js` ✅
+    - `node tests/sanity_endless_pressure_curve_checks.js` ✅
+    - `node tests/sanity_battle_variation_checks.js` ✅
+  - Node 全量：
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser audits：
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` ✅
+    - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-fix` ✅
+    - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4173 output/web-event-branch-audit` ✅
+    - `node tests/browser_inheritance_audit.mjs http://127.0.0.1:4173 output/web-inheritance-audit` ✅
+    - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4173 output/web-pvp-audit` ✅
+  - Playwright 客户端（develop-web-game）+ 人工视觉检查：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file "$WEB_GAME_ACTIONS" --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-theme-ecology` ✅
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-theme-ecology-local` ✅
+    - 已人工检查：
+      - `output/web-feature-audit/feature-audit.png`
+      - `output/web-feature-audit/feature-audit-compact-hand.png`
+      - `output/web-game-theme-ecology/shot-1.png`
+      - `output/web-game-theme-ecology-local/shot-1.png`
+
+- 历史建议（已归档）
+  - 可继续把“编队生态”与无尽轮段联动（例如轮段 3 固定提升咒织编队出现率），并为其增加独立奖励/词缀掉落。
+  - 可为编队标签增加鼠标悬浮详细说明（阵核职责、触发条件、克制建议），进一步降低新系统理解成本。
+
+- 2026-03-10: 第三十五轮战斗闭环扩展（编队战利结算 + 环境情报条）
+  - 敌阵编队战利结算（`js/core/battle.js`, `js/game.js`）
+    - `battle.js`：新增 `consumeSquadEcologyVictoryBonusSummary()`，可对已激活编队生态进行一次性战后结算：
+      - 按编队类型（钳袭/壁垒/咒织/接力）提供差异化金币、命环经验与冒险增益；
+      - 按节点类型（enemy/elite/trial）与敌人数进行缩放；
+      - 在无尽模式下接入“轮段指令协同”判定（编队与轮段策略匹配时追加奖励并提升增益层数）。
+    - `game.js`：`onBattleWon()` 新增编队战利消费链路，统一发放：
+      - 额外灵石、额外命环经验；
+      - 编队启示冒险增益（首回合灵力/开场护盾/命环经验/首回合抽牌）；
+      - 轮段协同日志反馈。
+    - `render_game_to_text` 战斗快照新增 `battle.squadEcology`，便于自动化探针与外部状态读取。
+
+  - 环境情报 UI（`js/core/battle.js`, `css/style.css`）
+    - `updateEnvironmentUI()` 新增敌阵 chip：
+      - 展示“敌阵·编队名 + 单位数”；
+      - title 聚合描述包含敌阵说明；
+      - 与环境 chip、遭遇 chip 共存展示。
+    - 新增样式 `.squad-formation-chip`，与现有遭遇标签视觉一致。
+
+  - 测试补强
+    - `tests/sanity_battle_variation_checks.js`
+      - 新增编队战利摘要断言（奖励存在、结构合法、一次性消费）。
+    - `tests/browser_feature_audit.mjs`
+      - 扩展“编队生态”探针：除敌人卡片标签外，新增环境栏 `squad-formation-chip` 可见性断言。
+
+- 2026-03-10: 本轮测试证据（全通过）
+  - 语法检查：
+    - `node --check js/core/battle.js` ✅
+    - `node --check js/game.js` ✅
+    - `node --check tests/sanity_battle_variation_checks.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+  - Node 增量：
+    - `node tests/sanity_battle_variation_checks.js` ✅
+    - `node tests/sanity_battle_encounter_theme_checks.js` ✅
+  - Node 全量：
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser audits：
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` ✅
+    - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-fix` ✅
+    - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4173 output/web-event-branch-audit` ✅
+    - `node tests/browser_inheritance_audit.mjs http://127.0.0.1:4173 output/web-inheritance-audit` ✅
+    - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4173 output/web-pvp-audit` ✅
+  - Playwright 客户端 + 视觉检查：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file "$WEB_GAME_ACTIONS" --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-squad-reward` ✅
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-squad-reward-local` ✅
+    - 已人工检查：
+      - `output/web-game-squad-reward/shot-1.png`
+      - `output/web-game-squad-reward-local/shot-1.png`
+
+- 历史建议（已归档）
+  - 可把“编队战利”接入奖励界面可视化（在 reward-screen 明示编队奖励来源和协同倍率）。
+  - 可把“敌阵情报”接入战术助手推荐文案，按编队类型给出针对性手牌建议（例如优先破盾/优先净化）。
+
+- 2026-03-10: 第三十六轮战斗反馈打磨（敌阵画像建议 + 战利来源可视化闭环）
+  - 战术助手扩展（`js/core/battle.js`, `css/style.css`）
+    - `resolveBattleTacticalAdvisorSnapshot()` 新增 `formationHint`：
+      - 基于当前 `activeSquadEcology`（钳袭/壁垒/咒织/接力）输出针对性应对建议；
+      - 无尽模式下叠加当前轮段策略研判（forge/swarm/counter/frenzy/bastion）。
+    - `updateBattleCommandUI()` 将 `formationHint` 渲染为 `.battle-advisor-formation` 文案行。
+    - 新增样式 `.battle-advisor-formation`，与现有战术助手色系统一。
+
+  - 奖励来源界面与稳定性修复（`js/game.js`, `css/mobile.css`）
+    - 修复 `onBattleWon()` 奖励元数据构建运行时错误：
+      - `rewardMeta.encounter.goldBonus` 与 `rewardMeta.squad.goldBonus` 均改为使用 `bonusGold`（修复未定义变量导致的 ReferenceError）。
+    - 移动端补齐奖励来源模块适配：
+      - `.reward-screen-content/.reward-resources/.reward-item/.reward-battle-meta/.reward-meta-*` 尺寸与间距优化，避免小屏拥挤与换行错位。
+
+  - 测试补强（`tests/sanity_battle_squad_reward_checks.js`, `tests/run_node_checks.sh`, `tests/browser_feature_audit.mjs`）
+    - 新增 Node 回归：`sanity_battle_squad_reward_checks.js`
+      - 覆盖基础编队战利、一次性消费语义、无尽轮段协同加成（含增益层数提升）。
+    - `run_node_checks.sh` 接入新用例。
+    - 浏览器审计扩展：
+      - 战术助手探针新增 `advisorFormation` 断言（敌阵画像/轮段研判文案）；
+      - 新增奖励来源探针，验证遭遇/编队/协同 chips 本地化展示以及空态清理。
+
+- 2026-03-10: 本轮测试证据（全通过）
+  - 语法检查：
+    - `node --check js/core/battle.js` ✅
+    - `node --check js/game.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node --check tests/sanity_battle_squad_reward_checks.js` ✅
+  - Node：
+    - `node tests/sanity_battle_squad_reward_checks.js` ✅
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser audits：
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` ✅
+    - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-fix` ✅
+    - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4173 output/web-event-branch-audit` ✅
+    - `node tests/browser_inheritance_audit.mjs http://127.0.0.1:4173 output/web-inheritance-audit` ✅
+    - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4173 output/web-pvp-audit` ✅
+  - Playwright 冒烟（develop-web-game）+ 视觉检查：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file "$WEB_GAME_ACTIONS" --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-reward-advisor` ✅
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-reward-advisor-local` ✅
+    - 已人工查看：
+      - `output/web-feature-audit/feature-audit.png`
+      - `output/web-feature-audit/feature-audit-compact-hand.png`
+      - `output/web-game-reward-advisor/shot-1.png`
+      - `output/web-game-reward-advisor-local/shot-1.png`
+
+- 历史建议（已归档）
+  - 可把奖励来源 chips 与战斗日志联动（点击 chip 高亮对应日志段落），降低信息回溯成本。
+  - 可进一步将“敌阵画像建议”与玩家手牌结构绑定，输出“当前手牌可执行方案”（如优先打哪两张牌）。
+
+- 2026-03-10: 第三十七轮战术可玩性扩展（手牌执行建议）
+  - 战术助手“可执行建议”升级（`js/core/battle.js`, `css/style.css`）
+    - 新增 `resolveBattleTacticalCardPlan(threatProfile, recommendation)`：
+      - 基于当前威胁画像（防守/破阵/净化/爆发）与实际手牌可打性（灵力/奶糖/条件）进行评分；
+      - 输出“先手 + 跟进”的两步执行建议（或无可打牌时的过渡建议）。
+    - `resolveBattleTacticalAdvisorSnapshot()` 新增 `cardPlanHint` 字段并接入 UI。
+    - 战术助手新增文案行 `.battle-advisor-cardplan`，统一色系显示“手牌执行”提示。
+
+  - 测试补强
+    - 新增 Node 用例：`tests/sanity_battle_advisor_plan_checks.js`
+      - 覆盖破阵场景下优先推荐破盾牌；
+      - 覆盖能量不足场景的攒能过渡建议；
+      - 覆盖快照字段 `cardPlanHint` 存在性。
+    - `tests/run_node_checks.sh` 接入新用例。
+    - `tests/browser_feature_audit.mjs`
+      - battle command probe 新增 `advisorCardPlan` 抓取与断言，确保战术助手实际渲染“手牌执行”文案。
+
+- 2026-03-10: 本轮测试证据（全通过）
+  - 语法检查：
+    - `node --check js/core/battle.js` ✅
+    - `node --check tests/sanity_battle_advisor_plan_checks.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+  - Node：
+    - `node tests/sanity_battle_advisor_plan_checks.js` ✅
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser audits：
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` ✅
+    - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-fix` ✅
+    - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4173 output/web-event-branch-audit` ✅
+    - `node tests/browser_inheritance_audit.mjs http://127.0.0.1:4173 output/web-inheritance-audit` ✅
+    - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4173 output/web-pvp-audit` ✅
+  - Playwright 冒烟（develop-web-game）+ 视觉检查：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file "$WEB_GAME_ACTIONS" --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-advisor-cardplan` ✅
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-advisor-cardplan-local` ✅
+    - 已人工查看：
+      - `output/web-feature-audit/feature-audit-compact-hand.png`
+      - `output/web-game-advisor-cardplan/shot-1.png`
+      - `output/web-game-advisor-cardplan-local/shot-1.png`
+
+- 历史建议（已归档）
+  - 可继续将“手牌执行建议”从静态两步升级为“可点击高亮手牌”（点击建议中的卡名时在手牌区闪烁对应卡牌）。
+  - 可继续加入“回合末复盘提示”（本回合未按建议执行时给出简短原因分析：能量不足/净化缺口/破盾窗口错过）。
+- 2026-03-10: 审计稳定性修正（matrix 预设探针）
+  - `tests/browser_feature_audit.mjs`
+    - `resonanceMatrixPresetProbe` 增加兜底注入：若随机 loadout 未带 `resonance_matrix_order`，则从命令目录注入该指令后再执行断言，避免 `no_matrix_command` 偶发误报。
+  - 回归：
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` ✅（本次所有 finding 均 pass）
+
+- 2026-03-10: 第三十八轮战术助手交互升级（建议卡牌可点击高亮）
+  - 交互能力扩展（`js/core/battle.js`, `css/style.css`）
+    - 新增 `resolveBattleTacticalCardPlanMeta()`：输出结构化建议 `{ text, steps[] }`，保留 `resolveBattleTacticalCardPlan()` 兼容字符串返回。
+    - 战术助手面板新增“建议步骤按钮”（①/② 卡牌名），点击后触发 `focusAdvisorCard(index)`：
+      - 自动滚动手牌到对应卡牌；
+      - 对应卡牌添加短时 `advisor-focus` 高亮态。
+    - 新增样式：
+      - `.battle-advisor-cardplan-steps/.battle-advisor-cardstep-btn`
+      - `#hand-cards .card.advisor-focus`
+      - 移动端按钮字号缩放。
+
+  - 测试补强（`tests/sanity_battle_advisor_plan_checks.js`, `tests/browser_feature_audit.mjs`）
+    - Node：新增 plan meta 断言，校验建议步骤索引正确（破阵场景优先命中破盾牌）。
+    - Browser：battle command probe 新增断言：
+      - `advisorCardStepCount >= 1`
+      - 点击建议步骤后 `advisorFocusApplied === true`（手牌高亮成功）。
+
+  - 审计稳定性同步
+    - matrix 预设探针保持兜底注入逻辑，避免随机 loadout 导致偶发 `no_matrix_command`。
+
+- 2026-03-10: 本轮测试证据（全通过）
+  - 语法检查：
+    - `node --check js/core/battle.js` ✅
+    - `node --check tests/sanity_battle_advisor_plan_checks.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+  - Node：
+    - `node tests/sanity_battle_advisor_plan_checks.js` ✅
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser：
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` ✅（新增建议步骤点击高亮断言通过）
+  - Playwright 冒烟（develop-web-game）+ 视觉检查：
+    - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file "$WEB_GAME_ACTIONS" --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-advisor-focus` ✅
+    - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-advisor-focus-local` ✅
+    - 已人工查看：
+      - `output/web-feature-audit/feature-audit-compact-hand.png`
+      - `output/web-game-advisor-focus/shot-1.png`
+      - `output/web-game-advisor-focus-local/shot-1.png`
+
+- 历史建议（已归档）
+  - 可继续把建议步骤与“自动选牌”开关联动（仅预选，不自动出牌），进一步降低操作成本。
+  - 可继续加入“本回合错失窗口复盘”短句（例如：未优先破盾/未及时净化），强化学习反馈。
+
+- 2026-03-10: 第三十九轮战术助手闭环验证补强（预选态 + 回合复盘）
+  - 测试补强
+    - `tests/sanity_battle_advisor_plan_checks.js`
+      - 新增 `suggestedStepKeys` 持久化断言，确保建议步骤可被回合复盘追踪。
+      - 新增“未按建议出牌”分支断言：破阵场景若打出非建议牌，会输出“错过破盾窗口”复盘。
+      - 新增“已按建议执行”分支断言：命中建议关键牌后，复盘提示应为空。
+    - `tests/browser_feature_audit.mjs`
+      - battle command probe 新增预选态断言：点击建议步骤后，必须出现 `selected` 或 `targeting-active`。
+      - 新增 advisor review probe：点击建议步骤但不出牌，直接结束回合后，日志历史中必须写入 `回合复盘：...`。
+      - 复盘断言改为读取 `Utils._battleLogHistory`，避免依赖日志面板是否已展开。
+
+  - 本地验证
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node tests/sanity_battle_advisor_plan_checks.js` ✅
+    - `bash tests/run_node_checks.sh` ✅
+    - `python3 -m http.server 4173` 本地运行 ✅
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` ✅
+      - 新增 finding 通过：`advisor preview enters selection state and end turn writes review log`
+      - 复盘样例：`回合复盘：已预选建议牌但未执行，可能是目标窗口或资源判断偏保守。`
+    - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-fix` ✅
+    - `node "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-json '{"steps":[{"buttons":[],"frames":8}]}' --iterations 3 --pause-ms 250 --screenshot-dir output/web-game-client` ✅
+      - 产物：`output/web-game-client/shot-{0,1,2}.png`、`state-{0,1,2}.json`
+      - 该客户端在默认游客弹窗链路下停留在主菜单态；真实开局与战斗链路已由 `browser_audit` / `browser_feature_audit` 覆盖通过。
+
+  - 环境备注
+    - `browser_feature_audit` 本轮出现若干 `net::ERR_NETWORK_CHANGED` 控制台噪声；同轮本地 HTTP 服务访问日志均为 200，且 `browser_audit` 控制台为 0 error，暂判断为 headless 截图/页面切换期的环境噪声，不构成当前版本阻塞。
+
+- 历史建议（已归档）
+  - 可继续把 `develop-web-game` 客户端的本项目动作流做成专用 actions 文件，绕过游客确认链路，稳定拿到角色选择/地图/战斗截图。
+  - 可继续把回合复盘扩展为“已执行建议时的正反馈总结”，形成正负反馈闭环。
+
+- 2026-03-10: 第四十轮无尽模式 V2 扩展（轮回偏执）
+  - 系统实现（`js/game.js`, `js/core/player.js`, `js/core/map.js`, `css/style.css`, `css/mobile.css`）
+    - 无尽状态新增偏执字段：
+      - `paranoiaLevel`
+      - `activeParanoiaBurdens`
+      - `activeParanoiaBoons`
+      - `paranoiaHistory`
+      - `lastParanoiaCycle`
+    - 新增 `轮回偏执` 选择流：每逢大轮回（第 13、26... 轮切换）在赐福后触发一次“负面法则 + 超规格补偿”抉择。
+    - 新增偏执负面法则：
+      - `紧箍识海`：手牌上限 -1
+      - `精英回响`：精英战额外临时词缀
+      - `枯脉疗蚀`：治疗衰减
+      - `薄获税印`：普通战灵石 / 命环经验掉落减少
+    - 新增偏执补偿：
+      - `稀曜偏振`：战后卡牌奖励稀有倾向提升
+      - `宝匣扩容`：法宝槽位 +1
+      - `命格跃迁`：立即获得一次命环跃迁经验
+    - `player.js`
+      - 新增 `getMaxHandSize()` 并把手牌上限接入抽牌逻辑；超出上限时新抽到的牌会自动落入弃牌堆。
+      - `getMaxTreasureSlots()` 接入无尽偏执提供的额外法宝槽位。
+    - `map.js` / 样式
+      - 无尽面板新增 `轮回偏执` chip、当前偏执摘要、影响标签，直接展示负担与补偿结果。
+    - 奖励与结算联动
+      - 普通战掉落减少会真实影响普通战灵石与命环经验。
+      - 稀有奖励倾向会真实影响战后卡牌奖励池。
+      - 大轮回推进链路已接入偏执选择，不再只停留在数值增长。
+
+  - 测试补强（`tests/sanity_endless_mode_checks.js`, `tests/browser_feature_audit.mjs`）
+    - Node：
+      - 默认无尽状态包含偏执字段。
+      - 偏执候选返回 3 组“负面 + 补偿”选项。
+      - 应用偏执后会写入 `paranoiaHistory` / `lastParanoiaCycle`。
+      - 治疗衰减、稀有奖励倾向、法宝槽位补偿均进入无尽修正。
+      - 第 12 -> 13 轮推进时会自动触发偏执选择 fallback 并完成大轮回推进。
+    - Browser：
+      - 无尽面板新增偏执 chip / 摘要 / 效果标签可见。
+      - `showEndlessParanoiaSelection()` 弹窗可打开、可点击并写入历史。
+      - 无尽完成流与 Boss 胜利流已适配偏执弹窗，仍能正常推进轮次。
+
+  - 本轮验证（全通过）
+    - 语法检查：
+      - `node --check js/game.js` ✅
+      - `node --check js/core/player.js` ✅
+      - `node --check js/core/map.js` ✅
+      - `node --check tests/sanity_endless_mode_checks.js` ✅
+      - `node --check tests/browser_feature_audit.mjs` ✅
+    - Node：
+      - `node tests/sanity_endless_mode_checks.js` ✅
+      - `node tests/sanity_endless_shop_service_checks.js` ✅
+      - `node tests/sanity_endless_phase_boss_checks.js` ✅
+      - `node tests/sanity_endless_pressure_curve_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-fix` ✅
+    - Playwright 本地运行：
+      - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-endless-paranoia` ✅
+      - `state-{0,1}.json` 已确认包含偏执字段。
+
+- 历史建议（已归档）
+  - 可继续推进 V2.3：把商店真正拆成 `基础页 / 契约页 / 传闻页`，并让 `天机 / 业果` 两类货币正式落地。
+  - 可继续推进 V2.2：把 Boss 三幕式做成战斗内显式阶段条与记忆点机制，而不只停留在无尽阶段修正。
+
+- 2026-03-10: 第四十一轮 V2 商店升级（三分页 / 三货币 / 传闻路线）
+  - 系统实现（`index.html`, `css/style.css`, `css/mobile.css`, `js/game.js`, `js/core/map.js`, `js/core/player.js`）
+    - 正式落地 V2.3 商店三分页：
+      - `基础页`：保留原有卡牌与常规服务。
+      - `契约页`：新增高风险高收益交易。
+      - `传闻页`：新增可锁定未来奖励与下一重天地图倾向的情报交易。
+    - 新增三货币雏形并接入存档：
+      - `灵石`：原主货币。
+      - `天机`：用于传闻页购买。
+      - `业果`：用于契约页购买。
+      - `player.getState()` / `loadGame()` 已支持 `heavenlyInsight`、`karma`、`shopRumors` 持久化与兼容默认值。
+    - 新增商店契约交易：
+      - `逆命血契`：消耗业果并损失生命上限，从 3 张稀有/史诗禁术中选 1 张。
+      - `蚀寿抵押`：压低当前生命，换取多场战斗的爆发与成长收益。
+      - `灾像供契`：向牌组加入【心魔·疑心】，换取法宝与灵石跃迁。
+    - 新增传闻交易：
+      - `稀曜签`：未来 2 次战后卡牌奖励更偏向稀有/史诗。
+      - `宝踪风声`：未来 2 次精英/Boss 结算提高法宝掉落率。
+      - `商路星引`：下一重天地图偏向事件 / 商店 / 营地。
+      - `锋路谶语`：下一重天地图偏向试炼 / 精英 / 锻炉。
+    - 新增运行中传闻状态：
+      - `rewardRareCharges`
+      - `rewardRareBonus`
+      - `treasureCharges`
+      - `treasureChanceBonus`
+      - `nextRealmMapShift`
+      - `nextRealmLabel`
+      - `nextRealmTarget`
+      - `history`
+    - 奖励与地图联动：
+      - 精英 / Boss / 试炼 / 残影战会掉落 `天机 / 业果`。
+      - 战后奖励面板新增 `天机 / 业果` 资源条目。
+      - 地图 `route hint` 面板新增“下一重天已锁定路线” chip，并修复新地图开局因早退条件导致 chip 不显示的问题。
+      - 地图生成正式读取传闻配置，下一重天生成后自动消费该路线情报。
+
+  - UI / 可读性升级
+    - 商店头部新增三货币资源条。
+    - 新增分页按钮、页签摘要、最近锁定历史。
+    - 服务卡新增标签、风险标识、不同货币样式。
+    - 移动端适配商店分页与资源条布局。
+
+  - 测试补强（`tests/sanity_shop_strategy_system_checks.js`, `tests/browser_feature_audit.mjs`, `tests/run_node_checks.sh`）
+    - Node：
+      - 商店目录包含 `基础 / 契约 / 传闻` 三页。
+      - `天机 / 业果` 的购买校验与扣费逻辑正确。
+      - 传闻效果会写入稀有奖励、法宝掉落与下一重天路线配置。
+      - `灾像供契` 会加入【心魔·疑心】并给予法宝。
+      - 地图权重会被下一重天路线传闻真实改变。
+    - Browser：
+      - 商店三分页按钮可见。
+      - 商店头部三货币显示正确。
+      - 传闻页价格正确显示为 `天机`。
+      - 契约页价格正确显示为 `业果`。
+      - 浏览器内完成一次传闻购买与一次契约购买后，状态真实写入。
+    - Visual：
+      - 检查截图：
+        - `output/shop-v2-visual-check/shop-rumor-tab.png`
+        - `output/shop-v2-visual-check/map-route-chip.png`
+        - `output/shop-v2-visual-check/reward-strategic-currency-clean.png`
+      - 已确认：分页结构、三货币、路线锁定 chip、战后新增资源条均可见且未出现文本截断。
+
+  - 本轮验证（全通过）
+    - 语法：
+      - `node --check js/game.js` ✅
+      - `node --check js/core/map.js` ✅
+      - `node --check js/core/player.js` ✅
+      - `node --check tests/sanity_shop_strategy_system_checks.js` ✅
+      - `node --check tests/browser_feature_audit.mjs` ✅
+    - Node：
+      - `node tests/sanity_shop_strategy_system_checks.js` ✅
+      - `node tests/sanity_endless_shop_service_checks.js` ✅
+      - `node tests/sanity_endless_mode_checks.js` ✅
+      - `node tests/sanity_save_migration_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-shop-v2-final` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-shop-v2` ✅
+    - Playwright / 视觉审计：
+      - `node tests/web_game_playwright_client.mjs --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-shop-v2` ✅
+      - 定向截图审计脚本：商店分页 / 地图路线提示 / 战后资源条均已检查 ✅
+
+- 历史建议（已归档）
+  - 可继续推进 V2.2 Boss 三幕式，把章节 Boss 从单阶段数值战升级为“宣告 / 对抗 / 逆转”三幕，并接入显式阶段条。
+  - 可继续把 `传闻页` 做成更长线：支持锁定下一次商店货架、Boss 情报提示、未来事件链权重。
+  - 可继续把 `契约页` 做成更极端：加入禁术专属卡池、诅咒法则、与无尽偏执联动的赌命协议。
+
+- 2026-03-11: 第四十二轮 V2.2 Boss 三幕式（宣告 / 对抗 / 逆转）
+  - 目标
+    - 将章节 Boss 从传统单阶段数值战，升级为带显式阶段规则、阶段条提示和阶段记忆点的三幕式战斗。
+    - 要求 Boss 规则不仅显示在 UI 上，还要真实接入玩家出牌 / 护盾 / 回合开始 / 转阶段流程。
+
+  - 本轮实现
+    - `js/core/battle.js`
+      - 新增并接通 Boss 三幕式主链路：
+        - Boss 创建时初始化 `bossActState`。
+        - 战斗开始时宣告当前幕，并在玩家首回合开始时触发记忆点。
+        - 敌回合开始接入 `echo_last_card`。
+        - 玩家回合开始接入 `seal_card / tribute_choice`。
+        - 玩家获得护盾时通过 battle-time hook 接入 `siphon_block`。
+        - Boss 转阶段时由 `checkPhaseChange()` 路由到三幕式状态机。
+        - 战斗结束与重新初始化时恢复 `player.addBlock` hook，避免泄漏到战斗外。
+      - 出牌流程升级：
+        - `playCardOnTarget()` 现在真正使用 `getEffectiveCardCost()` 的结果扣能。
+        - 被封签的牌打出后，会触发反噬与【心魔·疑心】污染。
+        - 记录 `lastPlayerCardSnapshot` 供 `echo_last_card` 在敌回合复诵。
+      - UI 升级：
+        - `updateBattleUI()` 统一刷新 `boss-act-panel`。
+        - 手牌 UI 为封签牌增加显式边框与角标，便于玩家识别高风险牌。
+    - `css/style.css`, `css/mobile.css`
+      - 新增 Boss 三幕式面板样式：标题、三段 chip、规则 / 反制 / 失败原因信息块。
+      - 新增封签手牌视觉态与角标样式。
+      - 修复面板最初被 grid 首行裁切的问题：现在明确放入战斗区第二行顶部，桌面与移动端都可见。
+    - `tests/sanity_boss_three_act_checks.js`
+      - 新增 Boss 三幕式逻辑 sanity：
+        - Boss 创建自动生成三幕式状态。
+        - 血线跨阈值时正确进入对抗 / 逆转阶段。
+        - `seal_card` 会锁定手牌并在打出时触发污染与反噬。
+        - `siphon_block` 会虹吸首段护盾并治疗 Boss。
+        - `echo_last_card` 会根据上一张牌类型复制收益。
+    - `tests/browser_feature_audit.mjs`, `tests/run_node_checks.sh`
+      - 浏览器审计新增 Boss 三幕式探针：验证 `boss-act-panel` 可见、三段 chip 渲染正确，并可从“宣告”推进到“对抗 / 逆转”。
+      - Node 回归总入口纳入新的三幕式 sanity。
+
+  - 视觉审计
+    - 初次截图发现 Boss 面板虽然 DOM 完整，但 UI 只露出下半截；定位为 `.battle-container` grid 自动排位把面板塞进 `80px` 顶部行导致裁切。
+    - 已修复后再次检查，确认以下截图可用：
+      - `output/boss-three-act-visual-check/boss-act-panel-element.png`
+      - `output/boss-three-act-visual-check/boss-act-hand.png`
+    - 已确认：
+      - Boss 标题 / 当前阶段 / 三段 chip / 规则块均可见。
+      - 封签手牌角标、描边和风险感知正常。
+
+  - 本轮验证（全通过）
+    - 语法：
+      - `node --check js/core/battle.js` ✅
+      - `node --check tests/sanity_boss_three_act_checks.js` ✅
+      - `node --check tests/browser_feature_audit.mjs` ✅
+    - Node：
+      - `node tests/sanity_boss_three_act_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-boss-three-act` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-boss-three-act` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-boss-three-act-fix` ✅
+    - Playwright / 视觉：
+      - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-boss-three-act` ✅
+      - 定向 Playwright 截图：Boss 面板与封签手牌均已人工复查 ✅
+
+- 历史建议（已归档）
+  - 可继续把 Boss 三幕式扩到更多“记忆点型”差异化机制，例如：阶段反制卡池、转幕召唤体、阶段专属奖励窗口。
+  - 可继续把三幕式与无尽模式打通，让无尽 Boss 继承轮段压力与偏执规则，形成更强的后期 Boss 身份差异。
+  - 可继续为 Boss 面板增加“下一次转幕阈值”提示与更明确的阶段动画反馈。
+
+- 2026-03-11: 第四十三轮 前端界面 review / 战斗视野优化
+  - 目标
+    - 对主菜单、选角、关卡选择、战斗等核心前端界面做严谨 review。
+    - 优先解决战斗中多个信息面板压住战场核心视野的问题。
+
+  - 本轮 review 结论
+    - 真实截图确认：此前战斗页的 `Boss 三幕式面板 + 战场指令面板` 在同一中轴区域堆叠，虽然功能正确，但会遮挡 Boss 规则块与敌人战场中心。
+    - 选角页底部确认区在长内容情况下会和底部区域过近，视觉上容易显得拥挤。
+    - 主菜单在大桌面分辨率下信息密度偏低，中央内容区显得过散。
+    - 关卡选择页的列表区与预览区布局尚可，但可以再收束节奏与边距，让整体重心更稳定。
+
+  - 本轮实现
+    - `css/style.css`
+      - 主菜单：
+        - 为 `menu-content` 增加统一容器感、边框与模糊背景，提升大屏聚焦感。
+        - 收束描述区宽度与按钮 / utilities 间距。
+      - 选角页：
+        - 为 `character-selection-footer` 增加 sticky 底部承托与半透明渐变底，避免确认按钮贴边拥挤。
+        - 为 `character-selection-container` 增加额外底部留白，避免内容被 footer 吞掉。
+      - 关卡选择页：
+        - 收束 `realm-select-layout` 最大宽度与内部边距。
+        - 调整 `realm-list-container` 的内容起始对齐与内边距。
+        - 微调 `realm-preview-panel` 宽度上限与整体节奏。
+      - 战斗页：
+        - 将 `battle-command-panel` 改为左侧信息轨布局，不再压在战场中轴线上。
+        - 将 `legacy-mission-tracker` 移到右上角轻量区域，缩小体积，避免与中央 HUD 抢空间。
+        - 调整 `environment-display` 为更轻的左上信息带。
+        - 将 `boss-act-panel` 收束成真正的中间信息带，并预留左右 HUD 轨道边距。
+        - 缩小战场指令按钮、战术助手与 Boss 面板的默认尺寸与信息密度，并为滚动区补充滚动条样式。
+    - `css/mobile.css`
+      - 主菜单、选角页移动端同步收束间距。
+      - 战斗页移动端面板补充最大高度与滚动约束，避免长面板持续遮挡敌人区。
+    - `tests/browser_feature_audit.mjs`
+      - 新增战斗几何审计：
+        - 验证 Boss 信息保持居中。
+        - 验证战场指令留在左侧信息轨。
+        - 验证传承任务停留在右侧信息轨。
+        - 验证战场指令面板不再侵入敌方战场核心区域。
+
+  - 视觉审计
+    - 主菜单：
+      - `output/ui-review-pass-2/main-menu-refined.png`
+      - 已确认：中央信息块更聚焦，不再显得空散。
+    - 选角页：
+      - `output/ui-review-pass-2/character-select-refined.png`
+      - 已确认：底部确认区与卡片区间距合理，按钮更稳定。
+    - 关卡选择页：
+      - `output/ui-review-pass-2/realm-select-refined.png`
+      - 已确认：列表与预览区重心更稳定。
+    - 战斗页：
+      - `output/ui-review-pass-2/battle-boss-layout-viewport-refined.png`
+      - 已确认：中轴线被让出，指令面板不再压在 Boss 规则中央；敌我场地和手牌区域更易读。
+
+  - 本轮验证（全通过）
+    - Playwright / 视觉：
+      - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-ui-review-pass-2` ✅
+      - 已人工检查 `output/web-game-client-ui-review-pass-2/shot-1.png` ✅
+    - Browser：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-ui-review-pass-2` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-ui-review-pass-2` ✅
+      - 新增几何审计项：`battle overlay layout keeps boss info centered while command and mission stay off the battlefield core` ✅
+    - Node：
+      - `bash tests/run_node_checks.sh` ✅
+
+- 历史建议（已归档）
+  - 可继续对战斗页做“信息层级模式”优化，例如：战斗开始默认紧凑态、鼠标悬停或快捷键展开详细助手。
+  - 可继续 review 奖励页、藏品页、PVP 页的大屏排版一致性，统一顶部节奏与卡片容器体系。
+  - 可继续针对移动端战斗页做单独一轮视野与手牌可点击性审计。
+  - 追加可视 spot check
+    - 商店页：
+      - `output/ui-review-pass-2/shop-refined.png`
+      - 已确认：分页、三货币条、卡牌货架与服务网格未因本轮全局排版调整发生回归。
+    - 奖励页：
+      - `output/ui-review-pass-2/reward-refined.png`
+      - 已确认：奖励来源面板与底部操作区可正常渲染；当前截图受“法则盗取”奖励弹层优先展示影响，但未出现新的布局破坏。
+
+- 2026-03-11: 第四十四轮 剩余前端界面统一 / 移动端战斗专项优化
+  - 目标
+    - 继续完成剩余核心前端界面的排版统一，覆盖 PVP 页与移动端战斗页。
+    - 把移动端战斗 HUD 从“可用”压到“紧凑、分层、不过度遮挡视野”的状态。
+
+  - 本轮实现
+    - `js/core/battle.js`
+      - 增加 `shouldUseCompactBattleHud()`。
+      - 战斗开始时，移动端默认以紧凑 HUD 启动，战术助手默认折叠，避免首屏就压满战场。
+      - Boss 面板的规则行增加 `signal / rule / counter / fail` 分类 class，便于移动端做信息降噪显示。
+    - `css/mobile.css`
+      - 移动端战斗页继续压缩 HUD：
+        - `battle-command-panel` 上移并进一步减高。
+        - 指令按钮改为 3 列紧凑栅格。
+        - `battle-tactical-advisor` 在移动端默认隐藏，仅保留最核心指令面。
+        - `legacy-mission-tracker` 缩小为右上角轻量提示。
+        - `boss-act-panel` 压缩为短信息带，保留阶段 chip 与“当前规则”单行，隐藏信号 / 反制 / 失败原因等次级信息。
+        - `end-turn-btn`、手牌区与 Boss 面板重新错位，避免按钮、手牌、Boss 说明三者互相遮挡。
+      - 继续微调主菜单 / 选角页移动端容器节奏，保持与上一轮桌面收束一致。
+    - `css/pvp.css`
+      - 为 PVP 页补统一容器体系：
+        - 收束 header 高度、主布局 gap 与左右边距。
+        - 为 `pvp-content-container` 增加容器边框、圆角、背景与阴影，让右侧内容区更像完整页面而不是散落元素。
+        - 调整导航宽度与 rune tab 节奏。
+        - 收束排行榜列表行间距。
+        - 微调防守页与结算页容器半径和宽度。
+      - 新增窄屏响应式：
+        - `pvp-layout-split` 在窄屏下改为纵向布局。
+        - 左侧导航切换为横向 tab 条。
+        - 防守页改为纵向堆叠布局。
+
+  - 测试补强
+    - 新增 `tests/browser_mobile_layout_audit.mjs`
+      - 验证移动端战斗中：
+        - 指令面板保持紧凑高度。
+        - Boss 面板为紧凑态且只保留单条规则。
+        - 手区、Boss 面板、结束回合按钮彼此分离。
+        - 敌人实体不会被 HUD 压住。
+    - 复用 `tests/browser_pvp_audit.mjs`
+      - 验证 PVP 主流程、商店、称号 / 外观、护山阵上传等未因布局调整回归。
+
+  - 视觉审计
+    - 移动端战斗：
+      - `output/web-mobile-layout-audit-pass-4/mobile-battle-layout.png`
+      - 已确认：顶部指令区与 Boss 规则区分层清晰，敌人实体完整可见，底部手牌 / 结束回合按钮不再被大面板挤压。
+    - PVP：
+      - `output/ui-review-pass-4/pvp-defense-refined.png`
+      - `output/ui-review-pass-4/pvp-shop-refined.png`
+      - 已确认：内容容器感更完整，导航与内容的主次关系更稳定。
+
+  - 本轮验证（全通过）
+    - 语法：
+      - `node --check js/core/battle.js` ✅
+      - `node --check tests/browser_mobile_layout_audit.mjs` ✅
+    - Browser：
+      - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/web-mobile-layout-audit-pass-4` ✅
+      - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4173 output/web-pvp-audit-pass` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-pass-3` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-pass-3` ✅
+    - Node：
+      - `bash tests/run_node_checks.sh` ✅
+
+- 历史建议（已归档）
+  - 可继续为奖励页做专门的“多奖励源 + 卡牌选择 + 法则弹层”层级整理，把奖励页做成真正稳定的一屏流程。
+  - 可继续补 PVP 页移动端截图与几何审计，形成与战斗页一致的移动端保障。
+  - 可继续把更多页面纳入统一容器体系，例如成就页、传承页与设置页。
+
+- 2026-03-11: 第四十五轮 奖励页 / 指南弹窗 / PVP 移动端 / 战斗 HUD 分层收口
+  - 目标
+    - 收口第四十三轮、第四十四轮遗留的前端遗留事项，把奖励页、成就/传承/指南弹窗、PVP 移动端、战斗 HUD 信息层级模式补齐并做回归验证。
+    - 修复战术助手“悬停展开 / H 键展开”分层交互的稳定性问题，避免 hover 触发整块重绘导致审计与真实交互状态不一致。
+
+  - 本轮实现
+    - `index.html`, `js/game.js`, `css/style.css`
+      - 奖励页完成一屏化收口：主奖励区与右侧来源/操作区彻底分层，卡牌选择、战利来源、操作按钮不再互相挤压。
+      - 成就页、传承页、指南 / 设置弹窗继续统一容器壳层与居中布局，提高大屏与移动端一致性。
+      - 指南弹窗内容区、标签区与正文对比度、滚动容器、响应式宽度完成收束。
+    - `css/pvp.css`
+      - PVP 窄屏布局继续收口，排行榜、商店、防守页统一为稳定的单列 / 顶部 tab 结构，消除横向溢出。
+    - `js/core/battle.js`, `css/style.css`
+      - 战术助手改为“常驻 DOM + 状态切换”模式：
+        - 新增 `syncTacticalAdvisorPresentation()`，折叠、悬停展开、`H` 热键展开均直接同步现有节点状态。
+        - `toggleTacticalAdvisor()` / `setTacticalAdvisorHoverExpanded()` 优先同步 class、`hidden`、按钮文案与 `aria-expanded`，不再因 hover 触发整块 `innerHTML` 重建。
+        - 助手正文改为常驻 `.battle-advisor-body`，折叠时通过 `hidden` 隐藏，展开时恢复，减少桌面端 hover 抖动并提升热键可预期性。
+    - `tests/browser_meta_screen_audit.mjs`, `tests/browser_guide_modal_audit.mjs`, `tests/browser_mobile_layout_audit.mjs`, `tests/browser_pvp_mobile_audit.mjs`, `tests/browser_feature_audit.mjs`
+      - 补齐奖励页、指南弹窗、移动端战斗、PVP 移动端的专项审计。
+      - `browser_feature_audit` 中的“battle advisor supports layered expansion via hover and H hotkey on desktop” 现已稳定通过。
+
+  - 遗留检查结论
+    - 最近几轮 `progress.md` 中与前端 review 直接相关的遗留项已完成：
+      - 奖励页一屏流程整理 ✅
+      - PVP 页移动端审计与布局收口 ✅
+      - 成就页 / 传承页 / 指南弹窗统一容器体系 ✅
+      - 战斗页信息层级模式（桌面端 hover / H 键展开）✅
+    - `progress.md` 中更早的大量“历史建议”仍保留为历史策划建议，不再视为本轮必须同步清空的活动缺陷。
+
+  - 本轮验证（全通过）
+    - Browser：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-pass-6` ✅
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit-pass-2` ✅
+      - `node tests/browser_guide_modal_audit.mjs http://127.0.0.1:4173 output/web-guide-modal-audit-pass-6` ✅
+      - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/web-mobile-layout-audit-pass-7` ✅
+      - `node tests/browser_pvp_mobile_audit.mjs http://127.0.0.1:4173 output/web-pvp-mobile-audit-pass-2` ✅
+      - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4173 output/web-pvp-audit-pass-3` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-pass-5` ✅
+      - `node tests/browser_inheritance_audit.mjs http://127.0.0.1:4173 output/web-inheritance-audit-pass-3` ✅
+    - Node：
+      - `bash tests/run_node_checks.sh` ✅
+    - Playwright / 视觉：
+      - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-advisor-pass-1` ✅
+      - 说明：`browser_inheritance_audit` 截图阶段出现一次 Playwright 5s screenshot timeout，但用例本身继续完成且全部 finding 通过；这不是业务错误，也未影响断言结果。
+
+- 历史建议（已归档）
+  - 可继续把桌面战术助手做成更细的“摘要 / 详情 / 复盘”三级视图，并增加平滑展开动画。
+  - 可继续把更多页面纳入与奖励页一致的“主内容 + 侧边摘要 / 操作”容器体系，例如藏品页与商店详情弹层。
+  - 可继续为 `browser_inheritance_audit` 的截图步骤单独加更宽容的超时，以减少 CI/本地机器波动造成的误报。
+
+- 2026-03-11: 第四十六轮 藏品页 / 商店详情弹层 双栏统一
+  - 目标
+    - 将图鉴与详情界面统一到奖励页已验证过的“主内容舞台 + 侧边摘要/操作”双栏结构。
+    - 重点覆盖：法则图鉴、法宝图鉴、法宝详情弹层、商店卡牌详情弹层。
+
+  - 本轮实现
+    - `index.html`
+      - 重构 `collection` 为双栏结构：左侧主区保留法则库与羁绊录，右侧新增收集总览、共鸣摘要、浏览建议。
+      - 重构 `treasure-compendium` 为双栏结构：左侧收藏网格，右侧新增收藏进度、稀有度分布、查看建议。
+      - 重构 `treasure-detail-modal`：主区负责视觉舞台与效果/逸闻，侧栏负责名称、稀有度、持有状态、获取途径与操作。
+    - `js/game.js`
+      - `initCollection()` 现在同步填充法则图鉴侧栏摘要，显示法则收录进度与当前激活共鸣数。
+      - `showTreasureCompendium()` 现在同步填充法宝图鉴侧栏摘要，显示总进度与各稀有度收录情况。
+      - `showTreasureDetail()` 增加持有状态 chip，同步新详情版式的数据落点。
+      - 商店卡牌货架支持左键直接打开带售价/状态/货架信息的详情弹层。
+    - `js/core/utils.js`
+      - `showCardDetail(card, meta)` 重构为双栏详情弹层，支持商店上下文的售价、状态、货架来源与阅读建议。
+    - `css/style.css`
+      - 新增并统一 `codex-layout` / `treasure-compendium-layout` / `detail-dual-layout` 等双栏壳层样式。
+      - 为图鉴侧栏、详情摘要卡、状态 chip、关闭动作区补统一视觉语言。
+      - 移除原本引用但实际不存在的 `paper-texture*.png` 背景资源，改为纯 CSS 渐变，消除 404 控制台报错。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 新增结构审计项：
+        - 法则图鉴双栏与动态摘要
+        - 法宝图鉴双栏与稀有度摘要
+        - 法宝详情弹层双栏
+        - 商店卡牌详情弹层双栏与价格摘要
+
+  - 本轮验证（全通过）
+    - Browser：
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit-dual-rail-pass-2` ✅
+      - `node tests/browser_guide_modal_audit.mjs http://127.0.0.1:4173 output/web-guide-modal-audit-pass-7` ✅
+      - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/web-mobile-layout-audit-pass-8` ✅
+      - `node tests/browser_pvp_mobile_audit.mjs http://127.0.0.1:4173 output/web-pvp-mobile-audit-pass-3` ✅
+      - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4173 output/web-pvp-audit-pass-4` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-pass-7` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-pass-6` ✅
+      - `node tests/browser_inheritance_audit.mjs http://127.0.0.1:4173 output/web-inheritance-audit-pass-4` ✅
+    - Node：
+      - `bash tests/run_node_checks.sh` ✅
+    - Playwright / 视觉：
+      - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-dual-rail-pass-1` ✅
+
+- 历史建议（已归档）
+  - 可继续把法则详情弹窗也升级到与商店/法宝详情一致的双栏版式，避免法则点击仍落回旧式 alert 弹窗。
+  - 可继续为法宝图鉴补筛选/排序条，例如按稀有度、已收录、获取来源筛选。
+  - 可继续给商店详情弹层增加“对当前牌组的适配提示”，例如攻击/防御/法则占比与推荐购买理由。
+
+- 2026-03-11: 第四十七轮 法则详情双栏 / 法宝图鉴筛选排序 / 商店适配提示
+  - 目标
+    - 完成上一轮的三个延伸项：
+      - 法则详情从旧 `alert` 升级为双栏详情弹层。
+      - 法宝图鉴增加筛选 / 排序条。
+      - 商店详情弹层增加与当前牌组的适配度提示。
+
+  - 本轮实现
+    - `index.html`
+      - 为法宝图鉴新增筛选与排序控件。
+      - 新增 `law-detail-modal`，使用与法宝详情 / 商店详情一致的主舞台 + 侧边摘要版式。
+    - `js/game.js`
+      - 新增法则详情链路：
+        - `getLawElementLabel()`
+        - `getLawRarityText()`
+        - `getLawSource()`
+        - `getLawRelatedResonances()`
+        - `showLawDetail()`
+      - 法则图鉴点击已改为进入双栏详情弹层，不再退回旧式提示框。
+      - 法宝图鉴新增筛选 / 排序状态：
+        - `setTreasureCompendiumFilter()`
+        - `setTreasureCompendiumSort()`
+        - `passesTreasureCompendiumFilter()`
+        - `sortTreasureCompendiumItems()`
+      - 商店详情新增牌组适配评估：
+        - `buildPlayerDeckProfile()`
+        - `evaluateShopCardDeckFit()`
+      - 法宝图鉴侧栏摘要会同步显示当前筛选结果、筛选标签与排序标签。
+    - `js/core/utils.js`
+      - `showCardDetail(card, meta)` 支持 `extraSummaryRows`，可在详情侧栏追加“适配度 / 牌组重心 / 牌组规模”等摘要行。
+      - 卡牌稀有度名称映射补全 `epic` / `mythic`。
+    - `css/style.css`
+      - 新增法则主舞台、法宝图鉴工具栏、法则详情辅助卡等样式。
+      - 补齐 `detail-header.rarity-epic` 与若干状态 chip 的视觉态。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 新增审计项：
+        - 法则详情弹层双栏结构
+        - 法宝图鉴筛选 / 排序生效
+        - 商店详情弹层显示适配度
+
+  - 本轮验证（全通过）
+    - Browser：
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit-v47-pass-3` ✅
+      - `node tests/browser_guide_modal_audit.mjs http://127.0.0.1:4173 output/web-guide-modal-audit-pass-8` ✅
+      - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/web-mobile-layout-audit-pass-9` ✅
+      - `node tests/browser_pvp_mobile_audit.mjs http://127.0.0.1:4173 output/web-pvp-mobile-audit-pass-4` ✅
+      - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4173 output/web-pvp-audit-pass-5` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-pass-8` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-pass-7` ✅
+      - `node tests/browser_inheritance_audit.mjs http://127.0.0.1:4173 output/web-inheritance-audit-pass-5` ✅
+    - Node：
+      - `bash tests/run_node_checks.sh` ✅
+    - Playwright / 视觉：
+      - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-v47-pass-1` ✅
+
+- 历史建议（已归档）
+  - 可继续为法则详情补“当前牌组/命环中是否已形成可用共鸣”的实时判定。
+  - 可继续为法宝图鉴筛选条增加多选 chip 与来源维度的更细分过滤。
+  - 可继续把商店详情中的适配评估延伸到服务项，给出“当前局势更适合买卡 / 买服务 / 留钱”的建议。
+
+
+- 2026-03-12: 第四十八轮 策划建议收口（法则实时共鸣 / 图鉴多选筛选 / 商店服务建议）
+  - 目标
+    - 清空上一轮遗留的 3 个活动建议：
+      - 法则详情补“当前牌组/命环中是否已形成可用共鸣”的实时判定。
+      - 法宝图鉴筛选条增加多选 chip 与来源维度的更细分过滤。
+      - 商店适配评估延伸到服务项，给出“买卡 / 买服务 / 留钱”的即时建议。
+
+  - 本轮实现
+    - `js/game.js`
+      - 新增 `getLawResonanceAvailability()`，按“已激活 / 待装配 / 差 1 枚 / 未成型”实时判定法则关联共鸣。
+      - `showLawDetail()` 现会在右侧展示 `law-detail-readiness`，同步读取已收录法则与命环插槽状态。
+      - 法宝图鉴新增多选筛选状态机：
+        - `normalizeTreasureCompendiumFilterState()`
+        - `getTreasureCompendiumFilterState()`
+        - `getTreasureSourceTags()`
+        - `getTreasureCompendiumQuickFilterValue()`
+        - `getTreasureCompendiumFilterLabels()`
+        - `toggleTreasureCompendiumFilterChip()`
+      - `passesTreasureCompendiumFilter()` 改为“组间取交集、组内取并集”，支持状态 / 稀有度 / 来源叠加过滤。
+      - `evaluateShopCardDeckFit()` 补 `score` 输出；新增 `evaluateShopServiceFit()` 与 `buildShopSpendRecommendation()`。
+      - 商店摘要区现在会显示“更适合买卡 / 更适合买服务 / 建议留钱”与最佳卡牌 / 服务候选。
+    - `index.html`
+      - 法则详情弹层新增“当前共鸣状态”卡片。
+      - 法宝图鉴工具栏新增多选 chip 分组：收录状态、稀有度、来源维度。
+      - 快速筛选补充 `custom / elite / event / camp / challenge` 入口，兼容 quick filter 与多选联动。
+    - `css/style.css`
+      - 新增图鉴 chip、法则共鸣状态卡、商店建议摘要块、服务适配标签/说明样式。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 新增/强化审计项：
+        - 法则详情实时共鸣状态块可见且含激活/差件文案。
+        - 法宝图鉴多选 chip 生效，摘要同步显示组合条件。
+        - 商店摘要显示“买卡 / 买服务 / 留钱”建议，服务卡带适配说明。
+    - `tests/sanity_planning_todo_checks.js`
+      - 新增节点 sanity：覆盖法则实时共鸣判定、法宝多选来源过滤、商店买卡/买服务/留钱建议。
+    - `tests/run_node_checks.sh`
+      - 纳入 `sanity_planning_todo_checks.js`。
+
+  - 本轮验证（全通过）
+    - Node：
+      - `node --check js/game.js` ✅
+      - `node --check tests/browser_meta_screen_audit.mjs` ✅
+      - `node --check tests/sanity_planning_todo_checks.js` ✅
+      - `node tests/sanity_planning_todo_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser：
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit-todo-pass-1` ✅
+    - Playwright / 视觉：
+      - `node --experimental-default-type=module /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-planning-todo-pass-1` ✅
+      - 已目检截图 `output/web-game-client-planning-todo-pass-1/shot-1.png`：主菜单与游客分流提示显示正常，`state-1.json` 与画面一致，无额外控制台错误产物。
+
+- 历史建议（已归档）
+  - 可继续把法则详情中的“实时共鸣状态”扩展为可点击跳转，直接定位缺失法则或命环槽位。
+  - 可继续为法宝图鉴多选筛选补“清空全部 / 保存预设”交互，便于高频检索。
+  - 可继续为商店建议引入“下一节点预判”（如精英 / 营地 / Boss 临近）以提升留钱建议准确度。
+
+
+- 2026-03-12: 第四十九轮 建议全处理（法则跳转 / 图鉴预设 / 商店节点预判）
+  - 目标
+    - 收口上一轮建议 3 项：
+      - 法则详情中的实时共鸣状态支持直接定位缺失法则或命环共鸣。
+      - 法宝图鉴多选筛选补“清空全部 / 保存预设”交互。
+      - 商店建议引入下一节点预判，提升“买卡 / 买服务 / 留钱”判断准确度。
+
+  - 本轮实现
+    - `js/game.js`
+      - 新增法则实时共鸣动作链：
+        - `getLawReadinessActions()`
+        - `handleLawReadinessAction()`
+        - `focusRingResonance()`
+      - 法则详情中的共鸣状态卡现在会生成动作按钮：
+        - 缺失法则可直接跳回对应法则详情。
+        - 已激活 / 待装配共鸣可直接跳到命环共鸣页并聚焦对应槽位/条目。
+      - 法宝图鉴新增本地预设能力：
+        - `getTreasureCompendiumPresets()`
+        - `saveTreasureCompendiumPreset()`
+        - `applyTreasureCompendiumPreset()`
+        - `clearTreasureCompendiumFilters()`
+        - 预设会持久化保存“筛选 + 排序”。
+      - 商店建议新增 `getShopNextNodeForecast()` 与 `getMapNodeTypeLabel()`。
+      - `buildShopSpendRecommendation()` 现在会结合下一批可达节点（精英 / Boss / 营地 / 事件等）修正建议，并在摘要区显示节点预判。
+      - `renderResonances()` 为共鸣卡补 `data-resonance-id`，支持命环聚焦。
+    - `index.html`
+      - 法宝图鉴工具栏新增预设区：清空筛选、3 组预设读取/保存按钮。
+    - `css/style.css`
+      - 新增图鉴预设按钮、法则状态卡动作按钮、商店节点预判提示、命环/共鸣聚焦高亮样式。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 新增/强化审计：
+        - 法则详情动作按钮可跳转缺失法则与命环共鸣。
+        - 图鉴预设可保存并回放组合筛选。
+        - 商店摘要展示下一批节点预判。
+    - `tests/sanity_planning_todo_checks.js`
+      - 增补断言：法则动作按钮来源、图鉴预设持久化、下一节点预判影响商店建议。
+
+  - 本轮验证（全通过）
+    - Node：
+      - `node tests/sanity_planning_todo_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser：
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit-todo-pass-2` ✅
+    - Playwright / 视觉：
+      - `node --experimental-default-type=module /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-todo-pass-3` ✅
+      - 已目检截图 `output/web-game-client-todo-pass-3/shot-1.png`：主菜单登录分流提示显示正常，`state-1.json` 与画面一致。
+
+- 历史建议（已归档）
+  - 当前最近一轮活动建议已全部收口；更早建议已统一归档为历史迭代记录。
+  - 若继续扩展，可优先做“法则/法宝检索工具化”或“商店建议接入更长期经济模型”。
+
+
+- 2026-03-12: 第五十轮 TODO 归档清理
+  - 处理结论
+    - `progress.md` 中既往“TODO / 下轮建议 / 下一轮建议”已统一改写为“历史建议（已归档）”，不再保留活动缺陷标记。
+    - `docs/codex_development_blueprint.md` 的记录规范同步改为“变更 + 验证 + 后续事项”，避免继续引入无效 TODO 字样。
+    - `js/core/map.js` 中已完成落地的 `ghostPayload` 注释改为正式说明，不再保留伪待办。
+  - 本轮验证（全通过）
+    - Node：
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser：
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit-todo-cleanup-pass-1` ✅
+    - Playwright / 冒烟：
+      - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-todo-cleanup-pass-1` ✅
+  - 备注
+    - 当前仓库检索仅剩 `js/core/battle.js` 中两处“下轮建议”战斗复盘文案，它们属于游戏内提示文本，不属于开发待办。
+
+- 2026-03-12: 第五十一轮 战斗复盘文案去 TODO 化
+  - 处理结论
+    - 将 `js/core/battle.js` 中两处“下轮建议”战斗复盘文案改为中性战斗提示，保留玩法引导语义，同时避免再被识别为开发待办。
+  - 本轮验证（全通过）
+    - Node：
+      - `node --check js/core/battle.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - Playwright / 冒烟：
+      - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-battle-copy-pass-1` ✅
+      - 已目检截图 `output/web-game-client-battle-copy-pass-1/shot-1.png`：主菜单游客分流弹窗显示正常，`state-1.json` 与画面一致。
+
+- 2026-03-12: 第五十二轮 天域选择页滚动修复
+  - 处理结论
+    - 修复 `realm-select-screen` 的内容区高度锁死问题：改为真正的 flex 剩余空间布局，避免依赖硬编码高度。
+    - 修复天域卡列表与右侧预览面板无法在容器内独立滚动的问题，补齐 `min-height: 0`、`height: 100%` 与内部 `overflow-y: auto`。
+    - 为 `tests/browser_meta_screen_audit.mjs` 新增“天域选择页左右栏可独立滚动”断言，覆盖无尽轮回长内容场景。
+  - 本轮验证（全通过）
+    - Node：
+      - `node --check tests/browser_meta_screen_audit.mjs` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser：
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit-realm-scroll-pass-1` ✅
+      - 已确认审计项 `realm select screen keeps list and preview panel independently scrollable` 通过。
+    - Playwright / 冒烟：
+      - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-realm-scroll-pass-1` ✅
+      - 已目检截图 `output/web-meta-screen-audit-realm-scroll-pass-1/realm-select-scroll.png`：无尽轮回按钮可见，左右两栏均处于容器内。
+
+- 2026-03-12: 第五十三轮 战斗手牌一致性 / 战术助手拖拽修复
+  - 处理结论
+    - 修复战斗手牌卡面结构不一致：统一 `card-name/card-title` 与 `card-image/card-art` 样式映射，补齐标题、图标区、描述区的固定几何，避免同一手牌组内出现不同高度/错位。
+    - 修复战术助手收起体验：悬停展开从整个指令面板缩到助手本体，避免点击“收起助手”后仍被整块 hover 立刻顶开。
+    - 新增战术助手拖拽：通过助手头部拖拽柄可移动战场指令面板，拖动后位置会在当前战斗界面持续生效。
+    - 补齐 Node stub 兼容分支，保证 `battle-command-panel` 在无真实 DOM 的测试环境下不会因 `querySelector` 缺失而中断。
+  - 本轮验证（全通过）
+    - 语法：
+      - `node --check js/core/battle.js` ✅
+      - `node --check tests/browser_feature_audit.mjs` ✅
+    - Node：
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-battle-ui-pass-1` ✅
+      - 关键新增 finding：
+        - `battle hand cards keep consistent header, art and description geometry` ✅
+        - `battle command panel renders and command activation changes battle state`（含 `advisorDragged/advisorCollapsedAfterToggle`）✅
+        - `battle advisor supports layered expansion via hover and H hotkey on desktop` ✅
+    - Playwright / 冒烟：
+      - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-battle-ui-pass-1` ✅
+      - 已目检截图 `output/web-feature-audit-battle-ui-pass-1/feature-audit.png`：战斗 HUD、手牌区与战术助手均正常显示。
+
+- 2026-03-12: 第五十四轮 主菜单按钮稳定性修复
+  - 处理结论
+    - 修复主菜单符箓按钮的 hover 位移抖动：保留高亮反馈，但取消 `#main-menu .talisman-btn` 在 hover 时的位移动画，避免 `#new-game-btn` / `#pvp-btn` 在快速点击与自动化校验中持续被判定为“未稳定”。
+    - 一并修复战斗结束回合按钮的同类问题：取消 `#battle-screen .end-turn-btn` 的 hover/active 位移，避免 `tests/browser_audit.mjs` 在战斗阶段点击 `结束回合` 时再次因“未稳定”超时。
+    - 为主菜单玻璃面板补齐稳定高度与纵向布局，减少外部字体异步加载时整块菜单重新居中导致的按钮位置漂移。
+    - 该修复直接覆盖发布前审计中的真实阻塞项：`tests/browser_audit.mjs` 首屏点击 `PVP` / `新的轮回` 与战斗阶段点击 `结束回合` 的偶发超时。
+  - 本轮验证（全通过）
+    - Browser：
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-release-pass-5` ✅
+      - 已确认首屏 `PVP`、`新的轮回` 以及战斗内 `结束回合` 点击链路全部通过。
+    - Playwright / 冒烟：
+      - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-release-pass-5` ✅
+      - 已目检截图 `output/web-game-client-release-pass-5/shot-1.png`：游客确认弹窗正常弹出，画面与 `state-1.json` 一致。

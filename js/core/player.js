@@ -16,6 +16,18 @@ class Player {
         this.currentHp = this.maxHp;
         this.block = 0;
         this.gold = charData.stats.gold;
+        this.heavenlyInsight = 1;
+        this.karma = 0;
+        this.shopRumors = {
+            rewardRareCharges: 0,
+            rewardRareBonus: 0,
+            treasureCharges: 0,
+            treasureChanceBonus: 0,
+            nextRealmMapShift: null,
+            nextRealmLabel: '',
+            nextRealmTarget: null,
+            history: []
+        };
 
         // 战斗属性
         this.baseEnergy = charData.stats.energy;
@@ -2459,7 +2471,14 @@ class Player {
                     // 确保 consumeCandy 的卡牌 cost 保持为 0 (或 baseCost)
                     card.cost = card.baseCost;
                 }
-                this.hand.push(card);
+                const handLimit = this.getMaxHandSize();
+                if (this.hand.length >= handLimit) {
+                    this.discardPile.push(card);
+                    Utils.showBattleLog(`手牌已满（上限 ${handLimit}），【${card.name}】被置入弃牌堆`);
+                } else {
+                    this.hand.push(card);
+                }
+
             }
         }
     }
@@ -2730,6 +2749,9 @@ class Player {
             currentHp: this.currentHp,
             block: this.block,
             gold: this.gold,
+            heavenlyInsight: this.heavenlyInsight,
+            karma: this.karma,
+            shopRumors: this.shopRumors,
             currentEnergy: this.currentEnergy,
             baseEnergy: this.baseEnergy,
             // 压缩卡牌数据：只保存关键属性
@@ -2853,6 +2875,14 @@ class Player {
         return this.equippedTreasures.some(t => t.id === treasureId);
     }
 
+    getMaxHandSize() {
+        let limit = Math.max(1, Math.floor(Number(this.maxHandSize) || 10));
+        if (this.game && typeof this.game.getEndlessParanoiaHandLimitPenalty === 'function') {
+            limit += Math.floor(Number(this.game.getEndlessParanoiaHandLimitPenalty()) || 0);
+        }
+        return Math.max(1, limit);
+    }
+
     // 获取最大法宝槽位
     getMaxTreasureSlots() {
         let slots = 2; // 初始
@@ -2861,6 +2891,9 @@ class Player {
         if (r >= 10) slots++;
         if (r >= 12) slots++;
         if (r >= 15) slots++;
+        if (this.game && typeof this.game.getEndlessParanoiaTreasureSlotBonus === 'function') {
+            slots += Math.max(0, Math.floor(Number(this.game.getEndlessParanoiaTreasureSlotBonus()) || 0));
+        }
 
         // Fix: Slot count should not decrease when returning to earlier realms
         if (!this._maxTreasureSlots || slots > this._maxTreasureSlots) {

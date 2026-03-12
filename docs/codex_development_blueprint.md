@@ -64,7 +64,7 @@
 4. 变更后统一跑：
    - `tests/run_node_checks.sh`
    - Playwright 审计场景
-5. 在 `progress.md` 追加“变更 + 验证 + TODO”。
+5. 在 `progress.md` 追加“变更 + 验证 + 后续事项”。
 
 ## 5. 风险与约束
 - 云端鉴权与游客模式必须可并行，不得互相阻断。

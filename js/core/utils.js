@@ -351,86 +351,123 @@ const Utils = {
     },
 
     // 显示卡牌详情弹窗 (Refactored for Void & Ink Theme)
-    showCardDetail(card) {
-        // 创建或获取详情遮罩层
+    showCardDetail(card, meta = {}) {
         let modal = document.getElementById('card-detail-modal');
         if (!modal) {
             modal = document.createElement('div');
             modal.id = 'card-detail-modal';
             modal.className = 'modal-overlay card-detail-overlay';
-            // Click outside to close
             modal.onclick = (e) => {
                 if (e.target === modal) modal.style.display = 'none';
             };
             document.body.appendChild(modal);
         }
 
-        // 解析详细效果数值
         let effectsHtml = '';
         if (card.effects) {
-            effectsHtml = '<div class="cd-section"><h3><span class="cd-icon">⚡</span> 效果解析</h3><ul class="cd-effects-list">';
-            card.effects.forEach(e => {
-                effectsHtml += `<li>${this.getEffectDescription(e)}</li>`;
+            effectsHtml = '<div class="cd-section"><div class="detail-panel-heading compact"><span class="detail-panel-kicker">效果拆解</span><h3>详细效果</h3></div><ul class="cd-effects-list">';
+            card.effects.forEach((effect) => {
+                effectsHtml += `<li>${this.getEffectDescription(effect)}</li>`;
             });
             effectsHtml += '</ul></div>';
         }
 
-        // Keywords / Lore (Placeholder)
-        const loreHtml = card.lore ? `<div class="cd-section cd-lore">"${card.lore}"</div>` : '';
+        const loreHtml = card.lore
+            ? `<div class="detail-dual-panel cd-lore-card"><span class="detail-mini-label">卡牌逸闻</span><p class="cd-lore">"${card.lore}"</p></div>`
+            : '';
 
-        // Rarity Color
-        const rarityClass = `rarity-${card.rarity || 'common'}`;
+        const rarity = card.rarity || 'common';
+        const rarityClass = `rarity-${rarity}`;
+        const summaryChips = [
+            `<span class="detail-status-chip type-${card.type}">${this.getCardTypeName(card.type)}</span>`,
+            `<span class="detail-status-chip rarity-chip ${rarityClass}">${this.getCardRarityName(rarity)}</span>`,
+            card.lawType ? `<span class="detail-status-chip law">${this.getLawName(card.lawType)}</span>` : ''
+        ].filter(Boolean).join('');
+        const sourceLabel = meta.sectionLabel || '卡牌详解';
+        const priceText = meta.priceText ? `<div class="cd-summary-row"><span>售价</span><strong>${meta.priceText}</strong></div>` : '';
+        const availabilityText = meta.availabilityText ? `<div class="cd-summary-row"><span>状态</span><strong>${meta.availabilityText}</strong></div>` : '';
+        const sourceText = meta.sourceLabel ? `<div class="cd-summary-row"><span>货架</span><strong>${meta.sourceLabel}</strong></div>` : '';
+        const costText = typeof card.cost === 'number' ? `${card.cost} 灵力` : '变动费用';
+        const effectCount = Array.isArray(card.effects) ? card.effects.length : 0;
+        const usageHint = meta.usageHint || (effectCount > 0 ? `包含 ${effectCount} 条显式效果，建议先看右侧摘要再读主区说明。` : '该牌以基础描述为主，适合直接配合主区卡面阅读。');
+        const extraSummaryRows = Array.isArray(meta.extraSummaryRows)
+            ? meta.extraSummaryRows.map((row) => `<div class="cd-summary-row"><span>${row.label}</span><strong>${row.value}</strong></div>`).join('')
+            : '';
+        const closeLabel = meta.closeLabel || '关闭界面';
 
         modal.innerHTML = `
-            <div class="card-detail-container">
-                <!-- Left: 3D Card Preview -->
-                <div class="cd-preview-pane">
-                    <div class="card-preview-wrapper">
-                         <!-- Re-use createCardElement logic but purely visual -->
-                         <div class="card ${card.type} ${rarityClass} big-preview">
-                             <div class="card-cost">${card.cost}</div>
-                             <div class="card-header"><div class="card-name">${card.name}</div></div>
-                             <div class="card-image">${card.icon || '🎴'}</div>
-                             <div class="card-desc">${card.description}</div>
-                             <div class="card-type">${this.getCardTypeIcon(card.type)} ${this.getCardTypeName(card.type)}</div>
-                             <div class="card__shine"></div>
-                         </div>
-                    </div>
-                </div>
-
-                <!-- Right: Information -->
-                <div class="cd-info-pane">
-                    <div class="cd-header">
-                        <h2>${card.name}</h2>
-                        <div class="cd-badges">
-                            <span class="cd-badge type-${card.type}">${this.getCardTypeName(card.type)}</span>
-                            <span class="cd-badge rarity-${card.rarity}">${this.getCardRarityName(card.rarity)}</span>
-                            ${card.lawType ? `<span class="cd-badge law">${this.getLawName(card.lawType)}</span>` : ''}
+            <div class="card-detail-container detail-dual-layout">
+                <div class="detail-dual-main card-detail-main">
+                    <section class="detail-dual-panel cd-stage-panel">
+                        <div class="detail-panel-heading">
+                            <span class="detail-panel-kicker">${sourceLabel}</span>
+                            <h3>卡面主舞台</h3>
                         </div>
-                    </div>
-                    
-                    <div class="cd-body">
-                        <div class="cd-desc-box">
-                            ${card.description}
+                        <div class="cd-preview-pane">
+                            <div class="card-preview-wrapper">
+                                 <div class="card ${card.type} ${rarityClass} big-preview">
+                                     <div class="card-cost">${card.cost}</div>
+                                     <div class="card-header"><div class="card-name">${card.name}</div></div>
+                                     <div class="card-image">${card.icon || '🎴'}</div>
+                                     <div class="card-desc">${card.description}</div>
+                                     <div class="card-type">${this.getCardTypeIcon(card.type)} ${this.getCardTypeName(card.type)}</div>
+                                     <div class="card__shine"></div>
+                                 </div>
+                            </div>
                         </div>
+                    </section>
+                    <section class="detail-dual-panel cd-copy-panel">
+                        <div class="detail-panel-heading compact">
+                            <span class="detail-panel-kicker">文本说明</span>
+                            <h3>卡牌摘要</h3>
+                        </div>
+                        <div class="cd-desc-box">${card.description}</div>
                         ${effectsHtml}
                         ${loreHtml}
-                    </div>
-
-                    <button class="cd-close-btn" onclick="document.getElementById('card-detail-modal').style.display='none'">关闭界面</button>
+                    </section>
                 </div>
+                <aside class="detail-dual-side card-detail-side">
+                    <section class="detail-dual-panel cd-info-pane">
+                        <div class="cd-header detail-header ${rarityClass}">
+                            <span class="detail-kicker">${sourceLabel}</span>
+                            <h2>${card.name}</h2>
+                            <div class="detail-sub">${this.getCardTypeName(card.type)} ｜ ${this.getCardRarityName(rarity)}</div>
+                        </div>
+                        <div class="detail-status-strip cd-badges">${summaryChips}</div>
+                        <div class="cd-summary-card">
+                            <div class="cd-summary-row"><span>费用</span><strong>${costText}</strong></div>
+                            <div class="cd-summary-row"><span>效果数</span><strong>${effectCount}</strong></div>
+                            ${priceText}
+                            ${availabilityText}
+                            ${sourceText}
+                            ${extraSummaryRows}
+                        </div>
+                    </section>
+                    <section class="detail-dual-panel detail-tip-panel">
+                        <div class="detail-panel-heading compact">
+                            <span class="detail-panel-kicker">使用建议</span>
+                            <h3>阅读顺序</h3>
+                        </div>
+                        <p class="codex-side-note">${usageHint}</p>
+                        <ul class="codex-side-list compact">
+                            <li>主区看卡面定位，右侧看费用、状态与商店信息。</li>
+                            <li>若来自商店，可先比较售价与当前资源，再决定是否购买。</li>
+                        </ul>
+                    </section>
+                    <div class="detail-modal-actions">
+                        <button class="cd-close-btn" onclick="document.getElementById('card-detail-modal').style.display='none'">${closeLabel}</button>
+                    </div>
+                </aside>
             </div>
         `;
 
         modal.style.display = 'flex';
 
-        // Add minimal animation
         const container = modal.querySelector('.card-detail-container');
         if (container) {
             container.style.animation = 'modalPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
         }
     },
-
     getEffectDescription(effect) {
         // 简单的效果描述生成器，用于详情页
         switch (effect.type) {
@@ -455,7 +492,7 @@ const Utils = {
     },
 
     getCardRarityName(rarity) {
-        const map = { 'basic': '基础', 'common': '普通', 'uncommon': '优秀', 'rare': '稀有', 'legendary': '传说' };
+        const map = { 'basic': '基础', 'common': '普通', 'uncommon': '优秀', 'rare': '稀有', 'epic': '史诗', 'legendary': '传说', 'mythic': '神话' };
         return map[rarity] || rarity;
     },
 
@@ -838,11 +875,17 @@ const Utils = {
         const encounterTierText = `${'I'.repeat(encounterTierStage)}阶`;
         const encounterAffixTag = String(enemy.encounterAffixTag || '').trim();
         const encounterAffixDesc = String(enemy.encounterAffixDesc || '').trim();
+        const squadTag = String(enemy.enemySquadTag || '').trim();
+        const squadRoleLabel = String(enemy.enemySquadRoleLabel || '').trim();
+        const squadDesc = String(enemy.enemySquadDesc || '').trim();
         if (encounterTag) {
             intentDesc += `｜遭遇：${encounterTag} ${encounterTierText}`;
         }
         if (encounterAffixTag) {
             intentDesc += `｜遭遇词缀：${encounterAffixTag}`;
+        }
+        if (squadTag) {
+            intentDesc += `｜编队：${squadTag}${squadRoleLabel ? `·${squadRoleLabel}` : ''}`;
         }
         if (currentPattern.type === 'multiAction' && Array.isArray(currentPattern.actions) && currentPattern.actions.length > 0) {
             const segments = currentPattern.actions
@@ -887,6 +930,11 @@ const Utils = {
             .replace(/"/g, '&quot;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
+        const squadDescSafe = squadDesc
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
         const counterHintTitleSafe = counterHints
             .map((item) => String(item.detail || ''))
             .join(' | ')
@@ -925,6 +973,9 @@ const Utils = {
                 : ''}
             ${encounterAffixTag
                 ? `<div class="enemy-encounter-affix" title="${encounterAffixDescSafe || '高阶遭遇词缀生效中'}">✦ 词缀·${encounterAffixTag}</div>`
+                : ''}
+            ${squadTag
+                ? `<div class="enemy-squad-tag" title="${squadDescSafe || '敌方编队协同中'}">⛭ 编队·${squadTag}${squadRoleLabel ? `·${squadRoleLabel}` : ''}</div>`
                 : ''}
             ${counterHints.length > 0
                 ? `<div class="enemy-counter-tag" title="${counterHintTitleSafe}">反制·${counterHints[0].label}</div>`

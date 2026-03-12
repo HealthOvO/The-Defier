@@ -104,6 +104,9 @@ class GameMap {
 
         // Save initial state to cache
         this.saveStateToCache(cacheKey);
+        if (this.game && typeof this.game.consumePendingRouteRumorProfile === 'function') {
+            this.game.consumePendingRouteRumorProfile(realm);
+        }
 
         return this.nodes;
     }
@@ -225,6 +228,21 @@ class GameMap {
             Object.keys(shift).forEach((key) => {
                 if (!Object.prototype.hasOwnProperty.call(weights, key)) return;
                 const delta = Number(shift[key]);
+                if (!Number.isFinite(delta)) return;
+                weights[key] += delta;
+            });
+        }
+
+        const rumorProfile = this.game && typeof this.game.getPendingRouteRumorProfile === 'function'
+            ? this.game.getPendingRouteRumorProfile(realm)
+            : null;
+        const rumorShift = rumorProfile && rumorProfile.shift && typeof rumorProfile.shift === 'object'
+            ? rumorProfile.shift
+            : null;
+        if (rumorShift) {
+            Object.keys(rumorShift).forEach((key) => {
+                if (!Object.prototype.hasOwnProperty.call(weights, key)) return;
+                const delta = Number(rumorShift[key]);
                 if (!Number.isFinite(delta)) return;
                 weights[key] += delta;
             });
@@ -1394,11 +1412,22 @@ class GameMap {
         }
         if (frontierRow < 0) frontierRow = Math.min(rows.length - 1, 1);
 
+        const chips = [];
+        const pendingRumor = this.game && typeof this.game.getPendingRouteRumorProfile === 'function'
+            ? this.game.getPendingRouteRumorProfile()
+            : null;
+        if (pendingRumor && pendingRumor.target) {
+            chips.push({
+                id: 'rumor-route',
+                icon: '🔮',
+                label: `第${pendingRumor.target}重已锁定：${pendingRumor.label}`
+            });
+        }
+
         const start = Math.max(0, frontierRow - 4);
         const recentRows = rows.slice(start, frontierRow).filter((rowNodes) => Array.isArray(rowNodes) && rowNodes.length > 0);
-        if (recentRows.length < 3) return { chips: [] };
+        if (recentRows.length < 3) return { chips };
 
-        const chips = [];
         const hasTypeInRows = (type) => recentRows.some((rowNodes) => this.rowContainsType(rowNodes, type));
         if (!hasTypeInRows('event')) {
             chips.push({
@@ -1487,6 +1516,9 @@ class GameMap {
         const pressureProfile = (typeof this.game.getEndlessPressureBehaviorProfile === 'function')
             ? this.game.getEndlessPressureBehaviorProfile()
             : null;
+        const cycleTheme = (typeof this.game.getEndlessCycleThemeProfile === 'function')
+            ? this.game.getEndlessCycleThemeProfile()
+            : null;
 
         const mutators = (state && Array.isArray(state.activeMutators) && typeof this.game.getEndlessMutatorPool === 'function')
             ? state.activeMutators
@@ -1504,6 +1536,32 @@ class GameMap {
         const behaviorHint = (pressureProfile && pressureProfile.summary)
             ? pressureProfile.summary
             : '敌方行动维持常态';
+        const themeChipClass = cycleTheme
+            ? `segment-${Math.max(1, Math.min(5, Math.floor(Number(cycleTheme.segmentIndex) || 1)))}`
+            : 'segment-0';
+        const themeChipText = cycleTheme
+            ? `轮段 ${cycleTheme.segmentIndex} · ${cycleTheme.shortName || cycleTheme.name || '稳衡'}`
+            : '轮段 · 稳衡';
+        const themeDesc = cycleTheme && cycleTheme.desc
+            ? cycleTheme.desc
+            : '轮段稳定，敌方与收益维持均衡节奏。';
+        const paranoia = (typeof this.game.getEndlessParanoiaEffects === 'function')
+            ? this.game.getEndlessParanoiaEffects()
+            : null;
+        const latestBurden = paranoia && paranoia.latestBurden ? paranoia.latestBurden : null;
+        const latestBoon = paranoia && paranoia.latestBoon ? paranoia.latestBoon : null;
+        const paranoiaLevel = Math.max(0, Math.floor(Number(state?.paranoiaLevel) || 0));
+        const paranoiaSummary = latestBurden && latestBoon
+            ? `偏执 ${paranoiaLevel} 层：${latestBurden.shortLabel || latestBurden.name} / ${latestBoon.shortLabel || latestBoon.name}`
+            : '尚未触发轮回偏执';
+        const paranoiaImpact = [];
+        if (paranoia) {
+            const handPenalty = Math.abs(Math.min(0, Math.floor(Number(paranoia.handLimitOffset) || 0)));
+            if (handPenalty > 0) paranoiaImpact.push(`手牌上限 -${handPenalty}`);
+            if (paranoia.eliteExtraMutator) paranoiaImpact.push('精英战额外词缀');
+            if (Number(paranoia.rewardRareChance || 0) > 0) paranoiaImpact.push('稀有奖励倾向提升');
+            if (Number(paranoia.extraTreasureSlots || 0) > 0) paranoiaImpact.push(`法宝槽位 +${Math.floor(Number(paranoia.extraTreasureSlots) || 0)}`);
+        }
         panel.innerHTML = `
             <div class="endless-title">无尽轮回 · 第${(state?.currentCycle || 0) + 1}轮</div>
             <div class="endless-stats">
@@ -1516,14 +1574,23 @@ class GameMap {
                 <span>压阶 ${pressureTier}</span>
                 <span>稀有保底 ${Math.max(0, rareEvery - 1 - rarePity)}/ ${Math.max(1, rareEvery - 1)}</span>
                 <span class="endless-pressure-chip tier-${behaviorTier}">敌方节奏：${behaviorHint}</span>
+                <span class="endless-theme-chip ${themeChipClass}" title="${themeDesc}">战场轮段：${themeChipText}</span>
+                <span class="endless-paranoia-chip ${paranoiaLevel > 0 ? 'active' : 'idle'}" title="${paranoiaSummary}">轮回偏执：${paranoiaLevel > 0 ? `第 ${paranoiaLevel} 层` : '未激活'}</span>
+            </div>
+            <div class="endless-theme-desc">${themeDesc}</div>
+            <div class="endless-paranoia-summary">${paranoiaSummary}</div>
+            <div class="endless-paranoia-effects">
+                ${paranoiaImpact.length > 0
+                    ? paranoiaImpact.map((item) => `<span class="endless-paranoia-effect">${item}</span>`).join('')
+                    : '<span class="endless-paranoia-effect idle">等待下一次大轮回抉择</span>'}
             </div>
             <div class="endless-mutators">
                 ${mutators.length > 0
-        ? mutators.map((item) => `<span class="endless-mutator-chip" title="${item.desc}">${item.name}</span>`).join('')
-        : '<span class="endless-mutator-chip">当前无词缀</span>'
-}
+                    ? mutators.map((item) => `<span class="endless-mutator-chip" title="${item.desc}">${item.name}</span>`).join('')
+                    : '<span class="endless-mutator-chip">当前无词缀</span>'}
             </div>
         `;
+
         panel.dataset.pressure = String(pressure);
         panel.classList.remove('pressure-up', 'pressure-down');
         if (this.lastEndlessPressure !== null && this.lastEndlessPressure !== pressure) {
@@ -1675,7 +1742,7 @@ class GameMap {
             ringExp: 50 + realm * 10,
             gold: 30 + realm * 10,
             icon: '👻',
-            // P1 TODO: 我们也可以在这里直接保存 ghostPayload 以供 battle.js 解析动作
+            // 保留 ghostPayload 供 battle.js 解析残影动作
             ghostPayload: ghostPayload,
             // 基础初始库
             patterns: [

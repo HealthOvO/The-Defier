@@ -18,8 +18,17 @@ class Battle {
         this.activeCardActionId = 0;
         this.activeEncounterTheme = null;
         this.encounterRewardConsumed = false;
+        this.squadRewardConsumed = false;
         this.commandState = this.createDefaultBattleCommandState();
         this.tacticalAdvisorCollapsed = false;
+        this.tacticalAdvisorHoverExpanded = false;
+        this.activeSquadEcology = null;
+        this.advisorFocusTimer = null;
+        this.turnAdvisorTelemetry = null;
+        this.battleCommandPanelPosition = null;
+        this.battleCommandDragState = null;
+        this.boundBattleCommandDragMove = null;
+        this.boundBattleCommandDragEnd = null;
 
         // 五行定义
         this.ELEMENTS = {
@@ -64,6 +73,502 @@ class Battle {
         this.pendingTimers.clear();
     }
 
+    installBattlePlayerHooks() {
+        if (!this.player || typeof this.player.addBlock !== 'function' || this.restorePlayerAddBlockHook) return;
+        const originalAddBlock = this.player.addBlock;
+        const battle = this;
+        const wrappedAddBlock = function (amount) {
+            const beforeBlock = Math.max(0, Number(this.block) || 0);
+            const result = originalAddBlock.call(this, amount);
+            const afterBlock = Math.max(0, Number(this.block) || 0);
+            const gained = Math.max(0, afterBlock - beforeBlock);
+            if (gained > 0) {
+                battle.handleBossPlayerBlockGain(gained);
+            }
+            return result;
+        };
+        wrappedAddBlock.__battleWrapped = true;
+        this.player.addBlock = wrappedAddBlock;
+        this.restorePlayerAddBlockHook = () => {
+            if (this.player && this.player.addBlock === wrappedAddBlock) {
+                this.player.addBlock = originalAddBlock;
+            }
+            this.restorePlayerAddBlockHook = null;
+        };
+    }
+
+    restoreBattlePlayerHooks() {
+        if (typeof this.restorePlayerAddBlockHook === 'function') {
+            this.restorePlayerAddBlockHook();
+        }
+    }
+
+    getBossThreeActMemoryProfile(enemy) {
+        const profileMap = {
+            banditLeader: {
+                key: 'seal_card',
+                name: '封签索命',
+                shortRule: '回合开始锁定一张手牌，打出时会注入心魔污染。',
+                reverseRule: '逆转阶段会持续封签并扩大手牌污染。',
+                counter: '优先清掉低价值牌，避免核心牌被锁定。',
+                fail: '关键牌被封签后，节奏会被硬性打断。'
+            },
+            demonWolf: {
+                key: 'siphon_block',
+                name: '撕盾噬血',
+                shortRule: '你每回合第一次获得护盾时，Boss 会虹吸其中一部分并恢复生命。',
+                reverseRule: '逆转阶段虹吸比例提高，拖回合会被持续反制。',
+                counter: '分散护盾时点，优先抢进攻窗口。',
+                fail: '高护盾节奏会被直接转化成 Boss 的续航。'
+            },
+            swordElder: {
+                key: 'seal_card',
+                name: '剑印封诀',
+                shortRule: '锁定你的关键手牌，迫使你改写出牌顺序。',
+                reverseRule: '逆转阶段被锁定的牌会附带更重污染。',
+                counter: '预留过牌与弃牌手段，拆掉被封锁的窗口。',
+                fail: '核心斩杀牌被点名后，节奏会崩盘。'
+            },
+            danZun: {
+                key: 'tribute_choice',
+                name: '丹火索供',
+                shortRule: '回合开始逼迫你在弃牌与掉血间做出牺牲。',
+                reverseRule: '逆转阶段弃牌与掉血的惩罚会同步放大。',
+                counter: '保持手牌质量，不让关键资源同时暴露。',
+                fail: '手牌与血线会被持续双线压制。'
+            },
+            ancientSpirit: {
+                key: 'siphon_block',
+                name: '幽魄吸甲',
+                shortRule: '你的第一层护盾会被转化为它的续航。',
+                reverseRule: '逆转阶段会把护盾差进一步滚成血量差。',
+                counter: '别过度依赖防守单卡，改用爆发抢节奏。',
+                fail: '拖延会让它越打越难杀。'
+            },
+            divineLord: {
+                key: 'tribute_choice',
+                name: '神念索贡',
+                shortRule: '每轮要求弃牌纳贡，手少时直接压血。',
+                reverseRule: '逆转阶段纳贡失败会追加更高伤害。',
+                counter: '留住低价值牌承压，保护核心启动牌。',
+                fail: '关键回合会被抽空手牌或直接斩线。'
+            },
+            fusionSovereign: {
+                key: 'seal_card',
+                name: '时缚真印',
+                shortRule: '将一张手牌标记为时缚牌，打出时污染牌序。',
+                reverseRule: '逆转阶段时缚会更频繁地打乱手牌。',
+                counter: '多保留冗余牌，让时缚落在次要资源上。',
+                fail: '主力技能被拖慢后就会被节奏压死。'
+            },
+            mahayanaSupreme: {
+                key: 'echo_last_card',
+                name: '观心复诵',
+                shortRule: '记住你上回合最后一张牌，并在敌回合复制收益。',
+                reverseRule: '逆转阶段复制会更高效，错误收尾会被放大。',
+                counter: '注意回合最后一张牌的类型，避免给它免费增益。',
+                fail: '错误收尾会让 Boss 连续白嫖护盾或力量。'
+            },
+            ascensionSovereign: {
+                key: 'seal_card',
+                name: '天雷封符',
+                shortRule: '被锁定的手牌在打出时会引来额外雷罚。',
+                reverseRule: '逆转阶段封符频率增加。',
+                counter: '保留便宜牌承受雷罚，保护核心爆发。',
+                fail: '封符会把高费牌变成自爆点。'
+            },
+            dualMagmaGuardians: {
+                key: 'siphon_block',
+                name: '熔甲回铸',
+                shortRule: '你第一次叠盾时，它们会熔走一部分转化为自身恢复。',
+                reverseRule: '逆转阶段熔甲比例更高。',
+                counter: '通过先手爆发压血，降低护盾依赖。',
+                fail: '防守越多，它们越难被击杀。'
+            },
+            stormSummoner: {
+                key: 'tribute_choice',
+                name: '风祀索供',
+                shortRule: '以弃牌换平安，手少时直接承受压血。',
+                reverseRule: '逆转阶段会同时蚕食手牌与血线。',
+                counter: '利用过牌与召唤击杀缩短战斗。',
+                fail: '拖入后期会被手牌税拖死。'
+            },
+            triheadGoldDragon: {
+                key: 'siphon_block',
+                name: '龙首夺壁',
+                shortRule: '你的第一段护盾会被金龙夺走并化为续航。',
+                reverseRule: '逆转阶段夺壁更重。',
+                counter: '减少纯叠盾回合，改打节奏交换。',
+                fail: '护盾流会被完全针对。'
+            },
+            mirrorDemon: {
+                key: 'echo_last_card',
+                name: '镜返残响',
+                shortRule: '它会复制你上回合最后一张牌的类型收益。',
+                reverseRule: '逆转阶段镜返效率更高。',
+                counter: '谨慎安排回合收尾牌。',
+                fail: '错误收尾等于白送 Boss 一整段资源。'
+            },
+            chaosEye: {
+                key: 'seal_card',
+                name: '邪视封忆',
+                shortRule: '随机扭曲一张手牌，打出时附带混沌污染。',
+                reverseRule: '逆转阶段会更频繁地扰乱手牌。',
+                counter: '用边角牌吸收污染，不要让关键牌暴露。',
+                fail: '牌序被扭曲后会连续断节奏。'
+            },
+            voidDevourer: {
+                key: 'tribute_choice',
+                name: '虚渊索祭',
+                shortRule: '每回合开始强迫你失去手牌或生命。',
+                reverseRule: '逆转阶段若手牌不足，惩罚会更重。',
+                counter: '维持足够手牌厚度，控制血线。',
+                fail: '容易被拖到弃牌与掉血双崩。'
+            },
+            elementalElder: {
+                key: 'echo_last_card',
+                name: '五炁复写',
+                shortRule: '根据你上回合最后一张牌复制护盾、力量或回复。',
+                reverseRule: '逆转阶段复写收益更大。',
+                counter: '避免用高价值防守/启动牌收尾。',
+                fail: '每次收尾都会变成对方的免费资源。'
+            },
+            karmaArbiter: {
+                key: 'tribute_choice',
+                name: '业衡索偿',
+                shortRule: '以弃牌赎罪，拒绝时将直接掉血。',
+                reverseRule: '逆转阶段业衡惩罚加重。',
+                counter: '保持冗余牌，避免核心回合被迫掉血。',
+                fail: '血线和手牌会被同时抽干。'
+            },
+            heavenlyDao: {
+                key: 'echo_last_card',
+                name: '天道映照',
+                shortRule: '映照你上一回合的终末牌序，把收益返还给自己。',
+                reverseRule: '逆转阶段会把映照收益进一步放大。',
+                counter: '谨慎处理回合的最后一张牌。',
+                fail: '回合收尾错误会被成倍惩罚。'
+            }
+        };
+        return profileMap[(enemy && enemy.id) || ''] || {
+            key: 'seal_card',
+            name: '封识诏令',
+            shortRule: '锁定一张手牌并污染它。',
+            reverseRule: '逆转阶段持续扩大封锁压力。',
+            counter: '先交低价值牌，保护核心组件。',
+            fail: '关键出牌窗口会被硬性打断。'
+        };
+    }
+
+    createBossThreeActState(enemy) {
+        if (!enemy || !enemy.isBoss) return null;
+        const mech = (typeof BOSS_MECHANICS !== 'undefined' && enemy.id && BOSS_MECHANICS[enemy.id])
+            ? BOSS_MECHANICS[enemy.id]
+            : null;
+        const memory = this.getBossThreeActMemoryProfile(enemy);
+        const counterTreasure = Array.isArray(mech?.countersBy) && typeof TREASURES !== 'undefined'
+            ? mech.countersBy.map((id) => TREASURES[id]?.name || id).slice(0, 2).join(' / ')
+            : '';
+        const declarationRule = mech?.mechanics?.description || '本场将围绕 Boss 的记忆点机制展开。';
+        const phaseConfigs = Array.isArray(enemy.phaseConfig) ? enemy.phaseConfig : [];
+        const actTwo = phaseConfigs[0] || {};
+        const actThree = phaseConfigs[1] || {};
+        return {
+            active: true,
+            bossId: enemy.id,
+            bossName: enemy.name,
+            memoryKey: memory.key,
+            memoryName: memory.name,
+            counterTreasure,
+            currentActIndex: 0,
+            transitionHistory: [0],
+            runtime: {
+                blockSiphonedTurn: -1,
+                echoedTurn: -1,
+                sealedTurn: -1,
+                lastSealedCardInstanceId: null
+            },
+            acts: [
+                {
+                    id: 'declaration',
+                    name: '宣告阶段',
+                    threshold: 1,
+                    signal: declarationRule,
+                    rule: `记忆点：${memory.shortRule}`,
+                    counter: counterTreasure ? `可借助法宝【${counterTreasure}】降低压力。${memory.counter}` : memory.counter,
+                    fail: memory.fail,
+                    patterns: enemy.patterns,
+                    heal: 0
+                },
+                {
+                    id: 'confrontation',
+                    name: `对抗阶段${actTwo.name ? `·${actTwo.name}` : ''}`,
+                    threshold: Number.isFinite(Number(actTwo.threshold)) ? Number(actTwo.threshold) : 0.68,
+                    signal: actTwo.name ? `${enemy.name} 的 ${actTwo.name} 已被引爆。` : `${enemy.name} 开始主动拉高对抗节奏。`,
+                    rule: `破局窗口：${memory.shortRule}`,
+                    counter: memory.counter,
+                    fail: `若此阶段无法建立优势，${memory.fail}`,
+                    patterns: actTwo.patterns || enemy.patterns,
+                    heal: Number.isFinite(Number(actTwo.heal)) ? Number(actTwo.heal) : 0.06
+                },
+                {
+                    id: 'reversal',
+                    name: `逆转阶段${actThree.name ? `·${actThree.name}` : ''}`,
+                    threshold: Number.isFinite(Number(actThree.threshold)) ? Number(actThree.threshold) : 0.34,
+                    signal: actThree.name ? `${enemy.name} 的 ${actThree.name} 压轴规则降临。` : `${enemy.name} 进入压轴逆转。`,
+                    rule: `压轴机制：${memory.reverseRule}`,
+                    counter: `最后窗口：${memory.counter}`,
+                    fail: `若仍拖延战斗，${memory.fail}`,
+                    patterns: actThree.patterns || actTwo.patterns || enemy.patterns,
+                    heal: Number.isFinite(Number(actThree.heal)) ? Number(actThree.heal) : 0.1,
+                    bonusStrength: 2
+                }
+            ]
+        };
+    }
+
+    initializeBossThreeActState(enemy) {
+        if (!enemy || !enemy.isBoss) return null;
+        enemy.bossActState = this.createBossThreeActState(enemy);
+        enemy.currentBossAct = 0;
+        return enemy.bossActState;
+    }
+
+    getPrimaryBossEnemy() {
+        return (Array.isArray(this.enemies) ? this.enemies : []).find((enemy) => enemy && enemy.isBoss && enemy.currentHp > 0) || null;
+    }
+
+    getBossActDisplayState(enemy = null) {
+        const boss = enemy || this.getPrimaryBossEnemy();
+        if (!boss || !boss.bossActState || !Array.isArray(boss.bossActState.acts)) return null;
+        const state = boss.bossActState;
+        const index = Math.max(0, Math.min(state.acts.length - 1, Number(state.currentActIndex) || 0));
+        const act = state.acts[index] || state.acts[0];
+        return {
+            boss,
+            state,
+            index,
+            act,
+            hpPercent: Math.max(0, Math.min(1, (boss.currentHp || 0) / Math.max(1, boss.maxHp || 1)))
+        };
+    }
+
+    shouldUseCompactBattleHud() {
+        if (typeof window === 'undefined' || typeof window.innerWidth !== 'number') return false;
+        return window.innerWidth <= 768;
+    }
+
+    updateBossActUI() {
+        const battleContainer = document.querySelector('#battle-screen .battle-container') || document.querySelector('.battle-container');
+        if (!battleContainer) return;
+
+        let panel = document.getElementById('boss-act-panel');
+        const displayState = this.getBossActDisplayState();
+        if (!displayState) {
+            if (panel) {
+                panel.style.display = 'none';
+                panel.innerHTML = '';
+            }
+            return;
+        }
+
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'boss-act-panel';
+            panel.className = 'boss-act-panel';
+            const enemyArea = battleContainer.querySelector('.enemy-area');
+            if (enemyArea) {
+                battleContainer.insertBefore(panel, enemyArea);
+            } else {
+                battleContainer.insertBefore(panel, battleContainer.firstChild);
+            }
+        }
+
+        const { boss, state, index, act, hpPercent } = displayState;
+        panel.style.display = 'block';
+        panel.innerHTML = `
+            <div class="boss-act-header">
+                <div>
+                    <div class="boss-act-title">${boss.name} · 三幕式</div>
+                    <div class="boss-act-subtitle">当前：${act.name}</div>
+                </div>
+                <div class="boss-act-hp">血线 ${(hpPercent * 100).toFixed(0)}%</div>
+            </div>
+            <div class="boss-act-track">
+                ${state.acts.map((item, itemIndex) => `
+                    <div class="boss-act-chip ${itemIndex === index ? 'active' : ''} ${itemIndex < index ? 'cleared' : ''}">
+                        <span class="boss-act-chip-index">${itemIndex + 1}</span>
+                        <span class="boss-act-chip-label">${item.name}</span>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="boss-act-body">
+                <div class="boss-act-line signal"><span class="label">明确信号</span><span class="value">${act.signal}</span></div>
+                <div class="boss-act-line rule"><span class="label">当前规则</span><span class="value">${act.rule}</span></div>
+                <div class="boss-act-line counter"><span class="label">反制窗口</span><span class="value">${act.counter}</span></div>
+                <div class="boss-act-line fail"><span class="label">失败原因</span><span class="value">${act.fail}</span></div>
+            </div>
+        `;
+    }
+
+    announceBossAct(enemy, initial = false) {
+        const display = this.getBossActDisplayState(enemy);
+        if (!display) return;
+        const { act } = display;
+        const prefix = initial ? '【Boss宣告】' : '【Boss转幕】';
+        Utils.showBattleLog(`${prefix}${enemy.name} · ${act.name}`);
+        Utils.showBattleLog(`规则：${act.rule}`);
+        Utils.showBattleLog(`反制：${act.counter}`);
+    }
+
+    applyBossActTransition(enemy, nextIndex) {
+        const state = enemy && enemy.bossActState;
+        if (!enemy || !state || !Array.isArray(state.acts)) return false;
+        if (nextIndex <= state.currentActIndex || nextIndex >= state.acts.length) return false;
+        state.currentActIndex = nextIndex;
+        enemy.currentBossAct = nextIndex;
+        state.transitionHistory.push(nextIndex);
+        const act = state.acts[nextIndex];
+
+        if (Array.isArray(act.patterns) && act.patterns.length > 0) {
+            enemy.patterns = act.patterns.map((pattern) => ({ ...pattern }));
+            enemy.currentPatternIndex = 0;
+            this.refreshEnemyTacticalPlan(enemy, true);
+        }
+        if (Number(act.heal) > 0 && typeof enemy.heal === 'function') {
+            const healed = enemy.heal(Math.floor(Math.max(0, Number(act.heal)) * Math.max(1, enemy.maxHp || 1)));
+            if (healed > 0) {
+                Utils.showBattleLog(`${enemy.name} 在转幕中恢复了 ${healed} 点生命`);
+            }
+        }
+        if (Number(act.bonusStrength) > 0 && typeof enemy.addBuff === 'function') {
+            enemy.addBuff('strength', Math.floor(Number(act.bonusStrength)));
+        }
+
+        const enemyEl = document.querySelector(`.enemy[data-index="${this.enemies.indexOf(enemy)}"]`);
+        if (enemyEl) {
+            Utils.addShakeEffect(enemyEl, 'heavy');
+            Utils.addFlashEffect(enemyEl, nextIndex >= 2 ? 'red' : 'gold');
+        }
+        this.announceBossAct(enemy, false);
+        return true;
+    }
+
+    checkBossThreeActTransition(enemy) {
+        const state = enemy && enemy.bossActState;
+        if (!enemy || !state || !Array.isArray(state.acts)) return false;
+        const hpPercent = (enemy.currentHp || 0) / Math.max(1, enemy.maxHp || 1);
+        let transitioned = false;
+        while (
+            state.currentActIndex + 1 < state.acts.length &&
+            hpPercent <= Number(state.acts[state.currentActIndex + 1].threshold)
+        ) {
+            transitioned = this.applyBossActTransition(enemy, state.currentActIndex + 1) || transitioned;
+        }
+        return transitioned;
+    }
+
+    processBossThreeActEnemyTurnStart(enemy) {
+        const display = this.getBossActDisplayState(enemy);
+        if (!display) return;
+        const memoryKey = display.state.memoryKey;
+        if (memoryKey !== 'echo_last_card') return;
+        if (!this.lastPlayerCardSnapshot || display.state.runtime.echoedTurn === this.turnNumber) return;
+
+        const snapshot = this.lastPlayerCardSnapshot;
+        display.state.runtime.echoedTurn = this.turnNumber;
+        if (snapshot.type === 'attack') {
+            enemy.addBuff('strength', display.index >= 2 ? 2 : 1);
+            Utils.showBattleLog(`记忆点【${display.state.memoryName}】：${enemy.name} 映照了你的攻击节奏，力量提升！`);
+        } else if (snapshot.type === 'skill' || snapshot.type === 'defense') {
+            enemy.block = (enemy.block || 0) + (display.index >= 2 ? 12 : 8);
+            Utils.showBattleLog(`记忆点【${display.state.memoryName}】：${enemy.name} 复制了你的防守余韵，获得护盾！`);
+        } else {
+            const healed = enemy.heal(display.index >= 2 ? 10 : 6);
+            Utils.showBattleLog(`记忆点【${display.state.memoryName}】：${enemy.name} 回收了你的术式余波，恢复 ${healed} 生命！`);
+        }
+    }
+
+    processBossThreeActPlayerTurnStart(enemy) {
+        const display = this.getBossActDisplayState(enemy);
+        if (!display) return;
+        display.state.runtime.blockSiphonedTurn = -1;
+        const memoryKey = display.state.memoryKey;
+        if (memoryKey === 'seal_card') {
+            this.markBossSealedCard(enemy, display);
+            return;
+        }
+        if (memoryKey === 'tribute_choice') {
+            const hand = Array.isArray(this.player.hand) ? this.player.hand : [];
+            if (hand.length >= 4) {
+                const discardIndex = Math.floor(Math.random() * hand.length);
+                const discarded = hand.splice(discardIndex, 1)[0];
+                if (discarded) {
+                    this.player.discardPile = Array.isArray(this.player.discardPile) ? this.player.discardPile : [];
+                    this.player.discardPile.push(discarded);
+                    Utils.showBattleLog(`记忆点【${display.state.memoryName}】：你被迫弃掉【${discarded.name}】以平息威压。`);
+                }
+            } else {
+                const damage = display.index >= 2 ? 8 : 5;
+                this.player.takeDamage(damage);
+                Utils.showBattleLog(`记忆点【${display.state.memoryName}】：供契不足，你失去 ${damage} 点生命。`);
+            }
+            this.markUIDirty('player', 'hand', 'piles');
+        }
+    }
+
+    markBossSealedCard(enemy, displayState = null) {
+        const display = displayState || this.getBossActDisplayState(enemy);
+        if (!display) return false;
+        const candidates = (Array.isArray(this.player.hand) ? this.player.hand : []).filter((card) => !!card && !card.__bossSealed);
+        if (candidates.length === 0) return false;
+        const card = candidates[Math.floor(Math.random() * candidates.length)];
+        card.__bossSealed = true;
+        card.__bossSealedPenalty = display.index >= 2 ? 2 : 1;
+        card.__bossSealedSource = enemy.name;
+        display.state.runtime.lastSealedCardInstanceId = card.instanceId || card.id || card.name;
+        display.state.runtime.sealedTurn = this.turnNumber;
+        Utils.showBattleLog(`记忆点【${display.state.memoryName}】：${enemy.name} 锁定了【${card.name}】。`);
+        this.markUIDirty('hand');
+        return true;
+    }
+
+    handleBossPlayerBlockGain(gainedAmount = 0) {
+        const display = this.getBossActDisplayState();
+        if (!display || display.state.memoryKey !== 'siphon_block') return;
+        if (display.state.runtime.blockSiphonedTurn === this.turnNumber) return;
+        const siphonRatio = display.index >= 2 ? 0.65 : 0.45;
+        const siphon = Math.max(1, Math.floor(Math.max(0, Number(gainedAmount) || 0) * siphonRatio));
+        if (siphon <= 0) return;
+
+        this.player.block = Math.max(0, (this.player.block || 0) - siphon);
+        const healed = display.boss.heal(siphon);
+        display.state.runtime.blockSiphonedTurn = this.turnNumber;
+        Utils.showBattleLog(`记忆点【${display.state.memoryName}】：${display.boss.name} 虹吸 ${siphon} 护盾${healed > 0 ? `，并恢复 ${healed} 生命` : ''}。`);
+        this.markUIDirty('player', 'enemies');
+    }
+
+    handleBossSealedCardPlayed(card) {
+        if (!card || !card.__bossSealed) return;
+        const boss = this.getPrimaryBossEnemy();
+        if (!boss || !boss.bossActState) return;
+        const curseCard = typeof cloneCardTemplate === 'function'
+            ? cloneCardTemplate('demonDoubt')
+            : (typeof CARDS !== 'undefined' && CARDS.demonDoubt ? JSON.parse(JSON.stringify(CARDS.demonDoubt)) : null);
+        if (curseCard) {
+            curseCard.instanceId = this.player.generateCardId ? this.player.generateCardId() : `${curseCard.id}_${Date.now()}`;
+            this.player.discardPile = Array.isArray(this.player.discardPile) ? this.player.discardPile : [];
+            this.player.discardPile.push(curseCard);
+        }
+        const backlash = boss.currentBossAct >= 2 ? 6 : 4;
+        this.player.takeDamage(backlash);
+        Utils.showBattleLog(`记忆点【${boss.bossActState.memoryName}】：被锁定的【${card.name}】反噬，你失去 ${backlash} 点生命。`);
+        delete card.__bossSealed;
+        delete card.__bossSealedPenalty;
+        delete card.__bossSealedSource;
+        this.markUIDirty('player', 'hand', 'piles');
+    }
+
     // 计算五行克制倍率
     calcElementalMultiplier(source, target) {
         if (!source || !target) return 1.0;
@@ -86,6 +591,7 @@ class Battle {
     // 初始化战斗
     init(enemyData) {
         this.clearBattleTimers();
+        this.restoreBattlePlayerHooks();
         this.enemies = [];
         this.battleEnded = false;
         this.battleResolution = null;
@@ -99,13 +605,21 @@ class Battle {
         this.isTurnTransitioning = false;
         this.currentCardProcessToken = 0;
         this.pendingLifeSteal = 0;
+        this.lastPlayerCardSnapshot = null;
         this.cardsPlayedThisTurn = 0;
         this.playerAttackedThisTurn = false;
         this.activeCardActionId = 0;
         this.activeEncounterTheme = null;
         this.encounterRewardConsumed = false;
+        this.squadRewardConsumed = false;
         this.commandState = this.createDefaultBattleCommandState();
         this.tacticalAdvisorCollapsed = false;
+        this.activeSquadEcology = null;
+        this.turnAdvisorTelemetry = null;
+        if (this.advisorFocusTimer) {
+            clearTimeout(this.advisorFocusTimer);
+            this.advisorFocusTimer = null;
+        }
         // --- P0 机制：五行融合化境 (Elemental Combo) 追踪器 ---
         this.elementalTracker = [];
 
@@ -125,6 +639,8 @@ class Battle {
             Utils.showBattleLog('战斗初始化失败：未找到有效敌人');
             return;
         }
+
+        this.applyEnemySquadEcology();
 
         // 兼容旧逻辑：部分法宝/系统通过 game.enemies 读取当前敌人
         if (this.game) {
@@ -406,6 +922,218 @@ class Battle {
             openingBlock: Math.max(0, Math.floor(Number(pick.openingBlock) || 0)),
             openingStrength: Math.max(0, Math.floor(Number(pick.openingStrength) || 0)),
             appendPatterns
+        };
+    }
+
+    hashSquadSeed(input = '') {
+        const str = String(input || '');
+        let seed = 0;
+        for (let i = 0; i < str.length; i += 1) {
+            seed = (seed * 33 + str.charCodeAt(i)) % 2147483647;
+        }
+        return seed;
+    }
+
+    resolveEnemySquadFormation(enemies = []) {
+        const combatants = Array.isArray(enemies)
+            ? enemies.filter((enemy) => enemy && enemy.currentHp > 0 && !enemy.isBoss && !enemy.isGhost && !enemy.isMinion)
+            : [];
+        if (combatants.length < 2) return null;
+
+        const roleCount = { striker: 0, guardian: 0, hexer: 0, balanced: 0 };
+        combatants.forEach((enemy) => {
+            const role = String(enemy.enemyVariantRole || this.resolveEnemyCombatArchetype(enemy.patterns) || 'balanced');
+            roleCount[role] = (roleCount[role] || 0) + 1;
+        });
+
+        const realm = Math.max(1, Math.floor(Number(this.player?.realm) || 1));
+        const node = this.game && this.game.currentBattleNode ? this.game.currentBattleNode : null;
+        const nodeSeed = node ? `${node.id || 0}:${node.row || 0}:${node.col || 0}:${node.type || 'enemy'}` : 'node:0';
+        const ids = combatants.map((enemy) => String(enemy.id || enemy.name || 'enemy')).sort().join('|');
+        const seed = this.hashSquadSeed(`${realm}:${nodeSeed}:${ids}:${combatants.length}`);
+
+        const pool = [
+            {
+                id: 'squad_pincer_hunt',
+                name: '钳袭编队',
+                tag: '钳袭',
+                desc: '前锋抢节奏，扰阵单位补减益，后排负责接力输出。',
+                preferred: ['striker', 'balanced'],
+                attackMul: 1.06,
+                openingBlock: 2
+            },
+            {
+                id: 'squad_bulwark_web',
+                name: '壁垒联阵',
+                tag: '壁垒',
+                desc: '敌方会轮流加固防线，迫使你优先破盾。',
+                preferred: ['guardian', 'balanced'],
+                attackMul: 1.02,
+                openingBlock: 5
+            },
+            {
+                id: 'squad_hex_weave',
+                name: '咒织链阵',
+                tag: '咒织',
+                desc: '敌方通过咒印链协同压场，战斗更偏控场消耗。',
+                preferred: ['hexer', 'balanced'],
+                attackMul: 1.03,
+                openingBlock: 3
+            },
+            {
+                id: 'squad_relay_cascade',
+                name: '潮汐接力',
+                tag: '接力',
+                desc: '敌方交替爆发与防守，形成明显波段压力。',
+                preferred: ['balanced', 'striker', 'guardian'],
+                attackMul: 1.05,
+                openingBlock: 3
+            }
+        ];
+
+        const preferredPool = pool.filter((formation) => {
+            if (!formation || !Array.isArray(formation.preferred)) return false;
+            return formation.preferred.some((role) => (roleCount[role] || 0) > 0);
+        });
+        const source = preferredPool.length > 0 ? preferredPool : pool;
+        const picked = source[seed % source.length];
+        if (!picked) return null;
+        return {
+            ...picked,
+            seed
+        };
+    }
+
+    applyEnemySquadEcology() {
+        this.activeSquadEcology = null;
+        if (!Array.isArray(this.enemies) || this.enemies.length < 2) return;
+
+        const combatants = this.enemies.filter((enemy) =>
+            enemy &&
+            enemy.currentHp > 0 &&
+            !enemy.isBoss &&
+            !enemy.isGhost &&
+            !enemy.isMinion &&
+            Array.isArray(enemy.patterns)
+        );
+        if (combatants.length < 2) return;
+
+        const formation = this.resolveEnemySquadFormation(combatants);
+        if (!formation) return;
+
+        const seeded = combatants
+            .map((enemy) => ({
+                enemy,
+                seed: this.hashSquadSeed(`${formation.seed}:${enemy.id || enemy.name || 'enemy'}`)
+            }))
+            .sort((a, b) => a.seed - b.seed)
+            .map((entry) => entry.enemy);
+
+        const roleLabels = ['阵核', '前锋', '扰阵'];
+        seeded.forEach((enemy, index) => {
+            if (!enemy || !Array.isArray(enemy.patterns)) return;
+            const roleLabel = roleLabels[index] || '策应';
+            enemy.enemySquadFormationId = formation.id;
+            enemy.enemySquadTag = formation.tag;
+            enemy.enemySquadRoleLabel = roleLabel;
+            enemy.enemySquadDesc = formation.desc;
+
+            const attackPatterns = enemy.patterns.filter((pattern) =>
+                pattern &&
+                typeof pattern === 'object' &&
+                (pattern.type === 'attack' || pattern.type === 'multiAttack' || pattern.type === 'executeDamage') &&
+                Number.isFinite(Number(pattern.value))
+            );
+            const hasDefend = enemy.patterns.some((pattern) => pattern && pattern.type === 'defend');
+            const hasDebuff = enemy.patterns.some((pattern) => pattern && (pattern.type === 'debuff' || pattern.type === 'addStatus'));
+
+            enemy.block = Math.max(0, Math.floor(Number(enemy.block) || 0)) + Math.max(0, Math.floor(Number(formation.openingBlock) || 0));
+
+            if (index === 0) {
+                enemy.buffs = enemy.buffs && typeof enemy.buffs === 'object' ? enemy.buffs : {};
+                enemy.buffs.strength = Math.max(0, Number(enemy.buffs.strength) || 0) + 1;
+            }
+
+            if (formation.id === 'squad_pincer_hunt') {
+                attackPatterns.forEach((pattern) => {
+                    pattern.value = Math.max(1, Math.floor(Number(pattern.value) * formation.attackMul));
+                });
+                if (index === 1 && attackPatterns.length > 0) {
+                    const ref = attackPatterns[0];
+                    enemy.patterns.push({
+                        type: 'multiAttack',
+                        value: Math.max(3, Math.floor(Number(ref.value) * 0.62)),
+                        count: 2,
+                        intent: '⚔️钳袭接力'
+                    });
+                }
+                if (index >= 2 && !hasDebuff) {
+                    enemy.patterns.push({
+                        type: 'debuff',
+                        buffType: 'weak',
+                        value: 1,
+                        intent: '🪤钳袭扰阵'
+                    });
+                }
+            } else if (formation.id === 'squad_bulwark_web') {
+                enemy.block = Math.max(enemy.block || 0, 8 + index * 2);
+                enemy.buffs = enemy.buffs && typeof enemy.buffs === 'object' ? enemy.buffs : {};
+                if (index === 0) {
+                    enemy.buffs.thorns = Math.max(0, Number(enemy.buffs.thorns) || 0) + 1;
+                }
+                if (!hasDefend) {
+                    enemy.patterns.push({
+                        type: 'defend',
+                        value: 8 + Math.max(0, index - 1) * 2,
+                        intent: '🛡️联阵护垒'
+                    });
+                }
+            } else if (formation.id === 'squad_hex_weave') {
+                if (!hasDebuff) {
+                    enemy.patterns.push({
+                        type: 'debuff',
+                        buffType: index === 0 ? 'vulnerable' : 'weak',
+                        value: 1,
+                        intent: index === 0 ? '🕸️咒织裂印' : '🕸️咒织缠压'
+                    });
+                }
+                if (index === seeded.length - 1 && !hasDefend) {
+                    enemy.patterns.push({
+                        type: 'defend',
+                        value: 7,
+                        intent: '🧿咒织回护'
+                    });
+                }
+            } else if (formation.id === 'squad_relay_cascade') {
+                if (index % 2 === 0) {
+                    attackPatterns.forEach((pattern) => {
+                        pattern.value = Math.max(1, Math.floor(Number(pattern.value) * formation.attackMul));
+                    });
+                } else if (!hasDefend) {
+                    enemy.patterns.push({
+                        type: 'defend',
+                        value: 8,
+                        intent: '🌊潮汐回防'
+                    });
+                }
+                if (index === seeded.length - 1 && !enemy.patterns.some((pattern) => pattern && pattern.type === 'heal')) {
+                    enemy.patterns.push({
+                        type: 'heal',
+                        value: Math.max(6, Math.floor(Number(enemy.maxHp || enemy.currentHp || 1) * 0.06)),
+                        intent: '🌊潮汐整队'
+                    });
+                }
+            }
+
+            this.refreshEnemyTacticalPlan(enemy, true);
+        });
+
+        this.activeSquadEcology = {
+            id: formation.id,
+            name: formation.name,
+            tag: formation.tag,
+            desc: formation.desc,
+            count: seeded.length
         };
     }
 
@@ -936,6 +1664,95 @@ class Battle {
             adventureBuffRewards
         };
         this.encounterRewardConsumed = true;
+        return result;
+    }
+
+    consumeSquadEcologyVictoryBonusSummary() {
+        if (this.squadRewardConsumed) return null;
+        const squad = this.activeSquadEcology;
+        if (!squad || typeof squad !== 'object' || !squad.id) return null;
+
+        const nodeType = String(this.game?.currentBattleNode?.type || 'enemy');
+        const enemyCount = Math.max(1, Math.floor(Number(squad.count) || 1));
+        const rewardMap = {
+            squad_pincer_hunt: {
+                gold: 12,
+                exp: 6,
+                buffs: [{ id: 'firstTurnEnergyBoostBattles', charges: 1, label: '首回合灵力' }]
+            },
+            squad_bulwark_web: {
+                gold: 10,
+                exp: 8,
+                buffs: [{ id: 'openingBlockBoostBattles', charges: 1, label: '开场护盾' }]
+            },
+            squad_hex_weave: {
+                gold: 9,
+                exp: 10,
+                buffs: [{ id: 'ringExpBoostBattles', charges: 1, label: '命环经验' }]
+            },
+            squad_relay_cascade: {
+                gold: 11,
+                exp: 7,
+                buffs: [{ id: 'firstTurnDrawBoostBattles', charges: 1, label: '首回合抽牌' }]
+            }
+        };
+        const pack = rewardMap[squad.id] || {
+            gold: 8,
+            exp: 6,
+            buffs: [{ id: 'firstTurnDrawBoostBattles', charges: 1, label: '首回合抽牌' }]
+        };
+
+        const nodeGoldMul = nodeType === 'elite' ? 1.35 : nodeType === 'trial' ? 1.5 : 1;
+        const nodeExpMul = nodeType === 'elite' ? 1.25 : nodeType === 'trial' ? 1.4 : 1;
+        let goldBonus = Math.max(0, Math.floor((pack.gold + Math.max(0, enemyCount - 2) * 2) * nodeGoldMul));
+        let ringExpBonus = Math.max(0, Math.floor((pack.exp + Math.max(0, enemyCount - 2)) * nodeExpMul));
+        const adventureBuffRewards = Array.isArray(pack.buffs)
+            ? pack.buffs.map((item) => ({ ...item }))
+            : [];
+
+        let synergy = null;
+        if (
+            this.game &&
+            typeof this.game.isEndlessActive === 'function' &&
+            this.game.isEndlessActive() &&
+            typeof this.game.getEndlessCycleThemeProfile === 'function'
+        ) {
+            const theme = this.game.getEndlessCycleThemeProfile();
+            const directive = String(theme?.enemyDirective || 'balanced');
+            const synergyMap = {
+                forge: 'squad_pincer_hunt',
+                swarm: 'squad_relay_cascade',
+                counter: 'squad_hex_weave',
+                frenzy: 'squad_pincer_hunt',
+                bastion: 'squad_bulwark_web'
+            };
+            if (synergyMap[directive] && synergyMap[directive] === squad.id) {
+                synergy = {
+                    themeId: String(theme?.id || ''),
+                    themeName: String(theme?.name || '轮段协同'),
+                    directive
+                };
+                goldBonus += Math.max(4, Math.floor(goldBonus * 0.2));
+                ringExpBonus += Math.max(3, Math.floor(ringExpBonus * 0.2));
+                if (adventureBuffRewards.length > 0) {
+                    adventureBuffRewards[0].charges = Math.min(3, Math.max(1, Math.floor(Number(adventureBuffRewards[0].charges) || 1) + 1));
+                }
+            }
+        }
+
+        const result = {
+            squadId: squad.id,
+            squadName: squad.name || squad.tag || '敌阵协同',
+            squadTag: squad.tag || '',
+            squadDesc: squad.desc || '',
+            nodeType,
+            enemyCount,
+            goldBonus,
+            ringExpBonus,
+            adventureBuffRewards,
+            synergy
+        };
+        this.squadRewardConsumed = true;
         return result;
     }
 
@@ -1631,7 +2448,11 @@ class Battle {
     }
 
     handleTacticalAdvisorHotkey(rawKey = '') {
-        const key = String(rawKey || '').trim();
+        const key = String(rawKey || '').trim().toLowerCase();
+        if (key === 'h') {
+            this.toggleTacticalAdvisor();
+            return true;
+        }
         const modeByKey = {
             '1': 'auto',
             '2': 'guard',
@@ -2660,6 +3481,10 @@ class Battle {
             enemy.currentPhase = 0;
         }
 
+        if (enemy.isBoss) {
+            this.initializeBossThreeActState(enemy);
+        }
+
         this.refreshEnemyTacticalPlan(enemy, true);
 
         return enemy;
@@ -2685,6 +3510,10 @@ class Battle {
         this.playerFirstAttackBoostUsed = false;
         this.turnStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
         this.encounterRewardConsumed = false;
+        this.lastPlayerCardSnapshot = null;
+        this.tacticalAdvisorCollapsed = this.shouldUseCompactBattleHud();
+
+        this.installBattlePlayerHooks();
 
         // --- P1 机制：解析残影 (Ghost) 行为库 ---
         for (let enemy of this.enemies) {
@@ -2759,6 +3588,10 @@ class Battle {
         if (encounterTheme) {
             this.applyEncounterThemeProfile(encounterTheme);
         }
+        if (this.activeSquadEcology && this.activeSquadEcology.tag) {
+            Utils.showBattleLog(`【敌阵生态】${this.activeSquadEcology.name}：${this.activeSquadEcology.desc}`);
+        }
+        this.resetTurnAdvisorTelemetry();
         this.initializeBattleCommandSystem();
         this.onBattleCommandTurnStart();
 
@@ -2815,6 +3648,12 @@ class Battle {
         const endTurnBtn = document.getElementById('end-turn-btn');
         if (endTurnBtn) {
             endTurnBtn.disabled = false;
+        }
+
+        const activeBoss = this.getPrimaryBossEnemy();
+        if (activeBoss && activeBoss.bossActState) {
+            this.announceBossAct(activeBoss, true);
+            this.processBossThreeActPlayerTurnStart(activeBoss);
         }
 
         // 更新UI
@@ -2950,6 +3789,7 @@ class Battle {
         if (this.uiDirty.piles) this.updatePilesUI();
         if (this.uiDirty.environment) this.updateEnvironmentUI();
         if (this.uiDirty.command) this.updateBattleCommandUI();
+        this.updateBossActUI();
         this.updateLegacyMissionTracker();
 
         // Sync active skill UI (Cooldowns etc)
@@ -3315,6 +4155,316 @@ class Battle {
         return tags.slice(0, 2);
     }
 
+    createDefaultTurnAdvisorTelemetry() {
+        return {
+            turn: Math.max(1, Math.floor(Number(this.turnNumber) || 1)),
+            cardsPlayed: 0,
+            followedSuggestedCount: 0,
+            tagUsage: {
+                cleanse: 0,
+                break: 0,
+                defend: 0,
+                burst: 0
+            },
+            tagAvailable: {
+                cleanse: false,
+                break: false,
+                defend: false,
+                burst: false
+            },
+            suggestedStepKeys: [],
+            focusedCardKey: ''
+        };
+    }
+
+    resetTurnAdvisorTelemetry() {
+        this.turnAdvisorTelemetry = this.createDefaultTurnAdvisorTelemetry();
+        return this.turnAdvisorTelemetry;
+    }
+
+    ensureTurnAdvisorTelemetry() {
+        const turn = Math.max(1, Math.floor(Number(this.turnNumber) || 1));
+        if (!this.turnAdvisorTelemetry || Number(this.turnAdvisorTelemetry.turn) !== turn) {
+            this.turnAdvisorTelemetry = this.createDefaultTurnAdvisorTelemetry();
+            this.turnAdvisorTelemetry.turn = turn;
+        }
+        return this.turnAdvisorTelemetry;
+    }
+
+    getAdvisorCardKey(card) {
+        if (!card || typeof card !== 'object') return '';
+        if (card.instanceId) return `iid:${String(card.instanceId)}`;
+        const cardId = String(card.id || card.name || 'card');
+        const cardName = String(card.name || card.id || 'card');
+        return `cid:${cardId}:${cardName}`;
+    }
+
+    updateTurnAdvisorAvailability(threatProfile = null) {
+        const telemetry = this.ensureTurnAdvisorTelemetry();
+        const profile = threatProfile && typeof threatProfile === 'object'
+            ? threatProfile
+            : this.resolveCounterplayThreatProfile();
+        const hand = Array.isArray(this.player?.hand) ? this.player.hand : [];
+
+        const seen = {
+            cleanse: false,
+            break: false,
+            defend: false,
+            burst: false
+        };
+
+        hand.forEach((card) => {
+            const tags = this.resolveCardCounterTags(card, profile);
+            tags.forEach((tag) => {
+                const id = String(tag?.id || '');
+                if (Object.prototype.hasOwnProperty.call(seen, id)) {
+                    seen[id] = true;
+                }
+            });
+        });
+
+        Object.keys(seen).forEach((key) => {
+            if (seen[key]) telemetry.tagAvailable[key] = true;
+        });
+        return telemetry;
+    }
+
+    recordTurnAdvisorCardUsage(card, threatProfile = null) {
+        if (!card || typeof card !== 'object') return null;
+        const telemetry = this.ensureTurnAdvisorTelemetry();
+        const profile = threatProfile && typeof threatProfile === 'object'
+            ? threatProfile
+            : this.resolveCounterplayThreatProfile();
+        const cardKey = this.getAdvisorCardKey(card);
+        telemetry.cardsPlayed = Math.max(0, Math.floor(Number(telemetry.cardsPlayed) || 0)) + 1;
+        if (cardKey && Array.isArray(telemetry.suggestedStepKeys) && telemetry.suggestedStepKeys.includes(cardKey)) {
+            telemetry.followedSuggestedCount = Math.max(0, Math.floor(Number(telemetry.followedSuggestedCount) || 0)) + 1;
+        }
+
+        const tags = this.resolveCardCounterTags(card, profile);
+        tags.forEach((tag) => {
+            const id = String(tag?.id || '');
+            if (Object.prototype.hasOwnProperty.call(telemetry.tagUsage, id)) {
+                telemetry.tagUsage[id] = Math.max(0, Math.floor(Number(telemetry.tagUsage[id]) || 0)) + 1;
+            }
+        });
+        return telemetry;
+    }
+
+    resolveTurnAdvisorReviewSummary(threatProfile = null, recommendation = null) {
+        const telemetry = this.ensureTurnAdvisorTelemetry();
+        const profile = threatProfile && typeof threatProfile === 'object'
+            ? threatProfile
+            : this.resolveCounterplayThreatProfile();
+        const pickedRecommendation = recommendation && typeof recommendation === 'object'
+            ? recommendation
+            : this.resolveTacticalAdvisorRecommendation(profile);
+
+        if ((Number(telemetry.followedSuggestedCount) || 0) > 0) {
+            return '';
+        }
+
+        if ((Number(telemetry.cardsPlayed) || 0) <= 0) {
+            if (telemetry.focusedCardKey && Array.isArray(telemetry.suggestedStepKeys) && telemetry.suggestedStepKeys.includes(telemetry.focusedCardKey)) {
+                return '回合复盘：已预选建议牌但未执行，可能是目标窗口或资源判断偏保守。';
+            }
+            return '回合复盘：本回合未出牌，若局势允许可先用低费牌试探并积累指令槽。';
+        }
+
+        if (profile.needBreak && telemetry.tagAvailable.break && (Number(telemetry.tagUsage.break) || 0) <= 0) {
+            return '回合复盘：本回合错过破盾窗口，敌方护势仍在，优先考虑破开防线。';
+        }
+        if (profile.needCleanse && telemetry.tagAvailable.cleanse && (Number(telemetry.tagUsage.cleanse) || 0) <= 0) {
+            return '回合复盘：本回合未及时净化，减益压力会继续放大，可优先处理控制与减益。';
+        }
+        if (profile.needDefend && telemetry.tagAvailable.defend && (Number(telemetry.tagUsage.defend) || 0) <= 0) {
+            return '回合复盘：本回合防御投入不足，敌方高爆发仍在斩杀线附近。';
+        }
+        if (profile.needBurst && telemetry.tagAvailable.burst && (Number(telemetry.tagUsage.burst) || 0) <= 0) {
+            return '回合复盘：本回合没有抓住爆发窗口，关键目标血线仍偏高。';
+        }
+        if ((Number(telemetry.cardsPlayed) || 0) > 0 && Array.isArray(telemetry.suggestedStepKeys) && telemetry.suggestedStepKeys.length > 0) {
+            return `回合复盘：本回合未按${pickedRecommendation.shortLabel || pickedRecommendation.label || '建议'}回路展开，下轮可优先执行助手步骤。`;
+        }
+        return '';
+    }
+
+    resolveBattleTacticalCardPlanMeta(threatProfile = null, recommendation = null) {
+        const profile = threatProfile && typeof threatProfile === 'object'
+            ? threatProfile
+            : this.resolveCounterplayThreatProfile();
+        const pickedRecommendation = recommendation && typeof recommendation === 'object'
+            ? recommendation
+            : this.resolveTacticalAdvisorRecommendation(profile);
+
+        const hand = Array.isArray(this.player?.hand) ? this.player.hand : [];
+        if (hand.length === 0) {
+            return {
+                text: '手牌执行：当前无手牌可规划，先通过战场指令或回能争取展开。',
+                steps: []
+            };
+        }
+
+        const tagPriorityMap = {
+            guard: ['defend', 'cleanse', 'break', 'burst'],
+            break: ['break', 'burst', 'defend', 'cleanse'],
+            cleanse: ['cleanse', 'defend', 'break', 'burst'],
+            burst: ['burst', 'break', 'defend', 'cleanse']
+        };
+        const priority = tagPriorityMap[pickedRecommendation?.id] || ['burst', 'break', 'defend', 'cleanse'];
+        const defaultReasonMap = {
+            attack: '压血抢节奏',
+            defense: '先稳护势',
+            skill: '补关键节奏',
+            law: '补关键节奏'
+        };
+
+        const cardMeta = hand.map((card, index) => {
+            if (!card || typeof card !== 'object') return null;
+            const tags = this.resolveCardCounterTags(card, profile);
+            const tagIds = tags.map((item) => String(item.id || ''));
+            const cost = this.getEffectiveCardCost(card);
+            const hpGate = card.condition && card.condition.type === 'hp'
+                ? Math.max(0, Number(card.condition.min) || 0)
+                : 0;
+            const hpAllowed = !hpGate || Number(this.player?.currentHp || 0) >= hpGate;
+            const energyAllowed = card.consumeCandy
+                ? Math.max(0, Number(this.player?.milkCandy) || 0) >= 1
+                : Math.max(0, Number(this.player?.currentEnergy) || 0) >= cost;
+            const playable = hpAllowed && energyAllowed && !card.unplayable;
+
+            let score = playable ? 60 : 0;
+            priority.forEach((tagId, idx) => {
+                if (tagIds.includes(tagId)) {
+                    score += Math.max(4, 22 - idx * 5);
+                }
+            });
+            if (pickedRecommendation?.id === 'guard' && card.type === 'defense') score += 8;
+            if (pickedRecommendation?.id === 'break' && card.type === 'attack') score += 7;
+            if (pickedRecommendation?.id === 'cleanse' && (card.type === 'skill' || card.type === 'law')) score += 6;
+            if (pickedRecommendation?.id === 'burst' && card.type === 'attack') score += 8;
+            score -= Math.max(0, cost - 1);
+
+            const reason = tags.length > 0
+                ? tags.map((item) => item.label).join(' + ')
+                : (defaultReasonMap[card.type] || '补节奏');
+            return {
+                index,
+                card,
+                playable,
+                score,
+                reason
+            };
+        }).filter(Boolean);
+
+        const playableCards = cardMeta
+            .filter((item) => item.playable)
+            .sort((a, b) => b.score - a.score);
+        if (playableCards.length === 0) {
+            return {
+                text: '手牌执行：当前关键牌均不可立即打出，先攒灵力并用低费牌过渡。',
+                steps: []
+            };
+        }
+
+        const nameOf = (item) => String(item?.card?.name || `卡牌${Number(item?.index || 0) + 1}`);
+        const first = playableCards[0];
+        const second = playableCards.find((item) => item.index !== first.index) || null;
+
+        if (!second) {
+            return {
+                text: `手牌执行：优先打【${nameOf(first)}】（${first.reason}），其余手牌留作下轮展开。`,
+                steps: [{
+                    index: first.index,
+                    name: nameOf(first),
+                    reason: first.reason
+                }]
+            };
+        }
+        return {
+            text: `手牌执行：先打【${nameOf(first)}】（${first.reason}），再接【${nameOf(second)}】（${second.reason}）。`,
+            steps: [{
+                index: first.index,
+                name: nameOf(first),
+                reason: first.reason
+            }, {
+                index: second.index,
+                name: nameOf(second),
+                reason: second.reason
+            }]
+        };
+    }
+
+    resolveBattleTacticalCardPlan(threatProfile = null, recommendation = null) {
+        const meta = this.resolveBattleTacticalCardPlanMeta(threatProfile, recommendation);
+        return meta && typeof meta.text === 'string' ? meta.text : '';
+    }
+
+    previewAdvisorCard(cardIndex) {
+        if (this.currentTurn !== 'player' || this.battleEnded || this.isProcessingCard || this.isTurnTransitioning) {
+            return false;
+        }
+        const index = Math.max(0, Math.floor(Number(cardIndex) || 0));
+        const card = Array.isArray(this.player?.hand) ? this.player.hand[index] : null;
+        if (!card) return false;
+
+        const telemetry = this.ensureTurnAdvisorTelemetry();
+        telemetry.focusedCardKey = this.getAdvisorCardKey(card);
+
+        const needsTarget = Array.isArray(card.effects) && card.effects.some((effect) =>
+            ['damage', 'debuff', 'execute', 'removeBlock', 'goldOnKill', 'maxHpOnKill', 'penetrate', 'steal', 'lifeSteal', 'absorb', 'swapHpPercent', 'executeDamage', 'percentDamage', 'blockBurst'].includes(effect.type)
+            && (!effect.target || effect.target === 'enemy' || effect.target === 'single')
+        );
+        const hasMultipleEnemies = this.enemies.filter((enemy) => enemy && enemy.currentHp > 0).length > 1;
+
+        this.selectedCard = index;
+        this.selectedCardIndex = index;
+        if (this.targetingMode) {
+            this.endTargetingMode();
+            this.selectedCard = index;
+            this.selectedCardIndex = index;
+        }
+        if (needsTarget && hasMultipleEnemies) {
+            this.startTargetingMode(index);
+            this.selectedCard = index;
+        }
+        this.updateHandUI();
+        this.focusAdvisorCard(index);
+        return true;
+    }
+
+    focusAdvisorCard(cardIndex) {
+        const handEl = document.getElementById('hand-cards');
+        if (!handEl) return false;
+        const index = Math.max(0, Math.floor(Number(cardIndex) || 0));
+        const target = handEl.querySelector(`.card[data-index="${index}"]`);
+        if (!target) return false;
+
+        const card = Array.isArray(this.player?.hand) ? this.player.hand[index] : null;
+        if (card) {
+            const telemetry = this.ensureTurnAdvisorTelemetry();
+            telemetry.focusedCardKey = this.getAdvisorCardKey(card);
+        }
+
+        handEl.querySelectorAll('.card.advisor-focus').forEach((el) => el.classList.remove('advisor-focus'));
+        target.classList.add('advisor-focus');
+        target.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+            inline: 'center'
+        });
+
+        if (this.advisorFocusTimer) {
+            clearTimeout(this.advisorFocusTimer);
+            this.advisorFocusTimer = null;
+        }
+        this.advisorFocusTimer = setTimeout(() => {
+            target.classList.remove('advisor-focus');
+            this.advisorFocusTimer = null;
+        }, 1800);
+        return true;
+    }
+
     // 更新手牌UI
     updateHandUI() {
         const handContainer = document.getElementById('hand-cards');
@@ -3361,6 +4511,15 @@ class Battle {
             }
 
             // 如果被选中
+            if (card.__bossSealed) {
+                cardEl.classList.add('boss-sealed-card');
+                cardEl.dataset.bossSealed = 'true';
+                const sealBadge = document.createElement('div');
+                sealBadge.className = 'boss-sealed-badge';
+                sealBadge.textContent = card.__bossSealedPenalty > 1 ? '封签·重' : '封签';
+                cardEl.appendChild(sealBadge);
+            }
+
             if (this.selectedCard === index) {
                 cardEl.classList.add('selected');
             }
@@ -3808,6 +4967,7 @@ class Battle {
 
         const card = this.player.hand[cardIndex];
         if (!card) return;
+        const cardThreatProfile = this.resolveCounterplayThreatProfile();
 
         const needsTarget = Array.isArray(card.effects) && card.effects.some(e =>
             ['damage', 'debuff', 'execute', 'removeBlock', 'goldOnKill', 'maxHpOnKill', 'penetrate', 'steal', 'lifeSteal', 'absorb', 'swapHpPercent', 'executeDamage', 'percentDamage', 'blockBurst'].includes(e.type)
@@ -3859,8 +5019,11 @@ class Battle {
                 Utils.showBattleLog(`破法者：获得 ${this.player.buffs.blockOnAttack} 护盾`);
             }
 
+            const effectiveCost = this.getEffectiveCardCost(card);
+            const sealedCardPlayed = !!card.__bossSealed;
+
             // 播放卡牌 (核心逻辑)
-            const results = this.player.playCard(cardIndex, target);
+            const results = this.player.playCard(cardIndex, target, { energyCostOverride: effectiveCost });
             if (results === false) {
                 return;
             }
@@ -3886,11 +5049,23 @@ class Battle {
                 await this.processElementalCombos(target, targetIndex);
             }
 
+            if (sealedCardPlayed) {
+                this.handleBossSealedCardPlayed(card);
+            }
+
+            this.lastPlayerCardSnapshot = {
+                id: card.id || '',
+                name: card.name || '',
+                type: card.type || '',
+                cost: effectiveCost
+            };
+
             // 检查战斗是否结束
             if (this.checkBattleEnd()) return;
 
             // 计数与追踪
             this.cardsPlayedThisTurn++;
+            this.recordTurnAdvisorCardUsage(card, cardThreatProfile);
             if (card.type === 'attack') this.playerAttackedThisTurn = true;
             this.emit('cardPlayed', {
                 card,
@@ -4736,6 +5911,14 @@ class Battle {
         this.endTargetingMode();
         this.selectedCard = null;
 
+        const reviewProfile = this.resolveCounterplayThreatProfile();
+        const reviewRecommendation = this.resolveTacticalAdvisorRecommendation(reviewProfile);
+        this.updateTurnAdvisorAvailability(reviewProfile);
+        const turnReview = this.resolveTurnAdvisorReviewSummary(reviewProfile, reviewRecommendation);
+        if (turnReview) {
+            Utils.showBattleLog(turnReview);
+        }
+
         // 禁用结束回合按钮
         const endTurnBtn = document.getElementById('end-turn-btn');
         if (endTurnBtn) endTurnBtn.disabled = true;
@@ -4858,7 +6041,12 @@ class Battle {
             this.isProcessingCard = false;
             this.cardsPlayedThisTurn = 0;
             this.playerAttackedThisTurn = false;
+            this.resetTurnAdvisorTelemetry();
             this.player.startTurn();
+            const extraTurnBoss = this.getPrimaryBossEnemy();
+            if (extraTurnBoss && extraTurnBoss.bossActState) {
+                this.processBossThreeActPlayerTurnStart(extraTurnBoss);
+            }
             this.emit('turnStart', { turnNumber: this.turnNumber, actor: 'player' });
             this.onBattleCommandTurnStart();
 
@@ -4910,6 +6098,7 @@ class Battle {
             this.cardsPlayedThisTurn = 0;
             this.playerAttackedThisTurn = false;
             this.tacticalAdvantageTriggerCount = 0; // 重置战术优势计数
+            this.resetTurnAdvisorTelemetry();
 
             // 环境：回合开始效果
             if (this.activeEnvironment && this.activeEnvironment.onTurnStart) {
@@ -4918,6 +6107,10 @@ class Battle {
             }
 
             this.player.startTurn();
+            const nextTurnBoss = this.getPrimaryBossEnemy();
+            if (nextTurnBoss && nextTurnBoss.bossActState) {
+                this.processBossThreeActPlayerTurnStart(nextTurnBoss);
+            }
             this.emit('turnStart', { turnNumber: this.turnNumber, actor: 'player' });
             this.onBattleCommandTurnStart();
             this.turnStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
@@ -4960,6 +6153,10 @@ class Battle {
 
             try {
                 // (Chaos Logic Removed - Replaced by new Chaos Law)
+
+                if (enemy.isBoss && enemy.bossActState) {
+                    this.processBossThreeActEnemyTurnStart(enemy);
+                }
 
                 // === Boss机制处理 (回合开始) ===
                 if (enemy.isBoss && typeof BossMechanicsHandler !== 'undefined') {
@@ -5618,6 +6815,8 @@ class Battle {
         this.battleEnded = true;
         this.battleResolution = result;
         this.isProcessingCard = false;
+        this.restoreBattlePlayerHooks();
+        this.clearBattleTimers();
         this.currentCardProcessToken++;
         this.isTurnTransitioning = false;
         this.endTargetingMode();
@@ -5642,19 +6841,13 @@ class Battle {
 
         // 检查玩家死亡
         if (!this.player.isAlive()) {
-            this.battleEnded = true;
-            this.clearBattleTimers();
-            this.game.onBattleLost();
-            return true;
+            return this.finalizeBattle('lost');
         }
 
         // 检查所有敌人死亡
         const allDead = this.enemies.length > 0 && this.enemies.every(e => e.currentHp <= 0);
         if (allDead) {
-            this.battleEnded = true;
-            this.clearBattleTimers();
-            this.game.onBattleWon(this.enemies);
-            return true;
+            return this.finalizeBattle('won');
         }
 
         return this.battleEnded;
@@ -5700,7 +6893,12 @@ class Battle {
 
     // 检查阶段转换
     checkPhaseChange(enemy) {
-        if (!enemy || !enemy.phases) return;
+        if (!enemy) return;
+        if (enemy.isBoss && enemy.bossActState) {
+            this.checkBossThreeActTransition(enemy);
+            return;
+        }
+        if (!enemy.phases) return;
 
         // 初始化 phases
         if (typeof enemy.currentPhase === 'undefined') enemy.currentPhase = 0;
@@ -5834,6 +7032,7 @@ class Battle {
         const profile = threatProfile && typeof threatProfile === 'object'
             ? threatProfile
             : this.resolveCounterplayThreatProfile();
+        const telemetry = this.updateTurnAdvisorAvailability(profile);
         const runtimeState = state && typeof state === 'object'
             ? state
             : (this.commandState || this.createDefaultBattleCommandState());
@@ -5901,9 +7100,63 @@ class Battle {
         const matrixMeta = commandMeta.find((item) => item && item.command && item.command.id === 'resonance_matrix_order') || null;
         const endlessActive = !!(this.game && typeof this.game.isEndlessActive === 'function' && this.game.isEndlessActive());
         let matrixHint = '';
+        let formationHint = '';
+        const cardPlanMeta = this.resolveBattleTacticalCardPlanMeta(profile, recommendation);
+        const cardPlanHint = cardPlanMeta && typeof cardPlanMeta.text === 'string'
+            ? cardPlanMeta.text
+            : '';
+        const cardPlanSteps = cardPlanMeta && Array.isArray(cardPlanMeta.steps)
+            ? cardPlanMeta.steps
+                .filter((item) => item && Number.isFinite(Number(item.index)))
+                .slice(0, 2)
+                .map((item) => ({
+                    index: Math.max(0, Math.floor(Number(item.index) || 0)),
+                    name: String(item.name || ''),
+                    reason: String(item.reason || '')
+                }))
+            : [];
+        telemetry.suggestedStepKeys = cardPlanSteps
+            .map((item) => this.getAdvisorCardKey(Array.isArray(this.player?.hand) ? this.player.hand[item.index] : null))
+            .filter(Boolean);
         let lastModeLabel = '';
         let pendingModeLabel = '';
         const matrixControls = [];
+        const squad = this.activeSquadEcology && typeof this.activeSquadEcology === 'object'
+            ? this.activeSquadEcology
+            : null;
+
+        if (squad && squad.id) {
+            const formationHintMap = {
+                squad_pincer_hunt: '敌阵画像：钳袭编队偏多段抢节奏，先压前锋并保留护盾，避免被连段补刀。',
+                squad_bulwark_web: '敌阵画像：壁垒联阵会反复堆防，先破盾再爆发，破甲与易伤价值更高。',
+                squad_hex_weave: '敌阵画像：咒织链阵会持续施压减益，净化与抽牌优先，避免行动链断裂。',
+                squad_relay_cascade: '敌阵画像：潮汐接力存在明显波段，敌方回防回合是你反打窗口。'
+            };
+            formationHint = formationHintMap[squad.id] || `敌阵画像：${squad.name || squad.tag || '协同编队'}，建议优先拆解阵核与关键功能位。`;
+        }
+
+        if (endlessActive && this.game && typeof this.game.getEndlessCycleThemeProfile === 'function') {
+            const theme = this.game.getEndlessCycleThemeProfile();
+            if (theme && typeof theme === 'object') {
+                const directive = String(theme.enemyDirective || 'balanced');
+                const directiveHintMap = {
+                    forge: '该轮段强调前压锻潮，建议保留中费护盾抵消开场压制。',
+                    swarm: '该轮段偏连段围猎，优先削减敌方行动数并抢回合节奏。',
+                    counter: '该轮段强化反制与减益，净化和免疫优先级显著上升。',
+                    frenzy: '该轮段爆发窗口更短，尽量在两回合内建立斩杀线。',
+                    bastion: '该轮段偏防守拉扯，留一段续航并分批释放爆发更稳。'
+                };
+                const themeHint = directiveHintMap[directive]
+                    || '该轮段节奏较均衡，可按当前构筑正常展开。';
+                const themeLabel = theme.shortName || theme.name || '稳衡';
+                if (formationHint) {
+                    formationHint = `${formationHint} 轮段研判：${themeLabel} · ${themeHint}`;
+                } else {
+                    formationHint = `轮段研判：${themeLabel} · ${themeHint}`;
+                }
+            }
+        }
+
         if (matrixMeta) {
             const modeId = String(runtimeState.lastResonanceMatrixMode || 'auto');
             const modeProfile = this.getResonanceMatrixModeProfile(modeId);
@@ -5943,6 +7196,9 @@ class Battle {
             recommendation,
             threatChips,
             readiness,
+            formationHint,
+            cardPlanHint,
+            cardPlanSteps,
             matrixHint,
             lastModeLabel,
             pendingModeLabel,
@@ -5950,10 +7206,187 @@ class Battle {
         };
     }
 
+    syncTacticalAdvisorPresentation() {
+        const panel = document.getElementById('battle-command-panel');
+        const advisor = panel && typeof panel.querySelector === 'function'
+            ? panel.querySelector('#battle-tactical-advisor')
+            : null;
+        if (!panel || !advisor) return false;
+
+        const expanded = !this.tacticalAdvisorCollapsed || this.tacticalAdvisorHoverExpanded;
+        advisor.classList.toggle('collapsed', !expanded);
+        advisor.classList.toggle('hover-expanded', !!this.tacticalAdvisorHoverExpanded);
+
+        const body = advisor.querySelector('.battle-advisor-body');
+        if (body) {
+            body.hidden = !expanded;
+        }
+
+        const toggleBtn = panel.querySelector('.battle-advisor-toggle');
+        if (toggleBtn) {
+            toggleBtn.textContent = expanded ? '收起助手' : '展开助手';
+            toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        }
+
+        return true;
+    }
+
+    clearBattleCommandPanelDragHandlers() {
+        if (typeof window === 'undefined') return;
+        if (this.boundBattleCommandDragMove) {
+            window.removeEventListener('pointermove', this.boundBattleCommandDragMove);
+            this.boundBattleCommandDragMove = null;
+        }
+        if (this.boundBattleCommandDragEnd) {
+            window.removeEventListener('pointerup', this.boundBattleCommandDragEnd);
+            window.removeEventListener('pointercancel', this.boundBattleCommandDragEnd);
+            this.boundBattleCommandDragEnd = null;
+        }
+        this.battleCommandDragState = null;
+        const panel = document.getElementById('battle-command-panel');
+        if (panel) panel.classList.remove('dragging');
+    }
+
+    clampBattleCommandPanelPosition(left, top, width, height) {
+        const viewportWidth = typeof window !== 'undefined' ? Math.max(0, window.innerWidth || 0) : 0;
+        const viewportHeight = typeof window !== 'undefined' ? Math.max(0, window.innerHeight || 0) : 0;
+        const safeWidth = Math.max(0, Number(width) || 0);
+        const safeHeight = Math.max(0, Number(height) || 0);
+        const gutter = 8;
+        const maxLeft = Math.max(gutter, viewportWidth - safeWidth - gutter);
+        const maxTop = Math.max(gutter, viewportHeight - safeHeight - gutter);
+        return {
+            left: Math.min(Math.max(gutter, Math.round(Number(left) || 0)), maxLeft),
+            top: Math.min(Math.max(gutter, Math.round(Number(top) || 0)), maxTop)
+        };
+    }
+
+    applyBattleCommandPanelPosition(panel) {
+        if (!panel) return false;
+        if (this.shouldUseCompactBattleHud()) {
+            panel.style.left = '';
+            panel.style.top = '';
+            panel.style.transform = '';
+            panel.classList.remove('custom-position', 'dragging');
+            return false;
+        }
+
+        const position = this.battleCommandPanelPosition;
+        if (!position || !Number.isFinite(position.left) || !Number.isFinite(position.top)) {
+            panel.style.left = '';
+            panel.style.top = '';
+            panel.style.transform = '';
+            panel.classList.remove('custom-position');
+            return false;
+        }
+
+        const rect = panel.getBoundingClientRect();
+        const next = this.clampBattleCommandPanelPosition(position.left, position.top, rect.width || panel.offsetWidth, rect.height || panel.offsetHeight);
+        this.battleCommandPanelPosition = next;
+        panel.style.left = `${next.left}px`;
+        panel.style.top = `${next.top}px`;
+        panel.style.transform = 'none';
+        panel.classList.add('custom-position');
+        return true;
+    }
+
+    beginBattleCommandPanelDrag(event) {
+        if (this.shouldUseCompactBattleHud() || typeof window === 'undefined') return false;
+        if (!event || (typeof event.button === 'number' && event.button !== 0)) return false;
+
+        const handle = event.target && typeof event.target.closest === 'function'
+            ? event.target.closest('.battle-advisor-drag-handle')
+            : null;
+        const panel = document.getElementById('battle-command-panel');
+        if (!handle || !panel) return false;
+
+        const rect = panel.getBoundingClientRect();
+        const clamped = this.clampBattleCommandPanelPosition(rect.left, rect.top, rect.width || panel.offsetWidth, rect.height || panel.offsetHeight);
+        this.battleCommandPanelPosition = clamped;
+        panel.style.left = `${clamped.left}px`;
+        panel.style.top = `${clamped.top}px`;
+        panel.style.transform = 'none';
+        panel.classList.add('custom-position', 'dragging');
+
+        this.tacticalAdvisorHoverExpanded = false;
+        this.syncTacticalAdvisorPresentation();
+
+        const startX = Number(event.clientX) || 0;
+        const startY = Number(event.clientY) || 0;
+        this.battleCommandDragState = {
+            pointerId: event.pointerId,
+            startX,
+            startY,
+            left: clamped.left,
+            top: clamped.top
+        };
+
+        const onMove = (moveEvent) => {
+            if (!this.battleCommandDragState) return;
+            if (this.battleCommandDragState.pointerId != null && moveEvent.pointerId != null && moveEvent.pointerId !== this.battleCommandDragState.pointerId) {
+                return;
+            }
+            const dx = (Number(moveEvent.clientX) || 0) - this.battleCommandDragState.startX;
+            const dy = (Number(moveEvent.clientY) || 0) - this.battleCommandDragState.startY;
+            const next = this.clampBattleCommandPanelPosition(
+                this.battleCommandDragState.left + dx,
+                this.battleCommandDragState.top + dy,
+                rect.width || panel.offsetWidth,
+                rect.height || panel.offsetHeight
+            );
+            this.battleCommandPanelPosition = next;
+            panel.style.left = `${next.left}px`;
+            panel.style.top = `${next.top}px`;
+            panel.style.transform = 'none';
+        };
+
+        const onEnd = (endEvent) => {
+            if (this.battleCommandDragState && this.battleCommandDragState.pointerId != null && endEvent.pointerId != null && endEvent.pointerId !== this.battleCommandDragState.pointerId) {
+                return;
+            }
+            if (handle && typeof handle.releasePointerCapture === 'function' && event.pointerId != null) {
+                try {
+                    handle.releasePointerCapture(event.pointerId);
+                } catch (_) {}
+            }
+            this.clearBattleCommandPanelDragHandlers();
+        };
+
+        this.boundBattleCommandDragMove = onMove;
+        this.boundBattleCommandDragEnd = onEnd;
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onEnd);
+        window.addEventListener('pointercancel', onEnd);
+
+        if (typeof handle.setPointerCapture === 'function' && event.pointerId != null) {
+            try {
+                handle.setPointerCapture(event.pointerId);
+            } catch (_) {}
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+    }
+
     toggleTacticalAdvisor() {
         this.tacticalAdvisorCollapsed = !this.tacticalAdvisorCollapsed;
-        this.markUIDirty('command');
-        this.updateBattleUI();
+        this.tacticalAdvisorHoverExpanded = false;
+        if (!this.syncTacticalAdvisorPresentation()) {
+            this.markUIDirty('command');
+            this.updateBattleUI();
+        }
+    }
+
+    setTacticalAdvisorHoverExpanded(active = false) {
+        const next = !!active;
+        if (this.shouldUseCompactBattleHud() || !this.tacticalAdvisorCollapsed || this.battleCommandDragState) return;
+        if (this.tacticalAdvisorHoverExpanded === next) return;
+        this.tacticalAdvisorHoverExpanded = next;
+        if (!this.syncTacticalAdvisorPresentation()) {
+            this.markUIDirty('command');
+            this.updateBattleUI();
+        }
     }
 
     updateBattleCommandUI() {
@@ -6046,17 +7479,30 @@ class Battle {
                 </button>
             `).join('')
             : '';
+        const cardPlanSteps = Array.isArray(advisor.cardPlanSteps)
+            ? advisor.cardPlanSteps.map((step, idx) => `
+                <button type="button"
+                        class="battle-advisor-cardstep-btn"
+                        data-card-index="${Math.max(0, Math.floor(Number(step.index) || 0))}"
+                        onclick="window.game && game.battle && game.battle.previewAdvisorCard(${Math.max(0, Math.floor(Number(step.index) || 0))})"
+                        title="${escapeHtml(step.reason || '')}">
+                    ${idx === 0 ? '①' : '②'} ${escapeHtml(step.name || `手牌${idx + 1}`)}
+                </button>
+            `).join('')
+            : '';
 
-        const advisorBody = this.tacticalAdvisorCollapsed
-            ? ''
-            : `
+        const advisorExpanded = !this.tacticalAdvisorCollapsed || this.tacticalAdvisorHoverExpanded;
+        const advisorBody = `
                 <div class="battle-advisor-threat-list">${threatChips}</div>
                 <p class="battle-advisor-line battle-advisor-recommend">建议回路：${escapeHtml(advisor.recommendation.label)} · ${escapeHtml(advisor.recommendation.desc)}</p>
                 <p class="battle-advisor-line battle-advisor-readiness">${escapeHtml(advisor.readiness)}</p>
+                ${advisor.formationHint ? `<p class="battle-advisor-line battle-advisor-formation">${escapeHtml(advisor.formationHint)}</p>` : ''}
+                ${advisor.cardPlanHint ? `<p class="battle-advisor-line battle-advisor-cardplan">${escapeHtml(advisor.cardPlanHint)}</p>` : ''}
+                ${cardPlanSteps ? `<div class="battle-advisor-cardplan-steps">${cardPlanSteps}</div>` : ''}
                 ${advisor.matrixHint ? `<p class="battle-advisor-line battle-advisor-matrix">${escapeHtml(advisor.matrixHint)}</p>` : ''}
                 ${advisor.pendingModeLabel ? `<p class="battle-advisor-line battle-advisor-pending-mode">模式预设：${escapeHtml(advisor.pendingModeLabel)}</p>` : ''}
                 ${matrixControls ? `<div class="battle-advisor-matrix-controls">${matrixControls}</div>` : ''}
-                ${matrixControls ? '<p class="battle-advisor-line battle-advisor-hotkey">快捷预设：1自适应 2守势 3破阵 4净域 5歼灭</p>' : ''}
+                ${matrixControls ? '<p class="battle-advisor-line battle-advisor-hotkey">快捷预设：H开关助手 · 1自适应 2守势 3破阵 4净域 5歼灭</p>' : '<p class="battle-advisor-line battle-advisor-hotkey">快捷预设：H 开关助手</p>'}
                 ${advisor.lastModeLabel ? `<p class="battle-advisor-line battle-advisor-last">上次命环模式：${escapeHtml(advisor.lastModeLabel)}</p>` : ''}
             `;
 
@@ -6067,7 +7513,7 @@ class Battle {
                     <span class="battle-command-points">${points}/${maxPoints}</span>
                     <button type="button" class="battle-advisor-toggle"
                             onclick="window.game && game.battle && game.battle.toggleTacticalAdvisor()">
-                        ${this.tacticalAdvisorCollapsed ? '展开助手' : '收起助手'}
+                        ${advisorExpanded ? '收起助手' : '展开助手'}
                     </button>
                 </span>
             </div>
@@ -6076,13 +7522,43 @@ class Battle {
             </div>
             <div class="battle-command-list">${commandButtons}</div>
             <section id="battle-tactical-advisor"
-                     class="battle-tactical-advisor ${this.tacticalAdvisorCollapsed ? 'collapsed' : ''}">
+                     class="battle-tactical-advisor ${advisorExpanded ? '' : 'collapsed'} ${this.tacticalAdvisorHoverExpanded ? 'hover-expanded' : ''}">
                 <div class="battle-advisor-header">
+                    <button type="button"
+                            class="battle-advisor-drag-handle"
+                            aria-label="拖动战术助手"
+                            title="拖动战术助手">⠿</button>
                     <span class="battle-advisor-title">战术助手</span>
                 </div>
-                ${advisorBody}
+                <div class="battle-advisor-body" ${advisorExpanded ? '' : 'hidden'}>
+                    ${advisorBody}
+                </div>
             </section>
         `;
+
+        if (typeof panel.querySelector !== 'function') return;
+
+        const advisorEl = panel.querySelector('#battle-tactical-advisor');
+        const dragHandle = panel.querySelector('.battle-advisor-drag-handle');
+        this.applyBattleCommandPanelPosition(panel);
+
+        if (dragHandle) {
+            dragHandle.onpointerdown = (event) => this.beginBattleCommandPanelDrag(event);
+        }
+
+        if (!this.shouldUseCompactBattleHud() && advisorEl) {
+            advisorEl.onmouseenter = () => this.setTacticalAdvisorHoverExpanded(true);
+            advisorEl.onmouseleave = () => this.setTacticalAdvisorHoverExpanded(false);
+            panel.onmouseenter = null;
+            panel.onmouseleave = null;
+        } else {
+            if (advisorEl) {
+                advisorEl.onmouseenter = null;
+                advisorEl.onmouseleave = null;
+            }
+            panel.onmouseenter = null;
+            panel.onmouseleave = null;
+        }
     }
 
 
@@ -6102,7 +7578,8 @@ class Battle {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
 
-        if (this.activeEnvironment || encounter) {
+        const squad = this.activeSquadEcology || null;
+        if (this.activeEnvironment || encounter || squad) {
             envEl.style.display = 'flex';
             envEl.innerHTML = `
                 ${this.activeEnvironment
@@ -6114,12 +7591,21 @@ class Battle {
                         <span class="encounter-name">遭遇·${escapeHtml(encounter.name)} ${'I'.repeat(Math.max(1, Math.min(3, Number(encounter.tierStage) || 1)))}阶</span>
                     </span>`
                 : ''}
+                ${squad
+                ? `<span class="squad-formation-chip" title="${escapeHtml(squad.desc || '敌方编队协同中')}">
+                        <span class="squad-icon">⛭</span>
+                        <span class="squad-name">敌阵·${escapeHtml(squad.name || squad.tag || '协同')} ${Math.max(1, Math.floor(Number(squad.count) || 1))}体</span>
+                    </span>`
+                : ''}
 `;
             const titleSegments = [];
             if (envDesc) titleSegments.push(`环境：${envDesc}`);
             if (encounter && encounter.description) {
                 const stage = Math.max(1, Math.min(3, Number(encounter.tierStage) || 1));
                 titleSegments.push(`遭遇（${'I'.repeat(stage)}阶）：${encounter.description}`);
+            }
+            if (squad && squad.desc) {
+                titleSegments.push(`敌阵：${squad.desc}`);
             }
             envEl.title = titleSegments.join(' ｜ ');
         } else {

@@ -19,6 +19,7 @@ class Game {
         this.pvpMatchTicket = null;
         this.stealAttempted = false;
         this.rewardCardSelected = false; // 防止重复选牌
+        this.lastBattleRewardMeta = null;
         this.comboCount = 0;
         this.lastCardType = null;
         this.runStartTime = null;
@@ -37,6 +38,15 @@ class Game {
         };
         this.endlessState = this.createDefaultEndlessState();
         this.encounterState = this.createDefaultEncounterState();
+        this.treasureCompendiumFilter = 'all';
+        this.treasureCompendiumSort = 'rarity_desc';
+        this.treasureCompendiumFilterState = {
+            status: 'all',
+            rarities: [],
+            sources: []
+        };
+        this.treasureCompendiumPresetStorageKey = 'theDefierTreasureCompendiumPresetsV1';
+        this.treasureCompendiumPresetCache = null;
         this.lastLegacyGain = 0;
         this.debugMode = localStorage.getItem('theDefierDebug') === 'true';
         this.boundGlobalEvents = false;
@@ -160,6 +170,14 @@ class Game {
                         tierStage: this.battle.activeEncounterTheme.tierStage || 1
                     }
                     : null,
+                squadEcology: this.battle.activeSquadEcology
+                    ? {
+                        id: this.battle.activeSquadEcology.id,
+                        name: this.battle.activeSquadEcology.name,
+                        tag: this.battle.activeSquadEcology.tag,
+                        count: this.battle.activeSquadEcology.count || 0
+                    }
+                    : null,
                 battleCommand: (typeof this.battle.getBattleCommandSnapshot === 'function')
                     ? this.battle.getBattleCommandSnapshot()
                     : null,
@@ -192,6 +210,7 @@ class Game {
             },
             endless: this.ensureEndlessState(),
             endlessPhase: this.getEndlessPhaseProfile(),
+            endlessTheme: this.getEndlessCycleThemeProfile(),
             encounter: this.ensureEncounterState(),
             perf: this.performanceStats
         };
@@ -263,8 +282,15 @@ class Game {
             activeMutators: [],
             lastMutatorId: null,
             lastPhaseId: null,
+            lastThemeId: null,
             phaseHistory: [],
+            themeHistory: [],
             boonHistory: [],
+            paranoiaLevel: 0,
+            activeParanoiaBurdens: [],
+            activeParanoiaBoons: [],
+            paranoiaHistory: [],
+            lastParanoiaCycle: -1,
             boonRarePity: 0,
             boonRareGuaranteedEvery: 3,
             barterHeat: 0,
@@ -445,6 +471,7 @@ class Game {
                 : [],
             lastMutatorId: typeof source.lastMutatorId === 'string' ? source.lastMutatorId : null,
             lastPhaseId: typeof source.lastPhaseId === 'string' ? source.lastPhaseId : null,
+            lastThemeId: typeof source.lastThemeId === 'string' ? source.lastThemeId : null,
             phaseHistory: Array.isArray(source.phaseHistory)
                 ? source.phaseHistory
                     .filter((entry) => entry && typeof entry.id === 'string' && Number.isFinite(Number(entry.cycle)))
@@ -454,9 +481,37 @@ class Game {
                     }))
                     .slice(-20)
                 : [],
+            themeHistory: Array.isArray(source.themeHistory)
+                ? source.themeHistory
+                    .filter((entry) => entry && typeof entry.id === 'string' && Number.isFinite(Number(entry.cycle)))
+                    .map((entry) => ({
+                        id: entry.id,
+                        cycle: Math.max(0, Math.floor(Number(entry.cycle) || 0)),
+                        segment: Math.max(1, Math.min(5, Math.floor(Number(entry.segment) || 1)))
+                    }))
+                    .slice(-20)
+                : [],
             boonHistory: Array.isArray(source.boonHistory)
                 ? source.boonHistory.filter((id) => typeof id === 'string').slice(-20)
                 : [],
+            paranoiaLevel: normalizeInt(source.paranoiaLevel),
+            activeParanoiaBurdens: Array.isArray(source.activeParanoiaBurdens)
+                ? source.activeParanoiaBurdens.filter((id) => typeof id === 'string').slice(-8)
+                : [],
+            activeParanoiaBoons: Array.isArray(source.activeParanoiaBoons)
+                ? source.activeParanoiaBoons.filter((id) => typeof id === 'string').slice(-8)
+                : [],
+            paranoiaHistory: Array.isArray(source.paranoiaHistory)
+                ? source.paranoiaHistory
+                    .filter((entry) => entry && typeof entry.burdenId === 'string' && typeof entry.boonId === 'string')
+                    .map((entry) => ({
+                        burdenId: entry.burdenId,
+                        boonId: entry.boonId,
+                        cycle: Math.max(0, Math.floor(Number(entry.cycle) || 0))
+                    }))
+                    .slice(-12)
+                : [],
+            lastParanoiaCycle: Math.max(-1, Math.floor(Number(source.lastParanoiaCycle) || -1)),
             boonRarePity: normalizeInt(source.boonRarePity),
             boonRareGuaranteedEvery: Math.max(2, Math.min(6, normalizeInt(source.boonRareGuaranteedEvery, 3) || 3)),
             barterHeat: Math.max(0, Math.min(9, normalizeInt(source.barterHeat, 0))),
@@ -590,6 +645,319 @@ class Game {
         return pick;
     }
 
+    getEndlessParanoiaBurdenPool() {
+        return [
+            {
+                id: 'cramped_hand',
+                name: '紧箍识海',
+                shortLabel: '手牌上限 -1',
+                desc: '每个大轮回后，手牌上限永久 -1。',
+                mods: { handLimitOffset: -1 }
+            },
+            {
+                id: 'elite_echo',
+                name: '精英回响',
+                shortLabel: '精英额外词缀',
+                desc: '无尽中的精英战会额外叠加 1 条临时轮回词缀。',
+                mods: { eliteExtraMutator: true }
+            },
+            {
+                id: 'withered_mend',
+                name: '枯脉疗蚀',
+                shortLabel: '治疗衰减',
+                desc: '所有恢复效果进一步衰减。',
+                mods: { healMul: 0.82 }
+            },
+            {
+                id: 'thin_harvest',
+                name: '薄获税印',
+                shortLabel: '普通战掉落减少',
+                desc: '普通战的灵石与命环经验收益下降。',
+                mods: { normalBattleRewardMul: 0.78, normalBattleExpMul: 0.84 }
+            }
+        ];
+    }
+
+    getEndlessParanoiaBoonPool() {
+        return [
+            {
+                id: 'rare_surge',
+                name: '稀曜偏振',
+                shortLabel: '稀有奖励提升',
+                desc: '战后卡牌奖励更容易出现稀有牌。',
+                mods: { rewardRareChance: 0.24 }
+            },
+            {
+                id: 'vault_slot',
+                name: '宝匣扩容',
+                shortLabel: '法宝槽位 +1',
+                desc: '额外获得 1 个法宝装备槽位。',
+                mods: { extraTreasureSlots: 1 }
+            },
+            {
+                id: 'fate_spark',
+                name: '命格跃迁',
+                shortLabel: '命环额外升级',
+                desc: '立即获得一次接近完整等级的命环跃迁。',
+                immediate: 'ringLevelUp'
+            }
+        ];
+    }
+
+    getEndlessParanoiaEffects() {
+        const result = {
+            handLimitOffset: 0,
+            eliteExtraMutator: false,
+            healMul: 1,
+            normalBattleRewardMul: 1,
+            normalBattleExpMul: 1,
+            rewardRareChance: 0,
+            extraTreasureSlots: 0,
+            activeBurdenIds: [],
+            activeBoonIds: [],
+            latestBurden: null,
+            latestBoon: null
+        };
+        if (!this.isEndlessActive() && !this.endlessState) return result;
+
+        const state = this.ensureEndlessState();
+        const burdenMap = new Map(this.getEndlessParanoiaBurdenPool().map((item) => [item.id, item]));
+        const boonMap = new Map(this.getEndlessParanoiaBoonPool().map((item) => [item.id, item]));
+        const burdenIds = Array.isArray(state.activeParanoiaBurdens) ? state.activeParanoiaBurdens : [];
+        const boonIds = Array.isArray(state.activeParanoiaBoons) ? state.activeParanoiaBoons : [];
+
+        burdenIds.forEach((id) => {
+            const burden = burdenMap.get(id);
+            if (!burden || !burden.mods) return;
+            result.activeBurdenIds.push(id);
+            if (Number.isFinite(Number(burden.mods.handLimitOffset))) {
+                result.handLimitOffset += Number(burden.mods.handLimitOffset) || 0;
+            }
+            if (burden.mods.eliteExtraMutator) result.eliteExtraMutator = true;
+            if (Number.isFinite(Number(burden.mods.healMul))) {
+                result.healMul *= Math.max(0.35, Number(burden.mods.healMul) || 1);
+            }
+            if (Number.isFinite(Number(burden.mods.normalBattleRewardMul))) {
+                result.normalBattleRewardMul *= Math.max(0.35, Number(burden.mods.normalBattleRewardMul) || 1);
+            }
+            if (Number.isFinite(Number(burden.mods.normalBattleExpMul))) {
+                result.normalBattleExpMul *= Math.max(0.35, Number(burden.mods.normalBattleExpMul) || 1);
+            }
+            result.latestBurden = burden;
+        });
+
+        boonIds.forEach((id) => {
+            const boon = boonMap.get(id);
+            if (!boon) return;
+            result.activeBoonIds.push(id);
+            if (boon.mods && Number.isFinite(Number(boon.mods.rewardRareChance))) {
+                result.rewardRareChance += Math.max(0, Number(boon.mods.rewardRareChance) || 0);
+            }
+            if (boon.mods && Number.isFinite(Number(boon.mods.extraTreasureSlots))) {
+                result.extraTreasureSlots += Math.max(0, Math.floor(Number(boon.mods.extraTreasureSlots) || 0));
+            }
+            result.latestBoon = boon;
+        });
+
+        return result;
+    }
+
+    getEndlessParanoiaTreasureSlotBonus() {
+        const effects = this.getEndlessParanoiaEffects();
+        return Math.max(0, Math.floor(Number(effects.extraTreasureSlots) || 0));
+    }
+
+    getEndlessParanoiaHandLimitPenalty() {
+        const effects = this.getEndlessParanoiaEffects();
+        return Math.min(0, Math.floor(Number(effects.handLimitOffset) || 0));
+    }
+
+    getEndlessParanoiaEliteMutatorId(cycleOverride = null) {
+        const pool = this.getEndlessMutatorPool();
+        if (!Array.isArray(pool) || pool.length === 0) return null;
+        const state = this.ensureEndlessState();
+        const cycle = Math.max(0, Math.floor(Number(cycleOverride === null || cycleOverride === undefined ? state.currentCycle : cycleOverride) || 0));
+        const safePool = pool.filter((item) => item && item.id !== 'war_market');
+        const pickPool = safePool.length > 0 ? safePool : pool;
+        const pick = pickPool[cycle % pickPool.length];
+        return pick && pick.id ? pick.id : null;
+    }
+
+    getEndlessActiveMutatorIds() {
+        const state = this.ensureEndlessState();
+        const activeIds = Array.isArray(state.activeMutators) ? state.activeMutators.filter((id) => typeof id === 'string' && id) : [];
+        const effects = this.getEndlessParanoiaEffects();
+        if (
+            effects.eliteExtraMutator &&
+            this.currentBattleNode &&
+            this.currentBattleNode.type === 'elite'
+        ) {
+            const extraId = this.getEndlessParanoiaEliteMutatorId();
+            if (extraId && !activeIds.includes(extraId)) {
+                activeIds.push(extraId);
+            }
+        }
+        return activeIds.slice(-4);
+    }
+
+    getEndlessParanoiaChoices() {
+        const state = this.ensureEndlessState();
+        const burdens = this.getEndlessParanoiaBurdenPool();
+        const boons = this.getEndlessParanoiaBoonPool();
+        if (!burdens.length || !boons.length) return [];
+
+        const activeBurdenIds = new Set(Array.isArray(state.activeParanoiaBurdens) ? state.activeParanoiaBurdens : []);
+        const activeBoonIds = new Set(Array.isArray(state.activeParanoiaBoons) ? state.activeParanoiaBoons : []);
+        const burdenPool = burdens.filter((item) => item && item.id && !activeBurdenIds.has(item.id));
+        const boonPool = boons.filter((item) => item && item.id && !activeBoonIds.has(item.id));
+        const pickedBurdens = burdenPool.length >= 3 ? burdenPool : burdens;
+        const pickedBoons = boonPool.length >= 3 ? boonPool : boons;
+        const burdenOffset = Math.max(0, Math.floor(Number(state.paranoiaLevel) || 0)) % pickedBurdens.length;
+        const boonOffset = Math.max(0, Math.floor((Number(state.paranoiaLevel) || 0) * 2)) % pickedBoons.length;
+        const choices = [];
+        for (let i = 0; i < 3; i += 1) {
+            const burden = pickedBurdens[(burdenOffset + i) % pickedBurdens.length];
+            const boon = pickedBoons[(boonOffset + i) % pickedBoons.length];
+            if (!burden || !boon) continue;
+            choices.push({
+                id: `${burden.id}__${boon.id}`,
+                burdenId: burden.id,
+                boonId: boon.id,
+                burden,
+                boon,
+                name: `${boon.name} · ${burden.name}`,
+                desc: `负面法则：${burden.shortLabel || burden.name}｜补偿：${boon.shortLabel || boon.name}`
+            });
+        }
+        return choices;
+    }
+
+    grantEndlessParanoiaBoonImmediate(boon) {
+        if (!boon || typeof boon !== 'object' || !this.player) return null;
+        if (boon.immediate === 'ringLevelUp' && this.player.fateRing && typeof this.player.fateRing.gainExp === 'function') {
+            const ring = this.player.fateRing;
+            let nextTarget = null;
+            if (typeof FATE_RING !== 'undefined' && FATE_RING.levels) {
+                Object.keys(FATE_RING.levels).forEach((key) => {
+                    const level = Math.max(0, Math.floor(Number(key) || 0));
+                    const meta = FATE_RING.levels[key];
+                    const expNeed = Math.max(0, Math.floor(Number(meta && meta.exp) || 0));
+                    if (level > (ring.level || 0) && (nextTarget === null || expNeed < nextTarget)) {
+                        nextTarget = expNeed;
+                    }
+                });
+            }
+            const missingExp = nextTarget === null
+                ? 320
+                : Math.max(60, nextTarget - Math.max(0, Math.floor(Number(ring.exp) || 0)));
+            ring.gainExp(missingExp);
+            return {
+                title: '命格跃迁',
+                detail: `命环获得 ${missingExp} 点跃迁经验。`
+            };
+        }
+        return null;
+    }
+
+    applyEndlessParanoiaChoice(choice, cycleOverride = null) {
+        const choices = this.getEndlessParanoiaChoices();
+        const state = this.ensureEndlessState();
+        let picked = null;
+        if (typeof choice === 'string') {
+            picked = choices.find((item) => item && item.id === choice) || null;
+        } else if (choice && typeof choice === 'object') {
+            if (choice.burden && choice.boon) {
+                picked = choice;
+            } else if (choice.burdenId && choice.boonId) {
+                const burden = this.getEndlessParanoiaBurdenPool().find((item) => item.id === choice.burdenId) || null;
+                const boon = this.getEndlessParanoiaBoonPool().find((item) => item.id === choice.boonId) || null;
+                if (burden && boon) {
+                    picked = {
+                        id: `${burden.id}__${boon.id}`,
+                        burdenId: burden.id,
+                        boonId: boon.id,
+                        burden,
+                        boon,
+                        name: `${boon.name} · ${burden.name}`
+                    };
+                }
+            }
+        }
+        if (!picked) picked = choices[0] || null;
+        if (!picked || !picked.burden || !picked.boon) return null;
+
+        state.activeParanoiaBurdens = Array.isArray(state.activeParanoiaBurdens) ? state.activeParanoiaBurdens : [];
+        state.activeParanoiaBoons = Array.isArray(state.activeParanoiaBoons) ? state.activeParanoiaBoons : [];
+        if (!state.activeParanoiaBurdens.includes(picked.burden.id)) state.activeParanoiaBurdens.push(picked.burden.id);
+        if (!state.activeParanoiaBoons.includes(picked.boon.id)) state.activeParanoiaBoons.push(picked.boon.id);
+        state.paranoiaHistory = Array.isArray(state.paranoiaHistory) ? state.paranoiaHistory : [];
+        const cycle = Math.max(0, Math.floor(Number(cycleOverride === null || cycleOverride === undefined ? state.currentCycle : cycleOverride) || 0));
+        state.paranoiaHistory.push({
+            burdenId: picked.burden.id,
+            boonId: picked.boon.id,
+            cycle
+        });
+        if (state.paranoiaHistory.length > 12) {
+            state.paranoiaHistory = state.paranoiaHistory.slice(state.paranoiaHistory.length - 12);
+        }
+        state.paranoiaLevel = state.paranoiaHistory.length;
+        state.lastParanoiaCycle = cycle;
+
+        const immediate = this.grantEndlessParanoiaBoonImmediate(picked.boon);
+        return {
+            ...picked,
+            cycle,
+            immediate
+        };
+    }
+
+    showEndlessParanoiaSelection(cycleOverride = null, onDone = null) {
+        const choices = this.getEndlessParanoiaChoices();
+        if (!choices || choices.length === 0) {
+            if (typeof onDone === 'function') onDone();
+            return;
+        }
+
+        const modal = document.getElementById('event-modal');
+        const titleEl = document.getElementById('event-title');
+        const iconEl = document.getElementById('event-icon');
+        const descEl = document.getElementById('event-desc');
+        const choicesEl = document.getElementById('event-choices');
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
+            this.applyEndlessParanoiaChoice(choices[0], cycleOverride);
+            if (typeof onDone === 'function') onDone();
+            return;
+        }
+
+        titleEl.textContent = '轮回偏执';
+        iconEl.textContent = '🜂';
+        descEl.innerHTML = '大轮回正在重写规则。你必须接纳一条负面法则，并领取一份超规格补偿。';
+        choicesEl.innerHTML = '';
+
+        choices.forEach((choice) => {
+            const btn = document.createElement('button');
+            btn.className = 'event-choice endless-paranoia-choice';
+            btn.innerHTML = `
+                <div><span style="color:#ff9d7a;">【负】${choice.burden.name}</span> + <span style="color:#9de7ff;">【偿】${choice.boon.name}</span></div>
+                <div class="choice-effect">${choice.burden.desc}<br>${choice.boon.desc}</div>
+            `;
+            btn.onclick = () => {
+                const applied = this.applyEndlessParanoiaChoice(choice, cycleOverride);
+                modal.classList.remove('active');
+                if (applied) {
+                    Utils.showBattleLog(`轮回偏执：接纳【${applied.burden.name}】并获得【${applied.boon.name}】`);
+                    if (applied.immediate && applied.immediate.detail) {
+                        Utils.showBattleLog(`轮回补偿：${applied.immediate.detail}`);
+                    }
+                }
+                if (typeof onDone === 'function') onDone(applied);
+            };
+            choicesEl.appendChild(btn);
+        });
+
+        modal.classList.add('active');    }
+
+
     getEndlessPhaseProfile(cycleOverride = null) {
         const state = this.ensureEndlessState();
         const rawCycle = cycleOverride === null || cycleOverride === undefined
@@ -707,6 +1075,210 @@ class Game {
         };
     }
 
+    getEndlessCycleThemeProfile(cycleOverride = null) {
+        const state = this.ensureEndlessState();
+        const rawCycle = cycleOverride === null || cycleOverride === undefined
+            ? state.currentCycle
+            : cycleOverride;
+        const cycle = Math.max(0, Math.floor(Number(rawCycle) || 0));
+        const segmentIndex = (cycle % 5) + 1;
+
+        const fallback = {
+            id: 'theme_balanced_band',
+            name: '轮段·稳衡',
+            shortName: '稳衡',
+            icon: '⚙️',
+            desc: '轮段稳定，敌方与收益维持均衡节奏。',
+            cycle,
+            segmentIndex,
+            enemyHpMul: 1,
+            enemyAtkMul: 1,
+            rewardGoldMul: 1,
+            rewardExpMul: 1,
+            shopPriceMul: 1,
+            healMul: 1,
+            mapWeightShift: {},
+            pressureOpeningBlock: 0,
+            pressureOpeningStrength: 0,
+            pressureExtraAttackPatterns: 0,
+            pressureAttackBoostMul: 1,
+            pressureInjectDebuffPattern: false,
+            eventGoldGainMul: 1,
+            eventRingExpFlat: 0,
+            eventTrialRewardMul: 1,
+            eventTempShopOfferBonus: 0,
+            eventTempShopPriceMul: 1,
+            eventBoonRareBonusRate: 0,
+            eventBonusAdventureBuffCharges: 0,
+            eventForceRelief: false,
+            eventForceRareBoonChoice: false,
+            enemyDirective: 'balanced',
+            enemyDirectiveHint: '均衡轮转'
+        };
+
+        const segmentMap = {
+            1: {
+                id: 'theme_flux_forge',
+                name: '轮段·压能锻潮',
+                shortName: '压能',
+                icon: '⚒️',
+                desc: '敌方以压能快攻试探防线，战局更偏主动换血。',
+                enemyHpMul: 1.04,
+                enemyAtkMul: 1.06,
+                rewardGoldMul: 1.03,
+                rewardExpMul: 1.02,
+                shopPriceMul: 1,
+                healMul: 0.98,
+                mapWeightShift: { elite: 0.02, trial: 0.02, rest: -0.02 },
+                pressureOpeningBlock: 2,
+                pressureOpeningStrength: 0,
+                pressureExtraAttackPatterns: 1,
+                pressureAttackBoostMul: 1.05,
+                pressureInjectDebuffPattern: false,
+                eventGoldGainMul: 1.02,
+                eventRingExpFlat: 6,
+                eventTrialRewardMul: 1.06,
+                eventTempShopOfferBonus: 0,
+                eventTempShopPriceMul: 1,
+                eventBoonRareBonusRate: 0.03,
+                eventBonusAdventureBuffCharges: 0,
+                eventForceRelief: false,
+                eventForceRareBoonChoice: false,
+                enemyDirective: 'forge',
+                enemyDirectiveHint: '前压锻潮'
+            },
+            2: {
+                id: 'theme_swarm_call',
+                name: '轮段·召潮群猎',
+                shortName: '召潮',
+                icon: '🐾',
+                desc: '敌方更偏连段围猎，持续动作明显增加。',
+                enemyHpMul: 1.08,
+                enemyAtkMul: 1.03,
+                rewardGoldMul: 1.04,
+                rewardExpMul: 1.04,
+                shopPriceMul: 0.97,
+                healMul: 0.96,
+                mapWeightShift: { enemy: 0.04, elite: 0.01, rest: -0.02 },
+                pressureOpeningBlock: 1,
+                pressureOpeningStrength: 1,
+                pressureExtraAttackPatterns: 1,
+                pressureAttackBoostMul: 1.04,
+                pressureInjectDebuffPattern: false,
+                eventGoldGainMul: 1.03,
+                eventRingExpFlat: 8,
+                eventTrialRewardMul: 1.04,
+                eventTempShopOfferBonus: 1,
+                eventTempShopPriceMul: 0.95,
+                eventBoonRareBonusRate: 0.03,
+                eventBonusAdventureBuffCharges: 0,
+                eventForceRelief: false,
+                eventForceRareBoonChoice: false,
+                enemyDirective: 'swarm',
+                enemyDirectiveHint: '连段围猎'
+            },
+            3: {
+                id: 'theme_counter_lattice',
+                name: '轮段·反制晶格',
+                shortName: '反制',
+                icon: '🧿',
+                desc: '敌方强化减益与反制段，迫使你更频繁切换节奏。',
+                enemyHpMul: 1.02,
+                enemyAtkMul: 1.07,
+                rewardGoldMul: 1.05,
+                rewardExpMul: 1.05,
+                shopPriceMul: 1.02,
+                healMul: 0.94,
+                mapWeightShift: { event: 0.02, trial: 0.02, rest: -0.02 },
+                pressureOpeningBlock: 2,
+                pressureOpeningStrength: 0,
+                pressureExtraAttackPatterns: 0,
+                pressureAttackBoostMul: 1.03,
+                pressureInjectDebuffPattern: true,
+                eventGoldGainMul: 1.06,
+                eventRingExpFlat: 10,
+                eventTrialRewardMul: 1.06,
+                eventTempShopOfferBonus: 0,
+                eventTempShopPriceMul: 1,
+                eventBoonRareBonusRate: 0.07,
+                eventBonusAdventureBuffCharges: 1,
+                eventForceRelief: true,
+                eventForceRareBoonChoice: false,
+                enemyDirective: 'counter',
+                enemyDirectiveHint: '反制压场'
+            },
+            4: {
+                id: 'theme_rift_frenzy',
+                name: '轮段·狂潮裂斩',
+                shortName: '狂潮',
+                icon: '🌪️',
+                desc: '敌方进入高爆发轮换，战斗更强调抢回合。',
+                enemyHpMul: 1.05,
+                enemyAtkMul: 1.1,
+                rewardGoldMul: 1.08,
+                rewardExpMul: 1.07,
+                shopPriceMul: 1.04,
+                healMul: 0.9,
+                mapWeightShift: { elite: 0.03, enemy: 0.03, rest: -0.03 },
+                pressureOpeningBlock: 0,
+                pressureOpeningStrength: 1,
+                pressureExtraAttackPatterns: 1,
+                pressureAttackBoostMul: 1.08,
+                pressureInjectDebuffPattern: true,
+                eventGoldGainMul: 1.08,
+                eventRingExpFlat: 12,
+                eventTrialRewardMul: 1.08,
+                eventTempShopOfferBonus: 0,
+                eventTempShopPriceMul: 1,
+                eventBoonRareBonusRate: 0.08,
+                eventBonusAdventureBuffCharges: 0,
+                eventForceRelief: false,
+                eventForceRareBoonChoice: false,
+                enemyDirective: 'frenzy',
+                enemyDirectiveHint: '裂斩突压'
+            },
+            5: {
+                id: 'theme_bastion_tide',
+                name: '轮段·垒潮回稳',
+                shortName: '垒潮',
+                icon: '🏰',
+                desc: '敌方防守与续航增强，但你可获得更多调整空间。',
+                enemyHpMul: 1.1,
+                enemyAtkMul: 1,
+                rewardGoldMul: 1.02,
+                rewardExpMul: 1.06,
+                shopPriceMul: 0.92,
+                healMul: 1.08,
+                mapWeightShift: { rest: 0.04, shop: 0.03, elite: -0.02 },
+                pressureOpeningBlock: 3,
+                pressureOpeningStrength: 0,
+                pressureExtraAttackPatterns: 0,
+                pressureAttackBoostMul: 1,
+                pressureInjectDebuffPattern: false,
+                eventGoldGainMul: 1.02,
+                eventRingExpFlat: 14,
+                eventTrialRewardMul: 1.03,
+                eventTempShopOfferBonus: 1,
+                eventTempShopPriceMul: 0.9,
+                eventBoonRareBonusRate: 0.04,
+                eventBonusAdventureBuffCharges: 1,
+                eventForceRelief: true,
+                eventForceRareBoonChoice: false,
+                enemyDirective: 'bastion',
+                enemyDirectiveHint: '垒潮拉扯'
+            }
+        };
+
+        const picked = segmentMap[segmentIndex];
+        if (!picked) return fallback;
+        return {
+            ...fallback,
+            ...picked,
+            cycle,
+            segmentIndex
+        };
+    }
+
     getEndlessModifiers() {
         if (!this.isEndlessActive()) {
             return {
@@ -716,7 +1288,8 @@ class Game {
                 rewardExpMul: 1,
                 shopPriceMul: 1,
                 healMul: 1,
-                mapWeightShift: {}
+                mapWeightShift: {},
+                cycleTheme: null
             };
         }
 
@@ -725,6 +1298,7 @@ class Game {
         const loopTier = Math.floor(cycle / 13);
         const pressure = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
         const phaseProfile = this.getEndlessPhaseProfile(cycle);
+        const cycleTheme = this.getEndlessCycleThemeProfile(cycle);
 
         const result = {
             enemyHpMul: 1 + cycle * 0.12 + loopTier * 0.08 + pressure * 0.025,
@@ -737,11 +1311,20 @@ class Game {
                 elite: Math.min(0.14, cycle * 0.008),
                 trial: Math.min(0.12, cycle * 0.007),
                 rest: -Math.min(0.08, cycle * 0.006)
+            },
+            cycleTheme: {
+                id: cycleTheme.id,
+                name: cycleTheme.name,
+                shortName: cycleTheme.shortName,
+                segmentIndex: cycleTheme.segmentIndex
             }
         };
 
         const mutatorMap = new Map(this.getEndlessMutatorPool().map((item) => [item.id, item]));
-        (state.activeMutators || []).forEach((mutatorId) => {
+        const activeMutatorIds = typeof this.getEndlessActiveMutatorIds === 'function'
+            ? this.getEndlessActiveMutatorIds()
+            : (Array.isArray(state.activeMutators) ? state.activeMutators : []);
+        activeMutatorIds.forEach((mutatorId) => {
             const mutator = mutatorMap.get(mutatorId);
             if (!mutator || !mutator.mods) return;
             const mods = mutator.mods;
@@ -775,6 +1358,44 @@ class Game {
             result.mapWeightShift.elite = (result.mapWeightShift.elite || 0) + 0.02;
             result.mapWeightShift.trial = (result.mapWeightShift.trial || 0) + 0.02;
         }
+
+        if (cycleTheme && typeof cycleTheme === 'object') {
+            result.enemyHpMul *= Math.max(1, Number(cycleTheme.enemyHpMul) || 1);
+            result.enemyAtkMul *= Math.max(1, Number(cycleTheme.enemyAtkMul) || 1);
+            result.rewardGoldMul *= Math.max(1, Number(cycleTheme.rewardGoldMul) || 1);
+            result.rewardExpMul *= Math.max(1, Number(cycleTheme.rewardExpMul) || 1);
+            result.shopPriceMul *= Math.max(0.7, Number(cycleTheme.shopPriceMul) || 1);
+            result.healMul *= Math.max(0.8, Number(cycleTheme.healMul) || 1);
+            if (cycleTheme.mapWeightShift && typeof cycleTheme.mapWeightShift === 'object') {
+                Object.keys(cycleTheme.mapWeightShift).forEach((key) => {
+                    const delta = Number(cycleTheme.mapWeightShift[key]);
+                    if (!Number.isFinite(delta)) return;
+                    result.mapWeightShift[key] = (result.mapWeightShift[key] || 0) + delta;
+                });
+            }
+        }
+
+        const paranoia = typeof this.getEndlessParanoiaEffects === 'function'
+            ? this.getEndlessParanoiaEffects()
+            : {
+                handLimitOffset: 0,
+                eliteExtraMutator: false,
+                healMul: 1,
+                normalBattleRewardMul: 1,
+                normalBattleExpMul: 1,
+                rewardRareChance: 0,
+                extraTreasureSlots: 0
+            };
+        if (Number.isFinite(Number(paranoia.healMul))) {
+            result.healMul *= Math.max(0.35, Number(paranoia.healMul) || 1);
+        }
+        result.normalBattleRewardMul = Math.max(0.35, Number(paranoia.normalBattleRewardMul) || 1);
+        result.normalBattleExpMul = Math.max(0.35, Number(paranoia.normalBattleExpMul) || 1);
+        result.rewardRareChance = Math.max(0, Number(paranoia.rewardRareChance) || 0);
+        result.handLimitOffset = Math.floor(Number(paranoia.handLimitOffset) || 0);
+        result.extraTreasureSlots = Math.max(0, Math.floor(Number(paranoia.extraTreasureSlots) || 0));
+        result.eliteExtraMutator = !!paranoia.eliteExtraMutator;
+        result.paranoiaEffects = paranoia;
 
         result.enemyHpMul = Math.max(1, result.enemyHpMul);
         result.enemyAtkMul = Math.max(1, result.enemyAtkMul);
@@ -810,6 +1431,7 @@ class Game {
         const activeMutators = new Set(Array.isArray(state?.activeMutators) ? state.activeMutators : []);
         const pressure = Math.max(0, Math.min(9, Math.floor(Number(state?.pressure) || 0)));
         const phaseProfile = this.getEndlessPhaseProfile(state.currentCycle);
+        const cycleTheme = this.getEndlessCycleThemeProfile(state.currentCycle);
 
         if (activeMutators.has('war_market')) {
             tuning.tempShopOfferBonus += 1;
@@ -862,6 +1484,17 @@ class Game {
                 tuning.forceRareBoonChoice = true;
             }
         }
+        if (cycleTheme && typeof cycleTheme === 'object') {
+            tuning.goldGainMul *= Math.max(1, Number(cycleTheme.eventGoldGainMul) || 1);
+            tuning.ringExpFlat += Math.max(0, Math.floor(Number(cycleTheme.eventRingExpFlat) || 0));
+            tuning.trialRewardMul *= Math.max(1, Number(cycleTheme.eventTrialRewardMul) || 1);
+            tuning.tempShopOfferBonus += Math.max(0, Math.floor(Number(cycleTheme.eventTempShopOfferBonus) || 0));
+            tuning.tempShopPriceMul *= Math.max(0.65, Number(cycleTheme.eventTempShopPriceMul) || 1);
+            tuning.boonRareBonusRate += Math.max(0, Number(cycleTheme.eventBoonRareBonusRate) || 0);
+            tuning.bonusAdventureBuffCharges += Math.max(0, Math.floor(Number(cycleTheme.eventBonusAdventureBuffCharges) || 0));
+            tuning.forceRelief = tuning.forceRelief || !!cycleTheme.eventForceRelief;
+            tuning.forceRareBoonChoice = tuning.forceRareBoonChoice || !!cycleTheme.eventForceRareBoonChoice;
+        }
 
         tuning.tempShopOfferBonus = Math.max(0, Math.min(2, Math.floor(Number(tuning.tempShopOfferBonus) || 0)));
         tuning.bonusAdventureBuffCharges = Math.max(0, Math.min(2, Math.floor(Number(tuning.bonusAdventureBuffCharges) || 0)));
@@ -891,6 +1524,7 @@ class Game {
         const state = this.ensureEndlessState();
         const pressure = Math.max(0, Math.min(9, Math.floor(Number(state?.pressure) || 0)));
         const phaseProfile = this.getEndlessPhaseProfile(state.currentCycle);
+        const cycleTheme = this.getEndlessCycleThemeProfile(state.currentCycle);
         const profile = {
             ...fallback,
             pressure
@@ -933,6 +1567,14 @@ class Game {
             profile.injectDebuffPattern = profile.injectDebuffPattern || !!phaseProfile.injectDebuffPattern;
             profile.summary += `｜阶段挑战：${phaseProfile.name}`;
         }
+        if (cycleTheme && typeof cycleTheme === 'object') {
+            profile.enemyOpeningBlock += Math.max(0, Math.floor(Number(cycleTheme.pressureOpeningBlock) || 0));
+            profile.enemyOpeningStrength += Math.max(0, Math.floor(Number(cycleTheme.pressureOpeningStrength) || 0));
+            profile.extraAttackPatterns += Math.max(0, Math.floor(Number(cycleTheme.pressureExtraAttackPatterns) || 0));
+            profile.attackBoostMul *= Math.max(1, Number(cycleTheme.pressureAttackBoostMul) || 1);
+            profile.injectDebuffPattern = profile.injectDebuffPattern || !!cycleTheme.pressureInjectDebuffPattern;
+            profile.summary += `｜轮段策略：${cycleTheme.name}`;
+        }
 
         profile.enemyOpeningBlock = Math.max(0, Math.floor(Number(profile.enemyOpeningBlock) || 0));
         profile.enemyOpeningStrength = Math.max(0, Math.floor(Number(profile.enemyOpeningStrength) || 0));
@@ -947,6 +1589,17 @@ class Game {
             profile.phaseId = null;
             profile.phaseName = null;
             profile.phaseCheckpoint = 0;
+        }
+        if (cycleTheme && typeof cycleTheme === 'object') {
+            profile.themeId = cycleTheme.id;
+            profile.themeName = cycleTheme.name;
+            profile.themeSegmentIndex = cycleTheme.segmentIndex;
+            profile.themeDirective = cycleTheme.enemyDirective;
+        } else {
+            profile.themeId = null;
+            profile.themeName = null;
+            profile.themeSegmentIndex = 0;
+            profile.themeDirective = 'balanced';
         }
         return profile;
     }
@@ -1195,6 +1848,10 @@ class Game {
         if (!Array.isArray(state.activeMutators) || state.activeMutators.length === 0) {
             this.rollNextEndlessMutator();
         }
+        const themeProfile = this.getEndlessCycleThemeProfile(state.currentCycle);
+        if (themeProfile && themeProfile.id) {
+            state.lastThemeId = themeProfile.id;
+        }
 
         this.player.isReplay = false;
         this.player.isRecultivation = false;
@@ -1238,7 +1895,9 @@ class Game {
         }
 
         const nextCycle = state.currentCycle + 1;
+        const enteringNewLoop = nextCycle > 0 && nextCycle % 13 === 0;
         const nextPhase = this.getEndlessPhaseProfile(nextCycle);
+        const nextTheme = this.getEndlessCycleThemeProfile(nextCycle);
         if (nextPhase && nextPhase.active) {
             state.lastPhaseId = nextPhase.id;
             state.phaseHistory = Array.isArray(state.phaseHistory) ? state.phaseHistory : [];
@@ -1247,6 +1906,19 @@ class Game {
                 state.phaseHistory = state.phaseHistory.slice(state.phaseHistory.length - 20);
             }
             Utils.showBattleLog(`阶段挑战启动：${nextPhase.name}（第 ${nextCycle + 1} 轮）`);
+        }
+        if (nextTheme && nextTheme.id) {
+            state.lastThemeId = nextTheme.id;
+            state.themeHistory = Array.isArray(state.themeHistory) ? state.themeHistory : [];
+            state.themeHistory.push({
+                id: nextTheme.id,
+                cycle: nextCycle,
+                segment: nextTheme.segmentIndex
+            });
+            if (state.themeHistory.length > 20) {
+                state.themeHistory = state.themeHistory.slice(state.themeHistory.length - 20);
+            }
+            Utils.showBattleLog(`轮段战场切换：${nextTheme.name}（第 ${nextCycle + 1} 轮）`);
         }
         const finalizeAdvance = () => {
             const latestState = this.ensureEndlessState();
@@ -1261,7 +1933,16 @@ class Game {
             this.autoSave();
         };
 
-        this.showEndlessBoonSelection(finalizeAdvance);
+        const afterBoonSelection = () => {
+            const latestState = this.ensureEndlessState();
+            if (enteringNewLoop && Number(latestState.lastParanoiaCycle) !== nextCycle) {
+                this.showEndlessParanoiaSelection(nextCycle, finalizeAdvance);
+                return;
+            }
+            finalizeAdvance();
+        };
+
+        this.showEndlessBoonSelection(afterBoonSelection);
     }
 
     getLegacyUpgradeCatalog() {
@@ -2342,10 +3023,18 @@ class Game {
                 activeMutators: [],
                 lastMutatorId: null,
                 lastPhaseId: null,
+                lastThemeId: null,
                 phaseHistory: [],
+                themeHistory: [],
                 boonHistory: [],
+                paranoiaLevel: 0,
+                activeParanoiaBurdens: [],
+                activeParanoiaBoons: [],
+                paranoiaHistory: [],
+                lastParanoiaCycle: -1,
                 boonRarePity: 0,
                 boonRareGuaranteedEvery: 3,
+                barterHeat: 0,
                 boonStats: {
                     rewardGoldMul: 0,
                     rewardExpMul: 0,
@@ -2486,7 +3175,10 @@ class Game {
             this.player.maxEnergy = clampInt(this.player.maxEnergy, 1, 99, 3);
             this.player.currentEnergy = clampInt(this.player.currentEnergy, 0, this.player.maxEnergy, this.player.maxEnergy);
             this.player.gold = clampInt(this.player.gold, 0, 999999999, 0);
+            this.player.heavenlyInsight = clampInt(this.player.heavenlyInsight, 0, 999, 1);
+            this.player.karma = clampInt(this.player.karma, 0, 999, 0);
             this.player.realm = clampInt(this.player.realm, 1, 18, 1);
+            this.player.shopRumors = this.normalizeShopRumors(this.player.shopRumors);
             if (!this.player.buffs || typeof this.player.buffs !== 'object') this.player.buffs = {};
             if (!Array.isArray(this.player.deck)) this.player.deck = [];
             if (!Array.isArray(this.player.hand)) this.player.hand = [];
@@ -2890,11 +3582,47 @@ class Game {
     initCollection() {
         const lawGrid = document.getElementById('law-archive-grid');
         const resonanceList = document.getElementById('resonance-manual-list');
+        const summaryEl = document.getElementById('law-codex-summary');
+        const resonanceSummaryEl = document.getElementById('law-codex-resonance-summary');
 
         // 确保容器存在
         if (!lawGrid || !resonanceList) {
             console.warn('New Codex UI structure not found.');
             return;
+        }
+
+        const allLawIds = Object.keys(LAWS || {});
+        const totalLawCount = allLawIds.length;
+        const collectedLawCount = allLawIds.filter((lawId) => this.player.collectedLaws.some((law) => law.id === lawId)).length;
+        const totalResonanceCount = (typeof LAW_RESONANCES !== 'undefined' && LAW_RESONANCES)
+            ? Object.keys(LAW_RESONANCES).length
+            : 0;
+        const activeResonanceCount = Array.isArray(this.player.activeResonances) ? this.player.activeResonances.length : 0;
+        const lawProgress = totalLawCount > 0 ? Math.round((collectedLawCount / totalLawCount) * 100) : 0;
+
+        if (summaryEl) {
+            summaryEl.innerHTML = [
+                '<span class="codex-side-kicker">收集总览</span>',
+                '<h3>法则收藏进度</h3>',
+                `<div class="codex-summary-metric"><strong>${collectedLawCount}</strong><span>/ ${totalLawCount} 已收录</span></div>`,
+                `<div class="codex-progress-track"><div class="codex-progress-fill" style="width:${lawProgress}%"></div></div>`,
+                '<ul class="codex-side-list compact">',
+                `<li>完成度 ${lawProgress}% · 越接近满库，共鸣路线越完整。</li>`,
+                '<li>未收录法则会保留在主区，便于直观看到缺口。</li>',
+                '</ul>'
+            ].join('');
+        }
+
+        if (resonanceSummaryEl) {
+            resonanceSummaryEl.innerHTML = [
+                '<span class="codex-side-kicker">当前共鸣</span>',
+                '<h3>羁绊装配</h3>',
+                '<div class="codex-summary-grid two-cols">',
+                `<div class="codex-summary-chip"><strong>${activeResonanceCount}</strong><span>激活中</span></div>`,
+                `<div class="codex-summary-chip"><strong>${totalResonanceCount}</strong><span>总条目</span></div>`,
+                '</div>',
+                '<p class="codex-side-note">优先补齐同元素法则，可更快点亮主力共鸣链。</p>'
+            ].join('');
         }
 
         // --- 1. 渲染法则库 (Jade Slips) ---
@@ -2944,11 +3672,11 @@ class Game {
                     if (passiveText) {
                         detailMsg += `\n\n🔎 被动效果:\n${passiveText}`;
                     }
-                    this.showAlertModal(detailMsg, law.name);
+                    this.showLawDetail(law, true);
                 });
             } else {
                 item.addEventListener('click', () => {
-                    this.showAlertModal('此法则尚处于迷雾之中，需在轮回中窃取获得。', '未解之谜');
+                    this.showLawDetail(law, false);
                 });
             }
 
@@ -3013,6 +3741,768 @@ class Game {
         }
     }
 
+    getLawElementLabel(element) {
+        const map = { thunder: '雷', fire: '火', sword: '剑', space: '空间', time: '时间', void: '虚空', chaos: '混沌', blood: '血', earth: '土', wind: '风', ice: '冰', life: '生命', metal: '金', karma: '因果', reversal: '逆转', wood: '木' };
+        return map[element] || (element || '未知');
+    }
+
+    getLawRarityText(rarity) {
+        const map = { common: '凡品法则', rare: '灵品法则', epic: '神品法则', legendary: '仙品法则', mythic: '无上法则' };
+        return map[rarity] || '未知品级';
+    }
+
+    getLawSource(law) {
+        const rarity = law?.rarity || 'rare';
+        switch (rarity) {
+            case 'common': return '战斗结算中的法则盗取 · 低阶试炼敌人残响';
+            case 'rare': return '战斗结算中的法则盗取 · 精英敌人与遭遇词缀更易携带';
+            case 'epic': return '高阶战斗结算中的法则盗取 · 精英/Boss 残响更容易显化';
+            case 'legendary':
+            case 'mythic': return '高压战局中的法则盗取 · 需围绕强敌或特殊轮段反复尝试';
+            default: return '战斗结算中的法则盗取';
+        }
+    }
+
+    getLawRelatedResonances(law) {
+        if (!law || typeof LAW_RESONANCES === 'undefined' || !LAW_RESONANCES) return [];
+        return Object.values(LAW_RESONANCES).filter((resonance) => Array.isArray(resonance.laws) && resonance.laws.includes(law.id));
+    }
+
+    getLawResonanceAvailability(law) {
+        const relatedResonances = this.getLawRelatedResonances(law);
+        const collectedIds = new Set(
+            Array.isArray(this.player?.collectedLaws)
+                ? this.player.collectedLaws.map((entry) => entry?.id).filter(Boolean)
+                : []
+        );
+        const socketedIds = new Set(
+            this.player?.fateRing && typeof this.player.fateRing.getSocketedLaws === 'function'
+                ? this.player.fateRing.getSocketedLaws().filter(Boolean)
+                : []
+        );
+
+        return relatedResonances.map((resonance) => {
+            const requiredLaws = Array.isArray(resonance?.laws) ? resonance.laws.filter(Boolean) : [];
+            const missingCollected = requiredLaws.filter((lawId) => !collectedIds.has(lawId));
+            const missingSocketed = requiredLaws.filter((lawId) => !socketedIds.has(lawId));
+            let state = 'locked';
+            let label = '未成型';
+            let detail = '当前尚未收齐共鸣所需法则。';
+
+            if (missingSocketed.length === 0 && requiredLaws.length > 0) {
+                state = 'active';
+                label = '已激活';
+                detail = '当前命环已装配完整组件，可直接享受这条共鸣。';
+            } else if (missingCollected.length === 0 && requiredLaws.length > 0) {
+                state = 'ready';
+                label = '待装配';
+                detail = missingSocketed.length === 1
+                    ? '已收齐共鸣组件，只差 1 枚法则装入命环。'
+                    : `已收齐共鸣组件，仍有 ${missingSocketed.length} 枚法则未装入命环。`;
+            } else if (missingCollected.length === 1) {
+                state = 'near';
+                label = '差 1 枚';
+                detail = `只差 ${LAWS?.[missingCollected[0]]?.name || missingCollected[0]}，即可形成完整共鸣。`;
+            } else if (missingCollected.length > 1) {
+                label = `差 ${missingCollected.length} 枚`;
+                detail = `仍需补齐 ${missingCollected.map((lawId) => LAWS?.[lawId]?.name || lawId).join('、')}。`;
+            }
+
+            return {
+                resonance,
+                requiredLaws,
+                missingCollected,
+                missingSocketed,
+                state,
+                label,
+                detail
+            };
+        });
+    }
+
+
+    getLawReadinessActions(entry) {
+        if (!entry || !entry.resonance) return [];
+        const actions = [];
+        if (entry.state === 'active' || entry.state === 'ready') {
+            actions.push({
+                type: 'ring',
+                resonanceId: entry.resonance.id,
+                label: entry.state === 'active' ? '定位命环共鸣' : '前往命环装配'
+            });
+        }
+        entry.missingCollected.forEach((lawId) => {
+            actions.push({
+                type: 'law',
+                lawId,
+                label: `查看${LAWS?.[lawId]?.name || lawId}`
+            });
+        });
+        return actions;
+    }
+
+    handleLawReadinessAction(actionType, resonanceId = '', lawId = '') {
+        if (actionType === 'law' && lawId && typeof LAWS !== 'undefined' && LAWS?.[lawId]) {
+            const law = LAWS[lawId];
+            const collected = Array.isArray(this.player?.collectedLaws)
+                ? this.player.collectedLaws.some((entry) => entry?.id === lawId)
+                : false;
+            this.showLawDetail(law, collected);
+            return;
+        }
+        if (actionType === 'ring' && resonanceId) {
+            this.closeModal();
+            this.showFateRing();
+            this.focusRingResonance(resonanceId);
+        }
+    }
+
+    focusRingResonance(resonanceId = '') {
+        if (!resonanceId || typeof LAW_RESONANCES === 'undefined' || !LAW_RESONANCES?.[resonanceId]) return false;
+        const resonance = LAW_RESONANCES[resonanceId];
+        const modal = document.getElementById('ring-modal');
+        if (!modal) return false;
+        const resonanceTab = modal.querySelector('.panel-tabs .tab:nth-child(2)');
+        if (resonanceTab) {
+            this.switchRingTab(resonanceTab, 'resonance');
+        }
+        document.querySelectorAll('.resonance-card.focus-target').forEach((card) => card.classList.remove('focus-target'));
+        const targetCard = document.querySelector(`.resonance-card[data-resonance-id="${resonanceId}"]`);
+        if (targetCard) {
+            targetCard.classList.add('focus-target');
+            targetCard.scrollIntoView({ block: 'center', behavior: 'auto' });
+        }
+
+        document.querySelectorAll('.ring-slot-3d.focus-target, .law-item-row.focus-target').forEach((el) => el.classList.remove('focus-target'));
+        const ring = this.player?.fateRing;
+        if (!ring || !Array.isArray(ring.slots)) return true;
+        const socketed = typeof ring.getSocketedLaws === 'function' ? ring.getSocketedLaws() : [];
+        const missingSocketed = (resonance.laws || []).filter((lawId) => !socketed.includes(lawId));
+        let targetSlotIndex = -1;
+        if (missingSocketed.length > 0) {
+            targetSlotIndex = ring.slots.findIndex((slot) => slot?.unlocked && !slot?.law);
+        }
+        if (targetSlotIndex === -1) {
+            targetSlotIndex = ring.slots.findIndex((slot) => resonance.laws.includes(slot?.law));
+        }
+        if (targetSlotIndex >= 0) {
+            this.selectedRingSlot = targetSlotIndex;
+            this.updateUIState(ring);
+            const slotEl = document.getElementById(`ring-slot-${targetSlotIndex}`);
+            if (slotEl) {
+                slotEl.classList.add('focus-target');
+                slotEl.scrollIntoView({ block: 'center', behavior: 'auto' });
+            }
+        }
+        return true;
+    }
+
+    showLawDetail(law, isCollected = false) {
+        const modal = document.getElementById('law-detail-modal');
+        if (!modal || !law) return;
+        const iconEl = document.getElementById('law-detail-icon');
+        const captionEl = document.getElementById('law-detail-caption');
+        const nameEl = document.getElementById('law-detail-name');
+        const rarityEl = document.getElementById('law-detail-rarity');
+        const descEl = document.getElementById('law-detail-desc');
+        const passiveEl = document.getElementById('law-detail-passive');
+        const linksEl = document.getElementById('law-detail-links');
+        const sourceEl = document.getElementById('law-detail-source');
+        const chipsEl = document.getElementById('law-detail-chips');
+        const noteEl = document.getElementById('law-detail-note');
+        const headerEl = document.getElementById('law-detail-header');
+        const stageEl = document.getElementById('law-detail-stage');
+        const readinessEl = document.getElementById('law-detail-readiness');
+        if (!iconEl || !nameEl || !headerEl || !chipsEl) return;
+
+        const rarity = law.rarity || 'rare';
+        const passiveText = typeof getLawPassiveDescription === 'function' ? getLawPassiveDescription(law) : (law.description || '未知效果');
+        const relatedResonances = this.getLawRelatedResonances(law);
+        const readinessList = this.getLawResonanceAvailability(law);
+        const unlockCards = Array.isArray(law.unlockCards) ? law.unlockCards.filter(Boolean) : [];
+        const activeResonanceCount = readinessList.filter((entry) => entry.state === 'active').length;
+        const readyResonanceCount = readinessList.filter((entry) => entry.state === 'ready').length;
+
+        headerEl.className = 'detail-header';
+        headerEl.classList.add(`rarity-${rarity}`);
+        stageEl.classList.toggle('locked', !isCollected);
+        iconEl.textContent = isCollected ? (law.icon || '📜') : '❔';
+        nameEl.textContent = isCollected ? law.name : '未解法则';
+        rarityEl.textContent = this.getLawRarityText(rarity);
+        captionEl.textContent = isCollected ? `${this.getLawElementLabel(law.element)}属性残响已被识别` : '法则仍被迷雾遮蔽，需要先在战斗中盗取';
+        descEl.innerHTML = isCollected ? law.description : '你只能感知到一缕残响。完成战斗并触发法则盗取，才能彻底辨识它的结构。';
+        passiveEl.textContent = isCollected ? passiveText : '尚未掌握，无法完整解析其被动结构。';
+        sourceEl.textContent = this.getLawSource(law);
+        chipsEl.innerHTML = [
+            `<span class="detail-status-chip ${isCollected ? 'owned' : 'locked'}">${isCollected ? '已掌握' : '未掌握'}</span>`,
+            `<span class="detail-status-chip">${this.getLawElementLabel(law.element)}属性</span>`,
+            `<span class="detail-status-chip rarity-chip rarity-${rarity}">${this.getLawRarityText(rarity)}</span>`
+        ].join('');
+        if (activeResonanceCount > 0) {
+            noteEl.textContent = '当前命环已点亮相关共鸣，可直接围绕主区被动与解锁内容继续构筑。';
+        } else if (readyResonanceCount > 0) {
+            noteEl.textContent = '你已收齐相关组件，只差把法则装入命环；可优先调整命环再看牌组联动。';
+        } else {
+            noteEl.textContent = isCollected
+                ? '先看右侧状态与元素，再回到主区确认被动和可解锁内容。'
+                : '当前更重要的是获取路径，掌握后再决定是否围绕它补共鸣。';
+        }
+
+        const relatedText = [];
+        if (relatedResonances.length > 0) {
+            relatedText.push(`关联共鸣：${relatedResonances.map((res) => res.name).join(' ｜ ')}`);
+        }
+        if (unlockCards.length > 0) {
+            relatedText.push(`解锁卡牌：${unlockCards.join(' ｜ ')}`);
+        }
+        if (relatedText.length === 0) {
+            relatedText.push(isCollected ? '当前未记录到额外共鸣或解锁卡牌。' : '掌握后可查看它能点亮的共鸣与卡牌。');
+        }
+        linksEl.innerHTML = relatedText.map((line) => `<p>${line}</p>`).join('');
+        if (readinessEl) {
+            readinessEl.innerHTML = readinessList.length > 0
+                ? readinessList.map((entry) => {
+                    const actions = this.getLawReadinessActions(entry);
+                    return `
+                    <div class="law-readiness-item ${entry.state}">
+                        <div class="law-readiness-title-row">
+                            <strong>${entry.resonance.name}</strong>
+                            <span class="law-readiness-chip ${entry.state}">${entry.label}</span>
+                        </div>
+                        <div class="law-readiness-desc">${entry.detail}</div>
+                        ${actions.length > 0 ? `<div class="law-readiness-actions">${actions.map((action) => `<button type="button" class="law-readiness-btn" onclick="game.handleLawReadinessAction('${action.type}', '${action.resonanceId || ''}', '${action.lawId || ''}')">${action.label}</button>`).join('')}</div>` : ''}
+                    </div>
+                `;
+                }).join('')
+                : '<div class="law-readiness-empty">暂无登记在册的关联共鸣，可先关注其被动与解锁卡牌。</div>';
+        }
+        modal.classList.add('active');
+        if (typeof audioManager !== 'undefined') audioManager.playSFX('click');
+    }
+
+    setTreasureCompendiumFilter(value = 'all') {
+        const nextValue = String(value || 'all');
+        const state = this.getTreasureCompendiumFilterState();
+        if (nextValue === 'custom') {
+            this.treasureCompendiumFilter = this.getTreasureCompendiumQuickFilterValue();
+            this.showTreasureCompendium();
+            return;
+        }
+        state.status = 'all';
+        state.rarities = [];
+        state.sources = [];
+
+        if (['owned', 'unowned'].includes(nextValue)) {
+            state.status = nextValue;
+        } else if (['common', 'rare', 'legendary', 'mythic'].includes(nextValue)) {
+            state.rarities = [nextValue];
+        } else if (['shop', 'elite', 'boss', 'event', 'camp', 'challenge'].includes(nextValue)) {
+            state.sources = [nextValue];
+        }
+
+        this.treasureCompendiumFilterState = state;
+        this.treasureCompendiumFilter = nextValue;
+        this.showTreasureCompendium();
+    }
+
+    setTreasureCompendiumSort(value = 'rarity_desc') {
+        this.treasureCompendiumSort = String(value || 'rarity_desc');
+        this.showTreasureCompendium();
+    }
+
+
+    getTreasureCompendiumPresetStorageKey() {
+        return this.treasureCompendiumPresetStorageKey || 'theDefierTreasureCompendiumPresetsV1';
+    }
+
+    serializeTreasureCompendiumFilterState(state = null, sort = null) {
+        return JSON.stringify({
+            state: this.normalizeTreasureCompendiumFilterState(state || this.getTreasureCompendiumFilterState()),
+            sort: String(sort || this.treasureCompendiumSort || 'rarity_desc')
+        });
+    }
+
+    getTreasureCompendiumPresets() {
+        if (Array.isArray(this.treasureCompendiumPresetCache)) return this.treasureCompendiumPresetCache;
+        const fallback = [null, null, null];
+        try {
+            const raw = localStorage.getItem(this.getTreasureCompendiumPresetStorageKey());
+            const parsed = raw ? JSON.parse(raw) : fallback;
+            this.treasureCompendiumPresetCache = Array.isArray(parsed)
+                ? parsed.slice(0, 3).map((entry) => entry && typeof entry === 'object'
+                    ? {
+                        state: this.normalizeTreasureCompendiumFilterState(entry.state),
+                        sort: String(entry.sort || 'rarity_desc'),
+                        savedAt: Number(entry.savedAt) || 0
+                    }
+                    : null)
+                : fallback;
+        } catch (error) {
+            this.treasureCompendiumPresetCache = fallback;
+        }
+        while (this.treasureCompendiumPresetCache.length < 3) this.treasureCompendiumPresetCache.push(null);
+        return this.treasureCompendiumPresetCache;
+    }
+
+    persistTreasureCompendiumPresets() {
+        try {
+            localStorage.setItem(this.getTreasureCompendiumPresetStorageKey(), JSON.stringify(this.getTreasureCompendiumPresets()));
+        } catch (error) {
+            console.warn('Persist treasure compendium presets failed:', error);
+        }
+    }
+
+    getTreasureCompendiumPresetSummary(state = null) {
+        const labels = this.getTreasureCompendiumFilterLabels(state || this.getTreasureCompendiumFilterState());
+        return labels.length > 0 ? labels.join(' / ') : '全部法宝';
+    }
+
+    saveTreasureCompendiumPreset(slot = 0) {
+        const index = Math.max(0, Math.min(2, Number(slot) || 0));
+        const presets = this.getTreasureCompendiumPresets();
+        presets[index] = {
+            state: this.normalizeTreasureCompendiumFilterState(this.getTreasureCompendiumFilterState()),
+            sort: String(this.treasureCompendiumSort || 'rarity_desc'),
+            savedAt: Date.now()
+        };
+        this.persistTreasureCompendiumPresets();
+        if (typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+            Utils.showBattleLog(`已保存图鉴筛选预设 ${index + 1}`);
+        }
+        this.showTreasureCompendium();
+    }
+
+    applyTreasureCompendiumPreset(slot = 0) {
+        const index = Math.max(0, Math.min(2, Number(slot) || 0));
+        const preset = this.getTreasureCompendiumPresets()[index];
+        if (!preset?.state) {
+            if (typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+                Utils.showBattleLog(`预设 ${index + 1} 为空`);
+            }
+            return false;
+        }
+        this.treasureCompendiumFilterState = this.normalizeTreasureCompendiumFilterState(preset.state);
+        this.treasureCompendiumSort = String(preset.sort || 'rarity_desc');
+        this.treasureCompendiumFilter = this.getTreasureCompendiumQuickFilterValue();
+        this.showTreasureCompendium();
+        return true;
+    }
+
+    clearTreasureCompendiumFilters() {
+        this.treasureCompendiumFilterState = this.normalizeTreasureCompendiumFilterState();
+        this.treasureCompendiumFilter = 'all';
+        this.treasureCompendiumSort = 'rarity_desc';
+        this.showTreasureCompendium();
+    }
+
+    isTreasureCompendiumPresetActive(slot = 0) {
+        const preset = this.getTreasureCompendiumPresets()[slot];
+        if (!preset?.state) return false;
+        return this.serializeTreasureCompendiumFilterState(preset.state, preset.sort) === this.serializeTreasureCompendiumFilterState();
+    }
+
+    getTreasureCompendiumPresetLabel(slot = 0) {
+        const preset = this.getTreasureCompendiumPresets()[slot];
+        if (!preset?.state) return `预设 ${slot + 1}（空）`;
+        return `预设 ${slot + 1} · ${this.getTreasureCompendiumPresetSummary(preset.state)}`;
+    }
+
+    normalizeTreasureCompendiumFilterState(rawState = null) {
+        const source = rawState && typeof rawState === 'object' ? rawState : {};
+        const normalizeList = (value, allowed) => {
+            const items = Array.isArray(value) ? value.map((entry) => String(entry || '')).filter(Boolean) : [];
+            return [...new Set(items)].filter((entry) => allowed.includes(entry));
+        };
+
+        return {
+            status: ['all', 'owned', 'unowned'].includes(source.status) ? source.status : 'all',
+            rarities: normalizeList(source.rarities, ['common', 'rare', 'legendary', 'mythic']),
+            sources: normalizeList(source.sources, ['shop', 'elite', 'boss', 'event', 'camp', 'challenge'])
+        };
+    }
+
+    getTreasureCompendiumFilterState() {
+        this.treasureCompendiumFilterState = this.normalizeTreasureCompendiumFilterState(this.treasureCompendiumFilterState);
+        return this.treasureCompendiumFilterState;
+    }
+
+    getTreasureSourceTags(treasure) {
+        const sourceText = this.getTreasureSource(treasure || {});
+        const tags = new Set();
+        if (/商店/.test(sourceText)) tags.add('shop');
+        if (/精英/.test(sourceText)) tags.add('elite');
+        if (/Boss|首杀|裁决者|天道终焉|丹尊|三首金龙|虚空吞噬者|合体天尊|大乘至尊|飞升主宰|混沌之眼|五行长老|上古遗灵|仙门长老|妖狼王|山寨头目/.test(sourceText)) tags.add('boss');
+        if (/奇遇|事件|雷劫|剑冢/.test(sourceText)) tags.add('event');
+        if (/营地|供奉|锻炉/.test(sourceText)) tags.add('camp');
+        if (/挑战|试炼|成就/.test(sourceText)) tags.add('challenge');
+        return Array.from(tags);
+    }
+
+    getTreasureCompendiumQuickFilterValue() {
+        const state = this.getTreasureCompendiumFilterState();
+        if (state.status !== 'all' && state.rarities.length === 0 && state.sources.length === 0) return state.status;
+        if (state.status === 'all' && state.rarities.length === 1 && state.sources.length === 0) return state.rarities[0];
+        if (state.status === 'all' && state.rarities.length === 0 && state.sources.length === 1) return state.sources[0];
+        if (state.status === 'all' && state.rarities.length === 0 && state.sources.length === 0) return 'all';
+        return 'custom';
+    }
+
+    getTreasureCompendiumFilterLabels(state = null) {
+        state = this.normalizeTreasureCompendiumFilterState(state || this.getTreasureCompendiumFilterState());
+        const labels = [];
+        const statusMap = { owned: '已收录', unowned: '未收录' };
+        const rarityMap = { common: '凡品', rare: '灵品', legendary: '神品', mythic: '仙品' };
+        const sourceMap = { shop: '商店', elite: '精英', boss: '首领', event: '事件', camp: '营地', challenge: '挑战' };
+        if (state.status !== 'all') labels.push(statusMap[state.status] || state.status);
+        state.rarities.forEach((value) => labels.push(rarityMap[value] || value));
+        state.sources.forEach((value) => labels.push(sourceMap[value] || value));
+        return labels;
+    }
+
+    toggleTreasureCompendiumFilterChip(group, value) {
+        const state = this.getTreasureCompendiumFilterState();
+        if (group === 'status') {
+            state.status = state.status === value ? 'all' : value;
+        } else if (group === 'rarity' || group === 'source') {
+            const key = group === 'rarity' ? 'rarities' : 'sources';
+            const next = new Set(Array.isArray(state[key]) ? state[key] : []);
+            if (next.has(value)) next.delete(value);
+            else next.add(value);
+            state[key] = Array.from(next);
+        }
+        this.treasureCompendiumFilterState = this.normalizeTreasureCompendiumFilterState(state);
+        this.treasureCompendiumFilter = this.getTreasureCompendiumQuickFilterValue();
+        this.showTreasureCompendium();
+    }
+
+    passesTreasureCompendiumFilter(item) {
+        const state = this.getTreasureCompendiumFilterState();
+        const rarity = item?.data?.rarity || 'common';
+        const sourceTags = this.getTreasureSourceTags(item?.data || {});
+        if (state.status === 'owned' && !item?.isOwned) return false;
+        if (state.status === 'unowned' && item?.isOwned) return false;
+        if (state.rarities.length > 0 && !state.rarities.includes(rarity)) return false;
+        if (state.sources.length > 0 && !state.sources.some((tag) => sourceTags.includes(tag))) return false;
+        return true;
+    }
+
+    sortTreasureCompendiumItems(items) {
+        const list = Array.isArray(items) ? [...items] : [];
+        const sortMode = this.treasureCompendiumSort || 'rarity_desc';
+        const rarityScore = { mythic: 4, legendary: 3, rare: 2, common: 1 };
+        return list.sort((a, b) => {
+            const realmA = TREASURE_CONFIG?.unlockRealm?.[a.id] || 1;
+            const realmB = TREASURE_CONFIG?.unlockRealm?.[b.id] || 1;
+            if (sortMode === 'name_asc') return String(a.data?.name || '').localeCompare(String(b.data?.name || ''));
+            if (sortMode === 'owned_first' && a.isOwned !== b.isOwned) return Number(b.isOwned) - Number(a.isOwned);
+            if (sortMode === 'realm_asc' && realmA !== realmB) return realmA - realmB;
+            const rarityA = rarityScore[a.data?.rarity || 'common'] || 1;
+            const rarityB = rarityScore[b.data?.rarity || 'common'] || 1;
+            if (rarityA !== rarityB) return rarityB - rarityA;
+            if (sortMode === 'owned_first' && realmA !== realmB) return realmA - realmB;
+            return String(a.id || '').localeCompare(String(b.id || ''));
+        });
+    }
+
+    buildPlayerDeckProfile() {
+        const deck = Array.isArray(this.player?.deck) ? this.player.deck : [];
+        const counts = { attack: 0, defense: 0, law: 0, chance: 0, energy: 0, other: 0 };
+        const lawTypeCounts = {};
+        let totalCost = 0;
+        deck.forEach((card) => {
+            const type = counts[card?.type] !== undefined ? card.type : 'other';
+            counts[type] += 1;
+            totalCost += Number(card?.cost) || 0;
+            if (card?.lawType) lawTypeCounts[card.lawType] = (lawTypeCounts[card.lawType] || 0) + 1;
+        });
+        const dominantType = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'other';
+        const dominantLawType = Object.entries(lawTypeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+        return {
+            size: deck.length,
+            counts,
+            lawTypeCounts,
+            dominantType,
+            dominantLawType,
+            avgCost: deck.length > 0 ? totalCost / deck.length : 0,
+            ratio(type) { return deck.length > 0 ? (counts[type] || 0) / deck.length : 0; }
+        };
+    }
+
+    evaluateShopCardDeckFit(card) {
+        const profile = this.buildPlayerDeckProfile();
+        const reasons = [];
+        let score = 0;
+        if (!card) return { label: '适配未知', reason: '无法解析当前卡牌。', summaryRows: [], score: 0 };
+        if (card.type === 'attack') {
+            const ratio = profile.ratio('attack');
+            if (ratio >= 0.34) { score += 2.2; reasons.push('当前牌组攻击占比高，新增攻击牌更容易形成连段。'); }
+            else if (ratio >= 0.2) { score += 1.1; reasons.push('攻击轴已有基础，可作为补强。'); }
+        } else if (card.type === 'defense') {
+            const ratio = profile.ratio('defense');
+            if (ratio >= 0.28) { score += 2; reasons.push('防御牌占比稳定，这张牌容易融入护盾节奏。'); }
+            else { score += 0.8; reasons.push('当前防御牌偏少，可作为补位工具。'); }
+        } else if (card.type === 'law') {
+            const ratio = profile.ratio('law');
+            if (ratio >= 0.2) { score += 2.2; reasons.push('法则牌比重较高，继续叠法则轴收益明显。'); }
+            if (card.lawType && profile.lawTypeCounts[card.lawType]) { score += 1.4; reasons.push(`牌组已存在 ${card.lawType} 法则链，可直接衔接。`); }
+        } else if (card.type === 'energy') {
+            if (profile.avgCost >= 1.7) { score += 2.1; reasons.push('当前牌组平均费用偏高，灵力牌更能稳节奏。'); }
+            else { score += 1.2; reasons.push('即使平均费用不高，灵力牌也能提升转场稳定性。'); }
+        } else if (card.type === 'chance') {
+            score += 1.0; reasons.push('机缘牌更依赖局面，适合作为弹性补件。');
+        }
+        if ((Number(card.cost) || 0) <= 1) { score += 0.5; reasons.push('低费用意味着更容易塞入现有曲线。'); }
+        if ((Number(card.cost) || 0) >= 3 && profile.avgCost >= 1.8) { score += 0.6; reasons.push('当前曲线允许更高费用的爆发牌。'); }
+        if (profile.size <= 12) { score += 0.4; reasons.push('牌组规模还不大，新牌更容易被尽快抽到。'); }
+        const label = score >= 3.2 ? '高适配' : (score >= 1.7 ? '中适配' : '低适配');
+        const reason = reasons[0] || '这张牌更偏通用补件，需结合当前流派自行判断。';
+        return {
+            label,
+            reason,
+            score,
+            summaryRows: [
+                { label: '适配度', value: label },
+                { label: '牌组重心', value: `${profile.dominantType}轴 · 均费 ${profile.avgCost.toFixed(1)}` },
+                { label: '牌组规模', value: `${profile.size} 张` }
+            ]
+        };
+    }
+
+    evaluateShopServiceFit(service) {
+        const profile = this.buildPlayerDeckProfile();
+        const hpRatio = this.player?.maxHp > 0 ? (this.player.currentHp / this.player.maxHp) : 1;
+        const currency = service?.currency || 'gold';
+        const currentBudget = typeof this.getStrategicCurrencyAmount === 'function'
+            ? this.getStrategicCurrencyAmount(currency)
+            : Number(this.player?.gold) || 0;
+        const price = Math.max(0, Number(service?.price) || 0);
+        const reasons = [];
+        let score = 0;
+
+        if (!service) return { label: '适配未知', reason: '无法解析当前服务。', summaryRows: [], score: 0 };
+
+        switch (service.id) {
+            case 'heal':
+            case 'campRation':
+            case 'fieldMedic':
+            case 'endlessStabilizer':
+                if (hpRatio <= 0.45) {
+                    score += 4.0;
+                    reasons.push('当前血线偏低，先补生存比继续扩牌更稳。');
+                } else if (hpRatio <= 0.7) {
+                    score += 1.8;
+                    reasons.push('生命有明显折损，补给类服务能提升容错。');
+                } else {
+                    score += 0.6;
+                    reasons.push('当前血线健康，补给收益偏向稳态。');
+                }
+                break;
+            case 'remove':
+                if (profile.size >= 14) {
+                    score += 3.1;
+                    reasons.push('当前牌组偏厚，净化能直接提高抽到核心牌的频率。');
+                } else if (profile.size >= 11) {
+                    score += 2.0;
+                    reasons.push('移除冗余牌能继续收束曲线。');
+                } else {
+                    score += 0.7;
+                    reasons.push('当前牌组较薄，净化收益更偏长期优化。');
+                }
+                break;
+            case 'exp':
+            case 'fateLedger':
+            case 'insightIncense':
+                score += 1.8;
+                reasons.push('命环成长服务偏向中长期增益，适合提前投资后续强度。');
+                break;
+            case 'tacticalPlan':
+            case 'pulseCatalyst':
+            case 'wardSigil':
+                score += profile.dominantType === 'attack' || profile.avgCost >= 1.8 ? 2.2 : 1.2;
+                reasons.push('战前增益服务能放大现有节奏轴，尤其适合已经成型的牌组。');
+                break;
+            case 'bountyContract':
+            case 'scoutPack':
+            case 'rumorRareDraft':
+            case 'rumorTreasureTrail':
+            case 'rumorUtilityRoute':
+            case 'rumorTrialRoute':
+                score += 1.4;
+                reasons.push('这类交易更偏投资未来收益，适合资源宽裕时滚雪球。');
+                break;
+            case 'endlessRefit':
+            case 'endlessOverclock':
+            case 'endlessBlessing':
+                score += this.isEndlessActive && this.isEndlessActive() ? 2.4 : 0.2;
+                reasons.push(this.isEndlessActive && this.isEndlessActive()
+                    ? '当前处于无尽轮回，轮回服务会直接影响压力与赐福。'
+                    : '轮回类服务仅在无尽模式下有较高收益。');
+                break;
+            default:
+                score += 1.0;
+                reasons.push('这是泛用型服务，价值取决于你当前缺口。');
+                break;
+        }
+
+        if (price > currentBudget) {
+            score -= 1.8;
+            reasons.push('当前资源不足，先保留余钱更稳。');
+        } else if (currency === 'gold' && currentBudget - price < 45) {
+            score -= 0.5;
+            reasons.push('买完后灵石结余偏低，要注意下一次商店与事件缓冲。');
+        }
+
+        const label = score >= 3.0 ? '高适配' : (score >= 1.7 ? '中适配' : '低适配');
+        return {
+            label,
+            reason: reasons[0] || '当前局势下属于通用型服务。',
+            score,
+            summaryRows: [
+                { label: '服务适配', value: label },
+                { label: '结余预估', value: `${Math.max(0, currentBudget - price)} ${this.getStrategicCurrencyLabel ? this.getStrategicCurrencyLabel(currency) : currency}` },
+                { label: '当前血线', value: `${Math.round(hpRatio * 100)}%` }
+            ]
+        };
+    }
+
+    getMapNodeTypeLabel(type = '') {
+        const map = {
+            enemy: '普通战',
+            elite: '精英战',
+            boss: 'Boss 战',
+            rest: '营地',
+            event: '事件',
+            shop: '商店',
+            trial: '试炼',
+            forge: '锻炉',
+            ghost_duel: '幻影决斗'
+        };
+        return map[type] || (type || '未知节点');
+    }
+
+    getShopNextNodeForecast() {
+        if (!this.map || typeof this.map.getAccessibleNodes !== 'function') return null;
+        const accessible = this.map.getAccessibleNodes().filter((node) => node && node.id !== this.shopNode?.id);
+        if (accessible.length === 0) return null;
+        const shopRow = Number(this.shopNode?.row);
+        const futureNodes = Number.isFinite(shopRow)
+            ? accessible.filter((node) => Number(node?.row) > shopRow)
+            : accessible;
+        const pool = futureNodes.length > 0 ? futureNodes : accessible;
+        const minRow = Math.min(...pool.map((node) => Number(node?.row) || 0));
+        const frontier = pool.filter((node) => (Number(node?.row) || 0) === minRow);
+        const rank = { boss: 6, elite: 5, ghost_duel: 4, trial: 4, enemy: 3, forge: 2, event: 2, rest: 1, shop: 1 };
+        const sortedTypes = [...new Set(frontier.map((node) => node.type))].sort((a, b) => (rank[b] || 0) - (rank[a] || 0));
+        const primaryType = sortedTypes[0] || frontier[0]?.type || 'enemy';
+        const labels = sortedTypes.map((type) => this.getMapNodeTypeLabel(type));
+        const danger = ['boss', 'elite', 'ghost_duel', 'trial'].includes(primaryType) ? 'high' : (primaryType === 'enemy' ? 'medium' : 'low');
+        return {
+            row: minRow,
+            nodes: frontier,
+            primaryType,
+            primaryLabel: this.getMapNodeTypeLabel(primaryType),
+            labels,
+            summary: labels.length > 0 ? `下一批节点：${labels.join(' / ')}` : '下一批节点未明',
+            danger
+        };
+    }
+
+    buildShopSpendRecommendation() {
+        const availableCards = Array.isArray(this.shopItems) ? this.shopItems.filter((item) => item && !item.sold) : [];
+        const availableServices = Array.isArray(this.shopServices) ? this.shopServices.filter((item) => item && !item.sold) : [];
+        const affordableCards = availableCards
+            .filter((item) => this.canAffordShopItem(item))
+            .map((item) => ({ item, fit: this.evaluateShopCardDeckFit(item.card) }))
+            .sort((a, b) => (b.fit?.score || 0) - (a.fit?.score || 0));
+        const affordableServices = availableServices
+            .filter((item) => this.canAffordShopItem(item))
+            .map((item) => ({ item, fit: this.evaluateShopServiceFit(item) }))
+            .sort((a, b) => (b.fit?.score || 0) - (a.fit?.score || 0));
+
+        const bestCard = affordableCards[0] || null;
+        const bestService = affordableServices[0] || null;
+        const goldBudget = typeof this.getStrategicCurrencyAmount === 'function' ? this.getStrategicCurrencyAmount('gold') : (Number(this.player?.gold) || 0);
+        const hpRatio = this.player?.maxHp > 0 ? (this.player.currentHp / this.player.maxHp) : 1;
+        const forecast = this.getShopNextNodeForecast();
+        let bestCardScore = bestCard?.fit?.score || 0;
+        let bestServiceScore = bestService?.fit?.score || 0;
+
+        if (forecast?.danger === 'high') {
+            bestServiceScore += hpRatio <= 0.7 ? 1.2 : 0.55;
+            bestCardScore -= hpRatio <= 0.55 ? 0.55 : 0.15;
+        } else if (forecast?.primaryType === 'rest') {
+            bestCardScore += 0.45;
+        } else if (forecast?.primaryType === 'event' || forecast?.primaryType === 'shop') {
+            bestCardScore += 0.25;
+            bestServiceScore -= 0.1;
+        }
+
+        const forecastHint = forecast?.summary ? ` ${forecast.summary}。` : '';
+
+        if (!bestCard && !bestService) {
+            return {
+                action: '建议留钱',
+                tone: 'save',
+                reason: (goldBudget <= 40 ? '当前资源太紧，先留钱应对后续恢复与关键节点。' : '本页暂无高适配且可负担的选项，先观察下一次货架更稳。') + forecastHint,
+                bestCard: null,
+                bestService: null,
+                forecast
+            };
+        }
+
+        if (forecast?.danger === 'high' && hpRatio <= 0.55 && bestService) {
+            return {
+                action: '更适合买服务',
+                tone: 'service',
+                reason: `${bestService.item.name}：${bestService.fit.reason}${forecastHint}`,
+                bestCard,
+                bestService,
+                forecast
+            };
+        }
+
+        if (forecast?.danger === 'high' && goldBudget < 65) {
+            return {
+                action: '建议留钱',
+                tone: 'save',
+                reason: `下一批更接近${forecast.primaryLabel}，当前灵石偏紧，先保留恢复或应急资金更稳。`,
+                bestCard,
+                bestService,
+                forecast
+            };
+        }
+
+        if (bestService && (!bestCard || bestServiceScore >= bestCardScore + 0.45)) {
+            return {
+                action: '更适合买服务',
+                tone: 'service',
+                reason: `${bestService.item.name}：${bestService.fit.reason}${forecastHint}`,
+                bestCard,
+                bestService,
+                forecast
+            };
+        }
+
+        if (bestCard && (!bestService || bestCardScore >= bestServiceScore - 0.25)) {
+            return {
+                action: '更适合买卡',
+                tone: 'card',
+                reason: `${bestCard.item.card.name}：${bestCard.fit.reason}${forecastHint}`,
+                bestCard,
+                bestService,
+                forecast
+            };
+        }
+
+        return {
+            action: '建议留钱',
+            tone: 'save',
+            reason: `当前买卡与买服务的收益接近，若资源吃紧可先保留弹性。${forecastHint}`,
+            bestCard,
+            bestService,
+            forecast
+        };
+    }
     // 辅助：格式化共鸣效果描述
     formattingResonanceEffect(effect) {
         if (!effect) return '';
@@ -3400,6 +4890,7 @@ class Game {
             const state = this.ensureEndlessState();
             const modifiers = this.getEndlessModifiers();
             const phaseProfile = this.getEndlessPhaseProfile(state.currentCycle);
+            const cycleTheme = this.getEndlessCycleThemeProfile(state.currentCycle);
             const realm = this.getEndlessRealmForCycle(state.currentCycle);
             const realmName = this.map.getRealmName(realm);
             const activeMutators = (state.activeMutators || [])
@@ -3417,6 +4908,9 @@ class Game {
                 const phaseText = phaseProfile && phaseProfile.active
                     ? `<br><span style="color:#ffd48a;">阶段挑战：${phaseProfile.name}（第${phaseProfile.checkpoint}轮）</span>`
                     : '<br><span style="color:#7fb5c8;">阶段挑战：稳态区间</span>';
+                const themeText = cycleTheme && cycleTheme.name
+                    ? `<br><span style="color:#9ceeff;">轮段主题：${cycleTheme.name}（第${cycleTheme.segmentIndex}段）</span><br><span style="color:#bdefff;opacity:0.9;">${cycleTheme.desc || ''}</span>`
+                    : '<br><span style="color:#9ceeff;">轮段主题：稳衡</span>';
                 envEl.innerHTML = `
                     <div style="margin-bottom:5px; color:#8fe8ff; font-weight:bold; font-size:1.05rem;">
                         当前映射：${realmName}
@@ -3426,6 +4920,7 @@ class Game {
                         灵石奖励 x${modifiers.rewardGoldMul.toFixed(2)}｜命环经验 x${modifiers.rewardExpMul.toFixed(2)}<br>
                         商店价格 x${modifiers.shopPriceMul.toFixed(2)}｜治疗效率 x${modifiers.healMul.toFixed(2)}
                         ${phaseText}
+                        ${themeText}
                     </div>
                 `;
             }
@@ -4159,6 +5654,9 @@ class Game {
         const phaseProfile = (typeof this.getEndlessPhaseProfile === 'function')
             ? this.getEndlessPhaseProfile()
             : null;
+        const cycleTheme = (typeof this.getEndlessCycleThemeProfile === 'function')
+            ? this.getEndlessCycleThemeProfile()
+            : null;
 
         const baseHp = Number(cloned.maxHp || cloned.hp || cloned.currentHp || 1);
         const nextHp = Math.max(1, Math.floor(baseHp * hpMul));
@@ -4214,6 +5712,118 @@ class Game {
                     value: 1,
                     intent: pressureProfile.pressure >= 8 ? '🩸重压咒印' : '🌀压制咒印'
                 });
+            }
+        }
+
+        if (cycleTheme && Array.isArray(cloned.patterns) && cloned.patterns.length > 0) {
+            const attackPatterns = cloned.patterns.filter((pattern) =>
+                pattern &&
+                typeof pattern === 'object' &&
+                (pattern.type === 'attack' || pattern.type === 'multiAttack' || pattern.type === 'executeDamage') &&
+                Number.isFinite(Number(pattern.value))
+            );
+            const defendPatterns = cloned.patterns.filter((pattern) =>
+                pattern &&
+                typeof pattern === 'object' &&
+                (pattern.type === 'defend' || pattern.type === 'heal')
+            );
+            const hasDebuffPattern = cloned.patterns.some((pattern) =>
+                pattern &&
+                typeof pattern === 'object' &&
+                (pattern.type === 'debuff' || pattern.type === 'addStatus')
+            );
+            const baseStrike = Math.max(7, Math.floor(9 * atkMul));
+            const directive = String(cycleTheme.enemyDirective || 'balanced');
+
+            if (directive === 'forge') {
+                if (attackPatterns.length > 0) {
+                    const leadAttack = attackPatterns[0];
+                    leadAttack.value = Math.max(1, Math.floor(Number(leadAttack.value) * 1.08));
+                }
+                if (defendPatterns.length === 0) {
+                    cloned.patterns.push({
+                        type: 'defend',
+                        value: Math.max(6, Math.floor(baseStrike * 0.72)),
+                        intent: '⚒️锻潮护势'
+                    });
+                }
+            } else if (directive === 'swarm') {
+                const multi = cloned.patterns.find((pattern) => pattern && pattern.type === 'multiAttack');
+                if (multi) {
+                    multi.count = Math.max(2, Math.min(5, Math.floor(Number(multi.count) || 2) + 1));
+                } else if (attackPatterns.length > 0) {
+                    const source = attackPatterns[0];
+                    cloned.patterns.push({
+                        type: 'multiAttack',
+                        value: Math.max(4, Math.floor(Number(source.value) * 0.66)),
+                        count: 2,
+                        intent: '🐾群猎连袭'
+                    });
+                }
+            } else if (directive === 'counter') {
+                if (!hasDebuffPattern) {
+                    cloned.patterns.push({
+                        type: 'debuff',
+                        buffType: 'weak',
+                        value: 1,
+                        intent: '🧿反制晶印'
+                    });
+                } else {
+                    cloned.block = Math.max(0, Math.floor(Number(cloned.block) || 0)) + 3;
+                }
+                cloned.__endlessAntiBurst = Math.max(
+                    Math.floor(Number(cloned.__endlessAntiBurst) || 0),
+                    1
+                );
+            } else if (directive === 'frenzy') {
+                if (attackPatterns.length > 0) {
+                    const burst = attackPatterns
+                        .slice()
+                        .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))[0];
+                    if (burst) {
+                        cloned.patterns.push({
+                            type: 'executeDamage',
+                            value: Math.max(8, Math.floor(Number(burst.value) * 0.92)),
+                            threshold: 0.5,
+                            intent: '🌪️裂斩追命'
+                        });
+                    }
+                }
+            } else if (directive === 'bastion') {
+                cloned.block = Math.max(0, Math.floor(Number(cloned.block) || 0)) + 5;
+                if (defendPatterns.length <= 0) {
+                    cloned.patterns.push({
+                        type: 'defend',
+                        value: Math.max(8, Math.floor(baseStrike * 0.95)),
+                        intent: '🏰垒潮回护'
+                    });
+                } else if (!cloned.patterns.some((pattern) => pattern && pattern.type === 'heal')) {
+                    cloned.patterns.push({
+                        type: 'heal',
+                        value: Math.max(8, Math.floor(cloned.maxHp * 0.06)),
+                        intent: '🏰潮汐回息'
+                    });
+                }
+            }
+
+            if (cloned.isBoss) {
+                if (directive === 'frenzy') {
+                    cloned.patterns.push({
+                        type: 'multiAttack',
+                        value: Math.max(7, Math.floor(baseStrike * 0.75)),
+                        count: 2,
+                        intent: '🌪️狂潮压阵'
+                    });
+                } else if (directive === 'bastion') {
+                    cloned.buffs.regen = Math.max(0, Math.floor(Number(cloned.buffs.regen) || 0)) + 2;
+                } else if (directive === 'counter') {
+                    cloned.patterns.push({
+                        type: 'debuff',
+                        buffType: 'vulnerable',
+                        value: 1,
+                        intent: '🧿晶格锁压'
+                    });
+                }
             }
         }
 
@@ -4287,6 +5897,14 @@ class Game {
                 id: phaseProfile.id,
                 name: phaseProfile.name,
                 checkpoint: phaseProfile.checkpoint
+            };
+        }
+        if (cycleTheme && cycleTheme.id) {
+            cloned.__endlessCycleTheme = {
+                id: cycleTheme.id,
+                name: cycleTheme.name,
+                segmentIndex: cycleTheme.segmentIndex,
+                directive: cycleTheme.enemyDirective
             };
         }
         return cloned;
@@ -4512,6 +6130,8 @@ class Game {
             return;
         }
 
+        this.lastBattleRewardMeta = null;
+
         const enemyList = Array.isArray(enemies) ? enemies.filter(Boolean) : [enemies].filter(Boolean);
         const isBossBattle = enemyList.some((enemy) => !!enemy && !!enemy.isBoss);
         const endlessMods = this.isEndlessActive() ? this.getEndlessModifiers() : null;
@@ -4523,6 +6143,17 @@ class Game {
         // 重玩收益减半
         if (this.player.isReplay) {
             ringExp = Math.floor(ringExp * 0.5);
+        }
+
+        const paranoiaEffects = this.isEndlessActive() ? this.getEndlessParanoiaEffects() : null;
+        if (
+            paranoiaEffects &&
+            this.currentBattleNode &&
+            this.currentBattleNode.type === 'enemy' &&
+            Number(paranoiaEffects.normalBattleExpMul || 1) < 1
+        ) {
+            ringExp = Math.max(1, Math.floor(ringExp * Math.max(0.35, Number(paranoiaEffects.normalBattleExpMul) || 1)));
+            Utils.showBattleLog('轮回偏执：普通战命环经验受到压制。');
         }
 
         // 遗物：逆命之环（额外获得25%经验）
@@ -4596,6 +6227,11 @@ class Game {
             }
         }
 
+        const rewardMeta = {
+            encounter: null,
+            squad: null
+        };
+
         const encounterVictory = (this.battle && typeof this.battle.consumeEncounterVictoryBonusSummary === 'function')
             ? this.battle.consumeEncounterVictoryBonusSummary()
             : null;
@@ -4623,6 +6259,54 @@ class Game {
             if (typeof this.recordEncounterThemeVictory === 'function') {
                 this.recordEncounterThemeVictory(encounterVictory);
             }
+            rewardMeta.encounter = {
+                themeId: encounterVictory.themeId || 'encounter',
+                themeName: encounterVictory.themeName || '遭遇奖励',
+                tierStage: Math.max(1, Math.min(3, Math.floor(Number(encounterVictory.tierStage) || 1))),
+                goldBonus: bonusGold,
+                ringExpBonus: bonusExp
+            };
+        }
+
+        const squadVictory = (this.battle && typeof this.battle.consumeSquadEcologyVictoryBonusSummary === 'function')
+            ? this.battle.consumeSquadEcologyVictoryBonusSummary()
+            : null;
+        if (squadVictory) {
+            const bonusGold = Math.max(0, Math.floor(Number(squadVictory.goldBonus) || 0));
+            const bonusExp = Math.max(0, Math.floor(Number(squadVictory.ringExpBonus) || 0));
+            if (bonusGold > 0) {
+                this.player.gold += bonusGold;
+                Utils.showBattleLog(`敌阵战利·${squadVictory.squadName}：额外获得 ${bonusGold} 灵石`);
+            }
+            if (bonusExp > 0) {
+                ringExp += bonusExp;
+                Utils.showBattleLog(`敌阵战利·${squadVictory.squadName}：命环经验 +${bonusExp}`);
+            }
+            if (Array.isArray(squadVictory.adventureBuffRewards) && this.player && typeof this.player.grantAdventureBuff === 'function') {
+                squadVictory.adventureBuffRewards.forEach((item) => {
+                    if (!item || !item.id) return;
+                    const ok = this.player.grantAdventureBuff(item.id, item.charges || 1);
+                    if (ok) {
+                        const shownCharges = Math.max(1, Math.floor(Number(item.charges) || 1));
+                        Utils.showBattleLog(`编队启示：${item.label || item.id} x${shownCharges}`);
+                    }
+                });
+            }
+            if (squadVictory.synergy && squadVictory.synergy.themeName) {
+                Utils.showBattleLog(`轮段协同：${squadVictory.synergy.themeName} 与敌阵共振，战利额外提升`);
+            }
+            rewardMeta.squad = {
+                squadId: squadVictory.squadId || 'squad',
+                squadName: squadVictory.squadName || '敌阵战利',
+                goldBonus: bonusGold,
+                ringExpBonus: bonusExp,
+                synergyThemeName: squadVictory.synergy && squadVictory.synergy.themeName
+                    ? squadVictory.synergy.themeName
+                    : ''
+            };
+        }
+        if (rewardMeta.encounter || rewardMeta.squad) {
+            this.lastBattleRewardMeta = rewardMeta;
         }
 
         const adventureGoldBonus = (this.player && typeof this.player.consumeAdventureVictoryGoldBoost === 'function')
@@ -4857,6 +6541,25 @@ class Game {
         // Hardcore: 全局战斗灵石收益降低
         totalGold = Math.floor(totalGold * 0.75);
 
+        if (
+            this.isEndlessActive && this.isEndlessActive() &&
+            this.currentBattleNode &&
+            this.currentBattleNode.type === 'enemy'
+        ) {
+            const paranoiaEffects = this.getEndlessParanoiaEffects ? this.getEndlessParanoiaEffects() : null;
+            const rewardMul = Math.max(0.35, Number(paranoiaEffects?.normalBattleRewardMul) || 1);
+            if (rewardMul < 1) {
+                totalGold = Math.floor(totalGold * rewardMul);
+                Utils.showBattleLog('轮回偏执：普通战灵石掉落减少。');
+            }
+        }
+
+        const nodeType = this.currentBattleNode && this.currentBattleNode.type ? this.currentBattleNode.type : '';
+        const strategicGain = this.grantStrategicCurrencies(
+            this.getBattleStrategicCurrencyRewards(nodeType),
+            nodeType === 'boss' ? '击破章节主宰' : '高压战利'
+        );
+
         this.player.gold += totalGold;
         this.achievementSystem.updateStat('totalGold', totalGold);
         this.achievementSystem.updateStat('enemiesDefeated', enemies.length);
@@ -4865,11 +6568,96 @@ class Game {
         }
 
         // 显示奖励界面
-        this.showRewardScreen(totalGold, canSteal, stealEnemy, ringExp);
+        this.showRewardScreen(totalGold, canSteal, stealEnemy, ringExp, strategicGain);
+    }
+
+    setRewardScreenState(state = 'hidden') {
+        const rewardScreen = document.getElementById('reward-screen');
+        if (rewardScreen) {
+            rewardScreen.dataset.stealState = state;
+        }
+    }
+
+    renderRewardBattleMeta() {
+        const panel = document.getElementById('reward-battle-meta');
+        if (!panel) return;
+        const meta = this.lastBattleRewardMeta;
+        if (!meta || (typeof meta !== 'object') || (!meta.encounter && !meta.squad)) {
+            panel.style.display = 'none';
+            panel.innerHTML = '';
+            return;
+        }
+
+        const chips = [];
+        if (meta.encounter) {
+            chips.push(
+                `<span class="reward-meta-chip chip-encounter">遭遇战利：${meta.encounter.themeName}（${'I'.repeat(Math.max(1, Math.min(3, Number(meta.encounter.tierStage) || 1)))}阶）</span>`,
+                `<span class="reward-meta-chip chip-gold">遭遇灵石 +${Math.max(0, Math.floor(Number(meta.encounter.goldBonus) || 0))}</span>`,
+                `<span class="reward-meta-chip chip-exp">遭遇命环经验 +${Math.max(0, Math.floor(Number(meta.encounter.ringExpBonus) || 0))}</span>`
+            );
+        }
+        if (meta.squad) {
+            chips.push(
+                `<span class="reward-meta-chip chip-squad">敌阵战利：${meta.squad.squadName}</span>`,
+                `<span class="reward-meta-chip chip-gold">编队灵石 +${Math.max(0, Math.floor(Number(meta.squad.goldBonus) || 0))}</span>`,
+                `<span class="reward-meta-chip chip-exp">编队命环经验 +${Math.max(0, Math.floor(Number(meta.squad.ringExpBonus) || 0))}</span>`
+            );
+            if (meta.squad.synergyThemeName) {
+                chips.push(`<span class="reward-meta-chip chip-synergy">轮段协同：${meta.squad.synergyThemeName}</span>`);
+            }
+        }
+
+        panel.style.display = 'block';
+        panel.innerHTML = `
+            <div class="reward-meta-title">本场战利来源</div>
+            <div class="reward-meta-chips">${chips.join('')}</div>
+        `;
     }
 
     // 显示奖励界面
-    showRewardScreen(gold, canSteal, stealEnemy, ringExp = 0) {
+    getRewardCardsForCurrentRun(count = 2) {
+        const safeCount = Math.max(1, Math.floor(Number(count) || 2));
+        if (!this.player) return getRewardCards(safeCount, null, []);
+        const endlessMods = this.isEndlessActive() ? this.getEndlessModifiers() : null;
+        const rumorRareBonus = this.consumeRewardRumorBoost();
+        const rareBonus = Math.max(0, Number(endlessMods?.rewardRareChance) || 0) + Math.max(0, rumorRareBonus);
+        if (rareBonus <= 0) {
+            return getRewardCards(safeCount, this.player.characterId, this.player.deck);
+        }
+
+        const picked = [];
+        const seen = new Set();
+        const archetype = typeof inferDeckArchetype === 'function' ? inferDeckArchetype(this.player.deck) : null;
+        for (let i = 0; i < safeCount; i += 1) {
+            let card = null;
+            for (let attempt = 0; attempt < 10; attempt += 1) {
+                const forceRare = Math.random() < Math.min(0.86, 0.18 + rareBonus);
+                const forceEpic = forceRare && Math.random() < 0.18;
+                if (forceRare) {
+                    card = getRandomCard(forceEpic ? 'epic' : 'rare', this.player.characterId);
+                } else if (archetype && typeof getRandomArchetypeCard === 'function' && Math.random() < 0.55) {
+                    card = getRandomArchetypeCard(archetype, null, this.player.characterId);
+                } else {
+                    card = getRandomCard(null, this.player.characterId);
+                }
+                if (!card) continue;
+                if (seen.has(card.id) && attempt < 9) continue;
+                break;
+            }
+            if (!card) {
+                const fallback = getRewardCards(1, this.player.characterId, this.player.deck);
+                card = Array.isArray(fallback) ? fallback[0] : null;
+            }
+            if (card) {
+                picked.push(card);
+                seen.add(card.id);
+            }
+        }
+        return picked;
+    }
+
+
+    showRewardScreen(gold, canSteal, stealEnemy, ringExp = 0, strategicGain = null) {
         this.rewardCardSelected = false; // 重置选牌状态
 
         const stealSection = document.getElementById('steal-section');
@@ -4884,18 +6672,41 @@ class Game {
             continueBtn.disabled = true;
             continueBtn.textContent = '请选择奖励';
         }
+        this.setRewardScreenState('hidden');
 
-        rewardGold.textContent = `+${gold} 灵石 | 命环经验 +${ringExp}`;
+        const bonusParts = [];
+        const gainPayload = strategicGain && typeof strategicGain === 'object' ? strategicGain : {};
+        if (Number(gainPayload.insight) > 0) bonusParts.push(`天机 +${Math.floor(Number(gainPayload.insight) || 0)}`);
+        if (Number(gainPayload.karma) > 0) bonusParts.push(`业果 +${Math.floor(Number(gainPayload.karma) || 0)}`);
+        rewardGold.textContent = `+${gold} 灵石 | 命环经验 +${ringExp}${bonusParts.length > 0 ? ' | ' + bonusParts.join(' | ') : ''}`;
+        this.renderRewardBattleMeta();
 
         // 法宝掉落判定
         const resourceContainer = document.querySelector('.reward-resources');
         // 清理旧的掉落显示
-        const existingTreasures = resourceContainer.querySelectorAll('.reward-treasure-item');
+        const existingTreasures = resourceContainer.querySelectorAll('.reward-treasure-item, .reward-strategy-item');
         existingTreasures.forEach(el => el.remove());
+
+        if (resourceContainer) {
+            if (Number(gainPayload.insight) > 0) {
+                const insightItem = document.createElement('div');
+                insightItem.className = 'reward-item reward-strategy-item';
+                insightItem.innerHTML = `<span class="icon">🔮</span> <span>获得天机：+${Math.floor(Number(gainPayload.insight) || 0)}</span>`;
+                resourceContainer.appendChild(insightItem);
+            }
+            if (Number(gainPayload.karma) > 0) {
+                const karmaItem = document.createElement('div');
+                karmaItem.className = 'reward-item reward-strategy-item';
+                karmaItem.innerHTML = `<span class="icon">🜂</span> <span>获得业果：+${Math.floor(Number(gainPayload.karma) || 0)}</span>`;
+                resourceContainer.appendChild(karmaItem);
+            }
+        }
 
         let dropChance = 0.08; // Hardcore: 普通8%
         if (this.currentBattleNode && this.currentBattleNode.type === 'elite') dropChance = 0.25; // Hardcore: 精英25%
         if (this.currentBattleNode && this.currentBattleNode.type === 'boss') dropChance = 0.60; // Hardcore: Boss 60%
+        if (this.currentBattleNode && this.currentBattleNode.type === 'ghost_duel') dropChance = 0.3;
+        dropChance += Math.max(0, this.consumeTreasureRumorBoost(this.currentBattleNode?.type || ''));
 
         if (Math.random() < dropChance) {
             let droppedTreasure = null;
@@ -4964,20 +6775,22 @@ class Game {
 
         // 法则盗取部分
         if (canSteal && stealEnemy && !this.stealAttempted) {
-            stealSection.style.display = 'flex';
+            stealSection.style.display = 'grid';
             const lawName = LAWS[stealEnemy.stealLaw]?.name || '神秘法则';
             stealText.textContent = `你感受到敌人体内残留的${lawName}力量...`;
             stealBtn.disabled = false;
             stealBtn.dataset.lawId = stealEnemy.stealLaw;
             stealBtn.dataset.chance = stealEnemy.stealChance;
+            this.setRewardScreenState('ready');
         } else {
             stealSection.style.display = 'none';
+            this.setRewardScreenState('hidden');
         }
 
         // 卡牌奖励
         rewardCards.innerHTML = '';
         const rewardCardCount = (this.currentBattleNode && this.currentBattleNode.type === 'trial') ? 3 : 2;
-        const cards = getRewardCards(rewardCardCount, this.player.characterId, this.player.deck);
+        const cards = this.getRewardCardsForCurrentRun(rewardCardCount);
 
         cards.forEach((card, index) => {
             const cardEl = Utils.createCardElement(card, index);
@@ -5093,8 +6906,9 @@ class Game {
 
                 if (law.unlockCards && law.unlockCards.length > 0) {
                     const cardName = CARDS[law.unlockCards[0]]?.name || '神秘卡牌';
-                    stealText.innerHTML += `<br><span style="color: var(--accent-purple)">解锁法则牌: ${cardName}</span>`;
+                    stealText.innerHTML += `<br><span style="color: var(--accent-purple)">解锁法则牌：${cardName}</span>`;
                 }
+                this.setRewardScreenState('success');
             } else {
                 // 补偿机制
                 let compensationMsg = `<span style="color: var(--text-secondary)">你已经掌握了这个法则</span>`;
@@ -5106,12 +6920,14 @@ class Game {
 
                 compensationMsg += `<br><span style="color: var(--accent-gold)">获得补偿：50灵石，20命环经验</span>`;
                 stealText.innerHTML = compensationMsg;
+                this.setRewardScreenState('success');
 
                 // 更新UI
                 this.updatePlayerDisplay();
             }
         } else {
-            stealText.innerHTML = `<span style="color: var(--text-muted)">盗取失败...法则残留消散了</span>`;
+            stealText.innerHTML = `<span style="color: var(--text-muted)">盗取失败……法则残留消散了</span>`;
+            this.setRewardScreenState('failed');
         }
     }
 
@@ -7304,7 +9120,7 @@ class Game {
 
             if (matchCount > 0) { // Only show relevant ones
                 html += `
-                    <div class="resonance-card ${hasAllLaws ? 'active' : ''}">
+                    <div class="resonance-card ${hasAllLaws ? 'active' : ''}" data-resonance-id="${resonance.id}">
                         <div class="resonance-header">
                             <span class="resonance-name">${resonance.name}</span>
                             <span style="font-size:0.8rem; color:${hasAllLaws ? 'var(--accent-gold)' : '#666'}">${matchCount}/${totalCount}</span>
@@ -7495,17 +9311,24 @@ class Game {
     // 显示游戏介绍 (v5.1)
     // 切换游戏介绍标签页
     switchIntroTab(tabId) {
-        // Update Buttons
+        const nextTab = ['overview', 'mechanics', 'controls', 'updates'].includes(tabId) ? tabId : 'overview';
+
         document.querySelectorAll('.intro-tab-btn').forEach(btn => {
             btn.classList.remove('active');
-            if (btn.dataset.tab === tabId) btn.classList.add('active');
+            if (btn.dataset.tab === nextTab) btn.classList.add('active');
         });
 
-        // Update Panels
-        document.querySelectorAll('.intro-tab-panel').forEach(panel => {
-            panel.classList.remove('active');
-            if (panel.id === `intro-${tabId}`) panel.classList.add('active');
-        });
+        const contentPanel = document.getElementById('intro-tab-content');
+        if (contentPanel) {
+            contentPanel.innerHTML = (this.introTabContent && this.introTabContent[nextTab]) || '';
+            contentPanel.dataset.activeTab = nextTab;
+            contentPanel.classList.add('active');
+        }
+
+        const scrollArea = document.querySelector('.intro-content-area');
+        if (scrollArea) {
+            scrollArea.scrollTop = 0;
+        }
     }
 
     showGameIntro() {
@@ -7694,6 +9517,12 @@ class Game {
         `;
 
 
+        this.introTabContent = {
+            overview: overviewContent,
+            mechanics: mechanicsContent,
+            controls: controlsContent,
+            updates: updatesContent
+        };
         settingsContainer.innerHTML = `
         <div class="game-intro-container">
             <div class="intro-header">
@@ -7709,20 +9538,11 @@ class Game {
             </nav>
 
             <div class="intro-content-area">
-                <div id="intro-overview" class="intro-tab-panel active">
+                <div id="intro-tab-content" class="intro-tab-panel active" data-active-tab="overview">
                     ${overviewContent}
                 </div>
-                <div id="intro-mechanics" class="intro-tab-panel">
-                    ${mechanicsContent}
-                </div>
-                <div id="intro-controls" class="intro-tab-panel">
-                    ${controlsContent}
-                </div>
-                <div id="intro-updates" class="intro-tab-panel">
-                    ${updatesContent}
-                </div>
             </div>
-            
+
             <div style="text-align: center; margin-top: auto; font-size: 0.8rem; color: rgba(255,255,255,0.2); padding-top: 10px;">
                 v5.1 介绍更新 | Breaking Fate since 2024
             </div>
@@ -7730,6 +9550,11 @@ class Game {
         `;
 
         modal.classList.add('active');
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => this.switchIntroTab('overview'));
+        } else {
+            this.switchIntroTab('overview');
+        }
     }
 
     // 卡牌使用效果
@@ -7760,19 +9585,10 @@ class Game {
     // 显示商店
     showShop(node) {
         this.shopNode = node;
-
-        // 生成商店数据（每次进入生成，增加随机性）
-        // 理想情况下应该保存在node中以防SL大法，但为了简单暂不持久化到node.data
-        const data = this.generateShopData();
-        this.shopItems = data.items;
-        this.shopServices = data.services;
-
-        // 更新金币显示
-        document.getElementById('shop-gold-display').textContent = this.player.gold;
-
-        // 渲染商店
+        this.shopCatalog = this.generateShopCatalog();
+        this.shopActiveTab = this.shopActiveTab || 'base';
+        this.syncActiveShopTab();
         this.renderShop();
-
         this.showScreen('shop-screen');
     }
 
@@ -8479,54 +10295,515 @@ class Game {
         return map[normalized] || map.common;
     }
 
+    normalizeShopRumors(rumors = null) {
+        const source = rumors && typeof rumors === 'object' ? rumors : {};
+        const history = Array.isArray(source.history)
+            ? source.history.filter((entry) => typeof entry === 'string').slice(-6)
+            : [];
+        const shift = source.nextRealmMapShift && typeof source.nextRealmMapShift === 'object'
+            ? { ...source.nextRealmMapShift }
+            : null;
+        return {
+            rewardRareCharges: Math.max(0, Math.floor(Number(source.rewardRareCharges) || 0)),
+            rewardRareBonus: Math.max(0, Number(source.rewardRareBonus) || 0),
+            treasureCharges: Math.max(0, Math.floor(Number(source.treasureCharges) || 0)),
+            treasureChanceBonus: Math.max(0, Number(source.treasureChanceBonus) || 0),
+            nextRealmMapShift: shift,
+            nextRealmLabel: typeof source.nextRealmLabel === 'string' ? source.nextRealmLabel : '',
+            nextRealmTarget: Number.isFinite(Number(source.nextRealmTarget)) ? Math.max(1, Math.floor(Number(source.nextRealmTarget))) : null,
+            history
+        };
+    }
+
+    ensureShopRumors() {
+        if (!this.player) {
+            return this.normalizeShopRumors();
+        }
+        this.player.shopRumors = this.normalizeShopRumors(this.player.shopRumors);
+        return this.player.shopRumors;
+    }
+
+    pushShopRumorHistory(entry) {
+        if (typeof entry !== 'string' || !entry.trim()) return;
+        const rumors = this.ensureShopRumors();
+        rumors.history.push(entry.trim());
+        rumors.history = rumors.history.slice(-6);
+    }
+
+    getStrategicCurrencyAmount(currency = 'gold') {
+        if (!this.player) return 0;
+        switch (currency) {
+            case 'insight':
+                return Math.max(0, Math.floor(Number(this.player.heavenlyInsight) || 0));
+            case 'karma':
+                return Math.max(0, Math.floor(Number(this.player.karma) || 0));
+            case 'gold':
+            default:
+                return Math.max(0, Math.floor(Number(this.player.gold) || 0));
+        }
+    }
+
+    getStrategicCurrencyLabel(currency = 'gold') {
+        switch (currency) {
+            case 'insight': return '天机';
+            case 'karma': return '业果';
+            case 'gold':
+            default: return '灵石';
+        }
+    }
+
+    getStrategicCurrencyIcon(currency = 'gold') {
+        switch (currency) {
+            case 'insight': return '🔮';
+            case 'karma': return '🜂';
+            case 'gold':
+            default: return '💰';
+        }
+    }
+
+    formatShopPrice(item = null) {
+        if (!item) return '';
+        const currency = item.currency || 'gold';
+        const icon = this.getStrategicCurrencyIcon(currency);
+        const label = this.getStrategicCurrencyLabel(currency);
+        return `${icon} ${Math.max(0, Math.floor(Number(item.price) || 0))} ${label}`;
+    }
+
+    canAffordShopItem(item = null) {
+        if (!item) return false;
+        const price = Math.max(0, Math.floor(Number(item.price) || 0));
+        return this.getStrategicCurrencyAmount(item.currency || 'gold') >= price;
+    }
+
+    spendShopPrice(item = null) {
+        if (!item) return false;
+        const price = Math.max(0, Math.floor(Number(item.price) || 0));
+        const currency = item.currency || 'gold';
+        if (this.getStrategicCurrencyAmount(currency) < price) return false;
+        if (currency === 'insight') {
+            this.player.heavenlyInsight -= price;
+        } else if (currency === 'karma') {
+            this.player.karma -= price;
+        } else {
+            this.player.gold -= price;
+        }
+        return true;
+    }
+
+    updateShopCurrencyDisplays() {
+        const goldEl = document.getElementById('shop-gold-display');
+        if (goldEl) goldEl.textContent = this.getStrategicCurrencyAmount('gold');
+        const insightEl = document.getElementById('shop-insight-display');
+        if (insightEl) insightEl.textContent = this.getStrategicCurrencyAmount('insight');
+        const karmaEl = document.getElementById('shop-karma-display');
+        if (karmaEl) karmaEl.textContent = this.getStrategicCurrencyAmount('karma');
+        const subtitleEl = document.getElementById('shop-header-subtitle');
+        if (subtitleEl) {
+            const activeRumorText = this.getShopRumorSummaryText();
+            subtitleEl.textContent = activeRumorText || '商贩会根据你的命途，拿出不同层级的交易。';
+        }
+    }
+
+    getShopPriceMultiplier(scalePerRealm = 0.15) {
+        const realm = this.player?.realm || 1;
+        const endlessMods = this.isEndlessActive() ? this.getEndlessModifiers() : null;
+        let priceMult = 1 + Math.max(0, realm - 1) * scalePerRealm;
+        if (endlessMods) {
+            priceMult *= Math.max(0.75, Number(endlessMods.shopPriceMul) || 1);
+        }
+        return priceMult;
+    }
+
+    generateContractShopServices() {
+        const priceMult = this.getShopPriceMultiplier(0.04);
+        return [
+            {
+                id: 'forbiddenDraft',
+                type: 'service',
+                name: '逆命血契',
+                icon: '🩸',
+                desc: '失去 6 点生命上限，从 3 张稀有/史诗禁术卡中选择 1 张。',
+                price: Math.max(1, Math.floor(1 * priceMult)),
+                currency: 'karma',
+                sold: false,
+                riskLabel: '伤根基',
+                tagLabel: '爆发成型'
+            },
+            {
+                id: 'soulMortgage',
+                type: 'service',
+                name: '蚀寿抵押',
+                icon: '⛓️',
+                desc: '当前生命降至至多 70%，换取 3 场首回合灵力 +1、命环经验提升与灵石补给。',
+                price: Math.max(1, Math.floor(1 * priceMult)),
+                currency: 'karma',
+                sold: false,
+                riskLabel: '搏命加速',
+                tagLabel: '滚雪球'
+            },
+            {
+                id: 'doomIdol',
+                type: 'service',
+                name: '灾像供契',
+                icon: '🗿',
+                desc: '向牌组加入【心魔·疑心】，立即获得一件随机法宝与 80 灵石。',
+                price: Math.max(1, Math.floor(2 * priceMult)),
+                currency: 'karma',
+                sold: false,
+                riskLabel: '牌组污染',
+                tagLabel: '法宝跃迁'
+            }
+        ];
+    }
+
+    generateRumorShopServices() {
+        const priceMult = this.getShopPriceMultiplier(0.02);
+        return [
+            {
+                id: 'rumorRareDraft',
+                type: 'service',
+                name: '稀曜签',
+                icon: '📎',
+                desc: '接下来 2 次战后卡牌奖励显著偏向稀有/史诗。',
+                price: Math.max(1, Math.floor(1 * priceMult)),
+                currency: 'insight',
+                sold: false,
+                tagLabel: '未来奖励'
+            },
+            {
+                id: 'rumorTreasureTrail',
+                type: 'service',
+                name: '宝踪风声',
+                icon: '🏺',
+                desc: '接下来 2 次精英/Boss 结算提升法宝掉落概率。',
+                price: Math.max(1, Math.floor(2 * priceMult)),
+                currency: 'insight',
+                sold: false,
+                tagLabel: '战利强化'
+            },
+            {
+                id: 'rumorUtilityRoute',
+                type: 'service',
+                name: '商路星引',
+                icon: '🗺️',
+                desc: '下一重天地图更偏向事件、商店与营地，适合稳定修整。',
+                price: Math.max(1, Math.floor(2 * priceMult)),
+                currency: 'insight',
+                sold: false,
+                tagLabel: '路线倾向'
+            },
+            {
+                id: 'rumorTrialRoute',
+                type: 'service',
+                name: '锋路谶语',
+                icon: '⚔️',
+                desc: '下一重天地图更偏向试炼、精英与锻炉，适合冒险爆发。',
+                price: Math.max(1, Math.floor(2 * priceMult)),
+                currency: 'insight',
+                sold: false,
+                tagLabel: '高压路线'
+            }
+        ];
+    }
+
+    generateShopCatalog() {
+        const base = this.generateShopData();
+        const rumors = this.ensureShopRumors();
+        return {
+            base: {
+                id: 'base',
+                icon: '🪙',
+                label: '基础页',
+                summary: '常规补给，使用灵石进行构筑修整。',
+                cardTitle: '📜 卡牌出售',
+                serviceTitle: '✨ 特殊服务',
+                items: Array.isArray(base.items) ? base.items : [],
+                services: Array.isArray(base.services) ? base.services : []
+            },
+            contract: {
+                id: 'contract',
+                icon: '🩸',
+                label: '契约页',
+                summary: `以业果换取高波动收益。当前业果：${this.getStrategicCurrencyAmount('karma')}。`,
+                cardTitle: '🕯️ 禁术契据',
+                serviceTitle: '🩸 高风险交易',
+                items: [],
+                services: this.generateContractShopServices()
+            },
+            rumor: {
+                id: 'rumor',
+                icon: '🔮',
+                label: '传闻页',
+                summary: rumors.nextRealmLabel
+                    ? `已锁定下一重天路线：${rumors.nextRealmLabel}`
+                    : '花费天机锁定未来奖励与下一重天路线倾向。',
+                cardTitle: '🔍 情报锁定',
+                serviceTitle: '📡 未来倾向',
+                items: [],
+                services: this.generateRumorShopServices()
+            }
+        };
+    }
+
+    syncActiveShopTab() {
+        const catalog = this.shopCatalog && typeof this.shopCatalog === 'object' ? this.shopCatalog : this.generateShopCatalog();
+        this.shopCatalog = catalog;
+        const tabId = catalog[this.shopActiveTab] ? this.shopActiveTab : 'base';
+        this.shopActiveTab = tabId;
+        const tab = catalog[tabId];
+        this.shopItems = Array.isArray(tab.items) ? tab.items : [];
+        this.shopServices = Array.isArray(tab.services) ? tab.services : [];
+        return tab;
+    }
+
+    switchShopTab(tabId = 'base') {
+        if (!this.shopCatalog || !this.shopCatalog[tabId]) return;
+        this.shopActiveTab = tabId;
+        this.syncActiveShopTab();
+        this.renderShop();
+    }
+
+    getShopRumorSummaryText() {
+        const rumors = this.ensureShopRumors();
+        const parts = [];
+        if (rumors.rewardRareCharges > 0) {
+            parts.push(`稀曜签剩余 ${rumors.rewardRareCharges} 次`);
+        }
+        if (rumors.treasureCharges > 0) {
+            parts.push(`宝踪风声剩余 ${rumors.treasureCharges} 次`);
+        }
+        if (rumors.nextRealmLabel && rumors.nextRealmTarget) {
+            parts.push(`第 ${rumors.nextRealmTarget} 重：${rumors.nextRealmLabel}`);
+        }
+        return parts.join(' ｜ ');
+    }
+
+    grantStrategicCurrencies(gains = {}, reason = '') {
+        if (!this.player) return { insight: 0, karma: 0 };
+        const insight = Math.max(0, Math.floor(Number(gains.insight) || 0));
+        const karma = Math.max(0, Math.floor(Number(gains.karma) || 0));
+        if (insight > 0) {
+            this.player.heavenlyInsight = this.getStrategicCurrencyAmount('insight') + insight;
+        }
+        if (karma > 0) {
+            this.player.karma = this.getStrategicCurrencyAmount('karma') + karma;
+        }
+        if ((insight > 0 || karma > 0) && reason) {
+            const detail = [];
+            if (insight > 0) detail.push(`天机 +${insight}`);
+            if (karma > 0) detail.push(`业果 +${karma}`);
+            Utils.showBattleLog(`${reason}：${detail.join('，')}`);
+        }
+        return { insight, karma };
+    }
+
+    getBattleStrategicCurrencyRewards(nodeType = '') {
+        const normalized = String(nodeType || '').toLowerCase();
+        const result = { insight: 0, karma: 0 };
+        if (normalized === 'elite') {
+            result.insight += 1;
+            result.karma += 1;
+        } else if (normalized === 'boss') {
+            result.insight += 2;
+            result.karma += 1;
+        } else if (normalized === 'trial') {
+            result.insight += 1;
+        } else if (normalized === 'ghost_duel') {
+            result.insight += 1;
+            result.karma += 1;
+        }
+        if (this.player && this.player.maxHp > 0 && this.player.currentHp <= this.player.maxHp * 0.4 && ['elite', 'boss', 'ghost_duel'].includes(normalized)) {
+            result.karma += 1;
+        }
+        return result;
+    }
+
+    consumeRewardRumorBoost() {
+        const rumors = this.ensureShopRumors();
+        if (rumors.rewardRareCharges <= 0 || rumors.rewardRareBonus <= 0) return 0;
+        rumors.rewardRareCharges = Math.max(0, rumors.rewardRareCharges - 1);
+        if (rumors.rewardRareCharges === 0) rumors.rewardRareBonus = 0;
+        return Number(rumors.rewardRareBonus) || 0;
+    }
+
+    consumeTreasureRumorBoost(nodeType = '') {
+        const normalized = String(nodeType || '').toLowerCase();
+        const rumors = this.ensureShopRumors();
+        if (!['elite', 'boss', 'ghost_duel'].includes(normalized)) return 0;
+        if (rumors.treasureCharges <= 0 || rumors.treasureChanceBonus <= 0) return 0;
+        rumors.treasureCharges = Math.max(0, rumors.treasureCharges - 1);
+        if (rumors.treasureCharges === 0) rumors.treasureChanceBonus = 0;
+        return Number(rumors.treasureChanceBonus) || 0;
+    }
+
+    setNextRealmMapRumor(shift, label = '') {
+        const rumors = this.ensureShopRumors();
+        rumors.nextRealmMapShift = shift && typeof shift === 'object' ? { ...shift } : null;
+        rumors.nextRealmLabel = typeof label === 'string' ? label : '';
+        rumors.nextRealmTarget = this.player ? Math.max(1, (this.player.realm || 1) + 1) : null;
+        if (rumors.nextRealmLabel) {
+            this.pushShopRumorHistory(`已锁定第 ${rumors.nextRealmTarget} 重：${rumors.nextRealmLabel}`);
+        }
+    }
+
+    getPendingRouteRumorProfile(realm = null) {
+        const rumors = this.ensureShopRumors();
+        const target = realm == null ? rumors.nextRealmTarget : Math.max(1, Math.floor(Number(realm) || 1));
+        if (!rumors.nextRealmMapShift || !rumors.nextRealmTarget || target !== rumors.nextRealmTarget) return null;
+        return {
+            shift: { ...rumors.nextRealmMapShift },
+            label: rumors.nextRealmLabel || '未知倾向',
+            target: rumors.nextRealmTarget
+        };
+    }
+
+    consumePendingRouteRumorProfile(realm = null) {
+        const rumors = this.ensureShopRumors();
+        const target = realm == null ? rumors.nextRealmTarget : Math.max(1, Math.floor(Number(realm) || 1));
+        if (!rumors.nextRealmTarget || target !== rumors.nextRealmTarget) return;
+        rumors.nextRealmMapShift = null;
+        rumors.nextRealmLabel = '';
+        rumors.nextRealmTarget = null;
+    }
+
     // 渲染商店
     renderShop() {
-        // 1. 渲染卡牌
-        const cardContainer = document.getElementById('shop-cards');
-        cardContainer.innerHTML = '';
+        const activeTab = this.syncActiveShopTab();
+        this.updateShopCurrencyDisplays();
 
-        this.shopItems.forEach((item, index) => {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'shop-card-wrapper';
+        const tabBar = document.getElementById('shop-tab-bar');
+        if (tabBar) {
+            tabBar.innerHTML = '';
+            Object.values(this.shopCatalog || {}).forEach((tab) => {
+                const btn = document.createElement('button');
+                btn.className = `shop-tab-btn ${tab.id === this.shopActiveTab ? 'active' : ''}`;
+                btn.type = 'button';
+                btn.innerHTML = `<span class="tab-icon">${tab.icon}</span><span>${tab.label}</span>`;
+                btn.onclick = () => this.switchShopTab(tab.id);
+                tabBar.appendChild(btn);
+            });
+        }
 
-            const cardEl = Utils.createCardElement(item.card, index);
-            cardEl.classList.add(`rarity-${item.card.rarity || 'common'}`);
-            if (item.sold) cardEl.classList.add('sold');
-
-            const priceBtn = document.createElement('div');
-            priceBtn.className = `card-price ${this.player.gold < item.price || item.sold ? 'cannot-afford' : ''}`;
-            priceBtn.innerHTML = item.sold ? '已售出' : `💰 ${item.price} `;
-
-            if (!item.sold) {
-                priceBtn.addEventListener('click', () => this.buyItem('card', index));
-                priceBtn.style.cursor = 'pointer';
+        const summaryEl = document.getElementById('shop-tab-summary');
+        if (summaryEl) {
+            const rumors = this.ensureShopRumors();
+            const advice = this.buildShopSpendRecommendation();
+            let summaryText = activeTab?.summary || '暂无摘要。';
+            if (this.shopActiveTab === 'contract') {
+                summaryText = `以业果换取高波动收益。当前业果：${this.getStrategicCurrencyAmount('karma')}。`;
+            } else if (this.shopActiveTab === 'rumor') {
+                summaryText = rumors.nextRealmLabel
+                    ? `已锁定第 ${rumors.nextRealmTarget || '?'} 重路线：${rumors.nextRealmLabel}`
+                    : '花费天机锁定未来奖励与下一重天路线倾向。';
             }
+            const history = Array.isArray(rumors.history) && rumors.history.length > 0
+                ? `<div class="shop-summary-history">最近锁定：${rumors.history.slice(-2).join(' ｜ ')}</div>`
+                : '';
+            summaryEl.innerHTML = `
+                <div class="shop-summary-title">${activeTab?.icon || '🏪'} ${activeTab?.label || '基础页'}</div>
+                <div class="shop-summary-text">${summaryText}</div>
+                <div class="shop-spend-advice tone-${advice.tone || 'save'}">
+                    <span class="shop-advice-badge">${advice.action}</span>
+                    <div class="shop-advice-text">${advice.reason}</div>
+                    ${advice.forecast?.summary ? `<div class="shop-advice-forecast ${advice.forecast.danger || 'low'}">${advice.forecast.summary}</div>` : ''}
+                    <div class="shop-advice-meta">
+                        <span>最佳卡牌：${advice.bestCard?.item?.card?.name || '暂无'}</span>
+                        <span>最佳服务：${advice.bestService?.item?.name || '暂无'}</span>
+                    </div>
+                </div>
+                ${history}
+            `;
+        }
 
-            wrapper.appendChild(cardEl);
-            wrapper.appendChild(priceBtn);
-            cardContainer.appendChild(wrapper);
-        });
+        const cardSection = document.getElementById('shop-card-section');
+        const cardTitle = document.getElementById('shop-card-section-title');
+        const cardContainer = document.getElementById('shop-cards');
+        if (cardTitle) cardTitle.textContent = activeTab?.cardTitle || '📜 卡牌出售';
+        if (cardSection) cardSection.style.display = this.shopActiveTab === 'base' ? 'block' : 'none';
+        if (cardContainer) {
+            cardContainer.innerHTML = '';
+            this.shopItems.forEach((item, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'shop-card-wrapper';
 
-        // 2. 渲染服务/道具
+                const cardEl = Utils.createCardElement(item.card, index);
+                cardEl.classList.add(`rarity-${item.card.rarity || 'common'}`);
+                if (item.sold) cardEl.classList.add('sold');
+                cardEl.style.cursor = 'zoom-in';
+                cardEl.addEventListener('click', () => {
+                    const fit = this.evaluateShopCardDeckFit(item.card);
+                    Utils.showCardDetail(item.card, {
+                        sectionLabel: '商店详情',
+                        sourceLabel: activeTab?.label || '基础页',
+                        priceText: item.sold ? '已售出' : this.formatShopPrice(item),
+                        availabilityText: item.sold ? '已售出' : (this.canAffordShopItem(item) ? '可购买' : '资源不足'),
+                        usageHint: fit.reason,
+                        extraSummaryRows: fit.summaryRows,
+                        closeLabel: '返回商店'
+                    });
+                });
+
+                const priceBtn = document.createElement('div');
+                priceBtn.className = `card-price ${(this.canAffordShopItem(item) && !item.sold) ? '' : 'cannot-afford'}`.trim();
+                priceBtn.innerHTML = item.sold ? '已售出' : this.formatShopPrice(item);
+
+                if (!item.sold) {
+                    priceBtn.addEventListener('click', () => this.buyItem('card', index));
+                    priceBtn.style.cursor = 'pointer';
+                }
+
+                wrapper.appendChild(cardEl);
+                wrapper.appendChild(priceBtn);
+                cardContainer.appendChild(wrapper);
+            });
+        }
+
+        const serviceTitle = document.getElementById('shop-service-section-title');
+        if (serviceTitle) serviceTitle.textContent = activeTab?.serviceTitle || '✨ 特殊服务';
         const serviceContainer = document.getElementById('shop-services-container');
+        if (!serviceContainer) return;
         serviceContainer.innerHTML = '';
+
+        if (!Array.isArray(this.shopServices) || this.shopServices.length === 0) {
+            const emptyState = document.createElement('div');
+            emptyState.className = 'shop-empty-state';
+            emptyState.textContent = '此页暂无可交易项目。';
+            serviceContainer.appendChild(emptyState);
+            return;
+        }
 
         this.shopServices.forEach((service, index) => {
             const el = document.createElement('div');
-            el.className = 'shop-service';
-            el.id = `service - ${service.id} `;
+            const currency = service.currency || 'gold';
+            const isAffordable = this.canAffordShopItem(service);
+            const fit = this.evaluateShopServiceFit(service);
+            el.className = `shop-service currency-${currency}${service.riskLabel ? ' is-risky' : ''}`;
+            el.id = `service-${service.id}`;
             if (service.sold) el.style.opacity = '0.5';
+
+            const tags = [
+                service.tagLabel ? { value: service.tagLabel, className: '' } : null,
+                service.riskLabel ? { value: service.riskLabel, className: '' } : null,
+                fit?.label ? { value: fit.label, className: `fit-${fit.label === '高适配' ? 'high' : fit.label === '中适配' ? 'mid' : 'low'}` } : null
+            ]
+                .filter(Boolean)
+                .map((entry) => `<span class="shop-service-tag ${entry.className}">${entry.value}</span>`)
+                .join('');
 
             el.innerHTML = `
                 <div class="service-icon">${service.icon}</div>
                 <div class="service-info">
-                    <div class="service-name">${service.name}</div>
+                    <div class="service-name-row">
+                        <div class="service-name">${service.name}</div>
+                        <div class="service-tags">${tags}</div>
+                    </div>
                     <div class="service-desc">${service.desc}</div>
+                    <div class="service-fit-note">${fit.reason}</div>
                 </div>
-                <button class="buy-btn ${this.player.gold < service.price || service.sold ? 'disabled' : ''}">
-                    <span class="price">${service.sold ? '已售出' : '💰 ' + service.price}</span>
+                <button class="buy-btn ${(isAffordable && !service.sold) ? '' : 'disabled'}">
+                    <span class="price">${service.sold ? '已售出' : this.formatShopPrice(service)}</span>
                 </button>
-`;
+            `;
 
             if (!service.sold) {
                 const btn = el.querySelector('.buy-btn');
@@ -8539,53 +10816,33 @@ class Game {
 
     // 统一购买逻辑
     buyItem(type, index) {
-        let item;
-        if (type === 'card') {
-            item = this.shopItems[index];
-        } else {
-            item = this.shopServices[index];
-        }
-
+        const item = type === 'card' ? this.shopItems[index] : this.shopServices[index];
         if (!item || item.sold) return;
-        if (this.player.gold < item.price) {
-            Utils.showBattleLog('灵石不足！');
+        if (!this.canAffordShopItem(item)) {
+            Utils.showBattleLog(`${this.getStrategicCurrencyLabel(item.currency || 'gold')}不足！`);
             return;
         }
 
-        // 执行购买效果
         if (type === 'card') {
             this.player.addCardToDeck(item.card);
-            Utils.showBattleLog(`购买了 ${item.card.name} `);
-
-            // 扣款并标记
-            this.player.gold -= item.price;
+            Utils.showBattleLog(`购买了 ${item.card.name}`);
+            if (!this.spendShopPrice(item)) return;
             item.sold = true;
         } else {
-            // 处理服务效果
             const result = this.applyServiceEffect(item);
-
-            if (!result) return; // 失败/取消
-
-            if (result === 'deferred') {
-                return; // 延迟扣款处理 (如移除卡牌)
+            if (!result) return;
+            if (result === 'deferred') return;
+            if (!this.spendShopPrice(item)) {
+                Utils.showBattleLog(`${this.getStrategicCurrencyLabel(item.currency || 'gold')}结算失败。`);
+                return;
             }
-
-            // 立即扣款
-            this.player.gold -= item.price;
-
-            if (result === 'repeatable') {
-                // 可重复购买，不标记为售出
-                // 如果导致涨价，在 applyServiceEffect 中已经处理
-            } else {
+            if (result !== 'repeatable') {
                 item.sold = true;
             }
         }
 
-        // 更新UI
-        document.getElementById('shop-gold-display').textContent = this.player.gold;
+        this.updateShopCurrencyDisplays();
         this.renderShop();
-
-        // 自动保存 (防止刷新丢进度)
         this.saveGame();
     }
 
@@ -8750,6 +11007,91 @@ class Game {
                 }
                 Utils.showBattleLog('战地医师签约完成：接下来 2 场战斗胜利后恢复生命');
                 this.showRewardModal('医护协议生效', '接下来 2 场战斗：\n胜利后恢复生命。', '🩹');
+                return true;
+
+            case 'forbiddenDraft':
+                if (this.player.maxHp <= 18) {
+                    Utils.showBattleLog('根基过于虚弱，无法继续签订血契。');
+                    return false;
+                }
+                this.showShopForbiddenDraft(service);
+                return 'deferred';
+
+            case 'soulMortgage': {
+                const beforeHp = this.player.currentHp;
+                const hpCap = Math.max(1, Math.floor(this.player.maxHp * 0.7));
+                this.player.currentHp = Math.max(1, Math.min(this.player.currentHp, hpCap));
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('firstTurnEnergyBoostBattles', 3);
+                    this.player.grantAdventureBuff('ringExpBoostBattles', 3);
+                    this.player.grantAdventureBuff('victoryGoldBoostBattles', 2);
+                }
+                const payout = 90 + Math.max(0, this.player.realm || 1) * 12;
+                this.player.gold += payout;
+                Utils.showBattleLog(`蚀寿抵押：生命 ${beforeHp}→${this.player.currentHp}，灵石 +${payout}`);
+                this.showRewardModal(
+                    '蚀寿抵押完成',
+                    `当前生命压至 ${this.player.currentHp}。
+接下来 3 场战斗：首回合灵力 +1、命环经验提升。
+额外获得 ${payout} 灵石。`,
+                    '⛓️'
+                );
+                return true;
+            }
+
+            case 'doomIdol': {
+                const curseCard = typeof cloneCardTemplate === 'function'
+                    ? cloneCardTemplate('demonDoubt')
+                    : (typeof CARDS !== 'undefined' && CARDS.demonDoubt ? JSON.parse(JSON.stringify(CARDS.demonDoubt)) : null);
+                if (curseCard) {
+                    this.player.addCardToDeck(curseCard);
+                }
+                const treasure = this.getWeightedRandomTreasure ? this.getWeightedRandomTreasure() : null;
+                if (treasure && treasure.id) {
+                    this.player.addTreasure(treasure.id);
+                }
+                this.player.gold += 80;
+                Utils.showBattleLog(`灾像供契：牌组混入【心魔·疑心】${treasure ? `，并获得法宝【${treasure.name}】` : ''}`);
+                this.showRewardModal(
+                    '灾像供契完成',
+                    `牌组加入【心魔·疑心】。
+${treasure ? `获得法宝：${treasure.name}
+` : ''}额外获得 80 灵石。`,
+                    '🗿'
+                );
+                return true;
+            }
+
+            case 'rumorRareDraft': {
+                const rumors = this.ensureShopRumors();
+                rumors.rewardRareCharges += 2;
+                rumors.rewardRareBonus = Math.max(Number(rumors.rewardRareBonus) || 0, 0.3);
+                this.pushShopRumorHistory('稀曜签：未来两次卡牌奖励稀有化');
+                Utils.showBattleLog('传闻锁定：接下来 2 次战后奖励更偏向稀有/史诗');
+                this.showRewardModal('稀曜签锁定', '未来 2 次战后卡牌奖励将显著偏向稀有/史诗。', '📎');
+                return true;
+            }
+
+            case 'rumorTreasureTrail': {
+                const rumors = this.ensureShopRumors();
+                rumors.treasureCharges += 2;
+                rumors.treasureChanceBonus = Math.max(Number(rumors.treasureChanceBonus) || 0, 0.22);
+                this.pushShopRumorHistory('宝踪风声：精英/Boss 战利强化');
+                Utils.showBattleLog('传闻锁定：接下来 2 次精英/Boss 战更易掉落法宝');
+                this.showRewardModal('宝踪风声锁定', '接下来 2 次精英/Boss 结算将提升法宝掉落率。', '🏺');
+                return true;
+            }
+
+            case 'rumorUtilityRoute':
+                this.setNextRealmMapRumor({ event: 0.05, shop: 0.04, rest: 0.02, enemy: -0.06, elite: -0.03 }, '机缘补给线');
+                Utils.showBattleLog(`传闻锁定：第 ${this.player.realm + 1} 重更偏向事件、商店与营地。`);
+                this.showRewardModal('商路星引生效', `第 ${this.player.realm + 1} 重地图将更偏向事件、商店与营地。`, '🗺️');
+                return true;
+
+            case 'rumorTrialRoute':
+                this.setNextRealmMapRumor({ trial: 0.06, elite: 0.03, forge: 0.025, enemy: -0.05, rest: -0.02, shop: -0.015 }, '试炼锋路');
+                Utils.showBattleLog(`传闻锁定：第 ${this.player.realm + 1} 重更偏向试炼、精英与锻炉。`);
+                this.showRewardModal('锋路谶语生效', `第 ${this.player.realm + 1} 重地图将更偏向试炼、精英与锻炉。`, '⚔️');
                 return true;
 
             case 'endlessStabilizer': {
@@ -8967,8 +11309,8 @@ class Game {
             Utils.showBattleLog('当前并非无尽轮回，无法执行轮回祷告。');
             return;
         }
-        if (this.player.gold < serviceItem.price) {
-            Utils.showBattleLog('灵石不足！');
+        if (!this.canAffordShopItem(serviceItem)) {
+            Utils.showBattleLog(`${this.getStrategicCurrencyLabel(serviceItem.currency || 'gold')}不足！`);
             return;
         }
 
@@ -8996,18 +11338,17 @@ class Game {
             const fallback = picks[0];
             const applied = fallback ? this.applyEndlessBoon(fallback.id) : null;
             if (!applied) return;
-            this.player.gold -= serviceItem.price;
+            if (!this.spendShopPrice(serviceItem)) return;
             serviceItem.sold = true;
+            this.updateShopCurrencyDisplays();
             this.renderShop();
-            const goldEl = document.getElementById('shop-gold-display');
-            if (goldEl) goldEl.textContent = this.player.gold;
             this.saveGame();
             return;
         }
 
         titleEl.textContent = '轮回祷告';
         iconEl.textContent = '🕯️';
-        descEl.innerHTML = `支付 <span style=\"color:var(--accent-gold)\">${serviceItem.price}</span> 灵石，从 2 项赐福中选择 1 项。`;
+        descEl.innerHTML = `支付 <span style=\"color:var(--accent-gold)\">${this.formatShopPrice(serviceItem)}</span>，从 2 项赐福中选择 1 项。`;
         choicesEl.innerHTML = '';
 
         picks.slice(0, 2).forEach((boon) => {
@@ -9048,8 +11389,8 @@ class Game {
 
     showShopCardDraft(serviceItem) {
         if (!serviceItem) return;
-        if (this.player.gold < serviceItem.price) {
-            Utils.showBattleLog('灵石不足！');
+        if (!this.canAffordShopItem(serviceItem)) {
+            Utils.showBattleLog(`${this.getStrategicCurrencyLabel(serviceItem.currency || 'gold')}不足！`);
             return;
         }
 
@@ -9073,7 +11414,7 @@ class Game {
 
         titleEl.textContent = '侦巡补给包';
         iconEl.textContent = '🎒';
-        descEl.innerHTML = `支付 <span style=\"color:var(--accent-gold)\">${serviceItem.price}</span> 灵石，选择 1 张补给卡牌。`;
+        descEl.innerHTML = `支付 <span style=\"color:var(--accent-gold)\">${this.formatShopPrice(serviceItem)}</span>，选择 1 张补给卡牌。`;
         choicesEl.innerHTML = '';
 
         cards.forEach((card) => {
@@ -9089,13 +11430,12 @@ class Game {
                 <div class="choice-effect">${card.description || '获得这张卡牌'}</div>
             `;
             btn.onclick = () => {
-                this.player.gold -= serviceItem.price;
+                if (!this.spendShopPrice(serviceItem)) return;
                 this.player.addCardToDeck(card);
                 serviceItem.sold = true;
                 this.closeModal();
                 Utils.showBattleLog(`补给采购完成：获得【${card.name}】`);
-                const goldEl = document.getElementById('shop-gold-display');
-                if (goldEl) goldEl.textContent = this.player.gold;
+                this.updateShopCurrencyDisplays();
                 this.renderShop();
                 this.saveGame();
             };
@@ -9114,10 +11454,85 @@ class Game {
         modal.classList.add('active');
     }
 
+    showShopForbiddenDraft(serviceItem) {
+        if (!serviceItem) return;
+        if (!this.canAffordShopItem(serviceItem)) {
+            Utils.showBattleLog(`${this.getStrategicCurrencyLabel(serviceItem.currency || 'gold')}不足！`);
+            return;
+        }
+        if (this.player.maxHp <= 18) {
+            Utils.showBattleLog('根基过于虚弱，无法承受禁术血契。');
+            return;
+        }
+
+        const rarityPool = ['rare', 'rare', 'epic'];
+        const cards = [];
+        for (let i = 0; i < 3; i += 1) {
+            const rarity = rarityPool[Math.floor(Math.random() * rarityPool.length)];
+            const card = getRandomCard(rarity, this.player.characterId);
+            if (card) cards.push(card);
+        }
+        if (cards.length === 0) {
+            Utils.showBattleLog('禁术卷轴暂未显化，交易取消。');
+            return;
+        }
+
+        const modal = document.getElementById('event-modal');
+        const titleEl = document.getElementById('event-title');
+        const iconEl = document.getElementById('event-icon');
+        const descEl = document.getElementById('event-desc');
+        const choicesEl = document.getElementById('event-choices');
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) return;
+
+        titleEl.textContent = '逆命血契';
+        iconEl.textContent = '🩸';
+        descEl.innerHTML = `支付 <span style="color:var(--accent-gold)">${this.formatShopPrice(serviceItem)}</span>，并永久失去 6 点生命上限，从 3 张禁术卡中选择 1 张。`;
+        choicesEl.innerHTML = '';
+
+        cards.forEach((card) => {
+            const rarityKey = String(card.rarity || 'rare').toLowerCase();
+            const rarityLabel = this.getCardRarityLabel(rarityKey);
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            btn.innerHTML = `
+                <div class="choice-title">
+                    <span class="choice-name">${card.icon || '🃏'} ${card.name}</span>
+                    <span class="choice-rarity rarity-${rarityKey}">【${rarityLabel}】</span>
+                </div>
+                <div class="choice-effect">${card.description || '获得这张卡牌'}</div>
+            `;
+            btn.onclick = () => {
+                if (!this.spendShopPrice(serviceItem)) return;
+                this.player.maxHp = Math.max(16, this.player.maxHp - 6);
+                this.player.currentHp = Math.min(this.player.currentHp, this.player.maxHp);
+                this.player.addCardToDeck(card);
+                serviceItem.sold = true;
+                this.closeModal();
+                Utils.showBattleLog(`逆命血契：获得【${card.name}】，最大生命降至 ${this.player.maxHp}`);
+                this.showRewardModal('逆命血契完成', `获得卡牌：${card.name}
+最大生命降至 ${this.player.maxHp}。`, '🩸');
+                this.updateShopCurrencyDisplays();
+                this.renderShop();
+                this.saveGame();
+            };
+            choicesEl.appendChild(btn);
+        });
+
+        const leaveBtn = document.createElement('button');
+        leaveBtn.className = 'event-choice';
+        leaveBtn.innerHTML = `
+            <div>🚶 暂缓血契</div>
+            <div class="choice-effect">保留业果，返回商店</div>
+        `;
+        leaveBtn.onclick = () => this.closeModal();
+        choicesEl.appendChild(leaveBtn);
+        modal.classList.add('active');
+    }
+
     // 显示移除卡牌界面 (Refactored: Ink & Gold Purification UI)
     showRemoveCard(serviceItem) {
-        if (this.player.gold < serviceItem.price) {
-            Utils.showBattleLog('灵石不足！');
+        if (!this.canAffordShopItem(serviceItem)) {
+            Utils.showBattleLog(`${this.getStrategicCurrencyLabel(serviceItem.currency || 'gold')}不足！`);
             return;
         }
 
@@ -9137,7 +11552,7 @@ class Game {
         // Reset State
         grid.innerHTML = '';
         modal.classList.add('active');
-        costDisplay.textContent = `消耗: ${serviceItem.price} 灵石`;
+        costDisplay.textContent = `消耗: ${this.formatShopPrice(serviceItem)}`;
         confirmBtn.disabled = true;
         confirmBtn.onclick = null; // Clear previous listeners
 
@@ -9206,8 +11621,8 @@ class Game {
             // Delay actual removal for animation
             setTimeout(() => {
                 // Remove from deck
+                if (!this.spendShopPrice(serviceItem)) return;
                 this.player.deck.splice(selectedIndex, 1);
-                this.player.gold -= serviceItem.price;
 
                 // Update Logic
                 this.player.removeCount = (this.player.removeCount || 0) + 1;
@@ -9220,8 +11635,8 @@ class Game {
                 Utils.showBattleLog(`【${cardName}】已化为灰烬...`);
 
                 // Refresh shop UI to show sold status
+                this.updateShopCurrencyDisplays();
                 this.renderShop();
-                document.getElementById('shop-gold-display').textContent = this.player.gold;
 
             }, 800);
         };
@@ -10595,12 +13010,40 @@ class Game {
 
         const grid = document.getElementById('treasure-compendium-grid');
         const statsEl = document.getElementById('treasure-compendium-stats');
+        const filterSelect = document.getElementById('treasure-filter-select');
+        const sortSelect = document.getElementById('treasure-sort-select');
         if (!grid) return;
+
+        const filterState = this.getTreasureCompendiumFilterState();
+        this.treasureCompendiumFilter = this.getTreasureCompendiumQuickFilterValue();
+        this.treasureCompendiumSort = this.treasureCompendiumSort || 'rarity_desc';
+        if (filterSelect) filterSelect.value = this.treasureCompendiumFilter;
+        if (sortSelect) sortSelect.value = this.treasureCompendiumSort;
+        [0, 1, 2].forEach((slot) => {
+            const applyBtn = document.getElementById(`treasure-preset-slot-${slot}`);
+            const saveBtn = document.getElementById(`treasure-preset-save-${slot}`);
+            if (applyBtn) {
+                applyBtn.textContent = this.getTreasureCompendiumPresetLabel(slot);
+                applyBtn.classList.toggle('active', this.isTreasureCompendiumPresetActive(slot));
+                applyBtn.title = this.getTreasureCompendiumPresetLabel(slot);
+            }
+            if (saveBtn) saveBtn.title = `保存到${slot + 1}号预设`;
+        });
+
+        document.querySelectorAll('#treasure-compendium [data-filter-chip-group]').forEach((chip) => {
+            const group = chip.dataset.filterChipGroup;
+            const value = chip.dataset.filterChipValue;
+            const active = group === 'status'
+                ? filterState.status === value
+                : (group === 'rarity'
+                    ? filterState.rarities.includes(value)
+                    : filterState.sources.includes(value));
+            chip.classList.toggle('active', active);
+        });
 
         grid.innerHTML = '';
         if (statsEl) statsEl.innerHTML = '';
 
-        // 1. 准备数据并排序
         let allTreasures = [];
         let ownedCount = 0;
 
@@ -10608,61 +13051,71 @@ class Game {
             const t = TREASURES[tid];
             const isOwned = this.player.hasTreasure(tid);
             if (isOwned) ownedCount++;
-
-            allTreasures.push({
-                id: tid,
-                data: t,
-                isOwned: isOwned
-            });
+            allTreasures.push({ id: tid, data: t, isOwned });
         }
 
-        // 排序规则: 品质 (Mythic > Legendary > Rare > Common) -> 是否拥有 (已拥有在前) -> ID
-        const rarityScore = { 'mythic': 4, 'legendary': 3, 'rare': 2, 'common': 1 };
+        const filteredTreasures = this.sortTreasureCompendiumItems(allTreasures.filter((item) => this.passesTreasureCompendiumFilter(item)));
 
-        allTreasures.sort((a, b) => {
-            const rA = rarityScore[a.data.rarity || 'common'] || 1;
-            const rB = rarityScore[b.data.rarity || 'common'] || 1;
-            if (rA !== rB) return rB - rA; // 高品质在前
-
-            // if (a.isOwned !== b.isOwned) return b.isOwned - a.isOwned; // 已拥有在前 (可选，暂不启用，保持图鉴顺序统一)
-
-            return a.id.localeCompare(b.id);
-        });
-
-        // 2. 渲染网格
-        allTreasures.forEach(item => {
+        filteredTreasures.forEach((item) => {
             const t = item.data;
             const isOwned = item.isOwned;
             const rarity = t.rarity || 'common';
-            // const rarityLabel = this.getRarityLabel(rarity); // Not needed for grid
-
             const el = document.createElement('div');
             el.className = `compendium-item rarity-${rarity} ${isOwned ? 'unlocked' : 'locked'}`;
-
-            // 构建内容 - 即使未解锁也显示真实图标和名字，但会有样式灰化
             const icon = t.icon || '📦';
             const name = t.name;
-
             el.innerHTML = `
                 <div class="compendium-item-inner">
                     <div class="compendium-icon ${isOwned ? '' : 'locked'}">${icon}</div>
                     <div class="compendium-name ${isOwned ? '' : 'locked'}">${name}</div>
                 </div>
             `;
-
-            el.onclick = () => {
-                this.showTreasureDetail(t, isOwned);
-            };
-
+            el.onclick = () => { this.showTreasureDetail(t, isOwned); };
             grid.appendChild(el);
         });
 
-        // 3. 更新进度头
         if (statsEl) {
             statsEl.innerHTML = `
                 <span class="stat-icon">🎒</span>
                 <span class="stat-text">法宝收藏进度: <span style="color:var(--accent-gold); font-weight:bold;">${ownedCount}</span> / ${allTreasures.length}</span>
             `;
+        }
+
+        const summaryEl = document.getElementById('treasure-compendium-summary');
+        const rarityEl = document.getElementById('treasure-compendium-rarity');
+        const progress = allTreasures.length > 0 ? Math.round((ownedCount / allTreasures.length) * 100) : 0;
+        const rarityOrder = ['common', 'rare', 'legendary', 'mythic'];
+        const rarityNameMap = { common: '凡品', rare: '灵品', legendary: '神品', mythic: '仙品' };
+        const sortLabelMap = { rarity_desc: '品质优先', owned_first: '已收录优先', realm_asc: '解锁层数优先', name_asc: '名称排序' };
+        const activeFilterLabels = this.getTreasureCompendiumFilterLabels();
+        const rarityCounts = rarityOrder.map((rarity) => {
+            const total = allTreasures.filter((item) => (item.data.rarity || 'common') === rarity).length;
+            const owned = allTreasures.filter((item) => (item.data.rarity || 'common') === rarity && item.isOwned).length;
+            return { rarity, total, owned };
+        });
+
+        if (summaryEl) {
+            summaryEl.innerHTML = [
+                '<span class="codex-side-kicker">藏品总览</span>',
+                '<h3>法宝收藏进度</h3>',
+                `<div class="codex-summary-metric"><strong>${ownedCount}</strong><span>/ ${allTreasures.length} 已收录</span></div>`,
+                `<div class="codex-progress-track"><div class="codex-progress-fill" style="width:${progress}%"></div></div>`,
+                '<ul class="codex-side-list compact">',
+                `<li>当前筛选结果 ${filteredTreasures.length} 件 · 条件 ${activeFilterLabels.length > 0 ? activeFilterLabels.join(' / ') : '全部法宝'} / 排序 ${sortLabelMap[this.treasureCompendiumSort] || this.treasureCompendiumSort}。</li>`,
+                '<li>点击主区任意法宝即可查看来源、逸闻与持有状态。</li>',
+                '</ul>'
+            ].join('');
+        }
+
+        if (rarityEl) {
+            rarityEl.innerHTML = [
+                '<span class="codex-side-kicker">稀有度分布</span>',
+                '<h3>稀有度概览</h3>',
+                '<div class="codex-summary-grid">',
+                ...rarityCounts.map((entry) => `<div class="codex-summary-chip rarity-${entry.rarity}"><strong>${entry.owned}/${entry.total}</strong><span>${rarityNameMap[entry.rarity]}</span></div>`),
+                '</div>',
+                '<p class="codex-side-note">顶部 quick filter 可快速切换，下面多选 chip 可叠加来源与稀有度条件。</p>'
+            ].join('');
         }
     }
 
@@ -10671,21 +13124,20 @@ class Game {
         const modal = document.getElementById('treasure-detail-modal');
         if (!modal) return;
 
-        // Elements
         const elIcon = document.getElementById('detail-icon');
         const elName = document.getElementById('detail-name');
         const elRarity = document.getElementById('detail-rarity');
         const elDesc = document.getElementById('detail-desc');
         const elLore = document.getElementById('detail-lore');
         const elSource = document.getElementById('detail-source');
+        const elOwnedState = document.getElementById('detail-owned-state');
         const header = modal.querySelector('.detail-header');
 
         if (!elIcon || !elName) return;
 
-        // Reset classes
         header.className = 'detail-header';
+        if (elOwnedState) elOwnedState.className = 'detail-status-chip';
 
-        // Common logic for filling content (Locked items now show full details too)
         const rarity = treasure.rarity || 'common';
         const rarityLabel = this.getRarityLabel(rarity);
 
@@ -10694,40 +13146,40 @@ class Game {
         elName.textContent = treasure.name;
         elRarity.innerHTML = rarityLabel;
 
-        // Description
         let desc = treasure.description;
         try {
             if (treasure.getDesc) desc = treasure.getDesc(this.player);
         } catch (e) {
             console.warn('Desc gen failed', e);
         }
-        // Highlight keywords support
         desc = desc.replace(/([\d.]+|[+\-]\d+%?)/g, '<span style="color:#ffb74d;">$1</span>');
         elDesc.innerHTML = desc;
 
-        // Lore
-        elLore.textContent = treasure.lore || "（此物似乎蕴含着某种未知的力量...）";
+        elLore.textContent = treasure.lore || '（此物似乎蕴含着某种未知的力量...）';
         elLore.style.visibility = 'visible';
 
-        // Source
         const source = this.getTreasureSource(treasure);
         elSource.innerHTML = source;
 
-        // Visual adjustments for Locked state in modal
         if (!isUnlocked) {
             elIcon.style.filter = 'grayscale(1) brightness(0.7)';
-            elName.style.color = '#888'; // Grey out name
+            elName.style.color = '#888';
             elRarity.innerHTML += ' <span style="font-size:0.8em; color:#666">(未获取)</span>';
-            // We still show description and source as requested
+            if (elOwnedState) {
+                elOwnedState.textContent = '未收录';
+                elOwnedState.classList.add('locked');
+            }
         } else {
             elIcon.style.filter = '';
-            elName.style.color = ''; // Reset to CSS default (gold/rarity color)
+            elName.style.color = '';
+            if (elOwnedState) {
+                elOwnedState.textContent = '已收录';
+                elOwnedState.classList.add('owned');
+            }
         }
 
-        // Show Modal
         modal.classList.add('active');
 
-        // Play sound
         if (typeof audioManager !== 'undefined') {
             audioManager.playSFX('click');
         }

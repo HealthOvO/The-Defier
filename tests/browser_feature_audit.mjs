@@ -180,7 +180,11 @@ async function safeScreenshot(page, outPath) {
         currentPatternIndex: 0
       }
     ];
+    if (typeof game.battle.applyEnemySquadEcology === 'function') {
+      game.battle.applyEnemySquadEcology();
+    }
     if (typeof game.battle.updateEnemiesUI === 'function') game.battle.updateEnemiesUI();
+    if (typeof game.battle.updateEnvironmentUI === 'function') game.battle.updateEnvironmentUI();
 
     const state = game.battle.commandState;
     if (!state || !state.enabled || !Array.isArray(state.commands) || state.commands.length < 1) {
@@ -204,8 +208,28 @@ async function safeScreenshot(page, outPath) {
     const advisorTitle = advisor ? (advisor.querySelector('.battle-advisor-title')?.textContent || '').trim() : '';
     const advisorRecommend = advisor ? (advisor.querySelector('.battle-advisor-recommend')?.textContent || '').trim() : '';
     const advisorReadiness = advisor ? (advisor.querySelector('.battle-advisor-readiness')?.textContent || '').trim() : '';
+    const advisorFormation = advisor ? (advisor.querySelector('.battle-advisor-formation')?.textContent || '').trim() : '';
+    const advisorCardPlan = advisor ? (advisor.querySelector('.battle-advisor-cardplan')?.textContent || '').trim() : '';
+    const advisorCardSteps = advisor ? Array.from(advisor.querySelectorAll('.battle-advisor-cardstep-btn')) : [];
+    const advisorCardStepCount = advisorCardSteps.length;
+    let advisorFocusApplied = false;
+    let advisorPreviewApplied = false;
+    let advisorTargetingPreview = false;
+    let advisorFocusedIndex = '';
+    if (advisorCardSteps.length > 0 && typeof advisorCardSteps[0].click === 'function') {
+      advisorFocusedIndex = String(advisorCardSteps[0].getAttribute('data-card-index') || '');
+      advisorCardSteps[0].click();
+      const focusedCard = document.querySelector('#hand-cards .card.advisor-focus');
+      const focusedIndex = focusedCard ? String(focusedCard.getAttribute('data-index') || '') : '';
+      const selectedCard = document.querySelector('#hand-cards .card.selected');
+      advisorFocusApplied = !!focusedCard && focusedIndex === advisorFocusedIndex;
+      advisorPreviewApplied = !!selectedCard && String(selectedCard.getAttribute('data-index') || '') === advisorFocusedIndex;
+      advisorTargetingPreview = !!document.querySelector('#hand-cards.targeting-active');
+    }
     const advisorThreatChips = advisor ? advisor.querySelectorAll('.battle-advisor-threat-chip').length : 0;
     let advisorCollapsedAfterToggle = false;
+    let advisorDragged = false;
+    let advisorDragDelta = { x: 0, y: 0 };
     const toggleBtn = panel ? panel.querySelector('.battle-advisor-toggle') : null;
     if (toggleBtn && typeof toggleBtn.click === 'function') {
       toggleBtn.click();
@@ -220,6 +244,50 @@ async function safeScreenshot(page, outPath) {
         if (typeof game.battle.updateBattleUI === 'function') game.battle.updateBattleUI();
       }
       panel = document.getElementById('battle-command-panel');
+    }
+
+    const dragHandle = panel ? panel.querySelector('.battle-advisor-drag-handle') : null;
+    if (panel && dragHandle && typeof PointerEvent !== 'undefined') {
+      const beforeRect = panel.getBoundingClientRect();
+      const startX = Math.round(beforeRect.left + 12);
+      const startY = Math.round(beforeRect.top + 12);
+      dragHandle.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: startX,
+        clientY: startY,
+        pointerId: 1,
+        isPrimary: true
+      }));
+      window.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: startX + 72,
+        clientY: startY + 36,
+        pointerId: 1,
+        isPrimary: true
+      }));
+      window.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 0,
+        clientX: startX + 72,
+        clientY: startY + 36,
+        pointerId: 1,
+        isPrimary: true
+      }));
+      panel = document.getElementById('battle-command-panel');
+      const afterRect = panel ? panel.getBoundingClientRect() : beforeRect;
+      advisorDragDelta = {
+        x: Math.round(afterRect.left - beforeRect.left),
+        y: Math.round(afterRect.top - beforeRect.top)
+      };
+      advisorDragged = Math.abs(advisorDragDelta.x) >= 40 && Math.abs(advisorDragDelta.y) >= 16;
     }
 
     const commandId = state.commands[0].id;
@@ -261,8 +329,17 @@ async function safeScreenshot(page, outPath) {
       advisorTitle,
       advisorRecommend,
       advisorReadiness,
+      advisorFormation,
+      advisorCardPlan,
+      advisorCardStepCount,
+      advisorFocusApplied,
+      advisorPreviewApplied,
+      advisorTargetingPreview,
+      advisorFocusedIndex,
       advisorThreatChips,
       advisorCollapsedAfterToggle,
+      advisorDragged,
+      advisorDragDelta,
       commandId,
       before,
       after,
@@ -279,8 +356,235 @@ async function safeScreenshot(page, outPath) {
       /回路/.test(battleCommandProbe.advisorRecommend || '') &&
       Number(battleCommandProbe.advisorThreatChips || 0) >= 1 &&
       /建议|指令|回合|命环/.test(battleCommandProbe.advisorReadiness || '') &&
-      !!battleCommandProbe.advisorCollapsedAfterToggle,
+      /敌阵画像|轮段研判/.test(battleCommandProbe.advisorFormation || '') &&
+      /手牌执行|优先打|先打/.test(battleCommandProbe.advisorCardPlan || '') &&
+      Number(battleCommandProbe.advisorCardStepCount || 0) >= 1 &&
+      !!battleCommandProbe.advisorFocusApplied &&
+      (!!battleCommandProbe.advisorPreviewApplied || !!battleCommandProbe.advisorTargetingPreview) &&
+      !!battleCommandProbe.advisorCollapsedAfterToggle &&
+      !!battleCommandProbe.advisorDragged,
     JSON.stringify(battleCommandProbe || null)
+  );
+
+  const advisorTurnReviewProbe = await page.evaluate(async () => {
+    if (!window.game || !game.battle) return { ok: false, reason: 'no_battle' };
+    const battle = game.battle;
+    battle.battleEnded = false;
+    battle.currentTurn = 'player';
+    battle.isProcessingCard = false;
+    battle.isTurnTransitioning = false;
+    battle.turnNumber = Math.max(1, Number(battle.turnNumber) || 1);
+    battle.enemyTurn = async () => {};
+    battle.enemies = [
+      {
+        id: 'audit_review_alpha',
+        name: '复盘试作敌',
+        icon: '🧪',
+        currentHp: 120,
+        maxHp: 120,
+        block: 14,
+        buffs: {},
+        patterns: [{ type: 'attack', value: 14, intent: '⚔️压制' }],
+        currentPatternIndex: 0
+      }
+    ];
+    if (game.player) {
+      game.player.currentEnergy = 3;
+      game.player.milkCandy = 3;
+      game.player.block = 0;
+      game.player.buffs = game.player.buffs || {};
+      game.player.buffs.extraTurn = 0;
+      game.player.hand = [
+        {
+          id: 'audit_review_strike',
+          name: '裂光斩',
+          type: 'attack',
+          cost: 1,
+          damage: 8,
+          effects: []
+        },
+        {
+          id: 'audit_review_break',
+          name: '穿甲震击',
+          type: 'attack',
+          cost: 2,
+          damage: 6,
+          effects: [{ type: 'removeBlock', value: 12 }]
+        },
+        {
+          id: 'audit_review_guard',
+          name: '归元护体',
+          type: 'defense',
+          cost: 1,
+          block: 8,
+          effects: [{ type: 'block', value: 8 }]
+        }
+      ];
+    }
+    if (typeof battle.resetTurnAdvisorTelemetry === 'function') {
+      battle.resetTurnAdvisorTelemetry();
+    }
+    if (typeof battle.updateBattleUI === 'function') battle.updateBattleUI();
+
+    const panel = document.getElementById('battle-command-panel');
+    const button = panel ? panel.querySelector('.battle-advisor-cardstep-btn') : null;
+    if (!button || typeof button.click !== 'function') {
+      return { ok: false, reason: 'no_advisor_step_button' };
+    }
+
+    const beforeLogCount = Array.isArray(Utils._battleLogHistory) ? Utils._battleLogHistory.length : 0;
+    button.click();
+    const selectedCard = document.querySelector('#hand-cards .card.selected');
+    const targetingActive = !!document.querySelector('#hand-cards.targeting-active');
+
+    await battle.endTurn();
+
+    const logTexts = Array.isArray(Utils._battleLogHistory)
+      ? Utils._battleLogHistory.map((item) => String(item?.message || '').trim())
+      : [];
+    const reviewEntry = [...logTexts].reverse().find((text) => /回合复盘：/.test(text)) || '';
+    const afterLogCount = logTexts.length;
+    return {
+      ok: (targetingActive || !!selectedCard) && /回合复盘：/.test(reviewEntry),
+      selectedCardIndex: selectedCard ? String(selectedCard.getAttribute('data-index') || '') : '',
+      targetingActive,
+      beforeLogCount,
+      afterLogCount,
+      reviewEntry
+    };
+  });
+  add(
+    'advisor preview enters selection state and end turn writes review log',
+    !!advisorTurnReviewProbe &&
+      !!advisorTurnReviewProbe.ok &&
+      Number(advisorTurnReviewProbe.afterLogCount || 0) > Number(advisorTurnReviewProbe.beforeLogCount || 0) &&
+      /回合复盘：/.test(advisorTurnReviewProbe.reviewEntry || '') &&
+      (/已预选建议牌但未执行|错过破盾窗口|未按/.test(advisorTurnReviewProbe.reviewEntry || '')),
+    JSON.stringify(advisorTurnReviewProbe || null)
+  );
+
+  const squadEcologyProbe = await page.evaluate(() => {
+    if (!window.game || !game.battle) return { ok: false, reason: 'no_battle' };
+    const battle = game.battle;
+    if (typeof battle.applyEnemySquadEcology !== 'function') return { ok: false, reason: 'no_squad_ecology_method' };
+
+    battle.enemies = [
+      {
+        id: 'audit_squad_alpha',
+        name: '试作敌阵甲',
+        icon: '🧪',
+        currentHp: 150,
+        maxHp: 150,
+        block: 0,
+        buffs: {},
+        patterns: [{ type: 'attack', value: 12, intent: '⚔️斩击' }],
+        currentPatternIndex: 0
+      },
+      {
+        id: 'audit_squad_beta',
+        name: '试作敌阵乙',
+        icon: '🧪',
+        currentHp: 145,
+        maxHp: 145,
+        block: 0,
+        buffs: {},
+        patterns: [{ type: 'defend', value: 9, intent: '🛡️护阵' }, { type: 'attack', value: 9, intent: '⚔️反斩' }],
+        currentPatternIndex: 0
+      },
+      {
+        id: 'audit_squad_gamma',
+        name: '试作敌阵丙',
+        icon: '🧪',
+        currentHp: 140,
+        maxHp: 140,
+        block: 0,
+        buffs: {},
+        patterns: [{ type: 'debuff', buffType: 'weak', value: 1, intent: '🌀缠压' }, { type: 'attack', value: 8, intent: '⚔️刺击' }],
+        currentPatternIndex: 0
+      }
+    ];
+    battle.applyEnemySquadEcology();
+    if (typeof battle.updateEnemiesUI === 'function') battle.updateEnemiesUI();
+    if (typeof battle.updateEnvironmentUI === 'function') battle.updateEnvironmentUI();
+
+    const squadTags = Array.from(document.querySelectorAll('.enemy .enemy-squad-tag')).map((el) => (el.textContent || '').trim());
+    const envChip = document.querySelector('#battle-environment .squad-formation-chip');
+    const roleLabels = battle.enemies.map((enemy) => enemy?.enemySquadRoleLabel || '');
+    const enrichedPattern = battle.enemies.some((enemy) => Array.isArray(enemy?.patterns) && enemy.patterns.length >= 3);
+    return {
+      ok: !!battle.activeSquadEcology && squadTags.length >= 2 && roleLabels.some((label) => label === '阵核') && !!envChip,
+      formation: battle.activeSquadEcology?.id || '',
+      squadTags,
+      envChipText: envChip ? (envChip.textContent || '').trim() : '',
+      roleLabels,
+      enrichedPattern
+    };
+  });
+  add(
+    'battle enemy squad ecology applies formation tags and role-differentiated behavior',
+    !!squadEcologyProbe &&
+      !!squadEcologyProbe.ok &&
+      /编队/.test((squadEcologyProbe.squadTags || []).join(' ')) &&
+      /敌阵/.test(squadEcologyProbe.envChipText || '') &&
+      !!squadEcologyProbe.enrichedPattern,
+    JSON.stringify(squadEcologyProbe || null)
+  );
+
+  const rewardMetaProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.renderRewardBattleMeta !== 'function') return { ok: false, reason: 'no_render_method' };
+
+    game.lastBattleRewardMeta = {
+      encounter: {
+        themeId: 'theme_counter_lattice',
+        themeName: '轮段·反制晶格',
+        tierStage: 2,
+        goldBonus: 18,
+        ringExpBonus: 9
+      },
+      squad: {
+        squadId: 'squad_hex_weave',
+        squadName: '咒织链阵',
+        goldBonus: 14,
+        ringExpBonus: 11,
+        synergyThemeName: '轮段·反制晶格'
+      }
+    };
+    game.renderRewardBattleMeta();
+
+    const panel = document.getElementById('reward-battle-meta');
+    const chips = Array.from(panel?.querySelectorAll('.reward-meta-chip') || []);
+    const texts = chips.map((chip) => (chip.textContent || '').trim());
+    const style = panel ? getComputedStyle(panel) : null;
+    const panelVisible = !!panel && !!style && style.display !== 'none' && style.visibility !== 'hidden';
+    const title = panel ? (panel.querySelector('.reward-meta-title')?.textContent || '').trim() : '';
+
+    game.lastBattleRewardMeta = null;
+    game.renderRewardBattleMeta();
+    const clearedDisplay = panel ? panel.style.display : '';
+    const clearedHtml = panel ? panel.innerHTML.trim() : '';
+
+    return {
+      ok:
+        panelVisible &&
+        texts.length >= 6 &&
+        texts.some((text) => /遭遇战利/.test(text)) &&
+        texts.some((text) => /敌阵战利/.test(text)) &&
+        texts.some((text) => /轮段协同/.test(text)),
+      title,
+      chipCount: texts.length,
+      texts,
+      clearedDisplay,
+      clearedHtmlLength: clearedHtml.length
+    };
+  });
+  add(
+    'reward screen meta panel shows localized encounter/squad sources and clears stale content',
+    !!rewardMetaProbe &&
+      !!rewardMetaProbe.ok &&
+      /战利来源/.test(rewardMetaProbe.title || '') &&
+      rewardMetaProbe.clearedDisplay === 'none' &&
+      Number(rewardMetaProbe.clearedHtmlLength ?? -1) === 0,
+    JSON.stringify(rewardMetaProbe || null)
   );
 
   const candyHudProbe = await page.evaluate(() => {
@@ -711,6 +1015,57 @@ async function safeScreenshot(page, outPath) {
     JSON.stringify(handCounterTagProbe || null)
   );
 
+  const handCardConsistencyProbe = await page.evaluate(() => {
+    if (!window.game || !game.battle || !game.player) return { ok: false, reason: 'no_battle' };
+    const customHand = [
+      { id: 'audit_long_law', name: '业火焚天', type: 'law', cost: 3, description: '造成 8 点伤害 3 次，每次附加 1 层灼烧。', icon: '🔥', rarity: 'rare' },
+      { id: 'audit_break', name: '罗汉拳', type: 'attack', cost: 1, description: '造成 6 点伤害，获得 4 点护盾。', icon: '👊', rarity: 'common' },
+      { id: 'audit_void', name: '虚空拥抱+', type: 'law', cost: 2, description: '造成敌人已损失生命 20% 的伤害。', icon: '🕳️', rarity: 'rare' },
+      { id: 'audit_pause', name: '时间静止+', type: 'law', cost: 2, description: '敌人跳过下一回合。', icon: '⏱️', rarity: 'rare' },
+      { id: 'audit_relay', name: '灵力激涌', type: 'energy', cost: 0, description: '获得 2 点灵力。', icon: '✨', rarity: 'common' },
+      { id: 'audit_draw', name: '冥想', type: 'energy', cost: 1, description: '消耗 1 奶糖。抽 2 张牌。', icon: '🧘', rarity: 'common', consumeCandy: true }
+    ];
+    game.player.hand = customHand.map((card) => ({ ...card }));
+    game.battle.player.hand = game.player.hand;
+    game.player.currentEnergy = 10;
+    game.player.milkCandy = 3;
+    if (typeof game.battle.updateHandUI === 'function') game.battle.updateHandUI();
+
+    const cards = Array.from(document.querySelectorAll('#hand-cards .card')).map((el) => {
+      const rect = el.getBoundingClientRect();
+      const imageRect = el.querySelector('.card-image, .card-art')?.getBoundingClientRect();
+      const headerRect = el.querySelector('.card-header')?.getBoundingClientRect();
+      const nameRect = el.querySelector('.card-name, .card-title')?.getBoundingClientRect();
+      const descRect = el.querySelector('.card-desc')?.getBoundingClientRect();
+      return {
+        name: (el.querySelector('.card-name, .card-title')?.textContent || '').trim(),
+        top: Math.round(rect.top),
+        height: Math.round(rect.height),
+        imageHeight: Math.round(imageRect?.height || 0),
+        headerHeight: Math.round(headerRect?.height || 0),
+        nameHeight: Math.round(nameRect?.height || 0),
+        descHeight: Math.round(descRect?.height || 0)
+      };
+    });
+    const topSpread = cards.length > 0 ? Math.max(...cards.map((card) => card.top)) - Math.min(...cards.map((card) => card.top)) : 999;
+    const heightSpread = cards.length > 0 ? Math.max(...cards.map((card) => card.height)) - Math.min(...cards.map((card) => card.height)) : 999;
+    return {
+      ok:
+        cards.length >= 6 &&
+        topSpread <= 2 &&
+        heightSpread <= 2 &&
+        cards.every((card) => card.imageHeight >= 28 && card.headerHeight >= 18 && card.nameHeight >= 12 && card.descHeight >= 18),
+      topSpread,
+      heightSpread,
+      cards
+    };
+  });
+  add(
+    'battle hand cards keep consistent header, art and description geometry',
+    !!handCardConsistencyProbe?.ok,
+    JSON.stringify(handCardConsistencyProbe || null)
+  );
+
   const resonanceMatrixProbe = await page.evaluate(async () => {
     if (!window.game || !game.battle || !game.player) return { ok: false, reason: 'no_battle' };
     const prevIsEndlessActive = game.isEndlessActive;
@@ -880,7 +1235,18 @@ async function safeScreenshot(page, outPath) {
       if (typeof prevEnsureEndlessState === 'function') game.ensureEndlessState = prevEnsureEndlessState;
       return { ok: false, reason: 'no_command_state' };
     }
-    const matrix = state.commands.find((command) => command && command.id === 'resonance_matrix_order');
+    let matrix = state.commands.find((command) => command && command.id === 'resonance_matrix_order');
+    if (!matrix && typeof game.battle.getBattleCommandCatalog === 'function') {
+      const matrixTemplate = game.battle.getBattleCommandCatalog().find((command) => command && command.id === 'resonance_matrix_order');
+      if (matrixTemplate) {
+        state.commands.push({
+          ...matrixTemplate,
+          cooldownRemaining: 0,
+          timesUsed: 0
+        });
+        matrix = state.commands.find((command) => command && command.id === 'resonance_matrix_order') || null;
+      }
+    }
     if (!matrix) {
       if (typeof prevIsEndlessActive === 'function') game.isEndlessActive = prevIsEndlessActive;
       if (typeof prevEnsureEndlessState === 'function') game.ensureEndlessState = prevEnsureEndlessState;
@@ -1613,36 +1979,119 @@ async function safeScreenshot(page, outPath) {
 
     const state = game.ensureEndlessState();
     state.pressure = 3;
+    state.currentCycle = 5;
     game.showScreen('map-screen');
     if (typeof game.map.updateEndlessPanel === 'function') game.map.updateEndlessPanel();
 
     const panel = document.getElementById('map-endless-panel');
     const beforeText = panel ? (panel.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    const beforeThemeText = panel?.querySelector('.endless-theme-chip')?.textContent?.trim() || '';
+    const beforeThemeDesc = panel?.querySelector('.endless-theme-desc')?.textContent?.trim() || '';
 
     const nextState = game.ensureEndlessState();
     nextState.pressure = 8;
+    nextState.currentCycle = 6;
     if (typeof game.map.updateEndlessPanel === 'function') game.map.updateEndlessPanel();
     const afterText = panel ? (panel.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    const afterThemeText = panel?.querySelector('.endless-theme-chip')?.textContent?.trim() || '';
+    const afterThemeDesc = panel?.querySelector('.endless-theme-desc')?.textContent?.trim() || '';
 
     return {
       visible: !!panel && getComputedStyle(panel).display !== 'none',
       hasBehaviorChip: !!panel?.querySelector('.endless-pressure-chip'),
+      hasThemeChip: !!panel?.querySelector('.endless-theme-chip'),
       pulseUp: !!panel?.classList.contains('pressure-up'),
       dataPressure: panel?.dataset?.pressure || '',
       beforeText,
-      afterText
+      afterText,
+      beforeThemeText,
+      afterThemeText,
+      beforeThemeDesc,
+      afterThemeDesc
     };
   });
   add(
-    'endless panel shows pressure behavior hint and pulse feedback when pressure rises',
+    'endless panel shows pressure/theme hints and pulse feedback when pressure rises',
     !!endlessPressurePanelProbe &&
       endlessPressurePanelProbe.visible &&
       endlessPressurePanelProbe.hasBehaviorChip &&
+      endlessPressurePanelProbe.hasThemeChip &&
       endlessPressurePanelProbe.pulseUp &&
       endlessPressurePanelProbe.dataPressure === '8' &&
+      endlessPressurePanelProbe.beforeThemeText !== endlessPressurePanelProbe.afterThemeText &&
+      /轮段/.test(endlessPressurePanelProbe.afterThemeText || '') &&
+      /敌方|战场|轮段/.test(endlessPressurePanelProbe.afterThemeDesc || '') &&
       /敌方节奏/.test(endlessPressurePanelProbe.afterText || '') &&
       /重压|压制|连续/.test(endlessPressurePanelProbe.afterText || ''),
     JSON.stringify(endlessPressurePanelProbe || null)
+  );
+
+  const endlessParanoiaProbe = await page.evaluate(async () => {
+    if (!window.game || typeof game.ensureEndlessState !== 'function') return null;
+    if (typeof game.isEndlessActive === 'function' && !game.isEndlessActive() && typeof game.startEndlessMode === 'function') {
+      game.startEndlessMode();
+    }
+    if (typeof game.isEndlessActive !== 'function' || !game.isEndlessActive()) return null;
+
+    const state = game.ensureEndlessState();
+    state.currentCycle = 12;
+    state.activeParanoiaBurdens = ['withered_mend'];
+    state.activeParanoiaBoons = ['rare_surge'];
+    state.paranoiaLevel = 1;
+    state.paranoiaHistory = [{ burdenId: 'withered_mend', boonId: 'rare_surge', cycle: 13 }];
+    game.showScreen('map-screen');
+    if (typeof game.map?.updateEndlessPanel === 'function') game.map.updateEndlessPanel();
+
+    const panel = document.getElementById('map-endless-panel');
+    const chipText = panel?.querySelector('.endless-paranoia-chip')?.textContent?.trim() || '';
+    const summaryText = panel?.querySelector('.endless-paranoia-summary')?.textContent?.trim() || '';
+    const effectTexts = Array.from(panel?.querySelectorAll('.endless-paranoia-effect') || []).map((el) => (el.textContent || '').trim());
+
+    let choiceCount = 0;
+    let beforeHistory = Array.isArray(state.paranoiaHistory) ? state.paranoiaHistory.length : 0;
+    let afterHistory = beforeHistory;
+    let afterSummary = summaryText;
+    let modalOpened = false;
+    if (typeof game.showEndlessParanoiaSelection === 'function') {
+      game.showEndlessParanoiaSelection(26);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      modalOpened = !!document.getElementById('event-modal')?.classList.contains('active');
+      const buttons = Array.from(document.querySelectorAll('#event-choices .event-choice'));
+      choiceCount = buttons.length;
+      if (buttons[0]) {
+        buttons[0].click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      }
+      const latestState = game.ensureEndlessState();
+      afterHistory = Array.isArray(latestState.paranoiaHistory) ? latestState.paranoiaHistory.length : 0;
+      if (typeof game.map?.updateEndlessPanel === 'function') game.map.updateEndlessPanel();
+      afterSummary = panel?.querySelector('.endless-paranoia-summary')?.textContent?.trim() || '';
+    }
+
+    return {
+      visible: !!panel && getComputedStyle(panel).display !== 'none',
+      chipText,
+      summaryText,
+      effectTexts,
+      modalOpened,
+      choiceCount,
+      beforeHistory,
+      afterHistory,
+      afterSummary
+    };
+  });
+  add(
+    'endless paranoia panel and selection flow are visible and actionable',
+    !!endlessParanoiaProbe &&
+      endlessParanoiaProbe.visible &&
+      /轮回偏执/.test(endlessParanoiaProbe.chipText || '') &&
+      /偏执/.test(endlessParanoiaProbe.summaryText || '') &&
+      endlessParanoiaProbe.effectTexts.length >= 1 &&
+      endlessParanoiaProbe.modalOpened &&
+      Number(endlessParanoiaProbe.choiceCount || 0) >= 3 &&
+      Number(endlessParanoiaProbe.afterHistory || 0) > Number(endlessParanoiaProbe.beforeHistory || 0) &&
+      /偏执/.test(endlessParanoiaProbe.afterSummary || ''),
+    JSON.stringify(endlessParanoiaProbe || null)
   );
 
   const endlessShopPressureProbe = await page.evaluate(() => {
@@ -1792,6 +2241,78 @@ async function safeScreenshot(page, outPath) {
     JSON.stringify(endlessShopBlessingProbe || null)
   );
 
+  const strategicShopProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.showShop !== 'function' || typeof game.buyItem !== 'function') return null;
+    if (typeof game.isEndlessActive === 'function' && game.isEndlessActive() && typeof game.handleEndlessModeExit === 'function') {
+      game.handleEndlessModeExit();
+    }
+    game.player.gold = Math.max(game.player.gold || 0, 4000);
+    game.player.heavenlyInsight = 4;
+    game.player.karma = 8;
+    game.player.shopRumors = game.normalizeShopRumors ? game.normalizeShopRumors(null) : {
+      rewardRareCharges: 0,
+      rewardRareBonus: 0,
+      treasureCharges: 0,
+      treasureChanceBonus: 0,
+      nextRealmMapShift: null,
+      nextRealmLabel: '',
+      nextRealmTarget: null,
+      history: []
+    };
+
+    game.showShop({ id: 92001, row: 2, type: 'shop', completed: false, accessible: true });
+    const tabTexts = Array.from(document.querySelectorAll('#shop-tab-bar .shop-tab-btn')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+    const displayBefore = {
+      gold: Number(document.getElementById('shop-gold-display')?.textContent || 0),
+      insight: Number(document.getElementById('shop-insight-display')?.textContent || 0),
+      karma: Number(document.getElementById('shop-karma-display')?.textContent || 0)
+    };
+
+    game.switchShopTab?.('rumor');
+    const rumorPriceTexts = Array.from(document.querySelectorAll('#shop-services-container .buy-btn .price')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+    const rumorIdx = (game.shopServices || []).findIndex((service) => service && service.id === 'rumorRareDraft');
+    const beforeInsight = game.player.heavenlyInsight;
+    if (rumorIdx >= 0) game.buyItem('service', rumorIdx);
+    const rumorState = game.ensureShopRumors ? game.ensureShopRumors() : (game.player.shopRumors || {});
+
+    game.switchShopTab?.('contract');
+    const contractPriceTexts = Array.from(document.querySelectorAll('#shop-services-container .buy-btn .price')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+    const beforeKarma = game.player.karma;
+    const beforeDeckSize = Array.isArray(game.player.deck) ? game.player.deck.length : 0;
+    const beforeTreasureCount = Array.isArray(game.player.collectedTreasures) ? game.player.collectedTreasures.length : 0;
+    const doomIdx = (game.shopServices || []).findIndex((service) => service && service.id === 'doomIdol');
+    if (doomIdx >= 0) game.buyItem('service', doomIdx);
+
+    return {
+      tabTexts,
+      displayBefore,
+      rumorPriceTexts,
+      contractPriceTexts,
+      rumorRareCharges: Number(rumorState.rewardRareCharges || 0),
+      rumorInsightSpent: game.player.heavenlyInsight < beforeInsight,
+      doomSpentKarma: game.player.karma < beforeKarma,
+      doomAddedCurse: (game.player.deck || []).slice(beforeDeckSize).some((card) => card && card.id === 'demonDoubt'),
+      doomAddedTreasure: Number((game.player.collectedTreasures || []).length) > beforeTreasureCount
+    };
+  });
+  add(
+    'shop supports base contract rumor tabs with multi-currency strategic purchases',
+    !!strategicShopProbe &&
+      Array.isArray(strategicShopProbe.tabTexts) &&
+      strategicShopProbe.tabTexts.some((text) => text.includes('基础页')) &&
+      strategicShopProbe.tabTexts.some((text) => text.includes('契约页')) &&
+      strategicShopProbe.tabTexts.some((text) => text.includes('传闻页')) &&
+      Number(strategicShopProbe.displayBefore?.insight || 0) >= 4 &&
+      Number(strategicShopProbe.displayBefore?.karma || 0) >= 3 &&
+      strategicShopProbe.rumorPriceTexts.some((text) => /天机|🔮/.test(text)) &&
+      strategicShopProbe.contractPriceTexts.some((text) => /业果|🜂/.test(text)) &&
+      Number(strategicShopProbe.rumorRareCharges || 0) >= 2 &&
+      strategicShopProbe.rumorInsightSpent &&
+      strategicShopProbe.doomSpentKarma &&
+      strategicShopProbe.doomAddedCurse,
+    JSON.stringify(strategicShopProbe || null)
+  );
+
   const endlessMutatorMarketProbe = await page.evaluate(() => {
     if (!window.game || typeof game.showTemporaryEventShop !== 'function') return null;
     if (typeof game.isEndlessActive === 'function' && !game.isEndlessActive() && typeof game.startEndlessMode === 'function') {
@@ -1840,6 +2361,7 @@ async function safeScreenshot(page, outPath) {
 
     const before = game.ensureEndlessState().currentCycle;
     const originalPicker = game.showEndlessBoonSelection;
+    const originalParanoiaPicker = game.showEndlessParanoiaSelection;
     game.showEndlessBoonSelection = (done) => {
       try {
         const choices = typeof game.getEndlessBoonChoices === 'function' ? game.getEndlessBoonChoices() : [];
@@ -1850,8 +2372,19 @@ async function safeScreenshot(page, outPath) {
         if (typeof done === 'function') done();
       }
     };
+    game.showEndlessParanoiaSelection = (cycle, done) => {
+      try {
+        const choices = typeof game.getEndlessParanoiaChoices === 'function' ? game.getEndlessParanoiaChoices() : [];
+        if (choices && choices[0] && typeof game.applyEndlessParanoiaChoice === 'function') {
+          game.applyEndlessParanoiaChoice(choices[0], cycle);
+        }
+      } finally {
+        if (typeof done === 'function') done();
+      }
+    };
     game.handleEndlessRealmComplete();
     game.showEndlessBoonSelection = originalPicker;
+    game.showEndlessParanoiaSelection = originalParanoiaPicker;
     const afterState = game.ensureEndlessState();
     return {
       before,
@@ -1878,11 +2411,22 @@ async function safeScreenshot(page, outPath) {
 
     const before = game.ensureEndlessState().currentCycle;
     const originalPicker = game.showEndlessBoonSelection;
+    const originalParanoiaPicker = game.showEndlessParanoiaSelection;
     game.showEndlessBoonSelection = (done) => {
       try {
         const choices = typeof game.getEndlessBoonChoices === 'function' ? game.getEndlessBoonChoices() : [];
         if (choices && choices[0] && typeof game.applyEndlessBoon === 'function') {
           game.applyEndlessBoon(choices[0].id);
+        }
+      } finally {
+        if (typeof done === 'function') done();
+      }
+    };
+    game.showEndlessParanoiaSelection = (cycle, done) => {
+      try {
+        const choices = typeof game.getEndlessParanoiaChoices === 'function' ? game.getEndlessParanoiaChoices() : [];
+        if (choices && choices[0] && typeof game.applyEndlessParanoiaChoice === 'function') {
+          game.applyEndlessParanoiaChoice(choices[0], cycle);
         }
       } finally {
         if (typeof done === 'function') done();
@@ -1905,6 +2449,7 @@ async function safeScreenshot(page, outPath) {
       patterns: [{ type: 'attack', value: 1 }]
     }]);
     game.showEndlessBoonSelection = originalPicker;
+    game.showEndlessParanoiaSelection = originalParanoiaPicker;
 
     const after = game.ensureEndlessState();
     return {
@@ -1923,6 +2468,147 @@ async function safeScreenshot(page, outPath) {
       endlessBossFlowProbe.active &&
       endlessBossFlowProbe.mode === 'map-screen',
     JSON.stringify(endlessBossFlowProbe || null)
+  );
+
+  const bossThreeActProbe = await page.evaluate(() => {
+    if (!window.game || !game.battle || typeof game.startDebugBattle !== 'function') {
+      return { ok: false, reason: 'no_debug_battle' };
+    }
+
+    game.startDebugBattle(1, 'boss');
+    const battle = game.battle;
+    const boss = Array.isArray(battle?.enemies) ? battle.enemies.find((enemy) => enemy && enemy.isBoss) : null;
+    if (!boss || !boss.bossActState || typeof battle.checkPhaseChange !== 'function') {
+      return { ok: false, reason: 'no_boss_three_act_state' };
+    }
+
+    const snapshot = () => {
+      if (typeof battle.updateBattleUI === 'function') battle.updateBattleUI();
+      const panel = document.getElementById('boss-act-panel');
+      const style = panel ? getComputedStyle(panel) : null;
+      return {
+        visible: !!panel && !!style && style.display !== 'none' && style.visibility !== 'hidden',
+        title: panel ? (panel.querySelector('.boss-act-title')?.textContent || '').trim() : '',
+        subtitle: panel ? (panel.querySelector('.boss-act-subtitle')?.textContent || '').trim() : '',
+        chips: Array.from(panel?.querySelectorAll('.boss-act-chip') || []).map((chip) => (chip.textContent || '').trim()),
+        activeChip: (panel?.querySelector('.boss-act-chip.active')?.textContent || '').trim(),
+        failLine: (panel?.querySelector('.boss-act-line.fail .value')?.textContent || '').trim()
+      };
+    };
+
+    const initial = snapshot();
+    const actTwoThreshold = Number(boss.bossActState.acts?.[1]?.threshold) || 0.68;
+    boss.currentHp = Math.max(1, Math.floor(boss.maxHp * Math.max(0.05, actTwoThreshold - 0.05)));
+    battle.checkPhaseChange(boss);
+    const actTwo = snapshot();
+
+    const actThreeThreshold = Number(boss.bossActState.acts?.[2]?.threshold) || 0.34;
+    boss.currentHp = Math.max(1, Math.floor(boss.maxHp * Math.max(0.03, actThreeThreshold - 0.05)));
+    battle.checkPhaseChange(boss);
+    const actThree = snapshot();
+
+    return {
+      ok:
+        initial.visible &&
+        initial.chips.length === 3 &&
+        /宣告/.test(initial.subtitle || '') &&
+        /对抗/.test(actTwo.subtitle || '') &&
+        /逆转/.test(actThree.subtitle || '') &&
+        /失败|节奏|拖延/.test(actThree.failLine || ''),
+      bossId: boss.id || '',
+      initial,
+      actTwo,
+      actThree,
+      sealedCards: Array.isArray(game.player?.hand) ? game.player.hand.filter((card) => card && card.__bossSealed).length : 0
+    };
+  });
+  add(
+    'boss three-act panel renders and updates across declaration confrontation reversal',
+    !!bossThreeActProbe &&
+      !!bossThreeActProbe.ok &&
+      Number(bossThreeActProbe.sealedCards || 0) >= 0 &&
+      /三幕式/.test(bossThreeActProbe.initial?.title || ''),
+    JSON.stringify(bossThreeActProbe || null)
+  );
+
+  await safeScreenshot(page, path.join(outDir, 'boss-three-act-panel.png'));
+
+  const battleOverlayLayoutProbe = await page.evaluate(() => {
+    if (!window.game || !game.battle || typeof game.startDebugBattle !== 'function') {
+      return { ok: false, reason: 'no_debug_battle' };
+    }
+    game.startDebugBattle(1, 'boss');
+    const battle = game.battle;
+    if (battle) {
+      battle.tacticalAdvisorCollapsed = false;
+      if (typeof battle.updateBattleUI === 'function') battle.updateBattleUI();
+    }
+
+    const bossPanel = document.getElementById('boss-act-panel');
+    const commandPanel = document.getElementById('battle-command-panel');
+    const missionPanel = document.getElementById('legacy-mission-tracker');
+    const enemyArea = document.querySelector('.enemy-area');
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+
+    const rectToObj = (rect) => rect ? ({ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height, centerX: rect.left + rect.width / 2 }) : null;
+
+    const bossRect = bossPanel ? rectToObj(bossPanel.getBoundingClientRect()) : null;
+    const commandRect = commandPanel ? rectToObj(commandPanel.getBoundingClientRect()) : null;
+    const missionRect = missionPanel ? rectToObj(missionPanel.getBoundingClientRect()) : null;
+    const enemyRect = enemyArea ? rectToObj(enemyArea.getBoundingClientRect()) : null;
+
+    const commandOnLeftRail = !!commandRect && commandRect.centerX < viewportWidth * 0.34;
+    const missionOnRightRail = !!missionRect && missionRect.centerX > viewportWidth * 0.72;
+    const bossCentered = !!bossRect && Math.abs(bossRect.centerX - viewportWidth / 2) < viewportWidth * 0.12;
+    const commandAvoidsCore = !!commandRect && (!enemyRect || commandRect.right <= enemyRect.left + enemyRect.width * 0.38);
+
+    return {
+      ok: commandOnLeftRail && missionOnRightRail && bossCentered && commandAvoidsCore,
+      viewportWidth,
+      commandOnLeftRail,
+      missionOnRightRail,
+      bossCentered,
+      commandAvoidsCore,
+      bossRect,
+      commandRect,
+      missionRect,
+      enemyRect
+    };
+  });
+  add(
+    'battle overlay layout keeps boss info centered while command and mission stay off the battlefield core',
+    !!battleOverlayLayoutProbe && !!battleOverlayLayoutProbe.ok,
+    JSON.stringify(battleOverlayLayoutProbe || null)
+  );
+
+  const advisorHierarchyProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.startDebugBattle !== 'function') return { ok: false, reason: 'no_debug_battle' };
+    game.startDebugBattle(1, 'boss');
+    const battle = game.battle;
+    if (!battle || typeof battle.updateBattleUI !== 'function') return { ok: false, reason: 'no_battle' };
+    battle.tacticalAdvisorCollapsed = true;
+    battle.tacticalAdvisorHoverExpanded = false;
+    battle.updateBattleUI();
+    const panel = document.getElementById('battle-command-panel');
+    const advisor = document.getElementById('battle-tactical-advisor');
+    const collapsedHeight = advisor ? advisor.getBoundingClientRect().height : 0;
+    if (advisor) advisor.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+    const hoverHeight = advisor ? advisor.getBoundingClientRect().height : 0;
+    battle.handleTacticalAdvisorHotkey('h');
+    const hotkeyHeight = advisor ? advisor.getBoundingClientRect().height : 0;
+    return {
+      ok: !!panel && !!advisor && collapsedHeight < hoverHeight && hotkeyHeight >= hoverHeight - 2,
+      collapsedHeight,
+      hoverHeight,
+      hotkeyHeight,
+      collapsed: battle.tacticalAdvisorCollapsed,
+      hoverExpanded: battle.tacticalAdvisorHoverExpanded,
+    };
+  });
+  add(
+    'battle advisor supports layered expansion via hover and H hotkey on desktop',
+    !!advisorHierarchyProbe && !!advisorHierarchyProbe.ok,
+    JSON.stringify(advisorHierarchyProbe || null)
   );
 
   await safeScreenshot(page, path.join(outDir, 'feature-audit.png'));

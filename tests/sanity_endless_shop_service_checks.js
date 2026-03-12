@@ -99,6 +99,7 @@ function assert(cond, msg) {
     'getEndlessBoonChoices',
     'applyEndlessBoon',
     'getEndlessPhaseProfile',
+    'getEndlessCycleThemeProfile',
     'getEndlessEventTuning',
     'getTemporaryEventShopOffers',
     'applyTemporaryEventShopOffer',

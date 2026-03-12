@@ -46,6 +46,7 @@ function assert(cond, msg) {
     'isEndlessActive',
     'getEndlessMutatorPool',
     'getEndlessPhaseProfile',
+    'getEndlessCycleThemeProfile',
     'getEndlessModifiers',
     'getEndlessPressureBehaviorProfile'
   ].forEach((name) => {
@@ -68,6 +69,7 @@ function assert(cond, msg) {
     assert(mods.enemyAtkMul >= 1, `enemyAtkMul should be valid at pressure=${pressure}`);
     assert(mods.rewardGoldMul >= 1, `rewardGoldMul should be valid at pressure=${pressure}`);
     assert(mods.healMul >= 0.45 && mods.healMul <= 1.35, `healMul should remain clamped at pressure=${pressure}`);
+    assert(mods.cycleTheme && mods.cycleTheme.id, `cycle theme metadata should exist at pressure=${pressure}`);
 
     if (last) {
       assert(mods.enemyHpMul >= last.mods.enemyHpMul, `enemyHpMul should be non-decreasing (${last.pressure} -> ${pressure})`);
@@ -98,6 +100,7 @@ function assert(cond, msg) {
     } else {
       assert(profile.tierId === 'cataclysm', `pressure ${pressure} should map to cataclysm tier`);
     }
+    assert(profile.themeId && profile.themeSegmentIndex >= 1, `pressure profile should expose theme metadata at pressure=${pressure}`);
 
     last = { pressure, mods, profile };
   }

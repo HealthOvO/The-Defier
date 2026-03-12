@@ -47,6 +47,7 @@
     #main-menu .menu-content {
         padding: 20px;
         width: 100%;
+        min-height: 520px;
     }
 
     #main-menu .game-description {
@@ -176,6 +177,29 @@
         font-size: 0.6rem;
         line-height: 1.2;
         white-space: normal;
+    }
+
+    .map-endless-panel .endless-theme-chip {
+        font-size: 0.6rem;
+        line-height: 1.2;
+        white-space: normal;
+    }
+
+    .map-endless-panel .endless-theme-desc {
+        font-size: 0.6rem;
+        line-height: 1.3;
+        margin-top: 4px;
+    }
+
+    .map-endless-panel .endless-paranoia-summary {
+        font-size: 0.6rem;
+        line-height: 1.3;
+        margin-top: 4px;
+    }
+
+    .map-endless-panel .endless-paranoia-effect {
+        font-size: 0.6rem;
+        line-height: 1.2;
     }
 
     .map-buff-chip {
@@ -333,7 +357,8 @@
         font-size: 0.9rem;
     }
 
-    .card .card-title {
+    .card .card-title,
+    .card .card-name {
         font-size: 0.85rem;
     }
 
@@ -375,12 +400,102 @@
         margin-right: 10px;
     }
 
+    /* --- Reward Screen --- */
+    .reward-screen-content {
+        width: min(94vw, 640px);
+        padding: 14px 10px 18px;
+    }
+
+    .reward-resources {
+        gap: 8px;
+        justify-content: flex-start;
+    }
+
+    .reward-item {
+        padding: 6px 9px;
+        font-size: 0.74rem;
+        line-height: 1.25;
+    }
+
+    .reward-battle-meta {
+        width: 100%;
+        padding: 8px 9px;
+        border-radius: 10px;
+    }
+
+    .reward-meta-title {
+        font-size: 0.74rem;
+        margin-bottom: 6px;
+    }
+
+    .reward-meta-chips {
+        gap: 5px 6px;
+    }
+
+    .reward-meta-chip {
+        font-size: 0.62rem;
+        padding: 3px 7px;
+    }
+
     /* --- Decks and Inventory --- */
     .law-archive-grid,
     .compendium-grid,
     .shop-cards {
         grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
         gap: 10px;
+    }
+
+    .shop-screen-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .shop-currency-strip {
+        width: 100%;
+        margin-left: 0;
+        justify-content: flex-start;
+    }
+
+    .shop-currency {
+        flex: 1 1 120px;
+        justify-content: center;
+    }
+
+    .shop-tab-bar {
+        gap: 8px;
+    }
+
+    .shop-tab-btn {
+        flex: 1 1 calc(50% - 8px);
+        justify-content: center;
+        padding: 10px 12px;
+    }
+
+    .shop-container {
+        padding: 14px 10px 24px;
+        gap: 14px;
+    }
+
+    .shop-section {
+        padding: 14px 12px;
+    }
+
+    .shop-services {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .shop-service {
+        align-items: flex-start;
+    }
+
+    .service-name-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .service-tags {
+        justify-content: flex-start;
     }
 
     /* --- Fate Ring / Life Ring --- */
@@ -447,5 +562,280 @@
 
     .treasure-visual-col {
         height: 200px;
+    }
+}
+
+#boss-act-panel {
+    width: 100%;
+}
+
+.boss-act-panel {
+    margin: 4px 0 8px;
+    padding: 10px 12px;
+}
+
+.boss-act-title {
+    font-size: 0.92rem;
+}
+
+.boss-act-subtitle,
+.boss-act-hp,
+.boss-act-chip-label,
+.boss-act-line .value {
+    font-size: 0.72rem;
+}
+
+.boss-act-chip {
+    padding: 8px 9px;
+}
+
+.boss-act-chip-index {
+    width: 22px;
+    height: 22px;
+}
+
+.boss-sealed-card::after {
+    inset: 6px;
+}
+
+/* UI Review Pass - Mobile containment */
+#main-menu .menu-content {
+    width: min(94vw, 420px);
+    padding: 18px 16px 24px;
+    border-radius: 22px;
+}
+
+#character-selection-screen .character-selection-container {
+    padding-bottom: 150px;
+}
+
+#character-selection-screen .character-selection-footer {
+    position: sticky;
+    bottom: 0;
+    padding: 14px 12px 18px;
+    background: linear-gradient(180deg, rgba(2, 5, 12, 0), rgba(2, 5, 12, 0.88) 24%, rgba(2, 5, 12, 0.98) 100%);
+}
+
+#realm-select-screen .realm-select-layout {
+    padding-bottom: 20px;
+}
+
+#battle-environment {
+    max-width: calc(100vw - 16px);
+}
+
+#legacy-mission-tracker {
+    top: 58px;
+    right: 8px;
+    left: auto;
+    transform: none;
+    width: min(220px, calc(100vw - 16px));
+    padding: 6px 8px;
+}
+
+#battle-command-panel {
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+#battle-command-panel .battle-command-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#battle-command-panel .battle-tactical-advisor {
+    max-height: 88px;
+    overflow-y: auto;
+}
+
+/* UI Review Pass - Mobile battle compact HUD */
+@media (max-width: 768px) {
+    #battle-command-panel {
+        top: 68px;
+        left: 6px;
+        width: calc(100vw - 12px);
+        max-height: 118px;
+        padding: 7px 8px;
+        border-radius: 12px;
+        z-index: 82;
+    }
+
+    #battle-command-panel .battle-command-list {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+        margin-top: 6px;
+    }
+
+    #battle-command-panel .battle-command-btn {
+        min-height: 46px;
+        padding: 5px 6px;
+    }
+
+    #battle-command-panel .battle-command-name {
+        font-size: 0.62rem;
+    }
+
+    #battle-command-panel .battle-command-meta {
+        font-size: 0.52rem;
+        line-height: 1.15;
+    }
+
+    #battle-command-panel .battle-tactical-advisor {
+        display: none;
+    }
+
+    #legacy-mission-tracker {
+        top: 64px;
+        right: 6px;
+        width: min(184px, calc(100vw - 12px));
+        padding: 5px 7px;
+        z-index: 83;
+    }
+
+    #legacy-mission-tracker .legacy-mission-tag,
+    #legacy-mission-tracker .legacy-mission-reward,
+    #legacy-mission-tracker .legacy-mission-progress-text {
+        font-size: 0.64rem;
+    }
+
+    #legacy-mission-tracker .legacy-mission-title {
+        font-size: 0.72rem;
+        line-height: 1.22;
+    }
+
+    #boss-act-panel {
+        position: absolute;
+        left: 6px;
+        right: 6px;
+        top: 194px;
+        bottom: auto;
+        width: auto;
+        margin: 0;
+        padding: 7px 8px;
+        border-radius: 14px;
+        max-height: 104px;
+        overflow: hidden;
+        z-index: 78;
+        background: linear-gradient(135deg, rgba(31, 19, 12, 0.96), rgba(65, 25, 17, 0.92));
+    }
+
+    #boss-act-panel .boss-act-header {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 6px;
+        align-items: center;
+    }
+
+    #boss-act-panel .boss-act-title {
+        font-size: 0.76rem;
+        letter-spacing: 0.03em;
+    }
+
+    #boss-act-panel .boss-act-subtitle,
+    #boss-act-panel .boss-act-hp {
+        font-size: 0.6rem;
+    }
+
+    #boss-act-panel .boss-act-track {
+        margin-top: 5px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+    }
+
+    #boss-act-panel .boss-act-chip {
+        padding: 5px 4px;
+        gap: 5px;
+        border-radius: 10px;
+    }
+
+    #boss-act-panel .boss-act-chip-index {
+        width: 18px;
+        height: 18px;
+        font-size: 0.58rem;
+    }
+
+    #boss-act-panel .boss-act-chip-label {
+        font-size: 0.56rem;
+        line-height: 1.15;
+    }
+
+    #boss-act-panel .boss-act-body {
+        display: block;
+        margin-top: 5px;
+    }
+
+    #boss-act-panel .boss-act-line {
+        grid-template-columns: 44px 1fr;
+        gap: 5px;
+        padding: 4px 6px;
+        border-radius: 8px;
+    }
+
+    #boss-act-panel .boss-act-line.signal,
+    #boss-act-panel .boss-act-line.counter,
+    #boss-act-panel .boss-act-line.fail {
+        display: none;
+    }
+
+    #boss-act-panel .boss-act-line .label,
+    #boss-act-panel .boss-act-line .value {
+        font-size: 0.58rem;
+        line-height: 1.2;
+    }
+
+    .end-turn-btn {
+        bottom: 192px;
+        right: 8px;
+        padding: 8px 16px;
+        font-size: 0.9rem;
+        z-index: 84;
+    }
+
+    .player-area {
+        margin-bottom: 132px;
+    }
+
+    .hand-area {
+        min-height: 182px;
+        padding-bottom: 12px;
+    }
+}
+
+@media (max-width: 768px) {
+    #battle-command-panel {
+        top: 58px;
+        max-height: 106px;
+    }
+
+    #boss-act-panel {
+        top: 170px;
+        max-height: 86px;
+        padding: 6px 7px;
+    }
+
+    #boss-act-panel .boss-act-track {
+        margin-top: 4px;
+        gap: 4px;
+    }
+
+    #boss-act-panel .boss-act-chip {
+        padding: 4px 3px;
+        gap: 4px;
+    }
+
+    #boss-act-panel .boss-act-chip-label {
+        font-size: 0.52rem;
+    }
+
+    #boss-act-panel .boss-act-body {
+        margin-top: 4px;
+    }
+
+    #boss-act-panel .boss-act-line {
+        padding: 3px 5px;
+    }
+
+    #boss-act-panel .boss-act-line .label,
+    #boss-act-panel .boss-act-line .value {
+        font-size: 0.54rem;
     }
 }

@@ -92,7 +92,49 @@ function loadFile(ctx, filePath) {
   assert(enemy.name.includes('·'), `enemy name should include variation suffix, got ${enemy.name}`);
   assert(enemy.patterns.length >= 2, 'variation should enrich enemy pattern list');
 
-  // 4) Bosses should not receive normal variation tags
+  // 4) Squad ecology should attach formation tags and enrich multi-enemy encounters
+  const squadEnemies = [
+    battle.createEnemyInstance({
+      id: 'squad_probe_a',
+      name: '潮锋甲',
+      hp: 64,
+      maxHp: 64,
+      patterns: [{ type: 'attack', value: 9, intent: '⚔️' }]
+    }),
+    battle.createEnemyInstance({
+      id: 'squad_probe_b',
+      name: '潮锋乙',
+      hp: 68,
+      maxHp: 68,
+      patterns: [{ type: 'defend', value: 8, intent: '🛡️' }, { type: 'attack', value: 7, intent: '⚔️' }]
+    }),
+    battle.createEnemyInstance({
+      id: 'squad_probe_c',
+      name: '潮锋丙',
+      hp: 66,
+      maxHp: 66,
+      patterns: [{ type: 'debuff', buffType: 'weak', value: 1, intent: '🌀' }, { type: 'attack', value: 8, intent: '⚔️' }]
+    })
+  ];
+  battle.enemies = squadEnemies.filter(Boolean);
+  battle.applyEnemySquadEcology();
+  assert(battle.activeSquadEcology && battle.activeSquadEcology.id, 'squad ecology should produce active formation metadata');
+  assert(
+    battle.enemies.every((e) => typeof e.enemySquadTag === 'string' && e.enemySquadTag.length > 0),
+    'squad enemies should carry squad tag for UI rendering'
+  );
+  assert(
+    battle.enemies.some((e) => Array.isArray(e.patterns) && e.patterns.length >= 3),
+    'squad ecology should enrich at least one enemy behavior pattern set'
+  );
+  const squadReward = battle.consumeSquadEcologyVictoryBonusSummary();
+  assert(squadReward && typeof squadReward === 'object', 'squad ecology should generate victory reward summary');
+  assert(Number(squadReward.goldBonus || 0) > 0, 'squad reward should grant extra gold');
+  assert(Number(squadReward.ringExpBonus || 0) > 0, 'squad reward should grant ring exp bonus');
+  assert(Array.isArray(squadReward.adventureBuffRewards), 'squad reward should expose adventure buff rewards');
+  assert(battle.consumeSquadEcologyVictoryBonusSummary() === null, 'squad reward summary should be consumable only once');
+
+  // 5) Bosses should not receive normal variation tags
   const boss = battle.createEnemyInstance({
     id: 'boss_case',
     name: '天劫化身',
@@ -103,7 +145,7 @@ function loadFile(ctx, filePath) {
   });
   assert(!boss.enemyVariantTag, 'boss should not receive normal variation tag');
 
-  // 5) Candy display snapshot should remain stable for HUD rendering logic
+  // 6) Candy display snapshot should remain stable for HUD rendering logic
   battle.player.milkCandy = 5;
   battle.player.maxMilkCandy = 7;
   const candyA = battle.getCandyDisplaySnapshot(6);

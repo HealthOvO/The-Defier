@@ -14,9 +14,12 @@ node tests/sanity_battle_pollution_checks.js
 node tests/sanity_battle_debuff_checks.js
 node tests/sanity_battle_guardbreak_checks.js
 node tests/sanity_battle_variation_checks.js
+node tests/sanity_battle_advisor_plan_checks.js
+node tests/sanity_battle_squad_reward_checks.js
 node tests/sanity_battle_encounter_theme_checks.js
 node tests/sanity_battle_command_checks.js
 node tests/sanity_battle_command_synergy_checks.js
+node tests/sanity_boss_three_act_checks.js
 node tests/sanity_path_doctrine_growth_checks.js
 node tests/sanity_enemy_tactical_queue_checks.js
 node tests/sanity_enemy_ecology_diversity_checks.js
@@ -34,6 +37,8 @@ node tests/sanity_card_design_guardrail_checks.js
 node tests/sanity_adventure_buff_checks.js
 node tests/sanity_pvp_service_checks.js
 node tests/sanity_pvp_shop_checks.js
+node tests/sanity_shop_strategy_system_checks.js
+node tests/sanity_planning_todo_checks.js
 node tests/verify_assets.js
 node tests/verify_avatars.js
 node tests/sanity_runtime_hooks_checks.js

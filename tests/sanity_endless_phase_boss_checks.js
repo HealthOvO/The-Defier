@@ -53,6 +53,7 @@ function assert(cond, msg) {
     'isEndlessActive',
     'getEndlessMutatorPool',
     'getEndlessPhaseProfile',
+    'getEndlessCycleThemeProfile',
     'getEndlessModifiers',
     'getEndlessEventTuning',
     'getEndlessPressureBehaviorProfile',
@@ -109,6 +110,10 @@ function assert(cond, msg) {
   assert(
     scaledBoss.__endlessPhaseProfile && scaledBoss.__endlessPhaseProfile.checkpoint === 12,
     'scaled boss should carry phase checkpoint metadata'
+  );
+  assert(
+    scaledBoss.__endlessCycleTheme && scaledBoss.__endlessCycleTheme.segmentIndex >= 1,
+    'scaled boss should carry endless cycle theme metadata'
   );
   assert(
     Array.isArray(scaledBoss.patterns) &&

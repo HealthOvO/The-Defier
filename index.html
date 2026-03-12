@@ -433,26 +433,52 @@
             <h2>法则图鉴</h2>
         </div>
 
-        <div class="codex-scroll-container">
-            <!-- Top Section: Law Archive -->
-            <div class="codex-section">
-                <div class="codex-section-header">
-                    <span class="section-icon">📜</span>
-                    <h3>万法归一 · 法则库</h3>
-                </div>
-                <div class="law-archive-grid" id="law-archive-grid">
-                    <!-- Dynamic Laws -->
-                </div>
-            </div>
+        <div class="codex-shell">
+            <div class="codex-scroll-container">
+                <div class="codex-layout">
+                    <div class="codex-main-column">
+                        <div class="codex-section">
+                            <div class="codex-section-header">
+                                <span class="section-icon">📜</span>
+                                <h3>万法归一 · 法则库</h3>
+                            </div>
+                            <div class="law-archive-grid" id="law-archive-grid">
+                                <!-- Dynamic Laws -->
+                            </div>
+                        </div>
 
-            <!-- Bottom Section: Resonance Manual -->
-            <div class="codex-section">
-                <div class="codex-section-header">
-                    <span class="section-icon">🔮</span>
-                    <h3>天道共鸣 · 羁绊录</h3>
-                </div>
-                <div class="resonance-manual-list" id="resonance-manual-list">
-                    <!-- Dynamic Resonances -->
+                        <div class="codex-section">
+                            <div class="codex-section-header">
+                                <span class="section-icon">🔮</span>
+                                <h3>天道共鸣 · 羁绊录</h3>
+                            </div>
+                            <div class="resonance-manual-list" id="resonance-manual-list">
+                                <!-- Dynamic Resonances -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <aside class="codex-side-column">
+                        <section class="codex-side-card" id="law-codex-summary">
+                            <span class="codex-side-kicker">收集总览</span>
+                            <h3>法则收藏进度</h3>
+                            <p>正在整理法则与共鸣记录...</p>
+                        </section>
+                        <section class="codex-side-card" id="law-codex-resonance-summary">
+                            <span class="codex-side-kicker">当前共鸣</span>
+                            <h3>羁绊装配</h3>
+                            <p>正在读取当前激活的共鸣链路...</p>
+                        </section>
+                        <section class="codex-side-card codex-guide-card">
+                            <span class="codex-side-kicker">检索建议</span>
+                            <h3>浏览方式</h3>
+                            <ul class="codex-side-list">
+                                <li>优先补齐未解锁法则，可直接提升后续共鸣可用性。</li>
+                                <li>先看右侧摘要，再回到主区决定要补的元素流派。</li>
+                                <li>已点亮共鸣会在主区显示激活标记，方便规划下一局偷取路线。</li>
+                            </ul>
+                        </section>
+                    </aside>
                 </div>
             </div>
         </div>
@@ -465,19 +491,120 @@
             <h2>法宝图鉴</h2>
         </div>
 
-        <div class="treasure-compendium-layout">
-            <!-- Top Stats Scroll -->
-            <div class="compendium-stats-wrapper">
-                <div class="compendium-stats" id="treasure-compendium-stats">
-                    <!-- 收集进度 -->
-                </div>
-            </div>
+        <div class="treasure-compendium-shell">
+            <div class="treasure-compendium-layout">
+                <div class="treasure-compendium-main">
+                    <div class="compendium-stats-wrapper">
+                        <div class="compendium-stats" id="treasure-compendium-stats">
+                            <!-- 收集进度 -->
+                        </div>
+                    </div>
 
-            <!-- Main Grid Area -->
-            <div class="compendium-grid-container">
-                <div class="compendium-grid" id="treasure-compendium-grid">
-                    <!-- 动态生成 -->
+                    <div class="compendium-toolbar">
+                        <label class="compendium-control">
+                            <span>筛选</span>
+                            <select id="treasure-filter-select" onchange="game.setTreasureCompendiumFilter(this.value)">
+                                <option value="all">全部法宝</option>
+                                <option value="custom">自定义多选</option>
+                                <option value="owned">仅已收录</option>
+                                <option value="unowned">仅未收录</option>
+                                <option value="common">凡品</option>
+                                <option value="rare">灵品</option>
+                                <option value="legendary">神品</option>
+                                <option value="mythic">仙品</option>
+                                <option value="shop">商店向</option>
+                                <option value="elite">精英来源</option>
+                                <option value="boss">首领奖励向</option>
+                                <option value="event">事件来源</option>
+                                <option value="camp">营地来源</option>
+                                <option value="challenge">挑战来源</option>
+                            </select>
+                        </label>
+                        <label class="compendium-control">
+                            <span>排序</span>
+                            <select id="treasure-sort-select" onchange="game.setTreasureCompendiumSort(this.value)">
+                                <option value="rarity_desc">品质优先</option>
+                                <option value="owned_first">已收录优先</option>
+                                <option value="realm_asc">解锁层数优先</option>
+                                <option value="name_asc">名称排序</option>
+                            </select>
+                        </label>
+                        <div class="compendium-chip-groups">
+                            <div class="compendium-chip-group">
+                                <span class="compendium-chip-label">收录状态</span>
+                                <div class="compendium-chip-row">
+                                    <button type="button" class="compendium-chip" data-filter-chip-group="status" data-filter-chip-value="owned" onclick="game.toggleTreasureCompendiumFilterChip('status', 'owned')">已收录</button>
+                                    <button type="button" class="compendium-chip" data-filter-chip-group="status" data-filter-chip-value="unowned" onclick="game.toggleTreasureCompendiumFilterChip('status', 'unowned')">未收录</button>
+                                </div>
+                            </div>
+                            <div class="compendium-chip-group">
+                                <span class="compendium-chip-label">稀有度</span>
+                                <div class="compendium-chip-row">
+                                    <button type="button" class="compendium-chip" data-filter-chip-group="rarity" data-filter-chip-value="common" onclick="game.toggleTreasureCompendiumFilterChip('rarity', 'common')">凡品</button>
+                                    <button type="button" class="compendium-chip" data-filter-chip-group="rarity" data-filter-chip-value="rare" onclick="game.toggleTreasureCompendiumFilterChip('rarity', 'rare')">灵品</button>
+                                    <button type="button" class="compendium-chip" data-filter-chip-group="rarity" data-filter-chip-value="legendary" onclick="game.toggleTreasureCompendiumFilterChip('rarity', 'legendary')">神品</button>
+                                    <button type="button" class="compendium-chip" data-filter-chip-group="rarity" data-filter-chip-value="mythic" onclick="game.toggleTreasureCompendiumFilterChip('rarity', 'mythic')">仙品</button>
+                                </div>
+                            </div>
+                            <div class="compendium-chip-group">
+                                <span class="compendium-chip-label">来源维度</span>
+                                <div class="compendium-chip-row">
+                                    <button type="button" class="compendium-chip" data-filter-chip-group="source" data-filter-chip-value="shop" onclick="game.toggleTreasureCompendiumFilterChip('source', 'shop')">商店</button>
+                                    <button type="button" class="compendium-chip" data-filter-chip-group="source" data-filter-chip-value="elite" onclick="game.toggleTreasureCompendiumFilterChip('source', 'elite')">精英</button>
+                                    <button type="button" class="compendium-chip" data-filter-chip-group="source" data-filter-chip-value="boss" onclick="game.toggleTreasureCompendiumFilterChip('source', 'boss')">首领</button>
+                                    <button type="button" class="compendium-chip" data-filter-chip-group="source" data-filter-chip-value="event" onclick="game.toggleTreasureCompendiumFilterChip('source', 'event')">事件</button>
+                                    <button type="button" class="compendium-chip" data-filter-chip-group="source" data-filter-chip-value="camp" onclick="game.toggleTreasureCompendiumFilterChip('source', 'camp')">营地</button>
+                                    <button type="button" class="compendium-chip" data-filter-chip-group="source" data-filter-chip-value="challenge" onclick="game.toggleTreasureCompendiumFilterChip('source', 'challenge')">挑战</button>
+                                </div>
+                            </div>
+                            <div class="compendium-preset-bar">
+                                <button type="button" class="compendium-chip utility" id="treasure-filter-clear" onclick="game.clearTreasureCompendiumFilters()">清空筛选</button>
+                                <div class="compendium-preset-slots">
+                                    <div class="compendium-preset-slot">
+                                        <button type="button" class="compendium-chip preset" id="treasure-preset-slot-0" onclick="game.applyTreasureCompendiumPreset(0)">预设 1（空）</button>
+                                        <button type="button" class="compendium-chip utility compact" id="treasure-preset-save-0" onclick="game.saveTreasureCompendiumPreset(0)">存</button>
+                                    </div>
+                                    <div class="compendium-preset-slot">
+                                        <button type="button" class="compendium-chip preset" id="treasure-preset-slot-1" onclick="game.applyTreasureCompendiumPreset(1)">预设 2（空）</button>
+                                        <button type="button" class="compendium-chip utility compact" id="treasure-preset-save-1" onclick="game.saveTreasureCompendiumPreset(1)">存</button>
+                                    </div>
+                                    <div class="compendium-preset-slot">
+                                        <button type="button" class="compendium-chip preset" id="treasure-preset-slot-2" onclick="game.applyTreasureCompendiumPreset(2)">预设 3（空）</button>
+                                        <button type="button" class="compendium-chip utility compact" id="treasure-preset-save-2" onclick="game.saveTreasureCompendiumPreset(2)">存</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="compendium-grid-container">
+                        <div class="compendium-grid" id="treasure-compendium-grid">
+                            <!-- 动态生成 -->
+                        </div>
+                    </div>
                 </div>
+
+                <aside class="treasure-compendium-side">
+                    <section class="compendium-side-card" id="treasure-compendium-summary">
+                        <span class="codex-side-kicker">藏品总览</span>
+                        <h3>法宝收藏进度</h3>
+                        <p>正在统计当前收藏与未解锁缺口...</p>
+                    </section>
+                    <section class="compendium-side-card" id="treasure-compendium-rarity">
+                        <span class="codex-side-kicker">稀有度分布</span>
+                        <h3>稀有度概览</h3>
+                        <p>正在统计凡品、灵品、神品、仙品...</p>
+                    </section>
+                    <section class="compendium-side-card codex-guide-card">
+                        <span class="codex-side-kicker">查看建议</span>
+                        <h3>检索方式</h3>
+                        <ul class="codex-side-list">
+                            <li>主区负责快速翻阅，右侧用于判断优先补齐的品质段。</li>
+                            <li>点击任意法宝可进入详情页，查看出处、逸闻与当前持有状态。</li>
+                            <li>高稀有法宝更偏后期掉落，建议结合 Boss 首杀与特殊事件推进图鉴。</li>
+                        </ul>
+                    </section>
+                </aside>
             </div>
         </div>
     </div>
@@ -695,29 +822,55 @@
     </div>
 
     <!-- 战斗奖励界面 -->
-    <div id="reward-screen" class="screen">
-        <div class="reward-container" style="overflow-y: auto; max-height: 95vh; padding-bottom: 50px;">
-            <h2 class="reward-title">战斗胜利！</h2>
-            <div class="steal-chance" id="steal-section">
-                <h3>🔮 法则盗取</h3>
-                <p id="steal-text">你感受到敌人体内残留的法则力量...</p>
-                <button class="steal-btn" id="steal-btn" onclick="game.attemptSteal()">
-                    尝试盗取
-                </button>
-            </div>
-            <div class="reward-cards" id="reward-cards">
-                <!-- 动态生成奖励卡牌 -->
-            </div>
-            <div class="reward-resources">
-                <div class="reward-item">
-                    <span class="icon">💰</span>
-                    <span id="reward-gold">+50 灵石</span>
+    <div id="reward-screen" class="screen" data-steal-state="hidden">
+        <div class="reward-container">
+            <div class="reward-shell">
+                <div class="reward-header">
+                    <span class="reward-kicker">战斗结算</span>
+                    <h2 class="reward-title">战斗胜利！</h2>
+                    <p class="reward-subtitle">先整理法则余烬，再从本场战利中挑选一张核心卡牌，决定下一段推进节奏。</p>
                 </div>
-            </div>
-            <div class="reward-actions">
-                <button class="continue-btn" id="continue-reward-btn" onclick="game.continueAfterReward()"
-                    disabled>请先选择一张卡牌</button>
-                <button class="skip-reward-btn" onclick="game.skipRewardCard()">跳过卡牌 (扣20灵石)</button>
+                <div class="reward-layout">
+                    <div class="reward-main-column">
+                        <div class="steal-chance reward-panel" id="steal-section">
+                            <h3>🔮 法则盗取</h3>
+                            <p id="steal-text">你感受到敌人体内残留的法则力量...</p>
+                            <button class="steal-btn" id="steal-btn" onclick="game.attemptSteal()">
+                                尝试盗取
+                            </button>
+                        </div>
+                        <div class="reward-card-stage reward-panel">
+                            <div class="reward-section-heading">
+                                <span class="reward-section-eyebrow">核心奖励</span>
+                                <h3>择一张卡牌纳入牌组</h3>
+                                <p>选择后即可继续推进；若当前灵石充足，也可付费跳过本次卡牌。</p>
+                            </div>
+                            <div class="reward-cards" id="reward-cards">
+                                <!-- 动态生成奖励卡牌 -->
+                            </div>
+                        </div>
+                    </div>
+                    <aside class="reward-side-column">
+                        <div class="reward-summary-card reward-panel">
+                            <div class="reward-section-heading compact">
+                                <span class="reward-section-eyebrow">结算摘要</span>
+                                <h3>本场收获</h3>
+                            </div>
+                            <div class="reward-resources">
+                                <div class="reward-item reward-item-primary">
+                                    <span class="icon">💰</span>
+                                    <span id="reward-gold">+50 灵石</span>
+                                </div>
+                            </div>
+                            <div id="reward-battle-meta" class="reward-battle-meta" style="display:none;"></div>
+                        </div>
+                        <div class="reward-actions reward-panel">
+                            <button class="continue-btn" id="continue-reward-btn" onclick="game.continueAfterReward()"
+                                disabled>请先选择一张卡牌</button>
+                            <button class="skip-reward-btn" onclick="game.skipRewardCard()">跳过卡牌 (扣20灵石)</button>
+                        </div>
+                    </aside>
+                </div>
             </div>
         </div>
     </div>
@@ -784,23 +937,41 @@
 
     <!-- 商店界面 -->
     <div id="shop-screen" class="screen">
-        <div class="screen-header">
+        <div class="screen-header shop-screen-header">
             <button class="back-btn" onclick="game.closeShop()">← 离开商店</button>
-            <h2>🏪 神秘商铺</h2>
-            <div class="shop-gold">
-                <span class="icon">💰</span>
-                <span id="shop-gold-display">0</span> 灵石
+            <div class="shop-header-title">
+                <h2>🏪 神秘商铺</h2>
+                <p id="shop-header-subtitle">商贩会根据你的命途，拿出不同层级的交易。</p>
+            </div>
+            <div class="shop-currency-strip">
+                <div class="shop-currency currency-gold">
+                    <span class="icon">💰</span>
+                    <span id="shop-gold-display">0</span>
+                    <span class="label">灵石</span>
+                </div>
+                <div class="shop-currency currency-insight">
+                    <span class="icon">🔮</span>
+                    <span id="shop-insight-display">0</span>
+                    <span class="label">天机</span>
+                </div>
+                <div class="shop-currency currency-karma">
+                    <span class="icon">🜂</span>
+                    <span id="shop-karma-display">0</span>
+                    <span class="label">业果</span>
+                </div>
             </div>
         </div>
         <div class="shop-container">
-            <div class="shop-section">
-                <h3>📜 卡牌出售</h3>
+            <div class="shop-tab-bar" id="shop-tab-bar"></div>
+            <div class="shop-tab-summary" id="shop-tab-summary"></div>
+            <div class="shop-section" id="shop-card-section">
+                <h3 id="shop-card-section-title">📜 卡牌出售</h3>
                 <div class="shop-cards" id="shop-cards">
                     <!-- 动态生成 -->
                 </div>
             </div>
-            <div class="shop-section">
-                <h3>✨ 特殊服务</h3>
+            <div class="shop-section" id="shop-service-section">
+                <h3 id="shop-service-section-title">✨ 特殊服务</h3>
                 <div class="shop-services" id="shop-services-container">
                     <!-- 动态生成 -->
                 </div>
@@ -1004,31 +1175,129 @@
     <div id="treasure-detail-modal" class="modal">
         <div class="modal-content treasure-detail-view">
             <button class="modal-close" onclick="game.closeModal()">×</button>
-            <div class="treasure-detail-layout">
-                <div class="treasure-visual-col">
-                    <div class="treasure-visual-bg">
-                        <div class="visual-particles"></div>
-                        <div class="treasure-large-icon" id="detail-icon">📦</div>
-                    </div>
-                </div>
-                <div class="treasure-info-col">
-                    <div class="detail-header">
-                        <h2 id="detail-name">法宝名称</h2>
-                        <div class="detail-sub" id="detail-rarity">稀有度</div>
-                    </div>
-                    <div class="detail-body">
+            <div class="treasure-detail-layout detail-dual-layout">
+                <div class="detail-dual-main treasure-detail-main">
+                    <section class="detail-dual-panel treasure-stage-panel">
+                        <div class="treasure-visual-col">
+                            <div class="treasure-visual-bg">
+                                <div class="visual-particles"></div>
+                                <div class="treasure-large-icon" id="detail-icon">📦</div>
+                            </div>
+                        </div>
+                    </section>
+                    <section class="detail-dual-panel treasure-story-panel">
+                        <div class="detail-panel-heading">
+                            <span class="detail-panel-kicker">效果解析</span>
+                            <h3>法宝摘要</h3>
+                        </div>
                         <div class="detail-desc-box">
                             <p id="detail-desc">法宝效果描述...</p>
                         </div>
-                        <div class="detail-lore">
+                        <div class="detail-lore-card">
+                            <span class="detail-mini-label">逸闻</span>
                             <i id="detail-lore">“此物乃天地造化，非有缘人不可得。”</i>
                         </div>
-                        <div class="detail-source">
-                            <span class="source-label">📍 获取途径:</span>
-                            <span id="detail-source">未知</span>
-                        </div>
-                    </div>
+                    </section>
                 </div>
+                <aside class="detail-dual-side treasure-detail-side">
+                    <section class="detail-dual-panel treasure-summary-panel">
+                        <div class="detail-header">
+                            <span class="detail-kicker">法宝图鉴</span>
+                            <h2 id="detail-name">法宝名称</h2>
+                            <div class="detail-sub" id="detail-rarity">稀有度</div>
+                        </div>
+                        <div class="detail-status-strip">
+                            <span class="detail-status-chip" id="detail-owned-state">已收录</span>
+                        </div>
+                        <div class="detail-source-card">
+                            <span class="detail-mini-label">获取途径</span>
+                            <div class="detail-source" id="detail-source">未知</div>
+                        </div>
+                    </section>
+                    <section class="detail-dual-panel detail-tip-panel">
+                        <div class="detail-panel-heading compact">
+                            <span class="detail-panel-kicker">整理建议</span>
+                            <h3>阅读顺序</h3>
+                        </div>
+                        <ul class="codex-side-list">
+                            <li>先看稀有度与持有状态，再决定是否要追该法宝掉落。</li>
+                            <li>主区侧重效果与逸闻，右侧负责来源与收藏信息。</li>
+                            <li>未获得法宝也会显示出处，便于规划路线和商店取舍。</li>
+                        </ul>
+                    </section>
+                    <div class="detail-modal-actions">
+                        <button class="cd-close-btn" onclick="game.closeModal()">关闭界面</button>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    </div>
+
+    <!-- 法则详情弹窗 -->
+    <div id="law-detail-modal" class="modal">
+        <div class="modal-content treasure-detail-view law-detail-view">
+            <button class="modal-close" onclick="game.closeModal()">×</button>
+            <div class="detail-dual-layout law-detail-layout">
+                <div class="detail-dual-main law-detail-main">
+                    <section class="detail-dual-panel law-stage-panel">
+                        <div class="detail-panel-heading">
+                            <span class="detail-panel-kicker">法则图鉴</span>
+                            <h3>法则主舞台</h3>
+                        </div>
+                        <div class="law-hero-stage" id="law-detail-stage">
+                            <div class="law-hero-orbit"></div>
+                            <div class="law-hero-icon" id="law-detail-icon">📜</div>
+                            <div class="law-hero-caption" id="law-detail-caption">法则残响正在浮现...</div>
+                        </div>
+                    </section>
+                    <section class="detail-dual-panel law-copy-panel">
+                        <div class="detail-panel-heading compact">
+                            <span class="detail-panel-kicker">效果解析</span>
+                            <h3>核心说明</h3>
+                        </div>
+                        <div class="cd-desc-box" id="law-detail-desc">法则说明</div>
+                        <div class="detail-dual-panel law-passive-card">
+                            <span class="detail-mini-label">被动效果</span>
+                            <div id="law-detail-passive">暂无被动说明</div>
+                        </div>
+                        <div class="detail-dual-panel law-links-card">
+                            <span class="detail-mini-label">关联内容</span>
+                            <div id="law-detail-links">暂无关联内容</div>
+                        </div>
+                    </section>
+                </div>
+                <aside class="detail-dual-side law-detail-side">
+                    <section class="detail-dual-panel law-summary-panel">
+                        <div class="detail-header" id="law-detail-header">
+                            <span class="detail-kicker">法则档案</span>
+                            <h2 id="law-detail-name">法则名称</h2>
+                            <div class="detail-sub" id="law-detail-rarity">稀有度</div>
+                        </div>
+                        <div class="detail-status-strip" id="law-detail-chips"></div>
+                        <div class="detail-source-card">
+                            <span class="detail-mini-label">获取方式</span>
+                            <div class="detail-source" id="law-detail-source">战后法则盗取</div>
+                        </div>
+                    </section>
+                    <section class="detail-dual-panel detail-tip-panel">
+                        <div class="detail-dual-panel law-readiness-panel">
+                            <span class="detail-mini-label">当前共鸣状态</span>
+                            <div id="law-detail-readiness">正在检索当前命环与已收录法则...</div>
+                        </div>
+                        <div class="detail-panel-heading compact">
+                            <span class="detail-panel-kicker">阅读顺序</span>
+                            <h3>检索建议</h3>
+                        </div>
+                        <p class="codex-side-note" id="law-detail-note">优先确认状态与元素，再决定是否围绕它补共鸣。</p>
+                        <ul class="codex-side-list compact">
+                            <li>已掌握法则可重点看其被动与关联共鸣。</li>
+                            <li>未掌握法则会强调获取方式，方便回头规划偷取路线。</li>
+                        </ul>
+                    </section>
+                    <div class="detail-modal-actions">
+                        <button class="cd-close-btn" onclick="game.closeModal()">关闭界面</button>
+                    </div>
+                </aside>
             </div>
         </div>
     </div>
