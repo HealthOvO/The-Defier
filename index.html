@@ -13,9 +13,12 @@
         href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@300;400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/design-system.css">
     <link rel="stylesheet" href="css/animations.css">
     <link rel="stylesheet" href="css/card-detail.css">
     <link rel="stylesheet" href="css/mobile.css">
+    <link rel="stylesheet" href="css/battle-hud.css">
+    <link rel="stylesheet" href="css/battle-feedback.css">
     <link rel="stylesheet" href="css/pvp.css">
     <link rel="stylesheet" href="css/events.css">
     <link rel="stylesheet" href="css/purification.css">
@@ -1422,7 +1425,7 @@
     </div>
 
     <!-- 战斗日志 -->
-    <div id="battle-log"></div>
+    <div id="battle-log" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <!-- 加载脚本 -->
     <!-- Bmob SDK -->
@@ -1452,6 +1455,8 @@
     <script src="js/core/audio.js?v=5.0.1"></script>
     <script src="js/core/events.js?v=5.0.1"></script>
     <script src="js/core/achievements.js?v=5.0.1"></script>
+    <script src="js/ui/battle-hud.js?v=5.0.1"></script>
+    <script src="js/ui/battle-feedback.js?v=5.0.1"></script>
     <script src="js/core/battle.js?v=5.0.1"></script>
     <script src="js/core/map.js?v=5.0.1"></script>
     <script src="js/core/fateRing.js?v=5.0.1"></script>

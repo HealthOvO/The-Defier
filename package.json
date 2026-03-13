@@ -8,6 +8,11 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "test:node": "bash tests/run_node_checks.sh",
+    "test:browser:feature": "node tests/browser_feature_audit.mjs",
+    "test:browser:mobile": "node tests/browser_mobile_layout_audit.mjs",
+    "test:browser:release": "bash tests/run_browser_release_checks.sh",
+    "test:browser:pvp": "node tests/browser_pvp_audit.mjs",
     "prepare:pages": "bash scripts/prepare-pages.sh .site"
   },
   "repository": {

@@ -1,0 +1,407 @@
+#battle-screen .battle-container {
+    position: relative;
+}
+
+#battle-screen .environment-display {
+    z-index: var(--z-battle-environment);
+}
+
+#battle-screen .legacy-mission-tracker,
+#battle-screen #legacy-mission-tracker {
+    z-index: var(--z-battle-mission);
+}
+
+#battle-screen .battle-command-panel,
+#battle-screen #battle-command-panel {
+    top: 154px;
+    left: var(--hud-gutter-desktop);
+    transform: none;
+    width: var(--hud-command-width);
+    max-height: calc(100vh - 392px);
+    padding: var(--hud-panel-padding);
+    border-radius: var(--hud-panel-radius);
+    border-color: var(--hud-panel-border);
+    background: var(--hud-panel-bg);
+    box-shadow: var(--hud-panel-shadow);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--hud-scrollbar) transparent;
+    z-index: var(--z-battle-command-panel);
+}
+
+#battle-screen .battle-command-panel::-webkit-scrollbar,
+#battle-screen .battle-tactical-advisor::-webkit-scrollbar {
+    width: 5px;
+}
+
+#battle-screen .battle-command-panel::-webkit-scrollbar-thumb,
+#battle-screen .battle-tactical-advisor::-webkit-scrollbar-thumb {
+    background: var(--hud-scrollbar);
+    border-radius: 999px;
+}
+
+#battle-screen .battle-command-panel.custom-position {
+    right: auto;
+    bottom: auto;
+}
+
+#battle-screen .battle-command-panel .battle-command-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+}
+
+#battle-screen .battle-command-panel .battle-command-btn {
+    min-height: 54px;
+    padding: 6px 7px;
+}
+
+#battle-screen .battle-command-panel .battle-command-name {
+    font-size: 0.72rem;
+}
+
+#battle-screen .battle-command-panel .battle-command-meta {
+    font-size: 0.63rem;
+}
+
+#battle-screen .battle-tactical-advisor {
+    margin-top: 6px;
+    max-height: min(220px, 28vh);
+    overflow-y: auto;
+    transition:
+        max-height var(--hud-transition-medium),
+        opacity var(--hud-transition-fast),
+        margin var(--hud-transition-fast),
+        border-color var(--hud-transition-fast),
+        background var(--hud-transition-fast);
+}
+
+#battle-screen .battle-tactical-advisor.collapsed {
+    max-height: 38px;
+    overflow: hidden;
+}
+
+#battle-screen .battle-advisor-header {
+    min-height: 28px;
+}
+
+#battle-screen .battle-advisor-title {
+    font-size: 0.68rem;
+}
+
+#battle-screen .battle-advisor-line {
+    margin-top: 4px;
+    font-size: 0.64rem;
+    line-height: 1.28;
+}
+
+#battle-screen .battle-advisor-section-title,
+#battle-screen .battle-advisor-section-note,
+#battle-screen .battle-advisor-tempo-label,
+#battle-screen .battle-advisor-tempo-score,
+#battle-screen .battle-advisor-status-chip,
+#battle-screen .battle-advisor-chain-tag,
+#battle-screen .battle-advisor-chain-step {
+    font-size: 0.58rem;
+}
+
+#battle-screen .battle-advisor-chain-title {
+    font-size: 0.67rem;
+}
+
+#battle-screen .battle-advisor-cardstep-btn,
+#battle-screen .battle-advisor-matrix-btn {
+    font-size: 0.58rem;
+    padding: 4px 6px;
+}
+
+#battle-screen .boss-act-panel,
+#battle-screen #boss-act-panel {
+    width: var(--hud-boss-width);
+    max-width: calc(100% - 32px);
+    margin-top: 8px;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 10px 12px;
+    border-radius: 16px;
+    background: var(--hud-panel-bg-strong);
+    z-index: var(--z-battle-boss-panel);
+    pointer-events: none;
+}
+
+#battle-screen .boss-act-track {
+    gap: 8px;
+    margin-top: 9px;
+}
+
+#battle-screen .boss-act-counter-chips {
+    margin-top: 8px;
+    gap: 5px;
+}
+
+#battle-screen .boss-act-counter-chip {
+    font-size: 0.62rem;
+    padding: 3px 8px;
+}
+
+#battle-screen .boss-act-chip {
+    padding: 7px 8px;
+    gap: 8px;
+}
+
+#battle-screen .boss-act-chip-index {
+    width: 22px;
+    height: 22px;
+    font-size: 0.7rem;
+}
+
+#battle-screen .boss-act-chip-label {
+    font-size: 0.7rem;
+}
+
+#battle-screen .boss-act-body {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 8px;
+}
+
+#battle-screen .boss-act-line {
+    grid-template-columns: 64px 1fr;
+    gap: 8px;
+    padding: 6px 8px;
+}
+
+#battle-screen .boss-act-line.fail {
+    grid-column: 1 / -1;
+}
+
+#battle-screen .boss-act-line .label {
+    font-size: 0.64rem;
+}
+
+#battle-screen .boss-act-line .value {
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
+#battle-screen .end-turn-btn,
+#battle-screen .end-turn-btn:hover:not(:disabled),
+#battle-screen .end-turn-btn:active:not(:disabled) {
+    z-index: var(--z-battle-end-turn);
+}
+
+#battle-screen .enemy-intent,
+#battle-screen .enemy-avatar.has-image .enemy-intent {
+    z-index: var(--z-battle-intent);
+}
+
+#battle-screen .hand-cards {
+    gap: 0;
+    justify-content: center;
+}
+
+#battle-screen #hand-cards .card {
+    margin-left: var(--battle-card-overlap-desktop);
+}
+
+#battle-screen #hand-cards .card:first-child {
+    margin-left: 0;
+}
+
+#battle-screen #hand-cards .card:hover {
+    transform: translateY(var(--battle-card-pop-lift)) scale(1.08) rotateX(0deg) !important;
+}
+
+#battle-screen #hand-cards .card.selected {
+    transform: translateY(var(--battle-card-selected-lift)) scale(1.3) rotateX(0deg) !important;
+}
+
+#battle-screen #hand-cards .card.advisor-focus {
+    transform: translateY(var(--battle-card-advisor-lift)) scale(1.12) rotateX(0deg) !important;
+}
+
+@media (max-width: 1180px) {
+    #battle-screen .battle-command-panel,
+    #battle-screen #battle-command-panel {
+        width: clamp(260px, 26vw, 320px);
+        max-height: calc(100vh - 360px);
+    }
+
+    #battle-screen .boss-act-panel,
+    #battle-screen #boss-act-panel {
+        width: min(540px, 50vw, calc(100% - 24px));
+    }
+}
+
+@media (max-width: 900px) {
+    #battle-screen .boss-act-panel,
+    #battle-screen #boss-act-panel {
+        width: min(500px, calc(100% - 18px));
+    }
+}
+
+@media (max-width: 768px) {
+    #battle-screen .battle-command-panel,
+    #battle-screen #battle-command-panel {
+        top: 68px;
+        left: var(--hud-gutter-mobile);
+        width: calc(100vw - 12px);
+        max-height: 118px;
+        padding: 7px 8px;
+        border-radius: 12px;
+        z-index: var(--z-battle-command-panel);
+    }
+
+    #battle-screen .battle-command-panel .battle-command-list,
+    #battle-screen #battle-command-panel .battle-command-list {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+        margin-top: 6px;
+    }
+
+    #battle-screen .battle-command-panel .battle-command-btn,
+    #battle-screen #battle-command-panel .battle-command-btn {
+        min-height: 46px;
+        padding: 5px 6px;
+    }
+
+    #battle-screen .battle-command-panel .battle-command-name,
+    #battle-screen #battle-command-panel .battle-command-name {
+        font-size: 0.62rem;
+    }
+
+    #battle-screen .battle-command-panel .battle-command-meta,
+    #battle-screen #battle-command-panel .battle-command-meta {
+        font-size: 0.52rem;
+        line-height: 1.15;
+    }
+
+    #battle-screen .battle-command-panel .battle-advisor-toggle,
+    #battle-screen #battle-command-panel .battle-advisor-toggle {
+        min-height: 26px;
+        padding: 4px 8px;
+    }
+
+    #battle-screen .battle-command-panel .battle-tactical-advisor,
+    #battle-screen #battle-command-panel .battle-tactical-advisor {
+        display: block;
+        margin-top: 6px;
+        max-height: 34px;
+        opacity: 1;
+        overflow: hidden;
+    }
+
+    #battle-screen .battle-command-panel .battle-tactical-advisor:not(.collapsed),
+    #battle-screen #battle-command-panel .battle-tactical-advisor:not(.collapsed) {
+        max-height: min(280px, 38vh);
+        background: linear-gradient(145deg, rgba(9, 24, 52, 0.9), rgba(8, 20, 42, 0.94));
+    }
+
+    #battle-screen .battle-command-panel .battle-advisor-drag-handle,
+    #battle-screen #battle-command-panel .battle-advisor-drag-handle {
+        display: none;
+    }
+
+    #battle-screen .battle-command-panel .battle-advisor-header,
+    #battle-screen #battle-command-panel .battle-advisor-header {
+        cursor: default;
+        touch-action: pan-y;
+    }
+
+    #battle-screen .battle-command-panel .battle-advisor-title,
+    #battle-screen #battle-command-panel .battle-advisor-title {
+        font-size: 0.64rem;
+        padding-left: 2px;
+    }
+
+    #battle-screen .battle-command-panel .battle-advisor-body,
+    #battle-screen #battle-command-panel .battle-advisor-body {
+        padding-bottom: 2px;
+    }
+
+    #battle-screen .legacy-mission-tracker,
+    #battle-screen #legacy-mission-tracker {
+        top: 64px;
+        right: 6px;
+        left: auto;
+        width: min(184px, calc(100vw - 12px));
+        padding: 5px 7px;
+        z-index: var(--z-battle-mission);
+    }
+
+    #battle-screen .boss-act-panel,
+    #battle-screen #boss-act-panel {
+        position: absolute;
+        left: 6px;
+        right: 6px;
+        top: 194px;
+        bottom: auto;
+        width: auto;
+        max-width: none;
+        margin: 0;
+        padding: 7px 8px;
+        border-radius: 14px;
+        max-height: 104px;
+        overflow: hidden;
+        z-index: var(--z-battle-boss-panel);
+    }
+
+    #battle-screen #boss-act-panel .boss-act-header {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 6px;
+        align-items: center;
+    }
+
+    #battle-screen #boss-act-panel .boss-act-title {
+        font-size: 0.76rem;
+        letter-spacing: 0.03em;
+    }
+
+    #battle-screen #boss-act-panel .boss-act-subtitle,
+    #battle-screen #boss-act-panel .boss-act-hp {
+        font-size: 0.62rem;
+    }
+
+    #battle-screen #boss-act-panel .boss-act-track,
+    #battle-screen #boss-act-panel .boss-act-counter-chips {
+        display: none;
+    }
+
+    #battle-screen #boss-act-panel .boss-act-body {
+        margin-top: 6px;
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+
+    #battle-screen #boss-act-panel .boss-act-line {
+        grid-template-columns: 52px 1fr;
+        padding: 4px 6px;
+    }
+
+    #battle-screen #boss-act-panel .boss-act-line:not(.signal) {
+        display: none;
+    }
+
+    #battle-screen #boss-act-panel .boss-act-line .label,
+    #battle-screen #boss-act-panel .boss-act-line .value {
+        font-size: 0.58rem;
+        line-height: 1.2;
+    }
+
+    #battle-screen #hand-cards .card {
+        margin-left: var(--battle-card-overlap-mobile);
+        transform: rotateX(6deg) translateY(-12px) scale(0.92);
+    }
+
+    #battle-screen #hand-cards .card:hover {
+        transform: translateY(-48px) scale(1.12) rotateX(0deg) !important;
+    }
+
+    #battle-screen #hand-cards .card.selected {
+        transform: translateY(-68px) scale(1.18) rotateX(0deg) !important;
+    }
+
+    #battle-screen #hand-cards .card.advisor-focus {
+        transform: translateY(-32px) scale(1.06) rotateX(0deg) !important;
+    }
+}

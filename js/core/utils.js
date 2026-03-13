@@ -1124,34 +1124,52 @@ const Utils = {
 
     ensureBattleLogPanel() {
         let panel = document.getElementById('battle-log-panel');
+        const helper = typeof DefierBattleFeedback !== 'undefined'
+            && DefierBattleFeedback
+            && typeof DefierBattleFeedback.buildBattleLogPanelShellMarkup === 'function';
         if (!panel) {
             panel = document.createElement('div');
             panel.id = 'battle-log-panel';
             panel.className = 'battle-log-panel';
-            panel.innerHTML = `
-                <div class="battle-log-panel-header">
-                    <span>战斗记录</span>
-                    <button type="button" id="battle-log-panel-close">×</button>
-                </div>
-                <div class="battle-log-panel-filters">
-                    <button type="button" class="log-filter-btn active" data-filter="all">全部</button>
-                    <button type="button" class="log-filter-btn" data-filter="damage">伤害</button>
-                    <button type="button" class="log-filter-btn" data-filter="status">状态</button>
-                    <button type="button" class="log-filter-btn" data-filter="system">系统</button>
-                    <button type="button" class="log-filter-btn" data-filter="warning">警告</button>
-                </div>
-                <div id="battle-log-panel-list" class="battle-log-panel-list"></div>
-            `;
+            panel.innerHTML = helper
+                ? DefierBattleFeedback.buildBattleLogPanelShellMarkup(this._battleLogFilter || 'all')
+                : `
+                    <div class="battle-log-panel-header">
+                        <span>战斗记录</span>
+                        <button type="button" id="battle-log-panel-close" aria-label="关闭战斗记录">×</button>
+                    </div>
+                    <div class="battle-log-panel-filters">
+                        <button type="button" class="log-filter-btn active" data-filter="all" aria-pressed="true">全部</button>
+                        <button type="button" class="log-filter-btn" data-filter="damage" aria-pressed="false">伤害</button>
+                        <button type="button" class="log-filter-btn" data-filter="status" aria-pressed="false">状态</button>
+                        <button type="button" class="log-filter-btn" data-filter="reward" aria-pressed="false">奖励</button>
+                        <button type="button" class="log-filter-btn" data-filter="system" aria-pressed="false">系统</button>
+                        <button type="button" class="log-filter-btn" data-filter="warning" aria-pressed="false">警告</button>
+                    </div>
+                    <div id="battle-log-panel-list" class="battle-log-panel-list"></div>
+                `;
             document.body.appendChild(panel);
         }
+
+        panel.setAttribute('role', 'dialog');
+        panel.setAttribute('aria-label', '战斗记录');
+        panel.dataset.renderer = helper ? 'battle-feedback' : 'legacy';
+        panel.querySelectorAll('.log-filter-btn').forEach((btn) => {
+            const active = (btn.dataset.filter || 'all') === (this._battleLogFilter || 'all');
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
 
         if (!this._battleLogPanelBound) {
             panel.addEventListener('click', (e) => {
                 const btn = e.target.closest('.log-filter-btn');
                 if (btn) {
                     this._battleLogFilter = btn.dataset.filter || 'all';
-                    panel.querySelectorAll('.log-filter-btn').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
+                    panel.querySelectorAll('.log-filter-btn').forEach((b) => {
+                        const active = b === btn;
+                        b.classList.toggle('active', active);
+                        b.setAttribute('aria-pressed', active ? 'true' : 'false');
+                    });
                     this.renderBattleLogPanel();
                     return;
                 }
@@ -1171,6 +1189,17 @@ const Utils = {
         if (!list) return;
 
         const filter = this._battleLogFilter || 'all';
+        list.dataset.filter = filter;
+
+        if (typeof DefierBattleFeedback !== 'undefined'
+            && DefierBattleFeedback
+            && typeof DefierBattleFeedback.buildBattleLogListMarkup === 'function') {
+            panel.dataset.renderer = 'battle-feedback';
+            list.dataset.renderer = 'battle-feedback';
+            list.innerHTML = DefierBattleFeedback.buildBattleLogListMarkup(this._battleLogHistory, filter);
+            return;
+        }
+
         const records = this._battleLogHistory
             .filter(item => filter === 'all' || item.category === filter)
             .slice()
@@ -1181,6 +1210,7 @@ const Utils = {
             return;
         }
 
+        list.dataset.renderer = 'legacy';
         list.innerHTML = records.map(item => {
             const time = new Date(item.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             return `
@@ -1209,6 +1239,10 @@ const Utils = {
 
         const text = String(message || '').trim();
         if (!text) return;
+
+        log.setAttribute('role', 'status');
+        log.setAttribute('aria-live', 'polite');
+        log.setAttribute('aria-atomic', 'true');
 
         const category = options.category || this.classifyBattleLog(text);
         const duration = Math.max(1000, Number(options.duration) || 2200);

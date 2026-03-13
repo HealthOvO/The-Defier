@@ -247,6 +247,9 @@ async function safeScreenshot(page, outPath) {
       hoverProbeCard.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
     }
     const advisorThreatChips = advisor ? advisor.querySelectorAll('.battle-advisor-threat-chip').length : 0;
+    const helperLoaded = !!window.DefierBattleHud
+      && typeof window.DefierBattleHud.buildBattleCommandPanelMarkup === 'function'
+      && typeof window.DefierBattleHud.clampFloatingPanelPosition === 'function';
     let advisorCollapsedAfterToggle = false;
     let advisorStaysCollapsedWhileHovered = false;
     let advisorDragged = false;
@@ -373,6 +376,7 @@ async function safeScreenshot(page, outPath) {
       advisorTargetingPreview,
       advisorFocusedIndex,
       advisorThreatChips,
+      helperLoaded,
       advisorCollapsedAfterToggle,
       advisorStaysCollapsedWhileHovered,
       advisorDragged,
@@ -384,9 +388,10 @@ async function safeScreenshot(page, outPath) {
     };
   });
   add(
-    'battle command panel renders and command activation changes battle state',
+    'battle command panel renders through shared HUD module and command activation changes battle state',
     !!battleCommandProbe &&
       !!battleCommandProbe.ok &&
+      !!battleCommandProbe.helperLoaded &&
       Number(battleCommandProbe.buttons || 0) >= 3 &&
       /战场指令/.test(battleCommandProbe.title || '') &&
       /战术助手/.test(battleCommandProbe.advisorTitle || '') &&
@@ -616,6 +621,7 @@ async function safeScreenshot(page, outPath) {
         texts.some((text) => /遭遇战利/.test(text)) &&
         texts.some((text) => /敌阵战利/.test(text)) &&
         texts.some((text) => /轮段协同/.test(text)),
+      renderer: panel?.dataset?.renderer || '',
       title,
       chipCount: texts.length,
       texts,
@@ -627,6 +633,7 @@ async function safeScreenshot(page, outPath) {
     'reward screen meta panel shows localized encounter/squad sources and clears stale content',
     !!rewardMetaProbe &&
       !!rewardMetaProbe.ok &&
+      rewardMetaProbe.renderer === 'battle-feedback' &&
       /战利来源/.test(rewardMetaProbe.title || '') &&
       rewardMetaProbe.clearedDisplay === 'none' &&
       Number(rewardMetaProbe.clearedHtmlLength ?? -1) === 0,
@@ -707,9 +714,18 @@ async function safeScreenshot(page, outPath) {
 
   const panelOpen = await page.evaluate(() => {
     const panel = document.getElementById('battle-log-panel');
-    return !!panel && panel.classList.contains('active');
+    const closeBtn = document.getElementById('battle-log-panel-close');
+    return {
+      active: !!panel && panel.classList.contains('active'),
+      renderer: panel?.dataset?.renderer || '',
+      closeAria: closeBtn?.getAttribute('aria-label') || ''
+    };
   });
-  add('battle log panel opens with L hotkey', panelOpen, panelOpen ? '' : 'panel not active');
+  add(
+    'battle log panel opens with L hotkey',
+    !!panelOpen?.active && panelOpen.renderer === 'battle-feedback' && /关闭战斗记录/.test(panelOpen.closeAria || ''),
+    JSON.stringify(panelOpen || null)
+  );
 
   const panelHasEntries = await page.evaluate(() => {
     return document.querySelectorAll('#battle-log-panel-list .battle-log-item').length > 0;
@@ -2641,7 +2657,7 @@ async function safeScreenshot(page, outPath) {
     JSON.stringify(battleOverlayLayoutProbe || null)
   );
 
-  const advisorHierarchyProbe = await page.evaluate(() => {
+  const advisorHierarchyProbe = await page.evaluate(async () => {
     if (!window.game || typeof game.startDebugBattle !== 'function') return { ok: false, reason: 'no_debug_battle' };
     game.startDebugBattle(1, 'boss');
     const battle = game.battle;
@@ -2656,12 +2672,24 @@ async function safeScreenshot(page, outPath) {
     if (advisor) advisor.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
     const hoverHeight = advisor ? advisor.getBoundingClientRect().height : 0;
     battle.handleTacticalAdvisorHotkey('h');
-    const hotkeyHeight = advisor ? advisor.getBoundingClientRect().height : 0;
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    const advisorAfterHotkey = document.getElementById('battle-tactical-advisor');
+    const bodyAfterHotkey = advisorAfterHotkey ? advisorAfterHotkey.querySelector('.battle-advisor-body') : null;
+    const hotkeyHeight = advisorAfterHotkey ? advisorAfterHotkey.getBoundingClientRect().height : 0;
+    const hotkeyMaxHeight = advisorAfterHotkey ? parseFloat(advisorAfterHotkey.style.maxHeight || getComputedStyle(advisorAfterHotkey).maxHeight || '0') : 0;
     return {
-      ok: !!panel && !!advisor && hoverHeight <= collapsedHeight + 1 && hotkeyHeight >= collapsedHeight + 20,
+      ok: !!panel
+        && !!advisor
+        && !!advisorAfterHotkey
+        && hoverHeight <= collapsedHeight + 1
+        && (
+          hotkeyHeight >= collapsedHeight + 20
+          || (hotkeyMaxHeight >= collapsedHeight + 20 && !!bodyAfterHotkey && bodyAfterHotkey.hidden === false)
+        ),
       collapsedHeight,
       hoverHeight,
       hotkeyHeight,
+      hotkeyMaxHeight,
       collapsed: battle.tacticalAdvisorCollapsed,
       hoverExpanded: battle.tacticalAdvisorHoverExpanded,
     };

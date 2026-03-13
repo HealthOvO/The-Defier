@@ -1,0 +1,37 @@
+:root {
+    --hud-compact-breakpoint: 768;
+    --hud-gutter-desktop: 16px;
+    --hud-gutter-mobile: 6px;
+    --hud-panel-radius: 14px;
+    --hud-panel-padding: 8px 9px;
+    --hud-panel-bg:
+        linear-gradient(145deg, rgba(7, 16, 40, 0.92), rgba(4, 10, 26, 0.92));
+    --hud-panel-bg-strong:
+        linear-gradient(135deg, rgba(34, 24, 16, 0.95), rgba(64, 28, 18, 0.88)),
+        radial-gradient(circle at top right, rgba(255, 188, 92, 0.18), transparent 44%);
+    --hud-panel-border: rgba(114, 184, 255, 0.48);
+    --hud-panel-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+    --hud-command-width: clamp(280px, 24vw, 360px);
+    --hud-boss-width: min(620px, 44vw, calc(100% - 32px));
+    --hud-scrollbar: rgba(124, 188, 255, 0.42);
+    --hud-transition-fast: 180ms ease;
+    --hud-transition-medium: 240ms ease;
+    --battle-card-overlap-desktop: -30px;
+    --battle-card-overlap-mobile: -22px;
+    --battle-card-pop-lift: -30px;
+    --battle-card-selected-lift: -90px;
+    --battle-card-advisor-lift: -44px;
+    --z-battle-environment: 108;
+    --z-battle-boss-panel: 114;
+    --z-battle-end-turn: 116;
+    --z-battle-command-panel: 118;
+    --z-battle-mission: 119;
+    --z-battle-intent: 130;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --hud-transition-fast: 1ms linear;
+        --hud-transition-medium: 1ms linear;
+    }
+}

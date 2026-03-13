@@ -84,9 +84,21 @@ function add(name, pass, detail = '') {
     const endTurn = document.getElementById('end-turn-btn');
     const enemy = document.querySelector('.enemy');
     const advisor = document.querySelector('#battle-command-panel .battle-tactical-advisor');
+    const toggleBtn = document.querySelector('#battle-command-panel .battle-advisor-toggle');
     const handCards = Array.from(document.querySelectorAll('#hand-cards .card')).slice(0, 3);
     const handCardRects = handCards.map((el) => rectObj(el));
     const visibleRuleLines = Array.from(document.querySelectorAll('#boss-act-panel .boss-act-line')).filter((el) => getComputedStyle(el).display !== 'none').length;
+    const advisorCollapsedInitially = !!advisor && advisor.classList.contains('collapsed');
+    const collapsedHeight = advisor ? advisor.getBoundingClientRect().height : 0;
+    let expandedHeight = collapsedHeight;
+    let advisorExpandedAfterToggle = false;
+    if (toggleBtn && typeof toggleBtn.click === 'function') {
+      toggleBtn.click();
+      if (window.game?.battle && typeof game.battle.updateBattleUI === 'function') game.battle.updateBattleUI();
+      const advisorAfterToggle = document.querySelector('#battle-command-panel .battle-tactical-advisor');
+      expandedHeight = advisorAfterToggle ? advisorAfterToggle.getBoundingClientRect().height : collapsedHeight;
+      advisorExpandedAfterToggle = !!advisorAfterToggle && !advisorAfterToggle.classList.contains('collapsed');
+    }
 
     return {
       viewport: { width: window.innerWidth, height: window.innerHeight },
@@ -94,8 +106,12 @@ function add(name, pass, detail = '') {
       boss: rectObj(boss),
       hand: rectObj(hand),
       endTurn: rectObj(endTurn),
-      enemy: rectObj(enemy),
+      enemy: rectObj(document.querySelector('.enemy') || enemy),
       handCardRects,
+      advisorCollapsedInitially,
+      advisorExpandedAfterToggle,
+      collapsedHeight,
+      expandedHeight,
       advisorVisible: !!advisor && getComputedStyle(advisor).display !== 'none',
       visibleRuleLines,
       ok: !!command && !!boss && !!hand && !!endTurn && !!enemy &&
@@ -106,17 +122,20 @@ function add(name, pass, detail = '') {
         rectObj(boss).bottom < rectObj(hand).top &&
         rectObj(endTurn).top >= rectObj(boss).top &&
         rectObj(endTurn).bottom <= rectObj(hand).top + 28 &&
-        rectObj(enemy).top > rectObj(boss).bottom - 6 &&
+        rectObj(document.querySelector('.enemy') || enemy).top > rectObj(boss).bottom - 6 &&
         handCardRects.length >= 2 &&
         handCardRects.every((rect) => !!rect && rect.width >= 86 && rect.bottom <= window.innerHeight - 6) &&
         handCardRects.every((rect) => rect.right <= rectObj(endTurn).left + 44 || rect.top >= rectObj(endTurn).bottom - 6) &&
-        !((!!advisor && getComputedStyle(advisor).display !== 'none')) &&
+        !!advisor &&
+        advisorCollapsedInitially &&
+        advisorExpandedAfterToggle &&
+        expandedHeight >= collapsedHeight + 20 &&
         visibleRuleLines <= 1
     };
   });
 
   add(
-    'mobile battle HUD stays compact and keeps command panel, boss panel, hand area separated',
+    'mobile battle HUD stays compact, keeps lanes separated, and still allows explicit advisor expansion',
     !!probe && !!probe.ok,
     JSON.stringify(probe || null)
   );

@@ -3000,3 +3000,99 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - 后续事项
     - 可继续把执行链接入卡牌详情弹窗，形成“悬停看摘要、长按看全链”的双层阅读体验。
     - 可继续为移动端补一个底部抽屉式战斗助手，把桌面执行链裁剪为点按展开版。
+
+- 2026-03-12: 第五十二轮 架构重构（战斗 HUD 模块化）
+  - 本轮变更
+    - 新增表现层模块 `js/ui/battle-hud.js`
+      - 集中承载 `escapeHtml / shouldUseCompactBattleHud / clampFloatingPanelPosition / buildBossActPanelMarkup / buildBattleCommandPanelMarkup`。
+      - `js/core/battle.js` 收口为“计算状态 + DOM 事件绑定”，不再内嵌整段 HUD 模板与布局基础规则。
+    - 新增样式入口
+      - `css/design-system.css`：统一 HUD 尺寸、图层、动画与手牌几何令牌；
+      - `css/battle-hud.css`：统一战斗指令面板、Boss 三幕面板、敌方意图层级与移动端助手抽屉样式。
+    - 入口接线
+      - `index.html` 接入新的 CSS / JS 资源；
+      - `package.json` 新增 `test:node / test:browser:feature / test:browser:mobile / test:browser:pvp`。
+    - 自动化门禁增强
+      - 新增 `tests/sanity_battle_hud_module_checks.js`；
+      - `tests/run_node_checks.sh` 纳入 HUD helper 校验；
+      - `tests/browser_feature_audit.mjs` 增加共享 HUD helper 加载断言；
+      - `tests/browser_mobile_layout_audit.mjs` 改为校验“默认紧凑 + 可显式展开助手”。
+    - 行为修复
+      - 移动端不再通过 `display:none` 隐藏战术助手，修复“点击收起助手无效”的假象问题；
+      - 继续保留桌面端拖拽定位能力，并统一定位钳制逻辑。
+  - 本轮验证
+    - `bash tests/run_node_checks.sh` ✅
+      - 新增 `Battle HUD module checks passed.` 已纳入全量 Node 自检并通过。
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-refactor-green` ✅
+      - 共享 HUD helper、桌面端拖拽、助手折叠/热键恢复、Boss 三幕面板与敌方意图避让全部通过。
+      - 截图步骤因字体等待超时触发安全降级：`[browser_feature_audit] screenshot skipped`，不影响断言结果。
+    - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/web-mobile-layout-audit-refactor-final` ✅
+      - 移动端默认紧凑、助手点击后可展开、Boss / 指令 / 手牌纵向通道分离通过。
+    - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-refactor` ✅
+      - 生成 `output/web-game-refactor/shot-0.png`、`output/web-game-refactor/shot-1.png`、`output/web-game-refactor/state-0.json`、`output/web-game-refactor/state-1.json`。
+      - 已人工查看 `output/web-game-refactor/shot-1.png`，主菜单渲染清晰，按钮层级与视觉表现正常。
+    - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-post-refactor` ✅
+      - 主流程入口、游客开局、PVP/图鉴切换、地图进战斗与结束回合交互通过。
+    - `bash scripts/prepare-pages.sh .site` ✅
+      - Pages 产物已包含 `css/design-system.css`、`css/battle-hud.css` 与 `js/ui` 重构资源。
+
+- 2026-03-13: 第五十三轮补充 架构延伸（战斗反馈层）
+  - 本轮变更
+    - 新增表现层模块 `js/ui/battle-feedback.js`
+      - 集中承载战斗日志历史面板骨架、日志条目列表、战后来源面板 HTML 生成。
+      - 统一对日志文案与奖励来源文案进行 HTML escape，降低 UI 注入与错位风险。
+    - 新增样式入口 `css/battle-feedback.css`
+      - 收口 `#battle-log`、`.battle-log-panel`、`.reward-battle-meta` 等反馈层样式；
+      - 补足关闭按钮 / 筛选按钮 touch target、`focus-visible` 与 `prefers-reduced-motion`。
+    - 运行时接线
+      - `index.html` 接入 `css/battle-feedback.css` 与 `js/ui/battle-feedback.js`；
+      - `index.html` 的 `#battle-log` 补上 `role=\"status\"`、`aria-live=\"polite\"`、`aria-atomic=\"true\"`。
+      - `js/core/utils.js` 的战斗日志历史面板改为委托 `DefierBattleFeedback` 渲染，并新增“奖励”筛选；
+      - `js/game.js` 的 `renderRewardBattleMeta()` 改为委托 `DefierBattleFeedback` 渲染，并保留 `data-renderer` 标记便于审计与排错。
+    - 自动化门禁增强
+      - 新增 `tests/sanity_battle_feedback_module_checks.js`；
+      - `tests/run_node_checks.sh` 纳入 battle feedback helper 校验；
+      - `tests/browser_feature_audit.mjs` 增加奖励来源面板 renderer 标记与战斗日志关闭按钮可访问性断言。
+  - 本轮验证
+    - `bash tests/run_node_checks.sh` ✅
+      - 包含新增 `Battle feedback module checks passed.`。
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-feedback-refactor-final` ✅
+      - 奖励来源面板确认由 `battle-feedback` 渲染；
+      - 战斗日志历史面板热键打开、renderer 标记与关闭按钮 aria 文案通过。
+      - 截图步骤因字体等待超时触发安全降级：`[browser_feature_audit] screenshot skipped`，不影响断言结果。
+    - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/web-mobile-layout-audit-feedback-refactor` ✅
+      - 移动端战斗 HUD 与助手抽屉布局未被反馈层样式回归影响。
+    - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit-feedback-refactor` ✅
+      - 战后奖励页桌面双栏、移动单栏、盗取反馈与图鉴/法宝/成就等信息层级通过。
+      - 截图步骤因字体等待超时触发安全降级，不影响断言结果。
+    - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-feedback-refactor-final` ✅
+      - 生成 `output/web-game-feedback-refactor-final/shot-0.png`、`shot-1.png`、`state-0.json`、`state-1.json`。
+      - 已人工查看 `output/web-game-feedback-refactor-final/shot-1.png`，主菜单渲染正常，无新增遮挡或按钮错位。
+  - 后续事项
+    - 可继续把奖励页摘要 rail 与日志历史过滤器进一步迁移到 `js/ui/` 的统一 presenter / controller 结构。
+    - 可继续为日志历史面板补“奖励”筛选的浏览器审计断言，完善反馈层专属门禁。
+
+- 2026-03-13: 第五十四轮 测试体系增强（发布级浏览器扫查脚本）
+  - 本轮变更
+    - 新增 `tests/run_browser_release_checks.sh`
+      - 串联执行：
+        - `browser_audit`
+        - `browser_feature_audit`
+        - `browser_mobile_layout_audit`
+        - `browser_meta_screen_audit`
+        - `browser_event_branch_audit`
+        - `browser_guide_modal_audit`
+        - `browser_inheritance_audit`
+        - `browser_pvp_audit`
+        - `browser_pvp_mobile_audit`
+      - 支持通过参数或 `BASE_URL` 指定本地地址，输出统一收口到单个目录树。
+    - `package.json`
+      - 新增 `test:browser:release`，后续可一键执行发布前浏览器回归。
+    - 官方 Playwright 客户端再次验证
+      - `--click-selector '#new-game-btn'` 路径在当前版本已恢复稳定；
+      - 产物 `output/web-game-click-selector-stable/shot-1.png` 已确认弹出“登录或游客”确认弹窗，按钮交互链路正常。
+  - 本轮验证
+    - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-final` ✅
+      - 所有浏览器发布审计通过，终端输出 `All browser release audits passed.`。
+    - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-click-selector-stable` ✅
+      - 已人工查看 `output/web-game-click-selector-stable/shot-1.png`，确认弹窗出现且首屏交互稳定。

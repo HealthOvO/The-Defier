@@ -6897,10 +6897,26 @@ class Game {
         const panel = document.getElementById('reward-battle-meta');
         if (!panel) return;
         const meta = this.lastBattleRewardMeta;
+        const helperAvailable = typeof DefierBattleFeedback !== 'undefined'
+            && DefierBattleFeedback
+            && typeof DefierBattleFeedback.buildRewardBattleMetaMarkup === 'function';
         if (!meta || (typeof meta !== 'object') || (!meta.encounter && !meta.squad)) {
             panel.style.display = 'none';
             panel.innerHTML = '';
+            panel.dataset.renderer = helperAvailable ? 'battle-feedback' : '';
             return;
+        }
+
+        panel.setAttribute('aria-live', 'polite');
+
+        if (helperAvailable) {
+            const markup = DefierBattleFeedback.buildRewardBattleMetaMarkup(meta);
+            if (markup) {
+                panel.style.display = 'block';
+                panel.dataset.renderer = 'battle-feedback';
+                panel.innerHTML = markup;
+                return;
+            }
         }
 
         const chips = [];
@@ -6923,6 +6939,7 @@ class Game {
         }
 
         panel.style.display = 'block';
+        panel.dataset.renderer = 'legacy';
         panel.innerHTML = `
             <div class="reward-meta-title">本场战利来源</div>
             <div class="reward-meta-chips">${chips.join('')}</div>

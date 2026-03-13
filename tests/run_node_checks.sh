@@ -15,6 +15,8 @@ node tests/sanity_battle_debuff_checks.js
 node tests/sanity_battle_guardbreak_checks.js
 node tests/sanity_battle_variation_checks.js
 node tests/sanity_battle_advisor_plan_checks.js
+node tests/sanity_battle_hud_module_checks.js
+node tests/sanity_battle_feedback_module_checks.js
 node tests/sanity_battle_squad_reward_checks.js
 node tests/sanity_battle_encounter_theme_checks.js
 node tests/sanity_battle_command_checks.js
