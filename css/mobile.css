@@ -46,8 +46,8 @@
 
     #main-menu .menu-content {
         padding: 20px;
-        width: 100%;
-        min-height: 520px;
+        width: min(94vw, 420px);
+        min-height: auto;
     }
 
     #main-menu .game-description {
@@ -205,6 +205,28 @@
     .map-buff-chip {
         padding: 4px 7px;
         font-size: 0.66rem;
+    }
+
+    .map-expedition-panels {
+        grid-template-columns: 1fr;
+        padding: 0 10px 14px;
+        gap: 10px;
+    }
+
+    .expedition-overview-card {
+        grid-column: span 1;
+    }
+
+    .expedition-panel-card {
+        padding: 12px;
+    }
+
+    .expedition-card-title {
+        font-size: 16px;
+    }
+
+    .expedition-choice-head {
+        align-items: flex-start;
     }
 
     .map-buff-name {
@@ -661,52 +683,83 @@
 }
 
 /* UI Review Pass - Mobile containment */
-#main-menu .menu-content {
-    width: min(94vw, 420px);
-    padding: 18px 16px 24px;
-    border-radius: 22px;
-}
+@media (max-width: 768px) {
+    #main-menu .menu-content {
+        width: min(94vw, 420px);
+        padding: 18px 16px 24px;
+        border-radius: 22px;
+    }
 
-#character-selection-screen .character-selection-container {
-    padding-bottom: 150px;
-}
+    #main-menu {
+        justify-content: flex-start;
+        padding: 16px 0 22px;
+    }
 
-#character-selection-screen .character-selection-footer {
-    position: sticky;
-    bottom: 0;
-    padding: 14px 12px 18px;
-    background: linear-gradient(180deg, rgba(2, 5, 12, 0), rgba(2, 5, 12, 0.88) 24%, rgba(2, 5, 12, 0.98) 100%);
-}
+    #main-menu .menu-utilities {
+        gap: 14px;
+        row-gap: 20px;
+    }
 
-#realm-select-screen .realm-select-layout {
-    padding-bottom: 20px;
-}
+    #main-menu .menu-oracle-strip {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
 
-#battle-environment {
-    max-width: calc(100vw - 16px);
-}
+    #main-menu .menu-oracle-card {
+        padding: 16px 14px;
+    }
 
-#legacy-mission-tracker {
-    top: 58px;
-    right: 8px;
-    left: auto;
-    transform: none;
-    width: min(220px, calc(100vw - 16px));
-    padding: 6px 8px;
-}
+    #challenge-screen .challenge-shell {
+        width: calc(100% - 16px);
+        margin-bottom: 16px;
+    }
 
-#battle-command-panel {
-    max-height: 180px;
-    overflow-y: auto;
-}
+    #challenge-screen .challenge-scroll-container {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
 
-#battle-command-panel .battle-command-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
+    #character-selection-screen .character-selection-container {
+        padding-bottom: 150px;
+    }
 
-#battle-command-panel .battle-tactical-advisor {
-    max-height: 88px;
-    overflow-y: auto;
+    #character-selection-screen .character-selection-footer {
+        position: sticky;
+        bottom: 0;
+        padding: 14px 12px 18px;
+        background: linear-gradient(180deg, rgba(2, 5, 12, 0), rgba(2, 5, 12, 0.88) 24%, rgba(2, 5, 12, 0.98) 100%);
+    }
+
+    #realm-select-screen .realm-select-layout {
+        padding-bottom: 20px;
+    }
+
+    #battle-environment {
+        max-width: calc(100vw - 16px);
+    }
+
+    #legacy-mission-tracker {
+        top: 58px;
+        right: 8px;
+        left: auto;
+        transform: none;
+        width: min(220px, calc(100vw - 16px));
+        padding: 6px 8px;
+    }
+
+    #battle-command-panel {
+        max-height: 180px;
+        overflow-y: auto;
+    }
+
+    #battle-command-panel .battle-command-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #battle-command-panel .battle-tactical-advisor {
+        max-height: 88px;
+        overflow-y: auto;
+    }
 }
 
 /* UI Review Pass - Mobile battle compact HUD */

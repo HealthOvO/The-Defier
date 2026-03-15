@@ -152,6 +152,84 @@ async function safeScreenshot(page, outPath) {
   });
   add('battle is reachable for guide validation', battleMode === 'battle-screen', `mode=${battleMode}`);
 
+  const cardTypeTemplateProbe = await page.evaluate(() => {
+    if (typeof Utils === 'undefined' || typeof Utils.createCardElement !== 'function') {
+      return { ok: false, reason: 'card_api_unavailable' };
+    }
+
+    const samples = {
+      skill: {
+        id: 'audit_skill',
+        name: '试阵步',
+        type: 'skill',
+        cost: 1,
+        icon: '✨',
+        description: '抽 1 张牌并获得 4 点护盾。',
+        rarity: 'common'
+      },
+      power: {
+        id: 'audit_power',
+        name: '自然生长',
+        type: 'power',
+        cost: 1,
+        icon: '🌱',
+        description: '每回合结束时，获得 3 点护盾。',
+        rarity: 'uncommon'
+      },
+      status: {
+        id: 'audit_status',
+        name: '心魔·疑心',
+        type: 'status',
+        cost: 0,
+        icon: '👿',
+        description: '无法打出。保留。占据抽牌位。',
+        rarity: 'special',
+        unplayable: true
+      }
+    };
+
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-9999px;top:-9999px;display:flex;gap:12px;';
+    document.body.appendChild(host);
+
+    const inspectType = (type) => {
+      const card = samples[type];
+      if (!card) return null;
+      const el = Utils.createCardElement(card, 0, false);
+      host.appendChild(el);
+      const footer = el.querySelector('.card-type');
+      const styles = window.getComputedStyle(el);
+      return {
+        name: card.name,
+        footerText: footer ? (footer.textContent || '').trim() : '',
+        borderColor: styles.borderColor,
+        backgroundImage: styles.backgroundImage
+      };
+    };
+
+    const result = {
+      skill: inspectType('skill'),
+      power: inspectType('power'),
+      status: inspectType('status')
+    };
+
+    host.remove();
+
+    const entries = Object.values(result).filter(Boolean);
+    return {
+      ok: entries.length === 3
+        && entries.every((entry) => entry.footerText && !/未知/.test(entry.footerText))
+        && entries.every((entry) => entry.borderColor && entry.borderColor !== 'rgba(0, 0, 0, 0)')
+        && entries.every((entry) => entry.backgroundImage && entry.backgroundImage !== 'none'),
+      result
+    };
+  });
+  add(
+    'card templates keep skill power and status cards on the same labeled skin system',
+    !!cardTypeTemplateProbe && !!cardTypeTemplateProbe.ok,
+    JSON.stringify(cardTypeTemplateProbe || null)
+  );
+
   const encounterThemeProbe = await page.evaluate(() => {
     const env = document.getElementById('battle-environment');
     const chip = env ? env.querySelector('.encounter-theme-chip') : null;
@@ -3319,6 +3397,7 @@ async function safeScreenshot(page, outPath) {
     const enemyArea = document.querySelector('.enemy-area');
     const enemyIntent = document.querySelector('.enemy .enemy-intent');
     const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
 
     const rectToObj = (rect) => rect ? ({ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height, centerX: rect.left + rect.width / 2 }) : null;
 
@@ -3332,6 +3411,9 @@ async function safeScreenshot(page, outPath) {
     const missionOnRightRail = !!missionRect && missionRect.centerX > viewportWidth * 0.72;
     const bossCentered = !!bossRect && Math.abs(bossRect.centerX - viewportWidth / 2) < viewportWidth * 0.12;
     const commandAvoidsCore = !!commandRect && (!enemyRect || commandRect.right <= enemyRect.left + enemyRect.width * 0.38);
+    const commandCompact = !!commandRect
+      && commandRect.width <= Math.min(320, viewportWidth * 0.23)
+      && commandRect.height <= Math.min(420, viewportHeight * 0.5);
     const bossCompact = !!bossRect && bossRect.width < viewportWidth * 0.72;
     const bossAvoidsEnemyIntent = !bossRect || !enemyIntentRect
       || bossRect.right <= enemyIntentRect.left - 12
@@ -3339,12 +3421,14 @@ async function safeScreenshot(page, outPath) {
       || bossRect.left >= enemyIntentRect.right + 12;
 
     return {
-      ok: commandOnLeftRail && missionOnRightRail && bossCentered && commandAvoidsCore && bossCompact && bossAvoidsEnemyIntent,
+      ok: commandOnLeftRail && missionOnRightRail && bossCentered && commandAvoidsCore && commandCompact && bossCompact && bossAvoidsEnemyIntent,
       viewportWidth,
+      viewportHeight,
       commandOnLeftRail,
       missionOnRightRail,
       bossCentered,
       commandAvoidsCore,
+      commandCompact,
       bossCompact,
       bossAvoidsEnemyIntent,
       bossRect,

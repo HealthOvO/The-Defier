@@ -13,20 +13,21 @@
 
 #battle-screen .battle-command-panel,
 #battle-screen #battle-command-panel {
-    top: 154px;
+    top: 148px;
     left: var(--hud-gutter-desktop);
     transform: none;
-    width: var(--hud-command-width);
-    max-height: calc(100vh - 392px);
-    padding: var(--hud-panel-padding);
+    width: clamp(264px, 20vw, 312px);
+    max-height: min(410px, calc(100vh - 430px));
+    padding: 7px 8px;
     border-radius: var(--hud-panel-radius);
     border-color: var(--hud-panel-border);
-    background: var(--hud-panel-bg);
+    background: linear-gradient(145deg, rgba(7, 16, 40, 0.86), rgba(4, 10, 26, 0.82));
     box-shadow: var(--hud-panel-shadow);
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--hud-scrollbar) transparent;
     z-index: var(--z-battle-command-panel);
+    backdrop-filter: blur(8px);
 }
 
 #battle-screen .battle-command-panel::-webkit-scrollbar,
@@ -47,25 +48,26 @@
 
 #battle-screen .battle-command-panel .battle-command-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 5px;
+    gap: 4px;
 }
 
 #battle-screen .battle-command-panel .battle-command-btn {
-    min-height: 54px;
-    padding: 6px 7px;
+    min-height: 48px;
+    padding: 5px 6px;
 }
 
 #battle-screen .battle-command-panel .battle-command-name {
-    font-size: 0.72rem;
+    font-size: 0.69rem;
 }
 
 #battle-screen .battle-command-panel .battle-command-meta {
-    font-size: 0.63rem;
+    font-size: 0.6rem;
+    line-height: 1.18;
 }
 
 #battle-screen .battle-tactical-advisor {
-    margin-top: 6px;
-    max-height: min(220px, 28vh);
+    margin-top: 5px;
+    max-height: min(132px, 16vh);
     overflow-y: auto;
     transition:
         max-height var(--hud-transition-medium),
@@ -500,13 +502,38 @@
 @media (max-width: 1180px) {
     #battle-screen .battle-command-panel,
     #battle-screen #battle-command-panel {
-        width: clamp(260px, 26vw, 320px);
-        max-height: calc(100vh - 360px);
+        width: clamp(252px, 24vw, 296px);
+        max-height: min(392px, calc(100vh - 396px));
     }
 
     #battle-screen .boss-act-panel,
     #battle-screen #boss-act-panel {
         width: min(540px, 50vw, calc(100% - 24px));
+    }
+}
+
+@media (max-width: 980px) {
+    #battle-screen .battle-command-panel,
+    #battle-screen #battle-command-panel {
+        width: clamp(188px, 22vw, 206px);
+        padding: 6px 7px;
+    }
+
+    #battle-screen .battle-command-panel .battle-command-btn,
+    #battle-screen #battle-command-panel .battle-command-btn {
+        min-height: 44px;
+        padding: 4px 5px;
+    }
+
+    #battle-screen .battle-command-panel .battle-command-name,
+    #battle-screen #battle-command-panel .battle-command-name {
+        font-size: 0.62rem;
+    }
+
+    #battle-screen .battle-command-panel .battle-command-meta,
+    #battle-screen #battle-command-panel .battle-command-meta {
+        font-size: 0.54rem;
+        line-height: 1.14;
     }
 }
 

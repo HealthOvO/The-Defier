@@ -242,7 +242,10 @@ const Utils = {
             defense: 'var(--card-defense)',
             law: 'var(--card-law)',
             chance: 'var(--card-chance)',
-            energy: 'var(--card-energy)'
+            energy: 'var(--card-energy)',
+            skill: 'var(--card-skill)',
+            power: 'var(--card-power)',
+            status: 'var(--card-status)'
         };
         return colors[type] || 'var(--text-primary)';
     },
@@ -345,7 +348,10 @@ const Utils = {
             defense: '🛡️',
             law: '📜',
             chance: '🎲',
-            energy: '⚡'
+            energy: '⚡',
+            skill: '✦',
+            power: '☯️',
+            status: '☠️'
         };
         return icons[type] || '';
     },
@@ -503,7 +509,10 @@ const Utils = {
             defense: '防御',
             law: '法则',
             chance: '机缘',
-            energy: '灵力'
+            energy: '灵力',
+            skill: '技能',
+            power: '功法',
+            status: '状态'
         };
         return names[type] || '未知';
     },

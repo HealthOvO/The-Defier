@@ -57,6 +57,7 @@ node tests/sanity_adventure_buff_checks.js
 node tests/sanity_pvp_service_checks.js
 node tests/sanity_pvp_shop_checks.js
 node tests/sanity_shop_strategy_system_checks.js
+node tests/sanity_expedition_state_checks.js
 node tests/sanity_planning_todo_checks.js
 node tests/verify_assets.js
 node tests/verify_avatars.js

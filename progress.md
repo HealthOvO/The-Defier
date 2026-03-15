@@ -4615,3 +4615,268 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - 当前状态
     - `V6.0` 已完成封板复验并可推送。
     - `V6.1` 已具备完整版本蓝图，可直接进入下一轮拆解与开发。
+
+- 2026-03-15: 第五十五轮 V6.1 第一条纵切封口（裂界远征 / 命盘档案）
+  - 已完成：把 `V6.1` 第一条高杠杆纵切从“仅有策划”推进到“代码 + 门禁 + 浏览器发布回归”闭环
+    - 新增数据层：
+      - `js/data/expedition_systems.js`
+      - 建立 `裂界远征` 的基础内容池：
+        - 章节支线区域
+        - 章节悬赏模板
+        - 势力画像
+        - 仇敌画像
+        - 章节结局元数据
+    - 新增运行时接线：
+      - `js/core/expedition_hub.js`
+      - 已接入：
+        - 章节开局自动生成远征状态
+        - 支线区域锁定
+        - 章节悬赏承接 / 进度 / 兑现
+        - 势力态度变化与战斗支援 / 压制
+        - 仇敌追猎注入战斗并记录击破结果
+        - 章节结局判定
+        - 命盘归档写入洞府
+        - `render_game_to_text` 同步远征摘要
+        - 构筑总览 / 洞府总览补充 6.1 信息
+    - 现有界面接线：
+      - `index.html`
+        - 接入 `js/data/expedition_systems.js?v=6.1.0`
+        - 接入 `js/core/expedition_hub.js?v=6.1.0`
+      - `css/style.css`
+      - `css/mobile.css`
+        - 新增远征地图面板、悬赏卡、势力卡、仇敌卡、移动端布局适配
+  - 已完成：补齐 6.1 远征门禁
+    - 新增 Node 门禁：
+      - `tests/sanity_expedition_state_checks.js`
+      - 覆盖：
+        - 远征状态生成
+        - 支线 / 悬赏选择上限
+        - 路线悬赏兑现
+        - 仇敌注入与击破
+        - 命盘归档持久化
+        - 洞府档案室 / 构筑摘要接线
+    - 新增 Browser 门禁：
+      - `tests/browser_expedition_audit.mjs`
+      - 覆盖：
+        - 地图远征面板渲染
+        - 支线锁定与高亮
+        - 悬赏激活与完成态
+        - `render_game_to_text` 远征字段同步
+        - 章节结算后归档写入与面板隐藏
+    - 发布脚本已接入：
+      - `tests/run_node_checks.sh`
+      - `tests/run_browser_release_checks.sh`
+  - 已完成：修复 6.1 真实运行时问题
+    - `js/core/expedition_hub.js`
+      - 修复章节归档后地图远征面板未立即隐藏的问题：
+        - `finalizeExpeditionChapter()` 现在会主动刷新远征面板
+        - `clearSave()` 也会同步清空远征面板，避免旧 UI 残留
+    - `tests/browser_meta_screen_audit.mjs`
+      - 洞府审计升级到 6.1 语义：
+        - 从旧版 `4` 房间断言改为校验新增 `命盘档案室`
+        - 新增 `远征命盘归档` 研究项断言
+  - 本轮验证（全部通过）
+    - 定向语法：
+      - `node --check js/data/expedition_systems.js` ✅
+      - `node --check js/core/expedition_hub.js` ✅
+      - `node --check tests/sanity_expedition_state_checks.js` ✅
+      - `node --check tests/browser_expedition_audit.mjs` ✅
+    - 定向 Node：
+      - `node tests/sanity_expedition_state_checks.js` ✅
+    - 定向 Browser：
+      - `node tests/browser_expedition_audit.mjs http://127.0.0.1:4173 output/browser-expedition-audit-rerun` ✅
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/browser-meta-screen-audit-v6_1-rerun` ✅
+    - 全量 Node：
+      - `bash tests/run_node_checks.sh` ✅
+      - 结尾确认：`All node checks passed.` ✅
+    - 全量 Browser release：
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-v6_1-expedition-rerun` ✅
+      - 结尾确认：`[release-checks] All browser release audits passed.` ✅
+    - 官方 Playwright 客户端：
+      - `node "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-v6_1-expedition` ✅
+      - 产物确认：
+        - `output/web-game-v6_1-expedition/state-0.json`
+        - `output/web-game-v6_1-expedition/state-1.json`
+        - `output/web-game-v6_1-expedition/shot-0.png`
+        - `output/web-game-v6_1-expedition/shot-1.png`
+      - 人工查看截图：
+        - `shot-1.png` 主菜单版式稳定，按钮与底部功能入口未见遮挡、塌陷或错位
+        - `state-1.json` 中 `expedition` 字段已同步暴露本章支线、悬赏、势力、仇敌与结局预览摘要
+        - 未生成 `errors-*.json`，本轮官方客户端未捕获新控制台错误
+  - 当前状态
+    - 这轮已关闭当前代码层面最明确、最可执行的 `V6.1` 远征 TODO：
+      - 远征结构
+      - 悬赏目标
+      - 势力 / 仇敌
+      - 命盘归档
+      - 地图 UI
+      - 文本状态同步
+      - 发布门禁
+    - 需要明确区分：
+      - `docs/designer_major_upgrade_planning_v4.md` / `requirements_v4.md` 描述的是整版 `V6.1` 大版本蓝图，不是已被一次性全部实现的小型 TODO 清单。
+      - 当前仓库已经完成 `V6.1` 的第一条完整纵切，并通过 Node / Browser / 官方客户端三层验证。
+      - 后续若继续推进 `V6.1`，应沿同样方式继续拆下一条纵切（例如挑战板、洞府推演、PvP 命盘联动、奖励页理由可视化），逐条开发并封口。
+
+- 2026-03-15: 第五十六轮 首页 / 周挑战滚动与布局修复
+  - 已完成：修复首页主菜单与周挑战页无法滚动、下半区内容被截断的问题
+    - `css/style.css`
+      - `#main-menu`
+        - 从整屏强制居中改为可纵向滚动容器
+        - 允许 `overflow-y: auto`，保留横向裁切
+      - `#main-menu .menu-content`
+        - 放宽宽度到 `min(720px, 92vw)`
+        - 移除过高的强制最小高度，避免摘要卡被底部裁切
+      - `.menu-oracle-strip`
+        - 改为 `auto-fit + minmax` 自适应网格，不再在窄内容区里硬塞 3 列
+      - `#main-menu .menu-utilities`
+        - 开启换行，避免功能入口把底部信息继续向下顶出可视区
+      - `.challenge-shell`
+        - 改为真正的 `flex` 纵向壳层并占满挑战页剩余高度
+      - `.challenge-scroll-container`
+        - 接入 `overflow-y: auto`
+        - 允许挑战正文在固定头部下独立滚动
+    - `css/mobile.css`
+      - 首页进一步压缩为单列摘要卡，避免移动端与窄屏横向挤压
+      - 周挑战内容区补充触摸滚动兼容
+  - 本轮验证（全部通过）
+    - 手工浏览器复验：
+      - 首页容器滚动值从 `0` 变为 `237`，确认主菜单可下滑到摘要卡与版本信息
+      - 周挑战容器滚动值从 `0` 变为 `531`，确认挑战正文区可独立滚动
+      - 目检产物：
+        - `output/manual-scroll-check/main-menu-after-fix.png`
+        - `output/manual-scroll-check/challenge-after-fix.png`
+    - 自动回归：
+      - `node tests/browser_challenge_audit.mjs http://127.0.0.1:4173 output/browser-challenge-audit-scroll-fix` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/browser-audit-scroll-fix` ✅
+  - 当前状态
+    - 首页现在可滚到底部，不再把“今日天机 / 七日劫数 / 最近解锁”卡片截在视口外。
+    - 周挑战页在桌面与移动宽度下都可正常纵向滚动，挑战规则、奖励、留痕与发起卡已恢复可访问。
+
+- 2026-03-15: 第五十七轮 战场指令遮挡收敛修复
+  - 已完成：修复桌面战斗页“战场指令”面板过大、遮挡左侧战场主体的问题
+    - `css/battle-hud.css`
+      - 桌面战场指令面板改为更窄的 `clamp(264px, 20vw, 312px)`，不再占用过宽左侧战场空间
+      - 桌面面板最大高度收敛为 `min(410px, calc(100vh - 430px))`
+      - 压缩按钮间距、按钮最小高度与字级，减少单个面板的垂向占用
+      - 战术助手改成更短的滚动视窗，展开时仍可读，但不再把左半边战场长距离盖住
+      - 面板背景改为更轻的半透明层并加入 `backdrop-filter`，在保留识别度的同时降低压场感
+    - `tests/browser_feature_audit.mjs`
+      - 为战斗 HUD 叠层布局补充更严格的桌面约束
+      - 新增 `commandCompact` 断言，要求战场指令面板在桌面宽度下同时满足更紧凑的宽高范围，避免后续回归到“大面板压场景”
+  - 本轮验证（全部通过）
+    - 自动回归：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/browser-feature-audit-battle-command-fix` ✅
+      - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/browser-mobile-layout-battle-command-fix` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/browser-audit-battle-command-fix` ✅
+      - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --actions-file /Users/health/.codex/skills/develop-web-game/references/action_payloads.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-battle-command-fix` ✅
+    - 关键布局数据：
+      - 桌面战斗指令面板由约 `345.6 x 508` 收敛到 `288 x 410`
+      - `browser_feature_audit` 的 `battle overlay layout keeps boss info centered without covering enemy intent lane` 断言继续通过，且新增 `commandCompact=true`
+    - 人工目检：
+      - `output/manual-battle-command-after-fix.png`
+      - `output/web-game-battle-command-fix/shot-1.png`
+  - 当前状态
+    - 桌面端战场指令仍保留完整按钮、系统条与战术助手入口，但左侧留白明显恢复，不再大面积压住战场主体。
+    - 移动端紧凑战斗 HUD 未受影响，显式展开助手、手牌区与结束回合按钮仍保持通过状态。
+
+- 2026-03-15: 第五十八轮 手牌卡面类型统一修复
+  - 已完成：修复 `skill / power / status` 等卡牌类型在手牌与详情中掉成“未知”、视觉皮肤不一致的问题
+    - `js/core/utils.js`
+      - 补齐 `getTypeColor / getCardTypeIcon / getCardTypeName`
+      - 新增类型映射：
+        - `skill` -> `✦ 技能`
+        - `power` -> `☯️ 功法`
+        - `status` -> `☠️ 状态`
+      - 让这几类卡在手牌、卡牌详情、摘要信息里都走同一套类型命名与图标体系
+    - `css/style.css`
+      - 新增 `--card-skill / --card-power / --card-status`
+      - 为 `.card.skill / .card.power / .card.status` 补齐边框与背景渐变皮肤
+      - 为三类卡的底部类型带补齐对应色调，避免和基础攻击 / 防御 / 法则 / 灵力卡混排时像不同模板
+    - `tests/browser_feature_audit.mjs`
+      - 新增“卡牌模板一致性”断言，直接用 `Utils.createCardElement` 校验 `skill / power / status` 卡面都会显示明确类型而非 `未知`
+  - 本轮验证
+    - 自动回归：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/browser-feature-audit-card-ui-fix-3` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/browser-audit-card-ui-fix` ✅
+      - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/browser-mobile-layout-card-ui-fix` ✅
+    - 人工目检：
+      - `output/manual-card-ui-after-fix.png`
+      - 混排手牌中 `心魔·疑心 / 自然生长 / 试阵步 / 火焰真意 / 蓄力` 已能稳定显示 `状态 / 功法 / 技能 / 法则 / 灵力`，不再出现同列卡牌模板语义断裂
+    - 受限项：
+      - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --actions-file /Users/health/.codex/skills/develop-web-game/references/action_payloads.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-card-ui-fix-rerun`
+      - 本次仍因项目既有的 `page.screenshot` 等待字体超时失败，未见新增业务错误；卡面修复已通过浏览器审计与原生 CDP 截图补足验证
+
+- 2026-03-15: 第五十九轮 全界面统一壳层 + 截图审计闭环
+  - 已完成：对首页、周挑战、位面选择、法宝图鉴、商店、PVP、战斗 HUD 做统一壳层和滚动策略收口，并补上覆盖主界面的截图审计
+    - `css/design-system.css`
+      - 为首页补齐高优先级统一规则：
+        - `#main-menu .menu-content` 改为真正的大壳体宽度，并限制 `max-height`
+        - 工具入口、情报卡、版本信息、按钮间距统一收口
+        - 新增 `max-height: 820px` 的矮屏桌面压缩规则，避免 1280x720 一类视口下首页情报卡被底部裁切
+      - 为图鉴 / 法宝图鉴改成“固定壳体 + 内部独立滚动”：
+        - `.codex-shell`, `.treasure-compendium-shell`
+        - `.codex-layout`, `.treasure-compendium-layout`
+        - `.codex-scroll-container`, `.compendium-grid-container`
+      - 为位面选择补齐固定高度和内滚容器：
+        - `.realm-select-layout`
+        - `.realm-list-container`
+        - `.realm-preview-panel`
+      - 为商店补齐统一壳层高度约束：
+        - `.shop-container`
+      - 延续统一滚动条、玻璃面板、焦点态和壳层阴影，让多界面不再各自漂移
+    - `css/mobile.css`
+      - 修复一个关键回归源：
+        - 底部“Mobile containment”一组规则此前没有包进媒体查询，导致桌面端也被强制套用 `420px` 首页宽度、单列摘要卡等移动布局
+        - 现已整体包回 `@media (max-width: 768px)`，彻底解除桌面端被移动规则污染的问题
+    - `css/battle-hud.css`
+      - 为 `980px` 左右的紧凑桌面新增独立断点
+      - 把左侧战场指令面板进一步收窄到约 `198px` 级别，并同步压缩按钮和文字密度
+      - 解决 `900x720` 下发布审计里 `commandCompact=false` 的边界失败
+    - `tests/browser_ui_gallery_audit.mjs`
+      - 新增主界面图库审计，覆盖：
+        - 首页
+        - 角色选择
+        - 周挑战
+        - 位面选择
+        - 法则图鉴
+        - 法宝图鉴
+        - 奖励页
+        - 成就
+        - 传承
+        - 商店
+        - PVP
+        - 战斗
+      - 改用 CDP `Page.captureScreenshot` 写图，绕开项目长期存在的 `page.screenshot` 等待字体超时问题
+    - `tests/run_browser_release_checks.sh`
+      - 已把 `browser_ui_gallery_audit.mjs` 纳入发布浏览器审计主链
+  - 本轮验证（全部通过）
+    - Node:
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器专项：
+      - `node tests/browser_ui_gallery_audit.mjs http://127.0.0.1:4173 output/browser-ui-gallery-audit-pass-3` ✅
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/browser-meta-screen-audit-ui-pass-2` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/browser-feature-audit-ui-pass-2` ✅
+      - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/release-browser-audits-ui-pass-2/mobile` ✅（已包含在 release checks 中）
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-ui-pass-2` ✅
+    - Playwright 客户端 + 人工视觉：
+      - `node "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-ui-unification` ✅
+      - `node "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-ui-unification-shortheight` ✅
+      - 已人工查看：
+        - `output/browser-ui-gallery-audit-pass-3/01-main-menu.png`
+        - `output/browser-ui-gallery-audit-pass-3/03-challenge-weekly.png`
+        - `output/browser-ui-gallery-audit-pass-3/04-realm-select.png`
+        - `output/browser-ui-gallery-audit-pass-3/06-treasure-compendium.png`
+        - `output/browser-ui-gallery-audit-pass-3/10-shop-screen.png`
+        - `output/browser-ui-gallery-audit-pass-3/11-pvp-screen.png`
+        - `output/web-game-ui-unification-shortheight/shot-0.png`
+    - 关键结果：
+      - 首页壳体由错误的桌面 `420px` 恢复为约 `1040px`
+      - `browser_ui_gallery_audit` 全 12 项通过
+      - `browser_feature_audit` 中紧凑桌面战斗 HUD 断言恢复通过：
+        - `viewport 900x720`
+        - `commandCompact=true`
+        - `commandRect.width=198`
+  - 当前状态
+    - 首页、周挑战、位面选择、法宝图鉴、商店都已经收敛到统一壳层，不再出现“外壳无限变高 / 内容被底部裁切 / 无法滚动”的旧问题
+    - 战斗 HUD 在桌面、紧凑桌面、移动端三组视口下都通过了布局约束
+    - 发布浏览器主链已经包含主界面图库审计，后续再出现类似首页 / 周挑战 / 图鉴 / 商店的 UI 回归时，会更早被脚本拦截

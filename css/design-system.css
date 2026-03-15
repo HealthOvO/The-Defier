@@ -1,5 +1,24 @@
 :root {
     --hud-compact-breakpoint: 768;
+    --ui-shell-max-width: 1320px;
+    --ui-shell-wide-width: 1400px;
+    --ui-shell-padding: clamp(16px, 2vw, 28px);
+    --ui-surface-radius-xl: 28px;
+    --ui-surface-radius-lg: 22px;
+    --ui-surface-radius-md: 16px;
+    --ui-surface-border: rgba(113, 158, 244, 0.18);
+    --ui-surface-border-strong: rgba(176, 212, 255, 0.3);
+    --ui-surface-bg:
+        radial-gradient(circle at top right, rgba(104, 156, 255, 0.1), transparent 34%),
+        linear-gradient(180deg, rgba(11, 18, 40, 0.9), rgba(5, 9, 22, 0.96));
+    --ui-surface-bg-elevated:
+        radial-gradient(circle at top left, rgba(244, 197, 110, 0.08), transparent 36%),
+        linear-gradient(180deg, rgba(13, 21, 47, 0.92), rgba(6, 10, 24, 0.98));
+    --ui-surface-shadow: 0 28px 60px rgba(0, 0, 0, 0.34);
+    --ui-surface-shadow-soft: 0 18px 36px rgba(0, 0, 0, 0.24);
+    --ui-focus-ring: 0 0 0 2px rgba(132, 207, 255, 0.36), 0 0 0 5px rgba(132, 207, 255, 0.14);
+    --ui-scrollbar-track: rgba(255, 255, 255, 0.05);
+    --ui-scrollbar-thumb: rgba(122, 178, 255, 0.44);
     --hud-gutter-desktop: 16px;
     --hud-gutter-mobile: 6px;
     --hud-panel-radius: 14px;
@@ -29,9 +48,487 @@
     --z-battle-intent: 130;
 }
 
+body {
+    background:
+        radial-gradient(circle at 14% 0%, rgba(93, 145, 255, 0.14), transparent 24%),
+        radial-gradient(circle at 86% 100%, rgba(246, 199, 115, 0.08), transparent 24%),
+        linear-gradient(180deg, #07111e 0%, #050914 58%, #03050a 100%);
+}
+
+.screen {
+    background:
+        radial-gradient(circle at 12% 0%, rgba(88, 142, 255, 0.12), transparent 26%),
+        radial-gradient(circle at 88% 100%, rgba(236, 186, 102, 0.08), transparent 24%),
+        linear-gradient(180deg, #07111f 0%, #040914 55%, #02050a 100%);
+}
+
+.screen-header {
+    width: min(var(--ui-shell-wide-width), calc(100% - 32px));
+    margin: clamp(12px, 2vh, 18px) auto 0;
+    padding: 14px 18px;
+    border: 1px solid var(--ui-surface-border);
+    border-radius: var(--ui-surface-radius-xl);
+    background: var(--ui-surface-bg-elevated);
+    box-shadow: var(--ui-surface-shadow-soft);
+    backdrop-filter: blur(18px);
+    gap: 14px;
+}
+
+.screen-header h2 {
+    margin: 0;
+    font-size: clamp(1.4rem, 2.4vw, 2rem);
+    letter-spacing: 0.04em;
+}
+
+.screen-header.transparent {
+    width: min(var(--ui-shell-wide-width), calc(100% - 32px));
+    margin: clamp(12px, 2vh, 18px) auto 0;
+    min-height: 92px;
+    height: auto;
+    padding: 16px clamp(18px, 2.5vw, 28px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--ui-surface-radius-xl);
+    background: linear-gradient(180deg, rgba(7, 12, 28, 0.88), rgba(7, 12, 28, 0.42));
+    box-shadow: var(--ui-surface-shadow-soft);
+    backdrop-filter: blur(18px);
+}
+
+.back-btn {
+    min-height: 44px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(18, 28, 58, 0.92), rgba(10, 16, 34, 0.96));
+    border-color: rgba(151, 187, 255, 0.24);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.back-btn:hover {
+    background: linear-gradient(180deg, rgba(25, 40, 79, 0.96), rgba(13, 21, 44, 0.98));
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
+}
+
+:where(button, .collection-inline-btn, .challenge-tab-btn, .shop-tab-btn, .rune-tab, .util-btn, .back-btn, .menu-btn, .talisman-btn):focus-visible {
+    outline: none;
+    box-shadow: var(--ui-focus-ring);
+}
+
+.menu-content,
+.character-selection-container,
+.realm-select-layout,
+.challenge-shell,
+.reward-shell,
+.codex-shell,
+.treasure-compendium-shell,
+.achievements-container,
+.inheritance-container,
+#pvp-screen .pvp-layout-split,
+.shop-container {
+    width: min(var(--ui-shell-max-width), calc(100% - 32px));
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.menu-content,
+.character-selection-container,
+.realm-select-layout,
+.achievements-container,
+.inheritance-container,
+#pvp-screen .pvp-layout-split,
+.shop-container {
+    border: 1px solid var(--ui-surface-border);
+    border-radius: var(--ui-surface-radius-xl);
+    background: var(--ui-surface-bg);
+    box-shadow: var(--ui-surface-shadow);
+    backdrop-filter: blur(18px);
+}
+
+.menu-content {
+    width: min(760px, calc(100% - 32px));
+    padding: clamp(24px, 3vw, 36px);
+    border-radius: 30px;
+    background:
+        radial-gradient(circle at top center, rgba(255, 224, 157, 0.08), transparent 42%),
+        linear-gradient(180deg, rgba(8, 14, 32, 0.82), rgba(4, 8, 20, 0.9));
+    box-shadow: 0 32px 64px rgba(0, 0, 0, 0.38);
+    backdrop-filter: blur(18px);
+}
+
+.character-selection-container,
+.realm-select-layout,
+.achievements-container,
+.inheritance-container,
+#pvp-screen .pvp-layout-split,
+.shop-container {
+    padding: clamp(16px, 2vw, 24px);
+}
+
+#pvp-screen .pvp-layout-split {
+    max-width: var(--ui-shell-wide-width);
+    margin-top: 14px;
+    margin-bottom: 24px;
+    gap: clamp(28px, 4vw, 68px);
+    height: calc(100vh - 150px);
+}
+
+.reward-panel,
+.challenge-scroll-container,
+.challenge-focus-card,
+.challenge-section,
+.challenge-rule-card,
+.challenge-reward-card,
+.challenge-record-item,
+.challenge-selection-banner,
+.challenge-launch-card,
+.realm-preview-panel,
+.map-endless-panel,
+.expedition-panel-card,
+.detail-dual-panel,
+.shop-section,
+.achievement-progress-card,
+.inheritance-card,
+.inheritance-stat,
+.inheritance-preset-btn,
+.formation-visualizer-panel,
+.defense-controls-panel,
+.shop-main-panel {
+    border-color: var(--ui-surface-border);
+    box-shadow: var(--ui-surface-shadow-soft);
+}
+
+.screen,
+.modal-content,
+.challenge-scroll-container,
+.ranking-scroll-area,
+.shop-container,
+.achievements-container,
+.inheritance-container,
+.realm-list-container,
+.realm-preview-panel,
+.reward-container,
+.codex-scroll-container,
+.panel-body,
+.panel-content-area,
+.right-panel-content,
+.purification-scroll-area {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ui-scrollbar-thumb) var(--ui-scrollbar-track);
+    scrollbar-gutter: stable both-edges;
+}
+
+.modal-content::-webkit-scrollbar,
+.challenge-scroll-container::-webkit-scrollbar,
+.ranking-scroll-area::-webkit-scrollbar,
+.shop-container::-webkit-scrollbar,
+.achievements-container::-webkit-scrollbar,
+.inheritance-container::-webkit-scrollbar,
+.realm-list-container::-webkit-scrollbar,
+.realm-preview-panel::-webkit-scrollbar,
+.reward-container::-webkit-scrollbar,
+.codex-scroll-container::-webkit-scrollbar,
+.panel-body::-webkit-scrollbar,
+.panel-content-area::-webkit-scrollbar,
+.right-panel-content::-webkit-scrollbar,
+.purification-scroll-area::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.modal-content::-webkit-scrollbar-track,
+.challenge-scroll-container::-webkit-scrollbar-track,
+.ranking-scroll-area::-webkit-scrollbar-track,
+.shop-container::-webkit-scrollbar-track,
+.achievements-container::-webkit-scrollbar-track,
+.inheritance-container::-webkit-scrollbar-track,
+.realm-list-container::-webkit-scrollbar-track,
+.realm-preview-panel::-webkit-scrollbar-track,
+.reward-container::-webkit-scrollbar-track,
+.codex-scroll-container::-webkit-scrollbar-track,
+.panel-body::-webkit-scrollbar-track,
+.panel-content-area::-webkit-scrollbar-track,
+.right-panel-content::-webkit-scrollbar-track,
+.purification-scroll-area::-webkit-scrollbar-track {
+    background: var(--ui-scrollbar-track);
+    border-radius: 999px;
+}
+
+.modal-content::-webkit-scrollbar-thumb,
+.challenge-scroll-container::-webkit-scrollbar-thumb,
+.ranking-scroll-area::-webkit-scrollbar-thumb,
+.shop-container::-webkit-scrollbar-thumb,
+.achievements-container::-webkit-scrollbar-thumb,
+.inheritance-container::-webkit-scrollbar-thumb,
+.realm-list-container::-webkit-scrollbar-thumb,
+.realm-preview-panel::-webkit-scrollbar-thumb,
+.reward-container::-webkit-scrollbar-thumb,
+.codex-scroll-container::-webkit-scrollbar-thumb,
+.panel-body::-webkit-scrollbar-thumb,
+.panel-content-area::-webkit-scrollbar-thumb,
+.right-panel-content::-webkit-scrollbar-thumb,
+.purification-scroll-area::-webkit-scrollbar-thumb {
+    background: var(--ui-scrollbar-thumb);
+    border-radius: 999px;
+}
+
+.modal-content {
+    border-radius: var(--ui-surface-radius-xl);
+    border-color: var(--ui-surface-border-strong);
+    background: var(--ui-surface-bg-elevated);
+    box-shadow: var(--ui-surface-shadow);
+    backdrop-filter: blur(20px);
+}
+
+#main-menu .menu-content {
+    width: min(1040px, calc(100% - 32px));
+    max-height: calc(100vh - 28px);
+    padding: clamp(22px, 3vh, 30px) clamp(24px, 3vw, 36px);
+    overflow: auto;
+}
+
+#main-menu .game-logo {
+    margin-bottom: 2px;
+}
+
+#main-menu .logo-img {
+    width: min(28vw, 168px);
+    max-width: 168px;
+    margin-bottom: 0;
+}
+
+#main-menu .game-description {
+    max-width: 620px;
+    margin-bottom: 16px;
+}
+
+#main-menu .game-description p {
+    line-height: 1.45;
+}
+
+#main-menu .menu-buttons {
+    width: min(100%, 380px);
+    gap: 10px;
+}
+
+#main-menu .menu-utilities {
+    justify-content: center;
+    gap: 16px;
+    row-gap: 18px;
+    margin-top: 20px;
+}
+
+#main-menu .util-btn-wrapper {
+    min-width: 64px;
+}
+
+#main-menu .menu-oracle-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+}
+
+#main-menu .menu-oracle-card {
+    min-height: 166px;
+    padding: 16px;
+}
+
+#main-menu .menu-oracle-card p {
+    min-height: 0;
+}
+
+#main-menu .version-info {
+    margin-top: 16px;
+}
+
+.codex-shell,
+.treasure-compendium-shell {
+    flex: 1;
+    min-height: 0;
+    max-height: calc(100vh - 132px);
+    display: flex;
+    overflow: hidden;
+}
+
+.codex-layout,
+.treasure-compendium-layout {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+.codex-main-column,
+.treasure-compendium-main,
+.codex-side-column,
+.treasure-compendium-side {
+    min-height: 0;
+}
+
+.codex-main-column,
+.treasure-compendium-main {
+    align-content: start;
+}
+
+.codex-scroll-container,
+.compendium-grid-container {
+    min-height: 0;
+    overflow: auto;
+}
+
+.codex-side-column,
+.treasure-compendium-side {
+    overflow: auto;
+    padding-right: 4px;
+}
+
+.realm-select-layout {
+    flex: 1;
+    min-height: 0;
+    max-height: calc(100vh - 132px);
+    margin-bottom: 18px;
+    overflow: hidden;
+}
+
+.realm-list-container,
+.realm-preview-panel {
+    min-height: 0;
+}
+
+.shop-container {
+    flex: 1;
+    min-height: 0;
+    max-height: calc(100vh - 144px);
+    padding: clamp(16px, 2vw, 24px);
+}
+
+@media (max-width: 1180px) {
+    #main-menu .menu-content {
+        width: min(760px, calc(100% - 28px));
+    }
+
+    #main-menu .menu-oracle-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-height: 820px) and (min-width: 769px) {
+    #main-menu {
+        padding: 12px 0 16px;
+    }
+
+    #main-menu .menu-content {
+        max-height: calc(100vh - 16px);
+        padding: 18px 26px 16px;
+    }
+
+    #main-menu .logo-img {
+        width: min(22vw, 138px);
+        max-width: 138px;
+    }
+
+    #main-menu .game-description {
+        margin-bottom: 10px;
+        font-size: 0.88rem;
+    }
+
+    #main-menu .talisman-btn {
+        height: 48px;
+    }
+
+    #main-menu .talisman-content {
+        gap: 10px;
+        font-size: 1.18rem;
+        letter-spacing: 1px;
+    }
+
+    #main-menu .menu-utilities {
+        margin-top: 14px;
+        gap: 12px;
+        row-gap: 14px;
+    }
+
+    #main-menu .util-btn {
+        width: 42px;
+        height: 42px;
+    }
+
+    #main-menu .menu-oracle-strip {
+        margin-top: 16px;
+        gap: 12px;
+    }
+
+    #main-menu .menu-oracle-card {
+        padding: 14px 14px 12px;
+    }
+
+    #main-menu .menu-oracle-card h4 {
+        margin: 3px 0 6px;
+        font-size: 0.96rem;
+    }
+
+    #main-menu .menu-oracle-card p {
+        font-size: 0.84rem;
+        line-height: 1.42;
+    }
+
+    #main-menu .version-info {
+        margin-top: 12px;
+        font-size: 0.72rem;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     :root {
         --hud-transition-fast: 1ms linear;
         --hud-transition-medium: 1ms linear;
+    }
+}
+
+@media (max-width: 768px) {
+    .screen-header,
+    .screen-header.transparent,
+    .menu-content,
+    .character-selection-container,
+    .realm-select-layout,
+    .challenge-shell,
+    .reward-shell,
+    .codex-shell,
+    .treasure-compendium-shell,
+    .achievements-container,
+    .inheritance-container,
+    #pvp-screen .pvp-layout-split,
+    .shop-container {
+        width: calc(100% - 18px);
+        border-radius: 22px;
+    }
+
+    .screen-header,
+    .screen-header.transparent {
+        padding: 12px 14px;
+    }
+
+    .screen-header.transparent {
+        min-height: 78px;
+    }
+
+    .character-selection-container,
+    .realm-select-layout,
+    .achievements-container,
+    .inheritance-container,
+    #pvp-screen .pvp-layout-split,
+    .shop-container,
+    .menu-content {
+        padding: 14px;
+    }
+
+    #main-menu .menu-content {
+        max-height: calc(100vh - 20px);
+    }
+
+    #main-menu .menu-oracle-strip {
+        grid-template-columns: 1fr;
+    }
+
+    .codex-shell,
+    .treasure-compendium-shell,
+    .realm-select-layout,
+    .shop-container {
+        max-height: calc(100vh - 104px);
     }
 }

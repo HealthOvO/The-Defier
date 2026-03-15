@@ -798,15 +798,19 @@ async function safeScreenshot(page, outPath) {
     const unlockItems = document.querySelectorAll('#sanctum-unlock-feed .unlock-feed-item').length;
     const summaryText = (document.getElementById('sanctum-summary')?.textContent || '').replace(/\s+/g, ' ').trim();
     const progressText = (document.getElementById('sanctum-progress')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const roomText = (document.getElementById('sanctum-room-grid')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const researchText = (document.getElementById('sanctum-research-list')?.textContent || '').replace(/\s+/g, ' ').trim();
     return {
       ok:
         /构筑画像|攻势抢拍|法则编织|护阵拖线|混成试作/.test(buildHeroText) &&
         buildMetricCount >= 4 &&
         /当前优势|主要缺口|下一轮补位/.test(buildNotesText) &&
-        roomCards === 4 &&
-        researchItems >= 9 &&
+        roomCards >= 5 &&
+        researchItems >= 10 &&
         goalItems >= 1 &&
         unlockItems >= 2 &&
+        /命盘档案室/.test(roomText) &&
+        /远征命盘归档/.test(researchText) &&
         /局外中枢进度/.test(summaryText) &&
         /观星留痕|炼器铭刻|三段套装/.test(summaryText) &&
         /法则：|法宝：|炼器研究：|套装共鸣：|炼器铭刻：|Boss 档案：|伏魔台记忆战：|观星留痕：/.test(progressText),
@@ -817,6 +821,8 @@ async function safeScreenshot(page, outPath) {
       researchItems,
       goalItems,
       unlockItems,
+      roomText,
+      researchText,
       summaryText,
       progressText
     };
