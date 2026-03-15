@@ -24,6 +24,7 @@ class Battle {
         this.tacticalAdvisorHoverExpanded = false;
         this.tacticalAdvisorHoverLocked = false;
         this.activeSquadEcology = null;
+        this.activeChapterBattlefield = null;
         this.advisorFocusTimer = null;
         this.hoveredBattleCardIndex = -1;
         this.turnAdvisorTelemetry = null;
@@ -986,6 +987,34 @@ class Battle {
         return seed;
     }
 
+    resolveChapterEcologyFormation(realm = 1, nodeType = 'enemy', enemies = []) {
+        const chapterIndex = Math.max(1, Math.min(6, Math.floor((Math.max(1, Number(realm) || 1) - 1) / 3) + 1));
+        const templates = (typeof ENEMY_ECOLOGY_TEMPLATES !== 'undefined' && ENEMY_ECOLOGY_TEMPLATES)
+            ? ENEMY_ECOLOGY_TEMPLATES[chapterIndex]
+            : null;
+        if (!templates) return null;
+
+        const nodeKind = ['elite', 'trial'].includes(String(nodeType || 'enemy')) ? 'elite' : 'formation';
+        const picked = templates[nodeKind] || templates.formation || null;
+        if (!picked) return null;
+
+        const comboCatalog = (typeof CHAPTER_ELITE_COMBOS !== 'undefined' && CHAPTER_ELITE_COMBOS)
+            ? CHAPTER_ELITE_COMBOS[chapterIndex]
+            : null;
+        const enemyIds = new Set((Array.isArray(enemies) ? enemies : []).map((enemy) => String(enemy?.id || '')));
+        const comboActive = comboCatalog && Array.isArray(comboCatalog.anchorEnemyIds)
+            ? comboCatalog.anchorEnemyIds.every((enemyId) => enemyIds.has(String(enemyId)))
+            : false;
+
+        return {
+            ...picked,
+            chapterIndex,
+            comboName: comboActive ? comboCatalog.name : '',
+            comboSummary: comboActive ? comboCatalog.summary : '',
+            comboActive
+        };
+    }
+
     resolveEnemySquadFormation(enemies = []) {
         const combatants = Array.isArray(enemies)
             ? enemies.filter((enemy) => enemy && enemy.currentHp > 0 && !enemy.isBoss && !enemy.isGhost && !enemy.isMinion)
@@ -1004,12 +1033,22 @@ class Battle {
         const ids = combatants.map((enemy) => String(enemy.id || enemy.name || 'enemy')).sort().join('|');
         const seed = this.hashSquadSeed(`${realm}:${nodeSeed}:${ids}:${combatants.length}`);
 
+        const chapterFormation = this.resolveChapterEcologyFormation(realm, node?.type || 'enemy', combatants);
+        if (chapterFormation) {
+            return {
+                ...chapterFormation,
+                behavior: chapterFormation.behavior || 'relay',
+                seed
+            };
+        }
+
         const pool = [
             {
                 id: 'squad_pincer_hunt',
                 name: '钳袭编队',
                 tag: '钳袭',
                 desc: '前锋抢节奏，扰阵单位补减益，后排负责接力输出。',
+                behavior: 'pincer',
                 preferred: ['striker', 'balanced'],
                 attackMul: 1.06,
                 openingBlock: 2
@@ -1019,6 +1058,7 @@ class Battle {
                 name: '壁垒联阵',
                 tag: '壁垒',
                 desc: '敌方会轮流加固防线，迫使你优先破盾。',
+                behavior: 'bulwark',
                 preferred: ['guardian', 'balanced'],
                 attackMul: 1.02,
                 openingBlock: 5
@@ -1028,6 +1068,7 @@ class Battle {
                 name: '咒织链阵',
                 tag: '咒织',
                 desc: '敌方通过咒印链协同压场，战斗更偏控场消耗。',
+                behavior: 'hex',
                 preferred: ['hexer', 'balanced'],
                 attackMul: 1.03,
                 openingBlock: 3
@@ -1037,6 +1078,7 @@ class Battle {
                 name: '潮汐接力',
                 tag: '接力',
                 desc: '敌方交替爆发与防守，形成明显波段压力。',
+                behavior: 'relay',
                 preferred: ['balanced', 'striker', 'guardian'],
                 attackMul: 1.05,
                 openingBlock: 3
@@ -1106,7 +1148,8 @@ class Battle {
                 enemy.buffs.strength = Math.max(0, Number(enemy.buffs.strength) || 0) + 1;
             }
 
-            if (formation.id === 'squad_pincer_hunt') {
+            const behavior = String(formation.behavior || formation.id || '');
+            if (behavior === 'pincer') {
                 attackPatterns.forEach((pattern) => {
                     pattern.value = Math.max(1, Math.floor(Number(pattern.value) * formation.attackMul));
                 });
@@ -1127,7 +1170,7 @@ class Battle {
                         intent: '🪤钳袭扰阵'
                     });
                 }
-            } else if (formation.id === 'squad_bulwark_web') {
+            } else if (behavior === 'bulwark') {
                 enemy.block = Math.max(enemy.block || 0, 8 + index * 2);
                 enemy.buffs = enemy.buffs && typeof enemy.buffs === 'object' ? enemy.buffs : {};
                 if (index === 0) {
@@ -1140,7 +1183,7 @@ class Battle {
                         intent: '🛡️联阵护垒'
                     });
                 }
-            } else if (formation.id === 'squad_hex_weave') {
+            } else if (behavior === 'hex') {
                 if (!hasDebuff) {
                     enemy.patterns.push({
                         type: 'debuff',
@@ -1156,7 +1199,7 @@ class Battle {
                         intent: '🧿咒织回护'
                     });
                 }
-            } else if (formation.id === 'squad_relay_cascade') {
+            } else if (behavior === 'relay') {
                 if (index % 2 === 0) {
                     attackPatterns.forEach((pattern) => {
                         pattern.value = Math.max(1, Math.floor(Number(pattern.value) * formation.attackMul));
@@ -1185,7 +1228,11 @@ class Battle {
             name: formation.name,
             tag: formation.tag,
             desc: formation.desc,
-            count: seeded.length
+            count: seeded.length,
+            chapterIndex: formation.chapterIndex || 0,
+            comboName: formation.comboName || '',
+            comboSummary: formation.comboSummary || '',
+            comboActive: !!formation.comboActive
         };
     }
 
@@ -1551,6 +1598,49 @@ class Battle {
             };
         }
 
+        if (archetypeId === 'cursebound') {
+            const appendPatterns = [{
+                type: 'debuff',
+                buffType: 'weak',
+                value: 1 + (s >= 2 ? 1 : 0),
+                intent: '🪬封契压制'
+            }];
+            if (typeof CARDS !== 'undefined' && CARDS.cursedScar) {
+                appendPatterns.push({
+                    type: 'addStatus',
+                    cardId: 'cursedScar',
+                    count: s >= 3 ? 2 : 1,
+                    intent: '📜契咒回灌'
+                });
+            }
+            return {
+                id: 'sealed_oath',
+                tag: '封契',
+                desc: '以咒牌回灌与虚弱压制打断压血清算，迫使咒契流额外承担代价。',
+                openingBlock: 2 + s,
+                appendPatterns
+            };
+        }
+
+        if (archetypeId === 'soulforge') {
+            return {
+                id: 'shatter_matrix',
+                tag: '裂阵',
+                desc: '多段裂阵突击会不断拆解护势与构件节奏，逼迫灵傀流反复铺场。',
+                openingBlock: 3 + s,
+                appendPatterns: [
+                    {
+                        type: 'multiAction',
+                        intent: '⚙️裂阵突击',
+                        actions: [
+                            { type: 'attack', value: 5 + s * 2, intent: '⚙️裂阵重击' },
+                            { type: 'attack', value: 4 + s, intent: '⚙️余震刮扫' }
+                        ]
+                    }
+                ]
+            };
+        }
+
         return null;
     }
 
@@ -1808,6 +1898,1495 @@ class Battle {
         return result;
     }
 
+    getChapterBattlefieldPlayerTurn() {
+        return Math.max(
+            1,
+            Math.floor(
+                Number(this.player?.turnNumber)
+                || Number(this.turnNumber)
+                || 1
+            )
+        );
+    }
+
+    getChapterBattlefieldDebuffKeys(target = null) {
+        if (!target || typeof target !== 'object') return [];
+        const buffs = target.buffs && typeof target.buffs === 'object' ? target.buffs : {};
+        const order = ['weak', 'vulnerable', 'poison', 'burn', 'bleed', 'freeze', 'paralysis', 'stun', 'mark'];
+        return order.filter((key) => {
+            if (key === 'stun') {
+                return !!target.stunned || Math.max(0, Math.floor(Number(buffs[key]) || 0)) > 0;
+            }
+            return Math.max(0, Math.floor(Number(buffs[key]) || 0)) > 0;
+        });
+    }
+
+    getChapterBattlefieldLoadedLawCount() {
+        const ring = this.player?.fateRing;
+        if (!ring || typeof ring !== 'object') return 0;
+
+        if (typeof ring.getSocketedLaws === 'function') {
+            const laws = ring.getSocketedLaws();
+            return Array.isArray(laws) ? laws.filter(Boolean).length : 0;
+        }
+
+        if (Array.isArray(ring.loadedLaws)) {
+            return ring.loadedLaws.filter(Boolean).length;
+        }
+
+        if (Array.isArray(ring.slots)) {
+            return ring.slots.filter((slot) => slot && slot.law).length;
+        }
+
+        return 0;
+    }
+
+    getChapterBattlefieldActiveVowCount() {
+        if (this.player && typeof this.player.getRunVowMetas === 'function') {
+            const metas = this.player.getRunVowMetas();
+            return Array.isArray(metas) ? metas.filter(Boolean).length : 0;
+        }
+        return Array.isArray(this.player?.runVows)
+            ? this.player.runVows.filter(Boolean).length
+            : 0;
+    }
+
+    getChapterBattlefieldSynergyState() {
+        const destinyMeta = this.player && typeof this.player.getRunDestinyMeta === 'function'
+            ? this.player.getRunDestinyMeta()
+            : null;
+        const spiritMeta = this.player && typeof this.player.getSpiritCompanionMeta === 'function'
+            ? this.player.getSpiritCompanionMeta()
+            : null;
+        const vowCount = this.getChapterBattlefieldActiveVowCount();
+        const lawCount = this.getChapterBattlefieldLoadedLawCount();
+        const equippedTreasures = Array.isArray(this.player?.equippedTreasures)
+            ? this.player.equippedTreasures.filter(Boolean)
+            : (Array.isArray(this.player?.treasures) ? this.player.treasures.filter(Boolean) : []);
+        const treasureCount = equippedTreasures.length;
+        const setCounts = this.player && typeof this.player.getEquippedTreasureSetCounts === 'function'
+            ? this.player.getEquippedTreasureSetCounts()
+            : equippedTreasures.reduce((result, treasure) => {
+                const setTag = typeof treasure?.setTag === 'string' ? treasure.setTag.trim() : '';
+                if (!setTag) return result;
+                const echo = treasure && treasure.data && treasure.data.workshopSetEcho ? 1 : 0;
+                result[setTag] = (result[setTag] || 0) + 1 + echo;
+                return result;
+            }, {});
+        const activeSets = Object.values(setCounts || {}).filter((value) => Math.max(0, Math.floor(Number(value) || 0)) >= 2).length;
+        const destinyActive = !!(destinyMeta || this.player?.runDestiny?.id || typeof this.player?.runDestiny === 'string');
+        const spiritActive = !!(spiritMeta || this.player?.spiritCompanion?.id || typeof this.player?.spiritCompanion === 'string');
+        const axes = [
+            destinyActive,
+            vowCount > 0,
+            lawCount > 0,
+            treasureCount > 0,
+            spiritActive
+        ].filter(Boolean).length;
+
+        return {
+            axes,
+            destinyActive,
+            vowCount,
+            lawCount,
+            treasureCount,
+            activeSets,
+            spiritActive
+        };
+    }
+
+    getBattleHudLoadedLawMetas() {
+        const ring = this.player?.fateRing;
+        let loadedLawIds = [];
+
+        if (ring && typeof ring.getSocketedLaws === 'function') {
+            loadedLawIds = ring.getSocketedLaws();
+        } else if (Array.isArray(ring?.loadedLaws)) {
+            loadedLawIds = ring.loadedLaws;
+        } else if (Array.isArray(ring?.slots)) {
+            loadedLawIds = ring.slots.map((slot) => slot?.law).filter(Boolean);
+        }
+
+        return loadedLawIds
+            .filter(Boolean)
+            .map((lawId) => {
+                const meta = typeof LAWS !== 'undefined' && LAWS && LAWS[lawId]
+                    ? LAWS[lawId]
+                    : null;
+                return {
+                    id: meta?.id || String(lawId),
+                    name: meta?.name || String(lawId),
+                    icon: meta?.icon || '📜',
+                    element: meta?.element || '',
+                    description: meta?.description || ''
+                };
+            });
+    }
+
+    getBattleHudActiveLawResonances(loadedLawIds = null) {
+        const ids = Array.isArray(loadedLawIds)
+            ? loadedLawIds.filter(Boolean)
+            : this.getBattleHudLoadedLawMetas().map((law) => law.id).filter(Boolean);
+        const active = [];
+
+        if (typeof LAW_RESONANCES !== 'undefined' && LAW_RESONANCES && typeof LAW_RESONANCES === 'object') {
+            Object.values(LAW_RESONANCES).forEach((resonance) => {
+                if (!resonance || !Array.isArray(resonance.laws) || resonance.laws.length === 0) return;
+                const matches = resonance.laws.every((lawId) => ids.includes(lawId));
+                if (!matches) return;
+                active.push({
+                    id: resonance.id || '',
+                    name: resonance.name || '',
+                    description: resonance.description || ''
+                });
+            });
+        }
+
+        if (active.length > 0) return active;
+
+        return Array.isArray(this.player?.activeResonances)
+            ? this.player.activeResonances
+                .filter(Boolean)
+                .map((resonance) => ({
+                    id: resonance.id || '',
+                    name: resonance.name || '',
+                    description: resonance.description || ''
+                }))
+            : [];
+    }
+
+    getBattleHudTreasureSetState() {
+        const equippedTreasures = Array.isArray(this.player?.equippedTreasures)
+            ? this.player.equippedTreasures.filter(Boolean)
+            : [];
+        const setCounts = this.player && typeof this.player.getEquippedTreasureSetCounts === 'function'
+            ? this.player.getEquippedTreasureSetCounts()
+            : equippedTreasures.reduce((result, treasure) => {
+                const setTag = treasure && typeof treasure.setTag === 'string'
+                    ? treasure.setTag.trim()
+                    : '';
+                if (!setTag) return result;
+                const setEcho = treasure && treasure.data && treasure.data.workshopSetEcho ? 1 : 0;
+                result[setTag] = (result[setTag] || 0) + 1 + setEcho;
+                return result;
+            }, {});
+        const activeSets = Object.entries(setCounts || {})
+            .map(([setTag, pieces]) => {
+                const label = this.player && typeof this.player.getTreasureSetLabel === 'function'
+                    ? this.player.getTreasureSetLabel(setTag)
+                    : setTag;
+                const meta = this.player && typeof this.player.getTreasureSetMeta === 'function'
+                    ? this.player.getTreasureSetMeta(setTag)
+                    : null;
+                return {
+                    id: setTag,
+                    label,
+                    icon: meta?.icon || '✦',
+                    pieces: Math.max(0, Math.floor(Number(pieces) || 0)),
+                    theme: meta?.theme || ''
+                };
+            })
+            .filter((entry) => entry.pieces >= 2)
+            .sort((a, b) => b.pieces - a.pieces || a.label.localeCompare(b.label, 'zh-Hans-CN'));
+
+        return {
+            equippedCount: equippedTreasures.length,
+            activeCount: activeSets.length,
+            activeSets,
+            leadSet: activeSets[0] || null
+        };
+    }
+
+    getBattleSystemDisplayState() {
+        const destiny = this.player && typeof this.player.getRunDestinyMeta === 'function'
+            ? this.player.getRunDestinyMeta()
+            : null;
+        const vows = this.player && typeof this.player.getRunVowMetas === 'function'
+            ? this.player.getRunVowMetas().filter(Boolean)
+            : [];
+        const spirit = this.resolveBattleSpiritCompanionDisplay();
+        const chapter = this.game && typeof this.game.getChapterDisplaySnapshot === 'function'
+            ? this.game.getChapterDisplaySnapshot(this.player?.realm || this.game?.player?.realm || 1)
+            : null;
+        const chapterField = this.getChapterBattlefieldDisplayState();
+        const loadedLaws = this.getBattleHudLoadedLawMetas();
+        const activeResonances = this.getBattleHudActiveLawResonances(loadedLaws.map((law) => law.id));
+        const pathId = String(this.player?.fateRing?.path || '');
+        const pathMeta = (
+            typeof FATE_RING !== 'undefined'
+            && FATE_RING
+            && FATE_RING.paths
+            && pathId
+            && FATE_RING.paths[pathId]
+        )
+            ? FATE_RING.paths[pathId]
+            : null;
+        const treasure = this.getBattleHudTreasureSetState();
+
+        const vowNames = vows.map((vow) => `${vow.icon || '✧'} ${vow.name || vow.id || '誓约'}`);
+        const resonanceNames = activeResonances.map((entry) => entry.name || entry.id || '法则共鸣');
+        const loadedLawNames = loadedLaws.map((law) => `${law.icon || '📜'} ${law.name || law.id || '法则'}`);
+        const treasureNames = treasure.activeSets.map((entry) => `${entry.icon || '✦'} ${entry.label}${entry.pieces}`);
+        const omenValue = chapterField?.omen?.phaseLabel
+            || chapterField?.omen?.name
+            || chapter?.skyOmen?.name
+            || chapter?.stageLabel
+            || chapter?.name
+            || '未定';
+        const leylineValue = chapterField?.leyline?.activeLabel
+            || chapterField?.leyline?.name
+            || chapter?.leyline?.name
+            || '未显';
+        const formationValue = chapterField?.formation?.name || '';
+        const destinyValue = destiny?.name || '未定';
+        const destinyMeta = destiny
+            ? `${destiny.tierLabel || `T${Math.max(1, Math.floor(Number(destiny.tier) || 1))}`} · ${destiny.category || '命格'}`
+            : '本局尚未选择';
+        const vowValue = vows.length <= 0
+            ? '无誓约'
+            : vows.length === 1
+                ? (vows[0].name || vows[0].id || '誓约')
+                : `${vows[0].name || vows[0].id || '誓约'} +${Math.max(0, vows.length - 1)}`;
+        const vowMeta = vows.length > 0
+            ? `${vows.length}/2 条进行中`
+            : '尚未签订';
+        const spiritValue = spirit?.name || '未缔约';
+        const spiritMeta = spirit
+            ? `${spirit.chargeText}${spirit.ready ? ' · 可释放' : ' · 蓄能中'}`
+            : '当前无灵契';
+        const lawValue = activeResonances.length > 0
+            ? `${activeResonances[0].name || activeResonances[0].id || '法则共鸣'}${activeResonances.length > 1 ? ` +${activeResonances.length - 1}` : ''}`
+            : loadedLaws.length > 0
+                ? `${loadedLaws[0].name || loadedLaws[0].id || '法则'}${loadedLaws.length > 1 ? ` +${loadedLaws.length - 1}` : ''}`
+                : '尚未装配';
+        const lawMeta = activeResonances.length > 0
+            ? `${loadedLaws.length} 法则在位${pathMeta?.name ? ` · ${pathMeta.name}` : ''}`
+            : loadedLaws.length > 0
+                ? `${loadedLaws.length} 法则待编织${pathMeta?.name ? ` · ${pathMeta.name}` : ''}`
+                : pathMeta?.name
+                    ? `命环 ${pathMeta.name}`
+                    : '命环待刻印';
+        const treasureValue = treasure.activeCount > 0
+            ? `${treasure.activeCount} 组激活`
+            : treasure.equippedCount > 0
+                ? '套装待成型'
+                : '未装备';
+        const treasureMeta = treasure.activeCount > 0
+            ? treasureNames.slice(0, 2).join(' / ')
+            : treasure.equippedCount > 0
+                ? `${treasure.equippedCount} 件法宝在位`
+                : '暂无法宝';
+
+        const stripItems = [
+            {
+                id: 'destiny',
+                label: '命格',
+                icon: destiny?.icon || '✦',
+                value: destinyValue,
+                meta: destinyMeta,
+                detail: destiny?.summary || destiny?.description || '当前没有命格修正。',
+                tone: destiny
+                    ? (destiny.category === '赌博' ? 'warning' : 'fate')
+                    : 'muted'
+            },
+            {
+                id: 'vows',
+                label: '誓约',
+                icon: vows[0]?.icon || '✧',
+                value: vowValue,
+                meta: vowMeta,
+                detail: vows.length > 0
+                    ? vowNames.join(' / ')
+                    : '当前没有誓约代价与收益。',
+                tone: vows.length > 0
+                    ? (vows.some((vow) => vow?.category === '赌博') ? 'warning' : 'oath')
+                    : 'muted'
+            },
+            {
+                id: 'spirit',
+                label: '灵契',
+                icon: spirit?.icon || '✦',
+                value: spiritValue,
+                meta: spiritMeta,
+                detail: spirit
+                    ? `${spirit.passiveLabel || '灵契被动'}：${spirit.passiveDesc || ''}`
+                    : '当前没有灵契护道。',
+                tone: spirit ? 'spirit' : 'muted'
+            },
+            {
+                id: 'chapter',
+                label: '天象 / 地脉',
+                icon: chapter?.icon || '☯️',
+                value: omenValue,
+                meta: leylineValue,
+                detail: [
+                    chapter?.name ? `${chapter.icon || '☯️'} ${chapter.name}${chapter.stageLabel ? ` · ${chapter.stageLabel}` : ''}` : '',
+                    formationValue
+                        ? `阵面：${formationValue}${chapterField?.formation?.detail ? ` · ${chapterField.formation.detail}` : ''}`
+                        : ''
+                ].filter(Boolean).join(' / '),
+                tone: chapterField || chapter ? 'chapter' : 'muted'
+            },
+            {
+                id: 'laws',
+                label: '法则编织',
+                icon: activeResonances[0]?.name ? '⌘' : '📜',
+                value: lawValue,
+                meta: lawMeta,
+                detail: [
+                    resonanceNames.length > 0 ? `共鸣：${resonanceNames.join(' / ')}` : '',
+                    pathMeta?.name ? `命环：${pathMeta.icon || '◈'} ${pathMeta.name}` : '',
+                    loadedLawNames.length > 0 ? `法则：${loadedLawNames.join(' / ')}` : ''
+                ].filter(Boolean).join(' / '),
+                tone: loadedLaws.length > 0 ? 'resonance' : 'muted'
+            },
+            {
+                id: 'treasures',
+                label: '法宝套装',
+                icon: treasure.leadSet?.icon || '🧰',
+                value: treasureValue,
+                meta: treasureMeta,
+                detail: treasure.activeCount > 0
+                    ? treasure.activeSets.map((entry) => `${entry.icon || '✦'} ${entry.label} ${entry.pieces} 件`).join(' / ')
+                    : (treasure.equippedCount > 0 ? '当前已带入战斗，但尚未达到 2 件共鸣阈值。' : '当前没有已装备法宝。'),
+                tone: treasure.activeCount > 0 ? 'treasure' : 'muted'
+            }
+        ];
+
+        return {
+            destiny,
+            vows: {
+                count: vows.length,
+                items: vows
+            },
+            spirit,
+            chapter: {
+                chapterIndex: chapterField?.chapterIndex || chapter?.chapterIndex || 0,
+                chapterName: chapterField?.chapterName || chapter?.name || '',
+                omen: chapterField?.omen || chapter?.skyOmen || null,
+                leyline: chapterField?.leyline || chapter?.leyline || null,
+                formation: chapterField?.formation || null
+            },
+            lawWeave: {
+                loadedCount: loadedLaws.length,
+                loadedLaws,
+                resonanceCount: activeResonances.length,
+                activeResonances,
+                path: pathMeta
+                    ? {
+                        id: pathMeta.id || pathId,
+                        name: pathMeta.name || pathId,
+                        icon: pathMeta.icon || '◈'
+                    }
+                    : null,
+                comboLabel: lawValue,
+                summary: lawMeta
+            },
+            treasureSets: {
+                equippedCount: treasure.equippedCount,
+                activeCount: treasure.activeCount,
+                activeSets: treasure.activeSets
+            },
+            stripItems
+        };
+    }
+
+    refreshChapterBattlefieldState() {
+        const field = this.activeChapterBattlefield;
+        if (!field || typeof field !== 'object') return null;
+
+        const stageIndex = Math.max(1, Math.min(3, Math.floor(Number(field.stageIndex) || 1)));
+        const playerBlock = Math.max(0, Math.floor(Number(this.player?.block) || 0));
+
+        if (field.chapterIndex === 2) {
+            if (playerBlock >= 14) {
+                field.leyline.activeLabel = '厚盾反锻';
+                field.leyline.activeDesc = '当前护盾足以把下一拍压成重锻反击，先守后砸的回报正在抬高。';
+            } else if (playerBlock >= 6) {
+                field.leyline.activeLabel = '积盾淬火';
+                field.leyline.activeDesc = '护盾已开始给输出回火，继续立盾就能稳稳转成反击。';
+            } else {
+                field.leyline.activeLabel = '炉壁待起';
+                field.leyline.activeDesc = '先把盾垫起来，炉海才会把防守折成真正的进攻质量。';
+            }
+            if (field.formation && field.formation.active && !field.formation.broken) {
+                field.formation.detail = `${field.formation.anchorRoleLabel}·${field.formation.anchorEnemyName}，误击旁位会返铸 ${(3 + stageIndex)} 护盾`;
+            }
+        } else if (field.chapterIndex === 4) {
+            const enemyDebuffPressure = (Array.isArray(this.enemies) ? this.enemies : []).reduce((maxCount, enemy) => {
+                if (!enemy || enemy.currentHp <= 0) return maxCount;
+                return Math.max(maxCount, this.getChapterBattlefieldDebuffKeys(enemy).length);
+            }, 0);
+            const playerDebuffPressure = this.getChapterBattlefieldDebuffKeys(this.player).length;
+            if (enemyDebuffPressure > 0) {
+                field.leyline.activeLabel = `幻咒回波·${enemyDebuffPressure}势`;
+                field.leyline.activeDesc = '敌人身上挂着的减益越多，镜面回波越愿意把它们折成额外收益。';
+            } else if (playerDebuffPressure > 0) {
+                field.leyline.activeLabel = '镜后退相';
+                field.leyline.activeDesc = '你身上的减益会被镜潮持续追问，净化越早越不亏。';
+            } else {
+                field.leyline.activeLabel = '镜面待拓';
+                field.leyline.activeDesc = '先挂上减益或咒印，再去收束输出，镜面收益才会真正展开。';
+            }
+            if (field.formation && field.formation.active && !field.formation.broken) {
+                field.formation.detail = `${field.formation.anchorRoleLabel}·${field.formation.anchorEnemyName}，误击旁位会触发反照`;
+            }
+        } else if (field.chapterIndex === 6) {
+            const synergy = this.getChapterBattlefieldSynergyState();
+            const activeParts = [];
+            field.synergy = synergy;
+            if (synergy.destinyActive) activeParts.push('命格');
+            if (synergy.vowCount > 0) activeParts.push(`誓约×${synergy.vowCount}`);
+            if (synergy.lawCount > 0) activeParts.push(`法则×${synergy.lawCount}`);
+            if (synergy.treasureCount > 0) activeParts.push(`法宝×${synergy.treasureCount}`);
+            if (synergy.spiritActive) activeParts.push('灵契');
+
+            field.leyline.activeLabel = `终章合式·${synergy.axes}轴`;
+            field.leyline.activeDesc = activeParts.length > 0
+                ? `当前答卷由 ${activeParts.join(' / ')} 共同支撑；轴数越完整，终章回报越高。`
+                : '当前仍是单轴答卷，终焉命庭会持续追问你缺的那几块拼图。';
+            if (field.formation && field.formation.active && !field.formation.broken) {
+                field.formation.detail = `${field.formation.anchorRoleLabel}·${field.formation.anchorEnemyName}，当前答卷 ${synergy.axes} 轴同判`;
+            }
+        }
+
+        return field;
+    }
+
+    resolveChapterBattlefieldProfile() {
+        if (!this.game || typeof this.game.getChapterDisplaySnapshot !== 'function') return null;
+        const chapter = this.game.getChapterDisplaySnapshot(this.player?.realm || this.game?.player?.realm || 1);
+        if (!chapter || typeof chapter !== 'object' || !chapter.chapterIndex) return null;
+
+        const stageIndex = Math.max(1, Math.min(3, Math.floor(Number(chapter.stageIndex) || 1)));
+
+        if (chapter.chapterIndex === 1) {
+            return {
+                id: 'fractured_frontline',
+                chapter,
+                stageIndex,
+                omen: {
+                    resolvePhase: (playerTurn) => (playerTurn % 2 === 1
+                        ? {
+                            id: 'oath_rush',
+                            label: '裂誓抢势',
+                            desc: '本回合先手进攻会被放大，适合抢下第一拍。'
+                        }
+                        : {
+                            id: 'ember_hunt',
+                            label: '余烬迫命',
+                            desc: '低血时直接回能，不压血则转成护势缓冲。'
+                        })
+                },
+                leyline: {
+                    label: '低血追命',
+                    desc: '生命压低后输出提升，处决时还能收回少量血线。'
+                },
+                formation: {
+                    id: 'fractured_oath_front',
+                    name: '裂誓锋阵',
+                    tag: '锋阵',
+                    desc: '锋核持续抢节奏，优先拆核才能切断敌阵的前压波段。',
+                    hint: '优先命中锋核可转成护盾，拆核后其余敌人会一起失势。',
+                    anchorStrategy: 'highestAttack',
+                    anchorRoleLabel: '锋核',
+                    escortRoleLabel: '锋翼'
+                }
+            };
+        }
+
+        if (chapter.chapterIndex === 2) {
+            return {
+                id: 'forge_sea_press',
+                chapter,
+                stageIndex,
+                omen: {
+                    resolvePhase: (playerTurn) => (playerTurn % 2 === 1
+                        ? {
+                            id: 'smelt_pressure',
+                            label: '炉压逼铸',
+                            desc: '先把盾垫厚，再借炉压把下一拍敲成更重的锻击。'
+                        }
+                        : {
+                            id: 'quench_reflow',
+                            label: '淬潮回锻',
+                            desc: '锻潮会把法宝与护阵准备折成回能，让资源越烧越顺手。'
+                        })
+                },
+                leyline: {
+                    label: '厚盾反锻',
+                    desc: '护盾会反过来抬高伤害，受创后也能把炉压推成下一拍的反击。'
+                },
+                formation: {
+                    id: 'forge_clamp_array',
+                    name: '淬炉钳阵',
+                    tag: '钳炉',
+                    desc: '炉锚牵住整队的护势回路，不先敲碎炉锚，旁位受击只会让它越烧越硬。',
+                    hint: '优先拆炉锚，放任淬卫会把你的试探伤害返铸成更多护盾。',
+                    anchorStrategy: 'highestHp',
+                    anchorRoleLabel: '炉锚',
+                    escortRoleLabel: '淬卫'
+                }
+            };
+        }
+
+        if (chapter.chapterIndex === 3) {
+            return {
+                id: 'sunken_star_network',
+                chapter,
+                stageIndex,
+                omen: {
+                    resolvePhase: (playerTurn) => (playerTurn % 2 === 1
+                        ? {
+                            id: 'star_cache',
+                            label: '伏星蓄势',
+                            desc: '本回合开端更容易补手，把铺垫稳稳续上。'
+                        }
+                        : {
+                            id: 'orbit_shift',
+                            label: '轮转定轨',
+                            desc: '次回合筹划会直接转成灵力优势。'
+                        })
+                },
+                leyline: {
+                    label: '三连成势',
+                    desc: '每连到第三张牌都会滚出额外护势，鼓励预埋与连锁。'
+                },
+                formation: {
+                    id: 'sunken_star_chain',
+                    name: '沉星链阵',
+                    tag: '星链',
+                    desc: '星核会吃掉你第一拍的失误，不先拆核就会被链阵反复回护。',
+                    hint: '首段伤害先打星核，否则它会立刻回护自己。',
+                    anchorStrategy: 'supportBackline',
+                    anchorRoleLabel: '星核',
+                    escortRoleLabel: '链卫'
+                }
+            };
+        }
+
+        if (chapter.chapterIndex === 4) {
+            return {
+                id: 'mirror_abyss_fold',
+                chapter,
+                stageIndex,
+                omen: {
+                    resolvePhase: (playerTurn) => (playerTurn % 2 === 1
+                        ? {
+                            id: 'mirror_bloom',
+                            label: '镜潮照骨',
+                            desc: '净化与镜返在这一拍更容易拉开身位，越早止损越稳。'
+                        }
+                        : {
+                            id: 'curse_reply',
+                            label: '幻咒回照',
+                            desc: '敌我减益会被镜面放大，越会借咒回身就越赚。'
+                        })
+                },
+                leyline: {
+                    label: '幻咒回波',
+                    desc: '敌方减益、镜返与净化会形成回波链，防错与借势价值显著抬高。'
+                },
+                formation: {
+                    id: 'mirror_fold_array',
+                    name: '悬镜折阵',
+                    tag: '镜折',
+                    desc: '镜心会记录你第一拍的去向，若先碰旁位，后续就会被反照追着打。',
+                    hint: '优先拆镜心，误击幻从会先把镜核翻成反照态。',
+                    anchorStrategy: 'hexerBackline',
+                    anchorRoleLabel: '镜心',
+                    escortRoleLabel: '幻从'
+                }
+            };
+        }
+
+        if (chapter.chapterIndex === 5) {
+            return {
+                id: 'blood_moon_altar',
+                chapter,
+                stageIndex,
+                omen: {
+                    resolvePhase: (playerTurn) => (playerTurn >= 3
+                        ? {
+                            id: 'blood_roar',
+                            label: '血月暴鸣',
+                            desc: '血线越低越能滚出爆发，保守会被天象持续追着烧。'
+                        }
+                        : {
+                            id: 'blood_rise',
+                            label: '血月渐盛',
+                            desc: '先以血换势，把前中段节奏硬顶起来。'
+                        })
+                },
+                leyline: {
+                    label: '狂脉噬战',
+                    desc: '血线压力会反过来变成护势与反打窗口，越敢换血越有回报。'
+                },
+                formation: {
+                    id: 'blood_moon_eye',
+                    name: '血祭阵眼',
+                    tag: '血祭',
+                    desc: '阵眼牵动整队狂化，压低它就能把换血转成自己的续航与回能。',
+                    hint: '优先压祭眼能把换血转成回复，拆眼后收尾会轻松很多。',
+                    anchorStrategy: 'lowestHp',
+                    anchorRoleLabel: '祭眼',
+                    escortRoleLabel: '血从'
+                }
+            };
+        }
+
+        if (chapter.chapterIndex === 6) {
+            return {
+                id: 'final_court_weave',
+                chapter,
+                stageIndex,
+                omen: {
+                    resolvePhase: (playerTurn, field) => {
+                        const axes = Math.max(0, Math.floor(Number(field?.synergy?.axes) || 0));
+                        if (axes >= 4) {
+                            return {
+                                id: 'many_axes_verdict',
+                                label: '万象同判',
+                                desc: '多轴答卷已被判为合格，终章会直接放大你的综合收益。'
+                            };
+                        }
+                        return playerTurn % 2 === 1
+                            ? {
+                                id: 'court_query',
+                                label: '命庭追问',
+                                desc: '单轴展开会被终章迅速看穿，先把缺的系统补齐更稳。'
+                            }
+                            : {
+                                id: 'court_amend',
+                                label: '终律补题',
+                                desc: '每补上一轴，终焉命庭就更愿意把压力折成护势与回能。'
+                            };
+                    }
+                },
+                leyline: {
+                    label: '终章合式',
+                    desc: '命格、誓约、法则、法宝与灵契越能同频，终章给出的答卷空间就越大。'
+                },
+                formation: {
+                    id: 'final_law_array',
+                    name: '终律衡阵',
+                    tag: '终律',
+                    desc: '终审会按你的多轴完整度判题，越能先击中阵核，越容易把答卷抢回自己手里。',
+                    hint: '优先点中终审，终章更看你是否真能把多套系统拧成一根绳。',
+                    anchorStrategy: 'supportBackline',
+                    anchorRoleLabel: '终审',
+                    escortRoleLabel: '律从'
+                }
+            };
+        }
+
+        return null;
+    }
+
+    pickChapterFormationAnchor(combatants = [], strategy = 'highestAttack') {
+        const fighters = Array.isArray(combatants)
+            ? combatants.filter((enemy) => enemy && enemy.currentHp > 0 && Array.isArray(enemy.patterns))
+            : [];
+        if (fighters.length === 0) return null;
+
+        const scoreEnemy = (enemy) => {
+            const patterns = Array.isArray(enemy.patterns) ? enemy.patterns : [];
+            const attackScore = patterns.reduce((sum, pattern) => {
+                if (!pattern || typeof pattern !== 'object') return sum;
+                if (pattern.type === 'attack' || pattern.type === 'executeDamage') {
+                    return sum + Math.max(1, Math.floor(Number(pattern.value) || 0));
+                }
+                if (pattern.type === 'multiAttack') {
+                    const count = Math.max(1, Math.floor(Number(pattern.count) || 1));
+                    return sum + Math.max(1, Math.floor(Number(pattern.value) || 0)) * count;
+                }
+                return sum;
+            }, 0);
+            const utilityScore = patterns.reduce((sum, pattern) => {
+                if (!pattern || typeof pattern !== 'object') return sum;
+                if (pattern.type === 'defend' || pattern.type === 'debuff' || pattern.type === 'addStatus' || pattern.type === 'heal') {
+                    return sum + 1;
+                }
+                return sum;
+            }, 0);
+            const debuffScore = patterns.reduce((sum, pattern) => {
+                if (!pattern || typeof pattern !== 'object') return sum;
+                if (pattern.type === 'debuff' || pattern.type === 'addStatus') {
+                    return sum + 1;
+                }
+                return sum;
+            }, 0);
+            return {
+                enemy,
+                attackScore,
+                utilityScore,
+                debuffScore,
+                currentHp: Math.max(0, Math.floor(Number(enemy.currentHp) || 0)),
+                maxHp: Math.max(1, Math.floor(Number(enemy.maxHp || enemy.hp || 1) || 1))
+            };
+        };
+
+        const scored = fighters.map(scoreEnemy);
+        scored.sort((a, b) => {
+            if (strategy === 'lowestHp') {
+                if (a.currentHp !== b.currentHp) return a.currentHp - b.currentHp;
+                if (a.maxHp !== b.maxHp) return a.maxHp - b.maxHp;
+                return b.attackScore - a.attackScore;
+            }
+            if (strategy === 'highestHp') {
+                if (a.currentHp !== b.currentHp) return b.currentHp - a.currentHp;
+                if (a.maxHp !== b.maxHp) return b.maxHp - a.maxHp;
+                if (a.utilityScore !== b.utilityScore) return b.utilityScore - a.utilityScore;
+                return b.attackScore - a.attackScore;
+            }
+            if (strategy === 'hexerBackline') {
+                if (a.debuffScore !== b.debuffScore) return b.debuffScore - a.debuffScore;
+                if (a.utilityScore !== b.utilityScore) return b.utilityScore - a.utilityScore;
+                if (a.attackScore !== b.attackScore) return a.attackScore - b.attackScore;
+                return b.currentHp - a.currentHp;
+            }
+            if (strategy === 'supportBackline') {
+                if (a.utilityScore !== b.utilityScore) return b.utilityScore - a.utilityScore;
+                if (a.attackScore !== b.attackScore) return a.attackScore - b.attackScore;
+                return b.currentHp - a.currentHp;
+            }
+            if (a.attackScore !== b.attackScore) return b.attackScore - a.attackScore;
+            if (a.utilityScore !== b.utilityScore) return a.utilityScore - b.utilityScore;
+            return b.currentHp - a.currentHp;
+        });
+
+        return scored[0]?.enemy || null;
+    }
+
+    buildChapterFormationState(profile) {
+        if (!profile || !profile.formation) return null;
+
+        const formationConfig = profile.formation;
+        const stageIndex = Math.max(1, Math.min(3, Math.floor(Number(profile.stageIndex) || 1)));
+        const formationState = {
+            id: formationConfig.id,
+            name: formationConfig.name,
+            tag: formationConfig.tag,
+            desc: formationConfig.desc,
+            hint: formationConfig.hint || '',
+            active: false,
+            broken: false,
+            anchorEnemyId: '',
+            anchorEnemyName: '',
+            anchorRoleLabel: formationConfig.anchorRoleLabel || '阵核',
+            escortRoleLabel: formationConfig.escortRoleLabel || '阵列',
+            detail: '本场敌数不足，阵面未成。',
+            firstDamageResolvedPlayerTurn: 0,
+            anchorProcPlayerTurn: 0
+        };
+
+        const combatants = Array.isArray(this.enemies)
+            ? this.enemies.filter((enemy) => enemy && enemy.currentHp > 0 && !enemy.isBoss && !enemy.isGhost && !enemy.isMinion)
+            : [];
+        if (combatants.length < 2) return formationState;
+
+        const anchor = this.pickChapterFormationAnchor(combatants, formationConfig.anchorStrategy);
+        if (!anchor) return formationState;
+
+        formationState.active = true;
+        formationState.anchorEnemyId = String(anchor.id || anchor.name || 'anchor');
+        formationState.anchorEnemyName = String(anchor.name || '阵核');
+        formationState.detail = `${formationState.anchorRoleLabel}·${formationState.anchorEnemyName}`;
+
+        combatants.forEach((enemy) => {
+            enemy.chapterFormationId = formationConfig.id;
+            enemy.chapterFormationTag = formationConfig.tag;
+            enemy.chapterFormationDesc = formationConfig.desc;
+            enemy.chapterFormationRoleLabel = enemy === anchor
+                ? formationState.anchorRoleLabel
+                : formationState.escortRoleLabel;
+            enemy.chapterFormationAnchor = enemy === anchor;
+        });
+
+        if (profile.chapter.chapterIndex === 1) {
+            anchor.buffs = anchor.buffs && typeof anchor.buffs === 'object' ? anchor.buffs : {};
+            anchor.buffs.strength = Math.max(0, Math.floor(Number(anchor.buffs.strength) || 0)) + 1;
+            formationState.detail = `${formationState.anchorRoleLabel}·${formationState.anchorEnemyName}，命中可转护势`;
+        } else if (profile.chapter.chapterIndex === 2) {
+            anchor.block = Math.max(0, Math.floor(Number(anchor.block) || 0)) + (6 + stageIndex * 2);
+            formationState.detail = `${formationState.anchorRoleLabel}·${formationState.anchorEnemyName}，误击旁位会返铸回护`;
+        } else if (profile.chapter.chapterIndex === 3) {
+            anchor.block = Math.max(0, Math.floor(Number(anchor.block) || 0)) + (4 + stageIndex);
+            formationState.detail = `${formationState.anchorRoleLabel}·${formationState.anchorEnemyName}，首拍误判会触发回护`;
+        } else if (profile.chapter.chapterIndex === 4) {
+            anchor.block = Math.max(0, Math.floor(Number(anchor.block) || 0)) + (4 + stageIndex);
+            formationState.detail = `${formationState.anchorRoleLabel}·${formationState.anchorEnemyName}，误击旁位会触发反照`;
+        } else if (profile.chapter.chapterIndex === 5) {
+            combatants.forEach((enemy) => {
+                if (enemy === anchor) return;
+                enemy.buffs = enemy.buffs && typeof enemy.buffs === 'object' ? enemy.buffs : {};
+                enemy.buffs.strength = Math.max(0, Math.floor(Number(enemy.buffs.strength) || 0)) + 1;
+            });
+            formationState.detail = `${formationState.anchorRoleLabel}·${formationState.anchorEnemyName}，命中可回生`;
+        } else if (profile.chapter.chapterIndex === 6) {
+            anchor.block = Math.max(0, Math.floor(Number(anchor.block) || 0)) + (5 + stageIndex);
+            anchor.buffs = anchor.buffs && typeof anchor.buffs === 'object' ? anchor.buffs : {};
+            anchor.buffs.strength = Math.max(0, Math.floor(Number(anchor.buffs.strength) || 0)) + 1;
+            formationState.detail = `${formationState.anchorRoleLabel}·${formationState.anchorEnemyName}，会按答卷轴数给出裁定`;
+        }
+
+        combatants.forEach((enemy) => this.refreshEnemyTacticalPlan(enemy, true));
+        return formationState;
+    }
+
+    getChapterFormationAnchorEnemy() {
+        const formation = this.activeChapterBattlefield?.formation;
+        if (!formation || formation.broken || !formation.anchorEnemyId) return null;
+        return (this.enemies || []).find((enemy) =>
+            enemy &&
+            enemy.currentHp > 0 &&
+            String(enemy.id || enemy.name || '') === String(formation.anchorEnemyId)
+        ) || null;
+    }
+
+    initializeChapterBattlefieldRules() {
+        this.activeChapterBattlefield = null;
+        const profile = this.resolveChapterBattlefieldProfile();
+        if (!profile) return null;
+
+        this.activeChapterBattlefield = {
+            profile,
+            chapterIndex: Math.max(1, Math.floor(Number(profile.chapter.chapterIndex) || 1)),
+            stageIndex: Math.max(1, Math.min(3, Math.floor(Number(profile.stageIndex) || 1))),
+            chapterName: String(profile.chapter.fullName || profile.chapter.name || '章节'),
+            stageLabel: String(profile.chapter.stageLabel || ''),
+            omen: {
+                name: String(profile.chapter.skyOmen?.name || '未知天象'),
+                desc: String(profile.chapter.skyOmen?.desc || ''),
+                phaseId: '',
+                phaseLabel: '',
+                phaseDesc: ''
+            },
+            leyline: {
+                name: String(profile.chapter.leyline?.name || '未知地脉'),
+                desc: String(profile.chapter.leyline?.desc || ''),
+                activeLabel: String(profile.leyline?.label || ''),
+                activeDesc: String(profile.leyline?.desc || '')
+            },
+            formation: this.buildChapterFormationState(profile),
+            turnState: {
+                turnStartApplied: 0,
+                lowHpDamageBonusTurn: 0,
+                forgeDamageBonusTurn: 0,
+                lowHpKillRecoverTurn: 0,
+                forgeRetaliationTurn: 0,
+                mirrorEchoTurn: 0,
+                mirrorCleanseTurn: 0,
+                bloodGuardTurn: 0,
+                finalCourtBonusTurn: 0,
+                finalCourtGuardTurn: 0
+            }
+        };
+
+        this.refreshChapterBattlefieldState();
+        Utils.showBattleLog(`【章节地脉·${this.activeChapterBattlefield.leyline.name}】${this.activeChapterBattlefield.leyline.activeDesc}`);
+        if (this.activeChapterBattlefield.formation) {
+            Utils.showBattleLog(`【章节阵面·${this.activeChapterBattlefield.formation.name}】${this.activeChapterBattlefield.formation.detail}`);
+        }
+        this.applyChapterBattlefieldTurnStart('player', { battleStart: true });
+        this.markUIDirty('environment', 'player', 'enemies');
+        return this.activeChapterBattlefield;
+    }
+
+    updateChapterBattlefieldOmenPhase(options = {}) {
+        const field = this.activeChapterBattlefield;
+        const resolvePhase = field?.profile?.omen && typeof field.profile.omen.resolvePhase === 'function'
+            ? field.profile.omen.resolvePhase
+            : null;
+        if (!field || !resolvePhase) return null;
+
+        const playerTurn = this.getChapterBattlefieldPlayerTurn();
+        const phase = resolvePhase(playerTurn, field) || null;
+        if (!phase || typeof phase !== 'object') return null;
+
+        const changed = field.omen.phaseId !== String(phase.id || '')
+            || field.omen.phaseLabel !== String(phase.label || '');
+
+        field.omen.phaseId = String(phase.id || '');
+        field.omen.phaseLabel = String(phase.label || '');
+        field.omen.phaseDesc = String(phase.desc || '');
+
+        if (changed && !options.silent) {
+            Utils.showBattleLog(`【章节天象·${field.omen.name}】${field.omen.phaseLabel}：${field.omen.phaseDesc}`);
+        }
+
+        return phase;
+    }
+
+    applyChapterBattlefieldTurnStart(actor = 'player', options = {}) {
+        const field = this.activeChapterBattlefield;
+        if (!field || actor !== 'player') return null;
+
+        const playerTurn = this.getChapterBattlefieldPlayerTurn();
+        if (!options.force && field.turnState.turnStartApplied === playerTurn) {
+            return field;
+        }
+        field.turnState.turnStartApplied = playerTurn;
+
+        this.refreshChapterBattlefieldState();
+        const phase = this.updateChapterBattlefieldOmenPhase(options) || {
+            id: '',
+            label: '',
+            desc: ''
+        };
+        const stageIndex = Math.max(1, Math.min(3, Math.floor(Number(field.stageIndex) || 1)));
+        const hpRatio = Math.max(0, Number(this.player?.currentHp || 0)) / Math.max(1, Number(this.player?.maxHp || 1));
+        const synergy = field.chapterIndex === 6 ? this.getChapterBattlefieldSynergyState() : null;
+        if (field.chapterIndex === 6) {
+            field.synergy = synergy;
+        }
+
+        if (field.chapterIndex === 1) {
+            if (phase.id === 'oath_rush') {
+                const bonus = 4 + stageIndex * 2;
+                this.player.buffs = this.player.buffs && typeof this.player.buffs === 'object' ? this.player.buffs : {};
+                this.player.buffs.nextAttackBonus = Math.max(0, Math.floor(Number(this.player.buffs.nextAttackBonus) || 0)) + bonus;
+                Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：下一次攻击 +${bonus}`);
+            } else if (hpRatio <= 0.55) {
+                this.player.gainEnergy(1);
+                Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：低血追命，灵力 +1`);
+            } else {
+                const block = 3 + stageIndex;
+                this.player.addBlock(block);
+                Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：稳守余烬，获得 ${block} 护盾`);
+            }
+        } else if (field.chapterIndex === 2) {
+            if (phase.id === 'smelt_pressure') {
+                const currentBlock = Math.max(0, Math.floor(Number(this.player?.block) || 0));
+                if (currentBlock > 0) {
+                    const bonus = Math.max(4 + stageIndex, Math.min(14 + stageIndex, Math.floor(currentBlock * 0.5)));
+                    this.player.buffs = this.player.buffs && typeof this.player.buffs === 'object' ? this.player.buffs : {};
+                    this.player.buffs.nextAttackBonus = Math.max(0, Math.floor(Number(this.player.buffs.nextAttackBonus) || 0)) + bonus;
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：护盾转锻，下一次攻击 +${bonus}`);
+                } else {
+                    const block = 4 + stageIndex;
+                    this.player.addBlock(block);
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：先立炉壁，获得 ${block} 护盾`);
+                }
+            } else {
+                const block = 3 + stageIndex;
+                const treasureCount = Array.isArray(this.player?.equippedTreasures)
+                    ? this.player.equippedTreasures.filter(Boolean).length
+                    : 0;
+                this.player.addBlock(block);
+                if (treasureCount > 0) {
+                    this.player.gainEnergy(1);
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：法宝回潮，获得 ${block} 护盾，灵力 +1`);
+                } else {
+                    const bonus = 2 + stageIndex;
+                    this.player.buffs = this.player.buffs && typeof this.player.buffs === 'object' ? this.player.buffs : {};
+                    this.player.buffs.nextAttackBonus = Math.max(0, Math.floor(Number(this.player.buffs.nextAttackBonus) || 0)) + bonus;
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：回锻蓄势，获得 ${block} 护盾，下一次攻击 +${bonus}`);
+                }
+            }
+        } else if (field.chapterIndex === 3) {
+            if (phase.id === 'star_cache') {
+                if (Array.isArray(this.player?.hand) && this.player.hand.length <= 5 && typeof this.player.drawCards === 'function') {
+                    this.player.drawCards(1);
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：补手 +1`);
+                    this.markUIDirty('hand', 'piles');
+                } else {
+                    const block = 2 + stageIndex;
+                    this.player.addBlock(block);
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：折算成 ${block} 护盾`);
+                }
+            } else {
+                this.player.gainEnergy(1);
+                Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：定轨回能 +1`);
+            }
+        } else if (field.chapterIndex === 4) {
+            if (phase.id === 'mirror_bloom') {
+                const cleaned = this.cleansePlayerDebuffs(1);
+                if (cleaned > 0) {
+                    const block = 3 + stageIndex + cleaned;
+                    this.player.addBlock(block);
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：净化 ${cleaned} 层减益，获得 ${block} 护盾`);
+                } else {
+                    const bonus = 4 + stageIndex;
+                    this.player.buffs = this.player.buffs && typeof this.player.buffs === 'object' ? this.player.buffs : {};
+                    this.player.buffs.nextAttackBonus = Math.max(0, Math.floor(Number(this.player.buffs.nextAttackBonus) || 0)) + bonus;
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：镜返定势，下一次攻击 +${bonus}`);
+                }
+            } else {
+                const enemyDebuffPressure = (Array.isArray(this.enemies) ? this.enemies : []).reduce((maxCount, enemy) => {
+                    if (!enemy || enemy.currentHp <= 0) return maxCount;
+                    return Math.max(maxCount, this.getChapterBattlefieldDebuffKeys(enemy).length);
+                }, 0);
+                if (enemyDebuffPressure > 0) {
+                    this.player.gainEnergy(1);
+                    if (enemyDebuffPressure >= 2 && typeof this.player.drawCards === 'function') {
+                        this.player.drawCards(1);
+                        Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：借咒回身，灵力 +1，抽牌 +1`);
+                        this.markUIDirty('hand', 'piles');
+                    } else {
+                        Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：借咒回身，灵力 +1`);
+                    }
+                } else {
+                    const block = 2 + stageIndex;
+                    this.player.addBlock(block);
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：镜面尚静，先获得 ${block} 护盾`);
+                }
+            }
+        } else if (field.chapterIndex === 5) {
+            if (phase.id === 'blood_rise') {
+                const hpLoss = Math.min(
+                    Math.max(0, Math.floor(Number(this.player?.currentHp || 0)) - 1),
+                    stageIndex >= 3 ? 2 : 1
+                );
+                if (hpLoss > 0) {
+                    this.player.currentHp = Math.max(1, Math.floor(Number(this.player.currentHp) || 1) - hpLoss);
+                }
+                this.player.gainEnergy(1);
+                Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：失去 ${hpLoss} 生命，灵力 +1`);
+            } else {
+                const baseBonus = 3 + stageIndex * 2;
+                this.player.buffs = this.player.buffs && typeof this.player.buffs === 'object' ? this.player.buffs : {};
+                if (hpRatio <= 0.5) {
+                    const block = 2 + stageIndex;
+                    this.player.addBlock(block);
+                    this.player.buffs.nextAttackBonus = Math.max(0, Math.floor(Number(this.player.buffs.nextAttackBonus) || 0)) + baseBonus + 2;
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：血线已压低，获得 ${block} 护盾，下一次攻击 +${baseBonus + 2}`);
+                } else {
+                    const hpLoss = Math.min(
+                        Math.max(0, Math.floor(Number(this.player?.currentHp || 0)) - 1),
+                        2
+                    );
+                    if (hpLoss > 0) {
+                        this.player.currentHp = Math.max(1, Math.floor(Number(this.player.currentHp) || 1) - hpLoss);
+                    }
+                    this.player.buffs.nextAttackBonus = Math.max(0, Math.floor(Number(this.player.buffs.nextAttackBonus) || 0)) + baseBonus;
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：失去 ${hpLoss} 生命，下一次攻击 +${baseBonus}`);
+                }
+            }
+        } else if (field.chapterIndex === 6) {
+            if (phase.id === 'many_axes_verdict') {
+                const bonus = 3 + Math.max(0, Math.floor(Number(synergy?.axes) || 0)) + Math.min(2, Math.max(0, Math.floor(Number(synergy?.lawCount) || 0)));
+                const block = 2 + stageIndex + Math.max(0, Math.floor(Number(synergy?.vowCount) || 0) - 1);
+                this.player.buffs = this.player.buffs && typeof this.player.buffs === 'object' ? this.player.buffs : {};
+                this.player.buffs.nextAttackBonus = Math.max(0, Math.floor(Number(this.player.buffs.nextAttackBonus) || 0)) + bonus;
+                this.player.addBlock(block);
+                this.player.gainEnergy(1);
+                if (Math.max(0, Math.floor(Number(synergy?.axes) || 0)) >= 5 && typeof this.player.drawCards === 'function') {
+                    this.player.drawCards(1);
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：${synergy.axes} 轴同判，获得 ${block} 护盾，灵力 +1，下一次攻击 +${bonus}，抽牌 +1`);
+                    this.markUIDirty('hand', 'piles');
+                } else {
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：${synergy.axes} 轴同判，获得 ${block} 护盾，灵力 +1，下一次攻击 +${bonus}`);
+                }
+            } else if (phase.id === 'court_amend') {
+                const block = 4 + stageIndex + Math.max(0, Math.floor(Number(synergy?.axes) || 0) - 1);
+                this.player.addBlock(block);
+                if (Math.max(0, Math.floor(Number(synergy?.lawCount) || 0)) >= 2) {
+                    const bonus = 2 + stageIndex;
+                    this.player.buffs = this.player.buffs && typeof this.player.buffs === 'object' ? this.player.buffs : {};
+                    this.player.buffs.nextAttackBonus = Math.max(0, Math.floor(Number(this.player.buffs.nextAttackBonus) || 0)) + bonus;
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：补题稳势，获得 ${block} 护盾，下一次攻击 +${bonus}`);
+                } else {
+                    Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：补题稳势，获得 ${block} 护盾`);
+                }
+            } else {
+                const block = 5 + stageIndex;
+                const energyGain = Math.max(0, Math.floor(Number(synergy?.axes) || 0)) >= 3 ? 1 : 0;
+                this.player.addBlock(block);
+                if (energyGain > 0) {
+                    this.player.gainEnergy(energyGain);
+                }
+                Utils.showBattleLog(`【天象·${field.omen.name}】${phase.label}：当前合式 ${Math.max(0, Math.floor(Number(synergy?.axes) || 0))} 轴，获得 ${block} 护盾${energyGain > 0 ? `，灵力 +${energyGain}` : ''}`);
+            }
+        }
+
+        if (field.formation) {
+            field.formation.firstDamageResolvedPlayerTurn = 0;
+            field.formation.anchorProcPlayerTurn = 0;
+        }
+
+        this.refreshChapterBattlefieldState();
+        this.markUIDirty('environment', 'player', 'enemies', 'hand', 'energy', 'piles');
+        return field;
+    }
+
+    handleChapterBattlefieldCardPlayed(card = null) {
+        const field = this.activeChapterBattlefield;
+        if (!field) return;
+
+        if (field.chapterIndex === 3) {
+            if (Math.max(0, Math.floor(Number(this.cardsPlayedThisTurn) || 0)) <= 0) return;
+            if (this.cardsPlayedThisTurn % 3 !== 0) return;
+
+            const block = 2 + Math.max(1, Math.min(3, Math.floor(Number(field.stageIndex) || 1)));
+            this.player.addBlock(block);
+            Utils.showBattleLog(`【地脉·${field.leyline.name}】三连成势：第 ${this.cardsPlayedThisTurn} 张牌触发 ${block} 护盾`);
+            this.markUIDirty('player', 'environment');
+            this.refreshChapterBattlefieldState();
+            return;
+        }
+
+        if (field.chapterIndex === 6) {
+            const synergy = this.getChapterBattlefieldSynergyState();
+            field.synergy = synergy;
+            if ((Number(synergy.axes) || 0) >= 4 && Math.max(0, Math.floor(Number(this.cardsPlayedThisTurn) || 0)) > 0 && this.cardsPlayedThisTurn % 4 === 0) {
+                const block = 2 + Math.max(0, Math.floor(Number(synergy.axes) || 0));
+                this.player.addBlock(block);
+                Utils.showBattleLog(`【地脉·${field.leyline.name}】终章合式：第 ${this.cardsPlayedThisTurn} 张牌回护 ${block}`);
+                this.markUIDirty('player', 'environment');
+            }
+            this.refreshChapterBattlefieldState();
+        }
+    }
+
+    applyChapterBattlefieldPlayerDamageModifiers(enemy, amount, sourceElement = null) {
+        const field = this.activeChapterBattlefield;
+        if (!field || !enemy || amount <= 0) return amount;
+
+        const hpRatio = Math.max(0, Number(this.player?.currentHp || 0)) / Math.max(1, Number(this.player?.maxHp || 1));
+        const playerTurn = this.getChapterBattlefieldPlayerTurn();
+
+        if (field.chapterIndex === 1 && hpRatio <= 0.55) {
+            const bonus = Math.max(1, Math.floor(amount * (0.08 + field.stageIndex * 0.04)));
+            amount += bonus;
+            if (field.turnState.lowHpDamageBonusTurn !== playerTurn) {
+                field.turnState.lowHpDamageBonusTurn = playerTurn;
+                Utils.showBattleLog(`【地脉·${field.leyline.name}】低血追命：本回合攻击压强继续抬升`);
+            }
+        } else if (field.chapterIndex === 2 && Math.max(0, Math.floor(Number(this.player?.block) || 0)) > 0) {
+            const currentBlock = Math.max(0, Math.floor(Number(this.player?.block) || 0));
+            const bonus = Math.max(1, Math.floor(Math.min(currentBlock, 18 + field.stageIndex * 4) * 0.25));
+            amount += bonus;
+            if (field.turnState.forgeDamageBonusTurn !== playerTurn) {
+                field.turnState.forgeDamageBonusTurn = playerTurn;
+                Utils.showBattleLog(`【地脉·${field.leyline.name}】护阵反锻：护盾正在反哺你的输出`);
+            }
+        } else if (field.chapterIndex === 4) {
+            const debuffCount = this.getChapterBattlefieldDebuffKeys(enemy).length;
+            if (debuffCount > 0) {
+                const bonus = Math.max(1, debuffCount * (1 + Math.max(1, Math.min(3, Math.floor(Number(field.stageIndex) || 1)))));
+                amount += bonus;
+                if (field.turnState.mirrorEchoTurn !== playerTurn) {
+                    field.turnState.mirrorEchoTurn = playerTurn;
+                    Utils.showBattleLog(`【地脉·${field.leyline.name}】幻咒回波：敌方减益被折成额外伤害`);
+                }
+            }
+        } else if (field.chapterIndex === 6) {
+            const synergy = this.getChapterBattlefieldSynergyState();
+            field.synergy = synergy;
+            if (Math.max(0, Math.floor(Number(synergy.axes) || 0)) >= 2) {
+                const bonus = Math.max(
+                    1,
+                    Math.floor(amount * (0.03 * Math.max(0, Math.floor(Number(synergy.axes) || 0))))
+                    + Math.min(3, Math.max(0, Math.floor(Number(synergy.lawCount) || 0)))
+                );
+                amount += bonus;
+                if (field.turnState.finalCourtBonusTurn !== playerTurn) {
+                    field.turnState.finalCourtBonusTurn = playerTurn;
+                    Utils.showBattleLog(`【地脉·${field.leyline.name}】终章合式：${synergy.axes} 轴联动正在放大本回合输出`);
+                }
+            }
+        } else if (field.chapterIndex === 5 && hpRatio <= 0.5) {
+            const bonus = Math.max(1, Math.floor(amount * (0.05 + field.stageIndex * 0.05)));
+            amount += bonus;
+            if (field.turnState.lowHpDamageBonusTurn !== playerTurn) {
+                field.turnState.lowHpDamageBonusTurn = playerTurn;
+                Utils.showBattleLog(`【地脉·${field.leyline.name}】狂脉噬战：压血后伤害继续放大`);
+            }
+        }
+
+        return amount;
+    }
+
+    handleChapterBattlefieldEnemyDamaged(enemy, damage, sourceElement = null) {
+        const field = this.activeChapterBattlefield;
+        const formation = field?.formation;
+        if (!field || !formation || !formation.active || formation.broken || !enemy || damage <= 0) return;
+
+        const playerTurn = this.getChapterBattlefieldPlayerTurn();
+        const anchor = this.getChapterFormationAnchorEnemy();
+        if (!anchor) return;
+
+        if (field.chapterIndex === 1 && enemy === anchor && formation.anchorProcPlayerTurn !== playerTurn) {
+            const block = 1 + Math.max(1, Math.min(3, Math.floor(Number(field.stageIndex) || 1)));
+            formation.anchorProcPlayerTurn = playerTurn;
+            this.player.addBlock(block);
+            Utils.showBattleLog(`【阵面·${formation.name}】命中锋核，转成 ${block} 护盾`);
+            this.markUIDirty('player', 'environment');
+            return;
+        }
+
+        if (field.chapterIndex === 2 && formation.firstDamageResolvedPlayerTurn !== playerTurn) {
+            formation.firstDamageResolvedPlayerTurn = playerTurn;
+            if (enemy === anchor) {
+                const block = 2 + Math.max(1, Math.min(3, Math.floor(Number(field.stageIndex) || 1)));
+                this.player.addBlock(block);
+                this.player.gainEnergy(1);
+                Utils.showBattleLog(`【阵面·${formation.name}】先敲炉锚，获得 ${block} 护盾，灵力 +1`);
+                this.markUIDirty('player', 'energy', 'environment');
+            } else {
+                const reforge = 3 + Math.max(1, Math.min(3, Math.floor(Number(field.stageIndex) || 1)));
+                anchor.block = Math.max(0, Math.floor(Number(anchor.block) || 0)) + reforge;
+                Utils.showBattleLog(`【阵面·${formation.name}】误击淬卫，${anchor.name} 返铸 ${reforge} 护盾`);
+                this.markUIDirty('enemies', 'environment');
+            }
+            this.refreshChapterBattlefieldState();
+            return;
+        }
+
+        if (field.chapterIndex === 3 && formation.firstDamageResolvedPlayerTurn !== playerTurn) {
+            formation.firstDamageResolvedPlayerTurn = playerTurn;
+            if (enemy === anchor) {
+                if (typeof this.player.drawCards === 'function') {
+                    this.player.drawCards(1);
+                    Utils.showBattleLog(`【阵面·${formation.name}】先手拆星核，抽牌 +1`);
+                    this.markUIDirty('hand', 'piles', 'environment');
+                }
+            } else {
+                const block = 4 + Math.max(1, Math.min(3, Math.floor(Number(field.stageIndex) || 1)));
+                anchor.block = Math.max(0, Math.floor(Number(anchor.block) || 0)) + block;
+                Utils.showBattleLog(`【阵面·${formation.name}】首拍失手，${anchor.name} 回护 ${block}`);
+                this.markUIDirty('enemies', 'environment');
+            }
+            return;
+        }
+
+        if (field.chapterIndex === 4 && formation.firstDamageResolvedPlayerTurn !== playerTurn) {
+            formation.firstDamageResolvedPlayerTurn = playerTurn;
+            if (enemy === anchor) {
+                const cleaned = this.cleansePlayerDebuffs(1);
+                if (cleaned > 0) {
+                    const block = 2 + Math.max(1, Math.min(3, Math.floor(Number(field.stageIndex) || 1)));
+                    this.player.addBlock(block);
+                    Utils.showBattleLog(`【阵面·${formation.name}】先拆镜心，净化 ${cleaned} 层减益并获得 ${block} 护盾`);
+                    this.markUIDirty('player', 'environment');
+                } else if (typeof this.player.drawCards === 'function') {
+                    this.player.drawCards(1);
+                    Utils.showBattleLog(`【阵面·${formation.name}】先拆镜心，抽牌 +1`);
+                    this.markUIDirty('hand', 'piles', 'environment');
+                }
+            } else {
+                anchor.buffs = anchor.buffs && typeof anchor.buffs === 'object' ? anchor.buffs : {};
+                anchor.buffs.reflect = Math.max(0, Math.floor(Number(anchor.buffs.reflect) || 0)) + 1;
+                Utils.showBattleLog(`【阵面·${formation.name}】误击幻从，${anchor.name} 进入反照`);
+                this.markUIDirty('enemies', 'environment');
+            }
+            this.refreshChapterBattlefieldState();
+            return;
+        }
+
+        if (field.chapterIndex === 5 && enemy === anchor && formation.anchorProcPlayerTurn !== playerTurn) {
+            const heal = 1 + Math.max(1, Math.min(3, Math.floor(Number(field.stageIndex) || 1)));
+            formation.anchorProcPlayerTurn = playerTurn;
+            if (typeof this.player.heal === 'function') {
+                this.player.heal(heal);
+            }
+            Utils.showBattleLog(`【阵面·${formation.name}】压中祭眼，回生 ${heal}`);
+            this.markUIDirty('player', 'environment');
+            this.refreshChapterBattlefieldState();
+            return;
+        }
+
+        if (field.chapterIndex === 6 && formation.firstDamageResolvedPlayerTurn !== playerTurn) {
+            formation.firstDamageResolvedPlayerTurn = playerTurn;
+            const synergy = this.getChapterBattlefieldSynergyState();
+            field.synergy = synergy;
+            if (enemy === anchor) {
+                const bonus = 2 + Math.max(1, Math.min(3, Math.floor(Number(field.stageIndex) || 1))) + Math.max(0, Math.floor(Number(synergy.axes) || 0) - 2);
+                this.player.buffs = this.player.buffs && typeof this.player.buffs === 'object' ? this.player.buffs : {};
+                this.player.buffs.nextAttackBonus = Math.max(0, Math.floor(Number(this.player.buffs.nextAttackBonus) || 0)) + bonus;
+                if (Math.max(0, Math.floor(Number(synergy.axes) || 0)) >= 3) {
+                    this.player.gainEnergy(1);
+                }
+                if (Math.max(0, Math.floor(Number(synergy.axes) || 0)) >= 5 && typeof this.player.drawCards === 'function') {
+                    this.player.drawCards(1);
+                    Utils.showBattleLog(`【阵面·${formation.name}】先击终审，下一次攻击 +${bonus}，灵力 +1，抽牌 +1`);
+                    this.markUIDirty('hand', 'piles', 'player', 'energy', 'environment');
+                } else {
+                    Utils.showBattleLog(`【阵面·${formation.name}】先击终审，下一次攻击 +${bonus}${Math.max(0, Math.floor(Number(synergy.axes) || 0)) >= 3 ? '，灵力 +1' : ''}`);
+                    this.markUIDirty('player', 'energy', 'environment');
+                }
+            } else {
+                const guard = 3 + Math.max(1, Math.min(3, Math.floor(Number(field.stageIndex) || 1))) + Math.max(0, 4 - Math.floor(Number(synergy.axes) || 0));
+                anchor.block = Math.max(0, Math.floor(Number(anchor.block) || 0)) + guard;
+                Utils.showBattleLog(`【阵面·${formation.name}】先碰律从，${anchor.name} 因答卷缺轴回护 ${guard}`);
+                this.markUIDirty('enemies', 'environment');
+            }
+            this.refreshChapterBattlefieldState();
+        }
+    }
+
+    handleChapterBattlefieldEnemyKilled(enemy) {
+        const field = this.activeChapterBattlefield;
+        const formation = field?.formation;
+        if (!field || !formation || !formation.active || formation.broken || !enemy) return;
+        if (String(enemy.id || enemy.name || '') !== String(formation.anchorEnemyId || '')) return;
+
+        formation.broken = true;
+        formation.active = false;
+        formation.detail = `${formation.anchorRoleLabel}已碎，敌阵失衡`;
+
+        const survivors = (this.enemies || []).filter((target) => target && target.currentHp > 0);
+        if (field.chapterIndex === 1) {
+            survivors.forEach((target) => {
+                target.buffs = target.buffs && typeof target.buffs === 'object' ? target.buffs : {};
+                target.buffs.weak = Math.max(0, Math.floor(Number(target.buffs.weak) || 0)) + 1;
+            });
+            Utils.showBattleLog(`【阵面·${formation.name}】锋核已碎，其余敌人陷入虚弱`);
+        } else if (field.chapterIndex === 2) {
+            this.player.gainEnergy(1);
+            survivors.forEach((target) => {
+                target.block = 0;
+                target.buffs = target.buffs && typeof target.buffs === 'object' ? target.buffs : {};
+                target.buffs.weak = Math.max(0, Math.floor(Number(target.buffs.weak) || 0)) + 1;
+            });
+            Utils.showBattleLog(`【阵面·${formation.name}】炉锚已碎，灵力 +1，残敌护盾尽失并陷入虚弱`);
+        } else if (field.chapterIndex === 3) {
+            this.player.gainEnergy(1);
+            Utils.showBattleLog(`【阵面·${formation.name}】星核崩解，灵力 +1`);
+        } else if (field.chapterIndex === 4) {
+            const cleaned = this.cleansePlayerDebuffs(2);
+            this.player.gainEnergy(1);
+            survivors.forEach((target) => {
+                target.buffs = target.buffs && typeof target.buffs === 'object' ? target.buffs : {};
+                target.buffs.vulnerable = Math.max(0, Math.floor(Number(target.buffs.vulnerable) || 0)) + 1;
+            });
+            Utils.showBattleLog(`【阵面·${formation.name}】镜心已碎，灵力 +1${cleaned > 0 ? `，净化 ${cleaned} 层减益` : ''}${survivors.length > 0 ? '，残敌陷入易伤' : ''}`);
+        } else if (field.chapterIndex === 5) {
+            this.player.gainEnergy(1);
+            survivors.forEach((target) => {
+                target.buffs = target.buffs && typeof target.buffs === 'object' ? target.buffs : {};
+                target.buffs.vulnerable = Math.max(0, Math.floor(Number(target.buffs.vulnerable) || 0)) + 1;
+            });
+            Utils.showBattleLog(`【阵面·${formation.name}】祭眼已灭，灵力 +1，残敌陷入易伤`);
+        } else if (field.chapterIndex === 6) {
+            const synergy = this.getChapterBattlefieldSynergyState();
+            field.synergy = synergy;
+            const cleaned = this.cleansePlayerDebuffs(Math.max(1, Math.floor(Number(synergy.axes) || 0) >= 4 ? 2 : 1));
+            if (Math.max(0, Math.floor(Number(synergy.axes) || 0)) >= 3) {
+                this.player.gainEnergy(1);
+            }
+            survivors.forEach((target) => {
+                target.buffs = target.buffs && typeof target.buffs === 'object' ? target.buffs : {};
+                target.buffs.weak = Math.max(0, Math.floor(Number(target.buffs.weak) || 0)) + 1;
+                if (Math.max(0, Math.floor(Number(synergy.axes) || 0)) >= 4) {
+                    target.buffs.vulnerable = Math.max(0, Math.floor(Number(target.buffs.vulnerable) || 0)) + 1;
+                }
+            });
+            Utils.showBattleLog(`【阵面·${formation.name}】终审已破${Math.max(0, Math.floor(Number(synergy.axes) || 0)) >= 3 ? '，灵力 +1' : ''}${cleaned > 0 ? `，净化 ${cleaned} 层减益` : ''}${survivors.length > 0 ? `，残敌陷入${Math.max(0, Math.floor(Number(synergy.axes) || 0)) >= 4 ? '虚弱与易伤' : '虚弱'}` : ''}`);
+        }
+
+        this.refreshChapterBattlefieldState();
+        this.markUIDirty('environment', 'player', 'enemies', 'energy');
+    }
+
+    handleChapterBattlefieldPlayerDamaged(damage, enemy = null, pattern = null) {
+        const field = this.activeChapterBattlefield;
+        if (!field || damage <= 0) return;
+
+        const playerTurn = this.getChapterBattlefieldPlayerTurn();
+        const stageIndex = Math.max(1, Math.min(3, Math.floor(Number(field.stageIndex) || 1)));
+
+        if (field.chapterIndex === 2) {
+            if (field.turnState.forgeRetaliationTurn === playerTurn) return;
+            field.turnState.forgeRetaliationTurn = playerTurn;
+            const bonus = 3 + stageIndex;
+            this.player.buffs = this.player.buffs && typeof this.player.buffs === 'object' ? this.player.buffs : {};
+            this.player.buffs.nextAttackBonus = Math.max(0, Math.floor(Number(this.player.buffs.nextAttackBonus) || 0)) + bonus;
+            Utils.showBattleLog(`【地脉·${field.leyline.name}】回炉反击：受创后，下一次攻击 +${bonus}`);
+            this.refreshChapterBattlefieldState();
+            this.markUIDirty('player', 'environment');
+            return;
+        }
+
+        if (field.chapterIndex === 4) {
+            if (field.turnState.mirrorCleanseTurn === playerTurn) return;
+            field.turnState.mirrorCleanseTurn = playerTurn;
+            const cleaned = this.cleansePlayerDebuffs(1);
+            const block = 2 + stageIndex + cleaned;
+            this.player.addBlock(block);
+            Utils.showBattleLog(`【地脉·${field.leyline.name}】镜后退相：${cleaned > 0 ? `净化 ${cleaned} 层减益并` : ''}获得 ${block} 护盾`);
+            this.refreshChapterBattlefieldState();
+            this.markUIDirty('player', 'environment');
+            return;
+        }
+
+        if (field.chapterIndex === 5) {
+            if (field.turnState.bloodGuardTurn === playerTurn) return;
+            field.turnState.bloodGuardTurn = playerTurn;
+
+            const block = 3 + stageIndex;
+            this.player.addBlock(block);
+            Utils.showBattleLog(`【地脉·${field.leyline.name}】狂脉回护：受创后立刻获得 ${block} 护盾`);
+            this.refreshChapterBattlefieldState();
+            this.markUIDirty('player', 'environment');
+            return;
+        }
+
+        if (field.chapterIndex === 6) {
+            if (field.turnState.finalCourtGuardTurn === playerTurn) return;
+            field.turnState.finalCourtGuardTurn = playerTurn;
+            const synergy = this.getChapterBattlefieldSynergyState();
+            field.synergy = synergy;
+            const block = 2 + stageIndex + Math.max(0, Math.floor(Number(synergy.axes) || 0));
+            const cleaned = Math.max(0, Math.floor(Number(synergy.axes) || 0)) >= 4 ? this.cleansePlayerDebuffs(1) : 0;
+            this.player.addBlock(block);
+            Utils.showBattleLog(`【地脉·${field.leyline.name}】编庭复判：受创后获得 ${block} 护盾${cleaned > 0 ? `，净化 ${cleaned} 层减益` : ''}`);
+            this.refreshChapterBattlefieldState();
+            this.markUIDirty('player', 'environment');
+        }
+    }
+
+    getChapterBattlefieldDisplayState() {
+        const field = this.activeChapterBattlefield;
+        if (!field || typeof field !== 'object') return null;
+        this.refreshChapterBattlefieldState();
+
+        return {
+            chapterIndex: Math.max(1, Math.floor(Number(field.chapterIndex) || 1)),
+            chapterName: field.chapterName || '',
+            stageIndex: Math.max(1, Math.min(3, Math.floor(Number(field.stageIndex) || 1))),
+            stageLabel: field.stageLabel || '',
+            omen: {
+                name: field.omen?.name || '',
+                desc: field.omen?.desc || '',
+                phaseId: field.omen?.phaseId || '',
+                phaseLabel: field.omen?.phaseLabel || '',
+                phaseDesc: field.omen?.phaseDesc || ''
+            },
+            leyline: {
+                name: field.leyline?.name || '',
+                desc: field.leyline?.desc || '',
+                activeLabel: field.leyline?.activeLabel || '',
+                activeDesc: field.leyline?.activeDesc || ''
+            },
+            synergy: field.synergy
+                ? {
+                    axes: Math.max(0, Math.floor(Number(field.synergy.axes) || 0)),
+                    destinyActive: !!field.synergy.destinyActive,
+                    vowCount: Math.max(0, Math.floor(Number(field.synergy.vowCount) || 0)),
+                    lawCount: Math.max(0, Math.floor(Number(field.synergy.lawCount) || 0)),
+                    treasureCount: Math.max(0, Math.floor(Number(field.synergy.treasureCount) || 0)),
+                    activeSets: Math.max(0, Math.floor(Number(field.synergy.activeSets) || 0)),
+                    spiritActive: !!field.synergy.spiritActive
+                }
+                : null,
+            formation: field.formation
+                ? {
+                    id: field.formation.id || '',
+                    name: field.formation.name || '',
+                    tag: field.formation.tag || '',
+                    desc: field.formation.desc || '',
+                    hint: field.formation.hint || '',
+                    active: !!field.formation.active,
+                    broken: !!field.formation.broken,
+                    detail: field.formation.detail || '',
+                    anchorEnemyName: field.formation.anchorEnemyName || ''
+                }
+                : null
+        };
+    }
+
     createDefaultBattleCommandState() {
         return {
             enabled: false,
@@ -2049,6 +3628,9 @@ class Battle {
         const baseCost = Math.max(1, Math.floor(Number(command.cost) || 1));
         const path = String(this.player?.fateRing?.path || '');
         const doctrineProfile = this.getPathDoctrineProfile(path);
+        const vowEffects = this.player && typeof this.player.getRunVowEffects === 'function'
+            ? this.player.getRunVowEffects()
+            : {};
         const hpRatio = Number(this.player?.maxHp) > 0
             ? (Number(this.player?.currentHp) || 0) / Number(this.player.maxHp)
             : 1;
@@ -2079,6 +3661,7 @@ class Battle {
         if (this.getBattleCommandEndlessPressure() >= 8) {
             discount += 1;
         }
+        discount += Math.max(0, Math.floor(Number(vowEffects.commandCostDiscount) || 0));
 
         return Math.max(1, baseCost - discount);
     }
@@ -2106,9 +3689,19 @@ class Battle {
         this.commandState.initialized = true;
         const path = String(this.player?.fateRing?.path || '');
         const pressure = this.getBattleCommandEndlessPressure();
+        const vowEffects = this.player && typeof this.player.getRunVowEffects === 'function'
+            ? this.player.getRunVowEffects()
+            : {};
         const baseCap = pressure >= 6 ? 14 : 12;
-        this.commandState.maxPoints = baseCap + (path === 'insight' ? 1 : 0);
-        this.commandState.points = Math.min(this.commandState.maxPoints, 3 + (pressure >= 8 ? 1 : 0));
+        this.commandState.maxPoints = baseCap
+            + (path === 'insight' ? 1 : 0)
+            + Math.max(0, Math.floor(Number(vowEffects.battleCommandPointCapBonus) || 0));
+        this.commandState.points = Math.min(
+            this.commandState.maxPoints,
+            3
+            + (pressure >= 8 ? 1 : 0)
+            + Math.max(0, Math.floor(Number(vowEffects.initialCommandPointsBonus) || 0))
+        );
         this.commandState.commands = loadout;
         this.commandState.turnCommandsUsed = 0;
         this.commandState.totalCommandsUsed = 0;
@@ -2124,6 +3717,12 @@ class Battle {
             const path = String(this.player?.fateRing?.path || '');
             const doctrineProfile = this.getPathDoctrineProfile(path);
             const archetype = String(this.player?.archetypeResonance?.id || '');
+            const hasSelfHarmCard = Array.isArray(card.effects) && card.effects.some((effect) => (
+                effect && (effect.type === 'selfDamage' || effect.type === 'addStatus')
+            ));
+            const hasForgeCard = Array.isArray(card.effects) && card.effects.some((effect) => (
+                effect && effect.type === 'createCard'
+            ));
 
             let gain = 1;
             if (card.type === 'attack') gain += 1;
@@ -2136,6 +3735,8 @@ class Battle {
             }
             if (archetype === 'entropy' && card.type === 'skill') gain += 1;
             if (archetype === 'bulwark' && card.type === 'defend') gain += 1;
+            if (archetype === 'cursebound' && hasSelfHarmCard) gain += 1;
+            if (archetype === 'soulforge' && (card.type === 'power' || hasForgeCard)) gain += 1;
             if (this.cardsPlayedThisTurn >= 4) gain += 1;
             this.gainBattleCommandPoints(gain, 'card');
         });
@@ -3554,6 +5155,7 @@ class Battle {
         this.isTurnTransitioning = false;
         this.currentCardProcessToken = 0;
         this.pendingLifeSteal = 0;
+        this.activeChapterBattlefield = null;
         this.selectedCardIndex = -1;
         this.playerTookDamage = false; // For Trial Challenge
         this.player.resurrectCount = 0; // Reset resurrection counter
@@ -3576,6 +5178,7 @@ class Battle {
 
         // 玩家回合开始
         this.player.startTurn();
+        this.applySpiritCompanionBattleStart();
 
         if (this.player.archetypeResonance) {
             const res = this.player.archetypeResonance;
@@ -3640,6 +5243,7 @@ class Battle {
         if (encounterTheme) {
             this.applyEncounterThemeProfile(encounterTheme);
         }
+        this.initializeChapterBattlefieldRules();
         if (this.activeSquadEcology && this.activeSquadEcology.tag) {
             Utils.showBattleLog(`【敌阵生态】${this.activeSquadEcology.name}：${this.activeSquadEcology.desc}`);
         }
@@ -4322,6 +5926,12 @@ class Battle {
         }, 0);
         const playerBlock = Math.max(0, Math.floor(Number(this.player?.block) || 0));
         const resonance = this.player?.archetypeResonance || null;
+        const destiny = this.player && typeof this.player.getRunDestinyMeta === 'function'
+            ? this.player.getRunDestinyMeta()
+            : null;
+        const activeVows = this.player && typeof this.player.getRunVowMetas === 'function'
+            ? this.player.getRunVowMetas()
+            : [];
         const bossDisplay = this.getBossActDisplayState();
         const islands = [];
         const pushIsland = (id, label, value, tone) => {
@@ -4356,6 +5966,24 @@ class Battle {
         } else {
             pushIsland('resonance', '共鸣', '未成型', 'muted');
         }
+        if (destiny && destiny.name) {
+            pushIsland(
+                'destiny',
+                '命格',
+                `${destiny.icon || '✦'} ${destiny.name}`,
+                destiny.category === '赌博' ? 'warning' : 'fate'
+            );
+        }
+        if (Array.isArray(activeVows) && activeVows.length > 0) {
+            const leadVow = activeVows[0];
+            const extraTag = activeVows.length > 1 ? ` +${activeVows.length - 1}` : '';
+            pushIsland(
+                'vow',
+                '誓约',
+                `${leadVow.icon || '✧'} ${leadVow.name}${extraTag}`,
+                leadVow.category === '赌博' ? 'warning' : 'oath'
+            );
+        }
         if (bossDisplay && bossDisplay.act) {
             pushIsland('boss', 'Boss幕', bossDisplay.act.name || `第${Math.max(1, Number(bossDisplay.index) + 1)}幕`, 'boss');
         } else if (Number(profile.lowestEnemyHp) > 0) {
@@ -4367,7 +5995,7 @@ class Battle {
             );
         }
 
-        return islands.slice(0, 4);
+        return islands.slice(0, 5);
     }
 
     resolveBattleAdvisorInspectCardIndex(cardPlanSteps = null) {
@@ -4471,6 +6099,10 @@ class Battle {
                 return `弃牌 ${Math.max(1, value || 1)}`;
             case 'discardRandom':
                 return `随机弃牌 ${Math.max(1, value || 1)}`;
+            case 'addStatus':
+                return `置入状态牌 ${Math.max(1, count || value || 1)}`;
+            case 'createCard':
+                return `生成 ${Math.max(1, count || value || 1)} 张构件`;
             case 'buff':
                 return `获得 ${buffNames[effect.buffType] || effect.buffType || '增益'} ${Math.max(1, value || 1)}`;
             case 'debuff':
@@ -5491,8 +7123,10 @@ class Battle {
 
             // 计数与追踪
             this.cardsPlayedThisTurn++;
+            this.handleChapterBattlefieldCardPlayed(card);
             this.recordTurnAdvisorCardUsage(card, cardThreatProfile);
             if (card.type === 'attack') this.playerAttackedThisTurn = true;
+            this.handleSpiritCompanionCardPlayed(card);
             this.emit('cardPlayed', {
                 card,
                 target,
@@ -5701,6 +7335,20 @@ class Battle {
             case 'draw':
                 Utils.showBattleLog(`抽取 ${result.value} 张牌`);
                 break;
+
+            case 'addStatus':
+            case 'createCard': {
+                const count = Math.max(0, Math.floor(Number(result.count) || 0));
+                const zoneLabel = result.zone === 'hand' ? '手牌' : (result.zone === 'draw' ? '牌库顶' : '弃牌堆');
+                const names = Array.isArray(result.cards)
+                    ? Array.from(new Set(result.cards.map((card) => card && card.name).filter(Boolean)))
+                    : [];
+                const leadName = names.length === 1 ? names[0] : (result.type === 'addStatus' ? '状态牌' : '构件');
+                if (count > 0) {
+                    Utils.showBattleLog(`${result.type === 'addStatus' ? '置入' : '生成'} ${count} 张${leadName}（${zoneLabel}）`);
+                }
+                break;
+            }
 
             case 'discardRandom': {
                 const count = Math.min(result.value || 1, this.player.hand.length);
@@ -6020,6 +7668,78 @@ class Battle {
 
         // 传承道统：每场战斗首次攻击增伤
         const doctrine = this.player && this.player.legacyRunDoctrine ? this.player.legacyRunDoctrine : null;
+        const destinyMeta = this.player && typeof this.player.getRunDestinyMeta === 'function'
+            ? this.player.getRunDestinyMeta()
+            : null;
+        const destinyEffects = destinyMeta && destinyMeta.effects ? destinyMeta.effects : null;
+        const destinyBattleState = this.player && this.player.runDestinyBattleState ? this.player.runDestinyBattleState : null;
+        const vowEffects = this.player && typeof this.player.getRunVowEffects === 'function'
+            ? this.player.getRunVowEffects()
+            : null;
+        const vowBattleState = this.player && this.player.runVowBattleState ? this.player.runVowBattleState : null;
+        const spiritMeta = this.player && typeof this.player.getSpiritCompanionMeta === 'function'
+            ? this.player.getSpiritCompanionMeta()
+            : null;
+        const spiritPassive = this.player && typeof this.player.getSpiritCompanionEffects === 'function'
+            ? (this.player.getSpiritCompanionEffects().passive || {})
+            : {};
+        if (
+            destinyMeta
+            && destinyEffects
+            && destinyBattleState
+            && Number(destinyEffects.firstAttackBonusPerBattle) > 0
+            && !destinyBattleState.firstAttackBonusUsed
+            && sourceElement !== 'plasma_proc'
+        ) {
+            const bonus = Math.max(0, Math.floor(Number(destinyEffects.firstAttackBonusPerBattle) || 0));
+            if (bonus > 0) {
+                amount += bonus;
+                destinyBattleState.firstAttackBonusUsed = true;
+                Utils.showBattleLog(`命格【${destinyMeta.name}】首击增伤 +${bonus}`);
+            }
+        }
+        if (
+            vowEffects
+            && vowBattleState
+            && Number(vowEffects.firstAttackBonusPerBattle) > 0
+            && !vowBattleState.firstAttackBonusUsed
+            && sourceElement !== 'plasma_proc'
+        ) {
+            const bonus = Math.max(0, Math.floor(Number(vowEffects.firstAttackBonusPerBattle) || 0));
+            if (bonus > 0) {
+                amount += bonus;
+                vowBattleState.firstAttackBonusUsed = true;
+                Utils.showBattleLog(`誓约之力：首击增伤 +${bonus}`);
+            }
+        }
+        if (
+            spiritMeta
+            && Number(spiritPassive.debuffedTargetBonusDamage) > 0
+            && sourceElement !== 'spirit_active'
+            && sourceElement !== 'spirit_passive'
+            && enemy
+            && enemy.buffs
+            && Object.keys(enemy.buffs).some((key) => Number(enemy.buffs[key]) > 0)
+        ) {
+            const bonus = Math.max(0, Math.floor(Number(spiritPassive.debuffedTargetBonusDamage) || 0));
+            if (bonus > 0) {
+                amount += bonus;
+                Utils.showBattleLog(`灵契【${spiritMeta.name}】追蚀伤害 +${bonus}`);
+            }
+        }
+        if (
+            spiritMeta
+            && Number(spiritPassive.blockedTargetBonusDamage) > 0
+            && sourceElement !== 'spirit_active'
+            && sourceElement !== 'spirit_passive'
+            && Math.max(0, Math.floor(Number(enemy?.block) || 0)) > 0
+        ) {
+            const bonus = Math.max(0, Math.floor(Number(spiritPassive.blockedTargetBonusDamage) || 0));
+            if (bonus > 0) {
+                amount += bonus;
+                Utils.showBattleLog(`灵契【${spiritMeta.name}】破势伤害 +${bonus}`);
+            }
+        }
         if (
             doctrine &&
             doctrine.firstAttackBonusPerBattle > 0 &&
@@ -6115,6 +7835,13 @@ class Battle {
         // 检查易伤
         if (enemy.buffs.vulnerable && enemy.buffs.vulnerable > 0) {
             amount += enemy.buffs.vulnerable;
+            if (destinyMeta && destinyEffects && Number(destinyEffects.vulnerableBonusDamage) > 0) {
+                const bonus = Math.max(0, Math.floor(Number(destinyEffects.vulnerableBonusDamage) || 0));
+                if (bonus > 0) {
+                    amount += bonus;
+                    Utils.showBattleLog(`命格【${destinyMeta.name}】乘势追击 +${bonus}`);
+                }
+            }
 
             const resonance = this.player && this.player.archetypeResonance ? this.player.archetypeResonance : null;
             const doctrine = this.player && this.player.legacyRunDoctrine ? this.player.legacyRunDoctrine : null;
@@ -6153,6 +7880,13 @@ class Battle {
 
         // 战斗新机制：破绽（Mark）会强化下一次受击并消耗
         if (enemy.buffs.mark && enemy.buffs.mark > 0) {
+            if (destinyMeta && destinyEffects && Number(destinyEffects.markedBonusDamage) > 0) {
+                const bonus = Math.max(0, Math.floor(Number(destinyEffects.markedBonusDamage) || 0));
+                if (bonus > 0) {
+                    amount += bonus;
+                    Utils.showBattleLog(`命格【${destinyMeta.name}】破绽追伤 +${bonus}`);
+                }
+            }
             amount += enemy.buffs.mark;
             Utils.showBattleLog(`命中破绽！额外伤害 +${enemy.buffs.mark}`);
             enemy.buffs.mark = 0;
@@ -6232,6 +7966,27 @@ class Battle {
         if (enemy.isBoss && typeof BossMechanicsHandler !== 'undefined') {
             amount = BossMechanicsHandler.processOnDamage(this, enemy, amount, 'player');
         }
+        if (
+            destinyMeta
+            && destinyEffects
+            && Number(destinyEffects.lowHpDamageBonusPct) > 0
+            && Number(destinyEffects.lowHpThreshold) > 0
+            && this.player
+            && Math.max(1, Number(this.player.maxHp) || 1) > 0
+            && (Number(this.player.currentHp) || 0) / Math.max(1, Number(this.player.maxHp) || 1) <= Number(destinyEffects.lowHpThreshold)
+        ) {
+            amount = Math.floor(amount * (1 + Math.max(0, Number(destinyEffects.lowHpDamageBonusPct) || 0)));
+        }
+        if (
+            vowEffects
+            && Number(vowEffects.lowHpDamageBonusPct) > 0
+            && Number(vowEffects.lowHpThreshold) > 0
+            && this.player
+            && Math.max(1, Number(this.player.maxHp) || 1) > 0
+            && (Number(this.player.currentHp) || 0) / Math.max(1, Number(this.player.maxHp) || 1) <= Number(vowEffects.lowHpThreshold)
+        ) {
+            amount = Math.floor(amount * (1 + Math.max(0, Number(vowEffects.lowHpDamageBonusPct) || 0)));
+        }
         amount = Math.max(0, amount);
 
         // 默认扣血逻辑
@@ -6240,6 +7995,7 @@ class Battle {
             amount = 0;
         }
         amount = Math.max(0, amount);
+        amount = this.applyChapterBattlefieldPlayerDamageModifiers(enemy, amount, sourceElement);
         let finalDamage = Math.floor(amount);
         const wasAlive = enemy.currentHp > 0;
 
@@ -6256,6 +8012,7 @@ class Battle {
 
         enemy.currentHp -= finalDamage;
         if (enemy.currentHp < 0) enemy.currentHp = 0;
+        this.handleChapterBattlefieldEnemyDamaged(enemy, finalDamage, sourceElement);
 
         // --- P0-1: Hit Stop & Screen Shake (顿帧与震屏动画) ---
         // 如果单次伤害超过怪物最大生命值的25%或者是BOSS且伤害过百，触发顿帧和重度震屏
@@ -6286,6 +8043,7 @@ class Battle {
 
         // 击杀触发
         if (wasAlive && enemy.currentHp <= 0) {
+            this.handleChapterBattlefieldEnemyKilled(enemy);
             this.onBattleCommandEnemyKilled(enemy);
             if (this.player.triggerTreasureEffect) {
                 this.player.triggerTreasureEffect('onKill', enemy);
@@ -6295,6 +8053,20 @@ class Battle {
             if (this.player.fateRing && this.player.fateRing.path === 'insight') {
                 this.player.heal(5);
                 Utils.showBattleLog('洞察之环：击杀回复 5 点生命');
+            }
+            if (destinyMeta && destinyEffects && Number(destinyEffects.onKillHeal) > 0 && this.player && typeof this.player.heal === 'function') {
+                const healAmount = Math.max(0, Math.floor(Number(destinyEffects.onKillHeal) || 0));
+                if (healAmount > 0) {
+                    this.player.heal(healAmount);
+                    Utils.showBattleLog(`命格【${destinyMeta.name}】收束回生 ${healAmount}`);
+                }
+            }
+            if (vowEffects && Number(vowEffects.onKillHeal) > 0 && this.player && typeof this.player.heal === 'function') {
+                const healAmount = Math.max(0, Math.floor(Number(vowEffects.onKillHeal) || 0));
+                if (healAmount > 0) {
+                    this.player.heal(healAmount);
+                    Utils.showBattleLog(`誓约之力：收束回生 ${healAmount}`);
+                }
             }
 
             // Update Achievements: Damage
@@ -6395,8 +8167,12 @@ class Battle {
                                 }
                             }
 
-                            this.player.takeDamage(damage);
-                            Utils.showBattleLog(`${card.name} 发作！受到 ${damage} 点伤害`);
+                            const damageResult = this.player.takeDamage(damage);
+                            const actualDamage = Math.max(0, Math.floor(Number(damageResult && damageResult.damage) || 0));
+                            if (typeof this.player.triggerArchetypeSelfDamageProc === 'function') {
+                                this.player.triggerArchetypeSelfDamageProc(actualDamage);
+                            }
+                            Utils.showBattleLog(`${card.name} 发作！受到 ${actualDamage || damage} 点伤害`);
                             const playerAvatar = document.querySelector('.player-avatar');
                             if (playerAvatar) Utils.addShakeEffect(playerAvatar);
                             await Utils.sleep(300);
@@ -6469,6 +8245,7 @@ class Battle {
             this.playerAttackedThisTurn = false;
             this.resetTurnAdvisorTelemetry();
             this.player.startTurn();
+            this.applyChapterBattlefieldTurnStart('player');
             const extraTurnBoss = this.getPrimaryBossEnemy();
             if (extraTurnBoss && extraTurnBoss.bossActState) {
                 this.processBossThreeActPlayerTurnStart(extraTurnBoss);
@@ -6533,6 +8310,7 @@ class Battle {
             }
 
             this.player.startTurn();
+            this.applyChapterBattlefieldTurnStart('player');
             const nextTurnBoss = this.getPrimaryBossEnemy();
             if (nextTurnBoss && nextTurnBoss.bossActState) {
                 this.processBossThreeActPlayerTurnStart(nextTurnBoss);
@@ -7085,6 +8863,8 @@ class Battle {
                     }
                 }
 
+                this.handleChapterBattlefieldPlayerDamaged(result.damage || 0, enemy, pattern);
+
                 // Boss 攻击后机制（如吸血、禁疗）
                 if (enemy.isBoss && typeof BossMechanicsHandler !== 'undefined') {
                     BossMechanicsHandler.processOnAttack(this, enemy, result.damage || 0, {
@@ -7145,6 +8925,8 @@ class Battle {
                             this.playerTookDamage = true;
                         }
                     }
+
+                    this.handleChapterBattlefieldPlayerDamaged(multiResult.damage || 0, enemy, pattern);
 
                     if (enemy.isBoss && typeof BossMechanicsHandler !== 'undefined') {
                         BossMechanicsHandler.processOnAttack(this, enemy, multiResult.damage || 0, {
@@ -7469,6 +9251,7 @@ class Battle {
             : (this.commandState || this.createDefaultBattleCommandState());
         const recommendation = this.resolveTacticalAdvisorRecommendation(profile);
 
+        const spirit = this.resolveBattleSpiritCompanionDisplay();
         const threatChips = [];
         if (profile.needDefend) {
             threatChips.push({ id: 'defend', label: '高爆发压制', tip: '建议保留护盾、避免裸吃连击。' });
@@ -7532,6 +9315,7 @@ class Battle {
         const endlessActive = !!(this.game && typeof this.game.isEndlessActive === 'function' && this.game.isEndlessActive());
         let matrixHint = '';
         let formationHint = '';
+        const chapterBattlefield = this.getChapterBattlefieldDisplayState();
         const cardPlanMeta = this.resolveBattleTacticalCardPlanMeta(profile, recommendation);
         const cardPlanHint = cardPlanMeta && typeof cardPlanMeta.text === 'string'
             ? cardPlanMeta.text
@@ -7591,6 +9375,25 @@ class Battle {
             }
         }
 
+        if (chapterBattlefield) {
+            const chapterSegments = [];
+            if (chapterBattlefield.formation?.hint) {
+                chapterSegments.push(chapterBattlefield.formation.hint);
+            }
+            if (chapterBattlefield.omen?.phaseLabel) {
+                chapterSegments.push(`当前天象轮段为「${chapterBattlefield.omen.phaseLabel}」`);
+            }
+            if (chapterBattlefield.leyline?.activeLabel) {
+                chapterSegments.push(`地脉抓手是「${chapterBattlefield.leyline.activeLabel}」`);
+            }
+            if (chapterSegments.length > 0) {
+                const chapterHint = chapterSegments.join(' ');
+                formationHint = formationHint
+                    ? `${formationHint} ${chapterHint}`
+                    : chapterHint;
+            }
+        }
+
         if (matrixMeta) {
             const modeId = String(runtimeState.lastResonanceMatrixMode || 'auto');
             const modeProfile = this.getResonanceMatrixModeProfile(modeId);
@@ -7639,8 +9442,256 @@ class Battle {
             matrixHint,
             lastModeLabel,
             pendingModeLabel,
-            matrixControls
+            matrixControls,
+            spirit
         };
+    }
+
+    resolveBattleSpiritCompanionDisplay() {
+        if (!this.player || typeof this.player.getSpiritCompanionMeta !== 'function') return null;
+        const meta = this.player.getSpiritCompanionMeta();
+        if (!meta) return null;
+        const state = typeof this.player.ensureSpiritCompanionBattleState === 'function'
+            ? this.player.ensureSpiritCompanionBattleState()
+            : (this.player.spiritCompanionBattleState || {});
+        const charge = Math.max(0, Math.floor(Number(state?.charge) || 0));
+        const chargeMax = Math.max(1, Math.floor(Number(meta.chargeMax) || 1));
+        return {
+            id: meta.id,
+            icon: meta.icon || '✦',
+            name: meta.name || '灵契',
+            title: meta.title || '',
+            summary: meta.summary || meta.description || '',
+            passiveLabel: meta.passiveLabel || '灵契被动',
+            passiveDesc: meta.passiveDesc || '',
+            activeLabel: meta.activeLabel || '灵契主动',
+            activeDesc: meta.activeDesc || '',
+            charge,
+            chargeMax,
+            chargeText: `${charge}/${chargeMax}`,
+            progress: Math.max(0, Math.min(100, Math.round((charge / chargeMax) * 100))),
+            ready: charge >= chargeMax
+        };
+    }
+
+    applySpiritCompanionBattleStart() {
+        if (!this.player || typeof this.player.getSpiritCompanionMeta !== 'function') return false;
+        const meta = this.player.getSpiritCompanionMeta();
+        if (!meta) return false;
+        const effects = typeof this.player.getSpiritCompanionEffects === 'function'
+            ? this.player.getSpiritCompanionEffects()
+            : { passive: {} };
+        const passive = effects.passive && typeof effects.passive === 'object' ? effects.passive : {};
+        let applied = false;
+
+        const weakAll = Math.max(0, Math.floor(Number(passive.battleStartEnemyWeakAll) || 0));
+        if (weakAll > 0) {
+            this.enemies.forEach((enemy) => {
+                if (!enemy || enemy.currentHp <= 0) return;
+                enemy.buffs = enemy.buffs || {};
+                enemy.buffs.weak = (enemy.buffs.weak || 0) + weakAll;
+            });
+            Utils.showBattleLog(`灵契【${meta.name}】开场压阵：全体敌人虚弱 +${weakAll}`);
+            applied = true;
+        }
+
+        const treasureCount = Array.isArray(this.player.equippedTreasures) ? this.player.equippedTreasures.length : 0;
+        const openingBlockPerTreasure = Math.max(0, Math.floor(Number(passive.treasureOpeningBlockPerTreasure) || 0));
+        if (openingBlockPerTreasure > 0 && treasureCount > 0) {
+            const blockGain = openingBlockPerTreasure * treasureCount;
+            this.player.addBlock(blockGain);
+            Utils.showBattleLog(`灵契【${meta.name}】宝纹护道：开场护盾 +${blockGain}`);
+            applied = true;
+        }
+
+        const startCharge = Math.max(0, Math.floor(Number(passive.treasureStartCharge) || 0));
+        if (startCharge > 0 && typeof this.player.gainSpiritCharge === 'function') {
+            this.player.gainSpiritCharge(startCharge);
+            Utils.showBattleLog(`灵契【${meta.name}】蓄势：灵契蓄能 +${startCharge}`);
+            applied = true;
+        }
+
+        return applied;
+    }
+
+    handleSpiritCompanionCardPlayed(card = null) {
+        if (!this.player || typeof this.player.getSpiritCompanionMeta !== 'function') return false;
+        const meta = this.player.getSpiritCompanionMeta();
+        if (!meta) return false;
+        const passive = this.player.getSpiritCompanionEffects().passive || {};
+        const state = typeof this.player.ensureSpiritCompanionBattleState === 'function'
+            ? this.player.ensureSpiritCompanionBattleState()
+            : null;
+        let triggered = false;
+
+        const nthEnergy = passive.everyNthCardEnergy && typeof passive.everyNthCardEnergy === 'object'
+            ? passive.everyNthCardEnergy
+            : null;
+        if (
+            nthEnergy
+            && Math.max(0, Math.floor(Number(nthEnergy.count) || 0)) > 0
+            && this.cardsPlayedThisTurn > 0
+            && this.cardsPlayedThisTurn % Math.max(1, Math.floor(Number(nthEnergy.count) || 1)) === 0
+        ) {
+            const energyGain = Math.max(0, Math.floor(Number(nthEnergy.energy) || 0));
+            if (energyGain > 0) {
+                this.player.gainEnergy(energyGain);
+                Utils.showBattleLog(`灵契【${meta.name}】踏枝回灵 +${energyGain}`);
+                if (state) state.nthCardPassiveProcCount = Math.max(0, Math.floor(Number(state.nthCardPassiveProcCount) || 0)) + 1;
+                triggered = true;
+            }
+            const extraCharge = Math.max(0, Math.floor(Number(passive.nthCardChargeBonus) || 0));
+            if (extraCharge > 0 && state && state.nthCardPassiveProcCount === 1 && typeof this.player.gainSpiritCharge === 'function') {
+                this.player.gainSpiritCharge(extraCharge);
+            }
+        }
+
+        return triggered;
+    }
+
+    handleSpiritCompanionPlayerDamaged(hpDamage = 0) {
+        if (!this.player || typeof this.player.getSpiritCompanionMeta !== 'function') return false;
+        const meta = this.player.getSpiritCompanionMeta();
+        if (!meta) return false;
+        const passive = this.player.getSpiritCompanionEffects().passive || {};
+        const state = typeof this.player.ensureSpiritCompanionBattleState === 'function'
+            ? this.player.ensureSpiritCompanionBattleState()
+            : null;
+        const damage = Math.max(0, Math.floor(Number(passive.onLoseHpRandomDamage) || 0));
+        if (!state || damage <= 0 || state.onLoseHpPulseUsedThisTurn) return false;
+
+        const enemies = Array.isArray(this.enemies)
+            ? this.enemies.filter((enemy) => enemy && enemy.currentHp > 0)
+            : [];
+        if (enemies.length === 0) return false;
+        const target = enemies[Math.floor(Math.random() * enemies.length)];
+        const dealt = this.dealDamageToEnemy(target, damage, 'spirit_passive');
+        const chargeGain = Math.max(0, Math.floor(Number(passive.onLoseHpExtraCharge) || 0));
+        if (chargeGain > 0 && typeof this.player.gainSpiritCharge === 'function') {
+            this.player.gainSpiritCharge(chargeGain);
+        }
+        state.onLoseHpPulseUsedThisTurn = true;
+        Utils.showBattleLog(`灵契【${meta.name}】反啄回响：对 ${target.name} 造成 ${dealt} 点伤害`);
+        return true;
+    }
+
+    activateSpiritCompanion() {
+        if (
+            !this.player
+            || this.currentTurn !== 'player'
+            || this.battleEnded
+            || this.isProcessingCard
+            || this.isTurnTransitioning
+            || typeof this.player.getSpiritCompanionMeta !== 'function'
+        ) {
+            return false;
+        }
+
+        const meta = this.player.getSpiritCompanionMeta();
+        if (!meta) return false;
+        const effects = typeof this.player.getSpiritCompanionEffects === 'function'
+            ? this.player.getSpiritCompanionEffects()
+            : { active: {}, chargeMax: 0 };
+        const active = effects.active && typeof effects.active === 'object' ? effects.active : {};
+        const chargeMax = Math.max(1, Math.floor(Number(effects.chargeMax) || Number(meta.chargeMax) || 1));
+        const state = typeof this.player.ensureSpiritCompanionBattleState === 'function'
+            ? this.player.ensureSpiritCompanionBattleState()
+            : null;
+        if (!state || state.charge < chargeMax || typeof this.player.spendSpiritCharge !== 'function' || !this.player.spendSpiritCharge(chargeMax)) {
+            return false;
+        }
+
+        const livingEnemies = Array.isArray(this.enemies)
+            ? this.enemies.filter((enemy) => enemy && enemy.currentHp > 0)
+            : [];
+        const applyAllDebuff = (buffType, value) => {
+            const amount = Math.max(0, Math.floor(Number(value) || 0));
+            if (amount <= 0) return;
+            livingEnemies.forEach((enemy) => {
+                enemy.buffs = enemy.buffs || {};
+                enemy.buffs[buffType] = (enemy.buffs[buffType] || 0) + amount;
+            });
+        };
+
+        switch (String(active.type || '')) {
+            case 'frost_guard':
+                this.player.addBlock(Math.max(0, Math.floor(Number(active.block) || 0)));
+                applyAllDebuff('weak', active.weakAll);
+                Utils.showBattleLog(`灵契【${meta.name}】发动【${meta.activeLabel}】`);
+                break;
+            case 'blood_flare':
+                if (state) state.onLoseHpPulseUsedThisTurn = true;
+                this.player.takeDamage(Math.max(0, Math.floor(Number(active.selfDamage) || 0)));
+                livingEnemies.forEach((enemy) => {
+                    this.dealDamageToEnemy(enemy, Math.max(0, Math.floor(Number(active.damageAll) || 0)), 'spirit_active');
+                });
+                Utils.showBattleLog(`灵契【${meta.name}】发动【${meta.activeLabel}】`);
+                break;
+            case 'star_sift': {
+                const drawCount = Math.max(0, Math.floor(Number(active.draw) || 0));
+                if (drawCount > 0) this.player.drawCards(drawCount);
+                const reducible = Array.isArray(this.player.hand)
+                    ? this.player.hand.filter((card) => card && Number(card.cost) > 0).slice(0, Math.max(0, Math.floor(Number(active.reduceHandCost) || 0)))
+                    : [];
+                reducible.forEach((card) => {
+                    card.cost = Math.max(0, Math.floor(Number(card.cost) || 0) - 1);
+                });
+                Utils.showBattleLog(`灵契【${meta.name}】发动【${meta.activeLabel}】`);
+                break;
+            }
+            case 'guardian_shell':
+                this.player.addBlock(Math.max(0, Math.floor(Number(active.block) || 0)));
+                ['weak', 'vulnerable', 'poison', 'burn', 'bleed', 'mark', 'stun'].forEach((key) => {
+                    if (this.player.buffs && this.player.buffs[key]) delete this.player.buffs[key];
+                });
+                Utils.showBattleLog(`灵契【${meta.name}】发动【${meta.activeLabel}】`);
+                break;
+            case 'night_pollen':
+                applyAllDebuff('vulnerable', active.vulnerableAll);
+                applyAllDebuff('weak', active.weakAll);
+                Utils.showBattleLog(`灵契【${meta.name}】发动【${meta.activeLabel}】`);
+                break;
+            case 'leap_combo':
+                this.player.gainEnergy(Math.max(0, Math.floor(Number(active.gainEnergy) || 0)));
+                this.player.drawCards(Math.max(0, Math.floor(Number(active.draw) || 0)));
+                Utils.showBattleLog(`灵契【${meta.name}】发动【${meta.activeLabel}】`);
+                break;
+            case 'sunder_strike': {
+                const target = livingEnemies
+                    .slice()
+                    .sort((a, b) => {
+                        const blockDiff = Math.max(0, Math.floor(Number(b.block) || 0)) - Math.max(0, Math.floor(Number(a.block) || 0));
+                        if (blockDiff !== 0) return blockDiff;
+                        return Math.max(0, Math.floor(Number(a.currentHp) || 0)) - Math.max(0, Math.floor(Number(b.currentHp) || 0));
+                    })[0];
+                if (target) {
+                    if (active.stripBlock) target.block = 0;
+                    this.dealDamageToEnemy(target, Math.max(0, Math.floor(Number(active.damage) || 0)), 'spirit_active');
+                    Utils.showBattleLog(`灵契【${meta.name}】发动【${meta.activeLabel}】`);
+                }
+                break;
+            }
+            case 'relic_overclock':
+                this.player.gainEnergy(Math.max(0, Math.floor(Number(active.gainEnergy) || 0)));
+                this.player.addBlock(Math.max(0, Math.floor(Number(active.block) || 0)));
+                if (this.commandState && typeof this.commandState === 'object') {
+                    const gain = Math.max(0, Math.floor(Number(active.gainCommandPoints) || 0));
+                    if (gain > 0) {
+                        this.commandState.points = Math.min(
+                            Math.max(0, Math.floor(Number(this.commandState.maxPoints) || 12)),
+                            Math.max(0, Math.floor(Number(this.commandState.points) || 0)) + gain
+                        );
+                    }
+                }
+                Utils.showBattleLog(`灵契【${meta.name}】发动【${meta.activeLabel}】`);
+                break;
+            default:
+                return false;
+        }
+
+        this.markUIDirty('command', 'player', 'hand', 'energy', 'enemies');
+        this.updateBattleUI();
+        return true;
     }
 
     syncTacticalAdvisorPresentation() {
@@ -7893,6 +9944,7 @@ class Battle {
         const progress = Math.max(0, Math.min(100, Math.round((points / maxPoints) * 100)));
         const threatProfile = this.resolveCounterplayThreatProfile();
         const advisor = this.resolveBattleTacticalAdvisorSnapshot(state, threatProfile);
+        const systems = this.getBattleSystemDisplayState();
 
         const commandButtonData = state.commands.map((command) => {
             const cost = this.resolveBattleCommandEffectiveCost(command);
@@ -7931,6 +9983,7 @@ class Battle {
             maxPoints,
             progress,
             commands: commandButtonData,
+            systems,
             advisor,
             advisorExpanded
         });
@@ -7968,6 +10021,10 @@ class Battle {
         const envIcon = this.activeEnvironment ? this.activeEnvironment.icon : '';
         const envDesc = this.activeEnvironment ? this.activeEnvironment.description : '';
         const encounter = this.activeEncounterTheme || null;
+        const chapter = (this.game && typeof this.game.getChapterDisplaySnapshot === 'function')
+            ? this.game.getChapterDisplaySnapshot(this.player?.realm || this.game?.player?.realm || 1)
+            : null;
+        const chapterField = this.getChapterBattlefieldDisplayState();
 
         const escapeHtml = (value) => String(value || '')
             .replace(/&/g, '&amp;')
@@ -7976,9 +10033,41 @@ class Battle {
             .replace(/"/g, '&quot;');
 
         const squad = this.activeSquadEcology || null;
-        if (this.activeEnvironment || encounter || squad) {
+        if (this.activeEnvironment || encounter || squad || chapter) {
             envEl.style.display = 'flex';
             envEl.innerHTML = `
+                ${chapter
+                ? `<span class="chapter-rule-chip" title="${escapeHtml(chapter.stageDesc || '')}">
+                        <span class="chapter-rule-icon">${escapeHtml(chapter.icon || '☯️')}</span>
+                        <span class="chapter-rule-name">${escapeHtml(chapter.fullName || chapter.name || '章节')}</span>
+                        <span class="chapter-rule-stage">${escapeHtml(chapter.stageLabel || '')}</span>
+                    </span>`
+                : ''}
+                ${chapter?.skyOmen
+                ? `<span class="chapter-omen-chip" title="${escapeHtml(chapterField?.omen?.phaseDesc || chapter.skyOmen.desc || '')}">
+                        <span class="chapter-rule-icon">☁️</span>
+                        <span class="chapter-rule-name">天象·${escapeHtml(chapter.skyOmen.name || '未定')}</span>
+                        ${chapterField?.omen?.phaseLabel
+                            ? `<span class="chapter-rule-stage">${escapeHtml(chapterField.omen.phaseLabel)}</span>`
+                            : ''}
+                    </span>`
+                : ''}
+                ${chapter?.leyline
+                ? `<span class="chapter-leyline-chip" title="${escapeHtml(chapterField?.leyline?.activeDesc || chapter.leyline.desc || '')}">
+                        <span class="chapter-rule-icon">⛰️</span>
+                        <span class="chapter-rule-name">地脉·${escapeHtml(chapter.leyline.name || '未定')}</span>
+                        ${chapterField?.leyline?.activeLabel
+                            ? `<span class="chapter-rule-stage">${escapeHtml(chapterField.leyline.activeLabel)}</span>`
+                            : ''}
+                    </span>`
+                : ''}
+                ${chapterField?.formation
+                ? `<span class="chapter-formation-chip" title="${escapeHtml(chapterField.formation.hint || chapterField.formation.desc || '')}">
+                        <span class="chapter-rule-icon">⌘</span>
+                        <span class="chapter-rule-name">阵面·${escapeHtml(chapterField.formation.name || '未定')}</span>
+                        <span class="chapter-rule-stage">${escapeHtml(chapterField.formation.detail || '')}</span>
+                    </span>`
+                : ''}
                 ${this.activeEnvironment
                 ? `<span class="env-main"><span class="env-icon">${envIcon}</span><span class="env-name">${escapeHtml(envName)}</span></span>`
                 : ''}
@@ -7996,6 +10085,14 @@ class Battle {
                 : ''}
 `;
             const titleSegments = [];
+            if (chapter && chapter.fullName) {
+                titleSegments.push(`章节：${chapter.fullName}｜${chapter.stageLabel || ''}`);
+            }
+            if (chapter?.skyOmen?.desc) titleSegments.push(`天象：${chapter.skyOmen.desc}`);
+            if (chapter?.leyline?.desc) titleSegments.push(`地脉：${chapter.leyline.desc}`);
+            if (chapterField?.omen?.phaseLabel) titleSegments.push(`天象轮段：${chapterField.omen.phaseLabel}｜${chapterField.omen.phaseDesc || ''}`);
+            if (chapterField?.leyline?.activeLabel) titleSegments.push(`地脉抓手：${chapterField.leyline.activeLabel}｜${chapterField.leyline.activeDesc || ''}`);
+            if (chapterField?.formation?.name) titleSegments.push(`阵面：${chapterField.formation.name}｜${chapterField.formation.detail || chapterField.formation.desc || ''}`);
             if (envDesc) titleSegments.push(`环境：${envDesc}`);
             if (encounter && encounter.description) {
                 const stage = Math.max(1, Math.min(3, Number(encounter.tierStage) || 1));

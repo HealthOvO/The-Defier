@@ -113,6 +113,30 @@ async function safeScreenshot(page, outPath) {
   });
   await page.waitForTimeout(800);
 
+  const mapChapterProbe = await page.evaluate(() => {
+    const panel = document.getElementById('map-chapter-brief');
+    const panelText = (panel?.textContent || '').replace(/\s+/g, ' ').trim();
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      panelText,
+      chapter: payload?.map?.chapter || null
+    };
+  });
+  add(
+    'map chapter card exposes chapter name plus omen and leyline before first battle',
+    !!mapChapterProbe &&
+      /章节世界规则/.test(mapChapterProbe.panelText || '') &&
+      /天象/.test(mapChapterProbe.panelText || '') &&
+      /地脉/.test(mapChapterProbe.panelText || '') &&
+      /碎誓外域/.test(mapChapterProbe.panelText || '') &&
+      mapChapterProbe.chapter?.name === '碎誓外域' &&
+      !!mapChapterProbe.chapter?.skyOmen?.name &&
+      !!mapChapterProbe.chapter?.leyline?.name,
+    JSON.stringify(mapChapterProbe || null)
+  );
+
   await page.evaluate(() => {
     const node = game?.map?.getAccessibleNodes?.().find((n) => ['enemy', 'elite', 'trial', 'boss'].includes(n.type));
     if (node) game.map.onNodeClick(node);
@@ -150,6 +174,393 @@ async function safeScreenshot(page, outPath) {
       /遭遇/.test(encounterThemeProbe.envTitle || '') &&
       /阶/.test(encounterThemeProbe.chipText || ''),
     JSON.stringify(encounterThemeProbe || null)
+  );
+
+  const battleChapterProbe = await page.evaluate(() => {
+    const env = document.getElementById('battle-environment');
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      text: (env?.textContent || '').replace(/\s+/g, ' ').trim(),
+      title: env?.title || '',
+      chapterRules: payload?.battle?.chapterRules || null
+    };
+  });
+  add(
+    'battle environment bar now carries chapter world rules with chapter, omen, and leyline chips',
+    !!battleChapterProbe &&
+      /碎誓外域/.test(battleChapterProbe.text || '') &&
+      /天象/.test(battleChapterProbe.text || '') &&
+      /地脉/.test(battleChapterProbe.text || '') &&
+      /章节：/.test(battleChapterProbe.title || '') &&
+      battleChapterProbe.chapterRules?.name === '碎誓外域' &&
+      !!battleChapterProbe.chapterRules?.skyOmen?.name &&
+      !!battleChapterProbe.chapterRules?.leyline?.name,
+    JSON.stringify(battleChapterProbe || null)
+  );
+
+  const chapterBattlefieldProbe = await page.evaluate(() => {
+    if (!window.game || !game.battle || !game.player) return { ok: false, reason: 'no_battle' };
+
+    game.battle.battleEnded = false;
+    game.battle.currentTurn = 'player';
+    game.battle.isProcessingCard = false;
+    game.battle.isTurnTransitioning = false;
+    game.player.realm = 8;
+    game.player.turnNumber = 1;
+    game.player.block = 0;
+    game.player.currentEnergy = game.player.baseEnergy || 3;
+
+    game.battle.enemies = [
+      {
+        id: 'chapter_probe_striker',
+        name: '沉星锋',
+        icon: '⚔️',
+        currentHp: 52,
+        maxHp: 52,
+        block: 0,
+        buffs: {},
+        patterns: [{ type: 'attack', value: 12, intent: '⚔️试击' }],
+        currentPatternIndex: 0
+      },
+      {
+        id: 'chapter_probe_anchor',
+        name: '沉星核',
+        icon: '🧿',
+        currentHp: 48,
+        maxHp: 48,
+        block: 0,
+        buffs: {},
+        patterns: [
+          { type: 'defend', value: 8, intent: '🛡️回护' },
+          { type: 'debuff', buffType: 'weak', value: 1, intent: '🌀牵制' }
+        ],
+        currentPatternIndex: 0
+      },
+      {
+        id: 'chapter_probe_tail',
+        name: '沉星尾',
+        icon: '✦',
+        currentHp: 46,
+        maxHp: 46,
+        block: 0,
+        buffs: {},
+        patterns: [{ type: 'attack', value: 9, intent: '⚔️试击' }],
+        currentPatternIndex: 0
+      }
+    ];
+
+    if (typeof game.battle.applyEnemySquadEcology === 'function') {
+      game.battle.applyEnemySquadEcology();
+    }
+    if (typeof game.battle.initializeChapterBattlefieldRules === 'function') {
+      game.battle.initializeChapterBattlefieldRules();
+    }
+    if (typeof game.battle.updateBattleUI === 'function') {
+      game.battle.updateBattleUI();
+    }
+
+    const env = document.getElementById('battle-environment');
+    const formationChip = env ? env.querySelector('.chapter-formation-chip') : null;
+    const enemyFormationTag = document.querySelector('.enemy .enemy-formation-tag');
+    let payload = null;
+    try {
+      payload = JSON.parse(window.render_game_to_text());
+    } catch {}
+
+    const result = {
+      ok:
+        !!formationChip &&
+        /阵面/.test(formationChip.textContent || '') &&
+        /伏星蓄势/.test(env?.textContent || '') &&
+        /三连成势/.test(env?.textContent || '') &&
+        /沉星链阵/.test(env?.textContent || '') &&
+        /阵面/.test(enemyFormationTag?.textContent || '') &&
+        payload?.battle?.chapterBattlefield?.chapterIndex === 3 &&
+        payload?.battle?.chapterBattlefield?.omen?.phaseLabel === '伏星蓄势' &&
+        payload?.battle?.chapterBattlefield?.formation?.name === '沉星链阵',
+      envText: (env?.textContent || '').replace(/\s+/g, ' ').trim(),
+      envTitle: env?.title || '',
+      formationChip: formationChip ? (formationChip.textContent || '').trim() : '',
+      enemyFormationTag: enemyFormationTag ? (enemyFormationTag.textContent || '').trim() : '',
+      chapterBattlefield: payload?.battle?.chapterBattlefield || null
+    };
+
+    game.battle.activeChapterBattlefield = null;
+    if (typeof game.battle.updateBattleUI === 'function') {
+      game.battle.updateBattleUI();
+    }
+
+    return result;
+  });
+  add(
+    'chapter battlefield runtime exposes omen phase, leyline focus, and formation tags together',
+    !!chapterBattlefieldProbe && !!chapterBattlefieldProbe.ok,
+    JSON.stringify(chapterBattlefieldProbe || null)
+  );
+
+  const chapterBattlefieldFinalProbe = await page.evaluate(() => {
+    if (!window.game || !game.battle || !game.player) return { ok: false, reason: 'no_battle' };
+
+    const originalRealm = game.player.realm;
+    const originalTurnNumber = game.player.turnNumber;
+    const originalEquippedTreasures = Array.isArray(game.player.equippedTreasures)
+      ? game.player.equippedTreasures.slice()
+      : [];
+    const originalTreasures = Array.isArray(game.player.treasures)
+      ? game.player.treasures.slice()
+      : [];
+    const originalRunVows = Array.isArray(game.player.runVows)
+      ? game.player.runVows.map((entry) => ({ ...(entry || {}) }))
+      : [];
+    const originalRunDestiny = game.player.runDestiny && typeof game.player.runDestiny === 'object'
+      ? { ...(game.player.runDestiny || {}) }
+      : game.player.runDestiny;
+    const originalGetSocketedLaws = game.player.fateRing && typeof game.player.fateRing.getSocketedLaws === 'function'
+      ? game.player.fateRing.getSocketedLaws.bind(game.player.fateRing)
+      : null;
+
+    game.battle.battleEnded = false;
+    game.battle.currentTurn = 'player';
+    game.battle.isProcessingCard = false;
+    game.battle.isTurnTransitioning = false;
+    game.player.realm = 18;
+    game.player.turnNumber = 1;
+    game.player.block = 0;
+    game.player.currentEnergy = game.player.baseEnergy || 3;
+
+    if (typeof game.player.setRunDestiny === 'function') {
+      game.player.setRunDestiny('preceptSeal', 1);
+    } else {
+      game.player.runDestiny = { id: 'preceptSeal', tier: 1 };
+    }
+    if (typeof game.player.setRunVows === 'function') {
+      game.player.setRunVows([{ id: 'realmBreak', tier: 1 }, { id: 'heavenlyGaze', tier: 1 }]);
+    } else {
+      game.player.runVows = [{ id: 'realmBreak', tier: 1 }, { id: 'heavenlyGaze', tier: 1 }];
+    }
+    if (typeof game.player.setSpiritCompanion === 'function') {
+      game.player.setSpiritCompanion('artifactSoul', 1);
+    }
+    game.player.equippedTreasures = [
+      { id: 'probe_xj_1', name: '玄甲一式', setTag: 'xuanjia' },
+      { id: 'probe_xj_2', name: '玄甲二式', setTag: 'xuanjia' }
+    ];
+    game.player.treasures = game.player.equippedTreasures;
+    if (game.player.fateRing) {
+      game.player.fateRing.getSocketedLaws = () => ['law_a', 'law_b', 'law_c'];
+    }
+
+    game.battle.enemies = [
+      {
+        id: 'final_probe_judge',
+        name: '终审司',
+        icon: '☯️',
+        currentHp: 66,
+        maxHp: 66,
+        block: 0,
+        buffs: {},
+        patterns: [
+          { type: 'defend', value: 9, intent: '🛡️终律' },
+          { type: 'debuff', buffType: 'weak', value: 1, intent: '🌀追问' }
+        ],
+        currentPatternIndex: 0
+      },
+      {
+        id: 'final_probe_guard',
+        name: '律从甲',
+        icon: '⚔️',
+        currentHp: 50,
+        maxHp: 50,
+        block: 0,
+        buffs: {},
+        patterns: [{ type: 'attack', value: 12, intent: '⚔️裁击' }],
+        currentPatternIndex: 0
+      },
+      {
+        id: 'final_probe_tail',
+        name: '律从乙',
+        icon: '✦',
+        currentHp: 48,
+        maxHp: 48,
+        block: 0,
+        buffs: {},
+        patterns: [{ type: 'attack', value: 9, intent: '⚔️裁击' }],
+        currentPatternIndex: 0
+      }
+    ];
+
+    if (typeof game.battle.initializeChapterBattlefieldRules === 'function') {
+      game.battle.initializeChapterBattlefieldRules();
+    }
+    if (typeof game.battle.updateBattleUI === 'function') {
+      game.battle.updateBattleUI();
+    }
+
+    const env = document.getElementById('battle-environment');
+    const formationChip = env ? env.querySelector('.chapter-formation-chip') : null;
+    const enemyFormationTag = document.querySelector('.enemy .enemy-formation-tag');
+    let payload = null;
+    try {
+      payload = JSON.parse(window.render_game_to_text());
+    } catch {}
+
+    const result = {
+      ok:
+        !!formationChip &&
+        /终章合式·5轴/.test(env?.textContent || '') &&
+        /万象同判/.test(env?.textContent || '') &&
+        /终律衡阵/.test(env?.textContent || '') &&
+        /阵面/.test(enemyFormationTag?.textContent || '') &&
+        payload?.battle?.chapterBattlefield?.chapterIndex === 6 &&
+        payload?.battle?.chapterBattlefield?.omen?.phaseLabel === '万象同判' &&
+        payload?.battle?.chapterBattlefield?.leyline?.activeLabel === '终章合式·5轴' &&
+        payload?.battle?.chapterBattlefield?.synergy?.axes === 5 &&
+        payload?.battle?.chapterBattlefield?.formation?.name === '终律衡阵',
+      envText: (env?.textContent || '').replace(/\s+/g, ' ').trim(),
+      envTitle: env?.title || '',
+      formationChip: formationChip ? (formationChip.textContent || '').trim() : '',
+      enemyFormationTag: enemyFormationTag ? (enemyFormationTag.textContent || '').trim() : '',
+      chapterBattlefield: payload?.battle?.chapterBattlefield || null
+    };
+
+    game.player.realm = originalRealm;
+    game.player.turnNumber = originalTurnNumber;
+    game.player.equippedTreasures = originalEquippedTreasures;
+    game.player.treasures = originalTreasures;
+    game.player.runVows = originalRunVows;
+    game.player.runDestiny = originalRunDestiny;
+    if (game.player.fateRing) {
+      if (originalGetSocketedLaws) {
+        game.player.fateRing.getSocketedLaws = originalGetSocketedLaws;
+      } else {
+        delete game.player.fateRing.getSocketedLaws;
+      }
+    }
+    game.battle.activeChapterBattlefield = null;
+    if (typeof game.battle.updateBattleUI === 'function') {
+      game.battle.updateBattleUI();
+    }
+
+    return result;
+  });
+  add(
+    'chapter battlefield final chapter surfaces multi-axis synergy in UI and render_game_to_text',
+    !!chapterBattlefieldFinalProbe && !!chapterBattlefieldFinalProbe.ok,
+    JSON.stringify(chapterBattlefieldFinalProbe || null)
+  );
+
+  const spiritCompanionProbe = await page.evaluate(() => {
+    if (!window.game || !game.battle || !game.player) return { ok: false, reason: 'no_battle' };
+
+    game.battle.battleEnded = false;
+    game.battle.currentTurn = 'player';
+    game.battle.isProcessingCard = false;
+    game.battle.isTurnTransitioning = false;
+    game.player.realm = 2;
+    game.player.block = 0;
+    game.player.buffs = {};
+
+    if (typeof game.player.setSpiritCompanion === 'function') {
+      game.player.setSpiritCompanion('frostChi', 1);
+    }
+    if (typeof game.player.resetSpiritCompanionBattleState === 'function') {
+      game.player.resetSpiritCompanionBattleState();
+    }
+
+    game.battle.enemies = [
+      {
+        id: 'spirit_probe_alpha',
+        name: '霜试敌-甲',
+        icon: '🧪',
+        currentHp: 80,
+        maxHp: 80,
+        block: 0,
+        buffs: {},
+        patterns: [{ type: 'attack', value: 10, intent: '⚔️试击' }],
+        currentPatternIndex: 0
+      },
+      {
+        id: 'spirit_probe_beta',
+        name: '霜试敌-乙',
+        icon: '🧪',
+        currentHp: 76,
+        maxHp: 76,
+        block: 0,
+        buffs: {},
+        patterns: [{ type: 'attack', value: 9, intent: '⚔️试击' }],
+        currentPatternIndex: 0
+      }
+    ];
+
+    if (typeof game.battle.applySpiritCompanionBattleStart === 'function') {
+      game.battle.applySpiritCompanionBattleStart();
+    }
+    if (typeof game.player.gainSpiritCharge === 'function') {
+      game.player.gainSpiritCharge(5);
+    }
+    if (typeof game.battle.markUIDirty === 'function') {
+      game.battle.markUIDirty('command', 'player', 'enemies', 'hand', 'energy');
+    }
+    if (typeof game.battle.updateBattleUI === 'function') {
+      game.battle.updateBattleUI();
+    }
+
+    const chipBefore = document.querySelector('#battle-command-panel .battle-command-spirit-chip');
+    const buttonBefore = document.querySelector('#battle-command-panel .battle-advisor-spirit-btn');
+    const beforeWeak = game.battle.enemies.reduce((sum, enemy) => sum + ((enemy.buffs && enemy.buffs.weak) || 0), 0);
+    const beforeBlock = game.player.block || 0;
+    const beforeCharge = game.player.spiritCompanionBattleState?.charge || 0;
+
+    const used = typeof game.battle.activateSpiritCompanion === 'function'
+      ? game.battle.activateSpiritCompanion()
+      : false;
+
+    let payload = null;
+    try {
+      payload = JSON.parse(window.render_game_to_text());
+    } catch {}
+
+    const chipAfter = document.querySelector('#battle-command-panel .battle-command-spirit-chip');
+    const buttonAfter = document.querySelector('#battle-command-panel .battle-advisor-spirit-btn');
+    const afterWeak = game.battle.enemies.reduce((sum, enemy) => sum + ((enemy.buffs && enemy.buffs.weak) || 0), 0);
+    const afterBlock = game.player.block || 0;
+    const afterCharge = game.player.spiritCompanionBattleState?.charge || 0;
+
+    return {
+      ok:
+        !!used &&
+        beforeWeak === 2 &&
+        beforeCharge === 5 &&
+        afterWeak === 6 &&
+        afterBlock >= beforeBlock + 8 &&
+        afterCharge === 0 &&
+        /霜螭/.test(chipBefore?.textContent || '') &&
+        /5\/5/.test(chipBefore?.textContent || '') &&
+        !buttonBefore?.disabled &&
+        /释放/.test(buttonBefore?.textContent || '') &&
+        /0\/5/.test(chipAfter?.textContent || '') &&
+        !!buttonAfter?.disabled &&
+        !!(payload?.player?.spiritCompanion && payload.player.spiritCompanion.id === 'frostChi') &&
+        !!(payload?.player?.spiritCharge && payload.player.spiritCharge.charge === 0 && payload.player.spiritCharge.max === 5),
+      beforeWeak,
+      afterWeak,
+      beforeBlock,
+      afterBlock,
+      beforeCharge,
+      afterCharge,
+      chipBefore: chipBefore ? (chipBefore.textContent || '').trim() : '',
+      chipAfter: chipAfter ? (chipAfter.textContent || '').trim() : '',
+      buttonBefore: buttonBefore ? (buttonBefore.textContent || '').trim() : '',
+      buttonAfter: buttonAfter ? (buttonAfter.textContent || '').trim() : '',
+      payload
+    };
+  });
+  add(
+    'spirit companion passive and active both render in HUD and resolve into battle state',
+    !!spiritCompanionProbe && !!spiritCompanionProbe.ok,
+    JSON.stringify(spiritCompanionProbe || null)
   );
 
   const battleCommandProbe = await page.evaluate(async () => {
@@ -204,6 +615,14 @@ async function safeScreenshot(page, outPath) {
     let panel = document.getElementById('battle-command-panel');
     const title = panel ? (panel.querySelector('.battle-command-title')?.textContent || '').trim() : '';
     const buttons = panel ? panel.querySelectorAll('.battle-command-btn').length : 0;
+    const systemStrip = panel ? panel.querySelector('.battle-system-strip') : null;
+    const systemChipCount = systemStrip ? systemStrip.querySelectorAll('.battle-system-chip').length : 0;
+    const systemIds = systemStrip
+      ? Array.from(systemStrip.querySelectorAll('.battle-system-chip')).map((el) => String(el.getAttribute('data-system-id') || ''))
+      : [];
+    const systemValueText = systemStrip
+      ? Array.from(systemStrip.querySelectorAll('.battle-system-chip')).map((el) => (el.textContent || '').trim()).join(' | ')
+      : '';
     const advisor = panel ? panel.querySelector('#battle-tactical-advisor') : null;
     const advisorTitle = advisor ? (advisor.querySelector('.battle-advisor-title')?.textContent || '').trim() : '';
     const advisorRecommend = advisor ? (advisor.querySelector('.battle-advisor-recommend')?.textContent || '').trim() : '';
@@ -213,6 +632,7 @@ async function safeScreenshot(page, outPath) {
     const advisorTempoSegments = advisor ? advisor.querySelectorAll('.battle-advisor-tempo-segment').length : 0;
     const advisorActiveTempo = advisor ? (advisor.querySelector('.battle-advisor-tempo-segment.active .battle-advisor-tempo-label')?.textContent || '').trim() : '';
     const advisorStatusChips = advisor ? advisor.querySelectorAll('.battle-advisor-status-chip').length : 0;
+    const systemCards = advisor ? advisor.querySelectorAll('.battle-system-card').length : 0;
     const advisorChain = advisor ? advisor.querySelector('.battle-advisor-chain') : null;
     const advisorChainTitle = advisorChain ? (advisorChain.querySelector('.battle-advisor-chain-title')?.textContent || '').trim() : '';
     const advisorChainKicker = advisorChain ? (advisorChain.querySelector('.battle-advisor-section-title')?.textContent || '').trim() : '';
@@ -249,7 +669,15 @@ async function safeScreenshot(page, outPath) {
     const advisorThreatChips = advisor ? advisor.querySelectorAll('.battle-advisor-threat-chip').length : 0;
     const helperLoaded = !!window.DefierBattleHud
       && typeof window.DefierBattleHud.buildBattleCommandPanelMarkup === 'function'
+      && typeof window.DefierBattleHud.buildBattleSystemsStripMarkup === 'function'
       && typeof window.DefierBattleHud.clampFloatingPanelPosition === 'function';
+    let systemsHud = null;
+    try {
+      const payload = JSON.parse(window.render_game_to_text ? window.render_game_to_text() : '{}');
+      systemsHud = payload?.battle?.systemsHud || null;
+    } catch (error) {
+      systemsHud = { parseError: String(error && error.message || error) };
+    }
     let advisorCollapsedAfterToggle = false;
     let advisorStaysCollapsedWhileHovered = false;
     let advisorDragged = false;
@@ -363,6 +791,11 @@ async function safeScreenshot(page, outPath) {
       advisorTempoSegments,
       advisorActiveTempo,
       advisorStatusChips,
+      systemChipCount,
+      systemIds,
+      systemValueText,
+      systemCards,
+      systemsHud,
       advisorChainTitle,
       advisorChainKicker,
       advisorChainSteps,
@@ -396,10 +829,24 @@ async function safeScreenshot(page, outPath) {
       /战场指令/.test(battleCommandProbe.title || '') &&
       /战术助手/.test(battleCommandProbe.advisorTitle || '') &&
       /回路/.test(battleCommandProbe.advisorRecommend || '') &&
+      Number(battleCommandProbe.systemChipCount || 0) >= 6 &&
+      Number(battleCommandProbe.systemCards || 0) >= 6 &&
+      ['destiny', 'vows', 'spirit', 'chapter', 'laws', 'treasures'].every((id) => (battleCommandProbe.systemIds || []).includes(id)) &&
+      /命格/.test(battleCommandProbe.systemValueText || '') &&
+      /誓约/.test(battleCommandProbe.systemValueText || '') &&
+      /灵契/.test(battleCommandProbe.systemValueText || '') &&
+      /天象 \/ 地脉/.test(battleCommandProbe.systemValueText || '') &&
+      /法则编织/.test(battleCommandProbe.systemValueText || '') &&
+      /法宝套装/.test(battleCommandProbe.systemValueText || '') &&
       Number(battleCommandProbe.advisorThreatChips || 0) >= 1 &&
       Number(battleCommandProbe.advisorTempoSegments || 0) >= 4 &&
       /守势|破阵|净域|歼灭/.test(battleCommandProbe.advisorActiveTempo || '') &&
       Number(battleCommandProbe.advisorStatusChips || 0) >= 3 &&
+      !!battleCommandProbe.systemsHud &&
+      Array.isArray(battleCommandProbe.systemsHud.stripItems) &&
+      battleCommandProbe.systemsHud.stripItems.length >= 6 &&
+      battleCommandProbe.systemsHud.lawWeave &&
+      battleCommandProbe.systemsHud.treasureSets &&
       /执行链：/.test(battleCommandProbe.advisorChainTitle || '') &&
       /建议|当前预选|悬停预判|默认巡检/.test(battleCommandProbe.advisorChainKicker || '') &&
       Number(battleCommandProbe.advisorChainSteps || 0) >= 2 &&
@@ -1782,6 +2229,262 @@ async function safeScreenshot(page, outPath) {
       routeHintProbe.chips.some((t) => t.includes('保底')) &&
       routeHintProbe.chips.some((t) => t.includes('补偿')),
     JSON.stringify(routeHintProbe || null)
+  );
+
+  const observatoryProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.showObservatoryNode !== 'function') return null;
+    game.player.heavenlyInsight = 0;
+    game.player.shopRumors = typeof game.normalizeShopRumors === 'function'
+      ? game.normalizeShopRumors(null)
+      : { rewardRareCharges: 0, rewardRareBonus: 0, treasureCharges: 0, treasureChanceBonus: 0, nextRealmMapShift: null, nextRealmLabel: '', nextRealmTarget: null, history: [] };
+    game.showObservatoryNode({ id: 91008, row: 2, type: 'observatory', completed: false, accessible: true });
+    const title = document.getElementById('event-title')?.textContent || '';
+    const desc = (document.getElementById('event-desc')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const choices = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+    const forecastBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('福缘星轨'));
+    if (forecastBtn) forecastBtn.click();
+    return {
+      title,
+      desc,
+      choiceCount: choices.length,
+      hasUtility: choices.some((t) => t.includes('福缘星轨')),
+      hasAssault: choices.some((t) => t.includes('锋芒星轨')),
+      hasReward: choices.some((t) => t.includes('校准星图战利')),
+      nextRealmLabel: game.player?.shopRumors?.nextRealmLabel || '',
+      insight: Number(game.player?.heavenlyInsight || 0)
+    };
+  });
+  add(
+    'observatory node previews future realm and can lock a route forecast',
+    !!observatoryProbe &&
+      /观星台/.test(observatoryProbe.title) &&
+      observatoryProbe.hasUtility &&
+      observatoryProbe.hasAssault &&
+      observatoryProbe.hasReward &&
+      observatoryProbe.choiceCount >= 4 &&
+      /天象|Boss/.test(observatoryProbe.desc) &&
+      /机缘补给线/.test(observatoryProbe.nextRealmLabel) &&
+      observatoryProbe.insight >= 1,
+    JSON.stringify(observatoryProbe || null)
+  );
+  await page.evaluate(() => {
+    document.getElementById('reward-modal')?.classList.remove('active');
+    document.getElementById('event-modal')?.classList.remove('active');
+  });
+
+  const forbiddenAltarProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.showForbiddenAltarNode !== 'function') return null;
+    const startingTreasureCount = Array.isArray(game.player?.collectedTreasures) ? game.player.collectedTreasures.length : 0;
+    const baseDeck = Array.isArray(game.player?.deck) ? game.player.deck.filter((card) => card && card.id !== 'demonDoubt') : [];
+    game.player.deck = baseDeck.slice();
+    game.showForbiddenAltarNode({ id: 91009, row: 2, type: 'forbidden_altar', completed: false, accessible: true });
+    const title = document.getElementById('event-title')?.textContent || '';
+    const choices = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+    const doomBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('灾像供契'));
+    if (doomBtn) doomBtn.click();
+    return {
+      title,
+      hasBloodDraft: choices.some((t) => t.includes('血契夺卷')),
+      hasVowDraft: choices.some((t) => t.includes('裂誓献祭')),
+      hasDoomTrade: choices.some((t) => t.includes('灾像供契')),
+      hasCurse: Array.isArray(game.player?.deck) && game.player.deck.some((card) => card && card.id === 'demonDoubt'),
+      treasureCount: Array.isArray(game.player?.collectedTreasures) ? game.player.collectedTreasures.length : 0,
+      startingTreasureCount,
+      karma: Number(game.player?.karma || 0)
+    };
+  });
+  add(
+    'forbidden altar offers high-risk options and doom trade applies curse plus treasure value',
+    !!forbiddenAltarProbe &&
+      /禁术坛/.test(forbiddenAltarProbe.title) &&
+      forbiddenAltarProbe.hasBloodDraft &&
+      forbiddenAltarProbe.hasVowDraft &&
+      forbiddenAltarProbe.hasDoomTrade &&
+      forbiddenAltarProbe.hasCurse &&
+      forbiddenAltarProbe.treasureCount > forbiddenAltarProbe.startingTreasureCount,
+    JSON.stringify(forbiddenAltarProbe || null)
+  );
+  await page.evaluate(() => {
+    document.getElementById('reward-modal')?.classList.remove('active');
+    document.getElementById('event-modal')?.classList.remove('active');
+  });
+
+  const memoryRiftProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.showMemoryRiftNode !== 'function') return null;
+    const destinyId = game.player?.runDestiny?.id || game.getRunDestinyCatalog?.()?.[0]?.id || null;
+    if (destinyId && typeof game.player?.setRunDestiny === 'function') {
+      game.player.setRunDestiny(destinyId, 1);
+    }
+    const beforeTier = Number(game.player?.runDestiny?.tier || 1);
+    game.showMemoryRiftNode({ id: 91010, row: 2, type: 'memory_rift', completed: false, accessible: true });
+    const title = document.getElementById('event-title')?.textContent || '';
+    const choices = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+    const upgradeBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('追忆命格'));
+    if (upgradeBtn) upgradeBtn.click();
+    return {
+      title,
+      hasUpgrade: choices.some((t) => t.includes('追忆命格')),
+      hasDraft: choices.some((t) => t.includes('撕取残章')),
+      hasRewrite: choices.some((t) => t.includes('逆写路标')),
+      beforeTier,
+      afterTier: Number(game.player?.runDestiny?.tier || 0)
+    };
+  });
+  add(
+    'memory rift can upgrade run destiny and exposes rewrite choices',
+    !!memoryRiftProbe &&
+      /记忆裂隙/.test(memoryRiftProbe.title) &&
+      memoryRiftProbe.hasUpgrade &&
+      memoryRiftProbe.hasDraft &&
+      memoryRiftProbe.hasRewrite &&
+      memoryRiftProbe.afterTier > memoryRiftProbe.beforeTier,
+    JSON.stringify(memoryRiftProbe || null)
+  );
+  await page.evaluate(() => {
+    document.getElementById('reward-modal')?.classList.remove('active');
+    document.getElementById('event-modal')?.classList.remove('active');
+  });
+
+  const spiritGrottoProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.showSpiritGrottoNode !== 'function') return null;
+    if (typeof game.player?.setSpiritCompanion === 'function') {
+      game.player.setSpiritCompanion('frostChi', 1);
+    }
+    const beforeTier = Number(game.player?.spiritCompanion?.tier || 1);
+    game.showSpiritGrottoNode({ id: 91011, row: 2, type: 'spirit_grotto', completed: false, accessible: true });
+    const title = document.getElementById('event-title')?.textContent || '';
+    const choices = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+    const upgradeBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('灵契升阶'));
+    if (upgradeBtn) upgradeBtn.click();
+    return {
+      title,
+      hasDraft: choices.some((t) => t.includes('契引新灵')),
+      hasUpgrade: choices.some((t) => t.includes('灵契升阶')),
+      hasTrace: choices.some((t) => t.includes('追索灵痕')),
+      beforeTier,
+      afterTier: Number(game.player?.spiritCompanion?.tier || 0),
+      insight: Number(game.player?.heavenlyInsight || 0)
+    };
+  });
+  add(
+    'spirit grotto can upgrade spirit companion and exposes reroll / trace choices',
+    !!spiritGrottoProbe &&
+      /灵契窟/.test(spiritGrottoProbe.title) &&
+      spiritGrottoProbe.hasDraft &&
+      spiritGrottoProbe.hasUpgrade &&
+      spiritGrottoProbe.hasTrace &&
+      spiritGrottoProbe.afterTier > spiritGrottoProbe.beforeTier &&
+      spiritGrottoProbe.insight >= 1,
+    JSON.stringify(spiritGrottoProbe || null)
+  );
+  await page.evaluate(() => {
+    document.getElementById('reward-modal')?.classList.remove('active');
+    document.getElementById('event-modal')?.classList.remove('active');
+  });
+
+  const forgeWorkshopProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.showForgeChoiceModal !== 'function') return null;
+    if (game.player) {
+      game.player.collectedTreasures = [];
+      game.player.equippedTreasures = [];
+      game.player.treasures = game.player.equippedTreasures;
+      if (typeof game.player.addTreasure === 'function') {
+        game.player.addTreasure('iron_talisman');
+        game.player.addTreasure('ring_echo_compass');
+      }
+      if (typeof game.player.setSpiritCompanion === 'function') {
+        game.player.setSpiritCompanion('frostChi', 1);
+      }
+    }
+
+    game.showForgeChoiceModal({ id: 91012, row: 2, type: 'forge', completed: false, accessible: true }, {
+      forgeCost: 50,
+      premiumCost: 110,
+      temperCost: 30
+    });
+
+    const title = document.getElementById('event-title')?.textContent || '';
+    const choices = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+    const reforgeBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('法宝重铸'));
+    if (reforgeBtn) reforgeBtn.click();
+    const reforgeChoices = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+    const pickBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('铁壁符'));
+    if (pickBtn) pickBtn.click();
+
+    const treasureWorkshop = typeof game.player?.getTreasureWorkshopSnapshot === 'function'
+      ? game.player.getTreasureWorkshopSnapshot('equipped')
+      : [];
+    return {
+      title,
+      hasCardBranch: choices.some((t) => t.includes('锻牌方案')),
+      hasReforge: choices.some((t) => t.includes('法宝重铸')),
+      hasInfusion: choices.some((t) => t.includes('器灵灌注')),
+      hasCalibration: choices.some((t) => t.includes('套装修正')),
+      reforgeChoiceCount: reforgeChoices.length,
+      reforgeApplied: treasureWorkshop.some((entry) => entry && entry.reforge && entry.reforge.mode === 'bulwark'),
+      workshopTags: treasureWorkshop
+    };
+  });
+  add(
+    'forge node upgrades into workshop menu with card, reforge, infusion, and calibration branches',
+    !!forgeWorkshopProbe &&
+      /炼器坊/.test(forgeWorkshopProbe.title) &&
+      forgeWorkshopProbe.hasCardBranch &&
+      forgeWorkshopProbe.hasReforge &&
+      forgeWorkshopProbe.hasInfusion &&
+      forgeWorkshopProbe.hasCalibration &&
+      forgeWorkshopProbe.reforgeChoiceCount >= 2 &&
+      forgeWorkshopProbe.reforgeApplied,
+    JSON.stringify(forgeWorkshopProbe || null)
+  );
+  await page.evaluate(() => {
+    document.getElementById('reward-modal')?.classList.remove('active');
+    document.getElementById('event-modal')?.classList.remove('active');
+  });
+
+  const trialChallengeProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.showTrialChallengeSelection !== 'function') return null;
+    game.showTrialChallengeSelection({ id: 91013, row: 2, type: 'trial', completed: false, accessible: true });
+    const title = document.getElementById('event-title')?.textContent || '';
+    const choices = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+    const dualBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('双誓并压'));
+    if (dualBtn) dualBtn.click();
+    const trialPayload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      title,
+      choiceCount: choices.length,
+      hasSpeed: choices.some((t) => t.includes('逐光试斩')),
+      hasNoDamage: choices.some((t) => t.includes('无伤镜湖')),
+      hasDual: choices.some((t) => t.includes('双誓并压')),
+      activeTrial: game.activeTrial,
+      trialName: game.trialData?.name || null,
+      trialChallenge: trialPayload?.battle?.trialChallenge || null,
+      currentScreen: game.currentScreen,
+      enemyName: game.battle?.enemies?.[0]?.name || '',
+      enemyHasTrialDebuff: Array.isArray(game.battle?.enemies?.[0]?.patterns)
+        && game.battle.enemies[0].patterns.some((pattern) => pattern?.type === 'debuff' && pattern?.buffType === 'vulnerable' && Number(pattern?.value || 0) >= 1),
+      trialReward: game.trialData?.reward || null
+    };
+  });
+  add(
+    'trial node upgrades into selectable challenge碑 and chosen affix package enters battle state',
+    !!trialChallengeProbe &&
+      /试炼碑/.test(trialChallengeProbe.title) &&
+      trialChallengeProbe.choiceCount >= 4 &&
+      trialChallengeProbe.hasSpeed &&
+      trialChallengeProbe.hasNoDamage &&
+      trialChallengeProbe.hasDual &&
+      trialChallengeProbe.activeTrial === 'oathMirror' &&
+      trialChallengeProbe.trialName === '双誓并压' &&
+      trialChallengeProbe.trialChallenge?.conditions?.noDamage === true &&
+      Number(trialChallengeProbe.trialChallenge?.conditions?.maxTurns || 0) === 5 &&
+      trialChallengeProbe.trialReward === 'law' &&
+      trialChallengeProbe.currentScreen === 'battle-screen' &&
+      /试炼/.test(trialChallengeProbe.enemyName) &&
+      trialChallengeProbe.enemyHasTrialDebuff,
+    JSON.stringify(trialChallengeProbe || null)
   );
 
   const campExpandedProbe = await page.evaluate(() => {

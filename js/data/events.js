@@ -1001,6 +1001,181 @@ const EVENTS = {
             }
         ]
     },
+    oathscarShrine: {
+        id: 'oathscarShrine',
+        name: '契痕祠',
+        icon: '🩸',
+        description: '古祠里的誓纹不断渗血，仿佛在提醒你：每一道契痕都能换来一次越界爆发。',
+        choices: [
+            {
+                text: '在誓纹上刻名',
+                icon: '✒️',
+                result: '获得咒契起手组件',
+                resultType: 'positive',
+                effects: [
+                    { type: 'card', cardId: 'oathscarCut' },
+                    { type: 'card', cardId: 'hexbrandSigil' }
+                ]
+            },
+            {
+                text: '以血换约',
+                icon: '🫀',
+                result: '损失生命，获得核心力量牌',
+                resultType: 'negative',
+                condition: { type: 'hp', min: 22 },
+                effects: [
+                    { type: 'damage', value: 10 },
+                    { type: 'card', cardId: 'bloodpriceMandate' }
+                ]
+            }
+        ]
+    },
+
+    griefWritArchive: {
+        id: 'griefWritArchive',
+        name: '悲契札库',
+        icon: '📚',
+        description: '守库人说，真正的咒契不靠蛮勇，而靠“预支痛苦、结算未来”。',
+        choices: [
+            {
+                text: '抄录账页',
+                icon: '📜',
+                result: '升级一张牌并获得悲契账簿',
+                resultType: 'positive',
+                effects: [
+                    { type: 'upgradeCard' },
+                    { type: 'card', cardId: 'griefLedger' }
+                ]
+            },
+            {
+                text: '借走旧咒',
+                icon: '🕯️',
+                result: '获得中轴牌与灵石',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'gold', value: 85 },
+                    { type: 'card', cardId: 'pactRite' }
+                ]
+            }
+        ]
+    },
+
+    blackbannerExecution: {
+        id: 'blackbannerExecution',
+        name: '黑幡行刑台',
+        icon: '⚑',
+        description: '刑台早已空无一人，但黑幡仍在风中低语：“命要先抵押，裁决才会降临。”',
+        choices: [
+            {
+                text: '接下裁决',
+                icon: '⚔️',
+                result: '损失生命，获得终结牌',
+                resultType: 'negative',
+                condition: { type: 'hp', min: 26 },
+                effects: [
+                    { type: 'damage', value: 12 },
+                    { type: 'card', cardId: 'doomsentVerdict' }
+                ]
+            },
+            {
+                text: '收殓残契',
+                icon: '🕳️',
+                result: '获得魂押并提升命环经验',
+                resultType: 'positive',
+                effects: [
+                    { type: 'card', cardId: 'soulCollateral' },
+                    { type: 'ringExp', value: 50 }
+                ]
+            }
+        ]
+    },
+
+    ghostFurnace: {
+        id: 'ghostFurnace',
+        name: '灵火残炉',
+        icon: '🔥',
+        description: '残炉中仍有灵火未灭，只要投入新的魂芯，就能唤醒沉睡的锻阵傀影。',
+        choices: [
+            {
+                text: '续燃炉火',
+                icon: '🪆',
+                result: '获得灵傀起手组件',
+                resultType: 'positive',
+                effects: [
+                    { type: 'card', cardId: 'emberPuppetScript' },
+                    { type: 'card', cardId: 'spareSoulCore' }
+                ]
+            },
+            {
+                text: '捡走护炉甲片',
+                icon: '🛡️',
+                result: '恢复生命并获得防守构件牌',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'heal', value: 10 },
+                    { type: 'card', cardId: 'relayHarness' }
+                ]
+            }
+        ]
+    },
+
+    marionetteArmory: {
+        id: 'marionetteArmory',
+        name: '傀兵军械库',
+        icon: '🧰',
+        description: '军械库里整齐摆放着可替换的傀芯和护板，每一件都像是为下一场战斗预制好的答案。',
+        choices: [
+            {
+                text: '整备武装',
+                icon: '🔧',
+                result: '升级一张牌并获得阵列过载',
+                resultType: 'positive',
+                effects: [
+                    { type: 'upgradeCard' },
+                    { type: 'card', cardId: 'arrayOverclock' }
+                ]
+            },
+            {
+                text: '搬走防具',
+                icon: '🏗️',
+                result: '获得两张站场牌',
+                resultType: 'positive',
+                effects: [
+                    { type: 'card', cardId: 'guardianGimbal' },
+                    { type: 'card', cardId: 'foundryBulwark' }
+                ]
+            }
+        ]
+    },
+
+    ancestralFoundry: {
+        id: 'ancestralFoundry',
+        name: '祖炉总控',
+        icon: '🏭',
+        description: '总控台仍记录着古代锻阵的全套流程，只要你敢启动，它会把战场直接改造成兵工域。',
+        choices: [
+            {
+                text: '启动祖炉',
+                icon: '⚙️',
+                result: '获得祖机开炉',
+                resultType: 'positive',
+                effects: [
+                    { type: 'card', cardId: 'ancestralMachina' },
+                    { type: 'ringExp', value: 45 }
+                ]
+            },
+            {
+                text: '继承军令',
+                icon: '👑',
+                result: '获得大锻命令与灵石',
+                resultType: 'positive',
+                effects: [
+                    { type: 'gold', value: 95 },
+                    { type: 'card', cardId: 'grandForgeMandate' }
+                ]
+            }
+        ]
+    },
     convergenceRelay: {
         id: 'convergenceRelay',
         name: '汇流中继台',
@@ -2018,9 +2193,9 @@ const EVENTS = {
 
 // 事件池 - 按类型分类
 const EVENT_POOL = {
-    common: ['mysteryChest', 'spiritVein', 'wanderingSmith', 'hiddenSpring', 'brokenPavilion', 'mirrorNeedleDojo', 'voidBookkeeper', 'shieldRelayBeacon', 'nightWatchCamp', 'emberCampSignal', 'leylineConfluence', 'medicRelayPost', 'riftAidConvoy', 'stormchaserCamp', 'herbalPactShrine'],
-    uncommon: ['injuredCultivator', 'mysteryStele', 'celestialGamble', 'bloodMoonRitual', 'swordTomb', 'wanderingOracle', 'bloodForgeCovenant', 'shatteredCompass', 'ashLedgerTrial', 'ironCitadelPact', 'caravanQuartermaster', 'floatingMarketRift', 'astralSupplyDepot', 'starlitFieldHospital', 'convergenceRelay', 'harmonicAnvil', 'thunderConductTrial', 'fulgurMarket', 'lifestringClinic', 'bloodloomGarden'],
-    rare: ['mysteriousMerchant', 'ancientAltar', 'fateChoice', 'ancientLibrary', 'voidRift', 'spiritAuction', 'fallenFormation', 'destinyMirror', 'demonContract', 'starObservation', 'debtboundAnvil', 'convergenceRitual', 'aegisTribunal', 'frontierContractBoard', 'artifactConfluxBazaar', 'overclockSigil', 'hospiceRelay'],
+    common: ['mysteryChest', 'spiritVein', 'wanderingSmith', 'hiddenSpring', 'brokenPavilion', 'mirrorNeedleDojo', 'voidBookkeeper', 'shieldRelayBeacon', 'nightWatchCamp', 'emberCampSignal', 'leylineConfluence', 'medicRelayPost', 'riftAidConvoy', 'stormchaserCamp', 'herbalPactShrine', 'oathscarShrine', 'ghostFurnace'],
+    uncommon: ['injuredCultivator', 'mysteryStele', 'celestialGamble', 'bloodMoonRitual', 'swordTomb', 'wanderingOracle', 'bloodForgeCovenant', 'shatteredCompass', 'ashLedgerTrial', 'ironCitadelPact', 'caravanQuartermaster', 'floatingMarketRift', 'astralSupplyDepot', 'starlitFieldHospital', 'convergenceRelay', 'harmonicAnvil', 'thunderConductTrial', 'fulgurMarket', 'lifestringClinic', 'bloodloomGarden', 'griefWritArchive', 'marionetteArmory'],
+    rare: ['mysteriousMerchant', 'ancientAltar', 'fateChoice', 'ancientLibrary', 'voidRift', 'spiritAuction', 'fallenFormation', 'destinyMirror', 'demonContract', 'starObservation', 'debtboundAnvil', 'convergenceRitual', 'aegisTribunal', 'frontierContractBoard', 'artifactConfluxBazaar', 'overclockSigil', 'hospiceRelay', 'blackbannerExecution', 'ancestralFoundry'],
     special: ['trialGround']
 };
 
@@ -2044,7 +2219,9 @@ const ARCHETYPE_EVENT_POOLS = {
     entropy: ['voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard', 'floatingMarketRift', 'astralSupplyDepot'],
     stormcraft: ['thunderConductTrial', 'stormchaserCamp', 'fulgurMarket', 'overclockSigil', 'convergenceRelay', 'harmonicAnvil'],
     vitalweave: ['herbalPactShrine', 'lifestringClinic', 'bloodloomGarden', 'hospiceRelay', 'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy'],
-    bulwark: ['shieldRelayBeacon', 'ironCitadelPact', 'aegisTribunal', 'nightWatchCamp', 'emberCampSignal', 'leylineConfluence', 'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy']
+    bulwark: ['shieldRelayBeacon', 'ironCitadelPact', 'aegisTribunal', 'nightWatchCamp', 'emberCampSignal', 'leylineConfluence', 'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy'],
+    cursebound: ['oathscarShrine', 'griefWritArchive', 'blackbannerExecution', 'voidBookkeeper', 'ashLedgerTrial', 'frontierContractBoard'],
+    soulforge: ['ghostFurnace', 'marionetteArmory', 'ancestralFoundry', 'harmonicAnvil', 'artifactConfluxBazaar', 'shieldRelayBeacon']
 };
 
 const FATE_PATH_EVENT_POOLS = {

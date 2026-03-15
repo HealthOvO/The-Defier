@@ -53,7 +53,7 @@ function loadFile(ctx, filePath) {
   const getRandomEvent = vm.runInContext('getRandomEvent', ctx);
 
   // 1) 流派包完整性
-  ['hemorrhage', 'precision', 'entropy', 'stormcraft', 'vitalweave', 'bulwark'].forEach((id) => {
+  ['hemorrhage', 'precision', 'entropy', 'stormcraft', 'vitalweave', 'bulwark', 'cursebound', 'soulforge'].forEach((id) => {
     const pack = ARCHETYPE_PACKS[id];
     assert(pack, `missing archetype pack: ${id}`);
     assert(Array.isArray(pack.cards) && pack.cards.length >= 15, `${id} should have at least 15 cards`);
@@ -92,6 +92,14 @@ function loadFile(ctx, filePath) {
   assert(vitalweavePack && vitalweavePack.id === 'vitalweave', 'getArchetypePack should return vitalweave pack');
   const rareVitalweave = getRandomArchetypeCard('vitalweave', 'rare', null);
   assert(rareVitalweave && rareVitalweave.rarity === 'rare', 'rare vitalweave card should be retrievable');
+  const curseboundPack = getArchetypePack('cursebound');
+  assert(curseboundPack && curseboundPack.id === 'cursebound', 'getArchetypePack should return cursebound pack');
+  const rareCursebound = getRandomArchetypeCard('cursebound', 'rare', null);
+  assert(rareCursebound && rareCursebound.rarity === 'rare', 'rare cursebound card should be retrievable');
+  const soulforgePack = getArchetypePack('soulforge');
+  assert(soulforgePack && soulforgePack.id === 'soulforge', 'getArchetypePack should return soulforge pack');
+  const rareSoulforge = getRandomArchetypeCard('soulforge', 'rare', null);
+  assert(rareSoulforge && rareSoulforge.rarity === 'rare', 'rare soulforge card should be retrievable');
 
   // 3) 奖励偏置：牌组明显偏向时，奖励应显著命中对应流派
   const precisionDeck = ARCHETYPE_PACKS.precision.cards.slice(0, 10).map((id) => ({ ...CARDS[id] }));
@@ -118,6 +126,8 @@ function loadFile(ctx, filePath) {
     'floatingMarketRift', 'emberCampSignal', 'leylineConfluence', 'astralSupplyDepot',
     'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy',
     'convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar',
+    'oathscarShrine', 'griefWritArchive', 'blackbannerExecution',
+    'ghostFurnace', 'marionetteArmory', 'ancestralFoundry',
     'endlessPressureValve', 'endlessFaultLine', 'endlessOverclockAltar',
     'thunderConductTrial', 'stormchaserCamp', 'fulgurMarket', 'overclockSigil',
     'herbalPactShrine', 'lifestringClinic', 'bloodloomGarden', 'hospiceRelay'
@@ -146,6 +156,12 @@ function loadFile(ctx, filePath) {
   assert(EVENT_POOL.common.includes('medicRelayPost'), 'medicRelayPost should be in common pool');
   assert(EVENT_POOL.uncommon.includes('starlitFieldHospital'), 'starlitFieldHospital should be in uncommon pool');
   assert(EVENT_POOL.common.includes('riftAidConvoy'), 'riftAidConvoy should be in common pool');
+  assert(EVENT_POOL.common.includes('oathscarShrine'), 'oathscarShrine should be in common pool');
+  assert(EVENT_POOL.uncommon.includes('griefWritArchive'), 'griefWritArchive should be in uncommon pool');
+  assert(EVENT_POOL.rare.includes('blackbannerExecution'), 'blackbannerExecution should be in rare pool');
+  assert(EVENT_POOL.common.includes('ghostFurnace'), 'ghostFurnace should be in common pool');
+  assert(EVENT_POOL.uncommon.includes('marionetteArmory'), 'marionetteArmory should be in uncommon pool');
+  assert(EVENT_POOL.rare.includes('ancestralFoundry'), 'ancestralFoundry should be in rare pool');
   assert(EVENT_POOL.uncommon.includes('convergenceRelay'), 'convergenceRelay should be in uncommon pool');
   assert(EVENT_POOL.uncommon.includes('harmonicAnvil'), 'harmonicAnvil should be in uncommon pool');
   assert(EVENT_POOL.rare.includes('artifactConfluxBazaar'), 'artifactConfluxBazaar should be in rare pool');
@@ -207,7 +223,9 @@ function loadFile(ctx, filePath) {
     entropy: ['voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard', 'floatingMarketRift', 'astralSupplyDepot'],
     stormcraft: ['thunderConductTrial', 'stormchaserCamp', 'fulgurMarket', 'overclockSigil', 'convergenceRelay', 'harmonicAnvil'],
     vitalweave: ['herbalPactShrine', 'lifestringClinic', 'bloodloomGarden', 'hospiceRelay', 'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy'],
-    bulwark: ['shieldRelayBeacon', 'ironCitadelPact', 'aegisTribunal', 'nightWatchCamp', 'emberCampSignal', 'leylineConfluence', 'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy']
+    bulwark: ['shieldRelayBeacon', 'ironCitadelPact', 'aegisTribunal', 'nightWatchCamp', 'emberCampSignal', 'leylineConfluence', 'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy'],
+    cursebound: ['oathscarShrine', 'griefWritArchive', 'blackbannerExecution', 'voidBookkeeper', 'ashLedgerTrial', 'frontierContractBoard'],
+    soulforge: ['ghostFurnace', 'marionetteArmory', 'ancestralFoundry', 'harmonicAnvil', 'artifactConfluxBazaar', 'shieldRelayBeacon']
   };
   Object.entries(expectedEventPools).forEach(([archetypeId, expectedIds]) => {
     const actual = ARCHETYPE_EVENT_POOLS[archetypeId];

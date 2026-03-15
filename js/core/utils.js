@@ -589,6 +589,11 @@ const Utils = {
         const enemyEl = document.createElement('div');
         enemyEl.className = `enemy ${enemy.isElite ? 'elite' : ''} ${enemy.isBoss ? 'boss' : ''}`;
         enemyEl.dataset.index = index;
+        const escapeHtml = (value) => String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
 
         let currentPattern;
         if (enemy.isGhost) {
@@ -599,7 +604,6 @@ const Utils = {
 
         if (!currentPattern) currentPattern = { type: 'none' };
 
-        const intentIcon = currentPattern.intent || '❓';
         const intentValue = currentPattern.value ? (currentPattern.count ? `${currentPattern.value}x${currentPattern.count}` : currentPattern.value) : '';
         const isAttackIntent = currentPattern.type === 'attack' || currentPattern.type === 'multiAttack';
         const playerBlock = Math.max(0, Math.floor(Number(window?.game?.player?.block) || 0));
@@ -878,6 +882,9 @@ const Utils = {
         const squadTag = String(enemy.enemySquadTag || '').trim();
         const squadRoleLabel = String(enemy.enemySquadRoleLabel || '').trim();
         const squadDesc = String(enemy.enemySquadDesc || '').trim();
+        const chapterFormationTag = String(enemy.chapterFormationTag || '').trim();
+        const chapterFormationRoleLabel = String(enemy.chapterFormationRoleLabel || '').trim();
+        const chapterFormationDesc = String(enemy.chapterFormationDesc || '').trim();
         if (encounterTag) {
             intentDesc += `｜遭遇：${encounterTag} ${encounterTierText}`;
         }
@@ -886,6 +893,9 @@ const Utils = {
         }
         if (squadTag) {
             intentDesc += `｜编队：${squadTag}${squadRoleLabel ? `·${squadRoleLabel}` : ''}`;
+        }
+        if (chapterFormationTag) {
+            intentDesc += `｜阵面：${chapterFormationTag}${chapterFormationRoleLabel ? `·${chapterFormationRoleLabel}` : ''}`;
         }
         if (currentPattern.type === 'multiAction' && Array.isArray(currentPattern.actions) && currentPattern.actions.length > 0) {
             const segments = currentPattern.actions
@@ -920,28 +930,92 @@ const Utils = {
             .replace(/\\/g, '\\\\')
             .replace(/'/g, "\\'")
             .replace(/\n/g, ' ');
-        const encounterDescSafe = encounterDesc
-            .replace(/&/g, '&amp;')
-            .replace(/"/g, '&quot;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-        const encounterAffixDescSafe = encounterAffixDesc
-            .replace(/&/g, '&amp;')
-            .replace(/"/g, '&quot;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-        const squadDescSafe = squadDesc
-            .replace(/&/g, '&amp;')
-            .replace(/"/g, '&quot;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-        const counterHintTitleSafe = counterHints
+        const battleHud = (typeof globalThis !== 'undefined' && globalThis.DefierBattleHud)
+            ? globalThis.DefierBattleHud
+            : null;
+        const renderMetaStrip = (stripClass, items = []) => {
+            const safeItems = items.filter((item) => item && String(item.text || '').trim());
+            if (safeItems.length === 0) return '';
+
+            if (battleHud && typeof battleHud.buildEnemyMetaStripMarkup === 'function') {
+                return battleHud.buildEnemyMetaStripMarkup({ stripClass, items: safeItems });
+            }
+
+            return `
+                <div class="${escapeHtml(stripClass)}">
+                    ${safeItems.map((item) => `
+                        <span class="${escapeHtml(item.className || 'enemy-meta-chip')}"
+                              ${item.title ? `title="${escapeHtml(item.title)}"` : ''}>
+                            ${escapeHtml(item.text)}
+                        </span>
+                    `).join('')}
+                </div>
+            `;
+        };
+        const intentDisplay = battleHud && typeof battleHud.resolveEnemyIntentDisplay === 'function'
+            ? battleHud.resolveEnemyIntentDisplay(currentPattern)
+            : {
+                icon: currentPattern.intent || '❓',
+                label: '',
+                hasLabel: false
+            };
+        const intentMarkup = battleHud && typeof battleHud.buildEnemyIntentMarkup === 'function'
+            ? battleHud.buildEnemyIntentMarkup({
+                type: currentPattern.type,
+                icon: intentDisplay.icon,
+                label: intentDisplay.label,
+                value: intentValue,
+                isGuardBreaker,
+                tooltipSafe,
+                ariaLabel: intentDesc
+            })
+            : `
+                <div class="enemy-intent ${escapeHtml(currentPattern.type || 'unknown')} ${isGuardBreaker ? 'breaker' : ''}"
+                     onmouseenter="Utils.showTooltip('${tooltipSafe}', event.clientX, event.clientY)"
+                     onmouseleave="Utils.hideTooltip()">
+                    ${escapeHtml(intentDisplay.icon)}
+                    ${intentValue ? `<span class="intent-value">${escapeHtml(intentValue)}</span>` : ''}
+                    ${isGuardBreaker ? '<span class="intent-tag breaker">破盾</span>' : ''}
+                </div>
+            `;
+        const counterHintTitle = counterHints
             .map((item) => String(item.detail || ''))
-            .join(' | ')
-            .replace(/&/g, '&amp;')
-            .replace(/"/g, '&quot;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
+            .join(' | ');
+        const primaryMetaMarkup = renderMetaStrip('enemy-meta-strip enemy-meta-primary', [
+            { className: `enemy-role-tag role-${enemyRole.id}`, text: enemyRole.label },
+            tacticalPlanLabel
+                ? { className: 'enemy-plan-tag', text: `节奏·${tacticalPlanLabel}`, title: `行动节奏：${tacticalPlanLabel}` }
+                : null,
+            counterHints.length > 0
+                ? { className: 'enemy-counter-tag', text: `反制·${counterHints[0].label}`, title: counterHintTitle }
+                : null
+        ]);
+        const secondaryMetaMarkup = renderMetaStrip('enemy-meta-strip enemy-meta-secondary', [
+            encounterTag
+                ? { className: 'enemy-encounter-tag', text: `⚔️ 遭遇·${encounterTag} ${encounterTierText}`, title: encounterDesc || '本场遭遇词条生效中' }
+                : null,
+            encounterAffixTag
+                ? { className: 'enemy-encounter-affix', text: `✦ 词缀·${encounterAffixTag}`, title: encounterAffixDesc || '高阶遭遇词缀生效中' }
+                : null,
+            squadTag
+                ? { className: 'enemy-squad-tag', text: `⛭ 编队·${squadTag}${squadRoleLabel ? `·${squadRoleLabel}` : ''}`, title: squadDesc || '敌方编队协同中' }
+                : null,
+            chapterFormationTag
+                ? {
+                    className: 'enemy-formation-tag',
+                    text: `⌘ 阵面·${chapterFormationTag}${chapterFormationRoleLabel ? `·${chapterFormationRoleLabel}` : ''}`,
+                    title: chapterFormationDesc || '章节阵面压制中'
+                }
+                : null
+        ]);
+        const threatTagsMarkup = renderMetaStrip(
+            'enemy-meta-strip enemy-threat-tags',
+            threatTags.map((item) => ({
+                className: `enemy-threat-tag tag-${item.id} ${item.severity === 'high' ? 'high-risk' : ''}`.trim(),
+                text: item.label,
+                title: String(item.desc || '')
+            }))
+        );
 
         // BOSS Image Support (Unified Structure)
         let avatarStyle = '';
@@ -955,53 +1029,27 @@ const Utils = {
         enemyEl.innerHTML = `
             <div class="enemy-avatar ${hasImage ? 'has-image' : ''}" style="${avatarStyle}">
                 ${hasImage ? '' : enemy.icon}
-                <div class="enemy-intent ${currentPattern.type} ${isGuardBreaker ? 'breaker' : ''}" 
-                     onmouseenter="Utils.showTooltip('${tooltipSafe}', event.clientX, event.clientY)"
-                     onmouseleave="Utils.hideTooltip()">
-                    ${intentIcon}
-                    ${intentValue ? `<span class="intent-value">${intentValue}</span>` : ''}
-                    ${isGuardBreaker ? '<span class="intent-tag breaker">破盾</span>' : ''}
+                ${intentMarkup}
+            </div>
+            <div class="enemy-info-stack">
+                <div class="enemy-name">${enemy.name}</div>
+                ${primaryMetaMarkup}
+                ${secondaryMetaMarkup}
+                ${threatTagsMarkup}
+                <div class="enemy-vitals">
+                    <div class="enemy-hp">
+                        <div class="enemy-hp-preview" style="width: 0%"></div>
+                        <div class="enemy-hp-fill" style="width: ${(enemy.currentHp / enemy.maxHp) * 100}%"></div>
+                    </div>
+                    <div class="enemy-vital-row">
+                        <div class="enemy-hp-text">${enemy.currentHp}/${enemy.maxHp}</div>
+                        ${enemy.block > 0 ? `<div class="enemy-block">🛡️ ${enemy.block}</div>` : ''}
+                    </div>
+                </div>
+                <div class="buff-list enemy-buffs">
+                    ${this.renderBuffs(enemy)}
                 </div>
             </div>
-            <div class="enemy-name">${enemy.name}</div>
-            <div class="enemy-role-tag role-${enemyRole.id}">${enemyRole.label}</div>
-            ${tacticalPlanLabel
-                ? `<div class="enemy-plan-tag" title="行动节奏：${tacticalPlanLabel}">节奏·${tacticalPlanLabel}</div>`
-                : ''}
-            ${encounterTag
-                ? `<div class="enemy-encounter-tag" title="${encounterDescSafe || '本场遭遇词条生效中'}">⚔️ 遭遇·${encounterTag} ${encounterTierText}</div>`
-                : ''}
-            ${encounterAffixTag
-                ? `<div class="enemy-encounter-affix" title="${encounterAffixDescSafe || '高阶遭遇词缀生效中'}">✦ 词缀·${encounterAffixTag}</div>`
-                : ''}
-            ${squadTag
-                ? `<div class="enemy-squad-tag" title="${squadDescSafe || '敌方编队协同中'}">⛭ 编队·${squadTag}${squadRoleLabel ? `·${squadRoleLabel}` : ''}</div>`
-                : ''}
-            ${counterHints.length > 0
-                ? `<div class="enemy-counter-tag" title="${counterHintTitleSafe}">反制·${counterHints[0].label}</div>`
-                : ''}
-            ${threatTags.length > 0
-                ? `<div class="enemy-threat-tags">${threatTags
-                    .map((item) => {
-                        const safeDesc = String(item.desc || '')
-                            .replace(/&/g, '&amp;')
-                            .replace(/"/g, '&quot;')
-                            .replace(/</g, '&lt;')
-                            .replace(/>/g, '&gt;');
-                        const riskClass = item.severity === 'high' ? 'high-risk' : '';
-                        return `<span class="enemy-threat-tag tag-${item.id} ${riskClass}" title="${safeDesc}">${item.label}</span>`;
-                    })
-                    .join('')}</div>`
-                : ''}
-            <div class="enemy-hp">
-                <div class="enemy-hp-preview" style="width: 0%"></div>
-                <div class="enemy-hp-fill" style="width: ${(enemy.currentHp / enemy.maxHp) * 100}%"></div>
-            </div>
-            <div class="enemy-hp-text">${enemy.currentHp}/${enemy.maxHp}</div>
-            ${enemy.block > 0 ? `<div class="enemy-block">🛡️ ${enemy.block}</div>` : ''}
-        <div class="buff-list enemy-buffs">
-            ${this.renderBuffs(enemy)}
-        </div>
         `;
 
         return enemyEl;

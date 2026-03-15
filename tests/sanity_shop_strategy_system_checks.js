@@ -129,6 +129,9 @@ function loadFile(ctx, filePath) {
     'setNextRealmMapRumor',
     'getPendingRouteRumorProfile',
     'consumePendingRouteRumorProfile',
+    'getStrategicRouteForecasts',
+    'getStrategicRouteForecast',
+    'applyStrategicRouteForecast',
     'applyServiceEffect'
   ].forEach((name) => {
     harness[name] = Game.prototype[name];
@@ -187,9 +190,13 @@ function loadFile(ctx, filePath) {
     getPreferredArchetypeId: () => null,
     getFateRingPath: () => null,
     applyFatePathNodeBias: () => {},
+    applyStrategicNodeBias: GameMap.prototype.applyStrategicNodeBias,
     applyRouteDiversityPressure: () => {},
     applyLongTermDiversityPressure: () => {},
     applyNodePityPressure: () => {},
+    getRecentRowsForBias: GameMap.prototype.getRecentRowsForBias,
+    rowContainsType: GameMap.prototype.rowContainsType,
+    normalizeNodeTypeForWeights: GameMap.prototype.normalizeNodeTypeForWeights,
     normalizeNodeWeights: GameMap.prototype.normalizeNodeWeights
   };
   const weightsWithRumor = GameMap.prototype.getDynamicNodeWeights.call(mapHarness, 2, 8, 5, {

@@ -155,34 +155,45 @@ class GameMap {
         const player = this.game && this.game.player ? this.game.player : {};
         const progress = row / Math.max(1, totalRows - 1);
         const weights = {
-            enemy: 0.50,
-            elite: 0.20,
-            event: 0.10,
-            shop: 0.08,
-            trial: 0.06,
-            forge: 0.04,
-            rest: 0.02
+            enemy: 0.46,
+            elite: 0.18,
+            event: 0.08,
+            shop: 0.07,
+            trial: 0.05,
+            forge: 0.03,
+            rest: 0.02,
+            observatory: 0.04,
+            spirit_grotto: 0.03,
+            forbidden_altar: 0.03,
+            memory_rift: 0.04
         };
 
-        // 中后段提升试炼与锻炉的出现率，强化构筑抉择
-        if (progress >= 0.5) {
-            weights.trial += 0.03;
-            weights.forge += 0.02;
-            weights.enemy -= 0.03;
-            weights.event -= 0.02;
-        }
-        if (progress >= 0.75) {
-            weights.trial += 0.02;
-            weights.forge += 0.01;
+        // 中后段提升试炼、裂隙与禁术节点的出现率，强化构筑转折
+        if (progress >= 0.45) {
+            weights.trial += 0.025;
+            weights.memory_rift += 0.012;
+            weights.observatory += 0.006;
             weights.enemy -= 0.02;
-            weights.shop -= 0.01;
+            weights.event -= 0.012;
+            weights.shop -= 0.011;
+        }
+        if (progress >= 0.72) {
+            weights.trial += 0.015;
+            weights.forbidden_altar += 0.014;
+            weights.memory_rift += 0.008;
+            weights.forge += 0.008;
+            weights.enemy -= 0.018;
+            weights.shop -= 0.014;
+            weights.rest -= 0.013;
         }
 
         // 金币不足时，降低锻炉概率，避免“到点但用不起”的无效体验
         const forgeDiscount = player && player.legacyBonuses ? (player.legacyBonuses.forgeCostDiscount || 0) : 0;
         const expectedForgeCost = Math.floor((55 + realm * 9) * (1 - Math.min(0.35, forgeDiscount)));
         if ((player.gold || 0) < expectedForgeCost) {
-            weights.forge -= 0.02;
+            weights.forge -= 0.015;
+            weights.observatory += 0.006;
+            weights.memory_rift += 0.004;
             weights.event += 0.01;
             weights.rest += 0.01;
         }
@@ -194,6 +205,7 @@ class GameMap {
             : 0;
         if (upgradableCount >= 4) {
             weights.forge += 0.02;
+            weights.memory_rift += 0.006;
             weights.enemy -= 0.015;
             weights.event -= 0.005;
         } else if (upgradableCount <= 1) {
@@ -206,10 +218,12 @@ class GameMap {
         // 仅做温和调整，避免路线被单一节点类型挤占。
         const preferredArchetype = this.getPreferredArchetypeId(player);
         if (preferredArchetype && progress >= 0.2 && progress <= 0.9) {
-            weights.event += 0.03;
-            weights.enemy -= 0.015;
+            weights.event += 0.022;
+            weights.memory_rift += 0.014;
+            weights.observatory += 0.006;
+            weights.enemy -= 0.018;
             weights.shop -= 0.01;
-            weights.rest -= 0.005;
+            weights.rest -= 0.008;
         }
 
         const fateRingPath = this.getFateRingPath(player);
@@ -248,6 +262,22 @@ class GameMap {
             });
         }
 
+        const vowEffects = player && typeof player.getRunVowEffects === 'function'
+            ? player.getRunVowEffects()
+            : null;
+        const vowShift = vowEffects && vowEffects.mapWeightShift && typeof vowEffects.mapWeightShift === 'object'
+            ? vowEffects.mapWeightShift
+            : null;
+        if (vowShift) {
+            Object.keys(vowShift).forEach((key) => {
+                if (!Object.prototype.hasOwnProperty.call(weights, key)) return;
+                const delta = Number(vowShift[key]);
+                if (!Number.isFinite(delta)) return;
+                weights[key] += delta;
+            });
+        }
+
+        this.applyStrategicNodeBias(weights, row, totalRows, realm, context);
         this.applyRouteDiversityPressure(weights, row, totalRows, context);
         this.applyLongTermDiversityPressure(weights, row, totalRows, context);
         this.applyNodePityPressure(weights, row, totalRows, context);
@@ -289,12 +319,12 @@ class GameMap {
         if (!path || typeof path !== 'string' || path === 'crippled') return;
 
         const pathShift = {
-            convergence: { event: 0.022, trial: 0.012, enemy: -0.016, rest: -0.006, shop: -0.004, forge: -0.008 },
-            resonance: { trial: 0.018, rest: 0.014, enemy: -0.015, elite: -0.009, forge: -0.004, event: -0.004 },
+            convergence: { event: 0.018, trial: 0.012, observatory: 0.01, memory_rift: 0.008, enemy: -0.016, rest: -0.006, shop: -0.004, forge: -0.008 },
+            resonance: { trial: 0.016, rest: 0.014, memory_rift: 0.006, enemy: -0.015, elite: -0.009, forge: -0.004, event: -0.004 },
             agility: { enemy: 0.018, elite: 0.012, event: -0.01, rest: -0.012, shop: -0.008 },
-            wisdom: { event: 0.02, shop: 0.008, enemy: -0.012, elite: -0.006, rest: -0.004, trial: -0.006 },
-            insight: { event: 0.016, trial: 0.012, enemy: -0.012, shop: -0.006, forge: -0.006, rest: -0.004 },
-            destruction: { enemy: 0.02, elite: 0.014, rest: -0.01, shop: -0.008, event: -0.008, trial: -0.008 },
+            wisdom: { event: 0.014, shop: 0.008, observatory: 0.012, memory_rift: 0.008, enemy: -0.012, elite: -0.006, rest: -0.004, trial: -0.006 },
+            insight: { event: 0.012, trial: 0.012, observatory: 0.01, memory_rift: 0.012, enemy: -0.012, shop: -0.006, forge: -0.006, rest: -0.004 },
+            destruction: { enemy: 0.02, elite: 0.014, forbidden_altar: 0.012, rest: -0.01, shop: -0.008, event: -0.008, trial: -0.008 },
             toughness: { rest: 0.016, forge: 0.01, event: 0.008, enemy: -0.012, elite: -0.008, trial: -0.006 }
         };
 
@@ -334,9 +364,13 @@ class GameMap {
             const eventBoost = 0.006 + doctrineTier * 0.006;
             const shopBoost = 0.003 + doctrineTier * 0.004;
             const trialBoost = doctrineTier >= 2 ? 0.003 * (doctrineTier - 1) : 0;
+            const observatoryBoost = 0.003 + doctrineTier * 0.003;
+            const riftBoost = doctrineTier >= 2 ? 0.002 + doctrineTier * 0.002 : 0;
             weights.event += eventBoost;
             weights.shop += shopBoost;
             weights.trial += trialBoost;
+            weights.observatory += observatoryBoost;
+            weights.memory_rift += riftBoost;
             weights.enemy -= 0.007 + doctrineTier * 0.004;
             weights.elite -= 0.003 + doctrineTier * 0.002;
             weights.rest -= 0.0015 * doctrineTier;
@@ -346,6 +380,7 @@ class GameMap {
         if (path === 'convergence') {
             weights.trial += 0.002 + doctrineTier * 0.002;
             weights.forge += doctrineTier >= 2 ? 0.0015 * doctrineTier : 0;
+            weights.memory_rift += doctrineTier >= 2 ? 0.001 * doctrineTier : 0;
             weights.enemy -= 0.002 + doctrineTier * 0.0015;
             return;
         }
@@ -353,8 +388,90 @@ class GameMap {
         if (path === 'resonance') {
             weights.rest += 0.002 + doctrineTier * 0.002;
             weights.event += doctrineTier >= 2 ? 0.0015 * doctrineTier : 0;
+            weights.memory_rift += doctrineTier >= 3 ? 0.0015 * doctrineTier : 0;
             weights.enemy -= 0.002 + doctrineTier * 0.0015;
             return;
+        }
+    }
+
+    applyStrategicNodeBias(weights, row, totalRows, realm, context = null) {
+        if (!weights || typeof weights !== 'object') return;
+        const player = this.game && this.game.player ? this.game.player : null;
+        if (!player) return;
+
+        const progress = row / Math.max(1, totalRows - 1);
+        const maxHp = Math.max(1, Number.isFinite(Number(player.maxHp)) ? Number(player.maxHp) : 80);
+        const currentHp = Number.isFinite(Number(player.currentHp)) ? Number(player.currentHp) : maxHp;
+        const hpRatio = Math.max(0, currentHp) / maxHp;
+        const pendingRumor = this.game && typeof this.game.getPendingRouteRumorProfile === 'function'
+            ? this.game.getPendingRouteRumorProfile(realm + 1)
+            : null;
+        const destiny = player && typeof player.getRunDestinyMeta === 'function'
+            ? player.getRunDestinyMeta()
+            : null;
+        const destinyBase = destiny && typeof RUN_DESTINIES !== 'undefined' ? RUN_DESTINIES[destiny.id] : null;
+        const destinyMaxTier = destinyBase && Array.isArray(destinyBase.tiers)
+            ? Math.max(1, destinyBase.tiers.length)
+            : 1;
+        const vows = player && typeof player.getRunVowMetas === 'function'
+            ? player.getRunVowMetas()
+            : [];
+        const vowCanGrow = vows.length < 2 || vows.some((meta) => meta && meta.tier < meta.maxTier);
+
+        if (!pendingRumor && realm < 18 && progress >= 0.2) {
+            weights.observatory += 0.01;
+            weights.enemy -= 0.005;
+            weights.shop -= 0.005;
+        }
+
+        const spirit = player && typeof player.getSpiritCompanionMeta === 'function'
+            ? player.getSpiritCompanionMeta()
+            : null;
+        const spiritCanGrow = spirit && Number(spirit.tier) < Number(spirit.maxTier || spirit.tier || 1);
+        if ((!spirit || spiritCanGrow) && progress >= 0.24) {
+            weights.spirit_grotto += spirit ? 0.016 : 0.02;
+            weights.enemy -= 0.008;
+            weights.shop -= 0.006;
+        }
+
+        if (destiny && destiny.tier < destinyMaxTier) {
+            weights.memory_rift += 0.014;
+            weights.event -= 0.006;
+            weights.enemy -= 0.008;
+        }
+
+        if (vowCanGrow && progress >= 0.42) {
+            weights.forbidden_altar += 0.01;
+            weights.enemy -= 0.005;
+            weights.rest -= 0.005;
+        }
+
+        if ((Number(player.karma) || 0) >= 2 && hpRatio >= 0.55) {
+            weights.forbidden_altar += 0.008;
+            weights.shop -= 0.004;
+            weights.event -= 0.004;
+        }
+
+        if (hpRatio <= 0.42 || maxHp <= 24) {
+            weights.forbidden_altar -= 0.015;
+            weights.rest += 0.009;
+            weights.observatory += 0.006;
+        }
+
+        const recentRows = this.getRecentRowsForBias(row, 3, context);
+        const hasStrategicNode = recentRows.some((rowNodes) => (
+            this.rowContainsType(rowNodes, 'observatory')
+            || this.rowContainsType(rowNodes, 'spirit_grotto')
+            || this.rowContainsType(rowNodes, 'forbidden_altar')
+            || this.rowContainsType(rowNodes, 'memory_rift')
+        ));
+        if (!hasStrategicNode && progress >= 0.28) {
+            weights.observatory += 0.008;
+            weights.spirit_grotto += 0.007;
+            weights.memory_rift += 0.009;
+            if (hpRatio >= 0.5) weights.forbidden_altar += 0.004;
+            weights.enemy -= 0.011;
+            weights.elite -= 0.006;
         }
     }
 
@@ -378,7 +495,11 @@ class GameMap {
                 shop: true,
                 trial: true,
                 forge: true,
-                rest: true
+                rest: true,
+                observatory: true,
+                spirit_grotto: true,
+                forbidden_altar: true,
+                memory_rift: true
             }, type)) return;
             counts[type] = (counts[type] || 0) + 1;
         });
@@ -452,19 +573,27 @@ class GameMap {
         const dominantToBoostPlan = (type) => {
             if (isCombat(type)) {
                 return [
-                    ['event', 0.3],
-                    ['trial', 0.24],
-                    ['shop', 0.2],
-                    ['forge', 0.16],
-                    ['rest', 0.1]
+                    ['event', 0.22],
+                    ['trial', 0.18],
+                    ['shop', 0.14],
+                    ['forge', 0.12],
+                    ['observatory', 0.12],
+                    ['spirit_grotto', 0.1],
+                    ['memory_rift', 0.12],
+                    ['forbidden_altar', 0.06],
+                    ['rest', 0.04]
                 ];
             }
             return [
-                ['enemy', 0.34],
-                ['elite', 0.2],
-                ['event', 0.16],
-                ['trial', 0.16],
-                ['shop', 0.14]
+                ['enemy', 0.24],
+                ['elite', 0.14],
+                ['event', 0.12],
+                ['trial', 0.12],
+                ['shop', 0.12],
+                ['observatory', 0.1],
+                ['spirit_grotto', 0.1],
+                ['memory_rift', 0.1],
+                ['forbidden_altar', 0.06]
             ];
         };
 
@@ -485,18 +614,26 @@ class GameMap {
             const penalty = Math.min(0.07, 0.03 * count);
             const inRowBoostPlan = isCombat(type)
                 ? [
-                    ['event', 0.32],
-                    ['trial', 0.24],
-                    ['shop', 0.2],
-                    ['forge', 0.14],
-                    ['rest', 0.1]
+                    ['event', 0.22],
+                    ['trial', 0.18],
+                    ['shop', 0.14],
+                    ['forge', 0.1],
+                    ['observatory', 0.14],
+                    ['spirit_grotto', 0.12],
+                    ['memory_rift', 0.14],
+                    ['forbidden_altar', 0.06],
+                    ['rest', 0.02]
                 ]
                 : [
-                    ['enemy', 0.36],
-                    ['elite', 0.22],
-                    ['trial', 0.16],
-                    ['event', 0.14],
-                    ['shop', 0.12]
+                    ['enemy', 0.24],
+                    ['elite', 0.16],
+                    ['trial', 0.12],
+                    ['event', 0.12],
+                    ['shop', 0.1],
+                    ['observatory', 0.1],
+                    ['spirit_grotto', 0.1],
+                    ['memory_rift', 0.1],
+                    ['forbidden_altar', 0.06]
                 ];
             this.applyWeightPenaltyAndRedistribute(weights, type, penalty, inRowBoostPlan);
         });
@@ -555,19 +692,27 @@ class GameMap {
         const planByType = (type) => {
             if (isCombat(type)) {
                 return [
-                    ['event', 0.3],
-                    ['trial', 0.24],
-                    ['forge', 0.16],
-                    ['shop', 0.16],
-                    ['rest', 0.14]
+                    ['event', 0.2],
+                    ['trial', 0.18],
+                    ['forge', 0.12],
+                    ['shop', 0.12],
+                    ['observatory', 0.14],
+                    ['spirit_grotto', 0.1],
+                    ['memory_rift', 0.14],
+                    ['forbidden_altar', 0.06],
+                    ['rest', 0.04]
                 ];
             }
             return [
-                ['enemy', 0.34],
-                ['elite', 0.22],
-                ['trial', 0.18],
-                ['event', 0.12],
-                ['shop', 0.14]
+                ['enemy', 0.24],
+                ['elite', 0.16],
+                ['trial', 0.12],
+                ['event', 0.1],
+                ['shop', 0.12],
+                ['observatory', 0.1],
+                ['spirit_grotto', 0.1],
+                ['memory_rift', 0.1],
+                ['forbidden_altar', 0.06]
             ];
         };
 
@@ -586,6 +731,7 @@ class GameMap {
 
     getRecentRowsForBias(row, lookback = 4, context = null) {
         const rows = [];
+        const sourceNodes = Array.isArray(this.nodes) ? this.nodes : [];
         const requestedRows = Array.isArray(context?.historyRows) ? context.historyRows : null;
         if (requestedRows && requestedRows.length > 0) {
             requestedRows.forEach((historyRow) => {
@@ -596,8 +742,8 @@ class GameMap {
 
         const start = Math.max(0, row - Math.max(1, Math.floor(Number(lookback) || 4)));
         for (let r = start; r < row; r += 1) {
-            if (Array.isArray(this.nodes[r]) && this.nodes[r].length > 0) {
-                rows.push(this.nodes[r]);
+            if (Array.isArray(sourceNodes[r]) && sourceNodes[r].length > 0) {
+                rows.push(sourceNodes[r]);
             }
         }
         if (Array.isArray(context?.currentRowNodes) && context.currentRowNodes.length > 0) {
@@ -625,6 +771,11 @@ class GameMap {
         const containsEvent = recentRows.some((rowNodes) => this.rowContainsType(rowNodes, 'event'));
         const containsShop = recentRows.some((rowNodes) => this.rowContainsType(rowNodes, 'shop'));
         const containsRest = recentRows.some((rowNodes) => this.rowContainsType(rowNodes, 'rest'));
+        const containsStrategic = recentRows.some((rowNodes) => (
+            this.rowContainsType(rowNodes, 'observatory')
+            || this.rowContainsType(rowNodes, 'forbidden_altar')
+            || this.rowContainsType(rowNodes, 'memory_rift')
+        ));
         const progress = row / Math.max(1, totalRows - 1);
 
         if (!containsEvent) {
@@ -646,6 +797,13 @@ class GameMap {
             weights.enemy -= 0.007;
             weights.elite -= 0.004;
             weights.event -= 0.003;
+        }
+        if (!containsStrategic && progress >= 0.28) {
+            weights.observatory += 0.012;
+            weights.memory_rift += 0.014;
+            if (progress >= 0.55) weights.forbidden_altar += 0.008;
+            weights.enemy -= 0.012;
+            weights.elite -= 0.006;
         }
     }
 
@@ -857,11 +1015,11 @@ class GameMap {
         let qualifiedHit = false;
         switch (path) {
             case 'convergence':
-                if (node.type === 'event') {
+                if (node.type === 'event' || node.type === 'observatory') {
                     qualifiedHit = true;
                     gainRingExp(12, '汇流节点共鸣：命环经验 +12');
                     grantBuff('firstTurnEnergyBoostBattles', 1, '汇流增幅：首回合灵力强化 +1 层');
-                } else if (node.type === 'trial' || node.type === 'forge') {
+                } else if (node.type === 'trial' || node.type === 'forge' || node.type === 'memory_rift' || node.type === 'spirit_grotto') {
                     qualifiedHit = true;
                     gainRingExp(8, '汇流校准：命环经验 +8');
                 }
@@ -875,6 +1033,9 @@ class GameMap {
                 } else if (node.type === 'trial') {
                     qualifiedHit = true;
                     grantBuff('firstTurnDrawBoostBattles', 1, '共鸣洞察：首回合抽牌 +1 层');
+                } else if (node.type === 'spirit_grotto') {
+                    qualifiedHit = true;
+                    grantBuff('firstTurnDrawBoostBattles', 1, '灵契回响：首回合抽牌 +1 层');
                 }
                 break;
             case 'agility':
@@ -884,23 +1045,23 @@ class GameMap {
                 }
                 break;
             case 'wisdom':
-                if (node.type === 'event' || node.type === 'shop') {
+                if (node.type === 'event' || node.type === 'shop' || node.type === 'observatory' || node.type === 'memory_rift' || node.type === 'spirit_grotto') {
                     qualifiedHit = true;
                     gainRingExp(9, '悟境推演：命环经验 +9');
                 }
                 break;
             case 'insight':
-                if (node.type === 'event' || node.type === 'trial') {
+                if (node.type === 'event' || node.type === 'trial' || node.type === 'observatory' || node.type === 'memory_rift' || node.type === 'spirit_grotto') {
                     qualifiedHit = true;
                     gainRingExp(10, '洞察归纳：命环经验 +10');
                     grantBuff('ringExpBoostBattles', 1, '洞察预热：命环经验倍率 +1 层');
                 }
                 break;
             case 'destruction':
-                if (isCombatNode) {
+                if (isCombatNode || node.type === 'forbidden_altar') {
                     qualifiedHit = true;
                     grantBuff('victoryGoldBoostBattles', 1, '毁灭掠夺：胜利额外灵石 +1 层');
-                    if (node.type === 'elite' || node.type === 'trial') {
+                    if (node.type === 'elite' || node.type === 'trial' || node.type === 'forbidden_altar') {
                         gainGold(12, '毁灭追猎：额外获得 12 灵石');
                     }
                 }
@@ -932,13 +1093,17 @@ class GameMap {
         });
         if (total <= 0) {
             return {
-                enemy: 0.5,
-                elite: 0.2,
-                event: 0.1,
-                shop: 0.08,
-                trial: 0.06,
-                forge: 0.04,
-                rest: 0.02
+                enemy: 0.46,
+                elite: 0.18,
+                event: 0.08,
+                shop: 0.07,
+                trial: 0.05,
+                forge: 0.03,
+                rest: 0.02,
+                observatory: 0.04,
+                spirit_grotto: 0.03,
+                forbidden_altar: 0.03,
+                memory_rift: 0.04
             };
         }
         Object.keys(normalized).forEach(key => {
@@ -950,7 +1115,7 @@ class GameMap {
     rollNodeByWeights(weights) {
         const roll = Math.random();
         let cumulative = 0;
-        const order = ['enemy', 'elite', 'event', 'shop', 'trial', 'forge', 'rest'];
+        const order = ['enemy', 'elite', 'event', 'observatory', 'spirit_grotto', 'shop', 'trial', 'forge', 'memory_rift', 'forbidden_altar', 'rest'];
         for (const key of order) {
             cumulative += weights[key] || 0;
             if (roll <= cumulative) return key;
@@ -969,9 +1134,29 @@ class GameMap {
             shop: '🏪',
             rest: '🏕️',
             trial: '⚖️',
-            forge: '⚒️'
+            forge: '⚒️',
+            observatory: '🔭',
+            spirit_grotto: '🪷',
+            forbidden_altar: '🩸',
+            memory_rift: '🪞'
         };
         return icons[type] || '❓';
+    }
+
+    getNodeLayoutSignature() {
+        if (!Array.isArray(this.nodes)) return 'empty';
+        return this.nodes
+            .map((row, rowIndex) => {
+                if (!Array.isArray(row)) return `${rowIndex}:none`;
+                return row
+                    .map((node, nodeIndex) => {
+                        const nodeId = node && node.id != null ? node.id : `row${rowIndex}-node${nodeIndex}`;
+                        const nodeType = node && node.type ? node.type : 'unknown';
+                        return `${nodeType}:${nodeId}`;
+                    })
+                    .join('|');
+            })
+            .join(' / ');
     }
 
     // 渲染地图 (V3 - Ascension Style + Flexbox Fix)
@@ -987,10 +1172,15 @@ class GameMap {
         const mapKey = (this.game && typeof this.game.getMapCacheKey === 'function')
             ? this.game.getMapCacheKey(currentRealm)
             : String(currentRealm);
+        const nodeLayoutSignature = this.getNodeLayoutSignature();
         const existingMap = container.querySelector('.map-screen-v3');
 
-        // Smart Render Check: If map exists and is for the same realm, update in-place
-        if (existingMap && existingMap.dataset.mapKey === mapKey) {
+        // Smart Render Check: If map exists and the node layout is unchanged, update in-place.
+        if (
+            existingMap
+            && existingMap.dataset.mapKey === mapKey
+            && existingMap.dataset.nodeSignature === nodeLayoutSignature
+        ) {
             console.log('[Debug] Updating existing map in-place');
             this.updateMapState();
             return;
@@ -999,7 +1189,7 @@ class GameMap {
         console.log('[Debug] Full map rebuild for realm:', currentRealm);
 
         container.innerHTML = `
-            <div class="map-screen-v3" data-realm="${currentRealm}" data-map-key="${mapKey}">
+            <div class="map-screen-v3" data-realm="${currentRealm}" data-map-key="${mapKey}" data-node-signature="${nodeLayoutSignature}">
                 <div class="map-bg-layer map-bg-stars"></div>
                 <div class="map-bg-layer map-bg-mist"></div>
                 
@@ -1020,6 +1210,7 @@ class GameMap {
                                 <span id="map-floor">${this.getRealmName(this.game.player.realm)}</span>
                             </div>
                         </div>
+                        <div id="map-chapter-brief" class="map-chapter-brief" style="display:none;"></div>
                         <div id="map-adventure-buffs" class="map-adventure-buffs" style="display:none;"></div>
                         <div id="map-route-hints" class="map-route-hints" style="display:none;"></div>
                         <div id="map-endless-panel" class="map-endless-panel" style="display:none;"></div>
@@ -1261,8 +1452,12 @@ class GameMap {
             event: '机缘：祸福相依',
             shop: '坊市：互通有无',
             rest: '洞府：休养生息',
-            trial: '试炼：高风险，高回报',
-            forge: '锻造：支付灵石强化构筑'
+            trial: '试炼碑：自选词缀难度，换高稀有奖励',
+            forge: '炼器坊：锻牌、重铸法宝或器灵灌注',
+            observatory: '观星台：预览下一重天并锁定路线',
+            spirit_grotto: '灵契窟：更换、升阶或追索灵契回响',
+            forbidden_altar: '禁术坛：以血换誓，赌高收益禁术',
+            memory_rift: '记忆裂隙：回溯命格，撕取残章'
         };
         return tips[type] || '未知区域';
     }
@@ -1347,9 +1542,83 @@ class GameMap {
             this.game.renderTreasures();
         }
 
+        this.updateChapterBriefPanel();
         this.updateAdventureBuffPanel();
         this.updateRouteHintPanel();
         this.updateEndlessPanel();
+    }
+
+    updateChapterBriefPanel() {
+        const panel = document.getElementById('map-chapter-brief');
+        if (!panel || !this.game || !this.game.player || typeof this.game.getChapterDisplaySnapshot !== 'function') {
+            return;
+        }
+
+        const chapter = this.game.getChapterDisplaySnapshot(this.game.player.realm);
+        if (!chapter) {
+            panel.style.display = 'none';
+            panel.innerHTML = '';
+            return;
+        }
+
+        const accessibleNodes = typeof this.getAccessibleNodes === 'function'
+            ? this.getAccessibleNodes()
+            : [];
+        const specialLabelMap = {
+            observatory: '观星台',
+            forge: '炼器坊',
+            forbidden_altar: '禁术坛',
+            spirit_grotto: '灵契窟',
+            memory_rift: '记忆裂隙',
+            trial: '试炼碑',
+            shop: '商路',
+            rest: '营地'
+        };
+        const specialWarnings = Array.from(new Set(
+            accessibleNodes
+                .map((node) => specialLabelMap[node?.type] || null)
+                .filter(Boolean)
+        )).slice(0, 3);
+
+        const bossInfo = this.game && typeof this.game.getRealmBossInfo === 'function'
+            ? this.game.getRealmBossInfo(this.game.player.realm)
+            : null;
+        const bossLine = bossInfo && bossInfo.bossName
+            ? `${bossInfo.bossName}${chapter.bossPrompt ? ` · ${chapter.bossPrompt}` : ''}`
+            : (chapter.bossPrompt || '本章主宰尚未显形。');
+
+        panel.style.display = 'block';
+        panel.innerHTML = `
+            <div class="chapter-brief-kicker">章节世界规则</div>
+            <div class="chapter-brief-header">
+                <div class="chapter-brief-title">${chapter.icon || '☯️'} ${chapter.fullName}</div>
+                <div class="chapter-brief-stage">${chapter.stageLabel}</div>
+            </div>
+            <div class="chapter-brief-line">
+                <span class="chapter-line-label">天象</span>
+                <span class="chapter-line-value">${chapter.skyOmen?.name || '未定'} · ${chapter.skyOmen?.desc || '暂无额外变化。'}</span>
+            </div>
+            <div class="chapter-brief-line">
+                <span class="chapter-line-label">地脉</span>
+                <span class="chapter-line-value">${chapter.leyline?.name || '未定'} · ${chapter.leyline?.desc || '暂无额外变化。'}</span>
+            </div>
+            <div class="chapter-brief-line compact">
+                <span class="chapter-line-label">主宰</span>
+                <span class="chapter-line-value">${bossLine}</span>
+            </div>
+            <div class="chapter-brief-chip-row">
+                ${(Array.isArray(chapter.focusTags) ? chapter.focusTags : [])
+                    .slice(0, 3)
+                    .map((tag) => `<span class="chapter-brief-chip">${tag}</span>`)
+                    .join('')}
+                <span class="chapter-brief-chip warning">前路异象：${specialWarnings.length > 0 ? specialWarnings.join(' / ') : '常规战斗为主'}</span>
+            </div>
+        `;
+        panel.title = [
+            chapter.stageDesc || '',
+            chapter.routePrompt || '',
+            chapter.bossPrompt || ''
+        ].filter(Boolean).join(' ｜ ');
     }
 
     updateAdventureBuffPanel() {
@@ -1424,6 +1693,18 @@ class GameMap {
             });
         }
 
+        const activeVows = this.game && this.game.player && typeof this.game.player.getRunVowMetas === 'function'
+            ? this.game.player.getRunVowMetas()
+            : [];
+        activeVows.forEach((vow) => {
+            if (!vow || !vow.name) return;
+            chips.push({
+                id: 'vow-route',
+                icon: vow.icon || '✧',
+                label: `${vow.name}：${vow.routeHint || '偏好高风险节点'}`
+            });
+        });
+
         const start = Math.max(0, frontierRow - 4);
         const recentRows = rows.slice(start, frontierRow).filter((rowNodes) => Array.isArray(rowNodes) && rowNodes.length > 0);
         if (recentRows.length < 3) return { chips };
@@ -1449,6 +1730,19 @@ class GameMap {
                 id: 'rest-pity',
                 icon: '🏕️',
                 label: '营地舒压权重上调'
+            });
+        }
+        const hasStrategicInRows = recentRows.some((rowNodes) => (
+            this.rowContainsType(rowNodes, 'observatory')
+            || this.rowContainsType(rowNodes, 'spirit_grotto')
+            || this.rowContainsType(rowNodes, 'forbidden_altar')
+            || this.rowContainsType(rowNodes, 'memory_rift')
+        ));
+        if (!hasStrategicInRows && progress >= 0.28) {
+            chips.push({
+                id: 'strategic-pity',
+                icon: '🧭',
+                label: '谋略节点权重上调'
             });
         }
 
@@ -1670,6 +1964,18 @@ class GameMap {
             case 'forge':
                 this.openForgeNode(node);
                 break;
+            case 'observatory':
+                this.openObservatoryNode(node);
+                break;
+            case 'spirit_grotto':
+                this.openSpiritGrottoNode(node);
+                break;
+            case 'forbidden_altar':
+                this.openForbiddenAltarNode(node);
+                break;
+            case 'memory_rift':
+                this.openMemoryRiftNode(node);
+                break;
         }
     }
 
@@ -1780,8 +2086,13 @@ class GameMap {
         this.game.startBattle([elite], node);
     }
 
-    // 试炼节点：强化版精英战
-    startTrialNode(node) {
+    // 试炼节点：先选词缀，再进入强化版精英战
+    startTrialNode(node, trialConfig = null) {
+        if (!trialConfig && this.game && typeof this.game.showTrialChallengeSelection === 'function') {
+            this.game.showTrialChallengeSelection(node);
+            return;
+        }
+
         const realm = this.game.player.realm;
         const trialEnemy = createEliteEnemy(realm) || getRandomEnemy(realm);
 
@@ -1790,17 +2101,51 @@ class GameMap {
             return;
         }
 
+        const armedTrial = trialConfig && this.game && typeof this.game.armTrialChallenge === 'function'
+            ? this.game.armTrialChallenge(trialConfig)
+            : trialConfig;
+
         trialEnemy.name = `【试炼】${trialEnemy.name}`;
-        trialEnemy.hp = Math.floor((trialEnemy.hp || trialEnemy.maxHp || 80) * 1.35);
+        const hpMul = Math.max(1, Number(armedTrial?.enemyHpMul) || 1);
+        const atkMul = Math.max(1, Number(armedTrial?.enemyAtkMul) || 1);
+        const openingBlock = Math.max(0, Math.floor(Number(armedTrial?.enemyOpeningBlock) || 0));
+        const enemyDebuff = armedTrial && armedTrial.enemyDebuff && typeof armedTrial.enemyDebuff === 'object'
+            ? armedTrial.enemyDebuff
+            : null;
+
+        trialEnemy.hp = Math.floor((trialEnemy.hp || trialEnemy.maxHp || 80) * 1.35 * hpMul);
+        trialEnemy.maxHp = Math.max(trialEnemy.hp, Math.floor(Number(trialEnemy.maxHp || trialEnemy.hp || 80) * 1.35 * hpMul));
         trialEnemy.ringExp = Math.floor((trialEnemy.ringExp || (20 + realm * 6)) * 1.6);
+        trialEnemy.block = Math.max(0, Math.floor(Number(trialEnemy.block) || 0)) + openingBlock;
         trialEnemy.patterns = (trialEnemy.patterns || []).map(pattern => {
             if (pattern.type === 'attack' || pattern.type === 'multiAttack') {
-                return { ...pattern, value: Math.floor((pattern.value || 0) * 1.2) };
+                return { ...pattern, value: Math.floor((pattern.value || 0) * 1.2 * atkMul) };
             }
             return { ...pattern };
         });
+        if (enemyDebuff && enemyDebuff.type && enemyDebuff.value > 0) {
+            trialEnemy.patterns.unshift({
+                type: 'debuff',
+                buffType: enemyDebuff.type,
+                value: enemyDebuff.value,
+                intent: '试炼词缀'
+            });
+        }
 
         this.game.currentBattleNode = node;
+        if (armedTrial && armedTrial.name) {
+            Utils.showBattleLog(`【试炼碑】已刻下【${armedTrial.name}】`);
+            const conditionLines = [];
+            if (Number(armedTrial?.conditions?.maxTurns || 0) > 0) {
+                conditionLines.push(`${armedTrial.conditions.maxTurns} 回合内取胜`);
+            }
+            if (armedTrial?.conditions?.noDamage) {
+                conditionLines.push('本场不可失去生命');
+            }
+            if (conditionLines.length > 0) {
+                Utils.showBattleLog(`试炼条件：${conditionLines.join('｜')}`);
+            }
+        }
         this.game.startBattle([trialEnemy], node);
     }
 
@@ -1953,6 +2298,42 @@ class GameMap {
 
         // Fallback: if modal API missing, use balanced default choice.
         this.applyForgeChoice(node, 'steady', { forgeCost, premiumCost, temperCost });
+    }
+
+    openObservatoryNode(node) {
+        this.game.currentBattleNode = node;
+        if (this.game && typeof this.game.showObservatoryNode === 'function') {
+            this.game.showObservatoryNode(node);
+            return;
+        }
+        this.completeNode(node);
+    }
+
+    openSpiritGrottoNode(node) {
+        this.game.currentBattleNode = node;
+        if (this.game && typeof this.game.showSpiritGrottoNode === 'function') {
+            this.game.showSpiritGrottoNode(node);
+            return;
+        }
+        this.completeNode(node);
+    }
+
+    openForbiddenAltarNode(node) {
+        this.game.currentBattleNode = node;
+        if (this.game && typeof this.game.showForbiddenAltarNode === 'function') {
+            this.game.showForbiddenAltarNode(node);
+            return;
+        }
+        this.completeNode(node);
+    }
+
+    openMemoryRiftNode(node) {
+        this.game.currentBattleNode = node;
+        if (this.game && typeof this.game.showMemoryRiftNode === 'function') {
+            this.game.showMemoryRiftNode(node);
+            return;
+        }
+        this.completeNode(node);
     }
 
     pickAndUpgradeCards(count = 1) {

@@ -45,7 +45,7 @@ function getCardValueScore(card) {
   const CARDS = vm.runInContext('CARDS', ctx);
   const ARCHETYPE_PACKS = vm.runInContext('ARCHETYPE_PACKS', ctx);
 
-  const targetArchetypes = ['stormcraft', 'vitalweave'];
+  const targetArchetypes = ['stormcraft', 'vitalweave', 'cursebound', 'soulforge'];
   const forbiddenEffectTypes = new Set(['searchDeck', 'tutor', 'instantWin', 'killAll']);
   const seen = new Set();
   const cards = [];

@@ -13,6 +13,14 @@ function add(name, pass, detail = '') {
   findings.push({ name, pass, detail });
 }
 
+async function safeScreenshot(page, outPath) {
+  try {
+    await page.screenshot({ path: outPath, fullPage: true, timeout: 5000 });
+  } catch (err) {
+    console.warn(`[browser_pvp_mobile_audit] screenshot skipped: ${err?.message || err}`);
+  }
+}
+
 function rectObj(el) {
   if (!el) return null;
   const rect = el.getBoundingClientRect();
@@ -131,7 +139,7 @@ function rectObj(el) {
   });
   add('pvp mobile defense view remains readable in single-column layout', !!defenseProbe?.ok, JSON.stringify(defenseProbe || null));
 
-  await page.screenshot({ path: path.join(outDir, 'pvp-mobile.png'), fullPage: true });
+  await safeScreenshot(page, path.join(outDir, 'pvp-mobile.png'));
 
   const report = { url, findings, consoleErrors, timestamp: new Date().toISOString() };
   fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));

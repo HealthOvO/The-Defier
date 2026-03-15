@@ -25,10 +25,14 @@ function loadFile(ctx, filePath) {
 
   loadFile(ctx, path.join(root, 'js/data/enemies.js'));
   const ENEMIES = vm.runInContext('ENEMIES', ctx);
+  const ENEMY_ECOLOGY_TEMPLATES = vm.runInContext('ENEMY_ECOLOGY_TEMPLATES', ctx);
+  const CHAPTER_ELITE_COMBOS = vm.runInContext('CHAPTER_ELITE_COMBOS', ctx);
   const getEnemiesForRealm = vm.runInContext('getEnemiesForRealm', ctx);
 
   const allIds = new Set(Object.keys(ENEMIES));
-  assert(allIds.size >= 50, `enemy roster should stay rich (>=50), got ${allIds.size}`);
+  assert(allIds.size >= 94, `enemy roster should reach V6.0 target (>=94), got ${allIds.size}`);
+  assert(Object.keys(ENEMY_ECOLOGY_TEMPLATES || {}).length >= 6, 'chapter ecology templates should cover all 6 chapters');
+  assert(Object.keys(CHAPTER_ELITE_COMBOS || {}).length >= 6, 'chapter elite combos should cover all 6 chapters');
 
   const globalCats = { attack: 0, defend: 0, debuff: 0, support: 0 };
   const attackTypes = new Set(['attack', 'multiAttack', 'executeDamage']);
@@ -38,7 +42,7 @@ function loadFile(ctx, filePath) {
 
   for (let realm = 1; realm <= 18; realm += 1) {
     const enemies = getEnemiesForRealm(realm);
-    assert(Array.isArray(enemies) && enemies.length >= 3, `realm ${realm} should provide >=3 enemies`);
+    assert(Array.isArray(enemies) && enemies.length >= 4, `realm ${realm} should provide >=4 enemies after ecology pack`);
 
     let hasBurstEnemy = false;
     let hasControlOrDefenseEnemy = false;
@@ -47,6 +51,8 @@ function loadFile(ctx, filePath) {
 
     enemies.forEach((enemy) => {
       assert(enemy && enemy.id, `realm ${realm} contains invalid enemy entry`);
+      assert(enemy.ecologyGroup, `enemy ${enemy.id} should expose ecologyGroup`);
+      assert(enemy.ecologyLabel, `enemy ${enemy.id} should expose ecologyLabel`);
       const patterns = Array.isArray(enemy.patterns) ? enemy.patterns : [];
       assert(patterns.length >= 2, `enemy ${enemy.id} should have >=2 behavior patterns`);
 
@@ -91,6 +97,13 @@ function loadFile(ctx, filePath) {
   assert(globalCats.defend > 0, 'global enemy ecology should include defense patterns');
   assert(globalCats.debuff > 0, 'global enemy ecology should include debuff/control patterns');
   assert(globalCats.support > 0, 'global enemy ecology should include support patterns');
+
+  for (let chapterIndex = 1; chapterIndex <= 6; chapterIndex += 1) {
+    const template = ENEMY_ECOLOGY_TEMPLATES[chapterIndex];
+    const combo = CHAPTER_ELITE_COMBOS[chapterIndex];
+    assert(template && template.formation && template.elite, `chapter ${chapterIndex} should define both ecology and elite templates`);
+    assert(combo && Array.isArray(combo.anchorEnemyIds) && combo.anchorEnemyIds.length >= 2, `chapter ${chapterIndex} should define anchor elite combo ids`);
+  }
 
   console.log('Enemy ecology diversity checks passed.');
 })();

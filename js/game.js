@@ -22,6 +22,14 @@ class Game {
         this.lastBattleRewardMeta = null;
         this.comboCount = 0;
         this.lastCardType = null;
+        this.selectedCharacterId = null;
+        this.selectedRunDestinyId = null;
+        this.selectedSpiritCompanionId = null;
+        this.activeTrial = null;
+        this.trialData = null;
+        this.trialMode = null;
+        this.pendingRunDestinyDrafts = {};
+        this.pendingSpiritCompanionDrafts = {};
         this.runStartTime = null;
         this.currentSaveSlot = null; // Default to null (unknown), NOT 0 (Slot 1)
         this.cachedSlots = [null, null, null, null]; // Cache for slots
@@ -146,6 +154,9 @@ class Game {
     renderGameToText() {
         const mode = this.currentScreen || 'unknown';
         const isBattleMode = mode === 'battle-screen';
+        const chapterSnapshot = (this.player && typeof this.getChapterDisplaySnapshot === 'function')
+            ? this.getChapterDisplaySnapshot(this.player?.realm || 1)
+            : null;
         const payload = {
             coordSystem: 'ui-screen-space, origin top-left, +x right, +y down',
             mode,
@@ -165,8 +176,54 @@ class Game {
                         tier: this.player.archetypeResonance.tier
                     }
                     : null,
+                runDestiny: (this.player && typeof this.player.getRunDestinyMeta === 'function')
+                    ? this.player.getRunDestinyMeta()
+                    : null,
+                runVows: (this.player && typeof this.player.getRunVowMetas === 'function')
+                    ? this.player.getRunVowMetas()
+                    : [],
+                spiritCompanion: (this.player && typeof this.player.getSpiritCompanionMeta === 'function')
+                    ? this.player.getSpiritCompanionMeta()
+                    : null,
+                spiritCharge: (this.player && typeof this.player.getSpiritCompanionMeta === 'function' && this.player.getSpiritCompanionMeta())
+                    ? {
+                        charge: Math.max(0, Math.floor(Number(this.player?.spiritCompanionBattleState?.charge) || 0)),
+                        max: Math.max(1, Math.floor(Number(this.player.getSpiritCompanionMeta().chargeMax) || 1))
+                    }
+                    : null,
+                treasureWorkshop: (this.player && typeof this.player.getTreasureWorkshopSnapshot === 'function')
+                    ? this.player.getTreasureWorkshopSnapshot('equipped')
+                    : [],
+                treasureResearch: (this.player && typeof this.player.getTreasureWorkshopResearchOverview === 'function')
+                    ? this.player.getTreasureWorkshopResearchOverview()
+                    : null,
                 adventureBuffs: this.player?.adventureBuffs || null
             },
+            draft: mode === 'character-selection-screen'
+                ? {
+                    selectedCharacterId: this.selectedCharacterId || null,
+                    selectedRunDestinyId: this.selectedRunDestinyId || null,
+                    selectedSpiritCompanionId: this.selectedSpiritCompanionId || null,
+                    characterIdentity: this.getCharacterIdentityProfile(this.selectedCharacterId || ''),
+                    runDestinies: Array.isArray(this.pendingRunDestinyDrafts?.[this.selectedCharacterId || ''])
+                        ? this.pendingRunDestinyDrafts[this.selectedCharacterId || ''].slice()
+                        : []
+                    ,
+                    spiritCompanions: Array.isArray(this.pendingSpiritCompanionDrafts?.[this.selectedCharacterId || ''])
+                        ? this.pendingSpiritCompanionDrafts[this.selectedCharacterId || ''].slice()
+                        : []
+                }
+                : null,
+            eventModal: (() => {
+                const modal = typeof document !== 'undefined' ? document.getElementById('event-modal') : null;
+                if (!modal || !modal.classList.contains('active')) return null;
+                return {
+                    title: document.getElementById('event-title')?.textContent || '',
+                    tone: modal.dataset.eventTone || '',
+                    atmosphere: document.getElementById('event-atmosphere')?.textContent || '',
+                    summary: document.getElementById('event-system-summary')?.textContent?.replace(/\s+/g, ' ').trim() || ''
+                };
+            })(),
             battle: (isBattleMode && this.battle) ? {
                 turn: this.battle.turnNumber || 0,
                 currentTurn: this.battle.currentTurn || 'none',
@@ -185,8 +242,42 @@ class Game {
                         count: this.battle.activeSquadEcology.count || 0
                     }
                     : null,
+                trialChallenge: this.trialData
+                    ? {
+                        id: this.trialData.id || null,
+                        name: this.trialData.name || null,
+                        conditions: this.trialData.conditions || {},
+                        rewardMultiplier: this.trialData.rewardMultiplier || 1,
+                        reward: this.trialData.reward || null
+                    }
+                    : null,
                 battleCommand: (typeof this.battle.getBattleCommandSnapshot === 'function')
                     ? this.battle.getBattleCommandSnapshot()
+                    : null,
+                chapterRules: chapterSnapshot
+                    ? {
+                        chapterIndex: chapterSnapshot.chapterIndex,
+                        name: chapterSnapshot.name,
+                        stageLabel: chapterSnapshot.stageLabel,
+                        skyOmen: chapterSnapshot.skyOmen
+                            ? {
+                                name: chapterSnapshot.skyOmen.name,
+                                desc: chapterSnapshot.skyOmen.desc
+                            }
+                            : null,
+                        leyline: chapterSnapshot.leyline
+                            ? {
+                                name: chapterSnapshot.leyline.name,
+                                desc: chapterSnapshot.leyline.desc
+                            }
+                            : null
+                    }
+                    : null,
+                chapterBattlefield: (typeof this.battle.getChapterBattlefieldDisplayState === 'function')
+                    ? this.battle.getChapterBattlefieldDisplayState()
+                    : null,
+                systemsHud: (typeof this.battle.getBattleSystemDisplayState === 'function')
+                    ? this.battle.getBattleSystemDisplayState()
                     : null,
                 enemies: (this.battle.enemies || []).filter(e => e.currentHp > 0).map((e, idx) => ({
                     i: idx,
@@ -202,6 +293,25 @@ class Game {
             } : null,
             map: this.map ? {
                 realm: this.player?.realm || 1,
+                chapter: chapterSnapshot
+                    ? {
+                        chapterIndex: chapterSnapshot.chapterIndex,
+                        name: chapterSnapshot.name,
+                        stageLabel: chapterSnapshot.stageLabel,
+                        skyOmen: chapterSnapshot.skyOmen
+                            ? {
+                                name: chapterSnapshot.skyOmen.name,
+                                desc: chapterSnapshot.skyOmen.desc
+                            }
+                            : null,
+                        leyline: chapterSnapshot.leyline
+                            ? {
+                                name: chapterSnapshot.leyline.name,
+                                desc: chapterSnapshot.leyline.desc
+                            }
+                            : null
+                    }
+                    : null,
                 activeNodes: typeof this.map.getAccessibleNodes === 'function'
                     ? this.map.getAccessibleNodes().map(n => ({ id: n.id, row: n.row, type: n.type }))
                     : []
@@ -230,6 +340,1469 @@ class Game {
         if (typeof AuthService === 'undefined') return false;
         if (!AuthService.isCloudEnabled || !AuthService.isCloudEnabled()) return false;
         return !AuthService.isLoggedIn();
+    }
+
+    getRunDestinyCatalog() {
+        if (typeof RUN_DESTINIES === 'undefined' || !RUN_DESTINIES || typeof RUN_DESTINIES !== 'object') {
+            return [];
+        }
+        return Object.values(RUN_DESTINIES).filter((item) => item && item.id);
+    }
+
+    getRunDestinyMetaById(destinyId, tier = 1) {
+        if (typeof destinyId !== 'string' || !destinyId || typeof RUN_DESTINIES === 'undefined' || !RUN_DESTINIES[destinyId]) {
+            return null;
+        }
+        const base = RUN_DESTINIES[destinyId];
+        const tiers = Array.isArray(base.tiers) ? base.tiers : [];
+        const tierIndex = Math.max(0, Math.min(tiers.length - 1, Math.floor(Number(tier) || 1) - 1));
+        const tierMeta = tiers[tierIndex] || tiers[0] || {};
+        return {
+            id: base.id,
+            name: base.name,
+            icon: base.icon || '✦',
+            category: base.category || '命格',
+            description: base.description || '',
+            playstyle: base.playstyle || '',
+            affinities: Array.isArray(base.affinities) ? base.affinities.slice() : [],
+            tier: Math.max(1, Math.floor(Number(tier) || 1)),
+            tierLabel: tierMeta.label || `第 ${Math.max(1, Math.floor(Number(tier) || 1))} 阶`,
+            summary: tierMeta.summary || base.description || '',
+            effects: tierMeta.effects && typeof tierMeta.effects === 'object'
+                ? { ...tierMeta.effects }
+                : {}
+        };
+    }
+
+    getRunVowCatalog() {
+        if (typeof RUN_VOWS === 'undefined' || !RUN_VOWS || typeof RUN_VOWS !== 'object') {
+            return [];
+        }
+        return Object.values(RUN_VOWS).filter((item) => item && item.id);
+    }
+
+    getRunVowMetaById(vowId, tier = 1) {
+        if (typeof vowId !== 'string' || !vowId || typeof RUN_VOWS === 'undefined' || !RUN_VOWS[vowId]) {
+            return null;
+        }
+        const base = RUN_VOWS[vowId];
+        const tiers = Array.isArray(base.tiers) ? base.tiers : [];
+        const maxTier = Math.max(1, tiers.length || 1);
+        const safeTier = Math.max(1, Math.min(maxTier, Math.floor(Number(tier) || 1)));
+        const tierMeta = tiers[safeTier - 1] || tiers[0] || {};
+        return {
+            id: base.id,
+            name: base.name,
+            icon: base.icon || '✧',
+            category: base.category || '誓约',
+            tags: Array.isArray(base.tags) ? base.tags.slice() : [],
+            description: base.description || '',
+            playstyle: base.playstyle || '',
+            routeHint: base.routeHint || '',
+            buildFit: base.buildFit || '',
+            counterplay: base.counterplay || '',
+            source: base.source || '',
+            uiMeta: base.uiMeta && typeof base.uiMeta === 'object' ? { ...base.uiMeta } : {},
+            unlockRules: base.unlockRules && typeof base.unlockRules === 'object'
+                ? JSON.parse(JSON.stringify(base.unlockRules))
+                : {},
+            affinities: Array.isArray(base.affinities) ? base.affinities.slice() : [],
+            tier: safeTier,
+            maxTier,
+            tierLabel: tierMeta.label || `第 ${safeTier} 阶`,
+            summary: tierMeta.summary || base.description || '',
+            risk: tierMeta.risk || '',
+            effects: tierMeta.effects && typeof tierMeta.effects === 'object'
+                ? { ...tierMeta.effects }
+                : {}
+        };
+    }
+
+    shuffleList(values = []) {
+        const list = Array.isArray(values) ? values.slice() : [];
+        if (typeof Utils !== 'undefined' && Utils && typeof Utils.shuffle === 'function') {
+            try {
+                return Utils.shuffle(list);
+            } catch (error) {
+                console.warn('shuffleList fallback due to Utils.shuffle error:', error);
+            }
+        }
+        for (let i = list.length - 1; i > 0; i -= 1) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [list[i], list[j]] = [list[j], list[i]];
+        }
+        return list;
+    }
+
+    draftRunDestiniesForCharacter(characterId) {
+        const charId = typeof characterId === 'string' ? characterId : 'linFeng';
+        const cached = this.pendingRunDestinyDrafts && Array.isArray(this.pendingRunDestinyDrafts[charId])
+            ? this.pendingRunDestinyDrafts[charId].slice()
+            : null;
+        if (cached && cached.length >= 3) return cached.slice(0, 3);
+
+        const catalog = this.getRunDestinyCatalog();
+        const affinityPool = this.shuffleList(
+            catalog.filter((item) => Array.isArray(item.affinities) && item.affinities.includes(charId))
+        );
+        const fallbackPool = this.shuffleList(
+            catalog.filter((item) => !Array.isArray(item.affinities) || !item.affinities.includes(charId))
+        );
+
+        const draft = [];
+        while (affinityPool.length > 0 && draft.length < 2) {
+            const next = affinityPool.shift();
+            if (next && !draft.includes(next.id)) draft.push(next.id);
+        }
+        while (fallbackPool.length > 0 && draft.length < 3) {
+            const next = fallbackPool.shift();
+            if (next && !draft.includes(next.id)) draft.push(next.id);
+        }
+        while (affinityPool.length > 0 && draft.length < 3) {
+            const next = affinityPool.shift();
+            if (next && !draft.includes(next.id)) draft.push(next.id);
+        }
+
+        this.pendingRunDestinyDrafts = this.pendingRunDestinyDrafts || {};
+        this.pendingRunDestinyDrafts[charId] = draft.slice(0, 3);
+        return this.pendingRunDestinyDrafts[charId].slice();
+    }
+
+    resolveDefaultRunDestinyId(characterId) {
+        const charId = typeof characterId === 'string' ? characterId : 'linFeng';
+        const draft = this.draftRunDestiniesForCharacter(charId);
+        return draft[0] || (this.getRunDestinyCatalog()[0] && this.getRunDestinyCatalog()[0].id) || null;
+    }
+
+    getSpiritCompanionCatalog() {
+        if (typeof SPIRIT_COMPANIONS === 'undefined' || !SPIRIT_COMPANIONS || typeof SPIRIT_COMPANIONS !== 'object') {
+            return [];
+        }
+        return Object.keys(SPIRIT_COMPANIONS)
+            .map((id) => this.getSpiritCompanionMetaById(id, 1))
+            .filter(Boolean);
+    }
+
+    getSpiritCompanionMetaById(spiritId, tier = 1) {
+        if (
+            typeof spiritId !== 'string'
+            || !spiritId
+            || typeof SPIRIT_COMPANIONS === 'undefined'
+            || !SPIRIT_COMPANIONS[spiritId]
+        ) {
+            return null;
+        }
+        const base = SPIRIT_COMPANIONS[spiritId];
+        const tiers = Array.isArray(base.tiers) ? base.tiers : [];
+        const maxTier = Math.max(1, tiers.length || 1);
+        const safeTier = Math.max(1, Math.min(maxTier, Math.floor(Number(tier) || 1)));
+        const tierMeta = tiers[safeTier - 1] || tiers[0] || {};
+        return {
+            id: base.id,
+            name: base.name,
+            icon: base.icon || '✦',
+            title: base.title || '',
+            category: '灵契',
+            description: base.description || '',
+            playstyle: base.playstyle || '',
+            story: base.story || '',
+            affinities: Array.isArray(base.affinities) ? base.affinities.slice() : [],
+            tier: safeTier,
+            maxTier,
+            tierLabel: tierMeta.label || `第 ${safeTier} 阶`,
+            summary: tierMeta.summary || base.description || '',
+            passiveLabel: tierMeta.passiveLabel || '灵契被动',
+            passiveDesc: tierMeta.passiveDesc || '',
+            activeLabel: tierMeta.activeLabel || '灵契主动',
+            activeDesc: tierMeta.activeDesc || '',
+            chargeMax: Math.max(1, Math.floor(Number(tierMeta.chargeMax) || 5)),
+            passive: tierMeta.passive && typeof tierMeta.passive === 'object'
+                ? { ...tierMeta.passive }
+                : {},
+            active: tierMeta.active && typeof tierMeta.active === 'object'
+                ? { ...tierMeta.active }
+                : {}
+        };
+    }
+
+    draftSpiritCompanionsForCharacter(characterId) {
+        const charId = typeof characterId === 'string' ? characterId : 'linFeng';
+        const cached = this.pendingSpiritCompanionDrafts && Array.isArray(this.pendingSpiritCompanionDrafts[charId])
+            ? this.pendingSpiritCompanionDrafts[charId].slice()
+            : null;
+        if (cached && cached.length >= 3) return cached.slice(0, 3);
+
+        const catalog = this.getSpiritCompanionCatalog();
+        const affinityPool = this.shuffleList(
+            catalog.filter((item) => Array.isArray(item.affinities) && item.affinities.includes(charId))
+        );
+        const fallbackPool = this.shuffleList(
+            catalog.filter((item) => !Array.isArray(item.affinities) || !item.affinities.includes(charId))
+        );
+
+        const draft = [];
+        while (affinityPool.length > 0 && draft.length < 2) {
+            const next = affinityPool.shift();
+            if (next && !draft.includes(next.id)) draft.push(next.id);
+        }
+        while (fallbackPool.length > 0 && draft.length < 3) {
+            const next = fallbackPool.shift();
+            if (next && !draft.includes(next.id)) draft.push(next.id);
+        }
+        while (affinityPool.length > 0 && draft.length < 3) {
+            const next = affinityPool.shift();
+            if (next && !draft.includes(next.id)) draft.push(next.id);
+        }
+
+        this.pendingSpiritCompanionDrafts = this.pendingSpiritCompanionDrafts || {};
+        this.pendingSpiritCompanionDrafts[charId] = draft.slice(0, 3);
+        return this.pendingSpiritCompanionDrafts[charId].slice();
+    }
+
+    resolveDefaultSpiritCompanionId(characterId) {
+        const charId = typeof characterId === 'string' ? characterId : 'linFeng';
+        const draft = this.draftSpiritCompanionsForCharacter(charId);
+        return draft[0] || (this.getSpiritCompanionCatalog()[0] && this.getSpiritCompanionCatalog()[0].id) || null;
+    }
+
+    renderRunDestinySelection(characterId) {
+        const host = document.getElementById('run-destiny-selection');
+        const summary = document.getElementById('run-destiny-summary');
+        if (!host) return;
+
+        const charId = typeof characterId === 'string' ? characterId : this.selectedCharacterId;
+        if (!charId) {
+            host.innerHTML = '<div class="run-destiny-empty">先选定一位角色，再感应这一局的命格。</div>';
+            if (summary) summary.textContent = '命格会决定这一轮的开局气质、资源节奏与战斗风格。';
+            return;
+        }
+
+        const draftIds = this.draftRunDestiniesForCharacter(charId);
+        if (!draftIds.includes(this.selectedRunDestinyId)) {
+            this.selectedRunDestinyId = draftIds[0] || null;
+        }
+
+        host.innerHTML = draftIds.map((destinyId) => {
+            const meta = this.getRunDestinyMetaById(destinyId, 1);
+            if (!meta) return '';
+            const selectedClass = destinyId === this.selectedRunDestinyId ? 'selected' : '';
+            const effectTags = [];
+            const effects = meta.effects || {};
+            if (Number(effects.firstTurnDraw) > 0) effectTags.push(`首回合抽牌 +${Math.floor(Number(effects.firstTurnDraw) || 0)}`);
+            if (Number(effects.firstTurnEnergy) > 0) effectTags.push(`首回合灵力 +${Math.floor(Number(effects.firstTurnEnergy) || 0)}`);
+            if (Number(effects.openingBlock) > 0) effectTags.push(`开场护盾 +${Math.floor(Number(effects.openingBlock) || 0)}`);
+            if (Number(effects.firstAttackBonusPerBattle) > 0) effectTags.push(`首击增伤 +${Math.floor(Number(effects.firstAttackBonusPerBattle) || 0)}`);
+            if (Number(effects.firstSkillDrawPerTurn) > 0) effectTags.push(`首个技能抽牌 +${Math.floor(Number(effects.firstSkillDrawPerTurn) || 0)}`);
+            if (Number(effects.overhealToBlockRatio) > 0) effectTags.push(`溢疗转盾 x${Number(effects.overhealToBlockRatio).toFixed(1)}`);
+
+            return `
+                <button type="button"
+                        class="run-destiny-card ${selectedClass}"
+                        data-destiny-id="${meta.id}"
+                        onclick="game.selectRunDestiny('${meta.id}')">
+                    <div class="run-destiny-head">
+                        <span class="run-destiny-icon">${meta.icon}</span>
+                        <div class="run-destiny-title-group">
+                            <span class="run-destiny-name">${meta.name}</span>
+                            <span class="run-destiny-tier">${meta.category} · ${meta.tierLabel}</span>
+                        </div>
+                    </div>
+                    <div class="run-destiny-desc">${meta.description}</div>
+                    <div class="run-destiny-summary">${meta.summary}</div>
+                    <div class="run-destiny-tags">
+                        ${(effectTags.slice(0, 3)).map((tag) => `<span class="run-destiny-tag">${tag}</span>`).join('')}
+                    </div>
+                </button>
+            `;
+        }).join('');
+
+        const selectedMeta = this.getRunDestinyMetaById(this.selectedRunDestinyId, 1);
+        if (summary) {
+            summary.textContent = selectedMeta
+                ? `已感应命格「${selectedMeta.name}」：${selectedMeta.playstyle || selectedMeta.summary || selectedMeta.description}`
+                : '命格会决定这一轮的开局气质、资源节奏与战斗风格。';
+        }
+    }
+
+    renderSpiritCompanionSelection(characterId) {
+        const host = document.getElementById('spirit-companion-selection');
+        const summary = document.getElementById('spirit-companion-summary');
+        if (!host) return;
+
+        const charId = typeof characterId === 'string' ? characterId : this.selectedCharacterId;
+        if (!charId) {
+            host.innerHTML = '<div class="run-destiny-empty">先选定一位角色，再决定与你同行的灵契。</div>';
+            if (summary) summary.textContent = '灵契提供常驻被动与蓄能主动，会补足这局的关键短板。';
+            return;
+        }
+
+        const draftIds = this.draftSpiritCompanionsForCharacter(charId);
+        if (!draftIds.includes(this.selectedSpiritCompanionId)) {
+            this.selectedSpiritCompanionId = draftIds[0] || null;
+        }
+
+        host.innerHTML = draftIds.map((spiritId) => {
+            const meta = this.getSpiritCompanionMetaById(spiritId, 1);
+            if (!meta) return '';
+            const selectedClass = spiritId === this.selectedSpiritCompanionId ? 'selected' : '';
+            const tags = [];
+            if (meta.passiveLabel) tags.push(`被动·${meta.passiveLabel}`);
+            if (meta.activeLabel) tags.push(`主动·${meta.activeLabel}`);
+            tags.push(`蓄能 ${meta.chargeMax}`);
+            return `
+                <button type="button"
+                        class="run-destiny-card run-spirit-card ${selectedClass}"
+                        data-spirit-id="${meta.id}"
+                        onclick="game.selectSpiritCompanion('${meta.id}')">
+                    <div class="run-destiny-head">
+                        <span class="run-destiny-icon">${meta.icon}</span>
+                        <div class="run-destiny-title-group">
+                            <span class="run-destiny-name">${meta.name}</span>
+                            <span class="run-destiny-tier">${meta.title || `${meta.category} · ${meta.tierLabel}`}</span>
+                        </div>
+                    </div>
+                    <div class="run-destiny-desc">${meta.description}</div>
+                    <div class="run-destiny-summary">${meta.passiveDesc}<br>${meta.activeDesc}</div>
+                    <div class="run-destiny-tags">
+                        ${tags.map((tag) => `<span class="run-destiny-tag">${tag}</span>`).join('')}
+                    </div>
+                </button>
+            `;
+        }).join('');
+
+        const selectedMeta = this.getSpiritCompanionMetaById(this.selectedSpiritCompanionId, 1);
+        if (summary) {
+            summary.textContent = selectedMeta
+                ? `已契合灵契「${selectedMeta.name}」：${selectedMeta.playstyle || selectedMeta.summary || selectedMeta.description}`
+                : '灵契提供常驻被动与蓄能主动，会补足这局的关键短板。';
+        }
+    }
+
+    updateCharacterSelectionConfirmState() {
+        const confirmBtn = document.getElementById('confirm-character-btn');
+        if (!confirmBtn) return;
+        confirmBtn.disabled = !this.selectedCharacterId || !this.selectedRunDestinyId || !this.selectedSpiritCompanionId;
+    }
+
+    selectRunDestiny(destinyId) {
+        const meta = this.getRunDestinyMetaById(destinyId, 1);
+        if (!meta) return;
+        this.selectedRunDestinyId = destinyId;
+        this.renderRunDestinySelection(this.selectedCharacterId);
+        this.updateCharacterSelectionConfirmState();
+    }
+
+    selectSpiritCompanion(spiritId) {
+        const meta = this.getSpiritCompanionMetaById(spiritId, 1);
+        if (!meta) return;
+        this.selectedSpiritCompanionId = spiritId;
+        this.renderSpiritCompanionSelection(this.selectedCharacterId);
+        this.updateCharacterSelectionConfirmState();
+    }
+
+    shouldOfferRunVowAfterRealm(realmCleared) {
+        const safeRealm = Math.max(1, Math.floor(Number(realmCleared) || 1));
+        if (![3, 9, 15].includes(safeRealm)) return false;
+        const active = this.player && typeof this.player.getRunVowMetas === 'function'
+            ? this.player.getRunVowMetas()
+            : [];
+        if (active.length < 2) return true;
+        return active.some((meta) => meta && meta.tier < meta.maxTier);
+    }
+
+    draftRunVowChoices(realmCleared = null) {
+        const catalog = this.getRunVowCatalog();
+        if (catalog.length === 0) return [];
+        const active = this.player && typeof this.player.getRunVowMetas === 'function'
+            ? this.player.getRunVowMetas()
+            : [];
+        const activeIds = new Set(active.map((meta) => meta.id));
+        const upgradable = this.shuffleList(active.filter((meta) => meta && meta.tier < meta.maxTier));
+        const fresh = this.shuffleList(catalog.filter((meta) => meta && !activeIds.has(meta.id)));
+
+        if (active.length >= 2) {
+            return upgradable.slice(0, 3).map((meta) => meta.id);
+        }
+
+        const draft = [];
+        if (upgradable.length > 0) {
+            draft.push(upgradable.shift().id);
+        }
+        while (fresh.length > 0 && draft.length < 3) {
+            const next = fresh.shift();
+            if (next && !draft.includes(next.id)) draft.push(next.id);
+        }
+        while (upgradable.length > 0 && draft.length < 3) {
+            const next = upgradable.shift();
+            if (next && !draft.includes(next.id)) draft.push(next.id);
+        }
+
+        if (draft.length === 0 && realmCleared != null) {
+            return this.shuffleList(catalog).slice(0, 3).map((meta) => meta.id);
+        }
+
+        return draft.slice(0, 3);
+    }
+
+    applyRunVowSelection(vowId) {
+        if (!this.player || typeof this.player.applyRunVow !== 'function') return null;
+        return this.player.applyRunVow(vowId);
+    }
+
+    showRunVowSelection(realmCleared, onDone = null) {
+        const draftIds = this.draftRunVowChoices(realmCleared);
+        if (!Array.isArray(draftIds) || draftIds.length === 0) {
+            if (typeof onDone === 'function') onDone(null);
+            return;
+        }
+
+        const modal = document.getElementById('event-modal');
+        const titleEl = document.getElementById('event-title');
+        const iconEl = document.getElementById('event-icon');
+        const descEl = document.getElementById('event-desc');
+        const choicesEl = document.getElementById('event-choices');
+        const activeMetas = this.player && typeof this.player.getRunVowMetas === 'function'
+            ? this.player.getRunVowMetas()
+            : [];
+        const chapterIndex = Math.max(1, Math.floor((Math.max(1, Math.floor(Number(realmCleared) || 1)) - 1) / 3) + 1);
+
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
+            const applied = this.applyRunVowSelection(draftIds[0]);
+            if (typeof onDone === 'function') onDone(applied);
+            return;
+        }
+
+        const activeSummary = activeMetas.length > 0
+            ? activeMetas.map((meta) => `${meta.icon || '✧'} ${meta.name} ${meta.tierLabel}`).join(' / ')
+            : '当前尚未立下誓约。';
+
+        titleEl.textContent = '逆命誓约';
+        iconEl.textContent = '⛓️';
+        descEl.innerHTML = `第 ${chapterIndex} 章已破，你可在此改写后续命途。<br><span style="color:rgba(255,235,198,0.82)">当前誓约：${activeSummary}</span>`;
+        this.applyEventModalPresentation({
+            tone: 'oath',
+            atmosphere: '誓约会同时改写收益、代价与路线偏好，签下之前必须看懂“这次到底在赌什么”。',
+            summaryLabel: '誓约摘要',
+            summaryItems: [
+                `章节：第 ${chapterIndex} 章章末`,
+                `当前誓约：${activeMetas.length}/${2} 条`,
+                '收益与代价会同步写进后续地图',
+                '路线提示会随誓约一起改变'
+            ]
+        });
+        choicesEl.innerHTML = '';
+
+        const buildEffectTags = (effects = {}) => {
+            const tags = [];
+            if (Number(effects.firstTurnDraw) > 0) tags.push(`首回合抽牌 +${Math.floor(Number(effects.firstTurnDraw) || 0)}`);
+            if (Number(effects.firstTurnEnergy) > 0) tags.push(`首回合灵力 +${Math.floor(Number(effects.firstTurnEnergy) || 0)}`);
+            if (Number(effects.openingBlock) > 0) tags.push(`开场护盾 +${Math.floor(Number(effects.openingBlock) || 0)}`);
+            if (Number(effects.firstAttackBonusPerBattle) > 0) tags.push(`首击增伤 +${Math.floor(Number(effects.firstAttackBonusPerBattle) || 0)}`);
+            if (Number(effects.onKillHeal) > 0) tags.push(`击杀回复 ${Math.floor(Number(effects.onKillHeal) || 0)}`);
+            if (Number(effects.blockGainMultiplier) > 0) tags.push(`护盾效率 +${Math.round(Number(effects.blockGainMultiplier) * 100)}%`);
+            if (Number(effects.rewardRareChance) > 0) tags.push('高稀有奖励倾向提升');
+            if (Number(effects.commandCostDiscount) > 0) tags.push(`指令消耗 -${Math.floor(Number(effects.commandCostDiscount) || 0)}`);
+            if (Number(effects.maxHpPenalty) > 0) tags.push(`生命上限 -${Math.floor(Number(effects.maxHpPenalty) || 0)}`);
+            if (Number(effects.battleStartHpLoss) > 0) tags.push(`每战开场失血 ${Math.floor(Number(effects.battleStartHpLoss) || 0)}`);
+            if (Number(effects.maxHandSizeOffset) < 0) tags.push(`手牌上限 ${Math.floor(Number(effects.maxHandSizeOffset) || 0)}`);
+            if (Number(effects.shopPriceMul) > 1) tags.push(`商店涨价 ${Math.round((Number(effects.shopPriceMul) - 1) * 100)}%`);
+            return tags.slice(0, 4);
+        };
+
+        draftIds.forEach((vowId) => {
+            const currentMeta = activeMetas.find((meta) => meta.id === vowId) || null;
+            const nextTier = currentMeta ? Math.min(currentMeta.maxTier, currentMeta.tier + 1) : 1;
+            const meta = this.getRunVowMetaById(vowId, nextTier);
+            if (!meta) return;
+            const modeLabel = currentMeta
+                ? `升阶 · ${currentMeta.tierLabel} → ${meta.tierLabel}`
+                : `立誓 · ${meta.tierLabel}`;
+            const tags = buildEffectTags(meta.effects || {});
+            const btn = document.createElement('button');
+            btn.className = 'event-choice run-vow-choice';
+            btn.innerHTML = `
+                <div class="choice-title">
+                    <span class="choice-name">${meta.icon || '✧'} ${meta.name}</span>
+                    <span class="choice-rarity">${modeLabel}</span>
+                </div>
+                <div class="choice-effect">${meta.summary || meta.description}</div>
+                <div class="choice-effect" style="color:#f1c89d;">赌注：${meta.risk || '誓约会改变后续资源与战斗节奏。'}</div>
+                <div class="choice-effect" style="color:#d8f0ff;">适配：${meta.buildFit || meta.playstyle || '围绕当前 build 主轴放大收益。'}</div>
+                <div class="choice-effect" style="color:#d2c7ff;">弱点：${meta.counterplay || '若没围绕它补齐短板，会被代价持续追债。'}</div>
+                <div class="choice-effect" style="color:#b9d7ff;">路线：${meta.routeHint || '偏向高风险收益节点。'}</div>
+                <div class="choice-effect">${tags.map((tag) => `· ${tag}`).join('<br>')}</div>
+            `;
+            btn.onclick = () => {
+                const applied = this.applyRunVowSelection(vowId);
+                modal.classList.remove('active');
+                if (applied && applied.meta) {
+                    const actionText = applied.type === 'upgrade' ? '誓约升阶' : '立下誓约';
+                    Utils.showBattleLog(`${actionText}：${applied.meta.name} ${applied.meta.tierLabel}`);
+                    this.showRewardModal(
+                        actionText,
+                        `${applied.meta.icon || '✧'} ${applied.meta.name}\n${applied.meta.summary}\n\n赌注：${applied.meta.risk || '命途已被改写。'}`,
+                        applied.meta.icon || '⛓️',
+                        () => {
+                            if (typeof onDone === 'function') onDone(applied);
+                        }
+                    );
+                    return;
+                }
+                if (typeof onDone === 'function') onDone(applied);
+            };
+            choicesEl.appendChild(btn);
+        });
+
+        const skipBtn = document.createElement('button');
+        skipBtn.className = 'event-choice';
+        skipBtn.innerHTML = `
+            <div>🚶 暂缓立誓</div>
+            <div class="choice-effect">保留当前命途，直接踏入下一重天。</div>
+        `;
+        skipBtn.onclick = () => {
+            modal.classList.remove('active');
+            if (typeof onDone === 'function') onDone(null);
+        };
+        choicesEl.appendChild(skipBtn);
+
+        this.activateModal(modal);
+    }
+
+    getEventModalRefs() {
+        return {
+            modal: document.getElementById('event-modal'),
+            titleEl: document.getElementById('event-title'),
+            iconEl: document.getElementById('event-icon'),
+            descEl: document.getElementById('event-desc'),
+            atmosphereEl: document.getElementById('event-atmosphere'),
+            summaryEl: document.getElementById('event-system-summary'),
+            choicesEl: document.getElementById('event-choices')
+        };
+    }
+
+    resetModalPresentation(modal) {
+        if (!modal) return;
+        modal.style.display = '';
+        modal.style.visibility = '';
+        modal.style.opacity = '';
+        modal.style.pointerEvents = '';
+
+        const content = modal.querySelector('.modal-content');
+        if (content) {
+            content.style.display = '';
+            content.style.visibility = '';
+            content.style.opacity = '';
+            content.style.pointerEvents = '';
+        }
+    }
+
+    activateModal(modal) {
+        if (!modal) return false;
+        this.resetModalPresentation(modal);
+        modal.classList.add('active');
+        return true;
+    }
+
+    finishStrategicNode(node, title, message, icon = '✨') {
+        const eventModal = document.getElementById('event-modal');
+        if (eventModal) eventModal.classList.remove('active');
+        this.showRewardModal(title, message, icon, () => {
+            if (this.map && typeof this.map.completeNode === 'function' && node) {
+                this.map.completeNode(node);
+            }
+            this.autoSave();
+        });
+    }
+
+    grantFateRingExp(amount, reason = '') {
+        const gained = Math.max(0, Math.floor(Number(amount) || 0));
+        if (gained <= 0 || !this.player || !this.player.fateRing) return 0;
+        this.player.fateRing.exp = Math.max(0, Math.floor(Number(this.player.fateRing.exp) || 0)) + gained;
+        if (typeof this.player.checkFateRingLevelUp === 'function') {
+            this.player.checkFateRingLevelUp();
+        }
+        if (reason) {
+            Utils.showBattleLog(`${reason}：命环经验 +${gained}`);
+        }
+        return gained;
+    }
+
+    draftStrategicCards(options = {}) {
+        const count = Math.max(1, Math.min(5, Math.floor(Number(options.count) || 3)));
+        const rarityPool = Array.isArray(options.rarityPool) && options.rarityPool.length > 0
+            ? options.rarityPool.map((item) => String(item || 'rare').toLowerCase())
+            : ['rare'];
+        const preferArchetype = !!options.preferArchetype;
+        const characterId = this.player?.characterId || null;
+        const deck = Array.isArray(this.player?.deck) ? this.player.deck : [];
+        const archetype = preferArchetype && typeof inferDeckArchetype === 'function'
+            ? inferDeckArchetype(deck)
+            : null;
+        const cards = [];
+        const seen = new Set();
+
+        for (let i = 0; i < count; i += 1) {
+            let picked = null;
+            for (let attempt = 0; attempt < 12; attempt += 1) {
+                const rarity = rarityPool[Math.floor(Math.random() * rarityPool.length)] || 'rare';
+                if (archetype && typeof getRandomArchetypeCard === 'function' && Math.random() < 0.45) {
+                    picked = getRandomArchetypeCard(archetype, rarity, characterId);
+                }
+                if (!picked && typeof getRandomCard === 'function') {
+                    picked = getRandomCard(rarity, characterId);
+                }
+                if (!picked) continue;
+                if (seen.has(picked.id) && attempt < 11) {
+                    picked = null;
+                    continue;
+                }
+                break;
+            }
+            if (picked) {
+                cards.push(picked);
+                seen.add(picked.id);
+            }
+        }
+
+        return cards;
+    }
+
+    showStrategicCardDraftModal(config = {}) {
+        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
+        const cards = Array.isArray(config.cards) ? config.cards.filter(Boolean).slice(0, 3) : [];
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl || cards.length === 0) return false;
+
+        titleEl.textContent = config.title || '残响抉择';
+        iconEl.textContent = config.icon || '🃏';
+        descEl.innerHTML = config.description || '从这些残章中选择一项回应。';
+        choicesEl.innerHTML = '';
+
+        cards.forEach((card) => {
+            const rarityKey = String(card.rarity || 'common').toLowerCase();
+            const rarityLabel = this.getCardRarityLabel(rarityKey);
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            btn.innerHTML = `
+                <div class="choice-title">
+                    <span class="choice-name">${card.icon || '🃏'} ${card.name}</span>
+                    <span class="choice-rarity rarity-${rarityKey}">【${rarityLabel}】</span>
+                </div>
+                <div class="choice-effect">${card.description || '获得这张卡牌。'}</div>
+            `;
+            btn.onclick = () => {
+                if (typeof config.onSelect === 'function') {
+                    config.onSelect(card);
+                }
+            };
+            choicesEl.appendChild(btn);
+        });
+
+        const leaveBtn = document.createElement('button');
+        leaveBtn.className = 'event-choice';
+        leaveBtn.innerHTML = `
+            <div>${config.leaveText || '🚶 暂且作罢'}</div>
+            <div class="choice-effect">${config.leaveDesc || '保持当前命途，返回上一层抉择。'}</div>
+        `;
+        leaveBtn.onclick = () => {
+            if (typeof config.onCancel === 'function') {
+                config.onCancel();
+                return;
+            }
+            this.closeModal();
+        };
+        choicesEl.appendChild(leaveBtn);
+
+        this.activateModal(modal);
+        return true;
+    }
+
+    getStrategicRouteForecasts() {
+        return {
+            utility: {
+                id: 'utility',
+                icon: '🗺️',
+                label: '机缘补给线',
+                desc: '下一重天更容易遇见商路、观星与修整节点，适合稳定转向。',
+                shift: {
+                    event: 0.05,
+                    shop: 0.04,
+                    rest: 0.02,
+                    observatory: 0.03,
+                    memory_rift: 0.02,
+                    enemy: -0.08,
+                    elite: -0.03,
+                    forbidden_altar: -0.01
+                }
+            },
+            assault: {
+                id: 'assault',
+                icon: '⚔️',
+                label: '试炼锋路',
+                desc: '下一重天更偏向试炼、精英、锻炉与禁术节点，适合冒险爆发。',
+                shift: {
+                    trial: 0.06,
+                    elite: 0.03,
+                    forge: 0.025,
+                    forbidden_altar: 0.025,
+                    enemy: -0.05,
+                    rest: -0.02,
+                    shop: -0.02,
+                    observatory: -0.01
+                }
+            },
+            rift: {
+                id: 'rift',
+                icon: '🪞',
+                label: '裂隙回响线',
+                desc: '下一重天更容易出现记忆裂隙、观星台与事件节点，适合改写构筑。',
+                shift: {
+                    memory_rift: 0.06,
+                    observatory: 0.04,
+                    event: 0.04,
+                    enemy: -0.06,
+                    elite: -0.03,
+                    shop: -0.02,
+                    rest: -0.01
+                }
+            }
+        };
+    }
+
+    getStrategicRouteForecast(forecastId = 'utility') {
+        const catalog = this.getStrategicRouteForecasts();
+        return catalog[forecastId] || catalog.utility;
+    }
+
+    applyStrategicRouteForecast(forecastId = 'utility') {
+        const forecast = this.getStrategicRouteForecast(forecastId);
+        if (!forecast) return null;
+        this.setNextRealmMapRumor(forecast.shift, forecast.label);
+        return forecast;
+    }
+
+    advanceRunDestinyTier(reason = '') {
+        const current = this.player && typeof this.player.normalizeRunDestiny === 'function'
+            ? this.player.normalizeRunDestiny(this.player.runDestiny)
+            : (this.player ? this.player.runDestiny : null);
+        if (!current || !current.id || typeof RUN_DESTINIES === 'undefined' || !RUN_DESTINIES[current.id]) {
+            return null;
+        }
+
+        const tiers = Array.isArray(RUN_DESTINIES[current.id].tiers) ? RUN_DESTINIES[current.id].tiers : [];
+        const maxTier = Math.max(1, tiers.length || 1);
+        const previousTier = Math.max(1, Math.floor(Number(current.tier) || 1));
+        const nextTier = Math.min(maxTier, previousTier + 1);
+        const previousMeta = this.getRunDestinyMetaById(current.id, previousTier);
+
+        if (nextTier === previousTier) {
+            return {
+                upgraded: false,
+                previousTier,
+                nextTier,
+                maxTier,
+                meta: previousMeta
+            };
+        }
+
+        if (this.player && typeof this.player.setRunDestiny === 'function') {
+            this.player.setRunDestiny(current.id, nextTier);
+        } else if (this.player) {
+            this.player.runDestiny = { id: current.id, tier: nextTier };
+        }
+        const meta = this.player && typeof this.player.getRunDestinyMeta === 'function'
+            ? this.player.getRunDestinyMeta()
+            : this.getRunDestinyMetaById(current.id, nextTier);
+        if (reason && meta) {
+            Utils.showBattleLog(`${reason}：${meta.name} ${meta.tierLabel}`);
+        }
+        return {
+            upgraded: true,
+            previousTier,
+            nextTier,
+            maxTier,
+            meta
+        };
+    }
+
+    advanceSpiritCompanionTier(reason = '') {
+        const current = this.player && typeof this.player.normalizeSpiritCompanion === 'function'
+            ? this.player.normalizeSpiritCompanion(this.player.spiritCompanion)
+            : (this.player ? this.player.spiritCompanion : null);
+        if (!current || !current.id || typeof SPIRIT_COMPANIONS === 'undefined' || !SPIRIT_COMPANIONS[current.id]) {
+            return null;
+        }
+
+        const tiers = Array.isArray(SPIRIT_COMPANIONS[current.id].tiers) ? SPIRIT_COMPANIONS[current.id].tiers : [];
+        const maxTier = Math.max(1, tiers.length || 1);
+        const previousTier = Math.max(1, Math.floor(Number(current.tier) || 1));
+        const nextTier = Math.min(maxTier, previousTier + 1);
+        const previousMeta = this.getSpiritCompanionMetaById(current.id, previousTier);
+
+        if (nextTier === previousTier) {
+            return {
+                upgraded: false,
+                previousTier,
+                nextTier,
+                maxTier,
+                meta: previousMeta
+            };
+        }
+
+        if (this.player && typeof this.player.setSpiritCompanion === 'function') {
+            this.player.setSpiritCompanion(current.id, nextTier);
+        } else if (this.player) {
+            this.player.spiritCompanion = { id: current.id, tier: nextTier };
+        }
+        const meta = this.player && typeof this.player.getSpiritCompanionMeta === 'function'
+            ? this.player.getSpiritCompanionMeta()
+            : this.getSpiritCompanionMetaById(current.id, nextTier);
+        if (reason && meta) {
+            Utils.showBattleLog(`${reason}：${meta.name} ${meta.tierLabel}`);
+        }
+        return {
+            upgraded: true,
+            previousTier,
+            nextTier,
+            maxTier,
+            meta
+        };
+    }
+
+    showObservatoryNode(node) {
+        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
+            const forecast = this.applyStrategicRouteForecast('utility');
+            const gained = this.grantStrategicCurrencies({ insight: 1 }, '观星推演');
+            this.finishStrategicNode(
+                node,
+                '星轨已锁定',
+                `第 ${this.player.realm + 1} 重将偏向 ${forecast?.label || '机缘补给线'}。\n天机 +${gained.insight || 0}。`,
+                forecast?.icon || '🔭'
+            );
+            return;
+        }
+
+        const nextRealm = Math.min(18, Math.max(1, (this.player?.realm || 1) + 1));
+        const nextRealmName = typeof this.getDisplayRealmName === 'function'
+            ? this.getDisplayRealmName(nextRealm)
+            : (this.map && typeof this.map.getRealmName === 'function' ? this.map.getRealmName(nextRealm) : `第 ${nextRealm} 重`);
+        const env = this.map && typeof this.map.getRealmEnvironment === 'function'
+            ? this.map.getRealmEnvironment(nextRealm)
+            : { name: '未知天象', desc: '天机仍被迷雾遮蔽。' };
+        const bossInfo = typeof this.getRealmBossInfo === 'function'
+            ? this.getRealmBossInfo(nextRealm)
+            : null;
+        const pending = this.getPendingRouteRumorProfile(nextRealm);
+        const pendingText = pending && pending.label
+            ? `<br><span style="color:#8ecbff;">当前已锁定：${pending.label}</span>`
+            : '';
+
+        titleEl.textContent = '观星台';
+        iconEl.textContent = '🔭';
+        descEl.innerHTML = `
+            <strong>${nextRealmName}</strong><br>
+            天象：${env.name} · ${env.desc}<br>
+            ${bossInfo && bossInfo.bossName ? `Boss 倾向：${bossInfo.bossName}${bossInfo.mechDesc ? ` · ${bossInfo.mechDesc}` : ''}` : 'Boss 倾向仍未完全显形。'}
+            ${pendingText}
+        `;
+        choicesEl.innerHTML = '';
+
+        const appendChoice = (icon, text, result, handler) => {
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            btn.innerHTML = `
+                <div>${icon} ${text}</div>
+                <div class="choice-effect">${result}</div>
+            `;
+            btn.onclick = handler;
+            choicesEl.appendChild(btn);
+        };
+
+        appendChoice('🗺️', '锁定福缘星轨', '偏向商路、观星、营地与平稳事件。', () => {
+            const forecast = this.applyStrategicRouteForecast('utility');
+            const gained = this.grantStrategicCurrencies({ insight: 1 }, '观星推演');
+            this.closeModal();
+            this.finishStrategicNode(
+                node,
+                '福缘星轨已定',
+                `第 ${this.player.realm + 1} 重路线趋向：${forecast.label}。\n${forecast.desc}\n天机 +${gained.insight || 0}。`,
+                forecast.icon || '🗺️'
+            );
+        });
+        appendChoice('⚔️', '锁定锋芒星轨', '偏向试炼、精英、锻炉与禁术节点。', () => {
+            const forecast = this.applyStrategicRouteForecast('assault');
+            const gained = this.grantStrategicCurrencies({ insight: 1 }, '观星推演');
+            this.closeModal();
+            this.finishStrategicNode(
+                node,
+                '锋芒星轨已定',
+                `第 ${this.player.realm + 1} 重路线趋向：${forecast.label}。\n${forecast.desc}\n天机 +${gained.insight || 0}。`,
+                forecast.icon || '⚔️'
+            );
+        });
+        appendChoice('✨', '校准星图战利', '锁定 1 次高稀有奖励，并获取 1 点天机。', () => {
+            const rumors = this.ensureShopRumors();
+            rumors.rewardRareCharges += 1;
+            rumors.rewardRareBonus = Math.max(Number(rumors.rewardRareBonus) || 0, 0.25);
+            if (nextRealm >= 5) {
+                rumors.treasureCharges += 1;
+                rumors.treasureChanceBonus = Math.max(Number(rumors.treasureChanceBonus) || 0, 0.16);
+            }
+            const gained = this.grantStrategicCurrencies({ insight: 1 }, '星图校准');
+            this.closeModal();
+            this.finishStrategicNode(
+                node,
+                '星图校准完成',
+                `天机 +${gained.insight || 0}。\n未来 1 次战后卡牌奖励将更偏向稀有/史诗。${nextRealm >= 5 ? '\n并额外锁定 1 次宝踪风声。' : ''}`,
+                '🔭'
+            );
+        });
+
+        const leaveBtn = document.createElement('button');
+        leaveBtn.className = 'event-choice';
+        leaveBtn.innerHTML = `
+            <div>🚶 收拢星图</div>
+            <div class="choice-effect">不再改写星轨，直接离开观星台。</div>
+        `;
+        leaveBtn.onclick = () => {
+            this.closeModal();
+            if (this.map && typeof this.map.completeNode === 'function') {
+                this.map.completeNode(node);
+            }
+            this.autoSave();
+        };
+        choicesEl.appendChild(leaveBtn);
+
+        this.activateModal(modal);
+    }
+
+    showForbiddenAltarNode(node) {
+        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
+            const gained = this.grantStrategicCurrencies({ karma: 1 }, '禁坛残响');
+            this.finishStrategicNode(node, '禁坛回响', `业果 +${gained.karma || 0}。`, '🩸');
+            return;
+        }
+
+        const player = this.player;
+        const bloodCost = 6;
+        const vowHpCost = Math.max(8, Math.floor((player.maxHp || 1) * 0.14));
+        const vowDraft = this.draftRunVowChoices(this.player.realm);
+        const activeVows = this.player && typeof this.player.getRunVowMetas === 'function'
+            ? this.player.getRunVowMetas()
+            : [];
+        const vowSummary = activeVows.length > 0
+            ? activeVows.map((item) => `${item.icon || '✧'} ${item.name} ${item.tierLabel}`).join(' / ')
+            : '尚未立誓';
+
+        titleEl.textContent = '禁术坛';
+        iconEl.textContent = '🩸';
+        descEl.innerHTML = `
+            祭坛下的血纹正在回应你。<br>
+            当前生命：${player.currentHp}/${player.maxHp} ｜ 业果：${this.getStrategicCurrencyAmount('karma')}<br>
+            <span style="color:rgba(255,235,198,0.82)">当前誓约：${vowSummary}</span>
+        `;
+        choicesEl.innerHTML = '';
+
+        const appendChoice = (icon, text, result, handler, disabled = false) => {
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            if (disabled) {
+                btn.classList.add('disabled');
+                btn.style.opacity = '0.5';
+                btn.style.cursor = 'not-allowed';
+            }
+            btn.innerHTML = `
+                <div>${icon} ${text}</div>
+                <div class="choice-effect">${result}</div>
+            `;
+            if (!disabled) btn.onclick = handler;
+            choicesEl.appendChild(btn);
+        };
+
+        appendChoice(
+            '📜',
+            `血契夺卷（最大生命 -${bloodCost}）`,
+            '从 3 张稀有/史诗卡中选择 1 张，并获得 1 点业果。',
+            () => {
+                const cards = this.draftStrategicCards({
+                    count: 3,
+                    rarityPool: ['rare', 'rare', 'epic'],
+                    preferArchetype: true
+                });
+                if (cards.length === 0) {
+                    Utils.showBattleLog('禁术卷轴暂未显化，祭仪中断。');
+                    return;
+                }
+                this.showStrategicCardDraftModal({
+                    title: '血契夺卷',
+                    icon: '📜',
+                    description: `祭出 ${bloodCost} 点生命上限，从以下残卷中选取一张。`,
+                    cards,
+                    leaveText: '🚶 返回祭坛',
+                    leaveDesc: '保留血量，回到禁术坛主选单。',
+                    onCancel: () => this.showForbiddenAltarNode(node),
+                    onSelect: (card) => {
+                        this.closeModal();
+                        player.maxHp = Math.max(16, player.maxHp - bloodCost);
+                        player.currentHp = Math.min(player.currentHp, player.maxHp);
+                        player.addCardToDeck(card);
+                        const gained = this.grantStrategicCurrencies({ karma: 1 }, '禁术血契');
+                        this.finishStrategicNode(
+                            node,
+                            '禁术血契完成',
+                            `获得卡牌：${card.name}\n最大生命降至 ${player.maxHp}。${gained.karma > 0 ? `\n业果 +${gained.karma}。` : ''}`,
+                            '🩸'
+                        );
+                    }
+                });
+            },
+            player.maxHp <= 18
+        );
+        appendChoice(
+            '⛓️',
+            `裂誓献祭（失去 ${vowHpCost} 生命）`,
+            '立下或升阶一条誓约，并获得 1 点业果。',
+            () => this.showForbiddenAltarVowDraft(node, vowHpCost, vowDraft),
+            player.currentHp <= vowHpCost + 1 || !Array.isArray(vowDraft) || vowDraft.length === 0
+        );
+        appendChoice('🗿', '灾像供契', '向牌组加入【心魔·疑心】，换取一件法宝与 1 点业果。', () => {
+            const curseCard = typeof cloneCardTemplate === 'function'
+                ? cloneCardTemplate('demonDoubt')
+                : null;
+            if (curseCard) {
+                player.addCardToDeck(curseCard);
+            }
+            const treasure = typeof this.getWeightedRandomTreasure === 'function'
+                ? this.getWeightedRandomTreasure()
+                : null;
+            if (treasure) {
+                player.addTreasure(treasure.id);
+            }
+            const gained = this.grantStrategicCurrencies({ karma: 1 }, '灾像供契');
+            this.closeModal();
+            this.finishStrategicNode(
+                node,
+                '灾像供契完成',
+                `${curseCard ? '牌组加入【心魔·疑心】。' : '祭坛记录了你的灾像。'}${treasure ? `\n获得法宝：${treasure.name}。` : ''}${gained.karma > 0 ? `\n业果 +${gained.karma}。` : ''}`,
+                '🗿'
+            );
+        });
+
+        const leaveBtn = document.createElement('button');
+        leaveBtn.className = 'event-choice';
+        leaveBtn.innerHTML = `
+            <div>🚶 压下邪念</div>
+            <div class="choice-effect">不与祭坛继续交易，直接离开。</div>
+        `;
+        leaveBtn.onclick = () => {
+            this.closeModal();
+            if (this.map && typeof this.map.completeNode === 'function') {
+                this.map.completeNode(node);
+            }
+            this.autoSave();
+        };
+        choicesEl.appendChild(leaveBtn);
+
+        this.activateModal(modal);
+    }
+
+    showForbiddenAltarVowDraft(node, hpCost, draftIds = null) {
+        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
+        const picks = Array.isArray(draftIds) && draftIds.length > 0
+            ? draftIds.slice(0, 3)
+            : this.draftRunVowChoices(this.player.realm);
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl || picks.length === 0) {
+            this.showForbiddenAltarNode(node);
+            return;
+        }
+
+        const activeMetas = this.player && typeof this.player.getRunVowMetas === 'function'
+            ? this.player.getRunVowMetas()
+            : [];
+        const buildEffectTags = (effects = {}) => {
+            const tags = [];
+            if (Number(effects.firstTurnDraw) > 0) tags.push(`首回合抽牌 +${Math.floor(Number(effects.firstTurnDraw) || 0)}`);
+            if (Number(effects.firstTurnEnergy) > 0) tags.push(`首回合灵力 +${Math.floor(Number(effects.firstTurnEnergy) || 0)}`);
+            if (Number(effects.openingBlock) > 0) tags.push(`开场护盾 +${Math.floor(Number(effects.openingBlock) || 0)}`);
+            if (Number(effects.firstAttackBonusPerBattle) > 0) tags.push(`首击增伤 +${Math.floor(Number(effects.firstAttackBonusPerBattle) || 0)}`);
+            if (Number(effects.onKillHeal) > 0) tags.push(`击杀回复 ${Math.floor(Number(effects.onKillHeal) || 0)}`);
+            if (Number(effects.blockGainMultiplier) > 0) tags.push(`护盾效率 +${Math.round(Number(effects.blockGainMultiplier) * 100)}%`);
+            if (Number(effects.rewardRareChance) > 0) tags.push('高稀有奖励倾向提升');
+            if (Number(effects.commandCostDiscount) > 0) tags.push(`指令消耗 -${Math.floor(Number(effects.commandCostDiscount) || 0)}`);
+            if (Number(effects.maxHpPenalty) > 0) tags.push(`生命上限 -${Math.floor(Number(effects.maxHpPenalty) || 0)}`);
+            if (Number(effects.battleStartHpLoss) > 0) tags.push(`每战开场失血 ${Math.floor(Number(effects.battleStartHpLoss) || 0)}`);
+            if (Number(effects.maxHandSizeOffset) < 0) tags.push(`手牌上限 ${Math.floor(Number(effects.maxHandSizeOffset) || 0)}`);
+            if (Number(effects.shopPriceMul) > 1) tags.push(`商店涨价 ${Math.round((Number(effects.shopPriceMul) - 1) * 100)}%`);
+            return tags.slice(0, 4);
+        };
+
+        titleEl.textContent = '禁坛裂誓';
+        iconEl.textContent = '⛓️';
+        descEl.innerHTML = `以 ${hpCost} 点生命为代价，撕开一条誓纹。`;
+        choicesEl.innerHTML = '';
+
+        picks.forEach((vowId) => {
+            const currentMeta = activeMetas.find((meta) => meta.id === vowId) || null;
+            const nextTier = currentMeta ? Math.min(currentMeta.maxTier, currentMeta.tier + 1) : 1;
+            const meta = this.getRunVowMetaById(vowId, nextTier);
+            if (!meta) return;
+            const modeLabel = currentMeta
+                ? `升阶 · ${currentMeta.tierLabel} → ${meta.tierLabel}`
+                : `立誓 · ${meta.tierLabel}`;
+            const tags = buildEffectTags(meta.effects || {});
+            const btn = document.createElement('button');
+            btn.className = 'event-choice run-vow-choice';
+            btn.innerHTML = `
+                <div class="choice-title">
+                    <span class="choice-name">${meta.icon || '✧'} ${meta.name}</span>
+                    <span class="choice-rarity">${modeLabel}</span>
+                </div>
+                <div class="choice-effect">${meta.summary || meta.description}</div>
+                <div class="choice-effect" style="color:#f1c89d;">赌注：${meta.risk || '誓约会改变后续资源与战斗节奏。'}</div>
+                <div class="choice-effect" style="color:#b9d7ff;">路线：${meta.routeHint || '偏向高风险收益节点。'}</div>
+                <div class="choice-effect">${tags.map((tag) => `· ${tag}`).join('<br>')}</div>
+            `;
+            btn.onclick = () => {
+                this.player.currentHp = Math.max(1, this.player.currentHp - hpCost);
+                const gained = this.grantStrategicCurrencies({ karma: 1 }, '血祭立誓');
+                const applied = this.applyRunVowSelection(vowId);
+                this.closeModal();
+                if (applied && applied.meta) {
+                    this.finishStrategicNode(
+                        node,
+                        '禁坛立誓完成',
+                        `${applied.meta.icon || '✧'} ${applied.meta.name}\n${applied.meta.summary}\n失去 ${hpCost} 生命。${gained.karma > 0 ? `\n业果 +${gained.karma}。` : ''}`,
+                        applied.meta.icon || '⛓️'
+                    );
+                    return;
+                }
+                this.finishStrategicNode(
+                    node,
+                    '血祭回响',
+                    `失去 ${hpCost} 生命，却只留下残缺誓纹。${gained.karma > 0 ? `\n业果 +${gained.karma}。` : ''}`,
+                    '🩸'
+                );
+            };
+            choicesEl.appendChild(btn);
+        });
+
+        const leaveBtn = document.createElement('button');
+        leaveBtn.className = 'event-choice';
+        leaveBtn.innerHTML = `
+            <div>🚶 暂缓血祭</div>
+            <div class="choice-effect">回到禁术坛主选单。</div>
+        `;
+        leaveBtn.onclick = () => this.showForbiddenAltarNode(node);
+        choicesEl.appendChild(leaveBtn);
+
+        this.activateModal(modal);
+    }
+
+    showMemoryRiftNode(node) {
+        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
+            const gained = this.grantStrategicCurrencies({ insight: 1 }, '裂隙回响');
+            this.finishStrategicNode(node, '裂隙回响', `天机 +${gained.insight || 0}。`, '🪞');
+            return;
+        }
+
+        const destinyMeta = this.player && typeof this.player.getRunDestinyMeta === 'function'
+            ? this.player.getRunDestinyMeta()
+            : null;
+        const destinyText = destinyMeta
+            ? `${destinyMeta.icon || '✦'} ${destinyMeta.name} ${destinyMeta.tierLabel}`
+            : '暂无命格响应';
+        const realmText = this.map && typeof this.map.getRealmName === 'function'
+            ? this.map.getRealmName(this.player.realm)
+            : `第 ${this.player.realm} 重`;
+
+        titleEl.textContent = '记忆裂隙';
+        iconEl.textContent = '🪞';
+        descEl.innerHTML = `
+            裂隙映出 <strong>${realmText}</strong> 的旧影。<br>
+            当前命格：${destinyText}
+        `;
+        choicesEl.innerHTML = '';
+
+        const appendChoice = (icon, text, result, handler) => {
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            btn.innerHTML = `
+                <div>${icon} ${text}</div>
+                <div class="choice-effect">${result}</div>
+            `;
+            btn.onclick = handler;
+            choicesEl.appendChild(btn);
+        };
+
+        appendChoice('✦', '追忆命格', '优先提升当前命格阶位；若已满阶，则转化为天机与感悟。', () => {
+            this.closeModal();
+            const advanced = this.advanceRunDestinyTier('记忆回响');
+            if (advanced && advanced.upgraded && advanced.meta) {
+                const exp = this.grantFateRingExp(24, '裂隙参悟');
+                this.finishStrategicNode(
+                    node,
+                    '命格回响',
+                    `${advanced.meta.icon || '✦'} ${advanced.meta.name} 提升至 ${advanced.meta.tierLabel}。\n命环经验 +${exp}。`,
+                    advanced.meta.icon || '🪞'
+                );
+                return;
+            }
+            const gained = this.grantStrategicCurrencies({ insight: 1 }, '裂隙残响');
+            const exp = this.grantFateRingExp(30, '裂隙残响');
+            this.finishStrategicNode(
+                node,
+                '残响回收',
+                `当前命格已抵达上限，转化为天机与感悟。\n天机 +${gained.insight || 0}。\n命环经验 +${exp}。`,
+                '🪞'
+            );
+        });
+        appendChoice('📚', '撕取残章', '从 3 张构筑相关卡中选择 1 张，并获得 1 点天机。', () => {
+            const cards = this.draftStrategicCards({
+                count: 3,
+                rarityPool: ['uncommon', 'rare', 'rare'],
+                preferArchetype: true
+            });
+            if (cards.length === 0) {
+                Utils.showBattleLog('裂隙残章尚未显化。');
+                return;
+            }
+            this.showStrategicCardDraftModal({
+                title: '撕取残章',
+                icon: '📚',
+                description: '从这些残章中抽取一页，写入当前构筑。',
+                cards,
+                leaveText: '🚶 返回裂隙',
+                leaveDesc: '放弃这轮残章，回到裂隙主选单。',
+                onCancel: () => this.showMemoryRiftNode(node),
+                onSelect: (card) => {
+                    this.closeModal();
+                    this.player.addCardToDeck(card);
+                    const gained = this.grantStrategicCurrencies({ insight: 1 }, '残章采撷');
+                    const exp = this.grantFateRingExp(12, '残章采撷');
+                    this.finishStrategicNode(
+                        node,
+                        '残章融入构筑',
+                        `获得卡牌：${card.name}\n天机 +${gained.insight || 0}。\n命环经验 +${exp}。`,
+                        '📚'
+                    );
+                }
+            });
+        });
+        appendChoice('🧭', '逆写路标', '锁定“裂隙回响线”，并让下一场战斗的命环收益更高。', () => {
+            const forecast = this.applyStrategicRouteForecast('rift');
+            if (this.player && typeof this.player.grantAdventureBuff === 'function') {
+                this.player.grantAdventureBuff('ringExpBoostBattles', 1);
+            }
+            const gained = this.grantStrategicCurrencies({ insight: 1 }, '裂隙定标');
+            this.closeModal();
+            this.finishStrategicNode(
+                node,
+                '裂隙路标已改写',
+                `第 ${this.player.realm + 1} 重路线趋向：${forecast.label}。\n${forecast.desc}\n天机 +${gained.insight || 0}。\n接下来 1 场战斗命环经验收益提升。`,
+                forecast.icon || '🪞'
+            );
+        });
+
+        const leaveBtn = document.createElement('button');
+        leaveBtn.className = 'event-choice';
+        leaveBtn.innerHTML = `
+            <div>🚶 合拢裂隙</div>
+            <div class="choice-effect">不再追问旧影，直接离开。</div>
+        `;
+        leaveBtn.onclick = () => {
+            this.closeModal();
+            if (this.map && typeof this.map.completeNode === 'function') {
+                this.map.completeNode(node);
+            }
+            this.autoSave();
+        };
+        choicesEl.appendChild(leaveBtn);
+
+        this.activateModal(modal);
+    }
+
+    showSpiritGrottoDraft(node, draftIds = null) {
+        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
+        const picks = Array.isArray(draftIds) && draftIds.length > 0
+            ? draftIds.slice(0, 3)
+            : this.draftSpiritCompanionsForCharacter(this.player?.characterId || 'linFeng');
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl || picks.length === 0) {
+            this.showSpiritGrottoNode(node);
+            return;
+        }
+
+        const currentMeta = this.player && typeof this.player.getSpiritCompanionMeta === 'function'
+            ? this.player.getSpiritCompanionMeta()
+            : null;
+
+        titleEl.textContent = '灵契换契';
+        iconEl.textContent = '🪷';
+        descEl.innerHTML = '从显化的灵契中重新立契，或借旧契回响直接升阶。';
+        choicesEl.innerHTML = '';
+
+        picks.forEach((spiritId) => {
+            const meta = this.getSpiritCompanionMetaById(spiritId, 1);
+            if (!meta) return;
+            const isCurrent = currentMeta && currentMeta.id === meta.id;
+            const canUpgradeCurrent = !!(isCurrent && Number(currentMeta.tier) < Number(currentMeta.maxTier || currentMeta.tier || 1));
+            const modeLabel = canUpgradeCurrent
+                ? `维持契约 · 升至 ${this.getSpiritCompanionMetaById(meta.id, Math.min(meta.maxTier, 2))?.tierLabel || '下一阶'}`
+                : (isCurrent ? '当前同行灵契' : '改契同行');
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            btn.innerHTML = `
+                <div class="choice-title">
+                    <span class="choice-name">${meta.icon || '✦'} ${meta.name}</span>
+                    <span class="choice-rarity">${modeLabel}</span>
+                </div>
+                <div class="choice-effect">${meta.summary || meta.description}</div>
+                <div class="choice-effect" style="color:#b9d7ff;">被动：${meta.passiveDesc}</div>
+                <div class="choice-effect" style="color:#f1c89d;">主动：${meta.activeDesc}</div>
+            `;
+            btn.onclick = () => {
+                const gained = this.grantStrategicCurrencies({ insight: 1 }, '灵契换契');
+                let resultMeta = null;
+                if (canUpgradeCurrent) {
+                    const advanced = this.advanceSpiritCompanionTier('灵契回响');
+                    resultMeta = advanced && advanced.meta ? advanced.meta : null;
+                } else if (typeof this.player?.setSpiritCompanion === 'function') {
+                    resultMeta = this.player.setSpiritCompanion(meta.id, 1);
+                }
+                this.closeModal();
+                this.finishStrategicNode(
+                    node,
+                    '灵契回响成形',
+                    `${resultMeta ? `${resultMeta.icon || '✦'} ${resultMeta.name} · ${resultMeta.tierLabel}` : '灵契回响短暂闪烁。'}\n${resultMeta?.summary || resultMeta?.description || '同行灵契已重整。'}${gained.insight > 0 ? `\n天机 +${gained.insight}。` : ''}`,
+                    resultMeta?.icon || '🪷'
+                );
+            };
+            choicesEl.appendChild(btn);
+        });
+
+        const leaveBtn = document.createElement('button');
+        leaveBtn.className = 'event-choice';
+        leaveBtn.innerHTML = `
+            <div>🚶 返回灵契窟</div>
+            <div class="choice-effect">先不换契，回到主选单。</div>
+        `;
+        leaveBtn.onclick = () => this.showSpiritGrottoNode(node);
+        choicesEl.appendChild(leaveBtn);
+
+        this.activateModal(modal);
+    }
+
+    showSpiritGrottoNode(node) {
+        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
+            const gained = this.grantStrategicCurrencies({ insight: 1 }, '灵契残响');
+            this.finishStrategicNode(node, '灵契残响', `天机 +${gained.insight || 0}。`, '🪷');
+            return;
+        }
+
+        const spiritMeta = this.player && typeof this.player.getSpiritCompanionMeta === 'function'
+            ? this.player.getSpiritCompanionMeta()
+            : null;
+        const spiritText = spiritMeta
+            ? `${spiritMeta.icon || '✦'} ${spiritMeta.name} ${spiritMeta.tierLabel}`
+            : '尚未结契';
+        const draftIds = this.draftSpiritCompanionsForCharacter(this.player?.characterId || 'linFeng');
+
+        titleEl.textContent = '灵契窟';
+        iconEl.textContent = '🪷';
+        descEl.innerHTML = `
+            灵窟中的气脉正回应你的同行之灵。<br>
+            当前灵契：${spiritText}
+        `;
+        choicesEl.innerHTML = '';
+
+        const appendChoice = (icon, text, result, handler, disabled = false) => {
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            if (disabled) {
+                btn.classList.add('disabled');
+                btn.style.opacity = '0.5';
+                btn.style.cursor = 'not-allowed';
+            }
+            btn.innerHTML = `
+                <div>${icon} ${text}</div>
+                <div class="choice-effect">${result}</div>
+            `;
+            if (!disabled) btn.onclick = handler;
+            choicesEl.appendChild(btn);
+        };
+
+        appendChoice(
+            '🫧',
+            '契引新灵',
+            '从 3 个灵契回响中选择 1 个同行；若维持旧契，则可直接升阶。',
+            () => this.showSpiritGrottoDraft(node, draftIds),
+            !Array.isArray(draftIds) || draftIds.length === 0
+        );
+
+        const canAdvance = !!(spiritMeta && Number(spiritMeta.tier) < Number(spiritMeta.maxTier || spiritMeta.tier || 1));
+        appendChoice(
+            '⬆️',
+            '灵契升阶',
+            canAdvance
+                ? '提升当前灵契阶位，并获得命环经验。'
+                : '当前灵契已满阶，将转化为天机与灵脉感悟。',
+            () => {
+                const advanced = this.advanceSpiritCompanionTier('灵契共鸣');
+                const gained = this.grantStrategicCurrencies({ insight: 1 }, '灵契共鸣');
+                const exp = this.grantFateRingExp(canAdvance ? 16 : 24, '灵契参悟');
+                this.closeModal();
+                if (advanced && advanced.upgraded && advanced.meta) {
+                    this.finishStrategicNode(
+                        node,
+                        '灵契升阶完成',
+                        `${advanced.meta.icon || '✦'} ${advanced.meta.name} 提升至 ${advanced.meta.tierLabel}。\n命环经验 +${exp}。${gained.insight > 0 ? `\n天机 +${gained.insight}。` : ''}`,
+                        advanced.meta.icon || '🪷'
+                    );
+                    return;
+                }
+                this.finishStrategicNode(
+                    node,
+                    '灵契感悟回流',
+                    `当前灵契已满阶，感悟转化为命环经验与天机。\n命环经验 +${exp}。${gained.insight > 0 ? `\n天机 +${gained.insight}。` : ''}`,
+                    '🪷'
+                );
+            },
+            !spiritMeta
+        );
+
+        appendChoice('📖', '追索灵痕', '获得 1 点天机，并让接下来 1 场战斗的命环经验额外提升。', () => {
+            if (this.player && typeof this.player.grantAdventureBuff === 'function') {
+                this.player.grantAdventureBuff('ringExpBoostBattles', 1);
+            }
+            const gained = this.grantStrategicCurrencies({ insight: 1 }, '灵痕追索');
+            const exp = this.grantFateRingExp(12, '灵痕追索');
+            this.closeModal();
+            this.finishStrategicNode(
+                node,
+                '灵痕已铭刻',
+                `天机 +${gained.insight || 0}。\n命环经验 +${exp}。\n接下来 1 场战斗命环经验收益提升。`,
+                '📖'
+            );
+        });
+
+        const leaveBtn = document.createElement('button');
+        leaveBtn.className = 'event-choice';
+        leaveBtn.innerHTML = `
+            <div>🚶 收束灵潮</div>
+            <div class="choice-effect">保持当前同行灵契，直接离开灵契窟。</div>
+        `;
+        leaveBtn.onclick = () => {
+            this.closeModal();
+            if (this.map && typeof this.map.completeNode === 'function') {
+                this.map.completeNode(node);
+            }
+            this.autoSave();
+        };
+        choicesEl.appendChild(leaveBtn);
+
+        this.activateModal(modal);
     }
 
     loadGuideState() {
@@ -574,6 +2147,445 @@ class Game {
         if (!this.isEndlessActive()) return fallbackName;
         const state = this.ensureEndlessState();
         return `无尽轮回·第${state.currentCycle + 1}轮｜${fallbackName}`;
+    }
+
+    getChapterProfileCatalog() {
+        if (this.chapterProfileCatalog && typeof this.chapterProfileCatalog === 'object') {
+            return this.chapterProfileCatalog;
+        }
+
+        this.chapterProfileCatalog = {
+            1: {
+                id: 'fractured_oath',
+                icon: '🜂',
+                name: '碎誓外域',
+                mechanic: '风险选择 / 先手压制',
+                mood: '试探、反抗',
+                skyOmen: {
+                    name: '裂誓流火',
+                    desc: '开局抢拍与首击伤害更容易滚成优势，敢压血就能提前吃到章节收益。'
+                },
+                leyline: {
+                    name: '逆誓余烬',
+                    desc: '低血、处决与首回合爆发的收益被放大，拖沓会让前段优势迅速流失。'
+                },
+                focusTags: ['风险试探', '先手斩杀', '试炼前压'],
+                routePrompt: '偏好精英、试炼与快节奏节点，把优势尽早换成战利。',
+                bossPrompt: '主宰会检定你能否在不稳血线下持续抢到终结窗口。',
+                recommendedDestinies: ['foldedEdge', 'rebelScale', 'emberHeart'],
+                recommendedSpirits: ['spiritApe', 'swordWraith', 'starFox'],
+                recommendedVows: ['blazingLife', 'realmBreak']
+            },
+            2: {
+                id: 'forge_sea',
+                icon: '⚒️',
+                name: '炉海天阙',
+                mechanic: '资源灼烧 / 锻造换节奏',
+                mood: '压迫、锻造',
+                skyOmen: {
+                    name: '炉海炙潮',
+                    desc: '回合末残手和高费停牌更容易被惩罚，资源利用率会直接决定战线长度。'
+                },
+                leyline: {
+                    name: '淬器火脉',
+                    desc: '厚盾、重铸与器灵联动更强，能把挨打回合转成下一轮的反击起点。'
+                },
+                focusTags: ['资源灼烧', '护阵重铸', '厚甲换血'],
+                routePrompt: '炼器坊、营地与精英会更有价值，能帮你把资源烧成真实强度。',
+                bossPrompt: '末段主宰会持续逼你交资源，不会给无效回合留情面。',
+                recommendedDestinies: ['soulAnchor', 'armorTemper', 'deepMeridian'],
+                recommendedSpirits: ['blackTortoise', 'artifactSoul', 'emberCrow'],
+                recommendedVows: ['wardingPrison', 'realmBreak']
+            },
+            3: {
+                id: 'sunken_stars',
+                icon: '🌠',
+                name: '沉星古庭',
+                mechanic: '预埋 / 连锁 / 星律地脉',
+                mood: '神秘、计算',
+                skyOmen: {
+                    name: '沉星轮转',
+                    desc: '预埋牌序、延迟收益与下一回合筹划会被放大，临时拼脸会越来越亏。'
+                },
+                leyline: {
+                    name: '星律地脉',
+                    desc: '多段连锁与时序调度更容易滚雪球，能把中盘铺垫转成稳定收束。'
+                },
+                focusTags: ['预埋节奏', '连锁收益', '次回合筹划'],
+                routePrompt: '观星台、记忆裂隙与事件更能放大这章的计算收益。',
+                bossPrompt: '主宰会追问你的牌序安排，错误收尾会被成倍放大。',
+                recommendedDestinies: ['starMemory', 'echoScripture', 'thunderVerse'],
+                recommendedSpirits: ['starFox', 'frostChi', 'artifactSoul'],
+                recommendedVows: ['heavenlyGaze', 'realmBreak']
+            },
+            4: {
+                id: 'mirror_abyss',
+                icon: '🪞',
+                name: '悬镜深渊',
+                mechanic: '复制 / 幻像 / 诅咒反照',
+                mood: '诡异、怀疑',
+                skyOmen: {
+                    name: '悬镜反照',
+                    desc: '复制与镜返会把你上一拍的选择反弹回来，错误收尾往往比少打一张牌更致命。'
+                },
+                leyline: {
+                    name: '幻咒回波',
+                    desc: '诅咒、虚弱、易伤和镜像收益会持续叠加，净化与防错的重要性显著提高。'
+                },
+                focusTags: ['复制反照', '诅咒回波', '净化防错'],
+                routePrompt: '禁术坛、试炼碑与事件都可能提前放大镜像压力，但回报也更高。',
+                bossPrompt: '主宰会围绕复制和诅咒出题，回合末的收尾选择就是答卷。',
+                recommendedDestinies: ['mirrorHeart', 'gapInsight', 'silentTide'],
+                recommendedSpirits: ['nightmareButterfly', 'frostChi', 'artifactSoul'],
+                recommendedVows: ['silentReturn', 'heavenlyGaze']
+            },
+            5: {
+                id: 'blood_moon',
+                icon: '🌕',
+                name: '血月禁庭',
+                mechanic: '压血 / 献祭 / 狂化阈值',
+                mood: '疯狂、赌命',
+                skyOmen: {
+                    name: '血月覆庭',
+                    desc: '血线越低，收益和风险都会一起拔高，慢吞吞的保守打法会被逐步逼死。'
+                },
+                leyline: {
+                    name: '献祭狂脉',
+                    desc: '自损换伤、收割回血与爆发阈值更容易成型，但容错会急速收窄。'
+                },
+                focusTags: ['压血爆发', '献祭换伤', '收割回生'],
+                routePrompt: '精英、禁术坛与试炼路线更适合这章，敢赌命就能拿回超额收益。',
+                bossPrompt: '主宰会持续压你的血线，逼你在狂化阈值前后做出正确取舍。',
+                recommendedDestinies: ['rebelScale', 'sacrificialFlame', 'bloodContract'],
+                recommendedSpirits: ['emberCrow', 'nightmareButterfly', 'swordWraith'],
+                recommendedVows: ['blazingLife', 'karmaDevour']
+            },
+            6: {
+                id: 'final_court',
+                icon: '☯️',
+                name: '终焉命庭',
+                mechanic: '法则编织 / 终局问答',
+                mood: '宿命、升华',
+                skyOmen: {
+                    name: '终焉问命',
+                    desc: '命格、誓约、法则与法宝的联动会被同时拉到台前，单轴玩法很难撑过终局。'
+                },
+                leyline: {
+                    name: '编庭法脉',
+                    desc: '多系统协同越完整，终章给出的答卷空间越大；失衡构筑会被快速识破。'
+                },
+                focusTags: ['多轴联动', '法则编织', '终局检定'],
+                routePrompt: '观星、试炼与炼器路线能更早补齐终章缺的最后一块拼图。',
+                bossPrompt: '末章主宰会把命格、誓约和法则一起拿来出题，缺一轴都会很难打。',
+                recommendedDestinies: ['preceptSeal', 'omenGlow', 'hiddenScript'],
+                recommendedSpirits: ['artifactSoul', 'blackTortoise', 'starFox'],
+                recommendedVows: ['realmBreak', 'heavenlyGaze']
+            }
+        };
+
+        return this.chapterProfileCatalog;
+    }
+
+    getChapterProfileForRealm(realm) {
+        const normalizedRealm = Math.max(1, Math.min(18, Math.floor(Number(realm) || 1)));
+        const chapterIndex = Math.max(1, Math.min(6, Math.floor((normalizedRealm - 1) / 3) + 1));
+        const stageIndex = ((normalizedRealm - 1) % 3) + 1;
+        const catalog = this.getChapterProfileCatalog();
+        const base = catalog[chapterIndex] || catalog[1];
+        const stageCatalog = [
+            {
+                index: 1,
+                label: '前段·示章',
+                desc: '先展示章节语法，让你知道这章正在放大什么。'
+            },
+            {
+                index: 2,
+                label: '中段·转势',
+                desc: '事件与精英会逼你换打法，原来的节奏不一定还能通吃。'
+            },
+            {
+                index: 3,
+                label: '末段·问锋',
+                desc: 'Boss 会围绕章节机制检定你的理解，而不只是堆数值。'
+            }
+        ];
+        const stage = stageCatalog[stageIndex - 1] || stageCatalog[0];
+
+        const resolveDestiny = (destinyId) => {
+            const meta = this.getRunDestinyMetaById(destinyId, 1);
+            return meta ? { id: meta.id, name: meta.name, icon: meta.icon, summary: meta.summary } : null;
+        };
+        const resolveSpirit = (spiritId) => {
+            const meta = this.getSpiritCompanionMetaById(spiritId, 1);
+            return meta ? { id: meta.id, name: meta.name, icon: meta.icon, summary: meta.summary } : null;
+        };
+        const resolveVow = (vowId) => {
+            const meta = this.getRunVowMetaById(vowId, 1);
+            return meta ? { id: meta.id, name: meta.name, icon: meta.icon, summary: meta.summary } : null;
+        };
+
+        return {
+            ...base,
+            chapterIndex,
+            realm: normalizedRealm,
+            fullName: `第${chapterIndex}章·${base.name}`,
+            stageIndex,
+            stageLabel: stage.label,
+            stageDesc: stage.desc,
+            recommendedDestinies: (base.recommendedDestinies || []).map(resolveDestiny).filter(Boolean),
+            recommendedSpirits: (base.recommendedSpirits || []).map(resolveSpirit).filter(Boolean),
+            recommendedVows: (base.recommendedVows || []).map(resolveVow).filter(Boolean)
+        };
+    }
+
+    getChapterDisplaySnapshot(realm) {
+        const chapter = this.getChapterProfileForRealm(realm);
+        if (!chapter) return null;
+
+        const currentDestiny = (this.player && typeof this.player.getRunDestinyMeta === 'function')
+            ? this.player.getRunDestinyMeta()
+            : null;
+        const currentSpirit = (this.player && typeof this.player.getSpiritCompanionMeta === 'function')
+            ? this.player.getSpiritCompanionMeta()
+            : null;
+        const currentVows = (this.player && typeof this.player.getRunVowMetas === 'function')
+            ? this.player.getRunVowMetas()
+            : [];
+
+        return {
+            ...chapter,
+            currentDestiny: currentDestiny
+                ? { id: currentDestiny.id, name: currentDestiny.name, icon: currentDestiny.icon, tierLabel: currentDestiny.tierLabel }
+                : null,
+            currentSpirit: currentSpirit
+                ? { id: currentSpirit.id, name: currentSpirit.name, icon: currentSpirit.icon, tierLabel: currentSpirit.tierLabel }
+                : null,
+            currentVows: Array.isArray(currentVows)
+                ? currentVows.map((meta) => ({ id: meta.id, name: meta.name, icon: meta.icon, tierLabel: meta.tierLabel }))
+                : [],
+            destinyRecommended: !!(currentDestiny && chapter.recommendedDestinies.some((meta) => meta.id === currentDestiny.id)),
+            spiritRecommended: !!(currentSpirit && chapter.recommendedSpirits.some((meta) => meta.id === currentSpirit.id)),
+            vowRecommended: Array.isArray(currentVows) && currentVows.some((meta) => chapter.recommendedVows.some((entry) => entry.id === meta.id))
+        };
+    }
+
+    getCharacterIdentityProfile(characterId) {
+        const charId = typeof characterId === 'string' && characterId ? characterId : null;
+        if (!charId || typeof CHARACTERS === 'undefined' || !CHARACTERS[charId]) return null;
+        const character = CHARACTERS[charId];
+        const template = (typeof getV6CharacterIdentityTemplate === 'function')
+            ? getV6CharacterIdentityTemplate(charId)
+            : null;
+        const recommendedDestinies = (template?.recommendedDestinyIds || [])
+            .map((destinyId) => this.getRunDestinyMetaById(destinyId, 1))
+            .filter(Boolean);
+        const recommendedSpirits = (template?.recommendedSpiritIds || [])
+            .map((spiritId) => this.getSpiritCompanionMetaById(spiritId, 1))
+            .filter(Boolean);
+
+        return {
+            id: charId,
+            name: character.name,
+            title: character.title,
+            unlockLabel: template?.unlockLabel || '已解锁',
+            unlockHint: template?.unlockHint || '可直接出阵',
+            synopsis: template?.synopsis || character.description || '',
+            identityHook: template?.identityHook || character.description || '',
+            keywords: Array.isArray(template?.keywords) ? template.keywords.slice(0, 4) : [],
+            recommendedDestinies,
+            recommendedSpirits,
+            recommendedDestinyText: recommendedDestinies.map((meta) => meta.name).join('、') || '待推演',
+            recommendedSpiritText: recommendedSpirits.map((meta) => meta.name).join('、') || '待追索',
+            exclusiveLine: template?.exclusiveLine || { title: '命线未定', summary: '更多剧情等待解锁。' },
+            uiMeta: template?.uiMeta || { tone: 'identity', icon: '✦' }
+        };
+    }
+
+    getSpiritStoryProfile(spiritId) {
+        const safeSpiritId = typeof spiritId === 'string' && spiritId ? spiritId : null;
+        if (!safeSpiritId) return null;
+        const template = (typeof getV6SpiritStoryTemplate === 'function')
+            ? getV6SpiritStoryTemplate(safeSpiritId)
+            : null;
+        const spiritMeta = typeof this.getSpiritCompanionMetaById === 'function'
+            ? this.getSpiritCompanionMetaById(safeSpiritId, 1)
+            : null;
+        if (!template && !spiritMeta) return null;
+        return {
+            id: safeSpiritId,
+            source: template?.source || '灵契窟 / 章节事件',
+            acquisitionTitle: template?.acquisitionTitle || '初见之契',
+            acquisitionSummary: template?.acquisitionSummary || spiritMeta?.story || '',
+            witnessTitle: template?.witnessTitle || '同行见证',
+            witnessSummary: template?.witnessSummary || spiritMeta?.summary || spiritMeta?.description || '',
+            growthGoal: template?.growthGoal || spiritMeta?.playstyle || '继续围绕它的护道方式补足构筑。',
+            uiMeta: template?.uiMeta || { tone: 'spirit', icon: spiritMeta?.icon || '✦' }
+        };
+    }
+
+    getChapterNarrativeProfile(chapterIndex) {
+        const safeChapterIndex = Math.max(1, Math.min(6, Math.floor(Number(chapterIndex) || 1)));
+        const chapter = typeof this.getChapterProfileForRealm === 'function'
+            ? this.getChapterProfileForRealm((safeChapterIndex - 1) * 3 + 1)
+            : null;
+        const template = (typeof getV6ChapterNarrativeTemplate === 'function')
+            ? getV6ChapterNarrativeTemplate(safeChapterIndex)
+            : null;
+        if (!template && !chapter) return null;
+        return {
+            id: template?.id || `chapter_${safeChapterIndex}_narrative`,
+            chapterIndex: safeChapterIndex,
+            name: template?.name || chapter?.name || `第 ${safeChapterIndex} 章`,
+            summary: template?.summary || chapter?.mechanic || '',
+            worldviewFocus: Array.isArray(template?.worldviewFocus) ? template.worldviewFocus.slice() : [],
+            beats: Array.isArray(template?.beats) ? template.beats.slice() : [],
+            finaleRecall: template?.finaleRecall || { title: '', summary: '', systems: [] },
+            uiMeta: template?.uiMeta || { tone: 'chapter', icon: chapter?.icon || '☯️' }
+        };
+    }
+
+    getWorldviewRecallCatalog() {
+        if (typeof V6_WORLDVIEW_RECALL === 'undefined' || !Array.isArray(V6_WORLDVIEW_RECALL)) return [];
+        try {
+            return JSON.parse(JSON.stringify(V6_WORLDVIEW_RECALL));
+        } catch (error) {
+            return V6_WORLDVIEW_RECALL.slice();
+        }
+    }
+
+    buildEventChoiceEffectSummary(choice = {}) {
+        const summary = [];
+        const effects = Array.isArray(choice.effects) ? choice.effects : [];
+        effects.forEach((effect) => {
+            if (!effect || typeof effect !== 'object') return;
+            switch (effect.type) {
+                case 'awakenRing':
+                    summary.push('觉醒命环');
+                    break;
+                case 'gold':
+                    summary.push(`${Number(effect.value) >= 0 ? '灵石' : '支付灵石'} ${Math.abs(Math.floor(Number(effect.value) || 0))}`);
+                    break;
+                case 'heal':
+                    summary.push(`恢复 ${Math.floor(Number(effect.value) || 0)} 生命`);
+                    break;
+                case 'damage':
+                    summary.push(`失去 ${Math.floor(Number(effect.value) || 0)} 生命`);
+                    break;
+                case 'ringExp':
+                    summary.push(`命环经验 +${Math.floor(Number(effect.value) || 0)}`);
+                    break;
+                case 'law':
+                    summary.push(effect.random ? '随机获得法则' : `获得法则 ${effect.lawId || ''}`.trim());
+                    break;
+                case 'card':
+                    summary.push(effect.cardId ? `获得卡牌 ${effect.cardId}` : '获得卡牌');
+                    break;
+                case 'battle':
+                    summary.push('立即进入战斗');
+                    break;
+                case 'upgradeCard':
+                    summary.push('强化 1 张卡牌');
+                    break;
+                case 'randomGold':
+                    summary.push(`获得 ${Math.floor(Number(effect.min) || 0)}-${Math.floor(Number(effect.max) || 0)} 灵石`);
+                    break;
+                case 'random':
+                    summary.push('随机结算 1 项命运结果');
+                    break;
+                case 'removeCard':
+                    summary.push('移除 1 张卡牌');
+                    break;
+                case 'vow':
+                    summary.push('获得誓约相关收益');
+                    break;
+                case 'spirit':
+                    summary.push('推进灵契线索');
+                    break;
+                default:
+                    if (effect.type) summary.push(String(effect.type));
+                    break;
+            }
+        });
+        return summary.slice(0, 4);
+    }
+
+    getEventNarrativePresentation(event, node = null) {
+        const currentChapter = this.player && typeof this.getChapterDisplaySnapshot === 'function'
+            ? this.getChapterDisplaySnapshot(this.player.realm || 1)
+            : null;
+        let presentationKey = 'generic';
+        if (event?.presentationKey) {
+            presentationKey = String(event.presentationKey);
+        } else if (event?.type === 'vow' || event?.isVowSelection) {
+            presentationKey = 'vow';
+        } else if (node?.type === 'rest') {
+            presentationKey = 'rest';
+        } else if (node?.type === 'observatory') {
+            presentationKey = 'observatory';
+        } else if (node?.type === 'forbidden') {
+            presentationKey = 'forbidden';
+        } else if (node?.type === 'memory') {
+            presentationKey = 'memory';
+        } else if (node?.type === 'event') {
+            presentationKey = 'event';
+        }
+        const template = (typeof V6_EVENT_PRESENTATION_TEMPLATES !== 'undefined' && V6_EVENT_PRESENTATION_TEMPLATES)
+            ? (V6_EVENT_PRESENTATION_TEMPLATES[presentationKey] || V6_EVENT_PRESENTATION_TEMPLATES.generic || null)
+            : null;
+        const summaryItems = [];
+        if (currentChapter) {
+            summaryItems.push(`章节：${currentChapter.name} · ${currentChapter.stageLabel}`);
+        }
+        if (event?.summary) {
+            summaryItems.push(`抉择：${event.summary}`);
+        } else if (event?.description) {
+            summaryItems.push(`抉择：${String(event.description).replace(/\s+/g, ' ').slice(0, 42)}`);
+        }
+        if (node?.type) {
+            summaryItems.push(`节点：${this.getMapNodeTypeLabel ? this.getMapNodeTypeLabel(node.type) : node.type}`);
+        }
+        const firstChoice = Array.isArray(event?.choices) && event.choices[0] ? event.choices[0] : null;
+        const effectSummary = this.buildEventChoiceEffectSummary(firstChoice);
+        if (effectSummary.length > 0) {
+            summaryItems.push(`效果：${effectSummary.join(' / ')}`);
+        }
+        return {
+            tone: String(event?.presentationTone || template?.tone || 'chapter'),
+            atmosphere: String(event?.atmosphere || template?.atmosphere || '命数回响正在逼近，抉择会直接改写接下来的路线。'),
+            summaryLabel: String(event?.summaryLabel || template?.summaryLabel || '局内摘要'),
+            summaryItems: summaryItems.slice(0, 4)
+        };
+    }
+
+    applyEventModalPresentation(presentation = {}) {
+        const refs = this.getEventModalRefs();
+        const modal = refs.modal;
+        if (!modal) return;
+        const escape = (value) => String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        const tone = String(presentation.tone || 'chapter');
+        modal.dataset.eventTone = tone;
+        const atmosphereText = String(presentation.atmosphere || '').trim();
+        if (refs.atmosphereEl) {
+            refs.atmosphereEl.textContent = atmosphereText;
+            refs.atmosphereEl.style.display = atmosphereText ? '' : 'none';
+        }
+        const summaryItems = Array.isArray(presentation.summaryItems) ? presentation.summaryItems.filter(Boolean) : [];
+        if (refs.summaryEl) {
+            refs.summaryEl.innerHTML = summaryItems.length > 0
+                ? `
+                    <span class="event-summary-label">${escape(presentation.summaryLabel || '局内摘要')}</span>
+                    <div class="event-summary-chip-list">
+                        ${summaryItems.map((item) => `<span class="event-summary-chip">${escape(item)}</span>`).join('')}
+                    </div>
+                `
+                : '';
+            refs.summaryEl.style.display = summaryItems.length > 0 ? '' : 'none';
+        }
     }
 
     getEndlessMutatorPool() {
@@ -3191,6 +5203,18 @@ class Game {
             if (!Array.isArray(this.player.hand)) this.player.hand = [];
             if (!Array.isArray(this.player.drawPile)) this.player.drawPile = [];
             if (!Array.isArray(this.player.discardPile)) this.player.discardPile = [];
+            if (typeof this.player.normalizeRunDestiny === 'function') {
+                this.player.normalizeRunDestiny(this.player.runDestiny);
+            }
+            if (typeof this.player.normalizeRunVows === 'function') {
+                this.player.normalizeRunVows(this.player.runVows);
+            }
+            if (typeof this.player.normalizeSpiritCompanion === 'function') {
+                this.player.normalizeSpiritCompanion(this.player.spiritCompanion);
+            }
+            if (typeof this.player.ensureSpiritCompanionBattleState === 'function') {
+                this.player.ensureSpiritCompanionBattleState();
+            }
 
             if (!this.player.legacyBonuses || typeof this.player.legacyBonuses !== 'object') {
                 this.player.legacyBonuses = {
@@ -4356,6 +6380,78 @@ class Game {
         return Array.from(tags);
     }
 
+    getTreasureResearchData(treasure) {
+        const safeTreasure = treasure && typeof treasure === 'object' ? treasure : {};
+        const playerResearch = this.player && typeof this.player.getTreasureResearchEntry === 'function'
+            ? this.player.getTreasureResearchEntry(safeTreasure.id)
+            : null;
+        const role = playerResearch?.role || {
+            tier: 'base',
+            label: '基础件',
+            summary: '更适合作为前期稳定补强，再决定是否继续投入研究。'
+        };
+        const setMeta = playerResearch?.setMeta || null;
+        const focusTags = Array.isArray(playerResearch?.focusTags) ? playerResearch.focusTags : [];
+        const setText = setMeta
+            ? [
+                `${setMeta.icon || '✦'} ${setMeta.label} · ${setMeta.theme}`,
+                `2件：${setMeta.twoPiece}`,
+                `3件：${setMeta.threePiece}`,
+                playerResearch?.setPieces > 0
+                    ? `当前已装备视作 ${playerResearch.setPieces} 件。`
+                    : '当前尚未把该套装正式带入战斗。'
+            ].join('<br>')
+            : '暂无套装归属，更多承担单卡对策或前期过渡补强。';
+        const buildFitText = [
+            focusTags.length > 0 ? `适配方向：${focusTags.join(' / ')}` : '适配方向：偏泛用补件',
+            role.summary
+        ].join('<br>');
+        const forgeLines = Array.isArray(playerResearch?.workshopLines) && playerResearch.workshopLines.length > 0
+            ? playerResearch.workshopLines.slice()
+            : ['尚未进行炼器改造，可先在炼器坊确认是走重铸、器灵还是套装修正。'];
+        forgeLines.push(playerResearch?.infusionNote || '当前暂无器灵灌注建议。');
+        return {
+            ...(playerResearch || {}),
+            role,
+            setMeta,
+            focusTags,
+            sourceText: this.getTreasureSource(safeTreasure),
+            setText,
+            buildFitText,
+            forgeText: forgeLines.join('<br>')
+        };
+    }
+
+    getTreasureResearchOverviewData() {
+        const fallbackOverview = {
+            setProgress: [],
+            coreOwned: 0,
+            coreTotal: 0,
+            formOwned: 0,
+            formTotal: 0,
+            activeReforges: 0,
+            activeInfusions: 0,
+            activeSetEchoes: 0,
+            activeWorkshops: 0,
+            resonantSets: 0,
+            fullSets: 0,
+            readyInfusions: []
+        };
+        const overview = this.player && typeof this.player.getTreasureWorkshopResearchOverview === 'function'
+            ? this.player.getTreasureWorkshopResearchOverview()
+            : fallbackOverview;
+        return {
+            ...overview,
+            spotlight: [
+                `核心件 ${overview.coreOwned || 0}/${overview.coreTotal || 0} · 形态件 ${overview.formOwned || 0}/${overview.formTotal || 0}`,
+                `已激活铭刻 ${overview.activeWorkshops || 0} 条：重铸 ${overview.activeReforges || 0} / 器灵 ${overview.activeInfusions || 0} / 套装修正 ${overview.activeSetEchoes || 0}`,
+                overview.readyInfusions && overview.readyInfusions.length > 0
+                    ? `当前可灌注：${overview.readyInfusions.join('、')}`
+                    : '当前没有已装备核心件待灌注，可继续先收集或装备核心法宝。'
+            ]
+        };
+    }
+
     getTreasureCompendiumQuickFilterValue() {
         const state = this.getTreasureCompendiumFilterState();
         if (state.status !== 'all' && state.rarities.length === 0 && state.sources.length === 0) return state.status;
@@ -4397,6 +6493,9 @@ class Game {
         const state = this.getTreasureCompendiumFilterState();
         const rarity = item?.data?.rarity || 'common';
         const sourceTags = this.getTreasureSourceTags(item?.data || {});
+        const research = typeof this.getTreasureResearchData === 'function'
+            ? this.getTreasureResearchData(item?.data || {})
+            : { role: { label: '' }, setLabel: '', setMeta: { theme: '' }, focusTags: [] };
         const query = this.getTreasureCompendiumSearchQuery().toLowerCase();
         if (state.status === 'owned' && !item?.isOwned) return false;
         if (state.status === 'unowned' && item?.isOwned) return false;
@@ -4410,6 +6509,10 @@ class Game {
                 item?.data?.lore,
                 this.getTreasureSource(item?.data || {}),
                 ...sourceTags,
+                research?.role?.label || '',
+                research?.setLabel || '',
+                research?.setMeta?.theme || '',
+                ...(research?.focusTags || []),
                 this.getRarityLabel(rarity).replace(/<[^>]+>/g, '')
             ].join(' ').toLowerCase();
             if (!haystack.includes(query)) return false;
@@ -4604,8 +6707,8 @@ class Game {
             rest: '营地',
             event: '事件',
             shop: '商店',
-            trial: '试炼',
-            forge: '锻炉',
+            trial: '试炼碑',
+            forge: '炼器坊',
             ghost_duel: '幻影决斗'
         };
         return map[type] || (type || '未知节点');
@@ -5219,6 +7322,8 @@ class Game {
             if (iconEl) iconEl.textContent = '♾️';
 
             const envEl = document.getElementById('preview-env');
+            const chapterEl = document.getElementById('preview-chapter');
+            const buildEl = document.getElementById('preview-build');
             if (envEl) {
                 const phaseText = phaseProfile && phaseProfile.active
                     ? `<br><span style="color:#ffd48a;">阶段挑战：${phaseProfile.name}（第${phaseProfile.checkpoint}轮）</span>`
@@ -5236,6 +7341,21 @@ class Game {
                         商店价格 x${modifiers.shopPriceMul.toFixed(2)}｜治疗效率 x${modifiers.healMul.toFixed(2)}
                         ${phaseText}
                         ${themeText}
+                    </div>
+                `;
+            }
+            if (chapterEl) {
+                chapterEl.innerHTML = `
+                    <div class="preview-chapter-summary">
+                        <strong>无尽轮回不绑定固定章节。</strong><br>
+                        当前映射天域会随轮次切换，主题词缀、压力阶段与偏执会共同决定打法。
+                    </div>
+                `;
+            }
+            if (buildEl) {
+                buildEl.innerHTML = `
+                    <div class="preview-current-build">
+                        建议优先围绕 <strong>轮段主题</strong>、<strong>阶段挑战</strong> 与 <strong>当前偏执</strong> 调整临时路线，而不是死守单一章节思路。
                     </div>
                 `;
             }
@@ -5276,6 +7396,7 @@ class Game {
         // Data
         const realmName = this.map.getRealmName(realmId);
         const env = this.map.getRealmEnvironment(realmId);
+        const chapter = this.getChapterDisplaySnapshot(realmId);
 
         // Update Header
         const titleEl = document.getElementById('preview-title');
@@ -5299,6 +7420,61 @@ class Game {
                     ${env.name}
                 </div>
                 <div style="font-size:0.95rem;">${env.desc}</div>
+            `;
+        }
+
+        const chapterEl = document.getElementById('preview-chapter');
+        if (chapterEl && chapter) {
+            const focusText = Array.isArray(chapter.focusTags) && chapter.focusTags.length > 0
+                ? chapter.focusTags.join(' / ')
+                : chapter.mechanic;
+            chapterEl.innerHTML = `
+                <div class="preview-chapter-summary">
+                    <strong>${chapter.fullName}</strong>
+                    <span class="preview-stage-pill">${chapter.stageLabel}</span>
+                </div>
+                <div class="preview-rule-line"><span class="rule-label">天象</span><span>${chapter.skyOmen.name} · ${chapter.skyOmen.desc}</span></div>
+                <div class="preview-rule-line"><span class="rule-label">地脉</span><span>${chapter.leyline.name} · ${chapter.leyline.desc}</span></div>
+                <div class="preview-rule-line"><span class="rule-label">放大</span><span>${focusText}</span></div>
+            `;
+        }
+
+        const buildEl = document.getElementById('preview-build');
+        if (buildEl && chapter) {
+            const renderTagGroup = (items = [], matches = false) => {
+                if (!Array.isArray(items) || items.length === 0) return '<span class="preview-tag muted">暂未显现</span>';
+                return items
+                    .slice(0, 3)
+                    .map((meta) => `<span class="preview-tag ${matches ? 'match' : ''}">${meta.icon || '✦'} ${meta.name}</span>`)
+                    .join('');
+            };
+            const currentLines = [];
+            if (chapter.currentDestiny) {
+                currentLines.push(`当前命格：${chapter.currentDestiny.icon || '✦'} ${chapter.currentDestiny.name}${chapter.destinyRecommended ? ' · 顺势' : ' · 可改线'}`);
+            }
+            if (chapter.currentSpirit) {
+                currentLines.push(`当前灵契：${chapter.currentSpirit.icon || '✦'} ${chapter.currentSpirit.name}${chapter.spiritRecommended ? ' · 顺势' : ' · 可改线'}`);
+            }
+            if (Array.isArray(chapter.currentVows) && chapter.currentVows.length > 0) {
+                currentLines.push(`当前誓约：${chapter.currentVows.map((meta) => `${meta.icon || '✦'} ${meta.name}`).join(' / ')}${chapter.vowRecommended ? ' · 顺势' : ' · 可补强'}`);
+            } else {
+                currentLines.push('当前尚未立誓，本章中后段可优先考虑顺势誓约。');
+            }
+
+            buildEl.innerHTML = `
+                <div class="preview-recommend-row">
+                    <span class="recommend-label">命格</span>
+                    <span class="preview-tag-strip">${renderTagGroup(chapter.recommendedDestinies, chapter.destinyRecommended)}</span>
+                </div>
+                <div class="preview-recommend-row">
+                    <span class="recommend-label">灵契</span>
+                    <span class="preview-tag-strip">${renderTagGroup(chapter.recommendedSpirits, chapter.spiritRecommended)}</span>
+                </div>
+                <div class="preview-recommend-row">
+                    <span class="recommend-label">誓约</span>
+                    <span class="preview-tag-strip">${renderTagGroup(chapter.recommendedVows, chapter.vowRecommended)}</span>
+                </div>
+                <div class="preview-current-build">${currentLines.join('<br>')}</div>
             `;
         }
 
@@ -5617,6 +7793,8 @@ class Game {
     // 显示角色选择界面
     showCharacterSelection() {
         this.selectedCharacterId = null;
+        this.selectedRunDestinyId = null;
+        this.selectedSpiritCompanionId = null;
         const container = document.getElementById('character-selection-container');
         if (container) {
             container.innerHTML = '';
@@ -5640,6 +7818,7 @@ class Game {
 
             for (const charId in CHARACTERS) {
                 const char = CHARACTERS[charId];
+                const identityProfile = this.getCharacterIdentityProfile(charId);
 
                 // Check if character is locked
                 let locked = false;
@@ -5679,6 +7858,20 @@ class Game {
                             <div class="char-name">${char.name}</div>
                             <div class="char-title">${char.title}</div>
                             <div class="char-desc">${char.description}</div>
+                            <div class="char-identity-strip">
+                                <span class="char-identity-pill primary">${identityProfile?.unlockLabel || '已解锁'}</span>
+                                <span class="char-identity-pill">${identityProfile?.recommendedDestinyText || '待推演'}</span>
+                                <span class="char-identity-pill">${identityProfile?.recommendedSpiritText || '待追索'}</span>
+                            </div>
+                            <div class="char-keyword-strip">
+                                ${(identityProfile?.keywords || []).map((keyword) => `<span class="char-keyword-chip">${keyword}</span>`).join('')}
+                            </div>
+                            <div class="char-story-panel">
+                                <div class="char-story-line"><strong>剧情简介：</strong>${identityProfile?.synopsis || char.description}</div>
+                                <div class="char-story-line"><strong>推荐玩法：</strong>${identityProfile?.identityHook || '围绕角色专属节奏推进本局。'}</div>
+                                <div class="char-story-line"><strong>角色专线：</strong>${identityProfile?.exclusiveLine?.summary || '更多专属内容等待追索。'}</div>
+                                <div class="char-story-line muted"><strong>解锁进度：</strong>${identityProfile?.unlockHint || (locked ? lockReason : '已满足出阵条件。')}</div>
+                            </div>
                             
                             <div class="char-relic-info">
                                 <div class="relic-name"><span>🔮</span> ${char.relic.name}</div>
@@ -5712,10 +7905,41 @@ class Game {
                 cardsContainer.appendChild(card);
             }
             container.appendChild(cardsContainer);
+
+            const destinySection = document.createElement('section');
+            destinySection.className = 'run-destiny-section';
+            destinySection.innerHTML = `
+                <div class="run-destiny-header">
+                    <div>
+                        <span class="run-destiny-kicker">开局命格</span>
+                        <h3>命轮初启 · 三选其一</h3>
+                    </div>
+                    <p id="run-destiny-summary">命格会决定这一轮的开局气质、资源节奏与战斗风格。</p>
+                </div>
+                <div class="run-destiny-grid" id="run-destiny-selection">
+                    <div class="run-destiny-empty">先选定一位角色，再感应这一局的命格。</div>
+                </div>
+            `;
+            container.appendChild(destinySection);
+
+            const spiritSection = document.createElement('section');
+            spiritSection.className = 'run-destiny-section run-spirit-section';
+            spiritSection.innerHTML = `
+                <div class="run-destiny-header">
+                    <div>
+                        <span class="run-destiny-kicker">同行灵契</span>
+                        <h3>护道灵契 · 三选其一</h3>
+                    </div>
+                    <p id="spirit-companion-summary">灵契提供常驻被动与蓄能主动，会补足这局的关键短板。</p>
+                </div>
+                <div class="run-destiny-grid" id="spirit-companion-selection">
+                    <div class="run-destiny-empty">先选定一位角色，再决定与你同行的灵契。</div>
+                </div>
+            `;
+            container.appendChild(spiritSection);
         }
 
-        const confirmBtn = document.getElementById('confirm-character-btn');
-        if (confirmBtn) confirmBtn.disabled = true;
+        this.updateCharacterSelectionConfirmState();
 
         this.showScreen('character-selection-screen');
     }
@@ -5728,8 +7952,9 @@ class Game {
             if (c.dataset.id === charId) c.classList.add('selected');
             else c.classList.remove('selected');
         });
-        const confirmBtn = document.getElementById('confirm-character-btn');
-        if (confirmBtn) confirmBtn.disabled = false;
+        this.renderRunDestinySelection(charId);
+        this.renderSpiritCompanionSelection(charId);
+        this.updateCharacterSelectionConfirmState();
     }
 
     // 确认选择
@@ -5744,11 +7969,14 @@ class Game {
 
         // 清除旧存档，开始新游戏
         this.clearSave();
-        this.startNewGame(this.selectedCharacterId);
+        this.startNewGame(this.selectedCharacterId, {
+            runDestinyId: this.selectedRunDestinyId || this.resolveDefaultRunDestinyId(this.selectedCharacterId),
+            spiritCompanionId: this.selectedSpiritCompanionId || this.resolveDefaultSpiritCompanionId(this.selectedCharacterId)
+        });
     }
 
     // 开始新游戏
-    startNewGame(characterId = 'linFeng') {
+    startNewGame(characterId = 'linFeng', options = {}) {
         // 游客模式下允许离线开始，不强制登录
         if (this.shouldForceCloudLogin()) {
             this.showLoginModal();
@@ -5756,6 +7984,18 @@ class Game {
         }
 
         this.player.reset(characterId);
+        const resolvedRunDestinyId = (options && typeof options.runDestinyId === 'string' && options.runDestinyId)
+            ? options.runDestinyId
+            : this.resolveDefaultRunDestinyId(characterId);
+        if (resolvedRunDestinyId && typeof this.player.setRunDestiny === 'function') {
+            this.player.setRunDestiny(resolvedRunDestinyId, Math.max(1, Math.floor(Number(options.runDestinyTier) || 1)));
+        }
+        const resolvedSpiritCompanionId = (options && typeof options.spiritCompanionId === 'string' && options.spiritCompanionId)
+            ? options.spiritCompanionId
+            : this.resolveDefaultSpiritCompanionId(characterId);
+        if (resolvedSpiritCompanionId && typeof this.player.setSpiritCompanion === 'function') {
+            this.player.setSpiritCompanion(resolvedSpiritCompanionId, Math.max(1, Math.floor(Number(options.spiritCompanionTier) || 1)));
+        }
         this.player.realm = 1;
         this.player.floor = 0;
         this.comboCount = 0;
@@ -6487,51 +8727,27 @@ class Game {
 
         // 试炼挑战检测 (Trial Challenge)
         if (this.activeTrial) {
-            let trialSuccess = false;
-            // 获取回合数 (assuming battle object exists and persists turnNumber)
-            // this.battle 应该是当前战斗实例
-
-            if (this.activeTrial === 'speedKill') {
-                const limit = (this.trialData && this.trialData.rounds) ? this.trialData.rounds : 3;
-                if (this.battle && this.battle.turnNumber <= limit) {
-                    trialSuccess = true;
-                }
-            } else if (this.activeTrial === 'noDamage') {
-                if (this.battle && !this.battle.playerTookDamage) {
-                    trialSuccess = true;
-                }
-            }
+            const trialSuccess = this.evaluateActiveTrialSuccess();
+            const trialName = this.trialData?.name || '试炼';
 
             if (trialSuccess) {
-                Utils.showBattleLog('⚡ 试炼完成！获得额外奖励！');
+                Utils.showBattleLog(`⚡ 试炼完成【${trialName}】！获得额外奖励！`);
 
                 if (this.trialData.rewardMultiplier) {
                     ringExp = Math.floor(ringExp * this.trialData.rewardMultiplier);
-                    this.player.gold += 50;
-                    Utils.showBattleLog(`奖励翻倍！获得额外 50 灵石`);
+                    Utils.showBattleLog(`奖励倍率提升至 x${Number(this.trialData.rewardMultiplier).toFixed(2)}`);
                 }
-                if (this.trialData.reward === 'law') {
-                    // 奖励一张随机法则牌
-                    const randomLawKey = Object.keys(LAWS)[Math.floor(Math.random() * Object.keys(LAWS).length)];
-                    const law = LAWS[randomLawKey];
-                    // 只是获得卡牌还是获得法则? "reward: law" usually implies getting the law power or card.
-                    // Description says "obtain rare law".
-                    // Let's force add law to player (if not duplicate)
-                    if (this.player.collectLaw(law)) {
-                        Utils.showBattleLog(`领悟法则：${law.name}`);
-                        this.achievementSystem.updateStat('lawsCollected', 1); // Update Achievement
-                    } else {
-                        // Fallback if already exists
-                        this.player.gold += 100;
-                        Utils.showBattleLog(`法则已存在，转化为 100 灵石`);
-                    }
+                const rewardResult = this.grantTrialChallengeReward();
+                if (rewardResult.rewardText) {
+                    Utils.showBattleLog(`试炼碑赐赏：${rewardResult.rewardText}`);
                 }
             } else {
-                Utils.showBattleLog('试炼失败...');
+                Utils.showBattleLog(`试炼未达成【${trialName}】条件。`);
             }
             // Clear trial state
             this.activeTrial = null;
             this.trialData = null;
+            this.trialMode = null;
         }
 
         if (endlessMods) {
@@ -6952,7 +9168,12 @@ class Game {
         if (!this.player) return getRewardCards(safeCount, null, []);
         const endlessMods = this.isEndlessActive() ? this.getEndlessModifiers() : null;
         const rumorRareBonus = this.consumeRewardRumorBoost();
-        const rareBonus = Math.max(0, Number(endlessMods?.rewardRareChance) || 0) + Math.max(0, rumorRareBonus);
+        const vowEffects = this.player && typeof this.player.getRunVowEffects === 'function'
+            ? this.player.getRunVowEffects()
+            : {};
+        const rareBonus = Math.max(0, Number(endlessMods?.rewardRareChance) || 0)
+            + Math.max(0, rumorRareBonus)
+            + Math.max(0, Number(vowEffects.rewardRareChance) || 0);
         if (rareBonus <= 0) {
             return getRewardCards(safeCount, this.player.characterId, this.player.deck);
         }
@@ -7291,21 +9512,22 @@ class Game {
         this.currentBattleNode = node;
         this.currentEvent = event;
 
-        const modal = document.getElementById('event-modal');
-        document.getElementById('event-icon').textContent = event.icon || '❓';
-        document.getElementById('event-title').textContent = event.name || '神秘事件';
+        const refs = this.getEventModalRefs();
+        const modal = refs.modal;
+        if (!modal || !refs.iconEl || !refs.titleEl || !refs.descEl || !refs.choicesEl) return;
+        refs.iconEl.textContent = event.icon || '❓';
+        refs.titleEl.textContent = event.name || '神秘事件';
 
         // 显示描述或对话
-        const descEl = document.getElementById('event-desc');
         if (event.speaker) {
-            descEl.innerHTML = `<span style="color: var(--accent-gold)">${event.speaker.icon}</span> ${event.speaker.dialogue}`;
+            refs.descEl.innerHTML = `<span style="color: var(--accent-gold)">${event.speaker.icon}</span> ${event.speaker.dialogue}`;
         } else {
-            descEl.textContent = event.description || '发生了一些事情...';
+            refs.descEl.textContent = event.description || '发生了一些事情...';
         }
+        this.applyEventModalPresentation(this.getEventNarrativePresentation(event, node));
 
         // 生成选项
-        const choicesEl = document.getElementById('event-choices');
-        choicesEl.innerHTML = '';
+        refs.choicesEl.innerHTML = '';
 
         event.choices.forEach((choice, index) => {
             // 检查条件
@@ -7332,9 +9554,17 @@ class Game {
             const btn = document.createElement('button');
             btn.className = 'event-choice';
             if (!canChoose) btn.classList.add('disabled');
+            const choiceSummary = this.buildEventChoiceEffectSummary(choice);
+            const escape = (value) => String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
             btn.innerHTML = `
-                <div>${choice.icon || '▶'} ${choice.text} ${conditionText}</div>
+                <div class="choice-title">${choice.icon || '▶'} ${choice.text} ${conditionText}</div>
                 <div class="choice-effect">${choice.result || ''}</div>
+                ${choiceSummary.length > 0 ? `<div class="choice-summary">${choiceSummary.map((item) => `<span class="choice-summary-chip">${escape(item)}</span>`).join('')}</div>` : ''}
             `;
 
             if (canChoose) {
@@ -7344,10 +9574,232 @@ class Game {
                 btn.style.cursor = 'not-allowed';
             }
 
-            choicesEl.appendChild(btn);
+            refs.choicesEl.appendChild(btn);
         });
 
         modal.classList.add('active');
+    }
+
+    getTrialChallengeCatalog() {
+        const realm = Math.max(1, Math.floor(Number(this.player?.realm) || 1));
+        return [
+            {
+                id: 'speedKill',
+                name: '逐光试斩',
+                icon: '⚡',
+                desc: '要求你在 4 回合内结束战斗。敌方生命与攻击同时提升。',
+                conditions: { maxTurns: 4 },
+                rewardMultiplier: 1.55,
+                reward: 'law',
+                bonusGold: 60 + realm * 6,
+                enemyHpMul: 1.18,
+                enemyAtkMul: 1.12
+            },
+            {
+                id: 'noDamage',
+                name: '无伤镜湖',
+                icon: '🪞',
+                desc: '本场不可失去生命。敌方开场获得护盾，并追加控场节奏。',
+                conditions: { noDamage: true },
+                rewardMultiplier: 1.4,
+                reward: 'rare_card',
+                bonusGold: 45 + realm * 5,
+                enemyHpMul: 1.1,
+                enemyAtkMul: 1.08,
+                enemyOpeningBlock: 10,
+                enemyDebuff: { type: 'weak', value: 1 }
+            },
+            {
+                id: 'oathMirror',
+                name: '双誓并压',
+                icon: '☯️',
+                desc: '5 回合内取胜且本场不可失去生命。敌方生命、护盾与压制节奏进一步强化。',
+                conditions: { maxTurns: 5, noDamage: true },
+                rewardMultiplier: 1.72,
+                reward: 'law',
+                bonusGold: 90 + realm * 8,
+                enemyHpMul: 1.24,
+                enemyAtkMul: 1.14,
+                enemyOpeningBlock: 12,
+                enemyDebuff: { type: 'vulnerable', value: 1 }
+            }
+        ];
+    }
+
+    armTrialChallenge(config = {}) {
+        if (!config || typeof config !== 'object') return null;
+        const conditions = config.conditions && typeof config.conditions === 'object'
+            ? config.conditions
+            : {};
+        const maxTurns = Math.max(
+            0,
+            Math.floor(
+                Number(
+                    config.maxTurns != null
+                        ? config.maxTurns
+                        : (config.rounds != null ? config.rounds : conditions.maxTurns)
+                ) || 0
+            )
+        );
+        const noDamage = !!(
+            config.noDamage != null
+                ? config.noDamage
+                : conditions.noDamage
+        );
+        const normalized = {
+            id: String(config.id || config.trialType || 'trialChallenge'),
+            name: String(config.name || config.label || config.trialType || '试炼挑战'),
+            icon: String(config.icon || '⚖️'),
+            desc: String(config.desc || config.description || '通过额外条件换取更高回报。'),
+            conditions: {
+                maxTurns,
+                noDamage
+            },
+            rounds: maxTurns,
+            rewardMultiplier: Math.max(1, Number(config.rewardMultiplier) || 1),
+            reward: String(config.reward || 'law'),
+            bonusGold: Math.max(0, Math.floor(Number(config.bonusGold) || 0)),
+            enemyHpMul: Math.max(1, Number(config.enemyHpMul) || 1),
+            enemyAtkMul: Math.max(1, Number(config.enemyAtkMul) || 1),
+            enemyOpeningBlock: Math.max(0, Math.floor(Number(config.enemyOpeningBlock) || 0)),
+            enemyDebuff: config.enemyDebuff && typeof config.enemyDebuff === 'object'
+                ? {
+                    type: String(config.enemyDebuff.type || ''),
+                    value: Math.max(0, Math.floor(Number(config.enemyDebuff.value) || 0))
+                }
+                : null
+        };
+        this.activeTrial = normalized.id;
+        this.trialData = normalized;
+        this.trialMode = {
+            type: normalized.id,
+            rounds: normalized.rounds,
+            rewardMultiplier: normalized.rewardMultiplier,
+            reward: normalized.reward
+        };
+        return normalized;
+    }
+
+    evaluateActiveTrialSuccess() {
+        const trial = this.trialData && typeof this.trialData === 'object' ? this.trialData : null;
+        if (!trial) return false;
+        const conditions = trial.conditions && typeof trial.conditions === 'object'
+            ? trial.conditions
+            : {};
+        if (
+            Number(conditions.maxTurns) > 0
+            && this.battle
+            && Number(this.battle.turnNumber) > Number(conditions.maxTurns)
+        ) {
+            return false;
+        }
+        if (conditions.noDamage && this.battle && this.battle.playerTookDamage) {
+            return false;
+        }
+        return true;
+    }
+
+    grantTrialChallengeReward() {
+        const trial = this.trialData && typeof this.trialData === 'object' ? this.trialData : null;
+        if (!trial) return { rewardText: '' };
+
+        const rewardLines = [];
+        const bonusGold = Math.max(0, Math.floor(Number(trial.bonusGold) || 0));
+        if (bonusGold > 0) {
+            this.player.gold += bonusGold;
+            rewardLines.push(`额外灵石 +${bonusGold}`);
+        }
+
+        if (trial.reward === 'law' && typeof LAWS !== 'undefined' && LAWS && typeof LAWS === 'object') {
+            const lawKeys = Object.keys(LAWS);
+            if (lawKeys.length > 0) {
+                const randomLawKey = lawKeys[Math.floor(Math.random() * lawKeys.length)];
+                const law = LAWS[randomLawKey];
+                if (this.player.collectLaw(law)) {
+                    rewardLines.push(`领悟法则：${law.name}`);
+                    if (this.achievementSystem && typeof this.achievementSystem.updateStat === 'function') {
+                        this.achievementSystem.updateStat('lawsCollected', 1);
+                    }
+                } else {
+                    this.player.gold += 100;
+                    rewardLines.push('法则重复，转化为 100 灵石');
+                }
+            }
+        } else if (trial.reward === 'rare_card' && typeof getRandomCard === 'function') {
+            const card = getRandomCard('rare', this.player?.characterId || null);
+            if (card && typeof this.player.addCardToDeck === 'function') {
+                this.player.addCardToDeck(card);
+                rewardLines.push(`获得稀有卡：${card.name}`);
+            }
+        }
+
+        return {
+            rewardText: rewardLines.join('｜')
+        };
+    }
+
+    showTrialChallengeSelection(node) {
+        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
+        const challenges = this.getTrialChallengeCatalog();
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl || challenges.length === 0) {
+            const fallback = challenges[0] || this.armTrialChallenge({ id: 'speedKill', name: '逐光试斩', conditions: { maxTurns: 4 }, rewardMultiplier: 1.4, reward: 'law' });
+            if (this.map && typeof this.map.startTrialNode === 'function') {
+                this.map.startTrialNode(node, fallback);
+            }
+            return;
+        }
+
+        titleEl.textContent = '试炼碑';
+        iconEl.textContent = '⚖️';
+        descEl.innerHTML = '主动刻下 1 组试炼词缀，换取更高稀有奖励与额外战利。';
+        choicesEl.innerHTML = '';
+
+        challenges.forEach((challenge) => {
+            const conditionParts = [];
+            if (challenge.conditions?.maxTurns > 0) conditionParts.push(`${challenge.conditions.maxTurns} 回合内取胜`);
+            if (challenge.conditions?.noDamage) conditionParts.push('本场不可失去生命');
+            const enemyParts = [];
+            if (challenge.enemyHpMul > 1) enemyParts.push(`敌方生命 x${challenge.enemyHpMul.toFixed(2)}`);
+            if (challenge.enemyAtkMul > 1) enemyParts.push(`敌方伤害 x${challenge.enemyAtkMul.toFixed(2)}`);
+            if (challenge.enemyOpeningBlock > 0) enemyParts.push(`开场护盾 +${challenge.enemyOpeningBlock}`);
+
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            btn.innerHTML = `
+                <div class="choice-title">
+                    <span class="choice-name">${challenge.icon || '⚖️'} ${challenge.name}</span>
+                    <span class="choice-rarity">奖励 x${challenge.rewardMultiplier.toFixed(2)}</span>
+                </div>
+                <div class="choice-effect">${challenge.desc}</div>
+                <div class="choice-effect" style="color:#b9d7ff;">条件：${conditionParts.join('｜') || '常规试炼'}</div>
+                <div class="choice-effect" style="color:#f1c89d;">词缀：${enemyParts.join('｜') || '强化精英基线'}</div>
+            `;
+            btn.onclick = () => {
+                const armed = this.armTrialChallenge(challenge);
+                this.closeModal();
+                if (this.map && typeof this.map.startTrialNode === 'function') {
+                    this.map.startTrialNode(node, armed);
+                }
+            };
+            choicesEl.appendChild(btn);
+        });
+
+        const leaveBtn = document.createElement('button');
+        leaveBtn.className = 'event-choice';
+        leaveBtn.innerHTML = `
+            <div>🚶 暂离试炼碑</div>
+            <div class="choice-effect">不刻词缀，保留当前路线与资源。</div>
+        `;
+        leaveBtn.onclick = () => {
+            this.closeModal();
+            if (this.map && typeof this.map.completeNode === 'function') {
+                this.map.completeNode(node);
+            }
+            this.autoSave();
+        };
+        choicesEl.appendChild(leaveBtn);
+
+        this.activateModal(modal);
     }
 
     showForgeChoiceModal(node, costs = {}) {
@@ -7359,14 +9811,135 @@ class Game {
         const upgradableCount = Array.isArray(this.player.deck)
             ? this.player.deck.filter(c => typeof canUpgradeCard === 'function' && canUpgradeCard(c)).length
             : 0;
+        const equippedTreasures = Array.isArray(this.player?.equippedTreasures)
+            ? this.player.equippedTreasures
+            : [];
+        const setTreasureCount = equippedTreasures.filter((treasure) => treasure && typeof treasure.setTag === 'string' && treasure.setTag.trim()).length;
+        const infusionEligibleCount = this.player && typeof this.player.isTreasureSpiritInfusionEligible === 'function'
+            ? equippedTreasures.filter((treasure) => this.player.isTreasureSpiritInfusionEligible(treasure)).length
+            : 0;
+        const spiritMeta = this.player && typeof this.player.getSpiritCompanionMeta === 'function'
+            ? this.player.getSpiritCompanionMeta()
+            : null;
+        const workshopTags = this.player && typeof this.player.getTreasureWorkshopSnapshot === 'function'
+            ? this.player.getTreasureWorkshopSnapshot('equipped')
+                .flatMap((entry) => {
+                    const labels = [];
+                    if (entry.reforge?.label) labels.push(entry.reforge.label);
+                    if (entry.spiritBond) labels.push(`器灵·${entry.spiritBond}`);
+                    if (entry.setEcho) labels.push('套装修正');
+                    return labels;
+                })
+            : [];
 
         const modal = document.getElementById('event-modal');
         document.getElementById('event-icon').textContent = '⚒️';
-        document.getElementById('event-title').textContent = '天工锻炉';
+        document.getElementById('event-title').textContent = '天工炼器坊';
 
         const descEl = document.getElementById('event-desc');
         descEl.innerHTML = `
-            炉火正旺，你可以选择不同锻法。<br>
+            炉火正旺，你可以选择锻牌、重铸与器灵调谐。<br>
+            当前可强化卡牌：<span style="color:var(--accent-gold)">${upgradableCount}</span> 张｜
+            已装备法宝：<span style="color:var(--accent-gold)">${equippedTreasures.length}</span> 件｜
+            当前灵契：<span style="color:var(--accent-gold)">${spiritMeta ? `${spiritMeta.icon || '✦'} ${spiritMeta.name}` : '未结契'}</span><br>
+            ${workshopTags.length > 0 ? `已激活工坊铭刻：<span style="color:#b9d7ff;">${workshopTags.join(' / ')}</span>` : '尚未激活工坊铭刻。'}
+        `;
+
+        const options = [
+            {
+                icon: '🔧',
+                text: '锻牌方案',
+                result: `进入精锻 / 过载 / 淬灵拓印分支（当前可强化 ${upgradableCount} 张牌）。`,
+                canChoose: true,
+                handler: () => this.showForgeCardDraft(node, { forgeCost, premiumCost, temperCost })
+            },
+            {
+                icon: '🧿',
+                text: '法宝重铸',
+                result: '为 1 件已装备法宝重写锻纹，改变其战斗定位。',
+                canChoose: equippedTreasures.length > 0,
+                handler: () => this.showForgeTreasureDraft(node, 'reforge', { forgeCost, premiumCost, temperCost })
+            },
+            {
+                icon: '🪶',
+                text: '器灵灌注',
+                result: spiritMeta
+                    ? infusionEligibleCount > 0
+                        ? `将当前同行灵契注入 1 件核心法宝，开场时额外获得灵契蓄能（当前可选 ${infusionEligibleCount} 件）。`
+                        : '当前已装备法宝里没有核心件，暂时无法进行器灵灌注。'
+                    : '需要当前已有同行灵契。',
+                canChoose: !!spiritMeta && infusionEligibleCount > 0,
+                handler: () => this.showForgeTreasureDraft(node, 'infusion', { forgeCost, premiumCost, temperCost })
+            },
+            {
+                icon: '🧩',
+                text: '套装修正',
+                result: setTreasureCount > 0
+                    ? '让 1 件套装法宝额外视作 +1 件同套，补齐套装共鸣阈值。'
+                    : '需要已装备带套装归属的法宝。',
+                canChoose: setTreasureCount > 0,
+                handler: () => this.showForgeTreasureDraft(node, 'calibration', { forgeCost, premiumCost, temperCost })
+            },
+            {
+                icon: '🚶',
+                text: '暂离炼器坊',
+                result: '保留资源，继续前进。',
+                canChoose: true,
+                handler: () => {
+                    modal.classList.remove('active');
+                    if (this.map && typeof this.map.completeNode === 'function') {
+                        this.map.completeNode(node);
+                    }
+                    this.autoSave();
+                }
+            }
+        ];
+
+        const choicesEl = document.getElementById('event-choices');
+        choicesEl.innerHTML = '';
+        options.forEach(option => {
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            if (!option.canChoose) btn.classList.add('disabled');
+            btn.innerHTML = `
+                <div>${option.icon} ${option.text}</div>
+                <div class="choice-effect">${option.result}</div>
+            `;
+
+            if (option.canChoose) {
+                btn.onclick = () => {
+                    if (typeof option.handler === 'function') {
+                        option.handler();
+                    }
+                };
+            } else {
+                btn.style.opacity = '0.5';
+                btn.style.cursor = 'not-allowed';
+            }
+
+            choicesEl.appendChild(btn);
+        });
+
+        modal.classList.add('active');
+    }
+
+    showForgeCardDraft(node, costs = {}) {
+        this.currentBattleNode = node;
+
+        const forgeCost = costs.forgeCost || (55 + this.player.realm * 9);
+        const premiumCost = costs.premiumCost || (forgeCost + 50);
+        const temperCost = costs.temperCost || Math.max(30, Math.floor(forgeCost * 0.6));
+        const upgradableCount = Array.isArray(this.player.deck)
+            ? this.player.deck.filter(c => typeof canUpgradeCard === 'function' && canUpgradeCard(c)).length
+            : 0;
+
+        const modal = document.getElementById('event-modal');
+        document.getElementById('event-icon').textContent = '⚒️';
+        document.getElementById('event-title').textContent = '炼器坊·锻牌';
+
+        const descEl = document.getElementById('event-desc');
+        descEl.innerHTML = `
+            炼器炉心已转向牌阵锻压。<br>
             当前可强化卡牌：<span style="color:var(--accent-gold)">${upgradableCount}</span> 张
         `;
 
@@ -7393,10 +9966,10 @@ class Game {
                 canChoose: this.player.gold >= temperCost
             },
             {
-                id: 'leave',
-                icon: '🚶',
-                text: '暂离锻炉',
-                result: '保留资源，继续前进',
+                id: 'back',
+                icon: '↩️',
+                text: '返回炼器坊',
+                result: '回到主选单，改做法宝重铸或器灵灌注。',
                 canChoose: true
             }
         ];
@@ -7414,6 +9987,10 @@ class Game {
 
             if (option.canChoose) {
                 btn.onclick = () => {
+                    if (option.id === 'back') {
+                        this.showForgeChoiceModal(node, { forgeCost, premiumCost, temperCost });
+                        return;
+                    }
                     modal.classList.remove('active');
                     if (this.map && typeof this.map.applyForgeChoice === 'function') {
                         this.map.applyForgeChoice(node, option.id, { forgeCost, premiumCost, temperCost });
@@ -7429,6 +10006,179 @@ class Game {
         });
 
         modal.classList.add('active');
+    }
+
+    describeTreasureWorkshopStatus(treasure) {
+        if (!treasure || !treasure.data || typeof treasure.data !== 'object') return '';
+        if (this.player && typeof this.player.describeTreasureWorkshopStatus === 'function') {
+            return this.player.describeTreasureWorkshopStatus(treasure);
+        }
+        const tags = [];
+        if (treasure.data.workshopReforge && this.player && typeof this.player.getTreasureWorkshopReforgeLabel === 'function') {
+            tags.push(this.player.getTreasureWorkshopReforgeLabel(treasure.data.workshopReforge));
+        }
+        if (treasure.data.workshopSpiritBond) {
+            const spiritMeta = this.getSpiritCompanionMetaById(treasure.data.workshopSpiritBond, 1);
+            tags.push(`器灵·${spiritMeta?.name || treasure.data.workshopSpiritBond}`);
+        }
+        if (treasure.data.workshopSetEcho) {
+            tags.push('套装修正');
+        }
+        return tags.join(' / ');
+    }
+
+    showForgeTreasureDraft(node, mode = 'reforge', costs = {}) {
+        this.currentBattleNode = node;
+        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
+            this.showForgeChoiceModal(node, costs);
+            return;
+        }
+
+        const spiritMeta = this.player && typeof this.player.getSpiritCompanionMeta === 'function'
+            ? this.player.getSpiritCompanionMeta()
+            : null;
+        const equippedTreasures = Array.isArray(this.player?.equippedTreasures)
+            ? this.player.equippedTreasures.slice()
+            : [];
+
+        let title = '炼器坊';
+        let icon = '⚒️';
+        let description = '从法宝中选择一件进行改造。';
+        let candidates = equippedTreasures.slice();
+
+        if (mode === 'reforge') {
+            title = '炼器坊·法宝重铸';
+            icon = '🧿';
+            description = '改写一件法宝的锻纹，使其更偏向护势、裂脉或节奏收益。';
+        } else if (mode === 'infusion') {
+            title = '炼器坊·器灵灌注';
+            icon = '🪶';
+            description = spiritMeta
+                ? `将 ${spiritMeta.icon || '✦'} ${spiritMeta.name} 的回响注入核心法宝，开场时额外获得灵契蓄能。`
+                : '当前没有同行灵契，无法进行器灵灌注。';
+            candidates = equippedTreasures.filter((treasure) => (
+                this.player
+                && typeof this.player.isTreasureSpiritInfusionEligible === 'function'
+                && this.player.isTreasureSpiritInfusionEligible(treasure)
+            ));
+        } else if (mode === 'calibration') {
+            title = '炼器坊·套装修正';
+            icon = '🧩';
+            description = '让一件套装法宝额外视作 +1 件同套，用于补齐套装共鸣阈值。';
+            candidates = equippedTreasures.filter((treasure) => treasure && typeof treasure.setTag === 'string' && treasure.setTag.trim());
+        }
+
+        if (mode === 'infusion' && !spiritMeta) {
+            this.showForgeChoiceModal(node, costs);
+            return;
+        }
+        if (!candidates.length) {
+            this.showForgeChoiceModal(node, costs);
+            return;
+        }
+
+        titleEl.textContent = title;
+        iconEl.textContent = icon;
+        descEl.innerHTML = description;
+        choicesEl.innerHTML = '';
+
+        candidates.forEach((treasure) => {
+            const setLabel = this.player && typeof this.player.getTreasureSetLabel === 'function'
+                ? this.player.getTreasureSetLabel(treasure.setTag || '')
+                : (treasure.setTag || '散修');
+            const statusText = this.describeTreasureWorkshopStatus(treasure);
+            const research = this.player && typeof this.player.getTreasureResearchEntry === 'function'
+                ? this.player.getTreasureResearchEntry(treasure)
+                : null;
+            let previewText = treasure.description || '保留原有法宝能力。';
+            if (mode === 'reforge' && this.player && typeof this.player.getTreasureWorkshopReforgeMode === 'function') {
+                const reforgeMode = this.player.getTreasureWorkshopReforgeMode(treasure);
+                const reforgeLabel = this.player.getTreasureWorkshopReforgeLabel(reforgeMode);
+                const reforgeSummary = this.player.getTreasureWorkshopReforgeSummary(reforgeMode);
+                previewText = `将改铸为【${reforgeLabel}】。${reforgeSummary}`;
+            } else if (mode === 'infusion') {
+                previewText = `注入 ${spiritMeta?.name || '灵契'} 回响。战斗开始时，若当前同行灵契匹配，则灵契蓄能 +1。${research?.role?.label ? ` 当前定位：${research.role.label}。` : ''}`;
+            } else if (mode === 'calibration') {
+                const sameSetCount = equippedTreasures.filter((entry) => entry && entry.setTag === treasure.setTag).length;
+                previewText = `${setLabel} 套装将额外视作 +1 件，当前会提升到 ${sameSetCount + 1} 件共鸣。`;
+            }
+
+            const btn = document.createElement('button');
+            btn.className = 'event-choice';
+            btn.innerHTML = `
+                <div class="choice-title">
+                    <span class="choice-name">${treasure.icon || '✦'} ${treasure.name}</span>
+                    <span class="choice-rarity">${setLabel}</span>
+                </div>
+                <div class="choice-effect">${previewText}</div>
+                ${research?.focusTags?.length ? `<div class="choice-effect" style="color:#d7e8ff;">适配：${research.focusTags.join(' / ')}</div>` : ''}
+                ${statusText ? `<div class="choice-effect" style="color:#b9d7ff;">当前铭刻：${statusText}</div>` : ''}
+            `;
+            btn.onclick = () => {
+                let result = null;
+                let gainedInsight = 0;
+                let gainedExp = 0;
+
+                if (mode === 'reforge' && typeof this.player?.applyTreasureReforge === 'function') {
+                    result = this.player.applyTreasureReforge(treasure.id);
+                    gainedExp = this.grantFateRingExp(12, '重铸余烬');
+                } else if (mode === 'infusion' && typeof this.player?.applyTreasureSpiritInfusion === 'function') {
+                    result = this.player.applyTreasureSpiritInfusion(treasure.id, spiritMeta?.id || '');
+                    gainedInsight = this.grantStrategicCurrencies({ insight: 1 }, '器灵灌注').insight || 0;
+                    gainedExp = this.grantFateRingExp(8, '器灵灌注');
+                } else if (mode === 'calibration' && typeof this.player?.applyTreasureSetCalibration === 'function') {
+                    result = this.player.applyTreasureSetCalibration(treasure.id);
+                    gainedInsight = this.grantStrategicCurrencies({ insight: 1 }, '套装修正').insight || 0;
+                    gainedExp = this.grantFateRingExp(10, '套装修正');
+                }
+
+                if (!result) {
+                    this.showForgeChoiceModal(node, costs);
+                    return;
+                }
+
+                this.closeModal();
+                if (mode === 'reforge') {
+                    this.finishStrategicNode(
+                        node,
+                        '法宝重铸完成',
+                        `${result.icon || '✦'} ${result.name} 已完成【${result.label}】。\n${result.summary}\n命环经验 +${gainedExp}。`,
+                        result.icon || '🧿'
+                    );
+                    return;
+                }
+
+                if (mode === 'infusion') {
+                    this.finishStrategicNode(
+                        node,
+                        '器灵灌注完成',
+                        `${result.icon || '✦'} ${result.name} 已与 ${result.spiritIcon || '✦'} ${result.spiritName} 建立回响。\n${result.summary}\n命环经验 +${gainedExp}。${gainedInsight > 0 ? `\n天机 +${gainedInsight}。` : ''}`,
+                        result.icon || '🪶'
+                    );
+                    return;
+                }
+
+                this.finishStrategicNode(
+                    node,
+                    '套装修正完成',
+                    `${result.icon || '✦'} ${result.name} 已校准为 ${result.setLabel} 共鸣锚点。\n${result.summary}\n当前 ${result.setLabel} 套装视作 ${result.pieces} 件。\n命环经验 +${gainedExp}。${gainedInsight > 0 ? `\n天机 +${gainedInsight}。` : ''}`,
+                    result.icon || '🧩'
+                );
+            };
+            choicesEl.appendChild(btn);
+        });
+
+        const backBtn = document.createElement('button');
+        backBtn.className = 'event-choice';
+        backBtn.innerHTML = `
+            <div>↩️ 返回炼器坊</div>
+            <div class="choice-effect">回到主选单，改做其他炼器方案。</div>
+        `;
+        backBtn.onclick = () => this.showForgeChoiceModal(node, costs);
+        choicesEl.appendChild(backBtn);
+
+        this.activateModal(modal);
     }
 
     // 选择事件选项
@@ -7703,13 +10453,18 @@ class Game {
                         Utils.showBattleLog(`无尽词缀联动：试炼奖励倍率提升至 x${rewardMultiplier.toFixed(2)}`);
                     }
                 }
-                this.trialMode = {
-                    type: effect.trialType,
+                const trialConfig = (typeof this.armTrialChallenge === 'function'
+                    ? this.armTrialChallenge
+                    : Game.prototype.armTrialChallenge
+                ).call(this, {
+                    id: effect.trialType,
+                    name: effect.name || effect.trialName || effect.trialType || '事件试炼',
                     rounds: effect.rounds,
-                        rewardMultiplier,
-                    reward: effect.reward
-                };
-                Utils.showBattleLog(`进入试炼模式: ${effect.trialType}`);
+                    rewardMultiplier,
+                    reward: effect.reward,
+                    desc: effect.description || '事件开启了一场额外试炼。'
+                });
+                Utils.showBattleLog(`进入试炼模式: ${trialConfig?.name || effect.trialType}`);
                 const trialEnemy = getRandomEnemy(this.player.realm);
                 if (trialEnemy) {
                     this.closeModal();
@@ -8506,6 +11261,30 @@ class Game {
         this.showScreen('map-screen');
     }
 
+    advanceToNextRealm(clearEssence = 0) {
+        this.player.realm++;
+        this.player.floor = 0;
+        this.currentBattleNode = null; // 防止奖励结算重复触发
+
+        this.player.isRecultivation = false;
+        this.player.isReplay = false;
+
+        this.player.checkSkillUnlock();
+
+        this.autoSave();
+        if (typeof AuthService !== 'undefined' && AuthService.isLoggedIn()) {
+            console.log('Realm Complete: Forcing Cloud Sync');
+        }
+
+        const healAmount = Math.floor(this.player.maxHp * 0.2);
+        this.player.heal(healAmount);
+        Utils.showBattleLog(`进入下一重天域，恢复 ${healAmount} HP，轮回精粹 +${clearEssence}`);
+
+        this.map.generate(this.player.realm);
+        this.renderTreasures('map-treasures');
+        this.showScreen('map-screen');
+    }
+
     // 天域完成
     onRealmComplete() {
         if (this.isEndlessActive()) {
@@ -8551,37 +11330,14 @@ class Game {
             this.showVictoryScreen();
             return;
         }
-
-        // 允许玩家选择继续或回城
-        // 这里暂时保持自动推进，但增加保存
-        this.player.realm++;
-        this.player.floor = 0;
-        this.currentBattleNode = null; // 关键修复：防止奖励结算再次触发节点完成
-
-        // 成功突破天域，清除重修惩罚
-        this.player.isRecultivation = false;
-        // 进入下一层肯定不是重玩（除非本来就是全通关后的无限模式？暂时假设突破即解除）
-        this.player.isReplay = false;
-
-        // 检查技能解锁 (Level up skill upon entering specific realms)
-        this.player.checkSkillUnlock();
-
-        // 关键修复：立即保存并强制同步
-        this.autoSave();
-        if (typeof AuthService !== 'undefined' && AuthService.isLoggedIn()) {
-            // Force sync log
-            console.log('Realm Complete: Forcing Cloud Sync');
-            // autoSave calls saveGame which handles sync, but logging here helps debug
+        if (this.shouldOfferRunVowAfterRealm(currentRealm)) {
+            this.showRunVowSelection(currentRealm, () => {
+                this.advanceToNextRealm(clearEssence);
+            });
+            return;
         }
 
-        // 治疗玩家 (小幅回复，而不是回满)
-        const healAmount = Math.floor(this.player.maxHp * 0.2);
-        this.player.heal(healAmount);
-        Utils.showBattleLog(`进入下一重天域，恢复 ${healAmount} HP，轮回精粹 +${clearEssence}`);
-
-        this.map.generate(this.player.realm);
-        this.renderTreasures('map-treasures');
-        this.showScreen('map-screen');
+        this.advanceToNextRealm(clearEssence);
     }
 
     // 显示胜利界面
@@ -8938,6 +11694,28 @@ class Game {
     }
 
     startDebugBattle(realm, type) {
+        const characterId = (typeof this.player?.characterId === 'string' && this.player.characterId)
+            ? this.player.characterId
+            : 'linFeng';
+        if (
+            this.player
+            && typeof this.player.getRunDestinyMeta === 'function'
+            && !this.player.getRunDestinyMeta()
+            && typeof this.player.setRunDestiny === 'function'
+        ) {
+            const runDestinyId = this.selectedRunDestinyId || this.resolveDefaultRunDestinyId(characterId);
+            if (runDestinyId) this.player.setRunDestiny(runDestinyId, 1);
+        }
+        if (
+            this.player
+            && typeof this.player.getSpiritCompanionMeta === 'function'
+            && !this.player.getSpiritCompanionMeta()
+            && typeof this.player.setSpiritCompanion === 'function'
+        ) {
+            const spiritCompanionId = this.selectedSpiritCompanionId || this.resolveDefaultSpiritCompanionId(characterId);
+            if (spiritCompanionId) this.player.setSpiritCompanion(spiritCompanionId, 1);
+        }
+
         // 1. 切换环境
         this.player.realm = realm;
         this.updateRealmBackground(); // 确保背景切换
@@ -9815,23 +12593,52 @@ class Game {
         // Tab 4: Updates
         const updatesContent = `
             <div class="intro-section">
+                <h3>🌌 V6.0《天命裂界》</h3>
+                <p class="intro-text">
+                    这一轮大版本的核心目标，不是简单“多加一点内容”，而是把《逆命者》真正推进到
+                    <strong>章节更鲜明、构筑更成型、战斗更能读懂、局外目标更完整</strong> 的阶段。
+                    你会在单局内感受到更明确的流派路线、更多会改变打法的事件与章节压力，也会在局外获得更稳定的成长反馈。
+                    这次更新尤其强调“每章都要像一个完整的小世界”，不是只换数值和贴图，而是让敌群、Boss、节点、构筑诱因和信息展示一起服务于同一章的主题。
+                </p>
+            </div>
+
+            <div class="intro-section">
                 <h3>📜 内容总览（当前版本）</h3>
                 <ul class="intro-list">
-                    <li>6 位角色，差异化开局与专属遗物。</li>
-                    <li>18 层天域 + 无尽轮回，支持长期刷构筑。</li>
-                    <li>300+ 卡牌、50+ 法宝、30+ 法则与多套流派。</li>
-                    <li>战场指令、遭遇主题、地图事件与营地联动强化可玩性。</li>
-                    <li>PVP 天道榜 + 商店经济 + 外观佩戴系统。</li>
+                    <li><strong>6 位角色</strong>：各自拥有差异化开局、专属遗物与成长路线，适合不同风险偏好与构筑节奏。</li>
+                    <li><strong>18 层天域 + 无尽轮回</strong>：主线推进与长线刷构筑并存，后期会出现更明显的章节生态与压力差异。</li>
+                    <li><strong>8 套核心流派</strong>：原有 6 套体系持续提纯，同时加入全新 <strong>咒契流 <code>cursebound</code></strong> 与 <strong>灵傀流 <code>soulforge</code></strong>。</li>
+                    <li><strong>94+ 敌人与 6 章生态包</strong>：每章都新增了更明确的敌群主题、精英组合与压制手段，不再只是“同层换皮怪库”。</li>
+                    <li><strong>数百张卡牌 / 法宝 / 法则 / 誓约</strong>：单卡不再只是数值堆叠，而是更强调桥接、节奏转折与局内决策窗口。</li>
+                    <li><strong>PVE + PVP 双线并进</strong>：单局构筑、挑战玩法、商店经济、外观佩戴与排行榜都已经形成可长期游玩的框架。</li>
                 </ul>
             </div>
 
             <div class="intro-section">
-                <h3>🧭 版本方向</h3>
+                <h3>🧭 本次新增重点</h3>
                 <ul class="intro-list">
-                    <li><strong>稳定性优先</strong>：持续回归测试，减少版本回退风险。</li>
-                    <li><strong>玩法扩展</strong>：强化流派差异、事件分支与无尽中后期深度。</li>
-                    <li><strong>可读性优化</strong>：提升战斗提示、指令反馈和新手引导体验。</li>
+                    <li><strong>咒契裁断</strong>：围绕自损、咒牌回灌、压血爆发和延迟清算展开，越接近危险线越能打出高收益回合。</li>
+                    <li><strong>灵傀锻阵</strong>：通过生成构件、布置阵件、积累护势与持续火力形成站场优势，节奏更像“先铺场、后压制”。</li>
+                    <li><strong>战斗可读性升级</strong>：HUD 会更直观地展示法则、法宝、Boss 三幕与关键系统状态，减少“看不懂自己为什么强/为什么死”。</li>
+                    <li><strong>章节事件与生态补强</strong>：更多事件会根据你的构筑方向偏置投放，让跑图选择和卡组成型更连贯。</li>
+                    <li><strong>敌群生态重构</strong>：碎誓外域会用追痕和问罪压你先手，炉海天阙更强调灼烧与锻打，终焉命庭则会把法则、资源税与终局裁断叠在一起。</li>
+                    <li><strong>六章 Boss 三幕化</strong>：章末主宰现在更强调开场立场、中场转幕、压轴大招与可识别反制窗口，打起来更像一场“答题战”而不是纯数值对撞。</li>
+                    <li><strong>局外系统延展</strong>：挑战、图鉴、工坊、观察站、誓约与命格体系持续扩展，给重复游玩明确目标。</li>
                 </ul>
+            </div>
+
+            <div class="intro-section">
+                <h3>🪐 版本定位</h3>
+                <p class="intro-text">
+                    V6.0 想呈现的是一种更强的“命运裂开感”:
+                    你会更频繁地被要求在<strong>保命、贪心、成型、转轴</strong>之间做选择。
+                    新版本不鼓励什么都拿一点，而是鼓励你识别本局最有希望成型的方向，然后围绕它一路做深。
+                </p>
+                <p class="intro-text">
+                    如果你是回流玩家，推荐优先体验一次 <strong>咒契流</strong> 的压血爆发，再体验一次
+                    <strong>灵傀流</strong> 的铺场锻阵，然后再去挑战一轮带有<strong>章节生态与三幕 Boss</strong> 的主线末段。
+                    两条新流派解决的是“我怎么成型”，而六章生态和 Boss 三幕解决的是“成型之后我要面对什么样的世界规则”。
+                </p>
             </div>
 
             <div class="intro-section">
@@ -9840,7 +12647,7 @@ class Game {
                     Designed & Developed by <strong>HealthOvO</strong> Team.
                 </p>
                 <p class="intro-text" style="font-size: 0.9rem;">
-                    若你遇到问题或有玩法建议，欢迎在仓库提交 issue/讨论。
+                    若你遇到问题，或想反馈某个流派 / 章节 / Boss 的体验，欢迎在仓库提交 issue / discussion。
                 </p>
                 <div style="margin-top:20px; text-align:center;">
                     <a href="https://github.com/HealthOvO/The-Defier" target="_blank" style="color:var(--accent-cyan); text-decoration:none; border-bottom:1px dashed var(--accent-cyan);">GitHub Repository</a>
@@ -9876,7 +12683,7 @@ class Game {
             </div>
 
             <div style="text-align: center; margin-top: auto; font-size: 0.8rem; color: rgba(255,255,255,0.2); padding-top: 10px;">
-                v5.1 介绍更新 | Breaking Fate since 2024
+                v6.0 天命裂界 | Breaking Fate since 2024
             </div>
         </div>
         `;
@@ -9928,13 +12735,7 @@ class Game {
     generateShopData() {
         const items = [];
         const services = [];
-        const realm = this.player.realm || 1;
-        const endlessMods = this.isEndlessActive() ? this.getEndlessModifiers() : null;
-        // Hardcore: 价格随天域层数上涨，每重天+15%
-        let priceMult = 1 + (realm - 1) * 0.15;
-        if (endlessMods) {
-            priceMult *= Math.max(0.75, Number(endlessMods.shopPriceMul) || 1);
-        }
+        const priceMult = this.getShopPriceMultiplier(0.15);
 
         // 1. 生成卡牌 (使用新方法)
         const newCards = this.generateShopCards(5);
@@ -10226,15 +13027,8 @@ class Game {
     // 生成商店卡牌 (封装以便刷新使用)
     generateShopCards(count = 5) {
         const items = [];
-        // 商店刷新的卡牌价格不随层数膨胀太厉害，主要还是原价打折
         const realm = this.player.realm || 1;
-        const endlessMods = this.isEndlessActive() ? this.getEndlessModifiers() : null;
-        // 卡牌本身价格固定，这里Multiplier主要影响折扣力度? 不，这里影响最终售价
-        // 卡牌基础价值较低，这里只微调
-        let priceMult = 1 + (realm - 1) * 0.05;
-        if (endlessMods) {
-            priceMult *= Math.max(0.75, Number(endlessMods.shopPriceMul) || 1);
-        }
+        const priceMult = this.getShopPriceMultiplier(0.05);
 
         for (let i = 0; i < count; i++) {
             // 随层数提升稀有度
@@ -10739,10 +13533,14 @@ class Game {
     getShopPriceMultiplier(scalePerRealm = 0.15) {
         const realm = this.player?.realm || 1;
         const endlessMods = this.isEndlessActive() ? this.getEndlessModifiers() : null;
+        const vowEffects = this.player && typeof this.player.getRunVowEffects === 'function'
+            ? this.player.getRunVowEffects()
+            : {};
         let priceMult = 1 + Math.max(0, realm - 1) * scalePerRealm;
         if (endlessMods) {
             priceMult *= Math.max(0.75, Number(endlessMods.shopPriceMul) || 1);
         }
+        priceMult *= Math.max(0.6, Number(vowEffects.shopPriceMul) || 1);
         return priceMult;
     }
 
@@ -10818,7 +13616,7 @@ class Game {
                 type: 'service',
                 name: '商路星引',
                 icon: '🗺️',
-                desc: '下一重天地图更偏向事件、商店与营地，适合稳定修整。',
+                desc: '下一重天地图更偏向事件、商店、营地与观星节点，适合稳定修整。',
                 price: Math.max(1, Math.floor(2 * priceMult)),
                 currency: 'insight',
                 sold: false,
@@ -10829,7 +13627,7 @@ class Game {
                 type: 'service',
                 name: '锋路谶语',
                 icon: '⚔️',
-                desc: '下一重天地图更偏向试炼、精英与锻炉，适合冒险爆发。',
+                desc: '下一重天地图更偏向试炼、精英、锻炉与禁术节点，适合冒险爆发。',
                 price: Math.max(1, Math.floor(2 * priceMult)),
                 currency: 'insight',
                 sold: false,
@@ -11424,16 +14222,20 @@ ${treasure ? `获得法宝：${treasure.name}
             }
 
             case 'rumorUtilityRoute':
-                this.setNextRealmMapRumor({ event: 0.05, shop: 0.04, rest: 0.02, enemy: -0.06, elite: -0.03 }, '机缘补给线');
-                Utils.showBattleLog(`传闻锁定：第 ${this.player.realm + 1} 重更偏向事件、商店与营地。`);
-                this.showRewardModal('商路星引生效', `第 ${this.player.realm + 1} 重地图将更偏向事件、商店与营地。`, '🗺️');
+            {
+                const forecast = this.applyStrategicRouteForecast('utility');
+                Utils.showBattleLog(`传闻锁定：第 ${this.player.realm + 1} 重更偏向${forecast.label}。`);
+                this.showRewardModal('商路星引生效', `第 ${this.player.realm + 1} 重地图将更偏向${forecast.label}。`, forecast.icon || '🗺️');
                 return true;
+            }
 
             case 'rumorTrialRoute':
-                this.setNextRealmMapRumor({ trial: 0.06, elite: 0.03, forge: 0.025, enemy: -0.05, rest: -0.02, shop: -0.015 }, '试炼锋路');
-                Utils.showBattleLog(`传闻锁定：第 ${this.player.realm + 1} 重更偏向试炼、精英与锻炉。`);
-                this.showRewardModal('锋路谶语生效', `第 ${this.player.realm + 1} 重地图将更偏向试炼、精英与锻炉。`, '⚔️');
+            {
+                const forecast = this.applyStrategicRouteForecast('assault');
+                Utils.showBattleLog(`传闻锁定：第 ${this.player.realm + 1} 重更偏向${forecast.label}。`);
+                this.showRewardModal('锋路谶语生效', `第 ${this.player.realm + 1} 重地图将更偏向${forecast.label}。`, forecast.icon || '⚔️');
                 return true;
+            }
 
             case 'endlessStabilizer': {
                 if (!this.isEndlessActive()) {
@@ -13354,6 +16156,7 @@ ${treasure ? `获得法宝：${treasure.name}
         const filterSelect = document.getElementById('treasure-filter-select');
         const sortSelect = document.getElementById('treasure-sort-select');
         const searchInput = document.getElementById('treasure-search-input');
+        const researchEl = document.getElementById('treasure-compendium-research');
         if (!grid) return;
 
         const filterState = this.getTreasureCompendiumFilterState();
@@ -13408,6 +16211,7 @@ ${treasure ? `获得法宝：${treasure.name}
             const t = item.data;
             const isOwned = item.isOwned;
             const rarity = t.rarity || 'common';
+            const research = this.getTreasureResearchData(t);
             const el = document.createElement('div');
             el.className = `compendium-item rarity-${rarity} ${isOwned ? 'unlocked' : 'locked'}`;
             const icon = t.icon || '📦';
@@ -13416,6 +16220,10 @@ ${treasure ? `获得法宝：${treasure.name}
                 <div class="compendium-item-inner">
                     <div class="compendium-icon ${isOwned ? '' : 'locked'}">${icon}</div>
                     <div class="compendium-name ${isOwned ? '' : 'locked'}">${name}</div>
+                    <div class="compendium-item-sub">
+                        <span class="compendium-mini-badge ${research?.role?.tier || 'base'}">${research?.role?.label || '基础件'}</span>
+                        <span class="compendium-mini-text">${research?.setMeta ? `${research.setMeta.icon || '✦'} ${research.setLabel}` : '散修 / 单卡件'}</span>
+                    </div>
                 </div>
             `;
             el.onclick = () => { this.showTreasureDetail(t, isOwned); };
@@ -13435,6 +16243,7 @@ ${treasure ? `获得法宝：${treasure.name}
         const rarityOrder = ['common', 'rare', 'legendary', 'mythic'];
         const rarityNameMap = { common: '凡品', rare: '灵品', legendary: '神品', mythic: '仙品' };
         const sortLabelMap = { rarity_desc: '品质优先', owned_first: '已收录优先', realm_asc: '解锁层数优先', name_asc: '名称排序' };
+        const researchOverview = this.getTreasureResearchOverviewData();
         const activeFilterLabels = this.getTreasureCompendiumFilterLabels();
         if (searchQuery) activeFilterLabels.unshift(`关键词「${searchQuery}」`);
         const rarityCounts = rarityOrder.map((rarity) => {
@@ -13451,7 +16260,7 @@ ${treasure ? `获得法宝：${treasure.name}
                 `<div class="codex-progress-track"><div class="codex-progress-fill" style="width:${progress}%"></div></div>`,
                 '<ul class="codex-side-list compact">',
                 `<li>当前筛选结果 ${filteredTreasures.length} 件 · 条件 ${activeFilterLabels.length > 0 ? activeFilterLabels.join(' / ') : '全部法宝'} / 排序 ${sortLabelMap[this.treasureCompendiumSort] || this.treasureCompendiumSort}。</li>`,
-                '<li>点击主区任意法宝即可查看来源、逸闻与持有状态。</li>',
+                '<li>点击主区任意法宝即可查看来源、套装关系、适配流派与当前铭刻状态。</li>',
                 '</ul>'
             ].join('');
         }
@@ -13464,6 +16273,25 @@ ${treasure ? `获得法宝：${treasure.name}
                 ...rarityCounts.map((entry) => `<div class="codex-summary-chip rarity-${entry.rarity}"><strong>${entry.owned}/${entry.total}</strong><span>${rarityNameMap[entry.rarity]}</span></div>`),
                 '</div>',
                 '<p class="codex-side-note">顶部 quick filter 可快速切换，下面多选 chip 可叠加来源与稀有度条件。</p>'
+            ].join('');
+        }
+
+        if (researchEl) {
+            researchEl.innerHTML = [
+                '<span class="codex-side-kicker">炼器研究</span>',
+                '<h3>套装 / 核心件</h3>',
+                '<div class="treasure-research-grid">',
+                ...researchOverview.setProgress.map((entry) => `
+                    <div class="treasure-research-chip ${entry.resonanceStage}">
+                        <strong>${entry.icon || '✦'} ${entry.label}</strong>
+                        <span>${entry.owned}/${entry.total} 收录 · 视作 ${entry.pieces} 件</span>
+                        <em>${entry.resonanceLabel}</em>
+                    </div>
+                `),
+                '</div>',
+                '<ul class="codex-side-list compact">',
+                ...researchOverview.spotlight.map((line) => `<li>${line}</li>`),
+                '</ul>'
             ].join('');
         }
     }
@@ -13480,15 +16308,25 @@ ${treasure ? `获得法宝：${treasure.name}
         const elLore = document.getElementById('detail-lore');
         const elSource = document.getElementById('detail-source');
         const elOwnedState = document.getElementById('detail-owned-state');
+        const elRoleState = document.getElementById('detail-role-state');
+        const elSetState = document.getElementById('detail-set-state');
+        const elInfusionState = document.getElementById('detail-infusion-state');
+        const elSet = document.getElementById('detail-set');
+        const elBuildFit = document.getElementById('detail-build-fit');
+        const elForgeStatus = document.getElementById('detail-forge-status');
         const header = modal.querySelector('.detail-header');
 
         if (!elIcon || !elName) return;
 
         header.className = 'detail-header';
         if (elOwnedState) elOwnedState.className = 'detail-status-chip';
+        if (elRoleState) elRoleState.className = 'detail-status-chip';
+        if (elSetState) elSetState.className = 'detail-status-chip';
+        if (elInfusionState) elInfusionState.className = 'detail-status-chip';
 
         const rarity = treasure.rarity || 'common';
         const rarityLabel = this.getRarityLabel(rarity);
+        const research = this.getTreasureResearchData(treasure);
 
         header.classList.add(`rarity-${rarity}`);
         elIcon.textContent = treasure.icon || '📦';
@@ -13507,8 +16345,25 @@ ${treasure ? `获得法宝：${treasure.name}
         elLore.textContent = treasure.lore || '（此物似乎蕴含着某种未知的力量...）';
         elLore.style.visibility = 'visible';
 
-        const source = this.getTreasureSource(treasure);
-        elSource.innerHTML = source;
+        elSource.innerHTML = research.sourceText || this.getTreasureSource(treasure);
+        if (elSet) elSet.innerHTML = research.setText || '暂无套装研究记录。';
+        if (elBuildFit) elBuildFit.innerHTML = research.buildFitText || '暂无适配建议。';
+        if (elForgeStatus) elForgeStatus.innerHTML = research.forgeText || '尚未进行炼器改造。';
+        if (elRoleState) {
+            elRoleState.textContent = research?.role?.label || '基础件';
+            elRoleState.classList.add('research');
+            if (research?.role?.tier === 'core') elRoleState.classList.add('eligible');
+            if (research?.role?.tier === 'base') elRoleState.classList.add('muted');
+        }
+        if (elSetState) {
+            elSetState.textContent = research?.setMeta ? `${research.setMeta.icon || '✦'} ${research.setLabel}` : '散修 / 单卡件';
+            elSetState.classList.add('research');
+        }
+        if (elInfusionState) {
+            elInfusionState.textContent = research?.infusionEligible ? '可器灵灌注' : '暂不开放灌注';
+            if (research?.infusionEligible) elInfusionState.classList.add('eligible');
+            else elInfusionState.classList.add('muted');
+        }
 
         if (!isUnlocked) {
             elIcon.style.filter = 'grayscale(1) brightness(0.7)';

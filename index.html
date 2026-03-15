@@ -93,6 +93,12 @@
                     <span class="util-label">法则图鉴</span>
                 </div>
                 <div class="util-btn-wrapper">
+                    <button class="util-btn" onclick="game.showChallengeHub('daily')">
+                        <span class="btn-icon">🔭</span>
+                    </button>
+                    <span class="util-label">周挑战</span>
+                </div>
+                <div class="util-btn-wrapper">
                     <button class="util-btn" onclick="game.showAchievements()">
                         <span class="btn-icon">🏆</span>
                     </button>
@@ -117,11 +123,28 @@
                     <span class="util-label">游戏指南</span>
                 </div>
             </div>
+            <div class="menu-oracle-strip">
+                <article class="menu-oracle-card" id="menu-daily-omen-card">
+                    <span class="menu-oracle-kicker">今日天机</span>
+                    <h4>观星台正在推演</h4>
+                    <p>今日轮换即将显形。</p>
+                </article>
+                <article class="menu-oracle-card" id="menu-weekly-ordeal-card">
+                    <span class="menu-oracle-kicker">七日劫数</span>
+                    <h4>本周积分待定</h4>
+                    <p>观星台正在整理新的周目标。</p>
+                </article>
+                <article class="menu-oracle-card" id="menu-unlock-focus-card">
+                    <span class="menu-oracle-kicker">最近解锁</span>
+                    <h4>藏经阁新线索</h4>
+                    <p>下一局的关键线索会在这里汇总。</p>
+                </article>
+            </div>
             <div style="text-align:center; margin-top:20px;">
                 <button class="menu-btn small cheat-btn" onclick="game.cheat()"
                     style="display: none; width: auto; padding: 5px 15px;">🛠️ 作弊</button>
             </div>
-            <div class="version-info">v5.0 最终版 | 逆命轮回·天道终焉</div>
+            <div class="version-info">v6.0 天命裂界 | 逆命轮回进入下一阶段</div>
         </div>
     </div>
 
@@ -433,104 +456,562 @@
     <div id="collection" class="screen">
         <div class="screen-header">
             <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
-            <h2>法则图鉴</h2>
+            <div class="collection-heading-group">
+                <h2 id="collection-title">藏经阁 · 法则图鉴</h2>
+                <p id="collection-subtitle">补齐法则与共鸣链，规划命环装配顺序。</p>
+            </div>
         </div>
 
         <div class="codex-shell">
-            <div class="codex-scroll-container">
-                <div class="codex-layout">
-                <div class="codex-main-column">
-                    <div class="compendium-toolbar codex-toolbar">
-                        <label class="compendium-control compendium-control-wide">
-                            <span>检索法则 / 共鸣</span>
-                            <input id="law-codex-search" type="search" placeholder="输入法则名、元素、共鸣或描述关键词"
-                                oninput="game.setLawCodexSearchQuery(this.value)">
-                        </label>
-                        <label class="compendium-control">
-                            <span>收录状态</span>
-                            <select id="law-codex-status-filter" onchange="game.setLawCodexStatusFilter(this.value)">
-                                <option value="all">全部法则</option>
-                                <option value="owned">仅已掌握</option>
-                                <option value="unowned">仅未掌握</option>
-                            </select>
-                        </label>
-                        <label class="compendium-control">
-                            <span>元素</span>
-                            <select id="law-codex-element-filter" onchange="game.setLawCodexElementFilter(this.value)">
-                                <option value="all">全部元素</option>
-                                <option value="thunder">雷</option>
-                                <option value="fire">火</option>
-                                <option value="ice">冰</option>
-                                <option value="sword">剑</option>
-                                <option value="void">虚空</option>
-                                <option value="chaos">混沌</option>
-                                <option value="blood">血</option>
-                                <option value="life">生命</option>
-                                <option value="earth">土</option>
-                                <option value="wind">风</option>
-                                <option value="time">时间</option>
-                                <option value="space">空间</option>
-                                <option value="karma">因果</option>
-                                <option value="reversal">逆转</option>
-                                <option value="metal">金</option>
-                                <option value="wood">木</option>
-                            </select>
-                        </label>
-                        <label class="compendium-control">
-                            <span>共鸣进度</span>
-                            <select id="law-codex-resonance-filter" onchange="game.setLawCodexResonanceFilter(this.value)">
-                                <option value="all">全部共鸣状态</option>
-                                <option value="active">已激活</option>
-                                <option value="ready">待装配</option>
-                                <option value="near">差 1 枚</option>
-                                <option value="locked">未成型</option>
-                            </select>
-                        </label>
-                        <button type="button" class="compendium-chip utility" id="law-codex-filter-clear"
-                            onclick="game.clearLawCodexFilters()">清空检索</button>
-                    </div>
+            <div class="collection-tab-bar">
+                <button type="button" class="collection-tab-btn active" data-collection-tab="laws"
+                    onclick="game.switchCollectionSection('laws')">法则</button>
+                <button type="button" class="collection-tab-btn" data-collection-tab="spirits"
+                    onclick="game.switchCollectionSection('spirits')">灵契</button>
+                <button type="button" class="collection-tab-btn" data-collection-tab="chapters"
+                    onclick="game.switchCollectionSection('chapters')">章节</button>
+                <button type="button" class="collection-tab-btn" data-collection-tab="enemies"
+                    onclick="game.switchCollectionSection('enemies')">敌影</button>
+                <button type="button" class="collection-tab-btn" data-collection-tab="bosses"
+                    onclick="game.switchCollectionSection('bosses')">Boss</button>
+                <button type="button" class="collection-tab-btn" data-collection-tab="builds"
+                    onclick="game.switchCollectionSection('builds')">构筑</button>
+                <button type="button" class="collection-tab-btn" data-collection-tab="sanctum"
+                    onclick="game.switchCollectionSection('sanctum')">洞府</button>
+            </div>
 
-                        <div class="codex-section">
-                            <div class="codex-section-header">
-                                <span class="section-icon">📜</span>
-                                <h3>万法归一 · 法则库</h3>
+            <div class="collection-tab-panel active" data-collection-panel="laws">
+                <div class="codex-scroll-container">
+                    <div class="codex-layout">
+                        <div class="codex-main-column">
+                            <div class="compendium-toolbar codex-toolbar">
+                                <label class="compendium-control compendium-control-wide">
+                                    <span>检索法则 / 共鸣</span>
+                                    <input id="law-codex-search" type="search" placeholder="输入法则名、元素、共鸣或描述关键词"
+                                        oninput="game.setLawCodexSearchQuery(this.value)">
+                                </label>
+                                <label class="compendium-control">
+                                    <span>收录状态</span>
+                                    <select id="law-codex-status-filter" onchange="game.setLawCodexStatusFilter(this.value)">
+                                        <option value="all">全部法则</option>
+                                        <option value="owned">仅已掌握</option>
+                                        <option value="unowned">仅未掌握</option>
+                                    </select>
+                                </label>
+                                <label class="compendium-control">
+                                    <span>元素</span>
+                                    <select id="law-codex-element-filter" onchange="game.setLawCodexElementFilter(this.value)">
+                                        <option value="all">全部元素</option>
+                                        <option value="thunder">雷</option>
+                                        <option value="fire">火</option>
+                                        <option value="ice">冰</option>
+                                        <option value="sword">剑</option>
+                                        <option value="void">虚空</option>
+                                        <option value="chaos">混沌</option>
+                                        <option value="blood">血</option>
+                                        <option value="life">生命</option>
+                                        <option value="earth">土</option>
+                                        <option value="wind">风</option>
+                                        <option value="time">时间</option>
+                                        <option value="space">空间</option>
+                                        <option value="karma">因果</option>
+                                        <option value="reversal">逆转</option>
+                                        <option value="metal">金</option>
+                                        <option value="wood">木</option>
+                                    </select>
+                                </label>
+                                <label class="compendium-control">
+                                    <span>共鸣进度</span>
+                                    <select id="law-codex-resonance-filter" onchange="game.setLawCodexResonanceFilter(this.value)">
+                                        <option value="all">全部共鸣状态</option>
+                                        <option value="active">已激活</option>
+                                        <option value="ready">待装配</option>
+                                        <option value="near">差 1 枚</option>
+                                        <option value="locked">未成型</option>
+                                    </select>
+                                </label>
+                                <button type="button" class="compendium-chip utility" id="law-codex-filter-clear"
+                                    onclick="game.clearLawCodexFilters()">清空检索</button>
                             </div>
-                            <div class="law-archive-grid" id="law-archive-grid">
-                                <!-- Dynamic Laws -->
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">📜</span>
+                                    <h3>万法归一 · 法则库</h3>
+                                </div>
+                                <div class="law-archive-grid" id="law-archive-grid">
+                                    <!-- Dynamic Laws -->
+                                </div>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">🔮</span>
+                                    <h3>天道共鸣 · 羁绊录</h3>
+                                </div>
+                                <div class="resonance-manual-list" id="resonance-manual-list">
+                                    <!-- Dynamic Resonances -->
+                                </div>
                             </div>
                         </div>
 
-                        <div class="codex-section">
-                            <div class="codex-section-header">
-                                <span class="section-icon">🔮</span>
-                                <h3>天道共鸣 · 羁绊录</h3>
+                        <aside class="codex-side-column">
+                            <section class="codex-side-card" id="law-codex-summary">
+                                <span class="codex-side-kicker">收集总览</span>
+                                <h3>法则收藏进度</h3>
+                                <p>正在整理法则与共鸣记录...</p>
+                            </section>
+                            <section class="codex-side-card" id="law-codex-resonance-summary">
+                                <span class="codex-side-kicker">当前共鸣</span>
+                                <h3>羁绊装配</h3>
+                                <p>正在读取当前激活的共鸣链路...</p>
+                            </section>
+                            <section class="codex-side-card codex-guide-card">
+                                <span class="codex-side-kicker">检索建议</span>
+                                <h3>浏览方式</h3>
+                                <ul class="codex-side-list">
+                                    <li>优先补齐未解锁法则，可直接提升后续共鸣可用性。</li>
+                                    <li>先看右侧摘要，再回到主区决定要补的元素流派。</li>
+                                    <li>已点亮共鸣会在主区显示激活标记，方便规划下一局偷取路线。</li>
+                                </ul>
+                            </section>
+                        </aside>
+                    </div>
+                </div>
+            </div>
+
+            <div class="collection-tab-panel" data-collection-panel="spirits">
+                <div class="codex-scroll-container">
+                    <div class="codex-layout">
+                        <div class="codex-main-column">
+                            <div class="compendium-toolbar codex-toolbar">
+                                <label class="compendium-control compendium-control-wide">
+                                    <span>检索灵契</span>
+                                    <input id="spirit-codex-search" type="search" placeholder="输入灵契名、护道方式或角色线索"
+                                        oninput="game.setSpiritCodexSearchQuery(this.value)">
+                                </label>
+                                <label class="compendium-control">
+                                    <span>关注对象</span>
+                                    <select id="spirit-codex-focus-filter" onchange="game.setSpiritCodexFocusFilter(this.value)">
+                                        <option value="all">全部灵契</option>
+                                        <option value="current">当前同行</option>
+                                        <option value="aligned">角色共鸣</option>
+                                        <option value="hidden">未解锁线索</option>
+                                    </select>
+                                </label>
                             </div>
-                            <div class="resonance-manual-list" id="resonance-manual-list">
-                                <!-- Dynamic Resonances -->
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">🪷</span>
+                                    <h3>灵契谱录</h3>
+                                </div>
+                                <div class="collection-card-grid" id="spirit-codex-grid"></div>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">📘</span>
+                                    <h3>灵契详档</h3>
+                                </div>
+                                <div id="spirit-codex-detail"></div>
                             </div>
                         </div>
-                    </div>
 
-                    <aside class="codex-side-column">
-                        <section class="codex-side-card" id="law-codex-summary">
-                            <span class="codex-side-kicker">收集总览</span>
-                            <h3>法则收藏进度</h3>
-                            <p>正在整理法则与共鸣记录...</p>
+                        <aside class="codex-side-column">
+                            <section class="codex-side-card" id="spirit-codex-summary">
+                                <span class="codex-side-kicker">灵契总览</span>
+                                <h3>灵契收录状态</h3>
+                                <p>正在整理灵契记录...</p>
+                            </section>
+                            <section class="codex-side-card" id="spirit-codex-research">
+                                <span class="codex-side-kicker">研究方向</span>
+                                <h3>灵契追索建议</h3>
+                                <p>正在归纳下一轮的灵契补位方向...</p>
+                            </section>
+                            <section class="codex-side-card codex-guide-card">
+                                <span class="codex-side-kicker">查看建议</span>
+                                <h3>如何使用</h3>
+                                <ul class="codex-side-list">
+                                    <li>先找当前角色更易共鸣的灵契，再决定下一条灵契窟路线。</li>
+                                    <li>章节档案会同步标注推荐灵契，适合与世界规则一起看。</li>
+                                    <li>未解锁条目会给出角色和路线线索，不需要盲猜。</li>
+                                </ul>
+                            </section>
+                        </aside>
+                    </div>
+                </div>
+            </div>
+
+            <div class="collection-tab-panel" data-collection-panel="chapters">
+                <div class="codex-scroll-container">
+                    <div class="codex-layout">
+                        <div class="codex-main-column">
+                            <div class="compendium-toolbar codex-toolbar">
+                                <label class="compendium-control compendium-control-wide">
+                                    <span>检索章节</span>
+                                    <input id="chapter-codex-search" type="search" placeholder="输入章节名、天象、地脉或敌人名"
+                                        oninput="game.setChapterCodexSearchQuery(this.value)">
+                                </label>
+                                <label class="compendium-control">
+                                    <span>阶段</span>
+                                    <select id="chapter-codex-focus-filter" onchange="game.setChapterCodexFocusFilter(this.value)">
+                                        <option value="all">全部章节</option>
+                                        <option value="active">当前章节</option>
+                                        <option value="cleared">已贯通</option>
+                                        <option value="upcoming">未来章节</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">🌌</span>
+                                    <h3>章节世界规则</h3>
+                                </div>
+                                <div class="collection-card-grid" id="chapter-codex-grid"></div>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">🧭</span>
+                                    <h3>章节详档</h3>
+                                </div>
+                                <div id="chapter-codex-detail"></div>
+                            </div>
+                        </div>
+
+                        <aside class="codex-side-column">
+                            <section class="codex-side-card" id="chapter-codex-summary">
+                                <span class="codex-side-kicker">章节总览</span>
+                                <h3>世界规则进度</h3>
+                                <p>正在读取章节档案...</p>
+                            </section>
+                            <section class="codex-side-card" id="chapter-codex-hints">
+                                <span class="codex-side-kicker">复盘提示</span>
+                                <h3>怎么读章节</h3>
+                                <p>正在整理章节天象与路线建议...</p>
+                            </section>
+                            <section class="codex-side-card codex-guide-card">
+                                <span class="codex-side-kicker">查看建议</span>
+                                <h3>如何使用</h3>
+                                <ul class="codex-side-list">
+                                    <li>先看天象和地脉，再看生态模板，不要只看章节名。</li>
+                                    <li>章节内路线价值会随着 Boss 传闻和誓约变化而改变。</li>
+                                    <li>这页适合和构筑快照一起看，能更快发现“这章到底在考什么”。</li>
+                                </ul>
+                            </section>
+                        </aside>
+                    </div>
+                </div>
+            </div>
+
+            <div class="collection-tab-panel" data-collection-panel="bosses">
+                <div class="codex-scroll-container">
+                    <div class="codex-layout">
+                        <div class="codex-main-column">
+                            <div class="compendium-toolbar codex-toolbar">
+                                <label class="compendium-control compendium-control-wide">
+                                    <span>检索 Boss</span>
+                                    <input id="boss-archive-search" type="search" placeholder="输入 Boss 名、机制、反制法宝或章节名"
+                                        oninput="game.setBossArchiveSearchQuery(this.value)">
+                                </label>
+                                <label class="compendium-control">
+                                    <span>风险</span>
+                                    <select id="boss-archive-focus-filter" onchange="game.setBossArchiveFocusFilter(this.value)">
+                                        <option value="all">全部 Boss</option>
+                                        <option value="defeated">已击破</option>
+                                        <option value="pending">待挑战</option>
+                                        <option value="highpressure">高压主宰</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">👁️</span>
+                                    <h3>主宰档案</h3>
+                                </div>
+                                <div class="collection-card-grid" id="boss-archive-grid"></div>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">🗝️</span>
+                                    <h3>破局手札</h3>
+                                </div>
+                                <div id="boss-archive-detail"></div>
+                            </div>
+                        </div>
+
+                        <aside class="codex-side-column">
+                            <section class="codex-side-card" id="boss-archive-summary">
+                                <span class="codex-side-kicker">主宰总览</span>
+                                <h3>Boss 档案进度</h3>
+                                <p>正在汇总章节主宰记录...</p>
+                            </section>
+                            <section class="codex-side-card" id="boss-archive-hints">
+                                <span class="codex-side-kicker">复盘提示</span>
+                                <h3>怎么读主宰</h3>
+                                <p>正在整理反制法宝与机制窗口...</p>
+                            </section>
+                            <section class="codex-side-card codex-guide-card">
+                                <span class="codex-side-kicker">查看建议</span>
+                                <h3>如何使用</h3>
+                                <ul class="codex-side-list">
+                                    <li>不要只记住“它很痛”，要记住它在哪一拍开始逼问你的构筑。</li>
+                                    <li>反制法宝不是必带答案，而是帮你降低这场检定的出错成本。</li>
+                                    <li>Boss 档案最好和章节档案配合看，很多主宰是在继续放大章节规则。</li>
+                                </ul>
+                            </section>
+                        </aside>
+                    </div>
+                </div>
+            </div>
+
+            <div class="collection-tab-panel" data-collection-panel="enemies">
+                <div class="codex-scroll-container">
+                    <div class="codex-layout">
+                        <div class="codex-main-column">
+                            <div class="compendium-toolbar codex-toolbar">
+                                <label class="compendium-control compendium-control-wide">
+                                    <span>检索敌影</span>
+                                    <input id="enemy-codex-search" type="search" placeholder="输入敌人名、意图、章节或应对关键词"
+                                        oninput="game.setEnemyCodexSearchQuery(this.value)">
+                                </label>
+                                <label class="compendium-control">
+                                    <span>档案状态</span>
+                                    <select id="enemy-codex-focus-filter" onchange="game.setEnemyCodexFocusFilter(this.value)">
+                                        <option value="all">全部敌影</option>
+                                        <option value="scouted">已遭遇</option>
+                                        <option value="upcoming">未来敌影</option>
+                                        <option value="control">控场型</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">👥</span>
+                                    <h3>敌影索引</h3>
+                                </div>
+                                <div class="collection-card-grid" id="enemy-codex-grid"></div>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">🧾</span>
+                                    <h3>敌影详档</h3>
+                                </div>
+                                <div id="enemy-codex-detail"></div>
+                            </div>
+                        </div>
+
+                        <aside class="codex-side-column">
+                            <section class="codex-side-card" id="enemy-codex-summary">
+                                <span class="codex-side-kicker">敌影总览</span>
+                                <h3>敌影档案进度</h3>
+                                <p>正在整理常驻敌影记录...</p>
+                            </section>
+                            <section class="codex-side-card" id="enemy-codex-hints">
+                                <span class="codex-side-kicker">复盘提示</span>
+                                <h3>怎么读敌影</h3>
+                                <p>正在归纳战术画像与应对窗口...</p>
+                            </section>
+                            <section class="codex-side-card codex-guide-card">
+                                <span class="codex-side-kicker">查看建议</span>
+                                <h3>如何使用</h3>
+                                <ul class="codex-side-list">
+                                    <li>先看首拍动作和战术画像，再决定是抢节奏、立盾还是留净化。</li>
+                                    <li>敌影档案适合和章节档案一起看，能更快分辨“这是单怪问题还是整章生态都在考这个”。</li>
+                                    <li>未来敌影会先显示大类和章节归属，方便提前准备法宝与法则切换。</li>
+                                </ul>
+                            </section>
+                        </aside>
+                    </div>
+                </div>
+            </div>
+
+            <div class="collection-tab-panel" data-collection-panel="builds">
+                <div class="codex-scroll-container">
+                    <div class="codex-layout">
+                        <div class="codex-main-column">
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">🧱</span>
+                                    <h3>构筑画像</h3>
+                                </div>
+                                <div id="build-snapshot-hero"></div>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">📊</span>
+                                    <h3>结构指标</h3>
+                                </div>
+                                <div id="build-snapshot-metrics"></div>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">📝</span>
+                                    <h3>优势 / 缺口 / 下一轮补位</h3>
+                                </div>
+                                <div id="build-snapshot-notes"></div>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">🏅</span>
+                                    <h3>个人高光记录</h3>
+                                </div>
+                                <div id="build-snapshot-highlights"></div>
+                            </div>
+                        </div>
+
+                        <aside class="codex-side-column">
+                            <section class="codex-side-card" id="build-snapshot-summary">
+                                <span class="codex-side-kicker">构筑概览</span>
+                                <h3>这一套在打什么</h3>
+                                <p>正在分析当前牌组画像...</p>
+                            </section>
+                            <section class="codex-side-card" id="build-snapshot-guide">
+                                <span class="codex-side-kicker">阅读顺序</span>
+                                <h3>怎么用这页复盘</h3>
+                                <p>正在归纳构筑阅读顺序...</p>
+                            </section>
+                            <section class="codex-side-card codex-guide-card">
+                                <span class="codex-side-kicker">查看建议</span>
+                                <h3>如何使用</h3>
+                                <ul class="codex-side-list">
+                                    <li>这页不是单纯算平均数，而是帮你判断“这一套到底靠什么赢”。</li>
+                                    <li>构筑快照和章节档案一起看，最容易发现当前章节真正缺的那一块。</li>
+                                    <li>如果缺口集中在命环或灵契，优先补系统协同，而不是继续平铺加牌。</li>
+                                </ul>
+                            </section>
+                        </aside>
+                    </div>
+                </div>
+            </div>
+
+            <div class="collection-tab-panel" data-collection-panel="sanctum">
+                <div class="codex-scroll-container">
+                    <div class="codex-layout">
+                        <div class="codex-main-column">
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">🏯</span>
+                                    <h3>洞府房间总览</h3>
+                                </div>
+                                <div class="sanctum-room-grid" id="sanctum-room-grid"></div>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">🔬</span>
+                                    <h3>可研究项</h3>
+                                </div>
+                                <div class="sanctum-research-list" id="sanctum-research-list"></div>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">🎯</span>
+                                    <h3>可领取目标</h3>
+                                </div>
+                                <div class="sanctum-goal-list" id="sanctum-goal-list"></div>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">🕯️</span>
+                                    <h3>近期解锁记录</h3>
+                                </div>
+                                <div class="sanctum-unlock-feed" id="sanctum-unlock-feed"></div>
+                            </div>
+                        </div>
+
+                        <aside class="codex-side-column">
+                            <section class="codex-side-card" id="sanctum-summary">
+                                <span class="codex-side-kicker">洞府概览</span>
+                                <h3>局外中枢进度</h3>
+                                <p>正在整理洞府房间状态...</p>
+                            </section>
+                            <section class="codex-side-card" id="sanctum-progress">
+                                <span class="codex-side-kicker">图鉴进度</span>
+                                <h3>收藏总览</h3>
+                                <p>正在汇总局外收藏...</p>
+                            </section>
+                            <section class="codex-side-card codex-guide-card" id="sanctum-guide">
+                                <span class="codex-side-kicker">使用建议</span>
+                                <h3>洞府怎么喂主线</h3>
+                                <p>正在整理洞府对主线的反哺路径...</p>
+                            </section>
+                        </aside>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="challenge-screen" class="screen">
+        <div class="screen-header">
+            <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
+            <div class="collection-heading-group">
+                <h2 id="challenge-hub-title">观星台 · 今日天机</h2>
+                <p id="challenge-hub-subtitle">每日一局短挑战，固定角色、章节目标与战场词缀。</p>
+            </div>
+        </div>
+
+        <div class="challenge-shell">
+            <div class="challenge-tab-bar">
+                <button type="button" class="challenge-tab-btn active" data-challenge-tab="daily"
+                    onclick="game.switchChallengeTab('daily')">今日天机</button>
+                <button type="button" class="challenge-tab-btn" data-challenge-tab="weekly"
+                    onclick="game.switchChallengeTab('weekly')">七日劫数</button>
+                <button type="button" class="challenge-tab-btn" data-challenge-tab="global"
+                    onclick="game.switchChallengeTab('global')">众生试炼</button>
+            </div>
+
+            <div class="challenge-scroll-container">
+                <div class="challenge-layout">
+                    <div class="challenge-main-column">
+                        <section id="challenge-hub-summary"></section>
+                        <section class="challenge-section">
+                            <div class="challenge-section-head">
+                                <span class="challenge-section-icon">🧭</span>
+                                <div>
+                                    <h3>当前规则</h3>
+                                    <p>固定命盘、章节目标与场上词缀会在这里展开。</p>
+                                </div>
+                            </div>
+                            <div class="challenge-rule-grid" id="challenge-hub-rules"></div>
                         </section>
-                        <section class="codex-side-card" id="law-codex-resonance-summary">
-                            <span class="codex-side-kicker">当前共鸣</span>
-                            <h3>羁绊装配</h3>
-                            <p>正在读取当前激活的共鸣链路...</p>
+                        <section class="challenge-section">
+                            <div class="challenge-section-head">
+                                <span class="challenge-section-icon">🎁</span>
+                                <div>
+                                    <h3>奖励轨道</h3>
+                                    <p>称号、外观、观星档案与局外奖励都会按目标解锁。</p>
+                                </div>
+                            </div>
+                            <div class="challenge-reward-list" id="challenge-hub-rewards"></div>
                         </section>
-                        <section class="codex-side-card codex-guide-card">
-                            <span class="codex-side-kicker">检索建议</span>
-                            <h3>浏览方式</h3>
-                            <ul class="codex-side-list">
-                                <li>优先补齐未解锁法则，可直接提升后续共鸣可用性。</li>
-                                <li>先看右侧摘要，再回到主区决定要补的元素流派。</li>
-                                <li>已点亮共鸣会在主区显示激活标记，方便规划下一局偷取路线。</li>
-                            </ul>
+                        <section class="challenge-section">
+                            <div class="challenge-section-head">
+                                <span class="challenge-section-icon">📝</span>
+                                <div>
+                                    <h3>近期留痕</h3>
+                                    <p>把本轮最高分、最近完成与失败原因压成观星记录。</p>
+                                </div>
+                            </div>
+                            <div class="challenge-record-list" id="challenge-hub-records"></div>
                         </section>
+                    </div>
+                    <aside class="challenge-side-column">
+                        <div id="challenge-hub-side"></div>
+                        <div id="challenge-hub-ranking"></div>
+                        <section class="codex-side-card challenge-launch-card" id="challenge-hub-launch"></section>
                     </aside>
                 </div>
             </div>
@@ -653,6 +1134,11 @@
                         <h3>稀有度概览</h3>
                         <p>正在统计凡品、灵品、神品、仙品...</p>
                     </section>
+                    <section class="compendium-side-card" id="treasure-compendium-research">
+                        <span class="codex-side-kicker">炼器研究</span>
+                        <h3>套装 / 核心件</h3>
+                        <p>正在整理套装阈值、核心件与器灵灌注目标...</p>
+                    </section>
                     <section class="compendium-side-card codex-guide-card">
                         <span class="codex-side-kicker">查看建议</span>
                         <h3>检索方式</h3>
@@ -692,6 +1178,16 @@
                     <div class="preview-section">
                         <h4><span class="section-icon">⚔️</span> 环境法则</h4>
                         <div id="preview-env" class="preview-text"></div>
+                    </div>
+
+                    <div class="preview-section">
+                        <h4><span class="section-icon">☯️</span> 章节脉络</h4>
+                        <div id="preview-chapter" class="preview-text"></div>
+                    </div>
+
+                    <div class="preview-section">
+                        <h4><span class="section-icon">🧭</span> 顺势建议</h4>
+                        <div id="preview-build" class="preview-text"></div>
                     </div>
 
                     <div class="preview-section">
@@ -735,6 +1231,7 @@
             </div>
             <div id="map-treasures" class="treasures-bar"></div>
         </div>
+        <div id="challenge-run-banner" class="challenge-run-banner" style="display:none;"></div>
         <div class="map-container">
             <div class="realm-title" id="realm-title">第一重·凡尘界</div>
             <div class="map-nodes" id="map-nodes">
@@ -1046,6 +1543,8 @@
             </div>
             <div class="event-body">
                 <p class="event-desc" id="event-desc">发生了一些事情...</p>
+                <div class="event-atmosphere" id="event-atmosphere" style="display:none;"></div>
+                <div class="event-system-summary" id="event-system-summary" style="display:none;"></div>
                 <div class="event-choices" id="event-choices">
                     <!-- 动态生成选项 -->
                 </div>
@@ -1266,10 +1765,25 @@
                         </div>
                         <div class="detail-status-strip">
                             <span class="detail-status-chip" id="detail-owned-state">已收录</span>
+                            <span class="detail-status-chip" id="detail-role-state">基础件</span>
+                            <span class="detail-status-chip" id="detail-set-state">散修 / 单卡件</span>
+                            <span class="detail-status-chip" id="detail-infusion-state">暂不开放灌注</span>
                         </div>
                         <div class="detail-source-card">
                             <span class="detail-mini-label">获取途径</span>
                             <div class="detail-source" id="detail-source">未知</div>
+                        </div>
+                        <div class="detail-source-card">
+                            <span class="detail-mini-label">套装关系</span>
+                            <div class="detail-source" id="detail-set">暂无套装研究记录。</div>
+                        </div>
+                        <div class="detail-source-card">
+                            <span class="detail-mini-label">适配流派</span>
+                            <div class="detail-source" id="detail-build-fit">正在整理该法宝的构筑方向...</div>
+                        </div>
+                        <div class="detail-source-card">
+                            <span class="detail-mini-label">炼器研究</span>
+                            <div class="detail-source" id="detail-forge-status">尚未进行炼器改造。</div>
                         </div>
                     </section>
                     <section class="detail-dual-panel detail-tip-panel">
@@ -1446,6 +1960,11 @@
     <script src="js/data/achievements.js?v=5.0.1"></script>
     <script src="js/data/skills.js?v=5.0.1"></script>
     <script src="js/data/characters.js?v=5.0.1"></script>
+    <script src="js/data/run_destinies.js?v=5.0.1"></script>
+    <script src="js/data/run_vows.js?v=5.0.1"></script>
+    <script src="js/data/spirit_companions.js?v=5.0.1"></script>
+    <script src="js/data/narrative_templates.js?v=6.0.0"></script>
+    <script src="js/data/challenge_rules.js?v=6.0.0"></script>
     <script src="js/data/shop-items.js?v=5.0.1"></script>
     <script src="js/core/utils.js?v=5.0.1"></script>
     <script src="js/core/card-effects.js?v=5.0.1"></script>
@@ -1463,6 +1982,8 @@
     <script src="js/core/player.js?v=5.0.1"></script>
     <script src="js/scenes/pvp-scene.js?v=5.0.1"></script>
     <script src="js/game.js?v=5.0.1"></script>
+    <script src="js/core/collection_hub.js?v=6.0.0"></script>
+    <script src="js/core/challenge_hub.js?v=6.0.0"></script>
 </body>
 
 </html>

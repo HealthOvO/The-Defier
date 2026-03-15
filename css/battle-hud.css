@@ -194,6 +194,284 @@
     z-index: var(--z-battle-intent);
 }
 
+#battle-screen .enemy-container {
+    width: min(100%, 760px);
+    justify-content: center;
+    align-items: flex-start;
+    align-content: flex-start;
+    flex-wrap: wrap;
+    row-gap: 28px;
+    column-gap: clamp(18px, 3vw, 40px);
+}
+
+#battle-screen .enemy {
+    width: clamp(124px, 12vw, 162px);
+    gap: 8px;
+}
+
+#battle-screen .enemy-avatar {
+    overflow: visible;
+}
+
+#battle-screen .enemy-info-stack {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+#battle-screen .enemy-name {
+    width: 100%;
+    margin-top: 2px;
+    font-size: 0.94rem;
+    line-height: 1.18;
+    text-align: center;
+    text-wrap: balance;
+}
+
+#battle-screen .enemy-meta-strip {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 4px 5px;
+    margin: 0;
+}
+
+#battle-screen .enemy-meta-strip .enemy-role-tag,
+#battle-screen .enemy-meta-strip .enemy-plan-tag,
+#battle-screen .enemy-meta-strip .enemy-encounter-tag,
+#battle-screen .enemy-meta-strip .enemy-encounter-affix,
+#battle-screen .enemy-meta-strip .enemy-squad-tag,
+#battle-screen .enemy-meta-strip .enemy-formation-tag,
+#battle-screen .enemy-meta-strip .enemy-counter-tag,
+#battle-screen .enemy-meta-strip .enemy-threat-tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 18px;
+    max-width: 100%;
+    margin: 0;
+    padding: 2px 7px;
+    text-align: center;
+    line-height: 1.16;
+    white-space: normal;
+    text-wrap: balance;
+    word-break: break-word;
+}
+
+#battle-screen .enemy-meta-primary {
+    margin-top: 1px;
+}
+
+#battle-screen .enemy-meta-secondary {
+    opacity: 0.94;
+}
+
+#battle-screen .enemy-threat-tags {
+    gap: 4px;
+}
+
+#battle-screen .enemy-vitals {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+#battle-screen .enemy-hp {
+    width: min(100%, 92px);
+}
+
+#battle-screen .enemy-vital-row {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+#battle-screen .enemy-hp-text {
+    font-size: 0.78rem;
+    line-height: 1;
+}
+
+#battle-screen .enemy-block {
+    margin: 0;
+    font-size: 0.78rem;
+    line-height: 1;
+}
+
+#battle-screen .enemy-buffs {
+    width: 100%;
+    min-height: 0;
+    margin-top: 0;
+}
+
+#battle-screen .enemy-intent {
+    top: -18px;
+    right: -18px;
+    width: auto;
+    min-width: 46px;
+    max-width: min(108px, calc(100% + 28px));
+    min-height: 46px;
+    height: auto;
+    padding: 4px 9px 6px 4px;
+    border-width: 1px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0;
+    background:
+        linear-gradient(135deg, rgba(10, 16, 30, 0.96), rgba(21, 28, 44, 0.92));
+    border-color: rgba(208, 222, 255, 0.28);
+    box-shadow:
+        0 10px 20px rgba(0, 0, 0, 0.36),
+        0 0 0 1px rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transform-origin: center;
+}
+
+#battle-screen .enemy-avatar.has-image .enemy-intent {
+    top: -16px;
+    right: -20px;
+    background:
+        linear-gradient(135deg, rgba(7, 11, 20, 0.97), rgba(18, 22, 34, 0.94));
+}
+
+#battle-screen .enemy-intent.has-label {
+    padding-right: 10px;
+}
+
+#battle-screen .enemy-intent.icon-only {
+    width: 46px;
+    padding-right: 4px;
+    justify-content: center;
+}
+
+#battle-screen .enemy-intent-core {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+}
+
+#battle-screen .enemy-intent-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    font-size: 1rem;
+    line-height: 1;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.16),
+        0 4px 10px rgba(0, 0, 0, 0.22);
+}
+
+#battle-screen .enemy-intent-label {
+    display: -webkit-box;
+    max-width: 54px;
+    overflow: hidden;
+    font-size: 0.62rem;
+    font-weight: 700;
+    line-height: 1.08;
+    color: rgba(245, 248, 255, 0.96);
+    text-align: left;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.42);
+    white-space: normal;
+    word-break: keep-all;
+    writing-mode: horizontal-tb;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+#battle-screen .enemy-intent.icon-only .enemy-intent-label {
+    display: none;
+}
+
+#battle-screen .enemy-intent.attack {
+    border-color: rgba(255, 116, 93, 0.52);
+    box-shadow:
+        0 10px 20px rgba(0, 0, 0, 0.36),
+        0 0 18px rgba(244, 67, 54, 0.24);
+}
+
+#battle-screen .enemy-intent.attack .enemy-intent-icon,
+#battle-screen .enemy-intent.multiAttack .enemy-intent-icon,
+#battle-screen .enemy-intent.executeDamage .enemy-intent-icon {
+    background: linear-gradient(135deg, rgba(115, 28, 26, 0.92), rgba(184, 58, 47, 0.9));
+}
+
+#battle-screen .enemy-intent.defend {
+    border-color: rgba(96, 207, 255, 0.5);
+    box-shadow:
+        0 10px 20px rgba(0, 0, 0, 0.36),
+        0 0 18px rgba(0, 188, 212, 0.2);
+}
+
+#battle-screen .enemy-intent.defend .enemy-intent-icon {
+    background: linear-gradient(135deg, rgba(18, 64, 108, 0.92), rgba(30, 116, 180, 0.88));
+}
+
+#battle-screen .enemy-intent.buff,
+#battle-screen .enemy-intent.heal {
+    border-color: rgba(163, 114, 255, 0.5);
+    box-shadow:
+        0 10px 20px rgba(0, 0, 0, 0.36),
+        0 0 18px rgba(156, 39, 176, 0.2);
+}
+
+#battle-screen .enemy-intent.buff .enemy-intent-icon,
+#battle-screen .enemy-intent.heal .enemy-intent-icon {
+    background: linear-gradient(135deg, rgba(77, 35, 113, 0.92), rgba(133, 63, 176, 0.9));
+}
+
+#battle-screen .enemy-intent.debuff .enemy-intent-icon,
+#battle-screen .enemy-intent.addStatus .enemy-intent-icon,
+#battle-screen .enemy-intent.multiAction .enemy-intent-icon,
+#battle-screen .enemy-intent.summon .enemy-intent-icon {
+    background: linear-gradient(135deg, rgba(78, 43, 18, 0.92), rgba(137, 89, 36, 0.88));
+}
+
+#battle-screen .enemy-intent.breaker {
+    border-color: rgba(255, 160, 112, 0.78);
+    box-shadow:
+        0 10px 20px rgba(0, 0, 0, 0.36),
+        0 0 22px rgba(255, 138, 80, 0.34);
+}
+
+#battle-screen .enemy-intent .intent-value {
+    bottom: -7px;
+    right: 3px;
+    font-size: 0.7rem;
+    line-height: 1;
+    min-width: 22px;
+    padding: 3px 6px;
+    border-radius: 999px;
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(5, 8, 15, 0.96);
+    color: #f6fbff;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.28);
+}
+
+#battle-screen .enemy-intent .intent-tag {
+    top: -10px;
+    left: 8px;
+    transform: none;
+    font-size: 0.52rem;
+    padding: 2px 5px;
+    z-index: 2;
+}
+
 #battle-screen .hand-cards {
     gap: 0;
     justify-content: center;
@@ -240,6 +518,49 @@
 }
 
 @media (max-width: 768px) {
+    #battle-screen .enemy-container {
+        width: 100%;
+        row-gap: 20px;
+        column-gap: 14px;
+    }
+
+    #battle-screen .enemy {
+        width: min(120px, 31vw);
+        gap: 6px;
+    }
+
+    #battle-screen .enemy-name {
+        font-size: 0.76rem;
+        line-height: 1.16;
+    }
+
+    #battle-screen .enemy-meta-strip {
+        gap: 3px 4px;
+    }
+
+    #battle-screen .enemy-meta-strip .enemy-role-tag,
+    #battle-screen .enemy-meta-strip .enemy-plan-tag,
+    #battle-screen .enemy-meta-strip .enemy-encounter-tag,
+    #battle-screen .enemy-meta-strip .enemy-encounter-affix,
+    #battle-screen .enemy-meta-strip .enemy-squad-tag,
+    #battle-screen .enemy-meta-strip .enemy-formation-tag,
+    #battle-screen .enemy-meta-strip .enemy-counter-tag,
+    #battle-screen .enemy-meta-strip .enemy-threat-tag {
+        min-height: 16px;
+        padding: 1px 6px;
+        font-size: 0.5rem;
+        letter-spacing: 0.16px;
+    }
+
+    #battle-screen .enemy-hp {
+        width: min(100%, 72px);
+    }
+
+    #battle-screen .enemy-hp-text,
+    #battle-screen .enemy-block {
+        font-size: 0.66rem;
+    }
+
     #battle-screen .battle-command-panel,
     #battle-screen #battle-command-panel {
         top: 68px;
@@ -316,6 +637,46 @@
     #battle-screen .battle-command-panel .battle-advisor-body,
     #battle-screen #battle-command-panel .battle-advisor-body {
         padding-bottom: 2px;
+    }
+
+    #battle-screen .enemy-intent,
+    #battle-screen .enemy-avatar.has-image .enemy-intent {
+        top: -16px;
+        right: -14px;
+        min-width: 40px;
+        max-width: min(92px, calc(100% + 14px));
+        min-height: 40px;
+        padding: 3px 8px 5px 3px;
+    }
+
+    #battle-screen .enemy-intent.icon-only {
+        width: 40px;
+    }
+
+    #battle-screen .enemy-intent-icon {
+        flex-basis: 30px;
+        width: 30px;
+        height: 30px;
+        font-size: 0.92rem;
+    }
+
+    #battle-screen .enemy-intent-label {
+        max-width: 44px;
+        font-size: 0.56rem;
+    }
+
+    #battle-screen .enemy-intent .intent-value {
+        bottom: -6px;
+        right: 1px;
+        font-size: 0.62rem;
+        min-width: 18px;
+        padding: 2px 5px;
+    }
+
+    #battle-screen .enemy-intent .intent-tag {
+        top: -9px;
+        left: 6px;
+        font-size: 0.48rem;
     }
 
     #battle-screen .legacy-mission-tracker,

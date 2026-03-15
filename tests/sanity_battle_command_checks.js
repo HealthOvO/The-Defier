@@ -38,7 +38,72 @@ function makePlayer() {
     drawPile: [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }, { id: 'c4' }],
     discardPile: [],
     activeResonances: [],
+    runDestiny: { id: 'audit_destiny', tier: 2 },
+    runVows: [{ id: 'audit_vow', tier: 1 }],
+    spiritCompanion: { id: 'audit_spirit', tier: 1 },
+    spiritCompanionBattleState: { charge: 3 },
+    equippedTreasures: [
+      { id: 'audit_treasure_1', setTag: 'xuanjia' },
+      { id: 'audit_treasure_2', setTag: 'xuanjia' }
+    ],
     collectedLaws: [],
+    fateRing: {
+      path: 'resonance',
+      getSocketedLaws() {
+        return ['thunderLaw', 'flameTruth'];
+      }
+    },
+    getRunDestinyMeta() {
+      return {
+        id: 'audit_destiny',
+        name: '试作命格',
+        icon: '✦',
+        tier: 2,
+        tierLabel: '第二阶',
+        category: '构筑',
+        summary: '首击获得额外爆发。'
+      };
+    },
+    getRunVowMetas() {
+      return [
+        {
+          id: 'audit_vow',
+          name: '破界誓',
+          icon: '✧',
+          tier: 1,
+          tierLabel: '第一阶',
+          category: '风险',
+          summary: '以风险换高压收益。'
+        }
+      ];
+    },
+    getSpiritCompanionMeta() {
+      return {
+        id: 'audit_spirit',
+        name: '霜螭',
+        icon: '🐉',
+        title: '护道之灵',
+        summary: '先控场再稳住护盾。',
+        passiveLabel: '霜鳞凝息',
+        passiveDesc: '战斗开始时，全体敌人获得 1 层虚弱。',
+        activeLabel: '寒潮护道',
+        activeDesc: '蓄能满后：全体敌人虚弱 +2，自身获得 8 护盾。',
+        chargeMax: 5
+      };
+    },
+    ensureSpiritCompanionBattleState() {
+      return this.spiritCompanionBattleState;
+    },
+    getEquippedTreasureSetCounts() {
+      return { xuanjia: 2 };
+    },
+    getTreasureSetLabel(setTag) {
+      return setTag === 'xuanjia' ? '玄甲' : setTag;
+    },
+    getTreasureSetMeta(setTag) {
+      if (setTag !== 'xuanjia') return null;
+      return { icon: '🛡️', theme: '护阵 / 反制 / 拉长回合' };
+    },
     addBlock(amount) {
       this.block = Math.max(0, this.block + Math.floor(Number(amount) || 0));
     },
@@ -72,6 +137,27 @@ function makePlayer() {
     JSON,
     Date,
     CARDS: { heartDemon: { id: 'heartDemon', name: '心魔' } },
+    LAWS: {
+      thunderLaw: { id: 'thunderLaw', name: '雷法残章', icon: '⚡', description: '雷火编织前件。' },
+      flameTruth: { id: 'flameTruth', name: '火焰真意', icon: '🔥', description: '雷火编织后件。' }
+    },
+    LAW_RESONANCES: {
+      plasmaOverload: {
+        id: 'plasmaOverload',
+        name: '雷火崩坏',
+        laws: ['thunderLaw', 'flameTruth'],
+        description: '雷引火爆。'
+      }
+    },
+    FATE_RING: {
+      paths: {
+        resonance: {
+          id: 'resonance',
+          name: '回响之环',
+          icon: '🎼'
+        }
+      }
+    },
     document: {
       querySelector: () => null,
       getElementById: () => null,
@@ -170,6 +256,16 @@ function makePlayer() {
   const snapshot = battle.getBattleCommandSnapshot();
   assert(snapshot && snapshot.enabled === true, 'command snapshot should expose enabled state');
   assert(snapshot.commandCount === 3, 'command snapshot should keep loadout size');
+
+  const systemState = battle.getBattleSystemDisplayState();
+  assert(systemState && Array.isArray(systemState.stripItems), 'battle system state should expose strip items');
+  assert(systemState.stripItems.length >= 6, 'battle system state should include all readability system entries');
+  assert(systemState.destiny && systemState.destiny.name === '试作命格', 'battle system state should expose current destiny');
+  assert(systemState.vows && systemState.vows.count === 1, 'battle system state should expose current vows');
+  assert(systemState.spirit && systemState.spirit.name === '霜螭', 'battle system state should expose current spirit');
+  assert(systemState.chapter && typeof systemState.chapter === 'object', 'battle system state should expose chapter wrapper');
+  assert(systemState.lawWeave && systemState.lawWeave.comboLabel === '雷火崩坏', 'battle system state should resolve current law weave combo');
+  assert(systemState.treasureSets && systemState.treasureSets.activeCount === 1, 'battle system state should expose active treasure set count');
 
   const pvpGame = {
     mode: 'pvp',

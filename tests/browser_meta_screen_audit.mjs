@@ -560,6 +560,278 @@ async function safeScreenshot(page, outPath) {
   );
   await safeScreenshot(page, path.join(outDir, 'law-detail-layout.png'));
 
+  const spiritCodexProbe = await page.evaluate(() => {
+    if (!window.game || !game.player || typeof game.showCollection !== 'function') return { ok: false, reason: 'no_game' };
+    document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
+    document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
+    game.selectedCharacterId = 'linFeng';
+    if (typeof game.player.setSpiritCompanion === 'function') game.player.setSpiritCompanion('emberCrow', 1);
+    game.showCollection();
+    if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('spirits');
+    if (typeof game.setSpiritCodexSearchQuery === 'function') game.setSpiritCodexSearchQuery('烛鸦');
+    if (typeof game.setSpiritCodexFocusFilter === 'function') game.setSpiritCodexFocusFilter('current');
+    const activeTab = document.querySelector('#collection [data-collection-tab="spirits"]');
+    const cards = document.querySelectorAll('#spirit-codex-grid .collection-card');
+    const detailText = (document.getElementById('spirit-codex-detail')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const summaryText = (document.getElementById('spirit-codex-summary')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const searchValue = document.getElementById('spirit-codex-search')?.value || '';
+    return {
+      ok:
+        !!activeTab?.classList.contains('active') &&
+        cards.length === 1 &&
+        /烛鸦/.test(detailText) &&
+        /血灯燎原|烬羽反啄/.test(detailText) &&
+        /当前同行/.test(summaryText) &&
+        searchValue === '烛鸦',
+      cards: cards.length,
+      searchValue,
+      detailText,
+      summaryText
+    };
+  });
+  add(
+    'spirit codex tab filters current spirit entries and renders detailed passive/active records',
+    !!spiritCodexProbe?.ok,
+    JSON.stringify(spiritCodexProbe || null)
+  );
+  await page.evaluate(() => {
+    document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
+    document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
+  });
+  await safeScreenshot(page, path.join(outDir, 'spirit-codex-layout.png'));
+
+  const enemyCodexProbe = await page.evaluate(() => {
+    if (!window.game || !game.player || typeof game.showCollection !== 'function') return { ok: false, reason: 'no_game' };
+    document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
+    document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
+    game.player.maxRealmReached = Math.max(Number(game.player.maxRealmReached) || 1, 2);
+    if (game.achievementSystem && typeof game.achievementSystem.updateStat === 'function') {
+      game.achievementSystem.updateStat('realmCleared', 2, 'max');
+    }
+    game.showCollection();
+    if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('enemies');
+    if (typeof game.setEnemyCodexSearchQuery === 'function') game.setEnemyCodexSearchQuery('墓羽鸦');
+    if (typeof game.setEnemyCodexFocusFilter === 'function') game.setEnemyCodexFocusFilter('scouted');
+    const cards = document.querySelectorAll('#enemy-codex-grid .collection-card');
+    const detailText = (document.getElementById('enemy-codex-detail')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const summaryText = (document.getElementById('enemy-codex-summary')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const searchValue = document.getElementById('enemy-codex-search')?.value || '';
+    return {
+      ok:
+        cards.length === 1 &&
+        /墓羽鸦/.test(detailText) &&
+        /控场型/.test(detailText) &&
+        /状态压制|净化|减益/.test(detailText) &&
+        /敌影档案进度/.test(summaryText) &&
+        searchValue === '墓羽鸦',
+      cards: cards.length,
+      searchValue,
+      detailText,
+      summaryText
+    };
+  });
+  add(
+    'enemy codex tab links tactical role, threat tags, and counterplay notes for scouted enemies',
+    !!enemyCodexProbe?.ok,
+    JSON.stringify(enemyCodexProbe || null)
+  );
+  await page.evaluate(() => {
+    document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
+    document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
+  });
+  await safeScreenshot(page, path.join(outDir, 'enemy-codex-layout.png'));
+
+  const bossArchiveProbe = await page.evaluate(() => {
+    if (!window.game || !game.player || typeof game.showCollection !== 'function') return { ok: false, reason: 'no_game' };
+    document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
+    document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
+    if (game.achievementSystem && typeof game.achievementSystem.updateStat === 'function') {
+      game.achievementSystem.updateStat('realmCleared', 12, 'max');
+      game.achievementSystem.updateStat('bossesDefeated', 4, 'max');
+    }
+    if (typeof game.recordBossMemoryResult === 'function') game.recordBossMemoryResult('danZun', 'victory', 6);
+    game.showCollection();
+    if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('bosses');
+    if (typeof game.setBossArchiveSearchQuery === 'function') game.setBossArchiveSearchQuery('丹尊');
+    if (typeof game.setBossArchiveFocusFilter === 'function') game.setBossArchiveFocusFilter('all');
+    const cards = document.querySelectorAll('#boss-archive-grid .collection-card');
+    const detailText = (document.getElementById('boss-archive-detail')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const summaryText = (document.getElementById('boss-archive-summary')?.textContent || '').replace(/\s+/g, ' ').trim();
+    return {
+      ok:
+        cards.length === 1 &&
+        /丹尊/.test(detailText) &&
+        /玄冰珠/.test(detailText) &&
+        /灼烧|净化|冰/.test(detailText) &&
+        /记忆战|已留痕|最快 6 回合/.test(detailText) &&
+        /记忆战留痕/.test(summaryText) &&
+        /Boss 档案进度/.test(summaryText),
+      cards: cards.length,
+      detailText,
+      summaryText
+    };
+  });
+  add(
+    'boss archive tab links chapter boss mechanics with counter treasures and break-window notes',
+    !!bossArchiveProbe?.ok,
+    JSON.stringify(bossArchiveProbe || null)
+  );
+  await page.evaluate(() => {
+    document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
+    document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
+  });
+  await safeScreenshot(page, path.join(outDir, 'boss-archive-layout.png'));
+
+  const bossMemoryFlowProbe = await page.evaluate(async () => {
+    if (!window.game || !game.player || typeof game.startBossMemoryBattle !== 'function') return { ok: false, reason: 'no_memory_battle' };
+    document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
+    document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
+    if (game.achievementSystem && typeof game.achievementSystem.updateStat === 'function') {
+      game.achievementSystem.updateStat('realmCleared', 12, 'max');
+      game.achievementSystem.updateStat('bossesDefeated', 4, 'max');
+    }
+    game.showCollection();
+    if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('bosses');
+    if (typeof game.setBossArchiveSearchQuery === 'function') game.setBossArchiveSearchQuery('丹尊');
+    const memoryBtn = document.querySelector('#boss-archive-detail .collection-inline-btn');
+    if (!memoryBtn) return { ok: false, reason: 'missing_memory_button' };
+    memoryBtn.click();
+    const startedMode = game.currentScreen;
+    const startedNodeType = game.currentBattleNode?.type || '';
+    const startedBossName = game.battle?.enemies?.[0]?.name || '';
+    if (typeof game.onBattleLost === 'function') {
+      await game.onBattleLost();
+    }
+    const returnedMode = game.currentScreen;
+    const rewardText = (document.getElementById('reward-message')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const detailText = (document.getElementById('boss-archive-detail')?.textContent || '').replace(/\s+/g, ' ').trim();
+    return {
+      ok:
+        startedMode === 'battle-screen' &&
+        startedNodeType === 'boss_memory' &&
+        /记忆战/.test(startedBossName) &&
+        returnedMode === 'collection' &&
+        /失败不会污染主线|累计试作/.test(rewardText) &&
+        /试作/.test(detailText),
+      startedMode,
+      startedNodeType,
+      startedBossName,
+      returnedMode,
+      rewardText,
+      detailText
+    };
+  });
+  add(
+    'boss archive can launch a boss memory battle and return to the archive with trial records intact',
+    !!bossMemoryFlowProbe?.ok,
+    JSON.stringify(bossMemoryFlowProbe || null)
+  );
+  await page.evaluate(() => {
+    document.getElementById('reward-modal')?.classList.remove('active');
+    document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
+    document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
+  });
+
+  const buildAndSanctumProbe = await page.evaluate(() => {
+    if (!window.game || !game.player || typeof game.showCollection !== 'function') return { ok: false, reason: 'no_game' };
+    document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
+    document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
+    const firstLaw = typeof LAWS !== 'undefined' ? LAWS.flameTruth || Object.values(LAWS)[0] : null;
+    const secondLaw = typeof LAWS !== 'undefined' ? LAWS.thunderLaw || Object.values(LAWS)[1] : null;
+    if (firstLaw && typeof game.player.collectLaw === 'function') game.player.collectLaw(firstLaw);
+    if (secondLaw && typeof game.player.collectLaw === 'function') game.player.collectLaw(secondLaw);
+    if (typeof game.player.addTreasure === 'function') {
+      game.player.addTreasure('soul_jade');
+      game.player.addTreasure('ice_spirit_bead');
+    }
+    if (typeof game.player.setRunDestiny === 'function') game.player.setRunDestiny('rebelScale', 1);
+    if (typeof game.player.setSpiritCompanion === 'function') game.player.setSpiritCompanion('emberCrow', 1);
+    if (game.player?.fateRing) {
+      game.player.fateRing.getSocketedLaws = () => [firstLaw?.id, secondLaw?.id].filter(Boolean);
+    }
+    if (game.achievementSystem && typeof game.achievementSystem.unlockAchievement === 'function') {
+      const firstAchievementId = typeof ACHIEVEMENTS !== 'undefined' ? Object.keys(ACHIEVEMENTS)[0] : null;
+      if (firstAchievementId) game.achievementSystem.unlockAchievement(firstAchievementId);
+      if (typeof game.achievementSystem.updateStat === 'function') {
+        game.achievementSystem.updateStat('maxCombo', 9, 'max');
+        game.achievementSystem.updateStat('singleDamage', 48, 'max');
+      }
+    }
+    if (typeof game.recordBossMemoryResult === 'function') game.recordBossMemoryResult('danZun', 'victory', 5);
+    if (typeof game.recordObservatoryArchiveEntry === 'function') {
+      game.recordObservatoryArchiveEntry({
+        id: 'audit-observatory-record',
+        type: 'challenge',
+        mode: 'daily',
+        modeLabel: '今日天机',
+        rotationKey: '2026-03-14',
+        rotationLabel: '2026.03.14',
+        seedSignature: 'D-030314-AUDT',
+        title: '星镜试锋',
+        note: '完成 · 得分 420',
+        icon: '🔭',
+        score: 420,
+        completed: true,
+        at: Date.now(),
+        reason: 'goal_reached',
+        rule: {
+          id: 'audit_rule',
+          name: '星镜试锋',
+          goalRealm: 3,
+          characterId: 'linFeng',
+          runDestinyId: 'rebelScale',
+          spiritCompanionId: 'emberCrow'
+        }
+      });
+    }
+
+    game.showCollection();
+    if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('builds');
+    const buildHeroText = (document.getElementById('build-snapshot-hero')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const buildMetricCount = document.querySelectorAll('#build-snapshot-metrics .build-metric-card').length;
+    const buildNotesText = (document.getElementById('build-snapshot-notes')?.textContent || '').replace(/\s+/g, ' ').trim();
+
+    if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('sanctum');
+    const roomCards = document.querySelectorAll('#sanctum-room-grid .sanctum-room-card').length;
+    const researchItems = document.querySelectorAll('#sanctum-research-list .sanctum-research-item').length;
+    const goalItems = document.querySelectorAll('#sanctum-goal-list .sanctum-goal-item, #sanctum-goal-list .codex-empty-state').length;
+    const unlockItems = document.querySelectorAll('#sanctum-unlock-feed .unlock-feed-item').length;
+    const summaryText = (document.getElementById('sanctum-summary')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const progressText = (document.getElementById('sanctum-progress')?.textContent || '').replace(/\s+/g, ' ').trim();
+    return {
+      ok:
+        /构筑画像|攻势抢拍|法则编织|护阵拖线|混成试作/.test(buildHeroText) &&
+        buildMetricCount >= 4 &&
+        /当前优势|主要缺口|下一轮补位/.test(buildNotesText) &&
+        roomCards === 4 &&
+        researchItems >= 9 &&
+        goalItems >= 1 &&
+        unlockItems >= 2 &&
+        /局外中枢进度/.test(summaryText) &&
+        /观星留痕|炼器铭刻|三段套装/.test(summaryText) &&
+        /法则：|法宝：|炼器研究：|套装共鸣：|炼器铭刻：|Boss 档案：|伏魔台记忆战：|观星留痕：/.test(progressText),
+      buildHeroText,
+      buildMetricCount,
+      buildNotesText,
+      roomCards,
+      researchItems,
+      goalItems,
+      unlockItems,
+      summaryText,
+      progressText
+    };
+  });
+  add(
+    'build snapshot and sanctum tabs summarize deck identity, research goals, room overview and recent unlock history',
+    !!buildAndSanctumProbe?.ok,
+    JSON.stringify(buildAndSanctumProbe || null)
+  );
+  await page.evaluate(() => {
+    document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
+    document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
+  });
+  await safeScreenshot(page, path.join(outDir, 'sanctum-layout.png'));
+
   const treasureCompendiumProbe = await page.evaluate(() => {
     if (!window.game || typeof game.showTreasureCompendium !== 'function') return { ok: false, reason: 'no_compendium' };
     if (!game.player) {
@@ -571,20 +843,27 @@ async function safeScreenshot(page, outPath) {
     const side = document.querySelector('.treasure-compendium-side');
     const summary = document.getElementById('treasure-compendium-summary');
     const rarity = document.getElementById('treasure-compendium-rarity');
+    const research = document.getElementById('treasure-compendium-research');
     const firstItem = document.querySelector('#treasure-compendium-grid .compendium-item');
     const toRect = (el) => {
       const rect = el.getBoundingClientRect();
       return { left: Math.round(rect.left), top: Math.round(rect.top), right: Math.round(rect.right), bottom: Math.round(rect.bottom), width: Math.round(rect.width), height: Math.round(rect.height) };
     };
-    if (!main || !side || !summary || !rarity || !firstItem) return { ok: false, reason: 'missing_compendium_nodes' };
+    if (!main || !side || !summary || !rarity || !research || !firstItem) return { ok: false, reason: 'missing_compendium_nodes' };
     const mainRect = toRect(main);
     const sideRect = toRect(side);
     return {
-      ok: mainRect.left < sideRect.left && sideRect.width >= 280 && /已收录/.test(summary.textContent || '') && /凡品|灵品|神品|仙品/.test(rarity.textContent || ''),
+      ok:
+        mainRect.left < sideRect.left &&
+        sideRect.width >= 280 &&
+        /已收录/.test(summary.textContent || '') &&
+        /凡品|灵品|神品|仙品/.test(rarity.textContent || '') &&
+        /炼器研究|核心件|套装/.test(research.textContent || ''),
       mainRect,
       sideRect,
       summaryText: (summary.textContent || '').replace(/\s+/g, ' ').trim(),
-      rarityText: (rarity.textContent || '').replace(/\s+/g, ' ').trim()
+      rarityText: (rarity.textContent || '').replace(/\s+/g, ' ').trim(),
+      researchText: (research.textContent || '').replace(/\s+/g, ' ').trim()
     };
   });
   add(
@@ -653,7 +932,12 @@ async function safeScreenshot(page, outPath) {
     const main = modal ? modal.querySelector('.treasure-detail-main') : null;
     const side = modal ? modal.querySelector('.treasure-detail-side') : null;
     const status = document.getElementById('detail-owned-state');
+    const role = document.getElementById('detail-role-state');
+    const infusion = document.getElementById('detail-infusion-state');
     const source = document.getElementById('detail-source');
+    const setInfo = document.getElementById('detail-set');
+    const buildFit = document.getElementById('detail-build-fit');
+    const forgeStatus = document.getElementById('detail-forge-status');
     const firstOwned = (window.game && game.player)
       ? Object.values(TREASURES || {}).find((treasure) => game.player.hasTreasure(treasure.id)) || Object.values(TREASURES || {})[0]
       : null;
@@ -666,15 +950,29 @@ async function safeScreenshot(page, outPath) {
       const rect = el.getBoundingClientRect();
       return { left: Math.round(rect.left), top: Math.round(rect.top), right: Math.round(rect.right), bottom: Math.round(rect.bottom), width: Math.round(rect.width), height: Math.round(rect.height) };
     };
-    if (!modal || !visibleMain || !visibleSide || !status || !source) return { ok: false, reason: 'missing_treasure_detail_nodes' };
+    if (!modal || !visibleMain || !visibleSide || !status || !role || !infusion || !source || !setInfo || !buildFit || !forgeStatus) return { ok: false, reason: 'missing_treasure_detail_nodes' };
     const mainRect = toRect(visibleMain);
     const sideRect = toRect(visibleSide);
     return {
-      ok: modal.classList.contains('active') && mainRect.left < sideRect.left && /已收录|未收录/.test(status.textContent || '') && (source.textContent || '').trim().length > 0,
+      ok:
+        modal.classList.contains('active') &&
+        mainRect.left < sideRect.left &&
+        /已收录|未收录/.test(status.textContent || '') &&
+        (source.textContent || '').trim().length > 0 &&
+        (role.textContent || '').trim().length > 0 &&
+        /灌注|核心|基础/.test((infusion.textContent || '') + (role.textContent || '')) &&
+        (setInfo.textContent || '').trim().length > 0 &&
+        (buildFit.textContent || '').trim().length > 0 &&
+        (forgeStatus.textContent || '').trim().length > 0,
       mainRect,
       sideRect,
       statusText: (status.textContent || '').trim(),
-      sourceText: (source.textContent || '').replace(/\s+/g, ' ').trim()
+      roleText: (role.textContent || '').trim(),
+      infusionText: (infusion.textContent || '').trim(),
+      sourceText: (source.textContent || '').replace(/\s+/g, ' ').trim(),
+      setText: (setInfo.textContent || '').replace(/\s+/g, ' ').trim(),
+      buildFitText: (buildFit.textContent || '').replace(/\s+/g, ' ').trim(),
+      forgeText: (forgeStatus.textContent || '').replace(/\s+/g, ' ').trim()
     };
   });
   add(

@@ -218,6 +218,33 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `bash tests/run_node_checks.sh` ✅
   - Browser:
     - `node tests/browser_audit.mjs` ✅
+
+- 2026-03-13: 战斗怪物意图 UI 优化（当前轮）
+  - `js/ui/battle-hud.js`：新增敌方意图展示辅助函数，意图文案改为“图标 + 可选短标签 + 数值角标”模式，避免 `🕯️诵调`、`📜裁令` 一类长意图被塞进 42px 圆徽章后竖排错位。
+  - `js/core/utils.js`：敌人卡片渲染接入新的意图 presenter，Boss/精英头像继续复用原有 tooltip 与破盾提示逻辑。
+  - `css/battle-hud.css`：以 battle HUD 覆盖层重写意图徽章布局、Boss 图片头像避让、移动端缩放与数值/破盾标定位，减少对旧 `style.css` 的侵入。
+  - `tests/sanity_battle_hud_module_checks.js`：新增意图拆分与意图 markup 断言，防止后续新增长意图时回归成拥挤/竖排显示。
+  - 本地验证：
+    - `bash tests/run_node_checks.sh` ✅
+    - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/intent-ui-browser-audit` ✅
+    - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/intent-ui-mobile-audit` ✅
+    - 视觉核验：`/Users/health/IdeaProjects/The-Defier/output/intent-ui-boss-visual-check.png` 已人工检查，Boss 长意图标签横排显示、数值角标与头像不再互相挤压。
+
+- 2026-03-13: 战斗敌人信息层统一优化（当前轮续）
+  - `js/core/utils.js`：把敌人名称、角色/节奏/遭遇/编队/反制/威胁标签改为分组 meta strip，血量与护盾并成紧凑 vital row，减少纵向堆叠。
+  - `js/ui/battle-hud.js`：新增通用 `buildEnemyMetaStripMarkup`，继续将战斗展示逻辑收口到 presenter 层。
+  - `css/battle-hud.css`：统一敌人卡宽度、多敌人容器换行、meta strip 换行规则、移动端 chip 密度与 vitals 排版，降低多标签 Boss 在手机上的信息塔问题。
+  - `tests/browser_mobile_layout_audit.mjs`：加入“高压标签场景”回归，强制注入多组遭遇/编队/反制标签并断言敌人 meta 总高度与手牌间距。
+  - 本地验证：
+    - `node tests/sanity_battle_hud_module_checks.js` ✅
+    - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/battle-ui-unified-mobile-audit` ✅
+    - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/battle-ui-unified-browser-audit` ✅
+    - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/battle-ui-release-audits` ✅
+    - `bash tests/run_node_checks.sh` ✅（`sanity_map_weight_checks.js` 首次运行出现历史随机波动，复跑后稳定通过）
+    - 视觉核验：
+      - `/Users/health/IdeaProjects/The-Defier/output/battle-ui-unified-mobile-audit/mobile-battle-layout.png`
+      - `/Users/health/IdeaProjects/The-Defier/output/battle-ui-unified-browser-audit/03-battle.png`
+      - `/Users/health/IdeaProjects/The-Defier/output/battle-ui-unified-multi-enemy.png`
     - `node tests/browser_feature_audit.mjs` ✅
     - `node tests/browser_event_branch_audit.mjs` ✅
     - `node tests/browser_inheritance_audit.mjs` ✅
@@ -3096,3 +3123,1495 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - 所有浏览器发布审计通过，终端输出 `All browser release audits passed.`。
     - `node /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#new-game-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-click-selector-stable` ✅
       - 已人工查看 `output/web-game-click-selector-stable/shot-1.png`，确认弹窗出现且首屏交互稳定。
+
+- 2026-03-13: 第五十五轮 策划案交付（V6.0 大版本升级方案）
+  - 本轮变更
+    - 新增完整策划文档 `docs/designer_major_upgrade_planning_v3.md`
+      - 基于当前项目真实状态整理版本基线：
+        - `6` 名角色、`178` 张卡、`46` 件法宝、`61` 个事件、`76` 个敌人
+        - 主线 / 无尽 / 传承 / 图鉴 / 异步 PvP / 成就已具备骨架
+      - 输出 V6.0《天命裂界》整体升级方向：
+        - 命格谱系 2.0
+        - 逆命誓约 2.0
+        - 灵契护道
+        - 命环路径树 + 碑文节点
+        - 法则编织盘
+        - 法宝炼器与套装深化
+        - 章节化主线、敌人生态、三幕 Boss
+        - 洞府经营、周挑战、无尽 / PvP 赛季深化
+      - 补充内容规模目标、经济结构、UI/UX 方向、开发分期、验证方案与成功指标。
+  - 本轮验证
+    - 交付物为文档策划案，本轮未运行自动化测试。
+    - 已人工核对文档内容与当前仓库结构、已有设计文档及数据规模一致，无脱离项目现状的空泛提案。
+  - 后续事项
+    - 可继续把 `docs/designer_major_upgrade_planning_v3.md` 拆成：
+      - 产品摘要版
+      - 系统拆解版
+      - 开发排期版
+      - 数值与内容清单版
+
+- 2026-03-13: 第五十六轮 策划文档深化（V6.0 功能需求版）
+  - 本轮变更
+    - 新增配套需求文档 `docs/designer_major_upgrade_requirements_v3.md`
+      - 明确 V6.0 不写排期、只写“要做什么”的文档边界。
+      - 将总案拆细为具体功能需求：
+        - 开局层：角色二阶道途、命格谱系、灵契护道
+        - 中局层：逆命誓约、新地图节点、事件、商店、营地
+        - 战斗层：命环路径树、法则编织盘、法宝炼器、章节天象 / 地脉 / 阵面、战斗可读性
+        - 内容层：卡牌、敌人生态、Boss、叙事内容包
+        - 局外层：洞府、传承、图鉴、周挑战、无尽 / PvP 深化
+        - 页面层：主菜单、角色选择、开局准备、地图、战斗、洞府 / 图鉴
+        - 基建层：数据结构、内容模板化、新门禁
+      - 文档结构统一为“要做什么 / 功能要求 / 内容要求 / 界面要求 / 完成状态”风格，便于后续继续拆。
+  - 本轮验证
+    - 交付物为文档策划案，本轮未运行自动化测试。
+    - 已人工检查章节结构与标题层级，确认文档以需求清单为主，不含排期和人力估算内容。
+  - 后续事项
+    - 可继续基于 `docs/designer_major_upgrade_requirements_v3.md` 拆出：
+      - 卡牌与流派详细需求书
+      - 章节 / Boss 详细需求书
+      - 洞府 / 图鉴 / 周挑战需求书
+      - UI 页面线框说明书
+
+- 2026-03-13: 第五十七轮 V6.0 纵切实现（逆命誓约 2.0 首版落地）
+  - 本轮变更
+    - 新增 `js/data/run_vows.js`
+      - 首发接入 6 条可升阶誓约：
+        - `焚命誓`
+        - `镇狱誓`
+        - `窥天誓`
+        - `噬业誓`
+        - `破界誓`
+        - `归寂誓`
+      - 每条誓约包含图标、定位、路线提示、风险描述、两阶效果与地图权重偏移。
+    - `index.html`
+      - 新增 `js/data/run_vows.js` 载入。
+    - `js/core/player.js`
+      - 新增局内誓约状态：
+        - `runVows`
+        - `runVowBattleState`
+      - 新增誓约运行时方法：
+        - `normalizeRunVows`
+        - `setRunVows`
+        - `getRunVowMeta`
+        - `getRunVowMetas`
+        - `getRunVowEffects`
+        - `resetRunVowBattleState`
+        - `applyRunVow`
+        - `applyRunVowConsequences`
+      - 将誓约效果接入：
+        - `prepareBattle`：开场护盾、开场失血
+        - `startTurn`：首回合抽牌 / 灵力
+        - `addBlock`：护盾倍率
+        - `heal`：治疗效率衰减
+        - `playCard`：首次消耗回牌
+        - `getMaxHandSize`：手牌上限修正
+      - 存档状态增加 `runVows`。
+    - `js/core/battle.js`
+      - 战场指令系统接入誓约：
+        - 指令槽上限增量
+        - 初始指令点增量
+        - 指令费用折扣
+      - 伤害链接入誓约：
+        - 首击增伤
+        - 低血增伤
+        - 击杀回复
+      - 战术助手状态岛新增 `誓约` 标签展示。
+    - `js/core/map.js`
+      - 地图权重生成正式接入誓约路线偏置。
+      - 路线提示面板新增“当前誓约偏好节点”提示芯片。
+    - `js/game.js`
+      - `renderGameToText` 增加 `player.runVows` 输出。
+      - 新增誓约流程方法：
+        - `getRunVowCatalog`
+        - `getRunVowMetaById`
+        - `shouldOfferRunVowAfterRealm`
+        - `draftRunVowChoices`
+        - `applyRunVowSelection`
+        - `showRunVowSelection`
+        - `advanceToNextRealm`
+      - 章末突破流程改为：
+        - 清完 `第 3 / 9 / 15 重` 后，先触发誓约选择，再进入下一重天。
+      - 商店价格倍率与战后高稀有奖励倾向接入誓约修正。
+      - 旧存档加载时增加 `runVows` 归一化。
+    - `css/style.css`
+      - 新增地图誓约路线芯片样式。
+      - 新增战斗 HUD `tone-oath` 视觉语法。
+    - 测试新增与更新
+      - 新增 `tests/sanity_run_vow_system_checks.js`
+        - 覆盖：
+          - 立誓 / 升阶代价
+          - 镇狱誓护盾 / 治疗修正
+          - 归寂誓首次消耗回牌
+          - 破界誓战场指令强化
+          - 焚命誓低血增伤
+          - `Game` 级誓约提案 / 商店倍率逻辑
+      - `tests/run_node_checks.sh` 已纳入新断言。
+      - `tests/browser_audit.mjs` 新增两条端到端断言：
+        - 地图路线提示面板可显示激活誓约
+        - 战斗 HUD 可显示激活誓约状态
+  - 本轮验证（全部通过）
+    - 语法检查：
+      - `node --check js/data/run_vows.js` ✅
+      - `node --check js/core/player.js` ✅
+      - `node --check js/core/battle.js` ✅
+      - `node --check js/game.js` ✅
+    - Node:
+      - `node tests/sanity_run_vow_system_checks.js` ✅
+      - `node tests/sanity_run_destiny_system_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser:
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/web-audit-run-vow` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-run-vow` ✅
+      - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/web-mobile-layout-audit-run-vow` ✅
+    - 视觉复查：
+      - 已人工查看 `output/web-mobile-layout-audit-run-vow/mobile-battle-layout.png`，确认移动端 HUD 在新增誓约状态后仍保持可读与不遮挡。
+  - 后续事项
+    - 可继续把誓约扩展到：
+      - `禁术坛 / 契约页` 的誓约碎片与提前接触
+      - `图鉴 / 洞府` 的誓约收录与研究入口
+      - 更完整的章节化主线（6 章结构）与章名 / 天象展示
+      - 下一条纵切建议优先做 `灵契护道` 或 `新战略节点（观星台 / 灵契窟 / 禁术坛 / 炼器坊）`
+
+- 2026-03-13: 第九轮 V6.0 纵切（新战略节点首版）
+  - 本轮真实落地
+    - `js/core/map.js`
+      - 新增战略节点类型：
+        - `observatory / 观星台`
+        - `forbidden_altar / 禁术坛`
+        - `memory_rift / 记忆裂隙`
+      - 地图权重、保底、路线提示、图标、tooltip、路径协同奖励已接入上述节点。
+      - 新增“谋略节点保底 / 战斗稠密补偿 / 誓约与命格偏置”相关路线芯片。
+      - 修复地图同一重天内的结构刷新缺陷：
+        - 过去 `render()` 仅按 `realm` 做 in-place update，若同层节点布局已变，DOM 会沿用旧节点；
+        - 现增加 `node layout signature`，只有结构未变才走 `updateMapState()`，否则强制整张地图重建。
+    - `js/game.js`
+      - 新增战略节点共用能力：
+        - `finishStrategicNode`
+        - `grantFateRingExp`
+        - `draftStrategicCards`
+        - `showStrategicCardDraftModal`
+        - `getStrategicRouteForecasts`
+        - `getStrategicRouteForecast`
+        - `applyStrategicRouteForecast`
+        - `advanceRunDestinyTier`
+      - 新增节点玩法流：
+        - `showObservatoryNode`
+          - 预览下一重天环境与 Boss 倾向
+          - 锁定 `机缘补给线 / 试炼锋路`
+          - 校准高稀有奖励与宝踪风声
+        - `showForbiddenAltarNode`
+          - 血契夺卷
+          - 裂誓献祭
+          - 灾像供契
+        - `showForbiddenAltarVowDraft`
+          - 以生命代价直接立誓 / 升阶
+        - `showMemoryRiftNode`
+          - 命格升阶
+          - 构筑倾向残章 draft
+          - 锁定 `裂隙回响线`
+      - 新增事件弹窗激活助手：
+        - `resetModalPresentation`
+        - `activateModal`
+      - 修复战略节点弹窗被历史内联样式卡死的问题：
+        - 在移动端审计与部分历史流程里，`.modal` 曾被写入 `display:none / visibility:hidden / pointer-events:none`
+        - 现战略节点与誓约相关事件弹窗在打开前会主动清理这些内联隐藏样式，避免出现“内容已生成但量出来 0x0”的假死状态
+    - `css/style.css`
+      - 新增三类战略节点视觉语法与 `route-strategic-pity` 芯片样式。
+    - 测试与审计
+      - 新增 `tests/sanity_strategic_node_system_checks.js`
+      - `tests/sanity_map_weight_checks.js` 更新为覆盖新节点与战略保底
+      - `tests/sanity_shop_strategy_system_checks.js` 更新为复用新的路线预测 helper
+      - `tests/browser_audit.mjs`
+        - 新增战略节点地图渲染断言
+        - 新增地图 / 战斗中的誓约与战略状态检查
+      - `tests/browser_feature_audit.mjs`
+        - 新增观星台 / 禁术坛 / 记忆裂隙端到端探针
+      - `tests/browser_mobile_layout_audit.mjs`
+        - 新增移动端观星台弹窗适配断言
+        - 改为 `safeScreenshot`，避免字体加载慢时因截图超时把通过断言误判成失败
+  - 本轮验证（全部通过）
+    - 语法检查：
+      - `node --check js/core/map.js` ✅
+      - `node --check js/game.js` ✅
+      - `node --check tests/browser_mobile_layout_audit.mjs` ✅
+    - Node:
+      - `node tests/sanity_strategic_node_system_checks.js` ✅
+      - `node tests/sanity_map_weight_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser:
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/strategic-node-browser-audit` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/strategic-node-feature-audit` ✅
+      - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/strategic-node-mobile-audit` ✅
+    - Playwright 客户端：
+      - `node --experimental-default-type=module /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#pvp-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/strategic-node-playwright` ✅
+      - 备注：
+        - 技能脚本当前是 ESM `.js`，在本仓库环境下需要加 `--experimental-default-type=module` 才能直接执行。
+    - 视觉复查：
+      - 已人工检查：
+        - `output/strategic-node-playwright/shot-0.png`
+        - `output/strategic-node-visual/map-strategic-nodes.png`
+        - `output/strategic-node-visual/observatory-modal.png`
+      - 结论：
+        - 战略节点在地图上可见且三种视觉语义区分清楚；
+        - 观星台弹窗桌面布局完整，4 个选项均可见；
+        - Playwright 客户端截图中的 PVP 界面无明显错位或遮挡。
+  - 当前状态
+    - 这条“新战略节点”纵切已闭环并绿测。
+    - 但 `6.0` 仍未整体完成，后续还需要继续做未落地的大块内容，不能对用户宣称已完工。
+  - 后续建议
+    - 下一条优先继续 `灵契护道`，把战略节点与构筑外成长再打通一层。
+    - 如果继续做地图向内容，可补：
+      - `灵契窟 / 炼器坊` 等剩余战略节点
+      - 更深层的路线预报 UI
+      - 与章节化主线、图鉴收录、章节天象叙事的联动
+
+- 2026-03-14: 第十轮 V6.0 纵切补完（试炼碑闭环 + 章节世界规则首版）
+  - 试炼碑浏览器审计闭环
+    - `tests/browser_feature_audit.mjs`
+      - 修复 `试炼碑` 探针对首回合敌方护甲的脆弱断言；
+      - 改为校验更稳定的真实生效信号：
+        - `activeTrial === 'oathMirror'`
+        - `trialName === '双誓并压'`
+        - `trialChallenge.conditions.noDamage === true`
+        - `trialChallenge.conditions.maxTurns === 5`
+        - `trialReward === 'law'`
+        - 敌方已注入 `vulnerable` 的试炼 debuff pattern
+    - 结果：
+      - `trial node upgrades into selectable challenge碑 and chosen affix package enters battle state` 已恢复通过。
+  - 章节世界规则首版真实落地
+    - `js/game.js`
+      - 新增 6 章章节档案与阶段逻辑：
+        - 第一章 `碎誓外域`
+        - 第二章 `炉海天阙`
+        - 第三章 `沉星古庭`
+        - 第四章 `悬镜深渊`
+        - 第五章 `血月禁庭`
+        - 第六章 `终焉命庭`
+      - 新增：
+        - `getChapterProfileCatalog`
+        - `getChapterProfileForRealm`
+        - `getChapterDisplaySnapshot`
+      - `renderGameToText()` 新增：
+        - `map.chapter`
+        - `battle.chapterRules`
+      - `updateRealmPreview()` 升级为章节化关卡预览：
+        - 新增 `章节脉络`
+        - 新增 `顺势建议`
+        - 展示：
+          - 章节名
+          - 当前阶段（前段 / 中段 / 末段）
+          - 天象 / 地脉
+          - 推荐命格 / 灵契 / 誓约
+          - 当前构筑是否顺势
+      - `endless` 预览补充“无固定章节”说明，避免把章节逻辑误套到无尽轮回。
+    - `index.html`
+      - 天域预览面板新增：
+        - `#preview-chapter`
+        - `#preview-build`
+    - `js/core/map.js`
+      - 地图头部新增 `#map-chapter-brief`
+      - 新增 `updateChapterBriefPanel()`
+      - 地图页现可展示：
+        - 章节名
+        - 当前阶段
+        - 天象 / 地脉规则
+        - 主宰传闻
+        - 当前前路异象（特殊节点预警）
+    - `js/core/battle.js`
+      - 战斗顶部 `battle-environment` 现整合：
+        - `章节`
+        - `天象`
+        - `地脉`
+        - 原有 `遭遇`
+        - 原有 `敌阵`
+      - tooltip 同步串联章节说明，战斗 HUD 开始满足“当前章节世界规则可读”要求。
+    - `css/style.css`
+      - 新增章节预览 tag / stage pill / rule line 样式
+      - 新增地图章节卡样式
+      - 新增战斗章节 chip（chapter / omen / leyline）样式
+    - `css/mobile.css`
+      - 补强奖励页移动端单列布局，修复 `browser_meta_screen_audit` 揪出的历史回归：
+        - `reward-layout` 强制单列
+        - `reward-main-column / reward-side-column` 收束为单栏
+        - 奖励卡片在 390px 视口内缩放与居中
+  - 测试与审计
+    - 新增：
+      - `tests/sanity_chapter_world_rule_checks.js`
+    - 更新：
+      - `tests/run_node_checks.sh`
+      - `tests/browser_audit.mjs`
+      - `tests/browser_feature_audit.mjs`
+  - 本轮验证（全部通过）
+    - 语法检查：
+      - `node --check js/game.js` ✅
+      - `node --check js/core/map.js` ✅
+      - `node --check js/core/battle.js` ✅
+      - `node --check tests/browser_audit.mjs` ✅
+      - `node --check tests/browser_feature_audit.mjs` ✅
+      - `node --check tests/sanity_chapter_world_rule_checks.js` ✅
+    - Node:
+      - `node tests/sanity_chapter_world_rule_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - Browser:
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/trial-feature-audit` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/trial-browser-audit` ✅
+      - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/trial-mobile-audit-rerun` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/chapter-browser-audit` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/chapter-feature-audit` ✅
+      - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/chapter-mobile-audit` ✅
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/chapter-meta-audit-rerun` ✅
+    - Playwright 客户端：
+      - `node --experimental-default-type=module /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#pvp-btn' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/chapter-playwright` ✅
+    - 视觉复查：
+      - 已人工检查：
+        - `output/chapter-meta-audit/reward-layout-mobile.png`
+        - `output/chapter-playwright/shot-1.png`
+      - 结论：
+        - 奖励页移动端已回到真正单列，不再左右双栏挤压；
+        - Playwright 烟测截图中的 PVP 页面仍保持稳定，无明显错位。
+  - 当前状态
+    - `试炼碑` 纵切已彻底闭环并绿测。
+    - `章节世界规则 / 主线章节重构` 已完成第一条真实可玩纵切：
+      - 关卡预览可读
+      - 地图章节卡可读
+      - 战斗 HUD 章节规则可读
+    - 但 `V6.0` 仍未整体完成，后续仍需继续补：
+      - 洞府经营
+      - 图鉴 2.0 / 藏经阁
+      - 更深的灵契局外收集与研究
+      - 周挑战 / 赛季化长线
+
+- 2026-03-14: 第十一轮 V6.0 进展补档（周挑战闭环 + 挑战横幅回灌修复）
+  - 已完成内容
+    - `js/core/challenge_hub.js`
+      - 观星台正式接入 `今日天机 / 七日劫数 / 众生试炼` 三类轮换挑战。
+      - 新增挑战 Hub、固定角色 / 命格 / 灵契锁定开局、运行中挑战横幅与里程碑领奖逻辑。
+      - 地图页的挑战横幅回灌链路已稳定：从主菜单进挑战、锁定命盘、开局跳地图、横幅持续显示，流程完整可跑。
+    - `index.html` / `css/style.css` / `css/mobile.css`
+      - 新增挑战页结构、主菜单观星摘要卡、挑战横幅与移动端适配样式。
+    - `tests`
+      - 新增 `tests/browser_challenge_audit.mjs`
+      - 新增 / 更新 `tests/sanity_weekly_challenge_checks.js`
+      - 浏览器审计已覆盖：
+        - 挑战 Hub 打开
+        - 固定命盘开局
+        - 地图挑战横幅可见
+        - 手机端挑战页可读
+  - 已验证证据
+    - `node tests/browser_challenge_audit.mjs http://127.0.0.1:4173 output/browser-challenge-audit-local` ✅
+    - `bash tests/run_node_checks.sh` ✅
+    - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-v6-boss-memory` ✅
+    - 视觉复查：
+      - `output/browser-challenge-audit-local/challenge-map-banner.png`
+      - `output/challenge-hub-playwright-final/shot-0.png`
+  - 当前状态
+    - 观星台不再只是“路线提示节点”，已经拥有真实的周挑战入口与地图内持续挑战态。
+
+- 2026-03-14: 第十二轮 V6.0 进展补档（敌影档案 + 洞府总览 / 伏魔台情报扩展）
+  - 已完成内容
+    - `js/core/collection_hub.js`
+      - 新增 `敌影档案 / Boss 档案 / 章节档案 / 灵契图鉴 / 构筑快照 / 洞府总览` 六大页签骨架。
+      - 伏魔台情报层已扩展到：
+        - 敌影战术画像
+        - Boss 风险等级
+        - 反制法宝
+        - 破局窗口
+      - 洞府总览已接入：
+        - 房间总览
+        - 研究项
+        - 可领取目标
+        - 最近解锁记录
+    - `tests`
+      - 新增 `tests/sanity_enemy_codex_checks.js`
+      - 新增 / 更新 `tests/sanity_codex_sanctum_checks.js`
+      - 更新 `tests/browser_meta_screen_audit.mjs`
+  - 已验证证据
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/meta-screen-audit-enemy-codex` ✅
+    - `bash tests/run_node_checks.sh` ✅
+    - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-v6-boss-memory` ✅
+    - 视觉复查：
+      - `output/meta-screen-audit-enemy-codex/enemy-codex-layout.png`
+      - `output/meta-screen-audit-enemy-codex/sanctum-layout.png`
+  - 当前状态
+    - `藏经阁 / 洞府 / 伏魔台` 已形成第一版可查、可读、可跳转的情报中枢，不再只停留在主流程外的占位入口。
+
+- 2026-03-14: 第十三轮 V6.0 进展补档（伏魔台首个真正可玩入口：Boss 记忆战）
+  - 已完成内容
+    - `js/core/collection_hub.js`
+      - 新增 Boss 记忆战持久化与沙盒流程：
+        - `loadBossMemoryRecords`
+        - `persistBossMemoryRecords`
+        - `getBossMemoryRecord`
+        - `recordBossMemoryResult`
+        - `buildRuntimeSaveSnapshot`
+        - `captureBossMemorySession`
+        - `restoreBossMemorySession`
+        - `startBossMemoryBattle`
+        - `finishBossMemoryBattle`
+      - `Game.prototype.onBattleWon / onBattleLost` 已接通 `boss_memory` 分支：
+        - 记忆战不会污染主线存档
+        - 结算后会返回 Boss 档案
+        - 会沉淀试作次数、首胜与最快轮次
+      - Boss 档案详情区新增：
+        - 记忆战状态
+        - 尝试次数
+        - 最快回合
+        - `发起记忆战` CTA
+      - 洞府总览进度新增：
+        - `clearedBossMemories`
+        - `totalBossMemoryAttempts`
+        - `memory_duel`
+    - `css/style.css`
+      - 新增 Boss 记忆战详情按钮组与状态卡样式。
+    - `tests`
+      - 新增 `tests/sanity_boss_memory_battle_checks.js`
+      - 更新 `tests/sanity_codex_sanctum_checks.js`
+      - 更新 `tests/browser_meta_screen_audit.mjs`
+      - 更新 `tests/run_node_checks.sh`
+  - 已验证证据
+    - `node tests/sanity_boss_memory_battle_checks.js` ✅
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/meta-screen-audit-boss-memory` ✅
+    - `bash tests/run_node_checks.sh` ✅
+    - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-v6-boss-memory` ✅
+    - `node --experimental-default-type=module /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector '#main-menu.active .util-btn[onclick="game.showCollection()"]' --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/boss-memory-playwright` ✅
+    - 视觉复查：
+      - `output/meta-screen-audit-boss-memory/boss-archive-layout.png`
+      - `output/boss-memory-playwright/shot-0.png`
+      - `output/boss-memory-playwright/shot-1.png`
+  - 当前状态
+    - `伏魔台` 已经从情报房间升级为真正可玩的局外入口。
+    - 但 `V6.0` 仍未整体完成，下一条继续优先推进 `观星台深化 / 观星留痕 / 命盘回放`。
+
+- 2026-03-14: 第十四轮 V6.0 纵切（观星台深化：观星留痕 + 命盘回放）
+  - 目标
+    - 把观星台从“当前轮换入口”继续推进为“可沉淀、可复盘、可回放”的系统：
+      - 命盘签可见
+      - 挑战完成后会留下观星留痕
+      - 历史命盘可直接回放
+      - 回放不污染正式轮换奖励与积分
+  - 实装内容
+    - `js/core/challenge_hub.js`
+      - 新增观星归档存储：
+        - `theDefierObservatoryArchiveV1`
+        - `normalizeObservatoryArchiveState`
+        - `loadObservatoryArchiveState`
+        - `persistObservatoryArchiveState`
+        - `recordObservatoryArchiveEntry`
+        - `getObservatoryArchiveEntries`
+        - `getObservatoryArchiveSummary`
+      - 新增命盘签能力：
+        - `buildChallengeSeedSignature`
+        - 当前 `daily / weekly / global` 轮换都会生成固定命盘签
+      - 新增可回放命盘构建：
+        - `buildReplayBundleFromArchiveEntry`
+        - `beginObservatoryReplay`
+      - 运行中挑战状态扩展：
+        - `pendingChallengeStart` / `activeChallengeRun` 现在会携带
+          - `seedSignature`
+          - `replayOnly`
+          - `archiveEntryId`
+          - `bundleSnapshot`
+      - 挑战完成链路升级：
+        - 正式挑战完成后：
+          - 仍写正式积分 / 奖励进度
+          - 额外写入 `观星留痕`
+        - 命盘回放完成后：
+          - 只写观星留痕与回放结果
+          - 不写正式挑战进度
+          - 不污染当前轮换奖励
+      - `finishStrategicNode` 现拦截 `observatory` 节点：
+        - 观星台路线/战利选择会写入洞府最近解锁与观星留痕库
+      - Challenge Hub UI 升级：
+        - 概览卡新增 `命盘签`
+        - `近期留痕` 区拆分为：
+          - 当前轮换记录
+          - 观星留痕（含 `复盘命盘` 按钮）
+        - 侧栏新增 `回放档案` 摘要卡
+      - 地图挑战横幅升级：
+        - 运行中会显示命盘签
+        - 回放态会显示 `观星回放 · 不计奖励`
+      - `renderGameToText()` 扩展：
+        - `challenge.pending.replayOnly`
+        - `challenge.pending.seedSignature`
+        - `challenge.activeRun.replayOnly`
+        - `challenge.activeRun.seedSignature`
+        - `challenge.hub.seedSignature`
+        - `challenge.archive.*`
+    - `js/core/collection_hub.js`
+      - 洞府研究按钮支持 `actionType: challenge`
+      - 洞府总览新增观星统计透出：
+        - `观星留痕`
+        - `观星留痕：X 条归档 / Y 次回放`
+      - 洞府说明增加“命盘签 / 留痕 / 回放”用途说明
+    - `css/style.css`
+      - 新增命盘签、观星留痕分组、回放操作区样式
+      - 补强移动端记录条纵向布局，避免回放按钮与留痕信息挤压
+    - `tests`
+      - 新增 `tests/sanity_observatory_archive_checks.js`
+      - 更新 `tests/browser_challenge_audit.mjs`
+      - 更新 `tests/browser_meta_screen_audit.mjs`
+      - 更新 `tests/run_node_checks.sh`
+  - 本轮验证（全部通过）
+    - 语法检查：
+      - `node --check js/core/challenge_hub.js` ✅
+      - `node --check js/core/collection_hub.js` ✅
+      - `node --check tests/sanity_observatory_archive_checks.js` ✅
+      - `node --check tests/browser_challenge_audit.mjs` ✅
+      - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - 定向 Node:
+      - `node tests/sanity_weekly_challenge_checks.js` ✅
+      - `node tests/sanity_observatory_archive_checks.js` ✅
+      - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - 定向 Browser:
+      - `node tests/browser_challenge_audit.mjs http://127.0.0.1:4173 output/browser-challenge-audit-observatory` ✅
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/meta-screen-audit-observatory` ✅
+    - 全量 Node:
+      - `bash tests/run_node_checks.sh` ✅
+    - 全量 Browser release:
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-v6-observatory-replay` ✅
+      - 结尾确认：`[release-checks] All browser release audits passed.` ✅
+    - Playwright 客户端冒烟：
+      - `node --experimental-default-type=module /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector "button[onclick=\"game.showChallengeHub('daily')\"]" --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/observatory-replay-playwright` ✅
+    - 视觉复查：
+      - 已人工检查：
+        - `output/observatory-replay-playwright/shot-1.png`
+        - `output/browser-challenge-audit-observatory/challenge-archive-replay.png`
+        - `output/browser-challenge-audit-observatory/challenge-replay-banner.png`
+      - 结论：
+        - 命盘签在观星台与地图横幅中都可见；
+        - 观星留痕列表已形成“当前记录 + 可回放命盘”双层结构；
+        - 回放态横幅能明确提示“不计奖励”，视觉上不再与正式挑战混淆。
+  - 当前状态
+    - `观星台` 已从“周挑战入口”升级为具备留痕与回放能力的中枢房间。
+    - `V6.0` 仍未整体完成，但这条纵切已经完整闭环，可继续推进下一轮：
+      - 炼器室深化 / 器灵与套装研究
+      - 洞府房间继续从“情报入口”升级成“可玩入口”
+      - 更深层的章节长线、洞府经营与局外研究
+
+- 2026-03-14: `V6.0` 纵切继续推进：炼器室深化 / 器灵与套装研究
+  - 本轮目标
+    - 把 `6.3 法宝炼器与器灵灌注` 从“战内有功能、局外难读懂”推进到真正可研究、可验证、可从洞府进入的完整系统。
+    - 对齐需求点：
+      - 第四套完整套装
+      - 器灵灌注只服务少量核心件
+      - 法宝图鉴展示套装关系、来源、适配流派、当前炼器状态
+      - 洞府炼器室从跳转入口升级为研究入口
+  - 设计决定
+    - 选择把“五行法宝群”正式编入第四套 `五行` 套装，而不是再临时造一批孤立新法宝：
+      - `metalEssence`
+      - `woodSpiritRoot`
+      - `waterCrystal`
+      - `firePhoenixFeather`
+      - `thickEarthShield`
+      - `five_element_bead`
+    - 将器灵灌注收束到少量 `核心件`，并同步给法宝定义 `核心件 / 形态件 / 基础件` 研究层：
+      - 核心件承担器灵位与体系上限
+      - 形态件负责改写节奏与触发方式
+      - 基础件作为早期补强与过渡
+    - 继续复用已有 `炼器坊` 战内入口，不做高风险大拆；把主要体验升级放在：
+      - `player.js` 的研究元数据与运行时规则
+      - `法宝图鉴 / 法宝详情`
+      - `洞府 sanctum` 的炼器室、研究项与进度摘要
+  - 实装内容
+    - `js/data/treasures.js`
+      - 五行法宝正式获得 `setTag: 'wuxing'`
+      - `five_element_bead` 并入 `五行` 套装
+    - `js/core/player.js`
+      - 新增法宝研究元数据接口：
+        - `getTreasureSetMeta()`
+        - `getTreasureResearchRoleMeta()`
+        - `getTreasureResearchArchetypeTags()`
+        - `getTreasureResearchEntry()`
+        - `getTreasureWorkshopResearchOverview()`
+      - 新增器灵资格判断：
+        - `isTreasureSpiritInfusionEligible()`
+        - 仅核心件可灌注，非核心件会被拒绝
+      - 新增炼器研究辅助输出：
+        - `describeTreasureWorkshopStatus()`
+        - `getTreasureWorkshopStatusLines()`
+        - `getTreasureSpiritInfusionNote()`
+      - 新增第四套套装 `五行` 的 2 件 / 3 件效果：
+        - 2 件：回合开始净化 1 层减益；若无减益则获得 3 护盾
+        - 3 件：若本回合完成净化则抽 1；否则获得 1 灵力
+      - 新增第四条重铸分支 `harmony / 五行重铸`
+        - 回合开始净化 1 层减益；若无减益则获得 3 护盾
+      - `getTreasureWorkshopSnapshot()` 现同步输出：
+        - `setTheme`
+        - `setPieces`
+        - `researchTier`
+        - `researchLabel`
+        - `focusTags`
+        - `infusionEligible`
+        - `workshopStatus`
+    - `js/game.js`
+      - `renderGameToText()` 新增 `player.treasureResearch`
+      - 法宝图鉴主区卡片新增研究副标题：
+        - 核心件 / 形态件 / 基础件
+        - 套装归属
+      - 法宝图鉴右侧新增 `炼器研究` 卡：
+        - 四套套装收录与当前共鸣状态
+        - 核心件 / 形态件计数
+        - 当前重铸 / 器灵 / 套装修正统计
+        - 待灌注核心件提示
+      - 法宝详情弹层新增：
+        - 研究定位 chip
+        - 套装归属 chip
+        - 器灵灌注资格 chip
+        - `套装关系`
+        - `适配流派`
+        - `炼器研究`
+      - 炼器坊 `showForgeChoiceModal()` / `showForgeTreasureDraft()` 更新：
+        - 器灵灌注只在已装备核心件时可选
+        - 候选列表只显示核心件
+        - 候选卡面补充适配流派提示
+    - `js/core/collection_hub.js`
+      - 洞府进度快照新增炼器统计：
+        - 核心件 / 形态件收录
+        - 炼器铭刻总数
+        - 二段 / 三段套装共鸣数
+      - `炼器室` 房间说明改为动态总结当前铭刻与套装共鸣
+      - 洞府新增炼器研究项：
+        - `炼器总谱`
+        - `套装共鸣索引`
+        - `器灵灌注锚点`
+      - 洞府研究按钮 / fallback goal 支持 `actionType: treasure`
+      - 洞府概览 / 进度 / 使用建议新增炼器研究透出
+    - `index.html`
+      - 法宝图鉴侧栏新增 `treasure-compendium-research`
+      - 法宝详情右栏新增研究 chip 与三张研究信息卡
+    - `css/style.css`
+      - 新增图鉴研究副标题 / badge 样式
+      - 新增套装研究卡片样式
+      - 新增详情研究 chip 的 `research / eligible / muted` 状态样式
+      - 移动端下研究卡改为单列，避免窄屏拥挤
+    - `tests`
+      - 更新 `tests/sanity_forge_workshop_checks.js`
+        - 核心件灌注限制
+        - 五行重铸
+        - 五行三件套调序收益
+        - 炼器研究总览
+      - 更新 `tests/sanity_codex_sanctum_checks.js`
+        - 洞府炼器室研究项
+        - 炼器研究进度字段
+      - 更新 `tests/browser_meta_screen_audit.mjs`
+        - 洞府炼器统计可见
+        - 法宝图鉴研究卡可见
+        - 法宝详情研究信息可见
+  - 本轮验证（全部通过）
+    - 语法检查：
+      - `node --check js/core/player.js` ✅
+      - `node --check js/game.js` ✅
+      - `node --check js/core/collection_hub.js` ✅
+      - `node --check tests/sanity_forge_workshop_checks.js` ✅
+      - `node --check tests/sanity_codex_sanctum_checks.js` ✅
+      - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - 定向 Node：
+      - `node tests/sanity_forge_workshop_checks.js` ✅
+      - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - 定向 Browser：
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/meta-screen-audit-forge-research` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/browser-feature-audit-forge-research` ✅
+    - 全量 Node：
+      - `bash tests/run_node_checks.sh` ✅
+    - 全量 Browser release：
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-v6-forge-research` ✅
+      - 结尾确认：`[release-checks] All browser release audits passed.` ✅
+    - Playwright 客户端冒烟：
+      - `node --experimental-default-type=module /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector "button[onclick=\"game.showTreasureCompendium()\"]" --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/forge-research-playwright` ✅
+    - 视觉复查：
+      - 已人工检查：
+        - `output/forge-research-playwright/shot-1.png`
+        - `output/meta-screen-audit-forge-research/treasure-compendium-layout.png`
+        - `output/meta-screen-audit-forge-research/treasure-detail-layout.png`
+      - 结论：
+        - 法宝图鉴主区已出现“研究定位 + 套装归属”信息，不再只是纯图标墙；
+        - 右侧 `炼器研究` 卡能清楚展示四套套装与当前核心件进度；
+        - 详情弹层已能一次性读到来源、套装、流派适配与当前炼器状态。
+  - 当前状态
+    - `炼器室` 已从“法宝图鉴入口”升级为可承载 `套装 / 核心件 / 器灵灌注` 研究语义的中枢房间。
+    - `6.3 法宝炼器与器灵灌注` 这一条纵切已形成完整闭环。
+    - `V6.0` 仍未整体完成，下一条最自然的延续建议：
+      - `6.4 战场系统：天象 / 地脉 / 阵面` 深化
+      - 洞府继续从研究入口扩成更强的局外经营层
+      - 章节长线与战场可读性继续做统一视觉语法
+
+- 2026-03-14: 第九轮 V6.0 深化（6.4 战场系统：天象 / 地脉 / 阵面 运行时实装）
+  - 本轮目标
+    - 把章节 `天象 / 地脉 / 阵面` 从“地图预告 + 战斗标签”推进为真实的战斗内规则。
+    - 先完成一个低风险但完整的纵切：至少 `3` 章拥有明确阵面差异，并把当前轮段 / 地脉抓手 / 阵核状态同步到 HUD 与 `renderGameToText()`。
+  - 设计取舍
+    - 不重写原有 `REALM_ENVIRONMENTS / encounter theme / squad ecology`，而是在其上叠一层 `章节战场规则`，降低回归风险。
+    - 先集中深化 `第1 / 3 / 5章`：
+      - 第 `1` 章：`裂誓抢势 / 余烬迫命 / 裂誓锋阵`
+      - 第 `3` 章：`伏星蓄势 / 轮转定轨 / 沉星链阵`
+      - 第 `5` 章：`血月渐盛 / 血月暴鸣 / 血祭阵眼`
+    - 让“阵面”真正改变目标优先级：
+      - 第 `1` 章：命中锋核转护势，拆核后全队失势
+      - 第 `3` 章：首拍若不打星核，星核会回护；先手拆核可抽牌
+      - 第 `5` 章：压中祭眼可回生，拆眼后回能并放大收尾
+  - 代码实现
+    - `js/core/battle.js`
+      - 新增章节战场规则运行时：
+        - `activeChapterBattlefield`
+        - `resolveChapterBattlefieldProfile()`
+        - `initializeChapterBattlefieldRules()`
+        - `applyChapterBattlefieldTurnStart()`
+        - `applyChapterBattlefieldPlayerDamageModifiers()`
+        - `handleChapterBattlefieldEnemyDamaged()`
+        - `handleChapterBattlefieldEnemyKilled()`
+        - `handleChapterBattlefieldPlayerDamaged()`
+        - `handleChapterBattlefieldCardPlayed()`
+        - `getChapterBattlefieldDisplayState()`
+      - 章节规则已正式接入战斗生命周期：
+        - 战斗开始初始化章节地脉与阵面
+        - 玩家回合开始结算天象轮段
+        - 出牌过程结算 `星律地脉` 的“三连成势”
+        - 伤害结算会读章节低血增伤 / 阵核命中收益
+        - 受击结算会读 `血月禁庭` 的狂脉回护
+      - 战术助手 `formationHint` 现会额外吸纳章节轮段 / 地脉抓手提示
+      - 战斗环境条新增：
+        - 天象轮段副标签
+        - 地脉抓手副标签
+        - `阵面` chip（显示阵核状态或未成阵）
+    - `js/core/utils.js`
+      - 敌人信息条新增章节阵面 tag：
+        - `⌘ 阵面·星链·链卫`
+        - `⌘ 阵面·锋阵·锋核`
+        - `⌘ 阵面·血祭·祭眼`
+      - Tooltip 现会带出阵面信息，保证敌方卡片与顶栏语义一致
+    - `js/game.js`
+      - `renderGameToText()` 新增 `battle.chapterBattlefield`
+      - 输出当前章节轮段、地脉抓手、阵面状态与阵核名称，便于自动化验证与无画面调试
+    - `css/style.css`
+      - 新增 `chapter-formation-chip`
+      - 新增 `enemy-formation-tag`
+      - 统一 `chapter-rule-stage` 在 `天象 / 地脉 / 阵面` 三类 chip 上的副标签表现
+    - `css/battle-hud.css`
+      - 敌方 meta strip 接入 `enemy-formation-tag`，兼容桌面与移动端换行密度
+    - `tests`
+      - 新增 `tests/sanity_chapter_battlefield_runtime_checks.js`
+        - 覆盖第 `1 / 3 / 5` 章的天象、地脉、阵核收益与破阵反馈
+      - `tests/run_node_checks.sh` 已纳入新断言
+      - `tests/browser_feature_audit.mjs` 新增章节战场实装探针：
+        - 环境条出现 `阵面`
+        - 敌人卡出现 `enemy-formation-tag`
+        - `render_game_to_text` 输出 `battle.chapterBattlefield`
+  - 本轮验证（全部通过）
+    - 语法检查：
+      - `node --check js/core/battle.js` ✅
+      - `node --check js/core/utils.js` ✅
+      - `node --check js/game.js` ✅
+    - 定向 Node：
+      - `node tests/sanity_chapter_battlefield_runtime_checks.js` ✅
+      - `node tests/sanity_chapter_world_rule_checks.js` ✅
+      - `node tests/sanity_battle_variation_checks.js` ✅
+    - 定向 Browser：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/browser-feature-audit-chapter-battlefield` ✅
+    - 全量 Node：
+      - `bash tests/run_node_checks.sh` ✅
+    - 全量 Browser release：
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-v6-chapter-battlefield` ✅
+      - 结尾确认：`[release-checks] All browser release audits passed.` ✅
+    - 官方 Playwright 客户端：
+      - `node --experimental-default-type=module /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector "#pvp-btn" --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/chapter-battlefield-playwright` ✅
+    - 视觉复查：
+      - 已人工检查：
+        - `output/chapter-battlefield-battle-visual.png`
+        - `output/chapter-battlefield-playwright/shot-1.png`
+      - 结论：
+        - 战斗顶栏已能同时读到 `章节 / 天象轮段 / 地脉抓手 / 阵面 / 遭遇 / 敌阵`
+        - 第 `3` 章合成战斗中，`沉星链阵` chip 与敌方 `阵面·星链` 标签在视觉上对应清晰
+        - 阵核说明不再只埋在 tooltip 或日志里，玩家能直接从战场读出“先打谁”
+  - 当前状态
+    - `6.4 战场系统：天象 / 地脉 / 阵面` 已从“展示层”推进到真实的运行时层，且已先在 `3` 个章节形成差异化打法。
+    - `V6.0` 仍未整体完成。
+    - 下一条最自然的延续建议：
+      - 继续补完第 `2 / 4 / 6` 章的章节战场规则
+      - 把章节战场规则奖励 / 复盘进一步并入洞府与章节档案
+      - 继续推进 `6.5 战斗可读性`，把命格 / 誓约 / 灵契 / 套装信息也统一收进同一战斗语法
+
+- 2026-03-14: `6.4 战场系统` 第二轮扩展（第 `2 / 4 / 6` 章运行时补完）
+  - 本轮目标
+    - 把章节战场规则从已落地的第 `1 / 3 / 5` 章继续扩展到剩余章节，形成完整的 `6` 章战场语法骨架。
+    - 继续坚持“真实运行时 + 自动化验证 + 视觉复查”的闭环，不做纯文案占位。
+  - 代码实现
+    - `js/core/battle.js`
+      - `resolveChapterBattlefieldProfile()` 新增：
+        - 第 `2` 章 `炉海天阙`
+          - 天象轮段：`炉压逼铸 / 淬潮回锻`
+          - 地脉抓手：厚盾反锻
+          - 阵面：`淬炉钳阵`
+        - 第 `4` 章 `悬镜深渊`
+          - 天象轮段：`镜潮照骨 / 幻咒回照`
+          - 地脉抓手：幻咒回波
+          - 阵面：`悬镜折阵`
+        - 第 `6` 章 `终焉命庭`
+          - 动态天象轮段：`命庭追问 / 终律补题 / 万象同判`
+          - 动态地脉抓手：`终章合式·X轴`
+          - 阵面：`终律衡阵`
+      - 新增章节战场辅助计算：
+        - `getChapterBattlefieldDebuffKeys()`
+        - `getChapterBattlefieldLoadedLawCount()`
+        - `getChapterBattlefieldActiveVowCount()`
+        - `getChapterBattlefieldSynergyState()`
+        - `refreshChapterBattlefieldState()`
+      - 新增阵核选择策略：
+        - `highestHp`
+        - `hexerBackline`
+      - 章节规则已接入并真实生效的运行时钩子：
+        - 玩家回合开始 `applyChapterBattlefieldTurnStart()`
+        - 出牌后 `handleChapterBattlefieldCardPlayed()`
+        - 玩家对敌伤害修正 `applyChapterBattlefieldPlayerDamageModifiers()`
+        - 命中敌人 `handleChapterBattlefieldEnemyDamaged()`
+        - 击杀阵核 `handleChapterBattlefieldEnemyKilled()`
+        - 玩家受击 `handleChapterBattlefieldPlayerDamaged()`
+      - 各章打法差异摘要：
+        - 第 `2` 章：
+          - 护盾会回铸为伤害
+          - 受击后反锻下一拍
+          - 先打错目标会给 `炉锚` 返铸更多护盾
+        - 第 `4` 章：
+          - 净化 / 借咒 / 镜返形成循环收益
+          - 先碰错目标会把 `镜心` 翻成反照态（`reflect`）
+          - 命中镜心可净化减益或回收手牌节奏
+        - 第 `6` 章：
+          - 正式读取 `命格 / 誓约 / 法则 / 法宝 / 灵契`
+          - 把多系统协同汇总为 `synergy.axes`
+          - 天象、地脉、阵面都会随多轴完整度动态变化
+      - `getChapterBattlefieldDisplayState()` 现新增 `synergy`
+        - 输出 `axes / vowCount / lawCount / treasureCount / activeSets / spiritActive / destinyActive`
+        - `render_game_to_text()` 将随之带出终章多轴状态，便于自动化验证
+    - `tests/sanity_chapter_battlefield_runtime_checks.js`
+      - 扩展覆盖章节：
+        - 第 `2` 章：高护盾增伤、受击反锻、钳阵返铸、拆炉锚后清护盾
+        - 第 `4` 章：净化型天象、减益转伤、镜心反照、拆镜后残敌易伤
+        - 第 `6` 章：`5` 轴协同、`万象同判`、终章增伤/回护/抽牌、终审破阵奖励
+    - `tests/browser_feature_audit.mjs`
+      - 新增终章浏览器探针：
+        - 环境条出现 `终章合式·5轴`
+        - 天象轮段显示 `万象同判`
+        - 敌方卡出现 `⌘ 阵面·终律·终审`
+        - `render_game_to_text` 输出 `battle.chapterBattlefield.synergy.axes === 5`
+  - 本轮验证（全部通过）
+    - 语法检查：
+      - `node --check js/core/battle.js` ✅
+      - `node --check tests/sanity_chapter_battlefield_runtime_checks.js` ✅
+      - `node --check tests/browser_feature_audit.mjs` ✅
+    - 定向 Node：
+      - `node tests/sanity_chapter_battlefield_runtime_checks.js` ✅
+      - `node tests/sanity_chapter_world_rule_checks.js` ✅
+      - `node tests/sanity_battle_variation_checks.js` ✅
+    - 定向 Browser：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/browser-feature-audit-v6-chapter-battlefield-246` ✅
+      - 代码整理后复跑：
+        - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/browser-feature-audit-v6-chapter-battlefield-246-rerun` ✅
+    - 全量 Node：
+      - `bash tests/run_node_checks.sh` ✅
+    - 全量 Browser release：
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-v6-chapter-battlefield-246` ✅
+      - 结尾确认：`[release-checks] All browser release audits passed.` ✅
+    - 官方 Playwright 客户端：
+      - `node --experimental-default-type=module /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector "#new-game-btn" --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/v6-chapter-battlefield-246-playwright` ✅
+  - 视觉复查
+    - 已人工检查：
+      - `output/release-browser-audits-v6-chapter-battlefield-246/core/03-battle.png`
+      - `output/chapter6-final-battlefield-visual.png`
+      - `output/v6-chapter-battlefield-246-playwright/shot-1.png`
+    - 结论：
+      - 通用战斗顶栏已稳定容纳 `章节 / 天象 / 地脉 / 阵面 / 遭遇 / 敌阵`
+      - 终章合成战斗中，`终章合式·5轴`、`万象同判` 与 `终律衡阵` 可同时被看见
+      - 敌方 `终审 / 律从` 的阵面标签已落到敌人卡片，不再只藏在日志或文本状态里
+  - 当前状态
+    - `6.4 战场系统：天象 / 地脉 / 阵面` 现在已覆盖 `6` 章，并完成真实运行时接入与大回归。
+    - `V6.0` 仍未整体完成。
+    - 下一条最自然的延续建议：
+      - 开始推进 `6.5 战斗可读性`
+      - 把 `命格 / 誓约 / 灵契 / 法宝套装激活数 / 法则编织组合` 也统一收进战斗 HUD 与 `render_game_to_text`
+      - 继续做“高系统密度战斗”下的信息层优先级与移动端密度治理
+
+- 2026-03-14: V6.0 `6.5 战斗可读性` 完成一轮真实实现与全量回归
+  - 本轮目标
+    - 把 `命格 / 誓约 / 灵契 / 当前章节天象 / 地脉 / 当前法则编织组合 / 当前法宝套装激活数` 从零散状态提示，升级为统一的战斗 HUD 中层系统信息层。
+    - 让 UI 展示与 `render_game_to_text()` 使用同一套标准化数据，避免视觉层与自动化层脱节。
+  - 代码实现
+    - `js/core/battle.js`
+      - 新增战斗系统可读性快照：
+        - `getBattleHudLoadedLawMetas()`
+        - `getBattleHudActiveLawResonances()`
+        - `getBattleHudTreasureSetState()`
+        - `getBattleSystemDisplayState()`
+      - `updateBattleCommandUI()` 现把 `systems` 一并传给共享 HUD 模块，不再只渲染指令与战术助手。
+      - 新快照统一输出：
+        - `destiny`
+        - `vows`
+        - `spirit`
+        - `chapter`
+        - `lawWeave`
+        - `treasureSets`
+        - `stripItems`
+      - `stripItems` 固定覆盖 `6` 类中层系统项，即便当前系统为空也会显示“未定 / 无誓约 / 尚未装配 / 未装备”等占位状态，保证 HUD 信息位稳定。
+    - `js/ui/battle-hud.js`
+      - 新增共享 HUD 生成函数：
+        - `buildBattleSystemsStripMarkup()`
+        - `buildBattleSystemsDetailMarkup()`
+      - `buildBattleCommandPanelMarkup()` 现新增两层呈现：
+        - 常驻 `battle-system-strip`
+          - 放在战场指令按钮下方
+          - 即便战术助手折叠，也能持续看到 `6` 个系统位
+        - 展开态 `中层系统状态`
+          - 放在 `关键状态岛` 下方
+          - 用卡片化形式显示系统名称、当前值与简要细节
+    - `css/style.css`
+      - 新增：
+        - `battle-system-strip`
+        - `battle-system-chip`
+        - `battle-system-grid`
+        - `battle-system-card`
+      - 为 `fate / oath / spirit / chapter / resonance / treasure / warning / muted` 建立统一色调与边框规则。
+      - 在紧凑布局下补入新的字号缩放规则，避免新增系统块在窄屏挤爆。
+    - `js/game.js`
+      - `render_game_to_text()` 现新增：
+        - `battle.systemsHud`
+      - 自动化脚本现在可直接断言：
+        - `battle.systemsHud.stripItems`
+        - `battle.systemsHud.lawWeave`
+        - `battle.systemsHud.treasureSets`
+        - `battle.systemsHud.spirit / destiny / vows / chapter`
+  - 测试与审计更新
+    - `tests/sanity_battle_hud_module_checks.js`
+      - 增加对：
+        - `buildBattleSystemsStripMarkup()`
+        - `buildBattleSystemsDetailMarkup()`
+        - `battle-system-strip`
+        - `中层系统状态`
+      - 的模块级断言。
+    - `tests/sanity_battle_command_checks.js`
+      - 新增 `getBattleSystemDisplayState()` 运行时断言。
+      - 覆盖：
+        - 当前命格
+        - 誓约计数
+        - 灵契状态
+        - 法则编织组合（示例：`雷火崩坏`）
+        - 法宝套装激活数
+    - `tests/browser_feature_audit.mjs`
+      - 在战斗指令面板审计中新增：
+        - `battle-system-strip` 是否存在
+        - 是否稳定渲染 `6` 个系统位
+        - 是否包含 `destiny / vows / spirit / chapter / laws / treasures`
+        - `render_game_to_text().battle.systemsHud` 是否同步输出
+  - 本轮验证（全部通过）
+    - 语法检查：
+      - `node --check js/core/battle.js` ✅
+      - `node --check js/ui/battle-hud.js` ✅
+      - `node --check js/game.js` ✅
+      - `node --check tests/sanity_battle_hud_module_checks.js` ✅
+      - `node --check tests/sanity_battle_command_checks.js` ✅
+      - `node --check tests/browser_feature_audit.mjs` ✅
+    - 定向 Node：
+      - `node tests/sanity_battle_hud_module_checks.js` ✅
+      - `node tests/sanity_battle_command_checks.js` ✅
+    - 定向 Browser：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/browser-feature-audit-v6-battle-readability` ✅
+    - 官方 Playwright 客户端：
+      - `node --experimental-default-type=module /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --click-selector "#new-game-btn" --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/v6-battle-readability-playwright` ✅
+      - 说明：
+        - 本次客户端冒烟仍会先落到“未登录是否同步”确认弹窗，因此战斗内视觉核对以 `browser_feature_audit` 与 release 审计截图为准。
+    - 全量 Node：
+      - `bash tests/run_node_checks.sh` ✅
+      - 结尾确认：`All node checks passed.` ✅
+    - 全量 Browser release：
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-v6-battle-readability` ✅
+      - 结尾确认：`[release-checks] All browser release audits passed.` ✅
+  - 视觉复查
+    - 已人工检查：
+      - `output/release-browser-audits-v6-battle-readability/core/03-battle.png`
+      - `output/browser-feature-audit-v6-battle-readability/feature-audit-compact-hand.png`
+      - `output/browser-feature-audit-v6-battle-readability/feature-audit.png`
+    - 结论：
+      - 常驻左侧指令面板现已稳定容纳 `命格 / 誓约 / 灵契 / 天象地脉 / 法则编织 / 法宝套装` 六个系统位。
+      - 即便战术助手折叠，中层系统信息仍保留在 `battle-system-strip` 中，不会再次退化为“展开后才知道当前 build 状态”。
+      - 桌面布局下系统带没有压到 Boss 三幕板、敌方意图或手牌区域。
+      - 压缩布局下系统块仍保持两列密度，未引发手牌底部裁切或主战场遮挡。
+  - 当前状态
+    - `6.5 战斗可读性` 的核心 HUD 改造、状态归一与自动化校验已经落地。
+    - `6.x` 的战斗信息层现在包含：
+      - `关键状态岛`
+      - `中层系统状态`
+      - `章节天象 / 地脉 / 阵面`
+      - `render_game_to_text` 对应结构化输出
+    - `V6.0` 是否整体完成仍需结合更上层内容包与剩余策划项继续核实，当前不能宣称全部收尾。
+    - 下一条最自然的延续建议：
+      - 盘点 `7.1+` 内容包需求是否仍有未开发项
+      - 或回头做一次 `V6.0` 全章节 / 全系统完成度核对清单，明确是否还有遗漏实现
+
+- 2026-03-14: V6.0 卡牌内容包第三轮扩展（`7.1` + `11.2` 本轮）
+  - 新增两套主流派：`cursebound` / `soulforge`
+    - `js/data/cards.js`
+      - 新增 `cursebound` 卡组与配套状态牌：
+        - `cursedScar`
+        - `covenantDebt`
+        - `oathscarCut`
+        - `hexbrandSigil`
+        - `blacktidePact`
+        - `covenantWard`
+        - `doomwhisperNeedle`
+        - `scarredDivination`
+        - `bloodpriceMandate`
+        - `griefLedger`
+        - `morbidAbsolution`
+        - `chainedVigil`
+        - `omenOfRuin`
+        - `pactRite`
+        - `sacramentOfAsh`
+        - `soulCollateral`
+        - `doomsentVerdict`
+      - 新增 `soulforge` 卡组与配套构件牌：
+        - `emberServitor`
+        - `wardConstruct`
+        - `forgeArray`
+        - `emberPuppetScript`
+        - `spareSoulCore`
+        - `relayHarness`
+        - `forgeVolley`
+        - `matrixKiln`
+        - `socketedAegis`
+        - `spiritAnvil`
+        - `arrayOverclock`
+        - `guardianGimbal`
+        - `soulcaseLattice`
+        - `effigyBarrage`
+        - `foundryBulwark`
+        - `grandForgeMandate`
+        - `ancestralMachina`
+        - `throneOfCinders`
+      - 已接入：
+        - `CARD_POOL.common / uncommon / rare`
+        - `ARCHETYPE_PACKS.cursebound / soulforge`
+        - `inferDeckArchetype()` 对两套新流派的识别
+        - 升级规则与描述生成（新增 `createCard / addStatus` 文案）
+  - 新增运行时效果与共鸣接入
+    - `js/core/player.js`
+      - 新增卡牌效果：
+        - `addStatus`
+        - `createCard`
+      - 新增共鸣：
+        - `cursebound`
+          - 首次自损：抽牌 + 护盾 + 随机追击
+        - `soulforge`
+          - 首次生成构件：抽牌 + 护盾 + 随机追击
+      - `selfDamage` 现会回传实际掉血值，并触发 `cursebound` 共鸣钩子。
+    - `js/core/battle.js`
+      - 新增敌方反制词缀：
+        - `sealed_oath`（封契）
+        - `shatter_matrix`（裂阵）
+      - 战场指令收益现在会识别：
+        - `cursebound` 的自损 / 状态投入牌
+        - `soulforge` 的构件生成 / power 铺场牌
+      - 战术顾问与战斗日志已可读出：
+        - `addStatus`
+        - `createCard`
+      - 回合结束状态牌的自损也会正确计入 `cursebound` 共鸣。
+  - 新增流派事件内容包
+    - `js/data/events.js`
+      - 新增 `cursebound` 事件：
+        - `oathscarShrine`
+        - `griefWritArchive`
+        - `blackbannerExecution`
+      - 新增 `soulforge` 事件：
+        - `ghostFurnace`
+        - `marionetteArmory`
+        - `ancestralFoundry`
+      - 已加入：
+        - `EVENT_POOL.common / uncommon / rare`
+        - `ARCHETYPE_EVENT_POOLS.cursebound / soulforge`
+      - 现在两套新流派在跑图阶段也会获得专属偏向事件，不再只在奖励池里出现。
+  - 丰富 V6.0 版本介绍页
+    - `js/game.js`
+      - 将“更新”页从简短清单扩展为：
+        - `V6.0《天命裂界》` 定位说明
+        - 更完整的当前版本内容总览
+        - 本次新增重点（新流派 / 可读性 / 局外系统）
+        - 版本定位与推荐体验路径
+      - 页脚版本号同步改为：
+        - `v6.0 天命裂界`
+  - 测试与审计更新
+    - 新增：
+      - `tests/sanity_cursebound_soulforge_resonance_checks.js`
+    - 更新：
+      - `tests/sanity_content_archetype_checks.js`
+      - `tests/sanity_card_design_guardrail_checks.js`
+      - `tests/run_node_checks.sh`
+  - 本轮验证（全部通过）
+    - 语法检查：
+      - `node --check js/data/cards.js` ✅
+      - `node --check js/core/player.js` ✅
+      - `node --check js/core/battle.js` ✅
+      - `node --check js/data/events.js` ✅
+      - `node --check js/game.js` ✅
+      - `node --check tests/sanity_content_archetype_checks.js` ✅
+      - `node --check tests/sanity_cursebound_soulforge_resonance_checks.js` ✅
+    - 定向 Node：
+      - `node tests/sanity_content_archetype_checks.js` ✅
+      - `node tests/sanity_cursebound_soulforge_resonance_checks.js` ✅
+      - `node tests/sanity_card_design_guardrail_checks.js` ✅
+      - `node tests/sanity_event_bias_distribution_checks.js` ✅
+      - `node tests/sanity_battle_command_checks.js` ✅
+      - `node tests/sanity_map_weight_checks.js` ✅
+      - `node tests/sanity_battle_hud_module_checks.js` ✅
+    - 官方 Playwright 客户端：
+      - `node --experimental-default-type=module /Users/health/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-v6-cursebound-soulforge` ✅
+      - 已人工检查：
+        - `output/web-game-v6-cursebound-soulforge/shot-1.png`
+    - Guide / 版本说明可视化审计：
+      - `node tests/browser_guide_modal_audit.mjs http://127.0.0.1:4173 output/browser-guide-v6-cursebound-soulforge` ✅
+      - 已人工检查：
+        - `output/guide-updates-v6.png`
+    - 全量 Node：
+      - `bash tests/run_node_checks.sh` ✅
+      - 结尾确认：`All node checks passed.` ✅
+    - 全量 Browser release：
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-v6-cursebound-soulforge` ✅
+      - 结尾确认：`[release-checks] All browser release audits passed.` ✅
+  - 当前状态
+    - `7.1 卡牌内容包` 中“新增两套主 archetype”已落地到：
+      - 卡池
+      - 构筑识别
+      - 奖励偏置
+      - 事件偏置
+      - 战斗共鸣
+      - 敌方反制词缀
+    - `11.2 版本包装` 中玩家可见的版本介绍页已显著充实，且桌面 / 移动阅读性均通过浏览器审计。
+    - 当前仍不能宣称整个 `V6.0` 已全部收尾；后续自然延续方向仍是：
+      - `7.2 敌人与生态内容包`
+      - `7.3 Boss 内容包`
+      - 对照需求文档继续清点尚未完全落地的章节 / 内容包项目
+
+- 2026-03-15: V6.0 第十二轮（`7.2 敌人与生态内容包` + `7.3 Boss 内容包` 第一批主线交付）
+  - 本轮目标
+    - 把“敌人与生态”从泛化框架推进到真正的章节内容包：
+      - 新增足量敌人，达到策划目标量级
+      - 每章补齐生态模板与精英组合
+      - 给 6 个大章 Boss 补专属三幕蓝图与玩家可读描述
+    - 同时把玩家可见的版本说明写得更完整、更像一次真正的大版本说明
+  - 已完成：敌人与章节生态扩充
+    - `js/data/enemies.js`
+      - 新增 `18` 个常规敌人，做到每重天从 `3` 个普通敌人提升到 `4` 个：
+        - `oathHound`
+        - `oathbreakerScout`
+        - `executionBanner`
+        - `slagChanneler`
+        - `emberHomunculus`
+        - `furnaceTribune`
+        - `starScribe`
+        - `orbitSentinel`
+        - `chronologyMoth`
+        - `mirrorServitor`
+        - `curseLacquerer`
+        - `reflectedPenitent`
+        - `bloodDebtKeeper`
+        - `moonHowler`
+        - `sacramentButcher`
+        - `lawWeaver`
+        - `verdictEnvoy`
+        - `fateShackle`
+      - 新增 `ENEMY_ECOLOGY_TEMPLATES`
+        - 覆盖 `6` 章
+        - 每章都包含：
+          - 常规生态阵型模板
+          - 精英 / 试炼用强化模板
+      - 新增 `CHAPTER_ELITE_COMBOS`
+        - 覆盖 `6` 章
+        - 记录每章精英组合的核心搭档与设计摘要
+      - 为全部敌人补齐：
+        - `ecologyGroup`
+        - `ecologyLabel`
+      - 现在敌影图鉴、章节档案、战斗生态都能读到章节归属，而不是只剩层数。
+  - 已完成：战斗生态运行时接入
+    - `js/core/battle.js`
+      - 新增 `resolveChapterEcologyFormation()`
+      - `resolveEnemySquadFormation()` 现在会优先读取章节生态模板，而不是只走通用编队池
+      - `applyEnemySquadEcology()` 现在支持：
+        - 章节编队行为 `pincer / bulwark / hex / relay`
+        - 章节索引
+        - 精英组合命名与摘要
+      - 结果：
+        - 第 1 章更像“裂誓围猎 / 问罪追压”
+        - 第 2 章更像“炉潮锻压 / 回火拉锯”
+        - 第 6 章更像“终庭法裁 / 多轴审列”
+  - 已完成：Boss 三幕内容包第一批主线落地
+    - `js/data/enemies.js`
+      - 新增 `BOSS_PHASE_BLUEPRINTS`
+      - 为 `6` 个大章 Boss 补入专属三幕蓝图：
+        - `swordElder`
+        - `divineLord`
+        - `ascensionSovereign`
+        - `triheadGoldDragon`
+        - `voidDevourer`
+        - `heavenlyDao`
+      - 每个 Boss 现在都带有：
+        - 专属二幕 / 三幕名称
+        - 独立阈值
+        - 压轴期额外招式
+        - `bossSetpiece`
+          - `openingStance`
+          - `counterWindow`
+          - `finisher`
+          - `visualCue`
+      - 这让 Boss 档案和战斗内三幕系统不再只剩“怒相 / 狂相”的泛化结构。
+  - 已完成：图鉴 / 档案 / 版本说明同步增强
+    - `js/core/collection_hub.js`
+      - 敌影档案现在可读出：
+        - `污染负担`
+        - `复合招式`
+        - `生态·章节标签`
+      - 章节档案现在带：
+        - 章节生态模板
+        - 精英组合摘要
+      - Boss 档案现在带：
+        - 开场立场
+        - 破局窗口
+        - 三幕压轴名
+        - 视觉记忆点
+        - 转幕预览
+    - `js/game.js`
+      - 更新页继续扩写：
+        - 明确写出 `94+ 敌人与 6 章生态包`
+        - 单独强调“敌群生态重构”
+        - 单独强调“六章 Boss 三幕化”
+        - 把版本定位说明写得更完整
+  - 测试更新
+    - `tests/sanity_enemy_ecology_diversity_checks.js`
+      - 总敌人数门槛提升到 `94+`
+      - 每重天敌人数门槛提升到 `4+`
+      - 新增对章节生态模板 / 精英组合的断言
+    - `tests/sanity_codex_sanctum_checks.js`
+      - 新增：
+        - 章节生态模板可见性断言
+        - 新敌影生态标签断言
+        - Boss 压轴元数据断言
+    - `tests/sanity_boss_memory_battle_checks.js`
+      - 新增终章 Boss 三幕档案可见性断言
+    - `tests/sanity_observatory_archive_checks.js`
+      - 调整种子签名断言为“对齐当前轮换实时 bundle”，修复跨日期运行时的历史脆弱性
+  - 本轮验证（全部通过）
+    - 语法检查：
+      - `node --check js/data/enemies.js` ✅
+      - `node --check js/core/battle.js` ✅
+      - `node --check js/core/collection_hub.js` ✅
+      - `node --check js/game.js` ✅
+      - `node --check tests/sanity_enemy_ecology_diversity_checks.js` ✅
+      - `node --check tests/sanity_codex_sanctum_checks.js` ✅
+      - `node --check tests/sanity_boss_memory_battle_checks.js` ✅
+    - 定向 Node：
+      - `node tests/sanity_enemy_ecology_diversity_checks.js` ✅
+      - `node tests/sanity_battle_variation_checks.js` ✅
+      - `node tests/sanity_codex_sanctum_checks.js` ✅
+      - `node tests/sanity_enemy_codex_checks.js` ✅
+      - `node tests/sanity_boss_memory_battle_checks.js` ✅
+    - 全量 Node：
+      - `bash tests/run_node_checks.sh` ✅
+      - 结尾确认：`All node checks passed.` ✅
+    - 官方 Playwright 客户端：
+      - `node "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-v6-enemy-boss-pack` ✅
+      - 已人工检查：
+        - `output/web-game-v6-enemy-boss-pack/shot-1.png`
+        - 主菜单渲染正常，无可见遮挡
+    - Guide 审计：
+      - `node tests/browser_guide_modal_audit.mjs http://127.0.0.1:4173 output/browser-guide-v6-enemy-boss-pack` ✅
+    - 全量 Browser release：
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-v6-enemy-boss-pack` ✅
+      - 结尾确认：`[release-checks] All browser release audits passed.` ✅
+  - 当前状态
+    - `7.2 敌人与生态内容包` 已完成第一批完整主线交付：
+      - 数量级达标
+      - 六章生态模板达标
+      - 六章精英组合达标
+      - 图鉴 / 档案 / 战斗生态 / 版本说明同步达标
+    - `7.3 Boss 内容包` 已完成六个大章 Boss 的第一批三幕蓝图化与档案可读化
+    - 后续若继续推进 `7.3`，自然下一步应考虑：
+      - 其余章节 Boss / 特殊 Boss 的同级别蓝图补齐
+      - 把更多 `bossSetpiece` 信息直接映射到战斗中段提示 / 转幕演出
+
+- 2026-03-15: V6.0 收尾轮（`7.4 事件与叙事内容包` + `9.2/9.3 身份展示` + `10.2/10.3 模板化 / 门禁` + `11.1 世界观回收`）
+  - 已完成：叙事模板与身份模板落地
+    - 新增 `js/data/narrative_templates.js`
+      - 建立统一模板：
+        - `createChapterNarrativeTemplate`
+        - `createSpiritStoryTemplate`
+        - `createCharacterIdentityTemplate`
+        - `createWorldviewRecallTemplate`
+      - 新增内容包：
+        - `V6_CHARACTER_IDENTITY_TEMPLATES`
+        - `V6_CHAPTER_NARRATIVE_ARCS`
+        - `V6_SPIRIT_STORY_TEMPLATES`
+        - `V6_WORLDVIEW_RECALL`
+        - `V6_EVENT_PRESENTATION_TEMPLATES`
+    - `index.html`
+      - 接入 `js/data/narrative_templates.js`
+      - 主菜单底部版本标识更新为 `v6.0 天命裂界 | 逆命轮回进入下一阶段`
+      - 事件弹窗新增：
+        - `#event-atmosphere`
+        - `#event-system-summary`
+  - 已完成：运行时与 UI 接线
+    - `js/game.js`
+      - 新增：
+        - `getCharacterIdentityProfile`
+        - `getSpiritStoryProfile`
+        - `getChapterNarrativeProfile`
+        - `getWorldviewRecallCatalog`
+        - `buildEventChoiceEffectSummary`
+        - `getEventNarrativePresentation`
+        - `applyEventModalPresentation`
+      - `render_game_to_text()` 新增：
+        - `draft.characterIdentity`
+        - `eventModal`
+      - 角色选择页现在可直接读到：
+        - 解锁进度
+        - 剧情简介
+        - 角色专属关键词
+        - 推荐命格
+        - 推荐灵契
+        - 角色专线摘要
+      - 通用事件弹窗现在会展示：
+        - 章节 / 节点 / 抉择摘要 chip
+        - 氛围文案
+        - 自动生成的效果摘要
+      - `逆命誓约` 选择页现在会直出：
+        - 赌注
+        - 适配 build
+        - 自然弱点
+        - 路线偏好
+    - `js/core/collection_hub.js`
+      - 灵契图鉴现在接入：
+        - 获取故事标题
+        - 获取故事正文
+        - 同行见证段落
+        - 研究目标
+      - 章节档案现在接入：
+        - 连续叙事线摘要
+        - 每章 `3` 段叙事 beat
+        - 终章总回收卡
+      - 图鉴搜索也已覆盖新叙事文本，不再只能搜机制词。
+    - `js/data/run_vows.js`
+      - 为全部首发誓约补齐：
+        - `tags`
+        - `buildFit`
+        - `counterplay`
+        - `source`
+        - `unlockRules`
+        - `uiMeta.readableCue`
+    - `css/style.css`
+      - 补齐角色身份卡片样式：
+        - `char-identity-strip`
+        - `char-keyword-strip`
+        - `char-story-panel`
+      - 补齐事件摘要样式：
+        - `event-atmosphere`
+        - `event-system-summary`
+        - `event-summary-chip`
+        - `choice-summary-chip`
+  - 已完成：新增门禁并纳入全量校验入口
+    - 新增 Node 门禁：
+      - `tests/sanity_run_identity_checks.js`
+      - `tests/sanity_vow_guardrail_checks.js`
+      - `tests/sanity_codex_unlock_flow_checks.js`
+    - 新增 Browser 门禁：
+      - `tests/browser_chapter_flow_audit.mjs`
+      - `tests/browser_dongfu_audit.mjs`
+      - `tests/browser_vow_choice_audit.mjs`
+    - 发布脚本已接入：
+      - `tests/run_node_checks.sh`
+      - `tests/run_browser_release_checks.sh`
+  - 本轮验证（全部通过）
+    - 定向 Node：
+      - `node tests/sanity_run_identity_checks.js` ✅
+      - `node tests/sanity_vow_guardrail_checks.js` ✅
+      - `node tests/sanity_codex_unlock_flow_checks.js` ✅
+    - 定向 Browser：
+      - `node tests/browser_vow_choice_audit.mjs http://127.0.0.1:4173 output/browser-vow-choice-audit-local-rerun` ✅
+      - `node tests/browser_chapter_flow_audit.mjs http://127.0.0.1:4173 output/browser-chapter-flow-audit-local` ✅
+      - `node tests/browser_dongfu_audit.mjs http://127.0.0.1:4173 output/browser-dongfu-audit-local-rerun` ✅
+    - 全量 Node：
+      - `bash tests/run_node_checks.sh` ✅
+      - 结尾确认：`All node checks passed.` ✅
+    - 全量 Browser release：
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-v6-narrative-closure` ✅
+      - 结尾确认：`[release-checks] All browser release audits passed.` ✅
+    - 官方 Playwright 客户端：
+      - `node "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-v6-narrative-closure` ✅
+      - 已人工检查：
+        - `output/web-game-v6-narrative-closure/shot-1.png`
+        - 主菜单与新增摘要信息未出现明显遮挡或塌陷
+  - 当前状态
+    - `7.4 事件与叙事内容包` 已从“策划要求”推进到真实玩家可见层：
+      - 角色选择可读身份
+      - 事件弹窗可读赌注与摘要
+      - 灵契图鉴可读获取故事
+      - 章节档案可读连续叙事线
+      - 终章可读世界观总回收
+    - `10.2 内容模板化要求` 已完成一轮真实落地：
+      - 叙事 / 身份 / 世界观数据已进入统一模板文件
+      - UI 与门禁都直接读取同一套内容定义
+    - `10.3 新门禁需求` 已完成补齐并进入发布脚本。
+    - 结合本轮与前序所有纵切，当前仓库内 V6.0 已达到“代码、门禁、浏览器发布回归、官方 Playwright 烟测”均通过的完成状态。
+
+- 2026-03-15: 第五十三轮 V6.0 封板复验
+  - 已完成：对最后一轮“占位文案去 TODO 化”后的版本执行封板复验
+    - 再次扫描仓库活动 TODO 关键字：
+      - `rg -n "TODO|待补|待补充|待补完" /Users/health/IdeaProjects/The-Defier -g '!output/**'`
+      - 当前仅命中 `progress.md` 内的历史归档记录，不存在产品界面、运行时代码或门禁脚本中的活动 TODO。
+    - 对最近触达的运行时代码执行语法校验：
+      - `node --check js/game.js` ✅
+      - `node --check js/core/collection_hub.js` ✅
+      - `node --check js/core/challenge_hub.js` ✅
+  - 本轮验证（全部通过）
+    - 全量 Node：
+      - `bash tests/run_node_checks.sh` ✅
+      - 结尾确认：`All node checks passed.` ✅
+    - 全量 Browser release：
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-v6-narrative-closure-rerun` ✅
+      - 结尾确认：`[release-checks] All browser release audits passed.` ✅
+    - 官方 Playwright 客户端：
+      - `node "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-v6-narrative-closure-rerun` ✅
+      - 产物确认：
+        - `output/web-game-v6-narrative-closure-rerun/state-0.json`
+        - `output/web-game-v6-narrative-closure-rerun/state-1.json`
+        - `output/web-game-v6-narrative-closure-rerun/shot-0.png`
+        - `output/web-game-v6-narrative-closure-rerun/shot-1.png`
+      - 人工查看截图：
+        - 主菜单按钮、功能入口与信息卡正常显示，未见遮挡、塌陷或空白区异常。
+        - 未生成 `errors-*.json`，本轮官方客户端未捕获新控制台错误。
+  - 当前状态
+    - V6.0 活动 TODO 已全部关闭。
+    - V6.0 代码、Node 门禁、浏览器发布审计、官方 Playwright 烟测均再次通过。
+    - 仓库内剩余 `TODO` 文本仅为 `progress.md` 历史记录，不构成待开发项。
+
+- 2026-03-15: 第五十四轮 V6.1 完整策划落档
+  - 已完成：输出 `V6.1《万象归途》` 的完整大版本策划与功能需求文档
+    - 新增策划总案：
+      - `docs/designer_major_upgrade_planning_v4.md`
+    - 新增功能需求：
+      - `docs/designer_major_upgrade_requirements_v4.md`
+  - 策划核心方向
+    - 把主线从“逐层推进”升级为“裂界远征”：
+      - 主线 + 支线区域
+      - 章节悬赏
+      - 势力声望 / 敌意
+      - 仇敌追猎
+      - 章节结局分流
+    - 把多模式从“并列入口”升级为“命盘联动”：
+      - 洞府推演所
+      - 挑战板
+      - 无尽试验场
+      - PvP 命盘对决
+    - 把 UI 从“展示系统”升级为“辅助判断”：
+      - 构筑总览
+      - 章节导航板
+      - 奖励页理由可视化
+      - 图鉴决策化
+  - 当前状态
+    - `V6.0` 已完成封板复验并可推送。
+    - `V6.1` 已具备完整版本蓝图，可直接进入下一轮拆解与开发。

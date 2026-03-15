@@ -1403,8 +1403,774 @@ const ENEMIES = {
     }
 };
 
+const V6_ENEMY_PACK = {
+    oathHound: {
+        id: 'oathHound',
+        name: '誓痕猎犬',
+        icon: '🐕',
+        realm: 1,
+        hp: 32,
+        patterns: [
+            { type: 'attack', value: 8, intent: '⚔️誓痕扑袭' },
+            { type: 'debuff', buffType: 'mark', value: 2, intent: '🎯裂誓追痕' },
+            { type: 'multiAttack', value: 4, count: 2, intent: '⚔️噬誓连咬' }
+        ],
+        aiProfile: 'aggressive',
+        ecologyLabel: '裂誓猎群',
+        ecologyGroup: 'fractured_hunt',
+        elitePartnerIds: ['graveRaven', 'bandit'],
+        gold: { min: 11, max: 18 }
+    },
+    oathbreakerScout: {
+        id: 'oathbreakerScout',
+        name: '裂誓斥候',
+        icon: '🏹',
+        realm: 2,
+        hp: 36,
+        patterns: [
+            { type: 'debuff', buffType: 'weak', value: 1, intent: '🪶扰誓沙' },
+            { type: 'attack', value: 9, intent: '⚔️裂羽暗矢' },
+            {
+                type: 'multiAction',
+                intent: '🜂试锋校准',
+                actions: [
+                    { type: 'defend', value: 7, intent: '🛡️避矢' },
+                    { type: 'attack', value: 6, intent: '⚔️补射' }
+                ]
+            }
+        ],
+        aiProfile: 'control',
+        ecologyLabel: '誓裂游击',
+        ecologyGroup: 'fractured_hunt',
+        elitePartnerIds: ['thunderBeast', 'venomSnake'],
+        gold: { min: 18, max: 27 }
+    },
+    executionBanner: {
+        id: 'executionBanner',
+        name: '问罪旗使',
+        icon: '🚩',
+        realm: 3,
+        hp: 52,
+        patterns: [
+            { type: 'buff', buffType: 'strength', value: 2, intent: '🚩悬旗督战' },
+            { type: 'attack', value: 13, intent: '⚔️执旗斩' },
+            { type: 'debuff', buffType: 'vulnerable', value: 1, intent: '✨问罪宣判' }
+        ],
+        aiProfile: 'balanced',
+        ecologyLabel: '试罪刑阵',
+        ecologyGroup: 'fractured_hunt',
+        elitePartnerIds: ['swordDisciple', 'talismanMaster'],
+        stealLaw: 'swordIntent',
+        gold: { min: 30, max: 46 }
+    },
+    slagChanneler: {
+        id: 'slagChanneler',
+        name: '熔渣导术师',
+        icon: '🫗',
+        realm: 4,
+        hp: 60,
+        patterns: [
+            { type: 'debuff', buffType: 'burn', value: 2, intent: '🔥灼渣泼洒' },
+            { type: 'attack', value: 14, intent: '⚔️熔流切割' },
+            { type: 'defend', value: 10, intent: '🛡️炉灰护幕' }
+        ],
+        aiProfile: 'control',
+        ecologyLabel: '熔渣工潮',
+        ecologyGroup: 'forge_tide',
+        elitePartnerIds: ['emberPhysician', 'alchemyGolem'],
+        stealLaw: 'flameTruth',
+        element: 'fire',
+        gold: { min: 40, max: 58 }
+    },
+    emberHomunculus: {
+        id: 'emberHomunculus',
+        name: '火傀药童',
+        icon: '🧫',
+        realm: 5,
+        hp: 74,
+        patterns: [
+            {
+                type: 'multiAction',
+                intent: '🧪回炉配方',
+                actions: [
+                    { type: 'heal', value: 10, intent: '💚回火缝合' },
+                    { type: 'debuff', buffType: 'burn', value: 2, intent: '🔥残焰附着' }
+                ]
+            },
+            { type: 'attack', value: 17, intent: '⚔️药焰突刺' },
+            { type: 'defend', value: 12, intent: '🛡️丹壁回缩' }
+        ],
+        aiProfile: 'sustain',
+        ecologyLabel: '回炉药潮',
+        ecologyGroup: 'forge_tide',
+        elitePartnerIds: ['ancientGhost', 'spiritBlade'],
+        gold: { min: 55, max: 76 }
+    },
+    furnaceTribune: {
+        id: 'furnaceTribune',
+        name: '炉海监军',
+        icon: '⚒️',
+        realm: 6,
+        hp: 92,
+        patterns: [
+            { type: 'defend', value: 16, intent: '🛡️火脉督阵' },
+            { type: 'attack', value: 20, intent: '⚔️淬锋裁断' },
+            { type: 'buff', buffType: 'strength', value: 2, intent: '💪熔潮鼓舞' }
+        ],
+        aiProfile: 'sustain',
+        ecologyLabel: '炉监钳阵',
+        ecologyGroup: 'forge_tide',
+        elitePartnerIds: ['divineGuard', 'voidMonk'],
+        stealLaw: 'earthShield',
+        gold: { min: 70, max: 95 }
+    },
+    starScribe: {
+        id: 'starScribe',
+        name: '沉星书记',
+        icon: '📘',
+        realm: 7,
+        hp: 96,
+        patterns: [
+            { type: 'debuff', buffType: 'weak', value: 2, intent: '🌠迟滞批注' },
+            { type: 'attack', value: 21, intent: '⚔️陨墨斩' },
+            { type: 'heal', value: 12, intent: '💚星页回溯' }
+        ],
+        aiProfile: 'control',
+        ecologyLabel: '沉星文阵',
+        ecologyGroup: 'star_archive',
+        elitePartnerIds: ['icePhoenix', 'timeKeeper'],
+        stealLaw: 'spaceRift',
+        gold: { min: 78, max: 106 }
+    },
+    orbitSentinel: {
+        id: 'orbitSentinel',
+        name: '环轨守御',
+        icon: '🛰️',
+        realm: 8,
+        hp: 116,
+        patterns: [
+            { type: 'defend', value: 18, intent: '🛡️环轨偏移' },
+            { type: 'attack', value: 22, intent: '⚔️轨刺投落' },
+            {
+                type: 'multiAction',
+                intent: '🌌星链联锁',
+                actions: [
+                    { type: 'buff', buffType: 'strength', value: 1, intent: '💪联锁增幅' },
+                    { type: 'attack', value: 8, intent: '⚔️补击' }
+                ]
+            }
+        ],
+        aiProfile: 'balanced',
+        ecologyLabel: '环轨锁阵',
+        ecologyGroup: 'star_archive',
+        elitePartnerIds: ['mahayanaDisciple', 'timeKeeper'],
+        gold: { min: 95, max: 124 }
+    },
+    chronologyMoth: {
+        id: 'chronologyMoth',
+        name: '时序蛾灵',
+        icon: '🦋',
+        realm: 9,
+        hp: 130,
+        patterns: [
+            { type: 'debuff', buffType: 'vulnerable', value: 2, intent: '✨回响蚀刻' },
+            { type: 'multiAttack', value: 10, count: 3, intent: '⚔️时针扑翼' },
+            { type: 'defend', value: 14, intent: '🛡️时砂护翅' }
+        ],
+        aiProfile: 'control',
+        ecologyLabel: '时序织翼',
+        ecologyGroup: 'star_archive',
+        elitePartnerIds: ['ascensionHerald', 'goldenDragonkin'],
+        element: 'wind',
+        gold: { min: 108, max: 138 }
+    },
+    mirrorServitor: {
+        id: 'mirrorServitor',
+        name: '照骨镜役',
+        icon: '🪞',
+        realm: 10,
+        hp: 138,
+        patterns: [
+            { type: 'debuff', buffType: 'weak', value: 2, intent: '🪞折影映身' },
+            { type: 'attack', value: 26, intent: '⚔️镜刃反折' },
+            { type: 'defend', value: 16, intent: '🛡️照骨镜壳' }
+        ],
+        aiProfile: 'control',
+        ecologyLabel: '照影反军',
+        ecologyGroup: 'mirror_curse',
+        elitePartnerIds: ['mirrorWarden', 'cursePriest'],
+        gold: { min: 122, max: 156 }
+    },
+    curseLacquerer: {
+        id: 'curseLacquerer',
+        name: '黯漆咒匠',
+        icon: '🖌️',
+        realm: 11,
+        hp: 150,
+        patterns: [
+            { type: 'addStatus', cardId: 'heartDemon', count: 1, intent: '🕳️黯漆附契' },
+            { type: 'attack', value: 27, intent: '⚔️诅墨横切' },
+            { type: 'debuff', buffType: 'vulnerable', value: 2, intent: '✨镜咒放大' }
+        ],
+        aiProfile: 'control',
+        ecologyLabel: '镜咒工坊',
+        ecologyGroup: 'mirror_curse',
+        elitePartnerIds: ['stormSummoner', 'mirrorDemon'],
+        gold: { min: 132, max: 168 }
+    },
+    reflectedPenitent: {
+        id: 'reflectedPenitent',
+        name: '折光罪徒',
+        icon: '🕯️',
+        realm: 12,
+        hp: 164,
+        patterns: [
+            { type: 'defend', value: 18, intent: '🛡️折光赎壁' },
+            {
+                type: 'multiAction',
+                intent: '🪞罪映双身',
+                actions: [
+                    { type: 'attack', value: 16, intent: '⚔️镜返' },
+                    { type: 'debuff', buffType: 'weak', value: 1, intent: '🌀失真' }
+                ]
+            },
+            { type: 'heal', value: 14, intent: '💚赎烬重缝' }
+        ],
+        aiProfile: 'sustain',
+        ecologyLabel: '赎镜压场',
+        ecologyGroup: 'mirror_curse',
+        elitePartnerIds: ['triheadAcolyte', 'mirrorDemon'],
+        gold: { min: 145, max: 182 }
+    },
+    bloodDebtKeeper: {
+        id: 'bloodDebtKeeper',
+        name: '血契典吏',
+        icon: '📕',
+        realm: 13,
+        hp: 176,
+        patterns: [
+            { type: 'debuff', buffType: 'bleed', value: 3, intent: '🩸血账追偿' },
+            { type: 'attack', value: 31, intent: '⚔️契书裁切' },
+            { type: 'buff', buffType: 'strength', value: 2, intent: '💪债印催逼' }
+        ],
+        aiProfile: 'aggressive',
+        ecologyLabel: '血账收庭',
+        ecologyGroup: 'bloodmoon_hunt',
+        elitePartnerIds: ['bloodbat', 'mirrorDemon'],
+        gold: { min: 158, max: 196 }
+    },
+    moonHowler: {
+        id: 'moonHowler',
+        name: '噬月嚎兽',
+        icon: '🌕',
+        realm: 14,
+        hp: 188,
+        patterns: [
+            { type: 'multiAttack', value: 14, count: 3, intent: '⚔️血月连扑' },
+            { type: 'debuff', buffType: 'mark', value: 3, intent: '🎯猎月锁喉' },
+            { type: 'attack', value: 36, intent: '⚔️月陨扑杀' }
+        ],
+        aiProfile: 'aggressive',
+        ecologyLabel: '逐月猎潮',
+        ecologyGroup: 'bloodmoon_hunt',
+        elitePartnerIds: ['chaosEye', 'voidDevourer'],
+        gold: { min: 170, max: 210 }
+    },
+    sacramentButcher: {
+        id: 'sacramentButcher',
+        name: '祭锋屠者',
+        icon: '🪓',
+        realm: 15,
+        hp: 205,
+        patterns: [
+            {
+                type: 'multiAction',
+                intent: '🩸献祭剜取',
+                actions: [
+                    { type: 'attack', value: 24, intent: '⚔️剜取' },
+                    { type: 'heal', value: 14, intent: '💚啖血回生' }
+                ]
+            },
+            { type: 'debuff', buffType: 'vulnerable', value: 2, intent: '✨祭锋开膛' },
+            { type: 'attack', value: 40, intent: '⚔️血断斩' }
+        ],
+        aiProfile: 'balanced',
+        ecologyLabel: '献锋收割',
+        ecologyGroup: 'bloodmoon_hunt',
+        elitePartnerIds: ['voidDevourer', 'karmaSpirit'],
+        gold: { min: 182, max: 226 }
+    },
+    lawWeaver: {
+        id: 'lawWeaver',
+        name: '法织执简',
+        icon: '📜',
+        realm: 16,
+        hp: 220,
+        patterns: [
+            { type: 'debuff', buffType: 'weak', value: 2, intent: '📜法禁停笔' },
+            { type: 'defend', value: 20, intent: '🛡️文脉封层' },
+            { type: 'attack', value: 42, intent: '⚔️律线断裁' }
+        ],
+        aiProfile: 'sustain',
+        ecologyLabel: '法庭织阵',
+        ecologyGroup: 'final_verdict',
+        elitePartnerIds: ['elementalElder', 'karmaArbiter'],
+        stealLaw: 'reversalLaw',
+        gold: { min: 194, max: 238 }
+    },
+    verdictEnvoy: {
+        id: 'verdictEnvoy',
+        name: '审命谕使',
+        icon: '⚖️',
+        realm: 17,
+        hp: 236,
+        patterns: [
+            { type: 'debuff', buffType: 'vulnerable', value: 2, intent: '⚖️裁命宣示' },
+            {
+                type: 'multiAction',
+                intent: '☯️双判同降',
+                actions: [
+                    { type: 'defend', value: 16, intent: '🛡️天衡自护' },
+                    { type: 'attack', value: 22, intent: '⚔️谕令追击' }
+                ]
+            },
+            { type: 'attack', value: 45, intent: '⚔️终审重斩' }
+        ],
+        aiProfile: 'balanced',
+        ecologyLabel: '天衡裁阵',
+        ecologyGroup: 'final_verdict',
+        elitePartnerIds: ['karmaArbiter', 'heavenlyDao'],
+        gold: { min: 206, max: 252 }
+    },
+    fateShackle: {
+        id: 'fateShackle',
+        name: '命锁缚灵',
+        icon: '⛓️',
+        realm: 18,
+        hp: 250,
+        patterns: [
+            { type: 'addStatus', cardId: 'heartDemon', count: 1, intent: '🕳️命锁烙印' },
+            { type: 'debuff', buffType: 'mark', value: 3, intent: '🎯终命悬决' },
+            { type: 'multiAttack', value: 16, count: 3, intent: '⚔️断命缠剿' }
+        ],
+        aiProfile: 'control',
+        ecologyLabel: '终庭锁命',
+        ecologyGroup: 'final_verdict',
+        elitePartnerIds: ['heavenlyDao', 'karmaArbiter'],
+        stealLaw: 'voidEmbrace',
+        gold: { min: 220, max: 270 }
+    }
+};
+
+const ENEMY_ECOLOGY_TEMPLATES = {
+    1: {
+        chapterIndex: 1,
+        formation: {
+            id: 'chapter1_fracture_hunt',
+            name: '裂誓围猎',
+            tag: '裂誓',
+            desc: '前锋以标记和先手压血追猎，适合在你未稳血线前抢拍。',
+            behavior: 'pincer',
+            preferred: ['striker', 'hexer'],
+            attackMul: 1.08,
+            openingBlock: 2
+        },
+        elite: {
+            id: 'chapter1_oathbreak_exile',
+            name: '问罪流放阵',
+            tag: '问罪',
+            desc: '精英战会以追痕、压血和问罪宣判连续逼你交资源。',
+            behavior: 'hex',
+            preferred: ['hexer', 'striker'],
+            attackMul: 1.07,
+            openingBlock: 4
+        }
+    },
+    2: {
+        chapterIndex: 2,
+        formation: {
+            id: 'chapter2_forge_tide',
+            name: '炉潮钳阵',
+            tag: '炉潮',
+            desc: '厚盾、灼烧与修补并进，会把战斗拖成资源锻打战。',
+            behavior: 'bulwark',
+            preferred: ['guardian', 'balanced'],
+            attackMul: 1.03,
+            openingBlock: 6
+        },
+        elite: {
+            id: 'chapter2_anvil_chain',
+            name: '淬炉锁链阵',
+            tag: '淬炉',
+            desc: '精英会轮番上盾、回火与加压，逼你优先拆阵核。',
+            behavior: 'relay',
+            preferred: ['guardian', 'balanced'],
+            attackMul: 1.06,
+            openingBlock: 8
+        }
+    },
+    3: {
+        chapterIndex: 3,
+        formation: {
+            id: 'chapter3_star_lattice',
+            name: '沉星链阵',
+            tag: '沉星',
+            desc: '控场、回合预埋和连锁补刀会交替出现，错误收尾会被放大。',
+            behavior: 'hex',
+            preferred: ['hexer', 'balanced'],
+            attackMul: 1.04,
+            openingBlock: 4
+        },
+        elite: {
+            id: 'chapter3_chronicle_spiral',
+            name: '时序回旋阵',
+            tag: '时序',
+            desc: '精英更偏向控手与补刀轮转，拖长后会不断吃到次回合税。',
+            behavior: 'relay',
+            preferred: ['hexer', 'guardian'],
+            attackMul: 1.07,
+            openingBlock: 5
+        }
+    },
+    4: {
+        chapterIndex: 4,
+        formation: {
+            id: 'chapter4_mirror_curse',
+            name: '悬镜咒潮',
+            tag: '悬镜',
+            desc: '镜返、诅咒与减益会层层叠起，让防错价值明显提高。',
+            behavior: 'hex',
+            preferred: ['hexer', 'balanced'],
+            attackMul: 1.03,
+            openingBlock: 5
+        },
+        elite: {
+            id: 'chapter4_reflection_chain',
+            name: '折镜连忏',
+            tag: '折镜',
+            desc: '精英会在反照与续航间切换，要求你找准净化和爆发窗口。',
+            behavior: 'bulwark',
+            preferred: ['hexer', 'guardian'],
+            attackMul: 1.05,
+            openingBlock: 7
+        }
+    },
+    5: {
+        chapterIndex: 5,
+        formation: {
+            id: 'chapter5_bloodmoon_hunt',
+            name: '血月逐猎',
+            tag: '血月',
+            desc: '压血、收割与狂化阈值一起推进，越拖越容易被斩线。',
+            behavior: 'pincer',
+            preferred: ['striker', 'balanced'],
+            attackMul: 1.09,
+            openingBlock: 3
+        },
+        elite: {
+            id: 'chapter5_sacrifice_feast',
+            name: '祭锋盛猎',
+            tag: '祭锋',
+            desc: '精英会用献祭回生和高压收割把战斗推向赌命节奏。',
+            behavior: 'relay',
+            preferred: ['striker', 'hexer'],
+            attackMul: 1.1,
+            openingBlock: 4
+        }
+    },
+    6: {
+        chapterIndex: 6,
+        formation: {
+            id: 'chapter6_final_verdict',
+            name: '终庭法裁',
+            tag: '终庭',
+            desc: '法则压制、标记审判与多轴检定同时存在，要求构筑完整应答。',
+            behavior: 'bulwark',
+            preferred: ['guardian', 'hexer', 'balanced'],
+            attackMul: 1.05,
+            openingBlock: 6
+        },
+        elite: {
+            id: 'chapter6_heavenly_adjudication',
+            name: '命衡审列',
+            tag: '命衡',
+            desc: '精英会以终局审判姿态拆你的容错，逼你尽快打穿阵眼。',
+            behavior: 'hex',
+            preferred: ['hexer', 'guardian'],
+            attackMul: 1.08,
+            openingBlock: 8
+        }
+    }
+};
+
+const CHAPTER_ELITE_COMBOS = {
+    1: {
+        chapterIndex: 1,
+        name: '问罪猎杀',
+        anchorEnemyIds: ['executionBanner', 'oathHound'],
+        summary: '先挂追痕再逼出易伤，让前段章节形成强烈的抢拍压血感。'
+    },
+    2: {
+        chapterIndex: 2,
+        name: '炉潮锁链',
+        anchorEnemyIds: ['furnaceTribune', 'slagChanneler'],
+        summary: '前排稳压、后排灼烧回火，逼你在资源被烧干前强拆阵核。'
+    },
+    3: {
+        chapterIndex: 3,
+        name: '时序追算',
+        anchorEnemyIds: ['orbitSentinel', 'chronologyMoth'],
+        summary: '通过连锁补刀与时序控手，让错误牌序不断被追罚。'
+    },
+    4: {
+        chapterIndex: 4,
+        name: '镜咒双映',
+        anchorEnemyIds: ['mirrorServitor', 'curseLacquerer'],
+        summary: '镜返与心魔污染共同压场，需要净化与快攻并用。'
+    },
+    5: {
+        chapterIndex: 5,
+        name: '血契盛猎',
+        anchorEnemyIds: ['bloodDebtKeeper', 'sacramentButcher'],
+        summary: '围绕低血收益与回生收割持续加压，逼你主动抢收头。'
+    },
+    6: {
+        chapterIndex: 6,
+        name: '终庭审列',
+        anchorEnemyIds: ['lawWeaver', 'verdictEnvoy'],
+        summary: '用法则压制与终局裁断构成复合资源税，是终章精英的典型考题。'
+    }
+};
+
+const BOSS_PHASE_BLUEPRINTS = {
+    swordElder: {
+        actTwo: {
+            threshold: 0.72,
+            name: '剑阵封域',
+            heal: 0.05,
+            attackMul: 1.14,
+            appendPatterns: [
+                { type: 'debuff', buffType: 'mark', value: 2, intent: '🎯封域剑印' }
+            ]
+        },
+        actThree: {
+            threshold: 0.34,
+            name: '万刃问锋',
+            heal: 0.1,
+            attackMul: 1.24,
+            defendMul: 0.85,
+            appendPatterns: [
+                { type: 'multiAttack', value: 8, count: 3, intent: '⚔️万刃断空' }
+            ]
+        },
+        setpiece: {
+            openingStance: '开场以剑印封诀锁你的关键牌序，逼你先交冗余牌。',
+            counterWindow: '拆掉剑阵护势、逼它提前交出封域回合，就是主要输出窗口。',
+            finisher: '万刃问锋',
+            visualCue: '大片断空剑符与环形剑阵会成为最醒目的战场记忆点。'
+        }
+    },
+    divineLord: {
+        actTwo: {
+            threshold: 0.7,
+            name: '神念锁界',
+            heal: 0.06,
+            attackMul: 1.12,
+            appendPatterns: [
+                { type: 'debuff', buffType: 'weak', value: 2, intent: '🌀神念压境' }
+            ]
+        },
+        actThree: {
+            threshold: 0.32,
+            name: '敕令天坠',
+            heal: 0.11,
+            attackMul: 1.26,
+            defendMul: 0.8,
+            appendPatterns: [
+                { type: 'attack', value: 44, intent: '☄️敕令坠界' }
+            ]
+        },
+        setpiece: {
+            openingStance: '以神念贡税压你的手牌厚度，越怕丢关键牌越会被拖慢。',
+            counterWindow: '保住低价值牌吃税，并在它切入敕令前用爆发压低血线。',
+            finisher: '敕令天坠',
+            visualCue: '天幕敕符与高空坠落的法印会强化“被审判”的压迫感。'
+        }
+    },
+    ascensionSovereign: {
+        actTwo: {
+            threshold: 0.72,
+            name: '雷诰巡天',
+            heal: 0.05,
+            attackMul: 1.15,
+            appendPatterns: [
+                { type: 'debuff', buffType: 'vulnerable', value: 2, intent: '⚡雷诰锁命' }
+            ]
+        },
+        actThree: {
+            threshold: 0.35,
+            name: '升霄天罚',
+            heal: 0.1,
+            attackMul: 1.22,
+            defendMul: 0.82,
+            appendPatterns: [
+                { type: 'multiAttack', value: 12, count: 3, intent: '⚡升霄天罚' }
+            ]
+        },
+        setpiece: {
+            openingStance: '先以封符和高压雷击迫使你缩短回合价值。',
+            counterWindow: '雷诰预备回合护盾较薄，是抢节奏与斩线的关键两拍。',
+            finisher: '升霄天罚',
+            visualCue: '整幕雷环收束到 Boss 身周，再炸成三段天罚落雷。'
+        }
+    },
+    triheadGoldDragon: {
+        actTwo: {
+            threshold: 0.7,
+            name: '三首轮甲',
+            heal: 0.06,
+            attackMul: 1.1,
+            appendPatterns: [
+                { type: 'defend', value: 26, intent: '🛡️龙鳞轮甲' }
+            ]
+        },
+        actThree: {
+            threshold: 0.33,
+            name: '鎏金噬界',
+            heal: 0.12,
+            attackMul: 1.25,
+            defendMul: 0.9,
+            appendPatterns: [
+                { type: 'attack', value: 56, intent: '💥鎏金龙噬' }
+            ]
+        },
+        setpiece: {
+            openingStance: '三首会轮替夺壁、反伤与高抗，逼你先决定用什么属性拆甲。',
+            counterWindow: '破掉大额护盾后的空档极短，需提前预留穿甲与爆发段。',
+            finisher: '鎏金噬界',
+            visualCue: '三枚龙首轮流点亮，最后会在中央叠成一道鎏金龙噬。'
+        }
+    },
+    voidDevourer: {
+        actTwo: {
+            threshold: 0.71,
+            name: '渊腹翻潮',
+            heal: 0.05,
+            attackMul: 1.13,
+            appendPatterns: [
+                { type: 'addStatus', cardId: 'heartDemon', count: 1, intent: '🕳️渊潮蚀心' }
+            ]
+        },
+        actThree: {
+            threshold: 0.3,
+            name: '终渊咀灭',
+            heal: 0.11,
+            attackMul: 1.24,
+            defendMul: 0.82,
+            appendPatterns: [
+                { type: 'multiAttack', value: 16, count: 3, intent: '🌑终渊咀灭' }
+            ]
+        },
+        setpiece: {
+            openingStance: '以吞噬和禁疗慢慢磨空你的恢复路线，再逼你赌爆发收尾。',
+            counterWindow: '它每次翻潮前会略微降速，正是清状态并转攻的窗口。',
+            finisher: '终渊咀灭',
+            visualCue: '虚空裂口逐层扩张，压轴时会像黑潮一样吞没战场。'
+        }
+    },
+    heavenlyDao: {
+        actTwo: {
+            threshold: 0.74,
+            name: '善律改卷',
+            heal: 0.08,
+            attackMul: 1.12,
+            appendPatterns: [
+                { type: 'defend', value: 80, intent: '🛡️善律改卷' }
+            ]
+        },
+        actThree: {
+            threshold: 0.36,
+            name: '终焉裁问',
+            heal: 0.15,
+            attackMul: 1.28,
+            defendMul: 0.7,
+            appendPatterns: [
+                { type: 'attack', value: 188, intent: '☯️终焉裁问' }
+            ]
+        },
+        setpiece: {
+            openingStance: '先以天道映照审问你的构筑，再逐步把多轴联动拉上台面。',
+            counterWindow: '映照回合结束后它会短暂暴露，必须趁那几拍完成关键转轴。',
+            finisher: '终焉裁问',
+            visualCue: '善恶双轮与太极法庭同时落下，形成终章最强视觉断章。'
+        }
+    }
+};
+
+Object.values(V6_ENEMY_PACK).forEach((enemy) => {
+    if (!enemy || !enemy.id || ENEMIES[enemy.id]) return;
+    ENEMIES[enemy.id] = enemy;
+});
+
 // 为敌人补全扩展元数据：aiProfile / phaseConfig / resistTags
 function enrichEnemyMetadata() {
+    const createScaledPhasePatterns = (basePatterns = [], config = {}) => {
+        const attackMul = Math.max(1, Number(config.attackMul) || 1);
+        const defendMul = Math.max(0.5, Number(config.defendMul) || 1);
+        const patterns = (Array.isArray(basePatterns) ? basePatterns : []).map((pattern) => {
+            if (!pattern || typeof pattern !== 'object') return pattern;
+            const next = { ...pattern };
+            if ((next.type === 'attack' || next.type === 'multiAttack' || next.type === 'executeDamage') && Number.isFinite(Number(next.value))) {
+                next.value = Math.max(1, Math.floor(Number(next.value) * attackMul));
+            }
+            if ((next.type === 'defend' || next.type === 'heal') && Number.isFinite(Number(next.value))) {
+                next.value = Math.max(1, Math.floor(Number(next.value) * defendMul));
+            }
+            return next;
+        });
+        (config.appendPatterns || []).forEach((pattern) => {
+            if (pattern && typeof pattern === 'object') patterns.push({ ...pattern });
+        });
+        return patterns;
+    };
+
+    Object.entries(BOSS_PHASE_BLUEPRINTS).forEach(([bossId, blueprint]) => {
+        const boss = ENEMIES[bossId];
+        if (!boss || boss.phaseConfig) return;
+        const basePatterns = Array.isArray(boss.patterns) ? boss.patterns : [];
+        boss.phaseConfig = [
+            {
+                threshold: Number.isFinite(Number(blueprint.actTwo?.threshold)) ? Number(blueprint.actTwo.threshold) : 0.68,
+                name: blueprint.actTwo?.name || '怒相',
+                heal: Number.isFinite(Number(blueprint.actTwo?.heal)) ? Number(blueprint.actTwo.heal) : 0.06,
+                patterns: createScaledPhasePatterns(basePatterns, blueprint.actTwo || {})
+            },
+            {
+                threshold: Number.isFinite(Number(blueprint.actThree?.threshold)) ? Number(blueprint.actThree.threshold) : 0.34,
+                name: blueprint.actThree?.name || '狂相',
+                heal: Number.isFinite(Number(blueprint.actThree?.heal)) ? Number(blueprint.actThree.heal) : 0.1,
+                patterns: createScaledPhasePatterns(basePatterns, blueprint.actThree || {})
+            }
+        ];
+        if (blueprint.setpiece && typeof blueprint.setpiece === 'object') {
+            boss.bossSetpiece = {
+                openingStance: String(blueprint.setpiece.openingStance || ''),
+                counterWindow: String(blueprint.setpiece.counterWindow || ''),
+                finisher: String(blueprint.setpiece.finisher || ''),
+                visualCue: String(blueprint.setpiece.visualCue || '')
+            };
+        }
+    });
+
+    const chapterEcologyDefaults = {
+        1: { group: 'fractured_hunt', label: '裂誓试锋' },
+        2: { group: 'forge_tide', label: '炉潮淬阵' },
+        3: { group: 'star_archive', label: '沉星筹算' },
+        4: { group: 'mirror_curse', label: '悬镜反照' },
+        5: { group: 'bloodmoon_hunt', label: '血月收割' },
+        6: { group: 'final_verdict', label: '终庭裁命' }
+    };
+
     Object.values(ENEMIES).forEach(enemy => {
         if (!enemy.aiProfile) {
             if (enemy.isBoss) enemy.aiProfile = 'boss_adaptive';
@@ -1418,6 +2184,11 @@ function enrichEnemyMetadata() {
                 ? Object.entries(enemy.resistances).filter(([, v]) => v > 0).map(([k]) => `resist_${k}`)
                 : [];
         }
+
+        const chapterIndex = Math.max(1, Math.min(6, Math.floor((Math.max(1, Number(enemy.realm) || 1) - 1) / 3) + 1));
+        const ecologyDefault = chapterEcologyDefaults[chapterIndex] || chapterEcologyDefaults[1];
+        if (!enemy.ecologyGroup) enemy.ecologyGroup = ecologyDefault.group;
+        if (!enemy.ecologyLabel) enemy.ecologyLabel = ecologyDefault.label;
     });
 
     const injectPattern = (enemyId, pattern) => {
@@ -1542,4 +2313,10 @@ function createEliteEnemy(realm) {
     enemy.gold.max = Math.floor(enemy.gold.max * 1.5);
 
     return enemy;
+}
+
+if (typeof window !== 'undefined') {
+    window.ENEMIES = ENEMIES;
+    window.ENEMY_ECOLOGY_TEMPLATES = ENEMY_ECOLOGY_TEMPLATES;
+    window.CHAPTER_ELITE_COMBOS = CHAPTER_ELITE_COMBOS;
 }

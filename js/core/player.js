@@ -123,6 +123,27 @@ class Player {
             ringExpBoostBattles: 0,
             victoryHealBoostBattles: 0
         };
+        this.runDestiny = null;
+        this.runDestinyBattleState = {
+            firstAttackBonusUsed: false,
+            firstSkillDrawUsedThisTurn: false,
+            firstBlockBonusUsed: false,
+            firstTurnBonusApplied: false
+        };
+        this.runVows = [];
+        this.runVowBattleState = {
+            firstAttackBonusUsed: false,
+            firstTurnBonusApplied: false,
+            firstExhaustDrawUsedThisTurn: false
+        };
+        this.spiritCompanion = null;
+        this.spiritCompanionBattleState = {
+            charge: 0,
+            firstSkillDrawUsedThisTurn: false,
+            firstBlockBonusUsedThisTurn: false,
+            onLoseHpPulseUsedThisTurn: false,
+            nthCardPassiveProcCount: 0
+        };
 
         // 遗物
         this.relic = charData.relic;
@@ -181,6 +202,428 @@ class Player {
         if (charData.activeSkillId) {
             this.initSkill(charData.activeSkillId);
         }
+    }
+
+    normalizeRunDestiny(runDestiny = this.runDestiny) {
+        if (!runDestiny || typeof runDestiny !== 'object') {
+            this.runDestiny = null;
+            return null;
+        }
+        const id = typeof runDestiny.id === 'string' ? runDestiny.id : '';
+        const catalog = (typeof RUN_DESTINIES !== 'undefined' && RUN_DESTINIES && typeof RUN_DESTINIES === 'object')
+            ? RUN_DESTINIES
+            : null;
+        if (!catalog || !catalog[id]) {
+            this.runDestiny = null;
+            return null;
+        }
+        const tier = Math.max(1, Math.floor(Number(runDestiny.tier) || 1));
+        this.runDestiny = { id, tier };
+        return this.runDestiny;
+    }
+
+    setRunDestiny(destinyId, tier = 1) {
+        const id = typeof destinyId === 'string' ? destinyId : '';
+        const catalog = (typeof RUN_DESTINIES !== 'undefined' && RUN_DESTINIES && typeof RUN_DESTINIES === 'object')
+            ? RUN_DESTINIES
+            : null;
+        if (!catalog || !catalog[id]) {
+            this.runDestiny = null;
+            return null;
+        }
+        this.runDestiny = {
+            id,
+            tier: Math.max(1, Math.floor(Number(tier) || 1))
+        };
+        return this.getRunDestinyMeta();
+    }
+
+    getRunDestinyMeta() {
+        const runDestiny = this.normalizeRunDestiny();
+        if (!runDestiny) return null;
+        const base = RUN_DESTINIES[runDestiny.id];
+        if (!base) return null;
+        const tiers = Array.isArray(base.tiers) ? base.tiers : [];
+        const tierIndex = Math.max(0, Math.min(tiers.length - 1, runDestiny.tier - 1));
+        const tierMeta = tiers[tierIndex] || tiers[0] || {};
+        return {
+            id: base.id,
+            name: base.name,
+            icon: base.icon || '✦',
+            category: base.category || '命格',
+            description: base.description || '',
+            playstyle: base.playstyle || '',
+            affinities: Array.isArray(base.affinities) ? base.affinities.slice() : [],
+            tier: Math.max(1, Math.floor(Number(runDestiny.tier) || 1)),
+            tierLabel: tierMeta.label || `第 ${Math.max(1, Math.floor(Number(runDestiny.tier) || 1))} 阶`,
+            summary: tierMeta.summary || base.description || '',
+            effects: tierMeta.effects && typeof tierMeta.effects === 'object'
+                ? { ...tierMeta.effects }
+                : {}
+        };
+    }
+
+    getRunDestinyEffects() {
+        const meta = this.getRunDestinyMeta();
+        return meta && meta.effects ? meta.effects : {};
+    }
+
+    resetRunDestinyBattleState() {
+        this.runDestinyBattleState = {
+            firstAttackBonusUsed: false,
+            firstSkillDrawUsedThisTurn: false,
+            firstBlockBonusUsed: false,
+            firstTurnBonusApplied: false
+        };
+        return this.runDestinyBattleState;
+    }
+
+    normalizeRunVows(runVows = this.runVows) {
+        const catalog = (typeof RUN_VOWS !== 'undefined' && RUN_VOWS && typeof RUN_VOWS === 'object')
+            ? RUN_VOWS
+            : null;
+        if (!catalog || !Array.isArray(runVows)) {
+            this.runVows = [];
+            return [];
+        }
+
+        const deduped = new Map();
+        runVows.forEach((entry) => {
+            if (!entry || typeof entry !== 'object') return;
+            const id = typeof entry.id === 'string' ? entry.id : '';
+            const base = catalog[id];
+            if (!id || !base) return;
+            const maxTier = Math.max(1, Array.isArray(base.tiers) ? base.tiers.length : 1);
+            const tier = Math.max(1, Math.min(maxTier, Math.floor(Number(entry.tier) || 1)));
+            const previous = deduped.get(id);
+            if (!previous || tier > previous.tier) {
+                deduped.set(id, { id, tier });
+            }
+        });
+
+        this.runVows = Array.from(deduped.values()).slice(0, 2);
+        return this.runVows;
+    }
+
+    setRunVows(runVows = []) {
+        this.runVows = Array.isArray(runVows)
+            ? runVows.map((entry) => ({ ...(entry || {}) }))
+            : [];
+        return this.normalizeRunVows();
+    }
+
+    getRunVowMeta(vowId, tier = 1) {
+        if (typeof vowId !== 'string' || !vowId || typeof RUN_VOWS === 'undefined' || !RUN_VOWS[vowId]) {
+            return null;
+        }
+        const base = RUN_VOWS[vowId];
+        const tiers = Array.isArray(base.tiers) ? base.tiers : [];
+        const maxTier = Math.max(1, tiers.length || 1);
+        const safeTier = Math.max(1, Math.min(maxTier, Math.floor(Number(tier) || 1)));
+        const tierMeta = tiers[safeTier - 1] || tiers[0] || {};
+        return {
+            id: base.id,
+            name: base.name,
+            icon: base.icon || '✧',
+            category: base.category || '誓约',
+            description: base.description || '',
+            playstyle: base.playstyle || '',
+            routeHint: base.routeHint || '',
+            affinities: Array.isArray(base.affinities) ? base.affinities.slice() : [],
+            tier: safeTier,
+            maxTier,
+            tierLabel: tierMeta.label || `第 ${safeTier} 阶`,
+            summary: tierMeta.summary || base.description || '',
+            risk: tierMeta.risk || '',
+            effects: tierMeta.effects && typeof tierMeta.effects === 'object'
+                ? { ...tierMeta.effects }
+                : {}
+        };
+    }
+
+    getRunVowMetas() {
+        return this.normalizeRunVows()
+            .map((entry) => this.getRunVowMeta(entry.id, entry.tier))
+            .filter(Boolean);
+    }
+
+    getRunVowEffects() {
+        const result = {
+            openingBlock: 0,
+            firstTurnDraw: 0,
+            firstTurnEnergy: 0,
+            firstAttackBonusPerBattle: 0,
+            onKillHeal: 0,
+            battleStartHpLoss: 0,
+            rewardRareChance: 0,
+            battleCommandPointCapBonus: 0,
+            initialCommandPointsBonus: 0,
+            commandCostDiscount: 0,
+            maxHandSizeOffset: 0,
+            firstExhaustDrawPerTurn: 0,
+            blockGainMultiplier: 0,
+            healMultiplier: 1,
+            shopPriceMul: 1,
+            lowHpThreshold: 0,
+            lowHpDamageBonusPct: 0,
+            mapWeightShift: {}
+        };
+
+        this.getRunVowMetas().forEach((meta) => {
+            const effects = meta && meta.effects ? meta.effects : {};
+            result.openingBlock += Math.max(0, Math.floor(Number(effects.openingBlock) || 0));
+            result.firstTurnDraw += Math.max(0, Math.floor(Number(effects.firstTurnDraw) || 0));
+            result.firstTurnEnergy += Math.max(0, Math.floor(Number(effects.firstTurnEnergy) || 0));
+            result.firstAttackBonusPerBattle += Math.max(0, Math.floor(Number(effects.firstAttackBonusPerBattle) || 0));
+            result.onKillHeal += Math.max(0, Math.floor(Number(effects.onKillHeal) || 0));
+            result.battleStartHpLoss += Math.max(0, Math.floor(Number(effects.battleStartHpLoss) || 0));
+            result.rewardRareChance += Math.max(0, Number(effects.rewardRareChance) || 0);
+            result.battleCommandPointCapBonus += Math.max(0, Math.floor(Number(effects.battleCommandPointCapBonus) || 0));
+            result.initialCommandPointsBonus += Math.max(0, Math.floor(Number(effects.initialCommandPointsBonus) || 0));
+            result.commandCostDiscount += Math.max(0, Math.floor(Number(effects.commandCostDiscount) || 0));
+            result.maxHandSizeOffset += Math.floor(Number(effects.maxHandSizeOffset) || 0);
+            result.firstExhaustDrawPerTurn += Math.max(0, Math.floor(Number(effects.firstExhaustDrawPerTurn) || 0));
+            result.blockGainMultiplier += Math.max(0, Number(effects.blockGainMultiplier) || 0);
+            if (Number.isFinite(Number(effects.healMultiplier)) && Number(effects.healMultiplier) > 0) {
+                result.healMultiplier *= Math.max(0.2, Number(effects.healMultiplier) || 1);
+            }
+            if (Number.isFinite(Number(effects.shopPriceMul)) && Number(effects.shopPriceMul) > 0) {
+                result.shopPriceMul *= Math.max(0.6, Number(effects.shopPriceMul) || 1);
+            }
+            if (Number.isFinite(Number(effects.lowHpDamageBonusPct)) && Number(effects.lowHpDamageBonusPct) > 0) {
+                result.lowHpDamageBonusPct += Math.max(0, Number(effects.lowHpDamageBonusPct) || 0);
+            }
+            if (Number.isFinite(Number(effects.lowHpThreshold)) && Number(effects.lowHpThreshold) > 0) {
+                result.lowHpThreshold = Math.max(result.lowHpThreshold, Number(effects.lowHpThreshold) || 0);
+            }
+            if (effects.mapWeightShift && typeof effects.mapWeightShift === 'object') {
+                Object.keys(effects.mapWeightShift).forEach((key) => {
+                    const delta = Number(effects.mapWeightShift[key]);
+                    if (!Number.isFinite(delta)) return;
+                    result.mapWeightShift[key] = (result.mapWeightShift[key] || 0) + delta;
+                });
+            }
+        });
+
+        result.healMultiplier = Math.max(0.2, Math.min(1.5, result.healMultiplier));
+        result.shopPriceMul = Math.max(0.6, Math.min(2, result.shopPriceMul));
+        return result;
+    }
+
+    resetRunVowBattleState() {
+        this.runVowBattleState = {
+            firstAttackBonusUsed: false,
+            firstTurnBonusApplied: false,
+            firstExhaustDrawUsedThisTurn: false
+        };
+        return this.runVowBattleState;
+    }
+
+    normalizeSpiritCompanion(spiritCompanion = this.spiritCompanion) {
+        const catalog = (typeof SPIRIT_COMPANIONS !== 'undefined' && SPIRIT_COMPANIONS && typeof SPIRIT_COMPANIONS === 'object')
+            ? SPIRIT_COMPANIONS
+            : null;
+        if (!catalog || !spiritCompanion || typeof spiritCompanion !== 'object') {
+            this.spiritCompanion = null;
+            return null;
+        }
+        const id = typeof spiritCompanion.id === 'string' ? spiritCompanion.id : '';
+        const base = catalog[id];
+        if (!id || !base) {
+            this.spiritCompanion = null;
+            return null;
+        }
+        const maxTier = Math.max(1, Array.isArray(base.tiers) ? base.tiers.length : 1);
+        const tier = Math.max(1, Math.min(maxTier, Math.floor(Number(spiritCompanion.tier) || 1)));
+        this.spiritCompanion = { id, tier };
+        return this.spiritCompanion;
+    }
+
+    setSpiritCompanion(spiritId, tier = 1) {
+        const id = typeof spiritId === 'string' ? spiritId : '';
+        const catalog = (typeof SPIRIT_COMPANIONS !== 'undefined' && SPIRIT_COMPANIONS && typeof SPIRIT_COMPANIONS === 'object')
+            ? SPIRIT_COMPANIONS
+            : null;
+        if (!catalog || !catalog[id]) {
+            this.spiritCompanion = null;
+            return null;
+        }
+        this.spiritCompanion = {
+            id,
+            tier: Math.max(1, Math.floor(Number(tier) || 1))
+        };
+        return this.getSpiritCompanionMeta();
+    }
+
+    getSpiritCompanionMeta() {
+        const entry = this.normalizeSpiritCompanion();
+        if (!entry || typeof SPIRIT_COMPANIONS === 'undefined' || !SPIRIT_COMPANIONS[entry.id]) {
+            return null;
+        }
+        const base = SPIRIT_COMPANIONS[entry.id];
+        const tiers = Array.isArray(base.tiers) ? base.tiers : [];
+        const safeTier = Math.max(1, Math.min(tiers.length || 1, Math.floor(Number(entry.tier) || 1)));
+        const tierMeta = tiers[safeTier - 1] || tiers[0] || {};
+        return {
+            id: base.id,
+            name: base.name,
+            icon: base.icon || '✦',
+            title: base.title || '',
+            category: '灵契',
+            description: base.description || '',
+            playstyle: base.playstyle || '',
+            story: base.story || '',
+            affinities: Array.isArray(base.affinities) ? base.affinities.slice() : [],
+            tier: safeTier,
+            maxTier: Math.max(1, tiers.length || 1),
+            tierLabel: tierMeta.label || `第 ${safeTier} 阶`,
+            summary: tierMeta.summary || base.description || '',
+            passiveLabel: tierMeta.passiveLabel || '灵契被动',
+            passiveDesc: tierMeta.passiveDesc || '',
+            activeLabel: tierMeta.activeLabel || '灵契主动',
+            activeDesc: tierMeta.activeDesc || '',
+            chargeMax: Math.max(1, Math.floor(Number(tierMeta.chargeMax) || 5)),
+            passive: tierMeta.passive && typeof tierMeta.passive === 'object'
+                ? { ...tierMeta.passive }
+                : {},
+            active: tierMeta.active && typeof tierMeta.active === 'object'
+                ? { ...tierMeta.active }
+                : {}
+        };
+    }
+
+    getSpiritCompanionEffects() {
+        const meta = this.getSpiritCompanionMeta();
+        if (!meta) {
+            return { passive: {}, active: {}, chargeMax: 0 };
+        }
+        return {
+            passive: meta.passive || {},
+            active: meta.active || {},
+            chargeMax: Math.max(1, Math.floor(Number(meta.chargeMax) || 1))
+        };
+    }
+
+    ensureSpiritCompanionBattleState() {
+        if (!this.spiritCompanionBattleState || typeof this.spiritCompanionBattleState !== 'object') {
+            return this.resetSpiritCompanionBattleState();
+        }
+        const effects = this.getSpiritCompanionEffects();
+        const chargeMax = Math.max(0, Math.floor(Number(effects.chargeMax) || 0));
+        this.spiritCompanionBattleState.charge = Math.max(0, Math.min(
+            chargeMax,
+            Math.floor(Number(this.spiritCompanionBattleState.charge) || 0)
+        ));
+        this.spiritCompanionBattleState.firstSkillDrawUsedThisTurn = !!this.spiritCompanionBattleState.firstSkillDrawUsedThisTurn;
+        this.spiritCompanionBattleState.firstBlockBonusUsedThisTurn = !!this.spiritCompanionBattleState.firstBlockBonusUsedThisTurn;
+        this.spiritCompanionBattleState.onLoseHpPulseUsedThisTurn = !!this.spiritCompanionBattleState.onLoseHpPulseUsedThisTurn;
+        this.spiritCompanionBattleState.nthCardPassiveProcCount = Math.max(0, Math.floor(Number(this.spiritCompanionBattleState.nthCardPassiveProcCount) || 0));
+        return this.spiritCompanionBattleState;
+    }
+
+    resetSpiritCompanionBattleState() {
+        this.spiritCompanionBattleState = {
+            charge: 0,
+            firstSkillDrawUsedThisTurn: false,
+            firstBlockBonusUsedThisTurn: false,
+            onLoseHpPulseUsedThisTurn: false,
+            nthCardPassiveProcCount: 0
+        };
+        return this.ensureSpiritCompanionBattleState();
+    }
+
+    gainSpiritCharge(amount = 1) {
+        const effects = this.getSpiritCompanionEffects();
+        const chargeMax = Math.max(0, Math.floor(Number(effects.chargeMax) || 0));
+        const gain = Math.max(0, Math.floor(Number(amount) || 0));
+        if (chargeMax <= 0 || gain <= 0) {
+            return { before: 0, after: 0, gained: 0, chargeMax: 0, becameReady: false };
+        }
+        const state = this.ensureSpiritCompanionBattleState();
+        const before = Math.max(0, Math.floor(Number(state.charge) || 0));
+        state.charge = Math.max(0, Math.min(chargeMax, before + gain));
+        return {
+            before,
+            after: state.charge,
+            gained: Math.max(0, state.charge - before),
+            chargeMax,
+            becameReady: before < chargeMax && state.charge >= chargeMax
+        };
+    }
+
+    spendSpiritCharge(amount = null) {
+        const effects = this.getSpiritCompanionEffects();
+        const chargeMax = Math.max(0, Math.floor(Number(effects.chargeMax) || 0));
+        const cost = amount == null
+            ? chargeMax
+            : Math.max(0, Math.floor(Number(amount) || 0));
+        const state = this.ensureSpiritCompanionBattleState();
+        if (cost <= 0 || state.charge < cost) return false;
+        state.charge -= cost;
+        return true;
+    }
+
+    applyRunVowConsequences(vowId, previousTier = 0, nextTier = 1) {
+        const previousMeta = previousTier > 0 ? this.getRunVowMeta(vowId, previousTier) : null;
+        const nextMeta = this.getRunVowMeta(vowId, nextTier);
+        if (!nextMeta) return null;
+
+        const previousEffects = previousMeta && previousMeta.effects ? previousMeta.effects : {};
+        const nextEffects = nextMeta.effects || {};
+        const previousPenalty = Math.max(0, Math.floor(Number(previousEffects.maxHpPenalty) || 0));
+        const nextPenalty = Math.max(0, Math.floor(Number(nextEffects.maxHpPenalty) || 0));
+        const penaltyDelta = Math.max(0, nextPenalty - previousPenalty);
+
+        if (penaltyDelta > 0) {
+            const prevMaxHp = this.maxHp;
+            this.maxHp = Math.max(18, this.maxHp - penaltyDelta);
+            const actualLoss = Math.max(0, prevMaxHp - this.maxHp);
+            if (actualLoss > 0) {
+                this.currentHp = Math.min(this.currentHp, this.maxHp);
+                if (typeof Utils !== 'undefined' && Utils.showBattleLog) {
+                    Utils.showBattleLog(`誓约【${nextMeta.name}】代价深化：最大生命 -${actualLoss}`);
+                }
+            }
+        }
+
+        return nextMeta;
+    }
+
+    applyRunVow(vowId) {
+        if (typeof vowId !== 'string' || !vowId || typeof RUN_VOWS === 'undefined' || !RUN_VOWS[vowId]) {
+            return null;
+        }
+
+        const normalized = this.normalizeRunVows();
+        const existing = normalized.find((entry) => entry.id === vowId) || null;
+        const maxTier = Math.max(1, Array.isArray(RUN_VOWS[vowId].tiers) ? RUN_VOWS[vowId].tiers.length : 1);
+        const previousTier = existing ? existing.tier : 0;
+        const nextTier = existing ? Math.min(maxTier, existing.tier + 1) : 1;
+
+        if (!existing && normalized.length >= 2) return null;
+        if (existing && nextTier === previousTier) {
+            return {
+                type: 'locked',
+                previousTier,
+                nextTier,
+                meta: this.getRunVowMeta(vowId, nextTier)
+            };
+        }
+
+        if (existing) {
+            existing.tier = nextTier;
+        } else {
+            normalized.push({ id: vowId, tier: nextTier });
+        }
+        this.runVows = normalized;
+        this.normalizeRunVows();
+        const meta = this.applyRunVowConsequences(vowId, previousTier, nextTier);
+        return {
+            type: previousTier > 0 ? 'upgrade' : 'new',
+            previousTier,
+            nextTier,
+            meta
+        };
     }
 
     initSkill(skillId) {
@@ -582,6 +1025,40 @@ class Player {
             };
         }
 
+        if (archetypeId === 'cursebound') {
+            return {
+                id: 'cursebound',
+                name: '咒契裁断',
+                tier,
+                matchCount,
+                applyBleedBonus: 0,
+                applyMarkBonus: 0,
+                firstMarkHitDraw: 0,
+                openingBlock: tier,
+                firstSelfDamageDraw: tier,
+                selfDamagePulseBlock: 3 + tier * 2,
+                selfDamagePulseDamage: 2 + tier,
+                procUsedThisTurn: false
+            };
+        }
+
+        if (archetypeId === 'soulforge') {
+            return {
+                id: 'soulforge',
+                name: '灵傀锻阵',
+                tier,
+                matchCount,
+                applyBleedBonus: 0,
+                applyMarkBonus: 0,
+                firstMarkHitDraw: 0,
+                openingBlock: tier * 2,
+                firstForgeDraw: tier,
+                forgePulseBlock: 4 + tier * 2,
+                forgePulseDamage: 2 + tier,
+                procUsedThisTurn: false
+            };
+        }
+
         return null;
     }
 
@@ -631,6 +1108,16 @@ class Player {
                 const isBulwark = card.synergyGroup === 'bulwark' ||
                     (Array.isArray(card.keywords) && (card.keywords.includes('guard') || card.keywords.includes('retain')));
                 if (isBulwark) matchCount += 1;
+            } else if (archetypeId === 'cursebound') {
+                const isCursebound = card.synergyGroup === 'cursebound' ||
+                    (Array.isArray(card.keywords) &&
+                        (card.keywords.includes('curse') || card.keywords.includes('selfharm') || card.keywords.includes('contract')));
+                if (isCursebound) matchCount += 1;
+            } else if (archetypeId === 'soulforge') {
+                const isSoulforge = card.synergyGroup === 'soulforge' ||
+                    (Array.isArray(card.keywords) &&
+                        (card.keywords.includes('forge') || card.keywords.includes('construct') || card.keywords.includes('array')));
+                if (isSoulforge) matchCount += 1;
             }
         });
 
@@ -813,6 +1300,81 @@ class Player {
         if (typeof battle.markUIDirty === 'function') battle.markUIDirty('player', 'hand', 'piles', 'enemies');
     }
 
+    triggerArchetypeSelfDamageProc(actualDamage = 0) {
+        const damage = Math.max(0, Math.floor(Number(actualDamage) || 0));
+        if (damage <= 0) return;
+        if (this.turnNumber <= 0) return;
+
+        const resonance = this.archetypeResonance;
+        if (!(resonance && resonance.id === 'cursebound')) return;
+        if (resonance.procUsedThisTurn) return;
+        resonance.procUsedThisTurn = true;
+
+        const drawCount = Math.max(0, Math.floor(Number(resonance.firstSelfDamageDraw) || 0));
+        const blockAmount = Math.max(0, Math.floor(Number(resonance.selfDamagePulseBlock) || 0));
+        const damageAmount = Math.max(1, Math.floor(Number(resonance.selfDamagePulseDamage) || 0));
+        if (drawCount > 0) this.drawCards(drawCount);
+        if (blockAmount > 0) this.addBlock(blockAmount);
+
+        const battle = this.game && this.game.battle ? this.game.battle : null;
+        if (!battle || !Array.isArray(battle.enemies)) {
+            Utils.showBattleLog(`【咒契裁断】逆价清算：抽牌 +${drawCount}，护盾 +${blockAmount}`);
+            return;
+        }
+
+        const aliveEnemies = battle.enemies.filter(e => e && e.currentHp > 0);
+        if (aliveEnemies.length === 0) {
+            Utils.showBattleLog(`【咒契裁断】逆价清算：抽牌 +${drawCount}，护盾 +${blockAmount}`);
+            return;
+        }
+
+        const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+        const dealt = battle.dealDamageToEnemy(target, damageAmount);
+        Utils.showBattleLog(`【咒契裁断】逆价清算：抽牌 +${drawCount}，护盾 +${blockAmount}，并对 ${target.name} 造成 ${dealt} 伤害`);
+        if (typeof battle.markUIDirty === 'function') battle.markUIDirty('player', 'hand', 'piles', 'enemies');
+    }
+
+    triggerArchetypeForgeProc(createdCards = []) {
+        const cards = Array.isArray(createdCards) ? createdCards.filter(Boolean) : [];
+        if (cards.length === 0) return;
+        if (this.turnNumber <= 0) return;
+
+        const resonance = this.archetypeResonance;
+        if (!(resonance && resonance.id === 'soulforge')) return;
+        if (resonance.procUsedThisTurn) return;
+
+        const forgeCount = cards.filter(card => (
+            card.synergyGroup === 'soulforge'
+            || (Array.isArray(card.keywords) &&
+                (card.keywords.includes('forge') || card.keywords.includes('construct') || card.keywords.includes('array')))
+        )).length;
+        if (forgeCount <= 0) return;
+
+        resonance.procUsedThisTurn = true;
+        const drawCount = Math.max(0, Math.floor(Number(resonance.firstForgeDraw) || 0));
+        const blockAmount = Math.max(0, Math.floor(Number(resonance.forgePulseBlock) || 0));
+        const damageAmount = Math.max(1, Math.floor(Number(resonance.forgePulseDamage) || 0));
+        if (drawCount > 0) this.drawCards(drawCount);
+        if (blockAmount > 0) this.addBlock(blockAmount);
+
+        const battle = this.game && this.game.battle ? this.game.battle : null;
+        if (!battle || !Array.isArray(battle.enemies)) {
+            Utils.showBattleLog(`【灵傀锻阵】炉阵共振：抽牌 +${drawCount}，护盾 +${blockAmount}`);
+            return;
+        }
+
+        const aliveEnemies = battle.enemies.filter(e => e && e.currentHp > 0);
+        if (aliveEnemies.length === 0) {
+            Utils.showBattleLog(`【灵傀锻阵】炉阵共振：抽牌 +${drawCount}，护盾 +${blockAmount}`);
+            return;
+        }
+
+        const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+        const dealt = battle.dealDamageToEnemy(target, damageAmount);
+        Utils.showBattleLog(`【灵傀锻阵】炉阵共振：抽牌 +${drawCount}，护盾 +${blockAmount}，并对 ${target.name} 造成 ${dealt} 伤害`);
+        if (typeof battle.markUIDirty === 'function') battle.markUIDirty('player', 'hand', 'piles', 'enemies');
+    }
+
     // 准备战斗
     // 修复牌组数据（每次战斗前重置，防止费用永久变更）
     sanitizeDeck() {
@@ -880,11 +1442,19 @@ class Player {
             this.legacyRunDoctrine.stormcraftProcUsedThisTurn = false;
             this.legacyRunDoctrine.vitalweaveProcUsedThisTurn = false;
         }
+        this.normalizeRunVows();
+        this.resetRunVowBattleState();
     }
 
     // 准备战斗
     prepareBattle() {
         this.ensureAdventureBuffs();
+        this.normalizeRunDestiny();
+        this.normalizeRunVows();
+        this.normalizeSpiritCompanion();
+        this.resetRunDestinyBattleState();
+        this.resetRunVowBattleState();
+        this.resetSpiritCompanionBattleState();
         // 关键修复：战斗前净化牌组，修复潜在的费用错误
         this.sanitizeDeck();
 
@@ -1021,6 +1591,35 @@ class Player {
             this.addBlock(10);
             Utils.showBattleLog('行旅增益：结界余韵生效，开场护盾 +10');
         }
+
+        const destinyMeta = this.getRunDestinyMeta();
+        const destinyEffects = destinyMeta ? destinyMeta.effects : null;
+        if (destinyMeta && destinyEffects && Number(destinyEffects.openingBlock) > 0) {
+            const blockGain = Math.max(0, Math.floor(Number(destinyEffects.openingBlock) || 0));
+            if (blockGain > 0) {
+                this.addBlock(blockGain);
+                Utils.showBattleLog(`命格【${destinyMeta.name}】开场护盾 +${blockGain}`);
+            }
+        }
+
+        const vowEffects = this.getRunVowEffects();
+        if (Number(vowEffects.openingBlock) > 0) {
+            const blockGain = Math.max(0, Math.floor(Number(vowEffects.openingBlock) || 0));
+            if (blockGain > 0) {
+                this.addBlock(blockGain);
+                Utils.showBattleLog(`誓约加持：开场护盾 +${blockGain}`);
+            }
+        }
+        if (Number(vowEffects.battleStartHpLoss) > 0) {
+            const hpLoss = Math.min(
+                Math.max(0, Math.floor(Number(vowEffects.battleStartHpLoss) || 0)),
+                Math.max(0, this.currentHp - 1)
+            );
+            if (hpLoss > 0) {
+                this.currentHp -= hpLoss;
+                Utils.showBattleLog(`誓约代价：开场失去 ${hpLoss} 点生命`);
+            }
+        }
     }
 
     // 应用命环加成 - 已废弃，由recalculateStats替代
@@ -1029,6 +1628,9 @@ class Player {
     // 开始回合
     startTurn() {
         this.ensureAdventureBuffs();
+        this.normalizeRunDestiny();
+        this.normalizeRunVows();
+        this.normalizeSpiritCompanion();
         if (this.skillCooldown > 0) {
             this.skillCooldown--;
         }
@@ -1044,11 +1646,81 @@ class Player {
         this.relicAttackEnergyUsedThisTurn = false;
         this.pathDoctrineSkillChainCountThisTurn = 0;
         this.pathDoctrineSkillChainDrawUsedThisTurn = false;
+        if (!this.runDestinyBattleState || typeof this.runDestinyBattleState !== 'object') {
+            this.resetRunDestinyBattleState();
+        }
+        this.runDestinyBattleState.firstSkillDrawUsedThisTurn = false;
+        if (!this.runVowBattleState || typeof this.runVowBattleState !== 'object') {
+            this.resetRunVowBattleState();
+        }
+        this.runVowBattleState.firstExhaustDrawUsedThisTurn = false;
+        if (!this.spiritCompanionBattleState || typeof this.spiritCompanionBattleState !== 'object') {
+            this.resetSpiritCompanionBattleState();
+        }
+        this.spiritCompanionBattleState.firstSkillDrawUsedThisTurn = false;
+        this.spiritCompanionBattleState.firstBlockBonusUsedThisTurn = false;
+        this.spiritCompanionBattleState.onLoseHpPulseUsedThisTurn = false;
+        this.spiritCompanionBattleState.nthCardPassiveProcCount = 0;
         if (this.legacyRunDoctrine && typeof this.legacyRunDoctrine === 'object') {
             this.legacyRunDoctrine.entropyProcUsedThisTurn = false;
             this.legacyRunDoctrine.bulwarkProcUsedThisTurn = false;
             this.legacyRunDoctrine.stormcraftProcUsedThisTurn = false;
             this.legacyRunDoctrine.vitalweaveProcUsedThisTurn = false;
+        }
+
+        const destinyMeta = this.getRunDestinyMeta();
+        const destinyEffects = destinyMeta ? destinyMeta.effects : null;
+        if (
+            destinyMeta
+            && destinyEffects
+            && !this.runDestinyBattleState.firstTurnBonusApplied
+            && this.turnNumber === 1
+        ) {
+            const drawBonus = Math.max(0, Math.floor(Number(destinyEffects.firstTurnDraw) || 0));
+            const energyBonus = Math.max(0, Math.floor(Number(destinyEffects.firstTurnEnergy) || 0));
+            if (drawBonus > 0) {
+                this.drawCards(drawBonus);
+                Utils.showBattleLog(`命格【${destinyMeta.name}】首回合抽牌 +${drawBonus}`);
+            }
+            if (energyBonus > 0) {
+                this.gainEnergy(energyBonus);
+                Utils.showBattleLog(`命格【${destinyMeta.name}】首回合灵力 +${energyBonus}`);
+            }
+            this.runDestinyBattleState.firstTurnBonusApplied = true;
+        }
+
+        const vowEffects = this.getRunVowEffects();
+        if (
+            this.runVowBattleState
+            && !this.runVowBattleState.firstTurnBonusApplied
+            && this.turnNumber === 1
+        ) {
+            const drawBonus = Math.max(0, Math.floor(Number(vowEffects.firstTurnDraw) || 0));
+            const energyBonus = Math.max(0, Math.floor(Number(vowEffects.firstTurnEnergy) || 0));
+            if (drawBonus > 0) {
+                this.drawCards(drawBonus);
+                Utils.showBattleLog(`誓约之力：首回合抽牌 +${drawBonus}`);
+            }
+            if (energyBonus > 0) {
+                this.gainEnergy(energyBonus);
+                Utils.showBattleLog(`誓约之力：首回合灵力 +${energyBonus}`);
+            }
+            this.runVowBattleState.firstTurnBonusApplied = true;
+        }
+
+        if (destinyMeta && destinyEffects) {
+            const healThreshold = Number(destinyEffects.turnStartHealBelowPct);
+            const healAmount = Math.max(0, Math.floor(Number(destinyEffects.turnStartHealAmount) || 0));
+            if (
+                Number.isFinite(healThreshold)
+                && healThreshold > 0
+                && healAmount > 0
+                && this.maxHp > 0
+                && this.currentHp / this.maxHp <= healThreshold
+            ) {
+                this.heal(healAmount);
+                Utils.showBattleLog(`命格【${destinyMeta.name}】回合回复 ${healAmount} 点生命`);
+            }
         }
 
         // 1. 灵气稀薄 (realm 1) - 改为护盾效果-20%，更友好的新手体验
@@ -1323,6 +1995,51 @@ class Player {
             // Ignore environment check errors
         }
 
+        const destinyMeta = this.getRunDestinyMeta();
+        const destinyEffects = destinyMeta ? destinyMeta.effects : null;
+        if (
+            destinyMeta
+            && destinyEffects
+            && Number(destinyEffects.firstBlockGainBonusPct) > 0
+            && this.runDestinyBattleState
+            && !this.runDestinyBattleState.firstBlockBonusUsed
+        ) {
+            const bonusPct = Math.max(0, Number(destinyEffects.firstBlockGainBonusPct) || 0);
+            const bonusValue = Math.floor(amount * bonusPct);
+            if (bonusValue > 0) {
+                amount += bonusValue;
+                this.runDestinyBattleState.firstBlockBonusUsed = true;
+                Utils.showBattleLog(`命格【${destinyMeta.name}】首段护盾强化 +${bonusValue}`);
+            }
+        }
+
+        const vowEffects = this.getRunVowEffects();
+        if (Number(vowEffects.blockGainMultiplier) > 0) {
+            const bonusPct = Math.max(0, Number(vowEffects.blockGainMultiplier) || 0);
+            const bonusValue = Math.floor(amount * bonusPct);
+            if (bonusValue > 0) {
+                amount += bonusValue;
+                Utils.showBattleLog(`誓约之力：护势加深 +${bonusValue}`);
+            }
+        }
+
+        const spiritMeta = this.getSpiritCompanionMeta();
+        const spiritEffects = this.getSpiritCompanionEffects().passive || {};
+        if (
+            spiritMeta
+            && Number(spiritEffects.firstBlockBonusPerTurn) > 0
+            && Math.max(0, Math.floor(Number(this.turnNumber) || 0)) > 0
+            && this.ensureSpiritCompanionBattleState()
+            && !this.spiritCompanionBattleState.firstBlockBonusUsedThisTurn
+        ) {
+            const bonus = Math.max(0, Math.floor(Number(spiritEffects.firstBlockBonusPerTurn) || 0));
+            if (bonus > 0) {
+                amount += bonus;
+                this.spiritCompanionBattleState.firstBlockBonusUsedThisTurn = true;
+                Utils.showBattleLog(`灵契【${spiritMeta.name}】厚甲护道 +${bonus}`);
+            }
+        }
+
         // 1. 灵气稀薄 (realm 1) - 护盾效果-20%
         if (this.realm === 1) {
             amount = Math.floor(amount * 0.8);
@@ -1375,11 +2092,25 @@ class Player {
             console.error('heal received invalid amount', amount);
             return;
         }
+        const destinyMeta = this.getRunDestinyMeta();
+        const destinyEffects = destinyMeta ? destinyMeta.effects : null;
+        const vowEffects = this.getRunVowEffects();
         const doctrineProfile = this.getPathDoctrineProfile();
         if (doctrineProfile.path === 'destruction' && doctrineProfile.tier > 0) {
             const adjusted = Math.max(0, Math.floor(amount * doctrineProfile.healEfficiency));
             if (adjusted < amount) {
                 Utils.showBattleLog(`毁灭教义：治疗效率降低至 ${Math.round(doctrineProfile.healEfficiency * 100)}%`);
+            }
+            amount = adjusted;
+        }
+        if (
+            Number.isFinite(Number(vowEffects.healMultiplier))
+            && Number(vowEffects.healMultiplier) > 0
+            && Number(vowEffects.healMultiplier) < 1
+        ) {
+            const adjusted = Math.max(0, Math.floor(amount * Number(vowEffects.healMultiplier)));
+            if (adjusted < amount) {
+                Utils.showBattleLog(`誓约代价：治疗效率降低至 ${Math.round(Number(vowEffects.healMultiplier) * 100)}%`);
             }
             amount = adjusted;
         }
@@ -1418,6 +2149,17 @@ class Player {
                     }
                 }
 
+            }
+        }
+        if (destinyMeta && destinyEffects && Number(destinyEffects.overhealToBlockRatio) > 0) {
+            const ratio = Math.max(0, Number(destinyEffects.overhealToBlockRatio) || 0);
+            const overflow = Math.max(0, Math.floor(amount - finalActualHeal));
+            if (overflow > 0) {
+                const shield = Math.max(0, Math.floor(overflow * ratio));
+                if (shield > 0) {
+                    this.addBlock(shield);
+                    Utils.showBattleLog(`命格【${destinyMeta.name}】溢疗转护盾 +${shield}`);
+                }
             }
         }
         this.triggerArchetypeHealProc(finalActualHeal);
@@ -1661,6 +2403,14 @@ class Player {
                     }
                 }
             }
+
+            if (
+                this.game
+                && this.game.battle
+                && typeof this.game.battle.handleSpiritCompanionPlayerDamaged === 'function'
+            ) {
+                this.game.battle.handleSpiritCompanionPlayerDamaged(hpDamage);
+            }
         }
 
         return { dodged: false, damage: hpDamage };
@@ -1747,6 +2497,41 @@ class Player {
             cardRemovedFromHand = true;
 
             if (card.type === 'skill') {
+                const destinyMeta = this.getRunDestinyMeta();
+                const destinyEffects = destinyMeta ? destinyMeta.effects : null;
+                if (
+                    destinyMeta
+                    && destinyEffects
+                    && Number(destinyEffects.firstSkillDrawPerTurn) > 0
+                    && this.runDestinyBattleState
+                    && !this.runDestinyBattleState.firstSkillDrawUsedThisTurn
+                ) {
+                    const drawAmount = Math.max(0, Math.floor(Number(destinyEffects.firstSkillDrawPerTurn) || 0));
+                    if (drawAmount > 0) {
+                        this.drawCards(drawAmount);
+                        this.runDestinyBattleState.firstSkillDrawUsedThisTurn = true;
+                        Utils.showBattleLog(`命格【${destinyMeta.name}】首个技能抽牌 +${drawAmount}`);
+                    }
+                }
+                const spiritMeta = this.getSpiritCompanionMeta();
+                const spiritPassive = this.getSpiritCompanionEffects().passive || {};
+                if (
+                    spiritMeta
+                    && Number(spiritPassive.firstSkillDrawPerTurn) > 0
+                    && this.ensureSpiritCompanionBattleState()
+                    && !this.spiritCompanionBattleState.firstSkillDrawUsedThisTurn
+                ) {
+                    const drawAmount = Math.max(0, Math.floor(Number(spiritPassive.firstSkillDrawPerTurn) || 0));
+                    if (drawAmount > 0) {
+                        this.drawCards(drawAmount);
+                        this.spiritCompanionBattleState.firstSkillDrawUsedThisTurn = true;
+                        Utils.showBattleLog(`灵契【${spiritMeta.name}】引牌 +${drawAmount}`);
+                    }
+                    const chargeAmount = Math.max(0, Math.floor(Number(spiritPassive.firstSkillChargePerTurn) || 0));
+                    if (chargeAmount > 0) {
+                        this.gainSpiritCharge(chargeAmount);
+                    }
+                }
                 if (this.fateRing && this.fateRing.path === 'resonance' && !this.ringResonanceSkillDrawUsedThisTurn) {
                     this.drawCards(1);
                     this.ringResonanceSkillDrawUsedThisTurn = true;
@@ -1810,10 +2595,25 @@ class Player {
             if (card.isTemp || card.exhaust) {
                 this.exhaustPile.push(card);
                 Utils.showBattleLog('卡牌已消耗');
+                const vowEffects = this.getRunVowEffects();
+                if (
+                    Number(vowEffects.firstExhaustDrawPerTurn) > 0
+                    && this.runVowBattleState
+                    && !this.runVowBattleState.firstExhaustDrawUsedThisTurn
+                ) {
+                    const drawAmount = Math.max(0, Math.floor(Number(vowEffects.firstExhaustDrawPerTurn) || 0));
+                    if (drawAmount > 0) {
+                        this.drawCards(drawAmount);
+                        this.runVowBattleState.firstExhaustDrawUsedThisTurn = true;
+                        Utils.showBattleLog(`誓约之力：消耗回牌 +${drawAmount}`);
+                    }
+                }
             } else {
                 // 加入弃牌堆
                 this.discardPile.push(card);
             }
+
+            this.gainSpiritCharge(1);
 
             return results;
         } catch (error) {
@@ -1945,6 +2745,44 @@ class Player {
 
             case 'discardRandom':
                 return { type: 'discardRandom', value: effect.value || 1, trigger: effect.trigger };
+
+            case 'addStatus':
+            case 'createCard': {
+                const cardId = effect.cardId;
+                const count = Math.max(1, Math.floor(Number(effect.count) || 1));
+                const zone = effect.zone === 'hand' ? 'hand' : (effect.zone === 'draw' ? 'draw' : 'discard');
+                const createdCards = [];
+
+                for (let i = 0; i < count; i++) {
+                    let template = null;
+                    if (typeof cloneCardTemplate === 'function') {
+                        template = cloneCardTemplate(cardId);
+                    } else if (typeof CARDS !== 'undefined' && CARDS[cardId]) {
+                        template = JSON.parse(JSON.stringify(CARDS[cardId]));
+                    }
+                    if (!template) continue;
+
+                    template.instanceId = this.generateCardId();
+                    if (effect.costOverride !== undefined && effect.costOverride !== null) {
+                        const forcedCost = Math.max(0, Math.floor(Number(effect.costOverride) || 0));
+                        template.cost = forcedCost;
+                        template.baseCost = forcedCost;
+                    }
+                    if (effect.temporary) template.isTemp = true;
+
+                    if (zone === 'hand') this.hand.push(template);
+                    else if (zone === 'draw') this.drawPile.push(template);
+                    else this.discardPile.push(template);
+
+                    createdCards.push(template);
+                }
+
+                if (effect.type === 'createCard' && createdCards.length > 0) {
+                    this.triggerArchetypeForgeProc(createdCards);
+                }
+
+                return { type: effect.type, zone, cards: createdCards, count: createdCards.length };
+            }
 
             case 'drawCalculated': {
                 const base = effect.base || 0;
@@ -2092,8 +2930,13 @@ class Player {
                 return { type: 'removeBlock', target: effect.target };
 
             case 'selfDamage':
-                this.currentHp = Math.max(1, this.currentHp - value);
-                return { type: 'selfDamage', value };
+                {
+                    const beforeHp = Math.max(1, Math.floor(Number(this.currentHp) || 1));
+                    this.currentHp = Math.max(1, beforeHp - value);
+                    const actualDamage = Math.max(0, beforeHp - this.currentHp);
+                    this.triggerArchetypeSelfDamageProc(actualDamage);
+                    return { type: 'selfDamage', value: actualDamage };
+                }
 
             case 'maxHpOnKill':
                 return { type: 'maxHpOnKill', value, target: effect.target };
@@ -2784,7 +3627,11 @@ class Player {
             legacyRunDoctrine: this.legacyRunDoctrine,
             legacyRunMission: this.legacyRunMission,
             adventureBuffs: this.ensureAdventureBuffs(),
-            maxRealmReached: this.maxRealmReached || 1
+            maxRealmReached: this.maxRealmReached || 1,
+            runDestiny: this.normalizeRunDestiny(),
+            runVows: this.normalizeRunVows(),
+            spiritCompanion: this.normalizeSpiritCompanion(),
+            spiritCompanionBattleState: this.ensureSpiritCompanionBattleState()
         };
     }
 
@@ -2809,7 +3656,8 @@ class Player {
                 ? treasure.setTag.trim()
                 : '';
             if (!setTag) return;
-            counts[setTag] = (counts[setTag] || 0) + 1;
+            const setEcho = treasure && treasure.data && treasure.data.workshopSetEcho ? 1 : 0;
+            counts[setTag] = (counts[setTag] || 0) + 1 + setEcho;
         });
         return counts;
     }
@@ -2818,6 +3666,467 @@ class Player {
         if (!setTag || typeof setTag !== 'string') return 0;
         const counts = this.getEquippedTreasureSetCounts();
         return Math.max(0, Math.floor(Number(counts[setTag]) || 0));
+    }
+
+    getTreasureById(treasureId, options = {}) {
+        if (!treasureId || typeof treasureId !== 'string') return null;
+        const source = options && options.equippedOnly
+            ? this.equippedTreasures
+            : this.collectedTreasures;
+        if (!Array.isArray(source)) return null;
+        return source.find((treasure) => treasure && treasure.id === treasureId) || null;
+    }
+
+    getTreasureSetLabel(setTag = '') {
+        const labels = {
+            xuanjia: '玄甲',
+            liemai: '裂脉',
+            xingheng: '星衡',
+            wuxing: '五行'
+        };
+        return labels[setTag] || '散修';
+    }
+
+    getTreasureSetMeta(setTag = '') {
+        const metas = {
+            xuanjia: {
+                id: 'xuanjia',
+                label: '玄甲',
+                icon: '🛡️',
+                theme: '护阵 / 反制 / 拉长回合',
+                twoPiece: '获得护盾时额外提高 20%，把防守牌真正转成续航资本。',
+                threePiece: '回合开始获得护盾留存与荆棘，且承受伤害时额外 -1。'
+            },
+            liemai: {
+                id: 'liemai',
+                label: '裂脉',
+                icon: '🩸',
+                theme: '斩杀 / 压血线 / 滚雪球',
+                twoPiece: '击杀回复生命，对流血目标追加伤害，鼓励连续收割。',
+                threePiece: '面对高层流血目标时追加最大生命比例斩击，用于压垮精英与 Boss。'
+            },
+            xingheng: {
+                id: 'xingheng',
+                label: '星衡',
+                icon: '✨',
+                theme: '节奏 / 回能 / 命环联动',
+                twoPiece: '回合开始根据灵力状态补 1 灵力或抽 1 张牌，维持行动链不断。',
+                threePiece: '开场额外抽牌，满灵力出手时再补伤害，把节奏优势转成爆发窗口。'
+            },
+            wuxing: {
+                id: 'wuxing',
+                label: '五行',
+                icon: '☯️',
+                theme: '净化 / 调序 / 元素容错',
+                twoPiece: '回合开始净化 1 层减益；若无减益则获得 3 护盾，提升环境适应力。',
+                threePiece: '若本回合完成净化则抽 1 张牌，否则获得 1 灵力，让调序也能反哺节奏。'
+            }
+        };
+        return metas[setTag] || null;
+    }
+
+    getTreasureResearchRoleMeta(treasureId = '') {
+        const id = String(treasureId || '');
+        const coreTreasureIds = new Set([
+            'iron_talisman',
+            'soul_banner',
+            'spirit_turtle_shell',
+            'astral_forge_core',
+            'fate_lotus_seal',
+            'ringweaver_anvil',
+            'five_element_bead'
+        ]);
+        const formTreasureIds = new Set([
+            'metalEssence',
+            'woodSpiritRoot',
+            'waterCrystal',
+            'firePhoenixFeather',
+            'thickEarthShield',
+            'vitality_stone',
+            'blood_orb',
+            'ring_echo_compass',
+            'moonblade_sheath',
+            'hunter_contract',
+            'matrix_resonator'
+        ]);
+
+        if (coreTreasureIds.has(id)) {
+            return {
+                tier: 'core',
+                label: '核心件',
+                summary: '承担套装上限或器灵灌注位，优先围绕其规划路线和后续补件。'
+            };
+        }
+        if (formTreasureIds.has(id)) {
+            return {
+                tier: 'form',
+                label: '形态件',
+                summary: '负责改写回合节奏或触发方式，是把体系从“能用”推到“会转”的关键齿轮。'
+            };
+        }
+        return {
+            tier: 'base',
+            label: '基础件',
+            summary: '更适合作为前期补强或过渡件，先提供稳定价值，再决定是否继续投入研究。'
+        };
+    }
+
+    getTreasureResearchArchetypeTags(treasure = null) {
+        const tags = new Set();
+        const setTag = treasure && typeof treasure.setTag === 'string'
+            ? treasure.setTag.trim()
+            : '';
+        const description = String(treasure?.description || '').toLowerCase();
+        const rarity = String(treasure?.rarity || 'common').toLowerCase();
+
+        if (setTag === 'xuanjia') {
+            tags.add('护阵拖线');
+            tags.add('反击续航');
+        } else if (setTag === 'liemai') {
+            tags.add('攻势抢拍');
+            tags.add('斩杀号转');
+        } else if (setTag === 'xingheng') {
+            tags.add('回能调度');
+            tags.add('法则编织');
+        } else if (setTag === 'wuxing') {
+            tags.add('元素适配');
+            tags.add('净域调序');
+        }
+
+        if (/护盾|减伤|免疫/.test(description)) tags.add('护阵拖线');
+        if (/击杀|流血|重伤|伤害/.test(description)) tags.add('攻势抢拍');
+        if (/灵力|抽|命环/.test(description)) tags.add('回能调度');
+        if (/元素|火|冰|雷|土|木/.test(description)) tags.add('元素适配');
+        if (rarity === 'legendary' || rarity === 'mythic') tags.add('Boss 对策');
+
+        return Array.from(tags).slice(0, 4);
+    }
+
+    isTreasureSpiritInfusionEligible(treasure = null) {
+        const treasureId = typeof treasure === 'string'
+            ? treasure
+            : treasure?.id || '';
+        return this.getTreasureResearchRoleMeta(treasureId).tier === 'core';
+    }
+
+    getTreasureSpiritBondLabel(spiritId = '') {
+        const safeId = String(spiritId || '');
+        if (!safeId) return '器灵';
+        const spiritMeta = typeof SPIRIT_COMPANIONS !== 'undefined' && SPIRIT_COMPANIONS
+            ? SPIRIT_COMPANIONS[safeId] || null
+            : null;
+        if (!spiritMeta) return `器灵·${safeId}`;
+        return `${spiritMeta.icon || '✦'} ${spiritMeta.name}`;
+    }
+
+    getTreasureSpiritInfusionNote(treasure = null) {
+        const roleMeta = this.getTreasureResearchRoleMeta(typeof treasure === 'string' ? treasure : treasure?.id || '');
+        if (this.isTreasureSpiritInfusionEligible(treasure)) {
+            return `${roleMeta.label}，可承接器灵灌注，把灵契护道能力并入法宝轴心。`;
+        }
+        return `${roleMeta.label}，当前不开放器灵灌注，避免把器灵价值分散到过渡件上。`;
+    }
+
+    describeTreasureWorkshopStatus(treasure = null) {
+        if (!treasure || !treasure.data || typeof treasure.data !== 'object') return '';
+        const tags = [];
+        if (treasure.data.workshopReforge) {
+            tags.push(this.getTreasureWorkshopReforgeLabel(treasure.data.workshopReforge));
+        }
+        if (treasure.data.workshopSpiritBond) {
+            tags.push(this.getTreasureSpiritBondLabel(treasure.data.workshopSpiritBond));
+        }
+        if (treasure.data.workshopSetEcho) {
+            tags.push('套装修正');
+        }
+        return tags.join(' / ');
+    }
+
+    getTreasureWorkshopStatusLines(treasure = null) {
+        const lines = [];
+        if (!treasure || !treasure.data || typeof treasure.data !== 'object') {
+            return ['尚未进行炼器改造，可从重铸、器灵或套装修正中挑一条深入。'];
+        }
+        if (treasure.data.workshopReforge) {
+            lines.push(`重铸：${this.getTreasureWorkshopReforgeLabel(treasure.data.workshopReforge)} · ${this.getTreasureWorkshopReforgeSummary(treasure.data.workshopReforge)}`);
+        }
+        if (treasure.data.workshopSpiritBond) {
+            lines.push(`器灵：已与 ${this.getTreasureSpiritBondLabel(treasure.data.workshopSpiritBond)} 建立回响，开场可额外蓄能。`);
+        }
+        if (treasure.data.workshopSetEcho) {
+            lines.push(`套装修正：当前会额外视作 1 件同套，用于补齐共鸣阈值。`);
+        }
+        if (lines.length === 0) {
+            lines.push('尚未进行炼器改造，可从重铸、器灵或套装修正中挑一条深入。');
+        }
+        return lines;
+    }
+
+    getTreasureResearchEntry(treasure = null) {
+        const resolvedTreasure = typeof treasure === 'string'
+            ? (this.getTreasureById(treasure) || (typeof TREASURES !== 'undefined' && TREASURES ? TREASURES[treasure] || null : null))
+            : treasure;
+        if (!resolvedTreasure) return null;
+
+        const setTag = typeof resolvedTreasure.setTag === 'string'
+            ? resolvedTreasure.setTag.trim()
+            : '';
+        const setMeta = this.getTreasureSetMeta(setTag);
+        const role = this.getTreasureResearchRoleMeta(resolvedTreasure.id);
+        const equipped = this.isTreasureEquipped(resolvedTreasure.id);
+        const totalSetCount = setTag && typeof TREASURES !== 'undefined' && TREASURES
+            ? Object.values(TREASURES).filter((item) => item && item.setTag === setTag).length
+            : 0;
+
+        return {
+            id: resolvedTreasure.id || '',
+            name: resolvedTreasure.name || '',
+            icon: resolvedTreasure.icon || '✦',
+            rarity: resolvedTreasure.rarity || 'common',
+            equipped,
+            setTag,
+            setLabel: setMeta?.label || this.getTreasureSetLabel(setTag),
+            setMeta,
+            setPieces: setTag ? this.getTreasureSetPieces(setTag) : 0,
+            totalSetCount,
+            role,
+            focusTags: this.getTreasureResearchArchetypeTags(resolvedTreasure),
+            infusionEligible: this.isTreasureSpiritInfusionEligible(resolvedTreasure),
+            infusionNote: this.getTreasureSpiritInfusionNote(resolvedTreasure),
+            workshopStatus: this.describeTreasureWorkshopStatus(resolvedTreasure),
+            workshopLines: this.getTreasureWorkshopStatusLines(resolvedTreasure),
+            reforgeMode: resolvedTreasure?.data?.workshopReforge || '',
+            spiritBond: resolvedTreasure?.data?.workshopSpiritBond || '',
+            setEcho: !!resolvedTreasure?.data?.workshopSetEcho
+        };
+    }
+
+    getTreasureWorkshopResearchOverview() {
+        const catalog = typeof TREASURES !== 'undefined' && TREASURES
+            ? Object.values(TREASURES).filter(Boolean)
+            : [];
+        const collected = Array.isArray(this.collectedTreasures) ? this.collectedTreasures : [];
+        const equipped = Array.isArray(this.equippedTreasures) ? this.equippedTreasures : [];
+        const setIds = ['xuanjia', 'liemai', 'xingheng', 'wuxing'];
+        const setProgress = setIds.map((setTag) => {
+            const meta = this.getTreasureSetMeta(setTag);
+            const owned = collected.filter((treasure) => treasure && treasure.setTag === setTag).length;
+            const equippedCount = equipped.filter((treasure) => treasure && treasure.setTag === setTag).length;
+            const total = catalog.filter((treasure) => treasure && treasure.setTag === setTag).length;
+            const pieces = this.getTreasureSetPieces(setTag);
+            const resonanceStage = pieces >= 3
+                ? 'full'
+                : pieces >= 2
+                    ? 'active'
+                    : owned > 0
+                        ? 'forming'
+                        : 'empty';
+            const resonanceLabel = resonanceStage === 'full'
+                ? '三段共鸣'
+                : resonanceStage === 'active'
+                    ? '二段共鸣'
+                    : resonanceStage === 'forming'
+                        ? '待收集'
+                        : '未起步';
+            return {
+                id: setTag,
+                label: meta?.label || this.getTreasureSetLabel(setTag),
+                icon: meta?.icon || '✦',
+                theme: meta?.theme || '',
+                twoPiece: meta?.twoPiece || '',
+                threePiece: meta?.threePiece || '',
+                owned,
+                equipped: equippedCount,
+                total,
+                pieces,
+                resonanceStage,
+                resonanceLabel
+            };
+        });
+
+        const roleTotal = catalog.reduce((accumulator, treasure) => {
+            const tier = this.getTreasureResearchRoleMeta(treasure?.id || '').tier;
+            accumulator[tier] = (accumulator[tier] || 0) + 1;
+            return accumulator;
+        }, { core: 0, form: 0, base: 0 });
+        const roleOwned = collected.reduce((accumulator, treasure) => {
+            const tier = this.getTreasureResearchRoleMeta(treasure?.id || '').tier;
+            accumulator[tier] = (accumulator[tier] || 0) + 1;
+            return accumulator;
+        }, { core: 0, form: 0, base: 0 });
+
+        const activeReforges = collected.filter((treasure) => treasure?.data?.workshopReforge).length;
+        const activeInfusions = collected.filter((treasure) => treasure?.data?.workshopSpiritBond).length;
+        const activeSetEchoes = collected.filter((treasure) => treasure?.data?.workshopSetEcho).length;
+        const readyInfusions = equipped
+            .filter((treasure) => this.isTreasureSpiritInfusionEligible(treasure) && !treasure?.data?.workshopSpiritBond)
+            .map((treasure) => treasure?.name || treasure?.id || '未知法宝');
+
+        return {
+            setProgress,
+            coreOwned: roleOwned.core || 0,
+            coreTotal: roleTotal.core || 0,
+            formOwned: roleOwned.form || 0,
+            formTotal: roleTotal.form || 0,
+            baseOwned: roleOwned.base || 0,
+            baseTotal: roleTotal.base || 0,
+            activeReforges,
+            activeInfusions,
+            activeSetEchoes,
+            activeWorkshops: activeReforges + activeInfusions + activeSetEchoes,
+            resonantSets: setProgress.filter((item) => item.pieces >= 2).length,
+            fullSets: setProgress.filter((item) => item.pieces >= 3).length,
+            readyInfusions
+        };
+    }
+
+    getTreasureWorkshopReforgeMode(treasure = null) {
+        const setTag = treasure && typeof treasure.setTag === 'string'
+            ? treasure.setTag.trim()
+            : '';
+        if (setTag === 'xuanjia') return 'bulwark';
+        if (setTag === 'liemai') return 'rend';
+        if (setTag === 'xingheng') return 'tempo';
+        if (setTag === 'wuxing') return 'harmony';
+
+        const rarity = treasure && typeof treasure.rarity === 'string'
+            ? treasure.rarity.toLowerCase()
+            : 'common';
+        if (rarity === 'legendary' || rarity === 'mythic') return 'tempo';
+        if (rarity === 'rare') return 'rend';
+        return 'bulwark';
+    }
+
+    getTreasureWorkshopReforgeLabel(mode = '') {
+        const labels = {
+            bulwark: '护势重铸',
+            rend: '裂脉重铸',
+            tempo: '星衡重铸',
+            harmony: '五行重铸'
+        };
+        return labels[mode] || '灵纹重铸';
+    }
+
+    getTreasureWorkshopReforgeSummary(mode = '') {
+        const summaries = {
+            bulwark: '战斗开始时额外获得 4 护盾。',
+            rend: '对带减益的敌人造成伤害时额外 +3。',
+            tempo: '战斗开始时额外抽 1 张牌。',
+            harmony: '回合开始时净化 1 层减益；若无减益则获得 3 护盾。'
+        };
+        return summaries[mode] || '炼器纹路正在稳定回响。';
+    }
+
+    getTreasureWorkshopSnapshot(scope = 'equipped') {
+        const source = scope === 'all'
+            ? (Array.isArray(this.collectedTreasures) ? this.collectedTreasures : [])
+            : (Array.isArray(this.equippedTreasures) ? this.equippedTreasures : []);
+        return source.map((treasure) => {
+            const mode = treasure && treasure.data ? treasure.data.workshopReforge : '';
+            const researchEntry = this.getTreasureResearchEntry(treasure);
+            return {
+                id: treasure?.id || '',
+                name: treasure?.name || '',
+                icon: treasure?.icon || '✦',
+                setTag: treasure?.setTag || '',
+                setLabel: this.getTreasureSetLabel(treasure?.setTag || ''),
+                equipped: this.isTreasureEquipped(treasure?.id),
+                setTheme: researchEntry?.setMeta?.theme || '',
+                setPieces: researchEntry?.setPieces || 0,
+                researchTier: researchEntry?.role?.tier || 'base',
+                researchLabel: researchEntry?.role?.label || '基础件',
+                focusTags: Array.isArray(researchEntry?.focusTags) ? researchEntry.focusTags : [],
+                infusionEligible: !!researchEntry?.infusionEligible,
+                reforge: mode
+                    ? {
+                        mode,
+                        label: this.getTreasureWorkshopReforgeLabel(mode),
+                        summary: this.getTreasureWorkshopReforgeSummary(mode)
+                    }
+                    : null,
+                spiritBond: treasure?.data?.workshopSpiritBond || null,
+                setEcho: !!treasure?.data?.workshopSetEcho,
+                workshopStatus: researchEntry?.workshopStatus || ''
+            };
+        });
+    }
+
+    applyTreasureReforge(treasureId) {
+        const treasure = this.getTreasureById(treasureId);
+        if (!treasure) return null;
+        if (!treasure.data || typeof treasure.data !== 'object') treasure.data = {};
+
+        (Array.isArray(this.collectedTreasures) ? this.collectedTreasures : []).forEach((entry) => {
+            if (!entry) return;
+            if (!entry.data || typeof entry.data !== 'object') entry.data = {};
+            delete entry.data.workshopReforge;
+        });
+
+        const mode = this.getTreasureWorkshopReforgeMode(treasure);
+        treasure.data.workshopReforge = mode;
+        return {
+            id: treasure.id,
+            name: treasure.name,
+            icon: treasure.icon || '✦',
+            setTag: treasure.setTag || '',
+            setLabel: this.getTreasureSetLabel(treasure.setTag || ''),
+            mode,
+            label: this.getTreasureWorkshopReforgeLabel(mode),
+            summary: this.getTreasureWorkshopReforgeSummary(mode)
+        };
+    }
+
+    applyTreasureSpiritInfusion(treasureId, spiritId = '') {
+        const treasure = this.getTreasureById(treasureId);
+        const spiritMeta = this.getSpiritCompanionMeta();
+        const resolvedSpiritId = typeof spiritId === 'string' && spiritId
+            ? spiritId
+            : (spiritMeta ? spiritMeta.id : '');
+        if (!treasure || !resolvedSpiritId || !spiritMeta || !this.isTreasureSpiritInfusionEligible(treasure)) return null;
+        if (!treasure.data || typeof treasure.data !== 'object') treasure.data = {};
+
+        (Array.isArray(this.collectedTreasures) ? this.collectedTreasures : []).forEach((entry) => {
+            if (!entry) return;
+            if (!entry.data || typeof entry.data !== 'object') entry.data = {};
+            delete entry.data.workshopSpiritBond;
+        });
+
+        treasure.data.workshopSpiritBond = resolvedSpiritId;
+        return {
+            id: treasure.id,
+            name: treasure.name,
+            icon: treasure.icon || '✦',
+            spiritId: spiritMeta.id,
+            spiritName: spiritMeta.name,
+            spiritIcon: spiritMeta.icon || '✦',
+            summary: '战斗开始时，若当前同行灵契匹配，则灵契蓄能 +1。'
+        };
+    }
+
+    applyTreasureSetCalibration(treasureId) {
+        const treasure = this.getTreasureById(treasureId);
+        const setTag = treasure && typeof treasure.setTag === 'string'
+            ? treasure.setTag.trim()
+            : '';
+        if (!treasure || !setTag) return null;
+        if (!treasure.data || typeof treasure.data !== 'object') treasure.data = {};
+
+        (Array.isArray(this.collectedTreasures) ? this.collectedTreasures : []).forEach((entry) => {
+            if (!entry) return;
+            if (!entry.data || typeof entry.data !== 'object') entry.data = {};
+            delete entry.data.workshopSetEcho;
+        });
+
+        treasure.data.workshopSetEcho = true;
+        return {
+            id: treasure.id,
+            name: treasure.name,
+            icon: treasure.icon || '✦',
+            setTag,
+            setLabel: this.getTreasureSetLabel(setTag),
+            pieces: this.getTreasureSetPieces(setTag),
+            summary: '该法宝额外视作 1 件同套装法宝，用于补齐套装共鸣阈值。'
+        };
     }
 
     // 获得法宝
@@ -2877,6 +4186,8 @@ class Player {
 
     getMaxHandSize() {
         let limit = Math.max(1, Math.floor(Number(this.maxHandSize) || 10));
+        const vowEffects = this.getRunVowEffects();
+        limit += Math.floor(Number(vowEffects.maxHandSizeOffset) || 0);
         if (this.game && typeof this.game.getEndlessParanoiaHandLimitPenalty === 'function') {
             limit += Math.floor(Number(this.game.getEndlessParanoiaHandLimitPenalty()) || 0);
         }
@@ -2936,6 +4247,23 @@ class Player {
         return false;
     }
 
+    cleanseTreasureDebuffs(limit = 1) {
+        if (!this.buffs || typeof this.buffs !== 'object') this.buffs = {};
+        const debuffTypes = ['weak', 'vulnerable', 'poison', 'burn', 'paralysis', 'stun', 'freeze', 'slow'];
+        const removed = [];
+        for (const debuffType of debuffTypes) {
+            if (removed.length >= limit) break;
+            if (Math.max(0, Math.floor(Number(this.buffs[debuffType]) || 0)) > 0) {
+                delete this.buffs[debuffType];
+                removed.push(debuffType);
+            }
+        }
+        return {
+            cleansed: removed.length,
+            removed
+        };
+    }
+
     // 触发法宝效果 (只触发装备的)
     // 支持返回值修改（例如伤害减免）
     triggerTreasureEffect(triggerType, ...args) {
@@ -2954,10 +4282,73 @@ class Player {
             }
         });
 
+        if (triggerType === 'onBattleStart') {
+            const workshopLogs = [];
+            this.equippedTreasures.forEach((treasure) => {
+                const data = treasure && treasure.data && typeof treasure.data === 'object'
+                    ? treasure.data
+                    : null;
+                if (!data) return;
+                if (data.workshopReforge === 'bulwark') {
+                    this.addBlock(4);
+                    workshopLogs.push(`${treasure.name} 护盾 +4`);
+                } else if (data.workshopReforge === 'tempo') {
+                    this.drawCards(1);
+                    workshopLogs.push(`${treasure.name} 抽牌 +1`);
+                }
+            });
+
+            const spiritMeta = this.getSpiritCompanionMeta();
+            const infusedTreasure = this.equippedTreasures.find((treasure) => (
+                treasure
+                && treasure.data
+                && typeof treasure.data.workshopSpiritBond === 'string'
+                && treasure.data.workshopSpiritBond.length > 0
+            ));
+            if (
+                infusedTreasure
+                && spiritMeta
+                && infusedTreasure.data.workshopSpiritBond === spiritMeta.id
+                && typeof this.gainSpiritCharge === 'function'
+            ) {
+                const chargeResult = this.gainSpiritCharge(1);
+                if (chargeResult.gained > 0) {
+                    workshopLogs.push(`${infusedTreasure.name} 为 ${spiritMeta.name} 蓄能 +${chargeResult.gained}`);
+                }
+            }
+
+            if (workshopLogs.length > 0 && typeof Utils !== 'undefined' && Utils.showBattleLog) {
+                Utils.showBattleLog(`【炼器坊】${workshopLogs.join('；')}`);
+            }
+        }
+
+        if (triggerType === 'onTurnStart') {
+            const workshopLogs = [];
+            this.equippedTreasures.forEach((treasure) => {
+                const data = treasure && treasure.data && typeof treasure.data === 'object'
+                    ? treasure.data
+                    : null;
+                if (!data || data.workshopReforge !== 'harmony') return;
+
+                const cleanseResult = this.cleanseTreasureDebuffs(1);
+                if (cleanseResult.cleansed > 0) {
+                    workshopLogs.push(`${treasure.name} 净化 ${cleanseResult.removed.join(' / ')}`);
+                } else {
+                    this.addBlock(3);
+                    workshopLogs.push(`${treasure.name} 护盾 +3`);
+                }
+            });
+
+            if (workshopLogs.length > 0 && typeof Utils !== 'undefined' && Utils.showBattleLog) {
+                Utils.showBattleLog(`【炼器坊】${workshopLogs.join('；')}`);
+            }
+        }
+
         const setCounts = this.getEquippedTreasureSetCounts();
         const xuanjiaPieces = Math.max(0, Math.floor(Number(setCounts.xuanjia) || 0));
         const liemaiPieces = Math.max(0, Math.floor(Number(setCounts.liemai) || 0));
         const xinghengPieces = Math.max(0, Math.floor(Number(setCounts.xingheng) || 0));
+        const wuxingPieces = Math.max(0, Math.floor(Number(setCounts.wuxing) || 0));
 
         if (triggerType === 'onBattleStart') {
             if (xinghengPieces >= 3) {
@@ -2978,6 +4369,24 @@ class Player {
                 } else {
                     this.drawCards(1);
                     Utils.showBattleLog('【星衡套·2】节奏前推：抽牌 +1');
+                }
+            }
+
+            if (wuxingPieces >= 2) {
+                const cleanseResult = this.cleanseTreasureDebuffs(1);
+                if (cleanseResult.cleansed > 0) {
+                    Utils.showBattleLog(`【五行套·2】调序净化：移除 ${cleanseResult.removed.join(' / ')}`);
+                    if (wuxingPieces >= 3) {
+                        this.drawCards(1);
+                        Utils.showBattleLog('【五行套·3】轮转回响：抽牌 +1');
+                    }
+                } else {
+                    this.addBlock(3);
+                    Utils.showBattleLog('【五行套·2】调序护体：获得 3 护盾');
+                    if (wuxingPieces >= 3) {
+                        this.gainEnergy(1);
+                        Utils.showBattleLog('【五行套·3】轮转回响：灵力 +1');
+                    }
                 }
             }
         } else if (triggerType === 'onKill') {
@@ -3035,6 +4444,18 @@ class Player {
 
             if (xinghengPieces >= 3 && Math.floor(Number(this.currentEnergy) || 0) === Math.floor(Number(this.baseEnergy) || 0)) {
                 modifiedValue = Math.max(0, Math.floor(Number(modifiedValue) || 0) + 2);
+            }
+
+            const hasDebuff = target && target.buffs && Object.values(target.buffs).some((value) => (
+                Math.max(0, Math.floor(Number(value) || 0)) > 0
+            ));
+            const reforgeTreasure = this.equippedTreasures.find((treasure) => (
+                treasure
+                && treasure.data
+                && treasure.data.workshopReforge === 'rend'
+            ));
+            if (reforgeTreasure && hasDebuff) {
+                modifiedValue = Math.max(0, Math.floor(Number(modifiedValue) || 0) + 3);
             }
         }
 

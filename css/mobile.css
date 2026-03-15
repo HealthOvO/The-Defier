@@ -401,9 +401,61 @@
     }
 
     /* --- Reward Screen --- */
-    .reward-screen-content {
-        width: min(94vw, 640px);
+    #reward-screen .reward-container {
         padding: 14px 10px 18px;
+    }
+
+    #reward-screen .reward-shell {
+        width: 100%;
+        max-width: 100%;
+        gap: 16px;
+    }
+
+    #reward-screen .reward-layout {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+    }
+
+    #reward-screen .reward-layout > * {
+        min-width: 0;
+    }
+
+    #reward-screen .reward-main-column,
+    #reward-screen .reward-side-column {
+        width: 100%;
+        min-width: 0;
+        gap: 14px;
+    }
+
+    #reward-screen .reward-side-column {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #reward-screen .reward-panel,
+    #reward-screen .reward-card-stage,
+    #reward-screen .reward-summary-card,
+    #reward-screen .reward-actions {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    #reward-screen .steal-chance {
+        padding: 18px 14px;
+    }
+
+    #reward-screen .reward-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    #reward-screen .reward-card {
+        justify-self: center;
+        transform: scale(0.9);
+        transform-origin: center top;
+    }
+
+    #reward-screen .reward-card:hover {
+        transform: scale(0.94) translateY(-6px);
     }
 
     .reward-resources {

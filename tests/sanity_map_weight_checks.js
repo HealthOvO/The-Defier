@@ -67,7 +67,7 @@ function loadFile(ctx, filePath) {
   const early = mapBase.getDynamicNodeWeights(1, totalRows, realm);
   const late = mapBase.getDynamicNodeWeights(6, totalRows, realm);
 
-  const keys = ['enemy', 'elite', 'event', 'shop', 'trial', 'forge', 'rest'];
+  const keys = ['enemy', 'elite', 'event', 'shop', 'trial', 'forge', 'rest', 'observatory', 'spirit_grotto', 'forbidden_altar', 'memory_rift'];
   keys.forEach((k) => {
     assert(typeof early[k] === 'number', `missing early weight: ${k}`);
     assert(typeof late[k] === 'number', `missing late weight: ${k}`);
@@ -141,7 +141,7 @@ function loadFile(ctx, filePath) {
   }
   const eventRateBase = sampleEventRate(noArchetypeW);
   const eventRateEntropy = sampleEventRate(entropyW);
-  assert(eventRateEntropy > eventRateBase + 0.02, `archetype event rate should increase (${eventRateBase} -> ${eventRateEntropy})`);
+  assert(eventRateEntropy > eventRateBase + 0.01, `archetype event rate should increase (${eventRateBase} -> ${eventRateEntropy})`);
 
   // 8) 命环路径应在节点层面形成差异化路线
   const mapConvergencePath = createMapForPlayer({
@@ -254,6 +254,12 @@ function loadFile(ctx, filePath) {
   assert(
     pityBoostW.shop > pityBaseW.shop,
     `shop pity should boost shop weight (${pityBaseW.shop} -> ${pityBoostW.shop})`
+  );
+  assert(
+    pityBoostW.observatory > pityBaseW.observatory
+      || pityBoostW.spirit_grotto > pityBaseW.spirit_grotto
+      || pityBoostW.memory_rift > pityBaseW.memory_rift,
+    `strategic pity should boost observatory, spirit grotto, or memory rift (${pityBaseW.observatory}, ${pityBaseW.spirit_grotto}, ${pityBaseW.memory_rift}) -> (${pityBoostW.observatory}, ${pityBoostW.spirit_grotto}, ${pityBoostW.memory_rift})`
   );
 
   console.log('Map weight sanity checks passed.');

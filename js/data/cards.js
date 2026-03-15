@@ -2717,6 +2717,608 @@ const CARDS = {
         effects: [
             { type: 'energyLoss', value: 1, trigger: 'turnEnd' }
         ]
+    },
+
+    cursedScar: {
+        id: 'cursedScar',
+        name: '契咒灼痕',
+        type: 'status',
+        cost: -1,
+        icon: '🩸',
+        description: '无法打出。保留。占据抽牌位。回合结束：受到 2 点伤害。',
+        rarity: 'special',
+        unplayable: true,
+        retain: true,
+        occupiesDrawSlot: true,
+        keywords: ['curse'],
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'selfDamage', value: 2, trigger: 'turnEnd' }
+        ]
+    },
+
+    covenantDebt: {
+        id: 'covenantDebt',
+        name: '契债回响',
+        type: 'status',
+        cost: -1,
+        icon: '📜',
+        description: '无法打出。保留。占据抽牌位。回合结束：随机弃 1 张其他手牌。',
+        rarity: 'special',
+        unplayable: true,
+        retain: true,
+        occupiesDrawSlot: true,
+        keywords: ['curse'],
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'discardRandom', value: 1, trigger: 'turnEnd' }
+        ]
+    },
+
+    emberServitor: {
+        id: 'emberServitor',
+        name: '炽傀侍灵',
+        type: 'attack',
+        cost: 0,
+        icon: '🪆',
+        description: '造成 4 点伤害并获得 2 点护盾。',
+        rarity: 'special',
+        keywords: ['forge', 'construct'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'damage', value: 4, target: 'enemy' },
+            { type: 'block', value: 2, target: 'self' }
+        ]
+    },
+
+    wardConstruct: {
+        id: 'wardConstruct',
+        name: '护炉灵构',
+        type: 'defense',
+        cost: 0,
+        icon: '🛡️',
+        description: '获得 6 点护盾。',
+        rarity: 'special',
+        keywords: ['forge', 'construct', 'guard'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'block', value: 6, target: 'self' }
+        ]
+    },
+
+    forgeArray: {
+        id: 'forgeArray',
+        name: '熔阵齐发',
+        type: 'attack',
+        cost: 1,
+        icon: '⚙️',
+        description: '对全体造成 6 点伤害。',
+        rarity: 'special',
+        keywords: ['forge', 'array', 'aoe'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'damageAll', value: 6, target: 'allEnemies' }
+        ]
+    },
+
+    oathscarCut: {
+        id: 'oathscarCut',
+        name: '契痕斩',
+        type: 'attack',
+        cost: 1,
+        icon: '🗡️',
+        description: '自身受到 2 点伤害，造成 9 点伤害。',
+        rarity: 'common',
+        keywords: ['curse', 'selfharm'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'selfDamage', value: 2, target: 'self' },
+            { type: 'damage', value: 9, target: 'enemy' }
+        ]
+    },
+
+    hexbrandSigil: {
+        id: 'hexbrandSigil',
+        name: '烙契印',
+        type: 'skill',
+        cost: 1,
+        icon: '🪬',
+        description: '抽 2 张牌，并向弃牌堆置入 1 张契咒灼痕。',
+        rarity: 'common',
+        keywords: ['curse', 'tempo'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'draw', value: 2, target: 'self' },
+            { type: 'addStatus', cardId: 'cursedScar', count: 1, zone: 'discard' }
+        ]
+    },
+
+    blacktidePact: {
+        id: 'blacktidePact',
+        name: '黑潮契约',
+        type: 'skill',
+        cost: 0,
+        icon: '🌑',
+        description: '自身受到 3 点伤害，获得 1 点灵力并抽 1 张牌。',
+        rarity: 'common',
+        keywords: ['curse', 'selfharm', 'tempo'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'selfDamage', value: 3, target: 'self' },
+            { type: 'energy', value: 1, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    covenantWard: {
+        id: 'covenantWard',
+        name: '契护',
+        type: 'defense',
+        cost: 1,
+        icon: '🕯️',
+        description: '获得 8 点护盾，并向弃牌堆置入 1 张契债回响。',
+        rarity: 'common',
+        keywords: ['curse', 'guard'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'block', value: 8, target: 'self' },
+            { type: 'addStatus', cardId: 'covenantDebt', count: 1, zone: 'discard' }
+        ]
+    },
+
+    doomwhisperNeedle: {
+        id: 'doomwhisperNeedle',
+        name: '祸语针',
+        type: 'attack',
+        cost: 1,
+        icon: '🪡',
+        description: '造成 6 点伤害，施加 1 层虚弱，并向弃牌堆置入 1 张契咒灼痕。',
+        rarity: 'common',
+        keywords: ['curse', 'control'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'damage', value: 6, target: 'enemy' },
+            { type: 'debuff', buffType: 'weak', value: 1, target: 'enemy' },
+            { type: 'addStatus', cardId: 'cursedScar', count: 1, zone: 'discard' }
+        ]
+    },
+
+    scarredDivination: {
+        id: 'scarredDivination',
+        name: '伤契占卜',
+        type: 'skill',
+        cost: 1,
+        icon: '🔮',
+        description: '抽 1 张牌；若生命低于 60%，再抽 2 张牌并获得 1 点灵力。随后向弃牌堆置入 1 张契咒灼痕。',
+        rarity: 'common',
+        keywords: ['curse', 'tempo', 'selfharm'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'draw', value: 1, target: 'self' },
+            { type: 'conditionalDraw', condition: 'lowHp', threshold: 0.6, drawValue: 2, energyValue: 1, target: 'self' },
+            { type: 'addStatus', cardId: 'cursedScar', count: 1, zone: 'discard' }
+        ]
+    },
+
+    bloodpriceMandate: {
+        id: 'bloodpriceMandate',
+        name: '血价敕令',
+        type: 'power',
+        cost: 1,
+        icon: '📕',
+        description: '自身受到 4 点伤害，获得 2 点力量。',
+        rarity: 'uncommon',
+        keywords: ['curse', 'selfharm', 'burst'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'selfDamage', value: 4, target: 'self' },
+            { type: 'buff', buffType: 'strength', value: 2, target: 'self' }
+        ]
+    },
+
+    griefLedger: {
+        id: 'griefLedger',
+        name: '悲契账簿',
+        type: 'skill',
+        cost: 1,
+        icon: '📚',
+        description: '抽 2 张牌，获得 1 点灵力，并向手牌置入 1 张契债回响。',
+        rarity: 'uncommon',
+        keywords: ['curse', 'tempo'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'draw', value: 2, target: 'self' },
+            { type: 'energy', value: 1, target: 'self' },
+            { type: 'addStatus', cardId: 'covenantDebt', count: 1, zone: 'hand' }
+        ]
+    },
+
+    morbidAbsolution: {
+        id: 'morbidAbsolution',
+        name: '厄赦',
+        type: 'attack',
+        cost: 2,
+        icon: '⚖️',
+        description: '造成 8 点伤害；若生命低于 60%，额外造成 8 点伤害。',
+        rarity: 'uncommon',
+        keywords: ['curse', 'burst'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'damage', value: 8, target: 'enemy' },
+            { type: 'conditionalDamage', value: 8, condition: 'lowHp', threshold: 0.6, target: 'enemy' }
+        ]
+    },
+
+    chainedVigil: {
+        id: 'chainedVigil',
+        name: '缚夜戒备',
+        type: 'defense',
+        cost: 1,
+        icon: '⛓️',
+        description: '获得 10 点护盾，并获得 1 层护盾留存。',
+        rarity: 'uncommon',
+        keywords: ['curse', 'guard', 'retain'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'block', value: 10, target: 'self' },
+            { type: 'buff', buffType: 'retainBlock', value: 1, target: 'self' }
+        ]
+    },
+
+    omenOfRuin: {
+        id: 'omenOfRuin',
+        name: '殃兆',
+        type: 'attack',
+        cost: 2,
+        icon: '🌘',
+        description: '自身受到 2 点伤害，对全体造成 6 点伤害。',
+        rarity: 'uncommon',
+        keywords: ['curse', 'aoe', 'selfharm'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'selfDamage', value: 2, target: 'self' },
+            { type: 'damageAll', value: 6, target: 'allEnemies' }
+        ]
+    },
+
+    pactRite: {
+        id: 'pactRite',
+        name: '契礼',
+        type: 'skill',
+        cost: 1,
+        icon: '🕯️',
+        description: '抽 1 张牌，并向弃牌堆置入 2 张契咒灼痕。',
+        rarity: 'uncommon',
+        keywords: ['curse', 'setup'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'draw', value: 1, target: 'self' },
+            { type: 'addStatus', cardId: 'cursedScar', count: 2, zone: 'discard' }
+        ]
+    },
+
+    sacramentOfAsh: {
+        id: 'sacramentOfAsh',
+        name: '灰烬圣约',
+        type: 'power',
+        cost: 2,
+        icon: '🔥',
+        description: '自身受到 4 点伤害，抽 1 张牌并获得 2 点力量。',
+        rarity: 'rare',
+        keywords: ['curse', 'selfharm', 'burst'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'selfDamage', value: 4, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' },
+            { type: 'buff', buffType: 'strength', value: 2, target: 'self' }
+        ]
+    },
+
+    soulCollateral: {
+        id: 'soulCollateral',
+        name: '魂押',
+        type: 'skill',
+        cost: 2,
+        icon: '🕳️',
+        description: '抽 3 张牌，并向弃牌堆置入 2 张契债回响。',
+        rarity: 'rare',
+        keywords: ['curse', 'tempo'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'draw', value: 3, target: 'self' },
+            { type: 'addStatus', cardId: 'covenantDebt', count: 2, zone: 'discard' }
+        ]
+    },
+
+    doomsentVerdict: {
+        id: 'doomsentVerdict',
+        name: '终契裁决',
+        type: 'attack',
+        cost: 3,
+        icon: '☠️',
+        description: '造成 14 点伤害；若生命低于 50%，额外造成 10 点伤害。随后向弃牌堆置入 1 张契咒灼痕。',
+        rarity: 'rare',
+        keywords: ['curse', 'burst', 'execute'],
+        comboTag: 'curse',
+        synergyGroup: 'cursebound',
+        effects: [
+            { type: 'damage', value: 14, target: 'enemy' },
+            { type: 'conditionalDamage', value: 10, condition: 'lowHp', threshold: 0.5, target: 'enemy' },
+            { type: 'addStatus', cardId: 'cursedScar', count: 1, zone: 'discard' }
+        ]
+    },
+
+    emberPuppetScript: {
+        id: 'emberPuppetScript',
+        name: '炽傀谱',
+        type: 'skill',
+        cost: 1,
+        icon: '📘',
+        description: '向手牌生成 1 张炽傀侍灵，并抽 1 张牌。',
+        rarity: 'common',
+        keywords: ['forge', 'construct', 'tempo'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'createCard', cardId: 'emberServitor', count: 1, zone: 'hand', temporary: true },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+
+    spareSoulCore: {
+        id: 'spareSoulCore',
+        name: '备用魂芯',
+        type: 'skill',
+        cost: 0,
+        icon: '💠',
+        description: '向手牌生成 1 张护炉灵构。',
+        rarity: 'common',
+        keywords: ['forge', 'construct'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'createCard', cardId: 'wardConstruct', count: 1, zone: 'hand', temporary: true }
+        ]
+    },
+
+    relayHarness: {
+        id: 'relayHarness',
+        name: '中继束具',
+        type: 'defense',
+        cost: 1,
+        icon: '🪢',
+        description: '获得 7 点护盾，并向弃牌堆生成 1 张炽傀侍灵。',
+        rarity: 'common',
+        keywords: ['forge', 'construct', 'guard'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'block', value: 7, target: 'self' },
+            { type: 'createCard', cardId: 'emberServitor', count: 1, zone: 'discard', temporary: true }
+        ]
+    },
+
+    forgeVolley: {
+        id: 'forgeVolley',
+        name: '熔炉齐射',
+        type: 'attack',
+        cost: 1,
+        icon: '🔥',
+        description: '造成 6 点伤害，并向弃牌堆生成 1 张护炉灵构。',
+        rarity: 'common',
+        keywords: ['forge', 'construct'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'damage', value: 6, target: 'enemy' },
+            { type: 'createCard', cardId: 'wardConstruct', count: 1, zone: 'discard', temporary: true }
+        ]
+    },
+
+    matrixKiln: {
+        id: 'matrixKiln',
+        name: '矩阵炉心',
+        type: 'skill',
+        cost: 1,
+        icon: '⚗️',
+        description: '向手牌生成 1 张炽傀侍灵，并向弃牌堆生成 1 张护炉灵构。',
+        rarity: 'common',
+        keywords: ['forge', 'construct', 'setup'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'createCard', cardId: 'emberServitor', count: 1, zone: 'hand', temporary: true },
+            { type: 'createCard', cardId: 'wardConstruct', count: 1, zone: 'discard', temporary: true }
+        ]
+    },
+
+    socketedAegis: {
+        id: 'socketedAegis',
+        name: '嵌魂壁',
+        type: 'defense',
+        cost: 1,
+        icon: '🧱',
+        description: '获得 6 点护盾，并获得 1 层护盾留存。',
+        rarity: 'common',
+        keywords: ['forge', 'guard', 'retain'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'block', value: 6, target: 'self' },
+            { type: 'buff', buffType: 'retainBlock', value: 1, target: 'self' }
+        ]
+    },
+
+    spiritAnvil: {
+        id: 'spiritAnvil',
+        name: '灵锻砧',
+        type: 'power',
+        cost: 1,
+        icon: '🔨',
+        description: '向手牌生成 1 张炽傀侍灵，并获得 1 点力量。',
+        rarity: 'uncommon',
+        keywords: ['forge', 'construct', 'burst'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'createCard', cardId: 'emberServitor', count: 1, zone: 'hand', temporary: true },
+            { type: 'buff', buffType: 'strength', value: 1, target: 'self' }
+        ]
+    },
+
+    arrayOverclock: {
+        id: 'arrayOverclock',
+        name: '阵列过载',
+        type: 'attack',
+        cost: 1,
+        icon: '⚡',
+        description: '造成 7 点伤害，并向弃牌堆生成 1 张熔阵齐发。',
+        rarity: 'uncommon',
+        keywords: ['forge', 'array', 'burst'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'damage', value: 7, target: 'enemy' },
+            { type: 'createCard', cardId: 'forgeArray', count: 1, zone: 'discard', temporary: true }
+        ]
+    },
+
+    guardianGimbal: {
+        id: 'guardianGimbal',
+        name: '守机云台',
+        type: 'defense',
+        cost: 1,
+        icon: '🛰️',
+        description: '获得 10 点护盾，并向手牌生成 1 张护炉灵构。',
+        rarity: 'uncommon',
+        keywords: ['forge', 'construct', 'guard'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'block', value: 10, target: 'self' },
+            { type: 'createCard', cardId: 'wardConstruct', count: 1, zone: 'hand', temporary: true }
+        ]
+    },
+
+    soulcaseLattice: {
+        id: 'soulcaseLattice',
+        name: '魂匣格架',
+        type: 'skill',
+        cost: 1,
+        icon: '🧰',
+        description: '抽 2 张牌，并向手牌生成 1 张炽傀侍灵。',
+        rarity: 'uncommon',
+        keywords: ['forge', 'construct', 'tempo'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'draw', value: 2, target: 'self' },
+            { type: 'createCard', cardId: 'emberServitor', count: 1, zone: 'hand', temporary: true }
+        ]
+    },
+
+    effigyBarrage: {
+        id: 'effigyBarrage',
+        name: '傀焰攒射',
+        type: 'attack',
+        cost: 2,
+        icon: '🎇',
+        description: '对全体造成 4 点伤害，并向手牌生成 1 张炽傀侍灵。',
+        rarity: 'uncommon',
+        keywords: ['forge', 'construct', 'aoe'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'damageAll', value: 4, target: 'allEnemies' },
+            { type: 'createCard', cardId: 'emberServitor', count: 1, zone: 'hand', temporary: true }
+        ]
+    },
+
+    foundryBulwark: {
+        id: 'foundryBulwark',
+        name: '炉心壁垒',
+        type: 'defense',
+        cost: 1,
+        icon: '🏗️',
+        description: '获得 8 点护盾，抽 1 张牌，并向弃牌堆生成 1 张护炉灵构。',
+        rarity: 'uncommon',
+        keywords: ['forge', 'guard', 'tempo'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'block', value: 8, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' },
+            { type: 'createCard', cardId: 'wardConstruct', count: 1, zone: 'discard', temporary: true }
+        ]
+    },
+
+    grandForgeMandate: {
+        id: 'grandForgeMandate',
+        name: '大锻命令',
+        type: 'power',
+        cost: 2,
+        icon: '👑',
+        description: '获得 6 点护盾，并向手牌各生成 1 张炽傀侍灵与护炉灵构。',
+        rarity: 'rare',
+        keywords: ['forge', 'construct', 'guard'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'block', value: 6, target: 'self' },
+            { type: 'createCard', cardId: 'emberServitor', count: 1, zone: 'hand', temporary: true },
+            { type: 'createCard', cardId: 'wardConstruct', count: 1, zone: 'hand', temporary: true }
+        ]
+    },
+
+    ancestralMachina: {
+        id: 'ancestralMachina',
+        name: '祖机开炉',
+        type: 'attack',
+        cost: 2,
+        icon: '🏭',
+        description: '对全体造成 7 点伤害，并向手牌生成 1 张熔阵齐发。',
+        rarity: 'rare',
+        keywords: ['forge', 'array', 'aoe'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'damageAll', value: 7, target: 'allEnemies' },
+            { type: 'createCard', cardId: 'forgeArray', count: 1, zone: 'hand', temporary: true }
+        ]
+    },
+
+    throneOfCinders: {
+        id: 'throneOfCinders',
+        name: '余烬王座',
+        type: 'power',
+        cost: 3,
+        icon: '🔥',
+        description: '获得 1 点力量，并向手牌生成 2 张炽傀侍灵。',
+        rarity: 'rare',
+        keywords: ['forge', 'construct', 'burst'],
+        comboTag: 'forge',
+        synergyGroup: 'soulforge',
+        effects: [
+            { type: 'buff', buffType: 'strength', value: 1, target: 'self' },
+            { type: 'createCard', cardId: 'emberServitor', count: 2, zone: 'hand', temporary: true }
+        ]
     }
 };
 
@@ -2740,6 +3342,8 @@ const CARD_POOL = {
         'mendThread', 'pulseBandage', 'transfuseStrike', 'wardingHerb', 'renewalChord',
         'bloodBloom', 'mercyNeedle',
         'ironBreath', 'mirrorWall', 'reboundingShell', 'bastionStudy', 'wardingSweep',
+        'oathscarCut', 'hexbrandSigil', 'blacktidePact', 'covenantWard', 'doomwhisperNeedle', 'scarredDivination',
+        'emberPuppetScript', 'spareSoulCore', 'relayHarness', 'forgeVolley', 'matrixKiln', 'socketedAegis',
         'poisonTouch', 'minorHeal', 'monkStrike', 'analysis',
         // 角色专属
         'defianceStrike', 'bloodSeal', 'unchain', 'karmaStrike', 'probe', 'starNeedle', 'artifactBolt'
@@ -2754,6 +3358,8 @@ const CARD_POOL = {
         'thunderLattice', 'exposedCircuit', 'flashRelay', 'stormWard', 'cascadeVolt',
         'lifelinkWeave', 'hospiceEdict', 'rebirthSpiral', 'thornedRemedy', 'vitalPivot',
         'resolveAnchor', 'guardianMantra', 'shieldTax', 'bastionCrash', 'counterEdict',
+        'bloodpriceMandate', 'griefLedger', 'morbidAbsolution', 'chainedVigil', 'omenOfRuin', 'pactRite',
+        'spiritAnvil', 'arrayOverclock', 'guardianGimbal', 'soulcaseLattice', 'effigyBarrage', 'foundryBulwark',
         'matrixGuardProtocol', 'matrixShatterVector',
         // 新增角色卡牌
         'defiantWill', 'healingTouch', 'vajraGlare', 'ringAnalysis',
@@ -2769,6 +3375,8 @@ const CARD_POOL = {
         'skybreakerArray', 'resonanceTempest', 'executionThunder',
         'soulSuture', 'reversalPulse', 'phoenixReprieve',
         'citadelOath', 'fortressEdict', 'aegisJudgement',
+        'sacramentOfAsh', 'soulCollateral', 'doomsentVerdict',
+        'grandForgeMandate', 'ancestralMachina', 'throneOfCinders',
         'matrixPurgeLoop',
         // 新增角色卡牌
         'ringResonance', 'breakthrough', 'bloodBlessing', 'lifeSurge', 'zenMeditation', 'lawInsight',
@@ -2846,6 +3454,26 @@ const ARCHETYPE_PACKS = {
             'bastionCrash', 'counterEdict', 'citadelOath', 'fortressEdict', 'aegisJudgement', 'defend',
             'ironWill', 'turtleShell', 'counterStance', 'artifactBolt', 'echoWard', 'matrixGuardProtocol'
         ]
+    },
+    cursebound: {
+        id: 'cursebound',
+        name: '咒契裁断',
+        description: '以自损与咒牌铺垫节奏，在压血区间完成延迟清算与爆发收束。',
+        cards: [
+            'oathscarCut', 'hexbrandSigil', 'blacktidePact', 'covenantWard', 'doomwhisperNeedle',
+            'scarredDivination', 'bloodpriceMandate', 'griefLedger', 'morbidAbsolution', 'chainedVigil',
+            'omenOfRuin', 'pactRite', 'sacramentOfAsh', 'soulCollateral', 'doomsentVerdict'
+        ]
+    },
+    soulforge: {
+        id: 'soulforge',
+        name: '灵傀锻阵',
+        description: '通过生成构件与阵件维持手牌密度，在站场积累后转为持续火力与护阵压制。',
+        cards: [
+            'emberPuppetScript', 'spareSoulCore', 'relayHarness', 'forgeVolley', 'matrixKiln',
+            'socketedAegis', 'spiritAnvil', 'arrayOverclock', 'guardianGimbal', 'soulcaseLattice',
+            'effigyBarrage', 'foundryBulwark', 'grandForgeMandate', 'ancestralMachina', 'throneOfCinders'
+        ]
     }
 };
 
@@ -2863,7 +3491,9 @@ function inferDeckArchetype(deck = []) {
         entropy: 0,
         stormcraft: 0,
         vitalweave: 0,
-        bulwark: 0
+        bulwark: 0,
+        cursebound: 0,
+        soulforge: 0
     };
     const hemorrhageSet = new Set(ARCHETYPE_PACKS.hemorrhage.cards);
     const precisionSet = new Set(ARCHETYPE_PACKS.precision.cards);
@@ -2871,6 +3501,8 @@ function inferDeckArchetype(deck = []) {
     const stormcraftSet = new Set(ARCHETYPE_PACKS.stormcraft.cards);
     const vitalweaveSet = new Set(ARCHETYPE_PACKS.vitalweave.cards);
     const bulwarkSet = new Set(ARCHETYPE_PACKS.bulwark.cards);
+    const curseboundSet = new Set(ARCHETYPE_PACKS.cursebound.cards);
+    const soulforgeSet = new Set(ARCHETYPE_PACKS.soulforge.cards);
 
     deck.forEach(card => {
         if (!card) return;
@@ -2932,6 +3564,26 @@ function inferDeckArchetype(deck = []) {
             (cardId && bulwarkSet.has(cardId))
         ) {
             scores.bulwark += 1;
+        }
+
+        if (
+            synergy === 'cursebound' ||
+            keywords.includes('curse') ||
+            keywords.includes('selfharm') ||
+            keywords.includes('contract') ||
+            (cardId && curseboundSet.has(cardId))
+        ) {
+            scores.cursebound += 1;
+        }
+
+        if (
+            synergy === 'soulforge' ||
+            keywords.includes('forge') ||
+            keywords.includes('construct') ||
+            keywords.includes('array') ||
+            (cardId && soulforgeSet.has(cardId))
+        ) {
+            scores.soulforge += 1;
         }
     });
 
@@ -3243,7 +3895,41 @@ const UPGRADE_RULES = {
         counterEdict: { damage: 3 },
         citadelOath: { block: 2, thorns: 2, retainBlock: 1 },
         fortressEdict: { ratio: 0.25, minDamage: 4, weak: 1 },
-        aegisJudgement: { damage: 4, block: 2 }
+        aegisJudgement: { damage: 4, block: 2 },
+
+        // 咒契裁断流派
+        oathscarCut: { damage: 2 },
+        hexbrandSigil: { draw: 1 },
+        blacktidePact: { draw: 1 },
+        covenantWard: { block: 2 },
+        doomwhisperNeedle: { damage: 2, weak: 1 },
+        scarredDivination: { draw: 1 },
+        bloodpriceMandate: { strength: 1 },
+        griefLedger: { draw: 1 },
+        morbidAbsolution: { damage: 3 },
+        chainedVigil: { block: 3, retainBlock: 1 },
+        omenOfRuin: { damage: 2 },
+        pactRite: { draw: 1, count: 1 },
+        sacramentOfAsh: { draw: 1, strength: 1 },
+        soulCollateral: { draw: 1 },
+        doomsentVerdict: { damage: 4 },
+
+        // 灵傀锻阵流派
+        emberPuppetScript: { draw: 1 },
+        spareSoulCore: { count: 1 },
+        relayHarness: { block: 2 },
+        forgeVolley: { damage: 2 },
+        matrixKiln: { costReduction: 1 },
+        socketedAegis: { block: 2, retainBlock: 1 },
+        spiritAnvil: { strength: 1 },
+        arrayOverclock: { damage: 2 },
+        guardianGimbal: { block: 3 },
+        soulcaseLattice: { draw: 1 },
+        effigyBarrage: { damage: 2 },
+        foundryBulwark: { block: 2, draw: 1 },
+        grandForgeMandate: { block: 2 },
+        ancestralMachina: { damage: 2 },
+        throneOfCinders: { strength: 1 }
     }
 };
 
@@ -3373,6 +4059,9 @@ function upgradeCard(card) {
             }
             if (effect.type === 'consumeAllEnergy' && specialRule.damagePerEnergy) {
                 effect.damagePerEnergy += specialRule.damagePerEnergy;
+            }
+            if ((effect.type === 'createCard' || effect.type === 'addStatus') && specialRule.count) {
+                effect.count = Math.max(1, Number(effect.count) || 1) + specialRule.count;
             }
 
             if (effect.type === 'execute' && specialRule.multiplier) {
@@ -3539,6 +4228,20 @@ function generateUpgradedDescription(card) {
             case 'discardRandom':
                 desc += `随机弃 ${effect.value || 1} 张手牌。`;
                 break;
+            case 'addStatus': {
+                const count = Math.max(1, Number(effect.count) || 1);
+                const cardName = CARDS[effect.cardId] ? CARDS[effect.cardId].name : '状态牌';
+                const zone = effect.zone === 'hand' ? '手牌' : (effect.zone === 'draw' ? '牌库顶' : '弃牌堆');
+                desc += `向${zone}置入 ${count} 张${cardName}。`;
+                break;
+            }
+            case 'createCard': {
+                const count = Math.max(1, Number(effect.count) || 1);
+                const cardName = CARDS[effect.cardId] ? CARDS[effect.cardId].name : '构件';
+                const zone = effect.zone === 'discard' ? '弃牌堆' : (effect.zone === 'draw' ? '牌库顶' : '手牌');
+                desc += `向${zone}生成 ${count} 张${cardName}${effect.temporary ? '（临时）' : ''}。`;
+                break;
+            }
             case 'mulligan':
                 desc += `丢弃当前手牌并抽取等量卡牌。`;
                 break;
