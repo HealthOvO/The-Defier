@@ -219,6 +219,95 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - Browser:
     - `node tests/browser_audit.mjs` ✅
 
+- 2026-03-15: 命途主线体验收口（地图即时反馈 + 圆满结算强化）
+  - `js/game.js`
+    - 新增 `lastRunPathMapFeedback/runPathMapFeedbackTimer`，并将 `render_game_to_text().map` 扩展为输出 `runPathFlash`。
+    - 新增 `buildRunPathFeedbackEntry/queueMapRunPathFeedback/dismissRunPathMapFeedback`，统一命途阶段完成的反馈结构。
+    - `handleRunPathProgress()` 现在会在地图/战略节点完成时推送即时反馈，在 `reward-screen` 场景下也能稳态写入奖励结算元数据，修复连续审计时 finale 场景丢失的问题。
+    - `renderRewardRunPathMeta()` 增加命途圆满态的 `is-complete` 样式、圆满徽记与收官说明文案。
+  - `js/core/map.js`
+    - 地图右上角新增 `#map-run-path-flash` 即时反馈面板。
+    - `updateLegacyMissionTracker()` 接入命途即时反馈渲染与过期隐藏逻辑。
+  - `css/style.css` / `css/mobile.css`
+    - 新增地图即时反馈与命途圆满结算的桌面/移动端样式、动效与自适应。
+    - 增加本地 `@font-face` 回退映射（`Ma Shan Zheng` / `Noto Sans SC` / `Cinzel` / `Roboto`），移除 `index.html` 的 Google Fonts 远程依赖，解决 Playwright 截图等待字体卡死与外链噪声。
+  - `tests`
+    - `tests/sanity_run_path_system_checks.js` 新增地图战略节点命途中段即时反馈断言，以及 `dismissRunPathMapFeedback()` 清理断言。
+    - `tests/browser_run_path_reward_audit.mjs`
+      - 覆盖地图即时反馈场景；
+      - 将 finale 场景改为独立刷新页面后验证，断言圆满徽记、完成态 class 与 `render_game_to_text().reward.runPath.completed`。
+    - `tests/browser_meta_screen_audit.mjs` 增加 `ERR_CONNECTION_CLOSED/RESET` 过滤，避免外部资源抖动误报。
+
+- 2026-03-15: 本轮验证证据（全通过）
+  - Node:
+    - `node tests/sanity_run_path_system_checks.js` ✅
+    - `bash tests/run_node_checks.sh` ✅
+  - Browser:
+    - `node tests/browser_run_path_reward_audit.mjs http://127.0.0.1:4173 output/web-run-path-reward-audit-current-2` ✅
+    - `node tests/browser_run_path_audit.mjs http://127.0.0.1:4173 output/web-run-path-audit-current-4` ✅
+    - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit-current-2` ✅
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-current-4` ✅
+  - Playwright 客户端烟测：
+    - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4173/?autotest=guest-battle&character=linFeng&destiny=foldedEdge&spirit=swordWraith&path=shatter&realm=1&battleType=normal" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-run-path-finale-client-current` ✅
+    - 已人工检查：
+      - `output/web-run-path-reward-audit-current-2/map-run-path-flash.png`
+      - `output/web-run-path-reward-audit-current-2/reward-run-path-finale.png`
+      - `output/web-run-path-finale-client-current/shot-1.png`
+    - 观察结果：地图即时反馈、奖励页圆满徽记、战斗 HUD 命途条均正常显示，且与 `state-0.json/state-1.json` 文本状态一致。
+
+- 2026-03-15: 命途阶段结算反馈（reward-screen）补完
+  - `index.html` / `css/style.css` / `css/mobile.css`
+    - 在战斗结算侧栏新增 `reward-run-path-meta` 区块，用于承载命途阶段完成后的局内反馈。
+    - 新增命途结算回响样式：命途徽记、阶段推进状态、阶段条目卡片，以及移动端单列压缩布局。
+  - `js/game.js`
+    - 新增 `lastRunPathRewardMeta` 结算态缓存，并接入 `renderGameToText().reward.runPath`。
+    - `handleRunPathProgress()` 在战斗内完成命途阶段时会累计记录结算项，支持同一场战斗内连续完成多个阶段。
+    - 新增 `queueRunPathRewardMeta()` / `renderRewardRunPathMeta()`，在 reward-screen 中渲染“命途结算回响”卡组。
+    - 在 `startBattle()` / `startDebugBattle()` / `continueAfterReward()` 中清理临时命途结算态，避免串到下一场或地图界面。
+  - `tests`
+    - 扩展 `tests/sanity_run_path_system_checks.js`：
+      - 校验命途阶段完成会生成并累积 reward-screen 元数据；
+      - 校验 `render_game_to_text` 会暴露 reward.runPath；
+      - 校验 `continueAfterReward()` 会清理该临时状态；
+      - 校验地图上的战略节点完成不会误把结算态泄露到下次战斗结算页。
+    - 新增 `tests/browser_run_path_reward_audit.mjs`：
+      - 校验 reward-screen 能展示多条命途阶段结算；
+      - 校验文案与 `render_game_to_text` 同步；
+      - 校验离开奖励页后临时状态清空。
+
+- 2026-03-15: 本轮测试证据（全通过）
+  - 语法检查：
+    - `node --check js/game.js` ✅
+    - `node --check tests/sanity_run_path_system_checks.js` ✅
+    - `node --check tests/browser_run_path_reward_audit.mjs` ✅
+  - Node:
+    - `node tests/sanity_run_path_system_checks.js` ✅
+    - `npm run test:node` ✅
+  - Browser:
+    - `node tests/browser_automation_boot_audit.mjs http://127.0.0.1:4173 output/web-automation-boot-audit-current-2` ✅
+    - `node tests/browser_run_path_audit.mjs http://127.0.0.1:4173 output/web-run-path-audit-current-3` ✅
+    - `node tests/browser_run_path_reward_audit.mjs http://127.0.0.1:4173 output/web-run-path-reward-audit-current` ✅
+    - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit-current` ✅
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-current-3` ✅
+  - Playwright 客户端冒烟：
+    - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4173/?autotest=guest-battle&character=linFeng&destiny=foldedEdge&spirit=swordWraith&path=shatter&realm=1&battleType=normal" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-run-path-reward-client-current` ✅
+    - 已人工检查：
+      - `output/web-run-path-reward-audit-current/reward-run-path-meta.png`
+      - `output/web-run-path-reward-client-current/shot-1.png`
+
+- 后续建议
+  - 可继续把“战略节点完成的非战斗型命途阶段奖励”做成独立弹窗或地图侧栏 toast，避免只在战斗结算页具象化。
+  - 可继续推进“命途最终圆满时的专属结算徽章 / 动画”作为下一轮 reward-screen 强反馈补强点。
+
+- 2026-03-15: 策划评估与验证记录（无代码改动）
+  - 读取 `game-design-theory` 与 `develop-web-game` 技能，基于当前仓库做版本升级策划评估。
+  - 现状核验：
+    - 数据规模：6 角色、205 卡牌、94 敌人、46 法宝、67 事件、27 命格、6 誓约、8 灵契。
+    - Node 检查：`npm run test:node` ✅ 全通过。
+    - Browser 检查：在本地静态服务 `http://127.0.0.1:4173` 下复跑 `browser_feature_audit.mjs` 与 `browser_mobile_layout_audit.mjs` ✅，控制台无新报错。
+    - 人工视觉复核：查看 `output/web-feature-audit-current/feature-audit.png`、`output/web-mobile-layout-audit-current/mobile-forge-workshop-modal.png`、`output/web-mobile-layout-audit-current/mobile-trial-challenge-modal.png`，画面与文本状态一致。
+  - 产出文档：新增 `docs/the-defier-upgrade-plan-2026-03.md`，给出 v7.0 全面升级策划、难度评定与 QA 验收方案。
+
 - 2026-03-13: 战斗怪物意图 UI 优化（当前轮）
   - `js/ui/battle-hud.js`：新增敌方意图展示辅助函数，意图文案改为“图标 + 可选短标签 + 数值角标”模式，避免 `🕯️诵调`、`📜裁令` 一类长意图被塞进 42px 圆徽章后竖排错位。
   - `js/core/utils.js`：敌人卡片渲染接入新的意图 presenter，Boss/精英头像继续复用原有 tooltip 与破盾提示逻辑。
@@ -4880,3 +4969,747 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 首页、周挑战、位面选择、法宝图鉴、商店都已经收敛到统一壳层，不再出现“外壳无限变高 / 内容被底部裁切 / 无法滚动”的旧问题
     - 战斗 HUD 在桌面、紧凑桌面、移动端三组视口下都通过了布局约束
     - 发布浏览器主链已经包含主界面图库审计，后续再出现类似首页 / 周挑战 / 图鉴 / 商店的 UI 回归时，会更早被脚本拦截
+
+- 2026-03-15: 命途构筑系统收尾修复与闭环验证（本轮）
+  - 命途系统稳健性修复：
+    - `js/game.js`
+      - 在 `awardRunPathPhaseRewards()` 中补充 `gold / heavenlyInsight / karma` 的防御性归一化，避免旧存档、测试桩或异常运行态字段缺失时出现 `NaN` 奖励。
+      - 当前奖励结算改为“先归一化，再累加”，命途中途阶段与登峰阶段都可稳定叠加。
+  - 测试脚本修正：
+    - `tests/browser_run_path_audit.mjs`
+      - 为自动化流程显式开启 `guestMode`，避免未登录环境下 `startNewGame()` 被云登录拦截，导致审计误报“地图未带入命途”。
+      - 截图超时从 `5000ms` 放宽到 `10000ms`，降低字体加载抖动带来的误判。
+  - 本轮验证（全部通过）
+    - Node:
+      - `node tests/sanity_run_path_system_checks.js` ✅
+      - `node tests/sanity_run_identity_checks.js` ✅
+      - `npm run test:node` ✅（已包含 `Run path system checks passed`）
+    - 浏览器专项：
+      - `node tests/browser_run_path_audit.mjs http://127.0.0.1:4173 output/web-run-path-audit-current` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-current` ✅
+      - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/web-mobile-layout-audit-current` ✅
+    - Playwright 客户端 + 人工视觉：
+      - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url http://127.0.0.1:4173 --click-selector "#new-game-btn" --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-run-path-client-current` ✅
+      - 备注：技能内置客户端为 ESM 脚本，仓库当前为 `commonjs`，因此本轮以 `--experimental-default-type=module` 方式运行，无需改动项目配置。
+      - 已人工查看：
+        - `output/web-run-path-audit-current/run-path-selection.png`
+        - `output/web-run-path-audit-current/run-path-map.png`
+        - `output/web-run-path-audit-current/run-path-battle.png`
+        - `output/web-run-path-client-current/shot-1.png`
+  - 关键结果
+    - 命途阶段奖励现已对缺省字段稳健，不会再把 `gold / heavenlyInsight / karma` 结算成 `NaN`
+    - 命途主线在“角色选择 -> 开局 -> 地图追踪 -> 战斗 HUD -> render_game_to_text”这条链路上已闭环
+    - 新增命途浏览器审计已稳定通过，不再把登录门槛误判成玩法状态缺失
+  - 下一步建议
+    - 若继续按 `docs/the-defier-upgrade-plan-2026-03.md` 推进，可优先做下一条高价值功能线：
+      - 章节 Boss 多阶段专属命途反制
+      - 命途专属事件池 / 商店配套 / 法宝套装协同
+      - 命途完成后的局内结算页与长期解锁反馈
+
+- 2026-03-15: 自动化隔离启动与命途验收链路补完（本轮）
+  - 已完成：补齐本项目专用的自动化直达入口，解决内置 Playwright 客户端容易卡在“游客 / 登录确认”链路、难以稳定截到角色选择 / 地图 / 战斗的问题
+    - `js/game.js`
+      - 新增基于 URL 参数的自动化隔离启动配置：
+        - `?autotest=guest-character-selection`
+        - `?autotest=guest-run-path-selection`
+        - `?autotest=guest-map`
+        - `?autotest=guest-battle`
+      - 自动化启动会：
+        - 强制 `guestMode=true`
+        - 自动关闭登录 / 存档 / 通用确认弹层
+        - 按参数直达选角、命途选择、地图或调试战斗
+      - 为防止污染真实进度：
+        - 自动化模式下跳过 `loadGame()`
+        - `saveGame()/autoSave()/clearSave()` 直接短路
+        - 这样客户端和浏览器审计可稳定跑流程，但不会覆盖本地或云端存档
+    - `tests/actions/automation_wait_steps.json`
+      - 新增项目专用静置动作文件，配合自动化 URL 直达截图，不再依赖手动点击游客确认按钮
+    - `tests/browser_automation_boot_audit.mjs`
+      - 新增自动化启动审计，覆盖：
+        - 命途选择落点
+        - 地图落点
+        - 战斗落点
+      - 断言 `render_game_to_text` 与画面状态一致，并过滤页面收尾阶段偶发的 `ERR_CONNECTION_CLOSED` 噪音
+  - 本轮验证（全部通过）
+    - Node:
+      - `node --check js/game.js` ✅
+      - `node --check tests/browser_automation_boot_audit.mjs` ✅
+      - `npm run test:node` ✅
+    - 浏览器专项：
+      - `node tests/browser_automation_boot_audit.mjs http://127.0.0.1:4173 output/web-automation-boot-audit-current` ✅
+      - `node tests/browser_run_path_audit.mjs http://127.0.0.1:4173 output/web-run-path-audit-current-2` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/web-feature-audit-current-2` ✅
+    - Playwright 客户端 + 人工视觉：
+      - `node --experimental-default-type=module "$WEB_GAME_CLIENT" --url "http://127.0.0.1:4173/?autotest=guest-battle&character=linFeng&destiny=foldedEdge&spirit=swordWraith&path=insight&realm=1&battleType=normal" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-automation-client-current` ✅
+      - 已人工查看：
+        - `output/web-automation-boot-audit-current/guest-run-path-selection.png`
+        - `output/web-automation-boot-audit-current/guest-battle.png`
+        - `output/web-automation-client-current/shot-1.png`
+        - `output/web-automation-client-current/state-1.json`
+  - 关键结果
+    - 内置 Playwright 客户端现在可以通过 URL 参数直接进入命途相关目标界面，不再被游客确认链路卡住
+    - 自动化截图与 `render_game_to_text` 已对齐，命途条、命格、灵契和章节系统条都能稳定出现在客户端烟测里
+    - 这套自动化入口是隔离态，不会读写用户现有存档，适合后续继续扩展更深的玩法验收链路
+  - 下一步建议
+    - 可继续把自动化直达入口扩展到：
+      - `reward-screen`
+      - `shop-screen`
+      - `trial` / `forge` / `observatory` 等战略节点场景
+    - 这样后续做“命途专属事件池 / 商店配套 / 完成结算反馈”时，可以直接复用这条稳定验收链路
+
+- 2026-03-15: 命途内容纵切补完（事件 / 商店 / 法宝 / Boss）（本轮）
+  - 已完成：把命途从“主线任务 + HUD”扩成可持续影响地图、商店、法宝研究与 Boss 解法的完整内容层
+    - `js/data/run_paths.js`
+      - 为 `shatter / bulwark / insight` 三条命途补齐扩展元数据：
+        - `eventPool`
+        - `shopBias.baseServices / rumorServices / tempOffers`
+        - `treasureSynergy`
+        - `bossCounterplay`
+        - `completionRecord`
+    - `js/data/events.js`
+      - `getRandomEvent()` 新增命途事件池偏置
+      - 优先级位于 debug hook / 命环路径偏置之后、流派偏置之前，使本轮命途在地图层面持续可感知
+    - `js/game.js`
+      - `getRunPathMetaById()` 与运行时 `player.runPath` 现在会携带命途扩展元数据
+      - 商店接入：
+        - 新增 `getRunPathShopProfile()`
+        - 新增 `injectRunPathShopServices()`
+        - 基础页 / 传闻页会注入命途专属服务
+        - 传闻页摘要文案会展示当前命途专属情报
+        - 临时事件商店会强制注入一条命途专属 offer
+        - 新增 `applyRunPathShopServiceEffect()` 处理命途专属服务效果
+      - 战略路线接入：
+        - 新增 `runPathShatter / runPathBulwark / runPathInsight` 三类路线预测
+      - 法宝研究接入：
+        - `getTreasureResearchData()` 会标记当前命途协同、推荐套装与锻造提示
+        - `getTreasureResearchOverviewData()` 会在图鉴侧栏高亮当前命途推荐套装与进度
+      - `render_game_to_text()` 新增 `battle.bossAct`，可输出 Boss 三幕状态与命途反制提示
+    - `js/core/battle.js`
+      - Boss 三幕状态新增 `runPathCounterplay`
+      - Boss 面板 counter chip 现在会优先显示命途解法
+      - Boss 面板正文新增“命途解法”行，明确当前命途在该 Boss 面前的拆招思路
+  - 测试补完
+    - 新增 `tests/sanity_run_path_content_hooks_checks.js`
+      - 覆盖命途事件池偏置
+      - 覆盖商店命途专属服务注入
+      - 覆盖法宝研究 / 概览中的命途协同文案
+      - 覆盖 Boss 三幕中的命途 counter hint
+    - 更新 `tests/sanity_shop_strategy_system_checks.js`
+      - 断言基础页 / 传闻页都会出现命途专属服务
+    - 更新 `tests/browser_run_path_audit.mjs`
+      - 断言商店页命途专属服务与传闻
+      - 断言法宝图鉴展示当前命途推荐套装
+      - 断言 Boss 面板和 `render_game_to_text` 都能看到命途反制提示
+    - 更新 `tests/run_node_checks.sh`
+      - 已纳入新的命途内容 sanity 检查
+  - 本轮验证（全部通过）
+    - Node：
+      - `node tests/sanity_run_path_content_hooks_checks.js` ✅
+      - `node tests/sanity_shop_strategy_system_checks.js` ✅
+      - `node tests/sanity_run_path_system_checks.js` ✅
+      - `node tests/sanity_boss_three_act_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器专项：
+      - `node tests/browser_run_path_audit.mjs http://127.0.0.1:4174 output/web-run-path-audit` ✅
+      - 已人工查看：
+        - `output/web-run-path-audit/run-path-shop.png`
+        - `output/web-run-path-audit/run-path-battle.png`
+    - Playwright 客户端：
+      - 由于技能脚本是 ESM，而仓库 `package.json` 为 commonjs，本轮通过 `node --experimental-default-type=module` 调起客户端 ✅
+      - 使用 `?autotest=guest-map&...&path=insight` 绕过登录提示，生成并人工查看：
+        - `output/web-game/shot-0.png`
+  - 关键结果
+    - 命途不再只是任务条，而是会真实影响：
+      - 地图事件出现倾向
+      - 商店供货与未来路线情报
+      - 法宝研究推荐与套装解读
+      - Boss 三幕的读法与拆招提示
+    - 新增内容已经同步到 UI 与 `render_game_to_text`，方便后续继续扩自动化验收
+  - 下一步建议
+    - 若继续沿 `docs/the-defier-upgrade-plan-2026-03.md` 往下做，可优先补：
+      - 命途完成后的长期收藏 / 图鉴解锁反馈
+      - 命途专属轻量事件（不是只做偏置，而是做真正独立事件）
+      - 命途与章节 Boss 的更细粒度数值 / 机制反制
+
+- 2026-03-15: 命途长期收藏 / 图鉴反馈闭环（本轮）
+  - 已完成：把命途最终圆满从“一次性结算”扩成“局内反馈 + 洞府长期留痕 + 构筑快照引用”的闭环
+    - `js/core/collection_hub.js`
+      - 新增命途长期记录持久化：
+        - `RUN_PATH_RECORDS_KEY`
+        - `loadRunPathRecords()`
+        - `persistRunPathRecords()`
+        - `getRunPathRecord()`
+        - `recordRunPathCompletion()`
+        - `getCompletedRunPathCount()`
+        - `getTotalRunPathClearCount()`
+        - `getLatestRunPathRecord()`
+      - `ensureCollectionHubBootState()` 现在会初始化 `runPathRecords`
+      - `getCollectionProgressSnapshot()` 新增：
+        - `completedRunPaths`
+        - `runPathArchiveCount`
+        - `totalRunPaths`
+        - `totalRunPathClears`
+      - `getBuildSnapshotData()` 新增当前命途、命途历史收录与“命途碑廊”长期目标文案
+      - `getSanctumOverviewData()` 新增：
+        - 房间：`命途碑廊`
+        - 研究：`命途战录`
+        - 洞府总览中的命途圆满进度与累计收录
+      - 顺手补强健壮性：
+        - `ensureEndlessState()` / `ensureEncounterState()` 返回 `null` 时，构筑快照与洞府总览不再报错
+        - `getTreasureWorkshopResearchOverview()` 返回空值时，洞府总览也会走兜底
+    - `js/game.js`
+      - `handleRunPathProgress()` 在命途最终阶段完成时会：
+        - 写入长期 `runPathRecords`
+        - 生成 `run_path` 类型的藏经阁最近解锁记录
+        - 组装奖励页和 `render_game_to_text` 可见的 archive 反馈
+      - `queueRunPathRewardMeta()` / `renderRewardRunPathMeta()` 现在支持 archive 区块
+      - `render_game_to_text().reward.runPath` 新增：
+        - `archive.id`
+        - `archive.recordName`
+        - `archive.note`
+        - `archive.clears`
+        - `archive.firstClear`
+    - UI / 体验
+      - 奖励页完成态新增“已收入洞府 · 命途战录”块，明确告诉玩家这次圆满已进入长期收藏
+      - 构筑快照新增命途摘要与历史收录提示
+      - 洞府总览新增 `命途碑廊` 房间与 `命途战录` 研究项
+    - `css/style.css`
+      - 为奖励页新增 archive 区块补齐桌面端样式
+    - `css/mobile.css`
+      - 为奖励页 archive 区块补齐移动端样式
+  - 测试补完
+    - 新增 `tests/sanity_run_path_archive_feedback_checks.js`
+      - 覆盖命途完成后的长期记录写入
+      - 覆盖 `getCollectionProgressSnapshot()` / `getBuildSnapshotData()` / `getSanctumOverviewData()` 的命途长期反馈
+      - 覆盖 `render_game_to_text().reward.runPath.archive`
+    - 更新 `tests/sanity_run_path_system_checks.js`
+      - 断言最终圆满时会生成命途 archive 反馈与 `run_path` 最近解锁记录
+    - 更新 `tests/sanity_codex_sanctum_checks.js`
+      - 断言洞府新增 `命途碑廊` 与 `命途战录`
+      - 断言构筑快照和洞府总览能读到命途收录进度
+    - 更新 `tests/browser_run_path_reward_audit.mjs`
+      - 断言奖励页出现 archive 文案
+      - 断言 `render_game_to_text` 暴露 archive 字段
+      - 断言洞府最近解锁中包含命途战录
+    - 更新 `tests/run_node_checks.sh`
+      - 纳入新的命途长期反馈 sanity 检查
+  - 本轮验证（全部通过）
+    - 语法：
+      - `node --check js/game.js` ✅
+      - `node --check js/core/collection_hub.js` ✅
+    - Node：
+      - `node tests/sanity_run_path_system_checks.js` ✅
+      - `node tests/sanity_run_path_archive_feedback_checks.js` ✅
+      - `node tests/sanity_codex_sanctum_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器专项：
+      - `node tests/browser_run_path_reward_audit.mjs http://127.0.0.1:4174 output/web-run-path-reward-audit-archive` ✅
+      - `node tests/browser_run_path_audit.mjs http://127.0.0.1:4174 output/web-run-path-audit-regression` ✅
+      - 已人工查看：
+        - `output/web-run-path-reward-audit-archive/reward-run-path-finale.png`
+    - Playwright 客户端：
+      - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4174/?autotest=guest-battle&character=linFeng&destiny=foldedEdge&spirit=swordWraith&path=shatter&realm=1&battleType=normal" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-run-path-archive-client` ✅
+      - 已人工查看：
+        - `output/web-game-run-path-archive-client/shot-1.png`
+  - 关键结果
+    - 命途圆满现在不只是一个“本场结算标签”，而是会真正沉淀为洞府中的长期收藏目标
+    - 玩家在奖励页、洞府总览、构筑快照三处都能看到这次圆满对长期成长的意义
+    - 这条闭环把命途系统从“局内任务条”继续推进成“可复盘、可追逐、可积累”的长线内容
+  - 下一步建议
+    - 若继续沿规划推进，下一刀更适合做：
+      - 命途专属独立事件
+      - 命途与章节/Boss 的更细颗粒机制反制
+      - 命途完成次数与不同角色通关样本的进一步对照展示
+
+- 2026-03-15: 命途专属独立事件落地（本轮）
+  - 已完成：把命途从“事件池偏置”继续升级成“真正独立、可选择、可结算”的事件内容
+    - `js/data/run_paths.js`
+      - 三条命途的 `eventPool` 现在都会优先挂载一条专属独立事件：
+        - `runPathShatterBounty`
+        - `runPathBulwarkSanctuary`
+        - `runPathInsightAstrolabe`
+    - `js/data/events.js`
+      - 新增 3 个命途专属独立事件：
+        - `断脉悬金榜`
+        - `镇脉壁垒库`
+        - `问真观星台`
+      - 设计方向：
+        - 破命流事件：以血换悬赏与抢拍资源
+        - 镇命流事件：以护流换续航与防线增益
+        - 窥命流事件：以校正命盘换天机、命环经验与路线样本
+      - 每条事件都包含明确的“命途事件”叙事摘要与至少 2 种有后果的选择
+    - `js/game.js`
+      - 新增事件效果：
+        - `heavenlyInsight`
+        - `runPathProgress`
+      - `runPathProgress` 会在事件内安全推进当前命途阶段，不再要求一定由战斗/地图节点触发
+      - `handleRunPathProgress()` 新增 `context.force` 旁路，使事件可以推进当前阶段而不破坏原有判定
+      - `buildEventChoiceEffectSummary()` 现在能正确总结：
+        - `天机`
+        - 行旅增益
+        - 命途推进
+  - 测试补完
+    - 更新 `tests/sanity_event_flow_checks.js`
+      - 覆盖 `heavenlyInsight`
+      - 覆盖 `runPathProgress`
+    - 更新 `tests/sanity_run_path_content_hooks_checks.js`
+      - 断言 3 条命途都挂载了专属独立事件
+      - 断言这些事件确实包含 `runPathProgress`
+      - 断言命途偏置会优先抽到专属事件
+    - 新增 `tests/browser_run_path_event_audit.mjs`
+      - 覆盖破命流 / 镇命流 / 窥命流三条独立事件
+      - 断言资源、天机、行旅增益与命途进度都会真实变化
+      - 断言事件结果页与系统摘要文案可见
+  - 本轮验证（全部通过）
+    - 语法：
+      - `node --check js/data/events.js` ✅
+      - `node --check js/game.js` ✅
+      - `node --check tests/browser_run_path_event_audit.mjs` ✅
+    - Node：
+      - `node tests/sanity_event_flow_checks.js` ✅
+      - `node tests/sanity_run_path_content_hooks_checks.js` ✅
+      - `node tests/sanity_run_path_system_checks.js` ✅
+      - `node tests/sanity_run_path_archive_feedback_checks.js` ✅
+      - `node tests/sanity_codex_sanctum_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器专项：
+      - `node tests/browser_run_path_event_audit.mjs http://127.0.0.1:4174 output/web-run-path-event-audit` ✅
+      - `node tests/browser_run_path_audit.mjs http://127.0.0.1:4174 output/web-run-path-audit-events-regression` ✅
+      - 已人工查看：
+        - `output/web-run-path-event-audit/runPathInsightAstrolabe.png`
+    - Playwright 客户端：
+      - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4174/?autotest=guest-map&character=yanHan&destiny=foldedEdge&spirit=swordWraith&path=insight&realm=1" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-run-path-event-client` ✅
+      - 已人工查看：
+        - `output/web-game-run-path-event-client/shot-1.png`
+  - 关键结果
+    - 命途事件不再只是“命途中意的普通事件”，而是具有专属标题、专属风险回报和专属推进逻辑的独立内容
+    - 玩家现在可以在事件中直接推进命途，而不是只能等战斗或战略节点慢慢记账
+    - 命途的局内主线感更强，事件层开始真正服务“这局我要走哪条修行路”
+  - 下一步建议
+    - 若继续沿规划推进，下一刀更适合做：
+      - 命途与章节 Boss 的更细颗粒机制反制
+      - 命途中盘裂变 / 转向事件
+      - 命途样本与不同角色通关记录的对照展示
+
+- 2026-03-15: 命途-Boss 动态对局解法接线完成（本轮）
+  - 运行时接线
+    - `js/data/run_paths.js`
+      - 复用上一轮已写入的 `bossMatchups` 作为唯一数据源，不再新增分散配置
+    - `js/game.js`
+      - `getRunPathMetaById()` 现在会深拷贝 `bossMatchups`
+      - 新增 `resolveRunPathBossMatchup(runPathMeta, options)`
+        - 合并顺序为：
+          - 基础 `bossCounterplay`
+          - `bossMatchups.mechanics`
+          - `bossMatchups.memories`
+          - `bossMatchups.bosses`
+        - 输出统一结构：
+          - `fit`
+          - `fitLabel`
+          - `chipLabel`
+          - `focus`
+          - `counter`
+          - `reward`
+    - `js/core/player.js`
+      - `player.getRunPathMeta()` 也会携带 `bossMatchups`
+      - 这样战斗内从玩家侧读取命途时不会丢掉 Boss 对局数据
+    - `js/core/battle.js`
+      - `createBossThreeActState()` 现在会根据当前 Boss / 记忆点 / 机制动态解析命途解法
+      - `resolveRunPathBossCounterplay()` 增加 battle 侧兜底合并逻辑
+        - 即使测试或独立上下文里没有 `game.resolveRunPathBossMatchup()`，也能正确解析动态命途对局
+      - Boss 三幕面板与 counter chips 现在会显示：
+        - 适配评级
+        - 更细化的 Boss-specific / memory-specific 拆招思路
+  - Boss 档案升级
+    - `js/core/collection_hub.js`
+      - 新增 `getBossArchiveMemoryProfile()`
+      - 新增 `resolveRunPathBossArchiveGuidance()`
+      - `getBossArchiveEntries()` 现在会带：
+        - `runPathMatchup`
+        - `runPathFit`
+        - `runPathFitLabel`
+        - `runPathCounterText`
+      - Boss 档案详情新增「当前命途解法」模块
+        - 展示当前命途名称
+        - 展示适配评级
+        - 展示具体拆招与收益文案
+      - Boss 卡片 tag 与右侧摘要也会感知当前命途适配信息
+  - 测试补完
+    - 更新 `tests/sanity_run_path_content_hooks_checks.js`
+      - 断言 `getRunPathMetaById('insight')` 会带 `bossMatchups`
+      - 断言战斗三幕状态会解析出 Boss-specific `fitLabel`
+    - 更新 `tests/sanity_codex_sanctum_checks.js`
+      - 断言 Boss 档案会暴露当前命途适配评级与解法摘要
+    - 更新浏览器审计
+      - `tests/browser_run_path_audit.mjs`
+        - 断言战斗内 `runPathCounterplay.fitLabel === 观符下刀`
+      - `tests/browser_meta_screen_audit.mjs`
+        - 断言 Boss 档案详情出现「当前命途解法 / 适配评级 / 留冗余手牌」
+  - 本轮验证（全部通过）
+    - 语法：
+      - `node --check js/game.js` ✅
+      - `node --check js/core/player.js` ✅
+      - `node --check js/core/battle.js` ✅
+      - `node --check js/core/collection_hub.js` ✅
+    - Node：
+      - `node tests/sanity_run_path_content_hooks_checks.js` ✅
+      - `node tests/sanity_boss_three_act_checks.js` ✅
+      - `node tests/sanity_run_path_archive_feedback_checks.js` ✅
+      - `node tests/sanity_boss_memory_battle_checks.js` ✅
+      - `node tests/sanity_codex_sanctum_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器专项：
+      - `node tests/browser_run_path_audit.mjs http://127.0.0.1:4174 output/web-run-path-audit-matchups` ✅
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/web-meta-audit-matchups` ✅
+      - 已人工查看：
+        - `output/web-run-path-audit-matchups/run-path-battle.png`
+        - `output/web-meta-audit-matchups/boss-archive-layout.png`
+    - Playwright 客户端：
+      - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4174/?autotest=guest-battle&character=linFeng&destiny=foldedEdge&spirit=swordWraith&path=insight&realm=1&battleType=boss" --actions-file "$HOME/.codex/skills/develop-web-game/references/action_payloads.json" --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-client-matchup` ✅
+      - 已人工查看：
+        - `output/web-game-client-matchup/shot-1.png`
+  - 关键结果
+    - 命途现在不再只给 Boss 战一个固定“通用提示”，而是会按具体 Boss、三幕记忆点和底层机制动态改写拆招建议
+    - Boss 档案与战斗三幕读题已共享同一套命途-Boss 对局数据，避免一边更新一边过期
+    - 命途的长期收藏、战斗内读题、Boss 档案复盘三者已经形成完整闭环
+  - 下一步建议
+    - 若继续沿规划推进，下一刀更适合做：
+      - 命途中盘裂变 / 转向事件
+      - 角色 × 命途 × Boss 的通关样本对照榜
+      - 更高章 Boss 的章节环境词缀与命途反制联动
+
+- 2026-03-15: 角色 × 命途 × Boss 通关样本对照榜落地（本轮）
+  - 已完成：在命途战录与 Boss 档案之间补上一层可长期复盘的实战样本聚合，构筑快照 / Boss 档案 / 洞府总览现在会共享同一份角色 × 命途 × Boss 样本数据
+    - `js/core/collection_hub.js`
+      - 新增长期持久化：
+        - `RUN_PATH_BOSS_SAMPLES_KEY`
+        - `loadRunPathBossSamples()`
+        - `persistRunPathBossSamples()`
+        - `recordRunPathBossSample()`
+        - `getRunPathBossSamples()`
+        - `buildRunPathBossSampleBoard()`
+      - `ensureCollectionHubBootState()` 现在会初始化 `runPathBossSamples`
+      - `recordRunPathCompletion()` / `getRunPathRecord()` / `loadRunPathRecords()` 新增裂变维度留痕：
+        - `lastMutationId`
+        - `lastMutationName`
+        - `lastMutationBranch`
+      - `handleBossDefeated()` 会在主线 Boss 胜利后自动写入当前：
+        - 角色
+        - 命途
+        - 裂变方向
+        - Boss
+        - 收官轮次
+        - 推荐套装
+      - `getCollectionProgressSnapshot()` 新增：
+        - `runPathBossSampleCount`
+        - `sampledBosses`
+        - `sampledCharacters`
+      - `getBuildSnapshotData()` 新增当前命途样本榜：
+        - 优先对齐当前裂变方向
+        - 若该裂变暂无样本，则回退到当前命途样本
+        - `strengths` / `nextTargets` 会直接引用样本榜结论
+      - `getBossArchiveEntries()` 新增：
+        - `sampleBoard`
+        - `sampleCount`
+      - `getSanctumOverviewData()` 新增：
+        - 房间文案会引用最新样本
+        - 研究项 `sample_board`
+        - 洞府统计中的样本总量 / 覆盖角色 / 覆盖 Boss
+      - UI 升级：
+        - Boss 档案详情新增「通关样本对照」
+        - 构筑快照新增「样本对照」
+        - 洞府总览 summary / progress / guide 会展示样本榜
+    - 样本展示规则
+      - Boss 档案默认优先展示“当前命途 / 当前裂变”对这位 Boss 的样本
+      - 若当前命途没有对应样本，则自动回退到该 Boss 的全局样本
+      - 构筑快照默认优先展示当前裂变方向样本，确保推荐更贴近这一局的真实走法
+  - 测试补完
+    - 新增 `tests/sanity_run_path_sample_board_checks.js`
+      - 覆盖样本记录写入、筛选、最佳轮次排序、裂变过滤与持久化恢复
+    - 更新 `tests/run_node_checks.sh`
+      - 纳入 `sanity_run_path_sample_board_checks.js`
+    - 更新 `tests/sanity_codex_sanctum_checks.js`
+      - 断言 Boss 档案会暴露样本榜
+      - 断言构筑快照会暴露样本榜与样本优势文案
+      - 断言洞府总览会暴露 `sample_board` 研究与样本进度
+    - 更新 `tests/browser_meta_screen_audit.mjs`
+      - 断言 Boss 档案详情出现「通关样本对照 / 林风 / 4 回合」
+      - 断言构筑快照出现样本榜与具体 Boss 样本
+      - 断言洞府总览 summary / progress / research 都能读到样本榜
+  - 本轮验证（全部通过）
+    - 语法：
+      - `node --check js/core/collection_hub.js` ✅
+      - `node --check tests/sanity_run_path_sample_board_checks.js` ✅
+      - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - Node：
+      - `node tests/sanity_run_path_sample_board_checks.js` ✅
+      - `node tests/sanity_codex_sanctum_checks.js` ✅
+      - `node tests/sanity_run_path_archive_feedback_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器专项：
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/web-meta-audit-sample-board` ✅
+      - 已人工查看：
+        - `output/web-meta-audit-sample-board/boss-archive-layout.png`
+        - `output/web-meta-audit-sample-board/sanctum-layout.png`
+    - Playwright 客户端：
+      - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4174/?autotest=guest-map&character=linFeng&destiny=foldedEdge&spirit=swordWraith&path=insight&realm=1" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-sample-board-client` ✅
+      - 已人工查看：
+        - `output/web-game-sample-board-client/shot-1.png`
+  - 关键结果
+    - 命途系统现在不只是“局内读题 + 结算战录”，而是开始积累真正可对照的通关样本
+    - 玩家能直接看到：
+      - 哪个角色最适合当前命途 / 裂变
+      - 哪位 Boss 已经有稳定模板
+      - 最快轮次能压到多少
+    - 构筑快照、Boss 档案、洞府总览三者已经共用同一份样本底座，后续继续扩高章 Boss 或章节环境词缀时不需要重做展示层
+  - 下一步建议
+    - 若继续沿规划推进，下一刀更适合做：
+      - 更高章 Boss 的章节环境词缀与命途反制联动
+      - 命途中盘裂变后专属事件继续加量，补足更多分支内容
+      - 基于样本榜继续沉淀“推荐角色 / 推荐裂变 / 推荐套装”的自动摘要
+
+- 2026-03-16: 高章章节场域 × 命途反制联动补记（接力完成）
+  - 已完成：将 Boss 对局读题从“机制/记忆/Boss”扩展到“章节场域”层，战斗内与藏经阁共用同一数据源
+    - `js/data/run_paths.js`
+      - 三条命途的 `bossMatchups.chapters` 已补齐高章章节场域（含 `mirror_abyss` / `blood_moon` / `final_court`）
+    - `js/game.js`
+      - `resolveRunPathBossMatchup()` 追加章节层合并，统一输出：
+        - `chapterId/chapterName/chapterCue/chapterRuleSummary`
+        - `chapterFocus/chapterCounter/chapterReward/chapterFitLabel`
+    - `js/core/battle.js`
+      - `resolveRunPathBossCounterplay()` battle 侧兜底也会合并章节场域反制
+      - Boss 三幕 counter chips / 面板新增章节信息展示（章节场域 / 章节补题 / 场域拆法）
+    - `js/core/collection_hub.js`
+      - Boss 档案 `runPathCounterText` 接入章节线索，支持在复盘页直接读到章节级拆题建议
+  - 测试补完
+    - 新增 `tests/sanity_run_path_environment_matchup_checks.js`
+    - 更新：
+      - `tests/sanity_run_path_content_hooks_checks.js`
+      - `tests/sanity_codex_sanctum_checks.js`
+      - `tests/browser_run_path_audit.mjs`
+      - `tests/browser_meta_screen_audit.mjs`
+      - `tests/run_node_checks.sh`
+  - 本轮验证（全部通过）
+    - Node：
+      - `node tests/sanity_run_path_environment_matchup_checks.js` ✅
+      - `node tests/sanity_run_path_content_hooks_checks.js` ✅
+      - `node tests/sanity_codex_sanctum_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器专项：
+      - `node tests/browser_run_path_audit.mjs http://127.0.0.1:4174 output/web-run-path-audit-env-matchup` ✅
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/web-meta-audit-env-matchup` ✅
+
+- 2026-03-16: 样本榜自动推荐摘要落地 + 全链路回归
+  - 已完成：基于样本榜沉淀“推荐角色 / 推荐裂变 / 推荐套装 / 推荐目标”自动摘要，并同步到 Boss 档案与构筑快照
+    - `js/core/collection_hub.js`
+      - 新增：
+        - `getRunPathSampleSetLabel()`
+        - `buildRunPathSampleRecommendation()`
+      - `buildRunPathBossSampleBoard()` 现在会输出 `recommendation`
+        - 统计维度：角色命中、裂变命中、套装命中、Boss 收官速度
+        - 输出 `recommendation.lines`（自动摘要）
+      - Boss 档案「通关样本对照」新增“自动推荐摘要”可视块
+      - 构筑快照「样本对照」新增“自动推荐摘要”可视块
+      - `getBuildSnapshotData()` 新增：
+        - `runPathSampleRecommendation`
+        - 推荐摘要驱动的 `strengths` / `nextTargets` 条目
+  - 稳定性修复
+    - `tests/sanity_weekly_challenge_checks.js`
+      - 修复跨周时间导致的里程碑领取断言漂移：同时给“当前周轮换 entry”注入积分后再领取，避免固定日期轮换与当前日期失配
+  - 测试补完
+    - 更新：
+      - `tests/sanity_run_path_sample_board_checks.js`
+      - `tests/sanity_codex_sanctum_checks.js`
+      - `tests/browser_meta_screen_audit.mjs`
+      - `tests/sanity_weekly_challenge_checks.js`
+  - 本轮验证（全部通过）
+    - 语法：
+      - `node --check js/core/collection_hub.js` ✅
+      - `node --check tests/sanity_run_path_sample_board_checks.js` ✅
+      - `node --check tests/sanity_codex_sanctum_checks.js` ✅
+      - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - Node：
+      - `node tests/sanity_run_path_sample_board_checks.js` ✅
+      - `node tests/sanity_codex_sanctum_checks.js` ✅
+      - `node tests/sanity_run_path_environment_matchup_checks.js` ✅
+      - `node tests/sanity_weekly_challenge_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器专项：
+      - `node tests/browser_run_path_audit.mjs http://127.0.0.1:4174 output/web-run-path-audit-recommendation` ✅
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/web-meta-audit-recommendation` ✅
+    - Playwright 客户端：
+      - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4174/?autotest=guest-battle&character=yanHan&destiny=preceptSeal&spirit=artifactSoul&path=insight&realm=18&battleType=boss" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-recommendation-client` ✅
+      - 已人工查看：
+        - `output/web-game-recommendation-client/shot-1.png`
+  - 关键结果
+    - 命途样本榜从“展示历史”升级为“可执行推荐”，玩家可直接照着样本去复刻角色、裂变与套装路线
+    - Boss 档案与构筑快照现在共享同一份自动摘要，减少“会看但不会做”的信息断层
+    - 全量 Node + 浏览器 + Playwright 回归已闭环，通过且无新控制台报错
+  - 下一步建议
+    - 若继续沿规划推进，下一刀更适合做：
+      - 命途中盘裂变后专属事件继续加量（按三条命途各补 1-2 条分支）
+      - 在推荐摘要中加入“章节场域适配度”评分，让样本推荐能按章节自动排序
+
+- 2026-03-16: 命途中盘裂变专属事件扩容（本轮）
+  - 已完成：把“命途裂变”从一段被动加成继续推进为“中盘可反复触发的专属事件分支”
+    - `js/data/run_paths.js`
+      - 为 3 条命途 × 3 个裂变分支补齐 `mutationEventPool`
+        - 破命流：
+          - `polarize` → `runPathShatterPolarizeEdict`
+          - `pivot` → `runPathShatterPivotLedger`
+          - `sacrifice` → `runPathShatterSacrificePyre`
+        - 镇命流：
+          - `polarize` → `runPathBulwarkPolarizeBastion`
+          - `pivot` → `runPathBulwarkPivotDrill`
+          - `sacrifice` → `runPathBulwarkSacrificeAnvil`
+        - 窥命流：
+          - `polarize` → `runPathInsightPolarizeAtlas`
+          - `pivot` → `runPathInsightPivotGambit`
+          - `sacrifice` → `runPathInsightSacrificeOracle`
+    - `js/core/player.js`
+      - `getRunPathMutationMeta()` 新增 `mutationEventPool`
+      - `getRunPathMeta()` 现在会输出：
+        - `mutationEventPool`
+        - 合并后的 `eventPool`（基础命途事件 + 裂变事件，去重）
+    - `js/game.js`
+      - `getRunPathMutationChoices()` 也会暴露 `mutationEventPool`，便于 UI / 调试和审计读取
+    - `js/data/events.js`
+      - 新增 9 条裂变专属事件（全部包含可结算选项与命途推进分支）：
+        - `runPathShatterPolarizeEdict`
+        - `runPathShatterPivotLedger`
+        - `runPathShatterSacrificePyre`
+        - `runPathBulwarkPolarizeBastion`
+        - `runPathBulwarkPivotDrill`
+        - `runPathBulwarkSacrificeAnvil`
+        - `runPathInsightPolarizeAtlas`
+        - `runPathInsightPivotGambit`
+        - `runPathInsightSacrificeOracle`
+      - `getRandomEvent()` 新增裂变事件偏置：
+        - 存在 `mutationEventPool` 时优先按概率抽裂变事件
+        - 仍保留原命途事件与流派偏置逻辑
+  - 测试补完
+    - 更新：
+      - `tests/sanity_run_path_content_hooks_checks.js`
+        - 覆盖裂变事件抽取偏置与 9 条裂变事件结构完整性
+      - `tests/sanity_run_path_mutation_checks.js`
+        - 覆盖 `mutationEventPool` 在选择态、运行态的透传与合并
+      - `tests/browser_run_path_event_audit.mjs`
+        - 新增 3 条裂变事件 UI 场景（破命/镇命/窥命各 1）
+  - 本轮验证（全部通过）
+    - 语法：
+      - `node --check js/data/run_paths.js` ✅
+      - `node --check js/data/events.js` ✅
+      - `node --check js/core/player.js` ✅
+      - `node --check tests/sanity_run_path_content_hooks_checks.js` ✅
+      - `node --check tests/sanity_run_path_mutation_checks.js` ✅
+      - `node --check tests/browser_run_path_event_audit.mjs` ✅
+    - Node：
+      - `node tests/sanity_run_path_content_hooks_checks.js` ✅
+      - `node tests/sanity_run_path_mutation_checks.js` ✅
+      - `node tests/sanity_event_flow_checks.js` ✅
+      - `node tests/sanity_run_path_system_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器专项：
+      - `node tests/browser_run_path_event_audit.mjs http://127.0.0.1:4174 output/web-run-path-event-audit-mutation` ✅
+      - `node tests/browser_run_path_audit.mjs http://127.0.0.1:4174 output/web-run-path-audit-mutation-event-regression` ✅
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/web-meta-audit-mutation-event-regression` ✅
+      - 截图降级提示：
+        - `browser_meta_screen_audit` 出现一次字体加载截图超时提示，但断言全部通过，属于审计脚本已容忍的非阻断降级
+    - Playwright 客户端：
+      - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4174/?autotest=guest-map&character=yanHan&destiny=preceptSeal&spirit=artifactSoul&path=insight&realm=6" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-mutation-event-client` ✅
+      - 已人工查看：
+        - `output/web-game-mutation-event-client/shot-1.png`
+  - 关键结果
+    - 中盘裂变不再只是“选一次就结束”的数值按钮，而是会在事件层持续产出差异化抉择
+    - 命途事件体系现在形成三层：
+      - 基础命途事件
+      - 裂变专属事件
+      - 章节/Boss 反制读题
+    - 局内目标感与中盘分叉感进一步增强，且门禁回归保持全绿
+
+- 2026-03-16: 样本榜“章节场域适配度”评分实装（本轮）
+  - 已完成：把命途样本推荐从“角色/裂变/套装/Boss”扩展为“章节场域拟合”闭环
+    - `js/core/collection_hub.js`
+      - `buildRunPathSampleRecommendation()` 新增章节聚合维度：
+        - 新增 `chapterMap` 统计（章节命中份数、最快回合、最近时间）
+        - 新增目标章节解析（优先 `options.realm`，回退 `player.realm/chapterIndex/chapterName`）
+        - 新增 `chapter.fitScore` 场域拟合分（0-100）
+      - 推荐结构新增 `recommendation.chapter` 字段，包含：
+        - `name/index/count/bestTurn`
+        - `fitScore/targetName/targetIndex/distance/matched`
+      - 推荐摘要 `recommendation.lines` 新增：
+        - `章节适配：... 场域拟合分 ...`
+      - `buildRunPathBossSampleBoard()` 的兜底 recommendation 结构同步补 `chapter: null`
+      - 构筑快照联动：
+        - `strengths` 新增“样本章节适配 + 场域拟合分”正向摘要
+        - `nextTargets` 新增“章节适配”行动建议（根据当前章节与样本主场偏差给出补样本方向）
+  - 测试补完
+    - 更新：
+      - `tests/sanity_run_path_sample_board_checks.js`
+        - 断言 recommendation 暴露 chapter + fitScore
+        - 断言推荐文案包含“章节适配/场域拟合分”
+      - `tests/sanity_codex_sanctum_checks.js`
+        - 断言 build snapshot 暴露 chapter fit recommendation
+        - 断言 strengths / nextTargets 包含章节适配信号
+      - `tests/browser_meta_screen_audit.mjs`
+        - build & sanctum 联审新增“章节适配/场域拟合分”文案断言
+  - 本轮验证（全部通过）
+    - 语法：
+      - `node --check js/core/collection_hub.js` ✅
+      - `node --check tests/sanity_run_path_sample_board_checks.js` ✅
+      - `node --check tests/sanity_codex_sanctum_checks.js` ✅
+      - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - Node：
+      - `node tests/sanity_run_path_sample_board_checks.js` ✅
+      - `node tests/sanity_codex_sanctum_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器专项：
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/web-meta-audit-chapter-fit` ✅
+      - `node tests/browser_run_path_audit.mjs http://127.0.0.1:4174 output/web-run-path-audit-chapter-fit` ✅
+      - `node tests/browser_run_path_event_audit.mjs http://127.0.0.1:4174 output/web-run-path-event-audit-chapter-fit` ✅
+    - Playwright 客户端：
+      - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4174/?autotest=guest-map&character=yanHan&destiny=preceptSeal&spirit=artifactSoul&path=insight&realm=6" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-chapter-fit-client` ✅
+      - 已人工查看：
+        - `output/web-game-chapter-fit-client/shot-0.png`
+        - `output/web-game-chapter-fit-client/shot-1.png`
+  - 关键结果
+    - 样本推荐新增“章节维度”，从“我该用谁”升级为“我该在哪章复刻样本”
+    - 构筑快照会直接给出场域拟合分与章节补位建议，降低路线决策成本
+    - Node + Browser + Playwright 回归均通过，无新增控制台报错
+
+- 2026-03-16: 最终功能/UI 验收闭环 + 提交前稳定性收口（本轮）
+  - 缺陷修复（关键稳定性）
+    - `js/game.js`
+      - `applyEndlessBoon()` 修复无尽赐福 `goldBurst` 分支的状态引用抖动：
+        - 旧逻辑在分支内再次调用 `ensureEndlessState()`，极端时会导致 `boonHistory` 追加表现不稳定（间歇性未写入）。
+        - 新逻辑统一复用函数开头获取的 `state`，并基于 `state.currentCycle` 计算 `goldGain`，避免重复取状态引入波动。
+  - 提交前定向稳定性验证（全部通过）
+    - `node --check js/game.js` ✅
+    - `node tests/sanity_endless_shop_service_checks.js` × 200 循环 ✅
+      - 进度节点：50 / 100 / 150 / 200 均通过。
+    - `bash tests/run_node_checks.sh` ✅（全量 Node 门禁全绿）
+  - 提交前全量浏览器审计（全部通过）
+    - 执行命令：
+      - `for f in tests/browser_*.mjs; do node "$f" "http://127.0.0.1:4174" "output/acceptance-$(basename "$f" .mjs)"; done`
+    - 覆盖脚本：共 19 个 `browser_*.mjs`，全部断言通过，退出码 0。
+    - 审计产物目录：`output/acceptance-browser_*`（共 19 个目录，均已生成截图/报告）。
+    - 非阻断降级日志（断言均通过）：
+      - `browser_feature_audit` / `browser_meta_screen_audit` / `browser_mobile_layout_audit` / `browser_vow_choice_audit` 出现字体等待导致的截图超时降级提示，脚本已容忍，未影响通过结果。
+  - 人工截图抽检（已完成）
+    - 主流程与战斗：
+      - `output/acceptance-browser_ui_gallery_audit/01-main-menu.png`
+      - `output/acceptance-browser_ui_gallery_audit/04-realm-select.png`
+      - `output/acceptance-browser_ui_gallery_audit/12-battle-screen.png`
+    - PVP 与移动端：
+      - `output/acceptance-browser_pvp_audit/pvp-audit.png`
+      - `output/acceptance-browser_pvp_mobile_audit/pvp-mobile.png`
+      - `output/acceptance-browser_mobile_layout_audit/mobile-observatory-modal.png`
+    - 命途/奖励/洞府：
+      - `output/acceptance-browser_run_path_reward_audit/reward-run-path-finale.png`
+      - `output/acceptance-browser_run_path_event_audit/runPathInsightSacrificeOracle.png`
+      - `output/acceptance-browser_meta_screen_audit/sanctum-layout.png`
+      - `output/acceptance-browser_challenge_audit/challenge-hub-desktop.png`
+      - `output/acceptance-browser_chapter_flow_audit/chapter-codex-final.png`
+  - 本轮结论
+    - 当前代码在本地“全量 Node + 全量浏览器审计 + 人工截图抽检”下未发现阻塞性功能缺陷或明显 UI 破损。
+    - 已满足提交与 push 条件。

@@ -83,6 +83,7 @@ function loadFile(ctx, filePath) {
   loadFile(ctx, path.join(root, 'js/data/boss_mechanics.js'));
   loadFile(ctx, path.join(root, 'js/data/achievements.js'));
   loadFile(ctx, path.join(root, 'js/data/run_destinies.js'));
+  loadFile(ctx, path.join(root, 'js/data/run_paths.js'));
   loadFile(ctx, path.join(root, 'js/data/run_vows.js'));
   loadFile(ctx, path.join(root, 'js/data/spirit_companions.js'));
   loadFile(ctx, path.join(root, 'js/data/fate_ring.js'));
@@ -111,6 +112,7 @@ function loadFile(ctx, filePath) {
   game.encounterState = Game.prototype.createDefaultEncounterState.call(game);
 
   game.player.setRunDestiny('rebelScale', 1);
+  game.player.setRunPath('insight');
   game.player.setSpiritCompanion('emberCrow', 1);
   game.player.collectLaw(LAWS.flameTruth || Object.values(LAWS)[0]);
   game.player.collectLaw(LAWS.thunderLaw || Object.values(LAWS)[1]);
@@ -127,6 +129,29 @@ function loadFile(ctx, filePath) {
   game.encounterState.maxStreak = 3;
   game.endlessState.clearedCycles = 1;
   game.recordBossMemoryResult('danZun', 'victory', 5);
+  game.recordRunPathCompletion(game.getRunPathMetaById('insight'), {
+    completedAt: Date.now(),
+    realm: 6,
+    characterId: 'linFeng',
+    phaseMeta: { id: 'insight_final', title: '命盘问真' },
+    rewardText: '天机 +2 / 灵石 +80'
+  });
+  game.recordRunPathBossSample(game.getRunPathMetaById('insight'), {
+    id: 'danZun',
+    name: '丹尊',
+    icon: '🗿',
+    realm: 6
+  }, {
+    characterId: 'linFeng',
+    turns: 4,
+    completedAt: Date.now() - 1000
+  });
+  game.recordCollectionUnlock('run_path', {
+    id: 'runPathInsightRecord',
+    name: '命盘观测录',
+    icon: '🔮',
+    note: '已收入洞府·命途碑廊，可继续复盘窥命流的套装与 Boss 读法。'
+  });
 
   const spirits = game.getSpiritCodexEntries();
   const currentSpirit = spirits.find((entry) => entry.id === 'emberCrow');
@@ -161,21 +186,44 @@ function loadFile(ctx, filePath) {
   assert(danZun && /灼烧|净化|冰/.test(danZun.breakHint), `danZun break hint should mention counterplay, got ${danZun && danZun.breakHint}`);
   assert(danZun && danZun.memoryRecord.clears >= 1, `danZun should carry boss memory record, got ${danZun && JSON.stringify(danZun.memoryRecord)}`);
   assert(danZun && danZun.memoryReady === true, `danZun should unlock boss memory battle after defeat, got ${danZun && danZun.memoryReady}`);
+  assert(danZun && danZun.runPathFitLabel === '留冗余手牌', `danZun should expose current run path matchup guidance, got ${danZun && JSON.stringify(danZun.runPathMatchup)}`);
+  assert(danZun && danZun.sampleCount >= 1, `danZun should expose archived sample count, got ${danZun && JSON.stringify(danZun.sampleBoard)}`);
+  assert(danZun && danZun.sampleBoard && danZun.sampleBoard.entries.some((entry) => /林枫/.test(entry.headline)), `danZun should expose sample board entries, got ${danZun && JSON.stringify(danZun.sampleBoard)}`);
+  assert(
+    danZun && danZun.sampleBoard && danZun.sampleBoard.recommendation && Array.isArray(danZun.sampleBoard.recommendation.lines) && danZun.sampleBoard.recommendation.lines.some((line) => /推荐角色/.test(line)),
+    `danZun should expose recommendation lines in sample board, got ${danZun && JSON.stringify(danZun.sampleBoard)}`
+  );
   assert(heavenlyDao && /终焉裁问/.test(heavenlyDao.finisher || ''), `heavenlyDao should expose finisher metadata, got ${heavenlyDao && heavenlyDao.finisher}`);
   assert(heavenlyDao && Array.isArray(heavenlyDao.actPreview) && heavenlyDao.actPreview.length >= 2, `heavenlyDao should expose act previews, got ${JSON.stringify(heavenlyDao && heavenlyDao.actPreview)}`);
+  assert(heavenlyDao && heavenlyDao.runPathFitLabel === '终章控尾', `heavenlyDao should expose boss-specific run path fit label, got ${heavenlyDao && JSON.stringify(heavenlyDao.runPathMatchup)}`);
+  assert(heavenlyDao && /适配评级 终章控尾/.test(heavenlyDao.runPathCounterText || ''), `heavenlyDao should expose run path counter text, got ${heavenlyDao && heavenlyDao.runPathCounterText}`);
+  assert(heavenlyDao && /章节场域.*终焉命庭/.test(heavenlyDao.runPathCounterText || ''), `heavenlyDao should expose chapter cue in counter text, got ${heavenlyDao && heavenlyDao.runPathCounterText}`);
+  assert(heavenlyDao && /章节补题|场域拆法/.test(heavenlyDao.runPathCounterText || ''), `heavenlyDao should expose chapter environment solve in counter text, got ${heavenlyDao && heavenlyDao.runPathCounterText}`);
 
   const build = game.getBuildSnapshotData();
   assert(build.profile.size >= 5, `build snapshot should see starter deck, got ${build.profile.size}`);
   assert(build.strengths.length >= 1, 'build snapshot should summarize at least one strength');
   assert(build.gaps.length >= 1, 'build snapshot should summarize at least one gap');
   assert(build.nextTargets.length >= 1, 'build snapshot should recommend next targets');
+  assert(build.runPath && build.runPath.id === 'insight', `build snapshot should expose current run path, got ${JSON.stringify(build.runPath)}`);
+  assert(build.runPathRecord && build.runPathRecord.clears >= 1, `build snapshot should expose run path archive record, got ${JSON.stringify(build.runPathRecord)}`);
+  assert(build.runPathSampleBoard && build.runPathSampleBoard.count >= 1, `build snapshot should expose run path sample board, got ${JSON.stringify(build.runPathSampleBoard)}`);
+  assert(build.runPathSampleRecommendation && build.runPathSampleRecommendation.character, `build snapshot should expose run path sample recommendation, got ${JSON.stringify(build.runPathSampleRecommendation)}`);
+  assert(build.runPathSampleRecommendation && build.runPathSampleRecommendation.chapter && build.runPathSampleRecommendation.chapter.fitScore >= 1, `build snapshot should expose chapter fit recommendation, got ${JSON.stringify(build.runPathSampleRecommendation)}`);
+  assert(build.strengths.some((line) => /样本对照/.test(line)), `build snapshot should mention sample board strengths, got ${JSON.stringify(build.strengths)}`);
+  assert(build.strengths.some((line) => /样本推荐角色|样本推荐套装/.test(line)), `build snapshot should include recommendation-driven strengths, got ${JSON.stringify(build.strengths)}`);
+  assert(build.strengths.some((line) => /章节适配|场域拟合分/.test(line)), `build snapshot should include chapter-fit strengths, got ${JSON.stringify(build.strengths)}`);
+  assert(build.nextTargets.some((line) => /裂变参考|样本目标|章节适配/.test(line)), `build snapshot should expose recommendation-driven next targets, got ${JSON.stringify(build.nextTargets)}`);
 
   const sanctum = game.getSanctumOverviewData();
-  assert(sanctum.rooms.length === 4, `sanctum should expose 4 rooms, got ${sanctum.rooms.length}`);
-  assert(sanctum.researches.length >= 9, `sanctum should expose forge research items in addition to codex studies, got ${sanctum.researches.length}`);
+  assert(sanctum.rooms.length === 5, `sanctum should expose 5 rooms, got ${sanctum.rooms.length}`);
+  assert(sanctum.researches.length >= 11, `sanctum should expose forge research items plus run path sample study, got ${sanctum.researches.length}`);
   assert(sanctum.rooms.some((room) => room.id === 'forge' && room.actionType === 'treasure'), 'forge room should jump into treasure research');
+  assert(sanctum.rooms.some((room) => room.id === 'run_path_gallery' && room.actionValue === 'builds'), 'sanctum should expose run path gallery room');
   assert(sanctum.rooms.some((room) => room.id === 'demon_platform' && room.actionValue === 'enemies'), 'demon platform should jump into enemy codex');
   assert(sanctum.researches.some((research) => research.id === 'forge_atlas' && research.actionType === 'treasure'), 'sanctum should expose forge atlas research');
+  assert(sanctum.researches.some((research) => research.id === 'run_path_archive' && research.progress >= 1), 'sanctum should expose run path archive research');
+  assert(sanctum.researches.some((research) => research.id === 'sample_board' && research.progress >= 1), 'sanctum should expose run path sample board research');
   assert(sanctum.researches.some((research) => research.id === 'memory_duel' && research.section === 'bosses'), 'sanctum should expose boss memory duel research');
   assert(sanctum.progress.collectedLaws >= 2, `sanctum progress should include collected laws, got ${sanctum.progress.collectedLaws}`);
   assert(sanctum.progress.collectedTreasures >= 2, `sanctum progress should include collected treasures, got ${sanctum.progress.collectedTreasures}`);
@@ -183,7 +231,11 @@ function loadFile(ctx, filePath) {
   assert(sanctum.progress.forgeFormTotal >= 8, `sanctum progress should expose forge form totals, got ${sanctum.progress.forgeFormTotal}`);
   assert(sanctum.progress.seenEnemies >= 3, `sanctum progress should include seen enemies, got ${sanctum.progress.seenEnemies}`);
   assert(sanctum.progress.clearedBossMemories >= 1, `sanctum progress should include boss memory clears, got ${sanctum.progress.clearedBossMemories}`);
+  assert(sanctum.progress.completedRunPaths >= 1, `sanctum progress should include completed run paths, got ${sanctum.progress.completedRunPaths}`);
+  assert(sanctum.progress.totalRunPaths === 3, `sanctum progress should expose total run paths, got ${sanctum.progress.totalRunPaths}`);
+  assert(sanctum.progress.runPathBossSampleCount >= 1, `sanctum progress should expose sample board count, got ${JSON.stringify(sanctum.progress)}`);
   assert(sanctum.recentUnlocks.length >= 4, `sanctum should accumulate recent unlock history, got ${sanctum.recentUnlocks.length}`);
+  assert(sanctum.recentUnlocks.some((entry) => entry.type === 'run_path' && entry.name === '命盘观测录'), 'sanctum recent unlocks should include run path archive');
   assert(sanctum.goals.length >= 1, 'sanctum should expose at least one actionable goal');
 
   console.log('Codex sanctum checks passed.');

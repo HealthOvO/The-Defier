@@ -277,6 +277,21 @@ class GameMap {
             });
         }
 
+        const runPathEffects = player && typeof player.getRunPathEffects === 'function'
+            ? player.getRunPathEffects()
+            : null;
+        const runPathShift = runPathEffects && runPathEffects.mapWeightShift && typeof runPathEffects.mapWeightShift === 'object'
+            ? runPathEffects.mapWeightShift
+            : null;
+        if (runPathShift) {
+            Object.keys(runPathShift).forEach((key) => {
+                if (!Object.prototype.hasOwnProperty.call(weights, key)) return;
+                const delta = Number(runPathShift[key]);
+                if (!Number.isFinite(delta)) return;
+                weights[key] += delta;
+            });
+        }
+
         this.applyStrategicNodeBias(weights, row, totalRows, realm, context);
         this.applyRouteDiversityPressure(weights, row, totalRows, context);
         this.applyLongTermDiversityPressure(weights, row, totalRows, context);
@@ -1222,6 +1237,15 @@ class GameMap {
                             </div>
                             <div class="mission-progress">0/0</div>
                         </div>
+                        <div id="map-run-path-mission" class="map-legacy-mission" style="display:none;">
+                            <div class="mission-title">命途主线</div>
+                            <div class="mission-desc">暂无进行中的命途</div>
+                            <div class="mission-track">
+                                <div class="mission-fill"></div>
+                            </div>
+                            <div class="mission-progress">0/0</div>
+                        </div>
+                        <div id="map-run-path-flash" class="map-run-path-flash" style="display:none;"></div>
                     </div>
                 </div>
 
@@ -1900,34 +1924,89 @@ class GameMap {
     }
 
     updateLegacyMissionTracker() {
-        const panel = document.getElementById('map-legacy-mission');
-        if (!panel) return;
+        const updatePanel = (panelId, payload = null, titlePrefix = '') => {
+            const panel = document.getElementById(panelId);
+            if (!panel) return;
+            if (!payload || !payload.target) {
+                panel.style.display = 'none';
+                return;
+            }
+
+            const target = Math.max(1, Number(payload.target) || 1);
+            const progress = Math.max(0, Math.min(target, Number(payload.progress) || 0));
+            const percent = Math.round((progress / target) * 100);
+            const titleEl = panel.querySelector('.mission-title');
+            const descEl = panel.querySelector('.mission-desc');
+            const fillEl = panel.querySelector('.mission-fill');
+            const progressEl = panel.querySelector('.mission-progress');
+
+            panel.style.display = 'block';
+            panel.classList.toggle('completed', !!payload.completed);
+            if (titleEl) titleEl.textContent = `${titlePrefix}${payload.title || '未命名阶段'}`;
+            if (descEl) descEl.textContent = payload.desc || '';
+            if (fillEl) fillEl.style.width = `${percent}%`;
+            if (progressEl) {
+                progressEl.textContent = payload.completed
+                    ? `已达成 ${target}/${target}`
+                    : `${progress}/${target}`;
+            }
+        };
 
         const mission = this.game && this.game.player ? this.game.player.legacyRunMission : null;
-        if (!mission || !mission.target) {
-            panel.style.display = 'none';
+        updatePanel('map-legacy-mission', mission ? {
+            title: mission.name || '未命名试炼',
+            desc: mission.desc || '',
+            target: mission.target,
+            progress: mission.progress,
+            completed: mission.completed
+        } : null, '传承试炼：');
+
+        const runPathTracker = this.game && typeof this.game.getRunPathTrackerState === 'function'
+            ? this.game.getRunPathTrackerState()
+            : null;
+        updatePanel('map-run-path-mission', runPathTracker ? {
+            title: `${runPathTracker.name} · ${runPathTracker.phaseLabel} · ${runPathTracker.title}`,
+            desc: runPathTracker.desc || runPathTracker.rewardText || '',
+            target: runPathTracker.target,
+            progress: runPathTracker.progress,
+            completed: runPathTracker.completed
+        } : null, '命途主线：');
+
+        const flashPanel = document.getElementById('map-run-path-flash');
+        const flash = this.game && this.game.lastRunPathMapFeedback ? this.game.lastRunPathMapFeedback : null;
+        if (!flashPanel) return;
+
+        const now = Date.now();
+        const shouldShowFlash = !!flash && (!flash.expiresAt || flash.expiresAt > now);
+        if (!shouldShowFlash) {
+            flashPanel.style.display = 'none';
+            flashPanel.innerHTML = '';
+            flashPanel.classList.remove('completed');
             return;
         }
 
-        const target = Math.max(1, Number(mission.target) || 1);
-        const progress = Math.max(0, Math.min(target, Number(mission.progress) || 0));
-        const percent = Math.round((progress / target) * 100);
+        const escape = (value) => String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+        const nextText = flash.completed
+            ? '命途主线已圆满，后续地图将按这条完成路线继续收束。'
+            : (flash.nextPhaseTitle
+                ? `下一阶段：${[flash.nextPhaseLabel, flash.nextPhaseTitle].filter(Boolean).join(' · ')}`
+                : '下一阶段已就绪。');
 
-        const titleEl = panel.querySelector('.mission-title');
-        const descEl = panel.querySelector('.mission-desc');
-        const fillEl = panel.querySelector('.mission-fill');
-        const progressEl = panel.querySelector('.mission-progress');
-
-        panel.style.display = 'block';
-        panel.classList.toggle('completed', !!mission.completed);
-        if (titleEl) titleEl.textContent = `传承试炼：${mission.name || '未命名试炼'}`;
-        if (descEl) descEl.textContent = mission.desc || '';
-        if (fillEl) fillEl.style.width = `${percent}%`;
-        if (progressEl) {
-            progressEl.textContent = mission.completed
-                ? `已达成 ${target}/${target}`
-                : `${progress}/${target}`;
-        }
+        flashPanel.style.display = 'grid';
+        flashPanel.classList.toggle('completed', !!flash.completed);
+        flashPanel.innerHTML = `
+            <div class="map-run-path-flash-head">
+                <div class="map-run-path-flash-badge">${escape(flash.icon || '✦')} ${escape(flash.name || '命途')}</div>
+                <div class="map-run-path-flash-status">${escape(flash.completed ? '命途圆满' : '阶段已完成')}</div>
+            </div>
+            <div class="map-run-path-flash-title">${escape([flash.phaseLabel, flash.title].filter(Boolean).join(' · '))}</div>
+            <div class="map-run-path-flash-reward">${escape(flash.rewardText || '奖励已结算')}</div>
+            <div class="map-run-path-flash-next">${escape(nextText)}</div>
+        `;
     }
 
     // 节点点击
@@ -2291,6 +2370,10 @@ class GameMap {
         const premiumCost = forgeCost + 50;
         const temperCost = Math.max(30, Math.floor(forgeCost * 0.6));
 
+        if (this.game && typeof this.game.handleRunPathProgress === 'function') {
+            this.game.handleRunPathProgress('strategicNodeVisit', 1, { nodeType: 'forge' });
+        }
+
         if (this.game && typeof this.game.showForgeChoiceModal === 'function') {
             this.game.showForgeChoiceModal(node, { forgeCost, premiumCost, temperCost });
             return;
@@ -2302,6 +2385,9 @@ class GameMap {
 
     openObservatoryNode(node) {
         this.game.currentBattleNode = node;
+        if (this.game && typeof this.game.handleRunPathProgress === 'function') {
+            this.game.handleRunPathProgress('strategicNodeVisit', 1, { nodeType: 'observatory' });
+        }
         if (this.game && typeof this.game.showObservatoryNode === 'function') {
             this.game.showObservatoryNode(node);
             return;
@@ -2311,6 +2397,9 @@ class GameMap {
 
     openSpiritGrottoNode(node) {
         this.game.currentBattleNode = node;
+        if (this.game && typeof this.game.handleRunPathProgress === 'function') {
+            this.game.handleRunPathProgress('strategicNodeVisit', 1, { nodeType: 'spirit_grotto' });
+        }
         if (this.game && typeof this.game.showSpiritGrottoNode === 'function') {
             this.game.showSpiritGrottoNode(node);
             return;
@@ -2320,6 +2409,9 @@ class GameMap {
 
     openForbiddenAltarNode(node) {
         this.game.currentBattleNode = node;
+        if (this.game && typeof this.game.handleRunPathProgress === 'function') {
+            this.game.handleRunPathProgress('strategicNodeVisit', 1, { nodeType: 'forbidden_altar' });
+        }
         if (this.game && typeof this.game.showForbiddenAltarNode === 'function') {
             this.game.showForbiddenAltarNode(node);
             return;
@@ -2329,6 +2421,9 @@ class GameMap {
 
     openMemoryRiftNode(node) {
         this.game.currentBattleNode = node;
+        if (this.game && typeof this.game.handleRunPathProgress === 'function') {
+            this.game.handleRunPathProgress('strategicNodeVisit', 1, { nodeType: 'memory_rift' });
+        }
         if (this.game && typeof this.game.showMemoryRiftNode === 'function') {
             this.game.showMemoryRiftNode(node);
             return;

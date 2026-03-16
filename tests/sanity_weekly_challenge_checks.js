@@ -182,10 +182,13 @@ function loadFile(ctx, filePath) {
   const weeklyBundle = game.buildChallengeBundle('weekly', new Date('2026-03-14T08:00:00'));
   const weeklyEntry = game.getChallengeProgressEntry('weekly', weeklyBundle.rotationKey, true);
   weeklyEntry.totalScore = 900;
+  const liveWeeklyBundle = game.buildChallengeBundle('weekly', new Date());
+  const liveWeeklyEntry = game.getChallengeProgressEntry('weekly', liveWeeklyBundle.rotationKey, true);
+  liveWeeklyEntry.totalScore = 900;
   game.saveChallengeProgressState();
   const claimed = game.claimChallengeMilestone('weekly', 'weekly_score_860');
   assert(claimed === true, 'weekly milestone should be claimable once totalScore is high enough');
-  assert(weeklyEntry.claimedRewards.weekly_score_860 === true, 'weekly milestone should persist as claimed');
+  assert(liveWeeklyEntry.claimedRewards.weekly_score_860 === true, 'weekly milestone should persist as claimed');
   assert(pvpState.ownedItems.title_supreme === true, 'weekly high score reward should unlock title_supreme');
 
   const globalBundle = game.buildChallengeBundle('global', new Date('2026-03-14T08:00:00'));

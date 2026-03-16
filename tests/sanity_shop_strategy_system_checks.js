@@ -59,6 +59,7 @@ function loadFile(ctx, filePath) {
 
   loadFile(ctx, path.join(root, 'js/game.js'));
   loadFile(ctx, path.join(root, 'js/core/map.js'));
+  loadFile(ctx, path.join(root, 'js/data/run_paths.js'));
 
   const Game = vm.runInContext('Game', ctx);
   const GameMap = vm.runInContext('GameMap', ctx);
@@ -76,6 +77,18 @@ function loadFile(ctx, filePath) {
       characterId: 'linFeng',
       deck: [],
       collectedTreasures: [],
+      getRunPathMeta() {
+        return {
+          id: 'shatter',
+          name: '破命流',
+          icon: '⚔️',
+          playstyle: '优先抢拍、扩大攻击收益。',
+          shopBias: {
+            baseServices: [{ id: 'runPathShatterOrder', type: 'service', name: '裂锋悬赏令', icon: '🗡️', desc: '测试命途服务', price: 132, sold: false }],
+            rumorServices: [{ id: 'runPathShatterRumor', type: 'service', name: '锋路断脉谶', icon: '⚔️', desc: '测试命途传闻', price: 3, currency: 'insight', sold: false }]
+          }
+        };
+      },
       addCardToDeck(card) {
         this.deck.push(card);
       },
@@ -119,6 +132,8 @@ function loadFile(ctx, filePath) {
     'getShopPriceMultiplier',
     'generateContractShopServices',
     'generateRumorShopServices',
+    'getRunPathShopProfile',
+    'injectRunPathShopServices',
     'generateShopCatalog',
     'syncActiveShopTab',
     'getShopRumorSummaryText',
@@ -141,8 +156,10 @@ function loadFile(ctx, filePath) {
 
   const catalog = harness.generateShopCatalog();
   assert(!!catalog.base && !!catalog.contract && !!catalog.rumor, 'shop catalog should expose three tabs');
+  assert(catalog.base.services.some((service) => service.id === 'runPathShatterOrder'), 'base tab should contain run path exclusive service');
   assert(catalog.contract.services.some((service) => service.id === 'doomIdol'), 'contract tab should contain doomIdol');
   assert(catalog.rumor.services.some((service) => service.id === 'rumorRareDraft'), 'rumor tab should contain rumorRareDraft');
+  assert(catalog.rumor.services.some((service) => service.id === 'runPathShatterRumor'), 'rumor tab should contain run path exclusive rumor');
 
   harness.shopCatalog = catalog;
   harness.shopActiveTab = 'contract';

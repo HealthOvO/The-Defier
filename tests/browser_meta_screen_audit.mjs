@@ -13,6 +13,12 @@ function add(name, pass, detail = '') {
   findings.push({ name, pass, detail });
 }
 
+function recordConsoleError(text) {
+  const message = String(text || '');
+  if (/ERR_CONNECTION_(CLOSED|RESET)/.test(message)) return;
+  consoleErrors.push(message);
+}
+
 function rectObj(rect) {
   return {
     left: Math.round(rect.left),
@@ -40,10 +46,10 @@ async function safeScreenshot(page, outPath) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
 
   page.on('console', (msg) => {
-    if (msg.type() === 'error') consoleErrors.push(msg.text());
+    if (msg.type() === 'error') recordConsoleError(msg.text());
   });
   page.on('pageerror', (err) => {
-    consoleErrors.push(String(err));
+    recordConsoleError(String(err));
   });
 
   await page.addInitScript(() => {
@@ -650,6 +656,19 @@ async function safeScreenshot(page, outPath) {
       game.achievementSystem.updateStat('bossesDefeated', 4, 'max');
     }
     if (typeof game.recordBossMemoryResult === 'function') game.recordBossMemoryResult('danZun', 'victory', 6);
+    if (typeof game.player?.setRunPath === 'function') game.player.setRunPath('insight');
+    if (typeof game.recordRunPathBossSample === 'function' && typeof game.player?.getRunPathMeta === 'function') {
+      game.recordRunPathBossSample(game.player.getRunPathMeta(), {
+        id: 'danZun',
+        name: '丹尊',
+        icon: '🗿',
+        realm: 6
+      }, {
+        characterId: 'linFeng',
+        turns: 4,
+        completedAt: Date.now() - 1000
+      });
+    }
     game.showCollection();
     if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('bosses');
     if (typeof game.setBossArchiveSearchQuery === 'function') game.setBossArchiveSearchQuery('丹尊');
@@ -663,9 +682,16 @@ async function safeScreenshot(page, outPath) {
         /丹尊/.test(detailText) &&
         /玄冰珠/.test(detailText) &&
         /灼烧|净化|冰/.test(detailText) &&
+        /当前命途解法|窥命流|适配评级|留冗余手牌/.test(detailText) &&
+        /章节场域/.test(detailText) &&
         /记忆战|已留痕|最快 6 回合/.test(detailText) &&
+        /通关样本对照/.test(detailText) &&
+        /自动推荐摘要|推荐角色|推荐套装/.test(detailText) &&
+        /林风|林枫/.test(detailText) &&
+        /4 回合/.test(detailText) &&
         /记忆战留痕/.test(summaryText) &&
-        /Boss 档案进度/.test(summaryText),
+        /Boss 档案进度/.test(summaryText) &&
+        /样本对照/.test(summaryText),
       cards: cards.length,
       detailText,
       summaryText
@@ -744,6 +770,7 @@ async function safeScreenshot(page, outPath) {
       game.player.addTreasure('soul_jade');
       game.player.addTreasure('ice_spirit_bead');
     }
+    if (typeof game.player.setRunPath === 'function') game.player.setRunPath('insight');
     if (typeof game.player.setRunDestiny === 'function') game.player.setRunDestiny('rebelScale', 1);
     if (typeof game.player.setSpiritCompanion === 'function') game.player.setSpiritCompanion('emberCrow', 1);
     if (game.player?.fateRing) {
@@ -758,6 +785,28 @@ async function safeScreenshot(page, outPath) {
       }
     }
     if (typeof game.recordBossMemoryResult === 'function') game.recordBossMemoryResult('danZun', 'victory', 5);
+    if (typeof game.recordRunPathBossSample === 'function' && typeof game.player?.getRunPathMeta === 'function') {
+      game.recordRunPathBossSample(game.player.getRunPathMeta(), {
+        id: 'danZun',
+        name: '丹尊',
+        icon: '🗿',
+        realm: 6
+      }, {
+        characterId: 'linFeng',
+        turns: 4,
+        completedAt: Date.now() - 2000
+      });
+      game.recordRunPathBossSample(game.player.getRunPathMeta(), {
+        id: 'heavenlyDao',
+        name: '天道',
+        icon: '☯',
+        realm: 18
+      }, {
+        characterId: 'linFeng',
+        turns: 8,
+        completedAt: Date.now() - 1000
+      });
+    }
     if (typeof game.recordObservatoryArchiveEntry === 'function') {
       game.recordObservatoryArchiveEntry({
         id: 'audit-observatory-record',
@@ -804,16 +853,25 @@ async function safeScreenshot(page, outPath) {
       ok:
         /构筑画像|攻势抢拍|法则编织|护阵拖线|混成试作/.test(buildHeroText) &&
         buildMetricCount >= 4 &&
-        /当前优势|主要缺口|下一轮补位/.test(buildNotesText) &&
+        /当前优势/.test(buildNotesText) &&
+        /主要缺口/.test(buildNotesText) &&
+        /下一轮补位/.test(buildNotesText) &&
+        /样本对照/.test(buildNotesText) &&
+        /自动推荐摘要|推荐角色|推荐套装/.test(buildNotesText) &&
+        /章节适配|场域拟合分/.test(buildNotesText) &&
+        /丹尊/.test(buildNotesText) &&
+        /天道/.test(buildNotesText) &&
         roomCards >= 5 &&
-        researchItems >= 10 &&
+        researchItems >= 11 &&
         goalItems >= 1 &&
         unlockItems >= 2 &&
         /命盘档案室/.test(roomText) &&
         /远征命盘归档/.test(researchText) &&
+        /实战样本对照榜/.test(researchText) &&
         /局外中枢进度/.test(summaryText) &&
         /观星留痕|炼器铭刻|三段套装/.test(summaryText) &&
-        /法则：|法宝：|炼器研究：|套装共鸣：|炼器铭刻：|Boss 档案：|伏魔台记忆战：|观星留痕：/.test(progressText),
+        /样本对照/.test(summaryText) &&
+        /法则：|法宝：|炼器研究：|套装共鸣：|炼器铭刻：|Boss 档案：|伏魔台记忆战：|样本对照：|观星留痕：/.test(progressText),
       buildHeroText,
       buildMetricCount,
       buildNotesText,

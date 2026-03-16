@@ -3,6 +3,8 @@
 
     const COLLECTION_HISTORY_KEY = 'theDefierCollectionUnlockHistoryV1';
     const BOSS_MEMORY_RECORDS_KEY = 'theDefierBossMemoryRecordsV1';
+    const RUN_PATH_RECORDS_KEY = 'theDefierRunPathRecordsV1';
+    const RUN_PATH_BOSS_SAMPLES_KEY = 'theDefierRunPathBossSamplesV1';
     const SECTION_META = {
         laws: {
             title: '藏经阁 · 法则图鉴',
@@ -89,6 +91,12 @@
         }
         if (!this.bossMemoryRecords || typeof this.bossMemoryRecords !== 'object') {
             this.bossMemoryRecords = this.loadBossMemoryRecords();
+        }
+        if (!this.runPathRecords || typeof this.runPathRecords !== 'object') {
+            this.runPathRecords = this.loadRunPathRecords();
+        }
+        if (!Array.isArray(this.runPathBossSamples)) {
+            this.runPathBossSamples = this.loadRunPathBossSamples();
         }
         if (!this.bossMemorySession || typeof this.bossMemorySession !== 'object') {
             this.bossMemorySession = null;
@@ -194,6 +202,616 @@
         } catch (error) {
             console.warn('Persist boss memory records failed:', error);
         }
+    };
+
+    Game.prototype.loadRunPathRecords = function () {
+        try {
+            const raw = typeof localStorage !== 'undefined'
+                ? localStorage.getItem(RUN_PATH_RECORDS_KEY)
+                : null;
+            const parsed = raw ? JSON.parse(raw) : {};
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+            return Object.keys(parsed).reduce((records, pathId) => {
+                const record = parsed[pathId];
+                if (!record || typeof record !== 'object') return records;
+                const favoredSets = Array.isArray(record.favoredSets)
+                    ? record.favoredSets.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 4)
+                    : [];
+                records[pathId] = {
+                    pathId: String(record.pathId || pathId),
+                    recordId: String(record.recordId || ''),
+                    recordName: String(record.recordName || ''),
+                    name: String(record.name || pathId),
+                    icon: String(record.icon || '✦'),
+                    category: String(record.category || '命途'),
+                    routeHint: String(record.routeHint || ''),
+                    favoredSets,
+                    bossFocus: String(record.bossFocus || ''),
+                    note: String(record.note || ''),
+                    clears: clampInt(record.clears || 0, 0, 9999),
+                    firstClearAt: clampInt(record.firstClearAt || 0, 0),
+                    lastCompletedAt: clampInt(record.lastCompletedAt || 0, 0),
+                    bestRealm: clampInt(record.bestRealm || 0, 0, 9999),
+                    lastRealm: clampInt(record.lastRealm || 0, 0, 9999),
+                    lastCharacterId: String(record.lastCharacterId || ''),
+                    lastCharacterName: String(record.lastCharacterName || ''),
+                    lastMutationId: String(record.lastMutationId || ''),
+                    lastMutationName: String(record.lastMutationName || ''),
+                    lastMutationBranch: String(record.lastMutationBranch || ''),
+                    lastRewardText: String(record.lastRewardText || ''),
+                    lastPhaseId: String(record.lastPhaseId || ''),
+                    lastPhaseTitle: String(record.lastPhaseTitle || '')
+                };
+                return records;
+            }, {});
+        } catch (error) {
+            return {};
+        }
+    };
+
+    Game.prototype.persistRunPathRecords = function () {
+        try {
+            if (typeof localStorage === 'undefined') return;
+            localStorage.setItem(RUN_PATH_RECORDS_KEY, JSON.stringify(this.runPathRecords || {}));
+        } catch (error) {
+            console.warn('Persist run path records failed:', error);
+        }
+    };
+
+    Game.prototype.getRunPathRecord = function (pathId = '') {
+        this.ensureCollectionHubBootState();
+        const safePathId = String(pathId || '').trim();
+        const source = safePathId && this.runPathRecords && this.runPathRecords[safePathId]
+            ? this.runPathRecords[safePathId]
+            : null;
+        return {
+            pathId: safePathId,
+            recordId: String(source?.recordId || ''),
+            recordName: String(source?.recordName || ''),
+            name: String(source?.name || safePathId),
+            icon: String(source?.icon || '✦'),
+            category: String(source?.category || '命途'),
+            routeHint: String(source?.routeHint || ''),
+            favoredSets: Array.isArray(source?.favoredSets) ? source.favoredSets.slice(0, 4) : [],
+            bossFocus: String(source?.bossFocus || ''),
+            note: String(source?.note || ''),
+            clears: clampInt(source?.clears || 0, 0, 9999),
+            firstClearAt: clampInt(source?.firstClearAt || 0, 0),
+            lastCompletedAt: clampInt(source?.lastCompletedAt || 0, 0),
+            bestRealm: clampInt(source?.bestRealm || 0, 0, 9999),
+            lastRealm: clampInt(source?.lastRealm || 0, 0, 9999),
+            lastCharacterId: String(source?.lastCharacterId || ''),
+            lastCharacterName: String(source?.lastCharacterName || ''),
+            lastMutationId: String(source?.lastMutationId || ''),
+            lastMutationName: String(source?.lastMutationName || ''),
+            lastMutationBranch: String(source?.lastMutationBranch || ''),
+            lastRewardText: String(source?.lastRewardText || ''),
+            lastPhaseId: String(source?.lastPhaseId || ''),
+            lastPhaseTitle: String(source?.lastPhaseTitle || '')
+        };
+    };
+
+    Game.prototype.recordRunPathCompletion = function (pathMeta = null, options = {}) {
+        const safePathId = String(pathMeta?.id || '').trim();
+        if (!safePathId) return this.getRunPathRecord('');
+        const previous = this.getRunPathRecord(safePathId);
+        const completionRecord = pathMeta?.completionRecord && typeof pathMeta.completionRecord === 'object'
+            ? pathMeta.completionRecord
+            : {};
+        const completedAt = clampInt(options.completedAt || Date.now(), 0);
+        const realm = clampInt(options.realm || 0, 0, 9999);
+        const characterId = String(options.characterId || '').trim();
+        const characterMeta = characterId ? getCharacterMeta(characterId) : null;
+        const mutationMeta = pathMeta?.mutation && typeof pathMeta.mutation === 'object'
+            ? pathMeta.mutation
+            : null;
+        const favoredSets = Array.isArray(pathMeta?.treasureSynergy?.favoredSets)
+            ? pathMeta.treasureSynergy.favoredSets.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 4)
+            : previous.favoredSets;
+        const next = {
+            pathId: safePathId,
+            recordId: String(completionRecord.id || previous.recordId || `runPath_${safePathId}`),
+            recordName: String(completionRecord.name || previous.recordName || `${pathMeta?.name || safePathId}战录`),
+            name: String(pathMeta?.name || previous.name || safePathId),
+            icon: String(completionRecord.icon || pathMeta?.icon || previous.icon || '✦'),
+            category: String(pathMeta?.category || previous.category || '命途'),
+            routeHint: String(pathMeta?.routeHint || previous.routeHint || ''),
+            favoredSets,
+            bossFocus: String(pathMeta?.bossCounterplay?.focus || previous.bossFocus || ''),
+            note: String(completionRecord.note || previous.note || ''),
+            clears: previous.clears + 1,
+            firstClearAt: previous.firstClearAt || completedAt,
+            lastCompletedAt: completedAt || Date.now(),
+            bestRealm: Math.max(previous.bestRealm, realm),
+            lastRealm: realm || previous.lastRealm,
+            lastCharacterId: characterId || previous.lastCharacterId,
+            lastCharacterName: characterMeta?.name || String(options.characterName || previous.lastCharacterName || ''),
+            lastMutationId: String(mutationMeta?.mutationId || mutationMeta?.id || previous.lastMutationId || ''),
+            lastMutationName: String(mutationMeta?.name || previous.lastMutationName || ''),
+            lastMutationBranch: String(mutationMeta?.branchLabel || previous.lastMutationBranch || ''),
+            lastRewardText: String(options.rewardText || previous.lastRewardText || ''),
+            lastPhaseId: String(options.phaseMeta?.id || previous.lastPhaseId || ''),
+            lastPhaseTitle: String(options.phaseMeta?.title || previous.lastPhaseTitle || '')
+        };
+        this.runPathRecords = {
+            ...(this.runPathRecords || {}),
+            [safePathId]: next
+        };
+        this.persistRunPathRecords();
+        return next;
+    };
+
+    Game.prototype.getCompletedRunPathCount = function () {
+        this.ensureCollectionHubBootState();
+        return Object.values(this.runPathRecords || {}).filter((record) => clampInt(record?.clears || 0, 0) > 0).length;
+    };
+
+    Game.prototype.getTotalRunPathClearCount = function () {
+        this.ensureCollectionHubBootState();
+        return Object.values(this.runPathRecords || {}).reduce((sum, record) => sum + clampInt(record?.clears || 0, 0), 0);
+    };
+
+    Game.prototype.getLatestRunPathRecord = function () {
+        this.ensureCollectionHubBootState();
+        const records = Object.values(this.runPathRecords || {})
+            .filter((record) => record && clampInt(record.lastCompletedAt || 0, 0) > 0)
+            .sort((a, b) => clampInt(b.lastCompletedAt || 0, 0) - clampInt(a.lastCompletedAt || 0, 0));
+        return records[0] || null;
+    };
+
+    Game.prototype.loadRunPathBossSamples = function () {
+        try {
+            const raw = typeof localStorage !== 'undefined'
+                ? localStorage.getItem(RUN_PATH_BOSS_SAMPLES_KEY)
+                : null;
+            const parsed = raw ? JSON.parse(raw) : [];
+            if (!Array.isArray(parsed)) return [];
+            return parsed
+                .filter((sample) => sample && typeof sample === 'object' && sample.pathId && sample.bossId)
+                .map((sample) => {
+                    const realm = clampInt(sample.realm || 0, 0, 9999);
+                    const chapter = realm > 0 && typeof this.getChapterProfileForRealm === 'function'
+                        ? this.getChapterProfileForRealm(realm)
+                        : null;
+                    const favoredSets = Array.isArray(sample.favoredSets)
+                        ? sample.favoredSets.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 4)
+                        : [];
+                    return {
+                        sampleId: String(sample.sampleId || `${sample.pathId}_${sample.bossId}_${sample.completedAt || 0}`),
+                        pathId: String(sample.pathId || ''),
+                        pathName: String(sample.pathName || sample.pathId || ''),
+                        pathIcon: String(sample.pathIcon || '✦'),
+                        mutationId: String(sample.mutationId || ''),
+                        mutationName: String(sample.mutationName || ''),
+                        mutationBranch: String(sample.mutationBranch || ''),
+                        bossId: String(sample.bossId || ''),
+                        bossName: String(sample.bossName || sample.bossId || ''),
+                        bossIcon: String(sample.bossIcon || '🗿'),
+                        characterId: String(sample.characterId || ''),
+                        characterName: String(sample.characterName || sample.characterId || ''),
+                        realm,
+                        chapterName: String(sample.chapterName || chapter?.name || (realm > 0 ? `第${getChapterIndexForRealm(realm)}章` : '未定章节')),
+                        completedAt: clampInt(sample.completedAt || 0, 0),
+                        turns: clampInt(sample.turns || 0, 0, 9999),
+                        favoredSets,
+                        routeHint: String(sample.routeHint || ''),
+                        source: String(sample.source || 'boss_clear')
+                    };
+                })
+                .sort((a, b) => clampInt(b.completedAt || 0, 0) - clampInt(a.completedAt || 0, 0))
+                .slice(0, 60);
+        } catch (error) {
+            return [];
+        }
+    };
+
+    Game.prototype.persistRunPathBossSamples = function () {
+        try {
+            if (typeof localStorage === 'undefined') return;
+            localStorage.setItem(RUN_PATH_BOSS_SAMPLES_KEY, JSON.stringify(this.runPathBossSamples || []));
+        } catch (error) {
+            console.warn('Persist run path boss samples failed:', error);
+        }
+    };
+
+    Game.prototype.recordRunPathBossSample = function (pathMeta = null, bossMeta = null, options = {}) {
+        this.ensureCollectionHubBootState();
+        const safePathId = String(pathMeta?.id || '').trim();
+        const safeBossId = String(bossMeta?.id || options.bossId || '').trim();
+        if (!safePathId || !safeBossId) return null;
+        const completedAt = clampInt(options.completedAt || Date.now(), 0);
+        const realm = clampInt(options.realm || bossMeta?.realm || this.player?.realm || 0, 0, 9999);
+        const chapter = realm > 0 && typeof this.getChapterProfileForRealm === 'function'
+            ? this.getChapterProfileForRealm(realm)
+            : null;
+        const mutationMeta = pathMeta?.mutation && typeof pathMeta.mutation === 'object'
+            ? pathMeta.mutation
+            : null;
+        const characterId = String(options.characterId || this.player?.characterId || '').trim();
+        const characterMeta = characterId ? getCharacterMeta(characterId) : null;
+        const favoredSets = Array.isArray(pathMeta?.treasureSynergy?.favoredSets)
+            ? pathMeta.treasureSynergy.favoredSets.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 4)
+            : [];
+        const sampleId = `sample_${safeBossId}_${safePathId}_${completedAt}_${Math.max(0, (this.runPathBossSamples || []).length % 997)}`;
+        const sample = {
+            sampleId,
+            pathId: safePathId,
+            pathName: String(pathMeta?.name || safePathId),
+            pathIcon: String(pathMeta?.icon || '✦'),
+            mutationId: String(mutationMeta?.mutationId || mutationMeta?.id || ''),
+            mutationName: String(mutationMeta?.name || ''),
+            mutationBranch: String(mutationMeta?.branchLabel || ''),
+            bossId: safeBossId,
+            bossName: String(bossMeta?.name || safeBossId),
+            bossIcon: String(bossMeta?.icon || '🗿'),
+            characterId,
+            characterName: String(characterMeta?.name || options.characterName || characterId || '未定角色'),
+            realm,
+            chapterName: String(options.chapterName || chapter?.name || (realm > 0 ? `第${getChapterIndexForRealm(realm)}章` : '未定章节')),
+            completedAt,
+            turns: clampInt(options.turns || 0, 0, 9999),
+            favoredSets,
+            routeHint: String(pathMeta?.routeHint || ''),
+            source: String(options.source || 'boss_clear')
+        };
+        const previous = Array.isArray(this.runPathBossSamples) ? this.runPathBossSamples : [];
+        this.runPathBossSamples = [sample, ...previous.filter((entry) => entry?.sampleId !== sampleId)].slice(0, 60);
+        this.persistRunPathBossSamples();
+        return sample;
+    };
+
+    Game.prototype.getRunPathBossSamples = function (options = {}) {
+        this.ensureCollectionHubBootState();
+        const source = Array.isArray(this.runPathBossSamples) ? this.runPathBossSamples.slice() : [];
+        const pathId = String(options.pathId || '').trim();
+        const bossId = String(options.bossId || '').trim();
+        const characterId = String(options.characterId || '').trim();
+        const mutationId = String(options.mutationId || '').trim();
+        const sourceType = String(options.source || '').trim();
+        const sortBy = ['bestTurn', 'recent'].includes(options.sortBy) ? options.sortBy : 'recent';
+        const filtered = source.filter((sample) => {
+            if (!sample) return false;
+            if (pathId && sample.pathId !== pathId) return false;
+            if (bossId && sample.bossId !== bossId) return false;
+            if (characterId && sample.characterId !== characterId) return false;
+            if (mutationId && sample.mutationId !== mutationId) return false;
+            if (sourceType && sample.source !== sourceType) return false;
+            return true;
+        });
+        filtered.sort((a, b) => {
+            if (sortBy === 'bestTurn') {
+                const aTurns = clampInt(a?.turns || 0, 0, 9999) || 9999;
+                const bTurns = clampInt(b?.turns || 0, 0, 9999) || 9999;
+                if (aTurns !== bTurns) return aTurns - bTurns;
+            }
+            return clampInt(b?.completedAt || 0, 0) - clampInt(a?.completedAt || 0, 0);
+        });
+        const limit = clampInt(options.limit || filtered.length, 0, 60);
+        return filtered.slice(0, limit || filtered.length);
+    };
+
+    Game.prototype.getRunPathSampleSetLabel = function (setId = '') {
+        const safeSetId = String(setId || '').trim();
+        if (!safeSetId) return '';
+        if (this.player && typeof this.player.getTreasureSetLabel === 'function') {
+            const label = String(this.player.getTreasureSetLabel(safeSetId) || '').trim();
+            if (label) return label;
+        }
+        return safeSetId;
+    };
+
+    Game.prototype.buildRunPathSampleRecommendation = function (samples = [], options = {}) {
+        if (!Array.isArray(samples) || samples.length <= 0) {
+            return {
+                character: null,
+                mutation: null,
+                chapter: null,
+                sets: [],
+                boss: null,
+                lines: []
+            };
+        }
+
+        const resolveTurnRank = (value) => {
+            const turns = clampInt(value || 0, 0, 9999);
+            return turns > 0 ? turns : 9999;
+        };
+
+        const rankByCountAndTurn = (source = []) => source
+            .slice()
+            .sort((a, b) => {
+                if ((b.count || 0) !== (a.count || 0)) return (b.count || 0) - (a.count || 0);
+                if ((a.bestTurn || 9999) !== (b.bestTurn || 9999)) return (a.bestTurn || 9999) - (b.bestTurn || 9999);
+                return (b.latestAt || 0) - (a.latestAt || 0);
+            });
+        const parseChapterIndexFromText = (value = '') => {
+            const matched = String(value || '').match(/第\s*(\d+)\s*章/);
+            return matched ? clampInt(matched[1] || 0, 1, 6) : 0;
+        };
+        const resolveChapterMeta = (sample = null) => {
+            if (!sample || typeof sample !== 'object') {
+                return { index: 0, id: '', name: '未定章节' };
+            }
+            const realm = clampInt(sample.realm || 0, 0, 9999);
+            const chapterIndex = realm > 0
+                ? getChapterIndexForRealm(realm)
+                : parseChapterIndexFromText(sample.chapterName || sample.chapterLabel || '');
+            const chapterProfile = chapterIndex > 0 && typeof this.getChapterProfileForRealm === 'function'
+                ? this.getChapterProfileForRealm((chapterIndex - 1) * 3 + 1)
+                : null;
+            return {
+                index: chapterIndex,
+                id: String(chapterProfile?.id || (chapterIndex > 0 ? `chapter_${chapterIndex}` : sample.chapterName || '')),
+                name: String(sample.chapterName || chapterProfile?.name || (chapterIndex > 0 ? `第${chapterIndex}章` : '未定章节'))
+            };
+        };
+        const resolveTargetChapterMeta = () => {
+            const targetRealm = clampInt(options.realm || this.player?.realm || 0, 0, 9999);
+            let chapterIndex = targetRealm > 0 ? getChapterIndexForRealm(targetRealm) : 0;
+            if (chapterIndex <= 0) {
+                chapterIndex = clampInt(options.chapterIndex || 0, 0, 6);
+            }
+            if (chapterIndex <= 0) {
+                chapterIndex = parseChapterIndexFromText(options.chapterName || options.chapterLabel || '');
+            }
+            const chapterProfile = chapterIndex > 0 && typeof this.getChapterProfileForRealm === 'function'
+                ? this.getChapterProfileForRealm((chapterIndex - 1) * 3 + 1)
+                : null;
+            return {
+                index: chapterIndex,
+                id: String(chapterProfile?.id || (chapterIndex > 0 ? `chapter_${chapterIndex}` : '')),
+                name: String(chapterProfile?.name || (chapterIndex > 0 ? `第${chapterIndex}章` : ''))
+            };
+        };
+
+        const characterMap = new Map();
+        const mutationMap = new Map();
+        const chapterMap = new Map();
+        const setMap = new Map();
+        const bossMap = new Map();
+
+        samples.forEach((sample) => {
+            if (!sample || typeof sample !== 'object') return;
+            const completedAt = clampInt(sample.completedAt || 0, 0);
+            const turnRank = resolveTurnRank(sample.turns || 0);
+
+            const characterKey = String(sample.characterId || sample.characterName || '').trim();
+            if (characterKey) {
+                const previous = characterMap.get(characterKey) || {
+                    id: String(sample.characterId || ''),
+                    name: String(sample.characterName || sample.characterId || '未定角色'),
+                    count: 0,
+                    bestTurn: 9999,
+                    latestAt: 0
+                };
+                previous.count += 1;
+                previous.bestTurn = Math.min(previous.bestTurn, turnRank);
+                previous.latestAt = Math.max(previous.latestAt, completedAt);
+                characterMap.set(characterKey, previous);
+            }
+
+            const mutationKey = String(sample.mutationId || sample.mutationName || '').trim();
+            if (mutationKey) {
+                const previous = mutationMap.get(mutationKey) || {
+                    id: String(sample.mutationId || mutationKey),
+                    name: String(sample.mutationName || sample.mutationId || mutationKey),
+                    branch: String(sample.mutationBranch || ''),
+                    count: 0,
+                    bestTurn: 9999,
+                    latestAt: 0
+                };
+                previous.count += 1;
+                previous.bestTurn = Math.min(previous.bestTurn, turnRank);
+                previous.latestAt = Math.max(previous.latestAt, completedAt);
+                mutationMap.set(mutationKey, previous);
+            }
+
+            (Array.isArray(sample.favoredSets) ? sample.favoredSets : [])
+                .map((setId) => String(setId || '').trim())
+                .filter(Boolean)
+                .forEach((setId) => {
+                    const previous = setMap.get(setId) || {
+                        id: setId,
+                        label: this.getRunPathSampleSetLabel(setId),
+                        count: 0,
+                        bestTurn: 9999,
+                        latestAt: 0
+                    };
+                    previous.count += 1;
+                    previous.bestTurn = Math.min(previous.bestTurn, turnRank);
+                    previous.latestAt = Math.max(previous.latestAt, completedAt);
+                    setMap.set(setId, previous);
+                });
+
+            const bossKey = String(sample.bossId || sample.bossName || '').trim();
+            if (bossKey) {
+                const previous = bossMap.get(bossKey) || {
+                    id: String(sample.bossId || bossKey),
+                    name: String(sample.bossName || sample.bossId || bossKey),
+                    count: 0,
+                    bestTurn: 9999,
+                    latestAt: 0
+                };
+                previous.count += 1;
+                previous.bestTurn = Math.min(previous.bestTurn, turnRank);
+                previous.latestAt = Math.max(previous.latestAt, completedAt);
+                bossMap.set(bossKey, previous);
+            }
+
+            const chapterMeta = resolveChapterMeta(sample);
+            const chapterKey = chapterMeta.index > 0
+                ? `chapter_${chapterMeta.index}`
+                : String(chapterMeta.name || '').trim();
+            if (chapterKey) {
+                const previous = chapterMap.get(chapterKey) || {
+                    id: chapterMeta.id || chapterKey,
+                    index: chapterMeta.index || 0,
+                    name: chapterMeta.name || '未定章节',
+                    count: 0,
+                    bestTurn: 9999,
+                    latestAt: 0
+                };
+                previous.count += 1;
+                previous.bestTurn = Math.min(previous.bestTurn, turnRank);
+                previous.latestAt = Math.max(previous.latestAt, completedAt);
+                chapterMap.set(chapterKey, previous);
+            }
+        });
+
+        const topCharacter = rankByCountAndTurn(Array.from(characterMap.values()))[0] || null;
+        const topMutationRaw = rankByCountAndTurn(Array.from(mutationMap.values()))[0] || null;
+        const topChapterRaw = rankByCountAndTurn(Array.from(chapterMap.values()))[0] || null;
+        const topSets = rankByCountAndTurn(Array.from(setMap.values())).slice(0, 2);
+        const topBoss = rankByCountAndTurn(Array.from(bossMap.values()))[0] || null;
+        const targetChapter = resolveTargetChapterMeta();
+
+        const topMutation = topMutationRaw
+            ? {
+                ...topMutationRaw,
+                label: [topMutationRaw.branch, topMutationRaw.name].filter(Boolean).join('·') || topMutationRaw.name
+            }
+            : null;
+        const topChapter = topChapterRaw
+            ? (() => {
+                const targetChapterIndex = targetChapter.index > 0
+                    ? targetChapter.index
+                    : (topChapterRaw.index > 0 ? topChapterRaw.index : 0);
+                const targetChapterName = targetChapter.name
+                    || (targetChapterIndex > 0 ? `第${targetChapterIndex}章` : '');
+                const chapterDistance = (targetChapterIndex > 0 && topChapterRaw.index > 0)
+                    ? Math.abs(topChapterRaw.index - targetChapterIndex)
+                    : 0;
+                const coverageScore = Math.round(((topChapterRaw.count || 0) / Math.max(1, samples.length)) * 65);
+                const speedScore = topChapterRaw.bestTurn < 9999
+                    ? Math.max(0, 18 - topChapterRaw.bestTurn)
+                    : 0;
+                const chapterAlignScore = (targetChapterIndex > 0 && topChapterRaw.index > 0)
+                    ? Math.max(0, 25 - chapterDistance * 10)
+                    : 12;
+                const fitScore = clampInt(Math.round(coverageScore + speedScore + chapterAlignScore), 0, 100);
+                return {
+                    ...topChapterRaw,
+                    bestTurn: topChapterRaw.bestTurn < 9999 ? topChapterRaw.bestTurn : 0,
+                    fitScore,
+                    targetIndex: targetChapterIndex,
+                    targetName: targetChapterName,
+                    distance: chapterDistance,
+                    matched: chapterDistance <= 0
+                };
+            })()
+            : null;
+        const isBossFocused = !!String(options.bossId || '').trim();
+        const lines = [];
+
+        if (topCharacter) {
+            lines.push(`推荐角色：${topCharacter.name}（样本 ${topCharacter.count} 份${topCharacter.bestTurn < 9999 ? `，最快 ${topCharacter.bestTurn} 回合` : ''}）。`);
+        }
+        if (topMutation) {
+            lines.push(`推荐裂变：${topMutation.label}（命中 ${topMutation.count} 份样本${topMutation.bestTurn < 9999 ? `，最快 ${topMutation.bestTurn} 回合` : ''}）。`);
+        } else if (String(options.pathId || options.pathName || '').trim()) {
+            lines.push('推荐裂变：当前样本仍不足，建议在中盘完成一次命途裂变并留下一份收官记录。');
+        }
+        if (topSets.length > 0) {
+            lines.push(`推荐套装：${topSets.map((setStat) => setStat.label || setStat.id).join(' / ')}。`);
+        }
+        if (topChapter) {
+            const chapterTargetHint = topChapter.targetName && topChapter.targetName !== topChapter.name
+                ? `，当前章节 ${topChapter.targetName}`
+                : '';
+            lines.push(`章节适配：${topChapter.name}（命中 ${topChapter.count} 份样本${topChapter.bestTurn > 0 ? `，最快 ${topChapter.bestTurn} 回合` : ''}，场域拟合分 ${topChapter.fitScore}${chapterTargetHint}）。`);
+        }
+        if (topBoss && !isBossFocused) {
+            lines.push(topBoss.bestTurn < 9999
+                ? `推荐目标：优先复刻 ${topBoss.name}（最快 ${topBoss.bestTurn} 回合）的收官模板。`
+                : `推荐目标：优先补 ${topBoss.name} 的限时回合样本，后续更容易校准收官节奏。`);
+        }
+
+        return {
+            character: topCharacter
+                ? {
+                    ...topCharacter,
+                    bestTurn: topCharacter.bestTurn < 9999 ? topCharacter.bestTurn : 0
+                }
+                : null,
+            mutation: topMutation
+                ? {
+                    ...topMutation,
+                    bestTurn: topMutation.bestTurn < 9999 ? topMutation.bestTurn : 0
+                }
+                : null,
+            chapter: topChapter || null,
+            sets: topSets.map((setStat) => ({
+                ...setStat,
+                bestTurn: setStat.bestTurn < 9999 ? setStat.bestTurn : 0
+            })),
+            boss: topBoss
+                ? {
+                    ...topBoss,
+                    bestTurn: topBoss.bestTurn < 9999 ? topBoss.bestTurn : 0
+                }
+                : null,
+            lines
+        };
+    };
+
+    Game.prototype.buildRunPathBossSampleBoard = function (options = {}) {
+        const displayLimit = Math.max(1, clampInt(options.limit || 3, 1, 6));
+        const samples = typeof this.getRunPathBossSamples === 'function'
+            ? this.getRunPathBossSamples({
+                ...options,
+                limit: 60
+            })
+            : [];
+        const focusPathName = samples[0]?.pathName || String(options.pathName || '');
+        const focusBossName = samples[0]?.bossName || String(options.bossName || '');
+        const uniqueCharacters = new Set(samples.map((sample) => sample.characterId || sample.characterName).filter(Boolean)).size;
+        const uniqueBosses = new Set(samples.map((sample) => sample.bossId).filter(Boolean)).size;
+        const uniqueMutations = new Set(samples.map((sample) => sample.mutationId || sample.mutationName).filter(Boolean)).size;
+        const timedSamples = samples.filter((sample) => clampInt(sample.turns || 0, 0, 9999) > 0);
+        const bestTurn = timedSamples.length > 0
+            ? timedSamples.reduce((best, sample) => Math.min(best, clampInt(sample.turns || 0, 0, 9999)), 9999)
+            : 0;
+        const entries = samples.slice(0, displayLimit).map((sample) => ({
+            ...sample,
+            headline: [
+                sample.characterName || '未定角色',
+                sample.pathName || '未定命途',
+                sample.mutationName || ''
+            ].filter(Boolean).join(' · '),
+            subtitle: `${sample.bossName || sample.bossId} · 第 ${Math.max(1, clampInt(sample.realm || 1, 1, 9999))} 重${sample.turns > 0 ? ` · ${sample.turns} 回合` : ''}`,
+            tagLine: [
+                sample.mutationBranch && sample.mutationName ? `${sample.mutationBranch}·${sample.mutationName}` : '',
+                ...(sample.favoredSets || [])
+                    .slice(0, 2)
+                    .map((setId) => this.getRunPathSampleSetLabel(setId))
+                    .filter(Boolean)
+            ].filter(Boolean)
+        }));
+        const recommendation = typeof this.buildRunPathSampleRecommendation === 'function'
+            ? this.buildRunPathSampleRecommendation(samples, options)
+            : { character: null, mutation: null, chapter: null, sets: [], boss: null, lines: [] };
+        return {
+            title: focusPathName && focusBossName
+                ? `${focusPathName} × ${focusBossName}`
+                : focusBossName
+                    ? `${focusBossName} 样本对照`
+                    : focusPathName
+                        ? `${focusPathName} 样本对照`
+                        : '近期通关样本',
+            count: samples.length,
+            uniqueCharacters,
+            uniqueBosses,
+            uniqueMutations,
+            bestTurn,
+            latestSample: samples[0] || null,
+            emptyText: focusBossName
+                ? '当前还没有这位主宰的通关样本，先去打一场主线 Boss 再回来对照。'
+                : focusPathName
+                    ? '当前命途还没有沉淀出 Boss 通关样本，先用它完成一场章节 Boss。'
+                    : '当前还没有可用于对照的通关样本。',
+            entries,
+            recommendation
+        };
     };
 
     Game.prototype.getBossMemoryRecord = function (bossId = '') {
@@ -646,9 +1264,15 @@
     };
 
     Game.prototype.getCollectionProgressSnapshot = function () {
+        this.ensureCollectionHubBootState();
         const spiritCatalog = (typeof SPIRIT_COMPANIONS !== 'undefined' && SPIRIT_COMPANIONS) ? Object.keys(SPIRIT_COMPANIONS) : [];
         const treasureCatalog = (typeof TREASURES !== 'undefined' && TREASURES) ? Object.keys(TREASURES) : [];
         const lawCatalog = (typeof LAWS !== 'undefined' && LAWS) ? Object.keys(LAWS) : [];
+        const runPathCatalog = typeof this.getRunPathCatalog === 'function'
+            ? this.getRunPathCatalog()
+            : ((typeof RUN_PATHS !== 'undefined' && RUN_PATHS)
+                ? Object.values(RUN_PATHS).filter((item) => item && item.id)
+                : []);
         const enemyCatalog = (typeof ENEMIES !== 'undefined' && ENEMIES)
             ? Object.values(ENEMIES).filter((enemy) => enemy && !enemy.isBoss && !enemy.isMinion)
             : [];
@@ -676,6 +1300,15 @@
         const bossMemoryAttempts = typeof this.getBossMemoryAttemptCount === 'function'
             ? this.getBossMemoryAttemptCount()
             : 0;
+        const runPathBossSamples = Array.isArray(this.runPathBossSamples) ? this.runPathBossSamples : [];
+        const sampledBosses = new Set(runPathBossSamples.map((sample) => sample?.bossId).filter(Boolean));
+        const sampledCharacters = new Set(runPathBossSamples.map((sample) => sample?.characterId || sample?.characterName).filter(Boolean));
+        const completedRunPaths = typeof this.getCompletedRunPathCount === 'function'
+            ? this.getCompletedRunPathCount()
+            : 0;
+        const totalRunPathClears = typeof this.getTotalRunPathClearCount === 'function'
+            ? this.getTotalRunPathClearCount()
+            : 0;
         const forgeOverview = this.player && typeof this.player.getTreasureWorkshopResearchOverview === 'function'
             ? this.player.getTreasureWorkshopResearchOverview()
             : null;
@@ -692,6 +1325,13 @@
             totalBosses: bossCatalog.length,
             clearedBossMemories: bossMemoryClears,
             totalBossMemoryAttempts: bossMemoryAttempts,
+            runPathBossSampleCount: runPathBossSamples.length,
+            sampledBosses: sampledBosses.size,
+            sampledCharacters: sampledCharacters.size,
+            completedRunPaths,
+            runPathArchiveCount: completedRunPaths,
+            totalRunPaths: runPathCatalog.length,
+            totalRunPathClears,
             clearedChapters: Math.max(0, Math.floor(realmProgress.clearedRealm / 3)),
             totalChapters: 6,
             currentChapterIndex: realmProgress.currentChapterIndex,
@@ -1200,10 +1840,74 @@
         }
     };
 
+    Game.prototype.getBossArchiveMemoryProfile = function (boss = null) {
+        const bossId = String(boss?.id || '').trim();
+        const profileMap = {
+            banditLeader: { key: 'seal_card', name: '封签索命' },
+            demonWolf: { key: 'siphon_block', name: '撕盾噬血' },
+            swordElder: { key: 'seal_card', name: '剑印封诀' },
+            danZun: { key: 'tribute_choice', name: '丹火索供' },
+            ancientSpirit: { key: 'siphon_block', name: '幽魄吸甲' },
+            divineLord: { key: 'tribute_choice', name: '神念索贡' },
+            fusionSovereign: { key: 'seal_card', name: '时缚真印' },
+            mahayanaSupreme: { key: 'echo_last_card', name: '观心复诵' },
+            ascensionSovereign: { key: 'seal_card', name: '天雷封符' },
+            dualMagmaGuardians: { key: 'siphon_block', name: '熔甲回铸' },
+            stormSummoner: { key: 'tribute_choice', name: '风祀索供' },
+            triheadGoldDragon: { key: 'siphon_block', name: '龙首夺壁' },
+            mirrorDemon: { key: 'echo_last_card', name: '镜返残响' },
+            chaosEye: { key: 'seal_card', name: '邪视封忆' },
+            voidDevourer: { key: 'tribute_choice', name: '虚渊索祭' },
+            elementalElder: { key: 'echo_last_card', name: '五炁复写' },
+            karmaArbiter: { key: 'tribute_choice', name: '业衡索偿' },
+            heavenlyDao: { key: 'echo_last_card', name: '天道映照' }
+        };
+        return profileMap[bossId] || { key: 'seal_card', name: '封识诏令' };
+    };
+
+    Game.prototype.resolveRunPathBossArchiveGuidance = function (boss = null, mechanic = null, runPathMeta = null) {
+        if (!runPathMeta || typeof this.resolveRunPathBossMatchup !== 'function') return null;
+        const memory = typeof this.getBossArchiveMemoryProfile === 'function'
+            ? this.getBossArchiveMemoryProfile(boss)
+            : null;
+        const chapter = typeof this.getChapterProfileForRealm === 'function'
+            ? this.getChapterProfileForRealm(boss?.realm || 1)
+            : null;
+        const resolved = this.resolveRunPathBossMatchup(runPathMeta, {
+            enemy: boss,
+            enemyId: boss?.id,
+            mechanic,
+            mechanicType: mechanic?.mechanics?.type,
+            memory,
+            memoryKey: memory?.key,
+            chapter
+        });
+        if (!resolved) return null;
+        return {
+            ...resolved,
+            memoryKey: memory?.key || '',
+            memoryName: memory?.name || '',
+            counterText: [
+                resolved.fitLabel ? `适配评级 ${resolved.fitLabel}` : '',
+                resolved.chapterCue ? `章节场域 ${resolved.chapterCue}` : '',
+                resolved.chapterFocus ? `章节补题 ${resolved.chapterFocus}` : '',
+                resolved.chapterCounter ? `场域拆法 ${resolved.chapterCounter}` : '',
+                resolved.focus,
+                resolved.counter,
+                resolved.reward ? `收益：${resolved.reward}` : ''
+            ].filter(Boolean).join(' ｜ ')
+        };
+    };
+
     Game.prototype.getBossArchiveEntries = function () {
         const enemyCatalog = (typeof ENEMIES !== 'undefined' && ENEMIES) ? Object.values(ENEMIES) : [];
         const bossCatalog = enemyCatalog.filter((enemy) => enemy && enemy.isBoss);
         const realmProgress = this.getCollectionRealmProgress();
+        const runPathMeta = this.player && typeof this.player.getRunPathMeta === 'function'
+            ? this.player.getRunPathMeta()
+            : (this.selectedRunPathId && typeof this.getRunPathMetaById === 'function'
+                ? this.getRunPathMetaById(this.selectedRunPathId)
+                : null);
 
         return bossCatalog.map((boss) => {
             const mechanic = (typeof BOSS_MECHANICS !== 'undefined' && BOSS_MECHANICS)
@@ -1265,6 +1969,25 @@
                     .filter(Boolean)
                     .slice(0, 2)
                 : [];
+            const runPathMatchup = runPathMeta && typeof this.resolveRunPathBossArchiveGuidance === 'function'
+                ? this.resolveRunPathBossArchiveGuidance(boss, mechanic, runPathMeta)
+                : null;
+            let sampleBoard = typeof this.buildRunPathBossSampleBoard === 'function'
+                ? this.buildRunPathBossSampleBoard({
+                    bossId: boss.id,
+                    pathId: runPathMeta?.id || '',
+                    mutationId: runPathMeta?.mutation?.mutationId || '',
+                    limit: 3,
+                    sortBy: 'bestTurn'
+                })
+                : null;
+            if ((!sampleBoard || sampleBoard.count <= 0) && typeof this.buildRunPathBossSampleBoard === 'function') {
+                sampleBoard = this.buildRunPathBossSampleBoard({
+                    bossId: boss.id,
+                    limit: 3,
+                    sortBy: 'bestTurn'
+                });
+            }
             return {
                 id: boss.id,
                 name: boss.name || boss.id,
@@ -1292,7 +2015,15 @@
                 memoryRecord,
                 memoryStatus,
                 memoryStatusLabel,
-                memorySummary
+                memorySummary,
+                runPathId: runPathMeta?.id || '',
+                runPathName: runPathMeta?.name || '',
+                runPathMatchup,
+                runPathFit: runPathMatchup?.fit || '',
+                runPathFitLabel: runPathMatchup?.fitLabel || '',
+                runPathCounterText: runPathMatchup?.counterText || '',
+                sampleBoard,
+                sampleCount: sampleBoard?.count || 0
             };
         });
     };
@@ -1316,8 +2047,12 @@
             entry.finisher,
             entry.visualCue,
             entry.bossPrompt,
+            entry.runPathName,
+            entry.runPathFitLabel,
+            entry.runPathCounterText,
             entry.memoryStatusLabel,
             entry.memorySummary,
+            ...(entry.sampleBoard?.entries || []).map((sample) => `${sample.headline} ${sample.subtitle} ${(sample.tagLine || []).join(' ')}`),
             ...entry.counterTreasures.map((item) => item.name),
             ...(entry.patternPreview || []),
             ...(entry.actPreview || [])
@@ -1352,6 +2087,33 @@
         const spirit = this.player && typeof this.player.getSpiritCompanionMeta === 'function'
             ? this.player.getSpiritCompanionMeta()
             : null;
+        const runPath = this.player && typeof this.player.getRunPathMeta === 'function'
+            ? this.player.getRunPathMeta()
+            : (this.selectedRunPathId && typeof this.getRunPathMetaById === 'function'
+                ? this.getRunPathMetaById(this.selectedRunPathId)
+                : null);
+        const runPathRecord = runPath && typeof this.getRunPathRecord === 'function'
+            ? this.getRunPathRecord(runPath.id)
+            : null;
+        let runPathSampleBoard = typeof this.buildRunPathBossSampleBoard === 'function' && runPath?.mutation?.mutationId
+            ? this.buildRunPathBossSampleBoard({
+                pathId: runPath.id,
+                mutationId: runPath.mutation.mutationId,
+                limit: 3,
+                sortBy: 'recent'
+            })
+            : null;
+        if ((!runPathSampleBoard || runPathSampleBoard.count <= 0) && typeof this.buildRunPathBossSampleBoard === 'function') {
+            runPathSampleBoard = this.buildRunPathBossSampleBoard({
+                pathId: runPath?.id || '',
+                limit: 3,
+                sortBy: 'recent'
+            });
+        }
+        const runPathSampleRecommendation = runPathSampleBoard && runPathSampleBoard.recommendation && typeof runPathSampleBoard.recommendation === 'object'
+            ? runPathSampleBoard.recommendation
+            : null;
+        const currentCharacterMeta = getCharacterMeta(this.player?.characterId || '');
         const vows = this.player && typeof this.player.getRunVowMetas === 'function'
             ? this.player.getRunVowMetas()
             : [];
@@ -1367,8 +2129,12 @@
             ? this.getChapterDisplaySnapshot(this.player?.realm || 1)
             : null;
         const stats = this.achievementSystem?.stats || {};
-        const encounter = typeof this.ensureEncounterState === 'function' ? this.ensureEncounterState() : {};
-        const endless = typeof this.ensureEndlessState === 'function' ? this.ensureEndlessState() : {};
+        const encounter = typeof this.ensureEncounterState === 'function'
+            ? (this.ensureEncounterState() || {})
+            : {};
+        const endless = typeof this.ensureEndlessState === 'function'
+            ? (this.ensureEndlessState() || {})
+            : {};
 
         const dominantTypeLabels = {
             attack: '攻势抢拍',
@@ -1385,7 +2151,20 @@
         if (profile.ratio('attack') >= 0.32) strengths.push('攻击牌占比高，适合在章节前中段主动抢拍。');
         if (profile.ratio('defense') >= 0.24) strengths.push('防御密度稳定，更容易把危险回合拖成可控回合。');
         if (profile.ratio('law') >= 0.18 || loadedLaws.length >= 2) strengths.push('命环与法则联动已经成形，适合围绕共鸣继续补件。');
+        if (runPath) strengths.push(`当前命途【${runPath.name}】会把本轮主线导向「${splitKeywords(runPath.playstyle || runPath.routeHint || runPath.description || '', 2).join(' / ') || runPath.category}」。`);
+        if (runPath?.mutation) strengths.push(`命途裂变已锁定【${runPath.mutation.branchLabel || '裂变'}·${runPath.mutation.name}】，当前中盘会更偏向「${splitKeywords(runPath.mutation.playstyle || runPath.mutation.routeHint || runPath.mutation.summary || '', 2).join(' / ') || '转职推进'}」。`);
         if (spirit) strengths.push(`当前灵契【${spirit.name}】能把构筑重心推向「${splitKeywords(spirit.playstyle || spirit.summary || '', 2).join(' / ') || spirit.tierLabel}」。`);
+        if (runPathRecord?.clears > 0) strengths.push(`洞府已收录 ${runPathRecord.clears} 份【${runPath.name}】战录，可直接复盘这条命途的推荐套装与 Boss 读法。`);
+        if (runPathSampleBoard?.count > 0) strengths.push(`样本对照榜已沉淀 ${runPathSampleBoard.count} 份「角色 × 命途 × Boss」实战样本，可直接比较谁更适合这条路线以及哪位 Boss 最容易收官。`);
+        if (runPathSampleRecommendation?.character?.name) {
+            strengths.push(`样本推荐角色当前落在【${runPathSampleRecommendation.character.name}】侧，复刻这条角色模板更容易快速稳定收官。`);
+        }
+        if (Array.isArray(runPathSampleRecommendation?.sets) && runPathSampleRecommendation.sets.length > 0) {
+            strengths.push(`样本推荐套装为 ${runPathSampleRecommendation.sets.map((item) => item.label || item.id).join(' / ')}，可优先围绕这一组继续补件。`);
+        }
+        if (runPathSampleRecommendation?.chapter?.name) {
+            strengths.push(`样本章节适配落在【${runPathSampleRecommendation.chapter.name}】（场域拟合分 ${clampInt(runPathSampleRecommendation.chapter.fitScore || 0, 0, 100)}），复盘该章模板更容易还原稳定收官。`);
+        }
         if (workshopSnapshot.some((item) => item?.setEcho || item?.spiritBond)) strengths.push('炼器坊改造已接入战斗，法宝正在从单卡转向体系增幅。');
         if (strengths.length === 0) strengths.push('当前仍处于早期试作阶段，优势更多来自角色基础盘而非完整体系。');
 
@@ -1393,17 +2172,48 @@
         if (profile.avgCost >= 1.9 && profile.ratio('energy') < 0.1) gaps.push('平均费用偏高，但回能牌偏少，容易在高压章吃到断档。');
         if (profile.ratio('defense') < 0.16) gaps.push('护阵密度偏低，遇到连击或章节灼烧时容错有限。');
         if (loadedLaws.length <= 1) gaps.push('命环槽位利用率偏低，还没有形成足够稳定的法则协同。');
+        if (!runPath) gaps.push('尚未挂接命途主线，局内目标更容易退回到“泛泛变强”。');
         if (!spirit) gaps.push('尚未挂接灵契，部分中后段章节会缺少关键的护道被动。');
         if (equippedTreasures.length <= 1) gaps.push('法宝位利用不足，缺少对 Boss 机制和章节规则的额外兜底。');
         if (gaps.length === 0) gaps.push('当前主要缺口不在面板，而在路线执行与资源调度的精度。');
 
         const nextTargets = [];
         if (chapter?.routePrompt) nextTargets.push(`章节路线：${chapter.routePrompt}`);
+        if (runPath?.mutation) nextTargets.push(`命途裂变：${runPath.mutation.branchLabel || '裂变'}·${runPath.mutation.name} 已生效，后续可优先走 ${runPath.mutation.routeHint || runPath.routeHint || '适配节点'}。`);
         if (chapter && !chapter.spiritRecommended && chapter.recommendedSpirits?.[0]) {
             nextTargets.push(`灵契补位：${chapter.recommendedSpirits[0].name} 更贴近当前章节要求。`);
         }
         if (chapter && !chapter.destinyRecommended && chapter.recommendedDestinies?.[0]) {
             nextTargets.push(`命格参考：${chapter.recommendedDestinies[0].name} 更适合这章的世界规则。`);
+        }
+        if (runPath && runPathRecord?.clears <= 0) {
+            nextTargets.push(`命途碑廊：完成当前【${runPath.name}】后，可把「${runPath.completionRecord?.name || `${runPath.name}战录`}」收入洞府长期档案。`);
+        } else if (runPath && runPathRecord?.clears > 0) {
+            nextTargets.push(`命途碑廊：${runPath.name} 已累计完成 ${runPathRecord.clears} 次，最近样本可反推角色、套装与 Boss 收官节奏。`);
+        }
+        if (runPath && (!runPathSampleBoard || runPathSampleBoard.count <= 0)) {
+            nextTargets.push(`样本对照：带当前【${runPath.name}】去击破一位章节 Boss，才能把角色、裂变方向与收官轮次压进对照榜。`);
+        } else if (runPathSampleBoard?.count > 0 && runPathSampleBoard.latestSample) {
+            nextTargets.push(`样本对照：最近一份是 ${runPathSampleBoard.latestSample.characterName} 对 ${runPathSampleBoard.latestSample.bossName} 的 ${runPathSampleBoard.latestSample.turns > 0 ? `${runPathSampleBoard.latestSample.turns} 回合` : '主线'} 收官，可继续压更快轮次。`);
+        }
+        if (runPathSampleRecommendation?.character?.name && currentCharacterMeta?.name && runPathSampleRecommendation.character.name !== currentCharacterMeta.name) {
+            nextTargets.push(`样本换轴：若当前卡手，可切到【${runPathSampleRecommendation.character.name}】复刻同命途样本，先把收官模板跑通。`);
+        }
+        if (runPathSampleRecommendation?.mutation?.label && !runPath?.mutation) {
+            nextTargets.push(`裂变参考：样本命中最高的是 ${runPathSampleRecommendation.mutation.label}，可在中盘裂变弹窗优先尝试该方向。`);
+        }
+        if (runPathSampleRecommendation?.boss?.name && runPathSampleRecommendation.boss.bestTurn > 0) {
+            nextTargets.push(`样本目标：先把 ${runPathSampleRecommendation.boss.name} 压到 ${runPathSampleRecommendation.boss.bestTurn} 回合，再回头抬高其它主宰的稳定率。`);
+        }
+        if (runPathSampleRecommendation?.chapter?.name) {
+            const fitScore = clampInt(runPathSampleRecommendation.chapter.fitScore || 0, 0, 100);
+            const sampleChapterName = runPathSampleRecommendation.chapter.name;
+            const currentChapterName = runPathSampleRecommendation.chapter.targetName || chapter?.name || '';
+            if (currentChapterName && sampleChapterName && sampleChapterName !== currentChapterName && fitScore < 70) {
+                nextTargets.push(`章节适配：当前章节 ${currentChapterName} 与样本主场 ${sampleChapterName} 有偏差，先回到该章补样本，把场域拟合分拉到 70+。`);
+            } else {
+                nextTargets.push(`章节适配：围绕 ${sampleChapterName} 继续压样本轮次，当前场域拟合分 ${fitScore}，目标 85+。`);
+            }
         }
         if (loadedLaws.length < 2 && Array.isArray(this.player?.collectedLaws) && this.player.collectedLaws.length > loadedLaws.length) {
             nextTargets.push('命环装配：已掌握法则多于当前装配数量，优先补命环而不是继续扩卡。');
@@ -1416,6 +2226,12 @@
             profile,
             destiny,
             spirit,
+            runPath,
+            runPathRecord,
+            runPathSampleBoard,
+            runPathSampleRecommendation,
+            completedRunPaths: typeof this.getCompletedRunPathCount === 'function' ? this.getCompletedRunPathCount() : 0,
+            totalRunPaths: typeof this.getRunPathCatalog === 'function' ? this.getRunPathCatalog().length : 0,
             vows,
             loadedLaws,
             equippedTreasures,
@@ -1439,8 +2255,26 @@
         const progress = this.getCollectionProgressSnapshot();
         const buildSnapshot = this.getBuildSnapshotData();
         const currentSpirit = buildSnapshot.spirit;
+        const latestRunPathRecord = typeof this.getLatestRunPathRecord === 'function'
+            ? this.getLatestRunPathRecord()
+            : null;
+        const latestSample = typeof this.getRunPathBossSamples === 'function'
+            ? this.getRunPathBossSamples({ limit: 1, sortBy: 'recent' })[0] || null
+            : null;
         const forgeOverview = this.player && typeof this.player.getTreasureWorkshopResearchOverview === 'function'
-            ? this.player.getTreasureWorkshopResearchOverview()
+            ? (this.player.getTreasureWorkshopResearchOverview() || {
+                coreOwned: 0,
+                coreTotal: 0,
+                formOwned: 0,
+                formTotal: 0,
+                activeWorkshops: 0,
+                activeReforges: 0,
+                activeInfusions: 0,
+                activeSetEchoes: 0,
+                resonantSets: 0,
+                fullSets: 0,
+                readyInfusions: []
+            })
             : {
                 coreOwned: 0,
                 coreTotal: 0,
@@ -1491,6 +2325,20 @@
                 actionValue: 'builds'
             },
             {
+                id: 'run_path_gallery',
+                icon: '🧭',
+                name: '命途碑廊',
+                focus: '命途战录 / 推荐套装 / Boss 读法',
+                note: latestSample
+                    ? `最近对照：${latestSample.characterName || latestSample.pathName} 用【${latestSample.pathName}】收下 ${latestSample.bossName}，${latestSample.turns > 0 ? `${latestSample.turns} 回合` : '已留样'}。`
+                    : latestRunPathRecord
+                    ? `最近战录：${latestRunPathRecord.recordName || latestRunPathRecord.name} · ${latestRunPathRecord.lastCharacterName || latestRunPathRecord.name} 完成于第 ${latestRunPathRecord.lastRealm || latestRunPathRecord.bestRealm || 1} 重天。`
+                    : '首条命途圆满后，会自动把命途定位、推荐套装与 Boss 读法收入洞府。',
+                actionLabel: '查看构筑快照',
+                actionType: 'collection',
+                actionValue: 'builds'
+            },
+            {
                 id: 'forge',
                 icon: '⚒️',
                 name: '炼器室',
@@ -1517,7 +2365,9 @@
                 icon: '🗿',
                 name: '伏魔台',
                 focus: '敌影档案 / Boss 记忆 / 破局手札',
-                note: progress.clearedBossMemories > 0
+                note: progress.runPathBossSampleCount > 0
+                    ? `已归档 ${progress.runPathBossSampleCount} 份角色 × 命途 × Boss 对照样本，伏魔台可继续压更快轮次。`
+                    : progress.clearedBossMemories > 0
                     ? `已留下 ${progress.clearedBossMemories} 份主宰记忆战记录，可继续压最快轮次。`
                     : '普通敌影与主宰机制都已开始归档，现已开放首版 Boss 记忆战。',
                 actionLabel: '查看敌影档案',
@@ -1527,6 +2377,15 @@
         ];
 
         const researches = [
+            {
+                id: 'run_path_archive',
+                room: '命途碑廊',
+                name: '命途战录',
+                progress: progress.completedRunPaths || 0,
+                goal: Math.max(1, progress.totalRunPaths || 1),
+                reward: '洞府会沉淀不同命途的定位、推荐套装、推荐角色与 Boss 读法，方便下轮直接追一条主线。',
+                section: 'builds'
+            },
             {
                 id: 'forge_atlas',
                 room: '炼器室',
@@ -1612,6 +2471,15 @@
                 progress: progress.collectedLaws >= 4 && progress.collectedTreasures >= 2 ? 1 : 0,
                 goal: 1,
                 reward: '构筑快照会汇总牌组画像、关键缺口与下一轮补位建议。',
+                section: 'builds'
+            },
+            {
+                id: 'sample_board',
+                room: '命途碑廊',
+                name: '实战样本对照榜',
+                progress: progress.runPathBossSampleCount || 0,
+                goal: 3,
+                reward: '构筑快照与 Boss 档案会对照角色、命途裂变、Boss 和收官轮次，方便直接找稳定样本。',
                 section: 'builds'
             }
         ].map((research) => ({
@@ -2100,6 +2968,7 @@
         if (focusSelect && focusSelect.value !== state.bossFocus) focusSelect.value = state.bossFocus;
 
         const entries = this.getBossArchiveEntries();
+        const progress = this.getCollectionProgressSnapshot();
         const filtered = entries.filter((entry) => this.passesBossArchiveFilter(entry));
         const selected = filtered.find((entry) => entry.id === this.selectedBossArchiveId) || filtered[0] || null;
         this.selectedBossArchiveId = selected?.id || '';
@@ -2120,6 +2989,7 @@
                     </div>
                     <div class="collection-card-tags">
                         <span class="collection-tag danger">${escapeHtml(entry.pressureLabel)}</span>
+                        ${entry.runPathFitLabel ? `<span class="collection-tag">${escapeHtml(entry.runPathFitLabel)}</span>` : ''}
                         ${entry.counterTreasures.slice(0, 2).map((item) => `<span class="collection-tag">${escapeHtml(item.name)}</span>`).join('')}
                     </div>
                 </button>
@@ -2162,6 +3032,15 @@
                         <p>${escapeHtml(selected.breakHint)}</p>
                     </section>
                     <section class="collection-detail-card">
+                        <span class="detail-mini-label">当前命途解法</span>
+                        <p>${escapeHtml(selected.runPathMatchup
+                ? `${selected.runPathName} · ${selected.runPathCounterText}`
+                : '当前未挂命途，挂接命途后这里会给出适配评级与拆招建议。')}</p>
+                        ${selected.runPathMatchup
+                ? `<div class="collection-card-tags"><span class="collection-tag">${escapeHtml(selected.runPathName || '当前命途')}</span><span class="collection-tag">${escapeHtml(selected.runPathFitLabel || '常规拆解')}</span></div>`
+                : ''}
+                    </section>
+                    <section class="collection-detail-card">
                         <span class="detail-mini-label">章节传闻</span>
                         <p>${escapeHtml(selected.bossPrompt || '暂无额外传闻')}</p>
                     </section>
@@ -2198,6 +3077,34 @@
                 : '<span class="collection-tag muted">暂无明确法宝反制</span>'}
                         </div>
                     </section>
+                    <section class="collection-detail-card">
+                        <span class="detail-mini-label">通关样本对照</span>
+                        ${selected.sampleBoard && selected.sampleBoard.count > 0
+                ? `
+                            <div class="detail-status-strip">
+                                <span class="detail-status-chip">样本 ${escapeHtml(selected.sampleBoard.count)}</span>
+                                <span class="detail-status-chip">角色 ${escapeHtml(selected.sampleBoard.uniqueCharacters)}</span>
+                                <span class="detail-status-chip">${selected.sampleBoard.bestTurn > 0 ? `最快 ${escapeHtml(selected.sampleBoard.bestTurn)} 回合` : '轮次待补'}</span>
+                            </div>
+                            <ul class="collection-detail-list">
+                                ${selected.sampleBoard.entries.map((sample) => `
+                                    <li>
+                                        ${escapeHtml(sample.headline)} · ${escapeHtml(sample.subtitle)}
+                                        ${sample.tagLine.length > 0 ? `（${escapeHtml(sample.tagLine.join(' / '))}）` : ''}
+                                    </li>
+                                `).join('')}
+                            </ul>
+                            ${Array.isArray(selected.sampleBoard.recommendation?.lines) && selected.sampleBoard.recommendation.lines.length > 0
+                ? `
+                                <p class="collection-muted">自动推荐摘要</p>
+                                <ul class="collection-detail-list">
+                                    ${selected.sampleBoard.recommendation.lines.slice(0, 4).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
+                                </ul>
+                            `
+                : ''}
+                        `
+                : `<p>${escapeHtml(selected.sampleBoard?.emptyText || '当前还没有这位主宰的通关样本。')}</p>`}
+                    </section>
                 </div>
                 <section class="collection-detail-card">
                     <span class="detail-mini-label">招式速记</span>
@@ -2217,8 +3124,9 @@
             `<div class="codex-summary-chip"><strong>${entries.filter((entry) => entry.memoryRecord.clears > 0).length}</strong><span>记忆战留痕</span></div>`,
             `<div class="codex-summary-chip"><strong>${entries.reduce((sum, entry) => sum + clampInt(entry.memoryRecord.attempts || 0, 0), 0)}</strong><span>总试作次数</span></div>`,
             `<div class="codex-summary-chip"><strong>${entries.filter((entry) => entry.pressureScore >= 1.45).length}</strong><span>高压主宰</span></div>`,
+            `<div class="codex-summary-chip"><strong>${progress.runPathBossSampleCount || 0}</strong><span>样本对照</span></div>`,
             '</div>',
-            '<p class="codex-side-note">Boss 档案现在会把章节背景、核心机制、反制法宝与伏魔台记忆战记录压在同一页，方便边读边练。</p>'
+            `<p class="codex-side-note">Boss 档案现在会把章节背景、核心机制、反制法宝与伏魔台记忆战记录压在同一页${entries.some((entry) => entry.runPathMatchup) ? '，并按当前命途补充适配评级与拆招建议' : ''}${(progress.runPathBossSampleCount || 0) > 0 ? '，同时把已归档的角色 × 命途 × Boss 样本放进对照榜' : ''}，方便边读边练。</p>`
         ].join('');
 
         hints.innerHTML = [
@@ -2248,11 +3156,11 @@
             <div class="collection-detail-shell">
                 <section class="collection-detail-hero">
                     <div class="collection-detail-hero-main">
-                        <div class="collection-detail-icon">${escapeHtml(snapshot.spirit?.icon || snapshot.destiny?.icon || '🧭')}</div>
+                        <div class="collection-detail-icon">${escapeHtml(snapshot.runPath?.icon || snapshot.spirit?.icon || snapshot.destiny?.icon || '🧭')}</div>
                         <div class="collection-detail-meta">
                             <span class="codex-side-kicker">构筑总览</span>
                             <h3>${escapeHtml(snapshot.archetypeLabel)}</h3>
-                            <p>${escapeHtml(snapshot.chapter?.fullName || '当前尚未进入章节')}${snapshot.chapter?.skyOmen?.name ? ` · 天象 ${escapeHtml(snapshot.chapter.skyOmen.name)}` : ''}</p>
+                            <p>${escapeHtml(snapshot.chapter?.fullName || '当前尚未进入章节')}${snapshot.chapter?.skyOmen?.name ? ` · 天象 ${escapeHtml(snapshot.chapter.skyOmen.name)}` : ''}${snapshot.runPath?.name ? ` · 命途 ${escapeHtml(snapshot.runPath.name)}` : ''}</p>
                         </div>
                     </div>
                     <div class="detail-status-strip">
@@ -2260,6 +3168,7 @@
                         <span class="detail-status-chip">均费 ${escapeHtml(profile.avgCost.toFixed(1))}</span>
                         <span class="detail-status-chip">装配法则 ${escapeHtml(snapshot.loadedLaws.length)}</span>
                         <span class="detail-status-chip">法宝 ${escapeHtml(snapshot.equippedTreasures.length)}</span>
+                        <span class="detail-status-chip">命途 ${escapeHtml(snapshot.runPath?.name || '未挂')}</span>
                     </div>
                 </section>
             </div>
@@ -2295,6 +3204,13 @@
                     <span>灵契</span>
                     <p>${escapeHtml(snapshot.spirit?.summary || '灵契缺位时，中后段章节很难补足护道。')}</p>
                 </div>
+                <div class="collection-mini-card">
+                    <strong>${escapeHtml(snapshot.runPath?.name || '未挂命途')}</strong>
+                    <span>命途碑廊</span>
+                    <p>${escapeHtml(snapshot.runPathRecord?.clears > 0
+                ? `已收录 ${snapshot.runPathRecord.clears} 份战录，最近完成于${this.formatCollectionTimestamp(snapshot.runPathRecord.lastCompletedAt)}。`
+                : '当前命途尚未圆满，完成后会把战录自动收入洞府。')}</p>
+                </div>
             </div>
         `;
 
@@ -2329,6 +3245,34 @@
                 : '<span class="collection-tag muted">法宝位未装配</span>'}
                     </div>
                 </section>
+                <section class="collection-detail-card">
+                    <span class="detail-mini-label">样本对照</span>
+                    ${snapshot.runPathSampleBoard && snapshot.runPathSampleBoard.count > 0
+                ? `
+                        <div class="detail-status-strip">
+                            <span class="detail-status-chip">样本 ${escapeHtml(snapshot.runPathSampleBoard.count)}</span>
+                            <span class="detail-status-chip">角色 ${escapeHtml(snapshot.runPathSampleBoard.uniqueCharacters)}</span>
+                            <span class="detail-status-chip">${snapshot.runPathSampleBoard.bestTurn > 0 ? `最快 ${escapeHtml(snapshot.runPathSampleBoard.bestTurn)} 回合` : '轮次待补'}</span>
+                        </div>
+                        <ul class="collection-detail-list">
+                            ${snapshot.runPathSampleBoard.entries.map((sample) => `
+                                <li>
+                                    ${escapeHtml(sample.headline)} · ${escapeHtml(sample.subtitle)}
+                                    ${sample.tagLine.length > 0 ? `（${escapeHtml(sample.tagLine.join(' / '))}）` : ''}
+                                </li>
+                            `).join('')}
+                        </ul>
+                        ${Array.isArray(snapshot.runPathSampleBoard.recommendation?.lines) && snapshot.runPathSampleBoard.recommendation.lines.length > 0
+                ? `
+                            <p class="collection-muted">自动推荐摘要</p>
+                            <ul class="collection-detail-list">
+                                ${snapshot.runPathSampleBoard.recommendation.lines.slice(0, 4).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
+                            </ul>
+                        `
+                : ''}
+                    `
+                : `<p>${escapeHtml(snapshot.runPathSampleBoard?.emptyText || '当前还没有命途样本，先把一位章节 Boss 打成稳定收官。')}</p>`}
+                </section>
             </div>
         `;
 
@@ -2351,6 +3295,8 @@
             `<li>${escapeHtml(snapshot.archetypeLabel)}</li>`,
             `<li>主类型：${escapeHtml(profile.dominantType)} · 当前章节：${escapeHtml(snapshot.chapter?.name || '未定')}</li>`,
             `<li>当前誓约：${escapeHtml(snapshot.vows.map((meta) => meta.name).join('、') || '暂无')}</li>`,
+            `<li>当前命途：${escapeHtml(snapshot.runPath?.name || '未挂')} · 已完成命途 ${escapeHtml(snapshot.completedRunPaths || 0)} / ${escapeHtml(snapshot.totalRunPaths || 0)}</li>`,
+            `<li>样本对照：${escapeHtml(snapshot.runPathSampleBoard?.count || 0)} 份 · ${snapshot.runPathSampleBoard?.bestTurn > 0 ? `当前最快 ${escapeHtml(snapshot.runPathSampleBoard.bestTurn)} 回合` : '尚未形成最快轮次'}</li>`,
             '</ul>'
         ].join('');
 
@@ -2360,6 +3306,7 @@
             '<ul class="codex-side-list compact">',
             '<li>先看“当前优势”，确认这套牌真正赢在哪里。</li>',
             '<li>再看“主要缺口”，判断是缺护阵、缺回能，还是命环没装满。</li>',
+            '<li>样本对照会告诉你这条命途到底是谁在打、打哪位 Boss 最稳、最快能压到多少回合。</li>',
             '<li>最后用“下一轮补位”反推地图路线，而不是每个节点都平均拿。</li>',
             '</ul>'
         ].join('');
@@ -2455,6 +3402,8 @@
             `<div class="codex-summary-chip"><strong>${data.researches.filter((item) => item.ready).length}</strong><span>已满足研究</span></div>`,
             `<div class="codex-summary-chip"><strong>${data.progress.clearedChapters}</strong><span>已贯通章节</span></div>`,
             `<div class="codex-summary-chip"><strong>${data.progress.clearedBossMemories || 0}</strong><span>记忆战留痕</span></div>`,
+            `<div class="codex-summary-chip"><strong>${data.progress.completedRunPaths || 0}</strong><span>命途战录</span></div>`,
+            `<div class="codex-summary-chip"><strong>${data.progress.runPathBossSampleCount || 0}</strong><span>样本对照</span></div>`,
             `<div class="codex-summary-chip"><strong>${data.progress.forgeActiveWorkshops || 0}</strong><span>炼器铭刻</span></div>`,
             `<div class="codex-summary-chip"><strong>${data.progress.forgeFullSets || 0}</strong><span>三段套装</span></div>`,
             `${data.progress.observatoryTraces !== undefined ? `<div class="codex-summary-chip"><strong>${data.progress.observatoryTraces || 0}</strong><span>观星留痕</span></div>` : ''}`,
@@ -2475,6 +3424,8 @@
             `<li>敌影档案：${data.progress.seenEnemies} / ${data.progress.totalEnemies}</li>`,
             `<li>Boss 档案：${data.progress.defeatedBosses} / ${data.progress.totalBosses}</li>`,
             `<li>伏魔台记忆战：${data.progress.clearedBossMemories || 0} 次留痕 / ${data.progress.totalBossMemoryAttempts || 0} 次试作</li>`,
+            `<li>命途碑廊：${data.progress.completedRunPaths || 0} / ${data.progress.totalRunPaths || 0} 条命途留痕 · 累计 ${data.progress.totalRunPathClears || 0} 次圆满</li>`,
+            `<li>样本对照：${data.progress.runPathBossSampleCount || 0} 份实战样本 · 涉及 ${data.progress.sampledCharacters || 0} 名角色 / ${data.progress.sampledBosses || 0} 位主宰</li>`,
             `${data.progress.observatoryTraces !== undefined ? `<li>观星留痕：${data.progress.observatoryTraces || 0} 条归档 / ${data.progress.observatoryReplays || 0} 次回放</li>` : ''}`,
             '</ul>'
         ].join('');
@@ -2485,6 +3436,8 @@
             '<ul class="codex-side-list compact">',
             '<li>先从可领取目标拿到即时收益，再回到章节或 Boss 档案定路线。</li>',
             '<li>研究项全部偏“解锁信息与入口”，不直接堆数值，方便后续继续扩系统。</li>',
+            '<li>样本对照榜会把角色、命途裂变和 Boss 收官轮次压在一起，适合开局前先找一份稳定模板。</li>',
+            '<li>命途碑廊会把圆满后的命途样本长期保存下来，适合拿来决定下一轮该追哪条主线、补哪组套装、怎么读 Boss。</li>',
             '<li>炼器室现在会标出核心件、形态件与器灵灌注资格，适合先在图鉴里定研究目标，再决定路线要去商店、精英还是事件。</li>',
             '<li>伏魔台的记忆战更适合拿来检验“我是否真的读懂了 Boss 出题”，而不是单纯比一次输赢。</li>',
             `${data.progress.observatoryTraces !== undefined ? '<li>观星台现在会沉淀命盘签和留痕，适合把高分轮换或好用命盘重新回放验证。</li>' : ''}`,
@@ -2628,11 +3581,18 @@
     };
 
     Game.prototype.handleBossDefeated = async function (bossEnemy = null, enemyList = [], ringExp = 0) {
-        if (this.currentBattleNode?.type !== 'boss_memory' && this.achievementSystem && typeof this.achievementSystem.updateStat === 'function') {
+        const isBossMemoryBattle = this.currentBattleNode?.type === 'boss_memory';
+        const liveRunPathMeta = !isBossMemoryBattle && this.player && typeof this.player.getRunPathMeta === 'function'
+            ? this.player.getRunPathMeta()
+            : null;
+        const liveTurnCount = !isBossMemoryBattle
+            ? clampInt(this.battle?.turnNumber || 0, 0, 9999)
+            : 0;
+        if (!isBossMemoryBattle && this.achievementSystem && typeof this.achievementSystem.updateStat === 'function') {
             this.achievementSystem.updateStat('bossesDefeated', 1);
         }
         const result = await originalHandleBossDefeated.call(this, bossEnemy, enemyList, ringExp);
-        if (this.currentBattleNode?.type !== 'boss_memory' && bossEnemy && typeof this.recordCollectionUnlock === 'function') {
+        if (!isBossMemoryBattle && bossEnemy && typeof this.recordCollectionUnlock === 'function') {
             const chapter = typeof this.getChapterProfileForRealm === 'function'
                 ? this.getChapterProfileForRealm(bossEnemy.realm || this.player?.realm || 1)
                 : null;
@@ -2641,6 +3601,15 @@
                 name: bossEnemy.name || bossEnemy.id,
                 icon: bossEnemy.icon || '👁️',
                 note: chapter ? `击破 ${chapter.name} 主宰` : '击破章节主宰'
+            });
+        }
+        if (!isBossMemoryBattle && bossEnemy && liveRunPathMeta && typeof this.recordRunPathBossSample === 'function') {
+            this.recordRunPathBossSample(liveRunPathMeta, bossEnemy, {
+                turns: liveTurnCount,
+                realm: bossEnemy.realm || this.player?.realm || 0,
+                characterId: this.player?.characterId || '',
+                completedAt: Date.now(),
+                source: 'boss_clear'
             });
         }
         return result;

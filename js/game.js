@@ -20,16 +20,21 @@ class Game {
         this.stealAttempted = false;
         this.rewardCardSelected = false; // 防止重复选牌
         this.lastBattleRewardMeta = null;
+        this.lastRunPathRewardMeta = null;
+        this.lastRunPathMapFeedback = null;
+        this.runPathMapFeedbackTimer = null;
         this.comboCount = 0;
         this.lastCardType = null;
         this.selectedCharacterId = null;
         this.selectedRunDestinyId = null;
         this.selectedSpiritCompanionId = null;
+        this.selectedRunPathId = null;
         this.activeTrial = null;
         this.trialData = null;
         this.trialMode = null;
         this.pendingRunDestinyDrafts = {};
         this.pendingSpiritCompanionDrafts = {};
+        this.pendingRunPathDrafts = {};
         this.runStartTime = null;
         this.currentSaveSlot = null; // Default to null (unknown), NOT 0 (Slot 1)
         this.cachedSlots = [null, null, null, null]; // Cache for slots
@@ -64,6 +69,7 @@ class Game {
         this.treasureCompendiumPresetCache = null;
         this.lastLegacyGain = 0;
         this.debugMode = localStorage.getItem('theDefierDebug') === 'true';
+        this.automationBootConfig = this.parseAutomationBootConfig();
         this.boundGlobalEvents = false;
         this.isAuthBusy = false;
         this.isSyncingSlots = false;
@@ -87,7 +93,7 @@ class Game {
         }
         this.initCollection();
         this.initDynamicBackground();
-        this.loadGameResult = this.loadGame();
+        this.loadGameResult = this.automationBootConfig ? false : this.loadGame();
 
         // 恢复当前的存档位索引 (修复刷新后无法同步到正确槽位的问题)
         // 恢复当前的存档位索引 (修复刷新后无法同步到正确槽位的问题)
@@ -132,7 +138,87 @@ class Game {
             setTimeout(() => this.openSaveSlotsWithSync(), 800);
         }
 
+        this.scheduleAutomationBoot();
+
         console.log('The Defier 2.1 初始化完成！');
+    }
+
+    parseAutomationBootConfig() {
+        if (typeof window === 'undefined' || !window.location || !window.location.search) return null;
+
+        let params = null;
+        try {
+            params = new URLSearchParams(window.location.search);
+        } catch (error) {
+            console.warn('Automation boot config parse failed:', error);
+            return null;
+        }
+
+        const mode = String(params.get('autotest') || '').trim();
+        const allowedModes = new Set([
+            'guest-character-selection',
+            'guest-run-path-selection',
+            'guest-map',
+            'guest-battle'
+        ]);
+        if (!allowedModes.has(mode)) return null;
+
+        return {
+            mode,
+            characterId: String(params.get('character') || 'linFeng').trim() || 'linFeng',
+            runDestinyId: String(params.get('destiny') || 'foldedEdge').trim() || 'foldedEdge',
+            spiritCompanionId: String(params.get('spirit') || 'swordWraith').trim() || 'swordWraith',
+            runPathId: String(params.get('path') || 'insight').trim() || 'insight',
+            realm: Math.max(1, Math.min(18, Math.floor(Number(params.get('realm')) || 1))),
+            battleType: String(params.get('battleType') || 'normal').trim() || 'normal'
+        };
+    }
+
+    scheduleAutomationBoot() {
+        if (!this.automationBootConfig) return;
+        setTimeout(() => this.runAutomationBootFlow(), 80);
+    }
+
+    runAutomationBootFlow() {
+        const config = this.automationBootConfig;
+        if (!config) return false;
+
+        this.guestMode = true;
+        if (typeof document !== 'undefined') {
+            ['auth-modal', 'save-slots-modal', 'generic-confirm-modal', 'save-conflict-modal'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.classList.remove('active');
+            });
+        }
+
+        if (config.mode === 'guest-character-selection' || config.mode === 'guest-run-path-selection') {
+            this.showCharacterSelection();
+            if (typeof this.selectCharacter === 'function') {
+                this.selectCharacter(config.characterId);
+            }
+            if (config.mode === 'guest-run-path-selection' && typeof this.selectRunPath === 'function') {
+                this.selectRunPath(config.runPathId);
+            }
+            return true;
+        }
+
+        if (config.mode === 'guest-map' || config.mode === 'guest-battle') {
+            this.startNewGame(config.characterId, {
+                runDestinyId: config.runDestinyId,
+                spiritCompanionId: config.spiritCompanionId,
+                runPathId: config.runPathId
+            });
+
+            if (config.mode === 'guest-map') {
+                this.startRealm(config.realm, false);
+                return true;
+            }
+
+            this.startDebugBattle(config.realm, config.battleType);
+            return true;
+        }
+
+        return false;
     }
 
     initRuntimeHooks() {
@@ -179,6 +265,9 @@ class Game {
                 runDestiny: (this.player && typeof this.player.getRunDestinyMeta === 'function')
                     ? this.player.getRunDestinyMeta()
                     : null,
+                runPath: (this.player && typeof this.player.getRunPathMeta === 'function')
+                    ? this.player.getRunPathMeta()
+                    : null,
                 runVows: (this.player && typeof this.player.getRunVowMetas === 'function')
                     ? this.player.getRunVowMetas()
                     : [],
@@ -204,6 +293,7 @@ class Game {
                     selectedCharacterId: this.selectedCharacterId || null,
                     selectedRunDestinyId: this.selectedRunDestinyId || null,
                     selectedSpiritCompanionId: this.selectedSpiritCompanionId || null,
+                    selectedRunPathId: this.selectedRunPathId || null,
                     characterIdentity: this.getCharacterIdentityProfile(this.selectedCharacterId || ''),
                     runDestinies: Array.isArray(this.pendingRunDestinyDrafts?.[this.selectedCharacterId || ''])
                         ? this.pendingRunDestinyDrafts[this.selectedCharacterId || ''].slice()
@@ -211,6 +301,10 @@ class Game {
                     ,
                     spiritCompanions: Array.isArray(this.pendingSpiritCompanionDrafts?.[this.selectedCharacterId || ''])
                         ? this.pendingSpiritCompanionDrafts[this.selectedCharacterId || ''].slice()
+                        : []
+                    ,
+                    runPaths: Array.isArray(this.pendingRunPathDrafts?.[this.selectedCharacterId || ''])
+                        ? this.pendingRunPathDrafts[this.selectedCharacterId || ''].slice()
                         : []
                 }
                 : null,
@@ -279,6 +373,22 @@ class Game {
                 systemsHud: (typeof this.battle.getBattleSystemDisplayState === 'function')
                     ? this.battle.getBattleSystemDisplayState()
                     : null,
+                bossAct: (typeof this.battle.getBossActDisplayState === 'function')
+                    ? (() => {
+                        const display = this.battle.getBossActDisplayState();
+                        if (!display || !display.state || !display.act) return null;
+                        return {
+                            bossId: display.state.bossId || display.boss?.id || null,
+                            currentActId: display.act.id || null,
+                            currentActName: display.act.name || '',
+                            memoryName: display.state.memoryName || '',
+                            runPathCounterplay: display.state.runPathCounterplay || null,
+                            counterChips: typeof this.battle.resolveBossActCounterChips === 'function'
+                                ? this.battle.resolveBossActCounterChips(display)
+                                : []
+                        };
+                    })()
+                    : null,
                 enemies: (this.battle.enemies || []).filter(e => e.currentHp > 0).map((e, idx) => ({
                     i: idx,
                     id: e.id,
@@ -312,6 +422,16 @@ class Game {
                             : null
                     }
                     : null,
+                runPathFlash: this.lastRunPathMapFeedback
+                    ? {
+                        pathId: this.lastRunPathMapFeedback.pathId || null,
+                        name: this.lastRunPathMapFeedback.name || null,
+                        phaseLabel: this.lastRunPathMapFeedback.phaseLabel || '',
+                        title: this.lastRunPathMapFeedback.title || '',
+                        rewardText: this.lastRunPathMapFeedback.rewardText || '',
+                        completed: !!this.lastRunPathMapFeedback.completed
+                    }
+                    : null,
                 activeNodes: typeof this.map.getAccessibleNodes === 'function'
                     ? this.map.getAccessibleNodes().map(n => ({ id: n.id, row: n.row, type: n.type }))
                     : []
@@ -325,6 +445,47 @@ class Game {
                 doctrine: this.player?.legacyRunDoctrine || null,
                 mission: this.player?.legacyRunMission || null
             },
+            reward: mode === 'reward-screen'
+                ? {
+                    stealState: typeof document !== 'undefined'
+                        ? (document.getElementById('reward-screen')?.dataset?.stealState || 'hidden')
+                        : 'hidden',
+                    battleMeta: this.lastBattleRewardMeta
+                        ? {
+                            encounter: !!this.lastBattleRewardMeta.encounter,
+                            squad: !!this.lastBattleRewardMeta.squad
+                        }
+                        : null,
+                    runPath: this.lastRunPathRewardMeta
+                        ? {
+                            pathId: this.lastRunPathRewardMeta.pathId || null,
+                            name: this.lastRunPathRewardMeta.name || null,
+                            entryCount: Array.isArray(this.lastRunPathRewardMeta.entries)
+                                ? this.lastRunPathRewardMeta.entries.length
+                                : 0,
+                            completed: !!this.lastRunPathRewardMeta.completed,
+                            archive: this.lastRunPathRewardMeta.archive
+                                ? {
+                                    id: this.lastRunPathRewardMeta.archive.id || null,
+                                    recordName: this.lastRunPathRewardMeta.archive.recordName || this.lastRunPathRewardMeta.archive.name || '',
+                                    note: this.lastRunPathRewardMeta.archive.note || '',
+                                    clears: Math.max(0, Math.floor(Number(this.lastRunPathRewardMeta.archive.clears) || 0)),
+                                    firstClear: !!this.lastRunPathRewardMeta.archive.firstClear
+                                }
+                                : null,
+                            entries: Array.isArray(this.lastRunPathRewardMeta.entries)
+                                ? this.lastRunPathRewardMeta.entries.map((entry) => ({
+                                    phaseId: entry.phaseId || null,
+                                    phaseLabel: entry.phaseLabel || '',
+                                    title: entry.title || '',
+                                    rewardText: entry.rewardText || '',
+                                    completed: !!entry.completed
+                                }))
+                                : []
+                        }
+                        : null
+                }
+                : null,
             endless: this.ensureEndlessState(),
             endlessPhase: this.getEndlessPhaseProfile(),
             endlessTheme: this.getEndlessCycleThemeProfile(),
@@ -681,7 +842,7 @@ class Game {
     updateCharacterSelectionConfirmState() {
         const confirmBtn = document.getElementById('confirm-character-btn');
         if (!confirmBtn) return;
-        confirmBtn.disabled = !this.selectedCharacterId || !this.selectedRunDestinyId || !this.selectedSpiritCompanionId;
+        confirmBtn.disabled = !this.selectedCharacterId || !this.selectedRunDestinyId || !this.selectedSpiritCompanionId || !this.selectedRunPathId;
     }
 
     selectRunDestiny(destinyId) {
@@ -698,6 +859,818 @@ class Game {
         this.selectedSpiritCompanionId = spiritId;
         this.renderSpiritCompanionSelection(this.selectedCharacterId);
         this.updateCharacterSelectionConfirmState();
+    }
+
+    getRunPathCatalog() {
+        if (typeof RUN_PATHS === 'undefined' || !RUN_PATHS || typeof RUN_PATHS !== 'object') {
+            return [];
+        }
+        return Object.values(RUN_PATHS).filter((item) => item && item.id);
+    }
+
+    getRunPathMetaById(pathId) {
+        if (typeof pathId !== 'string' || !pathId || typeof RUN_PATHS === 'undefined' || !RUN_PATHS[pathId]) {
+            return null;
+        }
+        const base = RUN_PATHS[pathId];
+        return {
+            id: base.id,
+            name: base.name || base.id,
+            icon: base.icon || '✦',
+            category: base.category || '命途',
+            description: base.description || '',
+            playstyle: base.playstyle || '',
+            routeHint: base.routeHint || '',
+            affinities: Array.isArray(base.affinities) ? base.affinities.slice() : [],
+            eventPool: Array.isArray(base.eventPool) ? base.eventPool.slice() : [],
+            shopBias: base.shopBias && typeof base.shopBias === 'object'
+                ? JSON.parse(JSON.stringify(base.shopBias))
+                : null,
+            treasureSynergy: base.treasureSynergy && typeof base.treasureSynergy === 'object'
+                ? JSON.parse(JSON.stringify(base.treasureSynergy))
+                : null,
+            bossCounterplay: base.bossCounterplay && typeof base.bossCounterplay === 'object'
+                ? { ...base.bossCounterplay }
+                : null,
+            bossMatchups: base.bossMatchups && typeof base.bossMatchups === 'object'
+                ? JSON.parse(JSON.stringify(base.bossMatchups))
+                : null,
+            mutations: base.mutations && typeof base.mutations === 'object'
+                ? JSON.parse(JSON.stringify(base.mutations))
+                : null,
+            completionRecord: base.completionRecord && typeof base.completionRecord === 'object'
+                ? { ...base.completionRecord }
+                : null,
+            effects: base.effects && typeof base.effects === 'object'
+                ? { ...base.effects }
+                : {},
+            phases: Array.isArray(base.phases)
+                ? base.phases.map((phase) => ({
+                    ...(phase || {}),
+                    rewards: Array.isArray(phase?.rewards) ? phase.rewards.map((reward) => ({ ...(reward || {}) })) : []
+                }))
+                : []
+        };
+    }
+
+    resolveRunPathBossMatchup(runPathMeta, options = {}) {
+        if (!runPathMeta || typeof runPathMeta !== 'object' || !runPathMeta.bossCounterplay) {
+            return null;
+        }
+        const matchupCatalog = runPathMeta.bossMatchups && typeof runPathMeta.bossMatchups === 'object'
+            ? runPathMeta.bossMatchups
+            : null;
+        const enemyId = String(options.enemyId || options.enemy?.id || '').trim();
+        const memoryKey = String(options.memoryKey || options.memory?.key || '').trim();
+        const mechanicType = String(options.mechanicType || options.mechanic?.mechanics?.type || '').trim();
+        const fallbackRealm = Math.max(1, Math.floor(Number(options.realm || options.enemy?.realm || this.player?.realm || 1) || 1));
+        const chapterSnapshot = options.chapterSnapshot
+            || options.chapter
+            || (typeof this.getChapterDisplaySnapshot === 'function' ? this.getChapterDisplaySnapshot(fallbackRealm) : null);
+        const chapterField = options.chapterBattlefield
+            || options.chapterField
+            || null;
+        const chapterId = String(options.chapterId || chapterSnapshot?.id || '').trim();
+        const fitLabelMap = {
+            advantage: '顺势拆招',
+            pivot: '对冲解法',
+            risk: '逆风赶时',
+            neutral: '常规拆解'
+        };
+        const mergeCounterplay = (target, source) => {
+            if (!source || typeof source !== 'object') return target;
+            ['fit', 'fitLabel', 'chipLabel', 'focus', 'counter', 'reward'].forEach((key) => {
+                if (typeof source[key] === 'string' && source[key].trim()) {
+                    target[key] = source[key].trim();
+                }
+            });
+            return target;
+        };
+        const chapterMatchup = matchupCatalog?.chapters?.[chapterId] && typeof matchupCatalog.chapters[chapterId] === 'object'
+            ? matchupCatalog.chapters[chapterId]
+            : null;
+
+        const resolved = mergeCounterplay({
+            id: runPathMeta.id,
+            name: runPathMeta.name || runPathMeta.id,
+            icon: runPathMeta.icon || '🧭',
+            chipLabel: runPathMeta.bossCounterplay.chipLabel || `命途·${runPathMeta.name || runPathMeta.id}`,
+            focus: runPathMeta.bossCounterplay.focus || '',
+            counter: runPathMeta.bossCounterplay.counter || '',
+            reward: runPathMeta.bossCounterplay.reward || '',
+            fit: 'neutral',
+            fitLabel: '',
+            enemyId,
+            chapterId,
+            memoryKey,
+            mechanicType,
+            chapterName: String(chapterSnapshot?.fullName || chapterSnapshot?.name || ''),
+            chapterCue: '',
+            chapterRuleSummary: '',
+            chapterFocus: String(chapterMatchup?.focus || ''),
+            chapterCounter: String(chapterMatchup?.counter || ''),
+            chapterReward: String(chapterMatchup?.reward || ''),
+            chapterFitLabel: String(chapterMatchup?.fitLabel || '')
+        }, matchupCatalog?.mechanics?.[mechanicType]);
+
+        mergeCounterplay(resolved, chapterMatchup);
+        mergeCounterplay(resolved, matchupCatalog?.memories?.[memoryKey]);
+        mergeCounterplay(resolved, matchupCatalog?.bosses?.[enemyId]);
+
+        const chapterOmenLabel = String(chapterField?.omen?.phaseLabel || chapterSnapshot?.skyOmen?.name || '').trim();
+        const chapterLeylineLabel = String(chapterField?.leyline?.activeLabel || chapterSnapshot?.leyline?.name || '').trim();
+        const chapterCueSegments = [
+            resolved.chapterName,
+            chapterOmenLabel,
+            chapterLeylineLabel
+        ].filter(Boolean);
+        resolved.chapterCue = chapterCueSegments.join(' · ');
+        resolved.chapterRuleSummary = [
+            chapterSnapshot?.skyOmen?.desc || '',
+            chapterSnapshot?.leyline?.desc || ''
+        ].filter(Boolean).join(' / ');
+
+        if (!resolved.fitLabel) {
+            resolved.fitLabel = fitLabelMap[resolved.fit] || fitLabelMap.neutral;
+        }
+        if (!resolved.chipLabel) {
+            resolved.chipLabel = `命途·${resolved.name || runPathMeta.id}`;
+        }
+        if (resolved.fitLabel && !String(resolved.chipLabel).includes(resolved.fitLabel)) {
+            resolved.chipLabel = `${resolved.chipLabel} · ${resolved.fitLabel}`;
+        }
+
+        return resolved;
+    }
+
+    draftRunPathsForCharacter(characterId) {
+        const charId = typeof characterId === 'string' ? characterId : this.selectedCharacterId;
+        const cached = this.pendingRunPathDrafts && Array.isArray(this.pendingRunPathDrafts[charId])
+            ? this.pendingRunPathDrafts[charId].slice()
+            : null;
+        if (cached && cached.length >= 3) return cached.slice(0, 3);
+
+        const catalog = this.getRunPathCatalog();
+        const ordered = this.shuffleList(catalog.slice()).sort((a, b) => {
+            const aAffinity = Array.isArray(a.affinities) && a.affinities.includes(charId) ? 1 : 0;
+            const bAffinity = Array.isArray(b.affinities) && b.affinities.includes(charId) ? 1 : 0;
+            if (aAffinity !== bAffinity) return bAffinity - aAffinity;
+            return String(a.id || '').localeCompare(String(b.id || ''), 'zh-Hans-CN');
+        });
+
+        const draft = ordered.slice(0, 3).map((item) => item.id);
+        this.pendingRunPathDrafts = this.pendingRunPathDrafts || {};
+        this.pendingRunPathDrafts[charId] = draft;
+        return draft.slice();
+    }
+
+    resolveDefaultRunPathId(characterId) {
+        const charId = typeof characterId === 'string' ? characterId : 'linFeng';
+        const draft = this.draftRunPathsForCharacter(charId);
+        return draft[0] || (this.getRunPathCatalog()[0] && this.getRunPathCatalog()[0].id) || null;
+    }
+
+    renderRunPathSelection(characterId) {
+        const host = document.getElementById('run-path-selection');
+        const summary = document.getElementById('run-path-summary');
+        if (!host) return;
+
+        const charId = typeof characterId === 'string' ? characterId : this.selectedCharacterId;
+        if (!charId) {
+            host.innerHTML = '<div class="run-destiny-empty">先选定一位角色，再决定这一轮的命途主线。</div>';
+            if (summary) summary.textContent = '命途会给这一轮提供清晰的阶段目标、路线倾向与战斗被动。';
+            return;
+        }
+
+        const draftIds = this.draftRunPathsForCharacter(charId);
+        if (!draftIds.includes(this.selectedRunPathId)) {
+            this.selectedRunPathId = draftIds[0] || null;
+        }
+
+        host.innerHTML = draftIds.map((pathId) => {
+            const meta = this.getRunPathMetaById(pathId);
+            if (!meta) return '';
+            const selectedClass = pathId === this.selectedRunPathId ? 'selected' : '';
+            const phaseTags = meta.phases.slice(0, 3).map((phase) => `${phase.label}·${phase.title}`);
+            return `
+                <button type="button"
+                        class="run-destiny-card run-path-card ${selectedClass}"
+                        data-run-path-id="${meta.id}"
+                        onclick="game.selectRunPath('${meta.id}')">
+                    <div class="run-destiny-head">
+                        <span class="run-destiny-icon">${meta.icon}</span>
+                        <div class="run-destiny-title-group">
+                            <span class="run-destiny-name">${meta.name}</span>
+                            <span class="run-destiny-tier">${meta.category} · ${meta.routeHint || '命途主线'}</span>
+                        </div>
+                    </div>
+                    <div class="run-destiny-desc">${meta.description}</div>
+                    <div class="run-destiny-summary">${meta.playstyle}</div>
+                    <div class="run-destiny-tags">
+                        ${phaseTags.map((tag) => `<span class="run-destiny-tag">${tag}</span>`).join('')}
+                    </div>
+                </button>
+            `;
+        }).join('');
+
+        const selectedMeta = this.getRunPathMetaById(this.selectedRunPathId);
+        if (summary) {
+            summary.textContent = selectedMeta
+                ? `已选命途「${selectedMeta.name}」：${selectedMeta.playstyle || selectedMeta.description}`
+                : '命途会给这一轮提供清晰的阶段目标、路线倾向与战斗被动。';
+        }
+    }
+
+    selectRunPath(pathId) {
+        const meta = this.getRunPathMetaById(pathId);
+        if (!meta) return;
+        this.selectedRunPathId = pathId;
+        this.renderRunPathSelection(this.selectedCharacterId);
+        this.updateCharacterSelectionConfirmState();
+    }
+
+    getRunPathTrackerState() {
+        if (!this.player || typeof this.player.getRunPathMeta !== 'function') return null;
+        const meta = this.player.getRunPathMeta();
+        if (!meta || !meta.currentPhase) return null;
+        const target = Math.max(1, Number(meta.currentPhase.target) || 1);
+        const progress = Math.max(0, Math.min(target, Number(meta.progress?.phaseProgress) || 0));
+        const rewardText = meta.currentPhase.rewardText || meta.progress?.lastRewardText || '';
+        const mutationLabel = meta.mutation ? `${meta.mutation.branchLabel || '裂变'} · ${meta.mutation.name || meta.mutation.id}` : '';
+        return {
+            id: meta.id,
+            icon: meta.icon,
+            name: meta.name,
+            category: meta.category,
+            phaseLabel: meta.currentPhase.label || `阶段 ${meta.phaseIndex + 1}`,
+            title: meta.currentPhase.title || meta.name,
+            desc: [mutationLabel, meta.trackerNote || meta.currentPhase.desc || meta.description || ''].filter(Boolean).join(' ｜ '),
+            target,
+            progress,
+            completed: !!meta.progress?.completed,
+            rewardText,
+            phaseIndex: meta.phaseIndex,
+            phaseCount: meta.phaseCount,
+            mutationLabel
+        };
+    }
+
+    getRunPathMutationChoices(pathId = '') {
+        const meta = this.getRunPathMetaById(pathId);
+        const source = meta && meta.mutations && typeof meta.mutations === 'object'
+            ? meta.mutations
+            : null;
+        if (!source) return [];
+        return Object.keys(source).map((mutationId) => {
+            const mutation = source[mutationId];
+            return {
+                id: mutationId,
+                mutationId,
+                branchLabel: mutation.branchLabel || '裂变',
+                name: mutation.name || mutationId,
+                icon: mutation.icon || '✦',
+                summary: mutation.summary || '',
+                risk: mutation.risk || '',
+                routeHint: mutation.routeHint || '',
+                playstyle: mutation.playstyle || '',
+                trackerNote: mutation.trackerNote || '',
+                mutationEventPool: Array.isArray(mutation.mutationEventPool)
+                    ? mutation.mutationEventPool.map((eventId) => String(eventId || '').trim()).filter(Boolean).slice(0, 3)
+                    : [],
+                effects: mutation.effects && typeof mutation.effects === 'object'
+                    ? JSON.parse(JSON.stringify(mutation.effects))
+                    : {},
+                immediate: mutation.immediate && typeof mutation.immediate === 'object'
+                    ? JSON.parse(JSON.stringify(mutation.immediate))
+                    : {},
+                treasureSynergy: mutation.treasureSynergy && typeof mutation.treasureSynergy === 'object'
+                    ? JSON.parse(JSON.stringify(mutation.treasureSynergy))
+                    : null
+            };
+        });
+    }
+
+    shouldOfferRunPathMutationAfterRealm(realmCleared) {
+        const safeRealm = Math.max(1, Math.floor(Number(realmCleared) || 1));
+        if (safeRealm !== 6 || !this.player || typeof this.player.getRunPathMeta !== 'function') return false;
+        const runPathMeta = this.player.getRunPathMeta();
+        if (!runPathMeta || runPathMeta.mutation) return false;
+        return this.getRunPathMutationChoices(runPathMeta.id).length >= 3;
+    }
+
+    applyRunPathMutationSelection(mutationId, realmCleared = 0) {
+        if (!this.player || typeof this.player.getRunPathMeta !== 'function') return null;
+        const runPathMeta = this.player.getRunPathMeta();
+        if (!runPathMeta) return null;
+        const choice = this.getRunPathMutationChoices(runPathMeta.id).find((item) => item.id === mutationId) || null;
+        if (!choice) return null;
+
+        this.player.runPathMutationState = {
+            pathId: runPathMeta.id,
+            mutationId: choice.id,
+            offeredAtRealm: Math.max(0, Math.floor(Number(realmCleared) || 0)),
+            chosenAt: Date.now()
+        };
+        if (typeof this.player.normalizeRunPathMutationState === 'function') {
+            this.player.normalizeRunPathMutationState();
+        }
+
+        const immediate = choice.immediate && typeof choice.immediate === 'object' ? choice.immediate : {};
+        const rewardLines = [];
+        const normalizeCurrency = (key) => {
+            if (!this.player || typeof this.player[key] !== 'number' || !Number.isFinite(this.player[key])) {
+                this.player[key] = 0;
+            }
+        };
+        if (Number(immediate.gold) > 0) {
+            normalizeCurrency('gold');
+            const amount = Math.max(0, Math.floor(Number(immediate.gold) || 0));
+            this.player.gold += amount;
+            rewardLines.push(`灵石 +${amount}`);
+        }
+        if (Number(immediate.heavenlyInsight) > 0) {
+            normalizeCurrency('heavenlyInsight');
+            const amount = Math.max(0, Math.floor(Number(immediate.heavenlyInsight) || 0));
+            this.player.heavenlyInsight += amount;
+            rewardLines.push(`天机 +${amount}`);
+        }
+        if (Number(immediate.ringExp) > 0) {
+            const gained = this.grantFateRingExp(immediate.ringExp, '命途裂变');
+            if (gained > 0) rewardLines.push(`命环经验 +${gained}`);
+        }
+        if (Number(immediate.maxHpDelta) !== 0) {
+            const delta = Math.floor(Number(immediate.maxHpDelta) || 0);
+            const prevMaxHp = Math.max(1, Math.floor(Number(this.player.maxHp) || 1));
+            const nextMaxHp = Math.max(1, prevMaxHp + delta);
+            this.player.maxHp = nextMaxHp;
+            this.player.currentHp = Math.max(1, Math.min(nextMaxHp, Math.floor(Number(this.player.currentHp) || nextMaxHp)));
+            rewardLines.push(delta > 0 ? `生命上限 +${delta}` : `生命上限 ${delta}`);
+        }
+        if (Number(immediate.currentHpDelta) !== 0) {
+            const delta = Math.floor(Number(immediate.currentHpDelta) || 0);
+            if (delta > 0 && typeof this.player.heal === 'function') {
+                const before = Math.max(0, Math.floor(Number(this.player.currentHp) || 0));
+                this.player.heal(delta);
+                rewardLines.push(`恢复 ${Math.max(0, this.player.currentHp - before)} 生命`);
+            } else if (delta < 0) {
+                const loss = Math.min(Math.max(0, -delta), Math.max(0, (this.player.currentHp || 1) - 1));
+                if (loss > 0) {
+                    this.player.currentHp -= loss;
+                    rewardLines.push(`失去 ${loss} 生命`);
+                }
+            }
+        } else if (Number(immediate.healPct) > 0 && typeof this.player.heal === 'function') {
+            const healAmount = Math.max(1, Math.floor((Number(this.player.maxHp) || 1) * Number(immediate.healPct)));
+            const before = Math.max(0, Math.floor(Number(this.player.currentHp) || 0));
+            this.player.heal(healAmount);
+            rewardLines.push(`恢复 ${Math.max(0, this.player.currentHp - before)} 生命`);
+        }
+        if (Array.isArray(immediate.adventureBuffs) && typeof this.player.grantAdventureBuff === 'function') {
+            immediate.adventureBuffs.forEach((buff) => {
+                const buffId = String(buff?.id || '');
+                const charges = Math.max(1, Math.floor(Number(buff?.charges) || 1));
+                if (buffId && this.player.grantAdventureBuff(buffId, charges)) {
+                    rewardLines.push(`${buffId} +${charges} 场`);
+                }
+            });
+        }
+
+        if (
+            this.map
+            && this.currentScreen === 'map-screen'
+            && typeof this.map.updateLegacyMissionTracker === 'function'
+        ) {
+            this.map.updateLegacyMissionTracker();
+        }
+        if (typeof this.autoSave === 'function') this.autoSave();
+        return {
+            pathId: runPathMeta.id,
+            mutationId: choice.id,
+            meta: choice,
+            rewardLines
+        };
+    }
+
+    showRunPathMutationSelection(realmCleared, onDone = null) {
+        if (!this.player || typeof this.player.getRunPathMeta !== 'function') {
+            if (typeof onDone === 'function') onDone(null);
+            return;
+        }
+        const runPathMeta = this.player.getRunPathMeta();
+        const choices = runPathMeta ? this.getRunPathMutationChoices(runPathMeta.id) : [];
+        if (!runPathMeta || choices.length === 0) {
+            if (typeof onDone === 'function') onDone(null);
+            return;
+        }
+
+        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
+        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
+            const applied = this.applyRunPathMutationSelection(choices[0].id, realmCleared);
+            if (typeof onDone === 'function') onDone(applied);
+            return;
+        }
+
+        const buildEffectTags = (effects = {}) => {
+            const tags = [];
+            if (Number(effects.openingBlock) > 0) tags.push(`开场护盾 +${Math.floor(Number(effects.openingBlock) || 0)}`);
+            if (Number(effects.firstAttackBonusPerBattle) > 0) tags.push(`首击增伤 +${Math.floor(Number(effects.firstAttackBonusPerBattle) || 0)}`);
+            if (Number(effects.firstSkillDrawPerTurn) > 0) tags.push(`首个技能抽牌 +${Math.floor(Number(effects.firstSkillDrawPerTurn) || 0)}`);
+            if (effects.mapWeightShift && typeof effects.mapWeightShift === 'object') {
+                const boosted = Object.keys(effects.mapWeightShift)
+                    .filter((key) => Number(effects.mapWeightShift[key]) > 0)
+                    .slice(0, 2)
+                    .map((key) => this.getMapNodeTypeLabel ? this.getMapNodeTypeLabel(key) : key);
+                if (boosted.length > 0) tags.push(`路线偏向 ${boosted.join(' / ')}`);
+            }
+            return tags.slice(0, 4);
+        };
+
+        titleEl.textContent = '命途裂变';
+        iconEl.textContent = '🧭';
+        descEl.innerHTML = `第 2 章已破，你必须决定这条【${runPathMeta.name}】要如何进入中盘。<br><span style="color:rgba(255,235,198,0.82)">当前命途：${runPathMeta.playstyle || runPathMeta.description}</span>`;
+        this.applyEventModalPresentation({
+            tone: 'omen',
+            atmosphere: '中盘不会再只靠“继续变强”混过去，你必须选择这轮命途是继续极化、转修副轴，还是拿血线与容错去换高阶收益。',
+            summaryLabel: '裂变摘要',
+            summaryItems: [
+                '触发点：第 2 章章末',
+                `当前命途：${runPathMeta.name}`,
+                '中盘身份会被永久改写',
+                '即时收益与后续路线会同步改变'
+            ]
+        });
+        choicesEl.innerHTML = '';
+
+        choices.forEach((choice) => {
+            const tags = buildEffectTags(choice.effects || {});
+            const btn = document.createElement('button');
+            btn.className = 'event-choice run-vow-choice';
+            btn.innerHTML = `
+                <div class="choice-title">
+                    <span class="choice-name">${choice.icon || '✦'} ${choice.branchLabel || '裂变'} · ${choice.name}</span>
+                    <span class="choice-rarity">${runPathMeta.name}</span>
+                </div>
+                <div class="choice-effect">${choice.summary || '改写这轮命途的中盘结构。'}</div>
+                <div class="choice-effect" style="color:#f1c89d;">赌注：${choice.risk || '中盘节奏会被永久改写。'}</div>
+                <div class="choice-effect" style="color:#d8f0ff;">玩法：${choice.playstyle || runPathMeta.playstyle || '围绕当前命途主线继续打磨。'}</div>
+                <div class="choice-effect" style="color:#b9d7ff;">路线：${choice.routeHint || runPathMeta.routeHint || '后续地图权重会跟着变化。'}</div>
+                <div class="choice-effect">${tags.map((tag) => `· ${tag}`).join('<br>')}</div>
+            `;
+            btn.onclick = () => {
+                const applied = this.applyRunPathMutationSelection(choice.id, realmCleared);
+                modal.classList.remove('active');
+                if (applied && applied.meta) {
+                    Utils.showBattleLog(`命途裂变：${runPathMeta.name} → ${applied.meta.branchLabel}·${applied.meta.name}`);
+                    this.showRewardModal(
+                        '命途裂变',
+                        `${applied.meta.icon || '✦'} ${applied.meta.branchLabel || '裂变'} · ${applied.meta.name}\n${applied.meta.summary || ''}\n\n${applied.rewardLines.join(' / ') || '裂变已完成，后续路线已改写。'}\n\n赌注：${applied.meta.risk || '中盘会按这条裂变方向继续推进。'}`,
+                        applied.meta.icon || '🧭',
+                        () => {
+                            if (typeof onDone === 'function') onDone(applied);
+                        }
+                    );
+                    return;
+                }
+                if (typeof onDone === 'function') onDone(applied);
+            };
+            choicesEl.appendChild(btn);
+        });
+
+        this.activateModal(modal);
+    }
+
+    getRunPathShopProfile() {
+        const meta = this.player && typeof this.player.getRunPathMeta === 'function'
+            ? this.player.getRunPathMeta()
+            : (this.selectedRunPathId ? this.getRunPathMetaById(this.selectedRunPathId) : null);
+        if (!meta || !meta.shopBias || typeof meta.shopBias !== 'object') return null;
+        return {
+            id: meta.id,
+            name: meta.name || meta.id,
+            icon: meta.icon || '🧭',
+            playstyle: meta.playstyle || meta.description || '',
+            shopBias: JSON.parse(JSON.stringify(meta.shopBias))
+        };
+    }
+
+    injectRunPathShopServices(baseServices = [], tabId = 'base') {
+        const profile = typeof this.getRunPathShopProfile === 'function' ? this.getRunPathShopProfile() : null;
+        if (!profile) return Array.isArray(baseServices) ? baseServices.slice() : [];
+        const sourceKey = tabId === 'rumor' ? 'rumorServices' : (tabId === 'base' ? 'baseServices' : '');
+        const extras = sourceKey && Array.isArray(profile.shopBias?.[sourceKey]) ? profile.shopBias[sourceKey] : [];
+        if (extras.length <= 0) return Array.isArray(baseServices) ? baseServices.slice() : [];
+        const priceMult = tabId === 'rumor'
+            ? this.getShopPriceMultiplier(0.02)
+            : this.getShopPriceMultiplier(0.08);
+        const clonedExtras = extras.map((entry) => ({
+            ...(entry || {}),
+            price: Math.max(1, Math.floor((Number(entry?.price) || 0) * priceMult)),
+            sold: !!entry?.sold,
+            pathId: profile.id,
+            pathName: profile.name,
+            pathIcon: profile.icon,
+            tagLabel: entry?.tagLabel || `${profile.name}专供`,
+            runPathExclusive: true
+        }));
+        const existingIds = new Set((Array.isArray(baseServices) ? baseServices : []).map((entry) => entry && entry.id).filter(Boolean));
+        const mergedExtras = clonedExtras.filter((entry) => !existingIds.has(entry.id));
+        return [...mergedExtras, ...(Array.isArray(baseServices) ? baseServices.slice() : [])];
+    }
+
+    awardRunPathPhaseRewards(pathMeta, phaseMeta) {
+        if (!this.player || !pathMeta || !phaseMeta) return [];
+        const rewards = Array.isArray(phaseMeta.rewards) ? phaseMeta.rewards : [];
+        const applied = [];
+        const normalizePlayerCurrency = (field) => {
+            this.player[field] = Math.max(0, Math.floor(Number(this.player[field]) || 0));
+            return this.player[field];
+        };
+
+        rewards.forEach((reward) => {
+            const kind = reward && typeof reward.kind === 'string' ? reward.kind : '';
+            if (!kind) return;
+            if (kind === 'gold') {
+                const amount = Math.max(0, Math.floor(Number(reward.amount) || 0));
+                if (amount > 0) {
+                    normalizePlayerCurrency('gold');
+                    this.player.gold += amount;
+                    applied.push(`灵石 +${amount}`);
+                }
+                return;
+            }
+            if (kind === 'ringExp') {
+                const amount = Math.max(0, Math.floor(Number(reward.amount) || 0));
+                if (amount > 0) {
+                    if (this.player.fateRing && typeof this.player.fateRing.gainExp === 'function') {
+                        this.player.fateRing.gainExp(amount);
+                    } else if (this.player.fateRing) {
+                        this.player.fateRing.exp = Math.max(0, Math.floor(Number(this.player.fateRing.exp) || 0) + amount);
+                    }
+                    applied.push(`命环经验 +${amount}`);
+                }
+                return;
+            }
+            if (kind === 'heavenlyInsight') {
+                const amount = Math.max(0, Math.floor(Number(reward.amount) || 0));
+                if (amount > 0) {
+                    normalizePlayerCurrency('heavenlyInsight');
+                    this.player.heavenlyInsight += amount;
+                    applied.push(`天机 +${amount}`);
+                }
+                return;
+            }
+            if (kind === 'karma') {
+                const amount = Math.max(0, Math.floor(Number(reward.amount) || 0));
+                if (amount > 0) {
+                    normalizePlayerCurrency('karma');
+                    this.player.karma += amount;
+                    applied.push(`业果 +${amount}`);
+                }
+                return;
+            }
+            if (kind === 'adventureBuff' && typeof this.player.grantAdventureBuff === 'function') {
+                const buffId = String(reward.id || '');
+                const charges = Math.max(1, Math.floor(Number(reward.charges) || 1));
+                if (buffId && this.player.grantAdventureBuff(buffId, charges)) {
+                    applied.push(`${buffId} +${charges} 场`);
+                }
+            }
+        });
+
+        return applied;
+    }
+
+    buildRunPathFeedbackEntry(pathMeta, phaseMeta, options = {}) {
+        if (!pathMeta || !phaseMeta) return null;
+        return {
+            pathId: String(pathMeta.id || ''),
+            icon: pathMeta.icon || '✦',
+            name: pathMeta.name || '未知道途',
+            category: pathMeta.category || '命途',
+            phaseId: String(phaseMeta.id || ''),
+            phaseLabel: phaseMeta.label || '命途阶段',
+            title: phaseMeta.title || pathMeta.name || '命途阶段',
+            desc: phaseMeta.desc || '',
+            rewardText: options.rewardText || '奖励已结算',
+            completed: !!options.completed,
+            nextPhaseLabel: options.nextPhase && options.nextPhase.label ? options.nextPhase.label : '',
+            nextPhaseTitle: options.nextPhase && options.nextPhase.title ? options.nextPhase.title : '',
+            archive: options.archive && typeof options.archive === 'object'
+                ? { ...options.archive }
+                : null,
+            revealedAt: Date.now()
+        };
+    }
+
+    queueRunPathRewardMeta(pathMeta, phaseMeta, options = {}) {
+        const entry = this.buildRunPathFeedbackEntry(pathMeta, phaseMeta, options);
+        if (!entry) return;
+
+        const pathId = entry.pathId;
+        const phaseId = entry.phaseId;
+        if (!pathId || !phaseId) return;
+
+        const existingMeta = this.lastRunPathRewardMeta
+            && this.lastRunPathRewardMeta.pathId === pathId
+            && Array.isArray(this.lastRunPathRewardMeta.entries)
+            ? this.lastRunPathRewardMeta
+            : null;
+        const entries = existingMeta
+            ? existingMeta.entries.filter((item) => item && item.phaseId !== phaseId)
+            : [];
+        entries.push(entry);
+
+        this.lastRunPathRewardMeta = {
+            pathId,
+            icon: entry.icon,
+            name: entry.name,
+            category: entry.category,
+            completed: !!options.completed || !!existingMeta?.completed,
+            archive: options.archive && typeof options.archive === 'object'
+                ? { ...options.archive }
+                : (existingMeta?.archive && typeof existingMeta.archive === 'object' ? { ...existingMeta.archive } : null),
+            entries
+        };
+    }
+
+    queueMapRunPathFeedback(pathMeta, phaseMeta, options = {}) {
+        const entry = this.buildRunPathFeedbackEntry(pathMeta, phaseMeta, options);
+        if (!entry) return;
+
+        this.lastRunPathMapFeedback = {
+            ...entry,
+            expiresAt: Date.now() + 4800
+        };
+
+        if (typeof clearTimeout === 'function' && this.runPathMapFeedbackTimer) {
+            clearTimeout(this.runPathMapFeedbackTimer);
+            this.runPathMapFeedbackTimer = null;
+        }
+
+        if (
+            this.map
+            && this.currentScreen === 'map-screen'
+            && typeof this.map.updateLegacyMissionTracker === 'function'
+        ) {
+            this.map.updateLegacyMissionTracker();
+        }
+
+        if (typeof setTimeout === 'function') {
+            this.runPathMapFeedbackTimer = setTimeout(() => {
+                this.dismissRunPathMapFeedback();
+            }, 4800);
+        }
+    }
+
+    dismissRunPathMapFeedback() {
+        if (typeof clearTimeout === 'function' && this.runPathMapFeedbackTimer) {
+            clearTimeout(this.runPathMapFeedbackTimer);
+            this.runPathMapFeedbackTimer = null;
+        }
+        this.lastRunPathMapFeedback = null;
+        if (
+            this.map
+            && this.currentScreen === 'map-screen'
+            && typeof this.map.updateLegacyMissionTracker === 'function'
+        ) {
+            this.map.updateLegacyMissionTracker();
+        }
+    }
+
+    handleRunPathProgress(eventType, amount = 1, context = {}) {
+        if (!this.player || typeof this.player.getRunPathMeta !== 'function') return false;
+        const pathMeta = this.player.getRunPathMeta();
+        const progress = this.player.ensureRunPathProgress ? this.player.ensureRunPathProgress() : null;
+        const phaseMeta = pathMeta && pathMeta.currentPhase ? pathMeta.currentPhase : null;
+        const forceProgress = !!context.force;
+        if (!pathMeta || !progress || !phaseMeta || progress.completed) return false;
+        if (!forceProgress && phaseMeta.eventType !== eventType) return false;
+
+        if (!forceProgress && eventType === 'strategicNodeVisit') {
+            const nodeType = String(context.nodeType || '');
+            const strategicTypes = ['observatory', 'memory_rift', 'spirit_grotto', 'forbidden_altar', 'forge'];
+            if (!strategicTypes.includes(nodeType)) return false;
+        }
+        if (!forceProgress && eventType === 'eliteOrTrialWin') {
+            const battleType = String(context.nodeType || '');
+            if (!['elite', 'trial', 'ghost_duel'].includes(battleType)) return false;
+        }
+
+        const delta = Math.max(0, Math.floor(Number(amount) || 0));
+        if (delta <= 0) return false;
+
+        const target = Math.max(1, Math.floor(Number(phaseMeta.target) || 1));
+        const before = Math.max(0, Math.floor(Number(progress.phaseProgress) || 0));
+        progress.phaseProgress = Math.min(target, before + delta);
+
+        if (typeof Utils !== 'undefined' && Utils.showBattleLog && progress.phaseProgress !== before) {
+            Utils.showBattleLog(`命途进度：${pathMeta.name} · ${phaseMeta.title} ${progress.phaseProgress}/${target}`);
+        }
+
+        if (progress.phaseProgress < target) {
+            if (typeof this.refreshLegacyMissionTrackers === 'function') this.refreshLegacyMissionTrackers();
+            return true;
+        }
+
+        progress.completedPhases = Array.isArray(progress.completedPhases) ? progress.completedPhases : [];
+        if (!progress.completedPhases.includes(phaseMeta.id)) {
+            progress.completedPhases.push(phaseMeta.id);
+        }
+
+        const rewardLines = this.awardRunPathPhaseRewards(pathMeta, phaseMeta);
+        progress.lastRewardText = phaseMeta.rewardText || rewardLines.join(' / ');
+        progress.rewardHistory = Array.isArray(progress.rewardHistory) ? progress.rewardHistory : [];
+        if (progress.lastRewardText) progress.rewardHistory.push(progress.lastRewardText);
+
+        const phaseCount = Array.isArray(pathMeta.phases) ? pathMeta.phases.length : 0;
+        const isFinalPhase = progress.completedPhases.length >= phaseCount;
+        progress.completed = isFinalPhase;
+        const nextPhasePreview = !isFinalPhase && Array.isArray(pathMeta.phases)
+            ? pathMeta.phases[Math.min(phaseCount - 1, Math.max(0, Number(progress.currentPhaseIndex) || 0) + 1)] || null
+            : null;
+        let archiveFeedback = null;
+
+        if (isFinalPhase) {
+            const completionMeta = pathMeta.completionRecord && typeof pathMeta.completionRecord === 'object'
+                ? pathMeta.completionRecord
+                : {};
+            const archiveRecord = typeof this.recordRunPathCompletion === 'function'
+                ? this.recordRunPathCompletion(pathMeta, {
+                    phaseMeta,
+                    rewardText: progress.lastRewardText,
+                    completedAt: Date.now(),
+                    realm: this.player?.realm,
+                    characterId: this.player?.characterId
+                })
+                : null;
+            const clears = Math.max(1, Math.floor(Number(archiveRecord?.clears) || 1));
+            const recordName = String(completionMeta.name || archiveRecord?.recordName || `${pathMeta.name || '命途'}战录`);
+            const firstClear = clears <= 1;
+            const archiveNote = firstClear
+                ? `已收入洞府·命途碑廊：${recordName}。后续可在藏经阁复盘这条命途的推荐套装与 Boss 读法。`
+                : `已将最新圆满样本补入洞府·命途碑廊：${recordName}。当前累计 ${clears} 次收录，可继续比较不同角色与路线。`;
+            archiveFeedback = {
+                id: String(completionMeta.id || archiveRecord?.recordId || `runPath_${pathMeta.id || 'record'}`),
+                name: String(pathMeta.name || '命途'),
+                icon: String(completionMeta.icon || pathMeta.icon || '✦'),
+                recordName,
+                note: archiveNote,
+                clears,
+                firstClear,
+                lastCharacterName: String(archiveRecord?.lastCharacterName || ''),
+                lastRealm: Math.max(0, Math.floor(Number(archiveRecord?.lastRealm) || 0))
+            };
+            if (typeof this.recordCollectionUnlock === 'function') {
+                this.recordCollectionUnlock('run_path', {
+                    id: archiveFeedback.id,
+                    name: archiveFeedback.recordName,
+                    icon: archiveFeedback.icon,
+                    note: archiveFeedback.note
+                });
+            }
+        }
+
+        if (
+            this.currentScreen === 'battle-screen'
+            || this.currentScreen === 'reward-screen'
+            || context.surface === 'reward-screen'
+        ) {
+            this.queueRunPathRewardMeta(pathMeta, phaseMeta, {
+                rewardText: progress.lastRewardText,
+                completed: isFinalPhase,
+                nextPhase: nextPhasePreview,
+                archive: archiveFeedback
+            });
+        } else if (this.currentScreen === 'map-screen' || context.surface === 'map-screen' || eventType === 'strategicNodeVisit') {
+            this.queueMapRunPathFeedback(pathMeta, phaseMeta, {
+                rewardText: progress.lastRewardText,
+                completed: isFinalPhase,
+                nextPhase: nextPhasePreview
+            });
+        }
+
+        if (typeof Utils !== 'undefined' && Utils.showBattleLog) {
+            Utils.showBattleLog(`命途阶段完成：${pathMeta.name} · ${phaseMeta.title}`);
+            if (progress.lastRewardText) {
+                Utils.showBattleLog(`命途嘉奖：${progress.lastRewardText}`);
+            }
+        }
+
+        if (!isFinalPhase) {
+            progress.currentPhaseIndex = Math.min(phaseCount - 1, Math.max(0, Number(progress.currentPhaseIndex) || 0) + 1);
+            progress.phaseProgress = 0;
+            const refreshed = this.player.getRunPathMeta();
+            const nextPhase = refreshed && refreshed.currentPhase ? refreshed.currentPhase : null;
+            if (nextPhase && typeof Utils !== 'undefined' && Utils.showBattleLog) {
+                Utils.showBattleLog(`命途转入【${nextPhase.label}】${nextPhase.title}`);
+            }
+        } else if (typeof Utils !== 'undefined' && Utils.showBattleLog) {
+            Utils.showBattleLog(`命途圆满：${pathMeta.name}`);
+        }
+
+        if (typeof this.refreshLegacyMissionTrackers === 'function') this.refreshLegacyMissionTrackers();
+        if (typeof this.autoSave === 'function') this.autoSave();
+        return true;
     }
 
     shouldOfferRunVowAfterRealm(realmCleared) {
@@ -1063,6 +2036,51 @@ class Game {
                     elite: -0.03,
                     shop: -0.02,
                     rest: -0.01
+                }
+            },
+            runPathShatter: {
+                id: 'runPathShatter',
+                icon: '⚔️',
+                label: '裂锋推进线',
+                desc: '下一重天更偏向精英、试炼、锻炉与禁术节点，适合继续抢节奏。',
+                shift: {
+                    elite: 0.05,
+                    trial: 0.055,
+                    forge: 0.03,
+                    forbidden_altar: 0.025,
+                    enemy: -0.05,
+                    rest: -0.025,
+                    shop: -0.02
+                }
+            },
+            runPathBulwark: {
+                id: 'runPathBulwark',
+                icon: '🛡️',
+                label: '镇御修整线',
+                desc: '下一重天更偏向营地、锻炉、商店与精英节点，适合稳步补强。',
+                shift: {
+                    rest: 0.05,
+                    forge: 0.04,
+                    shop: 0.03,
+                    elite: 0.02,
+                    event: -0.03,
+                    enemy: -0.04,
+                    forbidden_altar: -0.01
+                }
+            },
+            runPathInsight: {
+                id: 'runPathInsight',
+                icon: '🔮',
+                label: '窥盘裂隙线',
+                desc: '下一重天更偏向事件、观星台、记忆裂隙与灵契节点，适合继续扩信息。',
+                shift: {
+                    event: 0.05,
+                    observatory: 0.05,
+                    memory_rift: 0.045,
+                    spirit_grotto: 0.03,
+                    enemy: -0.05,
+                    elite: -0.03,
+                    shop: -0.01
                 }
             }
         };
@@ -2474,6 +3492,25 @@ class Game {
                 case 'ringExp':
                     summary.push(`命环经验 +${Math.floor(Number(effect.value) || 0)}`);
                     break;
+                case 'heavenlyInsight':
+                    summary.push(`天机 +${Math.floor(Number(effect.value) || 0)}`);
+                    break;
+                case 'adventureBuff':
+                {
+                    const buffTextMap = {
+                        firstTurnDrawBoostBattles: '首回合抽牌',
+                        openingBlockBoostBattles: '开场护盾',
+                        victoryGoldBoostBattles: '胜利悬赏',
+                        firstTurnEnergyBoostBattles: '首回合灵力',
+                        ringExpBoostBattles: '命环经验增益',
+                        victoryHealBoostBattles: '战后医护'
+                    };
+                    summary.push(`${buffTextMap[effect.buffId || ''] || '行旅增益'} +${Math.max(1, Math.floor(Number(effect.charges) || 1))}`);
+                    break;
+                }
+                case 'runPathProgress':
+                    summary.push(`推进命途 ${Math.max(1, Math.floor(Number(effect.amount) || 1))}`);
+                    break;
                 case 'law':
                     summary.push(effect.random ? '随机获得法则' : `获得法则 ${effect.lawId || ''}`.trim());
                     break;
@@ -3765,7 +4802,7 @@ class Game {
             const healAmount = Math.max(8, Math.floor(this.player.maxHp * 0.2));
             this.player.heal(healAmount);
         } else if (boon.immediate === 'goldBurst') {
-            const goldGain = 140 + this.ensureEndlessState().currentCycle * 20;
+            const goldGain = 140 + Math.max(0, Math.floor(Number(state.currentCycle) || 0)) * 20;
             this.player.gold += goldGain;
             Utils.showBattleLog(`无尽祝福：获得 ${goldGain} 灵石补给`);
         } else if (boon.immediate === 'cardDraft') {
@@ -4962,6 +5999,9 @@ class Game {
     // 保存游戏
     // 保存游戏
     saveGame() {
+        if (this.automationBootConfig) {
+            return false;
+        }
         try {
             const pvpEconomySnapshot = (typeof PVPService !== 'undefined'
                 && PVPService
@@ -5205,6 +6245,27 @@ class Game {
             if (!Array.isArray(this.player.discardPile)) this.player.discardPile = [];
             if (typeof this.player.normalizeRunDestiny === 'function') {
                 this.player.normalizeRunDestiny(this.player.runDestiny);
+            }
+            if (typeof this.player.normalizeRunPath === 'function') {
+                this.player.normalizeRunPath(this.player.runPath);
+                if (!this.player.runPath && typeof this.resolveDefaultRunPathId === 'function' && typeof this.player.setRunPath === 'function') {
+                    const fallbackPathId = this.resolveDefaultRunPathId(this.player.characterId || 'linFeng');
+                    if (fallbackPathId) this.player.setRunPath(fallbackPathId);
+                }
+                if (typeof this.player.ensureRunPathProgress === 'function') {
+                    this.player.ensureRunPathProgress();
+                }
+                if (typeof this.player.normalizeRunPathMutationState === 'function') {
+                    this.player.normalizeRunPathMutationState(this.player.runPathMutationState);
+                }
+                if (!this.player.runPathBattleState || typeof this.player.runPathBattleState !== 'object') {
+                    this.player.resetRunPathBattleState?.();
+                } else {
+                    this.player.runPathBattleState = {
+                        firstAttackBonusUsed: !!this.player.runPathBattleState.firstAttackBonusUsed,
+                        firstSkillDrawUsedThisTurn: !!this.player.runPathBattleState.firstSkillDrawUsedThisTurn
+                    };
+                }
             }
             if (typeof this.player.normalizeRunVows === 'function') {
                 this.player.normalizeRunVows(this.player.runVows);
@@ -5601,11 +6662,13 @@ class Game {
 
     // 清除存档
     clearSave() {
+        if (this.automationBootConfig) return;
         localStorage.removeItem('theDefierSave');
     }
 
     // 自动保存
     autoSave() {
+        if (this.automationBootConfig) return;
         this.saveGame();
     }
 
@@ -6385,6 +7448,9 @@ class Game {
         const playerResearch = this.player && typeof this.player.getTreasureResearchEntry === 'function'
             ? this.player.getTreasureResearchEntry(safeTreasure.id)
             : null;
+        const runPathMeta = this.player && typeof this.player.getRunPathMeta === 'function'
+            ? this.player.getRunPathMeta()
+            : null;
         const role = playerResearch?.role || {
             tier: 'base',
             label: '基础件',
@@ -6392,6 +7458,16 @@ class Game {
         };
         const setMeta = playerResearch?.setMeta || null;
         const focusTags = Array.isArray(playerResearch?.focusTags) ? playerResearch.focusTags : [];
+        const favoredSets = Array.isArray(runPathMeta?.treasureSynergy?.favoredSets)
+            ? runPathMeta.treasureSynergy.favoredSets
+            : [];
+        const favoredLabels = favoredSets.map((setId) => this.player?.getTreasureSetLabel?.(setId) || setId);
+        const runPathSynergyActive = !!(setMeta && favoredSets.includes(setMeta.id));
+        const runPathSynergyText = runPathMeta?.treasureSynergy
+            ? (runPathSynergyActive
+                ? `命途协同：当前【${runPathMeta.name}】推荐 ${setMeta?.icon || '✦'}${setMeta?.label || '该套装'}，${runPathMeta.treasureSynergy.bonusDesc || runPathMeta.treasureSynergy.summary || '能进一步放大当前构筑。'}`
+                : `当前命途推荐：${runPathMeta.name} 更偏向 ${favoredLabels.join(' / ')}，若要走长线可优先补这些套装。`)
+            : '';
         const setText = setMeta
             ? [
                 `${setMeta.icon || '✦'} ${setMeta.label} · ${setMeta.theme}`,
@@ -6404,12 +7480,18 @@ class Game {
             : '暂无套装归属，更多承担单卡对策或前期过渡补强。';
         const buildFitText = [
             focusTags.length > 0 ? `适配方向：${focusTags.join(' / ')}` : '适配方向：偏泛用补件',
-            role.summary
+            role.summary,
+            runPathSynergyText
         ].join('<br>');
         const forgeLines = Array.isArray(playerResearch?.workshopLines) && playerResearch.workshopLines.length > 0
             ? playerResearch.workshopLines.slice()
             : ['尚未进行炼器改造，可先在炼器坊确认是走重铸、器灵还是套装修正。'];
         forgeLines.push(playerResearch?.infusionNote || '当前暂无器灵灌注建议。');
+        if (runPathSynergyActive) {
+            forgeLines.push(`命途联动：${runPathMeta?.treasureSynergy?.bonusLabel || runPathMeta?.name || '当前命途'} · ${runPathMeta?.treasureSynergy?.summary || '当前套装与本轮节奏高度契合。'}`);
+        } else if (runPathSynergyText) {
+            forgeLines.push(runPathSynergyText.replace(/^命途协同：/, '命途提示：'));
+        }
         return {
             ...(playerResearch || {}),
             role,
@@ -6418,7 +7500,18 @@ class Game {
             sourceText: this.getTreasureSource(safeTreasure),
             setText,
             buildFitText,
-            forgeText: forgeLines.join('<br>')
+            forgeText: forgeLines.join('<br>'),
+            runPathSynergy: runPathMeta?.treasureSynergy
+                ? {
+                    pathId: runPathMeta.id,
+                    pathName: runPathMeta.name,
+                    active: runPathSynergyActive,
+                    favoredSets: favoredSets.slice(),
+                    summary: runPathMeta.treasureSynergy.summary || '',
+                    bonusLabel: runPathMeta.treasureSynergy.bonusLabel || '',
+                    bonusDesc: runPathMeta.treasureSynergy.bonusDesc || ''
+                }
+                : null
         };
     }
 
@@ -6440,9 +7533,26 @@ class Game {
         const overview = this.player && typeof this.player.getTreasureWorkshopResearchOverview === 'function'
             ? this.player.getTreasureWorkshopResearchOverview()
             : fallbackOverview;
+        const runPathMeta = this.player && typeof this.player.getRunPathMeta === 'function'
+            ? this.player.getRunPathMeta()
+            : null;
+        const favoredSets = Array.isArray(runPathMeta?.treasureSynergy?.favoredSets)
+            ? runPathMeta.treasureSynergy.favoredSets
+            : [];
+        const favoredLabels = favoredSets.map((setId) => this.player?.getTreasureSetLabel?.(setId) || setId);
+        const favoredProgress = favoredSets
+            .map((setId) => overview.setProgress?.find((entry) => entry && entry.id === setId))
+            .filter(Boolean)
+            .map((entry) => `${entry.icon || '✦'} ${entry.label} ${entry.owned}/${entry.total}（视作 ${entry.pieces} 件）`);
         return {
             ...overview,
             spotlight: [
+                ...(runPathMeta?.treasureSynergy ? [
+                    `当前命途推荐：${runPathMeta.icon || '🧭'} ${runPathMeta.name} · ${favoredLabels.join(' / ')} · ${runPathMeta.treasureSynergy.summary || '优先围绕推荐套装补件。'}`,
+                    favoredProgress.length > 0
+                        ? `当前命途协同进度：${favoredProgress.join(' / ')}`
+                        : `当前命途协同仍未成型，可优先补 ${favoredLabels.join(' / ')}。`
+                ] : []),
                 `核心件 ${overview.coreOwned || 0}/${overview.coreTotal || 0} · 形态件 ${overview.formOwned || 0}/${overview.formTotal || 0}`,
                 `已激活铭刻 ${overview.activeWorkshops || 0} 条：重铸 ${overview.activeReforges || 0} / 器灵 ${overview.activeInfusions || 0} / 套装修正 ${overview.activeSetEchoes || 0}`,
                 overview.readyInfusions && overview.readyInfusions.length > 0
@@ -6620,6 +7730,7 @@ class Game {
             case 'campRation':
             case 'fieldMedic':
             case 'endlessStabilizer':
+            case 'runPathBulwarkRation':
                 if (hpRatio <= 0.45) {
                     score += 4.0;
                     reasons.push('当前血线偏低，先补生存比继续扩牌更稳。');
@@ -6646,12 +7757,14 @@ class Game {
             case 'exp':
             case 'fateLedger':
             case 'insightIncense':
+            case 'runPathInsightAtlas':
                 score += 1.8;
                 reasons.push('命环成长服务偏向中长期增益，适合提前投资后续强度。');
                 break;
             case 'tacticalPlan':
             case 'pulseCatalyst':
             case 'wardSigil':
+            case 'runPathShatterOrder':
                 score += profile.dominantType === 'attack' || profile.avgCost >= 1.8 ? 2.2 : 1.2;
                 reasons.push('战前增益服务能放大现有节奏轴，尤其适合已经成型的牌组。');
                 break;
@@ -6661,6 +7774,9 @@ class Game {
             case 'rumorTreasureTrail':
             case 'rumorUtilityRoute':
             case 'rumorTrialRoute':
+            case 'runPathShatterRumor':
+            case 'runPathBulwarkRumor':
+            case 'runPathInsightRumor':
                 score += 1.4;
                 reasons.push('这类交易更偏投资未来收益，适合资源宽裕时滚雪球。');
                 break;
@@ -7795,6 +8911,7 @@ class Game {
         this.selectedCharacterId = null;
         this.selectedRunDestinyId = null;
         this.selectedSpiritCompanionId = null;
+        this.selectedRunPathId = null;
         const container = document.getElementById('character-selection-container');
         if (container) {
             container.innerHTML = '';
@@ -7937,6 +9054,22 @@ class Game {
                 </div>
             `;
             container.appendChild(spiritSection);
+
+            const runPathSection = document.createElement('section');
+            runPathSection.className = 'run-destiny-section run-path-section';
+            runPathSection.innerHTML = `
+                <div class="run-destiny-header">
+                    <div>
+                        <span class="run-destiny-kicker">本轮命途</span>
+                        <h3>命途主线 · 三择其一</h3>
+                    </div>
+                    <p id="run-path-summary">命途会给这一轮提供清晰的阶段目标、路线倾向与战斗被动。</p>
+                </div>
+                <div class="run-destiny-grid" id="run-path-selection">
+                    <div class="run-destiny-empty">先选定一位角色，再决定这一轮的命途主线。</div>
+                </div>
+            `;
+            container.appendChild(runPathSection);
         }
 
         this.updateCharacterSelectionConfirmState();
@@ -7954,6 +9087,7 @@ class Game {
         });
         this.renderRunDestinySelection(charId);
         this.renderSpiritCompanionSelection(charId);
+        this.renderRunPathSelection(charId);
         this.updateCharacterSelectionConfirmState();
     }
 
@@ -7971,7 +9105,8 @@ class Game {
         this.clearSave();
         this.startNewGame(this.selectedCharacterId, {
             runDestinyId: this.selectedRunDestinyId || this.resolveDefaultRunDestinyId(this.selectedCharacterId),
-            spiritCompanionId: this.selectedSpiritCompanionId || this.resolveDefaultSpiritCompanionId(this.selectedCharacterId)
+            spiritCompanionId: this.selectedSpiritCompanionId || this.resolveDefaultSpiritCompanionId(this.selectedCharacterId),
+            runPathId: this.selectedRunPathId || this.resolveDefaultRunPathId(this.selectedCharacterId)
         });
     }
 
@@ -7995,6 +9130,12 @@ class Game {
             : this.resolveDefaultSpiritCompanionId(characterId);
         if (resolvedSpiritCompanionId && typeof this.player.setSpiritCompanion === 'function') {
             this.player.setSpiritCompanion(resolvedSpiritCompanionId, Math.max(1, Math.floor(Number(options.spiritCompanionTier) || 1)));
+        }
+        const resolvedRunPathId = (options && typeof options.runPathId === 'string' && options.runPathId)
+            ? options.runPathId
+            : this.resolveDefaultRunPathId(characterId);
+        if (resolvedRunPathId && typeof this.player.setRunPath === 'function') {
+            this.player.setRunPath(resolvedRunPathId);
         }
         this.player.realm = 1;
         this.player.floor = 0;
@@ -8611,6 +9752,8 @@ class Game {
         this.currentBattleNode = node;
         this.stealAttempted = false;
         this.rewardCardSelected = false;
+        this.lastRunPathRewardMeta = null;
+        this.dismissRunPathMapFeedback();
         this.comboCount = 0;
         this.lastCardType = null;
 
@@ -8689,8 +9832,21 @@ class Game {
 
         const enemyList = Array.isArray(enemies) ? enemies.filter(Boolean) : [enemies].filter(Boolean);
         const isBossBattle = enemyList.some((enemy) => !!enemy && !!enemy.isBoss);
+        const battleNodeType = this.currentBattleNode && typeof this.currentBattleNode.type === 'string'
+            ? this.currentBattleNode.type
+            : '';
         const endlessMods = this.isEndlessActive() ? this.getEndlessModifiers() : null;
         this.player.enemiesDefeated += enemyList.length;
+
+        if (typeof this.handleRunPathProgress === 'function') {
+            this.handleRunPathProgress('battleWin', 1, { nodeType: battleNodeType });
+            if (['elite', 'trial', 'ghost_duel'].includes(battleNodeType)) {
+                this.handleRunPathProgress('eliteOrTrialWin', 1, { nodeType: battleNodeType });
+            }
+            if (isBossBattle || battleNodeType === 'boss') {
+                this.handleRunPathProgress('bossWin', 1, { nodeType: 'boss' });
+            }
+        }
 
         // 命环获得经验
         let ringExp = enemyList.reduce((sum, e) => sum + (e.ringExp || 10), 0);
@@ -9162,6 +10318,89 @@ class Game {
         `;
     }
 
+    renderRewardRunPathMeta() {
+        const panel = document.getElementById('reward-run-path-meta');
+        if (!panel) return;
+
+        const meta = this.lastRunPathRewardMeta;
+        if (!meta || !Array.isArray(meta.entries) || meta.entries.length === 0) {
+            panel.style.display = 'none';
+            panel.classList.remove('is-complete');
+            panel.innerHTML = '';
+            return;
+        }
+
+        const escape = (value) => {
+            if (
+                typeof DefierBattleFeedback !== 'undefined'
+                && DefierBattleFeedback
+                && typeof DefierBattleFeedback.escapeHtml === 'function'
+            ) {
+                return DefierBattleFeedback.escapeHtml(value);
+            }
+
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        };
+
+        const statusText = meta.completed
+            ? '命途圆满'
+            : `本场推进 ${meta.entries.length} 个阶段`;
+        const finaleMarkup = meta.completed ? `
+            <div class="reward-run-path-finale">
+                <div class="reward-run-path-crest">✦ 圆满徽记已铭刻</div>
+                <div class="reward-run-path-finale-copy">
+                    这条命途的三段目标已全部兑现，本轮构筑会带着这枚收官印记继续推进。
+                </div>
+            </div>
+        ` : '';
+        const archiveMarkup = meta.completed && meta.archive ? `
+            <div class="reward-run-path-archive">
+                <div class="reward-run-path-archive-title">已收入洞府 · ${escape(meta.archive.recordName || meta.archive.name || '命途战录')}</div>
+                <div class="reward-run-path-archive-copy">${escape(meta.archive.note || '圆满样本已同步到洞府，可在藏经阁继续复盘。')}</div>
+                <div class="reward-run-path-archive-meta">
+                    ${escape(meta.archive.firstClear ? '首次收录' : `累计收录 ${meta.archive.clears || 1} 次`)}
+                    ${meta.archive.lastCharacterName ? ` · 最近行者 ${escape(meta.archive.lastCharacterName)}` : ''}
+                    ${meta.archive.lastRealm ? ` · 完成重数 ${escape(meta.archive.lastRealm)}` : ''}
+                </div>
+            </div>
+        ` : '';
+        const entryMarkup = meta.entries.map((entry) => {
+            const phaseLabel = [entry.phaseLabel, entry.title].filter(Boolean).join(' · ');
+            const nextText = entry.completed
+                ? '主线已圆满，本轮命途奖励全部兑现。'
+                : (entry.nextPhaseTitle
+                    ? `下一阶段：${[entry.nextPhaseLabel, entry.nextPhaseTitle].filter(Boolean).join(' · ')}`
+                    : '下一阶段已就绪。');
+
+            return `
+                <div class="reward-run-path-entry ${entry.completed ? 'completed' : ''}">
+                    <div class="reward-run-path-phase">${escape(phaseLabel || '命途阶段')}</div>
+                    ${entry.desc ? `<div class="reward-run-path-desc">${escape(entry.desc)}</div>` : ''}
+                    <div class="reward-run-path-reward">${escape(entry.rewardText || '奖励已结算')}</div>
+                    <div class="reward-run-path-next">${escape(nextText)}</div>
+                </div>
+            `;
+        }).join('');
+
+        panel.setAttribute('aria-live', 'polite');
+        panel.style.display = 'block';
+        panel.classList.toggle('is-complete', !!meta.completed);
+        panel.innerHTML = `
+            <div class="reward-run-path-kicker">命途结算回响</div>
+            <div class="reward-run-path-header">
+                <div class="reward-run-path-badge">${escape(meta.icon || '✦')} ${escape(meta.name || '未知道途')}</div>
+                <div class="reward-run-path-status ${meta.completed ? 'is-complete' : ''}">${escape(statusText)}</div>
+            </div>
+            ${finaleMarkup}
+            ${archiveMarkup}
+            <div class="reward-run-path-entries">${entryMarkup}</div>
+        `;
+    }
+
     // 显示奖励界面
     getRewardCardsForCurrentRun(count = 2) {
         const safeCount = Math.max(1, Math.floor(Number(count) || 2));
@@ -9233,6 +10472,7 @@ class Game {
         if (Number(gainPayload.karma) > 0) bonusParts.push(`业果 +${Math.floor(Number(gainPayload.karma) || 0)}`);
         rewardGold.textContent = `+${gold} 灵石 | 命环经验 +${ringExp}${bonusParts.length > 0 ? ' | ' + bonusParts.join(' | ') : ''}`;
         this.renderRewardBattleMeta();
+        this.renderRewardRunPathMeta();
 
         // 法宝掉落判定
         const resourceContainer = document.querySelector('.reward-resources');
@@ -9502,6 +10742,8 @@ class Game {
 
         // 确保清除当前节点引用
         this.currentBattleNode = null;
+        this.lastRunPathRewardMeta = null;
+        this.dismissRunPathMapFeedback();
 
         this.autoSave();
         this.showScreen('map-screen');
@@ -10495,6 +11737,43 @@ class Game {
                 break;
                 }
 
+            case 'heavenlyInsight':
+            {
+                const amount = Math.max(0, Math.floor(Number(effect.value) || 0));
+                if (amount > 0) {
+                    this.player.heavenlyInsight = Math.max(0, Math.floor(Number(this.player.heavenlyInsight) || 0)) + amount;
+                    this.eventResults.push(`🔭 天机 +${amount}`);
+                } else {
+                    this.eventResults.push('⚠️ 天机未变化');
+                }
+                break;
+            }
+
+            case 'runPathProgress':
+            {
+                const runPathMeta = this.player && typeof this.player.getRunPathMeta === 'function'
+                    ? this.player.getRunPathMeta()
+                    : null;
+                const amount = Math.max(1, Math.floor(Number(effect.amount) || 1));
+                const eventType = String(effect.eventType || runPathMeta?.currentPhase?.eventType || '');
+                const applied = !!(
+                    runPathMeta
+                    && typeof this.handleRunPathProgress === 'function'
+                    && this.handleRunPathProgress(eventType, amount, {
+                        ...(effect.context && typeof effect.context === 'object' ? effect.context : {}),
+                        force: true,
+                        source: 'event',
+                        surface: this.currentScreen || 'map-screen'
+                    })
+                );
+                if (applied) {
+                    this.eventResults.push(`🧭 命途推进 +${amount}（${runPathMeta?.name || '当前命途'}）`);
+                } else {
+                    this.eventResults.push('🧭 当前命途未获得推进');
+                }
+                break;
+            }
+
             case 'endlessPressure': {
                 if (typeof this.ensureEndlessState !== 'function') {
                     this.eventResults.push('⚠️ 轮回压力系统不可用');
@@ -10593,6 +11872,9 @@ class Game {
     getTemporaryEventShopOffers(effect = {}) {
         const realm = this.player?.realm || 1;
         const endlessTuning = this.isEndlessActive() ? this.getEndlessEventTuning() : null;
+        const runPathMeta = this.player && typeof this.player.getRunPathMeta === 'function'
+            ? this.player.getRunPathMeta()
+            : null;
         const pathDoctrineProfile = (this.player && typeof this.player.getPathDoctrineProfile === 'function')
             ? this.player.getPathDoctrineProfile()
             : null;
@@ -10747,6 +12029,18 @@ class Game {
         if (preferredArchetype && archetypeExtras[preferredArchetype]) {
             offers.push(archetypeExtras[preferredArchetype]);
         }
+        const runPathOffer = Array.isArray(runPathMeta?.shopBias?.tempOffers) && runPathMeta.shopBias.tempOffers.length > 0
+            ? {
+                ...(runPathMeta.shopBias.tempOffers[0] || {}),
+                pathId: runPathMeta.id,
+                pathName: runPathMeta.name,
+                pathIcon: runPathMeta.icon || '🧭',
+                price: Math.floor(Math.max(1, Number(runPathMeta.shopBias.tempOffers[0]?.price) || 0) * priceMul)
+            }
+            : null;
+        if (runPathOffer && runPathOffer.id) {
+            offers.push(runPathOffer);
+        }
         if (endlessExclusiveOffers.length > 0) {
             offers.push(...endlessExclusiveOffers);
         }
@@ -10827,6 +12121,10 @@ class Game {
             const biasOffer = archetypeExtras[preferredArchetype];
             if (picked.length === 0) picked.push(biasOffer);
             else picked[resolveReplaceIndex()] = biasOffer;
+        }
+        if (runPathOffer && !picked.some((offer) => offer && offer.id === runPathOffer.id)) {
+            if (picked.length === 0) picked.push(runPathOffer);
+            else picked[resolveReplaceIndex()] = runPathOffer;
         }
         return picked;
     }
@@ -10958,6 +12256,35 @@ class Game {
                 if (!applied) return '祷告失败：赐福未生效';
                 const rarityText = applied.rarity === 'rare' ? '【稀有】' : '';
                 return `获得无尽赐福：${rarityText}${applied.name}`;
+            }
+            case 'temp_runPathShatter': {
+                const rarity = Math.random() < 0.6 ? 'rare' : 'epic';
+                const card = getRandomCard(rarity, this.player?.characterId || null);
+                if (card) this.player.addCardToDeck(card);
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('firstTurnEnergyBoostBattles', 2);
+                    this.player.grantAdventureBuff('victoryGoldBoostBattles', 1);
+                }
+                return `获得裂锋补给${card ? `：${card.name}` : ''}，并获得 2 层首回合灵力与 1 层悬赏增益`;
+            }
+            case 'temp_runPathBulwark': {
+                const healAmount = Math.max(12, Math.floor((this.player?.maxHp || 80) * 0.14));
+                this.player.heal(healAmount);
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('openingBlockBoostBattles', 2);
+                    this.player.grantAdventureBuff('victoryHealBoostBattles', 2);
+                }
+                return `获得镇御整备：恢复 ${healAmount} 生命，并获得 2 层开场护盾与 2 层战后医护增益`;
+            }
+            case 'temp_runPathInsight': {
+                const card = getRandomCard('rare', this.player?.characterId || null);
+                if (card) this.player.addCardToDeck(card);
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('ringExpBoostBattles', 2);
+                    this.player.grantAdventureBuff('firstTurnDrawBoostBattles', 1);
+                }
+                this.player.heavenlyInsight = Math.max(0, Math.floor(Number(this.player.heavenlyInsight) || 0)) + 1;
+                return `获得观测补给${card ? `：${card.name}` : ''}，并获得 2 层命环经验增益、1 层首回合抽牌与 1 点天机`;
             }
             default:
                 return '交易完成';
@@ -11328,6 +12655,18 @@ class Game {
             const finalEssence = this.awardLegacyEssence(18, '逆天终局', { silent: true });
             this.lastLegacyGain = clearEssence + finalEssence;
             this.showVictoryScreen();
+            return;
+        }
+        if (this.shouldOfferRunPathMutationAfterRealm(currentRealm)) {
+            this.showRunPathMutationSelection(currentRealm, () => {
+                if (this.shouldOfferRunVowAfterRealm(currentRealm)) {
+                    this.showRunVowSelection(currentRealm, () => {
+                        this.advanceToNextRealm(clearEssence);
+                    });
+                    return;
+                }
+                this.advanceToNextRealm(clearEssence);
+            });
             return;
         }
         if (this.shouldOfferRunVowAfterRealm(currentRealm)) {
@@ -11715,6 +13054,15 @@ class Game {
             const spiritCompanionId = this.selectedSpiritCompanionId || this.resolveDefaultSpiritCompanionId(characterId);
             if (spiritCompanionId) this.player.setSpiritCompanion(spiritCompanionId, 1);
         }
+        if (
+            this.player
+            && typeof this.player.getRunPathMeta === 'function'
+            && !this.player.getRunPathMeta()
+            && typeof this.player.setRunPath === 'function'
+        ) {
+            const runPathId = this.selectedRunPathId || this.resolveDefaultRunPathId(characterId);
+            if (runPathId) this.player.setRunPath(runPathId);
+        }
 
         // 1. 切换环境
         this.player.realm = realm;
@@ -11736,6 +13084,8 @@ class Game {
 
         // 3. 开始战斗
         this.showScreen('battle-screen');
+        this.lastRunPathRewardMeta = null;
+        this.dismissRunPathMapFeedback();
         if (this.battle) {
             this.battle.init([enemyData]);
         }
@@ -13639,16 +14989,25 @@ class Game {
     generateShopCatalog() {
         const base = this.generateShopData();
         const rumors = this.ensureShopRumors();
+        const runPathProfile = typeof this.getRunPathShopProfile === 'function' ? this.getRunPathShopProfile() : null;
+        const baseSummary = runPathProfile
+            ? `常规补给，当前命途「${runPathProfile.name}」还额外备了专供交易。`
+            : '常规补给，使用灵石进行构筑修整。';
+        const rumorSummary = rumors.nextRealmLabel
+            ? `已锁定下一重天路线：${rumors.nextRealmLabel}`
+            : (runPathProfile
+                ? `花费天机锁定未来奖励与下一重天路线倾向。当前命途「${runPathProfile.name}」提供专属情报。`
+                : '花费天机锁定未来奖励与下一重天路线倾向。');
         return {
             base: {
                 id: 'base',
                 icon: '🪙',
                 label: '基础页',
-                summary: '常规补给，使用灵石进行构筑修整。',
+                summary: baseSummary,
                 cardTitle: '📜 卡牌出售',
                 serviceTitle: '✨ 特殊服务',
                 items: Array.isArray(base.items) ? base.items : [],
-                services: Array.isArray(base.services) ? base.services : []
+                services: this.injectRunPathShopServices(Array.isArray(base.services) ? base.services : [], 'base')
             },
             contract: {
                 id: 'contract',
@@ -13664,13 +15023,11 @@ class Game {
                 id: 'rumor',
                 icon: '🔮',
                 label: '传闻页',
-                summary: rumors.nextRealmLabel
-                    ? `已锁定下一重天路线：${rumors.nextRealmLabel}`
-                    : '花费天机锁定未来奖励与下一重天路线倾向。',
+                summary: rumorSummary,
                 cardTitle: '🔍 情报锁定',
                 serviceTitle: '📡 未来倾向',
                 items: [],
-                services: this.generateRumorShopServices()
+                services: this.injectRunPathShopServices(this.generateRumorShopServices(), 'rumor')
             }
         };
     }
@@ -13818,13 +15175,16 @@ class Game {
         if (summaryEl) {
             const rumors = this.ensureShopRumors();
             const advice = this.buildShopSpendRecommendation();
+            const runPathProfile = typeof this.getRunPathShopProfile === 'function' ? this.getRunPathShopProfile() : null;
             let summaryText = activeTab?.summary || '暂无摘要。';
             if (this.shopActiveTab === 'contract') {
                 summaryText = `以业果换取高波动收益。当前业果：${this.getStrategicCurrencyAmount('karma')}。`;
             } else if (this.shopActiveTab === 'rumor') {
                 summaryText = rumors.nextRealmLabel
                     ? `已锁定第 ${rumors.nextRealmTarget || '?'} 重路线：${rumors.nextRealmLabel}`
-                    : '花费天机锁定未来奖励与下一重天路线倾向。';
+                    : (runPathProfile
+                        ? `花费天机锁定未来奖励与下一重天路线倾向。当前命途「${runPathProfile.name}」提供专属情报。`
+                        : '花费天机锁定未来奖励与下一重天路线倾向。');
             }
             const history = Array.isArray(rumors.history) && rumors.history.length > 0
                 ? `<div class="shop-summary-history">最近锁定：${rumors.history.slice(-2).join(' ｜ ')}</div>`
@@ -14047,6 +15407,11 @@ class Game {
                 return true;
             }
             return false;
+        }
+
+        if (service && service.runPathExclusive) {
+            const handled = this.applyRunPathShopServiceEffect(service);
+            if (handled !== null) return handled;
         }
 
         switch (service.id) {
@@ -14443,6 +15808,60 @@ ${treasure ? `获得法宝：${treasure.name}
 
             default:
                 return false;
+        }
+    }
+
+    applyRunPathShopServiceEffect(service) {
+        if (!service || typeof service !== 'object') return null;
+        switch (service.id) {
+            case 'runPathShatterOrder':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('firstTurnEnergyBoostBattles', 2);
+                    this.player.grantAdventureBuff('victoryGoldBoostBattles', 2);
+                }
+                Utils.showBattleLog('破命流军需：接下来 2 场战斗首回合灵力 +1，并提高胜利悬赏');
+                this.showRewardModal('裂锋悬赏令生效', '接下来 2 场战斗：\n首回合灵力 +1，并获得胜利悬赏增益。', '🗡️');
+                return true;
+            case 'runPathBulwarkRation': {
+                const healAmount = Math.max(12, Math.floor(this.player.maxHp * 0.2 * this.getEndlessHealingMultiplier()));
+                this.player.heal(healAmount);
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('openingBlockBoostBattles', 2);
+                    this.player.grantAdventureBuff('victoryHealBoostBattles', 1);
+                }
+                Utils.showBattleLog(`镇命流军需：恢复 ${healAmount} 生命，并补强护盾与医护`);
+                this.showRewardModal('镇脉军需到位', `恢复 ${healAmount} 生命。\n接下来 2 场战斗开场护盾强化，并获得 1 层战后医护增益。`, '🛡️');
+                return true;
+            }
+            case 'runPathInsightAtlas':
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('ringExpBoostBattles', 2);
+                    this.player.grantAdventureBuff('firstTurnDrawBoostBattles', 1);
+                }
+                this.player.heavenlyInsight = this.getStrategicCurrencyAmount('insight') + 1;
+                Utils.showBattleLog('窥命流校谱：命环经验增益生效，并额外获得 1 点天机');
+                this.showRewardModal('窥盘校谱完成', '接下来 2 场战斗：命环经验额外提升。\n并获得 1 层首回合抽牌增益与 1 点天机。', '🔮');
+                return true;
+            case 'runPathShatterRumor': {
+                const forecast = this.applyStrategicRouteForecast('runPathShatter');
+                Utils.showBattleLog(`命途传闻锁定：第 ${this.player.realm + 1} 重更偏向${forecast.label}。`);
+                this.showRewardModal('锋路断脉谶生效', `第 ${this.player.realm + 1} 重地图将更偏向${forecast.label}。`, forecast.icon || '⚔️');
+                return true;
+            }
+            case 'runPathBulwarkRumor': {
+                const forecast = this.applyStrategicRouteForecast('runPathBulwark');
+                Utils.showBattleLog(`命途传闻锁定：第 ${this.player.realm + 1} 重更偏向${forecast.label}。`);
+                this.showRewardModal('守脉安营录生效', `第 ${this.player.realm + 1} 重地图将更偏向${forecast.label}。`, forecast.icon || '🏕️');
+                return true;
+            }
+            case 'runPathInsightRumor': {
+                const forecast = this.applyStrategicRouteForecast('runPathInsight');
+                Utils.showBattleLog(`命途传闻锁定：第 ${this.player.realm + 1} 重更偏向${forecast.label}。`);
+                this.showRewardModal('裂隙观测志生效', `第 ${this.player.realm + 1} 重地图将更偏向${forecast.label}。`, forecast.icon || '🪞');
+                return true;
+            }
+            default:
+                return null;
         }
     }
 

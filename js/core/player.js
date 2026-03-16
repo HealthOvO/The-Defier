@@ -123,6 +123,13 @@ class Player {
             ringExpBoostBattles: 0,
             victoryHealBoostBattles: 0
         };
+        this.runPath = null;
+        this.runPathProgress = null;
+        this.runPathMutationState = null;
+        this.runPathBattleState = {
+            firstAttackBonusUsed: false,
+            firstSkillDrawUsedThisTurn: false
+        };
         this.runDestiny = null;
         this.runDestinyBattleState = {
             firstAttackBonusUsed: false,
@@ -236,6 +243,288 @@ class Player {
             tier: Math.max(1, Math.floor(Number(tier) || 1))
         };
         return this.getRunDestinyMeta();
+    }
+
+    normalizeRunPath(runPath = this.runPath) {
+        const catalog = (typeof RUN_PATHS !== 'undefined' && RUN_PATHS && typeof RUN_PATHS === 'object')
+            ? RUN_PATHS
+            : null;
+        if (!catalog || !runPath || typeof runPath !== 'object') {
+            this.runPath = null;
+            this.runPathProgress = null;
+            this.runPathMutationState = null;
+            return null;
+        }
+        const id = typeof runPath.id === 'string' ? runPath.id : '';
+        if (!catalog[id]) {
+            this.runPath = null;
+            this.runPathProgress = null;
+            this.runPathMutationState = null;
+            return null;
+        }
+        this.runPath = { id };
+        return this.runPath;
+    }
+
+    setRunPath(pathId) {
+        const id = typeof pathId === 'string' ? pathId : '';
+        const catalog = (typeof RUN_PATHS !== 'undefined' && RUN_PATHS && typeof RUN_PATHS === 'object')
+            ? RUN_PATHS
+            : null;
+        if (!catalog || !catalog[id]) {
+            this.runPath = null;
+            this.runPathProgress = null;
+            this.runPathMutationState = null;
+            return null;
+        }
+        this.runPath = { id };
+        this.runPathProgress = {
+            pathId: id,
+            currentPhaseIndex: 0,
+            phaseProgress: 0,
+            completedPhases: [],
+            rewardHistory: [],
+            completed: false,
+            lastRewardText: ''
+        };
+        this.runPathMutationState = null;
+        return this.getRunPathMeta();
+    }
+
+    normalizeRunPathMutationState(runPathMutationState = this.runPathMutationState) {
+        const runPath = this.normalizeRunPath(this.runPath);
+        const base = runPath && typeof RUN_PATHS !== 'undefined' && RUN_PATHS
+            ? RUN_PATHS[runPath.id] || null
+            : null;
+        const mutations = base && base.mutations && typeof base.mutations === 'object'
+            ? base.mutations
+            : null;
+        if (!runPath || !mutations || !runPathMutationState || typeof runPathMutationState !== 'object') {
+            this.runPathMutationState = null;
+            return null;
+        }
+        const mutationId = typeof runPathMutationState.mutationId === 'string'
+            ? runPathMutationState.mutationId
+            : '';
+        if (!mutationId || !mutations[mutationId]) {
+            this.runPathMutationState = null;
+            return null;
+        }
+        this.runPathMutationState = {
+            pathId: runPath.id,
+            mutationId,
+            offeredAtRealm: Math.max(0, Math.floor(Number(runPathMutationState.offeredAtRealm) || 0)),
+            chosenAt: Math.max(0, Math.floor(Number(runPathMutationState.chosenAt) || 0))
+        };
+        return this.runPathMutationState;
+    }
+
+    getRunPathMutationMeta() {
+        const runPath = this.normalizeRunPath(this.runPath);
+        const mutationState = this.normalizeRunPathMutationState();
+        if (!runPath || !mutationState || mutationState.pathId !== runPath.id) return null;
+        const base = (typeof RUN_PATHS !== 'undefined' && RUN_PATHS && RUN_PATHS[runPath.id]) ? RUN_PATHS[runPath.id] : null;
+        const mutation = base && base.mutations && mutationState.mutationId ? base.mutations[mutationState.mutationId] : null;
+        if (!mutation) return null;
+        return {
+            id: mutation.id || mutationState.mutationId,
+            mutationId: mutationState.mutationId,
+            pathId: runPath.id,
+            branchLabel: mutation.branchLabel || '裂变',
+            name: mutation.name || mutationState.mutationId,
+            icon: mutation.icon || '✦',
+            summary: mutation.summary || '',
+            risk: mutation.risk || '',
+            routeHint: mutation.routeHint || '',
+            playstyle: mutation.playstyle || '',
+            trackerNote: mutation.trackerNote || '',
+            mutationEventPool: Array.isArray(mutation.mutationEventPool)
+                ? mutation.mutationEventPool.map((eventId) => String(eventId || '').trim()).filter(Boolean).slice(0, 3)
+                : [],
+            effects: mutation.effects && typeof mutation.effects === 'object'
+                ? JSON.parse(JSON.stringify(mutation.effects))
+                : {},
+            immediate: mutation.immediate && typeof mutation.immediate === 'object'
+                ? JSON.parse(JSON.stringify(mutation.immediate))
+                : {},
+            treasureSynergy: mutation.treasureSynergy && typeof mutation.treasureSynergy === 'object'
+                ? JSON.parse(JSON.stringify(mutation.treasureSynergy))
+                : null,
+            offeredAtRealm: mutationState.offeredAtRealm,
+            chosenAt: mutationState.chosenAt
+        };
+    }
+
+    ensureRunPathProgress() {
+        const runPath = this.normalizeRunPath();
+        if (!runPath) {
+            this.runPathProgress = null;
+            return null;
+        }
+        const base = (typeof RUN_PATHS !== 'undefined' && RUN_PATHS && RUN_PATHS[runPath.id]) ? RUN_PATHS[runPath.id] : null;
+        if (!base) {
+            this.runPathProgress = null;
+            return null;
+        }
+        const phaseCount = Array.isArray(base.phases) ? base.phases.length : 0;
+        const progress = this.runPathProgress && typeof this.runPathProgress === 'object'
+            ? this.runPathProgress
+            : {};
+        const normalized = {
+            pathId: runPath.id,
+            currentPhaseIndex: Math.max(0, Math.min(Math.max(phaseCount - 1, 0), Math.floor(Number(progress.currentPhaseIndex) || 0))),
+            phaseProgress: Math.max(0, Math.floor(Number(progress.phaseProgress) || 0)),
+            completedPhases: Array.isArray(progress.completedPhases)
+                ? progress.completedPhases.map((entry) => String(entry || '')).filter(Boolean)
+                : [],
+            rewardHistory: Array.isArray(progress.rewardHistory)
+                ? progress.rewardHistory.map((entry) => String(entry || '')).filter(Boolean).slice(0, 12)
+                : [],
+            completed: !!progress.completed,
+            lastRewardText: String(progress.lastRewardText || '')
+        };
+        if (phaseCount <= 0) {
+            normalized.currentPhaseIndex = 0;
+            normalized.phaseProgress = 0;
+            normalized.completed = true;
+        } else if (normalized.completedPhases.length >= phaseCount) {
+            normalized.completed = true;
+            normalized.currentPhaseIndex = phaseCount - 1;
+        }
+        this.runPathProgress = normalized;
+        return this.runPathProgress;
+    }
+
+    getRunPathMeta() {
+        const runPath = this.normalizeRunPath();
+        if (!runPath) return null;
+        const base = (typeof RUN_PATHS !== 'undefined' && RUN_PATHS && RUN_PATHS[runPath.id]) ? RUN_PATHS[runPath.id] : null;
+        if (!base) return null;
+        const progress = this.ensureRunPathProgress();
+        const mutationMeta = this.getRunPathMutationMeta();
+        const phases = Array.isArray(base.phases) ? base.phases : [];
+        const phaseIndex = Math.max(0, Math.min(Math.max(phases.length - 1, 0), Math.floor(Number(progress?.currentPhaseIndex) || 0)));
+        const currentPhase = phases[phaseIndex] || null;
+        const baseTreasureSynergy = base.treasureSynergy && typeof base.treasureSynergy === 'object'
+            ? JSON.parse(JSON.stringify(base.treasureSynergy))
+            : null;
+        const mergedTreasureSynergy = baseTreasureSynergy
+            ? {
+                ...baseTreasureSynergy,
+                favoredSets: Array.from(new Set([
+                    ...(Array.isArray(baseTreasureSynergy.favoredSets) ? baseTreasureSynergy.favoredSets : []),
+                    ...(Array.isArray(mutationMeta?.treasureSynergy?.favoredSets) ? mutationMeta.treasureSynergy.favoredSets : [])
+                ])).slice(0, 4)
+            }
+            : (mutationMeta?.treasureSynergy ? JSON.parse(JSON.stringify(mutationMeta.treasureSynergy)) : null);
+        if (mergedTreasureSynergy && mutationMeta?.treasureSynergy?.summary) {
+            mergedTreasureSynergy.summary = mutationMeta.treasureSynergy.summary;
+        }
+        const mergedEffects = {
+            ...(base.effects && typeof base.effects === 'object' ? JSON.parse(JSON.stringify(base.effects)) : {})
+        };
+        const mutationEffects = mutationMeta?.effects && typeof mutationMeta.effects === 'object'
+            ? mutationMeta.effects
+            : {};
+        ['openingBlock', 'firstAttackBonusPerBattle', 'firstSkillDrawPerTurn'].forEach((key) => {
+            mergedEffects[key] = Math.max(0, Number(mergedEffects[key] || 0) + Number(mutationEffects[key] || 0));
+        });
+        mergedEffects.mapWeightShift = {
+            ...(mergedEffects.mapWeightShift && typeof mergedEffects.mapWeightShift === 'object' ? mergedEffects.mapWeightShift : {})
+        };
+        if (mutationEffects.mapWeightShift && typeof mutationEffects.mapWeightShift === 'object') {
+            Object.keys(mutationEffects.mapWeightShift).forEach((key) => {
+                const delta = Number(mutationEffects.mapWeightShift[key]);
+                if (!Number.isFinite(delta)) return;
+                mergedEffects.mapWeightShift[key] = Number(mergedEffects.mapWeightShift[key] || 0) + delta;
+            });
+        }
+        const baseEventPool = Array.isArray(base.eventPool) ? base.eventPool.slice() : [];
+        const mutationEventPool = Array.isArray(mutationMeta?.mutationEventPool)
+            ? mutationMeta.mutationEventPool.map((eventId) => String(eventId || '').trim()).filter(Boolean).slice(0, 3)
+            : [];
+        const mergedEventPool = Array.from(new Set([
+            ...baseEventPool,
+            ...mutationEventPool
+        ]));
+        return {
+            id: base.id,
+            name: base.name || base.id,
+            icon: base.icon || '✦',
+            category: base.category || '命途',
+            description: base.description || '',
+            playstyle: mutationMeta?.playstyle || base.playstyle || '',
+            routeHint: mutationMeta?.routeHint || base.routeHint || '',
+            affinities: Array.isArray(base.affinities) ? base.affinities.slice() : [],
+            eventPool: mergedEventPool,
+            mutationEventPool,
+            shopBias: base.shopBias && typeof base.shopBias === 'object'
+                ? JSON.parse(JSON.stringify(base.shopBias))
+                : null,
+            treasureSynergy: mergedTreasureSynergy,
+            bossCounterplay: base.bossCounterplay && typeof base.bossCounterplay === 'object'
+                ? { ...base.bossCounterplay }
+                : null,
+            bossMatchups: base.bossMatchups && typeof base.bossMatchups === 'object'
+                ? JSON.parse(JSON.stringify(base.bossMatchups))
+                : null,
+            mutations: base.mutations && typeof base.mutations === 'object'
+                ? JSON.parse(JSON.stringify(base.mutations))
+                : null,
+            mutation: mutationMeta,
+            completionRecord: base.completionRecord && typeof base.completionRecord === 'object'
+                ? { ...base.completionRecord }
+                : null,
+            effects: mergedEffects,
+            phases: phases.map((phase) => ({
+                ...(phase || {}),
+                rewards: Array.isArray(phase?.rewards) ? phase.rewards.map((reward) => ({ ...(reward || {}) })) : []
+            })),
+            phaseIndex,
+            phaseCount: phases.length,
+            currentPhase: currentPhase
+                ? {
+                    ...(currentPhase || {}),
+                    rewards: Array.isArray(currentPhase.rewards) ? currentPhase.rewards.map((reward) => ({ ...(reward || {}) })) : []
+                }
+                : null,
+            trackerNote: mutationMeta?.trackerNote || '',
+            progress: progress ? {
+                currentPhaseIndex: progress.currentPhaseIndex,
+                phaseProgress: progress.phaseProgress,
+                completedPhases: progress.completedPhases.slice(),
+                rewardHistory: progress.rewardHistory.slice(),
+                completed: !!progress.completed,
+                lastRewardText: progress.lastRewardText || ''
+            } : null
+        };
+    }
+
+    getRunPathEffects() {
+        const meta = this.getRunPathMeta();
+        const effects = meta && meta.effects ? meta.effects : {};
+        const result = {
+            openingBlock: Math.max(0, Math.floor(Number(effects.openingBlock) || 0)),
+            firstAttackBonusPerBattle: Math.max(0, Math.floor(Number(effects.firstAttackBonusPerBattle) || 0)),
+            firstSkillDrawPerTurn: Math.max(0, Math.floor(Number(effects.firstSkillDrawPerTurn) || 0)),
+            mapWeightShift: {}
+        };
+        if (effects.mapWeightShift && typeof effects.mapWeightShift === 'object') {
+            Object.keys(effects.mapWeightShift).forEach((key) => {
+                const delta = Number(effects.mapWeightShift[key]);
+                if (!Number.isFinite(delta)) return;
+                result.mapWeightShift[key] = delta;
+            });
+        }
+        return result;
+    }
+
+    resetRunPathBattleState() {
+        this.runPathBattleState = {
+            firstAttackBonusUsed: false,
+            firstSkillDrawUsedThisTurn: false
+        };
+        return this.runPathBattleState;
     }
 
     getRunDestinyMeta() {
@@ -1449,9 +1738,12 @@ class Player {
     // 准备战斗
     prepareBattle() {
         this.ensureAdventureBuffs();
+        this.normalizeRunPath();
+        this.ensureRunPathProgress();
         this.normalizeRunDestiny();
         this.normalizeRunVows();
         this.normalizeSpiritCompanion();
+        this.resetRunPathBattleState();
         this.resetRunDestinyBattleState();
         this.resetRunVowBattleState();
         this.resetSpiritCompanionBattleState();
@@ -1592,6 +1884,16 @@ class Player {
             Utils.showBattleLog('行旅增益：结界余韵生效，开场护盾 +10');
         }
 
+        const runPathMeta = this.getRunPathMeta();
+        const runPathEffects = this.getRunPathEffects();
+        if (runPathMeta && Number(runPathEffects.openingBlock) > 0) {
+            const blockGain = Math.max(0, Math.floor(Number(runPathEffects.openingBlock) || 0));
+            if (blockGain > 0) {
+                this.addBlock(blockGain);
+                Utils.showBattleLog(`命途【${runPathMeta.name}】开场护盾 +${blockGain}`);
+            }
+        }
+
         const destinyMeta = this.getRunDestinyMeta();
         const destinyEffects = destinyMeta ? destinyMeta.effects : null;
         if (destinyMeta && destinyEffects && Number(destinyEffects.openingBlock) > 0) {
@@ -1628,6 +1930,8 @@ class Player {
     // 开始回合
     startTurn() {
         this.ensureAdventureBuffs();
+        this.normalizeRunPath();
+        this.ensureRunPathProgress();
         this.normalizeRunDestiny();
         this.normalizeRunVows();
         this.normalizeSpiritCompanion();
@@ -1646,6 +1950,10 @@ class Player {
         this.relicAttackEnergyUsedThisTurn = false;
         this.pathDoctrineSkillChainCountThisTurn = 0;
         this.pathDoctrineSkillChainDrawUsedThisTurn = false;
+        if (!this.runPathBattleState || typeof this.runPathBattleState !== 'object') {
+            this.resetRunPathBattleState();
+        }
+        this.runPathBattleState.firstSkillDrawUsedThisTurn = false;
         if (!this.runDestinyBattleState || typeof this.runDestinyBattleState !== 'object') {
             this.resetRunDestinyBattleState();
         }
@@ -2077,6 +2385,9 @@ class Player {
         if (this.game && typeof this.game.handleLegacyMissionProgress === 'function') {
             this.game.handleLegacyMissionProgress('gainBlock', amount);
         }
+        if (this.game && typeof this.game.handleRunPathProgress === 'function') {
+            this.game.handleRunPathProgress('gainBlock', amount);
+        }
     }
 
     // 治疗
@@ -2497,6 +2808,21 @@ class Player {
             cardRemovedFromHand = true;
 
             if (card.type === 'skill') {
+                const runPathMeta = this.getRunPathMeta();
+                const runPathEffects = this.getRunPathEffects();
+                if (
+                    runPathMeta
+                    && Number(runPathEffects.firstSkillDrawPerTurn) > 0
+                    && this.runPathBattleState
+                    && !this.runPathBattleState.firstSkillDrawUsedThisTurn
+                ) {
+                    const drawAmount = Math.max(0, Math.floor(Number(runPathEffects.firstSkillDrawPerTurn) || 0));
+                    if (drawAmount > 0) {
+                        this.drawCards(drawAmount);
+                        this.runPathBattleState.firstSkillDrawUsedThisTurn = true;
+                        Utils.showBattleLog(`命途【${runPathMeta.name}】首个技能抽牌 +${drawAmount}`);
+                    }
+                }
                 const destinyMeta = this.getRunDestinyMeta();
                 const destinyEffects = destinyMeta ? destinyMeta.effects : null;
                 if (
@@ -2560,8 +2886,14 @@ class Player {
                         Utils.showBattleLog(`回响教义：技能连锁抽牌 +${doctrineProfile.skillChainDraw}`);
                     }
                 }
+                if (this.game && typeof this.game.handleRunPathProgress === 'function') {
+                    this.game.handleRunPathProgress('playSkillCard', 1);
+                }
             }
             if (card.type === 'attack') {
+                if (this.game && typeof this.game.handleRunPathProgress === 'function') {
+                    this.game.handleRunPathProgress('playAttackCard', 1);
+                }
                 if (this.relic && this.relic.id === 'artifactPulse' && !this.relicAttackEnergyUsedThisTurn) {
                     this.gainEnergy(1);
                     this.relicAttackEnergyUsedThisTurn = true;
@@ -3628,6 +3960,10 @@ class Player {
             legacyRunMission: this.legacyRunMission,
             adventureBuffs: this.ensureAdventureBuffs(),
             maxRealmReached: this.maxRealmReached || 1,
+            runPath: this.normalizeRunPath(),
+            runPathProgress: this.ensureRunPathProgress(),
+            runPathMutationState: this.normalizeRunPathMutationState(),
+            runPathBattleState: this.runPathBattleState ? { ...this.runPathBattleState } : this.resetRunPathBattleState(),
             runDestiny: this.normalizeRunDestiny(),
             runVows: this.normalizeRunVows(),
             spiritCompanion: this.normalizeSpiritCompanion(),

@@ -276,6 +276,10 @@ class Battle {
         const phaseConfigs = Array.isArray(enemy.phaseConfig) ? enemy.phaseConfig : [];
         const actTwo = phaseConfigs[0] || {};
         const actThree = phaseConfigs[1] || {};
+        const runPathMeta = this.player && typeof this.player.getRunPathMeta === 'function'
+            ? this.player.getRunPathMeta()
+            : null;
+        const runPathCounterplay = this.resolveRunPathBossCounterplay(enemy, mech, memory, runPathMeta);
         return {
             active: true,
             bossId: enemy.id,
@@ -283,6 +287,7 @@ class Battle {
             memoryKey: memory.key,
             memoryName: memory.name,
             counterTreasure,
+            runPathCounterplay,
             currentActIndex: 0,
             transitionHistory: [0],
             runtime: {
@@ -330,6 +335,84 @@ class Battle {
         };
     }
 
+    resolveRunPathBossCounterplay(enemy, mech, memory, runPathMeta) {
+        if (!runPathMeta || !runPathMeta.bossCounterplay) return null;
+        if (this.game && typeof this.game.resolveRunPathBossMatchup === 'function') {
+            const resolved = this.game.resolveRunPathBossMatchup(runPathMeta, {
+                enemy,
+                enemyId: enemy?.id,
+                mechanic: mech,
+                mechanicType: mech?.mechanics?.type,
+                memory,
+                memoryKey: memory?.key,
+                chapterSnapshot: this.game && typeof this.game.getChapterDisplaySnapshot === 'function'
+                    ? this.game.getChapterDisplaySnapshot(enemy?.realm || this.player?.realm || this.game?.player?.realm || 1)
+                    : null,
+                chapterBattlefield: typeof this.getChapterBattlefieldDisplayState === 'function'
+                    ? this.getChapterBattlefieldDisplayState()
+                    : null
+            });
+            if (resolved) return resolved;
+        }
+        const matchupCatalog = runPathMeta.bossMatchups && typeof runPathMeta.bossMatchups === 'object'
+            ? runPathMeta.bossMatchups
+            : null;
+        const chapterSnapshot = this.game && typeof this.game.getChapterDisplaySnapshot === 'function'
+            ? this.game.getChapterDisplaySnapshot(enemy?.realm || this.player?.realm || this.game?.player?.realm || 1)
+            : null;
+        const chapterField = typeof this.getChapterBattlefieldDisplayState === 'function'
+            ? this.getChapterBattlefieldDisplayState()
+            : null;
+        const mergeCounterplay = (target, source) => {
+            if (!source || typeof source !== 'object') return target;
+            ['fit', 'fitLabel', 'chipLabel', 'focus', 'counter', 'reward'].forEach((key) => {
+                if (typeof source[key] === 'string' && source[key].trim()) {
+                    target[key] = source[key].trim();
+                }
+            });
+            return target;
+        };
+        const chapterMatchup = matchupCatalog?.chapters?.[chapterSnapshot?.id || ''] && typeof matchupCatalog.chapters[chapterSnapshot?.id || ''] === 'object'
+            ? matchupCatalog.chapters[chapterSnapshot.id]
+            : null;
+        const resolved = {
+            id: runPathMeta.id,
+            name: runPathMeta.name || runPathMeta.id,
+            icon: runPathMeta.icon || '🧭',
+            chipLabel: runPathMeta.bossCounterplay.chipLabel || `命途·${runPathMeta.name || runPathMeta.id}`,
+            focus: runPathMeta.bossCounterplay.focus || '',
+            counter: runPathMeta.bossCounterplay.counter || '',
+            reward: runPathMeta.bossCounterplay.reward || '',
+            fit: 'neutral',
+            fitLabel: '常规拆解',
+            chapterId: String(chapterSnapshot?.id || ''),
+            chapterName: String(chapterSnapshot?.fullName || chapterSnapshot?.name || ''),
+            chapterCue: '',
+            chapterRuleSummary: '',
+            chapterFocus: String(chapterMatchup?.focus || ''),
+            chapterCounter: String(chapterMatchup?.counter || ''),
+            chapterReward: String(chapterMatchup?.reward || ''),
+            chapterFitLabel: String(chapterMatchup?.fitLabel || '')
+        };
+        mergeCounterplay(resolved, matchupCatalog?.mechanics?.[mech?.mechanics?.type || '']);
+        mergeCounterplay(resolved, chapterMatchup);
+        mergeCounterplay(resolved, matchupCatalog?.memories?.[memory?.key || '']);
+        mergeCounterplay(resolved, matchupCatalog?.bosses?.[enemy?.id || '']);
+        resolved.chapterCue = [
+            resolved.chapterName,
+            chapterField?.omen?.phaseLabel || chapterSnapshot?.skyOmen?.name || '',
+            chapterField?.leyline?.activeLabel || chapterSnapshot?.leyline?.name || ''
+        ].filter(Boolean).join(' · ');
+        resolved.chapterRuleSummary = [
+            chapterSnapshot?.skyOmen?.desc || '',
+            chapterSnapshot?.leyline?.desc || ''
+        ].filter(Boolean).join(' / ');
+        if (resolved.fitLabel && !String(resolved.chipLabel).includes(resolved.fitLabel)) {
+            resolved.chipLabel = `${resolved.chipLabel} · ${resolved.fitLabel}`;
+        }
+        return resolved;
+    }
+
     initializeBossThreeActState(enemy) {
         if (!enemy || !enemy.isBoss) return null;
         enemy.bossActState = this.createBossThreeActState(enemy);
@@ -373,6 +456,19 @@ class Battle {
             pushChip('tempo', '抢对抗节奏', '对抗阶段要尽快建立优势，避免被拖进逆转。');
         } else if (act.id === 'reversal') {
             pushChip('finish', '尽快收官', '逆转阶段惩罚会被放大，应优先寻找收尾窗口。');
+        }
+
+        if (state.runPathCounterplay) {
+            const runPathTip = [
+                state.runPathCounterplay.fitLabel ? `适配评级：${state.runPathCounterplay.fitLabel}` : '',
+                state.runPathCounterplay.chapterCue ? `章节场域：${state.runPathCounterplay.chapterCue}` : '',
+                state.runPathCounterplay.chapterFocus ? `章节补题：${state.runPathCounterplay.chapterFocus}` : '',
+                state.runPathCounterplay.chapterCounter ? `场域拆法：${state.runPathCounterplay.chapterCounter}` : '',
+                state.runPathCounterplay.focus,
+                state.runPathCounterplay.counter,
+                state.runPathCounterplay.reward
+            ].filter(Boolean).join(' ');
+            pushChip('run_path', state.runPathCounterplay.chipLabel, runPathTip || `沿命途【${state.runPathCounterplay.name}】的思路拆解当前 Boss。`);
         }
 
         switch (state.memoryKey) {
@@ -459,6 +555,19 @@ class Battle {
                 { id: 'signal', label: '明确信号', value: act.signal },
                 { id: 'rule', label: '当前规则', value: act.rule },
                 { id: 'counter', label: '反制窗口', value: act.counter },
+                ...(state.runPathCounterplay ? [{
+                    id: 'run_path',
+                    label: `${state.runPathCounterplay.icon || '🧭'} 命途解法`,
+                    value: [
+                        state.runPathCounterplay.fitLabel ? `适配评级：${state.runPathCounterplay.fitLabel}` : '',
+                        state.runPathCounterplay.chapterCue ? `章节场域：${state.runPathCounterplay.chapterCue}` : '',
+                        state.runPathCounterplay.chapterFocus ? `章节补题：${state.runPathCounterplay.chapterFocus}` : '',
+                        state.runPathCounterplay.chapterCounter ? `场域拆法：${state.runPathCounterplay.chapterCounter}` : '',
+                        state.runPathCounterplay.focus,
+                        state.runPathCounterplay.counter,
+                        state.runPathCounterplay.reward ? `收益：${state.runPathCounterplay.reward}` : ''
+                    ].filter(Boolean).join(' ｜ ')
+                }] : []),
                 { id: 'fail', label: '失败原因', value: act.fail }
             ]
         });
@@ -2098,6 +2207,9 @@ class Battle {
     }
 
     getBattleSystemDisplayState() {
+        const runPath = this.player && typeof this.player.getRunPathMeta === 'function'
+            ? this.player.getRunPathMeta()
+            : null;
         const destiny = this.player && typeof this.player.getRunDestinyMeta === 'function'
             ? this.player.getRunDestinyMeta()
             : null;
@@ -2138,6 +2250,9 @@ class Battle {
             || chapter?.leyline?.name
             || '未显';
         const formationValue = chapterField?.formation?.name || '';
+        const runPathPhase = runPath?.currentPhase || null;
+        const runPathTarget = Math.max(1, Math.floor(Number(runPathPhase?.target) || 1));
+        const runPathProgress = Math.max(0, Math.min(runPathTarget, Math.floor(Number(runPath?.progress?.phaseProgress) || 0)));
         const destinyValue = destiny?.name || '未定';
         const destinyMeta = destiny
             ? `${destiny.tierLabel || `T${Math.max(1, Math.floor(Number(destiny.tier) || 1))}`} · ${destiny.category || '命格'}`
@@ -2178,6 +2293,19 @@ class Battle {
                 : '暂无法宝';
 
         const stripItems = [
+            {
+                id: 'runPath',
+                label: '命途',
+                icon: runPath?.icon || '🧭',
+                value: runPath?.name || '未定',
+                meta: runPathPhase
+                    ? `${runPathPhase.label || `阶段${(runPath?.phaseIndex || 0) + 1}`} · ${runPathProgress}/${runPathTarget}`
+                    : '本轮尚未定式',
+                detail: runPathPhase
+                    ? `${runPathPhase.title || runPath?.name}：${runPathPhase.desc || runPath?.playstyle || runPath?.description || ''}`
+                    : '当前没有命途主线。',
+                tone: runPath ? 'chapter' : 'muted'
+            },
             {
                 id: 'destiny',
                 label: '命格',
@@ -2254,6 +2382,7 @@ class Battle {
         ];
 
         return {
+            runPath,
             destiny,
             vows: {
                 count: vows.length,
@@ -7668,6 +7797,13 @@ class Battle {
 
         // 传承道统：每场战斗首次攻击增伤
         const doctrine = this.player && this.player.legacyRunDoctrine ? this.player.legacyRunDoctrine : null;
+        const runPathMeta = this.player && typeof this.player.getRunPathMeta === 'function'
+            ? this.player.getRunPathMeta()
+            : null;
+        const runPathEffects = this.player && typeof this.player.getRunPathEffects === 'function'
+            ? this.player.getRunPathEffects()
+            : null;
+        const runPathBattleState = this.player && this.player.runPathBattleState ? this.player.runPathBattleState : null;
         const destinyMeta = this.player && typeof this.player.getRunDestinyMeta === 'function'
             ? this.player.getRunDestinyMeta()
             : null;
@@ -7683,6 +7819,21 @@ class Battle {
         const spiritPassive = this.player && typeof this.player.getSpiritCompanionEffects === 'function'
             ? (this.player.getSpiritCompanionEffects().passive || {})
             : {};
+        if (
+            runPathMeta
+            && runPathEffects
+            && runPathBattleState
+            && Number(runPathEffects.firstAttackBonusPerBattle) > 0
+            && !runPathBattleState.firstAttackBonusUsed
+            && sourceElement !== 'plasma_proc'
+        ) {
+            const bonus = Math.max(0, Math.floor(Number(runPathEffects.firstAttackBonusPerBattle) || 0));
+            if (bonus > 0) {
+                amount += bonus;
+                runPathBattleState.firstAttackBonusUsed = true;
+                Utils.showBattleLog(`命途【${runPathMeta.name}】首击增伤 +${bonus}`);
+            }
+        }
         if (
             destinyMeta
             && destinyEffects

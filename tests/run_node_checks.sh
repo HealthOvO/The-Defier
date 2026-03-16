@@ -23,6 +23,12 @@ node tests/sanity_battle_command_checks.js
 node tests/sanity_battle_command_synergy_checks.js
 node tests/sanity_boss_three_act_checks.js
 node tests/sanity_run_identity_checks.js
+node tests/sanity_run_path_system_checks.js
+node tests/sanity_run_path_mutation_checks.js
+node tests/sanity_run_path_content_hooks_checks.js
+node tests/sanity_run_path_archive_feedback_checks.js
+node tests/sanity_run_path_environment_matchup_checks.js
+node tests/sanity_run_path_sample_board_checks.js
 node tests/sanity_vow_guardrail_checks.js
 node tests/sanity_path_doctrine_growth_checks.js
 node tests/sanity_run_destiny_system_checks.js

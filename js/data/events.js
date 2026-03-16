@@ -442,6 +442,170 @@ const EVENTS = {
         ]
     },
 
+    runPathInsightAstrolabe: {
+        id: 'runPathInsightAstrolabe',
+        name: '问真观星台',
+        icon: '🔮',
+        summary: '命途事件 · 让命盘样本直接改写当前主线。',
+        summaryLabel: '命途事件',
+        presentationTone: 'mystic',
+        atmosphere: '星盘没有直接给你奖励，而是逼你决定要不要把这条命途提前写进这一局的节奏里。',
+        description: '半面星盘仍在推演未来，台边还留着一册未誊完的样本簿。你可以校正命盘，也可以只带走旁注。',
+        choices: [
+            {
+                text: '校正命盘',
+                icon: '🪞',
+                result: '天机 +1，命环经验提升，并推进当前命途',
+                resultType: 'positive',
+                effects: [
+                    { type: 'heavenlyInsight', value: 1 },
+                    { type: 'ringExp', value: 30 },
+                    { type: 'runPathProgress', amount: 1 }
+                ]
+            },
+            {
+                text: '誊录旁注',
+                icon: '📓',
+                result: '打开一间只卖调序样本的小铺',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'openTemporaryShop', offerCount: 2, priceMultiplier: 0.88, forceRelief: false }
+                ]
+            },
+            {
+                text: '让星盘自行沉寂',
+                icon: '🚶',
+                result: '保持当前路线',
+                resultType: 'neutral',
+                effects: []
+            }
+        ]
+    },
+
+    runPathInsightPolarizeAtlas: {
+        id: 'runPathInsightPolarizeAtlas',
+        name: '穷观校盘室',
+        icon: '🪐',
+        summary: '裂变事件 · 极化后，命盘会要求你把每一步都写成确定答案。',
+        summaryLabel: '裂变事件',
+        presentationTone: 'mystic',
+        atmosphere: '校盘室里只剩一条路：继续把不确定性剥离，直到每一拍都可复刻。',
+        description: '一排推演盘悬在半空，盘边标着“穷观：先拿到完整答案，再考虑收益上限”。',
+        choices: [
+            {
+                text: '穷观校盘',
+                icon: '🪞',
+                result: '天机 +2，命环经验提升，并推进当前命途',
+                resultType: 'positive',
+                effects: [
+                    { type: 'heavenlyInsight', value: 2 },
+                    { type: 'ringExp', value: 30 },
+                    { type: 'runPathProgress', amount: 1 }
+                ]
+            },
+            {
+                text: '誊录推演稿',
+                icon: '📘',
+                result: '开启一间偏调序补件的临时商铺',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'openTemporaryShop', offerCount: 2, priceMultiplier: 0.86, forceRelief: false }
+                ]
+            },
+            {
+                text: '封存盘册',
+                icon: '🚶',
+                result: '先保持当前路线',
+                resultType: 'neutral',
+                effects: []
+            }
+        ]
+    },
+
+    runPathInsightPivotGambit: {
+        id: 'runPathInsightPivotGambit',
+        name: '借势落子局',
+        icon: '♟️',
+        summary: '裂变事件 · 转修后，读题不再只是防错，而是要兑现成主动得分。',
+        summaryLabel: '裂变事件',
+        presentationTone: 'mystic',
+        atmosphere: '棋盘已经替你看清窗口，问题只剩一个：你敢不敢现在就落子。',
+        description: '案上残局只剩三手，旁注写着“先手不是优势，敢落手才是优势”。',
+        choices: [
+            {
+                text: '借势落子',
+                icon: '🎯',
+                result: '获得灵石、首轮调度优势，并推进当前命途',
+                resultType: 'positive',
+                effects: [
+                    { type: 'gold', value: 62 },
+                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 },
+                    { type: 'runPathProgress', amount: 1 }
+                ]
+            },
+            {
+                text: '先记手数',
+                icon: '🧾',
+                result: '命环经验 +28，天机 +1',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'ringExp', value: 28 },
+                    { type: 'heavenlyInsight', value: 1 }
+                ]
+            },
+            {
+                text: '暂不下注',
+                icon: '🚶',
+                result: '离开棋局',
+                resultType: 'neutral',
+                effects: []
+            }
+        ]
+    },
+
+    runPathInsightSacrificeOracle: {
+        id: 'runPathInsightSacrificeOracle',
+        name: '盲算祀台',
+        icon: '🕯️',
+        summary: '裂变事件 · 献祭后，额外情报会和额外风险一起到来。',
+        summaryLabel: '裂变事件',
+        presentationTone: 'danger',
+        atmosphere: '祀台不会白给答案，它只会把“可见未来”换成“更薄容错”。',
+        description: '烛火映出三条命盘裂缝，任何一条都能给你答案，但每条都要先付代价。',
+        choices: [
+            {
+                text: '盲算换题',
+                icon: '☄️',
+                result: '失去生命，获得高阶信息与稀有补件，并推进当前命途',
+                resultType: 'negative',
+                condition: { type: 'hp', min: 16 },
+                effects: [
+                    { type: 'damage', value: 8 },
+                    { type: 'heavenlyInsight', value: 2 },
+                    { type: 'card', rarity: 'rare' },
+                    { type: 'runPathProgress', amount: 1 }
+                ]
+            },
+            {
+                text: '留半卷天机',
+                icon: '📜',
+                result: '命环经验 +36，灵石 +45',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'ringExp', value: 36 },
+                    { type: 'gold', value: 45 }
+                ]
+            },
+            {
+                text: '吹灭烛火',
+                icon: '🚶',
+                result: '不改当前节奏',
+                resultType: 'neutral',
+                effects: []
+            }
+        ]
+    },
+
     ancientLibrary: {
         id: 'ancientLibrary',
         name: '上古书库',
@@ -804,6 +968,176 @@ const EVENTS = {
                 text: '不立盟约',
                 icon: '🚶',
                 result: '你离开了血炉',
+                resultType: 'neutral',
+                effects: []
+            }
+        ]
+    },
+
+    runPathShatterBounty: {
+        id: 'runPathShatterBounty',
+        name: '断脉悬金榜',
+        icon: '⚔️',
+        summary: '命途事件 · 用血线和赏金把破命流往前推。',
+        summaryLabel: '命途事件',
+        presentationTone: 'danger',
+        atmosphere: '榜文不问你稳不稳，只问你敢不敢把这条命途推得更激进。',
+        description: '残墙上钉着一份追杀号令，注脚写着一句旧话：先抢前两拍，再谈活路。你要签吗？',
+        choices: [
+            {
+                text: '签下追杀号令',
+                icon: '🩸',
+                result: '失去生命，获得悬赏资源，并推进当前命途',
+                resultType: 'negative',
+                condition: { type: 'hp', min: 16 },
+                effects: [
+                    { type: 'damage', value: 10 },
+                    { type: 'gold', value: 80 },
+                    { type: 'adventureBuff', buffId: 'victoryGoldBoostBattles', charges: 1 },
+                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 1 },
+                    { type: 'runPathProgress', amount: 1 }
+                ]
+            },
+            {
+                text: '拆读旧战录',
+                icon: '📜',
+                result: '获得爆发整备，但不提前追线',
+                resultType: 'positive',
+                effects: [
+                    { type: 'ringExp', value: 30 },
+                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 1 }
+                ]
+            },
+            {
+                text: '撕掉榜文',
+                icon: '🚶',
+                result: '你不接这笔单子',
+                resultType: 'neutral',
+                effects: []
+            }
+        ]
+    },
+
+    runPathShatterPolarizeEdict: {
+        id: 'runPathShatterPolarizeEdict',
+        name: '极锋讨令',
+        icon: '🩸',
+        summary: '裂变事件 · 极化后，榜文只认“抢拍兑现”，不认“保底留手”。',
+        summaryLabel: '裂变事件',
+        presentationTone: 'danger',
+        atmosphere: '极锋讨令把收益写在最前两拍，也把失误的代价抬到了同样高度。',
+        description: '一份加急缉令压在刀鞘下：只要你敢先出手，赏银立刻到账；若你犹豫，机会就归别人。',
+        choices: [
+            {
+                text: '立刻签令',
+                icon: '🗡️',
+                result: '失去生命，获得悬赏资源，并推进当前命途',
+                resultType: 'negative',
+                condition: { type: 'hp', min: 16 },
+                effects: [
+                    { type: 'damage', value: 12 },
+                    { type: 'gold', value: 95 },
+                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 1 },
+                    { type: 'runPathProgress', amount: 1 }
+                ]
+            },
+            {
+                text: '先读旧案',
+                icon: '📜',
+                result: '命环经验 +26，并获得一层悬赏增益',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'ringExp', value: 26 },
+                    { type: 'adventureBuff', buffId: 'victoryGoldBoostBattles', charges: 1 }
+                ]
+            },
+            {
+                text: '折回营地',
+                icon: '🚶',
+                result: '不接这份追令',
+                resultType: 'neutral',
+                effects: []
+            }
+        ]
+    },
+
+    runPathShatterPivotLedger: {
+        id: 'runPathShatterPivotLedger',
+        name: '转修悬账簿',
+        icon: '🗡️',
+        summary: '裂变事件 · 转修后，破命流开始把“爆发”拆成“稳手 + 收头”的双段题。',
+        summaryLabel: '裂变事件',
+        presentationTone: 'danger',
+        atmosphere: '账簿里每一笔都在问你：这一刀是为了现在的伤害，还是为了下一拍的必杀。',
+        description: '悬账簿记录着一百种失手案例，旁注写着“收头前先稳手，破命也要会控节拍”。',
+        choices: [
+            {
+                text: '按簿转修',
+                icon: '📘',
+                result: '提升调度收益，并推进当前命途',
+                resultType: 'positive',
+                effects: [
+                    { type: 'ringExp', value: 32 },
+                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 },
+                    { type: 'runPathProgress', amount: 1 }
+                ]
+            },
+            {
+                text: '先补军需',
+                icon: '🛒',
+                result: '开启一间偏中盘补件的临时商铺',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'openTemporaryShop', offerCount: 2, priceMultiplier: 0.9, forceRelief: false }
+                ]
+            },
+            {
+                text: '不改打法',
+                icon: '🚶',
+                result: '保持现状',
+                resultType: 'neutral',
+                effects: []
+            }
+        ]
+    },
+
+    runPathShatterSacrificePyre: {
+        id: 'runPathShatterSacrificePyre',
+        name: '祭火剜脉坛',
+        icon: '🔥',
+        summary: '裂变事件 · 献祭后，收益上限更高，但每次下注都要先交血线。',
+        summaryLabel: '裂变事件',
+        presentationTone: 'danger',
+        atmosphere: '剜脉坛不会问你稳不稳，它只看你愿不愿为下一拍极限收官付出即时代价。',
+        description: '祭坛火焰吞掉誓纸后，留下三句话：要强，就要薄；要快，就要狠；要活，就要算。',
+        choices: [
+            {
+                text: '祭火压线',
+                icon: '☄️',
+                result: '失去生命，获得稀有补件与天机，并推进当前命途',
+                resultType: 'negative',
+                condition: { type: 'hp', min: 18 },
+                effects: [
+                    { type: 'damage', value: 14 },
+                    { type: 'heavenlyInsight', value: 1 },
+                    { type: 'card', rarity: 'rare' },
+                    { type: 'runPathProgress', amount: 1 }
+                ]
+            },
+            {
+                text: '收灰留种',
+                icon: '🪙',
+                result: '灵石 +70，命环经验 +26',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'gold', value: 70 },
+                    { type: 'ringExp', value: 26 }
+                ]
+            },
+            {
+                text: '熄火离场',
+                icon: '🚶',
+                result: '暂不下注',
                 resultType: 'neutral',
                 effects: []
             }
@@ -1294,6 +1628,173 @@ const EVENTS = {
                     { type: 'heal', value: 10 },
                     { type: 'card', cardId: 'mirrorWall' }
                 ]
+            }
+        ]
+    },
+
+    runPathBulwarkSanctuary: {
+        id: 'runPathBulwarkSanctuary',
+        name: '镇脉壁垒库',
+        icon: '🛡️',
+        summary: '命途事件 · 把守势样本直接沉到这轮路线里。',
+        summaryLabel: '命途事件',
+        presentationTone: 'fortified',
+        atmosphere: '壁垒阵眼里剩下的灵流不够所有方案同时成立，你只能选一种“稳到最后”的办法。',
+        description: '守军撤离前把护流、军需和战录都锁进了壁垒阵眼。你可以接管护流，也可以拆开军需另做打算。',
+        choices: [
+            {
+                text: '接管护流',
+                icon: '🧿',
+                result: '恢复生命，强化防线，并推进当前命途',
+                resultType: 'positive',
+                effects: [
+                    { type: 'heal', value: 12 },
+                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 1 },
+                    { type: 'adventureBuff', buffId: 'victoryHealBoostBattles', charges: 1 },
+                    { type: 'runPathProgress', amount: 1 }
+                ]
+            },
+            {
+                text: '拆分军需',
+                icon: '📦',
+                result: '获得资源，但这次不强行追命途',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'gold', value: 78 },
+                    { type: 'ringExp', value: 24 }
+                ]
+            },
+            {
+                text: '原样封存',
+                icon: '🚶',
+                result: '保留阵眼，直接离开',
+                resultType: 'neutral',
+                effects: []
+            }
+        ]
+    },
+
+    runPathBulwarkPolarizeBastion: {
+        id: 'runPathBulwarkPolarizeBastion',
+        name: '固命垒心',
+        icon: '🧿',
+        summary: '裂变事件 · 极化后，镇命流会优先把最危险回合压成可承受回合。',
+        summaryLabel: '裂变事件',
+        presentationTone: 'fortified',
+        atmosphere: '垒心法阵只给一种答案：先活下来，剩下的一切都能慢慢拿回来。',
+        description: '一座旧垒心仍在运转，阵盘上刻着“稳线优先，收益随后”。',
+        choices: [
+            {
+                text: '重启垒心',
+                icon: '🛡️',
+                result: '恢复生命、强化开场防线，并推进当前命途',
+                resultType: 'positive',
+                effects: [
+                    { type: 'heal', value: 16 },
+                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 2 },
+                    { type: 'runPathProgress', amount: 1 }
+                ]
+            },
+            {
+                text: '抄录护阵图',
+                icon: '📘',
+                result: '命环经验 +28，天机 +1',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'ringExp', value: 28 },
+                    { type: 'heavenlyInsight', value: 1 }
+                ]
+            },
+            {
+                text: '封阵离开',
+                icon: '🚶',
+                result: '保持当前节奏',
+                resultType: 'neutral',
+                effects: []
+            }
+        ]
+    },
+
+    runPathBulwarkPivotDrill: {
+        id: 'runPathBulwarkPivotDrill',
+        name: '镜守转阵演武',
+        icon: '🪞',
+        summary: '裂变事件 · 转修后，镇命流要把“守住”继续转成“能反打”。',
+        summaryLabel: '裂变事件',
+        presentationTone: 'fortified',
+        atmosphere: '演武册反复强调同一句话：厚度不是目的，厚度只是换拍的工具。',
+        description: '转阵演武场上摆着两套脚本，一套稳手，一套反打；你必须现在选主轴。',
+        choices: [
+            {
+                text: '镜守操演',
+                icon: '🎯',
+                result: '获得守转攻行旅增益，并推进当前命途',
+                resultType: 'positive',
+                effects: [
+                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 1 },
+                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 },
+                    { type: 'runPathProgress', amount: 1 }
+                ]
+            },
+            {
+                text: '先做整备',
+                icon: '📦',
+                result: '灵石 +68，并获得一张稀有卡',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'gold', value: 68 },
+                    { type: 'card', rarity: 'rare' }
+                ]
+            },
+            {
+                text: '暂缓演武',
+                icon: '🚶',
+                result: '离开演武场',
+                resultType: 'neutral',
+                effects: []
+            }
+        ]
+    },
+
+    runPathBulwarkSacrificeAnvil: {
+        id: 'runPathBulwarkSacrificeAnvil',
+        name: '断甲反压砧',
+        icon: '⚒️',
+        summary: '裂变事件 · 献祭后，镇命流会用更薄容错换更强反击窗口。',
+        summaryLabel: '裂变事件',
+        presentationTone: 'danger',
+        atmosphere: '反压砧上的铭文写得很直白：要反打，就先接受这轮不再无损。',
+        description: '砧面残留着前代守军的誓印，“该守时守死，该出手时一击定线”。',
+        choices: [
+            {
+                text: '断甲换势',
+                icon: '🧱',
+                result: '失去生命，获得转攻增益，并推进当前命途',
+                resultType: 'negative',
+                condition: { type: 'hp', min: 18 },
+                effects: [
+                    { type: 'damage', value: 10 },
+                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 1 },
+                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 },
+                    { type: 'runPathProgress', amount: 1 }
+                ]
+            },
+            {
+                text: '稳线回仓',
+                icon: '🧺',
+                result: '恢复生命并获得少量灵石',
+                resultType: 'neutral',
+                effects: [
+                    { type: 'heal', value: 10 },
+                    { type: 'gold', value: 40 }
+                ]
+            },
+            {
+                text: '回避重压',
+                icon: '🚶',
+                result: '不改当前路线',
+                resultType: 'neutral',
+                effects: []
             }
         ]
     },
@@ -2329,6 +2830,42 @@ function getRandomEvent() {
     if (pathPool.length > 0 && Math.random() < pathBiasChance) {
         const pathEventId = pathPool[Math.floor(Math.random() * pathPool.length)];
         return JSON.parse(JSON.stringify(EVENTS[pathEventId]));
+    }
+
+    let activeRunPathMeta = null;
+    let activeRunPathProgress = null;
+    try {
+        activeRunPathMeta = window?.game?.player?.getRunPathMeta?.() || null;
+        activeRunPathProgress = activeRunPathMeta?.progress || null;
+    } catch (e) {
+        activeRunPathMeta = null;
+        activeRunPathProgress = null;
+    }
+    const runPathPool = Array.isArray(activeRunPathMeta?.eventPool)
+        ? activeRunPathMeta.eventPool.filter((id) => !!EVENTS[id])
+        : [];
+    const runPathMutationPool = Array.isArray(activeRunPathMeta?.mutationEventPool)
+        ? activeRunPathMeta.mutationEventPool.filter((id) => !!EVENTS[id])
+        : [];
+    const runPathPhaseIndex = Math.max(0, Math.floor(Number(activeRunPathMeta?.phaseIndex) || 0));
+    const runPathCompletedPhases = Array.isArray(activeRunPathProgress?.completedPhases)
+        ? activeRunPathProgress.completedPhases.length
+        : 0;
+    const runPathMutationBiasChance = Math.min(
+        0.72,
+        0.4 + runPathPhaseIndex * 0.05 + runPathCompletedPhases * 0.04 + (activeRunPathProgress?.completed ? 0.05 : 0)
+    );
+    if (runPathMutationPool.length > 0 && Math.random() < runPathMutationBiasChance) {
+        const runPathMutationEventId = runPathMutationPool[Math.floor(Math.random() * runPathMutationPool.length)];
+        return JSON.parse(JSON.stringify(EVENTS[runPathMutationEventId]));
+    }
+    const runPathBiasChance = Math.min(
+        0.58,
+        0.3 + runPathPhaseIndex * 0.08 + runPathCompletedPhases * 0.03 + (activeRunPathProgress?.completed ? 0.04 : 0) + (runPathMutationPool.length > 0 ? 0.04 : 0)
+    );
+    if (runPathPool.length > 0 && Math.random() < runPathBiasChance) {
+        const runPathEventId = runPathPool[Math.floor(Math.random() * runPathPool.length)];
+        return JSON.parse(JSON.stringify(EVENTS[runPathEventId]));
     }
 
     // 牌组成型后，事件投放向对应流派轻度偏置，提升构筑连贯性

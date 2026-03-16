@@ -191,6 +191,32 @@
         margin-top: 4px;
     }
 
+    .map-run-path-flash {
+        margin-top: 4px;
+        padding: 9px 10px;
+        gap: 6px;
+    }
+
+    .map-run-path-flash-head {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .map-run-path-flash-badge,
+    .map-run-path-flash-status {
+        justify-content: center;
+        font-size: 0.64rem;
+    }
+
+    .map-run-path-flash-title {
+        font-size: 0.76rem;
+    }
+
+    .map-run-path-flash-reward,
+    .map-run-path-flash-next {
+        font-size: 0.66rem;
+    }
+
     .map-endless-panel .endless-paranoia-summary {
         font-size: 0.6rem;
         line-height: 1.3;
@@ -509,6 +535,66 @@
     .reward-meta-chip {
         font-size: 0.62rem;
         padding: 3px 7px;
+    }
+
+    .reward-run-path-meta {
+        width: 100%;
+        padding: 10px;
+        border-radius: 12px;
+    }
+
+    .reward-run-path-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .reward-run-path-badge,
+    .reward-run-path-status {
+        justify-content: center;
+        font-size: 0.66rem;
+    }
+
+    .reward-run-path-entry {
+        padding: 9px 10px;
+        border-radius: 11px;
+    }
+
+    .reward-run-path-phase {
+        font-size: 0.74rem;
+    }
+
+    .reward-run-path-desc,
+    .reward-run-path-next,
+    .reward-run-path-reward {
+        font-size: 0.64rem;
+    }
+
+    .reward-run-path-finale {
+        padding: 10px;
+    }
+
+    .reward-run-path-crest {
+        width: 100%;
+        justify-content: center;
+        font-size: 0.68rem;
+    }
+
+    .reward-run-path-finale-copy {
+        font-size: 0.64rem;
+    }
+
+    .reward-run-path-archive {
+        padding: 10px;
+        border-radius: 11px;
+    }
+
+    .reward-run-path-archive-title {
+        font-size: 0.7rem;
+    }
+
+    .reward-run-path-archive-copy,
+    .reward-run-path-archive-meta {
+        font-size: 0.62rem;
     }
 
     /* --- Decks and Inventory --- */

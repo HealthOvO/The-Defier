@@ -62,6 +62,7 @@ function loadFile(ctx, filePath) {
   const state = {
     player: {
       gold: 100,
+      heavenlyInsight: 0,
       maxHp: 20,
       currentHp: 20,
       deck: [{ id: 'strike', name: 'Strike', type: 'attack', upgraded: false }],
@@ -96,6 +97,7 @@ function loadFile(ctx, filePath) {
     upgradedCalled: false,
     startedBattle: null,
     trialMode: null,
+    currentScreen: 'map-screen',
     closeModal() {
       this.closeModalCalled = true;
     },
@@ -104,6 +106,10 @@ function loadFile(ctx, filePath) {
     },
     startBattle(enemies, node) {
       this.startedBattle = { enemies, node };
+    },
+    handleRunPathProgress(eventType, amount, context) {
+      this.lastRunPathProgressCall = { eventType, amount, context };
+      return true;
     },
     currentBattleNode: { id: 1 },
     achievementSystem: { updateStat: () => {} }
@@ -136,6 +142,23 @@ function loadFile(ctx, filePath) {
   });
   assert(interrupted === true, 'random battle should propagate interrupt');
   assert(state.startedBattle && state.startedBattle.enemies && state.startedBattle.enemies.id === 'bandit', 'random battle should start target enemy');
+
+  state.eventResults = [];
+  interrupted = state.executeEventEffect({ type: 'heavenlyInsight', value: 2 });
+  assert(interrupted === false, 'heavenlyInsight should not interrupt flow');
+  assert(state.player.heavenlyInsight === 2, `heavenlyInsight should apply, got ${state.player.heavenlyInsight}`);
+
+  state.eventResults = [];
+  state.player.getRunPathMeta = () => ({
+    id: 'insight',
+    name: '窥命流',
+    currentPhase: { eventType: 'playSkillCard' }
+  });
+  interrupted = state.executeEventEffect({ type: 'runPathProgress', amount: 1 });
+  assert(interrupted === false, 'runPathProgress should not interrupt flow');
+  assert(state.lastRunPathProgressCall && state.lastRunPathProgressCall.eventType === 'playSkillCard', `runPathProgress should forward current phase event type, got ${JSON.stringify(state.lastRunPathProgressCall)}`);
+  assert(state.lastRunPathProgressCall && state.lastRunPathProgressCall.context && state.lastRunPathProgressCall.context.force === true, 'runPathProgress should force event-side progression');
+  assert(state.eventResults.some((line) => line.includes('命途推进')), `runPathProgress should append event result, got ${JSON.stringify(state.eventResults)}`);
 
   console.log('Event flow checks passed.');
 })();
