@@ -2823,6 +2823,10 @@ async function safeScreenshot(page, outPath) {
     const state = game.ensureEndlessState();
     state.pressure = 3;
     state.currentCycle = 5;
+    state.seasonCycleClears = 2;
+    state.seasonBossDefeated = 1;
+    state.seasonScore = 280;
+    state.seasonBestCycle = Math.max(6, Number(state.seasonBestCycle) || 0);
     game.showScreen('map-screen');
     if (typeof game.map.updateEndlessPanel === 'function') game.map.updateEndlessPanel();
 
@@ -2830,6 +2834,10 @@ async function safeScreenshot(page, outPath) {
     const beforeText = panel ? (panel.textContent || '').replace(/\s+/g, ' ').trim() : '';
     const beforeThemeText = panel?.querySelector('.endless-theme-chip')?.textContent?.trim() || '';
     const beforeThemeDesc = panel?.querySelector('.endless-theme-desc')?.textContent?.trim() || '';
+    const beforeSeasonText = panel?.querySelector('.endless-season-chip')?.textContent?.trim() || '';
+    const beforeDirectiveText = panel?.querySelector('.endless-directive-chip')?.textContent?.trim() || '';
+    const beforeSeasonDesc = panel?.querySelector('.endless-season-desc')?.textContent?.trim() || '';
+    const beforeSeasonLedger = panel?.querySelector('.endless-season-ledger')?.textContent?.trim() || '';
 
     const nextState = game.ensureEndlessState();
     nextState.pressure = 8;
@@ -2838,11 +2846,27 @@ async function safeScreenshot(page, outPath) {
     const afterText = panel ? (panel.textContent || '').replace(/\s+/g, ' ').trim() : '';
     const afterThemeText = panel?.querySelector('.endless-theme-chip')?.textContent?.trim() || '';
     const afterThemeDesc = panel?.querySelector('.endless-theme-desc')?.textContent?.trim() || '';
+    const afterSeasonText = panel?.querySelector('.endless-season-chip')?.textContent?.trim() || '';
+    const afterDirectiveText = panel?.querySelector('.endless-directive-chip')?.textContent?.trim() || '';
+    const afterSeasonDesc = panel?.querySelector('.endless-season-desc')?.textContent?.trim() || '';
+    const afterSeasonLedger = panel?.querySelector('.endless-season-ledger')?.textContent?.trim() || '';
+    let textState = null;
+    try {
+      textState = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())
+        : null;
+    } catch {
+      textState = null;
+    }
 
     return {
       visible: !!panel && getComputedStyle(panel).display !== 'none',
       hasBehaviorChip: !!panel?.querySelector('.endless-pressure-chip'),
       hasThemeChip: !!panel?.querySelector('.endless-theme-chip'),
+      hasSeasonChip: !!panel?.querySelector('.endless-season-chip'),
+      hasDirectiveChip: !!panel?.querySelector('.endless-directive-chip'),
+      hasSeasonDesc: !!panel?.querySelector('.endless-season-desc'),
+      hasSeasonLedger: !!panel?.querySelector('.endless-season-ledger'),
       pulseUp: !!panel?.classList.contains('pressure-up'),
       dataPressure: panel?.dataset?.pressure || '',
       beforeText,
@@ -2850,22 +2874,43 @@ async function safeScreenshot(page, outPath) {
       beforeThemeText,
       afterThemeText,
       beforeThemeDesc,
-      afterThemeDesc
+      afterThemeDesc,
+      beforeSeasonText,
+      afterSeasonText,
+      beforeDirectiveText,
+      afterDirectiveText,
+      beforeSeasonDesc,
+      afterSeasonDesc,
+      beforeSeasonLedger,
+      afterSeasonLedger,
+      seasonPayload: textState?.endlessSeason || null
     };
   });
   add(
-    'endless panel shows pressure/theme hints and pulse feedback when pressure rises',
+    'endless panel shows pressure/theme/season hints and pulse feedback when pressure rises',
     !!endlessPressurePanelProbe &&
       endlessPressurePanelProbe.visible &&
       endlessPressurePanelProbe.hasBehaviorChip &&
       endlessPressurePanelProbe.hasThemeChip &&
+      endlessPressurePanelProbe.hasSeasonChip &&
+      endlessPressurePanelProbe.hasDirectiveChip &&
+      endlessPressurePanelProbe.hasSeasonDesc &&
+      endlessPressurePanelProbe.hasSeasonLedger &&
       endlessPressurePanelProbe.pulseUp &&
       endlessPressurePanelProbe.dataPressure === '8' &&
       endlessPressurePanelProbe.beforeThemeText !== endlessPressurePanelProbe.afterThemeText &&
       /轮段/.test(endlessPressurePanelProbe.afterThemeText || '') &&
       /敌方|战场|轮段/.test(endlessPressurePanelProbe.afterThemeDesc || '') &&
+      /赛季：/.test(endlessPressurePanelProbe.afterSeasonText || '') &&
+      /季签：/.test(endlessPressurePanelProbe.afterDirectiveText || '') &&
+      /季签/.test(endlessPressurePanelProbe.afterSeasonDesc || '') &&
+      /赛季战绩|赛季积分/.test(endlessPressurePanelProbe.afterSeasonLedger || '') &&
       /敌方节奏/.test(endlessPressurePanelProbe.afterText || '') &&
-      /重压|压制|连续/.test(endlessPressurePanelProbe.afterText || ''),
+      /重压|压制|连续/.test(endlessPressurePanelProbe.afterText || '') &&
+      !!endlessPressurePanelProbe.seasonPayload &&
+      typeof endlessPressurePanelProbe.seasonPayload.id === 'string' &&
+      typeof endlessPressurePanelProbe.seasonPayload.directiveId === 'string' &&
+      typeof endlessPressurePanelProbe.seasonPayload.weekTag === 'string',
     JSON.stringify(endlessPressurePanelProbe || null)
   );
 

@@ -489,6 +489,7 @@ class Game {
             endless: this.ensureEndlessState(),
             endlessPhase: this.getEndlessPhaseProfile(),
             endlessTheme: this.getEndlessCycleThemeProfile(),
+            endlessSeason: this.getEndlessSeasonProfile(),
             encounter: this.ensureEncounterState(),
             perf: this.performanceStats
         };
@@ -2892,6 +2893,16 @@ class Game {
             boonRarePity: 0,
             boonRareGuaranteedEvery: 3,
             barterHeat: 0,
+            seasonId: null,
+            seasonWeekTag: '',
+            seasonName: '',
+            seasonIcon: '',
+            lastSeasonDirectiveId: null,
+            seasonBestCycle: 0,
+            seasonCycleClears: 0,
+            seasonBossDefeated: 0,
+            seasonScore: 0,
+            seasonArchive: {},
             boonStats: {
                 rewardGoldMul: 0,
                 rewardExpMul: 0,
@@ -3030,6 +3041,10 @@ class Game {
             if (!Number.isFinite(num)) return fallback;
             return Math.max(0, Math.floor(num));
         };
+        const normalizeString = (value, maxLen = 64) => {
+            if (typeof value !== 'string') return '';
+            return value.trim().slice(0, Math.max(0, Math.floor(Number(maxLen) || 0)));
+        };
         const sanitizeRate = (value) => {
             const num = Number(value);
             if (!Number.isFinite(num)) return 0;
@@ -3048,6 +3063,35 @@ class Game {
             battleOpeningBlock: normalizeInt(boonStatsRaw.battleOpeningBlock),
             battleFirstTurnEnergy: normalizeInt(boonStatsRaw.battleFirstTurnEnergy)
         };
+        const seasonArchiveRaw = source.seasonArchive && typeof source.seasonArchive === 'object'
+            ? source.seasonArchive
+            : {};
+        const seasonArchive = {};
+        Object.keys(seasonArchiveRaw).forEach((key) => {
+            if (typeof key !== 'string' || !key) return;
+            const entry = seasonArchiveRaw[key];
+            if (!entry || typeof entry !== 'object') return;
+            const safeKey = key.slice(0, 96);
+            seasonArchive[safeKey] = {
+                seasonId: normalizeString(entry.seasonId, 32) || normalizeString(safeKey.split(':')[0], 32) || null,
+                weekTag: normalizeString(entry.weekTag, 24),
+                seasonName: normalizeString(entry.seasonName, 32),
+                icon: normalizeString(entry.icon, 4),
+                bestCycle: normalizeInt(entry.bestCycle),
+                clears: normalizeInt(entry.clears),
+                bosses: normalizeInt(entry.bosses),
+                score: normalizeInt(entry.score),
+                lastDirectiveId: normalizeString(entry.lastDirectiveId, 40) || null,
+                updatedAt: Math.max(0, Math.floor(Number(entry.updatedAt) || 0))
+            };
+        });
+        const trimmedSeasonArchive = {};
+        Object.keys(seasonArchive)
+            .sort((a, b) => (seasonArchive[b]?.updatedAt || 0) - (seasonArchive[a]?.updatedAt || 0))
+            .slice(0, 16)
+            .forEach((key) => {
+                trimmedSeasonArchive[key] = seasonArchive[key];
+            });
 
         const unlockedByProgress = progressionRealm >= 6;
         const sourceUnlocked = !!source.unlocked;
@@ -3113,6 +3157,16 @@ class Game {
             boonRarePity: normalizeInt(source.boonRarePity),
             boonRareGuaranteedEvery: Math.max(2, Math.min(6, normalizeInt(source.boonRareGuaranteedEvery, 3) || 3)),
             barterHeat: Math.max(0, Math.min(9, normalizeInt(source.barterHeat, 0))),
+            seasonId: normalizeString(source.seasonId, 32) || null,
+            seasonWeekTag: normalizeString(source.seasonWeekTag, 24),
+            seasonName: normalizeString(source.seasonName, 32),
+            seasonIcon: normalizeString(source.seasonIcon, 4),
+            lastSeasonDirectiveId: normalizeString(source.lastSeasonDirectiveId, 40) || null,
+            seasonBestCycle: normalizeInt(source.seasonBestCycle),
+            seasonCycleClears: normalizeInt(source.seasonCycleClears),
+            seasonBossDefeated: normalizeInt(source.seasonBossDefeated),
+            seasonScore: normalizeInt(source.seasonScore),
+            seasonArchive: trimmedSeasonArchive,
             boonStats
         };
 
@@ -4335,6 +4389,440 @@ class Game {
         };
     }
 
+    getEndlessSeasonCatalog() {
+        return [
+            {
+                id: 'forge_tide',
+                name: '锻潮赛季',
+                icon: '⚒️',
+                desc: '锻潮赛季鼓励试炼推进与锻线运营，适合靠节奏压住前中盘。',
+                mods: {
+                    enemyHpMul: 1.01,
+                    rewardGoldMul: 1.04,
+                    rewardExpMul: 1.03,
+                    shopPriceMul: 0.97
+                },
+                eventMods: {
+                    trialRewardMul: 1.06,
+                    ringExpFlat: 6,
+                    tempShopOfferBonus: 1
+                },
+                directives: [
+                    {
+                        id: 'frontline_contract',
+                        name: '前压契令',
+                        desc: '精英与试炼节点更活跃，适合抢拍滚资源。',
+                        mods: {
+                            enemyAtkMul: 1.02,
+                            mapWeightShift: { elite: 0.02, trial: 0.02, rest: -0.01 }
+                        },
+                        eventMods: {
+                            goldGainMul: 1.03
+                        }
+                    },
+                    {
+                        id: 'calibrated_market',
+                        name: '校准商契',
+                        desc: '临时商会成本更柔和，利于中盘补件。',
+                        mods: {
+                            rewardGoldMul: 1.02,
+                            shopPriceMul: 0.95
+                        },
+                        eventMods: {
+                            tempShopPriceMul: 0.9,
+                            tempShopOfferBonus: 1
+                        }
+                    },
+                    {
+                        id: 'tempered_guard',
+                        name: '守势锻脉',
+                        desc: '换血容错提升，适合在高压轮段稳线。',
+                        mods: {
+                            enemyAtkMul: 0.99,
+                            healMul: 1.04
+                        },
+                        eventMods: {
+                            bonusAdventureBuffCharges: 1
+                        }
+                    }
+                ]
+            },
+            {
+                id: 'mirror_verdict',
+                name: '镜裁赛季',
+                icon: '🪞',
+                desc: '镜裁赛季强调读题与防错，回合末决策收益更高但容错更低。',
+                mods: {
+                    enemyHpMul: 1.02,
+                    enemyAtkMul: 1.03,
+                    rewardExpMul: 1.06
+                },
+                eventMods: {
+                    boonRareBonusRate: 0.04,
+                    ringExpFlat: 8
+                },
+                directives: [
+                    {
+                        id: 'cleanse_window',
+                        name: '净界窗',
+                        desc: '鼓励净化与调序，避免镜返压垮手牌。',
+                        mods: {
+                            mapWeightShift: { event: 0.02, memory_rift: 0.02, enemy: -0.01 }
+                        },
+                        eventMods: {
+                            forceRelief: true,
+                            bonusAdventureBuffCharges: 1
+                        }
+                    },
+                    {
+                        id: 'mirror_tax',
+                        name: '映照税',
+                        desc: '敌方节奏更紧，回报同步上调。',
+                        mods: {
+                            enemyAtkMul: 1.03,
+                            rewardGoldMul: 1.04
+                        },
+                        eventMods: {
+                            goldGainMul: 1.04,
+                            trialRewardMul: 1.04
+                        }
+                    },
+                    {
+                        id: 'echo_archive',
+                        name: '留痕档案',
+                        desc: '命环经验与稀有奖励倾向进一步提高。',
+                        mods: {
+                            rewardExpMul: 1.03
+                        },
+                        eventMods: {
+                            ringExpFlat: 10,
+                            boonRareBonusRate: 0.05
+                        }
+                    }
+                ]
+            },
+            {
+                id: 'blood_oath',
+                name: '血誓赛季',
+                icon: '🌕',
+                desc: '血誓赛季鼓励高风险换收益，适合爆发和斩杀路线。',
+                mods: {
+                    enemyAtkMul: 1.05,
+                    rewardGoldMul: 1.08,
+                    healMul: 0.96
+                },
+                eventMods: {
+                    goldGainMul: 1.05,
+                    boonRareBonusRate: 0.05
+                },
+                directives: [
+                    {
+                        id: 'razor_threshold',
+                        name: '阈值锋线',
+                        desc: '高压轮段收益更高，商会补给更紧凑。',
+                        mods: {
+                            enemyAtkMul: 1.03,
+                            rewardGoldMul: 1.04,
+                            mapWeightShift: { elite: 0.02, rest: -0.02 }
+                        },
+                        eventMods: {
+                            tempShopPriceMul: 0.93
+                        }
+                    },
+                    {
+                        id: 'bounty_sprint',
+                        name: '悬赏冲刺',
+                        desc: '强化悬赏与推进节奏，鼓励更快收官。',
+                        mods: {
+                            rewardGoldMul: 1.05,
+                            rewardExpMul: 1.02
+                        },
+                        eventMods: {
+                            trialRewardMul: 1.05,
+                            goldGainMul: 1.03
+                        }
+                    },
+                    {
+                        id: 'ashen_relief',
+                        name: '余烬补给',
+                        desc: '在高压中给予有限舒压窗口，避免断档。',
+                        mods: {
+                            healMul: 1.05,
+                            shopPriceMul: 0.96
+                        },
+                        eventMods: {
+                            forceRelief: true,
+                            tempShopOfferBonus: 1
+                        }
+                    }
+                ]
+            },
+            {
+                id: 'court_weave',
+                name: '编庭赛季',
+                icon: '☯️',
+                desc: '编庭赛季强调多轴协同，法则、法宝与命格联动收益更稳定。',
+                mods: {
+                    enemyHpMul: 1.04,
+                    rewardExpMul: 1.08,
+                    shopPriceMul: 1.01
+                },
+                eventMods: {
+                    ringExpFlat: 12,
+                    trialRewardMul: 1.05
+                },
+                directives: [
+                    {
+                        id: 'axis_alignment',
+                        name: '多轴校准',
+                        desc: '法则与套装补件效率提升，适合补齐终章答卷。',
+                        mods: {
+                            rewardExpMul: 1.04,
+                            mapWeightShift: { observatory: 0.02, spirit_grotto: 0.02, enemy: -0.01 }
+                        },
+                        eventMods: {
+                            ringExpFlat: 8,
+                            boonRareBonusRate: 0.04
+                        }
+                    },
+                    {
+                        id: 'verdict_shift',
+                        name: '终裁轮转',
+                        desc: '敌方更重检定节奏，但奖励同步拉高。',
+                        mods: {
+                            enemyHpMul: 1.03,
+                            enemyAtkMul: 1.02,
+                            rewardGoldMul: 1.03
+                        },
+                        eventMods: {
+                            goldGainMul: 1.03,
+                            trialRewardMul: 1.04
+                        }
+                    },
+                    {
+                        id: 'codex_fund',
+                        name: '藏经补助',
+                        desc: '临时商会和命环收益加强，便于补齐关键缺件。',
+                        mods: {
+                            shopPriceMul: 0.97
+                        },
+                        eventMods: {
+                            tempShopOfferBonus: 1,
+                            tempShopPriceMul: 0.92,
+                            ringExpFlat: 6
+                        }
+                    }
+                ]
+            }
+        ];
+    }
+
+    getEndlessWeekMeta(dateOverride = null) {
+        const toDate = (value) => {
+            if (value instanceof Date) return new Date(value.getTime());
+            const candidate = value === null || value === undefined ? new Date() : new Date(value);
+            if (Number.isFinite(candidate.getTime())) return candidate;
+            return new Date();
+        };
+        const raw = toDate(dateOverride);
+        const utcDate = new Date(Date.UTC(raw.getUTCFullYear(), raw.getUTCMonth(), raw.getUTCDate()));
+        const isoRef = new Date(utcDate.getTime());
+        const day = isoRef.getUTCDay() || 7;
+        isoRef.setUTCDate(isoRef.getUTCDate() + 4 - day);
+        const isoYear = isoRef.getUTCFullYear();
+        const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+        const weekNo = Math.max(1, Math.ceil((((isoRef - yearStart) / 86400000) + 1) / 7));
+        const weekTag = `${isoYear}-W${String(weekNo).padStart(2, '0')}`;
+        const weekIndex = Math.max(0, Math.floor(utcDate.getTime() / 604800000));
+        return {
+            year: isoYear,
+            weekNo,
+            weekTag,
+            weekIndex
+        };
+    }
+
+    getEndlessSeasonProfile(cycleOverride = null, dateOverride = null) {
+        const catalog = this.getEndlessSeasonCatalog();
+        if (!Array.isArray(catalog) || catalog.length === 0) return null;
+        const state = typeof this.ensureEndlessState === 'function'
+            ? this.ensureEndlessState()
+            : null;
+        const stateCycle = state && typeof state === 'object'
+            ? state.currentCycle
+            : 0;
+        const rawCycle = cycleOverride === null || cycleOverride === undefined
+            ? stateCycle
+            : cycleOverride;
+        const cycle = Math.max(0, Math.floor(Number(rawCycle) || 0));
+        const weekMeta = this.getEndlessWeekMeta(dateOverride);
+        const season = catalog[weekMeta.weekIndex % catalog.length] || catalog[0];
+        const directives = Array.isArray(season.directives) && season.directives.length > 0
+            ? season.directives
+            : [{ id: `${season.id}_default`, name: '稳态令', desc: season.desc || '当前赛季处于稳态指令。' }];
+        const directive = directives[(weekMeta.weekIndex + cycle) % directives.length] || directives[0];
+
+        const toMultiplier = (value) => {
+            const num = Number(value);
+            if (!Number.isFinite(num)) return 1;
+            return Math.max(0.7, Math.min(1.4, num));
+        };
+        const sanitizeMapShift = (rawShift) => {
+            if (!rawShift || typeof rawShift !== 'object') return {};
+            const cleaned = {};
+            Object.keys(rawShift).forEach((key) => {
+                const delta = Number(rawShift[key]);
+                if (!Number.isFinite(delta)) return;
+                cleaned[key] = Math.max(-0.15, Math.min(0.15, delta));
+            });
+            return cleaned;
+        };
+        const sanitizeMods = (mods) => {
+            const source = mods && typeof mods === 'object' ? mods : {};
+            return {
+                enemyHpMul: toMultiplier(source.enemyHpMul),
+                enemyAtkMul: toMultiplier(source.enemyAtkMul),
+                rewardGoldMul: toMultiplier(source.rewardGoldMul),
+                rewardExpMul: toMultiplier(source.rewardExpMul),
+                shopPriceMul: toMultiplier(source.shopPriceMul),
+                healMul: toMultiplier(source.healMul),
+                mapWeightShift: sanitizeMapShift(source.mapWeightShift)
+            };
+        };
+        const sanitizeEventMods = (mods) => {
+            const source = mods && typeof mods === 'object' ? mods : {};
+            return {
+                goldGainMul: toMultiplier(source.goldGainMul),
+                ringExpFlat: Math.max(0, Math.min(40, Math.floor(Number(source.ringExpFlat) || 0))),
+                trialRewardMul: toMultiplier(source.trialRewardMul),
+                tempShopOfferBonus: Math.max(0, Math.min(2, Math.floor(Number(source.tempShopOfferBonus) || 0))),
+                tempShopPriceMul: toMultiplier(source.tempShopPriceMul),
+                boonRareBonusRate: Math.max(0, Math.min(0.16, Number(source.boonRareBonusRate) || 0)),
+                bonusAdventureBuffCharges: Math.max(0, Math.min(2, Math.floor(Number(source.bonusAdventureBuffCharges) || 0))),
+                forceRelief: !!source.forceRelief,
+                forceRareBoonChoice: !!source.forceRareBoonChoice
+            };
+        };
+
+        return {
+            id: season.id,
+            name: season.name,
+            icon: season.icon || '🜁',
+            desc: season.desc || '',
+            weekTag: weekMeta.weekTag,
+            weekNo: weekMeta.weekNo,
+            year: weekMeta.year,
+            weekIndex: weekMeta.weekIndex,
+            directiveId: directive.id,
+            directiveName: directive.name || '稳态令',
+            directiveDesc: directive.desc || '',
+            mods: sanitizeMods(season.mods),
+            directiveMods: sanitizeMods(directive.mods),
+            eventMods: sanitizeEventMods(season.eventMods),
+            directiveEventMods: sanitizeEventMods(directive.eventMods),
+            signature: `${season.id}:${weekMeta.weekTag}:${directive.id}`
+        };
+    }
+
+    syncEndlessSeasonState(options = {}) {
+        const opts = options && typeof options === 'object' ? options : {};
+        const seedState = this.ensureEndlessState();
+        const cycleOverride = Object.prototype.hasOwnProperty.call(opts, 'cycleOverride')
+            ? opts.cycleOverride
+            : seedState.currentCycle;
+        const season = this.getEndlessSeasonProfile(
+            cycleOverride,
+            opts.dateOverride
+        );
+        if (!season) return null;
+        const state = this.ensureEndlessState();
+
+        state.seasonArchive = state.seasonArchive && typeof state.seasonArchive === 'object'
+            ? state.seasonArchive
+            : {};
+
+        const archiveSnapshot = (seasonId, weekTag, snapshot) => {
+            if (typeof seasonId !== 'string' || !seasonId || typeof weekTag !== 'string' || !weekTag) return;
+            const key = `${seasonId}:${weekTag}`.slice(0, 96);
+            const base = state.seasonArchive[key] && typeof state.seasonArchive[key] === 'object'
+                ? state.seasonArchive[key]
+                : {};
+            state.seasonArchive[key] = {
+                seasonId,
+                weekTag,
+                seasonName: typeof snapshot.seasonName === 'string' ? snapshot.seasonName : '',
+                icon: typeof snapshot.icon === 'string' ? snapshot.icon : '',
+                bestCycle: Math.max(0, Math.floor(Number(snapshot.bestCycle) || 0)),
+                clears: Math.max(0, Math.floor(Number(snapshot.clears) || 0)),
+                bosses: Math.max(0, Math.floor(Number(snapshot.bosses) || 0)),
+                score: Math.max(0, Math.floor(Number(snapshot.score) || 0)),
+                lastDirectiveId: typeof snapshot.lastDirectiveId === 'string' && snapshot.lastDirectiveId
+                    ? snapshot.lastDirectiveId
+                    : null,
+                updatedAt: Date.now()
+            };
+        };
+
+        const prevSeasonId = typeof state.seasonId === 'string' ? state.seasonId : null;
+        const prevWeekTag = typeof state.seasonWeekTag === 'string' ? state.seasonWeekTag : '';
+        const seasonChanged = prevSeasonId !== season.id || prevWeekTag !== season.weekTag;
+        if (seasonChanged && prevSeasonId && prevWeekTag) {
+            archiveSnapshot(prevSeasonId, prevWeekTag, {
+                seasonName: state.seasonName || '',
+                icon: state.seasonIcon || '',
+                bestCycle: state.seasonBestCycle,
+                clears: state.seasonCycleClears,
+                bosses: state.seasonBossDefeated,
+                score: state.seasonScore,
+                lastDirectiveId: state.lastSeasonDirectiveId
+            });
+            state.seasonBestCycle = 0;
+            state.seasonCycleClears = 0;
+            state.seasonBossDefeated = 0;
+            state.seasonScore = 0;
+        }
+
+        state.seasonId = season.id;
+        state.seasonWeekTag = season.weekTag;
+        state.seasonName = season.name || '';
+        state.seasonIcon = season.icon || '';
+        state.lastSeasonDirectiveId = season.directiveId || null;
+
+        const cycleDelta = Math.max(0, Math.floor(Number(opts.cycleDelta) || 0));
+        const bossDelta = Math.max(0, Math.floor(Number(opts.bossDelta) || 0));
+        const scoreDelta = Math.max(0, Math.floor(Number(opts.scoreDelta) || 0));
+        const bestCycleCandidate = Math.max(
+            Math.max(0, Math.floor(Number(opts.bestCycle) || 0)),
+            Math.max(0, Math.floor(Number(state.currentCycle) || 0) + 1)
+        );
+
+        state.seasonCycleClears = Math.max(0, Math.floor(Number(state.seasonCycleClears) || 0)) + cycleDelta;
+        state.seasonBossDefeated = Math.max(0, Math.floor(Number(state.seasonBossDefeated) || 0)) + bossDelta;
+        state.seasonScore = Math.max(0, Math.floor(Number(state.seasonScore) || 0)) + scoreDelta;
+        state.seasonBestCycle = Math.max(Math.max(0, Math.floor(Number(state.seasonBestCycle) || 0)), bestCycleCandidate);
+
+        archiveSnapshot(season.id, season.weekTag, {
+            seasonName: season.name || '',
+            icon: season.icon || '',
+            bestCycle: state.seasonBestCycle,
+            clears: state.seasonCycleClears,
+            bosses: state.seasonBossDefeated,
+            score: state.seasonScore,
+            lastDirectiveId: season.directiveId || null
+        });
+
+        const archiveKeys = Object.keys(state.seasonArchive)
+            .sort((a, b) => (state.seasonArchive[b]?.updatedAt || 0) - (state.seasonArchive[a]?.updatedAt || 0))
+            .slice(0, 16);
+        const trimmed = {};
+        archiveKeys.forEach((key) => {
+            trimmed[key] = state.seasonArchive[key];
+        });
+        state.seasonArchive = trimmed;
+
+        return season;
+    }
+
     getEndlessModifiers() {
         if (!this.isEndlessActive()) {
             return {
@@ -4345,7 +4833,8 @@ class Game {
                 shopPriceMul: 1,
                 healMul: 1,
                 mapWeightShift: {},
-                cycleTheme: null
+                cycleTheme: null,
+                endlessSeason: null
             };
         }
 
@@ -4355,6 +4844,9 @@ class Game {
         const pressure = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
         const phaseProfile = this.getEndlessPhaseProfile(cycle);
         const cycleTheme = this.getEndlessCycleThemeProfile(cycle);
+        const seasonProfile = typeof this.getEndlessSeasonProfile === 'function'
+            ? this.getEndlessSeasonProfile(cycle)
+            : null;
 
         const result = {
             enemyHpMul: 1 + cycle * 0.12 + loopTier * 0.08 + pressure * 0.025,
@@ -4373,6 +4865,32 @@ class Game {
                 name: cycleTheme.name,
                 shortName: cycleTheme.shortName,
                 segmentIndex: cycleTheme.segmentIndex
+            },
+            endlessSeason: seasonProfile
+                ? {
+                    id: seasonProfile.id || null,
+                    name: seasonProfile.name || '',
+                    icon: seasonProfile.icon || '',
+                    weekTag: seasonProfile.weekTag || '',
+                    directiveId: seasonProfile.directiveId || null,
+                    directiveName: seasonProfile.directiveName || ''
+                }
+                : null
+        };
+        const applyModifierPack = (mods) => {
+            if (!mods || typeof mods !== 'object') return;
+            if (Number.isFinite(Number(mods.enemyHpMul))) result.enemyHpMul *= Math.max(0.7, Number(mods.enemyHpMul) || 1);
+            if (Number.isFinite(Number(mods.enemyAtkMul))) result.enemyAtkMul *= Math.max(0.7, Number(mods.enemyAtkMul) || 1);
+            if (Number.isFinite(Number(mods.rewardGoldMul))) result.rewardGoldMul *= Math.max(0.7, Number(mods.rewardGoldMul) || 1);
+            if (Number.isFinite(Number(mods.rewardExpMul))) result.rewardExpMul *= Math.max(0.7, Number(mods.rewardExpMul) || 1);
+            if (Number.isFinite(Number(mods.shopPriceMul))) result.shopPriceMul *= Math.max(0.7, Number(mods.shopPriceMul) || 1);
+            if (Number.isFinite(Number(mods.healMul))) result.healMul *= Math.max(0.7, Number(mods.healMul) || 1);
+            if (mods.mapWeightShift && typeof mods.mapWeightShift === 'object') {
+                Object.keys(mods.mapWeightShift).forEach((key) => {
+                    const delta = Number(mods.mapWeightShift[key]);
+                    if (!Number.isFinite(delta)) return;
+                    result.mapWeightShift[key] = (result.mapWeightShift[key] || 0) + delta;
+                });
             }
         };
 
@@ -4429,6 +4947,10 @@ class Game {
                     result.mapWeightShift[key] = (result.mapWeightShift[key] || 0) + delta;
                 });
             }
+        }
+        if (seasonProfile && typeof seasonProfile === 'object') {
+            applyModifierPack(seasonProfile.mods);
+            applyModifierPack(seasonProfile.directiveMods);
         }
 
         const paranoia = typeof this.getEndlessParanoiaEffects === 'function'
@@ -4488,6 +5010,23 @@ class Game {
         const pressure = Math.max(0, Math.min(9, Math.floor(Number(state?.pressure) || 0)));
         const phaseProfile = this.getEndlessPhaseProfile(state.currentCycle);
         const cycleTheme = this.getEndlessCycleThemeProfile(state.currentCycle);
+        const seasonProfile = typeof this.getEndlessSeasonProfile === 'function'
+            ? this.getEndlessSeasonProfile(state.currentCycle)
+            : null;
+        const applyEventModifierPack = (mods) => {
+            if (!mods || typeof mods !== 'object') return;
+            if (Number.isFinite(Number(mods.goldGainMul))) tuning.goldGainMul *= Math.max(0.7, Number(mods.goldGainMul) || 1);
+            if (Number.isFinite(Number(mods.ringExpFlat))) tuning.ringExpFlat += Math.max(0, Math.floor(Number(mods.ringExpFlat) || 0));
+            if (Number.isFinite(Number(mods.trialRewardMul))) tuning.trialRewardMul *= Math.max(0.7, Number(mods.trialRewardMul) || 1);
+            if (Number.isFinite(Number(mods.tempShopOfferBonus))) tuning.tempShopOfferBonus += Math.max(0, Math.floor(Number(mods.tempShopOfferBonus) || 0));
+            if (Number.isFinite(Number(mods.tempShopPriceMul))) tuning.tempShopPriceMul *= Math.max(0.65, Number(mods.tempShopPriceMul) || 1);
+            if (Number.isFinite(Number(mods.boonRareBonusRate))) tuning.boonRareBonusRate += Math.max(0, Number(mods.boonRareBonusRate) || 0);
+            if (Number.isFinite(Number(mods.bonusAdventureBuffCharges))) {
+                tuning.bonusAdventureBuffCharges += Math.max(0, Math.floor(Number(mods.bonusAdventureBuffCharges) || 0));
+            }
+            tuning.forceRelief = tuning.forceRelief || !!mods.forceRelief;
+            tuning.forceRareBoonChoice = tuning.forceRareBoonChoice || !!mods.forceRareBoonChoice;
+        };
 
         if (activeMutators.has('war_market')) {
             tuning.tempShopOfferBonus += 1;
@@ -4551,6 +5090,10 @@ class Game {
             tuning.forceRelief = tuning.forceRelief || !!cycleTheme.eventForceRelief;
             tuning.forceRareBoonChoice = tuning.forceRareBoonChoice || !!cycleTheme.eventForceRareBoonChoice;
         }
+        if (seasonProfile && typeof seasonProfile === 'object') {
+            applyEventModifierPack(seasonProfile.eventMods);
+            applyEventModifierPack(seasonProfile.directiveEventMods);
+        }
 
         tuning.tempShopOfferBonus = Math.max(0, Math.min(2, Math.floor(Number(tuning.tempShopOfferBonus) || 0)));
         tuning.bonusAdventureBuffCharges = Math.max(0, Math.min(2, Math.floor(Number(tuning.bonusAdventureBuffCharges) || 0)));
@@ -4581,6 +5124,9 @@ class Game {
         const pressure = Math.max(0, Math.min(9, Math.floor(Number(state?.pressure) || 0)));
         const phaseProfile = this.getEndlessPhaseProfile(state.currentCycle);
         const cycleTheme = this.getEndlessCycleThemeProfile(state.currentCycle);
+        const seasonProfile = typeof this.getEndlessSeasonProfile === 'function'
+            ? this.getEndlessSeasonProfile(state.currentCycle)
+            : null;
         const profile = {
             ...fallback,
             pressure
@@ -4631,6 +5177,9 @@ class Game {
             profile.injectDebuffPattern = profile.injectDebuffPattern || !!cycleTheme.pressureInjectDebuffPattern;
             profile.summary += `｜轮段策略：${cycleTheme.name}`;
         }
+        if (seasonProfile && typeof seasonProfile === 'object' && seasonProfile.directiveName) {
+            profile.summary += `｜赛季令签：${seasonProfile.directiveName}`;
+        }
 
         profile.enemyOpeningBlock = Math.max(0, Math.floor(Number(profile.enemyOpeningBlock) || 0));
         profile.enemyOpeningStrength = Math.max(0, Math.floor(Number(profile.enemyOpeningStrength) || 0));
@@ -4656,6 +5205,19 @@ class Game {
             profile.themeName = null;
             profile.themeSegmentIndex = 0;
             profile.themeDirective = 'balanced';
+        }
+        if (seasonProfile && typeof seasonProfile === 'object') {
+            profile.seasonId = seasonProfile.id || null;
+            profile.seasonName = seasonProfile.name || '';
+            profile.seasonWeekTag = seasonProfile.weekTag || '';
+            profile.seasonDirectiveId = seasonProfile.directiveId || null;
+            profile.seasonDirectiveName = seasonProfile.directiveName || '';
+        } else {
+            profile.seasonId = null;
+            profile.seasonName = '';
+            profile.seasonWeekTag = '';
+            profile.seasonDirectiveId = null;
+            profile.seasonDirectiveName = '';
         }
         return profile;
     }
@@ -4908,6 +5470,7 @@ class Game {
         if (themeProfile && themeProfile.id) {
             state.lastThemeId = themeProfile.id;
         }
+        const seasonProfile = this.syncEndlessSeasonState({ bestCycle: state.currentCycle + 1 });
 
         this.player.isReplay = false;
         this.player.isRecultivation = false;
@@ -4920,12 +5483,17 @@ class Game {
         this.showScreen('map-screen');
         this.autoSave();
         Utils.showBattleLog(`无尽轮回开启：第 ${state.currentCycle + 1} 轮`);
+        if (seasonProfile) {
+            Utils.showBattleLog(`本周赛季：${seasonProfile.icon || '🜁'} ${seasonProfile.name}（${seasonProfile.weekTag}）｜季签：${seasonProfile.directiveName}`);
+        }
         return true;
     }
 
     handleEndlessRealmComplete() {
         if (!this.isEndlessActive()) return;
-        const state = this.ensureEndlessState();
+        let state = this.ensureEndlessState();
+        let seasonProfile = this.syncEndlessSeasonState();
+        state = this.ensureEndlessState();
         const prevPressure = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
         const prevBarterHeat = Math.max(0, Math.min(9, Math.floor(Number(state.barterHeat) || 0)));
         state.totalBossDefeated += 1;
@@ -4943,14 +5511,24 @@ class Game {
 
         const essenceGain = Math.max(1, Math.floor((state.currentCycle + 2) / 3));
         this.awardLegacyEssence(essenceGain, '无尽感悟', { silent: true });
-        Utils.showBattleLog(`无尽突破：灵石 +${cycleGold}，恢复 ${healAmount} 生命，轮回精粹 +${essenceGain}，无尽积分 +${cycleScore}，轮回压力 ${prevPressure}→${state.pressure}`);
+        const nextCycle = state.currentCycle + 1;
+        seasonProfile = this.syncEndlessSeasonState({
+            cycleDelta: 1,
+            bossDelta: 1,
+            scoreDelta: cycleScore,
+            bestCycle: nextCycle + 1
+        }) || seasonProfile;
+        state = this.ensureEndlessState();
+        const seasonProgressText = seasonProfile
+            ? `，赛季进度 ${state.seasonCycleClears} 轮 / 主宰 ${state.seasonBossDefeated} / 赛季积分 ${state.seasonScore}`
+            : '';
+        Utils.showBattleLog(`无尽突破：灵石 +${cycleGold}，恢复 ${healAmount} 生命，轮回精粹 +${essenceGain}，无尽积分 +${cycleScore}，轮回压力 ${prevPressure}→${state.pressure}${seasonProgressText}`);
 
         const rolledMutator = this.rollNextEndlessMutator();
         if (rolledMutator) {
             Utils.showBattleLog(`轮回异变：${rolledMutator.name}（${rolledMutator.desc}）`);
         }
 
-        const nextCycle = state.currentCycle + 1;
         const enteringNewLoop = nextCycle > 0 && nextCycle % 13 === 0;
         const nextPhase = this.getEndlessPhaseProfile(nextCycle);
         const nextTheme = this.getEndlessCycleThemeProfile(nextCycle);
@@ -6094,6 +6672,16 @@ class Game {
                 boonRarePity: 0,
                 boonRareGuaranteedEvery: 3,
                 barterHeat: 0,
+                seasonId: null,
+                seasonWeekTag: '',
+                seasonName: '',
+                seasonIcon: '',
+                lastSeasonDirectiveId: null,
+                seasonBestCycle: 0,
+                seasonCycleClears: 0,
+                seasonBossDefeated: 0,
+                seasonScore: 0,
+                seasonArchive: {},
                 boonStats: {
                     rewardGoldMul: 0,
                     rewardExpMul: 0,
@@ -8425,6 +9013,9 @@ class Game {
             const modifiers = this.getEndlessModifiers();
             const phaseProfile = this.getEndlessPhaseProfile(state.currentCycle);
             const cycleTheme = this.getEndlessCycleThemeProfile(state.currentCycle);
+            const seasonProfile = typeof this.getEndlessSeasonProfile === 'function'
+                ? this.getEndlessSeasonProfile(state.currentCycle)
+                : null;
             const realm = this.getEndlessRealmForCycle(state.currentCycle);
             const realmName = this.map.getRealmName(realm);
             const activeMutators = (state.activeMutators || [])
@@ -8447,6 +9038,9 @@ class Game {
                 const themeText = cycleTheme && cycleTheme.name
                     ? `<br><span style="color:#9ceeff;">轮段主题：${cycleTheme.name}（第${cycleTheme.segmentIndex}段）</span><br><span style="color:#bdefff;opacity:0.9;">${cycleTheme.desc || ''}</span>`
                     : '<br><span style="color:#9ceeff;">轮段主题：稳衡</span>';
+                const seasonText = seasonProfile
+                    ? `<br><span style="color:#ffd9a7;">赛季：${seasonProfile.icon || '🜁'} ${seasonProfile.name}（${seasonProfile.weekTag}）</span><br><span style="color:#ffd9a7;opacity:0.92;">季签：${seasonProfile.directiveName} · ${seasonProfile.directiveDesc || '保持稳态推进。'}</span>`
+                    : '<br><span style="color:#ffd9a7;">赛季：待命</span>';
                 envEl.innerHTML = `
                     <div style="margin-bottom:5px; color:#8fe8ff; font-weight:bold; font-size:1.05rem;">
                         当前映射：${realmName}
@@ -8457,15 +9051,21 @@ class Game {
                         商店价格 x${modifiers.shopPriceMul.toFixed(2)}｜治疗效率 x${modifiers.healMul.toFixed(2)}
                         ${phaseText}
                         ${themeText}
+                        ${seasonText}
                     </div>
                 `;
             }
             if (chapterEl) {
+                const seasonBest = Math.max(0, Math.floor(Number(state.seasonBestCycle) || 0));
+                const seasonClears = Math.max(0, Math.floor(Number(state.seasonCycleClears) || 0));
+                const seasonBosses = Math.max(0, Math.floor(Number(state.seasonBossDefeated) || 0));
+                const seasonScore = Math.max(0, Math.floor(Number(state.seasonScore) || 0));
                 chapterEl.innerHTML = `
                     <div class="preview-chapter-summary">
                         <strong>无尽轮回不绑定固定章节。</strong><br>
                         当前映射天域会随轮次切换，主题词缀、压力阶段与偏执会共同决定打法。
                     </div>
+                    <div class="preview-rule-line"><span class="rule-label">赛季战绩</span><span>已通关 ${seasonClears} 轮 / 主宰 ${seasonBosses} / 赛季积分 ${seasonScore} / 最深第 ${Math.max(1, seasonBest)} 轮</span></div>
                 `;
             }
             if (buildEl) {

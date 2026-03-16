@@ -15671,6 +15671,18 @@ body {
     color: rgba(222, 244, 255, 0.98);
 }
 
+.map-endless-panel .endless-stats .endless-season-chip {
+    border-color: rgba(255, 219, 156, 0.58);
+    color: rgba(255, 241, 214, 0.98);
+    background: rgba(86, 58, 24, 0.5);
+}
+
+.map-endless-panel .endless-stats .endless-directive-chip {
+    border-color: rgba(255, 175, 124, 0.6);
+    color: rgba(255, 234, 214, 0.97);
+    background: rgba(96, 44, 24, 0.52);
+}
+
 .map-endless-panel .endless-theme-desc {
     margin-top: 5px;
     padding: 3px 8px;
@@ -15679,6 +15691,28 @@ body {
     background: rgba(17, 42, 66, 0.42);
     color: rgba(202, 236, 253, 0.92);
     font-size: 0.67rem;
+    line-height: 1.35;
+}
+
+.map-endless-panel .endless-season-desc {
+    margin-top: 5px;
+    padding: 3px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 187, 128, 0.3);
+    background: rgba(68, 35, 19, 0.45);
+    color: rgba(255, 232, 205, 0.92);
+    font-size: 0.67rem;
+    line-height: 1.35;
+}
+
+.map-endless-panel .endless-season-ledger {
+    margin-top: 6px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 201, 139, 0.28);
+    background: rgba(42, 28, 18, 0.44);
+    color: rgba(255, 228, 197, 0.92);
+    font-size: 0.66rem;
     line-height: 1.35;
 }
 

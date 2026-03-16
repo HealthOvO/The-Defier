@@ -100,6 +100,11 @@ function assert(cond, msg) {
     'applyEndlessBoon',
     'getEndlessPhaseProfile',
     'getEndlessCycleThemeProfile',
+    'getEndlessSeasonCatalog',
+    'getEndlessWeekMeta',
+    'getEndlessSeasonProfile',
+    'syncEndlessSeasonState',
+    'getEndlessModifiers',
     'getEndlessEventTuning',
     'getTemporaryEventShopOffers',
     'applyTemporaryEventShopOffer',
@@ -114,6 +119,13 @@ function assert(cond, msg) {
   harness.endlessState.currentCycle = 8;
   harness.endlessState.pressure = 6;
   harness.endlessState.activeMutators = ['war_market', 'void_tax', 'trial_inferno'];
+  const seasonSeed = harness.syncEndlessSeasonState({
+    cycleOverride: harness.endlessState.currentCycle,
+    dateOverride: '2026-03-16T00:00:00.000Z'
+  });
+  assert(seasonSeed && seasonSeed.id, 'season state should seed successfully for shop checks');
+  const endlessMods = harness.getEndlessModifiers();
+  assert(endlessMods.endlessSeason && endlessMods.endlessSeason.directiveId, 'shop checks should run with season directive metadata');
 
   // 1) 无尽词缀应影响临时商会货架（更多选项 + 无尽专属货品 + 救援券）
   const offers = harness.getTemporaryEventShopOffers({ offerCount: 3 });

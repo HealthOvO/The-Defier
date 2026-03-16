@@ -5713,3 +5713,61 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - 本轮结论
     - 当前代码在本地“全量 Node + 全量浏览器审计 + 人工截图抽检”下未发现阻塞性功能缺陷或明显 UI 破损。
     - 已满足提交与 push 条件。
+
+- 2026-03-16: 无尽轮回赛季化收口（第二轮）+ 全量回归复验（本轮）
+  - 本轮完成
+    - `js/game.js`
+      - 新增赛季体系后，修复 2 个关键状态引用问题（会影响赛季账本真实写回）：
+        - `syncEndlessSeasonState()` 先取旧 `state` 再调用 `getEndlessSeasonProfile()` 导致写回丢失；
+        - `handleEndlessRealmComplete()` 在调用 `syncEndlessSeasonState()` 后继续使用陈旧 `state`。
+      - 增加 `getEndlessSeasonProfile()` 空状态防御，避免特定测试 harness（`ensureEndlessState()` 置空）触发空指针。
+    - `css/mobile.css`
+      - 补充无尽赛季 UI 移动端适配：
+        - `.endless-season-chip`
+        - `.endless-directive-chip`
+        - `.endless-season-desc`
+        - `.endless-season-ledger`
+    - 测试脚本补完（赛季覆盖）
+      - `tests/sanity_endless_mode_checks.js`
+        - harness 挂载赛季方法（`getEndlessSeasonCatalog/getEndlessWeekMeta/getEndlessSeasonProfile/syncEndlessSeasonState`）
+        - 增加默认状态、归一化、赛季轮换/归档、面板元数据、结算推进的赛季断言
+      - `tests/sanity_endless_phase_boss_checks.js`
+        - 新增赛季方法挂载与赛季元数据断言（modifiers + pressure profile）
+      - `tests/sanity_endless_shop_service_checks.js`
+        - 新增赛季初始化与季签元数据断言，确保商店链路运行在赛季上下文
+      - `tests/browser_feature_audit.mjs`
+        - 扩展无尽面板探针：赛季 chip、季签 chip、赛季说明、赛季战绩行、`render_game_to_text.endlessSeason` 断言
+  - 本轮验证（全部通过）
+    - 语法：
+      - `node --check js/game.js` ✅
+      - `node --check js/core/map.js` ✅
+      - `node --check tests/sanity_endless_mode_checks.js` ✅
+      - `node --check tests/sanity_endless_phase_boss_checks.js` ✅
+      - `node --check tests/sanity_endless_shop_service_checks.js` ✅
+      - `node --check tests/browser_feature_audit.mjs` ✅
+    - Node：
+      - `node tests/sanity_endless_mode_checks.js` ✅
+      - `node tests/sanity_endless_phase_boss_checks.js` ✅
+      - `node tests/sanity_endless_shop_service_checks.js` ✅
+      - `node tests/sanity_run_identity_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅（全量门禁通过）
+    - 浏览器审计：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4174 output/web-feature-audit-endless-season` ✅
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-endless-season` ✅（全量 release 浏览器审计通过）
+      - 非阻断降级：`feature/mobile/meta/vow-choice/chapter-flow/dongfu` 出现字体等待截图超时降级提示，断言均通过。
+    - Playwright 客户端（develop-web-game 要求）：
+      - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4174/?autotest=guest-map&character=yanHan&destiny=preceptSeal&spirit=artifactSoul&path=insight&realm=6" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-endless-season-client` ✅
+      - 产物：`shot-0.png/shot-1.png/state-0.json/state-1.json`，未生成 `errors-*.json`。
+  - 人工截图复核（已查看）
+    - 赛季面板专项（桌面 + 移动）：
+      - `output/manual-endless-season-check/endless-season-desktop.png`
+      - `output/manual-endless-season-check/endless-season-mobile.png`
+    - 浏览器专项截图：
+      - `output/web-feature-audit-endless-season/feature-audit.png`
+      - `output/web-feature-audit-endless-season/boss-three-act-panel.png`
+      - `output/release-browser-audits-endless-season/mobile/mobile-observatory-modal.png`
+      - `output/release-browser-audits-endless-season/challenge/challenge-hub-desktop.png`
+      - `output/release-browser-audits-endless-season/pvp/pvp-audit.png`
+  - 本轮结论
+    - 无尽轮回“赛季 + 季签 + 赛季战绩”功能链路在逻辑、UI（含移动端）与自动化审计中均已闭环。
+    - 目前未发现阻塞性功能缺陷或 UI 未实现项；可进入提交与 push。

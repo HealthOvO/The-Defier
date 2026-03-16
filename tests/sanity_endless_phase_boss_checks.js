@@ -54,6 +54,10 @@ function assert(cond, msg) {
     'getEndlessMutatorPool',
     'getEndlessPhaseProfile',
     'getEndlessCycleThemeProfile',
+    'getEndlessSeasonCatalog',
+    'getEndlessWeekMeta',
+    'getEndlessSeasonProfile',
+    'syncEndlessSeasonState',
     'getEndlessModifiers',
     'getEndlessEventTuning',
     'getEndlessPressureBehaviorProfile',
@@ -68,6 +72,7 @@ function assert(cond, msg) {
   harness.endlessState.active = true;
   harness.endlessState.activeMutators = [];
   harness.endlessState.pressure = 4;
+  harness.syncEndlessSeasonState({ cycleOverride: 2, dateOverride: '2026-03-16T00:00:00.000Z' });
 
   // 1) 相位映射：3/6/9/12 轮触发阶段挑战
   const phase3 = harness.getEndlessPhaseProfile(2);
@@ -86,6 +91,8 @@ function assert(cond, msg) {
   const modsPhase = harness.getEndlessModifiers();
   assert(modsPhase.enemyAtkMul > modsNoPhase.enemyAtkMul, 'phase challenge should increase enemy attack multiplier');
   assert(modsPhase.rewardExpMul > modsNoPhase.rewardExpMul, 'phase challenge should increase reward exp multiplier');
+  assert(modsPhase.endlessSeason && modsPhase.endlessSeason.id, 'endless modifiers should include season metadata');
+  assert(modsPhase.endlessSeason && modsPhase.endlessSeason.directiveId, 'endless modifiers should include season directive metadata');
 
   // 3) phase apex 下 Boss 应获得专属词缀行为
   harness.endlessState.currentCycle = 11; // loopIndex=12 -> apex
@@ -128,6 +135,8 @@ function assert(cond, msg) {
   // 4) 高相位应反映到行为画像与赐福调参
   const profile = harness.getEndlessPressureBehaviorProfile();
   assert(profile.phaseCheckpoint === 12, `pressure profile should expose phase checkpoint 12, got ${profile.phaseCheckpoint}`);
+  assert(typeof profile.seasonId === 'string' && profile.seasonId.length > 0, 'pressure profile should expose season id');
+  assert(typeof profile.seasonDirectiveName === 'string' && profile.seasonDirectiveName.length > 0, 'pressure profile should expose season directive name');
   const tuning = harness.getEndlessEventTuning();
   assert(tuning.boonRareBonusRate > 0.02, `phase tuning should boost rare boon rate, got ${tuning.boonRareBonusRate}`);
 

@@ -1837,6 +1837,9 @@ class GameMap {
         const cycleTheme = (typeof this.game.getEndlessCycleThemeProfile === 'function')
             ? this.game.getEndlessCycleThemeProfile()
             : null;
+        const seasonProfile = (typeof this.game.getEndlessSeasonProfile === 'function')
+            ? this.game.getEndlessSeasonProfile(state?.currentCycle)
+            : null;
 
         const mutators = (state && Array.isArray(state.activeMutators) && typeof this.game.getEndlessMutatorPool === 'function')
             ? state.activeMutators
@@ -1863,6 +1866,19 @@ class GameMap {
         const themeDesc = cycleTheme && cycleTheme.desc
             ? cycleTheme.desc
             : '轮段稳定，敌方与收益维持均衡节奏。';
+        const seasonChipText = seasonProfile
+            ? `${seasonProfile.icon || '🜁'} ${seasonProfile.name} · ${seasonProfile.weekTag}`
+            : '🜁 赛季待命';
+        const directiveChipText = seasonProfile && seasonProfile.directiveName
+            ? seasonProfile.directiveName
+            : '稳态季签';
+        const seasonDesc = seasonProfile
+            ? `${seasonProfile.desc || ''}｜季签：${seasonProfile.directiveName} · ${seasonProfile.directiveDesc || '保持稳态推进。'}`
+            : '赛季尚未激活，等待进入无尽轮回后自动加载。';
+        const seasonClears = Math.max(0, Math.floor(Number(state?.seasonCycleClears) || 0));
+        const seasonBosses = Math.max(0, Math.floor(Number(state?.seasonBossDefeated) || 0));
+        const seasonScore = Math.max(0, Math.floor(Number(state?.seasonScore) || 0));
+        const seasonBestCycle = Math.max(1, Math.floor(Number(state?.seasonBestCycle) || 1));
         const paranoia = (typeof this.game.getEndlessParanoiaEffects === 'function')
             ? this.game.getEndlessParanoiaEffects()
             : null;
@@ -1893,9 +1909,13 @@ class GameMap {
                 <span>稀有保底 ${Math.max(0, rareEvery - 1 - rarePity)}/ ${Math.max(1, rareEvery - 1)}</span>
                 <span class="endless-pressure-chip tier-${behaviorTier}">敌方节奏：${behaviorHint}</span>
                 <span class="endless-theme-chip ${themeChipClass}" title="${themeDesc}">战场轮段：${themeChipText}</span>
+                <span class="endless-season-chip" title="${seasonDesc}">赛季：${seasonChipText}</span>
+                <span class="endless-directive-chip" title="${seasonDesc}">季签：${directiveChipText}</span>
                 <span class="endless-paranoia-chip ${paranoiaLevel > 0 ? 'active' : 'idle'}" title="${paranoiaSummary}">轮回偏执：${paranoiaLevel > 0 ? `第 ${paranoiaLevel} 层` : '未激活'}</span>
             </div>
             <div class="endless-theme-desc">${themeDesc}</div>
+            <div class="endless-season-desc">${seasonDesc}</div>
+            <div class="endless-season-ledger">赛季战绩：已通关 ${seasonClears} 轮 · 主宰 ${seasonBosses} · 赛季积分 ${seasonScore} · 最深第 ${seasonBestCycle} 轮</div>
             <div class="endless-paranoia-summary">${paranoiaSummary}</div>
             <div class="endless-paranoia-effects">
                 ${paranoiaImpact.length > 0

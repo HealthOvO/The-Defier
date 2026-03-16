@@ -44,12 +44,16 @@ function assert(cond, msg) {
   assert(typeof Game === 'function', 'Game class should exist');
 
   const defaults = Game.prototype.createDefaultEndlessState.call({});
-    assert(defaults && defaults.active === false, 'default endless state should be inactive');
-    assert(defaults.currentCycle === 0, 'default cycle should be 0');
-    assert(defaults.pressure === 0, 'default pressure should be 0');
-    assert(Array.isArray(defaults.activeParanoiaBurdens) && defaults.activeParanoiaBurdens.length === 0, 'default paranoia burdens should exist');
-    assert(Array.isArray(defaults.activeParanoiaBoons) && defaults.activeParanoiaBoons.length === 0, 'default paranoia boons should exist');
-    assert(defaults.boonStats && defaults.boonStats.rewardGoldMul === 0, 'default boon stats should exist');
+  assert(defaults && defaults.active === false, 'default endless state should be inactive');
+  assert(defaults.currentCycle === 0, 'default cycle should be 0');
+  assert(defaults.pressure === 0, 'default pressure should be 0');
+  assert(Array.isArray(defaults.activeParanoiaBurdens) && defaults.activeParanoiaBurdens.length === 0, 'default paranoia burdens should exist');
+  assert(Array.isArray(defaults.activeParanoiaBoons) && defaults.activeParanoiaBoons.length === 0, 'default paranoia boons should exist');
+  assert(defaults.boonStats && defaults.boonStats.rewardGoldMul === 0, 'default boon stats should exist');
+  assert(defaults.seasonId === null, 'default season id should initialize as null');
+  assert(defaults.seasonWeekTag === '', 'default season week tag should initialize as empty');
+  assert(defaults.seasonScore === 0, 'default season score should initialize as 0');
+  assert(defaults.seasonArchive && typeof defaults.seasonArchive === 'object', 'default season archive should exist');
 
   function createHarness() {
     const calls = {
@@ -137,6 +141,10 @@ function assert(cond, msg) {
       'showEndlessParanoiaSelection',
       'getEndlessPhaseProfile',
       'getEndlessCycleThemeProfile',
+      'getEndlessSeasonCatalog',
+      'getEndlessWeekMeta',
+      'getEndlessSeasonProfile',
+      'syncEndlessSeasonState',
       'getEndlessModifiers',
       'getEndlessHealingMultiplier',
       'getEndlessEventTuning',
@@ -179,6 +187,9 @@ function assert(cond, msg) {
     assert(Array.isArray(normalized.activeParanoiaBoons) && normalized.activeParanoiaBoons.length === 0, 'paranoia boons should sanitize to empty');
     assert(normalized.boonStats.rewardGoldMul > 0, 'boon rewardGoldMul should parse numeric');
     assert(normalized.boonStats.healMul === 0, 'boon healMul should clamp at 0');
+    assert(typeof normalized.seasonWeekTag === 'string', 'seasonWeekTag should sanitize to string');
+    assert(normalized.seasonScore >= 0, 'seasonScore should sanitize to non-negative');
+    assert(normalized.seasonArchive && typeof normalized.seasonArchive === 'object', 'seasonArchive should sanitize to object');
   }
 
   // 轮次映射
@@ -207,6 +218,46 @@ function assert(cond, msg) {
     assert(seen.size >= 5, `cycle theme should rotate through >=5 themes, got ${seen.size}`);
   }
 
+  // 赛季映射与账本归档
+  {
+    const { harness } = createHarness();
+    harness.endlessState = harness.createDefaultEndlessState();
+    harness.endlessState.unlocked = true;
+    harness.endlessState.active = true;
+    harness.endlessState.currentCycle = 4;
+
+    const seasonA = harness.getEndlessSeasonProfile(4, '2026-03-16T00:00:00.000Z');
+    assert(seasonA && typeof seasonA === 'object', 'season profile should be generated');
+    assert(typeof seasonA.id === 'string' && seasonA.id.length > 0, 'season profile should include id');
+    assert(typeof seasonA.directiveId === 'string' && seasonA.directiveId.length > 0, 'season profile should include directive id');
+    assert(/^20\d{2}-W\d{2}$/.test(seasonA.weekTag || ''), `season profile should include ISO week tag, got ${seasonA.weekTag}`);
+
+    const syncedA = harness.syncEndlessSeasonState({
+      cycleOverride: 4,
+      dateOverride: '2026-03-16T00:00:00.000Z',
+      cycleDelta: 2,
+      bossDelta: 1,
+      scoreDelta: 320,
+      bestCycle: 7
+    });
+    const stateAfterA = harness.ensureEndlessState();
+    assert(syncedA && syncedA.id === seasonA.id, 'sync should return active season profile');
+    assert(stateAfterA.seasonId === seasonA.id, 'sync should persist season id');
+    assert(stateAfterA.seasonCycleClears >= 2, `sync should accumulate season clears, got ${stateAfterA.seasonCycleClears}`);
+    assert(stateAfterA.seasonBossDefeated >= 1, `sync should accumulate season bosses, got ${stateAfterA.seasonBossDefeated}`);
+    assert(stateAfterA.seasonScore >= 320, `sync should accumulate season score, got ${stateAfterA.seasonScore}`);
+
+    const seasonB = harness.syncEndlessSeasonState({
+      cycleOverride: 4,
+      dateOverride: '2026-03-23T00:00:00.000Z'
+    });
+    const stateAfterB = harness.ensureEndlessState();
+    const archiveKeys = Object.keys(stateAfterB.seasonArchive || {});
+    assert(seasonB && seasonB.weekTag !== seasonA.weekTag, 'cross-week sync should rotate season week tag');
+    assert(stateAfterB.seasonWeekTag === seasonB.weekTag, 'sync should persist latest week tag');
+    assert(archiveKeys.length >= 1, 'cross-week sync should preserve season archive snapshots');
+  }
+
   // 词缀轮换 + 修饰器合并
   {
     const { harness } = createHarness();
@@ -230,12 +281,16 @@ function assert(cond, msg) {
     assert(modifiers.healMul >= 0.45 && modifiers.healMul <= 1.35, 'heal multiplier should be clamped');
     assert(modifiers.enemyHpMul > 1.3, 'pressure should contribute to enemy hp scaling');
     assert(modifiers.cycleTheme && modifiers.cycleTheme.id, 'endless modifiers should expose active cycle theme metadata');
+    assert(modifiers.endlessSeason && modifiers.endlessSeason.id, 'endless modifiers should expose active season metadata');
+    assert(modifiers.endlessSeason && modifiers.endlessSeason.directiveId, 'endless modifiers should expose active season directive metadata');
 
     const profile = harness.getEndlessPressureBehaviorProfile();
     assert(profile && profile.tierId === 'tense', `pressure profile tier should match pressure=5, got ${profile ? profile.tierId : 'null'}`);
     assert(profile.enemyOpeningBlock >= 6, 'pressure profile should grant opening block at mid pressure');
     assert(profile.extraAttackPatterns >= 1, 'pressure profile should add extra attack patterns at mid pressure');
     assert(profile.themeId && profile.themeSegmentIndex >= 1, 'pressure profile should expose theme metadata');
+    assert(typeof profile.seasonId === 'string' && profile.seasonId.length > 0, 'pressure profile should expose season id');
+    assert(typeof profile.seasonDirectiveId === 'string' && profile.seasonDirectiveId.length > 0, 'pressure profile should expose season directive id');
   }
 
   // 事件联动调参
@@ -403,14 +458,21 @@ function assert(cond, msg) {
     assert(started === true, 'startEndlessMode should succeed when unlocked');
     assert(harness.isEndlessActive() === true, 'endless should be active after start');
     assert(calls.mapGenerate === 1, 'startEndlessMode should generate map once');
+    assert(typeof harness.ensureEndlessState().seasonId === 'string' && harness.ensureEndlessState().seasonId.length > 0, 'start should initialize season id');
+    assert(typeof harness.ensureEndlessState().seasonWeekTag === 'string' && harness.ensureEndlessState().seasonWeekTag.length > 0, 'start should initialize season week tag');
     const startCycle = harness.ensureEndlessState().currentCycle;
     const startPressure = harness.ensureEndlessState().pressure;
+    const startSeasonClears = harness.ensureEndlessState().seasonCycleClears;
+    const startSeasonBosses = harness.ensureEndlessState().seasonBossDefeated;
 
     harness.handleEndlessRealmComplete();
     const nextState = harness.ensureEndlessState();
     assert(nextState.currentCycle === startCycle + 1, 'realm complete should advance endless cycle');
     assert(nextState.pressure >= Math.min(9, startPressure + 1), 'realm complete should raise pressure by at least 1');
     assert(nextState.totalBossDefeated >= 1, 'realm complete should increase boss kill count');
+    assert(nextState.seasonCycleClears >= startSeasonClears + 1, 'realm complete should update season cycle clears');
+    assert(nextState.seasonBossDefeated >= startSeasonBosses + 1, 'realm complete should update season boss count');
+    assert(nextState.seasonScore > 0, 'realm complete should grant season score');
     assert(calls.mapGenerate >= 2, 'realm complete should generate next map');
     assert(calls.autoSave >= 2, 'start + advance should trigger autosave');
 
