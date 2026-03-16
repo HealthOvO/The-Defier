@@ -5771,3 +5771,21 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - 本轮结论
     - 无尽轮回“赛季 + 季签 + 赛季战绩”功能链路在逻辑、UI（含移动端）与自动化审计中均已闭环。
     - 目前未发现阻塞性功能缺陷或 UI 未实现项；可进入提交与 push。
+
+- 2026-03-16: 活动 TODO 清零收口（追加轮次）
+  - 扫描范围
+    - `js/`, `css/`, `index.html`, `tests/` 执行关键字扫描：
+      - `TODO|待补|FIXME|下轮建议|下一步建议`
+  - 发现与处理
+    - 运行时代码仅命中 2 处“待补”语义文案（`js/core/collection_hub.js`）：
+      - `轮次待补` → `暂无轮次记录`（2 处）
+    - 其余命中项位于 `docs/*.md` 与 `progress.md` 历史记录/规划语境，不属于活动开发待办。
+  - 本轮验证（全部通过）
+    - `node --check js/core/collection_hub.js` ✅
+    - `node tests/sanity_run_path_sample_board_checks.js` ✅
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/web-meta-audit-todo-cleanup` ✅
+    - 复扫结果：`js/css/index/tests` 下 TODO 关键字 0 命中 ✅
+  - 本轮结论
+    - 当前产品运行时与测试脚本层面不再存在活动 TODO 语义残留；
+    - 剩余“下一步建议/待补件”文本均为规划文档与历史记录，不构成未实现缺陷。

@@ -3084,7 +3084,7 @@
                             <div class="detail-status-strip">
                                 <span class="detail-status-chip">样本 ${escapeHtml(selected.sampleBoard.count)}</span>
                                 <span class="detail-status-chip">角色 ${escapeHtml(selected.sampleBoard.uniqueCharacters)}</span>
-                                <span class="detail-status-chip">${selected.sampleBoard.bestTurn > 0 ? `最快 ${escapeHtml(selected.sampleBoard.bestTurn)} 回合` : '轮次待补'}</span>
+                                <span class="detail-status-chip">${selected.sampleBoard.bestTurn > 0 ? `最快 ${escapeHtml(selected.sampleBoard.bestTurn)} 回合` : '暂无轮次记录'}</span>
                             </div>
                             <ul class="collection-detail-list">
                                 ${selected.sampleBoard.entries.map((sample) => `
@@ -3252,7 +3252,7 @@
                         <div class="detail-status-strip">
                             <span class="detail-status-chip">样本 ${escapeHtml(snapshot.runPathSampleBoard.count)}</span>
                             <span class="detail-status-chip">角色 ${escapeHtml(snapshot.runPathSampleBoard.uniqueCharacters)}</span>
-                            <span class="detail-status-chip">${snapshot.runPathSampleBoard.bestTurn > 0 ? `最快 ${escapeHtml(snapshot.runPathSampleBoard.bestTurn)} 回合` : '轮次待补'}</span>
+                            <span class="detail-status-chip">${snapshot.runPathSampleBoard.bestTurn > 0 ? `最快 ${escapeHtml(snapshot.runPathSampleBoard.bestTurn)} 回合` : '暂无轮次记录'}</span>
                         </div>
                         <ul class="collection-detail-list">
                             ${snapshot.runPathSampleBoard.entries.map((sample) => `
