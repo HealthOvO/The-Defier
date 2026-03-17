@@ -182,6 +182,8 @@ function loadFile(ctx, filePath) {
   game.formatEnemyPatternSummary = Game.prototype.formatEnemyPatternSummary;
   game.getBossBreakHint = Game.prototype.getBossBreakHint;
   game.getCollectionRealmProgress = Game.prototype.getCollectionRealmProgress;
+  game.getChapterProfileCatalog = Game.prototype.getChapterProfileCatalog;
+  game.resolveChapterDangerProfile = Game.prototype.resolveChapterDangerProfile;
   game.getChapterProfileForRealm = Game.prototype.getChapterProfileForRealm;
   game.getBossMemoryClearCount = Game.prototype.getBossMemoryClearCount;
   game.getBossMemoryAttemptCount = Game.prototype.getBossMemoryAttemptCount;

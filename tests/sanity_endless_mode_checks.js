@@ -54,6 +54,9 @@ function assert(cond, msg) {
   assert(defaults.seasonWeekTag === '', 'default season week tag should initialize as empty');
   assert(defaults.seasonScore === 0, 'default season score should initialize as 0');
   assert(defaults.seasonArchive && typeof defaults.seasonArchive === 'object', 'default season archive should exist');
+  assert(defaults.seasonDirectiveSelection && defaults.seasonDirectiveSelection.source === 'auto', 'default season directive selection should initialize as auto');
+  assert(defaults.seasonDirectiveClearCounts && typeof defaults.seasonDirectiveClearCounts === 'object', 'default directive clear counts should exist');
+  assert(defaults.seasonCollapseStats && typeof defaults.seasonCollapseStats === 'object', 'default collapse stats should exist');
 
   function createHarness() {
     const calls = {
@@ -142,9 +145,17 @@ function assert(cond, msg) {
       'getEndlessPhaseProfile',
       'getEndlessCycleThemeProfile',
       'getEndlessSeasonCatalog',
+      'getEndlessSeasonCollapseCatalog',
+      'getEndlessSeasonDirectiveRiskScore',
+      'getEndlessSeasonProgressSnapshot',
+      'getEndlessSeasonGoals',
+      'persistEndlessSeasonLedger',
       'getEndlessWeekMeta',
       'getEndlessSeasonProfile',
       'syncEndlessSeasonState',
+      'setEndlessSeasonDirective',
+      'getEndlessCollapseAnalysis',
+      'recordEndlessSeasonCollapse',
       'getEndlessModifiers',
       'getEndlessHealingMultiplier',
       'getEndlessEventTuning',
@@ -231,6 +242,9 @@ function assert(cond, msg) {
     assert(typeof seasonA.id === 'string' && seasonA.id.length > 0, 'season profile should include id');
     assert(typeof seasonA.directiveId === 'string' && seasonA.directiveId.length > 0, 'season profile should include directive id');
     assert(/^20\d{2}-W\d{2}$/.test(seasonA.weekTag || ''), `season profile should include ISO week tag, got ${seasonA.weekTag}`);
+    assert(Array.isArray(seasonA.directiveChoices) && seasonA.directiveChoices.length >= 3, 'season profile should expose selectable directive choices');
+    assert(Array.isArray(seasonA.goals) && seasonA.goals.length === 3, 'season profile should expose three-tier season goals');
+    assert(typeof seasonA.directiveRiskLabel === 'string' && seasonA.directiveRiskLabel.length > 0, 'season profile should expose active directive risk label');
 
     const syncedA = harness.syncEndlessSeasonState({
       cycleOverride: 4,
@@ -238,7 +252,8 @@ function assert(cond, msg) {
       cycleDelta: 2,
       bossDelta: 1,
       scoreDelta: 320,
-      bestCycle: 7
+      bestCycle: 7,
+      directiveClearId: seasonA.directiveId
     });
     const stateAfterA = harness.ensureEndlessState();
     assert(syncedA && syncedA.id === seasonA.id, 'sync should return active season profile');
@@ -246,6 +261,7 @@ function assert(cond, msg) {
     assert(stateAfterA.seasonCycleClears >= 2, `sync should accumulate season clears, got ${stateAfterA.seasonCycleClears}`);
     assert(stateAfterA.seasonBossDefeated >= 1, `sync should accumulate season bosses, got ${stateAfterA.seasonBossDefeated}`);
     assert(stateAfterA.seasonScore >= 320, `sync should accumulate season score, got ${stateAfterA.seasonScore}`);
+    assert((stateAfterA.seasonDirectiveClearCounts?.[seasonA.directiveId] || 0) >= 2, 'sync should track directive-based clear counts');
 
     const seasonB = harness.syncEndlessSeasonState({
       cycleOverride: 4,
@@ -256,6 +272,57 @@ function assert(cond, msg) {
     assert(seasonB && seasonB.weekTag !== seasonA.weekTag, 'cross-week sync should rotate season week tag');
     assert(stateAfterB.seasonWeekTag === seasonB.weekTag, 'sync should persist latest week tag');
     assert(archiveKeys.length >= 1, 'cross-week sync should preserve season archive snapshots');
+  }
+
+  // 季签切换 + 高风险目标链
+  {
+    const { harness } = createHarness();
+    harness.endlessState = harness.createDefaultEndlessState();
+    harness.endlessState.unlocked = true;
+    harness.endlessState.active = true;
+    harness.endlessState.currentCycle = 6;
+
+    const season = harness.getEndlessSeasonProfile(6);
+    const volatileDirective = season.directiveChoices.find((item) => item.riskTier === 'volatile') || season.directiveChoices[0];
+    const selected = harness.setEndlessSeasonDirective(volatileDirective.id);
+    const selectionState = harness.ensureEndlessState();
+
+    assert(selected && selected.directiveId === volatileDirective.id, 'directive selection should switch active directive');
+    assert(selectionState.seasonDirectiveSelection && selectionState.seasonDirectiveSelection.directiveId === volatileDirective.id, 'directive selection should persist into endless state');
+    assert(selected.activeDirectiveSource === 'player', 'directive selection should mark player override source');
+
+    harness.syncEndlessSeasonState({
+      cycleOverride: 6,
+      cycleDelta: 2,
+      bossDelta: 1,
+      scoreDelta: 960,
+      bestCycle: 10,
+      directiveClearId: volatileDirective.id
+    });
+    const updated = harness.getEndlessSeasonProfile(6);
+    const extremeGoal = updated.goals.find((goal) => goal.tier === 'extreme');
+    assert(extremeGoal && /激进季签/.test(extremeGoal.progressText || ''), 'extreme season goal should track risky directive clears');
+    assert(updated.directiveChoices.some((item) => item.id === volatileDirective.id && item.selected), 'active directive choice should be reflected in profile choices');
+  }
+
+  // 崩盘账本统计
+  {
+    const { harness } = createHarness();
+    harness.endlessState = harness.createDefaultEndlessState();
+    harness.endlessState.unlocked = true;
+    harness.endlessState.active = true;
+    harness.endlessState.currentCycle = 9;
+    harness.endlessState.pressure = 8;
+    harness.player.currentHp = 1;
+
+    const collapse = harness.recordEndlessSeasonCollapse();
+    const state = harness.ensureEndlessState();
+    const season = harness.getEndlessSeasonProfile(9);
+
+    assert(collapse && collapse.id === 'pressure_overload', `high pressure collapse should prefer pressure_overload, got ${collapse ? collapse.id : 'null'}`);
+    assert((state.seasonCollapseStats?.pressure_overload || 0) >= 1, 'collapse stats should increment within endless state');
+    assert(state.lastSeasonCollapse && state.lastSeasonCollapse.label === collapse.label, 'last collapse should be stored for UI replay');
+    assert(Array.isArray(season.collapseSummary) && season.collapseSummary.some((item) => item.id === 'pressure_overload'), 'season profile should expose collapse summary for UI');
   }
 
   // 词缀轮换 + 修饰器合并

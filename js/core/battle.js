@@ -1690,6 +1690,52 @@ class Battle {
             };
         }
 
+        if (archetypeId === 'mirrorweave') {
+            return {
+                id: 'phase_anchor',
+                tag: '锁相',
+                desc: '敌方锁相会压缩映照回路，逼迫镜渊流改用正序展开。',
+                openingBlock: 4 + s * 2,
+                appendPatterns: [
+                    {
+                        type: 'defend',
+                        value: 8 + s * 2,
+                        intent: '🪞镜相固封'
+                    },
+                    {
+                        type: 'debuff',
+                        buffType: 'weak',
+                        value: 1 + (s >= 3 ? 1 : 0),
+                        intent: '🫧相位错频'
+                    }
+                ]
+            };
+        }
+
+        if (archetypeId === 'oathbound') {
+            const appendPatterns = [{
+                type: 'debuff',
+                buffType: 'vulnerable',
+                value: 1 + (s >= 2 ? 1 : 0),
+                intent: '⛓️债誓裂印'
+            }];
+            if (typeof CARDS !== 'undefined' && CARDS.cursedScar) {
+                appendPatterns.push({
+                    type: 'addStatus',
+                    cardId: 'cursedScar',
+                    count: s >= 3 ? 2 : 1,
+                    intent: '📜债契回灌'
+                });
+            }
+            return {
+                id: 'debt_sanction',
+                tag: '债罚',
+                desc: '敌方债罚会回灌负面契印，拖慢誓罚流清算窗口。',
+                openingBlock: 2 + s,
+                appendPatterns
+            };
+        }
+
         if (archetypeId === 'hemorrhage') {
             return {
                 id: 'coagulate_grid',
@@ -3719,6 +3765,8 @@ class Battle {
         if (resonanceId === 'precision' && command && String(command.id) === 'hunt_order') synergyBonus += 0.05;
         if (resonanceId === 'bulwark' && command && String(command.id) === 'bulwark_order') synergyBonus += 0.05;
         if (resonanceId === 'entropy' && command && String(command.id) === 'tempo_order') synergyBonus += 0.05;
+        if (resonanceId === 'mirrorweave' && command && String(command.id) === 'hunt_order') synergyBonus += 0.05;
+        if (resonanceId === 'oathbound' && command && String(command.id) === 'suppress_order') synergyBonus += 0.05;
 
         const treasureCount = Array.isArray(this.player?.equippedTreasures)
             ? this.player.equippedTreasures.length
@@ -3846,12 +3894,26 @@ class Battle {
             const path = String(this.player?.fateRing?.path || '');
             const doctrineProfile = this.getPathDoctrineProfile(path);
             const archetype = String(this.player?.archetypeResonance?.id || '');
+            const cardKeywords = Array.isArray(card.keywords)
+                ? card.keywords.map((kw) => String(kw || '').toLowerCase())
+                : [];
             const hasSelfHarmCard = Array.isArray(card.effects) && card.effects.some((effect) => (
                 effect && (effect.type === 'selfDamage' || effect.type === 'addStatus')
             ));
             const hasForgeCard = Array.isArray(card.effects) && card.effects.some((effect) => (
                 effect && effect.type === 'createCard'
             ));
+            const hasEchoCard = cardKeywords.includes('mirror')
+                || cardKeywords.includes('echo')
+                || cardKeywords.includes('delay')
+                || (Array.isArray(card.effects) && card.effects.some((effect) => effect && effect.type === 'echoLastPlayedCard'));
+            const hasOathCard = cardKeywords.includes('oath')
+                || cardKeywords.includes('debt')
+                || cardKeywords.includes('penance')
+                || (Array.isArray(card.effects) && card.effects.some((effect) => effect && (
+                    effect.type === 'consumeOathDebt'
+                    || (effect.type === 'buff' && effect.buffType === 'oathDebt')
+                )));
 
             let gain = 1;
             if (card.type === 'attack') gain += 1;
@@ -3866,6 +3928,8 @@ class Battle {
             if (archetype === 'bulwark' && card.type === 'defend') gain += 1;
             if (archetype === 'cursebound' && hasSelfHarmCard) gain += 1;
             if (archetype === 'soulforge' && (card.type === 'power' || hasForgeCard)) gain += 1;
+            if (archetype === 'mirrorweave' && hasEchoCard) gain += 1;
+            if (archetype === 'oathbound' && hasOathCard) gain += 1;
             if (this.cardsPlayedThisTurn >= 4) gain += 1;
             this.gainBattleCommandPoints(gain, 'card');
         });
@@ -5323,6 +5387,10 @@ class Battle {
                 Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：本回合首次治疗触发护脉反击`);
             } else if (res.id === 'bulwark') {
                 Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：本回合首次获得护盾触发抽牌与反击`);
+            } else if (res.id === 'mirrorweave') {
+                Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：本回合首次映照触发额外收益`);
+            } else if (res.id === 'oathbound') {
+                Utils.showBattleLog(`【流派共鸣·${res.name}】T${res.tier} 激活：债印获取与清算获得额外收益`);
             }
         }
 
@@ -5916,7 +5984,9 @@ class Battle {
             ? threatProfile
             : this.resolveCounterplayThreatProfile();
         const effects = Array.isArray(card.effects) ? card.effects : [];
-        const keywords = Array.isArray(card.keywords) ? card.keywords.map((kw) => String(kw || '')) : [];
+        const keywords = Array.isArray(card.keywords)
+            ? card.keywords.map((kw) => String(kw || '').toLowerCase())
+            : [];
         const tags = [];
         const pushTag = (id, label, tip) => {
             if (!id || !label || !tip) return;
@@ -5951,6 +6021,17 @@ class Battle {
                 }
                 return false;
             });
+        const hasEcho = keywords.includes('mirror')
+            || keywords.includes('echo')
+            || keywords.includes('delay')
+            || effects.some((effect) => effect && effect.type === 'echoLastPlayedCard');
+        const hasOath = keywords.includes('oath')
+            || keywords.includes('debt')
+            || keywords.includes('penance')
+            || effects.some((effect) => effect && (
+                effect.type === 'consumeOathDebt'
+                || (effect.type === 'buff' && effect.buffType === 'oathDebt')
+            ));
 
         if (profile.needCleanse && hasCleanse) {
             pushTag('cleanse', '净化', '当前敌方偏控场，这张牌可用于解控与止损。');
@@ -5963,6 +6044,12 @@ class Battle {
         }
         if (profile.needBurst && hasBurst) {
             pushTag('burst', '爆发', '当前适合抢节奏，这张牌可用于快速压血。');
+        }
+        if (profile.needBurst && hasEcho) {
+            pushTag('echo', '映照', '当前处于节奏窗口，映照链可以扩大本回合收益。');
+        }
+        if ((profile.needDefend || profile.needCleanse) && hasOath) {
+            pushTag('oath', '债印', '当前压力偏高，债印清算可用于止损并回收资源。');
         }
 
         return tags.slice(0, 2);
@@ -6193,7 +6280,8 @@ class Battle {
             dodgeChance: '闪避率',
             slow: '减速',
             paralysis: '麻痹',
-            freeze: '冰冻'
+            freeze: '冰冻',
+            oathDebt: '债印'
         };
         switch (effect.type) {
             case 'damage':
@@ -6222,6 +6310,10 @@ class Battle {
                 return `恢复 ${value}`;
             case 'energy':
                 return `回灵 ${value}`;
+            case 'echoLastPlayedCard':
+                return '映照上一张牌';
+            case 'consumeOathDebt':
+                return `清算债印 ${Math.max(1, value || 1)}`;
             case 'cleanse':
                 return `净化 ${Math.max(1, value || 1)}`;
             case 'discardHand':
@@ -7240,12 +7332,21 @@ class Battle {
                 this.handleBossSealedCardPlayed(card);
             }
 
+            const previousCardSnapshot = this.lastPlayerCardSnapshot
+                ? JSON.parse(JSON.stringify(this.lastPlayerCardSnapshot))
+                : null;
             this.lastPlayerCardSnapshot = {
                 id: card.id || '',
                 name: card.name || '',
                 type: card.type || '',
-                cost: effectiveCost
+                cost: effectiveCost,
+                keywords: Array.isArray(card.keywords) ? card.keywords.slice() : [],
+                synergyGroup: card.synergyGroup || '',
+                effects: Array.isArray(card.effects) ? JSON.parse(JSON.stringify(card.effects)) : []
             };
+            if (typeof this.player?.rememberPlayedCardForEcho === 'function') {
+                this.player.rememberPlayedCardForEcho(this.lastPlayerCardSnapshot, previousCardSnapshot);
+            }
 
             // 检查战斗是否结束
             if (this.checkBattleEnd()) return;
@@ -7260,7 +7361,9 @@ class Battle {
                 card,
                 target,
                 turnNumber: this.turnNumber,
-                cardsPlayedThisTurn: this.cardsPlayedThisTurn
+                cardsPlayedThisTurn: this.cardsPlayedThisTurn,
+                previousCardSnapshot,
+                currentCardSnapshot: this.lastPlayerCardSnapshot
             });
 
             // 风雷翼
@@ -7316,6 +7419,18 @@ class Battle {
     // 处理效果
     async processEffect(result, target, targetIndex, sourceElement = null) {
         const enemyEl = document.querySelector(`.enemy[data-index="${targetIndex}"]`);
+        const resolveEnemyTargetByIndex = (index, fallbackTarget = null) => {
+            const idx = Math.floor(Number(index));
+            if (!Number.isFinite(idx) || idx < 0 || idx >= this.enemies.length) return fallbackTarget;
+            const enemy = this.enemies[idx];
+            if (!enemy || enemy.currentHp <= 0) return fallbackTarget;
+            return enemy;
+        };
+        const resolveEnemyIndex = (enemy, fallbackIndex = 0) => {
+            if (!enemy) return fallbackIndex;
+            const idx = this.enemies.indexOf(enemy);
+            return idx >= 0 ? idx : fallbackIndex;
+        };
 
         // 辅助函数：根据伤害计算震动强度
         const getShakeIntensity = (damage) => {
@@ -7465,6 +7580,90 @@ class Battle {
                 Utils.showBattleLog(`抽取 ${result.value} 张牌`);
                 break;
 
+            case 'echoLastPlayedCard': {
+                const echoTriggered = result.triggered !== false;
+                const nestedResults = Array.isArray(result.results)
+                    ? result.results
+                    : (Array.isArray(result.echoedResults) ? result.echoedResults : []);
+                const echoedCardName = result.cardName
+                    || result.echoedCardName
+                    || result.sourceCardName
+                    || (result.card && result.card.name)
+                    || '';
+                if (!echoTriggered || (nestedResults.length === 0 && !Number.isFinite(Number(result.value)))) {
+                    Utils.showBattleLog(result.message || '映照未触发（无可映照目标）');
+                    break;
+                }
+                Utils.showBattleLog(result.message || `镜渊映照发动${echoedCardName ? `：${echoedCardName}` : ''}`);
+                const preferredIndex = Number.isFinite(Number(result.targetIndex))
+                    ? Number(result.targetIndex)
+                    : (Number.isFinite(Number(result.echoTargetIndex)) ? Number(result.echoTargetIndex) : targetIndex);
+                const nestedTarget = resolveEnemyTargetByIndex(preferredIndex, target);
+                const nestedTargetIndex = resolveEnemyIndex(nestedTarget, targetIndex);
+                if (nestedResults.length > 0) {
+                    for (const nestedResult of nestedResults) {
+                        if (!nestedResult || typeof nestedResult !== 'object') continue;
+                        if (nestedResult.type === 'echoLastPlayedCard') {
+                            Utils.showBattleLog('映照回响被抑制，避免无限连锁');
+                            continue;
+                        }
+                        await this.processEffect(nestedResult, nestedTarget, nestedTargetIndex, sourceElement || 'echo_proc');
+                    }
+                } else if (nestedTarget && Number.isFinite(Number(result.value)) && Number(result.value) > 0) {
+                    const damage = this.dealDamageToEnemy(nestedTarget, Number(result.value), sourceElement || 'echo_proc');
+                    const nestedEnemyEl = document.querySelector(`.enemy[data-index="${nestedTargetIndex}"]`);
+                    if (nestedEnemyEl) {
+                        Utils.addShakeEffect(nestedEnemyEl, getShakeIntensity(damage));
+                        Utils.showFloatingNumber(nestedEnemyEl, damage, 'damage');
+                    }
+                    Utils.showBattleLog(`映照造成 ${damage} 点伤害`);
+                }
+                break;
+            }
+
+            case 'consumeOathDebt': {
+                const consumed = Math.max(0, Math.floor(Number(result.consumed || result.value) || 0));
+                const nestedResults = Array.isArray(result.results)
+                    ? result.results
+                    : (Array.isArray(result.followUps) ? result.followUps : []);
+                if (result.triggered === false || (consumed <= 0 && nestedResults.length === 0)) {
+                    Utils.showBattleLog(result.message || '誓罚清算未触发（无债印）');
+                    break;
+                }
+                const summaryBits = [];
+                if (consumed > 0) summaryBits.push(`清算债印 ${consumed}`);
+                const totalDebtDamage = Number.isFinite(Number(result.damageBonus))
+                    ? Math.floor(Number(result.damageBonus))
+                    : Math.floor(Number(result.value) || 0);
+                if (totalDebtDamage > 0) {
+                    summaryBits.push(`伤害 ${totalDebtDamage}`);
+                }
+                if (Number.isFinite(Number(result.energyGain)) && Number(result.energyGain) > 0) {
+                    summaryBits.push(`回灵 +${Math.floor(Number(result.energyGain))}`);
+                }
+                Utils.showBattleLog(result.message || `誓罚清算触发${summaryBits.length > 0 ? `（${summaryBits.join('，')}）` : ''}`);
+                const preferredIndex = Number.isFinite(Number(result.targetIndex))
+                    ? Number(result.targetIndex)
+                    : targetIndex;
+                const nestedTarget = resolveEnemyTargetByIndex(preferredIndex, target);
+                const nestedTargetIndex = resolveEnemyIndex(nestedTarget, targetIndex);
+                if (nestedResults.length > 0) {
+                    for (const nestedResult of nestedResults) {
+                        if (!nestedResult || typeof nestedResult !== 'object') continue;
+                        await this.processEffect(nestedResult, nestedTarget, nestedTargetIndex, sourceElement || 'oath_proc');
+                    }
+                } else if (nestedTarget && totalDebtDamage > 0) {
+                    const damage = this.dealDamageToEnemy(nestedTarget, totalDebtDamage, sourceElement || 'oath_proc');
+                    const nestedEnemyEl = document.querySelector(`.enemy[data-index="${nestedTargetIndex}"]`);
+                    if (nestedEnemyEl) {
+                        Utils.addShakeEffect(nestedEnemyEl, getShakeIntensity(damage));
+                        Utils.showFloatingNumber(nestedEnemyEl, damage, 'damage');
+                    }
+                    Utils.showBattleLog(`誓债清算造成 ${damage} 点伤害`);
+                }
+                break;
+            }
+
             case 'addStatus':
             case 'createCard': {
                 const count = Math.max(0, Math.floor(Number(result.count) || 0));
@@ -7516,7 +7715,7 @@ class Battle {
                     'retainBlock': '护盾保留', 'regen': '再生', 'thorns': '反伤', 'reflect': '反弹',
                     'dodge': '闪避', 'dodgeChance': '闪避率', 'freeze': '冰冻', 'slow': '减速',
                     'paralysis': '麻痹', 'severe_wound': '重伤', 'chaosAura': '混沌光环',
-                    'meritOnRetain': '苦行', 'immunity': '免疫'
+                    'meritOnRetain': '苦行', 'immunity': '免疫', 'oathDebt': '债印'
                 };
                 Utils.showBattleLog(`获得 ${buffNames[result.buffType] || result.buffType} 效果`);
                 break;

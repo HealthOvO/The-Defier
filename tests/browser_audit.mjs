@@ -333,7 +333,14 @@ async function safeScreenshot(page, targetPath) {
       && /章节世界规则/.test(mapChapterProbe.text || '')
       && /天象/.test(mapChapterProbe.text || '')
       && /地脉/.test(mapChapterProbe.text || '')
+      && /风险|DRI/.test(mapChapterProbe.text || '')
+      && /宿敌|追猎/.test(mapChapterProbe.text || '')
       && !!mapChapterProbe.chapter?.name
+      && typeof mapChapterProbe.chapter?.dangerProfile?.index === 'number'
+      && !!mapChapterProbe.chapter?.dangerProfile?.tierLabel
+      && !!mapChapterProbe.chapter?.nemesis?.name
+      && !!mapChapterProbe.chapter?.nemesis?.statusLabel
+      && typeof mapChapterProbe.chapter?.nemesis?.pressureIndex === 'number'
       && !!mapChapterProbe.chapter?.skyOmen?.name
       && !!mapChapterProbe.chapter?.leyline?.name,
     JSON.stringify(mapChapterProbe || null)
@@ -494,6 +501,8 @@ async function safeScreenshot(page, targetPath) {
       && /章节|天象|地脉/.test(battleChapterProbe.text || '')
       && /章节：/.test(battleChapterProbe.title || '')
       && !!battleChapterProbe.chapterRules?.name
+      && !!battleChapterProbe.chapterRules?.nemesis?.name
+      && !!battleChapterProbe.chapterRules?.nemesis?.statusLabel
       && !!battleChapterProbe.chapterRules?.skyOmen?.name
       && !!battleChapterProbe.chapterRules?.leyline?.name,
     JSON.stringify(battleChapterProbe || null)

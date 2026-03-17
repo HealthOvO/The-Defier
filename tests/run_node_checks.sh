@@ -54,6 +54,7 @@ node tests/sanity_legacy_progression_checks.js
 node tests/sanity_entropy_doctrine_checks.js
 node tests/sanity_stormcraft_vitalweave_resonance_checks.js
 node tests/sanity_cursebound_soulforge_resonance_checks.js
+node tests/sanity_mirrorweave_oathbound_checks.js
 node tests/sanity_bulwark_resonance_checks.js
 node tests/sanity_bulwark_doctrine_checks.js
 node tests/sanity_bulwark_blockburst_checks.js
@@ -64,6 +65,7 @@ node tests/sanity_pvp_service_checks.js
 node tests/sanity_pvp_shop_checks.js
 node tests/sanity_shop_strategy_system_checks.js
 node tests/sanity_expedition_state_checks.js
+node tests/sanity_expedition_nemesis_depth_checks.js
 node tests/sanity_planning_todo_checks.js
 node tests/verify_assets.js
 node tests/verify_avatars.js

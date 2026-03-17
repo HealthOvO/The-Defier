@@ -452,6 +452,74 @@
         }
     };
 
+    const buildNemesisVariants = (profile = {}) => ([
+        {
+            id: 'hunt',
+            label: '追猎压制',
+            note: '首轮追猎会先检定你当前章节最薄弱的一拍。',
+            hpMul: 1,
+            atkMul: 1,
+            titlePrefix: '【仇敌】',
+            intentSuffix: '仇敌压制'
+        },
+        {
+            id: 'recurrence',
+            label: '回返追猎',
+            note: '若让它暂退，下次现身会专门放大上次暴露出的漏洞。',
+            hpMul: Math.max(1.04, Number(profile.recurrenceHpMul) || 1.08),
+            atkMul: Math.max(1.04, Number(profile.recurrenceAtkMul) || 1.08),
+            titlePrefix: '【再临】',
+            intentSuffix: '回返压制'
+        },
+        {
+            id: 'allied',
+            label: '势力合围',
+            note: '一旦投靠势力，它的出手会更偏向合围和资源挤压。',
+            hpMul: Math.max(1.04, Number(profile.alliedHpMul) || 1.06),
+            atkMul: Math.max(1.04, Number(profile.alliedAtkMul) || 1.08),
+            titlePrefix: '【合围】',
+            intentSuffix: '势力合围'
+        },
+        {
+            id: 'guard',
+            label: '主宰护卫',
+            note: '若拖到终局，它会把前章所有压力压缩成一次护卫检定。',
+            hpMul: Math.max(1.08, Number(profile.guardHpMul) || 1.14),
+            atkMul: Math.max(1.08, Number(profile.guardAtkMul) || 1.12),
+            titlePrefix: '【护卫】',
+            intentSuffix: '主宰护卫'
+        }
+    ]);
+
+    const createNemesisProfile = (profile = {}) => {
+        const triggerNodeTypes = Array.isArray(profile.triggerNodeTypes)
+            ? profile.triggerNodeTypes.map((value) => String(value || '')).filter(Boolean).slice(0, 4)
+            : ['elite'];
+        return {
+            ...profile,
+            clueLine: String(profile.clueLine || '命盘碎屑里留下了一句不完整的追猎暗号。'),
+            clueNodeTypes: Array.isArray(profile.clueNodeTypes) && profile.clueNodeTypes.length > 0
+                ? profile.clueNodeTypes.map((value) => String(value || '')).filter(Boolean).slice(0, 4)
+                : ['event', 'observatory', 'memory_rift'],
+            releaseNodeTypes: Array.isArray(profile.releaseNodeTypes) && profile.releaseNodeTypes.length > 0
+                ? profile.releaseNodeTypes.map((value) => String(value || '')).filter(Boolean).slice(0, 3)
+                : ['event', 'observatory'],
+            tradeNodeTypes: Array.isArray(profile.tradeNodeTypes) && profile.tradeNodeTypes.length > 0
+                ? profile.tradeNodeTypes.map((value) => String(value || '')).filter(Boolean).slice(0, 3)
+                : ['shop'],
+            alliedFactionHints: Array.isArray(profile.alliedFactionHints) && profile.alliedFactionHints.length > 0
+                ? profile.alliedFactionHints.map((value) => String(value || '')).filter(Boolean).slice(0, 3)
+                : ['wild_hunt', 'ash_covenant'],
+            recursOnVictoryNodeTypes: Array.isArray(profile.recursOnVictoryNodeTypes)
+                ? profile.recursOnVictoryNodeTypes.map((value) => String(value || '')).filter(Boolean).slice(0, 3)
+                : (triggerNodeTypes.includes('enemy') ? ['enemy'] : []),
+            bossGuardEligible: profile.bossGuardEligible !== false,
+            battleVariants: Array.isArray(profile.battleVariants) && profile.battleVariants.length >= 2
+                ? profile.battleVariants
+                : buildNemesisVariants(profile)
+        };
+    };
+
     const NEMESIS_PROFILES = {
         chapter1: [
             {
@@ -464,7 +532,10 @@
                 triggerNodeTypes: ['elite', 'enemy'],
                 hpMul: 1.22,
                 atkMul: 1.16,
-                reward: { score: 42, gold: 90, ringExp: 36 }
+                reward: { score: 42, gold: 90, ringExp: 36 },
+                clueLine: '望台风痕里写着：它会先盯你最缺护盾的那一拍。',
+                alliedFactionHints: ['wild_hunt', 'frontier_bureau'],
+                recursOnVictoryNodeTypes: ['enemy']
             },
             {
                 id: 'bandit_scribe',
@@ -476,7 +547,8 @@
                 triggerNodeTypes: ['elite'],
                 hpMul: 1.26,
                 atkMul: 1.12,
-                reward: { score: 46, gold: 82, ringExp: 34 }
+                reward: { score: 46, gold: 82, ringExp: 34 },
+                clueLine: '浮市账簿角落有一句批注：补给越晚，它来收账时就越狠。'
             }
         ],
         chapter2: [
@@ -490,7 +562,24 @@
                 triggerNodeTypes: ['elite', 'boss'],
                 hpMul: 1.24,
                 atkMul: 1.14,
-                reward: { score: 48, gold: 96, ringExp: 38 }
+                reward: { score: 48, gold: 96, ringExp: 38 },
+                clueLine: '炉壁焦痕提醒你：它最爱在你还没补回资源的时候继续加炉火。',
+                alliedFactionHints: ['ash_covenant', 'frontier_bureau']
+            },
+            {
+                id: 'slag_appraiser',
+                chapterIndex: 2,
+                icon: '⛓️',
+                name: '渣火估价师',
+                epithet: '欠炉清点',
+                intro: '会把每次锻造代价折算成战斗压力，越想补件越容易被它抓节奏。',
+                triggerNodeTypes: ['shop', 'elite'],
+                hpMul: 1.2,
+                atkMul: 1.17,
+                reward: { score: 47, gold: 92, ringExp: 37 },
+                clueLine: '商埠旧单据写着：它只在你以为自己补齐了的时候来抬价。',
+                alliedFactionHints: ['ash_covenant', 'caravan_union'],
+                tradeNodeTypes: ['shop']
             }
         ],
         chapter3: [
@@ -504,7 +593,25 @@
                 triggerNodeTypes: ['elite', 'trial'],
                 hpMul: 1.2,
                 atkMul: 1.18,
-                reward: { score: 52, gold: 88, ringExp: 40 }
+                reward: { score: 52, gold: 88, ringExp: 40 },
+                clueLine: '沉星档案里记着：它会在你最后一张低价值牌后立刻上锁。',
+                alliedFactionHints: ['star_seers', 'covenant_lodge']
+            },
+            {
+                id: 'orbit_herald',
+                chapterIndex: 3,
+                icon: '🪐',
+                name: '寂轨传令',
+                epithet: '静默延拍',
+                intro: '不急着打死你，而是擅长把你的回合拖成一份迟到的答卷。',
+                triggerNodeTypes: ['enemy', 'observatory'],
+                hpMul: 1.18,
+                atkMul: 1.16,
+                reward: { score: 49, gold: 86, ringExp: 39 },
+                clueLine: '回廊碎镜里有句话：别把高价值收尾留给它来抄题。',
+                recursOnVictoryNodeTypes: ['enemy'],
+                releaseNodeTypes: ['observatory', 'event'],
+                alliedFactionHints: ['star_seers', 'wild_hunt']
             }
         ],
         chapter4: [
@@ -518,7 +625,25 @@
                 triggerNodeTypes: ['event', 'elite'],
                 hpMul: 1.18,
                 atkMul: 1.2,
-                reward: { score: 50, gold: 92, ringExp: 42 }
+                reward: { score: 50, gold: 92, ringExp: 42 },
+                clueLine: '黑市镜面写着：每做一次贪婪选择，它就替你记下一层利息。',
+                recursOnVictoryNodeTypes: ['event'],
+                alliedFactionHints: ['ash_covenant', 'covenant_lodge']
+            },
+            {
+                id: 'echo_tither',
+                chapterIndex: 4,
+                icon: '🔁',
+                name: '回波税吏',
+                epithet: '复制征收',
+                intro: '会先模仿你的强项，再向你收回那一部分稳定性。',
+                triggerNodeTypes: ['memory_rift', 'elite'],
+                hpMul: 1.21,
+                atkMul: 1.17,
+                reward: { score: 52, gold: 95, ringExp: 43 },
+                clueLine: '采井残页提醒你：别用最值钱的收尾牌给它留下模板。',
+                clueNodeTypes: ['memory_rift', 'event', 'observatory'],
+                alliedFactionHints: ['covenant_lodge', 'star_seers']
             }
         ],
         chapter5: [
@@ -532,7 +657,10 @@
                 triggerNodeTypes: ['elite', 'enemy', 'trial'],
                 hpMul: 1.28,
                 atkMul: 1.2,
-                reward: { score: 56, gold: 110, ringExp: 45 }
+                reward: { score: 56, gold: 110, ringExp: 45 },
+                clueLine: '血月祭垣刻着一句忠告：收头前先确认自己还能不能再扛一拍。',
+                recursOnVictoryNodeTypes: ['enemy'],
+                alliedFactionHints: ['wild_hunt', 'ash_covenant']
             }
         ],
         chapter6: [
@@ -546,10 +674,34 @@
                 triggerNodeTypes: ['elite', 'boss', 'trial'],
                 hpMul: 1.3,
                 atkMul: 1.18,
-                reward: { score: 60, gold: 120, ringExp: 52 }
+                reward: { score: 60, gold: 120, ringExp: 52 },
+                clueLine: '终律前庭只留了一行注解：它会把你最常依赖的保命方式当成审题入口。',
+                alliedFactionHints: ['frontier_bureau', 'star_seers']
+            },
+            {
+                id: 'vault_reclaimer',
+                chapterIndex: 6,
+                icon: '🧰',
+                name: '合式回收官',
+                epithet: '终盘追缴',
+                intro: '专门检查你有没有把前面所有补件真正拼成一张终章答卷。',
+                triggerNodeTypes: ['forge', 'boss'],
+                hpMul: 1.24,
+                atkMul: 1.2,
+                reward: { score: 58, gold: 118, ringExp: 50 },
+                clueLine: '机库校准单上的备注是：缺一块桥接件，就会被它整局拆账。',
+                tradeNodeTypes: ['shop', 'forge'],
+                alliedFactionHints: ['covenant_lodge', 'caravan_union']
             }
         ]
     };
+
+    const ENRICHED_NEMESIS_PROFILES = Object.fromEntries(
+        Object.entries(NEMESIS_PROFILES).map(([chapterKey, profiles]) => [
+            chapterKey,
+            Array.isArray(profiles) ? profiles.map((profile) => createNemesisProfile(profile)) : []
+        ])
+    );
 
     const CHAPTER_ENDING_LABELS = {
         assault: { id: 'assault', icon: '⚔️', name: '强袭过章', desc: '高压推进、主动抢节奏，把本章压成一段持续进攻。' },
@@ -563,6 +715,6 @@
     window.EXPEDITION_BRANCH_REGIONS = BRANCH_REGIONS;
     window.EXPEDITION_BOUNTY_TEMPLATES = BOUNTY_TEMPLATES;
     window.EXPEDITION_FACTION_PROFILES = FACTION_PROFILES;
-    window.EXPEDITION_NEMESIS_PROFILES = NEMESIS_PROFILES;
+    window.EXPEDITION_NEMESIS_PROFILES = ENRICHED_NEMESIS_PROFILES;
     window.EXPEDITION_CHAPTER_ENDINGS = CHAPTER_ENDING_LABELS;
 }());

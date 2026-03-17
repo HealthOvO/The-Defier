@@ -88,18 +88,40 @@ function loadFile(ctx, filePath) {
   game.isEndlessActive = () => false;
   game.getDisplayRealmName = Game.prototype.getDisplayRealmName;
   game.getChapterProfileCatalog = Game.prototype.getChapterProfileCatalog;
+  game.resolveChapterDangerProfile = Game.prototype.resolveChapterDangerProfile;
+  game.getChapterNemesisSnapshot = Game.prototype.getChapterNemesisSnapshot;
   game.getChapterProfileForRealm = Game.prototype.getChapterProfileForRealm;
   game.getChapterDisplaySnapshot = Game.prototype.getChapterDisplaySnapshot;
   game.getRunDestinyMetaById = Game.prototype.getRunDestinyMetaById;
   game.getRunVowMetaById = Game.prototype.getRunVowMetaById;
   game.getSpiritCompanionMetaById = Game.prototype.getSpiritCompanionMetaById;
   game.player = new Player();
+  game.getExpeditionState = () => ({
+    realm: 1,
+    activeNemesis: {
+      id: 'ember_scout',
+      icon: '🏹',
+      name: '裂誓斥候',
+      epithet: '猎拍先声',
+      intro: '总会比你更快一步看见缺口，专门惩罚前期失误。',
+      status: 'hunting',
+      engaged: true,
+      engagedCount: 1,
+      hpMul: 1.22,
+      atkMul: 1.16,
+      triggerNodeTypes: ['enemy', 'elite'],
+      reward: { gold: 90, ringExp: 36, score: 42 }
+    }
+  });
 
   const chapterOne = game.getChapterProfileForRealm(1);
   assert(chapterOne.chapterIndex === 1, `realm 1 should resolve to chapter 1, got ${chapterOne.chapterIndex}`);
   assert(chapterOne.name === '碎誓外域', `chapter 1 name mismatch: ${chapterOne.name}`);
   assert(chapterOne.stageLabel.includes('前段'), `realm 1 should be front stage, got ${chapterOne.stageLabel}`);
   assert(chapterOne.recommendedDestinies.length >= 3, 'chapter 1 should expose destiny recommendations');
+  assert(!!chapterOne.dangerProfile, 'chapter 1 should include danger profile');
+  assert(chapterOne.dangerProfile.index >= 0 && chapterOne.dangerProfile.index <= 100, `chapter 1 danger index out of range: ${chapterOne.dangerProfile.index}`);
+  assert(!!chapterOne.dangerProfile.tierLabel, 'chapter 1 danger profile should include tier label');
 
   const chapterThree = game.getChapterProfileForRealm(8);
   assert(chapterThree.chapterIndex === 3, `realm 8 should resolve to chapter 3, got ${chapterThree.chapterIndex}`);
@@ -111,23 +133,61 @@ function loadFile(ctx, filePath) {
   assert(chapterSix.chapterIndex === 6, `realm 18 should resolve to chapter 6, got ${chapterSix.chapterIndex}`);
   assert(chapterSix.name === '终焉命庭', `chapter 6 name mismatch: ${chapterSix.name}`);
   assert(chapterSix.stageLabel.includes('末段'), `realm 18 should be final stage, got ${chapterSix.stageLabel}`);
+  assert(!!chapterSix.dangerProfile, 'chapter 6 should include danger profile');
+  assert(chapterSix.dangerProfile.index >= chapterOne.dangerProfile.index, 'chapter 6 danger index should not be lower than chapter 1 baseline');
+
+  const chapterOneFinalStage = game.getChapterProfileForRealm(3);
+  assert(
+    chapterOneFinalStage.dangerProfile.index > chapterOne.dangerProfile.index,
+    `chapter stage progression should increase danger index, got stage1=${chapterOne.dangerProfile.index}, stage3=${chapterOneFinalStage.dangerProfile.index}`
+  );
+
+  const chapterOneSnapshot = game.getChapterDisplaySnapshot(1);
+  assert(!!chapterOneSnapshot.nemesis, 'chapter snapshot should expose active nemesis for current realm');
+  assert(chapterOneSnapshot.nemesis.name === '裂誓斥候', `chapter nemesis name mismatch: ${chapterOneSnapshot.nemesis && chapterOneSnapshot.nemesis.name}`);
+  assert(chapterOneSnapshot.nemesis.statusLabel === '追猎中', `chapter nemesis status label mismatch: ${chapterOneSnapshot.nemesis && chapterOneSnapshot.nemesis.statusLabel}`);
+  assert(chapterOneSnapshot.nemesis.pressureIndex > 0, `chapter nemesis pressure index should be positive, got ${chapterOneSnapshot.nemesis && chapterOneSnapshot.nemesis.pressureIndex}`);
+  assert(/灵石/.test(chapterOneSnapshot.nemesis.rewardSummary || ''), `chapter nemesis reward summary should mention gold, got ${chapterOneSnapshot.nemesis && chapterOneSnapshot.nemesis.rewardSummary}`);
 
   game.player.setRunDestiny('rebelScale', 1);
   game.player.setSpiritCompanion('emberCrow', 1);
   game.player.applyRunVow('blazingLife');
+  game.getExpeditionState = () => ({
+    realm: 14,
+    activeNemesis: {
+      id: 'blood_moon_reaper',
+      icon: '🩸',
+      name: '血月收契者',
+      epithet: '逆债回收',
+      intro: '最喜欢在你压血自信的时候出现，把收割局反拧成互相斩杀。',
+      status: 'escaped',
+      engaged: true,
+      engagedCount: 2,
+      hpMul: 1.28,
+      atkMul: 1.2,
+      triggerNodeTypes: ['elite', 'enemy', 'trial'],
+      reward: { gold: 110, ringExp: 45, score: 56 }
+    }
+  });
   const chapterFiveSnapshot = game.getChapterDisplaySnapshot(14);
   assert(chapterFiveSnapshot.chapterIndex === 5, `realm 14 should resolve to chapter 5, got ${chapterFiveSnapshot.chapterIndex}`);
   assert(chapterFiveSnapshot.destinyRecommended === true, 'chapter 5 should mark rebelScale as recommended');
   assert(chapterFiveSnapshot.spiritRecommended === true, 'chapter 5 should mark emberCrow as recommended');
   assert(chapterFiveSnapshot.vowRecommended === true, 'chapter 5 should mark blazingLife as recommended');
+  assert(!!chapterFiveSnapshot.dangerProfile, 'chapter snapshot should include danger profile');
+  assert(!!chapterFiveSnapshot.dangerProfile.counterplay, 'chapter snapshot should include danger counterplay');
+  assert(chapterFiveSnapshot.nemesis && chapterFiveSnapshot.nemesis.status === 'escaped', `chapter 5 snapshot should include escaped nemesis status, got ${JSON.stringify(chapterFiveSnapshot.nemesis)}`);
+  assert(/试炼/.test(chapterFiveSnapshot.nemesis.triggerNodeLabel || ''), `chapter 5 nemesis should expose trigger node labels, got ${chapterFiveSnapshot.nemesis && chapterFiveSnapshot.nemesis.triggerNodeLabel}`);
   assert(
     chapterFiveSnapshot.currentVows.some((meta) => meta.id === 'blazingLife'),
     `chapter 5 snapshot should include active vow blazingLife, got ${JSON.stringify(chapterFiveSnapshot.currentVows)}`
   );
 
+  game.getExpeditionState = () => null;
   const chapterFourSnapshot = game.getChapterDisplaySnapshot(11);
   assert(chapterFourSnapshot.chapterIndex === 4, `realm 11 should resolve to chapter 4, got ${chapterFourSnapshot.chapterIndex}`);
   assert(Array.isArray(chapterFourSnapshot.focusTags) && chapterFourSnapshot.focusTags.includes('复制反照'), 'chapter 4 should keep mirror focus tags');
+  assert(chapterFourSnapshot.nemesis === null, `chapter 4 snapshot should omit nemesis without active expedition state, got ${JSON.stringify(chapterFourSnapshot.nemesis)}`);
 
   console.log('Chapter world rule checks passed.');
 })();

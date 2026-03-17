@@ -1846,6 +1846,10 @@ body {
     grid-column: span 2;
 }
 
+.expedition-observatory-card {
+    grid-column: span 2;
+}
+
 .expedition-card-kicker {
     color: #f0cb76;
     font-size: 12px;
@@ -1904,6 +1908,18 @@ body {
     box-shadow: inset 0 0 0 1px rgba(238, 194, 91, 0.16);
 }
 
+.expedition-choice-card.suggested {
+    border-color: rgba(112, 188, 255, 0.44);
+    box-shadow: inset 0 0 0 1px rgba(112, 188, 255, 0.12);
+}
+
+.expedition-nemesis-card.recurring,
+.expedition-nemesis-card.allied,
+.expedition-nemesis-card.guarding {
+    border-color: rgba(255, 168, 105, 0.46);
+    box-shadow: inset 0 0 0 1px rgba(255, 168, 105, 0.16);
+}
+
 .expedition-choice-card.completed {
     border-color: rgba(88, 181, 126, 0.42);
 }
@@ -1919,6 +1935,18 @@ body {
 
 .expedition-nemesis-card.defeated {
     border-color: rgba(106, 198, 137, 0.44);
+}
+
+.expedition-nemesis-card.released {
+    border-color: rgba(108, 197, 224, 0.42);
+}
+
+.expedition-nemesis-card.traded {
+    border-color: rgba(255, 208, 116, 0.42);
+}
+
+.expedition-nemesis-card.evolved {
+    border-color: rgba(196, 104, 255, 0.42);
 }
 
 .expedition-choice-head {
@@ -1953,6 +1981,40 @@ body {
     gap: 4px;
     color: rgba(201, 212, 235, 0.72);
     font-size: 12px;
+}
+
+.expedition-observatory-source {
+    display: grid;
+    gap: 10px;
+    padding: 12px 12px 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(128, 186, 255, 0.22);
+    background: rgba(17, 27, 51, 0.62);
+}
+
+.expedition-observatory-note,
+.expedition-empty-note {
+    color: rgba(201, 219, 247, 0.74);
+    font-size: 12px;
+    line-height: 1.65;
+}
+
+.expedition-empty-note {
+    padding: 14px 12px;
+    border-radius: 14px;
+    border: 1px dashed rgba(128, 186, 255, 0.22);
+    background: rgba(10, 18, 35, 0.56);
+}
+
+@media (max-width: 1080px) {
+    .map-expedition-panels {
+        grid-template-columns: 1fr;
+    }
+
+    .expedition-overview-card,
+    .expedition-observatory-card {
+        grid-column: span 1;
+    }
 }
 
 /* ===================================
@@ -10016,6 +10078,37 @@ body {
     line-height: 1.55;
 }
 
+.preview-endless-directives {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.preview-endless-directive-btn {
+    border: 1px solid rgba(118, 176, 220, 0.26);
+    border-radius: 999px;
+    background: rgba(20, 35, 56, 0.7);
+    color: rgba(220, 236, 255, 0.92);
+    font-size: 0.72rem;
+    line-height: 1;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.preview-endless-directive-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 208, 141, 0.4);
+    background: rgba(62, 43, 21, 0.74);
+}
+
+.preview-endless-directive-btn.active {
+    border-color: rgba(255, 198, 122, 0.5);
+    background: linear-gradient(145deg, rgba(86, 57, 24, 0.78), rgba(54, 34, 18, 0.84));
+    color: rgba(255, 238, 210, 0.98);
+}
+
 .preview-loot-grid {
     display: flex;
     flex-wrap: wrap;
@@ -11883,11 +11976,14 @@ body {
 
 .intro-tab-panel {
     display: none;
-    animation: fadeIn 0.22s ease;
+    opacity: 1;
+    transform: translateY(0);
+    animation: introPanelIn 0.22s ease;
 }
 
 .intro-tab-panel.active {
     display: block;
+    opacity: 1;
 }
 
 .intro-section {
@@ -11952,6 +12048,16 @@ body {
     margin-bottom: 0;
     border-radius: 14px;
     background: linear-gradient(90deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+}
+
+@keyframes introPanelIn {
+    from {
+        transform: translateY(4px);
+    }
+
+    to {
+        transform: translateY(0);
+    }
 }
 
 @media (max-width: 768px) {
@@ -15415,6 +15521,145 @@ body {
     gap: 8px;
 }
 
+.map-situation-overview {
+    width: min(520px, 66vw);
+    padding: 8px 10px;
+    border: 1px solid rgba(118, 210, 255, 0.34);
+    border-radius: 12px;
+    background:
+        linear-gradient(145deg, rgba(10, 27, 45, 0.9), rgba(8, 18, 31, 0.84)),
+        radial-gradient(circle at top left, rgba(129, 208, 255, 0.18), transparent 48%);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+    color: rgba(220, 240, 255, 0.95);
+}
+
+.map-overview-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.map-overview-kicker {
+    color: rgba(153, 220, 255, 0.88);
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.map-overview-chapter {
+    color: rgba(234, 244, 255, 0.95);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-align: right;
+}
+
+.map-overview-grid {
+    margin-top: 6px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.map-overview-item {
+    min-height: 50px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    border: 1px solid rgba(132, 202, 255, 0.24);
+    background: linear-gradient(145deg, rgba(22, 48, 76, 0.56), rgba(13, 28, 46, 0.66));
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.map-overview-label {
+    color: rgba(158, 210, 255, 0.88);
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+}
+
+.map-overview-value {
+    color: rgba(228, 241, 255, 0.96);
+    font-size: 0.71rem;
+    line-height: 1.36;
+    word-break: break-word;
+}
+
+.map-situation-overview[data-risk-tier="high"] .map-overview-item,
+.map-situation-overview[data-risk-tier="extreme"] .map-overview-item {
+    border-color: rgba(255, 168, 139, 0.34);
+}
+
+.map-situation-overview[data-risk-tier="extreme"] {
+    border-color: rgba(255, 129, 129, 0.42);
+    background:
+        linear-gradient(145deg, rgba(43, 19, 23, 0.92), rgba(30, 14, 18, 0.88)),
+        radial-gradient(circle at top left, rgba(255, 127, 127, 0.2), transparent 50%);
+}
+
+.map-chapter-risk-card {
+    width: min(520px, 66vw);
+    padding: 9px 11px;
+    border: 1px solid rgba(255, 191, 130, 0.38);
+    border-radius: 12px;
+    background:
+        linear-gradient(145deg, rgba(28, 18, 12, 0.9), rgba(40, 23, 15, 0.84)),
+        radial-gradient(circle at top right, rgba(255, 183, 106, 0.16), transparent 50%);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+    color: rgba(255, 239, 214, 0.96);
+}
+
+.map-risk-kicker {
+    color: rgba(255, 211, 151, 0.82);
+    font-size: 0.67rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.map-risk-title {
+    margin-top: 4px;
+    color: rgba(255, 243, 220, 0.96);
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+}
+
+.map-risk-line {
+    margin-top: 6px;
+    display: grid;
+    grid-template-columns: 52px 1fr;
+    gap: 8px;
+    align-items: start;
+}
+
+.map-risk-label {
+    color: rgba(255, 207, 143, 0.9);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+}
+
+.map-risk-value {
+    color: rgba(243, 235, 224, 0.95);
+    font-size: 0.72rem;
+    line-height: 1.42;
+    word-break: break-word;
+}
+
+.map-chapter-risk-card[data-risk-tier="high"] {
+    border-color: rgba(255, 153, 123, 0.5);
+    background:
+        linear-gradient(145deg, rgba(46, 21, 12, 0.92), rgba(60, 27, 17, 0.88)),
+        radial-gradient(circle at top right, rgba(255, 153, 112, 0.18), transparent 48%);
+}
+
+.map-chapter-risk-card[data-risk-tier="extreme"] {
+    border-color: rgba(255, 118, 118, 0.56);
+    background:
+        linear-gradient(145deg, rgba(59, 16, 16, 0.94), rgba(76, 23, 20, 0.9)),
+        radial-gradient(circle at top right, rgba(255, 118, 118, 0.24), transparent 46%);
+}
+
 .map-chapter-brief {
     width: min(520px, 66vw);
     padding: 10px 12px;
@@ -15502,6 +15747,104 @@ body {
     color: rgba(255, 238, 208, 0.95);
     font-size: 0.69rem;
     line-height: 1.2;
+}
+
+.chapter-brief-chip.dri {
+    border-color: rgba(189, 223, 255, 0.52);
+    background: rgba(18, 52, 83, 0.44);
+    color: rgba(228, 243, 255, 0.96);
+}
+
+.chapter-brief-chip.dri.tier-low {
+    border-color: rgba(143, 219, 181, 0.56);
+    background: rgba(20, 73, 50, 0.4);
+    color: rgba(222, 255, 237, 0.97);
+}
+
+.chapter-brief-chip.dri.tier-medium {
+    border-color: rgba(226, 205, 139, 0.56);
+    background: rgba(78, 60, 22, 0.4);
+    color: rgba(255, 245, 219, 0.97);
+}
+
+.chapter-brief-chip.dri.tier-high {
+    border-color: rgba(248, 165, 120, 0.6);
+    background: rgba(92, 47, 23, 0.42);
+    color: rgba(255, 231, 219, 0.98);
+}
+
+.chapter-brief-chip.dri.tier-extreme {
+    border-color: rgba(255, 123, 123, 0.62);
+    background: rgba(95, 24, 24, 0.45);
+    color: rgba(255, 225, 225, 0.99);
+}
+
+.chapter-brief-chip.dri.tier-none {
+    border-color: rgba(160, 189, 222, 0.4);
+    background: rgba(26, 43, 64, 0.36);
+    color: rgba(220, 232, 248, 0.9);
+}
+
+.chapter-brief-chip.nemesis {
+    border-color: rgba(255, 184, 135, 0.4);
+    background: linear-gradient(145deg, rgba(64, 31, 16, 0.72), rgba(43, 17, 12, 0.84));
+    color: rgba(255, 236, 215, 0.97);
+}
+
+.chapter-brief-chip.nemesis.status-hunting {
+    border-color: rgba(255, 160, 110, 0.55);
+    background: linear-gradient(145deg, rgba(92, 39, 18, 0.82), rgba(60, 24, 16, 0.9));
+    color: rgba(255, 232, 220, 0.98);
+}
+
+.chapter-brief-chip.nemesis.status-recurring,
+.chapter-brief-chip.nemesis.status-allied,
+.chapter-brief-chip.nemesis.status-guarding {
+    border-color: rgba(255, 188, 112, 0.56);
+    background: linear-gradient(145deg, rgba(96, 52, 18, 0.82), rgba(63, 30, 14, 0.9));
+    color: rgba(255, 239, 216, 0.98);
+}
+
+.chapter-brief-chip.nemesis.status-defeated {
+    border-color: rgba(133, 224, 174, 0.52);
+    background: linear-gradient(145deg, rgba(18, 69, 41, 0.76), rgba(12, 46, 31, 0.86));
+    color: rgba(228, 255, 237, 0.98);
+}
+
+.chapter-brief-chip.nemesis.status-escaped {
+    border-color: rgba(209, 168, 255, 0.54);
+    background: linear-gradient(145deg, rgba(58, 26, 78, 0.78), rgba(37, 16, 58, 0.88));
+    color: rgba(245, 230, 255, 0.98);
+}
+
+.chapter-brief-chip.nemesis.status-released {
+    border-color: rgba(116, 210, 255, 0.5);
+    background: linear-gradient(145deg, rgba(16, 57, 76, 0.8), rgba(11, 35, 49, 0.9));
+    color: rgba(225, 245, 255, 0.98);
+}
+
+.chapter-brief-chip.nemesis.status-traded {
+    border-color: rgba(255, 214, 128, 0.54);
+    background: linear-gradient(145deg, rgba(88, 61, 18, 0.8), rgba(58, 39, 12, 0.9));
+    color: rgba(255, 244, 214, 0.98);
+}
+
+.chapter-brief-chip.nemesis.status-evolved {
+    border-color: rgba(204, 132, 255, 0.54);
+    background: linear-gradient(145deg, rgba(62, 25, 88, 0.82), rgba(40, 16, 59, 0.9));
+    color: rgba(247, 229, 255, 0.98);
+}
+
+.chapter-brief-chip.nemesis.status-none {
+    border-color: rgba(167, 178, 214, 0.38);
+    background: linear-gradient(145deg, rgba(31, 39, 58, 0.7), rgba(19, 24, 38, 0.84));
+    color: rgba(228, 235, 247, 0.92);
+}
+
+.chapter-brief-chip.nemesis-reward {
+    border-color: rgba(255, 220, 150, 0.42);
+    background: rgba(86, 58, 18, 0.4);
+    color: rgba(255, 244, 214, 0.96);
 }
 
 .chapter-brief-chip.warning {
@@ -15714,6 +16057,148 @@ body {
     color: rgba(255, 228, 197, 0.92);
     font-size: 0.66rem;
     line-height: 1.35;
+}
+
+.map-endless-panel .endless-section-title {
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    color: rgba(151, 214, 255, 0.88);
+    margin-bottom: 6px;
+}
+
+.map-endless-panel .endless-directive-controls,
+.map-endless-panel .endless-season-goals,
+.map-endless-panel .endless-collapse-ledger {
+    margin-top: 7px;
+    padding: 7px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(111, 168, 212, 0.2);
+    background: rgba(10, 22, 38, 0.42);
+}
+
+.map-endless-panel .endless-directive-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.map-endless-panel .endless-directive-option {
+    border: 1px solid rgba(121, 180, 228, 0.28);
+    border-radius: 999px;
+    background: rgba(22, 44, 70, 0.72);
+    color: rgba(220, 238, 255, 0.94);
+    font-size: 0.68rem;
+    line-height: 1.1;
+    padding: 5px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.map-endless-panel .endless-directive-option:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 201, 134, 0.42);
+}
+
+.map-endless-panel .endless-directive-option.active {
+    border-color: rgba(255, 184, 118, 0.62);
+    background: linear-gradient(145deg, rgba(92, 58, 23, 0.66), rgba(55, 34, 18, 0.78));
+    color: rgba(255, 238, 214, 0.98);
+}
+
+.map-endless-panel .endless-directive-option.risk-steady {
+    border-color: rgba(121, 225, 191, 0.34);
+}
+
+.map-endless-panel .endless-directive-option.risk-volatile {
+    border-color: rgba(255, 129, 129, 0.38);
+}
+
+.map-endless-panel .directive-risk {
+    opacity: 0.84;
+}
+
+.map-endless-panel .endless-directive-note,
+.map-endless-panel .endless-collapse-note {
+    margin-top: 6px;
+    color: rgba(208, 228, 248, 0.88);
+    font-size: 0.66rem;
+    line-height: 1.4;
+}
+
+.map-endless-panel .endless-season-goal-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.map-endless-panel .endless-season-goal {
+    border-radius: 10px;
+    padding: 8px;
+    border: 1px solid rgba(117, 177, 228, 0.22);
+    background: rgba(15, 30, 48, 0.48);
+    min-height: 92px;
+}
+
+.map-endless-panel .endless-season-goal.completed {
+    border-color: rgba(121, 231, 184, 0.34);
+    background: rgba(17, 56, 40, 0.42);
+}
+
+.map-endless-panel .endless-season-goal .goal-tier {
+    font-size: 0.65rem;
+    color: rgba(154, 214, 255, 0.86);
+    letter-spacing: 0.08em;
+}
+
+.map-endless-panel .endless-season-goal .goal-title {
+    margin-top: 3px;
+    color: rgba(238, 245, 255, 0.96);
+    font-size: 0.74rem;
+    font-weight: 700;
+}
+
+.map-endless-panel .endless-season-goal .goal-progress {
+    margin-top: 4px;
+    color: rgba(255, 221, 179, 0.92);
+    font-size: 0.65rem;
+    line-height: 1.35;
+}
+
+.map-endless-panel .endless-season-goal.completed .goal-progress {
+    color: rgba(188, 255, 222, 0.95);
+}
+
+.map-endless-panel .endless-season-goal .goal-desc {
+    margin-top: 5px;
+    color: rgba(205, 221, 238, 0.82);
+    font-size: 0.63rem;
+    line-height: 1.35;
+}
+
+.map-endless-panel .endless-collapse-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.map-endless-panel .endless-collapse-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 163, 134, 0.28);
+    background: rgba(74, 33, 24, 0.38);
+    color: rgba(255, 225, 205, 0.94);
+    font-size: 0.67rem;
+}
+
+.map-endless-panel .endless-collapse-chip.idle {
+    border-color: rgba(123, 170, 196, 0.24);
+    color: rgba(192, 223, 238, 0.84);
+    background: rgba(28, 46, 59, 0.34);
 }
 
 .map-endless-panel .endless-stats .endless-paranoia-chip {
@@ -16020,6 +16505,26 @@ body {
         width: 100%;
     }
 
+    .map-situation-overview {
+        width: 100%;
+    }
+
+    .map-overview-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .map-overview-item {
+        min-height: 44px;
+    }
+
+    .map-chapter-risk-card {
+        width: 100%;
+    }
+
+    .map-risk-line {
+        grid-template-columns: 46px 1fr;
+    }
+
     .map-adventure-buffs {
         width: 100%;
         justify-content: flex-start;
@@ -16032,6 +16537,19 @@ body {
 
     .map-endless-panel {
         width: 100%;
+    }
+
+    .map-endless-panel .endless-season-goal-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .preview-endless-directives {
+        gap: 6px;
+    }
+
+    .preview-endless-directive-btn {
+        width: 100%;
+        justify-content: center;
     }
 
     .map-legacy-mission {
@@ -17077,6 +17595,23 @@ body {
     border-color: rgba(171, 187, 220, 0.24);
     background: rgba(28, 35, 55, 0.74);
     color: rgba(213, 223, 241, 0.82);
+}
+
+.collection-alert {
+    margin: 10px 0 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(24, 31, 52, 0.82);
+    color: rgba(226, 236, 252, 0.92);
+    font-size: 0.84rem;
+    line-height: 1.5;
+}
+
+.collection-alert.danger {
+    border-color: rgba(255, 138, 138, 0.36);
+    background: rgba(74, 24, 31, 0.74);
+    color: rgba(255, 231, 231, 0.96);
 }
 
 .detail-source-card,
@@ -18324,6 +18859,27 @@ body {
     font-size: 0.9rem;
 }
 
+.challenge-theme-note {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(118, 166, 255, 0.18);
+    background: rgba(12, 23, 52, 0.72);
+    display: grid;
+    gap: 6px;
+}
+
+.challenge-theme-note strong {
+    color: #f6e3b7;
+    font-size: 0.94rem;
+}
+
+.challenge-theme-note span {
+    color: rgba(208, 223, 248, 0.76);
+    font-size: 0.84rem;
+    line-height: 1.55;
+}
+
 .challenge-seed-line {
     display: flex;
     flex-wrap: wrap;
@@ -18490,11 +19046,77 @@ body {
     font-size: 0.8rem;
 }
 
+.challenge-record-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
 .challenge-record-actions {
     display: flex;
     flex-direction: column;
     gap: 10px;
     align-items: flex-end;
+}
+
+.challenge-compare-note {
+    margin: 0;
+    color: rgba(204, 219, 246, 0.72);
+    font-size: 0.86rem;
+    line-height: 1.6;
+}
+
+.challenge-compare-card {
+    padding: 16px;
+    border-radius: 20px;
+    border: 1px solid rgba(118, 166, 255, 0.2);
+    background: linear-gradient(180deg, rgba(11, 22, 48, 0.9), rgba(7, 14, 30, 0.94));
+    display: grid;
+    gap: 12px;
+}
+
+.challenge-compare-card.selected {
+    border-color: rgba(240, 202, 121, 0.36);
+    box-shadow: inset 0 0 0 1px rgba(240, 202, 121, 0.14);
+}
+
+.challenge-compare-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.challenge-compare-head strong {
+    color: #f6e3b7;
+}
+
+.challenge-compare-head p {
+    margin: 6px 0 0;
+    color: rgba(214, 226, 248, 0.72);
+    font-size: 0.86rem;
+    line-height: 1.55;
+}
+
+.challenge-compare-score {
+    color: #fff0c4;
+    font-size: 0.92rem;
+    white-space: nowrap;
+}
+
+.challenge-compare-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    color: rgba(182, 201, 240, 0.72);
+    font-size: 0.82rem;
+}
+
+.challenge-compare-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
 }
 
 .challenge-leaderboard {
@@ -18658,5 +19280,10 @@ body {
     .challenge-record-actions {
         width: 100%;
         align-items: stretch;
+    }
+
+    .challenge-compare-head,
+    .challenge-compare-actions {
+        flex-direction: column;
     }
 }

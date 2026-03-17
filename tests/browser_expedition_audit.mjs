@@ -40,6 +40,10 @@ async function safeScreenshot(page, outPath) {
       localStorage.removeItem('theDefierSave');
       localStorage.removeItem('theDefierActiveExpeditionStateV1');
       localStorage.removeItem('theDefierRunSlateArchiveV1');
+      localStorage.removeItem('theDefierChallengeProgressV1');
+      localStorage.removeItem('theDefierActiveChallengeRunV1');
+      localStorage.removeItem('theDefierObservatoryArchiveV1');
+      localStorage.removeItem('theDefierObservatoryGuideStateV1');
     } catch {}
   });
 
@@ -54,6 +58,24 @@ async function safeScreenshot(page, outPath) {
     if (!window.game) return;
     game.guestMode = true;
     game.startNewGame('linFeng');
+    const bundle = typeof game.buildChallengeBundle === 'function' ? game.buildChallengeBundle('daily') : null;
+    if (bundle && typeof game.applyChallengeRunStart === 'function') {
+      game.applyChallengeRunStart(bundle);
+      if (game.activeChallengeRun) {
+        game.activeChallengeRun.progress.battleWins = 3;
+        game.activeChallengeRun.progress.eliteWins = 1;
+        game.activeChallengeRun.progress.realmClears = 1;
+      }
+      if (game.player) {
+        game.player.currentHp = Math.min(game.player.maxHp || 80, 72);
+      }
+      if (typeof game.finalizeActiveChallengeRun === 'function') {
+        game.finalizeActiveChallengeRun({ completed: true, reason: 'goal_reached' });
+      }
+    }
+    if (typeof game.initializeExpeditionForRealm === 'function') {
+      game.initializeExpeditionForRealm(game.player?.realm || 1, true);
+    }
     if (typeof game.showScreen === 'function') {
       game.showScreen('map-screen');
     }
@@ -74,24 +96,58 @@ async function safeScreenshot(page, outPath) {
       factionCards: panels?.querySelectorAll('.expedition-faction-card').length || 0,
       nemesisName: panels?.querySelector('.expedition-nemesis-card strong')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       overviewText: panels?.querySelector('.expedition-overview-card')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      observatoryText: panels?.querySelector('.expedition-observatory-card')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     };
   });
   add(
-    'map screen exposes expedition panels and mirrors them into render_game_to_text',
+    'map screen exposes expedition panels, observatory link options, and mirrors them into render_game_to_text',
     !!initialProbe &&
       initialProbe.mode === 'map-screen' &&
       initialProbe.panelVisible &&
-      initialProbe.panelCount === 4 &&
-      initialProbe.branchButtons >= 6 &&
+      initialProbe.panelCount === 5 &&
+      initialProbe.branchButtons >= 8 &&
       initialProbe.factionCards === 3 &&
       initialProbe.expedition?.branchOptions?.length === 3 &&
       initialProbe.expedition?.bountyDraft?.length === 3 &&
       initialProbe.expedition?.factions?.length === 3 &&
+      !!initialProbe.expedition?.observatoryLink &&
+      initialProbe.expedition?.observatoryLink?.bonusOptions?.length === 2 &&
       /裂界远征/.test(initialProbe.overviewText || '') &&
+      /观星|精选命盘/.test(initialProbe.observatoryText || '') &&
       !!initialProbe.nemesisName,
     JSON.stringify(initialProbe || null)
   );
   await safeScreenshot(page, path.join(outDir, 'expedition-panels-initial.png'));
+
+  const observatoryProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.getExpeditionState !== 'function') return { ok: false, reason: 'no_game' };
+    const state = game.getExpeditionState();
+    const observatory = state?.observatoryLink;
+    const option = observatory?.bonusOptions?.find((entry) => entry.triggerType === 'node_visit') || observatory?.bonusOptions?.[0];
+    if (!option) return { ok: false, reason: 'no_option' };
+    game.selectExpeditionObservatoryBonus(option.id);
+    if (option.triggerType === 'node_visit' && option.nodeTypes?.[0]) {
+      game.recordExpeditionNodeVisit({ type: option.nodeTypes[0], accessible: true, completed: false });
+    }
+    const payload = JSON.parse(window.render_game_to_text());
+    const observatoryText = document.querySelector('#map-expedition-panels .expedition-observatory-card')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    return {
+      ok: true,
+      optionId: option.id,
+      observatoryLink: payload?.expedition?.observatoryLink || null,
+      observatoryText,
+    };
+  });
+  add(
+    'observatory panel can lock a bonus clue and sync its consumed state back into render_game_to_text',
+    !!observatoryProbe &&
+      observatoryProbe.ok &&
+      observatoryProbe.observatoryLink?.selectedBonusId === observatoryProbe.optionId &&
+      observatoryProbe.observatoryLink?.bonusOptions?.some((entry) => entry.id === observatoryProbe.optionId && entry.selected === true) &&
+      (/当前线索|已触发/.test(observatoryProbe.observatoryText || '') || observatoryProbe.observatoryLink?.selectedBonusConsumed === true),
+    JSON.stringify(observatoryProbe || null)
+  );
+  await safeScreenshot(page, path.join(outDir, 'expedition-observatory-link.png'));
 
   const branchProbe = await page.evaluate(() => {
     if (!window.game || typeof game.getExpeditionState !== 'function') return { ok: false, reason: 'no_game' };
@@ -123,6 +179,30 @@ async function safeScreenshot(page, outPath) {
     JSON.stringify(branchProbe || null)
   );
   await safeScreenshot(page, path.join(outDir, 'expedition-branch-selected.png'));
+
+  const clueProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.recordExpeditionNodeVisit !== 'function') return { ok: false, reason: 'no_game' };
+    game.recordExpeditionNodeVisit({ type: 'event', accessible: true, completed: false });
+    const payload = JSON.parse(window.render_game_to_text());
+    const nemesisText = document.querySelector('#map-expedition-panels .expedition-nemesis-card')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    return {
+      ok: !!payload?.expedition?.activeNemesis,
+      activeNemesis: payload?.expedition?.activeNemesis || null,
+      nemesisText,
+    };
+  });
+  add(
+    'nemesis panel reveals clue and richer status metadata once an event trail is explored',
+    !!clueProbe &&
+      clueProbe.ok &&
+      typeof clueProbe.activeNemesis?.statusLabel === 'string' &&
+      clueProbe.activeNemesis.statusLabel.length > 0 &&
+      typeof clueProbe.activeNemesis?.clueLine === 'string' &&
+      clueProbe.activeNemesis.clueLine.length > 0 &&
+      (clueProbe.activeNemesis.clueRevealed === true || /线索/.test(clueProbe.nemesisText || '')),
+    JSON.stringify(clueProbe || null)
+  );
+  await safeScreenshot(page, path.join(outDir, 'expedition-nemesis-clue.png'));
 
   const bountyProbe = await page.evaluate(() => {
     if (!window.game || typeof game.getExpeditionState !== 'function') return { ok: false, reason: 'no_game' };

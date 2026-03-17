@@ -195,6 +195,7 @@ class Player {
         // 激活的共鸣
         this.activeResonances = [];
         this.archetypeResonance = null;
+        this.lastPlayedCardForEcho = null;
 
         // 游戏进度
         this.realm = 1;
@@ -1348,6 +1349,43 @@ class Player {
             };
         }
 
+        if (archetypeId === 'mirrorweave') {
+            return {
+                id: 'mirrorweave',
+                name: '镜渊回响',
+                tier,
+                matchCount,
+                applyBleedBonus: 0,
+                applyMarkBonus: 0,
+                firstMarkHitDraw: 0,
+                openingBlock: tier * 2,
+                firstEchoDraw: tier >= 2 ? 1 : 0,
+                firstEchoBlock: 2 + tier * 2,
+                mirrorEchoProcUsedThisTurn: false,
+                procUsedThisTurn: false
+            };
+        }
+
+        if (archetypeId === 'oathbound') {
+            return {
+                id: 'oathbound',
+                name: '誓罚清算',
+                tier,
+                matchCount,
+                applyBleedBonus: 0,
+                applyMarkBonus: 0,
+                firstMarkHitDraw: 0,
+                openingBlock: tier * 2,
+                firstDebtGainBlock: 2 + tier * 2,
+                firstDebtGainDraw: tier >= 2 ? 1 : 0,
+                firstDebtConsumeDraw: tier,
+                firstDebtConsumeEnergy: tier >= 2 ? 1 : 0,
+                oathDebtGainProcUsedThisTurn: false,
+                oathDebtConsumeProcUsedThisTurn: false,
+                procUsedThisTurn: false
+            };
+        }
+
         return null;
     }
 
@@ -1407,6 +1445,16 @@ class Player {
                     (Array.isArray(card.keywords) &&
                         (card.keywords.includes('forge') || card.keywords.includes('construct') || card.keywords.includes('array')));
                 if (isSoulforge) matchCount += 1;
+            } else if (archetypeId === 'mirrorweave') {
+                const isMirrorweave = card.synergyGroup === 'mirrorweave' ||
+                    (Array.isArray(card.keywords) &&
+                        (card.keywords.includes('mirror') || card.keywords.includes('echo') || card.keywords.includes('delay')));
+                if (isMirrorweave) matchCount += 1;
+            } else if (archetypeId === 'oathbound') {
+                const isOathbound = card.synergyGroup === 'oathbound' ||
+                    (Array.isArray(card.keywords) &&
+                        (card.keywords.includes('oath') || card.keywords.includes('debt') || card.keywords.includes('penance')));
+                if (isOathbound) matchCount += 1;
             }
         });
 
@@ -1664,6 +1712,195 @@ class Player {
         if (typeof battle.markUIDirty === 'function') battle.markUIDirty('player', 'hand', 'piles', 'enemies');
     }
 
+    canEchoCardSource(card) {
+        if (!card || typeof card !== 'object') return false;
+        if (!Array.isArray(card.effects) || card.effects.length <= 0) return false;
+        return card.effects.some((effect) => {
+            if (!effect || typeof effect !== 'object') return false;
+            return effect.type && effect.type !== 'echoLastPlayedCard';
+        });
+    }
+
+    rememberPlayedCardForEcho(card) {
+        if (!this.canEchoCardSource(card)) return false;
+
+        let clonedEffects = [];
+        try {
+            clonedEffects = JSON.parse(JSON.stringify(card.effects || []));
+        } catch (e) {
+            clonedEffects = (card.effects || []).map((effect) => ({ ...(effect || {}) }));
+        }
+
+        this.lastPlayedCardForEcho = {
+            id: card.id || null,
+            name: card.name || '未知卡牌',
+            type: card.type || 'unknown',
+            effects: clonedEffects
+        };
+        return true;
+    }
+
+    scaleEchoDiscreteValue(value, ratio, minimum = 1) {
+        const numericValue = Number(value);
+        const numericRatio = Number(ratio);
+        if (!Number.isFinite(numericValue) || !Number.isFinite(numericRatio) || numericValue <= 0 || numericRatio <= 0) {
+            return 0;
+        }
+        return Math.max(minimum, Math.round(numericValue * numericRatio));
+    }
+
+    scaleEchoDecimalValue(value, ratio) {
+        const numericValue = Number(value);
+        const numericRatio = Number(ratio);
+        if (!Number.isFinite(numericValue) || !Number.isFinite(numericRatio) || numericRatio <= 0) return 0;
+        const scaled = numericValue * numericRatio;
+        return Math.max(0, Math.round(scaled * 100) / 100);
+    }
+
+    buildEchoScaledEffect(effect, ratio = 1) {
+        if (!effect || typeof effect !== 'object') return null;
+        const scaledEffect = { ...effect };
+        const discrete = (value, minimum = 1) => this.scaleEchoDiscreteValue(value, ratio, minimum);
+        const decimal = (value) => this.scaleEchoDecimalValue(value, ratio);
+
+        switch (scaledEffect.type) {
+            case 'damage':
+            case 'penetrate':
+            case 'block':
+            case 'heal':
+            case 'energy':
+            case 'draw':
+            case 'selfDamage':
+            case 'removeBlock':
+            case 'damageAll':
+            case 'discardRandom':
+            case 'energyLoss':
+            case 'ringExp':
+            case 'applyBleed':
+            case 'applyMark':
+                scaledEffect.value = discrete(scaledEffect.value);
+                break;
+            case 'buff':
+            case 'debuff':
+                scaledEffect.value = scaledEffect.buffType === 'dodgeChance'
+                    ? decimal(scaledEffect.value)
+                    : discrete(scaledEffect.value);
+                break;
+            case 'oathDebt':
+            case 'consumeOathDebt':
+                scaledEffect.value = discrete(scaledEffect.value);
+                break;
+            case 'drawCalculated':
+                scaledEffect.base = discrete(scaledEffect.base || 0);
+                scaledEffect.perDiscard = discrete(scaledEffect.perDiscard || 0);
+                break;
+            case 'conditionalDraw':
+                if (scaledEffect.drawValue !== undefined) scaledEffect.drawValue = discrete(scaledEffect.drawValue);
+                if (scaledEffect.energyValue !== undefined) scaledEffect.energyValue = discrete(scaledEffect.energyValue);
+                break;
+            case 'conditionalDamage':
+                if (scaledEffect.value !== undefined) scaledEffect.value = discrete(scaledEffect.value);
+                if (scaledEffect.bonusDamage !== undefined) scaledEffect.bonusDamage = discrete(scaledEffect.bonusDamage);
+                break;
+            case 'percentDamage':
+                scaledEffect.value = decimal(scaledEffect.value);
+                break;
+            case 'blockFromStrength':
+                if (scaledEffect.multiplier !== undefined) scaledEffect.multiplier = decimal(scaledEffect.multiplier);
+                if (scaledEffect.minimum !== undefined) scaledEffect.minimum = discrete(scaledEffect.minimum);
+                break;
+            case 'blockBurst':
+                if (scaledEffect.ratio !== undefined) scaledEffect.ratio = decimal(scaledEffect.ratio);
+                if (scaledEffect.minDamage !== undefined) scaledEffect.minDamage = discrete(scaledEffect.minDamage);
+                if (scaledEffect.maxConsume !== undefined) scaledEffect.maxConsume = discrete(scaledEffect.maxConsume);
+                break;
+            case 'consumeAllEnergy':
+                if (scaledEffect.damagePerEnergy !== undefined) scaledEffect.damagePerEnergy = discrete(scaledEffect.damagePerEnergy);
+                break;
+            case 'randomDamage':
+                if (scaledEffect.minValue !== undefined) scaledEffect.minValue = discrete(scaledEffect.minValue);
+                if (scaledEffect.maxValue !== undefined) scaledEffect.maxValue = discrete(scaledEffect.maxValue);
+                break;
+            case 'randomCards':
+                if (scaledEffect.minValue !== undefined) scaledEffect.minValue = discrete(scaledEffect.minValue);
+                if (scaledEffect.maxValue !== undefined) scaledEffect.maxValue = discrete(scaledEffect.maxValue);
+                break;
+            case 'bonusGold':
+                if (scaledEffect.min !== undefined) scaledEffect.min = discrete(scaledEffect.min);
+                if (scaledEffect.max !== undefined) scaledEffect.max = discrete(scaledEffect.max);
+                break;
+            case 'damagePerLaw':
+                if (scaledEffect.baseDamage !== undefined) scaledEffect.baseDamage = discrete(scaledEffect.baseDamage);
+                if (scaledEffect.damagePerLaw !== undefined) scaledEffect.damagePerLaw = discrete(scaledEffect.damagePerLaw);
+                break;
+            case 'addStatus':
+            case 'createCard':
+                if (scaledEffect.count !== undefined) scaledEffect.count = discrete(scaledEffect.count);
+                break;
+            default:
+                break;
+        }
+
+        return scaledEffect;
+    }
+
+    triggerArchetypeEchoProc(echoCount = 0) {
+        const resolvedEchoCount = Math.max(0, Math.floor(Number(echoCount) || 0));
+        if (resolvedEchoCount <= 0) return;
+        if (this.turnNumber <= 0) return;
+
+        const resonance = this.archetypeResonance;
+        if (!(resonance && resonance.id === 'mirrorweave')) return;
+        if (resonance.mirrorEchoProcUsedThisTurn) return;
+
+        resonance.mirrorEchoProcUsedThisTurn = true;
+        const drawCount = Math.max(0, Math.floor(Number(resonance.firstEchoDraw) || 0));
+        const blockAmount = Math.max(0, Math.floor(Number(resonance.firstEchoBlock) || 0));
+
+        if (blockAmount > 0) this.addBlock(blockAmount);
+        if (drawCount > 0) this.drawCards(drawCount);
+
+        Utils.showBattleLog(`【镜渊回响】映照触发：护盾 +${blockAmount}${drawCount > 0 ? `，抽牌 +${drawCount}` : ''}`);
+    }
+
+    triggerArchetypeOathDebtGainProc(gainedStacks = 0) {
+        const gained = Math.max(0, Math.floor(Number(gainedStacks) || 0));
+        if (gained <= 0) return;
+        if (this.turnNumber <= 0) return;
+
+        const resonance = this.archetypeResonance;
+        if (!(resonance && resonance.id === 'oathbound')) return;
+        if (resonance.oathDebtGainProcUsedThisTurn) return;
+
+        resonance.oathDebtGainProcUsedThisTurn = true;
+        const blockAmount = Math.max(0, Math.floor(Number(resonance.firstDebtGainBlock) || 0));
+        const drawCount = Math.max(0, Math.floor(Number(resonance.firstDebtGainDraw) || 0));
+
+        if (blockAmount > 0) this.addBlock(blockAmount);
+        if (drawCount > 0) this.drawCards(drawCount);
+
+        Utils.showBattleLog(`【誓罚清算】债印缔结：护盾 +${blockAmount}${drawCount > 0 ? `，抽牌 +${drawCount}` : ''}`);
+    }
+
+    triggerArchetypeOathConsumeProc(consumedStacks = 0) {
+        const consumed = Math.max(0, Math.floor(Number(consumedStacks) || 0));
+        if (consumed <= 0) return;
+        if (this.turnNumber <= 0) return;
+
+        const resonance = this.archetypeResonance;
+        if (!(resonance && resonance.id === 'oathbound')) return;
+        if (resonance.oathDebtConsumeProcUsedThisTurn) return;
+
+        resonance.oathDebtConsumeProcUsedThisTurn = true;
+        const drawCount = Math.max(0, Math.floor(Number(resonance.firstDebtConsumeDraw) || 0));
+        const energyGain = Math.max(0, Math.floor(Number(resonance.firstDebtConsumeEnergy) || 0));
+
+        if (drawCount > 0) this.drawCards(drawCount);
+        if (energyGain > 0) this.gainEnergy(energyGain);
+
+        Utils.showBattleLog(`【誓罚清算】债印清算：${drawCount > 0 ? `抽牌 +${drawCount}` : '抽牌 +0'}${energyGain > 0 ? `，回灵 +${energyGain}` : ''}`);
+    }
+
     // 准备战斗
     // 修复牌组数据（每次战斗前重置，防止费用永久变更）
     sanitizeDeck() {
@@ -1712,6 +1949,7 @@ class Player {
     resetBattleState() {
         this.block = 0;
         this.buffs = {}; // Clear temp buffs
+        this.lastPlayedCardForEcho = null;
         this.hand = [];
         this.drawPile = [];
         this.discardPile = [];
@@ -1751,6 +1989,7 @@ class Player {
         this.sanitizeDeck();
 
         this.hand = [];
+        this.lastPlayedCardForEcho = null;
         // 关键修复：战斗牌堆必须是深拷贝，防止战斗中修改污染原牌组（如费用变化）
         this.drawPile = Utils.shuffle(JSON.parse(JSON.stringify(this.deck)));
         this.discardPile = [];
@@ -1943,6 +2182,9 @@ class Player {
         this.currentEnergy = this.baseEnergy;
         if (this.archetypeResonance) {
             this.archetypeResonance.procUsedThisTurn = false;
+            this.archetypeResonance.mirrorEchoProcUsedThisTurn = false;
+            this.archetypeResonance.oathDebtGainProcUsedThisTurn = false;
+            this.archetypeResonance.oathDebtConsumeProcUsedThisTurn = false;
         }
         this.ringResonanceSkillDrawUsedThisTurn = false;
         this.relicSkillDrawUsedThisTurn = false;
@@ -2920,6 +3162,7 @@ class Player {
 
             // 执行卡牌效果
             const results = this.executeCardEffects(card, target, context);
+            this.rememberPlayedCardForEcho(card);
 
             // 临时卡 (isTemp) -> 消耗 (Exhaust) 而非弃牌
             // 且需要确认临时卡是否本来就是消耗属性 (exhaust: true). 
@@ -3197,6 +3440,155 @@ class Player {
                 this.addBuff(effect.buffType, effect.value);
                 return { type: 'buff', buffType: effect.buffType, value: effect.value };
 
+            case 'oathDebt': {
+                const debtValue = Math.max(1, Math.floor(Number(effect.value) || 1));
+                this.addBuff('oathDebt', debtValue);
+                return { type: 'buff', buffType: 'oathDebt', value: debtValue };
+            }
+
+            case 'consumeOathDebt': {
+                const currentDebt = Math.max(0, Math.floor(Number(this.buffs.oathDebt) || 0));
+                const consumeLimitRaw = effect.consumeCount !== undefined && effect.consumeCount !== null
+                    ? Math.floor(Number(effect.consumeCount) || 0)
+                    : currentDebt;
+                const consumeLimit = consumeLimitRaw > 0 ? consumeLimitRaw : currentDebt;
+                const consumed = Math.min(currentDebt, consumeLimit);
+
+                if (consumed <= 0) {
+                    return {
+                        type: 'consumeOathDebt',
+                        value: 0,
+                        consumed: 0,
+                        remainingDebt: currentDebt,
+                        block: 0,
+                        draw: 0,
+                        energy: 0,
+                        results: [],
+                        target: effect.target
+                    };
+                }
+
+                const remainingDebt = Math.max(0, currentDebt - consumed);
+                if (remainingDebt > 0) this.buffs.oathDebt = remainingDebt;
+                else delete this.buffs.oathDebt;
+
+                const baseDamage = Math.max(0, Math.floor(Number(effect.baseDamage) || 0));
+                const damagePerDebt = Math.max(
+                    0,
+                    Math.floor(
+                        effect.damagePerDebt !== undefined && effect.damagePerDebt !== null
+                            ? Number(effect.damagePerDebt) || 0
+                            : Number(effect.value) || 0
+                    )
+                );
+                const damageValue = Math.max(0, baseDamage + damagePerDebt * consumed);
+
+                const baseBlock = Math.max(0, Math.floor(Number(effect.baseBlock) || 0));
+                const blockPerDebt = Math.max(0, Math.floor(Number(effect.blockPerDebt) || 0));
+                const blockGain = Math.max(0, baseBlock + blockPerDebt * consumed);
+
+                const baseDraw = Math.max(0, Math.floor(Number(effect.baseDraw) || 0));
+                const drawPerDebt = Math.max(0, Math.floor(Number(effect.drawPerDebt) || 0));
+                const drawGain = Math.max(0, baseDraw + drawPerDebt * consumed);
+
+                const baseEnergy = Math.max(0, Math.floor(Number(effect.baseEnergy) || 0));
+                const energyPerDebt = Math.max(0, Math.floor(Number(effect.energyPerDebt) || 0));
+                const energyGain = Math.max(0, baseEnergy + energyPerDebt * consumed);
+                const resultChain = [];
+
+                if (blockGain > 0) this.addBlock(blockGain);
+                if (drawGain > 0) this.drawCards(drawGain);
+                if (energyGain > 0) this.gainEnergy(energyGain);
+                if (damageValue > 0) {
+                    resultChain.push({
+                        type: 'damage',
+                        value: damageValue,
+                        target: effect.target
+                    });
+                }
+
+                this.triggerArchetypeOathConsumeProc(consumed);
+                return {
+                    type: 'consumeOathDebt',
+                    value: damageValue,
+                    damageBonus: damageValue,
+                    damagePerDebt,
+                    consumed,
+                    remainingDebt,
+                    block: blockGain,
+                    draw: drawGain,
+                    energy: energyGain,
+                    results: resultChain,
+                    target: effect.target
+                };
+            }
+
+            case 'echoLastPlayedCard': {
+                const depth = Math.max(0, Math.floor(Number(context.echoDepth) || 0));
+                if (depth >= 2) {
+                    return { type: 'echoLastPlayedCard', echoed: false, reason: 'depthLimit', value: 0, results: [] };
+                }
+
+                const source = this.lastPlayedCardForEcho;
+                if (!source || !Array.isArray(source.effects) || source.effects.length <= 0) {
+                    return { type: 'echoLastPlayedCard', echoed: false, reason: 'noSource', value: 0, results: [] };
+                }
+
+                const replayableEffects = source.effects.filter((sourceEffect) => (
+                    sourceEffect
+                    && typeof sourceEffect === 'object'
+                    && sourceEffect.type
+                    && sourceEffect.type !== 'echoLastPlayedCard'
+                ));
+                if (replayableEffects.length <= 0) {
+                    return { type: 'echoLastPlayedCard', echoed: false, reason: 'noReplayableEffect', value: 0, results: [] };
+                }
+
+                const ratio = Math.max(0, Number(effect.value) || 0);
+                const maxEffects = Math.max(1, Math.floor(Number(effect.maxEffects) || replayableEffects.length));
+                const replayEffects = replayableEffects.slice(0, maxEffects);
+                const repeatCount = Math.max(1, Math.floor(Number(effect.repeatCount) || 1));
+                const echoResults = [];
+                const replayContext = { ...context, echoDepth: depth + 1, isEchoReplay: true };
+
+                for (let repeatIndex = 0; repeatIndex < repeatCount; repeatIndex++) {
+                    replayEffects.forEach((sourceEffect) => {
+                        const replayEffect = this.buildEchoScaledEffect(sourceEffect, ratio);
+                        if (!replayEffect) return;
+                        const replayResult = this.executeEffect(replayEffect, target, replayContext);
+                        if (replayResult !== undefined && replayResult !== null) {
+                            echoResults.push(replayResult);
+                        }
+                    });
+                }
+
+                if (echoResults.length <= 0) {
+                    return {
+                        type: 'echoLastPlayedCard',
+                        echoed: false,
+                        triggered: false,
+                        reason: 'emptyReplay',
+                        value: 0,
+                        cardId: source.id || null,
+                        cardName: source.name || '未知卡牌',
+                        results: []
+                    }
+                }
+
+                this.triggerArchetypeEchoProc(echoResults.length);
+                return {
+                    type: 'echoLastPlayedCard',
+                    echoed: echoResults.length > 0,
+                    triggered: echoResults.length > 0,
+                    value: echoResults.length,
+                    ratio,
+                    repeatCount,
+                    cardId: source.id || null,
+                    cardName: source.name || '未知卡牌',
+                    results: echoResults
+                };
+            }
+
             case 'debuff':
                 return { type: 'debuff', buffType: effect.buffType, value: effect.value, target: effect.target };
 
@@ -3460,6 +3852,10 @@ class Player {
             this.buffs[type] = value;
         }
 
+        if (type === 'oathDebt') {
+            this.triggerArchetypeOathDebtGainProc(value);
+        }
+
         // 获取Buff名称
         let buffName = type;
         const buffNames = {
@@ -3482,7 +3878,8 @@ class Player {
             damageReduction: '减伤',
             chaosAura: '混乱光环',
             impervious: '金刚法相',
-            wrath: '明王之怒'
+            wrath: '明王之怒',
+            oathDebt: '誓债'
         };
         if (buffNames[type]) buffName = buffNames[type];
         else if (typeof GameData !== 'undefined' && GameData.getBuffName) buffName = GameData.getBuffName(type);
@@ -3569,6 +3966,31 @@ class Player {
             this.buffs.bleed = Math.max(0, this.buffs.bleed - 1);
             if (this.buffs.bleed <= 0) delete this.buffs.bleed;
             Utils.showBattleLog(`流血发作！`);
+        }
+
+        if (this.buffs.oathDebt) {
+            const debt = Math.max(0, Math.floor(Number(this.buffs.oathDebt) || 0));
+            if (debt > 0) {
+                const hpLoss = Math.min(Math.max(0, this.currentHp - 1), debt);
+                if (hpLoss > 0) {
+                    this.currentHp -= hpLoss;
+                    Utils.showBattleLog(`誓债反噬：失去 ${hpLoss} 点生命`);
+                    if (
+                        this.game
+                        && this.game.battle
+                        && typeof this.game.battle.handleSpiritCompanionPlayerDamaged === 'function'
+                    ) {
+                        this.game.battle.handleSpiritCompanionPlayerDamaged(hpLoss);
+                    }
+                }
+
+                const decayed = Math.max(0, debt - 1);
+                if (decayed > 0) this.buffs.oathDebt = decayed;
+                else delete this.buffs.oathDebt;
+                Utils.showBattleLog(`誓债余烬：剩余 ${decayed} 层`);
+            } else {
+                delete this.buffs.oathDebt;
+            }
         }
 
         // 铁布衫：下回合获得护盾

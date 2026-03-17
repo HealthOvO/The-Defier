@@ -183,26 +183,34 @@ async function safeScreenshot(page, outPath) {
       : null;
     const recordsText = document.getElementById('challenge-hub-records')?.textContent?.replace(/\s+/g, ' ').trim() || '';
     const replayButtons = document.querySelectorAll('#challenge-hub-records .challenge-record-actions .collection-inline-btn').length;
+    const compareCards = document.querySelectorAll('#challenge-hub-records .challenge-compare-card').length;
     const summaryText = document.getElementById('challenge-hub-summary')?.textContent?.replace(/\s+/g, ' ').trim() || '';
     return {
       mode: payload?.mode || '',
       archive: payload?.challenge?.archive || null,
       hub: payload?.challenge?.hub || null,
+      guide: payload?.challenge?.observatoryGuide || null,
       recordsText,
       replayButtons,
+      compareCards,
       summaryText
     };
   });
   add(
-    'challenge hub now surfaces seed signatures and observatory archive replay entries after a completed run',
+    'challenge hub now surfaces seed signatures, same-theme comparison, and observatory archive replay entries after a completed run',
     !!archiveProbe &&
       archiveProbe.mode === 'challenge-screen' &&
       archiveProbe.archive?.totalRecords >= 1 &&
       archiveProbe.archive?.replayableCount >= 1 &&
+      archiveProbe.archive?.featuredCount >= 1 &&
       /^D-/.test(archiveProbe.hub?.seedSignature || '') &&
+      archiveProbe.hub?.comparisonCount >= 1 &&
       archiveProbe.replayButtons >= 1 &&
+      archiveProbe.compareCards >= 1 &&
+      !!archiveProbe.guide?.title &&
+      (archiveProbe.guide?.featuredTags?.length || 0) >= 2 &&
       /命盘签/.test(archiveProbe.summaryText || '') &&
-      /观星留痕|复盘命盘/.test(archiveProbe.recordsText || ''),
+      /观星留痕|复盘命盘|同主题对比/.test(archiveProbe.recordsText || ''),
     JSON.stringify(archiveProbe || null)
   );
   await safeScreenshot(page, path.join(outDir, 'challenge-archive-replay.png'));

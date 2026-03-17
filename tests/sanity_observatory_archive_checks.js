@@ -119,6 +119,24 @@ function loadFile(ctx, filePath) {
 
   const challengeArchive = game.getObservatoryArchiveEntries({ types: ['challenge'], replayableOnly: true, limit: 1 })[0];
   assert(challengeArchive && challengeArchive.seedSignature === bundle.seedSignature, 'completed challenge should create replayable archive record with same seed signature');
+  assert(challengeArchive.themeLabel && challengeArchive.featuredTier, `challenge archive should expose theme and tier, got ${JSON.stringify(challengeArchive)}`);
+  assert(Array.isArray(challengeArchive.featuredTags) && challengeArchive.featuredTags.length >= 2, `challenge archive should expose featured tags, got ${JSON.stringify(challengeArchive.featuredTags)}`);
+  const defaultGuide = game.getSelectedObservatoryExpeditionGuide();
+  assert(defaultGuide && defaultGuide.id === challengeArchive.id, `latest featured archive should become default expedition guide, got ${JSON.stringify(defaultGuide)}`);
+
+  game.applyChallengeRunStart(bundle);
+  game.activeChallengeRun.progress.battleWins = 3;
+  game.activeChallengeRun.progress.eliteWins = 1;
+  game.activeChallengeRun.progress.realmClears = 1;
+  game.player.currentHp = 48;
+  const secondCompleted = game.finalizeActiveChallengeRun({ completed: true, reason: 'goal_reached' });
+  assert(secondCompleted && secondCompleted.completed === true, 'second challenge completion should also finalize');
+  const comparison = game.buildObservatoryThemeComparison({ mode: 'daily', rule: bundle.rule });
+  assert(comparison.entries.length >= 2, `same-theme comparison should expose at least two archive samples, got ${JSON.stringify(comparison)}`);
+  const alternateGuide = comparison.entries.find((entry) => entry.id !== challengeArchive.id);
+  assert(alternateGuide && game.selectObservatoryExpeditionGuide(alternateGuide.id, { silent: true }) === true, 'player should be able to switch expedition guide inside same-theme comparison');
+  const switchedGuide = game.getSelectedObservatoryExpeditionGuide();
+  assert(switchedGuide && switchedGuide.id === alternateGuide.id, `selected expedition guide should switch to requested archive, got ${JSON.stringify(switchedGuide)}`);
 
   const replayStarted = game.beginObservatoryReplay(challengeArchive.id);
   assert(replayStarted === true, 'beginObservatoryReplay should start a pending replay');
@@ -149,6 +167,9 @@ function loadFile(ctx, filePath) {
   const payload = game.getChallengeHubPayload();
   assert(payload.archive && payload.archive.totalRecords >= 3, `payload should expose archive summary, got ${JSON.stringify(payload.archive)}`);
   assert(payload.hub && payload.hub.seedSignature === liveHubBundle.seedSignature, `hub payload should expose live seed signature, got ${JSON.stringify(payload.hub)}`);
+  assert(payload.archive.selectedGuideId === switchedGuide.id, `payload should expose selected expedition guide, got ${JSON.stringify(payload.archive)}`);
+  assert(payload.hub.comparisonCount >= 2, `payload should expose same-theme comparison count, got ${JSON.stringify(payload.hub)}`);
+  assert(payload.observatoryGuide && payload.observatoryGuide.featuredTags.length >= 2, `payload should expose observatory guide tags, got ${JSON.stringify(payload.observatoryGuide)}`);
 
   console.log('Observatory archive checks passed.');
 })();

@@ -210,10 +210,14 @@ function loadFile(ctx, filePath) {
   assert(build.runPathSampleBoard && build.runPathSampleBoard.count >= 1, `build snapshot should expose run path sample board, got ${JSON.stringify(build.runPathSampleBoard)}`);
   assert(build.runPathSampleRecommendation && build.runPathSampleRecommendation.character, `build snapshot should expose run path sample recommendation, got ${JSON.stringify(build.runPathSampleRecommendation)}`);
   assert(build.runPathSampleRecommendation && build.runPathSampleRecommendation.chapter && build.runPathSampleRecommendation.chapter.fitScore >= 1, `build snapshot should expose chapter fit recommendation, got ${JSON.stringify(build.runPathSampleRecommendation)}`);
+  assert(Array.isArray(build.nextChapterRiskTags) && build.nextChapterRiskTags.length >= 1, `build snapshot should expose next chapter risk tags, got ${JSON.stringify(build.nextChapterRiskTags)}`);
+  assert(Array.isArray(build.priorityQueue) && build.priorityQueue.length >= 1, `build snapshot should expose a priority queue, got ${JSON.stringify(build.priorityQueue)}`);
+  assert(build.priorityQueue[0] && build.priorityQueue[0].rank === 1, `priority queue should be explicitly ranked, got ${JSON.stringify(build.priorityQueue)}`);
   assert(build.strengths.some((line) => /样本对照/.test(line)), `build snapshot should mention sample board strengths, got ${JSON.stringify(build.strengths)}`);
   assert(build.strengths.some((line) => /样本推荐角色|样本推荐套装/.test(line)), `build snapshot should include recommendation-driven strengths, got ${JSON.stringify(build.strengths)}`);
   assert(build.strengths.some((line) => /章节适配|场域拟合分/.test(line)), `build snapshot should include chapter-fit strengths, got ${JSON.stringify(build.strengths)}`);
   assert(build.nextTargets.some((line) => /裂变参考|样本目标|章节适配/.test(line)), `build snapshot should expose recommendation-driven next targets, got ${JSON.stringify(build.nextTargets)}`);
+  assert(build.sampleMismatchWarning === null || /拟合分|误配/.test(build.sampleMismatchWarning.text || ''), `sample mismatch warning should explain the drift when present, got ${JSON.stringify(build.sampleMismatchWarning)}`);
 
   const sanctum = game.getSanctumOverviewData();
   assert(sanctum.rooms.length === 5, `sanctum should expose 5 rooms, got ${sanctum.rooms.length}`);

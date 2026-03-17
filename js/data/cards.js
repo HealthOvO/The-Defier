@@ -653,7 +653,7 @@ const CARDS = {
         icon: '🗡️',
         description: '造成 6 点伤害，随机弃 1 张牌并抽 1 张牌',
         rarity: 'common',
-        keywords: ['discard'],
+        keywords: ['discard', 'echo', 'mirror'],
         comboTag: 'discard',
         synergyGroup: 'entropy',
         effects: [
@@ -1323,7 +1323,7 @@ const CARDS = {
         icon: '🪞',
         description: '获得 6 点护盾并获得 1 层护盾留存',
         rarity: 'common',
-        keywords: ['guard', 'retain'],
+        keywords: ['guard', 'retain', 'mirror', 'delay'],
         comboTag: 'guard',
         synergyGroup: 'bulwark',
         effects: [
@@ -2516,7 +2516,7 @@ const CARDS = {
         icon: '🧱',
         description: '获得 10 点护盾并抽 1 张牌。',
         rarity: 'uncommon',
-        keywords: ['guard'],
+        keywords: ['guard', 'echo', 'mirror'],
         comboTag: 'guard',
         synergyGroup: 'bulwark',
         effects: [
@@ -2536,6 +2536,201 @@ const CARDS = {
         effects: [
             { type: 'ringExp', value: 16 },
             { type: 'energy', value: 1, target: 'self' }
+        ]
+    },
+    mirrorTrace: {
+        id: 'mirrorTrace',
+        name: '镜迹演算',
+        type: 'skill',
+        cost: 1,
+        icon: '🪞',
+        description: '获得 6 点护盾并抽 1 张牌。',
+        rarity: 'common',
+        keywords: ['mirror', 'echo', 'tempo'],
+        comboTag: 'echo',
+        synergyGroup: 'mirrorweave',
+        effects: [
+            { type: 'block', value: 6, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+    delayPrism: {
+        id: 'delayPrism',
+        name: '滞光棱镜',
+        type: 'skill',
+        cost: 1,
+        icon: '🔷',
+        description: '下回合开始时获得 7 点护盾并抽 1 张牌。',
+        rarity: 'common',
+        keywords: ['mirror', 'delay', 'setup'],
+        comboTag: 'echo',
+        synergyGroup: 'mirrorweave',
+        effects: [
+            { type: 'buff', buffType: 'nextTurnBlock', value: 7, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+    reverberantEdge: {
+        id: 'reverberantEdge',
+        name: '镜渊回锋',
+        type: 'attack',
+        cost: 1,
+        icon: '🗡️',
+        description: '造成 7 点伤害，并以 60% 强度回响上一张已打出的牌。',
+        rarity: 'common',
+        keywords: ['mirror', 'echo'],
+        comboTag: 'echo',
+        synergyGroup: 'mirrorweave',
+        effects: [
+            { type: 'damage', value: 7, target: 'enemy' },
+            { type: 'echoLastPlayedCard', value: 0.6, repeatCount: 1, target: 'self' }
+        ]
+    },
+    mirroredRecital: {
+        id: 'mirroredRecital',
+        name: '双镜咏诵',
+        type: 'skill',
+        cost: 1,
+        icon: '🎼',
+        description: '抽 1 张牌，并以 65% 强度回响上一张已打出的牌。',
+        rarity: 'uncommon',
+        keywords: ['mirror', 'echo', 'tempo'],
+        comboTag: 'echo',
+        synergyGroup: 'mirrorweave',
+        effects: [
+            { type: 'draw', value: 1, target: 'self' },
+            { type: 'echoLastPlayedCard', value: 0.65, repeatCount: 1, target: 'self' }
+        ]
+    },
+    echoVault: {
+        id: 'echoVault',
+        name: '回响封存',
+        type: 'defense',
+        cost: 1,
+        icon: '🏛️',
+        description: '获得 9 点护盾与 1 层护盾留存，并以 45% 强度回响上一张已打出的牌。',
+        rarity: 'uncommon',
+        keywords: ['mirror', 'echo', 'delay', 'guard'],
+        comboTag: 'echo',
+        synergyGroup: 'mirrorweave',
+        effects: [
+            { type: 'block', value: 9, target: 'self' },
+            { type: 'buff', buffType: 'retainBlock', value: 1, target: 'self' },
+            { type: 'echoLastPlayedCard', value: 0.45, repeatCount: 1, target: 'self' }
+        ]
+    },
+    abyssalReflection: {
+        id: 'abyssalReflection',
+        name: '渊镜复奏',
+        type: 'power',
+        cost: 2,
+        icon: '🌌',
+        description: '抽 1 张牌，并以 70% 强度回响上一张已打出的牌 2 次。',
+        rarity: 'rare',
+        keywords: ['mirror', 'echo', 'delay', 'burst'],
+        comboTag: 'echo',
+        synergyGroup: 'mirrorweave',
+        effects: [
+            { type: 'draw', value: 1, target: 'self' },
+            { type: 'echoLastPlayedCard', value: 0.7, repeatCount: 2, target: 'self' }
+        ]
+    },
+    oathbrandCut: {
+        id: 'oathbrandCut',
+        name: '誓印裁击',
+        type: 'attack',
+        cost: 1,
+        icon: '⚔️',
+        description: '造成 8 点伤害并获得 1 层誓债。',
+        rarity: 'common',
+        keywords: ['oath', 'debt', 'penance'],
+        comboTag: 'oath',
+        synergyGroup: 'oathbound',
+        effects: [
+            { type: 'damage', value: 8, target: 'enemy' },
+            { type: 'buff', buffType: 'oathDebt', value: 1, target: 'self' }
+        ]
+    },
+    debtorVow: {
+        id: 'debtorVow',
+        name: '负誓',
+        type: 'skill',
+        cost: 0,
+        icon: '📜',
+        description: '自身受到 2 点伤害，抽 1 张牌并获得 1 层誓债。',
+        rarity: 'common',
+        keywords: ['oath', 'debt', 'selfharm'],
+        comboTag: 'oath',
+        synergyGroup: 'oathbound',
+        effects: [
+            { type: 'selfDamage', value: 2, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' },
+            { type: 'buff', buffType: 'oathDebt', value: 1, target: 'self' }
+        ]
+    },
+    penanceWall: {
+        id: 'penanceWall',
+        name: '偿罪壁',
+        type: 'defense',
+        cost: 1,
+        icon: '🛡️',
+        description: '获得 9 点护盾并获得 1 层誓债。',
+        rarity: 'common',
+        keywords: ['oath', 'debt', 'penance', 'guard'],
+        comboTag: 'oath',
+        synergyGroup: 'oathbound',
+        effects: [
+            { type: 'block', value: 9, target: 'self' },
+            { type: 'buff', buffType: 'oathDebt', value: 1, target: 'self' }
+        ]
+    },
+    debtTribunal: {
+        id: 'debtTribunal',
+        name: '债契审决',
+        type: 'skill',
+        cost: 1,
+        icon: '⚖️',
+        description: '清算全部誓债，每层造成 4 点伤害并抽 1 张牌。',
+        rarity: 'uncommon',
+        keywords: ['oath', 'debt', 'penance'],
+        comboTag: 'oath',
+        synergyGroup: 'oathbound',
+        effects: [
+            { type: 'consumeOathDebt', value: 4, target: 'enemy' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+    bloodOathLedger: {
+        id: 'bloodOathLedger',
+        name: '血誓账簿',
+        type: 'power',
+        cost: 1,
+        icon: '🩸',
+        description: '获得 2 层誓债、1 点灵力并抽 1 张牌。',
+        rarity: 'uncommon',
+        keywords: ['oath', 'debt', 'tempo'],
+        comboTag: 'oath',
+        synergyGroup: 'oathbound',
+        effects: [
+            { type: 'buff', buffType: 'oathDebt', value: 2, target: 'self' },
+            { type: 'energy', value: 1, target: 'self' },
+            { type: 'draw', value: 1, target: 'self' }
+        ]
+    },
+    sentenceOfPenance: {
+        id: 'sentenceOfPenance',
+        name: '偿誓终判',
+        type: 'attack',
+        cost: 2,
+        icon: '⛓️',
+        description: '造成 8 点伤害，并清算全部誓债，每层额外造成 6 点伤害。',
+        rarity: 'rare',
+        keywords: ['oath', 'debt', 'penance', 'burst'],
+        comboTag: 'oath',
+        synergyGroup: 'oathbound',
+        effects: [
+            { type: 'damage', value: 8, target: 'enemy' },
+            { type: 'consumeOathDebt', value: 6, target: 'enemy' }
         ]
     },
     matrixGuardProtocol: {
@@ -2812,7 +3007,7 @@ const CARDS = {
         icon: '🗡️',
         description: '自身受到 2 点伤害，造成 9 点伤害。',
         rarity: 'common',
-        keywords: ['curse', 'selfharm'],
+        keywords: ['curse', 'selfharm', 'oath', 'debt'],
         comboTag: 'curse',
         synergyGroup: 'cursebound',
         effects: [
@@ -2846,7 +3041,7 @@ const CARDS = {
         icon: '🌑',
         description: '自身受到 3 点伤害，获得 1 点灵力并抽 1 张牌。',
         rarity: 'common',
-        keywords: ['curse', 'selfharm', 'tempo'],
+        keywords: ['curse', 'selfharm', 'tempo', 'oath', 'debt'],
         comboTag: 'curse',
         synergyGroup: 'cursebound',
         effects: [
@@ -2864,7 +3059,7 @@ const CARDS = {
         icon: '🕯️',
         description: '获得 8 点护盾，并向弃牌堆置入 1 张契债回响。',
         rarity: 'common',
-        keywords: ['curse', 'guard'],
+        keywords: ['curse', 'guard', 'oath', 'penance'],
         comboTag: 'curse',
         synergyGroup: 'cursebound',
         effects: [
@@ -2917,7 +3112,7 @@ const CARDS = {
         icon: '📕',
         description: '自身受到 4 点伤害，获得 2 点力量。',
         rarity: 'uncommon',
-        keywords: ['curse', 'selfharm', 'burst'],
+        keywords: ['curse', 'selfharm', 'burst', 'oath', 'debt'],
         comboTag: 'curse',
         synergyGroup: 'cursebound',
         effects: [
@@ -2934,7 +3129,7 @@ const CARDS = {
         icon: '📚',
         description: '抽 2 张牌，获得 1 点灵力，并向手牌置入 1 张契债回响。',
         rarity: 'uncommon',
-        keywords: ['curse', 'tempo'],
+        keywords: ['curse', 'tempo', 'oath', 'debt'],
         comboTag: 'curse',
         synergyGroup: 'cursebound',
         effects: [
@@ -2969,7 +3164,7 @@ const CARDS = {
         icon: '⛓️',
         description: '获得 10 点护盾，并获得 1 层护盾留存。',
         rarity: 'uncommon',
-        keywords: ['curse', 'guard', 'retain'],
+        keywords: ['curse', 'guard', 'retain', 'oath', 'penance'],
         comboTag: 'curse',
         synergyGroup: 'cursebound',
         effects: [
@@ -3337,12 +3532,14 @@ const CARD_POOL = {
         'bloodlettingSlash', 'punctureMark', 'hunterSeal', 'stanceFlow', 'guardedRiposte',
         'serratedRitual', 'coagulatedGuard', 'weakpointSurvey', 'duetFeint', 'poisedCounter',
         'recklessMulligan', 'echoingCut', 'voidLedger', 'entropyGuard',
+        'mirrorTrace', 'delayPrism', 'reverberantEdge',
         'lightningProbe', 'chainArc', 'stormDraft', 'ionReserve', 'surgeStep',
         'forkedNeedle', 'pressureSpark',
         'mendThread', 'pulseBandage', 'transfuseStrike', 'wardingHerb', 'renewalChord',
         'bloodBloom', 'mercyNeedle',
         'ironBreath', 'mirrorWall', 'reboundingShell', 'bastionStudy', 'wardingSweep',
         'oathscarCut', 'hexbrandSigil', 'blacktidePact', 'covenantWard', 'doomwhisperNeedle', 'scarredDivination',
+        'oathbrandCut', 'debtorVow', 'penanceWall',
         'emberPuppetScript', 'spareSoulCore', 'relayHarness', 'forgeVolley', 'matrixKiln', 'socketedAegis',
         'poisonTouch', 'minorHeal', 'monkStrike', 'analysis',
         // 角色专属
@@ -3355,10 +3552,12 @@ const CARD_POOL = {
         'tacticalExpose', 'crimsonCascade', 'stanceAggressive', 'stanceDefensive',
         'bloodDebt', 'arteryRupture', 'razorFocus', 'stancePivot', 'focusBreak',
         'debtCollection', 'recirculation', 'calculatedRuin',
+        'mirroredRecital', 'echoVault',
         'thunderLattice', 'exposedCircuit', 'flashRelay', 'stormWard', 'cascadeVolt',
         'lifelinkWeave', 'hospiceEdict', 'rebirthSpiral', 'thornedRemedy', 'vitalPivot',
         'resolveAnchor', 'guardianMantra', 'shieldTax', 'bastionCrash', 'counterEdict',
         'bloodpriceMandate', 'griefLedger', 'morbidAbsolution', 'chainedVigil', 'omenOfRuin', 'pactRite',
+        'debtTribunal', 'bloodOathLedger',
         'spiritAnvil', 'arrayOverclock', 'guardianGimbal', 'soulcaseLattice', 'effigyBarrage', 'foundryBulwark',
         'matrixGuardProtocol', 'matrixShatterVector',
         // 新增角色卡牌
@@ -3372,6 +3571,7 @@ const CARD_POOL = {
         'thunderStorm', 'voidWalk', 'iceFreeze', 'desperateSurvival', 'enlightenment',
         'allIn', 'sunderingNeedle', 'hemorrhageRain', 'executionDoctrine',
         'scarletJudgement', 'bloodTideOath', 'verdictNeedle', 'oblivionSpiral', 'finalConvergence',
+        'abyssalReflection', 'sentenceOfPenance',
         'skybreakerArray', 'resonanceTempest', 'executionThunder',
         'soulSuture', 'reversalPulse', 'phoenixReprieve',
         'citadelOath', 'fortressEdict', 'aegisJudgement',
@@ -3455,6 +3655,16 @@ const ARCHETYPE_PACKS = {
             'ironWill', 'turtleShell', 'counterStance', 'artifactBolt', 'echoWard', 'matrixGuardProtocol'
         ]
     },
+    mirrorweave: {
+        id: 'mirrorweave',
+        name: '镜渊流',
+        description: '以回响与延迟资源滚动节奏，通过镜映上一张牌打出连携回合。',
+        cards: [
+            'mirrorTrace', 'delayPrism', 'reverberantEdge', 'mirroredRecital', 'echoVault',
+            'abyssalReflection', 'echoingCut', 'mirrorWall', 'echoWard', 'voidLedger',
+            'reboundingShell', 'bastionStudy', 'fortuneWheel', 'resonanceTempest', 'matrixPurgeLoop'
+        ]
+    },
     cursebound: {
         id: 'cursebound',
         name: '咒契裁断',
@@ -3463,6 +3673,16 @@ const ARCHETYPE_PACKS = {
             'oathscarCut', 'hexbrandSigil', 'blacktidePact', 'covenantWard', 'doomwhisperNeedle',
             'scarredDivination', 'bloodpriceMandate', 'griefLedger', 'morbidAbsolution', 'chainedVigil',
             'omenOfRuin', 'pactRite', 'sacramentOfAsh', 'soulCollateral', 'doomsentVerdict'
+        ]
+    },
+    oathbound: {
+        id: 'oathbound',
+        name: '誓罚流',
+        description: '通过累积誓债换取短线效率，再在关键回合集中清算形成终局爆发。',
+        cards: [
+            'oathbrandCut', 'debtorVow', 'penanceWall', 'debtTribunal', 'bloodOathLedger',
+            'sentenceOfPenance', 'oathscarCut', 'blacktidePact', 'covenantWard', 'griefLedger',
+            'bloodpriceMandate', 'chainedVigil', 'morbidAbsolution', 'soulCollateral', 'doomsentVerdict'
         ]
     },
     soulforge: {
@@ -3493,7 +3713,9 @@ function inferDeckArchetype(deck = []) {
         vitalweave: 0,
         bulwark: 0,
         cursebound: 0,
-        soulforge: 0
+        soulforge: 0,
+        mirrorweave: 0,
+        oathbound: 0
     };
     const hemorrhageSet = new Set(ARCHETYPE_PACKS.hemorrhage.cards);
     const precisionSet = new Set(ARCHETYPE_PACKS.precision.cards);
@@ -3503,6 +3725,8 @@ function inferDeckArchetype(deck = []) {
     const bulwarkSet = new Set(ARCHETYPE_PACKS.bulwark.cards);
     const curseboundSet = new Set(ARCHETYPE_PACKS.cursebound.cards);
     const soulforgeSet = new Set(ARCHETYPE_PACKS.soulforge.cards);
+    const mirrorweaveSet = new Set(ARCHETYPE_PACKS.mirrorweave.cards);
+    const oathboundSet = new Set(ARCHETYPE_PACKS.oathbound.cards);
 
     deck.forEach(card => {
         if (!card) return;
@@ -3584,6 +3808,24 @@ function inferDeckArchetype(deck = []) {
             (cardId && soulforgeSet.has(cardId))
         ) {
             scores.soulforge += 1;
+        }
+        if (
+            synergy === 'mirrorweave' ||
+            keywords.includes('mirror') ||
+            keywords.includes('echo') ||
+            keywords.includes('delay') ||
+            (cardId && mirrorweaveSet.has(cardId))
+        ) {
+            scores.mirrorweave += 1;
+        }
+        if (
+            synergy === 'oathbound' ||
+            keywords.includes('oath') ||
+            keywords.includes('debt') ||
+            keywords.includes('penance') ||
+            (cardId && oathboundSet.has(cardId))
+        ) {
+            scores.oathbound += 1;
         }
     });
 
@@ -3930,6 +4172,20 @@ const UPGRADE_RULES = {
         grandForgeMandate: { block: 2 },
         ancestralMachina: { damage: 2 },
         throneOfCinders: { strength: 1 }
+        ,
+        // 镜渊流 / 誓罚流
+        mirrorTrace: { block: 2, draw: 1 },
+        delayPrism: { nextBlock: 2, draw: 1 },
+        reverberantEdge: { damage: 2, echoScale: 0.15 },
+        mirroredRecital: { draw: 1, echoScale: 0.1 },
+        echoVault: { block: 2, retainBlock: 1, echoScale: 0.1 },
+        abyssalReflection: { draw: 1, echoScale: 0.1, repeatCount: 1 },
+        oathbrandCut: { damage: 2, oathDebt: 1 },
+        debtorVow: { selfDamage: -1, draw: 1, oathDebt: 1 },
+        penanceWall: { block: 2, oathDebt: 1 },
+        debtTribunal: { consumeOathDebt: 1, draw: 1 },
+        bloodOathLedger: { oathDebt: 1, energy: 1 },
+        sentenceOfPenance: { damage: 3, consumeOathDebt: 1 }
     }
 };
 
@@ -3964,6 +4220,9 @@ function upgradeCard(card) {
             }
             if (effect.type === 'heal' && specialRule.heal) {
                 effect.value += specialRule.heal;
+            }
+            if (effect.type === 'selfDamage' && specialRule.selfDamage) {
+                effect.value = Math.max(0, effect.value + specialRule.selfDamage);
             }
             if (effect.type === 'draw' && specialRule.draw) {
                 effect.value += specialRule.draw;
@@ -4020,6 +4279,9 @@ function upgradeCard(card) {
             if (effect.type === 'buff' && effect.buffType === 'retainBlock' && specialRule.retainBlock) {
                 effect.value += specialRule.retainBlock;
             }
+            if (effect.type === 'buff' && effect.buffType === 'oathDebt' && specialRule.oathDebt) {
+                effect.value += specialRule.oathDebt;
+            }
             if (effect.type === 'buff' && effect.buffType === 'damageReduction' && specialRule.damageReduction) {
                 effect.value += specialRule.damageReduction;
             }
@@ -4066,6 +4328,13 @@ function upgradeCard(card) {
 
             if (effect.type === 'execute' && specialRule.multiplier) {
                 effect.value = (effect.value || 1) + specialRule.multiplier;
+            }
+            if (effect.type === 'echoLastPlayedCard') {
+                if (specialRule.echoScale) effect.value = (Number(effect.value) || 0) + specialRule.echoScale;
+                if (specialRule.repeatCount) effect.repeatCount = Math.max(1, Number(effect.repeatCount) || 1) + specialRule.repeatCount;
+            }
+            if (effect.type === 'consumeOathDebt' && specialRule.consumeOathDebt) {
+                effect.value += specialRule.consumeOathDebt;
             }
 
             // Fix for missing upgrade handlers
@@ -4272,6 +4541,7 @@ function generateUpgradedDescription(card) {
                 else if (effect.buffType === 'regen') desc += `回合开始时回复 ${effect.value} 点生命。`;
                 else if (effect.buffType === 'meritOnRetain') desc += `回合结束每保留一张牌获得 ${effect.value} 点功德。`;
                 else if (effect.buffType === 'energyOnVulnerable') desc += `攻击易伤敌人回复 ${effect.value} 点灵力。`;
+                else if (effect.buffType === 'oathDebt') desc += `获得 ${effect.value} 层誓债。`;
                 break;
             case 'damagePerLaw':
                 desc += `根据装载法则数量+${effect.baseDamage}伤害（当前+${effect.damagePerLaw}/个）。`;
@@ -4300,6 +4570,17 @@ function generateUpgradedDescription(card) {
             }
             case 'blockFromLostHp':
                 desc += `获得等于已损失生命${Math.floor(effect.percent * 100)}%的护盾。`;
+                break;
+            case 'echoLastPlayedCard': {
+                const ratio = Math.max(0, Number(effect.value) || 0);
+                const count = Math.max(1, Number(effect.repeatCount) || 1);
+                desc += `以 ${Math.floor(ratio * 100)}% 强度回响上一张已打出的牌`;
+                if (count > 1) desc += ` ${count} 次`;
+                desc += `。`;
+                break;
+            }
+            case 'consumeOathDebt':
+                desc += `清算全部誓债，每层造成 ${effect.value} 点伤害。`;
                 break;
         }
     }

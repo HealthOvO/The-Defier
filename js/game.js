@@ -50,7 +50,15 @@ class Game {
             endlessModeV1: true
         };
         this.endlessState = this.createDefaultEndlessState();
+        if (this.legacyProgress && this.legacyProgress.endlessSeasonLedger && typeof this.legacyProgress.endlessSeasonLedger === 'object') {
+            this.endlessState = this.normalizeEndlessState({
+                ...this.endlessState,
+                ...this.legacyProgress.endlessSeasonLedger
+            });
+        }
         this.encounterState = this.createDefaultEncounterState();
+        this.chapterEventLedger = this.createDefaultChapterEventLedger();
+        this.currentEventRuntimeMeta = null;
         this.lawCodexFilterState = {
             query: '',
             status: 'all',
@@ -353,6 +361,35 @@ class Game {
                         chapterIndex: chapterSnapshot.chapterIndex,
                         name: chapterSnapshot.name,
                         stageLabel: chapterSnapshot.stageLabel,
+                        dangerProfile: chapterSnapshot.dangerProfile
+                            ? {
+                                index: chapterSnapshot.dangerProfile.index,
+                                tierId: chapterSnapshot.dangerProfile.tierId,
+                                tierLabel: chapterSnapshot.dangerProfile.tierLabel,
+                                summary: chapterSnapshot.dangerProfile.summary,
+                                dominantRisk: chapterSnapshot.dangerProfile.dominantRisk,
+                                counterplay: chapterSnapshot.dangerProfile.counterplay
+                            }
+                            : null,
+                        nemesis: chapterSnapshot.nemesis
+                            ? {
+                                id: chapterSnapshot.nemesis.id,
+                                name: chapterSnapshot.nemesis.name,
+                                status: chapterSnapshot.nemesis.status,
+                                statusLabel: chapterSnapshot.nemesis.statusLabel,
+                                triggerNodeTypes: chapterSnapshot.nemesis.triggerNodeTypes,
+                                engagedCount: chapterSnapshot.nemesis.engagedCount,
+                                recurrenceCount: chapterSnapshot.nemesis.recurrenceCount,
+                                pressureIndex: chapterSnapshot.nemesis.pressureIndex,
+                                currentVariantLabel: chapterSnapshot.nemesis.currentVariantLabel,
+                                clueLine: chapterSnapshot.nemesis.clueLine,
+                                clueRevealed: chapterSnapshot.nemesis.clueRevealed,
+                                alliedFactionName: chapterSnapshot.nemesis.alliedFactionName,
+                                fateOutcome: chapterSnapshot.nemesis.fateOutcome,
+                                counterplay: chapterSnapshot.nemesis.counterplay,
+                                rewardSummary: chapterSnapshot.nemesis.rewardSummary
+                            }
+                            : null,
                         skyOmen: chapterSnapshot.skyOmen
                             ? {
                                 name: chapterSnapshot.skyOmen.name,
@@ -408,6 +445,35 @@ class Game {
                         chapterIndex: chapterSnapshot.chapterIndex,
                         name: chapterSnapshot.name,
                         stageLabel: chapterSnapshot.stageLabel,
+                        dangerProfile: chapterSnapshot.dangerProfile
+                            ? {
+                                index: chapterSnapshot.dangerProfile.index,
+                                tierId: chapterSnapshot.dangerProfile.tierId,
+                                tierLabel: chapterSnapshot.dangerProfile.tierLabel,
+                                summary: chapterSnapshot.dangerProfile.summary,
+                                dominantRisk: chapterSnapshot.dangerProfile.dominantRisk,
+                                counterplay: chapterSnapshot.dangerProfile.counterplay
+                            }
+                            : null,
+                        nemesis: chapterSnapshot.nemesis
+                            ? {
+                                id: chapterSnapshot.nemesis.id,
+                                name: chapterSnapshot.nemesis.name,
+                                status: chapterSnapshot.nemesis.status,
+                                statusLabel: chapterSnapshot.nemesis.statusLabel,
+                                triggerNodeTypes: chapterSnapshot.nemesis.triggerNodeTypes,
+                                engagedCount: chapterSnapshot.nemesis.engagedCount,
+                                recurrenceCount: chapterSnapshot.nemesis.recurrenceCount,
+                                pressureIndex: chapterSnapshot.nemesis.pressureIndex,
+                                currentVariantLabel: chapterSnapshot.nemesis.currentVariantLabel,
+                                clueLine: chapterSnapshot.nemesis.clueLine,
+                                clueRevealed: chapterSnapshot.nemesis.clueRevealed,
+                                alliedFactionName: chapterSnapshot.nemesis.alliedFactionName,
+                                fateOutcome: chapterSnapshot.nemesis.fateOutcome,
+                                counterplay: chapterSnapshot.nemesis.counterplay,
+                                rewardSummary: chapterSnapshot.nemesis.rewardSummary
+                            }
+                            : null,
                         skyOmen: chapterSnapshot.skyOmen
                             ? {
                                 name: chapterSnapshot.skyOmen.name,
@@ -436,6 +502,7 @@ class Game {
                     ? this.map.getAccessibleNodes().map(n => ({ id: n.id, row: n.row, type: n.type }))
                     : []
             } : null,
+            destinyLedger: this.getChapterEventLedgerSnapshot({ includeEntries: true, limit: 4 }),
             legacy: {
                 essence: this.legacyProgress?.essence || 0,
                 unspent: this.getLegacyUnspentEssence(),
@@ -2865,7 +2932,28 @@ class Game {
             spent: 0,
             upgrades: {},
             lastPreset: null,
-            secondaryPreset: null
+            secondaryPreset: null,
+            endlessSeasonLedger: {
+                seasonId: null,
+                seasonWeekTag: '',
+                seasonName: '',
+                seasonIcon: '',
+                lastSeasonDirectiveId: null,
+                seasonBestCycle: 0,
+                seasonCycleClears: 0,
+                seasonBossDefeated: 0,
+                seasonScore: 0,
+                seasonArchive: {},
+                seasonDirectiveSelection: {
+                    seasonId: null,
+                    weekTag: '',
+                    directiveId: null,
+                    source: 'auto'
+                },
+                seasonDirectiveClearCounts: {},
+                seasonCollapseStats: {},
+                lastSeasonCollapse: null
+            }
         };
     }
 
@@ -2903,6 +2991,15 @@ class Game {
             seasonBossDefeated: 0,
             seasonScore: 0,
             seasonArchive: {},
+            seasonDirectiveSelection: {
+                seasonId: null,
+                weekTag: '',
+                directiveId: null,
+                source: 'auto'
+            },
+            seasonDirectiveClearCounts: {},
+            seasonCollapseStats: {},
+            lastSeasonCollapse: null,
             boonStats: {
                 rewardGoldMul: 0,
                 rewardExpMul: 0,
@@ -3050,6 +3147,17 @@ class Game {
             if (!Number.isFinite(num)) return 0;
             return Math.max(0, Math.min(0.9, num));
         };
+        const normalizeStatMap = (value, maxEntries = 16) => {
+            const sourceMap = value && typeof value === 'object' ? value : {};
+            const normalizedMap = {};
+            Object.keys(sourceMap)
+                .filter((key) => typeof key === 'string' && key)
+                .slice(0, Math.max(0, Math.floor(Number(maxEntries) || 0)))
+                .forEach((key) => {
+                    normalizedMap[key.slice(0, 48)] = normalizeInt(sourceMap[key], 0);
+                });
+            return normalizedMap;
+        };
 
         const boonStatsRaw = source.boonStats && typeof source.boonStats === 'object'
             ? source.boonStats
@@ -3082,6 +3190,10 @@ class Game {
                 bosses: normalizeInt(entry.bosses),
                 score: normalizeInt(entry.score),
                 lastDirectiveId: normalizeString(entry.lastDirectiveId, 40) || null,
+                directiveClearCounts: normalizeStatMap(entry.directiveClearCounts, 12),
+                collapseStats: normalizeStatMap(entry.collapseStats, 12),
+                lastCollapseReasonId: normalizeString(entry.lastCollapseReasonId, 48) || null,
+                lastCollapseLabel: normalizeString(entry.lastCollapseLabel, 32),
                 updatedAt: Math.max(0, Math.floor(Number(entry.updatedAt) || 0))
             };
         });
@@ -3167,6 +3279,37 @@ class Game {
             seasonBossDefeated: normalizeInt(source.seasonBossDefeated),
             seasonScore: normalizeInt(source.seasonScore),
             seasonArchive: trimmedSeasonArchive,
+            seasonDirectiveSelection: (() => {
+                const selection = source.seasonDirectiveSelection && typeof source.seasonDirectiveSelection === 'object'
+                    ? source.seasonDirectiveSelection
+                    : {};
+                return {
+                    seasonId: normalizeString(selection.seasonId, 32) || null,
+                    weekTag: normalizeString(selection.weekTag, 24),
+                    directiveId: normalizeString(selection.directiveId, 48) || null,
+                    source: selection.source === 'player' ? 'player' : 'auto'
+                };
+            })(),
+            seasonDirectiveClearCounts: normalizeStatMap(source.seasonDirectiveClearCounts, 12),
+            seasonCollapseStats: normalizeStatMap(source.seasonCollapseStats, 12),
+            lastSeasonCollapse: (() => {
+                const collapse = source.lastSeasonCollapse && typeof source.lastSeasonCollapse === 'object'
+                    ? source.lastSeasonCollapse
+                    : null;
+                if (!collapse) return null;
+                const collapseId = normalizeString(collapse.id, 48);
+                const collapseLabel = normalizeString(collapse.label, 32);
+                if (!collapseId || !collapseLabel) return null;
+                return {
+                    id: collapseId,
+                    label: collapseLabel,
+                    desc: normalizeString(collapse.desc, 160),
+                    cycle: normalizeInt(collapse.cycle),
+                    pressure: Math.max(0, Math.min(9, normalizeInt(collapse.pressure))),
+                    directiveId: normalizeString(collapse.directiveId, 48) || null,
+                    recordedAt: Math.max(0, Math.floor(Number(collapse.recordedAt) || 0))
+                };
+            })(),
             boonStats
         };
 
@@ -3242,6 +3385,13 @@ class Game {
                     desc: '低血、处决与首回合爆发的收益被放大，拖沓会让前段优势迅速流失。'
                 },
                 focusTags: ['风险试探', '先手斩杀', '试炼前压'],
+                dangerVector: {
+                    burst: 72,
+                    sustain: 46,
+                    control: 41,
+                    tax: 38,
+                    recovery: 64
+                },
                 routePrompt: '偏好精英、试炼与快节奏节点，把优势尽早换成战利。',
                 bossPrompt: '主宰会检定你能否在不稳血线下持续抢到终结窗口。',
                 recommendedDestinies: ['foldedEdge', 'rebelScale', 'emberHeart'],
@@ -3263,6 +3413,13 @@ class Game {
                     desc: '厚盾、重铸与器灵联动更强，能把挨打回合转成下一轮的反击起点。'
                 },
                 focusTags: ['资源灼烧', '护阵重铸', '厚甲换血'],
+                dangerVector: {
+                    burst: 48,
+                    sustain: 67,
+                    control: 45,
+                    tax: 74,
+                    recovery: 59
+                },
                 routePrompt: '炼器坊、营地与精英会更有价值，能帮你把资源烧成真实强度。',
                 bossPrompt: '末段主宰会持续逼你交资源，不会给无效回合留情面。',
                 recommendedDestinies: ['soulAnchor', 'armorTemper', 'deepMeridian'],
@@ -3284,6 +3441,13 @@ class Game {
                     desc: '多段连锁与时序调度更容易滚雪球，能把中盘铺垫转成稳定收束。'
                 },
                 focusTags: ['预埋节奏', '连锁收益', '次回合筹划'],
+                dangerVector: {
+                    burst: 54,
+                    sustain: 56,
+                    control: 73,
+                    tax: 52,
+                    recovery: 61
+                },
                 routePrompt: '观星台、记忆裂隙与事件更能放大这章的计算收益。',
                 bossPrompt: '主宰会追问你的牌序安排，错误收尾会被成倍放大。',
                 recommendedDestinies: ['starMemory', 'echoScripture', 'thunderVerse'],
@@ -3305,6 +3469,13 @@ class Game {
                     desc: '诅咒、虚弱、易伤和镜像收益会持续叠加，净化与防错的重要性显著提高。'
                 },
                 focusTags: ['复制反照', '诅咒回波', '净化防错'],
+                dangerVector: {
+                    burst: 63,
+                    sustain: 58,
+                    control: 76,
+                    tax: 66,
+                    recovery: 50
+                },
                 routePrompt: '禁术坛、试炼碑与事件都可能提前放大镜像压力，但回报也更高。',
                 bossPrompt: '主宰会围绕复制和诅咒出题，回合末的收尾选择就是答卷。',
                 recommendedDestinies: ['mirrorHeart', 'gapInsight', 'silentTide'],
@@ -3326,6 +3497,13 @@ class Game {
                     desc: '自损换伤、收割回血与爆发阈值更容易成型，但容错会急速收窄。'
                 },
                 focusTags: ['压血爆发', '献祭换伤', '收割回生'],
+                dangerVector: {
+                    burst: 86,
+                    sustain: 64,
+                    control: 49,
+                    tax: 71,
+                    recovery: 34
+                },
                 routePrompt: '精英、禁术坛与试炼路线更适合这章，敢赌命就能拿回超额收益。',
                 bossPrompt: '主宰会持续压你的血线，逼你在狂化阈值前后做出正确取舍。',
                 recommendedDestinies: ['rebelScale', 'sacrificialFlame', 'bloodContract'],
@@ -3347,6 +3525,13 @@ class Game {
                     desc: '多系统协同越完整，终章给出的答卷空间越大；失衡构筑会被快速识破。'
                 },
                 focusTags: ['多轴联动', '法则编织', '终局检定'],
+                dangerVector: {
+                    burst: 78,
+                    sustain: 72,
+                    control: 74,
+                    tax: 80,
+                    recovery: 36
+                },
                 routePrompt: '观星、试炼与炼器路线能更早补齐终章缺的最后一块拼图。',
                 bossPrompt: '末章主宰会把命格、誓约和法则一起拿来出题，缺一轴都会很难打。',
                 recommendedDestinies: ['preceptSeal', 'omenGlow', 'hiddenScript'],
@@ -3356,6 +3541,205 @@ class Game {
         };
 
         return this.chapterProfileCatalog;
+    }
+
+    resolveChapterDangerProfile(chapterBase = null, stageIndex = 1) {
+        const vector = chapterBase && typeof chapterBase === 'object' && chapterBase.dangerVector
+            ? chapterBase.dangerVector
+            : {};
+        const clampMetric = (value, fallback) => {
+            const normalized = Math.floor(Number(value));
+            if (!Number.isFinite(normalized)) return fallback;
+            return Math.max(0, Math.min(100, normalized));
+        };
+        const base = {
+            burst: clampMetric(vector.burst, 50),
+            sustain: clampMetric(vector.sustain, 50),
+            control: clampMetric(vector.control, 50),
+            tax: clampMetric(vector.tax, 50),
+            recovery: clampMetric(vector.recovery, 50)
+        };
+        const safeStage = Math.max(1, Math.min(3, Math.floor(Number(stageIndex) || 1)));
+        const stageBonus = (safeStage - 1) * 6;
+        const recoveryPenalty = 100 - base.recovery;
+        const weightedBase = Math.round(
+            (base.burst * 0.24)
+            + (base.sustain * 0.22)
+            + (base.control * 0.2)
+            + (base.tax * 0.22)
+            + (recoveryPenalty * 0.12)
+        );
+        const index = Math.max(0, Math.min(100, weightedBase + stageBonus));
+
+        const tier = index >= 76
+            ? { id: 'extreme', label: '极高', chip: '极限试锋' }
+            : index >= 61
+                ? { id: 'high', label: '高压', chip: '高压问锋' }
+                : index >= 46
+                    ? { id: 'medium', label: '中压', chip: '稳压试错' }
+                    : { id: 'low', label: '可控', chip: '稳态推进' };
+
+        const dimensions = [
+            { id: 'burst', label: '爆发威胁', value: base.burst },
+            { id: 'sustain', label: '续航压力', value: base.sustain },
+            { id: 'control', label: '控制压制', value: base.control },
+            { id: 'tax', label: '资源税负', value: base.tax },
+            { id: 'recovery', label: '纠错窗口', value: recoveryPenalty }
+        ].sort((a, b) => b.value - a.value);
+        const dominant = dimensions[0] || { id: 'burst', label: '爆发威胁', value: base.burst };
+
+        const counterplayMap = {
+            burst: '优先留护盾与首拍减伤，避免被连续高伤直接击穿。',
+            sustain: '补充持续回复或高质量防守，避免被拖入亏损回合。',
+            control: '提前准备净化与抗控资源，减少关键回合失效风险。',
+            tax: '控制费用曲线与手牌冗余，避免回合末资源空转。',
+            recovery: '保留至少一条保命链路，不要把容错全部换成输出。'
+        };
+
+        return {
+            index,
+            tierId: tier.id,
+            tierLabel: tier.label,
+            chipLabel: tier.chip,
+            stageBonus,
+            summary: `${dominant.label}偏高`,
+            dominantRisk: dominant.id,
+            dominantLabel: dominant.label,
+            counterplay: counterplayMap[dominant.id] || '保持资源冗余，避免单回合透支。',
+            dimensions: {
+                burst: base.burst,
+                sustain: base.sustain,
+                control: base.control,
+                tax: base.tax,
+                recoveryWindow: base.recovery
+            }
+        };
+    }
+
+    getChapterNemesisSnapshot(realm) {
+        const safeRealm = Math.max(1, Math.min(18, Math.floor(Number(realm) || 1)));
+        const expeditionState = typeof this.getExpeditionState === 'function'
+            ? this.getExpeditionState()
+            : null;
+        const source = expeditionState
+            && Math.max(1, Math.min(18, Math.floor(Number(expeditionState.realm) || 1))) === safeRealm
+            ? expeditionState
+            : null;
+        const nemesis = source && source.activeNemesis && typeof source.activeNemesis === 'object'
+            ? source.activeNemesis
+            : null;
+        if (!nemesis || !nemesis.id) return null;
+
+        const status = ['hunting', 'recurring', 'allied', 'guarding', 'defeated', 'escaped', 'released', 'traded', 'evolved'].includes(nemesis.status)
+            ? nemesis.status
+            : 'hunting';
+        const statusMeta = {
+            hunting: { label: '追猎中', chip: '狩猎锁定' },
+            recurring: { label: '复现中', chip: '回返加压' },
+            allied: { label: '投靠势力', chip: '势力合围' },
+            guarding: { label: '主宰护卫', chip: '护卫终局' },
+            defeated: { label: '已击破', chip: '猎线已结' },
+            escaped: { label: '已逃逸', chip: '风险外溢' },
+            released: { label: '已放走', chip: '留线观后' },
+            traded: { label: '完成交易', chip: '以赏换路' },
+            evolved: { label: '仇敌进阶', chip: '后患升级' }
+        };
+        const triggerNodeTypes = Array.isArray(nemesis.triggerNodeTypes)
+            ? nemesis.triggerNodeTypes.map((entry) => String(entry || '')).filter(Boolean).slice(0, 4)
+            : [];
+        const nodeLabelMap = {
+            enemy: '普通战',
+            elite: '精英战',
+            trial: '试炼',
+            boss: '主宰战',
+            event: '事件',
+            shop: '商店',
+            observatory: '观星',
+            memory_rift: '记忆裂隙',
+            forge: '炼器'
+        };
+        const reward = nemesis.resolvedReward && typeof nemesis.resolvedReward === 'object'
+            ? nemesis.resolvedReward
+            : (nemesis.reward && typeof nemesis.reward === 'object' ? nemesis.reward : {});
+        const rewardGold = Math.max(0, Math.floor(Number(reward.gold) || 0));
+        const rewardRingExp = Math.max(0, Math.floor(Number(reward.ringExp) || 0));
+        const rewardScore = Math.max(0, Math.floor(Number(reward.score) || 0));
+        const rewardHeavenlyInsight = Math.max(0, Math.floor(Number(reward.heavenlyInsight) || 0));
+        const engagedCount = Math.max(0, Math.floor(Number(nemesis.engagedCount) || 0));
+        const hpMul = Math.max(1, Number(nemesis.hpMul) || 1);
+        const atkMul = Math.max(1, Number(nemesis.atkMul) || 1);
+        const recurrenceCount = Math.max(0, Math.floor(Number(nemesis.recurrenceCount) || 0));
+        const battleVariants = Array.isArray(nemesis.battleVariants) ? nemesis.battleVariants : [];
+        const currentVariant = battleVariants.find((entry) => entry && entry.id === nemesis.currentVariantId) || battleVariants[0] || null;
+        const pressureIndex = Math.max(0, Math.min(100, Math.floor(
+            (hpMul - 1) * 34
+            + (atkMul - 1) * 42
+            + engagedCount * 6
+            + recurrenceCount * 8
+            + (status === 'hunting' ? 18 : 0)
+            + (status === 'recurring' ? 24 : 0)
+            + (status === 'allied' ? 20 : 0)
+            + (status === 'guarding' ? 26 : 0)
+            + (status === 'escaped' ? 10 : 0)
+            + (status === 'evolved' ? 14 : 0)
+        )));
+
+        const counterplay = status === 'defeated'
+            ? '追猎线已结算，可把资源转向章节主宰检定。'
+            : status === 'released'
+                ? '线索已被保留为长线情报，本章可把资源转向更稳的收官。'
+                : status === 'traded'
+                    ? '宿敌线已被转成交易赏格，优先把换来的资源兑现成终局优势。'
+                    : status === 'escaped'
+                        ? '宿敌已经脱离正面战线，优先稳住血线并防止后续压制。'
+                        : status === 'evolved'
+                            ? '这条仇敌线已经进阶，后续若再见到同类题目要提前准备更厚的兜底。'
+                            : status === 'guarding'
+                                ? '终章前要预留净化、护盾与爆发，避免被护卫战直接锁死答卷。'
+                                : status === 'allied'
+                                    ? `宿敌已投靠${nemesis.alliedFactionName || '敌对势力'}，要把资源预留给合围节点。`
+                                    : status === 'recurring'
+                                        ? '它已经记住了上次暴露的缺口，下一次接战要提前补齐防线。'
+                                        : `在${triggerNodeTypes.map((type) => nodeLabelMap[type] || type).join(' / ') || '战斗节点'}保留爆发与护盾，避免被仇敌连段滚雪球。`;
+
+        const rewardSummaryParts = [];
+        if (rewardGold > 0) rewardSummaryParts.push(`灵石 +${rewardGold}`);
+        if (rewardRingExp > 0) rewardSummaryParts.push(`命环经验 +${rewardRingExp}`);
+        if (rewardScore > 0) rewardSummaryParts.push(`命盘评分 +${rewardScore}`);
+        if (rewardHeavenlyInsight > 0) rewardSummaryParts.push(`天机 +${rewardHeavenlyInsight}`);
+
+        return {
+            id: String(nemesis.id || ''),
+            icon: String(nemesis.icon || '🎯'),
+            name: String(nemesis.name || '未知宿敌'),
+            epithet: String(nemesis.epithet || ''),
+            intro: String(nemesis.intro || ''),
+            status,
+            statusLabel: statusMeta[status]?.label || statusMeta.hunting.label,
+            chipLabel: statusMeta[status]?.chip || statusMeta.hunting.chip,
+            triggerNodeTypes,
+            triggerNodeLabel: triggerNodeTypes.map((type) => nodeLabelMap[type] || type).join(' / '),
+            engaged: !!nemesis.engaged,
+            engagedCount,
+            recurrenceCount,
+            lastEncounterNodeType: String(nemesis.lastEncounterNodeType || ''),
+            currentVariantId: String(nemesis.currentVariantId || ''),
+            currentVariantLabel: String(currentVariant?.label || ''),
+            clueLine: String(nemesis.clueLine || ''),
+            clueRevealed: !!nemesis.clueRevealed,
+            alliedFactionName: String(nemesis.alliedFactionName || ''),
+            fateOutcome: String(nemesis.fateOutcome || status),
+            pressureIndex,
+            counterplay,
+            reward: {
+                gold: rewardGold,
+                ringExp: rewardRingExp,
+                score: rewardScore,
+                heavenlyInsight: rewardHeavenlyInsight
+            },
+            rewardSummary: rewardSummaryParts.length > 0 ? rewardSummaryParts.join(' · ') : '暂无额外收益',
+            outcomeNote: String(nemesis.outcomeNote || '')
+        };
     }
 
     getChapterProfileForRealm(realm) {
@@ -3382,6 +3766,7 @@ class Game {
             }
         ];
         const stage = stageCatalog[stageIndex - 1] || stageCatalog[0];
+        const dangerProfile = this.resolveChapterDangerProfile(base, stageIndex);
 
         const resolveDestiny = (destinyId) => {
             const meta = this.getRunDestinyMetaById(destinyId, 1);
@@ -3404,6 +3789,7 @@ class Game {
             stageIndex,
             stageLabel: stage.label,
             stageDesc: stage.desc,
+            dangerProfile,
             recommendedDestinies: (base.recommendedDestinies || []).map(resolveDestiny).filter(Boolean),
             recommendedSpirits: (base.recommendedSpirits || []).map(resolveSpirit).filter(Boolean),
             recommendedVows: (base.recommendedVows || []).map(resolveVow).filter(Boolean)
@@ -3435,6 +3821,8 @@ class Game {
             currentVows: Array.isArray(currentVows)
                 ? currentVows.map((meta) => ({ id: meta.id, name: meta.name, icon: meta.icon, tierLabel: meta.tierLabel }))
                 : [],
+            dangerProfile: chapter.dangerProfile || null,
+            nemesis: this.getChapterNemesisSnapshot(chapter.realm),
             destinyRecommended: !!(currentDestiny && chapter.recommendedDestinies.some((meta) => meta.id === currentDestiny.id)),
             spiritRecommended: !!(currentSpirit && chapter.recommendedSpirits.some((meta) => meta.id === currentSpirit.id)),
             vowRecommended: Array.isArray(currentVows) && currentVows.some((meta) => chapter.recommendedVows.some((entry) => entry.id === meta.id))
@@ -3523,6 +3911,233 @@ class Game {
         } catch (error) {
             return V6_WORLDVIEW_RECALL.slice();
         }
+    }
+
+    createDefaultChapterEventLedger() {
+        return {
+            version: 1,
+            updatedAt: 0,
+            entries: [],
+            counters: {
+                short_gain_long_loss: 0,
+                short_loss_long_gain: 0,
+                defer: 0,
+                other: 0
+            },
+            tagFrequency: {}
+        };
+    }
+
+    normalizeChapterEventLedger(rawLedger = null) {
+        const fallback = this.createDefaultChapterEventLedger();
+        const source = rawLedger && typeof rawLedger === 'object' ? rawLedger : {};
+        const entries = Array.isArray(source.entries) ? source.entries : [];
+        const normalizedEntries = entries
+            .filter((entry) => entry && typeof entry === 'object')
+            .map((entry) => ({
+                id: String(entry.id || `ledger_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`),
+                runtimeId: String(entry.runtimeId || ''),
+                eventId: String(entry.eventId || ''),
+                eventName: String(entry.eventName || ''),
+                choiceIndex: Math.max(0, Math.floor(Number(entry.choiceIndex) || 0)),
+                choiceText: String(entry.choiceText || ''),
+                chapterIndex: Math.max(1, Math.floor(Number(entry.chapterIndex) || 1)),
+                chapterName: String(entry.chapterName || ''),
+                arcType: String(entry.arcType || 'other'),
+                immediateText: String(entry.immediateText || ''),
+                longTermText: String(entry.longTermText || ''),
+                echoText: String(entry.echoText || entry.longTermText || ''),
+                tags: Array.isArray(entry.tags)
+                    ? Array.from(new Set(entry.tags.map((tag) => String(tag || '').trim()).filter(Boolean))).slice(0, 8)
+                    : [],
+                nodeType: String(entry.nodeType || ''),
+                createdAt: Math.max(0, Math.floor(Number(entry.createdAt) || Date.now()))
+            }))
+            .slice(-80);
+
+        const counters = {
+            short_gain_long_loss: 0,
+            short_loss_long_gain: 0,
+            defer: 0,
+            other: 0
+        };
+        const tagFrequency = {};
+        normalizedEntries.forEach((entry) => {
+            const arcType = entry.arcType;
+            if (Object.prototype.hasOwnProperty.call(counters, arcType)) {
+                counters[arcType] += 1;
+            } else {
+                counters.other += 1;
+            }
+            entry.tags.forEach((tag) => {
+                tagFrequency[tag] = (tagFrequency[tag] || 0) + 1;
+            });
+        });
+
+        return {
+            ...fallback,
+            version: Math.max(1, Math.floor(Number(source.version) || 1)),
+            updatedAt: Math.max(0, Math.floor(Number(source.updatedAt) || (normalizedEntries[normalizedEntries.length - 1]?.createdAt || 0))),
+            entries: normalizedEntries,
+            counters,
+            tagFrequency
+        };
+    }
+
+    ensureChapterEventLedger() {
+        this.chapterEventLedger = this.normalizeChapterEventLedger(this.chapterEventLedger);
+        return this.chapterEventLedger;
+    }
+
+    getChapterEventLedgerSaveState() {
+        return this.normalizeChapterEventLedger(this.ensureChapterEventLedger());
+    }
+
+    applyChapterEventLedgerSaveState(rawLedger = null) {
+        this.chapterEventLedger = this.normalizeChapterEventLedger(rawLedger);
+        return this.chapterEventLedger;
+    }
+
+    getChapterEventLedgerSnapshot(options = {}) {
+        const ledger = this.ensureChapterEventLedger();
+        const includeEntries = !!options.includeEntries;
+        const limit = Math.max(1, Math.min(20, Math.floor(Number(options.limit) || 6)));
+        const recentEntries = includeEntries
+            ? ledger.entries
+                .slice(-limit)
+                .map((entry) => ({
+                    id: entry.id,
+                    chapterIndex: entry.chapterIndex,
+                    chapterName: entry.chapterName,
+                    eventId: entry.eventId,
+                    eventName: entry.eventName,
+                    choiceText: entry.choiceText,
+                    arcType: entry.arcType,
+                    immediateText: entry.immediateText,
+                    longTermText: entry.longTermText,
+                    echoText: entry.echoText,
+                    tags: Array.isArray(entry.tags) ? entry.tags.slice() : [],
+                    createdAt: entry.createdAt
+                }))
+            : [];
+        const topTags = Object.entries(ledger.tagFrequency || {})
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 6)
+            .map((item) => item[0]);
+        return {
+            version: ledger.version,
+            totalEntries: ledger.entries.length,
+            counters: { ...(ledger.counters || {}) },
+            topTags,
+            entries: recentEntries
+        };
+    }
+
+    getChapterEventComposerContext() {
+        const realm = Math.max(1, Math.floor(Number(this.player?.realm) || 1));
+        const chapterSnapshot = (typeof this.getChapterDisplaySnapshot === 'function')
+            ? this.getChapterDisplaySnapshot(realm)
+            : null;
+        const chapterIndex = Math.max(1, Math.min(6, Math.floor(Number(chapterSnapshot?.chapterIndex) || Math.floor((realm - 1) / 3) + 1)));
+        const chapterName = String(chapterSnapshot?.name || `第${chapterIndex}章`);
+        const ledger = this.ensureChapterEventLedger();
+        const priorEntries = ledger.entries
+            .filter((entry) => entry.chapterIndex < chapterIndex)
+            .slice(-12)
+            .map((entry) => ({
+                id: entry.id,
+                chapterIndex: entry.chapterIndex,
+                chapterName: entry.chapterName,
+                choiceText: entry.choiceText,
+                arcType: entry.arcType,
+                echoText: entry.echoText,
+                longTermText: entry.longTermText,
+                tags: Array.isArray(entry.tags) ? entry.tags.slice() : []
+            }));
+        const recentTags = Object.entries(ledger.tagFrequency || {})
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 8)
+            .map((item) => item[0]);
+        const gainCount = Math.max(0, Math.floor(Number(ledger.counters?.short_gain_long_loss) || 0));
+        const lossCount = Math.max(0, Math.floor(Number(ledger.counters?.short_loss_long_gain) || 0));
+        const imbalance = gainCount - lossCount;
+        const composeChance = Math.max(0.22, Math.min(0.66, 0.3 + chapterIndex * 0.025 + (Math.abs(imbalance) > 1 ? 0.04 : 0)));
+        return {
+            chapterIndex,
+            chapterName,
+            recentTags,
+            priorEntries,
+            composeChance
+        };
+    }
+
+    recordChapterEventConsequence(payload = {}) {
+        const event = payload.event && typeof payload.event === 'object'
+            ? payload.event
+            : (this.currentEvent && typeof this.currentEvent === 'object' ? this.currentEvent : null);
+        const choice = payload.choice && typeof payload.choice === 'object' ? payload.choice : null;
+        if (!event || !choice) return null;
+        const fateLedger = choice.fateLedger && typeof choice.fateLedger === 'object' ? choice.fateLedger : null;
+        if (!fateLedger) return null;
+
+        const ledger = this.ensureChapterEventLedger();
+        const choiceIndex = Math.max(0, Math.floor(Number(payload.choiceIndex) || 0));
+        const runtimeId = String(payload.runtimeId || this.currentEventRuntimeMeta?.eventRuntimeId || '');
+        if (runtimeId) {
+            const existing = ledger.entries.find((entry) => entry.runtimeId === runtimeId && entry.choiceIndex === choiceIndex);
+            if (existing) return existing;
+        }
+
+        const realm = Math.max(1, Math.floor(Number(this.player?.realm) || 1));
+        const chapterSnapshot = (typeof this.getChapterDisplaySnapshot === 'function')
+            ? this.getChapterDisplaySnapshot(realm)
+            : null;
+        const chapterIndex = Math.max(1, Math.min(6, Math.floor(Number(payload.chapterIndex || chapterSnapshot?.chapterIndex) || Math.floor((realm - 1) / 3) + 1)));
+        const chapterName = String(payload.chapterName || chapterSnapshot?.name || `第${chapterIndex}章`);
+        const arcTypeRaw = String(fateLedger.arcType || 'other').trim();
+        const arcType = arcTypeRaw || 'other';
+        const immediateText = String(fateLedger.immediateText || choice.result || '').trim();
+        const longTermText = String(fateLedger.longTermText || '').trim();
+        const echoText = String(fateLedger.echoText || longTermText || immediateText || '').trim();
+        const tags = Array.from(new Set(
+            (Array.isArray(fateLedger.tags) ? fateLedger.tags : [])
+                .map((tag) => String(tag || '').trim())
+                .filter(Boolean)
+        )).slice(0, 8);
+        const createdAt = Date.now();
+        const entry = {
+            id: `ledger_${chapterIndex}_${createdAt.toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+            runtimeId,
+            eventId: String(event.id || ''),
+            eventName: String(event.name || '章节事件'),
+            choiceIndex,
+            choiceText: String(choice.text || ''),
+            chapterIndex,
+            chapterName,
+            arcType,
+            immediateText,
+            longTermText,
+            echoText,
+            tags,
+            nodeType: String(this.currentBattleNode?.type || ''),
+            createdAt
+        };
+
+        ledger.entries.push(entry);
+        if (ledger.entries.length > 80) {
+            ledger.entries = ledger.entries.slice(ledger.entries.length - 80);
+        }
+        if (Object.prototype.hasOwnProperty.call(ledger.counters, arcType)) {
+            ledger.counters[arcType] += 1;
+        } else {
+            ledger.counters.other = (ledger.counters.other || 0) + 1;
+        }
+        tags.forEach((tag) => {
+            ledger.tagFrequency[tag] = (ledger.tagFrequency[tag] || 0) + 1;
+        });
+        ledger.updatedAt = createdAt;
+        this.chapterEventLedger = this.normalizeChapterEventLedger(ledger);
+        return entry;
     }
 
     buildEventChoiceEffectSummary(choice = {}) {
@@ -3631,6 +4246,12 @@ class Game {
             summaryItems.push(`抉择：${event.summary}`);
         } else if (event?.description) {
             summaryItems.push(`抉择：${String(event.description).replace(/\s+/g, ' ').slice(0, 42)}`);
+        }
+        if (event?.isComposedChapterEvent && event?.composerMeta?.themeName) {
+            summaryItems.push(`事件簇：${event.composerMeta.themeName}`);
+        }
+        if (event?.composerMeta?.recallText) {
+            summaryItems.push(`回响：${String(event.composerMeta.recallText).slice(0, 24)}`);
         }
         if (node?.type) {
             summaryItems.push(`节点：${this.getMapNodeTypeLabel ? this.getMapNodeTypeLabel(node.type) : node.type}`);
@@ -4617,6 +5238,285 @@ class Game {
         ];
     }
 
+    getEndlessSeasonCollapseCatalog() {
+        return {
+            pressure_overload: {
+                id: 'pressure_overload',
+                label: '压力失控',
+                shortLabel: '压溃',
+                desc: '轮回压力堆到临界点后，被连续压迫节奏击穿。'
+            },
+            sustain_break: {
+                id: 'sustain_break',
+                label: '续航崩线',
+                shortLabel: '续航',
+                desc: '治疗倍率和生命缓冲不足，持续作战能力被拖垮。'
+            },
+            mechanic_check: {
+                id: 'mechanic_check',
+                label: '机制检定失手',
+                shortLabel: '机制',
+                desc: '在精英、首领或试炼节点没答对当前轮段题目。'
+            },
+            supply_crack: {
+                id: 'supply_crack',
+                label: '补给断档',
+                shortLabel: '补给',
+                desc: '资源与商会节奏断层，导致中盘无法顺利补件。'
+            },
+            tempo_loss: {
+                id: 'tempo_loss',
+                label: '节奏失守',
+                shortLabel: '节奏',
+                desc: '攻防节拍被敌方夺走，构筑未能及时接上当前轮段。'
+            }
+        };
+    }
+
+    getEndlessSeasonDirectiveRiskScore(directive = null) {
+        if (!directive || typeof directive !== 'object') return 0;
+        const mods = directive.mods && typeof directive.mods === 'object' ? directive.mods : {};
+        const eventMods = directive.eventMods && typeof directive.eventMods === 'object' ? directive.eventMods : {};
+        const mapShift = mods.mapWeightShift && typeof mods.mapWeightShift === 'object' ? mods.mapWeightShift : {};
+
+        let score = 0;
+        score += Math.max(0, (Number(mods.enemyAtkMul) || 1) - 1) * 220;
+        score += Math.max(0, (Number(mods.enemyHpMul) || 1) - 1) * 180;
+        score += Math.max(0, (Number(mods.shopPriceMul) || 1) - 1) * 140;
+        score += Math.max(0, 1 - (Number(mods.healMul) || 1)) * 200;
+        score += Math.max(0, Number(mapShift.elite) || 0) * 180;
+        score += Math.max(0, Number(mapShift.trial) || 0) * 160;
+        score += Math.max(0, -Number(mapShift.rest) || 0) * 150;
+
+        score -= Math.max(0, 1 - (Number(mods.shopPriceMul) || 1)) * 120;
+        score -= Math.max(0, (Number(mods.healMul) || 1) - 1) * 160;
+        score -= Math.max(0, Number(mapShift.event) || 0) * 90;
+        score -= Math.max(0, Number(mapShift.observatory) || 0) * 80;
+        score -= Math.max(0, Number(mapShift.memory_rift) || 0) * 70;
+        score -= Math.max(0, Number(mapShift.spirit_grotto) || 0) * 70;
+
+        score += Math.max(0, (Number(eventMods.goldGainMul) || 1) - 1) * 75;
+        score += Math.max(0, (Number(eventMods.trialRewardMul) || 1) - 1) * 88;
+        score += Math.max(0, Number(eventMods.boonRareBonusRate) || 0) * 120;
+        score += eventMods.forceRareBoonChoice ? 10 : 0;
+        score -= Math.max(0, 1 - (Number(eventMods.tempShopPriceMul) || 1)) * 110;
+        score -= Math.max(0, Number(eventMods.tempShopOfferBonus) || 0) * 8;
+        score -= Math.max(0, Number(eventMods.bonusAdventureBuffCharges) || 0) * 9;
+        score -= eventMods.forceRelief ? 18 : 0;
+
+        return Number(score.toFixed(2));
+    }
+
+    getEndlessSeasonProgressSnapshot(seasonProfile = null) {
+        const state = typeof this.ensureEndlessState === 'function'
+            ? this.ensureEndlessState()
+            : null;
+        if (!state || !seasonProfile || typeof seasonProfile !== 'object') {
+            return {
+                clears: 0,
+                bosses: 0,
+                score: 0,
+                bestCycle: 0,
+                directiveClearCounts: {},
+                collapseStats: {},
+                lastCollapse: null
+            };
+        }
+
+        const seasonId = typeof seasonProfile.id === 'string' ? seasonProfile.id : null;
+        const weekTag = typeof seasonProfile.weekTag === 'string' ? seasonProfile.weekTag : '';
+        const archiveKey = seasonId && weekTag ? `${seasonId}:${weekTag}`.slice(0, 96) : '';
+        const archiveEntry = archiveKey && state.seasonArchive && typeof state.seasonArchive === 'object'
+            ? state.seasonArchive[archiveKey]
+            : null;
+        const isCurrentSeason = state.seasonId === seasonId && state.seasonWeekTag === weekTag;
+        const source = isCurrentSeason
+            ? state
+            : (archiveEntry && typeof archiveEntry === 'object' ? archiveEntry : {});
+
+        const directiveClearCounts = isCurrentSeason
+            ? (state.seasonDirectiveClearCounts && typeof state.seasonDirectiveClearCounts === 'object'
+                ? state.seasonDirectiveClearCounts
+                : {})
+            : (source.directiveClearCounts && typeof source.directiveClearCounts === 'object'
+                ? source.directiveClearCounts
+                : {});
+        const collapseStats = isCurrentSeason
+            ? (state.seasonCollapseStats && typeof state.seasonCollapseStats === 'object'
+                ? state.seasonCollapseStats
+                : {})
+            : (source.collapseStats && typeof source.collapseStats === 'object'
+                ? source.collapseStats
+                : {});
+        const currentCollapse = isCurrentSeason && state.lastSeasonCollapse && typeof state.lastSeasonCollapse === 'object'
+            ? state.lastSeasonCollapse
+            : null;
+        const archivedCollapse = !currentCollapse && source.lastCollapseReasonId
+            ? {
+                id: source.lastCollapseReasonId,
+                label: source.lastCollapseLabel || source.lastCollapseReasonId,
+                desc: '',
+                cycle: 0,
+                pressure: 0,
+                directiveId: source.lastDirectiveId || null,
+                recordedAt: Math.max(0, Math.floor(Number(source.updatedAt) || 0))
+            }
+            : null;
+
+        return {
+            clears: Math.max(0, Math.floor(Number(source.clears ?? source.seasonCycleClears) || 0)),
+            bosses: Math.max(0, Math.floor(Number(source.bosses ?? source.seasonBossDefeated) || 0)),
+            score: Math.max(0, Math.floor(Number(source.score ?? source.seasonScore) || 0)),
+            bestCycle: Math.max(0, Math.floor(Number(source.bestCycle ?? source.seasonBestCycle) || 0)),
+            directiveClearCounts: { ...directiveClearCounts },
+            collapseStats: { ...collapseStats },
+            lastCollapse: currentCollapse || archivedCollapse || null
+        };
+    }
+
+    getEndlessSeasonGoals(seasonProfile = null) {
+        if (!seasonProfile || typeof seasonProfile !== 'object') return [];
+        const stats = seasonProfile.stats && typeof seasonProfile.stats === 'object'
+            ? seasonProfile.stats
+            : this.getEndlessSeasonProgressSnapshot(seasonProfile);
+        const directiveChoices = Array.isArray(seasonProfile.directiveChoices)
+            ? seasonProfile.directiveChoices
+            : [];
+        const highRiskDirectiveIds = directiveChoices
+            .filter((item) => item && item.riskTier === 'volatile')
+            .map((item) => item.id);
+        const riskyClears = highRiskDirectiveIds.reduce((sum, directiveId) => {
+            return sum + Math.max(0, Math.floor(Number(stats.directiveClearCounts?.[directiveId]) || 0));
+        }, 0);
+
+        const goalTable = {
+            forge_tide: {
+                basic: { title: '稳步开锻', desc: '先用轮次和积分把本周锻潮节奏拉起来。', clears: 3, score: 420 },
+                advanced: { title: '连锻成势', desc: '把锻线推进到中高轮，验证中盘资源调度。', bestCycle: 8, bosses: 3 },
+                extreme: { title: '熔峰冲榜', desc: '至少两轮用激进季签破圈，证明高压也能稳住。', bestCycle: 12, score: 1800, riskyClears: 2 }
+            },
+            mirror_verdict: {
+                basic: { title: '镜面热身', desc: '用基础轮次和积分摸清镜裁赛季的读题方向。', clears: 3, score: 480 },
+                advanced: { title: '照裁校题', desc: '在中高轮保持首领通过率，说明检定节奏没偏。', bestCycle: 9, bosses: 3 },
+                extreme: { title: '镜极审判', desc: '带着高风险季签冲到深轮，证明不是靠稳态拖过。', bestCycle: 12, score: 1900, riskyClears: 2 }
+            },
+            blood_oath: {
+                basic: { title: '血誓试锋', desc: '把高风险赛季先跑通，确认能承受前中盘税负。', clears: 4, score: 520 },
+                advanced: { title: '誓线成环', desc: '在更高伤害环境里保持推进与收官效率。', bestCycle: 9, bosses: 4 },
+                extreme: { title: '赤月封喉', desc: '至少三轮用激进季签取胜，并把积分冲上高压档。', bestCycle: 13, score: 2100, riskyClears: 3 }
+            },
+            court_weave: {
+                basic: { title: '编庭定稿', desc: '先把多轴协同跑顺，形成完整账本底样。', clears: 3, score: 460 },
+                advanced: { title: '轴线合拍', desc: '推进更深轮次，同时保持首领节点处理稳定。', bestCycle: 10, bosses: 3 },
+                extreme: { title: '裁庭完卷', desc: '带着高风险季签完成深轮冲榜，证明构筑联动真正成型。', bestCycle: 12, score: 2000, riskyClears: 2 }
+            }
+        };
+        const config = goalTable[seasonProfile.id] || goalTable.forge_tide;
+        const buildGoal = (tierId, tierLabel, configEntry) => {
+            const requirements = [];
+            if (Number.isFinite(Number(configEntry.clears))) {
+                requirements.push({
+                    id: 'clears',
+                    label: '通关',
+                    current: Math.max(0, Math.floor(Number(stats.clears) || 0)),
+                    target: Math.max(1, Math.floor(Number(configEntry.clears) || 1)),
+                    suffix: '轮'
+                });
+            }
+            if (Number.isFinite(Number(configEntry.score))) {
+                requirements.push({
+                    id: 'score',
+                    label: '积分',
+                    current: Math.max(0, Math.floor(Number(stats.score) || 0)),
+                    target: Math.max(100, Math.floor(Number(configEntry.score) || 100)),
+                    suffix: ''
+                });
+            }
+            if (Number.isFinite(Number(configEntry.bestCycle))) {
+                requirements.push({
+                    id: 'bestCycle',
+                    label: '最深',
+                    current: Math.max(0, Math.floor(Number(stats.bestCycle) || 0)),
+                    target: Math.max(1, Math.floor(Number(configEntry.bestCycle) || 1)),
+                    suffix: '轮'
+                });
+            }
+            if (Number.isFinite(Number(configEntry.bosses))) {
+                requirements.push({
+                    id: 'bosses',
+                    label: '主宰',
+                    current: Math.max(0, Math.floor(Number(stats.bosses) || 0)),
+                    target: Math.max(1, Math.floor(Number(configEntry.bosses) || 1)),
+                    suffix: '次'
+                });
+            }
+            if (Number.isFinite(Number(configEntry.riskyClears))) {
+                requirements.push({
+                    id: 'riskyClears',
+                    label: '激进季签',
+                    current: Math.max(0, Math.floor(Number(riskyClears) || 0)),
+                    target: Math.max(1, Math.floor(Number(configEntry.riskyClears) || 1)),
+                    suffix: '轮'
+                });
+            }
+
+            const completed = requirements.length > 0 && requirements.every((item) => item.current >= item.target);
+            const progressText = requirements
+                .map((item) => `${item.label} ${Math.min(item.current, item.target)}/${item.target}${item.suffix}`)
+                .join(' · ');
+
+            return {
+                id: `${seasonProfile.id}_${tierId}`,
+                tier: tierId,
+                tierLabel,
+                title: configEntry.title,
+                desc: configEntry.desc,
+                completed,
+                progressText,
+                requirements
+            };
+        };
+
+        return [
+            buildGoal('basic', '基础', config.basic),
+            buildGoal('advanced', '进阶', config.advanced),
+            buildGoal('extreme', '极限', config.extreme)
+        ];
+    }
+
+    persistEndlessSeasonLedger() {
+        if (!this.legacyProgress || typeof this.saveLegacyProgress !== 'function') return null;
+        const state = typeof this.ensureEndlessState === 'function'
+            ? this.ensureEndlessState()
+            : this.endlessState;
+        if (!state || typeof state !== 'object') return null;
+        this.legacyProgress.endlessSeasonLedger = {
+            seasonId: state.seasonId || null,
+            seasonWeekTag: state.seasonWeekTag || '',
+            seasonName: state.seasonName || '',
+            seasonIcon: state.seasonIcon || '',
+            lastSeasonDirectiveId: state.lastSeasonDirectiveId || null,
+            seasonBestCycle: Math.max(0, Math.floor(Number(state.seasonBestCycle) || 0)),
+            seasonCycleClears: Math.max(0, Math.floor(Number(state.seasonCycleClears) || 0)),
+            seasonBossDefeated: Math.max(0, Math.floor(Number(state.seasonBossDefeated) || 0)),
+            seasonScore: Math.max(0, Math.floor(Number(state.seasonScore) || 0)),
+            seasonArchive: JSON.parse(JSON.stringify(state.seasonArchive || {})),
+            seasonDirectiveSelection: JSON.parse(JSON.stringify(state.seasonDirectiveSelection || {
+                seasonId: null,
+                weekTag: '',
+                directiveId: null,
+                source: 'auto'
+            })),
+            seasonDirectiveClearCounts: { ...(state.seasonDirectiveClearCounts || {}) },
+            seasonCollapseStats: { ...(state.seasonCollapseStats || {}) },
+            lastSeasonCollapse: state.lastSeasonCollapse
+                ? { ...state.lastSeasonCollapse }
+                : null
+        };
+        this.saveLegacyProgress();
+        return this.legacyProgress.endlessSeasonLedger;
+    }
+
     getEndlessWeekMeta(dateOverride = null) {
         const toDate = (value) => {
             if (value instanceof Date) return new Date(value.getTime());
@@ -4660,7 +5560,17 @@ class Game {
         const directives = Array.isArray(season.directives) && season.directives.length > 0
             ? season.directives
             : [{ id: `${season.id}_default`, name: '稳态令', desc: season.desc || '当前赛季处于稳态指令。' }];
-        const directive = directives[(weekMeta.weekIndex + cycle) % directives.length] || directives[0];
+        const autoDirective = directives[(weekMeta.weekIndex + cycle) % directives.length] || directives[0];
+        const selection = state && state.seasonDirectiveSelection && typeof state.seasonDirectiveSelection === 'object'
+            ? state.seasonDirectiveSelection
+            : null;
+        const selectedDirective = selection
+            && selection.source === 'player'
+            && selection.seasonId === season.id
+            && selection.weekTag === weekMeta.weekTag
+            ? directives.find((item) => item && item.id === selection.directiveId) || null
+            : null;
+        const directive = selectedDirective || autoDirective;
 
         const toMultiplier = (value) => {
             const num = Number(value);
@@ -4704,6 +5614,103 @@ class Game {
             };
         };
 
+        const rankedDirectives = directives
+            .map((item, index) => ({
+                ...item,
+                index,
+                riskScore: this.getEndlessSeasonDirectiveRiskScore(item)
+            }))
+            .sort((a, b) => {
+                if (a.riskScore !== b.riskScore) return a.riskScore - b.riskScore;
+                return a.index - b.index;
+            });
+        const riskMetaById = new Map();
+        rankedDirectives.forEach((item, index) => {
+            let riskTier = 'balanced';
+            if (rankedDirectives.length > 1) {
+                if (index === 0) riskTier = 'steady';
+                else if (index === rankedDirectives.length - 1) riskTier = 'volatile';
+            }
+            const riskLabel = riskTier === 'steady'
+                ? '稳进'
+                : riskTier === 'volatile'
+                    ? '激进'
+                    : '平衡';
+            const riskHint = riskTier === 'steady'
+                ? '容错更高，适合保线与补件。'
+                : riskTier === 'volatile'
+                    ? '收益更高，但会把检定压力一并抬升。'
+                    : '收益与风险保持折中，适合常规滚分。';
+            riskMetaById.set(item.id, {
+                rank: index + 1,
+                tier: riskTier,
+                label: riskLabel,
+                score: item.riskScore,
+                hint: riskHint
+            });
+        });
+
+        const directiveChoices = directives.map((item) => {
+            const riskMeta = riskMetaById.get(item.id) || {
+                rank: 1,
+                tier: 'balanced',
+                label: '平衡',
+                score: 0,
+                hint: '收益与风险保持折中，适合常规滚分。'
+            };
+            return {
+                id: item.id,
+                name: item.name || '稳态令',
+                desc: item.desc || '',
+                riskRank: riskMeta.rank,
+                riskTier: riskMeta.tier,
+                riskLabel: riskMeta.label,
+                riskScore: riskMeta.score,
+                riskHint: riskMeta.hint,
+                selected: directive.id === item.id,
+                autoRecommended: autoDirective.id === item.id,
+                mods: sanitizeMods(item.mods),
+                eventMods: sanitizeEventMods(item.eventMods)
+            };
+        });
+
+        const seasonProfileBase = {
+            id: season.id,
+            weekTag: weekMeta.weekTag
+        };
+        const progressSnapshot = this.getEndlessSeasonProgressSnapshot({
+            ...seasonProfileBase,
+            weekTag: weekMeta.weekTag
+        });
+        const activeRiskMeta = riskMetaById.get(directive.id) || {
+            tier: 'balanced',
+            label: '平衡',
+            score: 0,
+            hint: '收益与风险保持折中，适合常规滚分。'
+        };
+        const collapseCatalog = this.getEndlessSeasonCollapseCatalog();
+        const collapseSummary = Object.entries(progressSnapshot.collapseStats || {})
+            .map(([id, count]) => {
+                const meta = collapseCatalog[id] || { label: id, shortLabel: id };
+                return {
+                    id,
+                    label: meta.label,
+                    shortLabel: meta.shortLabel || meta.label,
+                    count: Math.max(0, Math.floor(Number(count) || 0))
+                };
+            })
+            .filter((item) => item.count > 0)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 3);
+        const goals = this.getEndlessSeasonGoals({
+            id: season.id,
+            name: season.name,
+            weekTag: weekMeta.weekTag,
+            directiveChoices,
+            stats: progressSnapshot
+        });
+        const completedGoal = [...goals].reverse().find((item) => item && item.completed) || null;
+
         return {
             id: season.id,
             name: season.name,
@@ -4716,10 +5723,28 @@ class Game {
             directiveId: directive.id,
             directiveName: directive.name || '稳态令',
             directiveDesc: directive.desc || '',
+            directiveRiskTier: activeRiskMeta.tier,
+            directiveRiskLabel: activeRiskMeta.label,
+            directiveRiskScore: activeRiskMeta.score,
+            directiveRiskHint: activeRiskMeta.hint,
+            activeDirectiveSource: selectedDirective ? 'player' : 'auto',
+            selectionModeLabel: selectedDirective ? '玩家钦定' : '轮转推荐',
+            autoDirectiveId: autoDirective.id,
+            autoDirectiveName: autoDirective.name || '稳态令',
+            autoDirectiveRiskLabel: (riskMetaById.get(autoDirective.id) || activeRiskMeta).label,
+            directiveChoices,
             mods: sanitizeMods(season.mods),
             directiveMods: sanitizeMods(directive.mods),
             eventMods: sanitizeEventMods(season.eventMods),
             directiveEventMods: sanitizeEventMods(directive.eventMods),
+            stats: progressSnapshot,
+            collapseStats: { ...(progressSnapshot.collapseStats || {}) },
+            collapseSummary,
+            lastCollapse: progressSnapshot.lastCollapse,
+            goals,
+            seasonGoals: goals,
+            goalTierReached: completedGoal ? completedGoal.tier : 'none',
+            goalTierLabel: completedGoal ? completedGoal.tierLabel : '未达成',
             signature: `${season.id}:${weekMeta.weekTag}:${directive.id}`
         };
     }
@@ -4740,6 +5765,20 @@ class Game {
         state.seasonArchive = state.seasonArchive && typeof state.seasonArchive === 'object'
             ? state.seasonArchive
             : {};
+        state.seasonDirectiveClearCounts = state.seasonDirectiveClearCounts && typeof state.seasonDirectiveClearCounts === 'object'
+            ? state.seasonDirectiveClearCounts
+            : {};
+        state.seasonCollapseStats = state.seasonCollapseStats && typeof state.seasonCollapseStats === 'object'
+            ? state.seasonCollapseStats
+            : {};
+        state.seasonDirectiveSelection = state.seasonDirectiveSelection && typeof state.seasonDirectiveSelection === 'object'
+            ? state.seasonDirectiveSelection
+            : {
+                seasonId: null,
+                weekTag: '',
+                directiveId: null,
+                source: 'auto'
+            };
 
         const archiveSnapshot = (seasonId, weekTag, snapshot) => {
             if (typeof seasonId !== 'string' || !seasonId || typeof weekTag !== 'string' || !weekTag) return;
@@ -4758,7 +5797,19 @@ class Game {
                 score: Math.max(0, Math.floor(Number(snapshot.score) || 0)),
                 lastDirectiveId: typeof snapshot.lastDirectiveId === 'string' && snapshot.lastDirectiveId
                     ? snapshot.lastDirectiveId
-                    : null,
+                    : (base.lastDirectiveId || null),
+                directiveClearCounts: snapshot.directiveClearCounts && typeof snapshot.directiveClearCounts === 'object'
+                    ? { ...snapshot.directiveClearCounts }
+                    : { ...(base.directiveClearCounts || {}) },
+                collapseStats: snapshot.collapseStats && typeof snapshot.collapseStats === 'object'
+                    ? { ...snapshot.collapseStats }
+                    : { ...(base.collapseStats || {}) },
+                lastCollapseReasonId: typeof snapshot.lastCollapseReasonId === 'string' && snapshot.lastCollapseReasonId
+                    ? snapshot.lastCollapseReasonId
+                    : (base.lastCollapseReasonId || null),
+                lastCollapseLabel: typeof snapshot.lastCollapseLabel === 'string'
+                    ? snapshot.lastCollapseLabel
+                    : (base.lastCollapseLabel || ''),
                 updatedAt: Date.now()
             };
         };
@@ -4774,12 +5825,19 @@ class Game {
                 clears: state.seasonCycleClears,
                 bosses: state.seasonBossDefeated,
                 score: state.seasonScore,
-                lastDirectiveId: state.lastSeasonDirectiveId
+                lastDirectiveId: state.lastSeasonDirectiveId,
+                directiveClearCounts: state.seasonDirectiveClearCounts,
+                collapseStats: state.seasonCollapseStats,
+                lastCollapseReasonId: state.lastSeasonCollapse?.id || null,
+                lastCollapseLabel: state.lastSeasonCollapse?.label || ''
             });
             state.seasonBestCycle = 0;
             state.seasonCycleClears = 0;
             state.seasonBossDefeated = 0;
             state.seasonScore = 0;
+            state.seasonDirectiveClearCounts = {};
+            state.seasonCollapseStats = {};
+            state.lastSeasonCollapse = null;
         }
 
         state.seasonId = season.id;
@@ -4787,10 +5845,35 @@ class Game {
         state.seasonName = season.name || '';
         state.seasonIcon = season.icon || '';
         state.lastSeasonDirectiveId = season.directiveId || null;
+        if (state.seasonDirectiveSelection.seasonId !== season.id || state.seasonDirectiveSelection.weekTag !== season.weekTag) {
+            state.seasonDirectiveSelection = {
+                seasonId: season.id,
+                weekTag: season.weekTag,
+                directiveId: state.seasonDirectiveSelection.source === 'player' ? state.seasonDirectiveSelection.directiveId : null,
+                source: state.seasonDirectiveSelection.source === 'player' ? 'player' : 'auto'
+            };
+            if (state.seasonDirectiveSelection.source === 'player') {
+                const validDirective = Array.isArray(season.directiveChoices)
+                    ? season.directiveChoices.some((item) => item.id === state.seasonDirectiveSelection.directiveId)
+                    : false;
+                if (!validDirective) {
+                    state.seasonDirectiveSelection.directiveId = null;
+                    state.seasonDirectiveSelection.source = 'auto';
+                }
+            }
+        }
 
         const cycleDelta = Math.max(0, Math.floor(Number(opts.cycleDelta) || 0));
         const bossDelta = Math.max(0, Math.floor(Number(opts.bossDelta) || 0));
         const scoreDelta = Math.max(0, Math.floor(Number(opts.scoreDelta) || 0));
+        const directiveClearId = typeof opts.directiveClearId === 'string' && opts.directiveClearId
+            ? opts.directiveClearId
+            : season.directiveId || null;
+        const collapseReasonId = typeof opts.collapseReasonId === 'string' && opts.collapseReasonId
+            ? opts.collapseReasonId
+            : null;
+        const collapseLabel = typeof opts.collapseLabel === 'string' ? opts.collapseLabel : '';
+        const collapseDesc = typeof opts.collapseDesc === 'string' ? opts.collapseDesc : '';
         const bestCycleCandidate = Math.max(
             Math.max(0, Math.floor(Number(opts.bestCycle) || 0)),
             Math.max(0, Math.floor(Number(state.currentCycle) || 0) + 1)
@@ -4800,6 +5883,21 @@ class Game {
         state.seasonBossDefeated = Math.max(0, Math.floor(Number(state.seasonBossDefeated) || 0)) + bossDelta;
         state.seasonScore = Math.max(0, Math.floor(Number(state.seasonScore) || 0)) + scoreDelta;
         state.seasonBestCycle = Math.max(Math.max(0, Math.floor(Number(state.seasonBestCycle) || 0)), bestCycleCandidate);
+        if (cycleDelta > 0 && directiveClearId) {
+            state.seasonDirectiveClearCounts[directiveClearId] = Math.max(0, Math.floor(Number(state.seasonDirectiveClearCounts[directiveClearId]) || 0)) + cycleDelta;
+        }
+        if (collapseReasonId) {
+            state.seasonCollapseStats[collapseReasonId] = Math.max(0, Math.floor(Number(state.seasonCollapseStats[collapseReasonId]) || 0)) + 1;
+            state.lastSeasonCollapse = {
+                id: collapseReasonId,
+                label: collapseLabel || collapseReasonId,
+                desc: collapseDesc || '',
+                cycle: Math.max(0, Math.floor(Number(state.currentCycle) || 0)),
+                pressure: Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0))),
+                directiveId: directiveClearId || season.directiveId || null,
+                recordedAt: Date.now()
+            };
+        }
 
         archiveSnapshot(season.id, season.weekTag, {
             seasonName: season.name || '',
@@ -4808,7 +5906,11 @@ class Game {
             clears: state.seasonCycleClears,
             bosses: state.seasonBossDefeated,
             score: state.seasonScore,
-            lastDirectiveId: season.directiveId || null
+            lastDirectiveId: season.directiveId || null,
+            directiveClearCounts: state.seasonDirectiveClearCounts,
+            collapseStats: state.seasonCollapseStats,
+            lastCollapseReasonId: state.lastSeasonCollapse?.id || null,
+            lastCollapseLabel: state.lastSeasonCollapse?.label || ''
         });
 
         const archiveKeys = Object.keys(state.seasonArchive)
@@ -4819,8 +5921,116 @@ class Game {
             trimmed[key] = state.seasonArchive[key];
         });
         state.seasonArchive = trimmed;
+        if (typeof this.persistEndlessSeasonLedger === 'function') {
+            this.persistEndlessSeasonLedger();
+        }
 
         return season;
+    }
+
+    setEndlessSeasonDirective(directiveId = null) {
+        const state = this.ensureEndlessState();
+        const seasonProfile = this.getEndlessSeasonProfile(state.currentCycle);
+        if (!seasonProfile) return null;
+
+        const resetToAuto = directiveId === null || directiveId === undefined || directiveId === '' || directiveId === 'auto';
+        let nextSelection = null;
+        if (resetToAuto) {
+            nextSelection = {
+                seasonId: seasonProfile.id,
+                weekTag: seasonProfile.weekTag,
+                directiveId: null,
+                source: 'auto'
+            };
+        } else {
+            const matched = Array.isArray(seasonProfile.directiveChoices)
+                ? seasonProfile.directiveChoices.find((item) => item && item.id === directiveId)
+                : null;
+            if (!matched) return null;
+            nextSelection = {
+                seasonId: seasonProfile.id,
+                weekTag: seasonProfile.weekTag,
+                directiveId: matched.id,
+                source: 'player'
+            };
+        }
+
+        this.endlessState = {
+            ...state,
+            seasonDirectiveSelection: nextSelection
+        };
+
+        const nextProfile = this.syncEndlessSeasonState({ cycleOverride: state.currentCycle }) || this.getEndlessSeasonProfile(state.currentCycle);
+        if (this.isEndlessActive && this.isEndlessActive()) {
+            this.autoSave?.();
+        } else if (typeof this.persistEndlessSeasonLedger === 'function') {
+            this.persistEndlessSeasonLedger();
+        }
+        if (typeof Utils !== 'undefined' && Utils.showBattleLog && nextProfile) {
+            const hint = resetToAuto
+                ? `已恢复轮转推荐：${nextProfile.directiveName}（${nextProfile.directiveRiskLabel}）`
+                : `已锁定季签：${nextProfile.directiveName}（${nextProfile.directiveRiskLabel}）`;
+            Utils.showBattleLog(`赛季令签调整：${hint}`);
+        }
+        return nextProfile;
+    }
+
+    getEndlessCollapseAnalysis() {
+        const state = this.ensureEndlessState();
+        const collapseCatalog = this.getEndlessSeasonCollapseCatalog();
+        const mods = typeof this.getEndlessModifiers === 'function'
+            ? this.getEndlessModifiers()
+            : null;
+        const seasonProfile = typeof this.getEndlessSeasonProfile === 'function'
+            ? this.getEndlessSeasonProfile(state.currentCycle)
+            : null;
+        const pressure = Math.max(0, Math.min(9, Math.floor(Number(state?.pressure) || 0)));
+        const hpRatio = this.player && Number(this.player.maxHp) > 0
+            ? Math.max(0, Number(this.player.currentHp) || 0) / Math.max(1, Number(this.player.maxHp) || 1)
+            : 0;
+        const nodeType = this.currentBattleNode && typeof this.currentBattleNode.type === 'string'
+            ? this.currentBattleNode.type
+            : 'enemy';
+        const gold = Math.max(0, Math.floor(Number(this.player?.gold) || 0));
+        const healMul = Math.max(0.45, Number(mods?.healMul) || 1);
+
+        let reasonId = 'tempo_loss';
+        let desc = '当前构筑没能在这个轮段及时接上攻防节奏。';
+        if (pressure >= 8) {
+            reasonId = 'pressure_overload';
+            desc = `轮回压力已到 ${pressure}/9，敌方连续压迫节奏把战线直接顶穿。`;
+        } else if (hpRatio <= 0.18 && healMul <= 0.86) {
+            reasonId = 'sustain_break';
+            desc = `当前治疗效率仅 x${healMul.toFixed(2)}，生命缓冲和回补窗口不足。`;
+        } else if (['elite', 'boss', 'trial'].includes(nodeType)) {
+            reasonId = 'mechanic_check';
+            const nodeLabel = nodeType === 'elite' ? '精英' : nodeType === 'boss' ? '首领' : '试炼';
+            desc = `${nodeLabel}节点的机制检定没有答对，当前季签 ${seasonProfile?.directiveName || '稳态令'} 也放大了错题代价。`;
+        } else if (gold < (this.isEndlessActive && this.isEndlessActive() ? 54 : 36) && (Number(mods?.shopPriceMul) || 1) >= 1) {
+            reasonId = 'supply_crack';
+            desc = `灵石储备只有 ${gold}，补件窗口断档，无法继续修正当前构筑。`;
+        }
+
+        const meta = collapseCatalog[reasonId] || collapseCatalog.tempo_loss;
+        return {
+            id: meta.id,
+            label: meta.label,
+            desc: desc || meta.desc || ''
+        };
+    }
+
+    recordEndlessSeasonCollapse() {
+        const state = this.ensureEndlessState();
+        const seasonProfile = this.getEndlessSeasonProfile(state.currentCycle);
+        if (!seasonProfile) return null;
+        const collapse = this.getEndlessCollapseAnalysis();
+        this.syncEndlessSeasonState({
+            cycleOverride: state.currentCycle,
+            collapseReasonId: collapse.id,
+            collapseLabel: collapse.label,
+            collapseDesc: collapse.desc
+        });
+        return collapse;
     }
 
     getEndlessModifiers() {
@@ -5484,7 +6694,10 @@ class Game {
         this.autoSave();
         Utils.showBattleLog(`无尽轮回开启：第 ${state.currentCycle + 1} 轮`);
         if (seasonProfile) {
-            Utils.showBattleLog(`本周赛季：${seasonProfile.icon || '🜁'} ${seasonProfile.name}（${seasonProfile.weekTag}）｜季签：${seasonProfile.directiveName}`);
+            Utils.showBattleLog(
+                `本周赛季：${seasonProfile.icon || '🜁'} ${seasonProfile.name}（${seasonProfile.weekTag}）` +
+                `｜季签：${seasonProfile.directiveName}（${seasonProfile.directiveRiskLabel} / ${seasonProfile.selectionModeLabel}）`
+            );
         }
         return true;
     }
@@ -5516,11 +6729,12 @@ class Game {
             cycleDelta: 1,
             bossDelta: 1,
             scoreDelta: cycleScore,
-            bestCycle: nextCycle + 1
+            bestCycle: nextCycle + 1,
+            directiveClearId: seasonProfile?.directiveId || null
         }) || seasonProfile;
         state = this.ensureEndlessState();
         const seasonProgressText = seasonProfile
-            ? `，赛季进度 ${state.seasonCycleClears} 轮 / 主宰 ${state.seasonBossDefeated} / 赛季积分 ${state.seasonScore}`
+            ? `，赛季进度 ${state.seasonCycleClears} 轮 / 主宰 ${state.seasonBossDefeated} / 赛季积分 ${state.seasonScore} / 目标 ${seasonProfile.goalTierLabel}`
             : '';
         Utils.showBattleLog(`无尽突破：灵石 +${cycleGold}，恢复 ${healAmount} 生命，轮回精粹 +${essenceGain}，无尽积分 +${cycleScore}，轮回压力 ${prevPressure}→${state.pressure}${seasonProgressText}`);
 
@@ -5888,12 +7102,103 @@ class Game {
     normalizeLegacyProgress(raw) {
         const defaults = this.getLegacyDefaults();
         const source = raw && typeof raw === 'object' ? raw : {};
+        const normalizeString = (value, maxLen = 64) => {
+            if (typeof value !== 'string') return '';
+            return value.trim().slice(0, Math.max(0, Math.floor(Number(maxLen) || 0)));
+        };
+        const normalizeInt = (value, fallback = 0) => {
+            const num = Number(value);
+            if (!Number.isFinite(num)) return fallback;
+            return Math.max(0, Math.floor(num));
+        };
+        const normalizeStatMap = (value, maxEntries = 16) => {
+            const sourceMap = value && typeof value === 'object' ? value : {};
+            const normalizedMap = {};
+            Object.keys(sourceMap)
+                .filter((key) => typeof key === 'string' && key)
+                .slice(0, Math.max(0, Math.floor(Number(maxEntries) || 0)))
+                .forEach((key) => {
+                    normalizedMap[key.slice(0, 48)] = normalizeInt(sourceMap[key], 0);
+                });
+            return normalizedMap;
+        };
         const normalized = {
-            essence: Math.max(0, Math.floor(Number(source.essence) || 0)),
-            spent: Math.max(0, Math.floor(Number(source.spent) || 0)),
+            essence: normalizeInt(source.essence, 0),
+            spent: normalizeInt(source.spent, 0),
             upgrades: {},
             lastPreset: null,
-            secondaryPreset: null
+            secondaryPreset: null,
+            endlessSeasonLedger: (() => {
+                const ledger = source.endlessSeasonLedger && typeof source.endlessSeasonLedger === 'object'
+                    ? source.endlessSeasonLedger
+                    : {};
+                const seasonArchiveRaw = ledger.seasonArchive && typeof ledger.seasonArchive === 'object'
+                    ? ledger.seasonArchive
+                    : {};
+                const seasonArchive = {};
+                Object.keys(seasonArchiveRaw)
+                    .filter((key) => typeof key === 'string' && key)
+                    .slice(0, 16)
+                    .forEach((key) => {
+                        const entry = seasonArchiveRaw[key];
+                        if (!entry || typeof entry !== 'object') return;
+                        const safeKey = key.slice(0, 96);
+                        seasonArchive[safeKey] = {
+                            seasonId: normalizeString(entry.seasonId, 32) || normalizeString(safeKey.split(':')[0], 32) || null,
+                            weekTag: normalizeString(entry.weekTag, 24),
+                            seasonName: normalizeString(entry.seasonName, 32),
+                            icon: normalizeString(entry.icon, 4),
+                            bestCycle: normalizeInt(entry.bestCycle),
+                            clears: normalizeInt(entry.clears),
+                            bosses: normalizeInt(entry.bosses),
+                            score: normalizeInt(entry.score),
+                            lastDirectiveId: normalizeString(entry.lastDirectiveId, 48) || null,
+                            directiveClearCounts: normalizeStatMap(entry.directiveClearCounts, 12),
+                            collapseStats: normalizeStatMap(entry.collapseStats, 12),
+                            lastCollapseReasonId: normalizeString(entry.lastCollapseReasonId, 48) || null,
+                            lastCollapseLabel: normalizeString(entry.lastCollapseLabel, 32),
+                            updatedAt: Math.max(0, Math.floor(Number(entry.updatedAt) || 0))
+                        };
+                    });
+
+                const selection = ledger.seasonDirectiveSelection && typeof ledger.seasonDirectiveSelection === 'object'
+                    ? ledger.seasonDirectiveSelection
+                    : {};
+                const collapse = ledger.lastSeasonCollapse && typeof ledger.lastSeasonCollapse === 'object'
+                    ? ledger.lastSeasonCollapse
+                    : null;
+                return {
+                    seasonId: normalizeString(ledger.seasonId, 32) || null,
+                    seasonWeekTag: normalizeString(ledger.seasonWeekTag, 24),
+                    seasonName: normalizeString(ledger.seasonName, 32),
+                    seasonIcon: normalizeString(ledger.seasonIcon, 4),
+                    lastSeasonDirectiveId: normalizeString(ledger.lastSeasonDirectiveId, 48) || null,
+                    seasonBestCycle: normalizeInt(ledger.seasonBestCycle),
+                    seasonCycleClears: normalizeInt(ledger.seasonCycleClears),
+                    seasonBossDefeated: normalizeInt(ledger.seasonBossDefeated),
+                    seasonScore: normalizeInt(ledger.seasonScore),
+                    seasonArchive,
+                    seasonDirectiveSelection: {
+                        seasonId: normalizeString(selection.seasonId, 32) || null,
+                        weekTag: normalizeString(selection.weekTag, 24),
+                        directiveId: normalizeString(selection.directiveId, 48) || null,
+                        source: selection.source === 'player' ? 'player' : 'auto'
+                    },
+                    seasonDirectiveClearCounts: normalizeStatMap(ledger.seasonDirectiveClearCounts, 12),
+                    seasonCollapseStats: normalizeStatMap(ledger.seasonCollapseStats, 12),
+                    lastSeasonCollapse: collapse && normalizeString(collapse.id, 48) && normalizeString(collapse.label, 32)
+                        ? {
+                            id: normalizeString(collapse.id, 48),
+                            label: normalizeString(collapse.label, 32),
+                            desc: normalizeString(collapse.desc, 160),
+                            cycle: normalizeInt(collapse.cycle),
+                            pressure: Math.max(0, Math.min(9, normalizeInt(collapse.pressure))),
+                            directiveId: normalizeString(collapse.directiveId, 48) || null,
+                            recordedAt: Math.max(0, Math.floor(Number(collapse.recordedAt) || 0))
+                        }
+                        : null
+                };
+            })()
         };
 
         const inputUpgrades = source.upgrades && typeof source.upgrades === 'object' ? source.upgrades : {};
@@ -6611,6 +7916,7 @@ class Game {
                 featureFlags: { ...this.featureFlags },
                 endlessMeta: this.ensureEndlessState(),
                 encounterMeta: this.ensureEncounterState(),
+                chapterEventLedger: this.getChapterEventLedgerSaveState(),
                 schemaMigratedAt: Date.now(),
                 timestamp: Date.now()
             };
@@ -6709,6 +8015,23 @@ class Game {
                 totalBonusExp: 0
             };
         };
+        const buildDefaultChapterLedger = () => {
+            if (typeof this.createDefaultChapterEventLedger === 'function') {
+                return this.createDefaultChapterEventLedger();
+            }
+            return {
+                version: 1,
+                updatedAt: 0,
+                entries: [],
+                counters: {
+                    short_gain_long_loss: 0,
+                    short_loss_long_gain: 0,
+                    defer: 0,
+                    other: 0
+                },
+                tagFrequency: {}
+            };
+        };
         const normalizeLegacy = (source) => {
             const progress = source && typeof source === 'object' ? source : {};
             const essence = Math.max(0, Math.floor(Number(progress.essence) || 0));
@@ -6740,6 +8063,7 @@ class Game {
             migrated.featureFlags = { ...(this.featureFlags || {}), ...(migrated.featureFlags || {}) };
             migrated.endlessMeta = migrated.endlessMeta || buildDefaultEndless();
             migrated.encounterMeta = migrated.encounterMeta || buildDefaultEncounter();
+            migrated.chapterEventLedger = migrated.chapterEventLedger || buildDefaultChapterLedger();
             migrated.schemaMigratedAt = Date.now();
             migrated.version = '5.1.0';
         } else {
@@ -6752,6 +8076,7 @@ class Game {
             migrated.featureFlags = { ...(this.featureFlags || {}), ...(migrated.featureFlags || {}) };
             migrated.endlessMeta = migrated.endlessMeta || buildDefaultEndless();
             migrated.encounterMeta = migrated.encounterMeta || buildDefaultEncounter();
+            migrated.chapterEventLedger = migrated.chapterEventLedger || buildDefaultChapterLedger();
             migrated.schemaMigratedAt = migrated.schemaMigratedAt || Date.now();
         }
 
@@ -6760,6 +8085,11 @@ class Game {
         }
         if (typeof this.normalizeEncounterState === 'function') {
             migrated.encounterMeta = this.normalizeEncounterState(migrated.encounterMeta);
+        }
+        if (typeof this.normalizeChapterEventLedger === 'function') {
+            migrated.chapterEventLedger = this.normalizeChapterEventLedger(migrated.chapterEventLedger);
+        } else {
+            migrated.chapterEventLedger = migrated.chapterEventLedger || buildDefaultChapterLedger();
         }
 
         return migrated;
@@ -6775,6 +8105,7 @@ class Game {
             gameState = this.migrateSaveData(gameState);
             this.legacyProgress = this.normalizeLegacyProgress(gameState.legacyProgress || this.legacyProgress);
             this.saveLegacyProgress();
+            this.applyChapterEventLedgerSaveState(gameState.chapterEventLedger);
 
             // 版本检查
             const currentVersion = '5.1.0';
@@ -9021,6 +10352,34 @@ class Game {
             const activeMutators = (state.activeMutators || [])
                 .map((id) => this.getEndlessMutatorPool().find((m) => m.id === id))
                 .filter(Boolean);
+            const goalSummary = seasonProfile && Array.isArray(seasonProfile.goals) && seasonProfile.goals.length > 0
+                ? seasonProfile.goals
+                    .map((goal) => `${goal.tierLabel}${goal.completed ? ' 已达成' : ` ${goal.progressText}`}`)
+                    .join(' / ')
+                : '进入无尽后生成本周目标链。';
+            const collapseSummary = seasonProfile && Array.isArray(seasonProfile.collapseSummary) && seasonProfile.collapseSummary.length > 0
+                ? seasonProfile.collapseSummary
+                    .map((item) => `${item.label} ${item.count} 次`)
+                    .join(' / ')
+                : '当前赛季暂无崩盘记录。';
+            const directiveButtons = seasonProfile && Array.isArray(seasonProfile.directiveChoices) && seasonProfile.directiveChoices.length > 0
+                ? `
+                    <div class="preview-endless-directives">
+                        <button class="preview-endless-directive-btn ${seasonProfile.activeDirectiveSource === 'auto' ? 'active' : ''}" data-directive-id="auto">
+                            轮转推荐
+                        </button>
+                        ${seasonProfile.directiveChoices.map((item) => `
+                            <button
+                                class="preview-endless-directive-btn ${item.selected ? 'active' : ''}"
+                                data-directive-id="${item.id}"
+                                title="${item.desc || ''}"
+                            >
+                                ${item.name} · ${item.riskLabel}
+                            </button>
+                        `).join('')}
+                    </div>
+                `
+                : '';
 
             const titleEl = document.getElementById('preview-title');
             if (titleEl) titleEl.textContent = `无尽轮回 · 第 ${state.currentCycle + 1} 轮`;
@@ -9066,14 +10425,29 @@ class Game {
                         当前映射天域会随轮次切换，主题词缀、压力阶段与偏执会共同决定打法。
                     </div>
                     <div class="preview-rule-line"><span class="rule-label">赛季战绩</span><span>已通关 ${seasonClears} 轮 / 主宰 ${seasonBosses} / 赛季积分 ${seasonScore} / 最深第 ${Math.max(1, seasonBest)} 轮</span></div>
+                    <div class="preview-rule-line"><span class="rule-label">赛季目标</span><span>${goalSummary}</span></div>
+                    <div class="preview-rule-line"><span class="rule-label">崩盘账本</span><span>${collapseSummary}</span></div>
                 `;
             }
             if (buildEl) {
                 buildEl.innerHTML = `
                     <div class="preview-current-build">
-                        建议优先围绕 <strong>轮段主题</strong>、<strong>阶段挑战</strong> 与 <strong>当前偏执</strong> 调整临时路线，而不是死守单一章节思路。
+                        建议优先围绕 <strong>轮段主题</strong>、<strong>阶段挑战</strong> 与 <strong>当前偏执</strong> 调整临时路线，而不是死守单一章节思路。<br>
+                        当前季签：<strong>${seasonProfile?.directiveName || '稳态令'}</strong>（${seasonProfile?.directiveRiskLabel || '平衡'} / ${seasonProfile?.selectionModeLabel || '轮转推荐'}）
                     </div>
+                    ${directiveButtons}
                 `;
+                buildEl.querySelectorAll('.preview-endless-directive-btn').forEach((btn) => {
+                    btn.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const nextDirectiveId = btn.dataset.directiveId || 'auto';
+                        if (typeof this.setEndlessSeasonDirective === 'function') {
+                            this.setEndlessSeasonDirective(nextDirectiveId === 'auto' ? null : nextDirectiveId);
+                        }
+                        this.updateRealmPreview('endless');
+                    });
+                });
             }
 
             const bossEl = document.getElementById('preview-boss');
@@ -9745,6 +11119,10 @@ class Game {
         this.currentBattleNode = null;
         this.rewardCardSelected = false;
         this.encounterState = this.createDefaultEncounterState();
+        this.chapterEventLedger = this.createDefaultChapterEventLedger();
+        this.currentEventRuntimeMeta = null;
+        this.currentEvent = null;
+        this.eventResults = [];
 
         // 恢复解锁进度（如果从旧存档继承）
         if (this.tempPreservedRealms && Array.isArray(this.tempPreservedRealms)) {
@@ -11353,6 +12731,16 @@ class Game {
     showEventModal(event, node) {
         this.currentBattleNode = node;
         this.currentEvent = event;
+        const chapterSnapshot = (typeof this.getChapterDisplaySnapshot === 'function')
+            ? this.getChapterDisplaySnapshot(this.player?.realm || 1)
+            : null;
+        this.currentEventRuntimeMeta = {
+            eventRuntimeId: `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+            chapterIndex: Math.max(1, Math.floor(Number(chapterSnapshot?.chapterIndex) || 1)),
+            chapterName: String(chapterSnapshot?.name || ''),
+            eventId: String(event?.id || ''),
+            isComposedChapterEvent: !!event?.isComposedChapterEvent
+        };
 
         const refs = this.getEventModalRefs();
         const modal = refs.modal;
@@ -12031,6 +13419,21 @@ class Game {
         // 收集效果结果用于显示
         this.eventResults = [];
         let flowInterrupted = false;
+        const ledgerEntry = this.recordChapterEventConsequence({
+            event: this.currentEvent,
+            choice,
+            choiceIndex,
+            runtimeId: this.currentEventRuntimeMeta?.eventRuntimeId,
+            chapterIndex: this.currentEventRuntimeMeta?.chapterIndex,
+            chapterName: this.currentEventRuntimeMeta?.chapterName
+        });
+        if (ledgerEntry) {
+            const shortEcho = String(ledgerEntry.echoText || ledgerEntry.longTermText || '后果已记录').slice(0, 36);
+            this.eventResults.push(`🧭 命盘入账：${shortEcho}`);
+            if (typeof Utils !== 'undefined' && Utils.showBattleLog) {
+                Utils.showBattleLog(`命盘后果已记录：${ledgerEntry.choiceText || '事件抉择'}`);
+            }
+        }
 
         // 执行效果
         if (choice.effects && choice.effects.length > 0) {
@@ -12622,6 +14025,20 @@ class Game {
                 name: '血炉突击包',
                 price: Math.floor(102 * priceMul),
                 desc: '获得 1 张进攻牌，并获得 1 层胜利悬赏增益'
+            },
+            mirrorweave: {
+                id: 'temp_mirrorweave',
+                icon: '🪞',
+                name: '镜渊回路包',
+                price: Math.floor(110 * priceMul),
+                desc: '获得 1 张镜渊卡，并获得 1 层首回合抽牌与开场护盾增益'
+            },
+            oathbound: {
+                id: 'temp_oathbound',
+                icon: '📜',
+                name: '誓罚清算包',
+                price: Math.floor(111 * priceMul),
+                desc: '获得 1 张誓罚卡，并获得 1 层首回合灵力与胜利悬赏增益'
             }
         };
 
@@ -12825,6 +14242,34 @@ class Game {
                     this.player.grantAdventureBuff('victoryGoldBoostBattles', 1);
                 }
                 return `获得突击卡${card ? `：${card.name}` : ''}，并获得 1 层胜利悬赏增益`;
+            }
+            case 'temp_mirrorweave': {
+                const rarity = Math.random() < 0.7 ? 'uncommon' : 'rare';
+                let card = null;
+                if (typeof getRandomArchetypeCard === 'function') {
+                    card = getRandomArchetypeCard('mirrorweave', rarity, this.player?.characterId || null);
+                }
+                if (!card) card = getRandomCard(rarity, this.player?.characterId || null);
+                if (card) this.player.addCardToDeck(card);
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('firstTurnDrawBoostBattles', 1);
+                    this.player.grantAdventureBuff('openingBlockBoostBattles', 1);
+                }
+                return `获得镜渊卡${card ? `：${card.name}` : ''}，并获得 1 层首回合抽牌与开场护盾增益`;
+            }
+            case 'temp_oathbound': {
+                const rarity = Math.random() < 0.65 ? 'uncommon' : 'rare';
+                let card = null;
+                if (typeof getRandomArchetypeCard === 'function') {
+                    card = getRandomArchetypeCard('oathbound', rarity, this.player?.characterId || null);
+                }
+                if (!card) card = getRandomCard(rarity, this.player?.characterId || null);
+                if (card) this.player.addCardToDeck(card);
+                if (typeof this.player.grantAdventureBuff === 'function') {
+                    this.player.grantAdventureBuff('firstTurnEnergyBoostBattles', 1);
+                    this.player.grantAdventureBuff('victoryGoldBoostBattles', 1);
+                }
+                return `获得誓罚卡${card ? `：${card.name}` : ''}，并获得 1 层首回合灵力与胜利悬赏增益`;
             }
             case 'temp_refit': {
                 if (!this.isEndlessActive()) return '当前并非无尽轮回，重配失败';
@@ -13085,6 +14530,9 @@ class Game {
     // 事件完成
     onEventComplete() {
         this.achievementSystem.updateStat('eventsCompleted', 1);
+        this.currentEvent = null;
+        this.currentEventRuntimeMeta = null;
+        this.eventResults = [];
 
         if (this.currentBattleNode) {
             this.map.completeNode(this.currentBattleNode);
@@ -13108,8 +14556,10 @@ class Game {
 
         if (this.isEndlessActive()) {
             const state = this.ensureEndlessState();
+            const collapse = this.recordEndlessSeasonCollapse();
             state.active = false;
-            Utils.showBattleLog(`无尽轮回中断：已坚持到第 ${state.currentCycle + 1} 轮。`);
+            const collapseText = collapse ? ` 崩盘主因：${collapse.label}。` : '';
+            Utils.showBattleLog(`无尽轮回中断：已坚持到第 ${state.currentCycle + 1} 轮。${collapseText}`);
         }
 
         const reachRealm = this.player && this.player.realm ? this.player.realm : 1;
@@ -13136,7 +14586,11 @@ class Game {
 
         document.getElementById('game-over-title').textContent = '陨落...';
         document.getElementById('game-over-title').classList.remove('victory');
-        document.getElementById('game-over-text').textContent = '逆命之路，暂时中断';
+        if (this.endlessState && this.endlessState.lastSeasonCollapse && this.endlessState.lastSeasonCollapse.label) {
+            document.getElementById('game-over-text').textContent = `逆命之路，暂时中断｜崩盘主因：${this.endlessState.lastSeasonCollapse.label}`;
+        } else {
+            document.getElementById('game-over-text').textContent = '逆命之路，暂时中断';
+        }
 
         document.getElementById('stat-floor').textContent = this.map.getRealmName(this.player.realm);
         document.getElementById('stat-enemies').textContent = this.player.enemiesDefeated;
@@ -14368,7 +15822,7 @@ class Game {
         }
     }
 
-    // 显示游戏介绍 (v5.1)
+    // 显示游戏介绍（v7.0 开发线）
     // 切换游戏介绍标签页
     switchIntroTab(tabId) {
         const nextTab = ['overview', 'mechanics', 'controls', 'updates'].includes(tabId) ? tabId : 'overview';
@@ -14543,52 +15997,41 @@ class Game {
         // Tab 4: Updates
         const updatesContent = `
             <div class="intro-section">
-                <h3>🌌 V6.0《天命裂界》</h3>
+                <h3>🌌 当前版本状态（V7.0《命途裂变》开发线）</h3>
                 <p class="intro-text">
-                    这一轮大版本的核心目标，不是简单“多加一点内容”，而是把《逆命者》真正推进到
-                    <strong>章节更鲜明、构筑更成型、战斗更能读懂、局外目标更完整</strong> 的阶段。
-                    你会在单局内感受到更明确的流派路线、更多会改变打法的事件与章节压力，也会在局外获得更稳定的成长反馈。
-                    这次更新尤其强调“每章都要像一个完整的小世界”，不是只换数值和贴图，而是让敌群、Boss、节点、构筑诱因和信息展示一起服务于同一章的主题。
+                    当前主线已进入 V7.0 迭代：核心目标是把“命途构筑、章节考试、长线复盘”彻底打通。
+                    版本强调中盘转轴、章节风险识别和跨模式成长闭环，而不是单纯叠加体量。
                 </p>
             </div>
 
             <div class="intro-section">
-                <h3>📜 内容总览（当前版本）</h3>
+                <h3>✅ V7.0 已开发到位的核心能力</h3>
                 <ul class="intro-list">
-                    <li><strong>6 位角色</strong>：各自拥有差异化开局、专属遗物与成长路线，适合不同风险偏好与构筑节奏。</li>
-                    <li><strong>18 层天域 + 无尽轮回</strong>：主线推进与长线刷构筑并存，后期会出现更明显的章节生态与压力差异。</li>
-                    <li><strong>8 套核心流派</strong>：原有 6 套体系持续提纯，同时加入全新 <strong>咒契流 <code>cursebound</code></strong> 与 <strong>灵傀流 <code>soulforge</code></strong>。</li>
-                    <li><strong>94+ 敌人与 6 章生态包</strong>：每章都新增了更明确的敌群主题、精英组合与压制手段，不再只是“同层换皮怪库”。</li>
-                    <li><strong>数百张卡牌 / 法宝 / 法则 / 誓约</strong>：单卡不再只是数值堆叠，而是更强调桥接、节奏转折与局内决策窗口。</li>
-                    <li><strong>PVE + PVP 双线并进</strong>：单局构筑、挑战玩法、商店经济、外观佩戴与排行榜都已经形成可长期游玩的框架。</li>
+                    <li><strong>命途主线三阶段</strong>：每局有明确阶段目标、阶段奖励与圆满归档。</li>
+                    <li><strong>命途裂变中盘抉择</strong>：中盘可执行极化 / 转修 / 献祭等路线改写，提升局内分叉感。</li>
+                    <li><strong>章节世界规则考试化</strong>：章节天象、地脉、主宰提示与路线建议形成统一语义。</li>
+                    <li><strong>DRI 风险指数面板</strong>：章节简报新增风险指数、风险维度与对策提示，挑战感更清晰可解释。</li>
+                    <li><strong>无尽轮回赛季化</strong>：赛季词条、季签、赛季账本与偏执层联动，支持长期进阶复盘。</li>
+                    <li><strong>PVP 赛季经济闭环</strong>：段位倍率、连胜奖励、交易日志、称号与法相佩戴完整打通。</li>
                 </ul>
             </div>
 
             <div class="intro-section">
-                <h3>🧭 本次新增重点</h3>
+                <h3>🧭 推荐体验路线（V7.0）</h3>
                 <ul class="intro-list">
-                    <li><strong>咒契裁断</strong>：围绕自损、咒牌回灌、压血爆发和延迟清算展开，越接近危险线越能打出高收益回合。</li>
-                    <li><strong>灵傀锻阵</strong>：通过生成构件、布置阵件、积累护势与持续火力形成站场优势，节奏更像“先铺场、后压制”。</li>
-                    <li><strong>战斗可读性升级</strong>：HUD 会更直观地展示法则、法宝、Boss 三幕与关键系统状态，减少“看不懂自己为什么强/为什么死”。</li>
-                    <li><strong>章节事件与生态补强</strong>：更多事件会根据你的构筑方向偏置投放，让跑图选择和卡组成型更连贯。</li>
-                    <li><strong>敌群生态重构</strong>：碎誓外域会用追痕和问罪压你先手，炉海天阙更强调灼烧与锻打，终焉命庭则会把法则、资源税与终局裁断叠在一起。</li>
-                    <li><strong>六章 Boss 三幕化</strong>：章末主宰现在更强调开场立场、中场转幕、压轴大招与可识别反制窗口，打起来更像一场“答题战”而不是纯数值对撞。</li>
-                    <li><strong>局外系统延展</strong>：挑战、图鉴、工坊、观察站、誓约与命格体系持续扩展，给重复游玩明确目标。</li>
+                    <li>先开主线跑完一条命途三阶段，观察章节 DRI 与命途任务的联动节奏。</li>
+                    <li>再进无尽轮回对照赛季账本，确认“崩盘维度”并反向优化主线构筑。</li>
+                    <li>最后进入天道榜，利用赛季倍率与商店经济把构筑转为长期竞争力。</li>
                 </ul>
             </div>
 
             <div class="intro-section">
-                <h3>🪐 版本定位</h3>
-                <p class="intro-text">
-                    V6.0 想呈现的是一种更强的“命运裂开感”:
-                    你会更频繁地被要求在<strong>保命、贪心、成型、转轴</strong>之间做选择。
-                    新版本不鼓励什么都拿一点，而是鼓励你识别本局最有希望成型的方向，然后围绕它一路做深。
-                </p>
-                <p class="intro-text">
-                    如果你是回流玩家，推荐优先体验一次 <strong>咒契流</strong> 的压血爆发，再体验一次
-                    <strong>灵傀流</strong> 的铺场锻阵，然后再去挑战一轮带有<strong>章节生态与三幕 Boss</strong> 的主线末段。
-                    两条新流派解决的是“我怎么成型”，而六章生态和 Boss 三幕解决的是“成型之后我要面对什么样的世界规则”。
-                </p>
+                <h3>🛰 下一迭代方向（V7.x）</h3>
+                <ul class="intro-list">
+                    <li><strong>仇敌追猎链路深化</strong>：让章节后果在后续章持续追击与反馈。</li>
+                    <li><strong>挑战样本回放增强</strong>：强化“失败可复盘、成功可复刻”的训练闭环。</li>
+                    <li><strong>跨模式难度同轴化</strong>：持续打磨主线 / 无尽 / 挑战 / PVP 的风险标尺一致性。</li>
+                </ul>
             </div>
 
             <div class="intro-section">
@@ -14633,7 +16076,7 @@ class Game {
             </div>
 
             <div style="text-align: center; margin-top: auto; font-size: 0.8rem; color: rgba(255,255,255,0.2); padding-top: 10px;">
-                v6.0 天命裂界 | Breaking Fate since 2024
+                v7.0 命途裂变（开发线） | Breaking Fate since 2024
             </div>
         </div>
         `;

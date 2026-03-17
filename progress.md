@@ -5789,3 +5789,573 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - 本轮结论
     - 当前产品运行时与测试脚本层面不再存在活动 TODO 语义残留；
     - 剩余“下一步建议/待补件”文本均为规划文档与历史记录，不构成未实现缺陷。
+
+- 2026-03-16: 无效内容清理 + 下一版本策划（V6.2）落地（本轮）
+  - 本轮完成
+    - 文案与版本标记清理（删除过时内容）
+      - `js/game.js`
+        - 更新注释：`显示游戏介绍（v6.1 迭代线）`
+        - 重写“更新”标签页内容，改为当前体系可验证信息：
+          - 命途样本板 / 章节适配
+          - 无尽赛季化（季签 + 账本）
+          - 挑战/观察站/远征联动
+          - PVP 段位经济与外观链路
+          - 下一版本（V6.2）前瞻
+        - 介绍页底部版本标记更新为 `v6.1 万象归途（迭代线）`
+      - `index.html`
+        - 主菜单版本文案更新为 `v6.1 万象归途（迭代中） | 命途·赛季·远征联动`
+        - 清理历史缓存参数：批量将 `?v=5.0.1` 更新为 `?v=6.1.1`（保留原有 6.x/7.x 独立标签）
+      - `game-intro.html`
+        - 同步新版介绍结构与措辞，移除不稳定硬编码规模数字；
+        - 改为“当前版本重点 + V6.2 方向”表达。
+    - 新增完整策划文档
+      - 新建 `docs/designer_major_upgrade_planning_v5.md`：
+        - 版本定位：`V6.2《天机回响》`
+        - 设计支柱、12 个必做模块、难度评定（DRI）、切片开发、QA 门禁、回滚策略、验收标准。
+    - 发现并修复 UI 可见性缺陷（额外收口）
+      - 问题：介绍页桌面端首屏在部分渲染路径出现主内容不可见（面板动画透明度停留风险）。
+      - 修复：`css/style.css`
+        - `intro-tab-panel` 改为专用动画 `introPanelIn`（仅位移、不依赖透明度）；
+        - 显式补 `opacity: 1`，避免内容面板在异常动画状态下不可见。
+  - 本轮验证（全部通过）
+    - Node / 文档校验：
+      - `node --check js/game.js` ✅
+      - `node tests/sanity_planning_todo_checks.js` ✅
+    - 浏览器专项：
+      - `node tests/browser_guide_modal_audit.mjs http://127.0.0.1:4174 output/web-guide-next-version-refresh` ✅
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/web-meta-next-version-refresh` ✅
+      - 非阻断降级：`browser_meta_screen_audit` 首次运行出现字体等待导致的截图超时降级提示，断言结果全绿。
+    - Playwright 客户端（develop-web-game 要求）：
+      - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4174/?autotest=guest-map&character=yanHan&destiny=preceptSeal&spirit=artifactSoul&path=insight&realm=6" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-next-version-refresh-client` ✅
+      - 产物：`shot-0.png/shot-1.png/state-0.json/state-1.json`，未生成 `errors-*.json`。
+  - 人工截图复核（已查看）
+    - 介绍页：
+      - `output/web-guide-next-version-refresh/guide-desktop.png`
+      - `output/web-guide-next-version-refresh/guide-mobile.png`
+    - 冒烟流程：
+      - `output/web-game-next-version-refresh-client/shot-0.png`
+      - `output/web-game-next-version-refresh-client/shot-1.png`
+    - 元界面：
+      - `output/web-meta-next-version-refresh/sanctum-layout.png`
+  - 本轮结论
+    - “无效内容”清理已完成：旧版本标记与过时介绍内容已替换为当前可验证表述；
+    - 下一版本（V6.2）完整策划文档已落地；
+    - 介绍页可见性问题已修复并回归通过，当前未发现阻塞性缺陷。
+
+- 2026-03-16: 版本线纠偏到 V7.0 + 7.0 实装开发（本轮）
+  - 背景纠偏
+    - 用户确认当前主线已推进到 `V7.0`，本轮将之前外显文案中的 `v6.1 / v6.2` 口径统一修正为 `v7.0`。
+  - 本轮完成（修正）
+    - `index.html`
+      - 主菜单版本标识更新为：`v7.0 命途裂变（开发中） | 命途任务·章节考试·DRI风险指数`
+      - 本地脚本缓存参数统一升级到 `?v=7.0.0`（含 data/core/ui/scenes）。
+    - `js/game.js`
+      - 介绍页注释、更新页文案、底部版本标识统一到 `V7.0` 口径。
+      - 更新页内容改为“V7.0 已开发能力 + 当前体验路径 + V7.x 后续方向”。
+    - `game-intro.html`
+      - 静态介绍页同步到 `V7.0` 口径，去除 `V6.2` 导向表述。
+    - `docs/designer_major_upgrade_planning_v5.md`
+      - 文档定位从 `V6.2` 修正为 `V7.0《命途裂变》`。
+  - 本轮完成（开发）
+    - 新增章节 `DRI` 风险指数体系并接入主流程：
+      - `js/game.js`
+        - 新增 `resolveChapterDangerProfile()`：
+          - 维度：爆发威胁 / 续航压力 / 控制压制 / 资源税负 / 纠错窗口；
+          - 输出：`index/tier/summary/dominantRisk/counterplay`。
+        - `getChapterProfileForRealm()` 与 `getChapterDisplaySnapshot()` 接入 `dangerProfile`。
+        - `render_game_to_text` 的 `map.chapter` 与 `battle.chapterRules` 同步暴露 `dangerProfile`。
+      - `js/core/map.js`
+        - 章节简报新增：
+          - `风险` 行（DRI 数值 + 分层 + 风险摘要）
+          - `对策` 行（按主风险维度给出反制建议）
+          - `风险指数` 芯片（DRI 可视化）
+      - `css/style.css`
+        - 新增章节风险芯片样式：
+          - `.chapter-brief-chip.dri` 及 `tier-low/medium/high/extreme/none`
+  - 测试补完
+    - `tests/sanity_chapter_world_rule_checks.js`
+      - 新增 DRI 断言：范围校验、阶段递增、快照字段完整性。
+      - 补充 harness 挂载：`resolveChapterDangerProfile`。
+    - `tests/sanity_boss_memory_battle_checks.js`
+      - 补充 harness 挂载：`getChapterProfileCatalog/resolveChapterDangerProfile`。
+    - `tests/browser_audit.mjs`
+      - 地图章节卡断言新增：`风险|DRI` 可见 + payload 包含 `dangerProfile`。
+    - `tests/browser_feature_audit.mjs`
+      - 地图章节卡断言新增：`风险|DRI` 可见 + payload 包含 `dangerProfile`。
+  - 本轮验证（全部通过）
+    - 语法：
+      - `node --check js/game.js` ✅
+      - `node --check js/core/map.js` ✅
+      - `node --check tests/sanity_chapter_world_rule_checks.js` ✅
+      - `node --check tests/sanity_boss_memory_battle_checks.js` ✅
+      - `node --check tests/browser_audit.mjs` ✅
+      - `node --check tests/browser_feature_audit.mjs` ✅
+    - Node：
+      - `bash tests/run_node_checks.sh` ✅（全量门禁全绿）
+    - 浏览器：
+      - `node tests/browser_guide_modal_audit.mjs http://127.0.0.1:4174 output/web-guide-v7-refresh` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4174 output/web-audit-v7-refresh` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4174 output/web-feature-v7-refresh` ✅
+      - 非阻断降级：`browser_feature_audit` 出现字体等待导致的截图超时降级提示，断言通过。
+    - Playwright 客户端：
+      - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4174/?autotest=guest-map&character=yanHan&destiny=preceptSeal&spirit=artifactSoul&path=insight&realm=6" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-v7-refresh-client` ✅
+  - 人工截图复核（已查看）
+    - `output/web-audit-v7-refresh/02-map.png`（章节卡已显示 DRI 与对策）
+    - `output/web-guide-v7-refresh/guide-desktop.png`（介绍页版本口径已到 v7.0）
+    - `output/web-game-v7-refresh-client/shot-0.png`
+    - `output/web-game-v7-refresh-client/shot-1.png`
+  - 本轮结论
+    - 版本口径已完成从 `6.1/6.2` 到 `7.0` 的外显统一；
+    - `DRI 风险指数` 已完成开发接入、样式呈现、状态输出与自动化测试闭环；
+    - 当前未发现阻塞性功能缺陷，可继续推进 V7.0 后续模块。
+
+- 2026-03-16: V7.0 宿敌追猎主线接入 + UI 同步修复（本轮）
+  - 本轮完成（开发）
+    - `js/game.js`
+      - 新增 `getChapterNemesisSnapshot()`：
+        - 将远征中的 `activeNemesis` 归一为主线章节可直接消费的快照；
+        - 输出字段包括：`status/statusLabel/triggerNodeTypes/pressureIndex/counterplay/rewardSummary`。
+      - `getChapterDisplaySnapshot()` 接入 `nemesis`；
+      - `render_game_to_text` 的 `map.chapter` 与 `battle.chapterRules` 同步暴露 `nemesis`。
+    - `js/core/map.js`
+      - 地图章节卡新增：
+        - `宿敌` 行（名字 / 状态 / 出没节点）
+        - `追猎` 行（针对宿敌的反制建议）
+        - `宿敌追猎` 芯片（状态 + 压力值）
+        - `追猎赏格` 芯片（灵石 / 命环经验 / 命盘评分）
+    - `css/style.css`
+      - 新增宿敌芯片样式：
+        - `.chapter-brief-chip.nemesis`
+        - `status-hunting / status-defeated / status-escaped / status-none`
+        - `.chapter-brief-chip.nemesis-reward`
+  - 本轮完成（缺陷修复）
+    - 人工查看 `output/release-browser-audits-v7-nemesis/core/02-map.png` 时发现：
+      - 章节卡内宿敌文案仍显示“暂无目标”，但 `render_game_to_text.map.chapter.nemesis` 已有正确数据。
+    - 根因：
+      - 章节卡首次渲染早于远征状态初始化后的宿敌数据注入，导致 UI 停留在旧快照。
+    - 修复：
+      - `js/core/expedition_hub.js`
+        - 在 `renderExpeditionMapPanels()` 内统一补 `map.updateChapterBriefPanel()`；
+        - 让宿敌状态在远征初始化、刷新、战斗结算后都能回推到章节卡。
+  - 测试补完
+    - `tests/sanity_chapter_world_rule_checks.js`
+      - 新增宿敌快照断言：
+        - 当前章存在宿敌时快照字段完整；
+        - 逃逸状态与触发节点标签正确；
+        - 无远征状态时 `nemesis === null`。
+    - `tests/browser_audit.mjs`
+      - 地图章节卡断言新增 `宿敌|追猎` 文案与 `map.chapter.nemesis` payload 校验；
+      - 战斗章节规则断言新增 `battle.chapterRules.nemesis` 校验。
+    - `tests/browser_feature_audit.mjs`
+      - 同步新增主线章节卡与战斗章节规则的宿敌断言。
+  - 本轮验证（全部通过）
+    - 语法 / Node：
+      - `node --check js/game.js` ✅
+      - `node --check js/core/map.js` ✅
+      - `node --check js/core/expedition_hub.js` ✅
+      - `node tests/sanity_chapter_world_rule_checks.js` ✅
+      - `node tests/sanity_expedition_state_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器：
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-v7-nemesis` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4174 output/web-feature-v7-nemesis-fix` ✅
+      - `node tests/browser_expedition_audit.mjs http://127.0.0.1:4174 output/web-expedition-v7-nemesis-fix` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4174 output/web-audit-v7-nemesis-fix-solo` ✅
+      - 非阻断降级：部分审计截图阶段出现字体等待超时提示，但断言结果全绿。
+    - Playwright 客户端：
+      - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4174/?autotest=guest-map&character=yanHan&destiny=preceptSeal&spirit=artifactSoul&path=insight&realm=1" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-v7-nemesis-client-fix` ✅
+  - 人工截图复核（已查看）
+    - `output/web-audit-v7-nemesis-fix-solo/02-map.png`
+      - 已确认章节卡显示真实宿敌：名称 / 状态 / 出没节点 / 赏格均可见。
+    - `output/web-audit-v7-nemesis-fix-solo/03-battle.png`
+      - 已确认战斗 HUD 正常，章节规则区未因宿敌接入发生遮挡或错位。
+    - `output/web-game-v7-nemesis-client-fix/shot-1.png`
+      - 已确认远征态势卡与宿敌卡可见，页面未出现空白块或布局崩坏。
+  - 本轮结论
+    - 宿敌追猎已不再局限于远征摘要，而是进入主线章节规则、地图章节卡与调试快照；
+    - 已修复“宿敌数据存在但章节卡未刷新”的真实 UI 时序缺陷；
+    - 当前这条 `V7.0` 宿敌链路已完成开发、自动化验证与人工截图闭环。
+
+- 2026-03-16: V7.0 深化补完（4.3 仇敌追猎系统完整版 + 4.4 样本板强化）
+  - 4.3 仇敌追猎系统深化
+    - `js/data/expedition_systems.js`
+      - 仇敌名录扩充到 `11` 名，满足策划案 `8-12` 名记名仇敌目标。
+      - 每名仇敌统一补齐：
+        - `clueLine`（事件/观星/记忆裂隙线索）
+        - `battleVariants`（至少 2 条战斗变体，实际统一给到 4 条：追猎 / 复现 / 合围 / 护卫）
+        - `alliedFactionHints / recursOnVictoryNodeTypes / releaseNodeTypes / tradeNodeTypes / bossGuardEligible`
+    - `js/core/expedition_hub.js`
+      - 扩展 `activeNemesis` 状态结构，新增：
+        - `clueRevealed`
+        - `battleVariants/currentVariantId`
+        - `recurrenceCount`
+        - `alliedFactionId/alliedFactionName`
+        - `resolvedReward`
+        - `fateOutcome`
+        - `rewardGranted`
+        - `outcomeNote`
+      - 新增仇敌状态机：
+        - 进行中状态：`hunting / recurring / allied / guarding`
+        - 结局状态：`defeated / escaped / released / traded / evolved`
+      - 新增仇敌结果处理：
+        - `resolveExpeditionNemesisReward`
+        - `grantExpeditionNemesisReward`
+        - `applyExpeditionNemesisOutcome`
+        - `chooseExpeditionNemesisVariant`
+        - `advanceExpeditionNemesisState`
+        - `resolvePendingExpeditionNemesisOutcome`
+      - 新增触发逻辑：
+        - 事件/观星/记忆裂隙会揭示仇敌线索；
+        - 商路 + 商盟结盟可触发 `traded`；
+        - 观星线 + 星见者结盟可触发 `released`；
+        - 首轮战胜后可进入 `recurring`；
+        - 带着复现状态进入 Boss 节点会转成 `guarding`；
+        - 护卫或复现未收束时若战败，会记为 `evolved`。
+      - 命盘归档与 `run slate` 现已记录：
+        - 仇敌结局标签
+        - 变体标签
+        - 势力投靠信息
+        - 已揭示线索
+    - `js/game.js` / `js/core/map.js` / `css/style.css`
+      - 章节快照与 `render_game_to_text` 新增：
+        - `recurrenceCount`
+        - `currentVariantLabel`
+        - `clueLine/clueRevealed`
+        - `alliedFactionName`
+        - `fateOutcome`
+      - 地图章节卡新增：
+        - 宿敌变体展示
+        - 线索行
+        - 投靠势力展示
+      - 宿敌状态样式扩展到：
+        - `recurring / allied / guarding / released / traded / evolved`
+  - 4.4 命途样本板强化
+    - `js/core/collection_hub.js`
+      - `getBuildSnapshotData()` 新增：
+        - `nextChapter`
+        - `nextChapterRiskTags`
+        - `sampleMismatchWarning`
+        - `priorityQueue`
+      - 现在会显式生成：
+        - 下一章高危标签（基于下一章 DRI 主导维度 + focus tags）
+        - `1/2/3` 补件优先级队列
+        - 样本主场与当前章节偏离时的红色“误配告警”
+      - 构筑页 UI 新增：
+        - 顶部高危标签带
+        - 红色误配警示块
+        - “补件优先级队列”卡片
+        - “下一章风险镜像”卡片
+  - 新增/更新测试
+    - 新增 `tests/sanity_expedition_nemesis_depth_checks.js`
+      - 校验：
+        - 仇敌总数落在 `8-12`
+        - 每名仇敌至少 2 条战斗变体 + 1 条线索
+        - `released / traded / recurring / guarding / evolved` 全链路
+    - `tests/run_node_checks.sh`
+      - 接入 `sanity_expedition_nemesis_depth_checks.js`
+    - `tests/browser_expedition_audit.mjs`
+      - 新增仇敌线索与扩展状态元数据断言
+    - `tests/sanity_codex_sanctum_checks.js`
+      - 新增 `nextChapterRiskTags / priorityQueue / sampleMismatchWarning` 断言
+    - `tests/browser_meta_screen_audit.mjs`
+      - 新增构筑页“补件优先级队列 / 下一章风险镜像”断言
+  - 本轮验证
+    - Node：
+      - `node --check js/data/expedition_systems.js` ✅
+      - `node --check js/core/expedition_hub.js` ✅
+      - `node --check js/game.js` ✅
+      - `node --check js/core/map.js` ✅
+      - `node --check js/core/collection_hub.js` ✅
+      - `node tests/sanity_expedition_state_checks.js` ✅
+      - `node tests/sanity_expedition_nemesis_depth_checks.js` ✅
+      - `node tests/sanity_chapter_world_rule_checks.js` ✅
+      - `node tests/sanity_codex_sanctum_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器：
+      - `node tests/browser_expedition_audit.mjs http://127.0.0.1:4173 output/browser-expedition-audit-v7-nemesis-depth` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/browser-feature-v7-nemesis-depth` ✅
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/browser-meta-screen-v7-sample-depth` ✅
+      - 备注：截图阶段仍有字体等待超时降级提示，但断言均通过。
+    - Playwright 客户端：
+      - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4173/?autotest=guest-map&character=yanHan&destiny=preceptSeal&spirit=artifactSoul&path=insight&realm=1" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-nemesis-depth-client` ✅
+  - 人工截图复核
+    - `output/web-game-nemesis-depth-client/shot-0.png`
+      - 已确认地图章节卡显示：
+        - 宿敌状态
+        - 追猎变体
+        - 线索行
+        - 追猎赏格
+    - `output/web-game-nemesis-depth-client/shot-1.png`
+      - 已确认远征宿敌卡显示：
+        - 变体
+        - 出没节点
+        - 线索状态
+        - 追猎结果会写入命盘摘要的说明
+    - `output/browser-expedition-audit-v7-nemesis-depth/expedition-finalized.png`
+      - 已确认章节结算后远征面板隐藏，章节卡与命途块保持稳定无错位。
+  - 当前剩余大项（尚未完全收口）
+    - 4.5 无尽赛季 2.0 还可继续补“分段目标 / 崩盘原因统计 / 可控风险指令可选化”
+    - 4.6 挑战 / 观察站 / 远征联动还可继续补“同主题对比视图 / 精选命盘驱动额外远征选项”
+    - 4.8 新流派与桥接组件
+    - 4.9 章节事件库组合化
+    - 4.10 统一局势总览条
+
+- 2026-03-16: V7.0 深化续做（4.5 无尽轮回赛季 2.0 完成一轮实装收口）
+  - 本轮落地
+    - `js/game.js`
+      - 无尽赛季状态扩展：
+        - `seasonDirectiveSelection`
+        - `seasonDirectiveClearCounts`
+        - `seasonCollapseStats`
+        - `lastSeasonCollapse`
+      - 赛季画像增强：
+        - `getEndlessSeasonProfile()` 现在会输出
+          - `directiveChoices`
+          - `directiveRiskTier / directiveRiskLabel / directiveRiskHint`
+          - `activeDirectiveSource / selectionModeLabel`
+          - `goals`
+          - `collapseSummary`
+          - `stats`
+      - 新增：
+        - `getEndlessSeasonCollapseCatalog()`
+        - `getEndlessSeasonDirectiveRiskScore()`
+        - `getEndlessSeasonProgressSnapshot()`
+        - `getEndlessSeasonGoals()`
+        - `setEndlessSeasonDirective()`
+        - `getEndlessCollapseAnalysis()`
+        - `recordEndlessSeasonCollapse()`
+        - `persistEndlessSeasonLedger()`
+      - `syncEndlessSeasonState()` 现在会：
+        - 归档赛季分段目标相关统计
+        - 记录季签通关次数
+        - 记录崩盘主因统计
+        - 把赛季账本同步到 `legacyProgress.endlessSeasonLedger`
+      - `startEndlessMode()` / `handleEndlessRealmComplete()` / `onBattleLost()` 已串上：
+        - 赛季目标进度反馈
+        - 玩家季签选择
+        - 崩盘主因写回账本与 Game Over 文案
+      - 无尽预览面板已新增：
+        - 赛季目标摘要
+        - 崩盘账本摘要
+        - 季签切换按钮
+    - `js/core/map.js`
+      - 无尽地图右侧面板新增三块可视区：
+        - `可控风险指令`
+        - `赛季挑战链`
+        - `崩盘账本`
+      - 支持在地图面板中直接点击切换季签
+    - `css/style.css`
+      - 新增无尽赛季 2.0 的样式：
+        - 季签按钮组
+        - 目标链卡片
+        - 崩盘账本标签
+        - 预览面板季签按钮
+        - 移动端单列适配
+    - 测试增强
+      - `tests/sanity_endless_mode_checks.js`
+        - 新增赛季目标、季签选择、崩盘账本断言
+      - `tests/sanity_endless_shop_service_checks.js`
+        - 补齐新赛季 helper 挂载
+      - `tests/sanity_endless_phase_boss_checks.js`
+        - 补齐新赛季 helper 挂载
+      - `tests/browser_feature_audit.mjs`
+        - 新增无尽面板：
+          - 季签按钮
+          - 赛季挑战链
+          - 崩盘账本
+          - `render_game_to_text` 赛季字段
+          - 季签切换后的 UI/文本状态一致性
+  - 本轮验证
+    - 语法：
+      - `node --check js/game.js` ✅
+      - `node --check js/core/map.js` ✅
+      - `node --check tests/sanity_endless_mode_checks.js` ✅
+      - `node --check tests/sanity_endless_shop_service_checks.js` ✅
+      - `node --check tests/browser_feature_audit.mjs` ✅
+    - Node：
+      - `node tests/sanity_endless_mode_checks.js` ✅
+      - `node tests/sanity_endless_shop_service_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/browser-feature-v7-endless-season-2-rerun` ✅
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/browser-meta-v7-endless-season-2` ✅
+      - 备注：截图阶段仍有字体等待超时的降级提示，但断言全部通过。
+    - Playwright 客户端：
+      - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4173/?autotest=guest-map&character=yanHan&destiny=preceptSeal&spirit=artifactSoul&path=insight&realm=6" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-v7-endless-season-2` ✅
+  - 人工截图复核
+    - `output/manual-endless-season-panel-focus-v7.png`
+      - 已确认无尽面板会同时展示：
+        - 季签切换按钮
+        - 赛季挑战链三档目标
+        - 崩盘账本与最近一次崩盘说明
+    - `output/manual-endless-season-panel-v7.png`
+      - 已确认无尽地图场景中右侧赛季面板与章节规则卡可同时显示，未出现明显错位。
+    - `output/web-game-v7-endless-season-2/shot-0.png`
+      - 已确认主地图界面正常进入，未引入额外控制台报错。
+  - 当时剩余大项（历史记录）
+    - 4.8 新流派与桥接组件
+    - 4.9 章节事件库组合化
+    - 4.10 统一局势总览条
+
+- 2026-03-17: V7.0 余量收口（4.8 最终闭环 + 全链路回归）
+  - 4.8 新流派与桥接组件确认已全部落地
+    - `js/data/cards.js`
+      - 新增两套流派：
+        - `mirrorweave`（镜渊流）
+        - `oathbound`（誓罚流）
+      - 新流派 pack / `CARD_POOL` / `inferDeckArchetype()` / `getRandomArchetypeCard()` / 升级规则 / 文案生成均已接入
+      - 旧卡桥接关键词与 pack 归属已补齐
+    - `js/core/player.js`
+      - 已接入 `echoLastPlayedCard` / `oathDebt` / `consumeOathDebt`
+      - 本轮额外修正两处隐藏运行时偏差：
+        - `echoLastPlayedCard` 现在会按卡面倍率缩放，并正确执行 `repeatCount`
+        - `consumeOathDebt` 现在按“每层誓债伤害”结算，并产出 battle 层可消费的嵌套伤害结果
+    - `js/core/battle.js`
+      - 已接入两类新 result 的日志与递归结算
+      - 本轮补了 `consumeOathDebt` 的 direct-damage 兜底，避免结果字段轻微漂移时清算伤害丢失
+    - `tests`
+      - `tests/sanity_content_archetype_checks.js`
+        - 已纳入 `mirrorweave / oathbound` 的 pack、API、识别、事件池与偏置覆盖
+      - `tests/sanity_mirrorweave_oathbound_checks.js`
+        - 本轮进一步加严，新增：
+          - 映照倍率与重复次数行为断言
+          - 誓债按层伤害断言
+          - battle 侧实际扣血结算断言
+      - `tests/run_node_checks.sh`
+        - 已纳入新专项检查
+  - 4.9 / 4.10 状态复核
+    - `4.9` 章节事件组合化与 ledger 持久化已在主仓
+    - `4.10` 局势总览条与章节风险卡已在主仓，并通过 node/browser 审计
+  - 本轮验证
+    - 语法：
+      - `node --check js/core/player.js` ✅
+      - `node --check js/core/battle.js` ✅
+      - `node --check tests/sanity_mirrorweave_oathbound_checks.js` ✅
+    - Node：
+      - `node tests/sanity_mirrorweave_oathbound_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器：
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/browser-audit-v7-rerun` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/browser-feature-audit-v7-current` ✅
+      - `node tests/browser_map_overview_risk_audit.mjs http://127.0.0.1:4173 output/browser-map-overview-risk-v7-current` ✅
+      - 备注：部分整页截图因字体加载等待超过默认阈值被安全跳过，但断言全部通过
+    - Playwright 客户端：
+      - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4173/?autotest=guest-battle&character=linFeng&destiny=emberHeart&spirit=starFox&path=insight&realm=1&battleType=normal" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-v7-battle-client` ✅
+  - 人工截图复核
+    - `output/web-v7-battle-client/shot-0.png`
+      - 已确认战斗 HUD、章节规则区、敌方意图与手牌区无明显错位
+    - `output/web-v7-battle-client/shot-1.png`
+      - 已确认回合静态状态与 `state-1.json` 的 battle-screen 文本输出一致
+  - 当前状态
+    - `V7.0` 规划中的 `4.8 / 4.9 / 4.10` 已全部收口
+
+- 2026-03-16: V7.0 深化补完（4.6 挑战 / 观察站 / 远征联动包收口）
+  - 已完成：把“挑战精选命盘 -> 观察站对比 -> 远征入口 bonus”做成完整联动链，4.6 设计细则已全部落地
+    - `js/core/challenge_hub.js`
+      - 观星留痕新增：
+        - `themeKey/themeLabel`
+        - `featuredTier`
+        - `featuredTags`
+        - `metrics`
+        - `preferredNodes`
+      - 挑战结算现在会基于：
+        - 血线
+        - 法则增量
+        - 法宝增量
+        - 高压战数量
+        - 当前主题
+        生成“命盘精选标签”
+      - 新增观察站远征线索状态：
+        - `theDefierObservatoryGuideStateV1`
+        - 默认自动锁定最新精选命盘
+        - 支持手动切换“设为远征线索”
+      - 新增 `buildObservatoryThemeComparison()`：
+        - 观察站可按主题聚合同类挑战/回放样本
+        - 若当前轮换主题暂无样本，会自动回退到当前已选远征线索主题
+      - 挑战页 UI 新增：
+        - 主题说明块
+        - 留痕标签条
+        - 同主题对比区
+        - 远征线索摘要区
+      - `render_game_to_text().challenge` 新增：
+        - `archive.featuredCount`
+        - `archive.selectedGuideId/Title/ThemeLabel`
+        - `hub.comparisonThemeLabel/comparisonCount`
+        - `observatoryGuide`
+    - `js/core/expedition_hub.js`
+      - 远征状态新增 `observatoryLink`
+      - 开章时会读取观察站当前精选命盘，并生成：
+        - 推荐路线
+        - 2 选 1 的小幅 bonus 选项
+      - bonus 按主题分为：
+        - 前压爆发
+        - 稳守续航
+        - 法宝共振
+        - 推演控场
+        - 连携节拍
+        - 跨章耐压
+      - bonus 触发形态：
+        - 节点触发
+        - 开战触发
+      - 远征地图新增“观星联动 / 精选命盘线索”面板
+      - 支线区域卡会对被观星样本推荐的路线加上提示
+      - 远征 payload / 构筑快照 / 命盘档案会记录当前观星线索与所选 bonus
+    - `css/style.css`
+      - 新增观察站对比卡、留痕标签、主题说明块样式
+      - 新增远征观星联动面板、推荐路线态、bonus 选项样式
+      - 增补远征面板单列自适应，避免 5 卡布局在窄屏下挤爆
+    - 测试增强
+      - `tests/sanity_observatory_archive_checks.js`
+        - 断言精选标签
+        - 断言同主题对比
+        - 断言远征线索切换
+        - 断言 payload 透出 guide / comparison
+      - `tests/sanity_expedition_state_checks.js`
+        - 断言远征会读取观星线索
+        - 断言 bonus 选项生成 / 选中 / 消耗
+        - 断言 payload 与构筑快照同步
+      - `tests/browser_challenge_audit.mjs`
+        - 断言挑战页出现同主题对比与远征线索
+      - `tests/browser_expedition_audit.mjs`
+        - 断言远征地图出现观星联动面板与 bonus 锁定/触发态
+  - 本轮验证
+    - 语法：
+      - `node --check js/core/challenge_hub.js` ✅
+      - `node --check js/core/expedition_hub.js` ✅
+      - `node --check tests/sanity_observatory_archive_checks.js` ✅
+      - `node --check tests/sanity_expedition_state_checks.js` ✅
+      - `node --check tests/browser_challenge_audit.mjs` ✅
+      - `node --check tests/browser_expedition_audit.mjs` ✅
+    - Node：
+      - `node tests/sanity_observatory_archive_checks.js` ✅
+      - `node tests/sanity_expedition_state_checks.js` ✅
+      - `node tests/sanity_weekly_challenge_checks.js` ✅
+      - `node tests/sanity_expedition_nemesis_depth_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器：
+      - `node tests/browser_challenge_audit.mjs http://127.0.0.1:4173 output/browser-challenge-audit-v7-observatory-link` ✅
+      - `node tests/browser_expedition_audit.mjs http://127.0.0.1:4173 output/browser-expedition-audit-v7-observatory-link` ✅
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4173 output/browser-feature-audit-v7-4_6-link` ✅
+      - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/browser-meta-screen-audit-v7-4_6-link` ✅
+      - 备注：部分整页截图因字体加载等待超过默认阈值被安全跳过，但断言全部通过
+    - Playwright 客户端：
+      - `node "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4173/?autotest=guest-map&character=linFeng&destiny=rebelScale&spirit=emberCrow&path=shatter&realm=4" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-v7-4_6-link-smoke` ✅
+  - 人工截图复核
+    - `output/manual-challenge-compare-v7-4_6.png`
+      - 已确认观察站留痕区会展示：
+        - 精选标签
+        - 设为远征线索按钮
+        - 同主题对比卡
+    - `output/manual-expedition-observatory-link-v7-4_6.png`
+      - 已确认远征观星联动面板会展示：
+        - 当前精选命盘标题与命盘签
+        - 推荐路线
+        - 2 条 bonus 选项按钮
+    - `output/browser-challenge-audit-v7-observatory-link/challenge-archive-replay.png`
+      - 已确认挑战页主布局在桌面宽度下无明显错位
+    - `output/browser-expedition-audit-v7-observatory-link/expedition-panels-initial.png`
+      - 已确认远征主面板与章节规则卡可同时渲染
+  - 当前剩余大项（仍待继续）
+    - 4.8 新流派与桥接组件
+    - 4.9 章节事件库组合化
+    - 4.10 统一局势总览条

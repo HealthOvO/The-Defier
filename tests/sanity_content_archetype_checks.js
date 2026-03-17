@@ -47,16 +47,29 @@ function loadFile(ctx, filePath) {
   const ARCHETYPE_EVENT_POOLS = vm.runInContext('ARCHETYPE_EVENT_POOLS', ctx);
   const FATE_PATH_EVENT_POOLS = vm.runInContext('FATE_PATH_EVENT_POOLS', ctx);
   const ARCHETYPE_PACKS = vm.runInContext('ARCHETYPE_PACKS', ctx);
+  const inferDeckArchetype = vm.runInContext('inferDeckArchetype', ctx);
   const getArchetypePack = vm.runInContext('getArchetypePack', ctx);
   const getRandomArchetypeCard = vm.runInContext('getRandomArchetypeCard', ctx);
   const getRewardCards = vm.runInContext('getRewardCards', ctx);
   const getRandomEvent = vm.runInContext('getRandomEvent', ctx);
 
   // 1) 流派包完整性
-  ['hemorrhage', 'precision', 'entropy', 'stormcraft', 'vitalweave', 'bulwark', 'cursebound', 'soulforge'].forEach((id) => {
+  const archetypePackMinimums = {
+    hemorrhage: 15,
+    precision: 15,
+    entropy: 15,
+    stormcraft: 15,
+    vitalweave: 15,
+    bulwark: 15,
+    cursebound: 15,
+    soulforge: 15,
+    mirrorweave: 10,
+    oathbound: 10
+  };
+  Object.entries(archetypePackMinimums).forEach(([id, minCards]) => {
     const pack = ARCHETYPE_PACKS[id];
     assert(pack, `missing archetype pack: ${id}`);
-    assert(Array.isArray(pack.cards) && pack.cards.length >= 15, `${id} should have at least 15 cards`);
+    assert(Array.isArray(pack.cards) && pack.cards.length >= minCards, `${id} should have at least ${minCards} cards`);
     pack.cards.forEach((cardId) => {
       assert(!!CARDS[cardId], `${id} contains missing card: ${cardId}`);
     });
@@ -100,6 +113,19 @@ function loadFile(ctx, filePath) {
   assert(soulforgePack && soulforgePack.id === 'soulforge', 'getArchetypePack should return soulforge pack');
   const rareSoulforge = getRandomArchetypeCard('soulforge', 'rare', null);
   assert(rareSoulforge && rareSoulforge.rarity === 'rare', 'rare soulforge card should be retrievable');
+  const mirrorweavePack = getArchetypePack('mirrorweave');
+  assert(mirrorweavePack && mirrorweavePack.id === 'mirrorweave', 'getArchetypePack should return mirrorweave pack');
+  const rareMirrorweave = getRandomArchetypeCard('mirrorweave', 'rare', null);
+  assert(rareMirrorweave && rareMirrorweave.rarity === 'rare', 'rare mirrorweave card should be retrievable');
+  const oathboundPack = getArchetypePack('oathbound');
+  assert(oathboundPack && oathboundPack.id === 'oathbound', 'getArchetypePack should return oathbound pack');
+  const rareOathbound = getRandomArchetypeCard('oathbound', 'rare', null);
+  assert(rareOathbound && rareOathbound.rarity === 'rare', 'rare oathbound card should be retrievable');
+
+  const mirrorweaveDeck = ARCHETYPE_PACKS.mirrorweave.cards.slice(0, 10).map((id) => ({ ...CARDS[id] }));
+  const oathboundDeck = ARCHETYPE_PACKS.oathbound.cards.slice(0, 10).map((id) => ({ ...CARDS[id] }));
+  assert(inferDeckArchetype(mirrorweaveDeck) === 'mirrorweave', 'mirrorweave deck should infer mirrorweave archetype');
+  assert(inferDeckArchetype(oathboundDeck) === 'oathbound', 'oathbound deck should infer oathbound archetype');
 
   // 3) 奖励偏置：牌组明显偏向时，奖励应显著命中对应流派
   const precisionDeck = ARCHETYPE_PACKS.precision.cards.slice(0, 10).map((id) => ({ ...CARDS[id] }));
@@ -234,6 +260,14 @@ function loadFile(ctx, filePath) {
       assert(actual.includes(eventId), `${archetypeId} event pool should include ${eventId}`);
     });
   });
+  ['mirrorweave', 'oathbound'].forEach((archetypeId) => {
+    const actual = ARCHETYPE_EVENT_POOLS[archetypeId];
+    assert(Array.isArray(actual), `missing event pool for archetype: ${archetypeId}`);
+    assert(actual.length >= 3, `${archetypeId} event pool should include at least 3 events`);
+    actual.forEach((eventId) => {
+      assert(!!EVENTS[eventId], `${archetypeId} event pool references missing event: ${eventId}`);
+    });
+  });
 
   const expectedPathPools = {
     convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar'],
@@ -263,6 +297,27 @@ function loadFile(ctx, filePath) {
     const boostedEvent = getRandomEvent();
     ctx.Math.random = oldRandom2;
     const expectedSet = new Set(eventIds);
+    assert(
+      boostedEvent && expectedSet.has(boostedEvent.id),
+      `expected ${archetypeId} event bias hit, got ${boostedEvent ? boostedEvent.id : 'null'}`
+    );
+  });
+  ['mirrorweave', 'oathbound'].forEach((archetypeId) => {
+    const deck = ARCHETYPE_PACKS[archetypeId].cards.slice(0, 10).map((id) => ({ ...CARDS[id] }));
+    const eventPool = Array.isArray(ARCHETYPE_EVENT_POOLS[archetypeId]) ? ARCHETYPE_EVENT_POOLS[archetypeId].filter((id) => !!EVENTS[id]) : [];
+    assert(eventPool.length >= 1, `${archetypeId} event pool should have at least one valid event`);
+    ctx.window.game = { player: { deck } };
+    const oldRandom2 = ctx.Math.random;
+    const seq2 = [0.2, 0.1];
+    let idx2 = 0;
+    ctx.Math.random = () => {
+      const val = seq2[idx2 % seq2.length];
+      idx2 += 1;
+      return val;
+    };
+    const boostedEvent = getRandomEvent();
+    ctx.Math.random = oldRandom2;
+    const expectedSet = new Set(eventPool);
     assert(
       boostedEvent && expectedSet.has(boostedEvent.id),
       `expected ${archetypeId} event bias hit, got ${boostedEvent ? boostedEvent.id : 'null'}`

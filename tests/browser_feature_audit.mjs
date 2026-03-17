@@ -130,8 +130,15 @@ async function safeScreenshot(page, outPath) {
       /章节世界规则/.test(mapChapterProbe.panelText || '') &&
       /天象/.test(mapChapterProbe.panelText || '') &&
       /地脉/.test(mapChapterProbe.panelText || '') &&
+      /风险|DRI/.test(mapChapterProbe.panelText || '') &&
+      /宿敌|追猎/.test(mapChapterProbe.panelText || '') &&
       /碎誓外域/.test(mapChapterProbe.panelText || '') &&
       mapChapterProbe.chapter?.name === '碎誓外域' &&
+      typeof mapChapterProbe.chapter?.dangerProfile?.index === 'number' &&
+      !!mapChapterProbe.chapter?.dangerProfile?.tierLabel &&
+      !!mapChapterProbe.chapter?.nemesis?.name &&
+      !!mapChapterProbe.chapter?.nemesis?.statusLabel &&
+      typeof mapChapterProbe.chapter?.nemesis?.pressureIndex === 'number' &&
       !!mapChapterProbe.chapter?.skyOmen?.name &&
       !!mapChapterProbe.chapter?.leyline?.name,
     JSON.stringify(mapChapterProbe || null)
@@ -273,6 +280,8 @@ async function safeScreenshot(page, outPath) {
       /地脉/.test(battleChapterProbe.text || '') &&
       /章节：/.test(battleChapterProbe.title || '') &&
       battleChapterProbe.chapterRules?.name === '碎誓外域' &&
+      !!battleChapterProbe.chapterRules?.nemesis?.name &&
+      !!battleChapterProbe.chapterRules?.nemesis?.statusLabel &&
       !!battleChapterProbe.chapterRules?.skyOmen?.name &&
       !!battleChapterProbe.chapterRules?.leyline?.name,
     JSON.stringify(battleChapterProbe || null)
@@ -2827,6 +2836,16 @@ async function safeScreenshot(page, outPath) {
     state.seasonBossDefeated = 1;
     state.seasonScore = 280;
     state.seasonBestCycle = Math.max(6, Number(state.seasonBestCycle) || 0);
+    state.seasonCollapseStats = { pressure_overload: 2, sustain_break: 1 };
+    state.lastSeasonCollapse = {
+      id: 'pressure_overload',
+      label: '压力失控',
+      desc: '轮回压力已到高危区间，敌方连续压迫节奏将战线击穿。',
+      cycle: 5,
+      pressure: 8,
+      directiveId: null,
+      recordedAt: Date.now()
+    };
     game.showScreen('map-screen');
     if (typeof game.map.updateEndlessPanel === 'function') game.map.updateEndlessPanel();
 
@@ -2838,6 +2857,9 @@ async function safeScreenshot(page, outPath) {
     const beforeDirectiveText = panel?.querySelector('.endless-directive-chip')?.textContent?.trim() || '';
     const beforeSeasonDesc = panel?.querySelector('.endless-season-desc')?.textContent?.trim() || '';
     const beforeSeasonLedger = panel?.querySelector('.endless-season-ledger')?.textContent?.trim() || '';
+    const directiveOptionCount = panel?.querySelectorAll('.endless-directive-option')?.length || 0;
+    const goalCardCount = panel?.querySelectorAll('.endless-season-goal')?.length || 0;
+    const collapseChipCount = panel?.querySelectorAll('.endless-collapse-chip')?.length || 0;
 
     const nextState = game.ensureEndlessState();
     nextState.pressure = 8;
@@ -2850,6 +2872,12 @@ async function safeScreenshot(page, outPath) {
     const afterDirectiveText = panel?.querySelector('.endless-directive-chip')?.textContent?.trim() || '';
     const afterSeasonDesc = panel?.querySelector('.endless-season-desc')?.textContent?.trim() || '';
     const afterSeasonLedger = panel?.querySelector('.endless-season-ledger')?.textContent?.trim() || '';
+    const pulseUpBeforeClick = !!panel?.classList.contains('pressure-up');
+    const directiveNoteBeforeClick = panel?.querySelector('.endless-directive-note')?.textContent?.trim() || '';
+    const volatileDirectiveBtn = Array.from(panel?.querySelectorAll('.endless-directive-option.risk-volatile') || [])[0] || null;
+    if (volatileDirectiveBtn) volatileDirectiveBtn.click();
+    const directiveNoteAfterClick = panel?.querySelector('.endless-directive-note')?.textContent?.trim() || '';
+    const collapseNote = panel?.querySelector('.endless-collapse-note')?.textContent?.trim() || '';
     let textState = null;
     try {
       textState = typeof window.render_game_to_text === 'function'
@@ -2867,8 +2895,15 @@ async function safeScreenshot(page, outPath) {
       hasDirectiveChip: !!panel?.querySelector('.endless-directive-chip'),
       hasSeasonDesc: !!panel?.querySelector('.endless-season-desc'),
       hasSeasonLedger: !!panel?.querySelector('.endless-season-ledger'),
+      hasDirectiveControls: !!panel?.querySelector('.endless-directive-controls'),
+      hasGoalGrid: !!panel?.querySelector('.endless-season-goal-grid'),
+      hasCollapseLedger: !!panel?.querySelector('.endless-collapse-ledger'),
+      pulseUpBeforeClick,
       pulseUp: !!panel?.classList.contains('pressure-up'),
       dataPressure: panel?.dataset?.pressure || '',
+      directiveOptionCount,
+      goalCardCount,
+      collapseChipCount,
       beforeText,
       afterText,
       beforeThemeText,
@@ -2883,6 +2918,9 @@ async function safeScreenshot(page, outPath) {
       afterSeasonDesc,
       beforeSeasonLedger,
       afterSeasonLedger,
+      directiveNoteBeforeClick,
+      directiveNoteAfterClick,
+      collapseNote,
       seasonPayload: textState?.endlessSeason || null
     };
   });
@@ -2896,8 +2934,14 @@ async function safeScreenshot(page, outPath) {
       endlessPressurePanelProbe.hasDirectiveChip &&
       endlessPressurePanelProbe.hasSeasonDesc &&
       endlessPressurePanelProbe.hasSeasonLedger &&
-      endlessPressurePanelProbe.pulseUp &&
+      endlessPressurePanelProbe.hasDirectiveControls &&
+      endlessPressurePanelProbe.hasGoalGrid &&
+      endlessPressurePanelProbe.hasCollapseLedger &&
+      endlessPressurePanelProbe.pulseUpBeforeClick &&
       endlessPressurePanelProbe.dataPressure === '8' &&
+      endlessPressurePanelProbe.directiveOptionCount >= 4 &&
+      endlessPressurePanelProbe.goalCardCount >= 3 &&
+      endlessPressurePanelProbe.collapseChipCount >= 1 &&
       endlessPressurePanelProbe.beforeThemeText !== endlessPressurePanelProbe.afterThemeText &&
       /轮段/.test(endlessPressurePanelProbe.afterThemeText || '') &&
       /敌方|战场|轮段/.test(endlessPressurePanelProbe.afterThemeDesc || '') &&
@@ -2905,12 +2949,21 @@ async function safeScreenshot(page, outPath) {
       /季签：/.test(endlessPressurePanelProbe.afterDirectiveText || '') &&
       /季签/.test(endlessPressurePanelProbe.afterSeasonDesc || '') &&
       /赛季战绩|赛季积分/.test(endlessPressurePanelProbe.afterSeasonLedger || '') &&
+      /当前：/.test(endlessPressurePanelProbe.directiveNoteBeforeClick || '') &&
+      /激进|玩家钦定/.test(endlessPressurePanelProbe.directiveNoteAfterClick || '') &&
+      /最近一次|崩盘/.test(endlessPressurePanelProbe.collapseNote || '') &&
       /敌方节奏/.test(endlessPressurePanelProbe.afterText || '') &&
       /重压|压制|连续/.test(endlessPressurePanelProbe.afterText || '') &&
       !!endlessPressurePanelProbe.seasonPayload &&
       typeof endlessPressurePanelProbe.seasonPayload.id === 'string' &&
       typeof endlessPressurePanelProbe.seasonPayload.directiveId === 'string' &&
-      typeof endlessPressurePanelProbe.seasonPayload.weekTag === 'string',
+      typeof endlessPressurePanelProbe.seasonPayload.weekTag === 'string' &&
+      Array.isArray(endlessPressurePanelProbe.seasonPayload.goals) &&
+      endlessPressurePanelProbe.seasonPayload.goals.length === 3 &&
+      Array.isArray(endlessPressurePanelProbe.seasonPayload.directiveChoices) &&
+      endlessPressurePanelProbe.seasonPayload.directiveChoices.length >= 3 &&
+      typeof endlessPressurePanelProbe.seasonPayload.activeDirectiveSource === 'string' &&
+      !!endlessPressurePanelProbe.seasonPayload.collapseStats,
     JSON.stringify(endlessPressurePanelProbe || null)
   );
 

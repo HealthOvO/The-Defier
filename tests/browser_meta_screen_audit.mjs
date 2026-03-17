@@ -855,10 +855,11 @@ async function safeScreenshot(page, outPath) {
         buildMetricCount >= 4 &&
         /当前优势/.test(buildNotesText) &&
         /主要缺口/.test(buildNotesText) &&
-        /下一轮补位/.test(buildNotesText) &&
+        /下一轮补位|补件优先级队列/.test(buildNotesText) &&
         /样本对照/.test(buildNotesText) &&
         /自动推荐摘要|推荐角色|推荐套装/.test(buildNotesText) &&
         /章节适配|场域拟合分/.test(buildNotesText) &&
+        /下一章风险镜像|下一章高危|高危·/.test(buildNotesText) &&
         /丹尊/.test(buildNotesText) &&
         /天道/.test(buildNotesText) &&
         roomCards >= 5 &&

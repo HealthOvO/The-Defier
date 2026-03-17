@@ -2128,6 +2128,14 @@
         const chapter = typeof this.getChapterDisplaySnapshot === 'function'
             ? this.getChapterDisplaySnapshot(this.player?.realm || 1)
             : null;
+        const currentChapterIndex = clampInt(
+            chapter?.chapterIndex || Math.floor((Math.max(1, clampInt(this.player?.realm || 1, 1, 18)) - 1) / 3) + 1,
+            1,
+            6
+        );
+        const nextChapter = currentChapterIndex < 6 && typeof this.getChapterDisplaySnapshot === 'function'
+            ? this.getChapterDisplaySnapshot(currentChapterIndex * 3 + 1)
+            : null;
         const stats = this.achievementSystem?.stats || {};
         const encounter = typeof this.ensureEncounterState === 'function'
             ? (this.ensureEncounterState() || {})
@@ -2168,6 +2176,12 @@
         if (workshopSnapshot.some((item) => item?.setEcho || item?.spiritBond)) strengths.push('炼器坊改造已接入战斗，法宝正在从单卡转向体系增幅。');
         if (strengths.length === 0) strengths.push('当前仍处于早期试作阶段，优势更多来自角色基础盘而非完整体系。');
 
+        const nextChapterRiskTags = Array.from(new Set([
+            nextChapter?.dangerProfile?.dominantLabel ? `下一章高危：${nextChapter.dangerProfile.dominantLabel}` : '',
+            nextChapter?.dangerProfile?.tierLabel ? `${nextChapter.dangerProfile.tierLabel}压力` : '',
+            ...(Array.isArray(nextChapter?.focusTags) ? nextChapter.focusTags.slice(0, 2).map((tag) => `高危·${tag}`) : [])
+        ].filter(Boolean))).slice(0, 4);
+
         const gaps = [];
         if (profile.avgCost >= 1.9 && profile.ratio('energy') < 0.1) gaps.push('平均费用偏高，但回能牌偏少，容易在高压章吃到断档。');
         if (profile.ratio('defense') < 0.16) gaps.push('护阵密度偏低，遇到连击或章节灼烧时容错有限。');
@@ -2176,6 +2190,20 @@
         if (!spirit) gaps.push('尚未挂接灵契，部分中后段章节会缺少关键的护道被动。');
         if (equippedTreasures.length <= 1) gaps.push('法宝位利用不足，缺少对 Boss 机制和章节规则的额外兜底。');
         if (gaps.length === 0) gaps.push('当前主要缺口不在面板，而在路线执行与资源调度的精度。');
+
+        let sampleMismatchWarning = null;
+        if (runPathSampleRecommendation?.chapter?.name) {
+            const fitScore = clampInt(runPathSampleRecommendation.chapter.fitScore || 0, 0, 100);
+            const sampleChapterName = runPathSampleRecommendation.chapter.name;
+            const currentChapterName = runPathSampleRecommendation.chapter.targetName || chapter?.name || '';
+            if (currentChapterName && sampleChapterName && sampleChapterName !== currentChapterName && fitScore < 70) {
+                sampleMismatchWarning = {
+                    title: '误配告警',
+                    text: `当前构筑正在【${currentChapterName}】硬扛，但样本主场是【${sampleChapterName}】，场域拟合分只有 ${fitScore}。若继续平均补件，会显著放大误配风险。`
+                };
+                gaps.unshift(`样本主场与当前章节错位（${currentChapterName} → ${sampleChapterName}），当前场域拟合分仅 ${fitScore}。`);
+            }
+        }
 
         const nextTargets = [];
         if (chapter?.routePrompt) nextTargets.push(`章节路线：${chapter.routePrompt}`);
@@ -2221,6 +2249,37 @@
         if (equippedTreasures.length < 2) nextTargets.push('法宝补件：优先找能补生存或反制章节机制的法宝。');
         if (nextTargets.length === 0) nextTargets.push('当前体系已进入打磨期，重点转向章节路线和 Boss 出题适配。');
 
+        const priorityQueue = [];
+        const pushPriority = (label, detail) => {
+            if (!label || !detail || priorityQueue.some((entry) => entry.label === label)) return;
+            priorityQueue.push({ label, detail });
+        };
+        if (sampleMismatchWarning) {
+            pushPriority('回章纠偏', sampleMismatchWarning.text.replace('误配风险。', '先回到样本主场把拟合分拉回 70+。'));
+        } else if (runPathSampleRecommendation?.chapter?.name) {
+            pushPriority('章节适配', `优先围绕【${runPathSampleRecommendation.chapter.name}】的场域答案补件，把拟合分压到 85+。`);
+        }
+        if (loadedLaws.length < 2 && Array.isArray(this.player?.collectedLaws) && this.player.collectedLaws.length > loadedLaws.length) {
+            pushPriority('补命环', '先把已掌握法则装进命环，不要在命环未满前继续平均扩卡。');
+        } else if (Array.isArray(runPathSampleRecommendation?.sets) && runPathSampleRecommendation.sets.length > 0) {
+            pushPriority('补套装', `优先围绕 ${runPathSampleRecommendation.sets.map((item) => item.label || item.id).join(' / ')} 凑出成型阈值。`);
+        }
+        if (equippedTreasures.length < 2) {
+            pushPriority('补法宝', '先补一件能扛章节机制的法宝，再考虑上限件。');
+        } else if (chapter && !chapter.spiritRecommended && chapter.recommendedSpirits?.[0]) {
+            pushPriority('补灵契', `下一步优先把灵契调整到【${chapter.recommendedSpirits[0].name}】附近，别让护道断档。`);
+        }
+        if (runPathSampleRecommendation?.boss?.name && runPathSampleRecommendation.boss.bestTurn > 0) {
+            pushPriority('压样本轮次', `收官前优先把 ${runPathSampleRecommendation.boss.name} 压到 ${runPathSampleRecommendation.boss.bestTurn} 回合模板。`);
+        }
+        const buildPriorityQueue = priorityQueue
+            .slice(0, 3)
+            .map((entry, index) => ({
+                rank: index + 1,
+                label: entry.label,
+                detail: entry.detail
+            }));
+
         return {
             archetypeLabel: `${dominantLabel} · ${dominantLawLabel}`,
             profile,
@@ -2237,6 +2296,10 @@
             equippedTreasures,
             workshopSnapshot,
             chapter,
+            nextChapter,
+            nextChapterRiskTags,
+            sampleMismatchWarning,
+            priorityQueue: buildPriorityQueue,
             strengths,
             gaps,
             nextTargets,
@@ -3170,6 +3233,16 @@
                         <span class="detail-status-chip">法宝 ${escapeHtml(snapshot.equippedTreasures.length)}</span>
                         <span class="detail-status-chip">命途 ${escapeHtml(snapshot.runPath?.name || '未挂')}</span>
                     </div>
+                    ${snapshot.nextChapterRiskTags.length > 0
+                ? `
+                        <div class="collection-card-tags">
+                            ${snapshot.nextChapterRiskTags.map((tag) => `<span class="collection-tag danger">${escapeHtml(tag)}</span>`).join('')}
+                        </div>
+                    `
+                : ''}
+                    ${snapshot.sampleMismatchWarning
+                ? `<p class="collection-alert danger">${escapeHtml(snapshot.sampleMismatchWarning.title)}：${escapeHtml(snapshot.sampleMismatchWarning.text)}</p>`
+                : ''}
                 </section>
             </div>
         `;
@@ -3229,9 +3302,11 @@
                     </ul>
                 </section>
                 <section class="collection-detail-card">
-                    <span class="detail-mini-label">下一轮补位</span>
+                    <span class="detail-mini-label">补件优先级队列</span>
                     <ul class="collection-detail-list">
-                        ${snapshot.nextTargets.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
+                        ${snapshot.priorityQueue.length > 0
+                ? snapshot.priorityQueue.map((entry) => `<li>${entry.rank}. ${escapeHtml(entry.label)}：${escapeHtml(entry.detail)}</li>`).join('')
+                : snapshot.nextTargets.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
                     </ul>
                 </section>
                 <section class="collection-detail-card">
@@ -3273,6 +3348,23 @@
                     `
                 : `<p>${escapeHtml(snapshot.runPathSampleBoard?.emptyText || '当前还没有命途样本，先把一位章节 Boss 打成稳定收官。')}</p>`}
                 </section>
+                <section class="collection-detail-card">
+                    <span class="detail-mini-label">下一章风险镜像</span>
+                    ${snapshot.nextChapter
+                ? `
+                        <div class="detail-status-strip">
+                            <span class="detail-status-chip ${snapshot.sampleMismatchWarning ? 'pending' : 'ready'}">${escapeHtml(snapshot.nextChapter.name || '下一章')}</span>
+                            <span class="detail-status-chip">${escapeHtml(snapshot.nextChapter.dangerProfile?.tierLabel || '待推演')}压力</span>
+                            <span class="detail-status-chip">${escapeHtml(snapshot.nextChapter.dangerProfile?.dominantLabel || '风险未定')}</span>
+                        </div>
+                        <div class="collection-card-tags">
+                            ${snapshot.nextChapterRiskTags.map((tag) => `<span class="collection-tag danger">${escapeHtml(tag)}</span>`).join('')}
+                        </div>
+                        <p>${escapeHtml(snapshot.nextChapter.dangerProfile?.counterplay || '先保留至少一条护阵与净化链路，再考虑扩伤。')}</p>
+                        ${snapshot.sampleMismatchWarning ? `<p class="collection-alert danger">${escapeHtml(snapshot.sampleMismatchWarning.text)}</p>` : ''}
+                    `
+                : '<p>当前已在终章，没有下一章风险镜像，重点转向终局答卷校验。</p>'}
+                </section>
             </div>
         `;
 
@@ -3297,6 +3389,8 @@
             `<li>当前誓约：${escapeHtml(snapshot.vows.map((meta) => meta.name).join('、') || '暂无')}</li>`,
             `<li>当前命途：${escapeHtml(snapshot.runPath?.name || '未挂')} · 已完成命途 ${escapeHtml(snapshot.completedRunPaths || 0)} / ${escapeHtml(snapshot.totalRunPaths || 0)}</li>`,
             `<li>样本对照：${escapeHtml(snapshot.runPathSampleBoard?.count || 0)} 份 · ${snapshot.runPathSampleBoard?.bestTurn > 0 ? `当前最快 ${escapeHtml(snapshot.runPathSampleBoard.bestTurn)} 回合` : '尚未形成最快轮次'}</li>`,
+            `<li>下一章风险：${escapeHtml(snapshot.nextChapterRiskTags.join(' / ') || '终章前暂无额外镜像')}</li>`,
+            snapshot.sampleMismatchWarning ? `<li>误配告警：${escapeHtml(snapshot.sampleMismatchWarning.text)}</li>` : '',
             '</ul>'
         ].join('');
 
@@ -3304,10 +3398,10 @@
             '<span class="codex-side-kicker">阅读顺序</span>',
             '<h3>怎么用这页复盘</h3>',
             '<ul class="codex-side-list compact">',
-            '<li>先看“当前优势”，确认这套牌真正赢在哪里。</li>',
-            '<li>再看“主要缺口”，判断是缺护阵、缺回能，还是命环没装满。</li>',
+            '<li>先看“下一章风险镜像”，确认下一章真正高危的是爆发、续航、控场还是资源税。</li>',
+            '<li>再看“补件优先级队列”，按 1/2/3 的顺序补，不要平均摊资源。</li>',
             '<li>样本对照会告诉你这条命途到底是谁在打、打哪位 Boss 最稳、最快能压到多少回合。</li>',
-            '<li>最后用“下一轮补位”反推地图路线，而不是每个节点都平均拿。</li>',
+            '<li>若出现“误配告警”，优先纠偏场域，而不是继续硬抬当前章的随机收益。</li>',
             '</ul>'
         ].join('');
     };

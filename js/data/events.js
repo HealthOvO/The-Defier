@@ -2692,6 +2692,788 @@ const EVENTS = {
     }
 };
 
+const CHAPTER_EVENT_COMPOSER_CLUSTERS = {
+    1: {
+        id: 'ember_frontier',
+        name: '灰炬边线',
+        icon: '🔥',
+        tone: 'danger',
+        atmosphere: [
+            '边线烽火时明时灭，任何一次补给决策都会改写下一章的敌我态势。',
+            '补给火堆旁的名单仍在翻页，命盘要求你立刻给出取舍。'
+        ],
+        triggerTemplates: [
+            {
+                id: 'ember_supply',
+                title: '灰炬补给堆',
+                description: '半毁的补给车仍可拆解。你能立刻获利，也能把这批资源送往后方营线。',
+                tags: ['补给', '边线']
+            },
+            {
+                id: 'frontier_toll',
+                title: '边线过桥税',
+                description: '破桥只允许一次通行。你可以加价优先通行，也可以让出先机换取后续通行权。',
+                tags: ['通行', '桥头']
+            }
+        ],
+        shortGainRewardTemplates: [
+            {
+                text: '优先截留物资',
+                icon: '💰',
+                resultType: 'positive',
+                result: '立即获得灵石与生命恢复',
+                effects: [
+                    { type: 'gold', value: 68 },
+                    { type: 'heal', value: 8 }
+                ],
+                tags: ['快利', '截留'],
+                immediateText: '你先把可见收益收入囊中。'
+            },
+            {
+                text: '抢占桥头税道',
+                icon: '⚔️',
+                resultType: 'positive',
+                result: '立即获得灵石与命环经验',
+                effects: [
+                    { type: 'gold', value: 52 },
+                    { type: 'ringExp', value: 18 }
+                ],
+                tags: ['抢先', '税道'],
+                immediateText: '你快速拿到通行收益。'
+            }
+        ],
+        shortLossCostTemplates: [
+            {
+                text: '护送后方营线',
+                icon: '🛡️',
+                resultType: 'neutral',
+                result: '短期损失灵石，换取命环成长与战后收益',
+                condition: { type: 'gold', min: 36 },
+                effects: [
+                    { type: 'gold', value: -36 },
+                    { type: 'ringExp', value: 28 },
+                    { type: 'adventureBuff', buffId: 'victoryGoldBoostBattles', charges: 1 }
+                ],
+                tags: ['护送', '投资'],
+                immediateText: '你先承担成本，当前资源被压缩。'
+            },
+            {
+                text: '让渡桥头先机',
+                icon: '🧾',
+                resultType: 'neutral',
+                result: '短期收益降低，换取后续稳定',
+                effects: [
+                    { type: 'ringExp', value: 34 },
+                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 1 }
+                ],
+                tags: ['让渡', '稳态'],
+                immediateText: '你放弃眼前优势，短期节奏变慢。'
+            }
+        ],
+        longTermLossTemplates: [
+            {
+                longTermText: '命盘记下了补给透支，后续章节更容易出现高压交易与资源追债。',
+                echoText: '你曾透支边线补给，债务回响仍在。',
+                tags: ['补给债务', '高压交易']
+            },
+            {
+                longTermText: '桥头税道被写成掠夺路径，后续事件会提高冲突代价。',
+                echoText: '桥头掠夺引发了更高的冲突成本。',
+                tags: ['桥头掠夺', '冲突升级']
+            }
+        ],
+        longTermGainTemplates: [
+            {
+                longTermText: '命盘记录了护送契约，后续章节更容易出现盟援与补给回馈。',
+                echoText: '你留下的护送名册正在带来盟援。',
+                tags: ['盟援契约', '补给回馈']
+            },
+            {
+                longTermText: '让渡先机被记为守序信誉，后续章节更容易触发稳定收益分支。',
+                echoText: '守序信誉正在为你打开稳定路线。',
+                tags: ['守序信誉', '稳态分支']
+            }
+        ]
+    },
+    2: {
+        id: 'forge_caravan',
+        name: '熔痕商队',
+        icon: '⚒️',
+        tone: 'chapter',
+        atmosphere: [
+            '熔渣还未冷却，商队账册却先一步要求你签下条款。',
+            '锻炉与账房并列，任何折价都会在下一章兑现代价。'
+        ],
+        triggerTemplates: [
+            {
+                id: 'molten_ledger',
+                title: '熔痕账亭',
+                description: '账亭愿给你即时折价，但会把未来维护成本转嫁给你。',
+                tags: ['账亭', '锻炉']
+            },
+            {
+                id: 'caravan_refit',
+                title: '商队改装点',
+                description: '你可以优先改装当前装备，或把资源投入长期护送协议。',
+                tags: ['商队', '改装']
+            }
+        ],
+        shortGainRewardTemplates: [
+            {
+                text: '签下即时折价',
+                icon: '🏷️',
+                resultType: 'positive',
+                result: '立刻获得灵石与卡牌补件',
+                effects: [
+                    { type: 'gold', value: 56 },
+                    { type: 'card', rarity: 'uncommon' }
+                ],
+                tags: ['折价', '补件'],
+                immediateText: '你拿到当前最直接的战备收益。'
+            },
+            {
+                text: '先做快修改装',
+                icon: '🔧',
+                resultType: 'positive',
+                result: '立刻获得升级与少量灵石',
+                effects: [
+                    { type: 'upgradeCard' },
+                    { type: 'gold', value: 24 }
+                ],
+                tags: ['快修', '改装'],
+                immediateText: '你把资源用于眼前战力强化。'
+            }
+        ],
+        shortLossCostTemplates: [
+            {
+                text: '签长期护送单',
+                icon: '📜',
+                resultType: 'neutral',
+                result: '短期损失生命，换取长期稳定回报',
+                condition: { type: 'hp', min: 18 },
+                effects: [
+                    { type: 'damage', value: 9 },
+                    { type: 'ringExp', value: 32 },
+                    { type: 'adventureBuff', buffId: 'victoryHealBoostBattles', charges: 1 }
+                ],
+                tags: ['护送单', '维护'],
+                immediateText: '你先承受护送成本，当前容错下降。'
+            },
+            {
+                text: '投入熔渣回收',
+                icon: '🧱',
+                resultType: 'neutral',
+                result: '短期支付灵石，换取后续缓冲',
+                condition: { type: 'gold', min: 42 },
+                effects: [
+                    { type: 'gold', value: -42 },
+                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 1 },
+                    { type: 'ringExp', value: 24 }
+                ],
+                tags: ['回收', '缓冲'],
+                immediateText: '你先投入成本，立即收益偏低。'
+            }
+        ],
+        longTermLossTemplates: [
+            {
+                longTermText: '折价条款会在后续章节触发维护追缴，交易风险上升。',
+                echoText: '折价账单尚未结清，维护追缴正在逼近。',
+                tags: ['维护追缴', '交易风险']
+            },
+            {
+                longTermText: '快修改装被命盘标记为过载路径，后续事件更容易出现额外代价。',
+                echoText: '快修留下的过载裂痕开始反噬。',
+                tags: ['过载改装', '额外代价']
+            }
+        ],
+        longTermGainTemplates: [
+            {
+                longTermText: '护送协议写入命盘，后续章节更容易获得医疗与补给分支。',
+                echoText: '护送协议正在持续回馈你的路线。',
+                tags: ['护送协议', '医疗补给']
+            },
+            {
+                longTermText: '回收投入形成稳态储备，后续章节更容易出现防线收益。',
+                echoText: '稳态储备正在提升你的防线韧性。',
+                tags: ['稳态储备', '防线收益']
+            }
+        ]
+    },
+    3: {
+        id: 'astral_archive',
+        name: '星册档案',
+        icon: '📚',
+        tone: 'mystic',
+        atmosphere: [
+            '观测厅把未来拆成账页，每一页都要求你先付一笔定金。',
+            '星册只承认被记录的选择，未记录的收益将被视作噪音。'
+        ],
+        triggerTemplates: [
+            {
+                id: 'astral_registry',
+                title: '星册登记台',
+                description: '登记台可为你提供即刻信息红利，也可为后续章节保留长期推演权。',
+                tags: ['观测', '登记']
+            },
+            {
+                id: 'echo_index',
+                title: '回响索引室',
+                description: '索引室允许你先拿走结果，也允许你先承担校对成本。',
+                tags: ['索引', '校对']
+            }
+        ],
+        shortGainRewardTemplates: [
+            {
+                text: '提取现成结论',
+                icon: '🔮',
+                resultType: 'positive',
+                result: '立即获得天机与灵石',
+                effects: [
+                    { type: 'heavenlyInsight', value: 2 },
+                    { type: 'gold', value: 38 }
+                ],
+                tags: ['速读', '现成结论'],
+                immediateText: '你直接拿走了可见答案。'
+            },
+            {
+                text: '挪用观测预算',
+                icon: '🧮',
+                resultType: 'positive',
+                result: '立即获得命环经验与卡牌',
+                effects: [
+                    { type: 'ringExp', value: 32 },
+                    { type: 'card', rarity: 'rare' }
+                ],
+                tags: ['预算挪用', '速得'],
+                immediateText: '你把未来预算转成当前战力。'
+            }
+        ],
+        shortLossCostTemplates: [
+            {
+                text: '先做长期校对',
+                icon: '🖋️',
+                resultType: 'neutral',
+                result: '短期消耗灵石，换取后续稳定情报',
+                condition: { type: 'gold', min: 48 },
+                effects: [
+                    { type: 'gold', value: -48 },
+                    { type: 'heavenlyInsight', value: 1 },
+                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 }
+                ],
+                tags: ['校对', '情报'],
+                immediateText: '你先投入预算，短期变现能力下降。'
+            },
+            {
+                text: '承担盲算误差',
+                icon: '🕯️',
+                resultType: 'neutral',
+                result: '短期失去生命，换取深层推演',
+                condition: { type: 'hp', min: 16 },
+                effects: [
+                    { type: 'damage', value: 8 },
+                    { type: 'heavenlyInsight', value: 2 },
+                    { type: 'ringExp', value: 18 }
+                ],
+                tags: ['盲算', '推演'],
+                immediateText: '你先承担误差，当前容错更薄。'
+            }
+        ],
+        longTermLossTemplates: [
+            {
+                longTermText: '速读结果会触发信息赤字，后续章节更容易出现认知税。',
+                echoText: '信息赤字被记入星册，认知税正在靠近。',
+                tags: ['信息赤字', '认知税']
+            },
+            {
+                longTermText: '预算挪用会削弱后续推演质量，事件不确定性提高。',
+                echoText: '被挪用的预算正在让后续推演失真。',
+                tags: ['推演失真', '不确定性']
+            }
+        ],
+        longTermGainTemplates: [
+            {
+                longTermText: '校对档案会在后续章节提供命盘指引，更容易触发稳健分支。',
+                echoText: '你留下的校对记录正在引导稳健路径。',
+                tags: ['校对档案', '稳健分支']
+            },
+            {
+                longTermText: '盲算样本被纳入命盘，后续章节更容易出现高价值情报回响。',
+                echoText: '盲算样本正在兑现高价值情报。',
+                tags: ['盲算样本', '情报回响']
+            }
+        ]
+    },
+    4: {
+        id: 'mirror_verdict',
+        name: '镜渊裁断',
+        icon: '🪞',
+        tone: 'chapter',
+        atmosphere: [
+            '镜渊会复制你最短线的欲望，也会放大它在后续章节的代价。',
+            '裁断庭里每份快利都对应一条追偿款。'
+        ],
+        triggerTemplates: [
+            {
+                id: 'mirror_court',
+                title: '镜渊裁断庭',
+                description: '你可立刻兑付镜渊红利，或先承担镜渊审计成本换取后续豁免。',
+                tags: ['镜渊', '裁断']
+            },
+            {
+                id: 'echo_trial',
+                title: '回声审计台',
+                description: '审计台允许你先拿分，也允许你先付账把后续利率压低。',
+                tags: ['审计', '回声']
+            }
+        ],
+        shortGainRewardTemplates: [
+            {
+                text: '先领镜渊红利',
+                icon: '💎',
+                resultType: 'positive',
+                result: '立即获得灵石与稀有卡',
+                effects: [
+                    { type: 'gold', value: 62 },
+                    { type: 'card', rarity: 'rare' }
+                ],
+                tags: ['镜渊红利', '快兑'],
+                immediateText: '你把镜渊红利直接兑现成当前强度。'
+            },
+            {
+                text: '跳过审计直接结算',
+                icon: '⚡',
+                resultType: 'positive',
+                result: '立即获得命环经验与生命恢复',
+                effects: [
+                    { type: 'ringExp', value: 26 },
+                    { type: 'heal', value: 10 }
+                ],
+                tags: ['跳审', '结算'],
+                immediateText: '你获得了即刻收益，但留下了后续问责。'
+            }
+        ],
+        shortLossCostTemplates: [
+            {
+                text: '先付审计税',
+                icon: '📉',
+                resultType: 'neutral',
+                result: '短期支付灵石，换取后续缓冲',
+                condition: { type: 'gold', min: 50 },
+                effects: [
+                    { type: 'gold', value: -50 },
+                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 1 },
+                    { type: 'ringExp', value: 20 }
+                ],
+                tags: ['审计税', '缓冲'],
+                immediateText: '你先承担现金流压力。'
+            },
+            {
+                text: '承担回声校验',
+                icon: '🩹',
+                resultType: 'neutral',
+                result: '短期失去生命，换取后续稳定增益',
+                condition: { type: 'hp', min: 16 },
+                effects: [
+                    { type: 'damage', value: 9 },
+                    { type: 'adventureBuff', buffId: 'victoryHealBoostBattles', charges: 1 },
+                    { type: 'heavenlyInsight', value: 1 }
+                ],
+                tags: ['回声校验', '稳定'],
+                immediateText: '你先吃下校验代价，短期风险上升。'
+            }
+        ],
+        longTermLossTemplates: [
+            {
+                longTermText: '快兑红利会触发镜渊追偿，后续章节更容易出现高额代价分支。',
+                echoText: '镜渊追偿正在追踪你的快兑记录。',
+                tags: ['镜渊追偿', '高额代价']
+            },
+            {
+                longTermText: '跳审结算会增加后续事件波动，稳定分支出现率下降。',
+                echoText: '跳审记录正在放大后续事件波动。',
+                tags: ['跳审记录', '波动上升']
+            }
+        ],
+        longTermGainTemplates: [
+            {
+                longTermText: '审计税入账后，后续章节更容易触发减压事件。',
+                echoText: '你预付的审计税正在降低后续利率。',
+                tags: ['预付审计', '减压事件']
+            },
+            {
+                longTermText: '回声校验通过后，后续章节更容易获得稳定补给。',
+                echoText: '回声校验正在给你返还稳定补给。',
+                tags: ['回声通过', '稳定补给']
+            }
+        ]
+    },
+    5: {
+        id: 'oathscar_blackflag',
+        name: '誓痕黑旗',
+        icon: '⛓️',
+        tone: 'danger',
+        atmosphere: [
+            '黑旗只认代价，短线红利越大，命盘追缴越快。',
+            '誓痕印记会把每次贪利都记成可追索债务。'
+        ],
+        triggerTemplates: [
+            {
+                id: 'blackflag_board',
+                title: '黑旗委托榜',
+                description: '你可以接高额快单，也可以承担先期亏损换取长期护航。',
+                tags: ['黑旗', '委托']
+            },
+            {
+                id: 'oathscar_altar',
+                title: '誓痕契坛',
+                description: '契坛可立即放大奖励，也可先缴誓税来换取后续豁免。',
+                tags: ['誓痕', '契坛']
+            }
+        ],
+        shortGainRewardTemplates: [
+            {
+                text: '接高额快单',
+                icon: '🪙',
+                resultType: 'positive',
+                result: '立即获得大量灵石',
+                effects: [
+                    { type: 'gold', value: 78 }
+                ],
+                tags: ['快单', '高额'],
+                immediateText: '你拿到了最直接的高额收益。'
+            },
+            {
+                text: '立刻放大奖励',
+                icon: '🩸',
+                resultType: 'positive',
+                result: '立即获得卡牌与命环经验',
+                effects: [
+                    { type: 'card', rarity: 'rare' },
+                    { type: 'ringExp', value: 24 }
+                ],
+                tags: ['放大', '速增'],
+                immediateText: '你把契坛红利压缩到当前回合。'
+            }
+        ],
+        shortLossCostTemplates: [
+            {
+                text: '先缴誓税',
+                icon: '📎',
+                resultType: 'neutral',
+                result: '短期支付灵石，换取后续补给',
+                condition: { type: 'gold', min: 55 },
+                effects: [
+                    { type: 'gold', value: -55 },
+                    { type: 'adventureBuff', buffId: 'victoryGoldBoostBattles', charges: 1 },
+                    { type: 'adventureBuff', buffId: 'victoryHealBoostBattles', charges: 1 }
+                ],
+                tags: ['誓税', '补给'],
+                immediateText: '你先承受现金流压力。'
+            },
+            {
+                text: '承担护航亏损',
+                icon: '🚩',
+                resultType: 'neutral',
+                result: '短期失去生命，换取后续稳定',
+                condition: { type: 'hp', min: 18 },
+                effects: [
+                    { type: 'damage', value: 10 },
+                    { type: 'heavenlyInsight', value: 1 },
+                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 1 }
+                ],
+                tags: ['护航', '先亏'],
+                immediateText: '你先吞下亏损，当前风险偏高。'
+            }
+        ],
+        longTermLossTemplates: [
+            {
+                longTermText: '高额快单会累积誓痕追偿，后续章节更容易触发惩罚分支。',
+                echoText: '誓痕追偿正在根据快单记录加码。',
+                tags: ['誓痕追偿', '惩罚分支']
+            },
+            {
+                longTermText: '强行放大奖励会推高后续风险阈值，代价事件出现率上升。',
+                echoText: '被放大的奖励正在反向抬高风险阈值。',
+                tags: ['风险阈值', '代价上升']
+            }
+        ],
+        longTermGainTemplates: [
+            {
+                longTermText: '誓税提前结清后，后续章节更容易触发减负与护航回馈。',
+                echoText: '提前结清誓税正在换来减负回馈。',
+                tags: ['誓税结清', '减负回馈']
+            },
+            {
+                longTermText: '护航亏损被记为信誉，后续章节更容易出现协防援助。',
+                echoText: '你的护航信誉正在带来协防援助。',
+                tags: ['护航信誉', '协防援助']
+            }
+        ]
+    },
+    6: {
+        id: 'final_convergence',
+        name: '终局合流',
+        icon: '🌌',
+        tone: 'mystic',
+        atmosphere: [
+            '终局命盘把每一次短线贪利都折算成最终审判参数。',
+            '合流庭的记录会在最后数个节点里直接改写风险权重。'
+        ],
+        triggerTemplates: [
+            {
+                id: 'final_registry',
+                title: '终局登记庭',
+                description: '你可提前兑现终局红利，也可先承担审判准备成本。',
+                tags: ['终局', '登记']
+            },
+            {
+                id: 'convergence_lens',
+                title: '合流观测镜',
+                description: '观测镜允许你先拿结果，也允许你先付代价换取后续容错。',
+                tags: ['合流', '观测镜']
+            }
+        ],
+        shortGainRewardTemplates: [
+            {
+                text: '提前兑现终局红利',
+                icon: '✨',
+                resultType: 'positive',
+                result: '立即获得天机、灵石与命环经验',
+                effects: [
+                    { type: 'heavenlyInsight', value: 2 },
+                    { type: 'gold', value: 46 },
+                    { type: 'ringExp', value: 24 }
+                ],
+                tags: ['提前兑现', '终局红利'],
+                immediateText: '你把最终红利前置为当下收益。'
+            },
+            {
+                text: '强提观测结果',
+                icon: '📡',
+                resultType: 'positive',
+                result: '立即获得稀有卡与回复',
+                effects: [
+                    { type: 'card', rarity: 'rare' },
+                    { type: 'heal', value: 10 }
+                ],
+                tags: ['强提', '观测结果'],
+                immediateText: '你直接提取了终局观测成果。'
+            }
+        ],
+        shortLossCostTemplates: [
+            {
+                text: '先做审判准备',
+                icon: '🧱',
+                resultType: 'neutral',
+                result: '短期损失灵石，换取后续容错与增益',
+                condition: { type: 'gold', min: 58 },
+                effects: [
+                    { type: 'gold', value: -58 },
+                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 1 },
+                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 }
+                ],
+                tags: ['审判准备', '容错'],
+                immediateText: '你先压缩经济，换取终局缓冲。'
+            },
+            {
+                text: '承受观测反噬',
+                icon: '🌀',
+                resultType: 'neutral',
+                result: '短期失去生命，换取后续稳定信息',
+                condition: { type: 'hp', min: 18 },
+                effects: [
+                    { type: 'damage', value: 11 },
+                    { type: 'heavenlyInsight', value: 2 },
+                    { type: 'ringExp', value: 16 }
+                ],
+                tags: ['反噬', '稳定信息'],
+                immediateText: '你先承受反噬，短期容错明显下降。'
+            }
+        ],
+        longTermLossTemplates: [
+            {
+                longTermText: '提前兑现会抬升终局审判压力，后续章节更容易触发高压节点。',
+                echoText: '终局审判已读取你的提前兑现记录。',
+                tags: ['终局压力', '高压节点']
+            },
+            {
+                longTermText: '强提结果会削弱后续容错，终盘代价权重上升。',
+                echoText: '强提观测结果正在推高终盘代价。',
+                tags: ['终盘代价', '容错下降']
+            }
+        ],
+        longTermGainTemplates: [
+            {
+                longTermText: '审判准备会在终局节点释放减压回报，后续容错提高。',
+                echoText: '你预留的审判准备正在降低终局压力。',
+                tags: ['审判准备', '终局减压']
+            },
+            {
+                longTermText: '反噬样本被命盘纳入稳定校准，后续事件更容易出现可控分支。',
+                echoText: '反噬样本正在换来可控分支。',
+                tags: ['稳定校准', '可控分支']
+            }
+        ]
+    }
+};
+
+function cloneEventTemplateData(value) {
+    if (value == null) return value;
+    try {
+        return JSON.parse(JSON.stringify(value));
+    } catch (error) {
+        return value;
+    }
+}
+
+function pickEventTemplate(list = []) {
+    if (!Array.isArray(list) || list.length === 0) return null;
+    return list[Math.floor(Math.random() * list.length)] || null;
+}
+
+function normalizeChapterEventComposerContext(rawContext = null) {
+    if (!rawContext || typeof rawContext !== 'object') return null;
+    const chapterIndex = Math.max(1, Math.min(6, Math.floor(Number(rawContext.chapterIndex) || 1)));
+    const priorEntries = Array.isArray(rawContext.priorEntries)
+        ? rawContext.priorEntries
+            .filter((entry) => entry && typeof entry === 'object')
+            .map((entry) => ({
+                id: String(entry.id || ''),
+                chapterIndex: Math.max(1, Math.floor(Number(entry.chapterIndex) || 1)),
+                echoText: String(entry.echoText || entry.longTermText || ''),
+                longTermText: String(entry.longTermText || ''),
+                choiceText: String(entry.choiceText || ''),
+                tags: Array.isArray(entry.tags)
+                    ? Array.from(new Set(entry.tags.map((tag) => String(tag || '').trim()).filter(Boolean))).slice(0, 6)
+                    : []
+            }))
+        : [];
+    const recentTags = Array.isArray(rawContext.recentTags)
+        ? Array.from(new Set(rawContext.recentTags.map((tag) => String(tag || '').trim()).filter(Boolean))).slice(0, 8)
+        : [];
+    const composeChance = Math.max(0.18, Math.min(0.72, Number(rawContext.composeChance) || (0.26 + chapterIndex * 0.03)));
+    return {
+        chapterIndex,
+        chapterName: String(rawContext.chapterName || `第${chapterIndex}章`),
+        priorEntries,
+        recentTags,
+        composeChance
+    };
+}
+
+function getChapterEventComposerContext() {
+    if (typeof window === 'undefined' || !window.game) return null;
+    if (typeof window.game.getChapterEventComposerContext !== 'function') return null;
+    try {
+        const rawContext = window.game.getChapterEventComposerContext();
+        return normalizeChapterEventComposerContext(rawContext);
+    } catch (error) {
+        return null;
+    }
+}
+
+function resolveChapterComposerRecallEntry(context = null) {
+    if (!context || !Array.isArray(context.priorEntries) || context.priorEntries.length === 0) return null;
+    const filtered = context.priorEntries.filter((entry) => entry.chapterIndex < context.chapterIndex);
+    if (filtered.length === 0) return null;
+    return filtered[Math.floor(Math.random() * filtered.length)] || null;
+}
+
+function buildChapterComposerChoice(baseChoice = {}, trigger = {}, arcType = 'neutral', longTermTemplate = null, recallEntry = null) {
+    const immediateText = String(baseChoice.immediateText || baseChoice.result || '').trim();
+    const longTermText = String(longTermTemplate?.longTermText || '').trim();
+    const echoText = String(longTermTemplate?.echoText || longTermText || '').trim();
+    const mergedTags = Array.from(new Set([
+        ...(Array.isArray(trigger.tags) ? trigger.tags : []),
+        ...(Array.isArray(baseChoice.tags) ? baseChoice.tags : []),
+        ...(Array.isArray(longTermTemplate?.tags) ? longTermTemplate.tags : []),
+        ...(Array.isArray(recallEntry?.tags) ? recallEntry.tags.slice(0, 2) : [])
+    ].map((tag) => String(tag || '').trim()).filter(Boolean)));
+    return {
+        text: String(baseChoice.text || '做出选择'),
+        icon: String(baseChoice.icon || '▶'),
+        resultType: String(baseChoice.resultType || 'neutral'),
+        result: `${String(baseChoice.result || '命盘发生变化。')} ${longTermText ? `（后果：${longTermText}）` : ''}`.trim(),
+        condition: baseChoice.condition ? cloneEventTemplateData(baseChoice.condition) : undefined,
+        effects: Array.isArray(baseChoice.effects) ? cloneEventTemplateData(baseChoice.effects) : [],
+        fateLedger: {
+            arcType,
+            immediateText,
+            longTermText,
+            echoText,
+            tags: mergedTags
+        }
+    };
+}
+
+function getComposedChapterEvent(rawContext = null) {
+    const context = normalizeChapterEventComposerContext(rawContext || getChapterEventComposerContext());
+    if (!context) return null;
+    const cluster = CHAPTER_EVENT_COMPOSER_CLUSTERS[context.chapterIndex];
+    if (!cluster) return null;
+
+    const trigger = pickEventTemplate(cluster.triggerTemplates);
+    const shortGainBase = pickEventTemplate(cluster.shortGainRewardTemplates);
+    const shortLossBase = pickEventTemplate(cluster.shortLossCostTemplates);
+    const longLoss = pickEventTemplate(cluster.longTermLossTemplates);
+    const longGain = pickEventTemplate(cluster.longTermGainTemplates);
+    if (!trigger || !shortGainBase || !shortLossBase || !longLoss || !longGain) return null;
+
+    const recallEntry = resolveChapterComposerRecallEntry(context);
+    const recallText = recallEntry
+        ? String(recallEntry.echoText || recallEntry.longTermText || recallEntry.choiceText || '').trim()
+        : '';
+    const recallTags = Array.isArray(recallEntry?.tags) ? recallEntry.tags.slice(0, 3) : [];
+    const summaryTags = Array.from(new Set([
+        ...(Array.isArray(trigger.tags) ? trigger.tags : []),
+        ...recallTags
+    ]));
+
+    const choices = [
+        buildChapterComposerChoice(shortGainBase, trigger, 'short_gain_long_loss', longLoss, recallEntry),
+        buildChapterComposerChoice(shortLossBase, trigger, 'short_loss_long_gain', longGain, recallEntry),
+        {
+            text: '暂不改写命盘',
+            icon: '🚶',
+            resultType: 'neutral',
+            result: '你保持当前路线，仅记录观测结果。',
+            effects: [],
+            fateLedger: {
+                arcType: 'defer',
+                immediateText: '你暂缓执行新的命盘条目。',
+                longTermText: '该抉择未追加代价，仅保留观测记录。',
+                echoText: '你选择了观望，命盘暂时平稳。',
+                tags: Array.from(new Set([...(Array.isArray(trigger.tags) ? trigger.tags : []), '观望']))
+            }
+        }
+    ];
+
+    const eventIdSuffix = Math.floor(Math.random() * 0xFFFFFF).toString(36);
+    return {
+        id: `chapterComposer_${cluster.id}_${trigger.id}_${eventIdSuffix}`,
+        name: `${cluster.icon} ${trigger.title}`,
+        icon: cluster.icon,
+        summaryLabel: '章节命盘',
+        summary: `章节事件簇 · ${cluster.name}${summaryTags.length > 0 ? ` · ${summaryTags.join('/')}` : ''}`,
+        presentationTone: String(cluster.tone || 'chapter'),
+        atmosphere: pickEventTemplate(cluster.atmosphere) || '命盘回响正在逼近，当前抉择会被写入后续章节。',
+        description: `${trigger.description}${recallText ? `\n前章回响：${recallText}` : ''}`,
+        isComposedChapterEvent: true,
+        composerMeta: {
+            chapterIndex: context.chapterIndex,
+            chapterName: context.chapterName,
+            themeId: cluster.id,
+            themeName: cluster.name,
+            triggerId: trigger.id,
+            triggerTags: Array.isArray(trigger.tags) ? trigger.tags.slice() : [],
+            recallEntryId: recallEntry?.id || null,
+            recallText,
+            recallTags
+        },
+        choices
+    };
+}
+
 // 事件池 - 按类型分类
 const EVENT_POOL = {
     common: ['mysteryChest', 'spiritVein', 'wanderingSmith', 'hiddenSpring', 'brokenPavilion', 'mirrorNeedleDojo', 'voidBookkeeper', 'shieldRelayBeacon', 'nightWatchCamp', 'emberCampSignal', 'leylineConfluence', 'medicRelayPost', 'riftAidConvoy', 'stormchaserCamp', 'herbalPactShrine', 'oathscarShrine', 'ghostFurnace'],
@@ -2721,7 +3503,9 @@ const ARCHETYPE_EVENT_POOLS = {
     stormcraft: ['thunderConductTrial', 'stormchaserCamp', 'fulgurMarket', 'overclockSigil', 'convergenceRelay', 'harmonicAnvil'],
     vitalweave: ['herbalPactShrine', 'lifestringClinic', 'bloodloomGarden', 'hospiceRelay', 'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy'],
     bulwark: ['shieldRelayBeacon', 'ironCitadelPact', 'aegisTribunal', 'nightWatchCamp', 'emberCampSignal', 'leylineConfluence', 'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy'],
+    mirrorweave: ['mirrorNeedleDojo', 'shatteredCompass', 'convergenceRelay', 'floatingMarketRift', 'astralSupplyDepot', 'harmonicAnvil'],
     cursebound: ['oathscarShrine', 'griefWritArchive', 'blackbannerExecution', 'voidBookkeeper', 'ashLedgerTrial', 'frontierContractBoard'],
+    oathbound: ['oathscarShrine', 'griefWritArchive', 'blackbannerExecution', 'debtboundAnvil', 'frontierContractBoard', 'ashLedgerTrial'],
     soulforge: ['ghostFurnace', 'marionetteArmory', 'ancestralFoundry', 'harmonicAnvil', 'artifactConfluxBazaar', 'shieldRelayBeacon']
 };
 
@@ -2798,6 +3582,14 @@ function getRandomEvent() {
                     return JSON.parse(JSON.stringify(EVENTS[endlessEventId]));
                 }
             }
+        }
+    }
+
+    const chapterComposerContext = getChapterEventComposerContext();
+    if (chapterComposerContext && Math.random() < chapterComposerContext.composeChance) {
+        const composedEvent = getComposedChapterEvent(chapterComposerContext);
+        if (composedEvent) {
+            return composedEvent;
         }
     }
 

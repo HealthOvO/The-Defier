@@ -1225,6 +1225,8 @@ class GameMap {
                                 <span id="map-floor">${this.getRealmName(this.game.player.realm)}</span>
                             </div>
                         </div>
+                        <div id="map-situation-overview" class="map-situation-overview" style="display:none;"></div>
+                        <div id="map-chapter-risk-card" class="map-chapter-risk-card" style="display:none;"></div>
                         <div id="map-chapter-brief" class="map-chapter-brief" style="display:none;"></div>
                         <div id="map-adventure-buffs" class="map-adventure-buffs" style="display:none;"></div>
                         <div id="map-route-hints" class="map-route-hints" style="display:none;"></div>
@@ -1572,19 +1574,36 @@ class GameMap {
         this.updateEndlessPanel();
     }
 
-    updateChapterBriefPanel() {
-        const panel = document.getElementById('map-chapter-brief');
-        if (!panel || !this.game || !this.game.player || typeof this.game.getChapterDisplaySnapshot !== 'function') {
-            return;
-        }
+    escapeMapText(value = '') {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
 
-        const chapter = this.game.getChapterDisplaySnapshot(this.game.player.realm);
-        if (!chapter) {
-            panel.style.display = 'none';
-            panel.innerHTML = '';
-            return;
-        }
+    formatTagLabel(label = '') {
+        const text = String(label || '').trim();
+        if (!text) return '';
+        return text.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+    }
 
+    formatPathLabel(pathId = '') {
+        const labels = {
+            convergence: '同调',
+            resonance: '共振',
+            destruction: '湮灭',
+            agility: '迅捷',
+            wisdom: '洞明',
+            insight: '洞察',
+            toughness: '坚韧'
+        };
+        if (labels[pathId]) return labels[pathId];
+        return this.formatTagLabel(pathId);
+    }
+
+    collectSpecialWarnings(limit = 3) {
         const accessibleNodes = typeof this.getAccessibleNodes === 'function'
             ? this.getAccessibleNodes()
             : [];
@@ -1598,11 +1617,232 @@ class GameMap {
             shop: '商路',
             rest: '营地'
         };
-        const specialWarnings = Array.from(new Set(
+        return Array.from(new Set(
             accessibleNodes
                 .map((node) => specialLabelMap[node?.type] || null)
                 .filter(Boolean)
-        )).slice(0, 3);
+        )).slice(0, Math.max(1, Math.floor(Number(limit) || 1)));
+    }
+
+    resolveFactionTendency(expeditionPayload = null) {
+        const factions = Array.isArray(expeditionPayload?.factions)
+            ? expeditionPayload.factions
+            : [];
+        if (factions.length === 0) {
+            return '暂无势力情报';
+        }
+
+        const allied = factions.filter((entry) => Number(entry?.stance) >= 2).length;
+        const hostile = factions.filter((entry) => Number(entry?.stance) <= -2).length;
+        const dominant = [...factions]
+            .sort((a, b) => Math.abs(Number(b?.stance) || 0) - Math.abs(Number(a?.stance) || 0))[0];
+        const dominantLabel = dominant && dominant.name
+            ? `${dominant.name}${Number(dominant.stance) > 0 ? '↑' : Number(dominant.stance) < 0 ? '↓' : '·'}`
+            : '';
+        return `盟友 ${allied} · 对立 ${hostile}${dominantLabel ? ` · 主轴 ${dominantLabel}` : ''}`;
+    }
+
+    resolveBountyProgress(expeditionPayload = null) {
+        const activeBounties = Array.isArray(expeditionPayload?.activeBounties)
+            ? expeditionPayload.activeBounties
+            : [];
+        if (activeBounties.length > 0) {
+            const completedCount = activeBounties.filter((entry) => !!entry?.completed).length;
+            const focusBounty = activeBounties.find((entry) => !entry?.completed) || activeBounties[0];
+            const progressSuffix = focusBounty && focusBounty.progressText
+                ? ` · ${focusBounty.name} ${focusBounty.progressText}`
+                : '';
+            return `${completedCount}/${activeBounties.length} 已完成${progressSuffix}`;
+        }
+
+        const bountyDraft = Array.isArray(expeditionPayload?.bountyDraft)
+            ? expeditionPayload.bountyDraft
+            : [];
+        if (bountyDraft.length > 0) {
+            const activeCount = bountyDraft.filter((entry) => !!entry?.active).length;
+            const maxActive = Math.min(2, bountyDraft.length);
+            return `${activeCount}/${maxActive} 已承接`;
+        }
+
+        return '暂无章节悬赏';
+    }
+
+    getMapSituationOverviewModel(chapter = null) {
+        const player = this.game && this.game.player ? this.game.player : null;
+        const expeditionPayload = (this.game && typeof this.game.getExpeditionPayload === 'function')
+            ? this.game.getExpeditionPayload()
+            : null;
+        const dangerProfile = chapter && chapter.dangerProfile ? chapter.dangerProfile : null;
+
+        const tags = [];
+        (Array.isArray(chapter?.focusTags) ? chapter.focusTags : [])
+            .slice(0, 2)
+            .forEach((tag) => {
+                const safeTag = this.formatTagLabel(tag);
+                if (safeTag) tags.push(safeTag);
+            });
+
+        const fatePath = this.getFateRingPath(player);
+        if (fatePath) {
+            tags.push(`命途·${this.formatPathLabel(fatePath)}`);
+        }
+        const archetype = this.getPreferredArchetypeId(player);
+        if (archetype) {
+            tags.push(`构筑·${this.formatTagLabel(archetype)}`);
+        }
+        if (expeditionPayload?.selectedBranchName) {
+            tags.push(`路线·${this.formatTagLabel(expeditionPayload.selectedBranchName)}`);
+        }
+
+        const coreTags = Array.from(new Set(tags.filter(Boolean))).slice(0, 4);
+        if (coreTags.length === 0) coreTags.push('稳态推进');
+
+        return {
+            chapterName: chapter?.fullName || chapter?.name || '当前章节',
+            coreTags,
+            riskLevel: dangerProfile
+                ? `DRI ${dangerProfile.index} / 100 · ${dangerProfile.tierLabel || '未定'}`
+                : 'DRI 待推演 · 风险结构未定',
+            riskTier: dangerProfile?.tierId || 'none',
+            bountyProgress: this.resolveBountyProgress(expeditionPayload),
+            factionTendency: this.resolveFactionTendency(expeditionPayload)
+        };
+    }
+
+    getChapterRiskResourceGuidance(dangerProfile = null, nemesis = null) {
+        const reserveProfile = {
+            low: { hpRate: 0.48, gold: 65 },
+            medium: { hpRate: 0.58, gold: 95 },
+            high: { hpRate: 0.66, gold: 125 },
+            extreme: { hpRate: 0.74, gold: 160 },
+            none: { hpRate: 0.54, gold: 80 }
+        };
+        const tierId = dangerProfile && reserveProfile[dangerProfile.tierId]
+            ? dangerProfile.tierId
+            : 'none';
+        const profile = reserveProfile[tierId];
+        const maxHp = Math.max(1, Math.floor(Number(this.game?.player?.maxHp) || 100));
+        const hpTarget = Math.max(1, Math.ceil(maxHp * profile.hpRate));
+        const notes = [
+            `生命建议 ≥ ${hpTarget}`,
+            `灵石预留 ≥ ${profile.gold}`
+        ];
+        if (nemesis && ['hunting', 'recurring', 'guarding', 'allied'].includes(nemesis.status)) {
+            notes.push('保留 1 轮爆发或控制链');
+        }
+        const expeditionPayload = (this.game && typeof this.game.getExpeditionPayload === 'function')
+            ? this.game.getExpeditionPayload()
+            : null;
+        const activeBountyCount = Array.isArray(expeditionPayload?.activeBounties)
+            ? expeditionPayload.activeBounties.length
+            : 0;
+        if (activeBountyCount > 0) {
+            notes.push(`在途悬赏 ${activeBountyCount} 条，预留 1 次补给机动`);
+        }
+        return `${notes.join('；')}。`;
+    }
+
+    updateMapSituationOverviewPanel(chapter = null) {
+        const panel = document.getElementById('map-situation-overview');
+        if (!panel) return;
+        if (!chapter) {
+            panel.style.display = 'none';
+            panel.innerHTML = '';
+            panel.dataset.riskTier = 'none';
+            return;
+        }
+
+        const model = this.getMapSituationOverviewModel(chapter);
+        panel.style.display = 'block';
+        panel.dataset.riskTier = model.riskTier || 'none';
+        panel.innerHTML = `
+            <div class="map-overview-head">
+                <span class="map-overview-kicker">局势总览</span>
+                <span class="map-overview-chapter">${this.escapeMapText(model.chapterName)}</span>
+            </div>
+            <div class="map-overview-grid">
+                <div class="map-overview-item">
+                    <span class="map-overview-label">核心标签</span>
+                    <span class="map-overview-value">${this.escapeMapText(model.coreTags.join(' / '))}</span>
+                </div>
+                <div class="map-overview-item">
+                    <span class="map-overview-label">风险等级</span>
+                    <span class="map-overview-value">${this.escapeMapText(model.riskLevel)}</span>
+                </div>
+                <div class="map-overview-item">
+                    <span class="map-overview-label">悬赏进度</span>
+                    <span class="map-overview-value">${this.escapeMapText(model.bountyProgress)}</span>
+                </div>
+                <div class="map-overview-item">
+                    <span class="map-overview-label">势力倾向</span>
+                    <span class="map-overview-value">${this.escapeMapText(model.factionTendency)}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    updateChapterRiskCardPanel(chapter = null, specialWarnings = []) {
+        const panel = document.getElementById('map-chapter-risk-card');
+        if (!panel) return;
+        if (!chapter) {
+            panel.style.display = 'none';
+            panel.innerHTML = '';
+            panel.dataset.riskTier = 'none';
+            return;
+        }
+
+        const dangerProfile = chapter && chapter.dangerProfile ? chapter.dangerProfile : null;
+        const nemesis = chapter && chapter.nemesis ? chapter.nemesis : null;
+        const warningLine = Array.isArray(specialWarnings) && specialWarnings.length > 0
+            ? `前路异象：${specialWarnings.join(' / ')}`
+            : '前路异象：当前以常规战斗节点为主';
+        const highRiskMechanic = dangerProfile
+            ? `${dangerProfile.tierLabel || '风险未定'} · ${dangerProfile.summary || '高压机制正在形成'}`
+            : '风险结构待推演，先用稳态路线收集战场情报。';
+        const defenseStrategy = [
+            dangerProfile?.counterplay || '',
+            nemesis?.counterplay || ''
+        ].filter(Boolean).join('；') || '优先保留防御链与过牌，先稳住前两轮，再决定爆发窗口。';
+        const reserveGuidance = this.getChapterRiskResourceGuidance(dangerProfile, nemesis);
+
+        panel.style.display = 'block';
+        panel.dataset.riskTier = dangerProfile?.tierId || 'none';
+        panel.innerHTML = `
+            <div class="map-risk-kicker">章节风险卡</div>
+            <div class="map-risk-title">${this.escapeMapText((chapter.icon || '⚠️') + ' ' + (chapter.fullName || chapter.name || '当前章节'))}</div>
+            <div class="map-risk-line">
+                <span class="map-risk-label">高危机制</span>
+                <span class="map-risk-value">${this.escapeMapText(highRiskMechanic)} · ${this.escapeMapText(warningLine)}</span>
+            </div>
+            <div class="map-risk-line">
+                <span class="map-risk-label">防御策略</span>
+                <span class="map-risk-value">${this.escapeMapText(defenseStrategy)}</span>
+            </div>
+            <div class="map-risk-line">
+                <span class="map-risk-label">资源预留</span>
+                <span class="map-risk-value">${this.escapeMapText(reserveGuidance)}</span>
+            </div>
+        `;
+    }
+
+    updateChapterBriefPanel() {
+        const panel = document.getElementById('map-chapter-brief');
+        if (!this.game || !this.game.player || typeof this.game.getChapterDisplaySnapshot !== 'function') {
+            return;
+        }
+
+        const chapter = this.game.getChapterDisplaySnapshot(this.game.player.realm);
+        if (!chapter) {
+            if (panel) {
+                panel.style.display = 'none';
+                panel.innerHTML = '';
+            }
+            this.updateMapSituationOverviewPanel(null);
+            this.updateChapterRiskCardPanel(null);
+            return;
+        }
+
+        const specialWarnings = this.collectSpecialWarnings(3);
 
         const bossInfo = this.game && typeof this.game.getRealmBossInfo === 'function'
             ? this.game.getRealmBossInfo(this.game.player.realm)
@@ -1610,9 +1850,30 @@ class GameMap {
         const bossLine = bossInfo && bossInfo.bossName
             ? `${bossInfo.bossName}${chapter.bossPrompt ? ` · ${chapter.bossPrompt}` : ''}`
             : (chapter.bossPrompt || '本章主宰尚未显形。');
+        const dangerProfile = chapter && chapter.dangerProfile ? chapter.dangerProfile : null;
+        const dangerLine = dangerProfile
+            ? `DRI ${dangerProfile.index} · ${dangerProfile.tierLabel} · ${dangerProfile.summary || '风险结构已锁定'}`
+            : 'DRI 待推演 · 风险结构尚未生成';
+        const dangerCounterplay = dangerProfile && dangerProfile.counterplay
+            ? dangerProfile.counterplay
+            : '先以稳态路线探路，再根据战场反馈调整资源分配。';
+        const nemesis = chapter && chapter.nemesis ? chapter.nemesis : null;
+        const nemesisLine = nemesis
+            ? `${nemesis.icon || '🎯'} ${nemesis.name} · ${nemesis.statusLabel || '追猎中'}${nemesis.currentVariantLabel ? ` · ${nemesis.currentVariantLabel}` : ''}${nemesis.triggerNodeLabel ? ` · 出没 ${nemesis.triggerNodeLabel}` : ''}${nemesis.alliedFactionName ? ` · 投靠 ${nemesis.alliedFactionName}` : ''}`
+            : '暂无锁定宿敌，当前以章节规则压力为主。';
+        const nemesisCounterplay = nemesis && nemesis.counterplay
+            ? nemesis.counterplay
+            : '优先确认高压节点的资源底线，避免被突发追击直接打乱节奏。';
+        const nemesisClue = nemesis && nemesis.clueRevealed && nemesis.clueLine
+            ? `线索：${nemesis.clueLine}`
+            : '线索：尚未显露，优先在事件/观星/记忆裂隙里找追猎痕迹。';
 
-        panel.style.display = 'block';
-        panel.innerHTML = `
+        this.updateMapSituationOverviewPanel(chapter);
+        this.updateChapterRiskCardPanel(chapter, specialWarnings);
+
+        if (panel) {
+            panel.style.display = 'block';
+            panel.innerHTML = `
             <div class="chapter-brief-kicker">章节世界规则</div>
             <div class="chapter-brief-header">
                 <div class="chapter-brief-title">${chapter.icon || '☯️'} ${chapter.fullName}</div>
@@ -1627,10 +1888,34 @@ class GameMap {
                 <span class="chapter-line-value">${chapter.leyline?.name || '未定'} · ${chapter.leyline?.desc || '暂无额外变化。'}</span>
             </div>
             <div class="chapter-brief-line compact">
+                <span class="chapter-line-label">风险</span>
+                <span class="chapter-line-value">${dangerLine}</span>
+            </div>
+            <div class="chapter-brief-line compact">
+                <span class="chapter-line-label">对策</span>
+                <span class="chapter-line-value">${dangerCounterplay}</span>
+            </div>
+            <div class="chapter-brief-line compact">
+                <span class="chapter-line-label">宿敌</span>
+                <span class="chapter-line-value">${nemesisLine}</span>
+            </div>
+            <div class="chapter-brief-line compact">
+                <span class="chapter-line-label">追猎</span>
+                <span class="chapter-line-value">${nemesisCounterplay}</span>
+            </div>
+            <div class="chapter-brief-line compact">
+                <span class="chapter-line-label">线索</span>
+                <span class="chapter-line-value">${nemesisClue}</span>
+            </div>
+            <div class="chapter-brief-line compact">
                 <span class="chapter-line-label">主宰</span>
                 <span class="chapter-line-value">${bossLine}</span>
             </div>
             <div class="chapter-brief-chip-row">
+                <span class="chapter-brief-chip dri ${dangerProfile ? `tier-${dangerProfile.tierId || 'medium'}` : 'tier-none'}">${dangerProfile ? `风险指数 · DRI ${dangerProfile.index} / 100` : '风险指数 · 待推演'}</span>
+                <span class="chapter-brief-chip nemesis ${nemesis ? `status-${nemesis.status || 'hunting'}` : 'status-none'}">${nemesis ? `宿敌追猎 · ${nemesis.statusLabel} · 压力 ${nemesis.pressureIndex}` : '宿敌追猎 · 暂无目标'}</span>
+                ${nemesis ? `<span class="chapter-brief-chip nemesis-reward">追猎赏格 · ${nemesis.rewardSummary || '暂无额外收益'}</span>` : ''}
+                ${nemesis && nemesis.currentVariantLabel ? `<span class="chapter-brief-chip nemesis-reward">${nemesis.currentVariantLabel}</span>` : ''}
                 ${(Array.isArray(chapter.focusTags) ? chapter.focusTags : [])
                     .slice(0, 3)
                     .map((tag) => `<span class="chapter-brief-chip">${tag}</span>`)
@@ -1638,11 +1923,13 @@ class GameMap {
                 <span class="chapter-brief-chip warning">前路异象：${specialWarnings.length > 0 ? specialWarnings.join(' / ') : '常规战斗为主'}</span>
             </div>
         `;
-        panel.title = [
-            chapter.stageDesc || '',
-            chapter.routePrompt || '',
-            chapter.bossPrompt || ''
-        ].filter(Boolean).join(' ｜ ');
+            panel.title = [
+                chapter.stageDesc || '',
+                chapter.routePrompt || '',
+                chapter.bossPrompt || '',
+                nemesis && nemesis.intro ? `${nemesis.name}：${nemesis.intro}` : ''
+            ].filter(Boolean).join(' ｜ ');
+        }
     }
 
     updateAdventureBuffPanel() {
@@ -1873,12 +2160,21 @@ class GameMap {
             ? seasonProfile.directiveName
             : '稳态季签';
         const seasonDesc = seasonProfile
-            ? `${seasonProfile.desc || ''}｜季签：${seasonProfile.directiveName} · ${seasonProfile.directiveDesc || '保持稳态推进。'}`
+            ? `${seasonProfile.desc || ''}｜季签：${seasonProfile.directiveName}（${seasonProfile.directiveRiskLabel || '平衡'} / ${seasonProfile.selectionModeLabel || '轮转推荐'}）· ${seasonProfile.directiveDesc || '保持稳态推进。'}`
             : '赛季尚未激活，等待进入无尽轮回后自动加载。';
         const seasonClears = Math.max(0, Math.floor(Number(state?.seasonCycleClears) || 0));
         const seasonBosses = Math.max(0, Math.floor(Number(state?.seasonBossDefeated) || 0));
         const seasonScore = Math.max(0, Math.floor(Number(state?.seasonScore) || 0));
         const seasonBestCycle = Math.max(1, Math.floor(Number(state?.seasonBestCycle) || 1));
+        const seasonGoals = seasonProfile && Array.isArray(seasonProfile.goals)
+            ? seasonProfile.goals
+            : [];
+        const collapseSummary = seasonProfile && Array.isArray(seasonProfile.collapseSummary)
+            ? seasonProfile.collapseSummary
+            : [];
+        const lastCollapse = seasonProfile && seasonProfile.lastCollapse
+            ? seasonProfile.lastCollapse
+            : null;
         const paranoia = (typeof this.game.getEndlessParanoiaEffects === 'function')
             ? this.game.getEndlessParanoiaEffects()
             : null;
@@ -1916,6 +2212,60 @@ class GameMap {
             <div class="endless-theme-desc">${themeDesc}</div>
             <div class="endless-season-desc">${seasonDesc}</div>
             <div class="endless-season-ledger">赛季战绩：已通关 ${seasonClears} 轮 · 主宰 ${seasonBosses} · 赛季积分 ${seasonScore} · 最深第 ${seasonBestCycle} 轮</div>
+            <div class="endless-directive-controls">
+                <div class="endless-section-title">可控风险指令</div>
+                <div class="endless-directive-options">
+                    <button
+                        type="button"
+                        class="endless-directive-option ${seasonProfile?.activeDirectiveSource === 'auto' ? 'active' : ''}"
+                        data-endless-directive="auto"
+                    >
+                        轮转推荐
+                    </button>
+                    ${(seasonProfile?.directiveChoices || []).map((item) => `
+                        <button
+                            type="button"
+                            class="endless-directive-option risk-${item.riskTier || 'balanced'} ${item.selected ? 'active' : ''}"
+                            data-endless-directive="${item.id}"
+                            title="${item.desc || ''}"
+                        >
+                            <span class="directive-name">${item.name}</span>
+                            <span class="directive-risk">${item.riskLabel || '平衡'}</span>
+                        </button>
+                    `).join('')}
+                </div>
+                <div class="endless-directive-note">
+                    当前：${seasonProfile?.directiveName || '稳态令'}（${seasonProfile?.directiveRiskLabel || '平衡'}）｜${seasonProfile?.directiveRiskHint || '收益与风险保持折中，适合常规滚分。'}
+                </div>
+            </div>
+            <div class="endless-season-goals">
+                <div class="endless-section-title">赛季挑战链</div>
+                <div class="endless-season-goal-grid">
+                    ${seasonGoals.length > 0
+                        ? seasonGoals.map((goal) => `
+                            <div class="endless-season-goal ${goal.completed ? 'completed' : 'pending'}">
+                                <div class="goal-tier">${goal.tierLabel}</div>
+                                <div class="goal-title">${goal.title}</div>
+                                <div class="goal-progress">${goal.completed ? '已达成' : (goal.progressText || '进行中')}</div>
+                                <div class="goal-desc">${goal.desc || ''}</div>
+                            </div>
+                        `).join('')
+                        : '<div class="endless-season-goal pending"><div class="goal-title">赛季目标待生成</div><div class="goal-desc">进入本周无尽后会自动生成目标链。</div></div>'}
+                </div>
+            </div>
+            <div class="endless-collapse-ledger">
+                <div class="endless-section-title">崩盘账本</div>
+                <div class="endless-collapse-list">
+                    ${collapseSummary.length > 0
+                        ? collapseSummary.map((item) => `<span class="endless-collapse-chip">${item.label} ${item.count} 次</span>`).join('')
+                        : '<span class="endless-collapse-chip idle">本周暂无崩盘记录</span>'}
+                </div>
+                <div class="endless-collapse-note">
+                    ${lastCollapse && lastCollapse.label
+                        ? `最近一次：${lastCollapse.label}${lastCollapse.desc ? `｜${lastCollapse.desc}` : ''}`
+                        : '账本会在无尽失败后记录主因，方便复盘赛季失分点。'}
+                </div>
+            </div>
             <div class="endless-paranoia-summary">${paranoiaSummary}</div>
             <div class="endless-paranoia-effects">
                 ${paranoiaImpact.length > 0
@@ -1941,6 +2291,15 @@ class GameMap {
             }, 900);
         }
         this.lastEndlessPressure = pressure;
+
+        panel.querySelectorAll('[data-endless-directive]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const directiveId = button.getAttribute('data-endless-directive');
+                if (!this.game || typeof this.game.setEndlessSeasonDirective !== 'function') return;
+                this.game.setEndlessSeasonDirective(directiveId === 'auto' ? null : directiveId);
+                this.updateEndlessPanel();
+            });
+        });
     }
 
     updateLegacyMissionTracker() {

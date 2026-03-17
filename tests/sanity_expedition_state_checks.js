@@ -94,6 +94,20 @@ function loadFile(ctx, filePath) {
     };
     Game.prototype.updatePlayerDisplay = function () {};
     Game.prototype.isEndlessActive = function () { return false; };
+    Game.prototype.getSelectedObservatoryExpeditionGuide = function () {
+      return {
+        id: 'guide_ember_break',
+        title: '观星精选·焚脉试锋',
+        score: 228,
+        seedSignature: 'D-TEST-7A1C',
+        themeKey: 'assault',
+        themeLabel: '前压爆发',
+        featuredTier: '精选命盘',
+        featuredTags: ['前压爆发', '准时冲线', '稳血收官'],
+        preferredNodes: ['enemy', 'elite', 'trial'],
+        expeditionNote: '优先战斗稠密路线，把先手优势换成远征开局节奏。'
+      };
+    };
 
     class GameMap {}
 
@@ -114,6 +128,32 @@ function loadFile(ctx, filePath) {
   assert(initialState.bountyDraft.length === 3, `expedition should draft 3 bounties, got ${initialState.bountyDraft.length}`);
   assert(initialState.factions.length === 3, `expedition should track 3 factions, got ${initialState.factions.length}`);
   assert(initialState.activeNemesis && initialState.activeNemesis.id, 'expedition should generate an active nemesis');
+  assert(initialState.observatoryLink && initialState.observatoryLink.sourceRecordId === 'guide_ember_break', `expedition should read observatory guide into chapter state, got ${JSON.stringify(initialState.observatoryLink)}`);
+  assert(initialState.observatoryLink.bonusOptions.length === 2, `observatory link should expose 2 bonus options, got ${JSON.stringify(initialState.observatoryLink)}`);
+  assert(initialState.observatoryLink.recommendedBranches.length >= 1, `observatory link should suggest branches, got ${JSON.stringify(initialState.observatoryLink.recommendedBranches)}`);
+
+  const observatoryBonus = initialState.observatoryLink.bonusOptions.find((entry) => entry.triggerType === 'node_visit') || initialState.observatoryLink.bonusOptions[0];
+  const observatorySelected = game.selectExpeditionObservatoryBonus(observatoryBonus.id);
+  assert(observatorySelected === true, 'observatory bonus selection should succeed once per chapter');
+  const observatoryState = game.getExpeditionState();
+  assert(observatoryState.observatoryLink.selectedBonusId === observatoryBonus.id, `selected observatory bonus should persist, got ${observatoryState.observatoryLink.selectedBonusId}`);
+  const observatoryResourceBefore = {
+    gold: game.player.gold,
+    ringExp: game.player.fateRing.exp,
+    heavenlyInsight: game.player.heavenlyInsight
+  };
+  game.recordExpeditionNodeVisit({ type: observatoryBonus.nodeTypes[0], accessible: true, completed: false });
+  const observatoryTriggeredState = game.getExpeditionState();
+  assert(
+    observatoryTriggeredState.observatoryLink.bonusOptions.some((entry) => entry.id === observatoryBonus.id && entry.consumed === true),
+    `selected observatory bonus should consume on matching node visit, got ${JSON.stringify(observatoryTriggeredState.observatoryLink)}`
+  );
+  assert(
+    game.player.gold > observatoryResourceBefore.gold
+      || game.player.fateRing.exp > observatoryResourceBefore.ringExp
+      || game.player.heavenlyInsight > observatoryResourceBefore.heavenlyInsight,
+    'observatory bonus trigger should improve at least one resource'
+  );
 
   const branchSelected = game.selectExpeditionBranch(initialState.branchOptions[0].id);
   const afterBranch = game.getExpeditionState();
@@ -153,6 +193,11 @@ function loadFile(ctx, filePath) {
       || game.player.karma > rewardBefore.karma,
     'route bounty completion should improve at least one player resource'
   );
+  const observatoryPayload = game.getExpeditionPayload().observatoryLink;
+  assert(observatoryPayload && observatoryPayload.sourceTitle === '观星精选·焚脉试锋', `expedition payload should expose observatory link, got ${JSON.stringify(observatoryPayload)}`);
+  assert(observatoryPayload.selectedBonusId === observatoryBonus.id, `payload should expose selected observatory bonus, got ${JSON.stringify(observatoryPayload)}`);
+  assert(observatoryPayload.bonusOptions.some((entry) => entry.id === observatoryBonus.id && entry.consumed === true), `selected observatory bonus should be consumed after matching node visit, got ${JSON.stringify(observatoryPayload)}`);
+  assert(game.getBuildSnapshotData().strengths.some((line) => /观星线索/.test(line)), 'build snapshot should mention observatory link guidance');
 
   const nemesisNodeType = progressedState.activeNemesis.triggerNodeTypes[0];
   const buffedEnemies = game.applyExpeditionBattleModifiers([
