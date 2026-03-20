@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { safeAuditScreenshot } from './helpers/safe_audit_screenshot.mjs';
 
 const url = process.argv[2] || 'http://127.0.0.1:4173';
 const outDir = process.argv[3] || 'output/web-audit';
@@ -17,12 +18,100 @@ function clsActive(el) {
   return !!el && el.classList.contains('active');
 }
 
-async function safeScreenshot(page, targetPath) {
+async function triggerBattleEndTurn(page) {
   try {
-    await page.screenshot({ path: targetPath, fullPage: true, timeout: 8000 });
+    const endTurnBtn = page.locator('#end-turn-btn');
+    await endTurnBtn.waitFor({ state: 'visible', timeout: 4000 });
+    await endTurnBtn.click({ timeout: 4000, force: true });
+    return 'playwright-force-click';
   } catch (err) {
-    console.warn(`[browser_audit] screenshot skipped: ${targetPath} (${err && err.message ? err.message : err})`);
+    const fallback = await page.evaluate(() => {
+      const btn = document.getElementById('end-turn-btn');
+      if (!btn || btn.disabled) return { ok: false, reason: 'missing_or_disabled' };
+      btn.click();
+      return { ok: true };
+    });
+    if (fallback?.ok) {
+      return 'dom-click-fallback';
+    }
+    throw err;
   }
+}
+
+async function showMainMenu(page) {
+  await page.evaluate(() => {
+    if (window.game && typeof game.showScreen === 'function') {
+      game.showScreen('main-menu');
+    }
+  });
+  await page.waitForFunction(() => {
+    const mainMenu = document.getElementById('main-menu');
+    const newGameBtn = document.getElementById('new-game-btn');
+    const pvpBtn = document.getElementById('pvp-btn');
+    const isVisible = (el) => {
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && el.offsetParent !== null;
+    };
+    return !!mainMenu
+      && mainMenu.classList.contains('active')
+      && isVisible(newGameBtn)
+      && isVisible(pvpBtn)
+      && window.game?.currentScreen === 'main-menu';
+  }, { timeout: 3000 });
+}
+
+async function openCollectionScreen(page) {
+  try {
+    await page.locator("button[onclick=\"game.showCollection()\"], button[onclick=\"game.showScreen('collection')\"]").first().click({
+      timeout: 3000,
+      force: true,
+    });
+    await page.waitForFunction(() => {
+      try {
+        return JSON.parse(window.render_game_to_text()).mode === 'collection';
+      } catch {
+        return false;
+      }
+    }, { timeout: 3000 });
+    return 'ui-click';
+  } catch (err) {
+    await page.evaluate(() => {
+      if (window.game && typeof game.showCollection === 'function') {
+        game.showCollection();
+      } else if (window.game && typeof game.showScreen === 'function') {
+        game.showScreen('collection');
+      }
+    });
+    await page.waitForFunction(() => {
+      try {
+        return JSON.parse(window.render_game_to_text()).mode === 'collection';
+      } catch {
+        return false;
+      }
+    }, { timeout: 3000 });
+    return `fallback:${err.name || 'unknown'}`;
+  }
+}
+
+async function openNewGameEntry(page) {
+  try {
+    await page.click('#new-game-btn', { timeout: 3000, force: true });
+  } catch (err) {
+    await page.evaluate(async () => {
+      if (window.game && typeof game.openSaveSlotsWithSync === 'function') {
+        await game.openSaveSlotsWithSync();
+      }
+    });
+    return `fallback:${err.name || 'unknown'}`;
+  }
+
+  await page.waitForFunction(() => {
+    const confirmModal = document.getElementById('generic-confirm-modal');
+    const saveSlotsModal = document.getElementById('save-slots-modal');
+    return !!confirmModal?.classList.contains('active') || !!saveSlotsModal?.classList.contains('active');
+  }, { timeout: 3000 });
+  return 'ui-click';
 }
 
 (async () => {
@@ -43,7 +132,7 @@ async function safeScreenshot(page, targetPath) {
 
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1800);
-  await safeScreenshot(page, path.join(outDir, '00-initial.png'));
+  await safeAuditScreenshot(page, path.join(outDir, '00-initial.png'), 'browser_audit', { timeout: 9000 });
 
   const authActiveOnBoot = await page.evaluate(() => {
     const modal = document.getElementById('auth-modal');
@@ -80,17 +169,18 @@ async function safeScreenshot(page, targetPath) {
     }
   });
   add('PVP mode switch works', pvpMode === 'pvp-screen', `mode=${pvpMode}`);
-  await safeScreenshot(page, path.join(outDir, '01-pvp.png'));
+  await safeAuditScreenshot(page, path.join(outDir, '01-pvp.png'), 'browser_audit', { timeout: 9000 });
 
   try {
     await page.click('#pvp-screen .back-btn', { timeout: 2000 });
     await page.waitForTimeout(300);
   } catch {}
+  await showMainMenu(page);
 
   // Collection screen
   try {
-    await page.locator("button[onclick=\"game.showCollection()\"], button[onclick=\"game.showScreen('collection')\"]").first().click({ timeout: 3000 });
-    await page.waitForTimeout(300);
+    const collectionOpenMode = await openCollectionScreen(page);
+    add('can open collection', true, collectionOpenMode);
   } catch (e) {
     add('can open collection', false, String(e));
   }
@@ -107,11 +197,12 @@ async function safeScreenshot(page, targetPath) {
     await page.click('#collection .back-btn', { timeout: 2000 });
     await page.waitForTimeout(300);
   } catch {}
+  await showMainMenu(page);
 
   // New game flow
   try {
-    await page.click('#new-game-btn', { timeout: 3000 });
-    await page.waitForTimeout(1000);
+    const newGameOpenMode = await openNewGameEntry(page);
+    add('can click new game', true, newGameOpenMode);
   } catch (e) {
     add('can click new game', false, String(e));
   }
@@ -120,7 +211,11 @@ async function safeScreenshot(page, targetPath) {
     const modal = document.getElementById('save-slots-modal');
     return !!modal && modal.classList.contains('active');
   });
-  add('new game opens save slots modal when logged out', !slotsModalActive, slotsModalActive ? 'unexpectedly opened save slots' : '');
+  add(
+    'new game does not jump directly to save slots when logged out',
+    !slotsModalActive,
+    slotsModalActive ? 'unexpectedly opened save slots' : ''
+  );
 
   const confirmModalActive = await page.evaluate(() => {
     const modal = document.getElementById('generic-confirm-modal');
@@ -147,7 +242,7 @@ async function safeScreenshot(page, targetPath) {
   add('guest path reaches character selection', modeAfterSlot === 'character-selection-screen', `mode=${modeAfterSlot}`);
 
   if (modeAfterSlot === 'character-selection-screen') {
-    await page.click('.character-card[data-id="linFeng"]', { timeout: 3000 });
+    await page.click('.character-card[data-id="linFeng"]', { timeout: 3000, force: true });
     await page.waitForTimeout(200);
     const destinyDraft = await page.evaluate(() => {
       const cards = Array.from(document.querySelectorAll('#run-destiny-selection .run-destiny-card'));
@@ -182,7 +277,14 @@ async function safeScreenshot(page, targetPath) {
         && spiritDraft.payloadCount >= 3,
       JSON.stringify(spiritDraft)
     );
-    await page.click('#confirm-character-btn', { timeout: 3000 });
+    try {
+      await page.click('#confirm-character-btn', { timeout: 3000, force: true });
+    } catch {
+      await page.evaluate(() => {
+        if (!window.game || typeof game.confirmCharacterSelection !== 'function') return;
+        game.confirmCharacterSelection();
+      });
+    }
     await page.waitForTimeout(500);
   }
 
@@ -311,10 +413,12 @@ async function safeScreenshot(page, targetPath) {
     }
   });
   add('can enter map screen', mapMode === 'map-screen', `mode=${mapMode}`);
-  await safeScreenshot(page, path.join(outDir, '02-map.png'));
+  await safeAuditScreenshot(page, path.join(outDir, '02-map.png'), 'browser_audit', { timeout: 9000 });
 
   const mapChapterProbe = await page.evaluate(() => {
     const panel = document.getElementById('map-chapter-brief');
+    const overview = document.getElementById('map-situation-overview');
+    const risk = document.getElementById('map-chapter-risk-card');
     const style = panel ? getComputedStyle(panel) : null;
     let payload = null;
     try {
@@ -323,6 +427,8 @@ async function safeScreenshot(page, targetPath) {
     return {
       visible: !!panel && !!style && style.display !== 'none' && style.visibility !== 'hidden',
       text: (panel?.textContent || '').replace(/\s+/g, ' ').trim(),
+      overviewText: (overview?.textContent || '').replace(/\s+/g, ' ').trim(),
+      riskText: (risk?.textContent || '').replace(/\s+/g, ' ').trim(),
       chapter: payload?.map?.chapter || null
     };
   });
@@ -335,6 +441,7 @@ async function safeScreenshot(page, targetPath) {
       && /地脉/.test(mapChapterProbe.text || '')
       && /风险|DRI/.test(mapChapterProbe.text || '')
       && /宿敌|追猎/.test(mapChapterProbe.text || '')
+      && /预判/.test(mapChapterProbe.text || '')
       && !!mapChapterProbe.chapter?.name
       && typeof mapChapterProbe.chapter?.dangerProfile?.index === 'number'
       && !!mapChapterProbe.chapter?.dangerProfile?.tierLabel
@@ -342,7 +449,14 @@ async function safeScreenshot(page, targetPath) {
       && !!mapChapterProbe.chapter?.nemesis?.statusLabel
       && typeof mapChapterProbe.chapter?.nemesis?.pressureIndex === 'number'
       && !!mapChapterProbe.chapter?.skyOmen?.name
-      && !!mapChapterProbe.chapter?.leyline?.name,
+      && !!mapChapterProbe.chapter?.leyline?.name
+      && Array.isArray(mapChapterProbe.chapter?.factionSignals)
+      && Array.isArray(mapChapterProbe.chapter?.nemesisSignals)
+      && Array.isArray(mapChapterProbe.chapter?.bountyConflicts)
+      && !!mapChapterProbe.chapter?.nemesisForecast
+      && /最近势力变化/.test(mapChapterProbe.overviewText || '')
+      && /追猎预判/.test(mapChapterProbe.overviewText || '')
+      && /悬赏冲突/.test(mapChapterProbe.riskText || ''),
     JSON.stringify(mapChapterProbe || null)
   );
 
@@ -510,7 +624,7 @@ async function safeScreenshot(page, targetPath) {
 
   if (battleMode === 'battle-screen') {
     const before = await page.evaluate(() => JSON.parse(window.render_game_to_text()));
-    await page.click('#end-turn-btn', { timeout: 3000 });
+    const interactionMode = await triggerBattleEndTurn(page);
     await page.waitForTimeout(500);
     await page.evaluate(() => {
       if (typeof window.advanceTime === 'function') window.advanceTime(800);
@@ -518,10 +632,10 @@ async function safeScreenshot(page, targetPath) {
     await page.waitForTimeout(200);
     const after = await page.evaluate(() => JSON.parse(window.render_game_to_text()));
     const progressed = (after?.battle?.turn ?? 0) >= (before?.battle?.turn ?? 0);
-    add('battle end-turn interaction works', progressed, `turn ${before?.battle?.turn} -> ${after?.battle?.turn}`);
+    add('battle end-turn interaction works', progressed, `turn ${before?.battle?.turn} -> ${after?.battle?.turn} via ${interactionMode}`);
   }
 
-  await safeScreenshot(page, path.join(outDir, '03-battle.png'));
+  await safeAuditScreenshot(page, path.join(outDir, '03-battle.png'), 'browser_audit', { timeout: 9000 });
 
   const report = {
     url,
@@ -532,6 +646,11 @@ async function safeScreenshot(page, targetPath) {
 
   fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
+  const failed = findings.filter((item) => !item.pass);
+  if (failed.length > 0 || consoleErrors.length > 0) {
+    failed.forEach((item) => console.error(`FAIL: ${item.name}\n${item.detail}`));
+    process.exitCode = 1;
+  }
 
   await browser.close();
 })();

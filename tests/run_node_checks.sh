@@ -10,6 +10,7 @@ node tests/sanity_expansion_system_checks.js
 node tests/sanity_event_flow_checks.js
 node tests/sanity_content_archetype_checks.js
 node tests/sanity_event_bias_distribution_checks.js
+node tests/sanity_engineering_event_surface_checks.js
 node tests/sanity_battle_pollution_checks.js
 node tests/sanity_battle_debuff_checks.js
 node tests/sanity_battle_guardbreak_checks.js
@@ -40,6 +41,7 @@ node tests/sanity_codex_unlock_flow_checks.js
 node tests/sanity_enemy_codex_checks.js
 node tests/sanity_boss_memory_battle_checks.js
 node tests/sanity_weekly_challenge_checks.js
+node tests/sanity_challenge_danger_profile_checks.js
 node tests/sanity_observatory_archive_checks.js
 node tests/sanity_spirit_companion_checks.js
 node tests/sanity_forge_workshop_checks.js
@@ -50,6 +52,10 @@ node tests/sanity_enemy_ecology_diversity_checks.js
 node tests/sanity_map_weight_checks.js
 node tests/sanity_map_path_synergy_checks.js
 node tests/sanity_map_ghost_duel_checks.js
+node tests/sanity_map_node_risk_checks.js
+node tests/sanity_map_engineering_progress_checks.js
+node tests/sanity_map_faction_bounty_signal_checks.js
+node tests/sanity_reward_modal_closure_checks.js
 node tests/sanity_legacy_progression_checks.js
 node tests/sanity_entropy_doctrine_checks.js
 node tests/sanity_stormcraft_vitalweave_resonance_checks.js
@@ -64,6 +70,7 @@ node tests/sanity_adventure_buff_checks.js
 node tests/sanity_pvp_service_checks.js
 node tests/sanity_pvp_shop_checks.js
 node tests/sanity_shop_strategy_system_checks.js
+node tests/sanity_expedition_completion_gate_checks.js
 node tests/sanity_expedition_state_checks.js
 node tests/sanity_expedition_nemesis_depth_checks.js
 node tests/sanity_planning_todo_checks.js

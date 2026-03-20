@@ -54,7 +54,9 @@ async function runScenario(browser, scenario) {
     selectedRunPathId: window.game?.selectedRunPathId || null,
     runPathTrackerText: document.getElementById('map-run-path-mission')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     selectedCardCount: document.querySelectorAll('#run-path-selection .run-path-card.selected').length,
-    selectedPathName: document.querySelector('#run-path-selection .run-path-card.selected .run-destiny-name')?.textContent?.trim() || ''
+    selectedPathName: document.querySelector('#run-path-selection .run-path-card.selected .run-destiny-name')?.textContent?.trim() || '',
+    pvpTitle: document.querySelector('#pvp-ranking-brief .pvp-risk-title')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    pvpHint: document.getElementById('pvp-challenge-intent')?.textContent?.replace(/\s+/g, ' ').trim() || ''
   }));
 
   const pass = scenario.assert({ payload, probe });
@@ -101,6 +103,21 @@ const scenarios = [
         && payload?.player?.runPath?.id === 'insight'
         && runPathItem?.value === '窥命流';
     }
+  },
+  {
+    id: 'guest-pvp',
+    query: '?autotest=guest-pvp',
+    name: 'automation boot can land on pvp ranking with focus brief visible',
+    assert: ({ payload, probe }) => (
+      probe.screen === 'pvp-screen'
+      && probe.guestMode
+      && payload?.mode === 'pvp-screen'
+      && payload?.pvp?.activeTab === 'ranking'
+      && !!payload?.pvp?.rankingFocus?.rank?.user?.username
+      && !!payload?.pvp?.rankingFocus?.duelBrief?.targetName
+      && /焦点对手/.test(probe.pvpTitle)
+      && /已锁定|可锁定|约战/.test(probe.pvpHint)
+    )
   }
 ];
 

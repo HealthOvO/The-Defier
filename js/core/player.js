@@ -28,6 +28,17 @@ class Player {
             nextRealmTarget: null,
             history: []
         };
+        this.strategicEngineering = {
+            version: 1,
+            lastAdvancedTrackId: '',
+            history: [],
+            tracks: {
+                observatory: { progress: 0, tier: 0, lastRealm: 0 },
+                spirit_grotto: { progress: 0, tier: 0, lastRealm: 0 },
+                forbidden_altar: { progress: 0, tier: 0, lastRealm: 0 },
+                memory_rift: { progress: 0, tier: 0, lastRealm: 0 }
+            }
+        };
 
         // 战斗属性
         this.baseEnergy = charData.stats.energy;
@@ -4349,6 +4360,7 @@ class Player {
             heavenlyInsight: this.heavenlyInsight,
             karma: this.karma,
             shopRumors: this.shopRumors,
+            strategicEngineering: this.strategicEngineering,
             currentEnergy: this.currentEnergy,
             baseEnergy: this.baseEnergy,
             // 压缩卡牌数据：只保存关键属性

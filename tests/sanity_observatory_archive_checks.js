@@ -121,8 +121,10 @@ function loadFile(ctx, filePath) {
   assert(challengeArchive && challengeArchive.seedSignature === bundle.seedSignature, 'completed challenge should create replayable archive record with same seed signature');
   assert(challengeArchive.themeLabel && challengeArchive.featuredTier, `challenge archive should expose theme and tier, got ${JSON.stringify(challengeArchive)}`);
   assert(Array.isArray(challengeArchive.featuredTags) && challengeArchive.featuredTags.length >= 2, `challenge archive should expose featured tags, got ${JSON.stringify(challengeArchive.featuredTags)}`);
+  assert(challengeArchive.insight && challengeArchive.insight.title && challengeArchive.insight.summary, `challenge archive should expose replay insight, got ${JSON.stringify(challengeArchive && challengeArchive.insight)}`);
   const defaultGuide = game.getSelectedObservatoryExpeditionGuide();
   assert(defaultGuide && defaultGuide.id === challengeArchive.id, `latest featured archive should become default expedition guide, got ${JSON.stringify(defaultGuide)}`);
+  assert(defaultGuide && defaultGuide.insight && defaultGuide.insight.title, `selected guide should expose archive insight, got ${JSON.stringify(defaultGuide)}`);
 
   game.applyChallengeRunStart(bundle);
   game.activeChallengeRun.progress.battleWins = 3;
@@ -133,6 +135,7 @@ function loadFile(ctx, filePath) {
   assert(secondCompleted && secondCompleted.completed === true, 'second challenge completion should also finalize');
   const comparison = game.buildObservatoryThemeComparison({ mode: 'daily', rule: bundle.rule });
   assert(comparison.entries.length >= 2, `same-theme comparison should expose at least two archive samples, got ${JSON.stringify(comparison)}`);
+  assert(comparison.entries.every((entry) => entry && entry.insight && entry.insight.title), `same-theme comparison entries should expose insight, got ${JSON.stringify(comparison.entries)}`);
   const alternateGuide = comparison.entries.find((entry) => entry.id !== challengeArchive.id);
   assert(alternateGuide && game.selectObservatoryExpeditionGuide(alternateGuide.id, { silent: true }) === true, 'player should be able to switch expedition guide inside same-theme comparison');
   const switchedGuide = game.getSelectedObservatoryExpeditionGuide();
@@ -142,12 +145,16 @@ function loadFile(ctx, filePath) {
   assert(replayStarted === true, 'beginObservatoryReplay should start a pending replay');
   assert(game.pendingChallengeStart && game.pendingChallengeStart.replayOnly === true, 'pending replay should mark replayOnly');
   assert(game.pendingChallengeStart.bundleSnapshot && game.pendingChallengeStart.bundleSnapshot.replayOnly === true, 'pending replay should carry replay bundle snapshot');
+  assert(game.pendingChallengeStart.archiveInsight && /回放/.test(game.pendingChallengeStart.archiveInsight.title || ''), `pending replay should carry replay insight, got ${JSON.stringify(game.pendingChallengeStart && game.pendingChallengeStart.archiveInsight)}`);
 
   const completionsBeforeReplay = progressEntry.completions;
   game.startNewGame('linFeng');
   assert(game.activeChallengeRun && game.activeChallengeRun.replayOnly === true, 'replay start should create replayOnly active run');
   assert(game.activeChallengeRun.archiveEntryId === challengeArchive.id, `replay run should remember source archive id, got ${game.activeChallengeRun.archiveEntryId}`);
   assert(game.startedRealm === 1, `replay start should enter realm 1, got ${game.startedRealm}`);
+  assert(game.activeChallengeRun.archiveInsight && /回放/.test(game.activeChallengeRun.archiveInsight.title || ''), `active replay should preserve replay insight, got ${JSON.stringify(game.activeChallengeRun && game.activeChallengeRun.archiveInsight)}`);
+  const replayPayload = game.getChallengeHubPayload();
+  assert(replayPayload.activeRun && replayPayload.activeRun.archiveInsight && replayPayload.activeRun.archiveInsight.title, `payload should expose replay run insight, got ${JSON.stringify(replayPayload.activeRun)}`);
 
   game.activeChallengeRun.progress.battleWins = 1;
   game.player.currentHp = 50;
@@ -159,6 +166,7 @@ function loadFile(ctx, filePath) {
   const latestArchive = game.getObservatoryArchiveEntries({ limit: 1 })[0];
   assert(latestArchive && latestArchive.type === 'replay', `latest archive should be replay result, got ${JSON.stringify(latestArchive)}`);
   assert(/回放不计奖励/.test(latestArchive.note || ''), `replay note should mention non-reward replay, got ${latestArchive.note}`);
+  assert(latestArchive.insight && /回放/.test(latestArchive.insight.title || ''), `replay archive should expose replay insight, got ${JSON.stringify(latestArchive && latestArchive.insight)}`);
   assert(game.unlocks.some((entry) => /命盘回放/.test(entry.name || '')), 'replay result should also appear in unlock feed');
 
   game.currentScreen = 'challenge-screen';
@@ -168,8 +176,11 @@ function loadFile(ctx, filePath) {
   assert(payload.archive && payload.archive.totalRecords >= 3, `payload should expose archive summary, got ${JSON.stringify(payload.archive)}`);
   assert(payload.hub && payload.hub.seedSignature === liveHubBundle.seedSignature, `hub payload should expose live seed signature, got ${JSON.stringify(payload.hub)}`);
   assert(payload.archive.selectedGuideId === switchedGuide.id, `payload should expose selected expedition guide, got ${JSON.stringify(payload.archive)}`);
+  assert(payload.archive.latestInsight && payload.archive.latestInsight.summary && payload.archive.latestInsight.focusLines.length >= 1, `archive payload should expose latest insight detail, got ${JSON.stringify(payload.archive)}`);
+  assert(payload.archive.latestInsightTitle && /回放|复刻|剖面/.test(payload.archive.latestInsightTitle), `archive payload should expose latest insight label, got ${JSON.stringify(payload.archive)}`);
   assert(payload.hub.comparisonCount >= 2, `payload should expose same-theme comparison count, got ${JSON.stringify(payload.hub)}`);
   assert(payload.observatoryGuide && payload.observatoryGuide.featuredTags.length >= 2, `payload should expose observatory guide tags, got ${JSON.stringify(payload.observatoryGuide)}`);
+  assert(payload.observatoryGuide && payload.observatoryGuide.insight && payload.observatoryGuide.insight.title, `payload should expose observatory guide insight, got ${JSON.stringify(payload.observatoryGuide)}`);
 
   console.log('Observatory archive checks passed.');
 })();

@@ -4,6 +4,9 @@
     const ACTIVE_EXPEDITION_STATE_KEY = 'theDefierActiveExpeditionStateV1';
     const RUN_SLATE_ARCHIVE_KEY = 'theDefierRunSlateArchiveV1';
     const MAX_ACTIVE_BOUNTIES = 2;
+    const MAX_FACTION_HISTORY = 12;
+    const MAX_NEMESIS_HISTORY = 12;
+    const DEFAULT_FACTION_REASON = '本章初入，局势仍未定盘。';
 
     const originalStartRealm = Game.prototype.startRealm;
     const originalAdvanceToNextRealm = Game.prototype.advanceToNextRealm;
@@ -27,6 +30,9 @@
     const originalMapOnNodeClick = typeof GameMap !== 'undefined' && GameMap?.prototype
         ? GameMap.prototype.onNodeClick
         : null;
+    const originalMapCompleteNode = typeof GameMap !== 'undefined' && GameMap?.prototype
+        ? GameMap.prototype.completeNode
+        : null;
 
     const safeNumber = (value, fallback = 0) => {
         const num = Number(value);
@@ -36,6 +42,13 @@
     const clampInt = (value, min = 0, max = Number.MAX_SAFE_INTEGER) => {
         const num = Math.floor(safeNumber(value, min));
         return Math.max(min, Math.min(max, num));
+    };
+
+    const isMapNodeMarkedCompleted = (mapInstance, node) => {
+        if (!node || !mapInstance || !Array.isArray(mapInstance.nodes)) return false;
+        const nodeId = String(node.id || '');
+        if (!nodeId) return !!node.completed;
+        return mapInstance.nodes.some((row) => Array.isArray(row) && row.some((entry) => entry && entry.id === nodeId && entry.completed));
     };
 
     const escapeHtml = (value) => String(value ?? '')
@@ -82,6 +95,79 @@
     };
 
     const readArray = (value) => (Array.isArray(value) ? value.filter(Boolean) : []);
+
+    const EXPEDITION_NODE_LABELS = {
+        enemy: '敌阵',
+        elite: '精英',
+        boss: '首领',
+        event: '事件',
+        shop: '商店',
+        rest: '营地',
+        trial: '试炼',
+        forge: '炼器坊',
+        observatory: '观星台',
+        spirit_grotto: '灵契窟',
+        forbidden_altar: '禁术坛',
+        memory_rift: '记忆裂隙'
+    };
+
+    const getExpeditionNodeLabel = (type = '') => (
+        EXPEDITION_NODE_LABELS[String(type || '')] || String(type || '未知节点')
+    );
+
+    const getExpeditionNodeLabels = (nodeTypes = [], limit = 3) => Array.from(new Set(
+        readArray(nodeTypes)
+            .map((value) => getExpeditionNodeLabel(value))
+            .filter(Boolean)
+    )).slice(0, Math.max(1, clampInt(limit, 1, 6)));
+
+    const formatExpeditionNodeLabels = (nodeTypes = [], fallback = '关键线路', limit = 3) => {
+        const labels = getExpeditionNodeLabels(nodeTypes, limit);
+        return labels.length > 0 ? labels.join(' / ') : fallback;
+    };
+
+    const getStrategicEngineeringExpeditionTrackProfile = (trackId = '') => {
+        switch (String(trackId || '')) {
+            case 'observatory':
+                return {
+                    routeNodeTypes: ['observatory', 'event', 'memory_rift'],
+                    pressureDeltas: [0, -2, -4, -6],
+                    routeDirective: '观测锁线',
+                    rewardBias: '情报前置',
+                    pressureBias: '稳读预警',
+                    nemesisModifier: '观测锁线'
+                };
+            case 'memory_rift':
+                return {
+                    routeNodeTypes: ['memory_rift', 'event', 'observatory'],
+                    pressureDeltas: [0, 2, 4, 6],
+                    routeDirective: '裂隙改道',
+                    rewardBias: '高收益改写',
+                    pressureBias: '错位波动',
+                    nemesisModifier: '裂隙改道'
+                };
+            case 'forbidden_altar':
+                return {
+                    routeNodeTypes: ['forbidden_altar', 'elite', 'trial'],
+                    pressureDeltas: [0, 2, 4, 6],
+                    routeDirective: '禁术压强',
+                    rewardBias: '献祭收割',
+                    pressureBias: '血契增压',
+                    nemesisModifier: '血契增压'
+                };
+            case 'spirit_grotto':
+                return {
+                    routeNodeTypes: ['spirit_grotto', 'rest', 'observatory'],
+                    pressureDeltas: [0, -1, -3, -5],
+                    routeDirective: '护送稳线',
+                    rewardBias: '护送续航',
+                    pressureBias: '缓冲兜底',
+                    nemesisModifier: '护送稳线'
+                };
+            default:
+                return null;
+        }
+    };
 
     const normalizeReward = (reward = null) => {
         const source = reward && typeof reward === 'object' ? reward : {};
@@ -264,6 +350,129 @@
         return `${clampInt(bounty.progress, 0, 999)}/${clampInt(condition.target, 1, 999)}`;
     };
 
+    const getBountyFocusNodeTypes = (bounty = null) => {
+        const condition = bounty?.condition || {};
+        switch (condition.type) {
+            case 'visitNodeType':
+                return condition.nodeType ? [String(condition.nodeType)] : [];
+            case 'eliteWins':
+                return ['elite', 'trial'];
+            case 'battleWins':
+                return ['enemy', 'elite', 'trial', 'boss'];
+            case 'noRestBossWin':
+                return ['enemy', 'elite', 'trial', 'boss'];
+            case 'hpAboveOnBossWin':
+                return ['rest', 'shop', 'observatory', 'boss'];
+            default:
+                return [];
+        }
+    };
+
+    const getBountyAvoidNodeTypes = (bounty = null) => {
+        const condition = bounty?.condition || {};
+        switch (condition.type) {
+            case 'noRestBossWin':
+                return ['rest'];
+            case 'hpAboveOnBossWin':
+                return ['forbidden_altar'];
+            default:
+                return [];
+        }
+    };
+
+    const isPressureBounty = (bounty = null) => {
+        const condition = bounty?.condition || {};
+        return ['battleWins', 'eliteWins', 'noRestBossWin'].includes(condition.type)
+            || String(bounty?.id || '') === 'altar_oath'
+            || String(bounty?.id || '') === 'trial_verdict';
+    };
+
+    const isStabilityBounty = (bounty = null) => (
+        String(bounty?.condition?.type || '') === 'hpAboveOnBossWin'
+    );
+
+    const getConflictSeverityWeight = (severity = 'low') => {
+        if (severity === 'high') return 3;
+        if (severity === 'medium') return 2;
+        return 1;
+    };
+
+    const normalizeFactionHistoryEntry = (entry = null, index = 0) => {
+        const source = entry && typeof entry === 'object' ? entry : {};
+        const delta = clampInt(source.delta, -3, 3);
+        const factionName = String(source.factionName || source.name || '未知势力');
+        const reason = String(source.reason || '');
+        const stanceAfter = clampInt(source.stanceAfter ?? source.stance ?? 0, -3, 3);
+        const deltaLabel = delta > 0 ? `+${delta}` : String(delta);
+        return {
+            id: String(source.id || `faction_log_${index}`),
+            factionId: String(source.factionId || ''),
+            factionName,
+            delta,
+            deltaLabel,
+            stanceAfter,
+            stanceLabel: getFactionStatusMeta(stanceAfter).label,
+            reason,
+            sourceType: String(source.sourceType || 'system'),
+            line: String(source.line || `${factionName}${delta ? ` ${delta > 0 ? '↑' : '↓'}${Math.abs(delta)}` : ''} · ${reason || '局势出现了新的变化。'}`),
+            timestamp: clampInt(source.timestamp, 0) || Date.now()
+        };
+    };
+
+    const normalizeNemesisHistoryEntry = (entry = null, index = 0) => {
+        const source = entry && typeof entry === 'object' ? entry : {};
+        const status = normalizeNemesisStatus(source.status || source.fateOutcome || 'hunting');
+        const meta = getNemesisStatusMeta(status);
+        const severity = ['low', 'medium', 'high'].includes(String(source.severity || ''))
+            ? String(source.severity)
+            : (['guarding', 'evolved', 'escaped'].includes(status) ? 'high' : ['allied', 'recurring', 'hunting'].includes(status) ? 'medium' : 'low');
+        const title = String(source.title || meta.label);
+        const detail = String(source.detail || source.reason || source.note || '');
+        return {
+            id: String(source.id || `nemesis_log_${index}`),
+            status,
+            statusLabel: meta.label,
+            severity,
+            title,
+            detail,
+            counterplay: String(source.counterplay || ''),
+            sourceType: String(source.sourceType || 'system'),
+            nodeTypes: readArray(source.nodeTypes).map((value) => String(value || '')).filter(Boolean).slice(0, 4),
+            line: String(source.line || `${title}${detail ? ` · ${detail}` : ''}`),
+            timestamp: clampInt(source.timestamp, 0) || Date.now()
+        };
+    };
+
+    const normalizeConflictWarning = (entry = null, index = 0) => {
+        const source = entry && typeof entry === 'object' ? entry : {};
+        const severity = ['low', 'medium', 'high'].includes(String(source.severity || ''))
+            ? String(source.severity)
+            : 'low';
+        const bountyName = String(source.bountyName || '当前悬赏');
+        const label = String(source.label || '冲突提示');
+        const detail = String(source.detail || '');
+        const suggestion = String(source.suggestion || '');
+        return {
+            id: String(source.id || `bounty_conflict_${index}`),
+            bountyId: String(source.bountyId || ''),
+            bountyName,
+            severity,
+            sourceType: String(source.sourceType || 'system'),
+            label,
+            detail,
+            suggestion,
+            factionId: String(source.factionId || ''),
+            factionName: String(source.factionName || ''),
+            engineeringTrackId: String(source.engineeringTrackId || ''),
+            engineeringTrackName: String(source.engineeringTrackName || ''),
+            engineeringThemeLabel: String(source.engineeringThemeLabel || ''),
+            engineeringNote: String(source.engineeringNote || ''),
+            routeDivergence: String(source.routeDivergence || ''),
+            nodeTypes: readArray(source.nodeTypes).map((value) => String(value || '')).filter(Boolean).slice(0, 4),
+            line: String(source.line || `${bountyName} · ${label}${detail ? `：${detail}` : ''}`)
+        };
+    };
+
     const getFactionStatusMeta = (stance = 0) => {
         if (stance >= 2) return { tone: 'allied', label: '结盟', nextHint: '已进入支援阈值' };
         if (stance <= -2) return { tone: 'hostile', label: '敌意', nextHint: '已进入敌意阈值' };
@@ -310,6 +519,57 @@
     const getNemesisStatusMeta = (status = 'hunting') => (
         NEMESIS_STATUS_META[normalizeNemesisStatus(status)] || NEMESIS_STATUS_META.hunting
     );
+
+    const getNemesisPressureMeta = (score = 0) => {
+        const safeScore = clampInt(score, 0, 100);
+        if (safeScore >= 78) return { tierId: 'extreme', label: '极高压' };
+        if (safeScore >= 58) return { tierId: 'high', label: '高压' };
+        if (safeScore >= 34) return { tierId: 'medium', label: '拉扯' };
+        return { tierId: 'low', label: '试探' };
+    };
+
+    const EXPEDITION_ENGINEERING_SIGNAL_META = {
+        observatory: {
+            themeLabel: '观测锁线',
+            windowPrefix: '观测锁线',
+            preferredNodeTypes: ['observatory', 'event', 'memory_rift'],
+            pressureDeltaByTier: [0, -2, -4, -6],
+            overlapPressureDeltaByTier: [0, -1, -1, -2],
+            rewardBiasLabel: '情报 / 锁线',
+            pressureBiasLabel: '缓压',
+            summaryLine: '观测网会提前显露追猎窗口，并把路线分歧转成可读情报。'
+        },
+        memory_rift: {
+            themeLabel: '裂隙改道',
+            windowPrefix: '裂隙改道',
+            preferredNodeTypes: ['memory_rift', 'event', 'observatory'],
+            pressureDeltaByTier: [0, 2, 4, 6],
+            overlapPressureDeltaByTier: [0, 1, 2, 2],
+            rewardBiasLabel: '改写 / 绕行',
+            pressureBiasLabel: '错位高压',
+            summaryLine: '裂隙回响会改写既定路网，让高收益节点与追猎窗口更容易发生错位。'
+        },
+        spirit_grotto: {
+            themeLabel: '护送稳线',
+            windowPrefix: '护送稳线',
+            preferredNodeTypes: ['spirit_grotto', 'rest', 'observatory'],
+            pressureDeltaByTier: [0, -1, -3, -5],
+            overlapPressureDeltaByTier: [0, -1, -1, -2],
+            rewardBiasLabel: '援护 / 续航',
+            pressureBiasLabel: '稳线',
+            summaryLine: '灵契护道会抹平追猎波峰，把路线风险压回可控区间。'
+        },
+        forbidden_altar: {
+            themeLabel: '禁术压强',
+            windowPrefix: '血契逼战',
+            preferredNodeTypes: ['forbidden_altar', 'trial', 'elite', 'enemy'],
+            pressureDeltaByTier: [0, 2, 4, 6],
+            overlapPressureDeltaByTier: [0, 1, 2, 2],
+            rewardBiasLabel: '高压 / 爆发',
+            pressureBiasLabel: '升压',
+            summaryLine: '血契链路会把高压收益和追猎风险一起抬高，逼你更早交答卷。'
+        }
+    };
 
     Game.prototype.loadActiveExpeditionState = function () {
         try {
@@ -437,6 +697,12 @@
             stance: clampInt(entry.stance, -3, 3),
             lastReason: String(entry.lastReason || '')
         })).filter((entry) => entry.id);
+        const factionHistory = readArray(source.factionHistory)
+            .map((entry, index) => normalizeFactionHistoryEntry(entry, index))
+            .slice(-MAX_FACTION_HISTORY);
+        const nemesisHistory = readArray(source.nemesisHistory)
+            .map((entry, index) => normalizeNemesisHistoryEntry(entry, index))
+            .slice(-MAX_NEMESIS_HISTORY);
         const nemesisSource = source.activeNemesis && typeof source.activeNemesis === 'object' ? source.activeNemesis : {};
         return {
             realm: clampInt(source.realm, 1, 18),
@@ -450,6 +716,8 @@
             activeBountyIds: readArray(source.activeBountyIds).map((value) => String(value || '')).filter(Boolean).slice(0, MAX_ACTIVE_BOUNTIES),
             observatoryLink: normalizeExpeditionObservatoryLink(source.observatoryLink),
             factions,
+            factionHistory,
+            nemesisHistory,
             activeNemesis: nemesisSource.id ? {
                 id: String(nemesisSource.id || ''),
                 icon: String(nemesisSource.icon || '⚔️'),
@@ -792,6 +1060,15 @@
                 note: options.note || `${meta.label}${nemesis.alliedFactionName ? ` · ${nemesis.alliedFactionName}` : ''}`
             });
         }
+        this.appendExpeditionNemesisHistory(source, {
+            status: normalizedOutcome,
+            severity: ['escaped', 'evolved'].includes(normalizedOutcome) ? 'high' : ['defeated', 'released', 'traded'].includes(normalizedOutcome) ? 'low' : 'medium',
+            title: `${nemesis.name} · ${meta.label}`,
+            detail: nemesis.outcomeNote || `${nemesis.name} 的追猎线已切换到「${meta.label}」。`,
+            counterplay: this.getExpeditionNemesisForecast(source)?.counterplay || '',
+            nodeTypes: nemesis.lastEncounterNodeType ? [nemesis.lastEncounterNodeType] : nemesis.triggerNodeTypes,
+            sourceType: options.sourceType || 'outcome'
+        });
         if (!options.silent && typeof Utils !== 'undefined' && Utils?.showBattleLog) {
             Utils.showBattleLog(`【仇敌追猎】${nemesis.name}：${meta.label}${nemesis.alliedFactionName ? ` · ${nemesis.alliedFactionName}` : ''}`);
         }
@@ -835,6 +1112,15 @@
 
         if (!nemesis.clueRevealed && nodeType && nemesis.clueLine && nemesis.clueNodeTypes.includes(nodeType)) {
             nemesis.clueRevealed = true;
+            this.appendExpeditionNemesisHistory(source, {
+                status: nemesis.status,
+                severity: 'medium',
+                title: `${nemesis.name} · 线索显露`,
+                detail: nemesis.clueLine,
+                counterplay: this.getExpeditionNemesisForecast(source)?.counterplay || '',
+                nodeTypes: [nodeType],
+                sourceType: 'clue'
+            });
             if (!options.silent && typeof Utils !== 'undefined' && Utils?.showBattleLog) {
                 Utils.showBattleLog(`【仇敌线索】${nemesis.clueLine}`);
             }
@@ -876,6 +1162,15 @@
             nemesis.alliedFactionId = hostileFaction.id;
             nemesis.alliedFactionName = hostileFaction.name;
             nemesis.outcomeNote = `${hostileFaction.name} 开始为其提供掩护。`;
+            this.appendExpeditionNemesisHistory(source, {
+                status: nemesis.status,
+                severity: 'high',
+                title: `${nemesis.name} · 投靠势力`,
+                detail: `${hostileFaction.name} 开始为其提供掩护，后续合围节点会更危险。`,
+                counterplay: this.getExpeditionNemesisForecast(source)?.counterplay || '',
+                nodeTypes: [nodeType],
+                sourceType: 'allied'
+            });
             if (!options.silent && typeof Utils !== 'undefined' && Utils?.showBattleLog) {
                 Utils.showBattleLog(`【仇敌追猎】${nemesis.name} 已投靠 ${hostileFaction.name}。`);
             }
@@ -893,6 +1188,15 @@
             }
             nemesis.status = 'guarding';
             nemesis.outcomeNote = `${nemesis.name} 已作为终章护卫现身。`;
+            this.appendExpeditionNemesisHistory(source, {
+                status: nemesis.status,
+                severity: 'high',
+                title: `${nemesis.name} · 主宰护卫`,
+                detail: `${nemesis.name} 会在首领窗口以护卫形态压轴现身。`,
+                counterplay: this.getExpeditionNemesisForecast(source)?.counterplay || '',
+                nodeTypes: [nodeType],
+                sourceType: 'guarding'
+            });
             if (!options.silent && typeof Utils !== 'undefined' && Utils?.showBattleLog) {
                 Utils.showBattleLog(`【仇敌追猎】${nemesis.name} 成为了主宰护卫。`);
             }
@@ -931,7 +1235,7 @@
         const factions = pickUnique(factionPool, 3, seed + 17).map((entry) => ({
             ...entry,
             stance: 0,
-            lastReason: '本章初入，局势仍未定盘。'
+            lastReason: DEFAULT_FACTION_REASON
         }));
 
         const activeNemesis = pickUnique(this.getExpeditionNemesisPool(chapterIndex), 1, seed + 29)[0] || null;
@@ -949,6 +1253,8 @@
             activeBountyIds: [],
             observatoryLink,
             factions,
+            factionHistory: [],
+            nemesisHistory: [],
             activeNemesis: activeNemesis ? {
                 ...activeNemesis,
                 status: 'hunting',
@@ -998,17 +1304,810 @@
         return state.factions.find((entry) => entry.id === factionId) || null;
     };
 
-    Game.prototype.applyExpeditionFactionShift = function (factionId = '', delta = 0, reason = '', options = {}) {
-        const state = this.getExpeditionState();
+    Game.prototype.appendExpeditionFactionHistory = function (state = null, faction = null, delta = 0, reason = '', options = {}) {
+        if (!state || !faction || !reason) return null;
+        const actualDelta = clampInt(delta, -3, 3);
+        const entry = normalizeFactionHistoryEntry({
+            id: `${String(faction.id || 'faction')}_${Date.now()}_${Math.max(0, readArray(state.factionHistory).length)}`,
+            factionId: faction.id,
+            factionName: faction.name,
+            delta: actualDelta,
+            stanceAfter: faction.stance,
+            reason,
+            sourceType: options.sourceType || 'system',
+            timestamp: Date.now(),
+            line: `${faction.name}${actualDelta ? ` ${actualDelta > 0 ? '↑' : '↓'}${Math.abs(actualDelta)}` : ''} · ${reason}`
+        });
+        state.factionHistory = [...readArray(state.factionHistory), entry].slice(-MAX_FACTION_HISTORY);
+        return entry;
+    };
+
+    Game.prototype.applyExpeditionFactionDelta = function (state = null, factionId = '', delta = 0, reason = '', options = {}) {
         if (!state || !factionId || !delta) return null;
         const target = state.factions.find((entry) => entry.id === factionId);
         if (!target) return null;
-        target.stance = clampInt(target.stance + clampInt(delta, -3, 3), -3, 3);
-        target.lastReason = String(reason || target.lastReason || '');
+        const previousStance = clampInt(target.stance, -3, 3);
+        target.stance = clampInt(previousStance + clampInt(delta, -3, 3), -3, 3);
+        target.lastReason = String(reason || target.lastReason || DEFAULT_FACTION_REASON);
+        const actualDelta = target.stance - previousStance;
+        if (actualDelta !== 0 || options.forceLog) {
+            this.appendExpeditionFactionHistory(state, target, actualDelta, target.lastReason, options);
+        }
+        return target;
+    };
+
+    Game.prototype.getRecentExpeditionFactionLogs = function (state = null, limit = 3) {
+        const source = state || this.getExpeditionState();
+        if (!source) return [];
+        const safeLimit = clampInt(limit, 1, MAX_FACTION_HISTORY);
+        const history = readArray(source.factionHistory)
+            .map((entry, index) => normalizeFactionHistoryEntry(entry, index))
+            .slice(-safeLimit)
+            .reverse();
+        if (history.length > 0) return history;
+        return readArray(source.factions)
+            .filter((entry) => entry.lastReason && entry.lastReason !== DEFAULT_FACTION_REASON)
+            .sort((a, b) => Math.abs(clampInt(b.stance, -3, 3)) - Math.abs(clampInt(a.stance, -3, 3)))
+            .slice(0, safeLimit)
+            .map((entry, index) => normalizeFactionHistoryEntry({
+                id: `faction_fallback_${index}`,
+                factionId: entry.id,
+                factionName: entry.name,
+                delta: 0,
+                stanceAfter: entry.stance,
+                reason: entry.lastReason,
+                sourceType: 'fallback',
+                line: `${entry.name} · ${entry.lastReason}`
+            }, index));
+    };
+
+    Game.prototype.appendExpeditionNemesisHistory = function (state = null, entry = null) {
+        if (!state || !entry || typeof entry !== 'object') return null;
+        const normalized = normalizeNemesisHistoryEntry({
+            ...entry,
+            id: entry.id || `nemesis_${Date.now()}_${Math.max(0, readArray(state.nemesisHistory).length)}`,
+            timestamp: entry.timestamp || Date.now()
+        }, readArray(state.nemesisHistory).length);
+        const previous = readArray(state.nemesisHistory).slice(-1)[0];
+        if (
+            previous
+            && String(previous.status || '') === normalized.status
+            && String(previous.line || '') === normalized.line
+            && String(previous.sourceType || '') === normalized.sourceType
+        ) {
+            return normalizeNemesisHistoryEntry(previous, 0);
+        }
+        state.nemesisHistory = [...readArray(state.nemesisHistory), normalized].slice(-MAX_NEMESIS_HISTORY);
+        return normalized;
+    };
+
+    Game.prototype.getRecentExpeditionNemesisLogs = function (state = null, limit = 3) {
+        const source = state || this.getExpeditionState();
+        if (!source) return [];
+        const safeLimit = clampInt(limit, 1, MAX_NEMESIS_HISTORY);
+        const history = readArray(source.nemesisHistory)
+            .map((entry, index) => normalizeNemesisHistoryEntry(entry, index))
+            .slice(-safeLimit)
+            .reverse();
+        if (history.length > 0) return history;
+        const nemesis = source.activeNemesis;
+        if (!nemesis?.id) return [];
+        const fallback = [];
+        if (nemesis.clueRevealed && nemesis.clueLine) {
+            fallback.push({
+                id: 'nemesis_fallback_clue',
+                status: nemesis.status,
+                title: `${nemesis.name} · 线索显露`,
+                detail: nemesis.clueLine,
+                sourceType: 'fallback',
+                nodeTypes: nemesis.clueNodeTypes
+            });
+        }
+        if (nemesis.outcomeNote) {
+            fallback.push({
+                id: 'nemesis_fallback_note',
+                status: nemesis.status,
+                title: `${nemesis.name} · ${getNemesisStatusMeta(nemesis.status).label}`,
+                detail: nemesis.outcomeNote,
+                sourceType: 'fallback',
+                nodeTypes: nemesis.lastEncounterNodeType ? [nemesis.lastEncounterNodeType] : nemesis.triggerNodeTypes
+            });
+        }
+        return fallback
+            .slice(0, safeLimit)
+            .map((entry, index) => normalizeNemesisHistoryEntry(entry, index));
+    };
+
+    Game.prototype.getStrategicEngineeringExpeditionInfluence = function (state = null) {
+        const source = state || this.getExpeditionState();
+        const snapshot = typeof this.getStrategicEngineeringSnapshot === 'function'
+            ? this.getStrategicEngineeringSnapshot()
+            : null;
+        const focusTrack = snapshot?.focusTrack;
+        const tier = clampInt(focusTrack?.tier, 0, 3);
+        const profile = getStrategicEngineeringExpeditionTrackProfile(focusTrack?.trackId || '');
+        if (!source || !focusTrack?.trackId || tier <= 0 || !profile) return null;
+
+        const routeNodeTypes = readArray(profile.routeNodeTypes).slice(0, 4);
+        const icon = String(focusTrack.icon || '🧭');
+        const name = String(focusTrack.name || focusTrack.trackId || '工程主轴');
+        const tierLabel = String(focusTrack.tierLabel || `T${tier}`);
+        const effectSummary = String(focusTrack.effectSummary || '跨章工程正在改写本章远征。');
+        const pressureDeltas = Array.isArray(profile.pressureDeltas) ? profile.pressureDeltas : [0];
+        const pressureDelta = safeNumber(
+            pressureDeltas[Math.min(tier, Math.max(0, pressureDeltas.length - 1))],
+            0
+        );
+
+        return {
+            engineeringTrackId: String(focusTrack.trackId || ''),
+            engineeringTrackName: name,
+            engineeringTrackIcon: icon,
+            engineeringTier: tier,
+            engineeringTierLabel: tierLabel,
+            routeNodeTypes,
+            routeNodeLabels: getExpeditionNodeLabels(routeNodeTypes, 3),
+            routeDirective: String(profile.routeDirective || ''),
+            rewardBias: String(profile.rewardBias || ''),
+            pressureBias: String(profile.pressureBias || ''),
+            pressureDelta,
+            nemesisModifier: String(profile.nemesisModifier || profile.routeDirective || ''),
+            effectSummary,
+            summary: `${icon} ${name} ${tierLabel} 正在把本章远征推向 ${formatExpeditionNodeLabels(routeNodeTypes, '关键线路')} 线，${effectSummary}`
+        };
+    };
+
+    Game.prototype.getExpeditionBranchEngineeringInsight = function (state = null, branch = null, influence = null) {
+        const activeInfluence = influence || this.getStrategicEngineeringExpeditionInfluence(state);
+        if (!branch || !activeInfluence) return null;
+
+        const branchNodeBias = readArray(branch.nodeBias).slice(0, 4);
+        const matchNodeTypes = Array.from(new Set(
+            branchNodeBias.filter((type) => activeInfluence.routeNodeTypes.includes(type))
+        )).slice(0, 4);
+        const targetLabels = formatExpeditionNodeLabels(activeInfluence.routeNodeTypes, '关键线路');
+        const matchLabels = formatExpeditionNodeLabels(matchNodeTypes, targetLabels);
+        let engineeringNote = '';
+        let pressureBias = activeInfluence.pressureBias;
+        let rewardBias = activeInfluence.rewardBias;
+        let routeDivergence = matchNodeTypes.length > 0 ? 'aligned' : 'offset';
+
+        switch (activeInfluence.engineeringTrackId) {
+            case 'observatory':
+                engineeringNote = matchNodeTypes.length > 0
+                    ? `${activeInfluence.engineeringTrackName}会在 ${matchLabels} 线提前暴露追猎窗口。`
+                    : `${activeInfluence.engineeringTrackName}更偏 ${targetLabels} 线，这条路线的信息收益会缩水。`;
+                pressureBias = matchNodeTypes.length > 0 ? '低压锁线' : '信息偏移';
+                rewardBias = matchNodeTypes.length > 0 ? '情报前置' : '预警缩水';
+                break;
+            case 'memory_rift':
+                engineeringNote = matchNodeTypes.length > 0
+                    ? `${activeInfluence.engineeringTrackName}会把这条路线改写成 ${matchLabels} 的高收益高波动窗口。`
+                    : `${activeInfluence.engineeringTrackName}正在把收益牵向 ${targetLabels} 线，这条路线更容易出现分岔。`;
+                pressureBias = matchNodeTypes.length > 0 ? '裂隙改道' : '分岔上升';
+                rewardBias = '高收益改写';
+                routeDivergence = matchNodeTypes.length > 0 ? 'volatile' : 'drifting';
+                break;
+            case 'forbidden_altar':
+                engineeringNote = matchNodeTypes.length > 0
+                    ? `${activeInfluence.engineeringTrackName}会把这条路线抬成 ${matchLabels} 的高压追猎线。`
+                    : `${activeInfluence.engineeringTrackName}正在抬升 ${targetLabels} 线压强，这条路线会更吃资源与净化。`;
+                pressureBias = '禁术压强';
+                rewardBias = '献祭收割';
+                routeDivergence = 'volatile';
+                break;
+            case 'spirit_grotto':
+                engineeringNote = matchNodeTypes.length > 0
+                    ? `${activeInfluence.engineeringTrackName}会把这条路线稳成 ${matchLabels} 的护送线。`
+                    : `${activeInfluence.engineeringTrackName}更偏 ${targetLabels} 线，这条路线暂时吃不到稳线补给。`;
+                pressureBias = matchNodeTypes.length > 0 ? '护送稳线' : '补给偏离';
+                rewardBias = matchNodeTypes.length > 0 ? '续航兜底' : '补给缩水';
+                routeDivergence = matchNodeTypes.length > 0 ? 'stabilized' : 'offset';
+                break;
+            default:
+                engineeringNote = activeInfluence.summary;
+                break;
+        }
+
+        return {
+            engineeringTrackId: activeInfluence.engineeringTrackId,
+            engineeringTrackName: activeInfluence.engineeringTrackName,
+            engineeringTrackIcon: activeInfluence.engineeringTrackIcon,
+            engineeringTier: activeInfluence.engineeringTier,
+            engineeringTierLabel: activeInfluence.engineeringTierLabel,
+            engineeringNote,
+            pressureBias,
+            rewardBias,
+            routeDivergence,
+            matchNodeTypes
+        };
+    };
+
+    Game.prototype.getExpeditionBountyEngineeringInsight = function (state = null, bounty = null, selectedBranch = null, influence = null) {
+        const activeInfluence = influence || this.getStrategicEngineeringExpeditionInfluence(state);
+        if (!bounty || !activeInfluence) return null;
+
+        const focusNodeTypes = getBountyFocusNodeTypes(bounty);
+        const avoidNodeTypes = getBountyAvoidNodeTypes(bounty);
+        const branchNodeBias = readArray(selectedBranch?.nodeBias).slice(0, 4);
+        const focusMatch = Array.from(new Set(
+            focusNodeTypes.filter((type) => activeInfluence.routeNodeTypes.includes(type))
+        )).slice(0, 4);
+        const branchMatch = Array.from(new Set(
+            branchNodeBias.filter((type) => activeInfluence.routeNodeTypes.includes(type))
+        )).slice(0, 4);
+        const aligned = focusMatch.length > 0 || branchMatch.length > 0;
+        const targetLabels = formatExpeditionNodeLabels(activeInfluence.routeNodeTypes, '关键线路');
+        const focusLabels = formatExpeditionNodeLabels(focusNodeTypes, '当前目标');
+        const matchLabels = formatExpeditionNodeLabels(focusMatch.length > 0 ? focusMatch : branchMatch, targetLabels);
+        const stabilityBounty = isStabilityBounty(bounty);
+        const pressureBounty = isPressureBounty(bounty);
+        let engineeringNote = '';
+        let summaryLine = '';
+        let pressureBias = activeInfluence.pressureBias;
+        let rewardBias = activeInfluence.rewardBias;
+        let routeDivergence = aligned ? 'aligned' : 'offset';
+        let warning = null;
+
+        switch (activeInfluence.engineeringTrackId) {
+            case 'observatory':
+                engineeringNote = aligned
+                    ? `${activeInfluence.engineeringTrackName}会把这条赏单锁到 ${matchLabels} 线，追猎窗口会更早显露。`
+                    : `${activeInfluence.engineeringTrackName}当前更偏 ${targetLabels} 线，这条赏单需要额外绕路才能吃满情报收益。`;
+                summaryLine = `工程牵引：${engineeringNote}`;
+                pressureBias = aligned ? '低压锁线' : '信息偏移';
+                rewardBias = aligned ? '情报前置' : '预警缩水';
+                routeDivergence = aligned ? 'locked' : 'offset';
+                if (!aligned && focusNodeTypes.length > 0) {
+                    warning = {
+                        severity: 'medium',
+                        sourceType: 'engineering',
+                        label: '观测锁线',
+                        detail: `${activeInfluence.engineeringTrackName}更偏 ${targetLabels} 线，而这条赏单主要盯住 ${focusLabels}，完成线会变窄。`,
+                        suggestion: '若要稳结单，优先锁含观星 / 事件的路线。',
+                        engineeringTrackId: activeInfluence.engineeringTrackId,
+                        engineeringTrackName: activeInfluence.engineeringTrackName,
+                        engineeringNote,
+                        routeDivergence,
+                        nodeTypes: activeInfluence.routeNodeTypes
+                    };
+                }
+                break;
+            case 'memory_rift':
+                engineeringNote = aligned
+                    ? `${activeInfluence.engineeringTrackName}会把这条赏单拖进 ${matchLabels} 的改写窗口，奖励更高但路线更抖。`
+                    : `${activeInfluence.engineeringTrackName}正在把收益牵向 ${targetLabels} 线，这条赏单更容易出现分岔。`;
+                summaryLine = `工程牵引：${engineeringNote}`;
+                pressureBias = aligned ? '裂隙改道' : '分岔上升';
+                rewardBias = '高收益改写';
+                routeDivergence = aligned ? 'volatile' : 'drifting';
+                if (stabilityBounty || !aligned) {
+                    warning = {
+                        severity: stabilityBounty ? 'high' : 'medium',
+                        sourceType: 'engineering',
+                        label: stabilityBounty ? '追猎错位' : '路线分岔',
+                        detail: stabilityBounty
+                            ? `${activeInfluence.engineeringTrackName}会把节奏推向 ${targetLabels} 线，稳线类赏单更容易在改道时掉进度。`
+                            : `${activeInfluence.engineeringTrackName}正在把路线扯向 ${targetLabels}，这条赏单很难顺带完成。`,
+                        suggestion: stabilityBounty
+                            ? '接单前先确认补给余量，并给改线预留一个节点。'
+                            : '若想吃满奖励，优先锁能碰到记忆裂隙 / 事件的路线。',
+                        engineeringTrackId: activeInfluence.engineeringTrackId,
+                        engineeringTrackName: activeInfluence.engineeringTrackName,
+                        engineeringNote,
+                        routeDivergence,
+                        nodeTypes: activeInfluence.routeNodeTypes
+                    };
+                }
+                break;
+            case 'forbidden_altar':
+                engineeringNote = aligned || pressureBounty
+                    ? `${activeInfluence.engineeringTrackName}会把这条赏单抬成 ${matchLabels} 的高压收割线，追猎与反噬都会被放大。`
+                    : `${activeInfluence.engineeringTrackName}正在抬升 ${targetLabels} 线压强，这条赏单会被迫承担更多风险。`;
+                summaryLine = `工程牵引：${engineeringNote}`;
+                pressureBias = '禁术压强';
+                rewardBias = '献祭收割';
+                routeDivergence = 'volatile';
+                warning = {
+                    severity: stabilityBounty ? 'high' : 'medium',
+                    sourceType: 'engineering',
+                    label: stabilityBounty ? '禁术反噬' : '压强牵引',
+                    detail: stabilityBounty
+                        ? `${activeInfluence.engineeringTrackName}会持续抬高追猎压强，稳线类赏单会被迫在保血和结单之间二选一。`
+                        : `${activeInfluence.engineeringTrackName}会放大这条赏单的高压节奏，势力与仇敌都更容易同步加压。`,
+                    suggestion: stabilityBounty
+                        ? '若坚持稳线赏单，优先准备净化、护盾与一次补给节点。'
+                        : '承接前确认本章有足够资源顶住两轮连续硬战。',
+                    engineeringTrackId: activeInfluence.engineeringTrackId,
+                    engineeringTrackName: activeInfluence.engineeringTrackName,
+                    engineeringNote,
+                    routeDivergence,
+                    nodeTypes: activeInfluence.routeNodeTypes
+                };
+                break;
+            case 'spirit_grotto':
+                engineeringNote = aligned || stabilityBounty
+                    ? `${activeInfluence.engineeringTrackName}会把这条赏单稳成 ${matchLabels} 的护送线，容错更高。`
+                    : `${activeInfluence.engineeringTrackName}更偏 ${targetLabels} 线，这条赏单暂时吃不到稳线补给。`;
+                summaryLine = `工程牵引：${engineeringNote}`;
+                pressureBias = aligned || stabilityBounty ? '护送稳线' : '补给偏离';
+                rewardBias = aligned || stabilityBounty ? '续航兜底' : '补给缩水';
+                routeDivergence = aligned || stabilityBounty ? 'stabilized' : 'offset';
+                if (pressureBounty && !aligned && !avoidNodeTypes.includes('rest')) {
+                    warning = {
+                        severity: 'low',
+                        sourceType: 'engineering',
+                        label: '补给绕行',
+                        detail: `${activeInfluence.engineeringTrackName}更偏 ${targetLabels} 线，这条强袭赏单如果吃不到补给，后段会更难控血。`,
+                        suggestion: '若打算并行推进，至少给本章留 1 个营地或灵契节点。',
+                        engineeringTrackId: activeInfluence.engineeringTrackId,
+                        engineeringTrackName: activeInfluence.engineeringTrackName,
+                        engineeringNote,
+                        routeDivergence,
+                        nodeTypes: activeInfluence.routeNodeTypes
+                    };
+                }
+                break;
+            default:
+                engineeringNote = activeInfluence.summary;
+                summaryLine = `工程牵引：${engineeringNote}`;
+                break;
+        }
+
+        return {
+            engineeringTrackId: activeInfluence.engineeringTrackId,
+            engineeringTrackName: activeInfluence.engineeringTrackName,
+            engineeringTrackIcon: activeInfluence.engineeringTrackIcon,
+            engineeringTier: activeInfluence.engineeringTier,
+            engineeringTierLabel: activeInfluence.engineeringTierLabel,
+            engineeringNote,
+            summaryLine,
+            pressureBias,
+            rewardBias,
+            routeDivergence,
+            warning
+        };
+    };
+
+    Game.prototype.getExpeditionObservatoryEngineeringIntel = function (state = null, nemesisForecast = null, bountyConflictWarnings = null, influence = null) {
+        const source = state || this.getExpeditionState();
+        const link = source?.observatoryLink;
+        const activeInfluence = influence || this.getStrategicEngineeringExpeditionInfluence(source);
+        if (!source || !link || !activeInfluence) return null;
+
+        const forecast = nemesisForecast || this.getExpeditionNemesisForecast(source);
+        const warnings = Array.isArray(bountyConflictWarnings)
+            ? bountyConflictWarnings
+            : this.getExpeditionBountyConflictWarnings(source);
+        const leadWarning = readArray(warnings)[0] || null;
+        const targetLabels = formatExpeditionNodeLabels(activeInfluence.routeNodeTypes, '关键线路');
+        let huntIntel = '';
+
+        switch (activeInfluence.engineeringTrackId) {
+            case 'observatory':
+                huntIntel = `${activeInfluence.engineeringTrackName}已把追猎窗口收束到 ${forecast?.windowLabel || '观测链路'}，优先查验 ${targetLabels} 线。`;
+                break;
+            case 'memory_rift':
+                huntIntel = `${activeInfluence.engineeringTrackName}正在把追猎窗口推向 ${forecast?.windowLabel || '裂隙改道'}，记忆裂隙与事件线更容易出现错位现身。`;
+                break;
+            case 'forbidden_altar':
+                huntIntel = `${activeInfluence.engineeringTrackName}正在抬升 ${targetLabels} 线压强，后续追猎窗口会更凶。`;
+                break;
+            case 'spirit_grotto':
+                huntIntel = `${activeInfluence.engineeringTrackName}正在 ${targetLabels} 线布出护送稳线，追猎压力可被提前吸收。`;
+                break;
+            default:
+                huntIntel = activeInfluence.summary;
+                break;
+        }
+
+        return {
+            engineeringTrackId: activeInfluence.engineeringTrackId,
+            engineeringTrackName: activeInfluence.engineeringTrackName,
+            engineeringTrackIcon: activeInfluence.engineeringTrackIcon,
+            engineeringTier: activeInfluence.engineeringTier,
+            engineeringTierLabel: activeInfluence.engineeringTierLabel,
+            huntIntel,
+            conflictPreview: leadWarning
+                ? `冲突预告：${leadWarning.line}`
+                : `${activeInfluence.engineeringTrackName} 暂未侦测到新的悬赏撕裂，可继续按 ${activeInfluence.routeDirective} 节奏推进。`,
+            signalLine: `工程情报：${huntIntel}`
+        };
+    };
+
+    Game.prototype.getExpeditionNemesisForecast = function (state = null) {
+        const source = state || this.getExpeditionState();
+        const nemesis = source?.activeNemesis;
+        if (!source || !nemesis?.id) return null;
+
+        const status = normalizeNemesisStatus(nemesis.status);
+        const statusMeta = getNemesisStatusMeta(status);
+        const selectedBranch = source.branchOptions.find((entry) => entry.id === source.selectedBranchId) || null;
+        const branchNodeBias = readArray(selectedBranch?.nodeBias).slice(0, 4);
+        const activeBounties = this.getActiveExpeditionBounties(source);
+        const bountySignalMap = new Map(activeBounties.map((entry) => [entry.id, this.getExpeditionBountySignalModel(source, entry)]));
+        const bountyFocusNodeTypes = Array.from(new Set(activeBounties.flatMap((entry) => readArray(bountySignalMap.get(entry.id)?.focusNodeTypes)))).slice(0, 4);
+        const hostileFactions = source.factions.filter((entry) => entry.stance <= -2);
+        const alliedFactions = source.factions.filter((entry) => entry.stance >= 2);
+        const hostilePressureNodeTypes = Array.from(new Set(hostileFactions.flatMap((entry) => readArray(entry.pressureNodeTypes)))).slice(0, 4);
+        const alliedSupportNodeTypes = Array.from(new Set(alliedFactions.flatMap((entry) => readArray(entry.supportNodeTypes)))).slice(0, 4);
+        const triggerNodeTypes = readArray(nemesis.triggerNodeTypes).slice(0, 4);
+        const overlapNodeTypes = Array.from(new Set(triggerNodeTypes.filter((type) => (
+            branchNodeBias.includes(type)
+            || bountyFocusNodeTypes.includes(type)
+            || hostilePressureNodeTypes.includes(type)
+        )))).slice(0, 4);
+        const focusNodeTypes = overlapNodeTypes.length > 0
+            ? overlapNodeTypes
+            : (triggerNodeTypes.length > 0 ? triggerNodeTypes : branchNodeBias);
+        const focusNodeLabels = getExpeditionNodeLabels(focusNodeTypes, 3);
+        const engineeringInfluence = this.getStrategicEngineeringExpeditionInfluence(source);
+        const engineeringFocusNodeTypes = engineeringInfluence
+            ? Array.from(new Set(
+                (focusNodeTypes.length > 0 ? focusNodeTypes : triggerNodeTypes)
+                    .filter((type) => engineeringInfluence.routeNodeTypes.includes(type))
+            )).slice(0, 4)
+            : [];
+        const hostileOverlap = hostileFactions.find((entry) => readArray(entry.pressureNodeTypes).some((type) => focusNodeTypes.includes(type))) || null;
+        const alliedCover = alliedFactions.find((entry) => readArray(entry.supportNodeTypes).some((type) => focusNodeTypes.includes(type))) || null;
+        const baseScoreMap = {
+            hunting: 46,
+            recurring: 62,
+            allied: 69,
+            guarding: 84,
+            defeated: 12,
+            escaped: 34,
+            released: 10,
+            traded: 14,
+            evolved: 76
+        };
+        let pressureIndex = clampInt(
+            (baseScoreMap[status] ?? 42)
+            + Math.min(18, overlapNodeTypes.length * 7)
+            + Math.min(16, clampInt(nemesis.engagedCount, 0, 99) * 4)
+            + Math.min(18, clampInt(nemesis.recurrenceCount, 0, 9) * 8)
+            + (nemesis.alliedFactionName ? 8 : 0)
+            + (nemesis.clueRevealed ? 4 : 0)
+            + (activeBounties.length > 0 && overlapNodeTypes.some((type) => bountyFocusNodeTypes.includes(type)) ? 6 : 0)
+            - (alliedSupportNodeTypes.some((type) => focusNodeTypes.includes(type)) ? 4 : 0),
+            0,
+            100
+        );
+        let nextWindowLabel = status === 'guarding'
+            ? '终章首领窗口'
+            : status === 'allied'
+                ? `下个 ${formatExpeditionNodeLabels(focusNodeTypes, '合围')} 节点`
+                : status === 'recurring'
+                    ? `下个 ${formatExpeditionNodeLabels(focusNodeTypes, '复现')} 窗口`
+                    : status === 'evolved'
+                        ? '后续章节同类线路'
+                        : ['defeated', 'released', 'traded'].includes(status)
+                            ? '本章已结算'
+                            : status === 'escaped'
+                                ? '章末外溢窗口'
+                                : `下个 ${formatExpeditionNodeLabels(focusNodeTypes, '追猎')} 窗口`;
+
+        const drivers = [];
+        if (selectedBranch && overlapNodeTypes.some((type) => branchNodeBias.includes(type))) {
+            drivers.push(`当前路线会把你送进 ${formatExpeditionNodeLabels(overlapNodeTypes.filter((type) => branchNodeBias.includes(type)), '关键线路')} 线。`);
+        }
+        if (activeBounties.length > 0 && overlapNodeTypes.some((type) => bountyFocusNodeTypes.includes(type))) {
+            drivers.push(`在途悬赏会催你继续踏入 ${formatExpeditionNodeLabels(overlapNodeTypes.filter((type) => bountyFocusNodeTypes.includes(type)), '追猎')} 线。`);
+        }
+        if (hostileOverlap) {
+            drivers.push(`${hostileOverlap.name} 已在 ${formatExpeditionNodeLabels(hostileOverlap.pressureNodeTypes, '高压')} 线加压。`);
+        }
+        if (nemesis.alliedFactionName) {
+            drivers.push(`该仇敌已投靠 ${nemesis.alliedFactionName}，会更倾向在合围节点现身。`);
+        }
+        if (nemesis.clueRevealed && nemesis.clueLine) {
+            drivers.push(`线索指向：${nemesis.clueLine}`);
+        }
+        if (nemesis.outcomeNote && ['defeated', 'released', 'traded', 'escaped'].includes(status)) {
+            drivers.push(nemesis.outcomeNote);
+        }
+
+        let engineeringModifier = '';
+        let engineeringNote = '';
+        const settledWindow = ['defeated', 'released', 'traded', 'escaped', 'evolved'].includes(status);
+        if (engineeringInfluence) {
+            const engineeringLabels = formatExpeditionNodeLabels(
+                engineeringFocusNodeTypes.length > 0 ? engineeringFocusNodeTypes : engineeringInfluence.routeNodeTypes,
+                '关键线路'
+            );
+            engineeringModifier = engineeringInfluence.nemesisModifier;
+            switch (engineeringInfluence.engineeringTrackId) {
+                case 'observatory':
+                    pressureIndex = clampInt(pressureIndex + engineeringInfluence.pressureDelta - (engineeringFocusNodeTypes.length > 0 ? 2 : 0), 0, 100);
+                    if (!settledWindow) nextWindowLabel = `${engineeringModifier} · ${nextWindowLabel}`;
+                    drivers.unshift(`${engineeringInfluence.engineeringTrackName} 已把追猎窗口提前暴露到 ${engineeringLabels} 线。`);
+                    engineeringNote = `${engineeringInfluence.engineeringTrackName}正在收束追猎窗口，${engineeringLabels} 线会更早给出预警。`;
+                    break;
+                case 'memory_rift':
+                    pressureIndex = clampInt(pressureIndex + engineeringInfluence.pressureDelta + (engineeringFocusNodeTypes.length > 0 ? 2 : 0), 0, 100);
+                    if (!settledWindow) nextWindowLabel = `${engineeringModifier} · ${nextWindowLabel}`;
+                    drivers.unshift(`${engineeringInfluence.engineeringTrackName} 正把追猎窗口拖向 ${engineeringLabels} 线，现身时机会更跳跃。`);
+                    engineeringNote = `${engineeringInfluence.engineeringTrackName}会让追猎窗口更易错位，奖励更高但路线波动更强。`;
+                    break;
+                case 'forbidden_altar':
+                    pressureIndex = clampInt(pressureIndex + engineeringInfluence.pressureDelta + 2, 0, 100);
+                    if (!settledWindow) nextWindowLabel = `${engineeringModifier} · ${nextWindowLabel}`;
+                    drivers.unshift(`${engineeringInfluence.engineeringTrackName} 正在抬升 ${engineeringLabels} 线压强，这次追猎会更凶。`);
+                    engineeringNote = `${engineeringInfluence.engineeringTrackName}会同步放大仇敌压强与势力反噬。`;
+                    break;
+                case 'spirit_grotto':
+                    pressureIndex = clampInt(pressureIndex + engineeringInfluence.pressureDelta, 0, 100);
+                    if (!settledWindow) nextWindowLabel = `${engineeringModifier} · ${nextWindowLabel}`;
+                    drivers.unshift(`${engineeringInfluence.engineeringTrackName} 正在 ${engineeringLabels} 线铺出护送稳线。`);
+                    engineeringNote = `${engineeringInfluence.engineeringTrackName}会替这条追猎线提供额外缓冲与稳线空间。`;
+                    break;
+                default:
+                    engineeringNote = engineeringInfluence.summary;
+                    break;
+            }
+        }
+
+        const pressureMeta = getNemesisPressureMeta(pressureIndex);
+        let line = status === 'guarding'
+            ? `${nemesis.name} 将在终章首领窗口以「${this.chooseExpeditionNemesisVariant(source, 'boss').label || '护卫终局'}」施压。`
+            : ['defeated', 'released', 'traded'].includes(status)
+                ? `${nemesis.name} · ${statusMeta.label} · ${nemesis.outcomeNote || '当前追猎线已阶段性结算。'}`
+                : `${nemesis.name} · ${nextWindowLabel} · ${drivers[0] || `预计会在 ${formatExpeditionNodeLabels(focusNodeTypes, '关键线路')} 线继续施压。`}`;
+
+        let counterplay = status === 'guarding'
+            ? '终章前保留净化、护盾与一轮爆发，避免护卫战把答卷直接锁死。'
+            : status === 'allied'
+                ? `${nemesis.alliedFactionName || hostileOverlap?.name || '敌对势力'} 已参与追猎，先拆敌意路线或改走 ${formatExpeditionNodeLabels(focusNodeTypes, '低压')} 线。`
+                : status === 'recurring'
+                    ? '它已经记住了上次暴露的缺口，下一次接战前先补好护盾与过牌。'
+                    : status === 'escaped'
+                        ? '章末外溢说明你没把追猎线收干净，后续优先选能提前锁线的事件与观星节点。'
+                        : status === 'evolved'
+                            ? '同类追猎题会在后续变得更凶，接下来要优先做能稳血和拆压制的构筑。'
+                            : ['defeated', 'released', 'traded'].includes(status)
+                                ? '当前可把资源重新转回章节主线，把追猎收益兑现成收官优势。'
+                            : alliedCover
+                                ? `${alliedCover.name} 能在这条线提供援护，先借支援稳住再找反打窗口。`
+                                : `在 ${formatExpeditionNodeLabels(focusNodeTypes, '关键线路')} 线保留 1 轮爆发或控制链，别让它先手滚雪球。`;
+        if (engineeringInfluence) {
+            switch (engineeringInfluence.engineeringTrackId) {
+                case 'observatory':
+                    counterplay = `${counterplay} 优先把观星 / 事件节点的预警转成先手资源。`;
+                    break;
+                case 'memory_rift':
+                    counterplay = `${counterplay} 经过记忆裂隙或黑市分岔时，记得给改线与补给留一个节点。`;
+                    break;
+                case 'forbidden_altar':
+                    counterplay = `${counterplay} 提前备好净化、护盾与一次爆发，避免血契压强连续滚大。`;
+                    break;
+                case 'spirit_grotto':
+                    counterplay = `${counterplay} 优先借灵契 / 营地节点稳住血线，再决定要不要硬接追猎。`;
+                    break;
+                default:
+                    break;
+            }
+        }
+        if (engineeringNote && !/工程/.test(line)) {
+            line = `${line} ${engineeringNote}`;
+        }
+
+        return {
+            nemesisId: nemesis.id,
+            nemesisName: nemesis.name,
+            status,
+            statusLabel: statusMeta.label,
+            pressureIndex,
+            pressureTier: pressureMeta.tierId,
+            pressureLabel: pressureMeta.label,
+            windowLabel: nextWindowLabel,
+            focusNodeTypes,
+            focusNodeLabels,
+            driverLines: drivers.slice(0, 4),
+            line,
+            counterplay,
+            engineeringTrackId: engineeringInfluence?.engineeringTrackId || '',
+            engineeringTrackName: engineeringInfluence?.engineeringTrackName || '',
+            engineeringModifier,
+            engineeringNote
+        };
+    };
+
+    Game.prototype.buildExpeditionConflictWarning = function (bounty = null, source = {}) {
+        return normalizeConflictWarning({
+            id: source.id || `${bounty?.id || 'bounty'}_${source.sourceType || 'system'}_${source.label || 'warning'}_${source.factionId || 'none'}`,
+            bountyId: bounty?.id || '',
+            bountyName: bounty?.name || '当前悬赏',
+            severity: source.severity || 'low',
+            sourceType: source.sourceType || 'system',
+            label: source.label || '冲突提示',
+            detail: source.detail || '',
+            suggestion: source.suggestion || '',
+            factionId: source.factionId || '',
+            factionName: source.factionName || '',
+            engineeringTrackId: source.engineeringTrackId || '',
+            engineeringTrackName: source.engineeringTrackName || '',
+            engineeringThemeLabel: source.engineeringThemeLabel || '',
+            engineeringNote: source.engineeringNote || '',
+            routeDivergence: source.routeDivergence || '',
+            nodeTypes: source.nodeTypes || [],
+            line: source.line || ''
+        });
+    };
+
+    Game.prototype.getExpeditionBountySignalModel = function (state = null, bounty = null) {
+        const source = state || this.getExpeditionState();
+        if (!source || !bounty) {
+            return {
+                focusNodeTypes: [],
+                avoidNodeTypes: [],
+                conflictWarnings: [],
+                summaryLine: '暂无悬赏情报',
+                engineeringTrackId: '',
+                engineeringTrackName: '',
+                engineeringNote: '',
+                routeDivergence: 'stable',
+                pressureBias: '常规',
+                rewardBias: '均衡'
+            };
+        }
+        const selectedBranch = source.branchOptions.find((entry) => entry.id === source.selectedBranchId) || null;
+        const branchBias = readArray(selectedBranch?.nodeBias).map((value) => String(value || ''));
+        const focusNodeTypes = getBountyFocusNodeTypes(bounty);
+        const avoidNodeTypes = getBountyAvoidNodeTypes(bounty);
+        const focusLabels = focusNodeTypes.map((type) => getExpeditionNodeLabel(type));
+        const warnings = [];
+        const engineeringInfluence = this.getStrategicEngineeringExpeditionInfluence(source);
+        const engineeringInsight = this.getExpeditionBountyEngineeringInsight(source, bounty, selectedBranch, engineeringInfluence);
+
+        if (selectedBranch) {
+            if (focusNodeTypes.length > 0 && !focusNodeTypes.some((type) => branchBias.includes(type))) {
+                warnings.push(this.buildExpeditionConflictWarning(bounty, {
+                    severity: 'high',
+                    sourceType: 'route',
+                    label: '路线错位',
+                    detail: `当前支线「${selectedBranch.name}」较少自然经过 ${focusLabels.join(' / ')}，完成线会偏紧。`,
+                    suggestion: `若坚持这条支线，优先把可见的 ${focusLabels[0] || '关键'} 节点留给该悬赏。`,
+                    nodeTypes: focusNodeTypes
+                }));
+            }
+            if (avoidNodeTypes.some((type) => branchBias.includes(type))) {
+                warnings.push(this.buildExpeditionConflictWarning(bounty, {
+                    severity: 'medium',
+                    sourceType: 'route',
+                    label: '路线牵制',
+                    detail: `当前支线会频繁把你引向 ${avoidNodeTypes.map((type) => getExpeditionNodeLabel(type)).join(' / ')}，容错会被压缩。`,
+                    suggestion: '先确认补给余量，再决定是否并行推进这条赏单。',
+                    nodeTypes: avoidNodeTypes
+                }));
+            }
+        } else if (focusNodeTypes.length > 0) {
+            warnings.push(this.buildExpeditionConflictWarning(bounty, {
+                severity: 'low',
+                sourceType: 'route',
+                label: '尚未锁线',
+                detail: `这条悬赏依赖 ${focusLabels.join(' / ')} 节点，最好先选定支线再承接。`,
+                suggestion: '先看支线分布，再决定是否把它放进本章主目标。 ',
+                nodeTypes: focusNodeTypes
+            }));
+        }
+
+        readArray(source.factions).forEach((faction) => {
+            const dislikedFocus = focusNodeTypes.filter((type) => readArray(faction.dislikes).includes(type));
+            if (dislikedFocus.length > 0) {
+                warnings.push(this.buildExpeditionConflictWarning(bounty, {
+                    severity: Number(faction.stance) <= -1 ? 'high' : 'medium',
+                    sourceType: 'faction',
+                    label: '关系反噬',
+                    detail: `${faction.name} 反感 ${dislikedFocus.map((type) => getExpeditionNodeLabel(type)).join(' / ')} 线，继续推进会拉低态度。`,
+                    suggestion: `若必须接单，留意 ${faction.name} 后续是否会转入敌意阈值。`,
+                    factionId: faction.id,
+                    factionName: faction.name,
+                    nodeTypes: dislikedFocus
+                }));
+            }
+            const hostilePressure = focusNodeTypes.filter((type) => (
+                Number(faction.stance) <= -1
+                && (readArray(faction.pressureNodeTypes).includes(type) || readArray(faction.likes).includes(type))
+            ));
+            if (hostilePressure.length > 0) {
+                warnings.push(this.buildExpeditionConflictWarning(bounty, {
+                    severity: Number(faction.stance) <= -2 ? 'high' : 'medium',
+                    sourceType: 'faction',
+                    label: '势力牵制',
+                    detail: `${faction.name} 已在 ${hostilePressure.map((type) => getExpeditionNodeLabel(type)).join(' / ')} 线加压，这条赏单更容易被拖慢。`,
+                    suggestion: `尽量在资源充足时推进，避免被 ${faction.name} 的压制节奏反咬。`,
+                    factionId: faction.id,
+                    factionName: faction.name,
+                    nodeTypes: hostilePressure
+                }));
+            }
+        });
+
+        const peerBounties = this.getActiveExpeditionBounties(source).filter((entry) => entry.id !== bounty.id);
+        peerBounties.forEach((entry) => {
+            if (
+                (isPressureBounty(bounty) && isStabilityBounty(entry))
+                || (isStabilityBounty(bounty) && isPressureBounty(entry))
+            ) {
+                warnings.push(this.buildExpeditionConflictWarning(bounty, {
+                    severity: 'medium',
+                    sourceType: 'peer_bounty',
+                    label: '目标拉扯',
+                    detail: `与「${entry.name}」并行时，会在抢节奏和稳血线之间反复拉扯。`,
+                    suggestion: '若手感开始吃紧，优先保住更接近完成的一条赏单。'
+                }));
+            }
+        });
+
+        if (engineeringInsight?.warning) {
+            warnings.push(this.buildExpeditionConflictWarning(bounty, engineeringInsight.warning));
+        }
+
+        const deduped = warnings.reduce((list, entry) => {
+            const key = [entry.bountyId, entry.sourceType, entry.label, entry.factionId, entry.nodeTypes.join(',')].join('|');
+            if (!list.some((item) => [item.bountyId, item.sourceType, item.label, item.factionId, item.nodeTypes.join(',')].join('|') === key)) {
+                list.push(entry);
+            }
+            return list;
+        }, []).sort((a, b) => (
+            getConflictSeverityWeight(b.severity) - getConflictSeverityWeight(a.severity)
+            || a.label.localeCompare(b.label, 'zh-Hans-CN')
+        ));
+
+        let summaryLine = '当前赏单与路线暂未出现明显冲突。';
+        if (engineeringInsight?.summaryLine) {
+            summaryLine = engineeringInsight.summaryLine;
+        } else if (deduped.length > 0) {
+            const lead = deduped[0];
+            summaryLine = `${lead.bountyName} · ${lead.label}${lead.detail ? `：${lead.detail}` : ''}`;
+        } else if (selectedBranch && focusLabels.length > 0) {
+            summaryLine = `当前支线「${selectedBranch.name}」能自然推进 ${focusLabels.join(' / ')} 目标。`;
+        } else if (focusLabels.length > 0) {
+            summaryLine = `这条悬赏主要围绕 ${focusLabels.join(' / ')} 节点展开。`;
+        }
+
+        return {
+            focusNodeTypes,
+            avoidNodeTypes,
+            conflictWarnings: deduped.slice(0, 3),
+            summaryLine,
+            engineeringTrackId: engineeringInsight?.engineeringTrackId || '',
+            engineeringTrackName: engineeringInsight?.engineeringTrackName || '',
+            engineeringNote: engineeringInsight?.engineeringNote || '',
+            routeDivergence: engineeringInsight?.routeDivergence || 'stable',
+            pressureBias: engineeringInsight?.pressureBias || '常规',
+            rewardBias: engineeringInsight?.rewardBias || '均衡'
+        };
+    };
+
+    Game.prototype.getExpeditionBountyConflictWarnings = function (state = null, signalMap = null) {
+        const source = state || this.getExpeditionState();
+        if (!source) return [];
+        const map = signalMap instanceof Map ? signalMap : new Map();
+        const warnings = this.getActiveExpeditionBounties(source).flatMap((entry) => {
+            if (!map.has(entry.id)) {
+                map.set(entry.id, this.getExpeditionBountySignalModel(source, entry));
+            }
+            return readArray(map.get(entry.id)?.conflictWarnings);
+        });
+        return warnings
+            .map((entry, index) => normalizeConflictWarning(entry, index))
+            .sort((a, b) => getConflictSeverityWeight(b.severity) - getConflictSeverityWeight(a.severity))
+            .slice(0, 4);
+    };
+
+    Game.prototype.applyExpeditionFactionShift = function (factionId = '', delta = 0, reason = '', options = {}) {
+        const state = this.getExpeditionState();
+        if (!state || !factionId || !delta) return null;
+        const target = this.applyExpeditionFactionDelta(state, factionId, delta, reason, {
+            sourceType: options.sourceType || 'system',
+            forceLog: !!options.forceLog
+        });
+        if (!target) return null;
         this.expeditionState = state;
         this.persistActiveExpeditionState();
         if (!options.silent && typeof Utils !== 'undefined' && Utils?.showBattleLog) {
-            Utils.showBattleLog(`【势力】${target.name}${delta > 0 ? '态度转暖' : '态度转冷'}：${target.lastReason}`);
+            Utils.showBattleLog(`【势力】${target.name}${Number(target.stance) >= 0 && delta > 0 ? '态度转暖' : '态度转冷'}：${target.lastReason}`);
         }
         return target;
     };
@@ -1025,10 +2124,9 @@
             Object.keys(target.factionImpact || {}).forEach((factionId) => {
                 const delta = clampInt(target.factionImpact[factionId], -2, 2);
                 if (!delta) return;
-                const faction = state.factions.find((entry) => entry.id === factionId);
-                if (!faction) return;
-                faction.stance = clampInt(faction.stance + delta, -3, 3);
-                faction.lastReason = `你把本章路线锚定到「${target.name}」。`;
+                this.applyExpeditionFactionDelta(state, factionId, delta, `你把本章路线锚定到「${target.name}」。`, {
+                    sourceType: 'branch'
+                });
             });
             if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
                 Utils.showBattleLog(`【裂界远征】已锁定支线区域：${target.name}`);
@@ -1061,6 +2159,11 @@
             state.activeBountyIds = activeIds;
             if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
                 Utils.showBattleLog(`【章节悬赏】已承接：${bounty.name}`);
+                const signal = this.getExpeditionBountySignalModel(state, bounty);
+                const leadWarning = readArray(signal.conflictWarnings)[0];
+                if (leadWarning) {
+                    Utils.showBattleLog(`【悬赏研判】${leadWarning.label}：${leadWarning.detail}`);
+                }
             }
         }
         this.expeditionState = state;
@@ -1173,12 +2276,14 @@
         }
         state.factions.forEach((faction) => {
             if (faction.likes.includes(type)) {
-                faction.stance = clampInt(faction.stance + 1, -3, 3);
-                faction.lastReason = `你在本章推进了「${type}」相关路线。`;
+                this.applyExpeditionFactionDelta(state, faction.id, 1, `你在「${getExpeditionNodeLabel(type)}」线上推进了一步，顺着他们认可的章法前进。`, {
+                    sourceType: 'node_visit'
+                });
             }
             if (faction.dislikes.includes(type)) {
-                faction.stance = clampInt(faction.stance - 1, -3, 3);
-                faction.lastReason = `你在本章触碰了他们不喜欢的节点。`;
+                this.applyExpeditionFactionDelta(state, faction.id, -1, `你触碰了「${getExpeditionNodeLabel(type)}」节点，这正是他们最反感的做法。`, {
+                    sourceType: 'node_visit'
+                });
             }
         });
 
@@ -1256,6 +2361,15 @@
             state.activeNemesis.engagedCount = clampInt((state.activeNemesis.engagedCount || 0) + 1, 0, 99);
             state.activeNemesis.currentVariantId = variant.id;
             state.activeNemesis.lastEncounterNodeType = nodeType;
+            this.appendExpeditionNemesisHistory(state, {
+                status: nemesis.status,
+                severity: ['guarding', 'allied'].includes(nemesis.status) ? 'high' : 'medium',
+                title: `${nemesis.name} · ${variant.label || '追猎压制'}`,
+                detail: `${nemesis.name} 在「${getExpeditionNodeLabel(nodeType)}」线现身，准备以 ${variant.label || '追猎压制'} 开战。`,
+                counterplay: this.getExpeditionNemesisForecast(state)?.counterplay || '',
+                nodeTypes: [nodeType],
+                sourceType: 'encounter'
+            });
             if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
                 Utils.showBattleLog(`【仇敌追猎】${nemesis.name} 以「${variant.label || '追猎压制'}」现身了。`);
             }
@@ -1337,8 +2451,9 @@
         }
         state.factions.forEach((faction) => {
             if (faction.likes.includes(nodeType)) {
-                faction.stance = clampInt(faction.stance + 1, -3, 3);
-                faction.lastReason = `你在本章打穿了 ${nodeType} 压力线。`;
+                this.applyExpeditionFactionDelta(state, faction.id, 1, `你在「${getExpeditionNodeLabel(nodeType)}」节点打穿了压力线，证明这条路值得继续。`, {
+                    sourceType: 'battle_victory'
+                });
             }
         });
         const nemesisDefeated = state.activeNemesis
@@ -1359,6 +2474,15 @@
                 state.activeNemesis.hpMul = Math.max(1, safeNumber(state.activeNemesis.hpMul, 1) * 1.05);
                 state.activeNemesis.atkMul = Math.max(1, safeNumber(state.activeNemesis.atkMul, 1) * 1.05);
                 state.activeNemesis.outcomeNote = `${state.activeNemesis.name} 暂退重整，后续会以更重的压制回返。`;
+                this.appendExpeditionNemesisHistory(state, {
+                    status: state.activeNemesis.status,
+                    severity: 'high',
+                    title: `${state.activeNemesis.name} · 复现中`,
+                    detail: state.activeNemesis.outcomeNote,
+                    counterplay: this.getExpeditionNemesisForecast(state)?.counterplay || '',
+                    nodeTypes: [nodeType],
+                    sourceType: 'recurring'
+                });
                 if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
                     Utils.showBattleLog(`【仇敌追猎】${state.activeNemesis.name} 暂退，后续会再次现身。`);
                 }
@@ -1551,17 +2675,81 @@
         if (!state && !latestSlate) return null;
         const activeBounties = state ? this.getActiveExpeditionBounties(state) : [];
         const selectedObservatoryBonus = state ? this.getSelectedExpeditionObservatoryBonus(state) : null;
+        const recentFactionLogs = state ? this.getRecentExpeditionFactionLogs(state, 4) : [];
+        const recentNemesisLogs = state ? this.getRecentExpeditionNemesisLogs(state, 4) : [];
+        const engineeringInfluence = state ? this.getStrategicEngineeringExpeditionInfluence(state) : null;
+        const nemesisForecast = state ? this.getExpeditionNemesisForecast(state) : null;
+        const branchEngineeringMap = new Map();
+        readArray(state?.branchOptions).forEach((entry) => {
+            branchEngineeringMap.set(entry.id, state ? this.getExpeditionBranchEngineeringInsight(state, entry, engineeringInfluence) : null);
+        });
+        const bountySignalMap = new Map();
+        readArray(state?.bountyDraft).forEach((entry) => {
+            bountySignalMap.set(entry.id, state ? this.getExpeditionBountySignalModel(state, entry) : {
+                focusNodeTypes: [],
+                avoidNodeTypes: [],
+                conflictWarnings: [],
+                summaryLine: '暂无悬赏情报',
+                engineeringTrackId: '',
+                engineeringTrackName: '',
+                engineeringNote: '',
+                routeDivergence: 'stable',
+                pressureBias: '常规',
+                rewardBias: '均衡'
+            });
+        });
+        const bountyConflictWarnings = state ? this.getExpeditionBountyConflictWarnings(state, bountySignalMap) : [];
+        const observatoryEngineering = state
+            ? this.getExpeditionObservatoryEngineeringIntel(state, nemesisForecast, bountyConflictWarnings, engineeringInfluence)
+            : null;
+        const selectedBranchEngineering = state?.selectedBranchId
+            ? branchEngineeringMap.get(state.selectedBranchId) || null
+            : null;
+        const serializeWarning = (warning = null) => ({
+            id: warning?.id || '',
+            severity: warning?.severity || 'low',
+            label: warning?.label || '',
+            detail: warning?.detail || '',
+            suggestion: warning?.suggestion || '',
+            factionId: warning?.factionId || '',
+            factionName: warning?.factionName || '',
+            engineeringTrackId: warning?.engineeringTrackId || '',
+            engineeringTrackName: warning?.engineeringTrackName || '',
+            engineeringNote: warning?.engineeringNote || '',
+            routeDivergence: warning?.routeDivergence || '',
+            line: warning?.line || ''
+        });
         return {
             chapterIndex: state?.chapterIndex || latestSlate?.chapterIndex || 0,
             chapterName: state?.chapterFullName || latestSlate?.chapterName || '',
             selectedBranchId: state?.selectedBranchId || '',
             selectedBranchName: state?.branchOptions?.find((entry) => entry.id === state.selectedBranchId)?.name || '',
+            engineeringLink: engineeringInfluence
+                ? {
+                    trackId: engineeringInfluence.engineeringTrackId,
+                    name: engineeringInfluence.engineeringTrackName,
+                    icon: engineeringInfluence.engineeringTrackIcon,
+                    tier: engineeringInfluence.engineeringTier,
+                    tierLabel: engineeringInfluence.engineeringTierLabel,
+                    routeDirective: engineeringInfluence.routeDirective,
+                    pressureBias: engineeringInfluence.pressureBias,
+                    rewardBias: engineeringInfluence.rewardBias,
+                    summary: engineeringInfluence.summary,
+                    line: selectedBranchEngineering?.engineeringNote || observatoryEngineering?.huntIntel || engineeringInfluence.summary
+                }
+                : null,
             branchOptions: readArray(state?.branchOptions).map((entry) => ({
                 id: entry.id,
                 name: entry.name,
                 tone: entry.tone,
                 selected: entry.id === state.selectedBranchId,
-                recommended: this.isExpeditionRecommendedBranch(state, entry.id)
+                recommended: this.isExpeditionRecommendedBranch(state, entry.id),
+                engineeringTrackId: branchEngineeringMap.get(entry.id)?.engineeringTrackId || '',
+                engineeringTrackName: branchEngineeringMap.get(entry.id)?.engineeringTrackName || '',
+                engineeringNote: branchEngineeringMap.get(entry.id)?.engineeringNote || '',
+                routeDivergence: branchEngineeringMap.get(entry.id)?.routeDivergence || '',
+                pressureBias: branchEngineeringMap.get(entry.id)?.pressureBias || '',
+                rewardBias: branchEngineeringMap.get(entry.id)?.rewardBias || ''
             })),
             bountyDraft: readArray(state?.bountyDraft).map((entry) => ({
                 id: entry.id,
@@ -1570,14 +2758,32 @@
                 active: readArray(state?.activeBountyIds).includes(entry.id),
                 progress: entry.progress,
                 progressText: getBountyProgressLabel(entry),
-                completed: !!entry.completed
+                completed: !!entry.completed,
+                focusNodeTypes: readArray(bountySignalMap.get(entry.id)?.focusNodeTypes),
+                conflictWarnings: readArray(bountySignalMap.get(entry.id)?.conflictWarnings).map((warning) => serializeWarning(warning)),
+                conflictLabels: readArray(bountySignalMap.get(entry.id)?.conflictWarnings).map((warning) => warning.label),
+                signalLine: String(bountySignalMap.get(entry.id)?.summaryLine || ''),
+                engineeringTrackId: String(bountySignalMap.get(entry.id)?.engineeringTrackId || ''),
+                engineeringTrackName: String(bountySignalMap.get(entry.id)?.engineeringTrackName || ''),
+                engineeringNote: String(bountySignalMap.get(entry.id)?.engineeringNote || ''),
+                routeDivergence: String(bountySignalMap.get(entry.id)?.routeDivergence || ''),
+                pressureBias: String(bountySignalMap.get(entry.id)?.pressureBias || ''),
+                rewardBias: String(bountySignalMap.get(entry.id)?.rewardBias || '')
             })),
             activeBounties: activeBounties.map((entry) => ({
                 id: entry.id,
                 name: entry.name,
                 progress: entry.progress,
                 progressText: getBountyProgressLabel(entry),
-                completed: !!entry.completed
+                completed: !!entry.completed,
+                conflictWarnings: readArray(bountySignalMap.get(entry.id)?.conflictWarnings).map((warning) => serializeWarning(warning)),
+                signalLine: String(bountySignalMap.get(entry.id)?.summaryLine || ''),
+                engineeringTrackId: String(bountySignalMap.get(entry.id)?.engineeringTrackId || ''),
+                engineeringTrackName: String(bountySignalMap.get(entry.id)?.engineeringTrackName || ''),
+                engineeringNote: String(bountySignalMap.get(entry.id)?.engineeringNote || ''),
+                routeDivergence: String(bountySignalMap.get(entry.id)?.routeDivergence || ''),
+                pressureBias: String(bountySignalMap.get(entry.id)?.pressureBias || ''),
+                rewardBias: String(bountySignalMap.get(entry.id)?.rewardBias || '')
             })),
             factions: readArray(state?.factions).map((entry) => ({
                 id: entry.id,
@@ -1585,6 +2791,46 @@
                 stance: entry.stance,
                 status: getFactionStatusMeta(entry.stance).label,
                 lastReason: entry.lastReason || ''
+            })),
+            recentFactionLogs: recentFactionLogs.map((entry) => ({
+                id: entry.id,
+                factionId: entry.factionId,
+                factionName: entry.factionName,
+                delta: entry.delta,
+                deltaLabel: entry.deltaLabel,
+                stanceAfter: entry.stanceAfter,
+                stanceLabel: entry.stanceLabel,
+                reason: entry.reason,
+                line: entry.line,
+                sourceType: entry.sourceType
+            })),
+            recentNemesisLogs: recentNemesisLogs.map((entry) => ({
+                id: entry.id,
+                status: entry.status,
+                statusLabel: entry.statusLabel,
+                severity: entry.severity,
+                title: entry.title,
+                detail: entry.detail,
+                counterplay: entry.counterplay,
+                line: entry.line,
+                sourceType: entry.sourceType,
+                nodeTypes: readArray(entry.nodeTypes)
+            })),
+            bountyConflictWarnings: bountyConflictWarnings.map((entry) => ({
+                id: entry.id,
+                bountyId: entry.bountyId,
+                bountyName: entry.bountyName,
+                severity: entry.severity,
+                label: entry.label,
+                detail: entry.detail,
+                suggestion: entry.suggestion,
+                factionId: entry.factionId,
+                factionName: entry.factionName,
+                engineeringTrackId: entry.engineeringTrackId || '',
+                engineeringTrackName: entry.engineeringTrackName || '',
+                engineeringNote: entry.engineeringNote || '',
+                routeDivergence: entry.routeDivergence || '',
+                line: entry.line
             })),
             activeNemesis: state?.activeNemesis
                 ? {
@@ -1600,6 +2846,27 @@
                     recurrenceCount: clampInt(state.activeNemesis.recurrenceCount, 0, 9),
                     alliedFactionName: state.activeNemesis.alliedFactionName || '',
                     outcomeNote: state.activeNemesis.outcomeNote || ''
+                }
+                : null,
+            nemesisForecast: nemesisForecast
+                ? {
+                    nemesisId: nemesisForecast.nemesisId,
+                    nemesisName: nemesisForecast.nemesisName,
+                    status: nemesisForecast.status,
+                    statusLabel: nemesisForecast.statusLabel,
+                    pressureIndex: nemesisForecast.pressureIndex,
+                    pressureTier: nemesisForecast.pressureTier,
+                    pressureLabel: nemesisForecast.pressureLabel,
+                    windowLabel: nemesisForecast.windowLabel,
+                    focusNodeTypes: readArray(nemesisForecast.focusNodeTypes),
+                    focusNodeLabels: readArray(nemesisForecast.focusNodeLabels),
+                    driverLines: readArray(nemesisForecast.driverLines),
+                    line: nemesisForecast.line,
+                    counterplay: nemesisForecast.counterplay,
+                    engineeringTrackId: nemesisForecast.engineeringTrackId || '',
+                    engineeringTrackName: nemesisForecast.engineeringTrackName || '',
+                    engineeringModifier: nemesisForecast.engineeringModifier || '',
+                    engineeringNote: nemesisForecast.engineeringNote || ''
                 }
                 : null,
             observatoryLink: state?.observatoryLink
@@ -1626,7 +2893,12 @@
                     })),
                     selectedBonusId: state.observatoryLink.selectedBonusId || '',
                     selectedBonusLabel: selectedObservatoryBonus?.label || '',
-                    selectedBonusConsumed: !!selectedObservatoryBonus?.consumed
+                    selectedBonusConsumed: !!selectedObservatoryBonus?.consumed,
+                    engineeringTrackId: observatoryEngineering?.engineeringTrackId || '',
+                    engineeringTrackName: observatoryEngineering?.engineeringTrackName || '',
+                    engineeringTierLabel: observatoryEngineering?.engineeringTierLabel || '',
+                    huntIntel: observatoryEngineering?.huntIntel || '',
+                    conflictPreview: observatoryEngineering?.conflictPreview || ''
                 }
                 : null,
             endingPreview: state ? this.determineExpeditionEnding(state) : null,
@@ -1694,16 +2966,29 @@
             : null;
         const observatoryLink = state.observatoryLink || null;
         const selectedObservatoryBonus = this.getSelectedExpeditionObservatoryBonus(state);
+        const recentFactionLogs = this.getRecentExpeditionFactionLogs(state, 4);
+        const recentNemesisLogs = this.getRecentExpeditionNemesisLogs(state, 3);
+        const engineeringInfluence = this.getStrategicEngineeringExpeditionInfluence(state);
+        const nemesisForecast = this.getExpeditionNemesisForecast(state);
+        const branchEngineeringMap = new Map(state.branchOptions.map((entry) => [
+            entry.id,
+            this.getExpeditionBranchEngineeringInsight(state, entry, engineeringInfluence)
+        ]));
+        const bountySignalMap = new Map(state.bountyDraft.map((entry) => [entry.id, this.getExpeditionBountySignalModel(state, entry)]));
+        const bountyConflictWarnings = this.getExpeditionBountyConflictWarnings(state, bountySignalMap);
+        const observatoryEngineering = this.getExpeditionObservatoryEngineeringIntel(state, nemesisForecast, bountyConflictWarnings, engineeringInfluence);
         container.style.display = 'grid';
         container.innerHTML = `
             <section class="expedition-panel-card expedition-overview-card">
                 <div class="expedition-card-kicker">裂界远征</div>
                 <div class="expedition-card-title">本章目标 · ${escapeHtml(state.chapterFullName || state.chapterName)}</div>
-                <div class="expedition-card-note">${escapeHtml(selectedBranch ? `当前支线：${selectedBranch.name}` : '请选择 1 条支线区域锁定本章路线。')}${observatoryLink?.sourceTitle ? ` 当前观星线索：${observatoryLink.sourceTitle}。` : ''}</div>
+                <div class="expedition-card-note">${escapeHtml(selectedBranch ? `当前支线：${selectedBranch.name}` : '请选择 1 条支线区域锁定本章路线。')}${observatoryLink?.sourceTitle ? ` 当前观星线索：${observatoryLink.sourceTitle}。` : ''}${engineeringInfluence ? ` 工程主轴：${engineeringInfluence.engineeringTrackIcon} ${engineeringInfluence.engineeringTrackName} ${engineeringInfluence.engineeringTierLabel} · ${engineeringInfluence.routeDirective}。` : ''}</div>
                 <div class="expedition-chip-row">
                     <span class="expedition-chip">${escapeHtml(ending.icon)} ${escapeHtml(ending.name)}</span>
                     <span class="expedition-chip">${escapeHtml(activeBounties.length)}/${MAX_ACTIVE_BOUNTIES} 条悬赏</span>
                     <span class="expedition-chip">${escapeHtml(state.activeNemesis?.name || '暂无仇敌')} · ${escapeHtml(nemesisMeta.label || '未定')}</span>
+                    ${nemesisForecast?.pressureLabel ? `<span class="expedition-chip">${escapeHtml(`追猎预判 · ${nemesisForecast.pressureLabel}`)}</span>` : ''}
+                    ${engineeringInfluence ? `<span class="expedition-chip">${escapeHtml(`工程主轴 · ${engineeringInfluence.engineeringTrackName} ${engineeringInfluence.engineeringTierLabel}`)}</span>` : ''}
                     ${observatoryLink?.sourceThemeLabel ? `<span class="expedition-chip">${escapeHtml(observatoryLink.sourceThemeLabel)} · 观星样本</span>` : ''}
                     ${selectedObservatoryBonus?.label ? `<span class="expedition-chip">${escapeHtml(selectedObservatoryBonus.label)}${selectedObservatoryBonus.consumed ? ' · 已触发' : ''}</span>` : ''}
                 </div>
@@ -1712,7 +2997,9 @@
                 <div class="expedition-card-kicker">支线区域</div>
                 <div class="expedition-card-title">选择本章路线</div>
                 <div class="expedition-choice-list">
-                    ${state.branchOptions.map((entry) => `
+                    ${state.branchOptions.map((entry) => {
+            const branchEngineering = branchEngineeringMap.get(entry.id);
+            return `
                         <article class="expedition-choice-card ${entry.id === state.selectedBranchId ? 'selected' : ''} ${this.isExpeditionRecommendedBranch(state, entry.id) ? 'suggested' : ''}">
                             <div class="expedition-choice-head">
                                 <strong>${escapeHtml(entry.icon)} ${escapeHtml(entry.name)}</strong>
@@ -1723,20 +3010,30 @@
                                 <span>收益：${escapeHtml(entry.reward)}</span>
                                 <span>风险：${escapeHtml(entry.risk)}</span>
                             </div>
+                            ${branchEngineering?.engineeringNote
+                ? `<div class="expedition-choice-meta">
+                                    <span>${escapeHtml(`工程偏向：${branchEngineering.pressureBias || '常规'}`)}</span>
+                                    <span>${escapeHtml(`工程收益：${branchEngineering.rewardBias || '均衡'}`)}</span>
+                                </div>
+                                <div class="expedition-observatory-note">${escapeHtml(`工程联动：${branchEngineering.engineeringNote}`)}</div>`
+                : ''}
                             ${this.isExpeditionRecommendedBranch(state, entry.id)
                 ? `<div class="expedition-observatory-note">观星建议：这条路线更贴近「${escapeHtml(observatoryLink?.sourceThemeLabel || '精选命盘')}」的样本节奏。</div>`
                 : ''}
                             <button type="button" class="collection-inline-btn ${entry.id === state.selectedBranchId ? 'secondary' : ''}"
                                 onclick="game.selectExpeditionBranch('${escapeHtml(entry.id)}')">${entry.id === state.selectedBranchId ? '当前路线' : '锁定路线'}</button>
                         </article>
-                    `).join('')}
+                    `;
+        }).join('')}
                 </div>
             </section>
             <section class="expedition-panel-card">
                 <div class="expedition-card-kicker">章节悬赏</div>
                 <div class="expedition-card-title">承接 1-2 条</div>
                 <div class="expedition-choice-list">
-                    ${state.bountyDraft.map((entry) => `
+                    ${state.bountyDraft.map((entry) => {
+            const signal = bountySignalMap.get(entry.id) || { conflictWarnings: [], summaryLine: '暂无悬赏情报' };
+            return `
                         <article class="expedition-choice-card ${state.activeBountyIds.includes(entry.id) ? 'selected' : ''} ${entry.completed ? 'completed' : ''}">
                             <div class="expedition-choice-head">
                                 <strong>${escapeHtml(entry.icon)} ${escapeHtml(entry.name)}</strong>
@@ -1747,10 +3044,88 @@
                                 <span>${escapeHtml(getBountyProgressLabel(entry))}</span>
                                 <span>${escapeHtml(entry.routeHint)}</span>
                             </div>
+                            ${signal.conflictWarnings.length > 0
+                    ? `<div class="expedition-warning-list">
+                                    ${signal.conflictWarnings.slice(0, 2).map((warning) => `
+                                        <div class="expedition-warning-item ${escapeHtml(warning.severity)}">
+                                            <strong>${escapeHtml(warning.label)}</strong>
+                                            <span>${escapeHtml(warning.detail)}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>`
+                    : `<div class="expedition-observatory-note expedition-bounty-signal">${escapeHtml(signal.summaryLine || '当前赏单与路线暂未出现明显冲突。')}</div>`}
+                            ${signal.engineeringNote
+                    ? `<div class="expedition-observatory-note expedition-bounty-signal">${escapeHtml(`工程联动：${signal.engineeringNote}`)}</div>`
+                    : ''}
                             <button type="button" class="collection-inline-btn ${state.activeBountyIds.includes(entry.id) ? 'secondary' : ''}"
                                 onclick="game.toggleExpeditionBounty('${escapeHtml(entry.id)}')">${state.activeBountyIds.includes(entry.id) ? '取消承接' : '承接悬赏'}</button>
                         </article>
-                    `).join('')}
+                    `;
+        }).join('')}
+                </div>
+            </section>
+            <section class="expedition-panel-card expedition-signals-card">
+                <div class="expedition-card-kicker">态势研判</div>
+                <div class="expedition-card-title">关系回看、追猎预判与冲突提示</div>
+                ${engineeringInfluence ? `<div class="expedition-observatory-note">${escapeHtml(`工程联动：${engineeringInfluence.summary}`)}</div>` : ''}
+                <div class="expedition-signal-grid">
+                    <div class="expedition-signal-block">
+                        <div class="expedition-choice-head">
+                            <strong>最近势力变化</strong>
+                            <span>${escapeHtml(recentFactionLogs.length > 0 ? `最近 ${recentFactionLogs.length} 条` : '暂无新波动')}</span>
+                        </div>
+                        ${recentFactionLogs.length > 0
+                ? `<div class="expedition-signal-list">
+                                ${recentFactionLogs.map((entry) => `
+                                    <article class="expedition-signal-item">
+                                        <strong>${escapeHtml(entry.factionName)} ${escapeHtml(entry.delta ? `${entry.delta > 0 ? '↑' : '↓'}${Math.abs(entry.delta)}` : entry.stanceLabel)}</strong>
+                                        <span>${escapeHtml(entry.reason)}</span>
+                                    </article>
+                                `).join('')}
+                            </div>`
+                : '<div class="expedition-empty-note">最近还没有新的势力波动，先锁路线或踩关键节点再观察本章关系转折。</div>'}
+                    </div>
+                    <div class="expedition-signal-block warning">
+                        <div class="expedition-choice-head">
+                            <strong>悬赏冲突提示</strong>
+                            <span>${escapeHtml(bountyConflictWarnings.length > 0 ? `进行中 ${bountyConflictWarnings.length} 条` : '当前稳定')}</span>
+                        </div>
+                        ${bountyConflictWarnings.length > 0
+                ? `<div class="expedition-signal-list">
+                                ${bountyConflictWarnings.map((entry) => `
+                                    <article class="expedition-signal-item warning ${escapeHtml(entry.severity)}">
+                                        <strong>${escapeHtml(entry.bountyName)} · ${escapeHtml(entry.label)}</strong>
+                                        <span>${escapeHtml(entry.detail || entry.line)}</span>
+                                        ${entry.engineeringNote ? `<span>${escapeHtml(entry.engineeringNote)}</span>` : ''}
+                                    </article>
+                                `).join('')}
+                            </div>`
+                : '<div class="expedition-empty-note">当前承接的悬赏与路线暂未出现明显冲突，可以继续按既定节奏推进。</div>'}
+                    </div>
+                    <div class="expedition-signal-block nemesis ${escapeHtml(nemesisForecast?.pressureTier || 'low')}">
+                        <div class="expedition-choice-head">
+                            <strong>仇敌追猎链路</strong>
+                            <span>${escapeHtml(nemesisForecast ? `${nemesisForecast.pressureLabel} · ${nemesisForecast.windowLabel}` : '暂无异常')}</span>
+                        </div>
+                        ${nemesisForecast
+                ? `<article class="expedition-signal-item nemesis ${escapeHtml(nemesisForecast.pressureTier || 'low')}">
+                                <strong>${escapeHtml(`${nemesisForecast.pressureLabel} · ${nemesisForecast.windowLabel}`)}</strong>
+                                <span>${escapeHtml(nemesisForecast.line)}</span>
+                                ${nemesisForecast.engineeringModifier ? `<span>${escapeHtml(`工程联动：${nemesisForecast.engineeringModifier} · ${nemesisForecast.engineeringNote || '本轮追猎窗口已被工程主轴改写。'}`)}</span>` : ''}
+                                <span>${escapeHtml(nemesisForecast.counterplay || '先稳住关键资源，再决定是否硬接这条追猎线。')}</span>
+                            </article>`
+                : '<div class="expedition-empty-note">当前仇敌链路尚未形成明确压制窗口，先踩事件或高压节点再观察追猎方向。</div>'}
+                        ${recentNemesisLogs.length > 0
+                ? `<div class="expedition-signal-list">
+                                ${recentNemesisLogs.map((entry) => `
+                                    <article class="expedition-signal-item nemesis ${escapeHtml(entry.severity || 'low')}">
+                                        <strong>${escapeHtml(entry.title)}</strong>
+                                        <span>${escapeHtml(entry.detail || entry.line)}</span>
+                                    </article>
+                                `).join('')}
+                            </div>`
+                : ''}
+                    </div>
                 </div>
             </section>
             <section class="expedition-panel-card expedition-observatory-card">
@@ -1776,6 +3151,8 @@
                         ${observatoryLink.recommendedBranches.length > 0
                     ? `<div class="expedition-observatory-note">推荐路线：${escapeHtml(observatoryLink.recommendedBranches.map((entry) => entry.name).join(' / '))}</div>`
                     : ''}
+                        ${observatoryEngineering?.huntIntel ? `<div class="expedition-observatory-note">${escapeHtml(`工程情报：${observatoryEngineering.huntIntel}`)}</div>` : ''}
+                        ${observatoryEngineering?.conflictPreview ? `<div class="expedition-observatory-note">${escapeHtml(observatoryEngineering.conflictPreview)}</div>` : ''}
                     </div>
                     <div class="expedition-choice-list">
                         ${observatoryLink.bonusOptions.map((entry) => `
@@ -1925,6 +3302,72 @@
         try {
             const payload = JSON.parse(raw);
             payload.expedition = this.getExpeditionPayload();
+            if (payload?.map?.chapter && payload.expedition) {
+                payload.map.chapter.factionSignals = readArray(payload.expedition.recentFactionLogs).map((entry) => ({
+                    factionId: entry.factionId,
+                    factionName: entry.factionName,
+                    delta: entry.delta,
+                    stanceAfter: entry.stanceAfter,
+                    stanceLabel: entry.stanceLabel,
+                    reason: entry.reason,
+                    line: entry.line
+                }));
+                payload.map.chapter.bountyConflicts = readArray(payload.expedition.bountyConflictWarnings).map((entry) => ({
+                    bountyId: entry.bountyId,
+                    bountyName: entry.bountyName,
+                    severity: entry.severity,
+                    label: entry.label,
+                    detail: entry.detail,
+                    suggestion: entry.suggestion,
+                    engineeringTrackId: entry.engineeringTrackId || '',
+                    engineeringTrackName: entry.engineeringTrackName || '',
+                    engineeringNote: entry.engineeringNote || '',
+                    routeDivergence: entry.routeDivergence || '',
+                    line: entry.line
+                }));
+                payload.map.chapter.nemesisSignals = readArray(payload.expedition.recentNemesisLogs).map((entry) => ({
+                    status: entry.status,
+                    statusLabel: entry.statusLabel,
+                    severity: entry.severity,
+                    title: entry.title,
+                    detail: entry.detail,
+                    counterplay: entry.counterplay,
+                    line: entry.line,
+                    nodeTypes: readArray(entry.nodeTypes)
+                }));
+                payload.map.chapter.nemesisForecast = payload.expedition.nemesisForecast
+                    ? {
+                        status: payload.expedition.nemesisForecast.status,
+                        statusLabel: payload.expedition.nemesisForecast.statusLabel,
+                        pressureIndex: payload.expedition.nemesisForecast.pressureIndex,
+                        pressureTier: payload.expedition.nemesisForecast.pressureTier,
+                        pressureLabel: payload.expedition.nemesisForecast.pressureLabel,
+                        windowLabel: payload.expedition.nemesisForecast.windowLabel,
+                        focusNodeTypes: readArray(payload.expedition.nemesisForecast.focusNodeTypes),
+                        focusNodeLabels: readArray(payload.expedition.nemesisForecast.focusNodeLabels),
+                        driverLines: readArray(payload.expedition.nemesisForecast.driverLines),
+                        line: payload.expedition.nemesisForecast.line,
+                        counterplay: payload.expedition.nemesisForecast.counterplay,
+                        engineeringTrackId: payload.expedition.nemesisForecast.engineeringTrackId || '',
+                        engineeringTrackName: payload.expedition.nemesisForecast.engineeringTrackName || '',
+                        engineeringModifier: payload.expedition.nemesisForecast.engineeringModifier || '',
+                        engineeringNote: payload.expedition.nemesisForecast.engineeringNote || ''
+                    }
+                    : null;
+                payload.map.chapter.expeditionEngineering = payload.expedition.engineeringLink
+                    ? {
+                        trackId: payload.expedition.engineeringLink.trackId,
+                        name: payload.expedition.engineeringLink.name,
+                        tier: payload.expedition.engineeringLink.tier,
+                        tierLabel: payload.expedition.engineeringLink.tierLabel,
+                        routeDirective: payload.expedition.engineeringLink.routeDirective,
+                        pressureBias: payload.expedition.engineeringLink.pressureBias,
+                        rewardBias: payload.expedition.engineeringLink.rewardBias,
+                        summary: payload.expedition.engineeringLink.summary,
+                        line: payload.expedition.engineeringLink.line
+                    }
+                    : null;
+            }
             return JSON.stringify(payload);
         } catch (error) {
             return raw;
@@ -1964,9 +3407,18 @@
         if (!expedition) return snapshot;
         const selectedBranch = expedition.branchOptions.find((entry) => entry.id === expedition.selectedBranchId);
         const activeBounties = this.getActiveExpeditionBounties(expedition);
+        const recentFactionLogs = this.getRecentExpeditionFactionLogs(expedition, 2);
+        const recentNemesisLogs = this.getRecentExpeditionNemesisLogs(expedition, 2);
+        const engineeringInfluence = this.getStrategicEngineeringExpeditionInfluence(expedition);
+        const nemesisForecast = this.getExpeditionNemesisForecast(expedition);
+        const bountySignalMap = new Map(expedition.bountyDraft.map((entry) => [entry.id, this.getExpeditionBountySignalModel(expedition, entry)]));
+        const bountyConflictWarnings = this.getExpeditionBountyConflictWarnings(expedition, bountySignalMap);
         snapshot.strengths = Array.isArray(snapshot.strengths) ? snapshot.strengths.slice() : [];
         snapshot.gaps = Array.isArray(snapshot.gaps) ? snapshot.gaps.slice() : [];
         snapshot.nextTargets = Array.isArray(snapshot.nextTargets) ? snapshot.nextTargets.slice() : [];
+        if (engineeringInfluence) {
+            snapshot.strengths.push(`工程主轴当前为【${engineeringInfluence.engineeringTrackName} ${engineeringInfluence.engineeringTierLabel}】，正在以「${engineeringInfluence.routeDirective}」改写远征。`);
+        }
         if (selectedBranch) {
             snapshot.strengths.push(`远征路线已锁定为【${selectedBranch.name}】，会把当前章节更强地推向「${selectedBranch.tone}」。`);
         } else {
@@ -1976,6 +3428,12 @@
             snapshot.nextTargets.push(`章节悬赏：${activeBounties.map((entry) => `${entry.name}（${getBountyProgressLabel(entry)}）`).join(' / ')}`);
         } else {
             snapshot.nextTargets.push('章节悬赏：还未承接，建议尽快选 1-2 条让本章有明确目标。');
+        }
+        if (recentFactionLogs.length > 0) {
+            snapshot.nextTargets.push(`势力日志：${recentFactionLogs[0].line}`);
+        }
+        if (bountyConflictWarnings.length > 0) {
+            snapshot.gaps.push(`悬赏冲突：${bountyConflictWarnings[0].line}`);
         }
         if (expedition.observatoryLink?.sourceTitle) {
             const selectedBonus = this.getSelectedExpeditionObservatoryBonus(expedition);
@@ -1994,8 +3452,14 @@
         if (expedition.activeNemesis && ACTIVE_NEMESIS_STATUSES.includes(expedition.activeNemesis.status)) {
             snapshot.gaps.push(`仇敌【${expedition.activeNemesis.name}】当前处于「${getNemesisStatusMeta(expedition.activeNemesis.status).label}」，精英与试炼路线会更危险。`);
         }
+        if (nemesisForecast?.line) {
+            snapshot.gaps.push(`追猎预判：${nemesisForecast.line}`);
+        }
         if (expedition.activeNemesis?.clueRevealed && expedition.activeNemesis?.clueLine) {
             snapshot.nextTargets.push(`仇敌线索：${expedition.activeNemesis.clueLine}`);
+        }
+        if (recentNemesisLogs.length > 0) {
+            snapshot.nextTargets.push(`追猎日志：${recentNemesisLogs[0].line}`);
         }
         snapshot.expedition = this.getExpeditionPayload();
         return snapshot;
@@ -2079,10 +3543,19 @@
 
     if (typeof GameMap !== 'undefined' && originalMapOnNodeClick) {
         GameMap.prototype.onNodeClick = function (node) {
-            if (node && !node.completed && node.accessible && this?.game && typeof this.game.recordExpeditionNodeVisit === 'function') {
+            return originalMapOnNodeClick.call(this, node);
+        };
+    }
+
+    if (typeof GameMap !== 'undefined' && originalMapCompleteNode) {
+        GameMap.prototype.completeNode = function (node) {
+            const beforeCompleted = isMapNodeMarkedCompleted(this, node);
+            const result = originalMapCompleteNode.call(this, node);
+            const afterCompleted = isMapNodeMarkedCompleted(this, node);
+            if (!beforeCompleted && afterCompleted && node && this?.game && typeof this.game.recordExpeditionNodeVisit === 'function') {
                 this.game.recordExpeditionNodeVisit(node);
             }
-            return originalMapOnNodeClick.call(this, node);
+            return result;
         };
     }
 }());

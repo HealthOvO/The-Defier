@@ -14,6 +14,7 @@ echo "[release-checks] Writing reports under: $OUTPUT_ROOT"
 
 node tests/browser_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/core"
 node tests/browser_feature_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/feature"
+node tests/browser_map_overview_risk_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/map-overview-risk"
 node tests/browser_ui_gallery_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/ui-gallery"
 node tests/browser_mobile_layout_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/mobile"
 node tests/browser_meta_screen_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/meta"

@@ -15,9 +15,21 @@ function add(name, pass, detail = '') {
 
 async function safeScreenshot(page, outPath) {
   try {
-    await page.screenshot({ path: outPath, fullPage: true, timeout: 5000 });
+    await page.screenshot({
+      path: outPath,
+      fullPage: true,
+      animations: 'disabled',
+      timeout: 12000,
+    });
   } catch (err) {
-    console.warn(`[browser_vow_choice_audit] screenshot skipped: ${err?.message || err}`);
+    try {
+      const session = await page.context().newCDPSession(page);
+      const shot = await session.send('Page.captureScreenshot', { format: 'png' });
+      fs.writeFileSync(outPath, Buffer.from(shot.data, 'base64'));
+      console.warn(`[browser_vow_choice_audit] screenshot fallback captured after Playwright timeout: ${err?.message || err}`);
+    } catch (fallbackErr) {
+      console.warn(`[browser_vow_choice_audit] screenshot skipped: ${fallbackErr?.message || fallbackErr}`);
+    }
   }
 }
 

@@ -139,7 +139,7 @@
                 <button class="menu-btn small cheat-btn" onclick="game.cheat()"
                     style="display: none; width: auto; padding: 5px 15px;">🛠️ 作弊</button>
             </div>
-            <div class="version-info">v7.0 命途裂变（开发中） | 命途任务·章节考试·DRI风险指数</div>
+            <div class="version-info">v7.0 命途裂变 | 命途任务·章节考试·工程主轴·DRI风险指数·PVP复盘·焦点约战·对手档案·赛季账本·样本筛面</div>
         </div>
     </div>
 
@@ -194,6 +194,11 @@
             <div class="pvp-content-container">
                 <!-- Ranking Tab -->
                 <div id="tab-ranking" class="pvp-tab-pane active">
+                    <div id="pvp-ranking-brief" class="pvp-risk-brief" data-risk-tier="none">
+                        <div class="pvp-risk-kicker">榜单推演</div>
+                        <div class="pvp-risk-title">选择一名对手，查看本场读题建议</div>
+                        <div class="pvp-risk-footnote">这里会显示 PVP DRI、对手档案、赛季题面、分段标签、跨场对照、历史交手留痕、多场趋势、赛季账本、样本筛面摘要、主导风险轴、对策、资源预留与焦点约战单。</div>
+                    </div>
                     <div class="ranking-scroll-area" id="ranking-list">
                         <!-- Dynamic Jade Slips -->
                         <div class="loading-ink">
@@ -203,6 +208,7 @@
                     </div>
 
                     <div class="pvp-nav-footer">
+                        <div class="challenge-intent-line" id="pvp-challenge-intent">未锁定焦点目标时，将自动按榜位推演对手。</div>
                         <button class="challenge-btn pulse" onclick="PVPScene.findMatch()">
                             <span class="btn-glow"></span>
                             <span class="text">⚔️ 论道切磋</span>
@@ -1195,11 +1201,13 @@
                         <div id="preview-loot" class="preview-loot-grid"></div>
                     </div>
 
-                    <button class="menu-btn primary large" id="enter-realm-btn" disabled>
-                        <span class="btn-text">踏入天域</span>
-                    </button>
-                    <div class="realm-cost-display" id="realm-cost-display"
-                        style="display:none; color: var(--accent-gold); margin-top: 10px; font-size: 0.9rem;">
+                    <div class="realm-preview-actions">
+                        <button class="menu-btn primary large" id="enter-realm-btn" disabled>
+                            <span class="btn-text">踏入天域</span>
+                        </button>
+                        <div class="realm-cost-display" id="realm-cost-display"
+                            style="display:none; color: var(--accent-gold); margin-top: 10px; font-size: 0.9rem;">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1477,6 +1485,27 @@
                     <span class="vs-text">VS</span>
                     <span class="opponent-name" id="pvp-result-opponent">对手名字</span>
                     <span class="opponent-rating" id="pvp-result-opp-score">1050</span>
+                </div>
+
+                <div class="pvp-result-review" id="pvp-result-review" data-tier="controlled">
+                    <div class="pvp-result-review-kicker" id="pvp-result-review-kicker">赛后复盘</div>
+                    <div class="pvp-result-review-head">
+                        <div class="pvp-result-review-copy">
+                            <div class="pvp-result-review-title" id="pvp-result-review-title">本局题面会在这里回看</div>
+                            <div class="pvp-result-review-subtitle" id="pvp-result-review-subtitle">DRI、主轴与对手画像会同步写入复盘卡。</div>
+                        </div>
+                        <div class="pvp-result-review-chip tier-controlled" id="pvp-result-review-chip">DRI 0 · 可控</div>
+                    </div>
+                    <div class="pvp-result-review-summary" id="pvp-result-review-summary">当你完成一场 PVP，对局复盘会总结这把到底是越压破局，还是哪里读题失拍。</div>
+                    <div class="pvp-result-review-row">
+                        <span class="label" id="pvp-result-review-focus-label">判词</span>
+                        <span class="value" id="pvp-result-review-focus-value">系统会结合这场的风险主轴给出一句更具体的复盘提示。</span>
+                    </div>
+                    <div class="pvp-result-review-row">
+                        <span class="label" id="pvp-result-review-next-label">下一把</span>
+                        <span class="value" id="pvp-result-review-next-value">这里会告诉你下一把应该优先保留什么资源与节拍。</span>
+                    </div>
+                    <div class="pvp-result-review-foot" id="pvp-result-review-foot">对局结束后会同步展示道韵变化与天道币收益。</div>
                 </div>
             </div>
 

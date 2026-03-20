@@ -46,6 +46,7 @@ function loadFile(ctx, filePath) {
   const ENDLESS_MUTATOR_EVENT_BIAS = vm.runInContext('ENDLESS_MUTATOR_EVENT_BIAS', ctx);
   const ARCHETYPE_EVENT_POOLS = vm.runInContext('ARCHETYPE_EVENT_POOLS', ctx);
   const FATE_PATH_EVENT_POOLS = vm.runInContext('FATE_PATH_EVENT_POOLS', ctx);
+  const STRATEGIC_ENGINEERING_EVENT_POOLS = vm.runInContext('STRATEGIC_ENGINEERING_EVENT_POOLS', ctx);
   const ARCHETYPE_PACKS = vm.runInContext('ARCHETYPE_PACKS', ctx);
   const inferDeckArchetype = vm.runInContext('inferDeckArchetype', ctx);
   const getArchetypePack = vm.runInContext('getArchetypePack', ctx);
@@ -283,6 +284,18 @@ function loadFile(ctx, filePath) {
     });
   });
 
+  const expectedEngineeringPools = {
+    observatory: ['artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil', 'starObservation', 'astralSupplyDepot', 'floatingMarketRift'],
+    memory_rift: ['floatingMarketRift', 'astralSupplyDepot', 'voidRift', 'voidBookkeeper', 'artifactConfluxBazaar', 'convergenceRelay']
+  };
+  Object.entries(expectedEngineeringPools).forEach(([trackId, expectedIds]) => {
+    const actual = STRATEGIC_ENGINEERING_EVENT_POOLS[trackId];
+    assert(Array.isArray(actual), `missing engineering event pool for track: ${trackId}`);
+    expectedIds.forEach((eventId) => {
+      assert(actual.includes(eventId), `${trackId} engineering event pool should include ${eventId}`);
+    });
+  });
+
   Object.entries(expectedEventPools).forEach(([archetypeId, eventIds]) => {
     const deck = ARCHETYPE_PACKS[archetypeId].cards.slice(0, 10).map((id) => ({ ...CARDS[id] }));
     ctx.window.game = { player: { deck } };
@@ -346,6 +359,170 @@ function loadFile(ctx, filePath) {
     assert(
       evt && expectedSet.has(evt.id),
       `expected resonance path bias hit, got ${evt ? evt.id : 'null'}`
+    );
+  }
+
+  // 5.6) 工程偏置应能命中观星/裂隙事件池，并挂上可见强化信息
+  {
+    ctx.window.game = {
+      player: { deck: [] },
+      getStrategicEngineeringSnapshot: () => ({
+        focusTrack: {
+          trackId: 'observatory',
+          tier: 2,
+          tierLabel: 'II阶',
+          name: '观星工程',
+          icon: '🔭',
+          effectSummary: '观测网已经锁定此地灵流'
+        },
+        activeTracks: [
+          {
+            trackId: 'observatory',
+            tier: 2,
+            tierLabel: 'II阶',
+            name: '观星工程',
+            icon: '🔭',
+            effectSummary: '观测网已经锁定此地灵流'
+          }
+        ],
+        summary: '观星工程 II阶'
+      })
+    };
+    const oldRandom = ctx.Math.random;
+    const seq = [0.1, 0.2]; // 触发工程偏置 + 命中池内第二个事件 artifactConfluxBazaar
+    let ridx = 0;
+    ctx.Math.random = () => {
+      const val = seq[ridx % seq.length];
+      ridx += 1;
+      return val;
+    };
+    const evt = getRandomEvent();
+    ctx.Math.random = oldRandom;
+    assert(evt && evt.id === 'artifactConfluxBazaar', `expected observatory engineering event hit, got ${evt ? evt.id : 'null'}`);
+    assert(
+      evt.engineeringEventMeta && evt.engineeringEventMeta.trackId === 'observatory' && evt.engineeringEventMeta.selectedByEngineeringBias === true,
+      `observatory engineering event should expose engineeringEventMeta, got ${JSON.stringify(evt && evt.engineeringEventMeta)}`
+    );
+    assert(
+      evt.engineeringResonance && evt.engineeringResonance.trackId === 'observatory' && evt.engineeringResonance.biasSource === 'focus',
+      `observatory engineering event should also expose engineeringResonance, got ${JSON.stringify(evt && evt.engineeringResonance)}`
+    );
+    assert(/工程联动/.test(evt.summary || ''), `observatory engineering summary should mention engineering linkage, got ${evt.summary}`);
+    assert(
+      evt.choices[0].effects.some((effect) => effect.type === 'openTemporaryShop' && Number(effect.offerCount) >= 5 && Number(effect.priceMultiplier) < 1),
+      `observatory market entry should gain extra slot + discount, got ${JSON.stringify(evt.choices[0].effects)}`
+    );
+    assert(
+      evt.choices[1].effects.some((effect) => effect.type === 'heavenlyInsight'),
+      `observatory stipend should gain heavenlyInsight, got ${JSON.stringify(evt.choices[1].effects)}`
+    );
+  }
+
+  {
+    ctx.window.game = {
+      player: { deck: [] },
+      getStrategicEngineeringSnapshot: () => ({
+        focusTrack: {
+          trackId: 'memory_rift',
+          tier: 2,
+          tierLabel: 'II阶',
+          name: '裂隙工程',
+          icon: '🪞',
+          effectSummary: '裂隙工程已经与当前路线并轨'
+        },
+        activeTracks: [
+          {
+            trackId: 'memory_rift',
+            tier: 2,
+            tierLabel: 'II阶',
+            name: '裂隙工程',
+            icon: '🪞',
+            effectSummary: '裂隙工程已经与当前路线并轨'
+          }
+        ],
+        summary: '裂隙工程 II阶'
+      })
+    };
+    const oldRandom = ctx.Math.random;
+    const seq = [0.1, 0.0]; // 触发工程偏置 + 命中池内首个事件 floatingMarketRift
+    let ridx = 0;
+    ctx.Math.random = () => {
+      const val = seq[ridx % seq.length];
+      ridx += 1;
+      return val;
+    };
+    const evt = getRandomEvent();
+    ctx.Math.random = oldRandom;
+    assert(evt && evt.id === 'floatingMarketRift', `expected memory_rift engineering event hit, got ${evt ? evt.id : 'null'}`);
+    assert(
+      evt.engineeringEventMeta && evt.engineeringEventMeta.trackId === 'memory_rift' && evt.engineeringEventMeta.selectedByEngineeringBias === true,
+      `memory_rift engineering event should expose engineeringEventMeta, got ${JSON.stringify(evt && evt.engineeringEventMeta)}`
+    );
+    assert(
+      evt.engineeringResonance && evt.engineeringResonance.trackId === 'memory_rift' && evt.engineeringResonance.biasSource === 'focus',
+      `memory_rift engineering event should also expose engineeringResonance, got ${JSON.stringify(evt && evt.engineeringResonance)}`
+    );
+    assert(
+      evt.choices[0].effects.some((effect) => effect.type === 'openTemporaryShop' && Number(effect.offerCount) >= 4 && Number(effect.priceMultiplier) < 1),
+      `memory_rift market entry should gain extra slot + discount, got ${JSON.stringify(evt.choices[0].effects)}`
+    );
+    assert(
+      evt.choices[1].effects.some((effect) => effect.type === 'ringExp') && evt.choices[1].effects.some((effect) => effect.type === 'gold' && Number(effect.value) > 0),
+      `memory_rift bypass option should gain ringExp + gold, got ${JSON.stringify(evt.choices[1].effects)}`
+    );
+  }
+
+  // 5.7) 若其他偏置先命中同类事件，工程强化也应继续附着，而不是只在工程偏置分支里生效
+  {
+    ctx.window.game = {
+      player: {
+        deck: [],
+        fateRing: { path: 'convergence' }
+      },
+      getStrategicEngineeringSnapshot: () => ({
+        focusTrack: {
+          trackId: 'observatory',
+          tier: 2,
+          tierLabel: 'II阶',
+          name: '观星工程',
+          icon: '🔭',
+          effectSummary: '观测网已经锁定此地灵流'
+        },
+        activeTracks: [
+          {
+            trackId: 'observatory',
+            tier: 2,
+            tierLabel: 'II阶',
+            name: '观星工程',
+            icon: '🔭',
+            effectSummary: '观测网已经锁定此地灵流'
+          }
+        ],
+        summary: '观星工程 II阶'
+      })
+    };
+    const oldRandom = ctx.Math.random;
+    const seq = [0.1, 0.0]; // 命中 convergence 路径池首个事件 convergenceRelay
+    let ridx = 0;
+    ctx.Math.random = () => {
+      const val = seq[ridx % seq.length];
+      ridx += 1;
+      return val;
+    };
+    const evt = getRandomEvent();
+    ctx.Math.random = oldRandom;
+    assert(evt && evt.id === 'convergenceRelay', `expected convergence path event hit, got ${evt ? evt.id : 'null'}`);
+    assert(
+      evt.engineeringEventMeta && evt.engineeringEventMeta.trackId === 'observatory' && evt.engineeringEventMeta.selectedByEngineeringBias === false,
+      `path-selected aligned event should still carry non-bias engineering meta, got ${JSON.stringify(evt && evt.engineeringEventMeta)}`
+    );
+    assert(
+      evt.engineeringResonance && evt.engineeringResonance.trackId === 'observatory' && evt.engineeringResonance.biasSource === 'runtime',
+      `path-selected aligned event should expose runtime engineering resonance, got ${JSON.stringify(evt && evt.engineeringResonance)}`
+    );
+    assert(
+      evt.choices[0].effects.some((effect) => effect.type === 'heavenlyInsight') || evt.choices[0].effects.some((effect) => effect.type === 'ringExp' && Number(effect.value) > 48),
+      `path-selected aligned event should receive observatory bonus effects, got ${JSON.stringify(evt.choices[0].effects)}`
     );
   }
 

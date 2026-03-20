@@ -2606,6 +2606,57 @@ async function safeScreenshot(page, outPath) {
 
   await page.evaluate(() => {
     if (!window.game || typeof getRandomEvent !== 'function') return;
+    if (typeof game.createDefaultStrategicEngineeringState === 'function') {
+      game.player.strategicEngineering = game.createDefaultStrategicEngineeringState();
+      game.player.strategicEngineering.lastAdvancedTrackId = 'memory_rift';
+      if (game.player.strategicEngineering.tracks?.memory_rift) {
+        game.player.strategicEngineering.tracks.memory_rift.progress = 2;
+        game.player.strategicEngineering.tracks.memory_rift.tier = 2;
+        game.player.strategicEngineering.tracks.memory_rift.lastRealm = game.player?.realm || 1;
+      }
+    }
+    window.__debugEventQueue = ['ashLedgerTrial'];
+    const evt = getRandomEvent();
+    if (!evt) return;
+    game.showEventModal(evt, { id: 91002, row: 2, type: 'event', completed: false, accessible: true });
+  });
+  await page.waitForTimeout(120);
+  const engineeringEventProbe = await page.evaluate(() => {
+    const summary = (document.getElementById('event-system-summary')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const choices = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) =>
+      (el.textContent || '').replace(/\s+/g, ' ').trim()
+    );
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      summary,
+      choices,
+      eventMeta: payload?.eventModal?.engineeringEventMeta || null,
+      biasProfile: payload?.map?.chapter?.engineeringEventBias || null
+    };
+  });
+  add(
+    'memory-rift engineering event surfaces meta in modal and render_game_to_text',
+    !!engineeringEventProbe &&
+      /工程/.test(engineeringEventProbe.summary || '') &&
+      /裂隙工程/.test(engineeringEventProbe.summary || '') &&
+      engineeringEventProbe.choices.some((text) => text.includes('裂隙页边注追加') || text.includes('裂隙校对补偿')) &&
+      engineeringEventProbe.eventMeta?.trackId === 'memory_rift' &&
+      engineeringEventProbe.eventMeta?.selectedByEngineeringBias === false &&
+      engineeringEventProbe.biasProfile?.trackId === 'memory_rift' &&
+      Array.isArray(engineeringEventProbe.biasProfile?.eventIds) &&
+      engineeringEventProbe.biasProfile.eventIds.includes('ashLedgerTrial'),
+    JSON.stringify(engineeringEventProbe || null)
+  );
+  await page.evaluate(() => {
+    const em = document.getElementById('event-modal');
+    if (em) em.classList.remove('active');
+  });
+  await page.waitForTimeout(120);
+
+  await page.evaluate(() => {
+    if (!window.game || typeof getRandomEvent !== 'function') return;
     window.__debugEventQueue = ['floatingMarketRift'];
     const evt = getRandomEvent();
     if (!evt) return;
@@ -2829,6 +2880,64 @@ async function safeScreenshot(page, outPath) {
     }
     if (typeof game.isEndlessActive !== 'function' || !game.isEndlessActive()) return null;
 
+    const collectDangerUi = (panel) => {
+      const dangerBand = panel?.querySelector(
+        '.endless-danger-band, .endless-dri-band, .endless-danger-panel, [data-endless-danger-band]'
+      ) || null;
+      const dangerHead = dangerBand?.querySelector(
+        '.endless-danger-head, .endless-dri-head, .challenge-danger-head, [data-endless-danger-head]'
+      ) || null;
+      const dangerSummary = dangerBand?.querySelector(
+        '.endless-danger-summary, .endless-dri-summary, .challenge-danger-summary, [data-endless-danger-summary]'
+      ) || null;
+      const dangerFoot = dangerBand?.querySelector(
+        '.endless-danger-foot, .endless-dri-foot, .challenge-danger-foot, [data-endless-danger-foot]'
+      ) || null;
+      const dangerChips = Array.from(dangerBand?.querySelectorAll(
+        '.endless-danger-chip, .endless-dri-chip, .challenge-danger-chip, [data-endless-danger-chip]'
+      ) || []);
+      const counterplayEl = panel?.querySelector(
+        '.endless-danger-counterplay, [data-endless-counterplay], .endless-directive-note'
+      ) || null;
+      const reserveEl = panel?.querySelector(
+        '.endless-danger-reserve, [data-endless-reserve], .endless-danger-note'
+      ) || null;
+      return {
+        bandVisible: !!dangerBand,
+        chipCount: dangerChips.length,
+        headText: (dangerHead?.textContent || '').replace(/\s+/g, ' ').trim(),
+        summaryText: (dangerSummary?.textContent || '').replace(/\s+/g, ' ').trim(),
+        footText: (dangerFoot?.textContent || '').replace(/\s+/g, ' ').trim(),
+        counterplayText: (counterplayEl?.textContent || '').replace(/\s+/g, ' ').trim(),
+        reserveText: (reserveEl?.textContent || '').replace(/\s+/g, ' ').trim()
+      };
+    };
+
+    const readTextState = () => {
+      try {
+        return typeof window.render_game_to_text === 'function'
+          ? JSON.parse(window.render_game_to_text())
+          : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const readDangerPayload = () => {
+      const textState = readTextState();
+      if (textState?.endlessDangerProfile) {
+        return textState.endlessDangerProfile;
+      }
+      if (typeof game.getEndlessDangerProfile === 'function') {
+        try {
+          return game.getEndlessDangerProfile();
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    };
+
     const state = game.ensureEndlessState();
     state.pressure = 3;
     state.currentCycle = 5;
@@ -2850,6 +2959,8 @@ async function safeScreenshot(page, outPath) {
     if (typeof game.map.updateEndlessPanel === 'function') game.map.updateEndlessPanel();
 
     const panel = document.getElementById('map-endless-panel');
+    const beforeDangerUi = collectDangerUi(panel);
+    const beforeDangerPayload = readDangerPayload();
     const beforeText = panel ? (panel.textContent || '').replace(/\s+/g, ' ').trim() : '';
     const beforeThemeText = panel?.querySelector('.endless-theme-chip')?.textContent?.trim() || '';
     const beforeThemeDesc = panel?.querySelector('.endless-theme-desc')?.textContent?.trim() || '';
@@ -2865,6 +2976,8 @@ async function safeScreenshot(page, outPath) {
     nextState.pressure = 8;
     nextState.currentCycle = 6;
     if (typeof game.map.updateEndlessPanel === 'function') game.map.updateEndlessPanel();
+    const afterPressureDangerUi = collectDangerUi(panel);
+    const afterPressureDangerPayload = readDangerPayload();
     const afterText = panel ? (panel.textContent || '').replace(/\s+/g, ' ').trim() : '';
     const afterThemeText = panel?.querySelector('.endless-theme-chip')?.textContent?.trim() || '';
     const afterThemeDesc = panel?.querySelector('.endless-theme-desc')?.textContent?.trim() || '';
@@ -2877,15 +2990,10 @@ async function safeScreenshot(page, outPath) {
     const volatileDirectiveBtn = Array.from(panel?.querySelectorAll('.endless-directive-option.risk-volatile') || [])[0] || null;
     if (volatileDirectiveBtn) volatileDirectiveBtn.click();
     const directiveNoteAfterClick = panel?.querySelector('.endless-directive-note')?.textContent?.trim() || '';
+    const afterDirectiveDangerUi = collectDangerUi(panel);
+    const afterDirectiveDangerPayload = readDangerPayload();
     const collapseNote = panel?.querySelector('.endless-collapse-note')?.textContent?.trim() || '';
-    let textState = null;
-    try {
-      textState = typeof window.render_game_to_text === 'function'
-        ? JSON.parse(window.render_game_to_text())
-        : null;
-    } catch {
-      textState = null;
-    }
+    const textState = readTextState();
 
     return {
       visible: !!panel && getComputedStyle(panel).display !== 'none',
@@ -2898,6 +3006,21 @@ async function safeScreenshot(page, outPath) {
       hasDirectiveControls: !!panel?.querySelector('.endless-directive-controls'),
       hasGoalGrid: !!panel?.querySelector('.endless-season-goal-grid'),
       hasCollapseLedger: !!panel?.querySelector('.endless-collapse-ledger'),
+      hasDangerBand: beforeDangerUi.bandVisible || afterPressureDangerUi.bandVisible || afterDirectiveDangerUi.bandVisible,
+      dangerChipCount: Math.max(beforeDangerUi.chipCount, afterPressureDangerUi.chipCount, afterDirectiveDangerUi.chipCount),
+      beforeDangerHead: beforeDangerUi.headText,
+      afterPressureDangerHead: afterPressureDangerUi.headText,
+      afterDirectiveDangerHead: afterDirectiveDangerUi.headText,
+      beforeDangerSummary: beforeDangerUi.summaryText,
+      afterPressureDangerSummary: afterPressureDangerUi.summaryText,
+      afterDirectiveDangerSummary: afterDirectiveDangerUi.summaryText,
+      afterDirectiveDangerFoot: afterDirectiveDangerUi.footText,
+      afterPressureCounterplay: afterPressureDangerUi.counterplayText,
+      afterDirectiveCounterplay: afterDirectiveDangerUi.counterplayText,
+      afterDirectiveReserve: afterDirectiveDangerUi.reserveText,
+      beforeDangerPayload,
+      afterPressureDangerPayload,
+      afterDirectiveDangerPayload,
       pulseUpBeforeClick,
       pulseUp: !!panel?.classList.contains('pressure-up'),
       dataPressure: panel?.dataset?.pressure || '',
@@ -2921,11 +3044,12 @@ async function safeScreenshot(page, outPath) {
       directiveNoteBeforeClick,
       directiveNoteAfterClick,
       collapseNote,
+      dangerPayload: textState?.endlessDangerProfile || afterDirectiveDangerPayload || null,
       seasonPayload: textState?.endlessSeason || null
     };
   });
   add(
-    'endless panel shows pressure/theme/season hints and pulse feedback when pressure rises',
+    'endless panel shows pressure/theme/season hints, DRI danger profile, and pulse feedback when pressure rises',
     !!endlessPressurePanelProbe &&
       endlessPressurePanelProbe.visible &&
       endlessPressurePanelProbe.hasBehaviorChip &&
@@ -2937,6 +3061,8 @@ async function safeScreenshot(page, outPath) {
       endlessPressurePanelProbe.hasDirectiveControls &&
       endlessPressurePanelProbe.hasGoalGrid &&
       endlessPressurePanelProbe.hasCollapseLedger &&
+      endlessPressurePanelProbe.hasDangerBand &&
+      endlessPressurePanelProbe.dangerChipCount >= 4 &&
       endlessPressurePanelProbe.pulseUpBeforeClick &&
       endlessPressurePanelProbe.dataPressure === '8' &&
       endlessPressurePanelProbe.directiveOptionCount >= 4 &&
@@ -2949,8 +3075,31 @@ async function safeScreenshot(page, outPath) {
       /季签：/.test(endlessPressurePanelProbe.afterDirectiveText || '') &&
       /季签/.test(endlessPressurePanelProbe.afterSeasonDesc || '') &&
       /赛季战绩|赛季积分/.test(endlessPressurePanelProbe.afterSeasonLedger || '') &&
+      /DRI/.test(endlessPressurePanelProbe.afterPressureDangerHead || endlessPressurePanelProbe.afterDirectiveDangerHead || '') &&
+      /主轴|对策/.test(endlessPressurePanelProbe.afterDirectiveDangerFoot || '') &&
+      (endlessPressurePanelProbe.afterDirectiveDangerSummary || '').length > 0 &&
+      /对策|当前：/.test(endlessPressurePanelProbe.afterDirectiveCounterplay || '') &&
+      (endlessPressurePanelProbe.afterDirectiveReserve || '').length > 0 &&
       /当前：/.test(endlessPressurePanelProbe.directiveNoteBeforeClick || '') &&
       /激进|玩家钦定/.test(endlessPressurePanelProbe.directiveNoteAfterClick || '') &&
+      (
+        endlessPressurePanelProbe.afterDirectiveDangerHead !== endlessPressurePanelProbe.afterPressureDangerHead ||
+        endlessPressurePanelProbe.afterDirectiveDangerSummary !== endlessPressurePanelProbe.afterPressureDangerSummary ||
+        endlessPressurePanelProbe.afterDirectiveCounterplay !== endlessPressurePanelProbe.afterPressureCounterplay ||
+        endlessPressurePanelProbe.directiveNoteAfterClick !== endlessPressurePanelProbe.directiveNoteBeforeClick
+      ) &&
+      !!endlessPressurePanelProbe.dangerPayload &&
+      Number.isFinite(Number(endlessPressurePanelProbe.dangerPayload.index)) &&
+      typeof endlessPressurePanelProbe.dangerPayload.tierId === 'string' &&
+      typeof endlessPressurePanelProbe.dangerPayload.dominantAxisId === 'string' &&
+      typeof endlessPressurePanelProbe.dangerPayload.summary === 'string' &&
+      typeof endlessPressurePanelProbe.dangerPayload.counterplay === 'string' &&
+      typeof endlessPressurePanelProbe.dangerPayload.reserveGuidance === 'string' &&
+      Array.isArray(endlessPressurePanelProbe.dangerPayload.axes) &&
+      endlessPressurePanelProbe.dangerPayload.axes.length === 4 &&
+      (
+        Number(endlessPressurePanelProbe.afterPressureDangerPayload?.index || 0) >= Number(endlessPressurePanelProbe.beforeDangerPayload?.index || 0)
+      ) &&
       /最近一次|崩盘/.test(endlessPressurePanelProbe.collapseNote || '') &&
       /敌方节奏/.test(endlessPressurePanelProbe.afterText || '') &&
       /重压|压制|连续/.test(endlessPressurePanelProbe.afterText || '') &&
@@ -3595,6 +3744,11 @@ async function safeScreenshot(page, outPath) {
   };
   fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
+  const failed = findings.filter((item) => !item.pass);
+  if (failed.length > 0 || consoleErrors.length > 0) {
+    failed.forEach((item) => console.error(`FAIL: ${item.name}\n${item.detail}`));
+    process.exitCode = 1;
+  }
 
   await browser.close();
 })();

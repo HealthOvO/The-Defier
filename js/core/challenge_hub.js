@@ -234,6 +234,57 @@
         }
     };
 
+    const CHALLENGE_NODE_LABELS = {
+        enemy: '常规战',
+        elite: '精英',
+        trial: '试炼',
+        rest: '营地',
+        shop: '商店',
+        observatory: '观星台',
+        forge: '炼器台',
+        event: '事件',
+        memory_rift: '记忆裂隙',
+        spirit_grotto: '灵契窟',
+        forbidden_altar: '禁术坛'
+    };
+
+    const CHALLENGE_REASON_LIBRARY = {
+        goal_reached: { label: '完成线达成' },
+        battle_lost: { label: '战斗失手' },
+        interrupted: { label: '中途收束' }
+    };
+
+    const CHALLENGE_DANGER_AXIS_LIBRARY = {
+        burst: {
+            id: 'burst',
+            label: '先手爆发',
+            summary: '第一拍与瞬时爆发惩罚偏高，若起手没稳住会迅速掉血。',
+            counterplay: '优先留开场护盾、首拍减伤与速杀手段，别让第一轮失血滚雪球。',
+            reserveGuidance: '首章前建议至少保留 1 次硬减伤、护盾翻盘点或低费止损牌。'
+        },
+        attrition: {
+            id: 'attrition',
+            label: '拉锯压强',
+            summary: '敌方血量、护盾或跨章耐压更高，越拖越容易被资源税反超。',
+            counterplay: '把恢复、补件与法宝节奏提早，避免在中盘因资源税断档。',
+            reserveGuidance: '建议每重结束时都保留恢复与补件预算，不要把灵石和补件机会花空。'
+        },
+        control: {
+            id: 'control',
+            label: '控场税负',
+            summary: '弱化、易伤与压制会持续放大失误成本，容错窗口更窄。',
+            counterplay: '预留净化、免控或稳态护盾，避免在 debuff 回合里空过关键输出窗。',
+            reserveGuidance: '建议保留净化、低费防御或灵契主动来专门吃掉压制回合。'
+        },
+        execution: {
+            id: 'execution',
+            label: '执行门槛',
+            summary: '固定命盘、双誓约与跨章目标提高了路线与节拍执行要求。',
+            counterplay: '优先按指定命盘完成章节目标，再追求额外分数，不要过早偏离样本。',
+            reserveGuidance: '建议先完成指定章节线，再去贪高压战和额外资源点。'
+        }
+    };
+
     const resolveChallengeThemeMeta = (rule = null, mode = 'daily') => {
         const source = rule && typeof rule === 'object' ? rule : {};
         const searchText = [
@@ -271,6 +322,78 @@
             eliteWins: clampInt(metrics.eliteWins, 0, 99),
             bossWins: clampInt(metrics.bossWins, 0, 99),
             realmClears: clampInt(metrics.realmClears, 0, 99)
+        };
+    };
+
+    const normalizeChallengeDangerProfile = (profile = null) => {
+        const source = profile && typeof profile === 'object' ? profile : {};
+        const axes = Array.isArray(source.axes) ? source.axes : [];
+        return {
+            index: clampInt(source.index, 0, 100),
+            tierId: String(source.tierId || 'controlled'),
+            tierLabel: String(source.tierLabel || '可控'),
+            dominantAxisId: String(source.dominantAxisId || 'burst'),
+            dominantAxisLabel: String(source.dominantAxisLabel || CHALLENGE_DANGER_AXIS_LIBRARY.burst.label),
+            summary: String(source.summary || ''),
+            counterplay: String(source.counterplay || ''),
+            reserveGuidance: String(source.reserveGuidance || ''),
+            line: String(source.line || ''),
+            axes: axes
+                .filter((axis) => axis && typeof axis === 'object')
+                .slice(0, 4)
+                .map((axis) => ({
+                    id: String(axis.id || ''),
+                    label: String(axis.label || ''),
+                    value: clampInt(axis.value, 0, 100)
+                }))
+        };
+    };
+
+    const normalizeChallengeArchiveInsight = (insight = null) => {
+        const source = insight && typeof insight === 'object' ? insight : {};
+        return {
+            title: String(source.title || ''),
+            summary: String(source.summary || ''),
+            focusLines: normalizeTagList(Array.isArray(source.focusLines) ? source.focusLines : [], 3),
+            preferredNodeLine: String(source.preferredNodeLine || ''),
+            reasonLabel: String(source.reasonLabel || '')
+        };
+    };
+
+    const hasChallengeArchiveInsight = (insight = null) => {
+        const normalized = normalizeChallengeArchiveInsight(insight);
+        return !!(normalized.title || normalized.summary || normalized.focusLines.length > 0);
+    };
+
+    const serializeChallengeDangerProfile = (profile = null) => {
+        const normalized = normalizeChallengeDangerProfile(profile);
+        return {
+            index: normalized.index,
+            tierId: normalized.tierId,
+            tierLabel: normalized.tierLabel,
+            dominantAxisId: normalized.dominantAxisId,
+            dominantAxisLabel: normalized.dominantAxisLabel,
+            summary: normalized.summary,
+            counterplay: normalized.counterplay,
+            reserveGuidance: normalized.reserveGuidance,
+            line: normalized.line,
+            axes: normalized.axes.map((axis) => ({
+                id: axis.id,
+                label: axis.label,
+                value: axis.value
+            }))
+        };
+    };
+
+    const serializeChallengeArchiveInsight = (insight = null) => {
+        const normalized = normalizeChallengeArchiveInsight(insight);
+        if (!normalized.title && !normalized.summary && normalized.focusLines.length === 0) return null;
+        return {
+            title: normalized.title,
+            summary: normalized.summary,
+            focusLines: normalized.focusLines.slice(0, 3),
+            preferredNodeLine: normalized.preferredNodeLine,
+            reasonLabel: normalized.reasonLabel
         };
     };
 
@@ -316,6 +439,106 @@
         if (snapshot.treasureGains > 0) parts.push(`法宝 +${snapshot.treasureGains}`);
         if ((snapshot.eliteWins + snapshot.bossWins) > 0) parts.push(`高压战 ${snapshot.eliteWins + snapshot.bossWins}`);
         return parts.join(' · ');
+    };
+
+    const formatChallengePreferredNodes = (preferredNodes = []) => normalizeTagList(
+        preferredNodes
+            .map((nodeId) => CHALLENGE_NODE_LABELS[nodeId] || String(nodeId || '').trim())
+            .filter(Boolean),
+        3
+    );
+
+    const buildChallengeArchiveInsight = (entry = {}, themeMeta = null) => {
+        const source = entry && typeof entry === 'object' ? entry : {};
+        const metrics = normalizeChallengeMetricSnapshot(source.metrics);
+        const meta = themeMeta || resolveChallengeThemeMeta(source.rule, source.mode || 'daily');
+        const preferredNodeLabels = formatChallengePreferredNodes(
+            Array.isArray(source.preferredNodes) && source.preferredNodes.length > 0
+                ? source.preferredNodes
+                : meta.preferredNodes
+        );
+        const preferredNodeLine = preferredNodeLabels.length > 0
+            ? `优先节点：${preferredNodeLabels.join(' / ')}`
+            : '';
+        const hpPercent = clampInt(Math.round(metrics.hpRatio * 100), 0, 100);
+        const highPressureCount = clampInt(metrics.eliteWins + metrics.bossWins, 0, 99);
+        const resourceParts = [];
+        if (metrics.lawGains > 0) resourceParts.push(`法则 +${metrics.lawGains}`);
+        if (metrics.treasureGains > 0) resourceParts.push(`法宝 +${metrics.treasureGains}`);
+        const reasonLabel = CHALLENGE_REASON_LIBRARY[source.reason]?.label || '本轮留痕';
+        const focusLines = [];
+        let title = source.replayOnly ? '回放样本' : '挑战留痕';
+        let summary = `${meta.label} 主题已写入观察站，可继续拿来复盘。`;
+
+        if (source.completed) {
+            title = source.replayOnly ? '回放复刻' : '复刻重点';
+            const keyword = hpPercent >= 78
+                ? '稳血收官'
+                : highPressureCount >= 2
+                    ? '高压过线'
+                    : metrics.lawGains >= 2
+                        ? '法则补全'
+                        : reasonLabel;
+            summary = `${keyword}：${meta.label} 样本保住了 ${hpPercent}% 血线${highPressureCount > 0 ? `，并处理了 ${highPressureCount} 场高压战` : ''}。`;
+            if (preferredNodeLine) focusLines.push(preferredNodeLine);
+            focusLines.push(
+                highPressureCount >= 2
+                    ? '复刻建议：高压战前先预留护盾、减伤或控场，再按这套命盘推进。'
+                    : `复刻建议：优先沿主题节点走，尽量把血线维持在 ${Math.max(55, Math.min(90, hpPercent || 65))}% 左右进入收官。`
+            );
+            if (resourceParts.length > 0) {
+                focusLines.push(`资源抓手：${resourceParts.join(' / ')}。`);
+            } else if (meta.expeditionNote) {
+                focusLines.push(`路线提示：${meta.expeditionNote}`);
+            }
+        } else {
+            title = source.replayOnly ? '回放试错' : '失手剖面';
+            const failKeyword = hpPercent < 35
+                ? '血线失守'
+                : highPressureCount >= 1
+                    ? '高压段断档'
+                    : resourceParts.length === 0
+                        ? '补件断档'
+                        : reasonLabel;
+            summary = `${failKeyword}：这份${source.replayOnly ? '回放样本' : '挑战留痕'}停在 ${hpPercent}% 血线${highPressureCount > 0 ? `，已吃下 ${highPressureCount} 场高压战` : ''}。`;
+            if (preferredNodeLine) focusLines.push(preferredNodeLine);
+            if (hpPercent < 45) {
+                focusLines.push('补救建议：下次先把恢复、护盾或减伤做厚，再回到高压节点。');
+            } else if (highPressureCount === 0) {
+                focusLines.push('补救建议：先按主题优先节点补信息与资源，再去打第一场高压战。');
+            } else {
+                focusLines.push('补救建议：进入高压战前留住爆发与兜底，不要把关键资源耗在前段。');
+            }
+            if (resourceParts.length === 0) {
+                focusLines.push('资源缺口：本轮没有形成法则/法宝补件，建议先补一组关键件再复刻。');
+            } else {
+                focusLines.push(`本轮抓到：${resourceParts.join(' / ')}，可以保留这部分路线，再修正失手点。`);
+            }
+        }
+
+        return {
+            title,
+            summary,
+            focusLines: normalizeTagList(focusLines, 3),
+            preferredNodeLine,
+            reasonLabel
+        };
+    };
+
+    const renderChallengeInsightMarkup = (insight = null, options = {}) => {
+        if (!insight || typeof insight !== 'object') return '';
+        const compact = !!options.compact;
+        const lines = Array.isArray(insight.focusLines) ? insight.focusLines.filter(Boolean).slice(0, 3) : [];
+        if (!insight.title && !insight.summary && lines.length === 0) return '';
+        return `
+            <div class="challenge-record-insight${compact ? ' compact' : ''}">
+                ${insight.title ? `<strong>${escapeHtml(insight.title)}</strong>` : ''}
+                ${insight.summary ? `<p>${escapeHtml(insight.summary)}</p>` : ''}
+                ${lines.length > 0
+                    ? `<div class="challenge-record-insight-lines">${lines.map((line) => `<span class="challenge-record-insight-line">${escapeHtml(line)}</span>`).join('')}</div>`
+                    : ''}
+            </div>
+        `;
     };
 
     Game.prototype.ensureChallengeHubBootState = function () {
@@ -380,6 +603,20 @@
                             }, metrics, themeMeta, { completed, mode }),
                         4
                     );
+                    const preferredNodes = Array.isArray(item.preferredNodes)
+                        ? item.preferredNodes.map((entry) => String(entry || '')).filter(Boolean).slice(0, 4)
+                        : themeMeta.preferredNodes.slice(0, 4);
+                    const insight = normalizeChallengeArchiveInsight(
+                        item.insight || buildChallengeArchiveInsight({
+                            rule,
+                            mode,
+                            replayOnly,
+                            completed,
+                            metrics,
+                            preferredNodes,
+                            reason: String(item.reason || '')
+                        }, themeMeta)
+                    );
                     return {
                         id: String(item.id || ''),
                         type,
@@ -405,9 +642,8 @@
                         featuredTier,
                         featuredTags,
                         metrics,
-                        preferredNodes: Array.isArray(item.preferredNodes)
-                            ? item.preferredNodes.map((entry) => String(entry || '')).filter(Boolean).slice(0, 4)
-                            : themeMeta.preferredNodes.slice(0, 4),
+                        preferredNodes,
+                        insight: hasChallengeArchiveInsight(insight) ? insight : null,
                         rule
                     };
                 })
@@ -514,6 +750,7 @@
                     featuredTags: payload.featuredTags || [],
                     metrics: payload.metrics || null,
                     preferredNodes: payload.preferredNodes || [],
+                    insight: payload.insight || null,
                     rule: payload.rule || null
                 },
                 ...(Array.isArray(state.records) ? state.records : [])
@@ -626,6 +863,9 @@
             preferredNodes: Array.isArray(entry.preferredNodes) && entry.preferredNodes.length > 0
                 ? entry.preferredNodes.slice(0, 4)
                 : themeMeta.preferredNodes.slice(0, 4),
+            insight: entry.insight && hasChallengeArchiveInsight(entry.insight)
+                ? normalizeChallengeArchiveInsight(entry.insight)
+                : null,
             expeditionNote: themeMeta.expeditionNote,
             compareHint: themeMeta.compareHint
         };
@@ -699,7 +939,10 @@
                     selected: selectedGuideId === entry.id,
                     expeditionEligible: this.isObservatoryEntryExpeditionEligible(entry),
                     replayable: !!entry.replayable,
-                    note: entry.note || ''
+                    note: entry.note || '',
+                    insight: entry.insight && hasChallengeArchiveInsight(entry.insight)
+                        ? normalizeChallengeArchiveInsight(entry.insight)
+                        : null
                 };
             });
         return {
@@ -851,6 +1094,115 @@
         };
     };
 
+    Game.prototype.buildChallengeDangerProfile = function (rule = null, mode = 'daily', themeMeta = null) {
+        const source = rule && typeof rule === 'object' ? rule : {};
+        const safeMode = ['daily', 'weekly', 'global'].includes(mode) ? mode : 'daily';
+        const meta = themeMeta || resolveChallengeThemeMeta(source, safeMode);
+        const modifiers = source.battleModifiers && typeof source.battleModifiers === 'object'
+            ? source.battleModifiers
+            : {};
+        const enemyHpMul = Math.max(1, safeNumber(modifiers.enemyHpMul, 1));
+        const enemyAtkMul = Math.max(1, safeNumber(modifiers.enemyAtkMul, 1));
+        const openingBlock = clampInt(modifiers.enemyOpeningBlock, 0, 12);
+        const debuffValue = clampInt(modifiers.enemyDebuff?.value, 0, 4);
+        const goalRealm = clampInt(source.goalRealm, 1, 18);
+        const vowCount = Array.isArray(source.vowIds) ? source.vowIds.filter(Boolean).length : 0;
+        const searchText = [
+            source.name,
+            source.intro,
+            source.objective,
+            ...(Array.isArray(source.tags) ? source.tags : [])
+        ].join(' ');
+
+        const modeBase = safeMode === 'daily' ? 28 : safeMode === 'weekly' ? 42 : 58;
+        const burstTags = /爆发|前压|压制|收头|强袭|快攻|猎首|抢拍|先手/;
+        const attritionTags = /长线|守|稳|续航|护盾|跨章|冲榜|法宝|炼器|守阵|耐压/;
+        const controlTags = /控场|推演|预判|手牌|弱化|易伤|天机|法则|读图|星录/;
+        const executionTags = /双誓|连携|节拍|统一规则|固定命盘|冲分|命盘|试炼|复刻/;
+
+        const burstValue = clampInt(
+            12
+            + Math.round((enemyAtkMul - 1) * 120)
+            + (/vulnerable|weak/.test(String(modifiers.enemyDebuff?.type || '')) ? 9 + debuffValue * 3 : 0)
+            + (burstTags.test(searchText) ? 8 : 0)
+            + (safeMode === 'global' ? 6 : 0),
+            0,
+            100
+        );
+        const attritionValue = clampInt(
+            14
+            + Math.round((enemyHpMul - 1) * 110)
+            + openingBlock * 3
+            + Math.max(0, goalRealm - 3) * 2
+            + (attritionTags.test(searchText) ? 8 : 0),
+            0,
+            100
+        );
+        const controlValue = clampInt(
+            10
+            + (modifiers.enemyDebuff?.type ? 10 + debuffValue * 5 : 0)
+            + (controlTags.test(searchText) ? 8 : 0)
+            + (meta?.key === 'oracle' ? 6 : 0),
+            0,
+            100
+        );
+        const executionValue = clampInt(
+            12
+            + Math.max(0, goalRealm - 3) * 5
+            + vowCount * 6
+            + (executionTags.test(searchText) ? 8 : 0)
+            + (safeMode === 'global' ? 10 : safeMode === 'weekly' ? 4 : 0),
+            0,
+            100
+        );
+
+        const axes = [
+            { ...CHALLENGE_DANGER_AXIS_LIBRARY.burst, value: burstValue },
+            { ...CHALLENGE_DANGER_AXIS_LIBRARY.attrition, value: attritionValue },
+            { ...CHALLENGE_DANGER_AXIS_LIBRARY.control, value: controlValue },
+            { ...CHALLENGE_DANGER_AXIS_LIBRARY.execution, value: executionValue }
+        ];
+        const dominantAxis = axes.reduce((best, axis) => (axis.value > best.value ? axis : best), axes[0]);
+        const axisAverage = axes.reduce((sum, axis) => sum + axis.value, 0) / Math.max(1, axes.length);
+        const index = clampInt(
+            modeBase
+            + axisAverage * 0.55
+            + dominantAxis.value * 0.12
+            + Math.max(0, goalRealm - 3) * 0.8,
+            0,
+            100
+        );
+        let tierId = 'controlled';
+        let tierLabel = '可控';
+        if (index >= 75) {
+            tierId = 'extreme';
+            tierLabel = '极限';
+        } else if (index >= 60) {
+            tierId = 'high';
+            tierLabel = '高压';
+        } else if (index >= 42) {
+            tierId = 'medium';
+            tierLabel = '中压';
+        }
+
+        return normalizeChallengeDangerProfile({
+            index,
+            tierId,
+            tierLabel,
+            dominantAxisId: dominantAxis.id,
+            dominantAxisLabel: dominantAxis.label,
+            summary: `${dominantAxis.label}偏高：${dominantAxis.summary}`,
+            counterplay: dominantAxis.counterplay,
+            reserveGuidance: dominantAxis.reserveGuidance,
+            line: `试炼压强 DRI ${index} / 100 · ${tierLabel} · 主轴 ${dominantAxis.label}`,
+            axes: axes.map((axis) => ({
+                id: axis.id,
+                label: axis.label,
+                value: axis.value
+            }))
+        });
+    };
+
     Game.prototype.buildChallengeBundle = function (mode = 'daily', date = new Date()) {
         this.ensureChallengeHubBootState();
         const safeMode = ['daily', 'weekly', 'global'].includes(mode) ? mode : 'daily';
@@ -859,6 +1211,8 @@
         const rule = this.pickChallengeRule(safeMode, rotationKey);
         const seedSignature = this.buildChallengeSeedSignature(safeMode, rotationKey, rule);
         const entry = this.getChallengeProgressEntry(safeMode, rotationKey, false) || createProgressEntry();
+        const themeMeta = this.getChallengeThemeMeta(rule, safeMode);
+        const dangerProfile = this.buildChallengeDangerProfile(rule, safeMode, themeMeta);
         const currentValue = safeMode === 'daily'
             ? clampInt(entry.completions, 0)
             : safeMode === 'weekly'
@@ -888,6 +1242,8 @@
             rotationLabel: formatDateLabel(safeMode, rotationKey),
             meta,
             rule,
+            themeMeta,
+            dangerProfile,
             seedSignature,
             progress: {
                 attempts: clampInt(entry.attempts, 0),
@@ -909,6 +1265,11 @@
             .find((item) => item && item.id === String(recordId || ''));
         if (!entry || !entry.replayable || !entry.rule?.id) return null;
         const safeMode = ['daily', 'weekly', 'global'].includes(entry.mode) ? entry.mode : 'daily';
+        const themeMeta = this.getChallengeThemeMeta(entry.rule, safeMode);
+        const archiveInsight = normalizeChallengeArchiveInsight(buildChallengeArchiveInsight({
+            ...entry,
+            replayOnly: true
+        }, themeMeta));
         return {
             mode: safeMode,
             rotationKey: entry.rotationKey || `archive-${entry.id}`,
@@ -920,7 +1281,10 @@
                 accentClass: HUB_META[safeMode]?.accentClass || 'daily'
             },
             rule: clone(entry.rule),
+            themeMeta,
+            dangerProfile: this.buildChallengeDangerProfile(entry.rule, safeMode, themeMeta),
             seedSignature: entry.seedSignature || this.buildChallengeSeedSignature(safeMode, entry.rotationKey || entry.id, entry.rule),
+            archiveInsight: hasChallengeArchiveInsight(archiveInsight) ? archiveInsight : null,
             progress: createProgressEntry(),
             rewards: [],
             records: [],
@@ -1055,7 +1419,8 @@
             && run.mode === bundle.mode
             && run.rotationKey === bundle.rotationKey;
         const archiveSummary = this.getObservatoryArchiveSummary();
-        const themeMeta = this.getChallengeThemeMeta(bundle.rule, bundle.mode);
+        const themeMeta = bundle.themeMeta || this.getChallengeThemeMeta(bundle.rule, bundle.mode);
+        const dangerProfile = bundle.dangerProfile || this.buildChallengeDangerProfile(bundle.rule, bundle.mode, themeMeta);
         const selectedGuide = this.getSelectedObservatoryExpeditionGuide({ silentSync: true });
         const comparison = this.buildObservatoryThemeComparison({
             mode: bundle.mode,
@@ -1099,6 +1464,25 @@
                     <div class="challenge-theme-note">
                         <strong>${escapeHtml(themeMeta.label)}</strong>
                         <span>${escapeHtml(comparison.compareHint)}</span>
+                    </div>
+                    <div class="challenge-danger-band">
+                        <div class="challenge-danger-head">
+                            <strong>试炼压强</strong>
+                            <span>DRI ${dangerProfile.index} / 100 · ${escapeHtml(dangerProfile.tierLabel)}</span>
+                        </div>
+                        <p class="challenge-danger-summary">${escapeHtml(dangerProfile.summary)}</p>
+                        <div class="challenge-danger-grid">
+                            ${dangerProfile.axes.map((axis) => `
+                                <div class="challenge-danger-chip">
+                                    <strong>${clampInt(axis.value, 0)}</strong>
+                                    <span>${escapeHtml(axis.label)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="challenge-danger-foot">
+                            <span>主轴：${escapeHtml(dangerProfile.dominantAxisLabel)}</span>
+                            <span>对策：${escapeHtml(dangerProfile.counterplay)}</span>
+                        </div>
                     </div>
                     ${selectedGuide
                 ? `<div class="challenge-inline-note">当前远征线索：${escapeHtml(selectedGuide.title)} · ${escapeHtml(selectedGuide.themeLabel)}。</div>`
@@ -1190,6 +1574,7 @@
                             ${entry.featuredTags.length > 0
                 ? `<div class="challenge-record-tags">${entry.featuredTags.map((tag) => `<span class="challenge-tag">${escapeHtml(tag)}</span>`).join('')}</div>`
                 : ''}
+                            ${renderChallengeInsightMarkup(entry.insight)}
                         </div>
                         <div class="challenge-record-actions">
                             <span>${escapeHtml(this.formatCollectionTimestamp ? this.formatCollectionTimestamp(entry.at) : formatDateLabel(entry.mode, entry.rotationKey))}</span>
@@ -1222,6 +1607,7 @@
                         <div class="challenge-record-tags">
                             ${entry.featuredTags.map((tag) => `<span class="challenge-tag">${escapeHtml(tag)}</span>`).join('')}
                         </div>
+                        ${renderChallengeInsightMarkup(entry.insight, { compact: true })}
                         <div class="challenge-compare-meta">
                             <span>${escapeHtml(entry.modeLabel)}</span>
                             <span>${escapeHtml(entry.metricLine)}</span>
@@ -1270,6 +1656,20 @@
             const nextReward = bundle.rewards.find((item) => !item.claimed) || null;
             sideEl.innerHTML = `
                 <section class="codex-side-card">
+                    <span class="codex-side-kicker">难度同轴</span>
+                    <h3>试炼压强 DRI ${dangerProfile.index}</h3>
+                    <div class="codex-summary-grid two-cols">
+                        ${dangerProfile.axes.map((axis) => `
+                            <div class="codex-summary-chip">
+                                <strong>${clampInt(axis.value, 0)}</strong>
+                                <span>${escapeHtml(axis.label)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <p>${escapeHtml(`${dangerProfile.tierLabel} · ${dangerProfile.summary}`)}</p>
+                    <p class="collection-muted">${escapeHtml(dangerProfile.reserveGuidance)}</p>
+                </section>
+                <section class="codex-side-card">
                     <span class="codex-side-kicker">观星总览</span>
                     <h3>${escapeHtml(bundle.meta.label)}进度</h3>
                     <div class="codex-summary-grid two-cols">
@@ -1298,6 +1698,7 @@
                     <p>${escapeHtml(archiveSummary.latest?.title
                 ? `最近留痕：${archiveSummary.latest.title}。`
                 : '完成任意观星挑战后，命盘签和成绩都会沉淀到这里。')}</p>
+                    ${renderChallengeInsightMarkup(archiveSummary.latest?.insight, { compact: true })}
                 </section>
                 <section class="codex-side-card">
                     <span class="codex-side-kicker">远征线索</span>
@@ -1312,6 +1713,7 @@
                     ${selectedGuide?.featuredTags?.length
                 ? `<div class="challenge-record-tags">${selectedGuide.featuredTags.map((tag) => `<span class="challenge-tag">${escapeHtml(tag)}</span>`).join('')}</div>`
                 : ''}
+                    ${renderChallengeInsightMarkup(selectedGuide?.insight, { compact: true })}
                 </section>
             `;
         }
@@ -1459,7 +1861,10 @@
             modeLabel: bundle.meta.label,
             bundleSnapshot: clone(bundle),
             replayOnly: false,
-            seedSignature: bundle.seedSignature || ''
+            seedSignature: bundle.seedSignature || '',
+            archiveInsight: bundle.archiveInsight && hasChallengeArchiveInsight(bundle.archiveInsight)
+                ? normalizeChallengeArchiveInsight(bundle.archiveInsight)
+                : null
         };
 
         if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
@@ -1500,7 +1905,10 @@
             bundleSnapshot: clone(bundle),
             replayOnly: true,
             seedSignature: bundle.seedSignature || '',
-            archiveEntryId: bundle.archiveEntryId || ''
+            archiveEntryId: bundle.archiveEntryId || '',
+            archiveInsight: bundle.archiveInsight && hasChallengeArchiveInsight(bundle.archiveInsight)
+                ? normalizeChallengeArchiveInsight(bundle.archiveInsight)
+                : null
         };
 
         if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
@@ -1553,6 +1961,9 @@
             seedSignature: String(source.seedSignature || ''),
             replayOnly: !!source.replayOnly,
             archiveEntryId: String(source.archiveEntryId || ''),
+            archiveInsight: source.archiveInsight && hasChallengeArchiveInsight(source.archiveInsight)
+                ? normalizeChallengeArchiveInsight(source.archiveInsight)
+                : null,
             progress: {
                 battleWins: clampInt(source.progress?.battleWins, 0),
                 eliteWins: clampInt(source.progress?.eliteWins, 0),
@@ -1590,6 +2001,9 @@
             seedSignature: String(bundle.seedSignature || this.buildChallengeSeedSignature(bundle.mode, bundle.rotationKey, bundle.rule)),
             replayOnly: !!bundle.replayOnly,
             archiveEntryId: String(bundle.archiveEntryId || ''),
+            archiveInsight: bundle.archiveInsight && hasChallengeArchiveInsight(bundle.archiveInsight)
+                ? normalizeChallengeArchiveInsight(bundle.archiveInsight)
+                : null,
             progress: {
                 battleWins: 0,
                 eliteWins: 0,
@@ -1709,6 +2123,16 @@
             realmClears: clampInt(sourceRun.progress?.realmClears, 0)
         });
         const themeMeta = resolveChallengeThemeMeta(rule, sourceRun.mode);
+        const preferredNodes = themeMeta.preferredNodes.slice(0, 4);
+        const insight = normalizeChallengeArchiveInsight(buildChallengeArchiveInsight({
+            rule,
+            mode: sourceRun.mode,
+            replayOnly: !!sourceRun.replayOnly,
+            completed: !!options.completed,
+            metrics,
+            preferredNodes,
+            reason: String(options.reason || '')
+        }, themeMeta));
         return {
             rule,
             metrics,
@@ -1716,8 +2140,9 @@
             themeLabel: themeMeta.label,
             featuredTier: buildChallengeFeaturedTier(sourceRun, metrics, options),
             featuredTags: buildChallengeFeaturedTags(rule, sourceRun, metrics, themeMeta, options),
-            preferredNodes: themeMeta.preferredNodes.slice(0, 4),
+            preferredNodes,
             metricLine: formatChallengeMetricLine(metrics),
+            insight: hasChallengeArchiveInsight(insight) ? insight : null,
             compareHint: themeMeta.compareHint,
             expeditionNote: themeMeta.expeditionNote
         };
@@ -1806,6 +2231,7 @@
             featuredTags: profile.featuredTags,
             metrics: profile.metrics,
             preferredNodes: profile.preferredNodes,
+            insight: profile.insight,
             rule
         });
         if (typeof this.recordCollectionUnlock === 'function') {
@@ -1977,11 +2403,21 @@
         const score = this.computeActiveChallengeScore(run);
         run.progress.currentScore = score;
         this.persistActiveChallengeRun();
+        const replayFocus = run.replayOnly && run.archiveInsight
+            ? (() => {
+                const insight = normalizeChallengeArchiveInsight(run.archiveInsight);
+                return insight.focusLines[0] || insight.summary || insight.title || '';
+            })()
+            : '';
         banner.innerHTML = `
             <span class="challenge-run-chip">${escapeHtml(run.modeLabel)}</span>
             <div class="challenge-run-text">
                 <strong>${escapeHtml(run.ruleName)}</strong>
-                <span>${escapeHtml(run.targetChapter || `目标至第 ${run.goalRealm} 重`)}${run.seedSignature ? ` · 命盘签 ${run.seedSignature}` : ''}</span>
+                <span>${escapeHtml(run.targetChapter || `目标至第 ${run.goalRealm} 重`)}${run.seedSignature ? ` · 命盘签 ${run.seedSignature}` : ''}${(() => {
+                    const dangerProfile = this.buildChallengeDangerProfile(run, run.mode);
+                    return dangerProfile.index > 0 ? ` · DRI ${dangerProfile.index} · ${dangerProfile.tierLabel}` : '';
+                })()}</span>
+                ${replayFocus ? `<span class="challenge-run-focus">训练重点：${escapeHtml(replayFocus)}</span>` : ''}
             </div>
             <div class="challenge-run-stats">
                 <span>${run.replayOnly ? '观星回放 · 不计奖励' : `完成线 第 ${run.goalRealm} 重`}</span>
@@ -2066,6 +2502,10 @@
         const container = document.getElementById('character-selection-container');
         const confirmBtn = document.getElementById('confirm-character-btn');
         if (!container) return;
+        const dangerProfile = this.buildChallengeDangerProfile(pending.rule, pending.mode);
+        const archiveInsight = pending.archiveInsight && hasChallengeArchiveInsight(pending.archiveInsight)
+            ? normalizeChallengeArchiveInsight(pending.archiveInsight)
+            : null;
 
         let banner = document.getElementById('challenge-selection-banner');
         if (!banner) {
@@ -2084,7 +2524,10 @@
             <div class="challenge-selection-meta">
                 <span>角色：${escapeHtml(this.getCharacterDisplayName(pending.rule.characterId))}</span>
                 <span>章节：${escapeHtml(pending.rule.targetChapter || `完成至第 ${pending.rule.goalRealm} 重`)}</span>
+                <span>压强：DRI ${dangerProfile.index} · ${escapeHtml(dangerProfile.tierLabel)}</span>
+                <span>主轴：${escapeHtml(dangerProfile.dominantAxisLabel)}</span>
             </div>
+            ${renderChallengeInsightMarkup(archiveInsight, { compact: true })}
         `;
 
         document.querySelectorAll('.character-card').forEach((card) => {
@@ -2186,17 +2629,49 @@
     Game.prototype.getChallengeHubPayload = function () {
         this.ensureChallengeHubBootState();
         const tab = this.challengeHubState.tab || 'daily';
-        const bundle = this.currentScreen === 'challenge-screen' ? this.buildChallengeBundle(tab) : null;
+        const liveBundle = this.currentScreen === 'challenge-screen' ? this.buildChallengeBundle(tab) : null;
         const archive = this.getObservatoryArchiveSummary();
         const selectedGuide = this.getSelectedObservatoryExpeditionGuide({ silentSync: true });
-        const comparison = bundle
+        const pendingDangerProfile = this.pendingChallengeStart?.rule
+            ? this.buildChallengeDangerProfile(this.pendingChallengeStart.rule, this.pendingChallengeStart.mode)
+            : null;
+        const pendingArchiveInsight = this.pendingChallengeStart?.archiveInsight
+            || this.pendingChallengeStart?.bundleSnapshot?.archiveInsight
+            || null;
+        const hubBundle = (
+            this.pendingChallengeStart
+            && this.pendingChallengeStart.rule
+            && this.pendingChallengeStart.mode === tab
+        )
+            ? {
+                mode: this.pendingChallengeStart.mode,
+                rule: this.pendingChallengeStart.rule,
+                rewards: Array.isArray(this.pendingChallengeStart.bundleSnapshot?.rewards)
+                    ? this.pendingChallengeStart.bundleSnapshot.rewards
+                    : (liveBundle?.rewards || []),
+                progress: liveBundle?.progress || { bestScore: 0, totalScore: 0 },
+                seedSignature: String(
+                    this.pendingChallengeStart.seedSignature
+                    || this.pendingChallengeStart.bundleSnapshot?.seedSignature
+                    || liveBundle?.seedSignature
+                    || ''
+                ),
+                dangerProfile: pendingDangerProfile,
+                archiveInsight: pendingArchiveInsight
+            }
+            : liveBundle;
+        const comparison = hubBundle
             ? this.buildObservatoryThemeComparison({
-                mode: bundle.mode,
-                rule: bundle.rule,
-                themeKey: this.getChallengeThemeMeta(bundle.rule, bundle.mode).key,
-                themeLabel: this.getChallengeThemeMeta(bundle.rule, bundle.mode).label
+                mode: hubBundle.mode,
+                rule: hubBundle.rule,
+                themeKey: this.getChallengeThemeMeta(hubBundle.rule, hubBundle.mode).key,
+                themeLabel: this.getChallengeThemeMeta(hubBundle.rule, hubBundle.mode).label
             })
             : null;
+        const activeRunDangerProfile = this.activeChallengeRun
+            ? this.buildChallengeDangerProfile(this.activeChallengeRun, this.activeChallengeRun.mode)
+            : null;
+        const activeRunArchiveInsight = this.activeChallengeRun?.archiveInsight || null;
         return {
             pending: this.pendingChallengeStart
                 ? {
@@ -2204,7 +2679,9 @@
                     ruleId: this.pendingChallengeStart.rule?.id || '',
                     characterId: this.pendingChallengeStart.rule?.characterId || '',
                     replayOnly: !!this.pendingChallengeStart.replayOnly,
-                    seedSignature: String(this.pendingChallengeStart.seedSignature || '')
+                    seedSignature: String(this.pendingChallengeStart.seedSignature || ''),
+                    dangerProfile: serializeChallengeDangerProfile(pendingDangerProfile),
+                    archiveInsight: serializeChallengeArchiveInsight(pendingArchiveInsight)
                 }
                 : null,
             activeRun: this.activeChallengeRun
@@ -2217,20 +2694,23 @@
                     currentScore: clampInt(this.activeChallengeRun.progress?.currentScore, 0),
                     resolved: !!this.activeChallengeRun.resolved,
                     replayOnly: !!this.activeChallengeRun.replayOnly,
-                    seedSignature: String(this.activeChallengeRun.seedSignature || '')
+                    seedSignature: String(this.activeChallengeRun.seedSignature || ''),
+                    dangerProfile: serializeChallengeDangerProfile(activeRunDangerProfile),
+                    archiveInsight: serializeChallengeArchiveInsight(activeRunArchiveInsight)
                 }
                 : null,
-            hub: bundle
+            hub: hubBundle
                 ? {
                     activeTab: tab,
-                    ruleName: bundle.rule?.name || '',
-                    targetChapter: bundle.rule?.targetChapter || '',
-                    rewardCount: bundle.rewards.length,
-                    bestScore: clampInt(bundle.progress.bestScore, 0),
-                    totalScore: clampInt(bundle.progress.totalScore, 0),
-                    seedSignature: bundle.seedSignature || '',
+                    ruleName: hubBundle.rule?.name || '',
+                    targetChapter: hubBundle.rule?.targetChapter || '',
+                    rewardCount: hubBundle.rewards.length,
+                    bestScore: clampInt(hubBundle.progress.bestScore, 0),
+                    totalScore: clampInt(hubBundle.progress.totalScore, 0),
+                    seedSignature: hubBundle.seedSignature || '',
                     comparisonThemeLabel: comparison?.themeLabel || '',
-                    comparisonCount: comparison?.entries?.length || 0
+                    comparisonCount: comparison?.entries?.length || 0,
+                    dangerProfile: serializeChallengeDangerProfile(hubBundle.dangerProfile)
                 }
                 : null,
             archive: {
@@ -2240,6 +2720,8 @@
                 featuredCount: archive.featuredCount,
                 latestTitle: archive.latest?.title || '',
                 latestSeedSignature: archive.latest?.seedSignature || '',
+                latestInsightTitle: archive.latest?.insight?.title || '',
+                latestInsight: serializeChallengeArchiveInsight(archive.latest?.insight),
                 selectedGuideId: selectedGuide?.id || '',
                 selectedGuideTitle: selectedGuide?.title || '',
                 selectedGuideThemeLabel: selectedGuide?.themeLabel || ''
@@ -2251,7 +2733,8 @@
                     themeLabel: selectedGuide.themeLabel,
                     featuredTier: selectedGuide.featuredTier,
                     featuredTags: normalizeTagList(selectedGuide.featuredTags, 4),
-                    seedSignature: selectedGuide.seedSignature || ''
+                    seedSignature: selectedGuide.seedSignature || '',
+                    insight: serializeChallengeArchiveInsight(selectedGuide.insight)
                 }
                 : null
         };

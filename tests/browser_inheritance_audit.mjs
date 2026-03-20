@@ -225,6 +225,11 @@ async function safeScreenshot(page, outPath) {
   };
   fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
+  const failed = findings.filter((item) => !item.pass);
+  if (failed.length > 0 || consoleErrors.length > 0) {
+    failed.forEach((item) => console.error(`FAIL: ${item.name}\n${item.detail}`));
+    process.exitCode = 1;
+  }
 
   await browser.close();
 })();

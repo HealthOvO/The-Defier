@@ -17,6 +17,9 @@ class Game {
         this.mode = 'pve';
         this.pvpOpponentRank = null;
         this.pvpMatchTicket = null;
+        this.pvpDangerProfile = null;
+        this.pvpMatchIntent = null;
+        this.pvpResultReview = null;
         this.stealAttempted = false;
         this.rewardCardSelected = false; // 防止重复选牌
         this.lastBattleRewardMeta = null;
@@ -167,7 +170,8 @@ class Game {
             'guest-character-selection',
             'guest-run-path-selection',
             'guest-map',
-            'guest-battle'
+            'guest-battle',
+            'guest-pvp'
         ]);
         if (!allowedModes.has(mode)) return null;
 
@@ -226,6 +230,18 @@ class Game {
             return true;
         }
 
+        if (config.mode === 'guest-pvp') {
+            this.showScreen('pvp-screen');
+            if (
+                typeof window !== 'undefined'
+                && window.PVPScene
+                && typeof window.PVPScene.onShow === 'function'
+            ) {
+                window.PVPScene.onShow();
+            }
+            return true;
+        }
+
         return false;
     }
 
@@ -251,6 +267,205 @@ class Game {
         const chapterSnapshot = (this.player && typeof this.getChapterDisplaySnapshot === 'function')
             ? this.getChapterDisplaySnapshot(this.player?.realm || 1)
             : null;
+        const frontierRisk = (this.map && typeof this.map.getAccessibleNodeRiskForecast === 'function')
+            ? this.map.getAccessibleNodeRiskForecast(chapterSnapshot).topRisk
+            : null;
+        const currentNodeRisk = (this.currentBattleNode && this.map && typeof this.map.resolveNodeRiskProfile === 'function')
+            ? this.map.resolveNodeRiskProfile(this.currentBattleNode, chapterSnapshot)
+            : null;
+        const strategicEngineering = (typeof this.getStrategicEngineeringSnapshot === 'function')
+            ? this.getStrategicEngineeringSnapshot()
+            : null;
+        const strategicEngineeringEventBias = (typeof this.getStrategicEngineeringEventBiasProfile === 'function')
+            ? this.getStrategicEngineeringEventBiasProfile()
+            : null;
+        const normalizePvpDanger = (profile = null) => {
+            if (!profile) return null;
+            if (
+                typeof PVPService !== 'undefined'
+                && PVPService
+                && typeof PVPService.normalizePVPDangerProfile === 'function'
+            ) {
+                return PVPService.normalizePVPDangerProfile(profile);
+            }
+            return profile;
+        };
+        const pvpMyRank = (
+            typeof PVPService !== 'undefined'
+            && PVPService
+            && PVPService.currentRankData
+        ) ? PVPService.currentRankData : null;
+        const pvpFocus = (
+            typeof window !== 'undefined'
+            && window.PVPScene
+            && typeof window.PVPScene.getRankingFocusSnapshot === 'function'
+        ) ? window.PVPScene.getRankingFocusSnapshot() : null;
+        const pvpDangerProfile = normalizePvpDanger(this.pvpDangerProfile);
+        const pvpMatchIntent = this.pvpMatchIntent && typeof this.pvpMatchIntent === 'object'
+            ? {
+                targetName: String(this.pvpMatchIntent.targetName || ''),
+                targetRankId: String(this.pvpMatchIntent.targetRankId || ''),
+                engagementId: String(this.pvpMatchIntent.engagementId || ''),
+                engagementLabel: String(this.pvpMatchIntent.engagementLabel || ''),
+                engagementLine: String(this.pvpMatchIntent.engagementLine || ''),
+                modeId: String(this.pvpMatchIntent.modeId || ''),
+                modeLabel: String(this.pvpMatchIntent.modeLabel || ''),
+                modeLine: String(this.pvpMatchIntent.modeLine || ''),
+                winRewardText: String(this.pvpMatchIntent.winRewardText || ''),
+                lossRewardText: String(this.pvpMatchIntent.lossRewardText || ''),
+                reserveText: String(this.pvpMatchIntent.reserveText || ''),
+                counterplayText: String(this.pvpMatchIntent.counterplayText || ''),
+                chipText: String(this.pvpMatchIntent.chipText || ''),
+                tags: Array.isArray(this.pvpMatchIntent.tags) ? this.pvpMatchIntent.tags.slice(0, 3) : [],
+                rewardPreview: this.pvpMatchIntent.rewardPreview && typeof this.pvpMatchIntent.rewardPreview === 'object'
+                    ? {
+                        winCoins: Math.max(0, Math.floor(Number(this.pvpMatchIntent.rewardPreview.winCoins) || 0)),
+                        lossCoins: Math.max(0, Math.floor(Number(this.pvpMatchIntent.rewardPreview.lossCoins) || 0)),
+                        winRatingDelta: Math.trunc(Number(this.pvpMatchIntent.rewardPreview.winRatingDelta) || 0),
+                        lossRatingDelta: Math.trunc(Number(this.pvpMatchIntent.rewardPreview.lossRatingDelta) || 0)
+                    }
+                    : null
+            }
+            : null;
+        const pvpResultReview = this.pvpResultReview && typeof this.pvpResultReview === 'object'
+            ? {
+                outcomeId: String(this.pvpResultReview.outcomeId || ''),
+                verdictLabel: String(this.pvpResultReview.verdictLabel || ''),
+                title: String(this.pvpResultReview.title || ''),
+                subtitle: String(this.pvpResultReview.subtitle || ''),
+                chipText: String(this.pvpResultReview.chipText || ''),
+                summary: String(this.pvpResultReview.summary || ''),
+                focusTitle: String(this.pvpResultReview.focusTitle || ''),
+                focusText: String(this.pvpResultReview.focusText || ''),
+                nextTitle: String(this.pvpResultReview.nextTitle || ''),
+                nextText: String(this.pvpResultReview.nextText || ''),
+                economyLine: String(this.pvpResultReview.economyLine || ''),
+                dangerLine: String(this.pvpResultReview.dangerLine || ''),
+                tags: Array.isArray(this.pvpResultReview.tags) ? this.pvpResultReview.tags.slice(0, 3) : [],
+                dangerProfile: normalizePvpDanger(this.pvpResultReview.dangerProfile || null)
+            }
+            : null;
+        const pvpPayload = (
+            mode === 'pvp-screen'
+            || this.mode === 'pvp'
+            || !!pvpFocus
+            || !!this.pvpOpponentRank
+            || !!pvpDangerProfile
+            || !!pvpResultReview
+        ) ? {
+            activeTab: (typeof window !== 'undefined' && window.PVPScene) ? (window.PVPScene.activeTab || null) : null,
+            myRank: pvpMyRank ? {
+                score: Math.max(0, Math.floor(Number(pvpMyRank.score) || 0)),
+                realm: Math.max(1, Math.floor(Number(pvpMyRank.realm) || 1)),
+                division: pvpMyRank.division || null
+            } : null,
+            rankingFocus: pvpFocus ? {
+                rank: pvpFocus.rank ? {
+                    objectId: pvpFocus.rank.objectId || null,
+                    user: pvpFocus.rank.user ? {
+                        objectId: pvpFocus.rank.user.objectId || null,
+                        username: pvpFocus.rank.user.username || ''
+                    } : null,
+                    score: Math.max(0, Math.floor(Number(pvpFocus.rank.score) || 0)),
+                    realm: Math.max(1, Math.floor(Number(pvpFocus.rank.realm) || 1)),
+                    division: pvpFocus.rank.division || null
+                } : null,
+                duelBrief: pvpFocus.duelBrief && typeof pvpFocus.duelBrief === 'object'
+                    ? {
+                        targetName: String(pvpFocus.duelBrief.targetName || ''),
+                        targetRankId: String(pvpFocus.duelBrief.targetRankId || ''),
+                        engagementId: String(pvpFocus.duelBrief.engagementId || ''),
+                        engagementLabel: String(pvpFocus.duelBrief.engagementLabel || ''),
+                        engagementLine: String(pvpFocus.duelBrief.engagementLine || ''),
+                        modeId: String(pvpFocus.duelBrief.modeId || ''),
+                        modeLabel: String(pvpFocus.duelBrief.modeLabel || ''),
+                        modeLine: String(pvpFocus.duelBrief.modeLine || ''),
+                        winRewardText: String(pvpFocus.duelBrief.winRewardText || ''),
+                        lossRewardText: String(pvpFocus.duelBrief.lossRewardText || ''),
+                        reserveText: String(pvpFocus.duelBrief.reserveText || ''),
+                        counterplayText: String(pvpFocus.duelBrief.counterplayText || ''),
+                        chipText: String(pvpFocus.duelBrief.chipText || ''),
+                        tags: Array.isArray(pvpFocus.duelBrief.tags) ? pvpFocus.duelBrief.tags.slice(0, 3) : [],
+                        rewardPreview: pvpFocus.duelBrief.rewardPreview && typeof pvpFocus.duelBrief.rewardPreview === 'object'
+                            ? {
+                                winCoins: Math.max(0, Math.floor(Number(pvpFocus.duelBrief.rewardPreview.winCoins) || 0)),
+                                lossCoins: Math.max(0, Math.floor(Number(pvpFocus.duelBrief.rewardPreview.lossCoins) || 0)),
+                                winRatingDelta: Math.trunc(Number(pvpFocus.duelBrief.rewardPreview.winRatingDelta) || 0),
+                                lossRatingDelta: Math.trunc(Number(pvpFocus.duelBrief.rewardPreview.lossRatingDelta) || 0)
+                            }
+                            : null
+                    }
+                    : null,
+                dossier: pvpFocus.dossier && typeof pvpFocus.dossier === 'object'
+                    ? {
+                        targetName: String(pvpFocus.dossier.targetName || ''),
+                        targetRankId: String(pvpFocus.dossier.targetRankId || ''),
+                        targetDivision: String(pvpFocus.dossier.targetDivision || ''),
+                        targetRealm: Math.max(1, Math.floor(Number(pvpFocus.dossier.targetRealm) || 1)),
+                        confidence: String(pvpFocus.dossier.confidence || ''),
+                        confidenceLabel: String(pvpFocus.dossier.confidenceLabel || ''),
+                        title: String(pvpFocus.dossier.title || ''),
+                        summary: String(pvpFocus.dossier.summary || ''),
+                        riskLine: String(pvpFocus.dossier.riskLine || ''),
+                        scoreLine: String(pvpFocus.dossier.scoreLine || ''),
+                        seasonLine: String(pvpFocus.dossier.seasonLine || ''),
+                        seasonName: String(pvpFocus.dossier.seasonName || ''),
+                        seasonDetail: String(pvpFocus.dossier.seasonDetail || ''),
+                        segmentLabel: String(pvpFocus.dossier.segmentLabel || ''),
+                        segmentLine: String(pvpFocus.dossier.segmentLine || ''),
+                        sourceLabel: String(pvpFocus.dossier.sourceLabel || ''),
+                        sourceLine: String(pvpFocus.dossier.sourceLine || ''),
+                        formationLabel: String(pvpFocus.dossier.formationLabel || ''),
+                        formationLine: String(pvpFocus.dossier.formationLine || ''),
+                        routeValue: String(pvpFocus.dossier.routeValue || ''),
+                        routeLine: String(pvpFocus.dossier.routeLine || ''),
+                        comparisonValue: String(pvpFocus.dossier.comparisonValue || ''),
+                        comparisonLine: String(pvpFocus.dossier.comparisonLine || ''),
+                        historyValue: String(pvpFocus.dossier.historyValue || ''),
+                        historyLine: String(pvpFocus.dossier.historyLine || ''),
+                        historyTag: String(pvpFocus.dossier.historyTag || ''),
+                        historyCount: Math.max(0, Math.floor(Number(pvpFocus.dossier.historyCount) || 0)),
+                        trendValue: String(pvpFocus.dossier.trendValue || ''),
+                        trendLine: String(pvpFocus.dossier.trendLine || ''),
+                        trendTag: String(pvpFocus.dossier.trendTag || ''),
+                        trendSampleCount: Math.max(0, Math.floor(Number(pvpFocus.dossier.trendSampleCount) || 0)),
+                        ledgerValue: String(pvpFocus.dossier.ledgerValue || ''),
+                        ledgerLine: String(pvpFocus.dossier.ledgerLine || ''),
+                        ledgerTag: String(pvpFocus.dossier.ledgerTag || ''),
+                        ledgerSampleCount: Math.max(0, Math.floor(Number(pvpFocus.dossier.ledgerSampleCount) || 0)),
+                        ledgerChips: Array.isArray(pvpFocus.dossier.ledgerChips) ? pvpFocus.dossier.ledgerChips.slice(0, 4) : [],
+                        archetypeLabel: String(pvpFocus.dossier.archetypeLabel || ''),
+                        counterplayText: String(pvpFocus.dossier.counterplayText || ''),
+                        reserveText: String(pvpFocus.dossier.reserveText || ''),
+                        tags: Array.isArray(pvpFocus.dossier.tags) ? pvpFocus.dossier.tags.slice(0, 6) : [],
+                        clueCards: Array.isArray(pvpFocus.dossier.clueCards)
+                            ? pvpFocus.dossier.clueCards.slice(0, 6).map((item) => ({
+                                label: String(item && item.label || ''),
+                                value: String(item && item.value || ''),
+                                detail: String(item && item.detail || '')
+                            }))
+                            : []
+                    }
+                    : null,
+                dangerProfile: normalizePvpDanger(pvpFocus.dangerProfile || null)
+            } : null,
+            activeMatch: (this.pvpOpponentRank || pvpDangerProfile) ? {
+                opponent: this.pvpOpponentRank ? {
+                    objectId: this.pvpOpponentRank.objectId || null,
+                    user: this.pvpOpponentRank.user ? {
+                        objectId: this.pvpOpponentRank.user.objectId || null,
+                        username: this.pvpOpponentRank.user.username || ''
+                    } : null,
+                    score: Math.max(0, Math.floor(Number(this.pvpOpponentRank.score) || 0)),
+                    realm: Math.max(1, Math.floor(Number(this.pvpOpponentRank.realm) || 1)),
+                    division: this.pvpOpponentRank.division || null
+                } : null,
+                ticket: this.pvpMatchTicket || null,
+                dangerProfile: pvpDangerProfile,
+                intent: pvpMatchIntent
+            } : null,
+            resultOverlay: pvpResultReview
+        } : null;
         const payload = {
             coordSystem: 'ui-screen-space, origin top-left, +x right, +y down',
             mode,
@@ -323,7 +538,20 @@ class Game {
                     title: document.getElementById('event-title')?.textContent || '',
                     tone: modal.dataset.eventTone || '',
                     atmosphere: document.getElementById('event-atmosphere')?.textContent || '',
-                    summary: document.getElementById('event-system-summary')?.textContent?.replace(/\s+/g, ' ').trim() || ''
+                    summary: document.getElementById('event-system-summary')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+                    engineeringEventMeta: this.currentEvent && this.currentEvent.engineeringEventMeta
+                        ? {
+                            trackId: this.currentEvent.engineeringEventMeta.trackId || '',
+                            name: this.currentEvent.engineeringEventMeta.name || '',
+                            icon: this.currentEvent.engineeringEventMeta.icon || '',
+                            tier: Math.max(0, Math.floor(Number(this.currentEvent.engineeringEventMeta.tier) || 0)),
+                            tierLabel: this.currentEvent.engineeringEventMeta.tierLabel || '',
+                            summary: this.currentEvent.engineeringEventMeta.summary || '',
+                            effectSummary: this.currentEvent.engineeringEventMeta.effectSummary || '',
+                            source: this.currentEvent.engineeringEventMeta.source || '',
+                            selectedByEngineeringBias: !!this.currentEvent.engineeringEventMeta.selectedByEngineeringBias
+                        }
+                        : null
                 };
             })(),
             battle: (isBattleMode && this.battle) ? {
@@ -355,6 +583,17 @@ class Game {
                     : null,
                 battleCommand: (typeof this.battle.getBattleCommandSnapshot === 'function')
                     ? this.battle.getBattleCommandSnapshot()
+                    : null,
+                nodeRisk: currentNodeRisk
+                    ? {
+                        type: currentNodeRisk.type,
+                        label: currentNodeRisk.label,
+                        index: currentNodeRisk.index,
+                        tierId: currentNodeRisk.tierId,
+                        tierLabel: currentNodeRisk.tierLabel,
+                        summary: currentNodeRisk.summary,
+                        counterplay: currentNodeRisk.counterplay
+                    }
                     : null,
                 chapterRules: chapterSnapshot
                     ? {
@@ -485,9 +724,65 @@ class Game {
                                 name: chapterSnapshot.leyline.name,
                                 desc: chapterSnapshot.leyline.desc
                             }
+                            : null,
+                        frontierRisk: frontierRisk
+                            ? {
+                                type: frontierRisk.type,
+                                label: frontierRisk.label,
+                                index: frontierRisk.index,
+                                tierId: frontierRisk.tierId,
+                                tierLabel: frontierRisk.tierLabel,
+                                summary: frontierRisk.summary,
+                                counterplay: frontierRisk.counterplay,
+                                reserveGuidance: frontierRisk.reserveGuidance
+                            }
+                            : null,
+                        engineeringFocus: strategicEngineering && strategicEngineering.focusTrack
+                            ? {
+                                trackId: strategicEngineering.focusTrack.trackId,
+                                name: strategicEngineering.focusTrack.name,
+                                icon: strategicEngineering.focusTrack.icon,
+                                tier: strategicEngineering.focusTrack.tier,
+                                tierLabel: strategicEngineering.focusTrack.tierLabel,
+                                progress: strategicEngineering.focusTrack.progress,
+                                nextTarget: strategicEngineering.focusTrack.nextTarget,
+                                remaining: strategicEngineering.focusTrack.remaining,
+                                effectSummary: strategicEngineering.focusTrack.effectSummary,
+                                summary: strategicEngineering.summary
+                            }
+                            : null,
+                        engineeringEventBias: strategicEngineeringEventBias
+                            ? {
+                                trackId: strategicEngineeringEventBias.trackId,
+                                name: strategicEngineeringEventBias.name,
+                                icon: strategicEngineeringEventBias.icon,
+                                tier: strategicEngineeringEventBias.tier,
+                                tierLabel: strategicEngineeringEventBias.tierLabel,
+                                biasChance: strategicEngineeringEventBias.biasChance,
+                                eventIds: Array.isArray(strategicEngineeringEventBias.eventIds)
+                                    ? strategicEngineeringEventBias.eventIds.slice()
+                                    : [],
+                                signal: strategicEngineeringEventBias.signal,
+                                bonusPreview: strategicEngineeringEventBias.bonusPreview,
+                                summary: strategicEngineeringEventBias.summary
+                            }
                             : null
                     }
                     : null,
+                engineeringProjects: strategicEngineering
+                    ? strategicEngineering.allTracks.map((track) => ({
+                        trackId: track.trackId,
+                        name: track.name,
+                        icon: track.icon,
+                        nodeLabel: track.nodeLabel,
+                        tier: track.tier,
+                        tierLabel: track.tierLabel,
+                        progress: track.progress,
+                        nextTarget: track.nextTarget,
+                        remaining: track.remaining,
+                        effectSummary: track.effectSummary
+                    }))
+                    : [],
                 runPathFlash: this.lastRunPathMapFeedback
                     ? {
                         pathId: this.lastRunPathMapFeedback.pathId || null,
@@ -499,7 +794,41 @@ class Game {
                     }
                     : null,
                 activeNodes: typeof this.map.getAccessibleNodes === 'function'
-                    ? this.map.getAccessibleNodes().map(n => ({ id: n.id, row: n.row, type: n.type }))
+                    ? this.map.getAccessibleNodes().map((n) => {
+                        const risk = typeof this.map.resolveNodeRiskProfile === 'function'
+                            ? this.map.resolveNodeRiskProfile(n, chapterSnapshot)
+                            : null;
+                        return {
+                            id: n.id,
+                            row: n.row,
+                            type: n.type,
+                            engineering: strategicEngineering
+                                ? (() => {
+                                    const track = strategicEngineering.allTracks.find((entry) => entry.trackId === n.type);
+                                    if (!track) return null;
+                                    return {
+                                        trackId: track.trackId,
+                                        name: track.name,
+                                        tier: track.tier,
+                                        tierLabel: track.tierLabel,
+                                        progress: track.progress,
+                                        nextTarget: track.nextTarget,
+                                        remaining: track.remaining,
+                                        effectSummary: track.effectSummary
+                                    };
+                                })()
+                                : null,
+                            risk: risk
+                                ? {
+                                    index: risk.index,
+                                    tierId: risk.tierId,
+                                    tierLabel: risk.tierLabel,
+                                    label: risk.label,
+                                    summary: risk.summary
+                                }
+                                : null
+                        };
+                    })
                     : []
             } : null,
             destinyLedger: this.getChapterEventLedgerSnapshot({ includeEntries: true, limit: 4 }),
@@ -553,10 +882,12 @@ class Game {
                         : null
                 }
                 : null,
+            pvp: pvpPayload,
             endless: this.ensureEndlessState(),
             endlessPhase: this.getEndlessPhaseProfile(),
             endlessTheme: this.getEndlessCycleThemeProfile(),
             endlessSeason: this.getEndlessSeasonProfile(),
+            endlessDangerProfile: this.getEndlessDangerProfile(),
             encounter: this.ensureEncounterState(),
             perf: this.performanceStats
         };
@@ -4164,6 +4495,21 @@ class Game {
                 case 'heavenlyInsight':
                     summary.push(`天机 +${Math.floor(Number(effect.value) || 0)}`);
                     break;
+                case 'maxHp':
+                    summary.push(`最大生命 ${Number(effect.value) >= 0 ? '+' : ''}${Math.floor(Number(effect.value) || 0)}`);
+                    break;
+                case 'permaBuff':
+                {
+                    const statMap = {
+                        strength: '力量',
+                        defense: '防御',
+                        energy: '灵力',
+                        maxHp: '生命',
+                        draw: '抽牌'
+                    };
+                    summary.push(`永久${statMap[effect.stat] || '属性'} ${Number(effect.value) >= 0 ? '+' : ''}${Math.floor(Number(effect.value) || 0)}`);
+                    break;
+                }
                 case 'adventureBuff':
                 {
                     const buffTextMap = {
@@ -4189,8 +4535,14 @@ class Game {
                 case 'battle':
                     summary.push('立即进入战斗');
                     break;
+                case 'trial':
+                    summary.push(`开启试炼${effect.name || effect.trialName ? `：${effect.name || effect.trialName}` : ''}`);
+                    break;
                 case 'upgradeCard':
                     summary.push('强化 1 张卡牌');
+                    break;
+                case 'treasure':
+                    summary.push(effect.random ? '获得随机法宝' : `获得法宝 ${effect.treasureId || ''}`.trim());
                     break;
                 case 'randomGold':
                     summary.push(`获得 ${Math.floor(Number(effect.min) || 0)}-${Math.floor(Number(effect.max) || 0)} 灵石`);
@@ -4198,8 +4550,44 @@ class Game {
                 case 'random':
                     summary.push('随机结算 1 项命运结果');
                     break;
+                case 'nothing':
+                    summary.push('保持现状');
+                    break;
                 case 'removeCard':
                     summary.push('移除 1 张卡牌');
+                    break;
+                case 'removeCardType':
+                {
+                    const count = Math.max(1, Math.floor(Number(effect.count) || 1));
+                    const cardTypeMap = {
+                        attack: '攻击',
+                        skill: '技能',
+                        power: '功法',
+                        strike: '攻击'
+                    };
+                    const typeLabel = cardTypeMap[String(effect.cardType || '').trim()] || '指定';
+                    summary.push(`移除 ${count} 张${typeLabel}牌`);
+                    break;
+                }
+                case 'openTemporaryShop':
+                {
+                    const offerCount = Math.max(0, Math.floor(Number(effect.offerCount) || 0));
+                    const priceMultiplier = Number(effect.priceMultiplier);
+                    const parts = [effect.title ? `开启${effect.title}` : '开启临时商会'];
+                    if (offerCount > 0) {
+                        parts.push(`货位 ${offerCount}`);
+                    }
+                    if (Number.isFinite(priceMultiplier) && priceMultiplier > 0 && priceMultiplier < 1) {
+                        parts.push(`折价 ${Math.round((1 - priceMultiplier) * 100)}%`);
+                    }
+                    summary.push(parts.join(' · '));
+                    break;
+                }
+                case 'openCampfire':
+                    summary.push('进入营地整备');
+                    break;
+                case 'endlessPressure':
+                    summary.push(`轮回压力 ${Number(effect.value) > 0 ? '+' : ''}${Math.floor(Number(effect.value) || 0)}`);
                     break;
                 case 'vow':
                     summary.push('获得誓约相关收益');
@@ -4208,7 +4596,7 @@ class Game {
                     summary.push('推进灵契线索');
                     break;
                 default:
-                    if (effect.type) summary.push(String(effect.type));
+                    summary.push(String(effect.label || effect.title || effect.name || '特殊效果'));
                     break;
             }
         });
@@ -4241,6 +4629,14 @@ class Game {
         const summaryItems = [];
         if (currentChapter) {
             summaryItems.push(`章节：${currentChapter.name} · ${currentChapter.stageLabel}`);
+        }
+        if (event?.engineeringEventMeta) {
+            const meta = event.engineeringEventMeta;
+            const tierLabel = meta.tierLabel || `T${Math.max(0, Math.floor(Number(meta.tier) || 0))}`;
+            summaryItems.push(`工程：${meta.icon || '🧭'} ${meta.name || '工程联动'} ${tierLabel}${meta.selectedByEngineeringBias ? ' · 偏置命中' : ' · 同步强化'}`);
+            if (meta.summary) {
+                summaryItems.push(`联动：${meta.summary}`);
+            }
         }
         if (event?.summary) {
             summaryItems.push(`抉择：${event.summary}`);
@@ -4452,8 +4848,14 @@ class Game {
         if (!this.isEndlessActive() && !this.endlessState) return result;
 
         const state = this.ensureEndlessState();
-        const burdenMap = new Map(this.getEndlessParanoiaBurdenPool().map((item) => [item.id, item]));
-        const boonMap = new Map(this.getEndlessParanoiaBoonPool().map((item) => [item.id, item]));
+        const burdenPool = typeof this.getEndlessParanoiaBurdenPool === 'function'
+            ? this.getEndlessParanoiaBurdenPool()
+            : [];
+        const boonPool = typeof this.getEndlessParanoiaBoonPool === 'function'
+            ? this.getEndlessParanoiaBoonPool()
+            : [];
+        const burdenMap = new Map(burdenPool.map((item) => [item.id, item]));
+        const boonMap = new Map(boonPool.map((item) => [item.id, item]));
         const burdenIds = Array.isArray(state.activeParanoiaBurdens) ? state.activeParanoiaBurdens : [];
         const boonIds = Array.isArray(state.activeParanoiaBoons) ? state.activeParanoiaBoons : [];
 
@@ -6033,7 +6435,7 @@ class Game {
         return collapse;
     }
 
-    getEndlessModifiers() {
+    getEndlessModifiers(cycleOverride = null) {
         if (!this.isEndlessActive()) {
             return {
                 enemyHpMul: 1,
@@ -6049,7 +6451,10 @@ class Game {
         }
 
         const state = this.ensureEndlessState();
-        const cycle = Math.max(0, Math.floor(Number(state.currentCycle) || 0));
+        const rawCycle = cycleOverride === null || cycleOverride === undefined
+            ? state.currentCycle
+            : cycleOverride;
+        const cycle = Math.max(0, Math.floor(Number(rawCycle) || 0));
         const loopTier = Math.floor(cycle / 13);
         const pressure = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
         const phaseProfile = this.getEndlessPhaseProfile(cycle);
@@ -6316,7 +6721,7 @@ class Game {
         return tuning;
     }
 
-    getEndlessPressureBehaviorProfile() {
+    getEndlessPressureBehaviorProfile(cycleOverride = null) {
         const fallback = {
             pressure: 0,
             tierId: 'calm',
@@ -6331,11 +6736,15 @@ class Game {
         if (!this.isEndlessActive()) return fallback;
 
         const state = this.ensureEndlessState();
+        const rawCycle = cycleOverride === null || cycleOverride === undefined
+            ? state.currentCycle
+            : cycleOverride;
+        const cycle = Math.max(0, Math.floor(Number(rawCycle) || 0));
         const pressure = Math.max(0, Math.min(9, Math.floor(Number(state?.pressure) || 0)));
-        const phaseProfile = this.getEndlessPhaseProfile(state.currentCycle);
-        const cycleTheme = this.getEndlessCycleThemeProfile(state.currentCycle);
+        const phaseProfile = this.getEndlessPhaseProfile(cycle);
+        const cycleTheme = this.getEndlessCycleThemeProfile(cycle);
         const seasonProfile = typeof this.getEndlessSeasonProfile === 'function'
-            ? this.getEndlessSeasonProfile(state.currentCycle)
+            ? this.getEndlessSeasonProfile(cycle)
             : null;
         const profile = {
             ...fallback,
@@ -6430,6 +6839,273 @@ class Game {
             profile.seasonDirectiveName = '';
         }
         return profile;
+    }
+
+    getSharedDangerAxisLibrary() {
+        return {
+            burst: {
+                id: 'burst',
+                label: '先手爆发',
+                summary: '第一拍与瞬时爆发惩罚偏高，若起手没稳住会迅速掉血。',
+                counterplay: '优先留开场护盾、首拍减伤与速杀手段，别让第一轮失血滚雪球。',
+                reserveGuidance: '首章前建议至少保留 1 次硬减伤、护盾翻盘点或低费止损牌。'
+            },
+            attrition: {
+                id: 'attrition',
+                label: '拉锯压强',
+                summary: '敌方血量、护盾或跨章耐压更高，越拖越容易被资源税反超。',
+                counterplay: '把恢复、补件与法宝节奏提早，避免在中盘因资源税断档。',
+                reserveGuidance: '建议每重结束时都保留恢复与补件预算，不要把灵石和补件机会花空。'
+            },
+            control: {
+                id: 'control',
+                label: '控场税负',
+                summary: '弱化、易伤与压制会持续放大失误成本，容错窗口更窄。',
+                counterplay: '预留净化、免控或稳态护盾，避免在 debuff 回合里空过关键输出窗。',
+                reserveGuidance: '建议保留净化、低费防御或灵契主动来专门吃掉压制回合。'
+            },
+            execution: {
+                id: 'execution',
+                label: '执行门槛',
+                summary: '固定季签、偏执抉择与深轮检定提高了路线与节拍执行要求。',
+                counterplay: '优先按当前季签与轮段题面完成主轴，再追求额外收益，不要过早偏离样本。',
+                reserveGuidance: '建议先把本轮主轴打稳，再去贪高压战、额外分数和高波动交易。'
+            }
+        };
+    }
+
+    getEndlessDangerProfile(cycleOverride = null) {
+        const axisLibrary = typeof this.getSharedDangerAxisLibrary === 'function'
+            ? this.getSharedDangerAxisLibrary()
+            : {
+                burst: {
+                    id: 'burst',
+                    label: '先手爆发',
+                    summary: '第一拍与瞬时爆发惩罚偏高，若起手没稳住会迅速掉血。',
+                    counterplay: '优先留开场护盾、首拍减伤与速杀手段，别让第一轮失血滚雪球。',
+                    reserveGuidance: '首章前建议至少保留 1 次硬减伤、护盾翻盘点或低费止损牌。'
+                },
+                attrition: {
+                    id: 'attrition',
+                    label: '拉锯压强',
+                    summary: '敌方血量、护盾或跨章耐压更高，越拖越容易被资源税反超。',
+                    counterplay: '把恢复、补件与法宝节奏提早，避免在中盘因资源税断档。',
+                    reserveGuidance: '建议每重结束时都保留恢复与补件预算，不要把灵石和补件机会花空。'
+                },
+                control: {
+                    id: 'control',
+                    label: '控场税负',
+                    summary: '弱化、易伤与压制会持续放大失误成本，容错窗口更窄。',
+                    counterplay: '预留净化、免控或稳态护盾，避免在 debuff 回合里空过关键输出窗。',
+                    reserveGuidance: '建议保留净化、低费防御或灵契主动来专门吃掉压制回合。'
+                },
+                execution: {
+                    id: 'execution',
+                    label: '执行门槛',
+                    summary: '固定季签、偏执抉择与深轮检定提高了路线与节拍执行要求。',
+                    counterplay: '优先按当前季签与轮段题面完成主轴，再追求额外收益，不要过早偏离样本。',
+                    reserveGuidance: '建议先把本轮主轴打稳，再去贪高压战、额外分数和高波动交易。'
+                }
+            };
+        const fallbackAxes = [
+            { id: axisLibrary.burst.id, label: axisLibrary.burst.label, value: 0 },
+            { id: axisLibrary.attrition.id, label: axisLibrary.attrition.label, value: 0 },
+            { id: axisLibrary.control.id, label: axisLibrary.control.label, value: 0 },
+            { id: axisLibrary.execution.id, label: axisLibrary.execution.label, value: 0 }
+        ];
+        const fallback = {
+            index: 0,
+            tierId: 'controlled',
+            tierLabel: '可控',
+            dominantAxisId: axisLibrary.burst.id,
+            dominantAxisLabel: axisLibrary.burst.label,
+            summary: axisLibrary.burst.summary,
+            counterplay: axisLibrary.burst.counterplay,
+            reserveGuidance: axisLibrary.burst.reserveGuidance,
+            line: '轮回压强 DRI 0 / 100 · 可控 · 主轴 先手爆发',
+            axes: fallbackAxes
+        };
+        if (!this.isEndlessActive()) return fallback;
+
+        const clampInt = (value, min = 0, max = 100, fallbackValue = min) => {
+            const num = Number(value);
+            if (!Number.isFinite(num)) return fallbackValue;
+            return Math.max(min, Math.min(max, Math.round(num)));
+        };
+        const clampRate = (value, min = 0, max = 1, fallbackValue = min) => {
+            const num = Number(value);
+            if (!Number.isFinite(num)) return fallbackValue;
+            return Math.max(min, Math.min(max, num));
+        };
+
+        const state = this.ensureEndlessState();
+        const rawCycle = cycleOverride === null || cycleOverride === undefined
+            ? state.currentCycle
+            : cycleOverride;
+        const cycle = Math.max(0, Math.floor(Number(rawCycle) || 0));
+        const pressure = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
+        const mods = typeof this.getEndlessModifiers === 'function'
+            ? this.getEndlessModifiers(cycle)
+            : { enemyHpMul: 1, healMul: 1 };
+        const pressureProfile = typeof this.getEndlessPressureBehaviorProfile === 'function'
+            ? this.getEndlessPressureBehaviorProfile(cycle)
+            : null;
+        const cycleTheme = typeof this.getEndlessCycleThemeProfile === 'function'
+            ? this.getEndlessCycleThemeProfile(cycle)
+            : null;
+        const seasonProfile = typeof this.getEndlessSeasonProfile === 'function'
+            ? this.getEndlessSeasonProfile(cycle)
+            : null;
+        const paranoia = typeof this.getEndlessParanoiaEffects === 'function'
+            ? this.getEndlessParanoiaEffects()
+            : null;
+
+        const collapseStats = seasonProfile && seasonProfile.collapseStats && typeof seasonProfile.collapseStats === 'object'
+            ? seasonProfile.collapseStats
+            : {};
+        const directiveRiskScore = Math.max(0, Number(seasonProfile?.directiveRiskScore) || 0);
+        const directiveRiskTier = seasonProfile?.directiveRiskTier || 'balanced';
+        const paranoiaLevel = Math.max(0, Math.floor(Number(state.paranoiaLevel) || 0));
+        const cycleThemeText = [
+            cycleTheme?.name || '',
+            cycleTheme?.desc || '',
+            cycleTheme?.enemyDirective || ''
+        ].join(' ');
+        const controlThemeSignal = /控场|压制|封|弱化|易伤|手牌|镜|审|净化|读题|tax|control/i.test(cycleThemeText);
+        const attritionThemeSignal = /耐压|守势|拖|续航|熔|锻|补给|商会|长线/i.test(cycleThemeText);
+        const burstThemeSignal = /爆发|前压|连斩|速攻|骤压|冲刺/i.test(cycleThemeText);
+
+        const burstValue = clampInt(
+            12
+            + pressure * 4.2
+            + (pressureProfile?.enemyOpeningBlock || 0) * 1.9
+            + (pressureProfile?.enemyOpeningStrength || 0) * 13
+            + (pressureProfile?.extraAttackPatterns || 0) * 10
+            + Math.max(0, ((Number(pressureProfile?.attackBoostMul) || 1) - 1) * 150)
+            + ((pressureProfile?.injectDebuffPattern || burstThemeSignal) ? 6 : 0)
+            + (directiveRiskTier === 'volatile' ? 4 : 0),
+            0,
+            100
+        );
+
+        const attritionValue = clampInt(
+            14
+            + pressure * 4.6
+            + cycle * 1.9
+            + Math.max(0, ((Number(mods.enemyHpMul) || 1) - 1) * 24)
+            + Math.max(0, (1 - clampRate(mods.healMul, 0.45, 1.35, 1)) * 54)
+            + clampInt(collapseStats.sustain_break, 0, 12, 0) * 6
+            + clampInt(collapseStats.supply_crack, 0, 12, 0) * 5
+            + (attritionThemeSignal ? 7 : 0),
+            0,
+            100
+        );
+
+        const controlValue = clampInt(
+            10
+            + pressure * 3.1
+            + ((pressureProfile?.injectDebuffPattern || false) ? 18 : 0)
+            + (controlThemeSignal ? 8 : 0)
+            + (seasonProfile?.id === 'mirror_verdict' ? 8 : 0)
+            + clampInt(collapseStats.pressure_overload, 0, 12, 0) * 4
+            + clampInt(collapseStats.mechanic_check, 0, 12, 0) * 6
+            + (Number(paranoia?.handLimitOffset) < 0 ? Math.abs(Number(paranoia.handLimitOffset) || 0) * 5 : 0),
+            0,
+            100
+        );
+
+        const executionValue = clampInt(
+            12
+            + pressure * 2.4
+            + cycle * 1.2
+            + directiveRiskScore * 0.12
+            + paranoiaLevel * 10
+            + clampInt(collapseStats.tempo_loss, 0, 12, 0) * 5
+            + clampInt(collapseStats.mechanic_check, 0, 12, 0) * 3
+            + (seasonProfile?.activeDirectiveSource === 'player' ? 4 : 0),
+            0,
+            100
+        );
+
+        const axes = [
+            { ...axisLibrary.burst, value: burstValue },
+            { ...axisLibrary.attrition, value: attritionValue },
+            { ...axisLibrary.control, value: controlValue },
+            { ...axisLibrary.execution, value: executionValue }
+        ];
+        const dominantAxis = axes.reduce((best, axis) => (axis.value > best.value ? axis : best), axes[0]);
+        const axisAverage = axes.reduce((sum, axis) => sum + axis.value, 0) / Math.max(1, axes.length);
+        const index = clampInt(
+            18
+            + axisAverage * 0.54
+            + dominantAxis.value * 0.14
+            + pressure * 1.6
+            + cycle * 0.35
+            + directiveRiskScore * 0.04
+            + paranoiaLevel * 1.8,
+            0,
+            100
+        );
+
+        let tierId = 'controlled';
+        let tierLabel = '可控';
+        if (index >= 75) {
+            tierId = 'extreme';
+            tierLabel = '极限';
+        } else if (index >= 60) {
+            tierId = 'high';
+            tierLabel = '高压';
+        } else if (index >= 42) {
+            tierId = 'medium';
+            tierLabel = '中压';
+        }
+
+        const contextParts = [];
+        if (cycleTheme?.shortName || cycleTheme?.name) {
+            contextParts.push(`轮段 ${cycleTheme.shortName || cycleTheme.name}`);
+        }
+        if (seasonProfile?.directiveName) {
+            contextParts.push(`季签 ${seasonProfile.directiveName}`);
+        }
+        if (paranoiaLevel > 0) {
+            contextParts.push(`偏执 ${paranoiaLevel} 层`);
+        }
+        const summary = `${dominantAxis.label}偏高：${dominantAxis.summary}${contextParts.length > 0 ? ` 当前受${contextParts.join(' / ')}牵引。` : ''}`;
+
+        let counterplay = dominantAxis.counterplay;
+        if (dominantAxis.id === 'control' && pressureProfile?.injectDebuffPattern) {
+            counterplay += ' 本轮敌方会附带压制咒印，净化与低费护盾的优先级更高。';
+        } else if (dominantAxis.id === 'execution' && seasonProfile?.directiveName) {
+            counterplay += ` 当前季签「${seasonProfile.directiveName}」更适合先把题面答稳，再吃额外收益。`;
+        } else if (dominantAxis.id === 'attrition' && Number(mods.healMul || 1) < 0.95) {
+            counterplay += ` 当前治疗效率仅 x${Number(mods.healMul || 1).toFixed(2)}，更要提前规划补给与恢复节点。`;
+        } else if (dominantAxis.id === 'burst' && pressure >= 6) {
+            counterplay += ' 深轮前两拍容错更低，首轮别把硬减伤和止损点打空。';
+        }
+
+        let reserveGuidance = dominantAxis.reserveGuidance;
+        if (paranoiaLevel >= 2) {
+            reserveGuidance += ' 偏执层数较高时，额外预留一条手牌修正或保底收益线。';
+        } else if (directiveRiskTier === 'volatile') {
+            reserveGuidance += ' 当前为激进季签，建议把补件与应急资源预算留得更厚。';
+        }
+
+        return {
+            index,
+            tierId,
+            tierLabel,
+            dominantAxisId: dominantAxis.id,
+            dominantAxisLabel: dominantAxis.label,
+            summary,
+            counterplay,
+            reserveGuidance,
+            line: `轮回压强 DRI ${index} / 100 · ${tierLabel} · 主轴 ${dominantAxis.label}`,
+            axes: axes.map((axis) => ({
+                id: axis.id,
+                label: axis.label,
+                value: clampInt(axis.value, 0, 100, 0)
+            }))
+        };
     }
 
     buildEndlessPressurePatternVariant(pattern, profile, variantIndex = 0) {
@@ -8157,6 +8833,7 @@ class Game {
             this.player.karma = clampInt(this.player.karma, 0, 999, 0);
             this.player.realm = clampInt(this.player.realm, 1, 18, 1);
             this.player.shopRumors = this.normalizeShopRumors(this.player.shopRumors);
+            this.player.strategicEngineering = this.normalizeStrategicEngineering(this.player.strategicEngineering);
             if (!this.player.buffs || typeof this.player.buffs !== 'object') this.player.buffs = {};
             if (!Array.isArray(this.player.deck)) this.player.deck = [];
             if (!Array.isArray(this.player.hand)) this.player.hand = [];
@@ -10362,7 +11039,7 @@ class Game {
                     .map((item) => `${item.label} ${item.count} 次`)
                     .join(' / ')
                 : '当前赛季暂无崩盘记录。';
-            const directiveButtons = seasonProfile && Array.isArray(seasonProfile.directiveChoices) && seasonProfile.directiveChoices.length > 0
+                const directiveButtons = seasonProfile && Array.isArray(seasonProfile.directiveChoices) && seasonProfile.directiveChoices.length > 0
                 ? `
                     <div class="preview-endless-directives">
                         <button class="preview-endless-directive-btn ${seasonProfile.activeDirectiveSource === 'auto' ? 'active' : ''}" data-directive-id="auto">
@@ -10380,6 +11057,9 @@ class Game {
                     </div>
                 `
                 : '';
+            const dangerProfile = typeof this.getEndlessDangerProfile === 'function'
+                ? this.getEndlessDangerProfile(state.currentCycle)
+                : null;
 
             const titleEl = document.getElementById('preview-title');
             if (titleEl) titleEl.textContent = `无尽轮回 · 第 ${state.currentCycle + 1} 轮`;
@@ -10400,6 +11080,9 @@ class Game {
                 const seasonText = seasonProfile
                     ? `<br><span style="color:#ffd9a7;">赛季：${seasonProfile.icon || '🜁'} ${seasonProfile.name}（${seasonProfile.weekTag}）</span><br><span style="color:#ffd9a7;opacity:0.92;">季签：${seasonProfile.directiveName} · ${seasonProfile.directiveDesc || '保持稳态推进。'}</span>`
                     : '<br><span style="color:#ffd9a7;">赛季：待命</span>';
+                const dangerText = dangerProfile
+                    ? `<br><span style="color:#ffddb0;">轮回压强：DRI ${dangerProfile.index} / 100 · ${dangerProfile.tierLabel}</span><br><span style="color:#ffe9c8;opacity:0.92;">主轴：${dangerProfile.dominantAxisLabel}｜对策：${dangerProfile.counterplay}</span>`
+                    : '';
                 envEl.innerHTML = `
                     <div style="margin-bottom:5px; color:#8fe8ff; font-weight:bold; font-size:1.05rem;">
                         当前映射：${realmName}
@@ -10411,6 +11094,7 @@ class Game {
                         ${phaseText}
                         ${themeText}
                         ${seasonText}
+                        ${dangerText}
                     </div>
                 `;
             }
@@ -10422,8 +11106,9 @@ class Game {
                 chapterEl.innerHTML = `
                     <div class="preview-chapter-summary">
                         <strong>无尽轮回不绑定固定章节。</strong><br>
-                        当前映射天域会随轮次切换，主题词缀、压力阶段与偏执会共同决定打法。
+                        当前映射天域会随轮次切换，主题词缀、压力阶段、赛季季签与偏执会共同决定打法。
                     </div>
+                    <div class="preview-rule-line"><span class="rule-label">风险主轴</span><span>${dangerProfile ? `DRI ${dangerProfile.index} · ${dangerProfile.dominantAxisLabel} · ${dangerProfile.summary}` : '待进入轮回后推演'}</span></div>
                     <div class="preview-rule-line"><span class="rule-label">赛季战绩</span><span>已通关 ${seasonClears} 轮 / 主宰 ${seasonBosses} / 赛季积分 ${seasonScore} / 最深第 ${Math.max(1, seasonBest)} 轮</span></div>
                     <div class="preview-rule-line"><span class="rule-label">赛季目标</span><span>${goalSummary}</span></div>
                     <div class="preview-rule-line"><span class="rule-label">崩盘账本</span><span>${collapseSummary}</span></div>
@@ -10432,7 +11117,8 @@ class Game {
             if (buildEl) {
                 buildEl.innerHTML = `
                     <div class="preview-current-build">
-                        建议优先围绕 <strong>轮段主题</strong>、<strong>阶段挑战</strong> 与 <strong>当前偏执</strong> 调整临时路线，而不是死守单一章节思路。<br>
+                        建议优先围绕 <strong>轮段主题</strong>、<strong>阶段挑战</strong>、<strong>当前 DRI 主轴</strong> 与 <strong>当前偏执</strong> 调整临时路线，而不是死守单一章节思路。<br>
+                        当前主轴：<strong>${dangerProfile?.dominantAxisLabel || '待推演'}</strong>｜对策：${dangerProfile?.counterplay || '进入无尽后会自动生成应对提示。'}<br>
                         当前季签：<strong>${seasonProfile?.directiveName || '稳态令'}</strong>（${seasonProfile?.directiveRiskLabel || '平衡'} / ${seasonProfile?.selectionModeLabel || '轮转推荐'}）
                     </div>
                     ${directiveButtons}
@@ -11711,9 +12397,13 @@ class Game {
         const enemyList = rawEnemyList.filter(Boolean);
         const isPvpBattle = enemyList.some(e => e && e.isGhost);
         this.mode = isPvpBattle ? 'pvp' : 'pve';
+        this.pvpResultReview = null;
         if (!isPvpBattle) {
             this.pvpOpponentRank = null;
             this.pvpMatchTicket = null;
+            this.pvpDangerProfile = null;
+            this.pvpMatchIntent = null;
+            this.pvpResultReview = null;
             if (typeof PVPService !== 'undefined' && typeof PVPService.clearActiveMatch === 'function') {
                 PVPService.clearActiveMatch();
             }
@@ -12061,6 +12751,72 @@ class Game {
 
     // === PVP Result Handlers ===
 
+    buildPVPResultReview(result = {}, didWin = true) {
+        if (typeof PVPService === 'undefined' || !PVPService || typeof PVPService.getPvpResultReview !== 'function') {
+            return null;
+        }
+        const delta = result && result.delta !== undefined ? result.delta : (result && result.ratingChange) || 0;
+        return PVPService.getPvpResultReview({
+            didWin,
+            dangerProfile: this.pvpDangerProfile,
+            ratingDelta: delta,
+            coinsAwarded: result && result.coinsAwarded,
+            opponent: this.pvpOpponentRank
+        });
+    }
+
+    renderPVPResultReview(review = null) {
+        const panel = document.getElementById('pvp-result-review');
+        const kicker = document.getElementById('pvp-result-review-kicker');
+        const title = document.getElementById('pvp-result-review-title');
+        const subtitle = document.getElementById('pvp-result-review-subtitle');
+        const chip = document.getElementById('pvp-result-review-chip');
+        const summary = document.getElementById('pvp-result-review-summary');
+        const focusLabel = document.getElementById('pvp-result-review-focus-label');
+        const focusValue = document.getElementById('pvp-result-review-focus-value');
+        const nextLabel = document.getElementById('pvp-result-review-next-label');
+        const nextValue = document.getElementById('pvp-result-review-next-value');
+        const foot = document.getElementById('pvp-result-review-foot');
+        if (!panel || !kicker || !title || !subtitle || !chip || !summary || !focusLabel || !focusValue || !nextLabel || !nextValue || !foot) {
+            this.pvpResultReview = review && typeof review === 'object' ? review : null;
+            return;
+        }
+
+        const safeReview = review && typeof review === 'object'
+            ? review
+            : {
+                outcomeId: '',
+                kicker: '赛后复盘',
+                title: '本局题面会在这里回看',
+                subtitle: 'DRI、主轴与对手画像会同步写入复盘卡。',
+                chipText: 'DRI 0 · 可控',
+                chipTierId: 'controlled',
+                summary: '当你完成一场 PVP，对局复盘会总结这把到底是越压破局，还是哪里读题失拍。',
+                focusTitle: '判词',
+                focusText: '系统会结合这场的风险主轴给出一句更具体的复盘提示。',
+                nextTitle: '下一把',
+                nextText: '这里会告诉你下一把应该优先保留什么资源与节拍。',
+                economyLine: '对局结束后会同步展示道韵变化与天道币收益。',
+                dangerLine: '',
+                dangerProfile: null,
+                tags: []
+            };
+
+        panel.dataset.tier = safeReview.chipTierId || 'controlled';
+        kicker.textContent = safeReview.kicker || '赛后复盘';
+        title.textContent = safeReview.title || '本局题面会在这里回看';
+        subtitle.textContent = safeReview.subtitle || '';
+        chip.textContent = safeReview.chipText || 'DRI 0 · 可控';
+        chip.className = `pvp-result-review-chip tier-${safeReview.chipTierId || 'controlled'}`;
+        summary.textContent = safeReview.summary || '';
+        focusLabel.textContent = safeReview.focusTitle || '判词';
+        focusValue.textContent = safeReview.focusText || '';
+        nextLabel.textContent = safeReview.nextTitle || '下一把';
+        nextValue.textContent = safeReview.nextText || '';
+        foot.textContent = safeReview.economyLine || safeReview.dangerLine || '';
+        this.pvpResultReview = safeReview;
+    }
+
     async handlePVPVictory() {
         console.log('PVP Victory!');
         const overlay = document.getElementById('pvp-result-overlay');
@@ -12102,6 +12858,7 @@ class Game {
                 oppScore.textContent = this.pvpOpponentRank.score || 1000;
             }
         }
+        this.renderPVPResultReview(this.buildPVPResultReview(result, true));
         if (result && Number(result.coinsAwarded) > 0) {
             Utils.showBattleLog(`天道币 +${Math.floor(Number(result.coinsAwarded))}`);
         }
@@ -12151,6 +12908,7 @@ class Game {
                 oppScore.textContent = this.pvpOpponentRank.score || 1000;
             }
         }
+        this.renderPVPResultReview(this.buildPVPResultReview(result, false));
         if (result && Number(result.coinsAwarded) > 0) {
             Utils.showBattleLog(`天道币 +${Math.floor(Number(result.coinsAwarded))}`);
         }
@@ -12166,6 +12924,10 @@ class Game {
         this.mode = 'pve';
         this.pvpMatchTicket = null;
         this.pvpOpponentRank = null;
+        this.pvpDangerProfile = null;
+        this.pvpMatchIntent = null;
+        this.renderPVPResultReview(null);
+        this.pvpResultReview = null;
         if (typeof PVPService !== 'undefined' && typeof PVPService.clearActiveMatch === 'function') {
             PVPService.clearActiveMatch();
         }
@@ -12591,7 +13353,7 @@ class Game {
         // 动态更新跳过按钮文本
         const skipBtn = this.currentScreenElement ? this.currentScreenElement.querySelector('.skip-reward-btn') : document.querySelector('.skip-reward-btn');
         if (skipBtn) {
-            const skipCost = 80 * this.player.realm;
+            const skipCost = this.getRewardSkipCost();
             skipBtn.textContent = `跳过卡牌 (扣${skipCost}灵石)`;
             // Visual indicator if affordable
             if (this.player.gold < skipCost) {
@@ -12606,6 +13368,11 @@ class Game {
         }
 
         this.showScreen('reward-screen');
+    }
+
+    getRewardSkipCost() {
+        const realm = Math.max(1, Math.floor(Number(this.player?.realm) || 1));
+        return 50 * realm;
     }
 
     // 选择奖励卡牌
@@ -12626,7 +13393,7 @@ class Game {
 
     // 跳过奖励卡牌（扣除灵石）
     skipRewardCard() {
-        const cost = 50 * this.player.realm;
+        const cost = this.getRewardSkipCost();
         if (this.player.gold >= cost) {
             this.player.gold -= cost;
             Utils.showBattleLog(`跳过卡牌奖励，扣除 ${cost} 灵石`);
@@ -15868,7 +16635,7 @@ class Game {
                 <ul class="intro-list">
                     <li><strong>主线挑战</strong>：闯过 18 层天域，击败镇守强敌。</li>
                     <li><strong>长线玩法</strong>：无尽轮回高压成长，挑战更高轮次。</li>
-                    <li><strong>对抗玩法</strong>：PVP 天道榜，镜像对战与赛季奖励并行。</li>
+                    <li><strong>对抗玩法</strong>：PVP 天道榜，镜像对战、风险画像与赛季奖励并行。</li>
                 </ul>
             </div>
 
@@ -15947,8 +16714,8 @@ class Game {
             <div class="intro-section">
                 <h3>♾️ 无尽与 🏆 PVP</h3>
                 <ul class="intro-list">
-                    <li><strong>无尽轮回</strong>：以压力系统驱动高压成长，强调稳压与爆发平衡。</li>
-                    <li><strong>天道榜（PVP）</strong>：镜像对战、段位奖励、商店外观与经济循环。</li>
+                    <li><strong>无尽轮回</strong>：压力、赛季、季签与偏执会汇总成 DRI 主轴与对策，强调读题后的稳压与爆发平衡。</li>
+                    <li><strong>天道榜（PVP）</strong>：榜单推演、焦点约战、定向匹配、镜像演武兜底、实战与赛后复盘会同步展示 PVP DRI、主轴、对策与预留，并联动段位奖励、商店外观与经济循环。</li>
                     <li><strong>传承系统</strong>：局外成长可强化下一轮开局强度与构筑容错。</li>
                 </ul>
             </div>
@@ -16010,9 +16777,15 @@ class Game {
                     <li><strong>命途主线三阶段</strong>：每局有明确阶段目标、阶段奖励与圆满归档。</li>
                     <li><strong>命途裂变中盘抉择</strong>：中盘可执行极化 / 转修 / 献祭等路线改写，提升局内分叉感。</li>
                     <li><strong>章节世界规则考试化</strong>：章节天象、地脉、主宰提示与路线建议形成统一语义。</li>
-                    <li><strong>DRI 风险指数面板</strong>：章节简报新增风险指数、风险维度与对策提示，挑战感更清晰可解释。</li>
-                    <li><strong>无尽轮回赛季化</strong>：赛季词条、季签、赛季账本与偏执层联动，支持长期进阶复盘。</li>
-                    <li><strong>PVP 赛季经济闭环</strong>：段位倍率、连胜奖励、交易日志、称号与法相佩戴完整打通。</li>
+                    <li><strong>DRI 风险指数面板</strong>：章节简报、挑战观察站与无尽轮回现已共享风险指数、主导维度与对策提示，读题语言更统一。</li>
+                    <li><strong>挑战试炼压强 DRI</strong>：观察站挑战页、锁定开局横幅与地图运行横幅现已同步展示试炼压强、主轴维度与应对提示。</li>
+                    <li><strong>挑战样本回放增强</strong>：观察站留痕会自动生成复刻重点 / 失手剖面，并在回放开局与地图横幅持续提示训练重点。</li>
+                    <li><strong>仇敌追猎链路预判</strong>：地图总览、章节风险卡与远征态势会同步给出追猎历史、下一次高压窗口与建议对策。</li>
+                    <li><strong>地图节点工程化 2.0</strong>：观星 / 禁术 / 裂隙 / 灵契线路会形成跨章工程主轴，持续改写后续地图结构。</li>
+                    <li><strong>工程事件联动 2.1</strong>：观星 / 裂隙主轴会继续偏置章节事件池，并为命中事件追加货位、折价、命环、天机等强化。</li>
+                    <li><strong>工程追猎联动 2.2</strong>：跨章工程主轴现已同步影响悬赏冲突、路线分歧、远征态势、章节总览桥接与仇敌追猎窗口。</li>
+                    <li><strong>无尽轮回 DRI 同轴化</strong>：赛季词条、季签、崩盘账本与偏执层现已统一折算成轮回压强 DRI、主轴与预留建议。</li>
+                    <li><strong>PVP 风险画像 + 焦点约战闭环</strong>：榜单推演、对手档案回看、PVP DRI、对策/预留、焦点约战单、定向匹配、镜像演武兜底、赛后复盘卡、段位倍率、连胜奖励、交易日志、称号与法相佩戴现已完整打通。</li>
                 </ul>
             </div>
 
@@ -16020,17 +16793,16 @@ class Game {
                 <h3>🧭 推荐体验路线（V7.0）</h3>
                 <ul class="intro-list">
                     <li>先开主线跑完一条命途三阶段，观察章节 DRI 与命途任务的联动节奏。</li>
-                    <li>再进无尽轮回对照赛季账本，确认“崩盘维度”并反向优化主线构筑。</li>
-                    <li>最后进入天道榜，利用赛季倍率与商店经济把构筑转为长期竞争力。</li>
+                    <li>再进无尽轮回对照 DRI 主轴与赛季账本，确认“崩盘维度”并反向优化主线构筑。</li>
+                    <li>最后进入天道榜，对照 PVP DRI、主轴与对策微调构筑，再利用赛季倍率与商店经济把强势套路沉淀成长期竞争力。</li>
                 </ul>
             </div>
 
             <div class="intro-section">
                 <h3>🛰 下一迭代方向（V7.x）</h3>
                 <ul class="intro-list">
-                    <li><strong>仇敌追猎链路深化</strong>：让章节后果在后续章持续追击与反馈。</li>
-                    <li><strong>挑战样本回放增强</strong>：强化“失败可复盘、成功可复刻”的训练闭环。</li>
-                    <li><strong>跨模式难度同轴化</strong>：持续打磨主线 / 无尽 / 挑战 / PVP 的风险标尺一致性。</li>
+                    <li><strong>PVP 赛季题面深化</strong>：继续补更细的赛季题面提示、分段标签与跨场对照线索，让 PVP DRI 不只在开战前可读，也能继续承接到赛后复盘。</li>
+                    <li><strong>挑战观察站深化</strong>：继续补充跨样本对比维度、训练标签与更细的复盘导引。</li>
                 </ul>
             </div>
 
@@ -16096,9 +16868,24 @@ class Game {
         }
     }
 
+    closeRewardModal(options = {}) {
+        const modal = document.getElementById('reward-modal');
+        if (!modal || !modal.classList || !modal.classList.contains('active')) return false;
+        modal.classList.remove('active');
+        const callback = modal.onCloseCallback;
+        modal.onCloseCallback = null;
+        if (options.invokeCallback !== false && typeof callback === 'function') {
+            callback();
+        }
+        return true;
+    }
+
     // 关闭模态框
-    closeModal() {
+    closeModal(options = {}) {
+        const invokeRewardCallback = options.invokeRewardCallback !== false;
+        this.closeRewardModal({ invokeCallback: invokeRewardCallback });
         document.querySelectorAll('.modal').forEach(modal => {
+            if (modal.id === 'reward-modal') return;
             modal.classList.remove('active');
             modal.classList.remove('upgrade-mode'); // Clean up upgrade UI overrides
         });
@@ -16668,8 +17455,7 @@ class Game {
             // 绑定事件
             const btn = modal.querySelector('#reward-confirm-btn');
             btn.onclick = () => {
-                modal.classList.remove('active');
-                if (modal.onCloseCallback) modal.onCloseCallback();
+                this.closeRewardModal({ invokeCallback: true });
                 if (typeof audioManager !== 'undefined') audioManager.playSFX('click');
             };
         }
@@ -16840,6 +17626,422 @@ class Game {
         }
         this.player.shopRumors = this.normalizeShopRumors(this.player.shopRumors);
         return this.player.shopRumors;
+    }
+
+    getStrategicEngineeringCatalog() {
+        return {
+            observatory: {
+                id: 'observatory',
+                nodeType: 'observatory',
+                icon: '🔭',
+                name: '观星工程',
+                nodeLabel: '观星台',
+                tierLabels: ['未成形', 'I阶', 'II阶', 'III阶'],
+                thresholds: [1, 2, 4],
+                effectByTier: [
+                    '尚未形成稳定观测网。',
+                    '下重更偏向观星与事件，先把情报线立起来。',
+                    '观星、事件与裂隙联动抬升，常规战斗略降。',
+                    '形成跨章观测网，功能节点更稳定，追路更可控。'
+                ],
+                shiftByTier: [
+                    {},
+                    { observatory: 0.018, event: 0.014, enemy: -0.01 },
+                    { observatory: 0.026, event: 0.02, memory_rift: 0.014, enemy: -0.016, elite: -0.004 },
+                    { observatory: 0.032, event: 0.022, memory_rift: 0.02, shop: 0.006, enemy: -0.02, elite: -0.006 }
+                ],
+                reward: {
+                    insight: 1
+                }
+            },
+            spirit_grotto: {
+                id: 'spirit_grotto',
+                nodeType: 'spirit_grotto',
+                icon: '🪷',
+                name: '灵契工程',
+                nodeLabel: '灵契窟',
+                tierLabels: ['未成形', 'I阶', 'II阶', 'III阶'],
+                thresholds: [1, 2, 4],
+                effectByTier: [
+                    '尚未形成稳定护道链。',
+                    '下重更偏向灵契与修整节点，先把护道线接起来。',
+                    '灵契、营地与观星协同补强，推进更稳。',
+                    '护道网络成形，恢复与补强节点会更连续。'
+                ],
+                shiftByTier: [
+                    {},
+                    { spirit_grotto: 0.018, rest: 0.012, observatory: 0.008 },
+                    { spirit_grotto: 0.026, rest: 0.016, observatory: 0.012, shop: 0.006, enemy: -0.01 },
+                    { spirit_grotto: 0.03, rest: 0.02, observatory: 0.014, shop: 0.01, enemy: -0.014, forbidden_altar: -0.006 }
+                ],
+                reward: {
+                    buffId: 'firstTurnDrawBoostBattles',
+                    buffAmount: 1,
+                    buffLabel: '首回合抽牌增益'
+                }
+            },
+            forbidden_altar: {
+                id: 'forbidden_altar',
+                nodeType: 'forbidden_altar',
+                icon: '🩸',
+                name: '禁术工程',
+                nodeLabel: '禁术坛',
+                tierLabels: ['未成形', 'I阶', 'II阶', 'III阶'],
+                thresholds: [1, 2, 4],
+                effectByTier: [
+                    '尚未形成禁术推进链。',
+                    '下重更偏向禁术与试炼节点，收益与代价会同步放大。',
+                    '禁术、试炼与锻炉形成加速链，路线更偏冒险爆发。',
+                    '血契链路成形，高压节点更集中，适合搏命滚雪球。'
+                ],
+                shiftByTier: [
+                    {},
+                    { forbidden_altar: 0.018, trial: 0.012, rest: -0.008 },
+                    { forbidden_altar: 0.024, trial: 0.018, elite: 0.01, forge: 0.008, rest: -0.012, shop: -0.006 },
+                    { forbidden_altar: 0.03, trial: 0.022, elite: 0.014, forge: 0.012, enemy: -0.01, rest: -0.016, shop: -0.008 }
+                ],
+                reward: {
+                    karma: 1
+                }
+            },
+            memory_rift: {
+                id: 'memory_rift',
+                nodeType: 'memory_rift',
+                icon: '🪞',
+                name: '裂隙工程',
+                nodeLabel: '记忆裂隙',
+                tierLabels: ['未成形', 'I阶', 'II阶', 'III阶'],
+                thresholds: [1, 2, 4],
+                effectByTier: [
+                    '尚未形成稳定裂隙回响。',
+                    '下重更偏向裂隙与事件节点，先把改写构筑的窗口拉出来。',
+                    '裂隙、事件与观星联动抬升，构筑改写会更连续。',
+                    '裂隙回响网成形，信息线与构筑线会同步加速。'
+                ],
+                shiftByTier: [
+                    {},
+                    { memory_rift: 0.018, event: 0.012, observatory: 0.008 },
+                    { memory_rift: 0.026, event: 0.018, observatory: 0.012, spirit_grotto: 0.006, enemy: -0.01 },
+                    { memory_rift: 0.032, event: 0.02, observatory: 0.016, spirit_grotto: 0.01, enemy: -0.014, elite: -0.004 }
+                ],
+                reward: {
+                    ringExp: 18
+                }
+            }
+        };
+    }
+
+    createDefaultStrategicEngineeringState() {
+        const catalog = this.getStrategicEngineeringCatalog();
+        const tracks = {};
+        Object.keys(catalog).forEach((id) => {
+            tracks[id] = {
+                progress: 0,
+                tier: 0,
+                lastRealm: 0
+            };
+        });
+        return {
+            version: 1,
+            lastAdvancedTrackId: '',
+            history: [],
+            tracks
+        };
+    }
+
+    resolveStrategicEngineeringTier(progress = 0, thresholds = []) {
+        const normalizedProgress = Math.max(0, Math.floor(Number(progress) || 0));
+        const marks = Array.isArray(thresholds) ? thresholds : [];
+        let tier = 0;
+        marks.forEach((threshold, index) => {
+            if (normalizedProgress >= Math.max(1, Math.floor(Number(threshold) || 0))) {
+                tier = index + 1;
+            }
+        });
+        return tier;
+    }
+
+    normalizeStrategicEngineering(source = null) {
+        const catalog = this.getStrategicEngineeringCatalog();
+        const defaults = this.createDefaultStrategicEngineeringState();
+        const root = source && typeof source === 'object' ? source : {};
+        const tracksSource = root.tracks && typeof root.tracks === 'object' ? root.tracks : {};
+        const history = Array.isArray(root.history)
+            ? root.history.filter((entry) => typeof entry === 'string' && entry.trim()).slice(-8)
+            : [];
+        const normalized = {
+            version: Math.max(1, Math.floor(Number(root.version) || defaults.version)),
+            lastAdvancedTrackId: typeof root.lastAdvancedTrackId === 'string' && catalog[root.lastAdvancedTrackId]
+                ? root.lastAdvancedTrackId
+                : '',
+            history,
+            tracks: {}
+        };
+
+        Object.keys(catalog).forEach((id) => {
+            const entry = tracksSource[id] && typeof tracksSource[id] === 'object' ? tracksSource[id] : {};
+            const progress = Math.max(0, Math.floor(Number(entry.progress) || 0));
+            const tier = this.resolveStrategicEngineeringTier(progress, catalog[id].thresholds);
+            normalized.tracks[id] = {
+                progress,
+                tier,
+                lastRealm: Number.isFinite(Number(entry.lastRealm)) ? Math.max(0, Math.floor(Number(entry.lastRealm))) : 0
+            };
+        });
+
+        return normalized;
+    }
+
+    ensureStrategicEngineeringState() {
+        if (!this.player) {
+            return this.createDefaultStrategicEngineeringState();
+        }
+        this.player.strategicEngineering = this.normalizeStrategicEngineering(this.player.strategicEngineering);
+        return this.player.strategicEngineering;
+    }
+
+    getStrategicEngineeringTrackSnapshot(trackId = '', sourceState = null) {
+        const catalog = this.getStrategicEngineeringCatalog();
+        const meta = catalog[trackId];
+        if (!meta) return null;
+
+        const state = sourceState && typeof sourceState === 'object'
+            ? this.normalizeStrategicEngineering(sourceState)
+            : this.ensureStrategicEngineeringState();
+        const trackState = state.tracks && state.tracks[trackId] ? state.tracks[trackId] : { progress: 0, tier: 0, lastRealm: 0 };
+        const progress = Math.max(0, Math.floor(Number(trackState.progress) || 0));
+        const tier = this.resolveStrategicEngineeringTier(progress, meta.thresholds);
+        const maxTier = Array.isArray(meta.thresholds) ? meta.thresholds.length : 0;
+        const nextTarget = tier < maxTier ? meta.thresholds[tier] : null;
+        const remaining = nextTarget == null ? 0 : Math.max(0, Math.floor(Number(nextTarget) || 0) - progress);
+        const tierLabels = Array.isArray(meta.tierLabels) ? meta.tierLabels : [];
+        const effectByTier = Array.isArray(meta.effectByTier) ? meta.effectByTier : [];
+        const shiftByTier = Array.isArray(meta.shiftByTier) ? meta.shiftByTier : [];
+        const weightShift = shiftByTier[Math.min(tier, Math.max(0, shiftByTier.length - 1))] || {};
+
+        return {
+            ...meta,
+            trackId,
+            progress,
+            tier,
+            maxTier,
+            lastRealm: Math.max(0, Math.floor(Number(trackState.lastRealm) || 0)),
+            tierLabel: tierLabels[tier] || `T${tier}`,
+            nextTierLabel: nextTarget == null ? '封顶' : (tierLabels[tier + 1] || `T${tier + 1}`),
+            nextTarget,
+            remaining,
+            active: progress > 0,
+            effectSummary: effectByTier[tier] || effectByTier[0] || '暂无额外变化。',
+            nextEffectSummary: nextTarget == null ? '当前已达到最高阶。' : (effectByTier[tier + 1] || '下一阶效果待推演。'),
+            weightShift: { ...weightShift }
+        };
+    }
+
+    getStrategicEngineeringSnapshot() {
+        const state = this.ensureStrategicEngineeringState();
+        const allTracks = Object.keys(this.getStrategicEngineeringCatalog())
+            .map((id) => this.getStrategicEngineeringTrackSnapshot(id, state))
+            .filter(Boolean)
+            .sort((a, b) => {
+                if (b.tier !== a.tier) return b.tier - a.tier;
+                if (b.progress !== a.progress) return b.progress - a.progress;
+                return String(a.trackId || '').localeCompare(String(b.trackId || ''));
+            });
+
+        const activeTracks = allTracks.filter((entry) => entry.active);
+        const focusTrack = activeTracks.find((entry) => entry.trackId === state.lastAdvancedTrackId)
+            || activeTracks[0]
+            || null;
+        const sideTracks = focusTrack
+            ? activeTracks.filter((entry) => entry.trackId !== focusTrack.trackId).slice(0, 2)
+            : [];
+        const summary = focusTrack
+            ? `${focusTrack.icon} ${focusTrack.name} ${focusTrack.tierLabel} · ${focusTrack.effectSummary}${focusTrack.nextTarget != null ? ` · 距${focusTrack.nextTierLabel}还需 ${focusTrack.remaining} 次${focusTrack.nodeLabel}` : ' · 已达当前最高工事阶'}`
+            : '尚未形成跨章工程，优先在观星、禁术、裂隙或灵契节点里选出一条主轴。';
+        const posture = focusTrack
+            ? `主轴 ${focusTrack.name} ${focusTrack.tierLabel}${sideTracks.length > 0 ? ` · 副轴 ${sideTracks.map((entry) => `${entry.name} ${entry.tierLabel}`).join(' / ')}` : ''}`
+            : '当前还没有明确的跨章工程主轴。';
+
+        return {
+            focusTrack,
+            activeTracks,
+            allTracks,
+            lastAdvancedTrackId: state.lastAdvancedTrackId || '',
+            history: Array.isArray(state.history) ? state.history.slice() : [],
+            summary,
+            posture
+        };
+    }
+
+    getStrategicEngineeringWeightShift() {
+        const snapshot = this.getStrategicEngineeringSnapshot();
+        const merged = {};
+        snapshot.activeTracks.forEach((track) => {
+            Object.keys(track.weightShift || {}).forEach((key) => {
+                const delta = Number(track.weightShift[key]);
+                if (!Number.isFinite(delta)) return;
+                merged[key] = (merged[key] || 0) + delta;
+            });
+        });
+        return merged;
+    }
+
+    getStrategicEngineeringEventBiasProfile() {
+        const snapshot = this.getStrategicEngineeringSnapshot();
+        const focusTrack = snapshot && snapshot.focusTrack ? snapshot.focusTrack : null;
+        if (!focusTrack || focusTrack.tier <= 0) return null;
+
+        const profileCatalog = {
+            observatory: {
+                eventIdsByTier: [
+                    [],
+                    ['artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil', 'starObservation'],
+                    ['artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil', 'starObservation', 'astralSupplyDepot'],
+                    ['artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil', 'starObservation', 'astralSupplyDepot', 'floatingMarketRift']
+                ],
+                biasChanceByTier: [0, 0.24, 0.34, 0.44],
+                signalByTier: [
+                    '',
+                    '观测回路刚接入这处异象，天机与命环校准收益开始抬升。',
+                    '观测网已经锁定此地灵流，观测、校准与货单筛选都会更稳。',
+                    '跨章观测网压住了灵流波动，本次事件会稳定吐出高价值观测结果。'
+                ],
+                bonusPreviewByTier: [
+                    '',
+                    '额外货位 +1 / 小幅折价 / 天机 +1 / 命环经验补正',
+                    '额外货位 +1 / 折价 8% / 天机 +1 / 命环经验 +10~16',
+                    '额外货位 +1 / 折价 12% / 天机 +2 / 命环经验 +14~24'
+                ]
+            },
+            memory_rift: {
+                eventIdsByTier: [
+                    [],
+                    ['floatingMarketRift', 'astralSupplyDepot', 'voidRift', 'voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard'],
+                    ['floatingMarketRift', 'astralSupplyDepot', 'voidRift', 'voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard', 'artifactConfluxBazaar', 'convergenceRelay'],
+                    ['floatingMarketRift', 'astralSupplyDepot', 'voidRift', 'voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard', 'artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil']
+                ],
+                biasChanceByTier: [0, 0.22, 0.32, 0.42],
+                signalByTier: [
+                    '',
+                    '裂隙回响开始渗入此地，构筑改写与裂隙补给窗口正在放大。',
+                    '裂隙工程已经与当前路线并轨，改写构筑与裂隙补给收益进一步抬升。',
+                    '深层裂隙回响已成网，本次事件会更偏向高压改写与重配收益。'
+                ],
+                bonusPreviewByTier: [
+                    '',
+                    '额外货位 +1 / 小幅折价 / 灵石补贴 / 命环经验补正',
+                    '额外货位 +1 / 折价 10% / 灵石 +16 / 命环经验 +12~18',
+                    '额外货位 +1 / 折价 14% / 灵石 +24 / 命环经验 +18~26'
+                ]
+            }
+        };
+
+        const config = profileCatalog[focusTrack.trackId];
+        if (!config) return null;
+
+        const tierIndex = Math.max(
+            0,
+            Math.min(
+                focusTrack.tier,
+                (Array.isArray(config.biasChanceByTier) ? config.biasChanceByTier.length : 1) - 1,
+                (Array.isArray(config.bonusPreviewByTier) ? config.bonusPreviewByTier.length : 1) - 1
+            )
+        );
+        const eventIds = Array.isArray(config.eventIdsByTier)
+            ? (config.eventIdsByTier[tierIndex] || config.eventIdsByTier[0] || []).filter((id) => typeof id === 'string' && id.trim())
+            : [];
+        const signal = Array.isArray(config.signalByTier)
+            ? (config.signalByTier[tierIndex] || config.signalByTier[0] || '')
+            : '';
+        const biasChance = Math.max(0, Math.min(0.75, Number(config.biasChanceByTier[tierIndex]) || 0));
+        const bonusPreview = Array.isArray(config.bonusPreviewByTier)
+            ? String(config.bonusPreviewByTier[tierIndex] || config.bonusPreviewByTier[0] || '')
+            : '';
+
+        return {
+            trackId: focusTrack.trackId,
+            name: focusTrack.name,
+            icon: focusTrack.icon,
+            tier: focusTrack.tier,
+            tierLabel: focusTrack.tierLabel,
+            eventIds,
+            biasChance,
+            signal,
+            bonusPreview,
+            summary: `${focusTrack.icon} ${focusTrack.name} ${focusTrack.tierLabel} 正在改写章节事件池${bonusPreview ? `，并为命中的工程事件追加 ${bonusPreview}` : ''}。`
+        };
+    }
+
+    applyStrategicEngineeringMilestoneReward(track = null) {
+        if (!track || !track.reward || !this.player) return '';
+        const reward = track.reward;
+        const details = [];
+
+        const insight = Math.max(0, Math.floor(Number(reward.insight) || 0));
+        if (insight > 0) {
+            this.player.heavenlyInsight = this.getStrategicCurrencyAmount('insight') + insight;
+            details.push(`天机 +${insight}`);
+        }
+
+        const karma = Math.max(0, Math.floor(Number(reward.karma) || 0));
+        if (karma > 0) {
+            this.player.karma = this.getStrategicCurrencyAmount('karma') + karma;
+            details.push(`业果 +${karma}`);
+        }
+
+        const ringExp = Math.max(0, Math.floor(Number(reward.ringExp) || 0));
+        if (ringExp > 0) {
+            const gained = this.grantFateRingExp(ringExp);
+            if (gained > 0) details.push(`命环经验 +${gained}`);
+        }
+
+        if (reward.buffId && this.player && typeof this.player.grantAdventureBuff === 'function') {
+            const buffAmount = Math.max(1, Math.floor(Number(reward.buffAmount) || 1));
+            if (this.player.grantAdventureBuff(reward.buffId, buffAmount)) {
+                details.push(`${reward.buffLabel || '战术增益'} +${buffAmount} 场`);
+            }
+        }
+
+        return details.join('，');
+    }
+
+    recordStrategicNodeEngineering(nodeType = '', context = {}) {
+        const trackId = String(nodeType || '').trim();
+        const catalog = this.getStrategicEngineeringCatalog();
+        if (!catalog[trackId] || !this.player) return null;
+
+        const state = this.ensureStrategicEngineeringState();
+        const before = this.getStrategicEngineeringTrackSnapshot(trackId, state);
+        const trackState = state.tracks[trackId];
+        trackState.progress = Math.max(0, Math.floor(Number(trackState.progress) || 0)) + 1;
+        trackState.lastRealm = Number.isFinite(Number(context.realm))
+            ? Math.max(0, Math.floor(Number(context.realm)))
+            : Math.max(0, Math.floor(Number(this.player.realm) || 0));
+        trackState.tier = this.resolveStrategicEngineeringTier(trackState.progress, catalog[trackId].thresholds);
+
+        const after = this.getStrategicEngineeringTrackSnapshot(trackId, state);
+        const advanced = !!after && !!before && after.tier > before.tier;
+
+        if (advanced) {
+            state.lastAdvancedTrackId = trackId;
+            const rewardSummary = this.applyStrategicEngineeringMilestoneReward(after);
+            const historyLine = `${after.icon} ${after.name}推进至 ${after.tierLabel}：${after.effectSummary}${rewardSummary ? `｜${rewardSummary}` : ''}`;
+            state.history.push(historyLine);
+            state.history = state.history.slice(-8);
+            if (typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+                Utils.showBattleLog(`【${after.name}】推进至 ${after.tierLabel}：${after.effectSummary}${rewardSummary ? `（${rewardSummary}）` : ''}`);
+            }
+        } else if (after) {
+            state.history.push(`${after.icon} ${after.name}推进 ${after.progress}${after.nextTarget != null ? ` / ${after.nextTarget}` : ''} · ${after.nextTarget != null ? `距${after.nextTierLabel}还需 ${after.remaining} 次${after.nodeLabel}` : '当前已达最高工事阶'}`);
+            state.history = state.history.slice(-8);
+        }
+
+        return {
+            trackId,
+            before,
+            after,
+            advanced
+        };
     }
 
     pushShopRumorHistory(entry) {

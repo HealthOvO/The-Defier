@@ -19,18 +19,97 @@ async function safeScreenshot(page, outPath) {
   }
 }
 
+async function clickEventChoice(page, selector) {
+  try {
+    await page.click(selector, { timeout: 3000, force: true });
+    return 'playwright-force-click';
+  } catch (err) {
+    const fallback = await page.evaluate((targetSelector) => {
+      const btn = document.querySelector(targetSelector);
+      if (!btn) return { ok: false, reason: 'missing' };
+      btn.click();
+      return { ok: true };
+    }, selector).catch(() => ({ ok: false, reason: 'evaluate-failed' }));
+    if (fallback?.ok) return 'dom-click-fallback';
+    throw err;
+  }
+}
+
 async function getSnapshot(page) {
   return page.evaluate(() => ({
     mode: window.game?.currentScreen || null,
     hp: window.game?.player?.currentHp ?? null,
     maxHp: window.game?.player?.maxHp ?? null,
     gold: window.game?.player?.gold ?? null,
+    insight: window.game?.player?.heavenlyInsight ?? null,
     deck: Array.isArray(window.game?.player?.deck) ? window.game.player.deck.length : null,
     ringExp: window.game?.player?.fateRing?.exp ?? null,
     adventureBuffs: window.game?.player?.adventureBuffs
       ? { ...window.game.player.adventureBuffs }
       : null
   }));
+}
+
+async function getEventModalSnapshot(page) {
+  return page.evaluate(() => {
+    const currentEvent = window.game?.currentEvent || null;
+    const textPayload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : {};
+    const choiceTexts = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) =>
+      (el.textContent || '').replace(/\s+/g, ' ').trim()
+    );
+    return {
+      eventId: currentEvent?.id || null,
+      summary: textPayload?.eventModal?.summary || '',
+      engineeringMeta: currentEvent?.engineeringEventMeta || null,
+      firstChoice: currentEvent?.choices?.[0] || null,
+      secondChoice: currentEvent?.choices?.[1] || null,
+      choiceTexts
+    };
+  });
+}
+
+const INTERNAL_EFFECT_LABEL_PATTERN = /\b(openTemporaryShop|openCampfire|removeCardType|permaBuff|runPathProgress|heavenlyInsight|ringExp|endlessPressure|maxHp)\b/;
+
+async function armEngineeringSnapshot(page, trackId, tier = 2) {
+  await page.evaluate(({ trackId, tier }) => {
+    if (!window.game) return;
+    const catalog = {
+      observatory: {
+        name: '观星工程',
+        icon: '🔭',
+        effectSummary: '观测网已经锁定此地灵流'
+      },
+      memory_rift: {
+        name: '裂隙工程',
+        icon: '🪞',
+        effectSummary: '裂隙工程已经与当前路线并轨'
+      }
+    };
+    const meta = catalog[trackId] || {
+      name: trackId,
+      icon: '🧭',
+      effectSummary: '工程联动测试态'
+    };
+    const trackState = {
+      trackId,
+      tier,
+      tierLabel: `T${tier}`,
+      progress: tier,
+      nextTarget: tier >= 3 ? null : tier + 1,
+      remaining: tier >= 3 ? 0 : 1,
+      nodeLabel: meta.name,
+      ...meta
+    };
+    window.__testStrategicEngineeringSnapshot = {
+      focusTrack: { ...trackState },
+      activeTracks: [{ ...trackState }],
+      allTracks: [{ ...trackState }],
+      summary: `${meta.name} T${tier}`
+    };
+    game.getStrategicEngineeringSnapshot = () => window.__testStrategicEngineeringSnapshot;
+  }, { trackId, tier });
 }
 
 async function bootstrapRun(page) {
@@ -350,14 +429,14 @@ async function bootstrapRun(page) {
     const before = await getSnapshot(page);
 
     const choiceSelector = `#event-choices .event-choice:nth-child(${check.choiceIndex + 1})`;
-    await page.click(choiceSelector, { timeout: 3000, force: true });
+    await clickEventChoice(page, choiceSelector);
     await page.waitForTimeout(350);
 
     const modalActive = await page.evaluate(() => !!document.getElementById('event-modal')?.classList.contains('active'));
     if (modalActive) {
       const continueBtnVisible = await page.locator('#event-choices .event-choice').first().isVisible().catch(() => false);
       if (continueBtnVisible) {
-        await page.click('#event-choices .event-choice', { timeout: 3000, force: true });
+        await clickEventChoice(page, '#event-choices .event-choice');
         await page.waitForTimeout(350);
       }
     }
@@ -378,6 +457,93 @@ async function bootstrapRun(page) {
     await page.waitForTimeout(150);
   }
 
+  const engineeringChecks = [
+    {
+      name: 'observatory engineering event overlay + reward uplift',
+      trackId: 'observatory',
+      eventId: 'artifactConfluxBazaar',
+      choiceIndex: 1,
+      screenshot: 'engineering-observatory-event.png',
+      expectModal: (modal) =>
+        modal.eventId === 'artifactConfluxBazaar' &&
+        modal.engineeringMeta?.trackId === 'observatory' &&
+        /工程联动/.test(modal.summary || '') &&
+        Array.isArray(modal.firstChoice?.effects) &&
+        modal.firstChoice.effects.some((effect) => effect.type === 'openTemporaryShop' && Number(effect.offerCount) >= 5 && Number(effect.priceMultiplier) < 1) &&
+        Array.isArray(modal.secondChoice?.effects) &&
+        modal.secondChoice.effects.some((effect) => effect.type === 'heavenlyInsight') &&
+        Array.isArray(modal.choiceTexts) &&
+        modal.choiceTexts.length >= 2 &&
+        modal.choiceTexts.every((text) => !INTERNAL_EFFECT_LABEL_PATTERN.test(text)),
+      expectResult: (before, after) =>
+        after.gold > before.gold &&
+        after.ringExp > before.ringExp + 20 &&
+        after.insight > before.insight,
+      detail: 'summary shows engineering linkage, bazaar choice gets shop discount + insight, payout is uplifted, and no raw effect ids leak into UI'
+    },
+    {
+      name: 'memory-rift engineering event overlay + reward uplift',
+      trackId: 'memory_rift',
+      eventId: 'floatingMarketRift',
+      choiceIndex: 1,
+      screenshot: 'engineering-memory-rift-event.png',
+      expectModal: (modal) =>
+        modal.eventId === 'floatingMarketRift' &&
+        modal.engineeringMeta?.trackId === 'memory_rift' &&
+        /工程联动/.test(modal.summary || '') &&
+        Array.isArray(modal.firstChoice?.effects) &&
+        modal.firstChoice.effects.some((effect) => effect.type === 'openTemporaryShop' && Number(effect.offerCount) >= 4 && Number(effect.priceMultiplier) < 1) &&
+        Array.isArray(modal.secondChoice?.effects) &&
+        modal.secondChoice.effects.some((effect) => effect.type === 'ringExp') &&
+        Array.isArray(modal.choiceTexts) &&
+        modal.choiceTexts.length >= 2 &&
+        modal.choiceTexts.every((text) => !INTERNAL_EFFECT_LABEL_PATTERN.test(text)),
+      expectResult: (before, after) =>
+        after.gold > before.gold + 28 &&
+        after.ringExp > before.ringExp,
+      detail: 'summary shows engineering linkage, rift market choice gets shop discount, bypass payout gains extra gold + ringExp, and no raw effect ids leak into UI'
+    }
+  ];
+
+  for (const check of engineeringChecks) {
+    await armEngineeringSnapshot(page, check.trackId, 2);
+    const forcedId = await page.evaluate(({ eventId }) => {
+      if (!window.game || typeof EVENTS === 'undefined') return null;
+      window.__debugEventQueue = [eventId];
+      const evt = typeof getRandomEvent === 'function' ? getRandomEvent() : null;
+      if (!evt) return null;
+      game.showEventModal(evt, { id: `engineering-${eventId}`, row: 2, type: 'event' });
+      return evt.id;
+    }, { eventId: check.eventId });
+    add(`engineering forced event returns expected id (${check.trackId})`, forcedId === check.eventId, `got=${forcedId}`);
+
+    await page.waitForTimeout(150);
+    const modalSnapshot = await getEventModalSnapshot(page);
+    add(`engineering modal metadata check (${check.trackId})`, check.expectModal(modalSnapshot), JSON.stringify(modalSnapshot));
+    await safeScreenshot(page, path.join(outDir, check.screenshot));
+
+    const before = await getSnapshot(page);
+    const choiceSelector = `#event-choices .event-choice:nth-child(${check.choiceIndex + 1})`;
+    await clickEventChoice(page, choiceSelector);
+    await page.waitForTimeout(350);
+
+    const continueBtnVisible = await page.locator('#event-choices .event-choice').first().isVisible().catch(() => false);
+    if (continueBtnVisible) {
+      await clickEventChoice(page, '#event-choices .event-choice');
+      await page.waitForTimeout(350);
+    }
+
+    const after = await getSnapshot(page);
+    add(`engineering reward check (${check.trackId})`, check.expectResult(before, after), `${check.detail}; before=${JSON.stringify(before)}, after=${JSON.stringify(after)}`);
+
+    await page.evaluate(() => {
+      if (window.game && typeof game.showScreen === 'function') game.showScreen('map-screen');
+      const em = document.getElementById('event-modal');
+      if (em) em.classList.remove('active');
+    });
+    await page.waitForTimeout(150);
+  }
+
   await safeScreenshot(page, path.join(outDir, 'event-branch-audit.png'));
 
   const report = {
@@ -388,6 +554,11 @@ async function bootstrapRun(page) {
   };
   fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
+  const failed = findings.filter((item) => !item.pass);
+  if (failed.length > 0 || consoleErrors.length > 0) {
+    failed.forEach((item) => console.error(`FAIL: ${item.name}\n${item.detail}`));
+    process.exitCode = 1;
+  }
 
   await browser.close();
 })();

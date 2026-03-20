@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { safeAuditScreenshot } from './helpers/safe_audit_screenshot.mjs';
 
 const url = process.argv[2] || 'http://127.0.0.1:4173';
 const outDir = process.argv[3] || 'output/web-meta-screen-audit';
@@ -28,14 +29,6 @@ function rectObj(rect) {
     width: Math.round(rect.width),
     height: Math.round(rect.height),
   };
-}
-
-async function safeScreenshot(page, outPath) {
-  try {
-    await page.screenshot({ path: outPath, fullPage: true, timeout: 5000 });
-  } catch (err) {
-    console.warn(`[browser_meta_screen_audit] screenshot skipped: ${err?.message || err}`);
-  }
 }
 
 (async () => {
@@ -102,8 +95,12 @@ async function safeScreenshot(page, outPath) {
     const actions = document.querySelector('.reward-actions');
     const summary = document.querySelector('.reward-summary-card');
     const cards = Array.from(document.querySelectorAll('#reward-cards .card'));
+    const skipBtn = document.querySelector('.skip-reward-btn');
+    const expectedSkipCost = typeof game.getRewardSkipCost === 'function'
+      ? game.getRewardSkipCost()
+      : 50 * Math.max(1, Math.floor(Number(game.player?.realm) || 1));
 
-    if (!screen || !layout || !main || !side || !actions || !summary || cards.length < 2) {
+    if (!screen || !layout || !main || !side || !actions || !summary || cards.length < 2 || !skipBtn) {
       return { ok: false, reason: 'missing_reward_nodes' };
     }
 
@@ -136,13 +133,16 @@ async function safeScreenshot(page, outPath) {
         cardsInsideMain &&
         cardsAboveActions &&
         mainRect.right < viewportWidth &&
-        sideRect.right <= viewportWidth,
+        sideRect.right <= viewportWidth &&
+        (skipBtn.textContent || '').includes(`扣${expectedSkipCost}灵石`),
       stealState: screen.dataset.stealState || '',
       mainRect,
       sideRect,
       summaryRect,
       actionsRect,
       cardRects,
+      skipText: skipBtn.textContent || '',
+      expectedSkipCost,
     };
   });
   add(
@@ -150,7 +150,7 @@ async function safeScreenshot(page, outPath) {
     !!rewardProbe?.ok,
     JSON.stringify(rewardProbe || null)
   );
-  await safeScreenshot(page, path.join(outDir, 'reward-layout.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'reward-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   await page.evaluate(() => {
     window.__auditOriginalRandom = Math.random;
@@ -177,7 +177,7 @@ async function safeScreenshot(page, outPath) {
     !!rewardResolveProbe?.ok,
     JSON.stringify(rewardResolveProbe || null)
   );
-  await safeScreenshot(page, path.join(outDir, 'reward-layout-after-steal.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'reward-layout-after-steal.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -239,7 +239,7 @@ async function safeScreenshot(page, outPath) {
     !!rewardMobileProbe?.ok,
     JSON.stringify(rewardMobileProbe || null)
   );
-  await safeScreenshot(page, path.join(outDir, 'reward-layout-mobile.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'reward-layout-mobile.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   await page.setViewportSize({ width: 1440, height: 960 });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -284,7 +284,7 @@ async function safeScreenshot(page, outPath) {
     !!achievementsProbe?.ok,
     JSON.stringify(achievementsProbe || null)
   );
-  await safeScreenshot(page, path.join(outDir, 'achievements-layout.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'achievements-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
@@ -364,7 +364,7 @@ async function safeScreenshot(page, outPath) {
     !!realmSelectScrollProbe?.ok,
     JSON.stringify(realmSelectScrollProbe || null)
   );
-  await safeScreenshot(page, path.join(outDir, 'realm-select-scroll.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'realm-select-scroll.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
@@ -453,7 +453,7 @@ async function safeScreenshot(page, outPath) {
     !!collectionProbe?.ok,
     JSON.stringify(collectionProbe || null)
   );
-  await safeScreenshot(page, path.join(outDir, 'law-codex-layout.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'law-codex-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   const lawCodexFilterProbe = await page.evaluate(() => {
     if (!window.game || !game.player || typeof game.showCollection !== 'function') return { ok: false, reason: 'no_game' };
@@ -564,7 +564,7 @@ async function safeScreenshot(page, outPath) {
     !!lawDetailProbe?.ok,
     JSON.stringify(lawDetailProbe || null)
   );
-  await safeScreenshot(page, path.join(outDir, 'law-detail-layout.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'law-detail-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   const spiritCodexProbe = await page.evaluate(() => {
     if (!window.game || !game.player || typeof game.showCollection !== 'function') return { ok: false, reason: 'no_game' };
@@ -604,7 +604,7 @@ async function safeScreenshot(page, outPath) {
     document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
     document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
   });
-  await safeScreenshot(page, path.join(outDir, 'spirit-codex-layout.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'spirit-codex-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   const enemyCodexProbe = await page.evaluate(() => {
     if (!window.game || !game.player || typeof game.showCollection !== 'function') return { ok: false, reason: 'no_game' };
@@ -645,7 +645,7 @@ async function safeScreenshot(page, outPath) {
     document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
     document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
   });
-  await safeScreenshot(page, path.join(outDir, 'enemy-codex-layout.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'enemy-codex-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   const bossArchiveProbe = await page.evaluate(() => {
     if (!window.game || !game.player || typeof game.showCollection !== 'function') return { ok: false, reason: 'no_game' };
@@ -706,7 +706,7 @@ async function safeScreenshot(page, outPath) {
     document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
     document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
   });
-  await safeScreenshot(page, path.join(outDir, 'boss-archive-layout.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'boss-archive-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   const bossMemoryFlowProbe = await page.evaluate(async () => {
     if (!window.game || !game.player || typeof game.startBossMemoryBattle !== 'function') return { ok: false, reason: 'no_memory_battle' };
@@ -895,7 +895,7 @@ async function safeScreenshot(page, outPath) {
     document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
     document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
   });
-  await safeScreenshot(page, path.join(outDir, 'sanctum-layout.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'sanctum-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   const treasureCompendiumProbe = await page.evaluate(() => {
     if (!window.game || typeof game.showTreasureCompendium !== 'function') return { ok: false, reason: 'no_compendium' };
@@ -936,7 +936,7 @@ async function safeScreenshot(page, outPath) {
     !!treasureCompendiumProbe?.ok,
     JSON.stringify(treasureCompendiumProbe || null)
   );
-  await safeScreenshot(page, path.join(outDir, 'treasure-compendium-layout.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'treasure-compendium-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   const treasureFilterProbe = await page.evaluate(() => {
     if (!window.game || !game.player || typeof game.showTreasureCompendium !== 'function') return { ok: false, reason: 'no_game' };
@@ -1045,7 +1045,7 @@ async function safeScreenshot(page, outPath) {
     !!treasureDetailProbe?.ok,
     JSON.stringify(treasureDetailProbe || null)
   );
-  await safeScreenshot(page, path.join(outDir, 'treasure-detail-layout.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'treasure-detail-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
@@ -1092,7 +1092,7 @@ async function safeScreenshot(page, outPath) {
     !!shopDetailProbe?.ok,
     JSON.stringify(shopDetailProbe || null)
   );
-  await safeScreenshot(page, path.join(outDir, 'shop-card-detail-layout.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'shop-card-detail-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   const shopAdviceProbe = await page.evaluate(() => {
     const summary = document.getElementById('shop-tab-summary');
@@ -1131,7 +1131,7 @@ async function safeScreenshot(page, outPath) {
     !!shopAdviceProbe?.ok,
     JSON.stringify(shopAdviceProbe || null)
   );
-  await safeScreenshot(page, path.join(outDir, 'shop-strategy-advice-layout.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'shop-strategy-advice-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   add('no console errors were emitted during meta-screen audit', consoleErrors.length === 0, JSON.stringify(consoleErrors));
   const report = {

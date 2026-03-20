@@ -1249,6 +1249,8 @@ class Battle {
             );
             const hasDefend = enemy.patterns.some((pattern) => pattern && pattern.type === 'defend');
             const hasDebuff = enemy.patterns.some((pattern) => pattern && (pattern.type === 'debuff' || pattern.type === 'addStatus'));
+            const hasMultiAttack = enemy.patterns.some((pattern) => pattern && pattern.type === 'multiAttack');
+            const hasHeal = enemy.patterns.some((pattern) => pattern && pattern.type === 'heal');
 
             enemy.block = Math.max(0, Math.floor(Number(enemy.block) || 0)) + Math.max(0, Math.floor(Number(formation.openingBlock) || 0));
 
@@ -1325,6 +1327,46 @@ class Battle {
                         type: 'heal',
                         value: Math.max(6, Math.floor(Number(enemy.maxHp || enemy.currentHp || 1) * 0.06)),
                         intent: '🌊潮汐整队'
+                    });
+                }
+            }
+
+            // 即使编队行为没有命中某个角色专属分支，也要保证“前锋 / 阵核 / 扰阵”在行动链上可读地分化。
+            if (enemy.patterns.length < 3) {
+                if (roleLabel === '前锋' && attackPatterns.length > 0 && !hasMultiAttack) {
+                    const ref = attackPatterns[attackPatterns.length - 1];
+                    enemy.patterns.push({
+                        type: 'multiAttack',
+                        value: Math.max(3, Math.floor(Number(ref.value) * 0.58)),
+                        count: 2,
+                        intent: '⚔️前锋追袭'
+                    });
+                } else if (roleLabel === '阵核') {
+                    if (!hasDefend) {
+                        enemy.patterns.push({
+                            type: 'defend',
+                            value: 8 + Math.max(0, index) * 2,
+                            intent: '🛡️阵核固阵'
+                        });
+                    } else if (!hasHeal) {
+                        enemy.patterns.push({
+                            type: 'heal',
+                            value: Math.max(5, Math.floor(Number(enemy.maxHp || enemy.currentHp || 1) * 0.05)),
+                            intent: '✨阵核回稳'
+                        });
+                    }
+                } else if (roleLabel === '扰阵' && !hasDebuff) {
+                    enemy.patterns.push({
+                        type: 'debuff',
+                        buffType: index % 2 === 0 ? 'weak' : 'vulnerable',
+                        value: 1,
+                        intent: '🌀扰阵牵制'
+                    });
+                } else if (!hasDefend) {
+                    enemy.patterns.push({
+                        type: 'defend',
+                        value: 6,
+                        intent: '🛡️协同回防'
                     });
                 }
             }

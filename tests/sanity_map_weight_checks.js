@@ -41,7 +41,7 @@ function loadFile(ctx, filePath) {
   loadFile(ctx, path.join(root, 'js/core/map.js'));
   const GameMap = vm.runInContext('GameMap', ctx);
 
-  function createMapForPlayer(playerOverrides = {}) {
+  function createMapForPlayer(playerOverrides = {}, gameOverrides = {}) {
     const player = Object.assign({
       realm: 1,
       gold: 120,
@@ -49,13 +49,13 @@ function loadFile(ctx, filePath) {
       deck: [{ upgraded: false }, { upgraded: false }, { upgraded: false }]
     }, playerOverrides);
 
-    const game = {
+    const game = Object.assign({
       player,
       startBattle: () => {},
       showEventModal: () => {},
       showShop: () => {},
       showCampfire: () => {}
-    };
+    }, gameOverrides);
     return new GameMap(game);
   }
 
@@ -143,7 +143,31 @@ function loadFile(ctx, filePath) {
   const eventRateEntropy = sampleEventRate(entropyW);
   assert(eventRateEntropy > eventRateBase + 0.01, `archetype event rate should increase (${eventRateBase} -> ${eventRateEntropy})`);
 
-  // 8) 命环路径应在节点层面形成差异化路线
+  // 8) 工程推进偏置应真实进入节点权重层
+  const mapEngineeringNeutral = createMapForPlayer();
+  const mapEngineeringBiased = createMapForPlayer({}, {
+    getStrategicEngineeringWeightShift: () => ({
+      observatory: 0.05,
+      event: 0.035,
+      enemy: -0.04
+    })
+  });
+  const engineeringNeutralW = mapEngineeringNeutral.getDynamicNodeWeights(4, totalRows, realm);
+  const engineeringBiasedW = mapEngineeringBiased.getDynamicNodeWeights(4, totalRows, realm);
+  assert(
+    engineeringBiasedW.observatory > engineeringNeutralW.observatory,
+    `engineering shift should raise observatory weight (${engineeringNeutralW.observatory} -> ${engineeringBiasedW.observatory})`
+  );
+  assert(
+    engineeringBiasedW.event > engineeringNeutralW.event,
+    `engineering shift should raise event weight (${engineeringNeutralW.event} -> ${engineeringBiasedW.event})`
+  );
+  assert(
+    engineeringBiasedW.enemy < engineeringNeutralW.enemy,
+    `engineering shift should lower enemy weight when the shift says so (${engineeringNeutralW.enemy} -> ${engineeringBiasedW.enemy})`
+  );
+
+  // 9) 命环路径应在节点层面形成差异化路线
   const mapConvergencePath = createMapForPlayer({
     fateRing: { path: 'convergence' }
   });
@@ -165,7 +189,7 @@ function loadFile(ctx, filePath) {
     `resonance path should raise rest/trial (${neutralPathW.rest}, ${neutralPathW.trial}) -> (${resonancePathW.rest}, ${resonancePathW.trial})`
   );
 
-  // 9) 相邻层同质化压力：连续战斗倾向后应降低敌人权重并抬升功能节点
+  // 10) 相邻层同质化压力：连续战斗倾向后应降低敌人权重并抬升功能节点
   const mapDiversity = createMapForPlayer();
   const baselineW = mapDiversity.getDynamicNodeWeights(4, totalRows, realm);
   const pressuredW = mapDiversity.getDynamicNodeWeights(4, totalRows, realm, {
@@ -182,7 +206,7 @@ function loadFile(ctx, filePath) {
     `diversity pressure should raise event/trial (${baselineW.event}, ${baselineW.trial}) -> (${pressuredW.event}, ${pressuredW.trial})`
   );
 
-  // 10) 同一行已出现节点类型后，下一个节点应倾向不同类型
+  // 11) 同一行已出现节点类型后，下一个节点应倾向不同类型
   const inRowBaselineW = mapDiversity.getDynamicNodeWeights(4, totalRows, realm, {
     previousRowNodes: [],
     previousTwoRowNodes: [],
@@ -202,7 +226,7 @@ function loadFile(ctx, filePath) {
     `in-row pressure should increase non-combat options (shop ${inRowBaselineW.shop} -> ${inRowPressuredW.shop}, event ${inRowBaselineW.event} -> ${inRowPressuredW.event})`
   );
 
-  // 11) 长程记忆去重：最近多层长期偏向同类型时，后续应抑制该类型
+  // 12) 长程记忆去重：最近多层长期偏向同类型时，后续应抑制该类型
   mapDiversity.nodes = [
     [{ type: 'enemy' }, { type: 'elite' }, { type: 'enemy' }],
     [{ type: 'enemy' }, { type: 'enemy' }],

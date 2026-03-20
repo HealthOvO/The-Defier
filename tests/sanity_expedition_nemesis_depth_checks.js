@@ -46,6 +46,43 @@ function createBattleEnemy() {
   };
 }
 
+function createEngineeringSnapshot(trackId) {
+  const catalog = {
+    observatory: {
+      name: '观星工程',
+      icon: '🔭',
+      effectSummary: '观星、事件与裂隙联动抬升，常规战斗略降。'
+    },
+    forbidden_altar: {
+      name: '禁术工程',
+      icon: '🩸',
+      effectSummary: '禁术、试炼与锻炉形成加速链，路线更偏冒险爆发。'
+    },
+    memory_rift: {
+      name: '裂隙工程',
+      icon: '🪞',
+      effectSummary: '裂隙、事件与观星联动抬升，构筑改写会更连续。'
+    },
+    spirit_grotto: {
+      name: '灵契工程',
+      icon: '🪷',
+      effectSummary: '灵契、营地与观星协同补强，推进更稳。'
+    }
+  };
+  const meta = catalog[trackId];
+  if (!meta) return null;
+  return {
+    focusTrack: {
+      trackId,
+      tier: 2,
+      tierLabel: 'II阶',
+      name: meta.name,
+      icon: meta.icon,
+      effectSummary: meta.effectSummary
+    }
+  };
+}
+
 (function run() {
   const root = path.resolve(__dirname, '..');
   const localStorage = createStorage();
@@ -146,13 +183,24 @@ function createBattleEnemy() {
   releaseState.branchSelectionLocked = true;
   releaseState.stats.selectedBranchName = '裂誓望台';
   releaseGame.expeditionState = releaseState;
+  releaseGame.getStrategicEngineeringSnapshot = () => createEngineeringSnapshot('observatory');
   releaseGame.recordExpeditionNodeVisit({ type: 'event', accessible: true, completed: false });
   releaseState = releaseGame.getExpeditionState();
   assert(releaseState.activeNemesis.clueRevealed === true, 'event node should reveal the nemesis clue');
   assert(releaseState.activeNemesis.status === 'released', `star seers branch should allow release outcome, got ${releaseState.activeNemesis.status}`);
   assert(releaseState.activeNemesis.rewardGranted === true, 'release outcome should grant its resolved reward once');
   assert(releaseGame.player.heavenlyInsight >= 2, `release outcome should grant heavenly insight, got ${releaseGame.player.heavenlyInsight}`);
-  assert(releaseGame.getExpeditionPayload().activeNemesis.statusLabel === '已放走', 'payload should expose release status label');
+  const releasePayload = releaseGame.getExpeditionPayload();
+  assert(releasePayload.activeNemesis.statusLabel === '已放走', 'payload should expose release status label');
+  assert(releasePayload.nemesisForecast && releasePayload.nemesisForecast.status === 'released', `release payload should sync forecast status, got ${JSON.stringify(releasePayload.nemesisForecast)}`);
+  assert(
+    releasePayload.nemesisForecast
+      && releasePayload.nemesisForecast.engineeringTrackId === 'observatory'
+      && releasePayload.nemesisForecast.engineeringModifier === '观测锁线'
+      && /观星工程/.test(releasePayload.nemesisForecast.engineeringNote || ''),
+    `release payload should expose observatory engineering pursuit note, got ${JSON.stringify(releasePayload.nemesisForecast)}`
+  );
+  assert(Array.isArray(releasePayload.recentNemesisLogs) && releasePayload.recentNemesisLogs.some((entry) => entry.status === 'released'), 'release payload should retain released history log');
 
   const tradeGame = new Game();
   let tradeState = tradeGame.initializeExpeditionForRealm(1, true);
@@ -165,12 +213,23 @@ function createBattleEnemy() {
   tradeState.branchSelectionLocked = true;
   tradeState.stats.selectedBranchName = '裂口浮市';
   tradeGame.expeditionState = tradeState;
+  tradeGame.getStrategicEngineeringSnapshot = () => createEngineeringSnapshot('memory_rift');
   const goldBeforeTrade = tradeGame.player.gold;
   tradeGame.recordExpeditionNodeVisit({ type: 'shop', accessible: true, completed: false });
   tradeState = tradeGame.getExpeditionState();
   assert(tradeState.activeNemesis.status === 'traded', `market route should allow trade outcome, got ${tradeState.activeNemesis.status}`);
   assert(tradeState.activeNemesis.rewardGranted === true, 'trade outcome should grant reward once');
   assert(tradeGame.player.gold > goldBeforeTrade, 'trade outcome should grant gold');
+  const tradePayload = tradeGame.getExpeditionPayload();
+  assert(tradePayload.nemesisForecast && tradePayload.nemesisForecast.status === 'traded', `trade payload should sync forecast status, got ${JSON.stringify(tradePayload.nemesisForecast)}`);
+  assert(
+    tradePayload.nemesisForecast
+      && tradePayload.nemesisForecast.engineeringTrackId === 'memory_rift'
+      && tradePayload.nemesisForecast.engineeringModifier === '裂隙改道'
+      && /裂隙工程/.test(tradePayload.nemesisForecast.engineeringNote || ''),
+    `trade payload should expose memory-rift engineering pursuit note, got ${JSON.stringify(tradePayload.nemesisForecast)}`
+  );
+  assert(Array.isArray(tradePayload.recentNemesisLogs) && tradePayload.recentNemesisLogs.some((entry) => entry.status === 'traded'), 'trade payload should retain traded history log');
 
   const evolveGame = new Game();
   let evolveState = evolveGame.initializeExpeditionForRealm(1, true);
@@ -198,6 +257,17 @@ function createBattleEnemy() {
     alliedFactionName: ''
   };
   evolveGame.expeditionState = evolveState;
+  const baselineForecast = evolveGame.getExpeditionPayload().nemesisForecast;
+  evolveGame.getStrategicEngineeringSnapshot = () => createEngineeringSnapshot('forbidden_altar');
+  const engineeredForecast = evolveGame.getExpeditionPayload().nemesisForecast;
+  assert(
+    engineeredForecast
+      && baselineForecast
+      && engineeredForecast.pressureIndex > baselineForecast.pressureIndex
+      && engineeredForecast.engineeringTrackId === 'forbidden_altar'
+      && engineeredForecast.engineeringModifier === '血契增压',
+    `forbidden altar engineering should raise nemesis pressure without changing state machine, got baseline=${JSON.stringify(baselineForecast)} engineered=${JSON.stringify(engineeredForecast)}`
+  );
   const firstEncounter = evolveGame.applyExpeditionBattleModifiers([createBattleEnemy()], { type: 'enemy' });
   evolveGame.recordExpeditionBattleVictory({ type: 'enemy' }, firstEncounter);
   evolveState = evolveGame.getExpeditionState();
@@ -209,6 +279,8 @@ function createBattleEnemy() {
   const evolvedSlate = evolveGame.finalizeExpeditionChapter('battle_lost');
   assert(evolvedSlate.nemesisStatus === 'evolved', `failed guarded pursuit should evolve the nemesis, got ${evolvedSlate.nemesisStatus}`);
   assert(/仇敌进阶/.test(evolvedSlate.scoreBreakdown.join(' | ')), `slate should record evolved outcome, got ${JSON.stringify(evolvedSlate.scoreBreakdown)}`);
+  const evolvedPayload = evolveGame.getExpeditionPayload();
+  assert(evolvedPayload.latestSlate && evolvedPayload.latestSlate.nemesisStatus === 'evolved', `post-finalize payload should preserve evolved outcome, got ${JSON.stringify(evolvedPayload.latestSlate)}`);
 
   console.log('Expedition nemesis depth checks passed.');
 })();

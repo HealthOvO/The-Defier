@@ -26,6 +26,43 @@ function loadFile(ctx, filePath) {
   vm.runInContext(code, ctx, { filename: filePath });
 }
 
+function createEngineeringSnapshot(trackId) {
+  const catalog = {
+    observatory: {
+      name: '观星工程',
+      icon: '🔭',
+      effectSummary: '观星、事件与裂隙联动抬升，常规战斗略降。'
+    },
+    spirit_grotto: {
+      name: '灵契工程',
+      icon: '🪷',
+      effectSummary: '灵契、营地与观星协同补强，推进更稳。'
+    },
+    forbidden_altar: {
+      name: '禁术工程',
+      icon: '🩸',
+      effectSummary: '禁术、试炼与锻炉形成加速链，路线更偏冒险爆发。'
+    },
+    memory_rift: {
+      name: '裂隙工程',
+      icon: '🪞',
+      effectSummary: '裂隙、事件与观星联动抬升，构筑改写会更连续。'
+    }
+  };
+  const meta = catalog[trackId];
+  if (!meta) return null;
+  return {
+    focusTrack: {
+      trackId,
+      tier: 2,
+      tierLabel: 'II阶',
+      name: meta.name,
+      icon: meta.icon,
+      effectSummary: meta.effectSummary
+    }
+  };
+}
+
 (function run() {
   const root = path.resolve(__dirname, '..');
   const localStorage = createStorage();
@@ -161,6 +198,21 @@ function loadFile(ctx, filePath) {
   assert(afterBranch.selectedBranchId === initialState.branchOptions[0].id, 'selected branch should persist');
   assert(afterBranch.branchSelectionLocked === true, 'branch selection should lock after first choice');
 
+  const factionLogTarget = afterBranch.factions[0];
+  const factionShifted = game.applyExpeditionFactionShift(factionLogTarget.id, 1, '审计：势力日志校验。', { silent: true });
+  const factionLogPayload = game.getExpeditionPayload();
+  assert(!!factionShifted, 'manual faction shift should succeed for history coverage');
+  assert(
+    factionLogPayload.factions.some((entry) => entry.id === factionLogTarget.id && /审计：势力日志校验/.test(entry.lastReason || '')),
+    `payload factions should expose updated lastReason, got ${JSON.stringify(factionLogPayload.factions)}`
+  );
+  assert(
+    Array.isArray(factionLogPayload.recentFactionLogs)
+      && factionLogPayload.recentFactionLogs.length >= 1
+      && factionLogPayload.recentFactionLogs.some((entry) => entry.factionId === factionLogTarget.id && /审计：势力日志校验/.test(entry.reason || '')),
+    `payload should expose recent faction logs, got ${JSON.stringify(factionLogPayload.recentFactionLogs)}`
+  );
+
   const firstToggle = game.toggleExpeditionBounty(afterBranch.bountyDraft[0].id);
   const secondToggle = game.toggleExpeditionBounty(afterBranch.bountyDraft[1].id);
   const thirdToggle = game.toggleExpeditionBounty(afterBranch.bountyDraft[2].id);
@@ -193,6 +245,91 @@ function loadFile(ctx, filePath) {
       || game.player.karma > rewardBefore.karma,
     'route bounty completion should improve at least one player resource'
   );
+  const conflictState = game.getExpeditionState();
+  const conflictFaction = conflictState.factions[0];
+  conflictFaction.stance = -2;
+  conflictFaction.lastReason = '审计：该路线会继续刺激对立势力。';
+  conflictFaction.likes = [routeBounty.condition.nodeType];
+  conflictFaction.dislikes = [routeBounty.condition.nodeType];
+  conflictFaction.pressureNodeTypes = [routeBounty.condition.nodeType];
+  game.expeditionState = conflictState;
+  game.persistActiveExpeditionState();
+  const conflictPayload = game.getExpeditionPayload();
+  const routeDraftPayload = conflictPayload.bountyDraft.find((entry) => entry.id === routeBounty.id);
+  const routeActivePayload = conflictPayload.activeBounties.find((entry) => entry.id === routeBounty.id);
+  assert(
+    routeDraftPayload && Array.isArray(routeDraftPayload.conflictWarnings) && routeDraftPayload.conflictWarnings.length >= 1,
+    `bounty draft payload should expose conflict warnings, got ${JSON.stringify(routeDraftPayload)}`
+  );
+  assert(
+    routeActivePayload && typeof routeActivePayload.signalLine === 'string' && routeActivePayload.signalLine.length > 0,
+    `active bounty payload should expose signal summary, got ${JSON.stringify(routeActivePayload)}`
+  );
+  assert(
+    Array.isArray(conflictPayload.bountyConflictWarnings)
+      && conflictPayload.bountyConflictWarnings.some((entry) => entry.bountyId === routeBounty.id && /势力牵制|关系反噬/.test(entry.label || '')),
+    `payload should expose active bounty conflict warnings, got ${JSON.stringify(conflictPayload.bountyConflictWarnings)}`
+  );
+  assert(
+    conflictPayload.nemesisForecast
+      && typeof conflictPayload.nemesisForecast.pressureIndex === 'number'
+      && typeof conflictPayload.nemesisForecast.line === 'string'
+      && conflictPayload.nemesisForecast.line.length > 0,
+    `payload should expose nemesis forecast, got ${JSON.stringify(conflictPayload.nemesisForecast)}`
+  );
+  assert(
+    Array.isArray(conflictPayload.recentNemesisLogs),
+    `payload should expose recent nemesis logs array, got ${JSON.stringify(conflictPayload.recentNemesisLogs)}`
+  );
+
+  game.getStrategicEngineeringSnapshot = () => createEngineeringSnapshot('forbidden_altar');
+  const engineeringPayload = game.getExpeditionPayload();
+  const engineeringDraftPayload = engineeringPayload.bountyDraft.find((entry) => entry.id === routeBounty.id);
+  const engineeringRender = JSON.parse(game.renderGameToText());
+  assert(
+    engineeringPayload.engineeringLink && engineeringPayload.engineeringLink.trackId === 'forbidden_altar',
+    `payload should expose engineering link summary, got ${JSON.stringify(engineeringPayload.engineeringLink)}`
+  );
+  assert(
+    engineeringPayload.branchOptions.some((entry) => entry.engineeringTrackId === 'forbidden_altar' && entry.pressureBias),
+    `branch payload should expose engineering route bias, got ${JSON.stringify(engineeringPayload.branchOptions)}`
+  );
+  assert(
+    engineeringDraftPayload
+      && engineeringDraftPayload.engineeringTrackId === 'forbidden_altar'
+      && typeof engineeringDraftPayload.engineeringNote === 'string'
+      && engineeringDraftPayload.engineeringNote.length > 0
+      && typeof engineeringDraftPayload.pressureBias === 'string'
+      && engineeringDraftPayload.pressureBias.length > 0,
+    `bounty payload should expose engineering signal details, got ${JSON.stringify(engineeringDraftPayload)}`
+  );
+  assert(
+    Array.isArray(engineeringPayload.bountyConflictWarnings)
+      && engineeringPayload.bountyConflictWarnings.some((entry) => entry.engineeringTrackId === 'forbidden_altar'),
+    `active bounty conflicts should retain engineering source, got ${JSON.stringify(engineeringPayload.bountyConflictWarnings)}`
+  );
+  assert(
+    engineeringPayload.nemesisForecast
+      && engineeringPayload.nemesisForecast.engineeringTrackId === 'forbidden_altar'
+      && engineeringPayload.nemesisForecast.engineeringModifier === '血契增压'
+      && /禁术工程/.test(engineeringPayload.nemesisForecast.engineeringNote || ''),
+    `nemesis forecast should expose engineering pursuit modifier, got ${JSON.stringify(engineeringPayload.nemesisForecast)}`
+  );
+  assert(
+    engineeringPayload.observatoryLink
+      && typeof engineeringPayload.observatoryLink.huntIntel === 'string'
+      && engineeringPayload.observatoryLink.huntIntel.length > 0
+      && typeof engineeringPayload.observatoryLink.conflictPreview === 'string'
+      && engineeringPayload.observatoryLink.conflictPreview.length > 0,
+    `observatory payload should expose engineering intel, got ${JSON.stringify(engineeringPayload.observatoryLink)}`
+  );
+  assert(
+    engineeringRender.expedition
+      && engineeringRender.expedition.engineeringLink
+      && engineeringRender.expedition.engineeringLink.trackId === 'forbidden_altar',
+    `render_game_to_text should mirror expedition engineering link, got ${JSON.stringify(engineeringRender)}`
+  );
+
   const observatoryPayload = game.getExpeditionPayload().observatoryLink;
   assert(observatoryPayload && observatoryPayload.sourceTitle === '观星精选·焚脉试锋', `expedition payload should expose observatory link, got ${JSON.stringify(observatoryPayload)}`);
   assert(observatoryPayload.selectedBonusId === observatoryBonus.id, `payload should expose selected observatory bonus, got ${JSON.stringify(observatoryPayload)}`);
@@ -212,10 +349,26 @@ function loadFile(ctx, filePath) {
   assert(Array.isArray(buffedEnemies) && buffedEnemies.length === 1, 'battle modifiers should return enemy list');
   assert(/^nemesis_/.test(buffedEnemies[0].id), `nemesis encounter should stamp enemy id, got ${buffedEnemies[0].id}`);
   assert(/仇敌/.test(buffedEnemies[0].name), `nemesis encounter should rename enemy, got ${buffedEnemies[0].name}`);
+  const encounterPayload = game.getExpeditionPayload();
+  assert(
+    Array.isArray(encounterPayload.recentNemesisLogs)
+      && encounterPayload.recentNemesisLogs.some((entry) => /线索显露|追猎压制|现身/.test(`${entry.title || ''} ${entry.detail || ''}`)),
+    `nemesis encounter should append readable history, got ${JSON.stringify(encounterPayload.recentNemesisLogs)}`
+  );
 
   game.recordExpeditionBattleVictory({ type: nemesisNodeType }, buffedEnemies);
   const nemesisState = game.getExpeditionState();
   assert(nemesisState.activeNemesis.status === 'defeated', `nemesis should be defeated after tagged victory, got ${nemesisState.activeNemesis.status}`);
+  const nemesisPayload = game.getExpeditionPayload();
+  assert(
+    nemesisPayload.nemesisForecast && nemesisPayload.nemesisForecast.status === 'defeated',
+    `nemesis forecast should sync to defeated outcome, got ${JSON.stringify(nemesisPayload.nemesisForecast)}`
+  );
+  assert(
+    Array.isArray(nemesisPayload.recentNemesisLogs)
+      && nemesisPayload.recentNemesisLogs.some((entry) => entry.status === 'defeated'),
+    `nemesis payload should retain defeated history log, got ${JSON.stringify(nemesisPayload.recentNemesisLogs)}`
+  );
   assert(
     game.collectionUnlocks.some((entry) => entry.type === 'nemesis'),
     'defeating a nemesis should record a collection unlock'

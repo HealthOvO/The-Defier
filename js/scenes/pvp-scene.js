@@ -9,6 +9,9 @@ window.PVPScene = {
     selectedPersonality: 'balanced', // Default
     isMatching: false, // 匹配锁，防止重复请求导致状态竞争
     matchingTimeoutMs: 8000,
+    rankingFocusId: null,
+    rankingFocusData: null,
+    lastLoadedRankings: [],
     PERSONA_RULES: {
         balanced: { damageMul: 1.0, takenMul: 1.0, regenEnergyPerTurn: 1, hpMul: 1.0 },
         slaughter: { damageMul: 1.2, takenMul: 1.1, regenEnergyPerTurn: 0, hpMul: 1.0 },
@@ -33,14 +36,392 @@ window.PVPScene = {
         const text = btn ? btn.querySelector('.text') : null;
         if (!btn) return;
         btn.disabled = !!isBusy;
-        if (text) {
-            text.textContent = isBusy ? '⏳ 神念匹配中...' : '⚔️ 论道切磋';
-        }
         btn.classList.toggle('is-matching', !!isBusy);
+        if (isBusy) {
+            if (text) {
+                text.textContent = '⏳ 神念匹配中...';
+            }
+            const hint = document.getElementById('pvp-challenge-intent');
+            if (hint) {
+                hint.textContent = '正在锁定焦点目标与残影，若无快照会自动转入镜像演武。';
+            }
+            return;
+        }
+        this.renderChallengeIntent();
     },
 
     getPersonalityRuleSet(type) {
         return this.PERSONA_RULES[type] || this.PERSONA_RULES.balanced;
+    },
+
+    escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    },
+
+    getCurrentRankBaseline() {
+        const fallback = {
+            myRank: null,
+            myScore: 1000,
+            myRealm: 1
+        };
+        if (typeof PVPService === 'undefined' || !PVPService) return fallback;
+        const rank = PVPService.currentRankData
+            || (typeof PVPService.loadLocalRank === 'function' ? PVPService.loadLocalRank() : null);
+        if (!rank) return fallback;
+        return {
+            myRank: rank,
+            myScore: Math.max(0, Number(rank.score) || 1000),
+            myRealm: Math.max(1, Math.floor(Number(rank.realm) || 1))
+        };
+    },
+
+    getRankingFocusSnapshot() {
+        if (!this.rankingFocusData) return null;
+        const focus = this.rankingFocusData;
+        return {
+            rank: focus.rank ? {
+                objectId: focus.rank.objectId || '',
+                user: focus.rank.user ? {
+                    objectId: focus.rank.user.objectId || '',
+                    username: focus.rank.user.username || ''
+                } : null,
+                score: Math.max(0, Math.floor(Number(focus.rank.score) || 0)),
+                realm: Math.max(1, Math.floor(Number(focus.rank.realm) || 1)),
+                division: focus.rank.division || ''
+            } : null,
+            duelBrief: focus.duelBrief && typeof focus.duelBrief === 'object'
+                ? {
+                    targetName: String(focus.duelBrief.targetName || ''),
+                    targetRankId: String(focus.duelBrief.targetRankId || ''),
+                    engagementId: String(focus.duelBrief.engagementId || ''),
+                    engagementLabel: String(focus.duelBrief.engagementLabel || ''),
+                    engagementLine: String(focus.duelBrief.engagementLine || ''),
+                    modeId: String(focus.duelBrief.modeId || ''),
+                    modeLabel: String(focus.duelBrief.modeLabel || ''),
+                    modeLine: String(focus.duelBrief.modeLine || ''),
+                    winRewardText: String(focus.duelBrief.winRewardText || ''),
+                    lossRewardText: String(focus.duelBrief.lossRewardText || ''),
+                    reserveText: String(focus.duelBrief.reserveText || ''),
+                    counterplayText: String(focus.duelBrief.counterplayText || ''),
+                    chipText: String(focus.duelBrief.chipText || ''),
+                    tags: Array.isArray(focus.duelBrief.tags) ? focus.duelBrief.tags.slice(0, 3) : [],
+                    rewardPreview: focus.duelBrief.rewardPreview && typeof focus.duelBrief.rewardPreview === 'object'
+                        ? {
+                            winCoins: Math.max(0, Math.floor(Number(focus.duelBrief.rewardPreview.winCoins) || 0)),
+                            lossCoins: Math.max(0, Math.floor(Number(focus.duelBrief.rewardPreview.lossCoins) || 0)),
+                            winRatingDelta: Math.trunc(Number(focus.duelBrief.rewardPreview.winRatingDelta) || 0),
+                            lossRatingDelta: Math.trunc(Number(focus.duelBrief.rewardPreview.lossRatingDelta) || 0)
+                        }
+                        : null
+                }
+                : null,
+            dossier: focus.dossier && typeof focus.dossier === 'object'
+                ? {
+                    targetName: String(focus.dossier.targetName || ''),
+                    targetRankId: String(focus.dossier.targetRankId || ''),
+                    targetDivision: String(focus.dossier.targetDivision || ''),
+                    targetRealm: Math.max(1, Math.floor(Number(focus.dossier.targetRealm) || 1)),
+                    confidence: String(focus.dossier.confidence || ''),
+                    confidenceLabel: String(focus.dossier.confidenceLabel || ''),
+                    title: String(focus.dossier.title || ''),
+                    summary: String(focus.dossier.summary || ''),
+                    riskLine: String(focus.dossier.riskLine || ''),
+                    scoreLine: String(focus.dossier.scoreLine || ''),
+                    seasonLine: String(focus.dossier.seasonLine || ''),
+                    seasonName: String(focus.dossier.seasonName || ''),
+                    seasonDetail: String(focus.dossier.seasonDetail || ''),
+                    segmentLabel: String(focus.dossier.segmentLabel || ''),
+                    segmentLine: String(focus.dossier.segmentLine || ''),
+                    sourceLabel: String(focus.dossier.sourceLabel || ''),
+                    sourceLine: String(focus.dossier.sourceLine || ''),
+                    formationLabel: String(focus.dossier.formationLabel || ''),
+                    formationLine: String(focus.dossier.formationLine || ''),
+                    routeValue: String(focus.dossier.routeValue || ''),
+                    routeLine: String(focus.dossier.routeLine || ''),
+                    comparisonValue: String(focus.dossier.comparisonValue || ''),
+                    comparisonLine: String(focus.dossier.comparisonLine || ''),
+                    historyValue: String(focus.dossier.historyValue || ''),
+                    historyLine: String(focus.dossier.historyLine || ''),
+                    historyTag: String(focus.dossier.historyTag || ''),
+                    historyCount: Math.max(0, Math.floor(Number(focus.dossier.historyCount) || 0)),
+                    trendValue: String(focus.dossier.trendValue || ''),
+                    trendLine: String(focus.dossier.trendLine || ''),
+                    trendTag: String(focus.dossier.trendTag || ''),
+                    trendSampleCount: Math.max(0, Math.floor(Number(focus.dossier.trendSampleCount) || 0)),
+                    ledgerValue: String(focus.dossier.ledgerValue || ''),
+                    ledgerLine: String(focus.dossier.ledgerLine || ''),
+                    ledgerTag: String(focus.dossier.ledgerTag || ''),
+                    ledgerSampleCount: Math.max(0, Math.floor(Number(focus.dossier.ledgerSampleCount) || 0)),
+                    ledgerChips: Array.isArray(focus.dossier.ledgerChips) ? focus.dossier.ledgerChips.slice(0, 4) : [],
+                    archetypeLabel: String(focus.dossier.archetypeLabel || ''),
+                    counterplayText: String(focus.dossier.counterplayText || ''),
+                    reserveText: String(focus.dossier.reserveText || ''),
+                    tags: Array.isArray(focus.dossier.tags) ? focus.dossier.tags.slice(0, 6) : [],
+                    clueCards: Array.isArray(focus.dossier.clueCards)
+                        ? focus.dossier.clueCards.slice(0, 6).map((item) => ({
+                            label: String(item && item.label || ''),
+                            value: String(item && item.value || ''),
+                            detail: String(item && item.detail || '')
+                        }))
+                        : []
+                }
+                : null,
+            dangerProfile: (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.normalizePVPDangerProfile === 'function')
+                ? PVPService.normalizePVPDangerProfile(focus.dangerProfile || null)
+                : (focus.dangerProfile || null)
+        };
+    },
+
+    syncFocusedRowSelection() {
+        document.querySelectorAll('#ranking-list .jade-slip-row').forEach((row) => {
+            row.classList.toggle('is-focused', !!(this.rankingFocusId && row.dataset.rankId === this.rankingFocusId));
+        });
+    },
+
+    renderChallengeIntent() {
+        const btn = document.querySelector('#tab-ranking .challenge-btn');
+        const text = btn ? btn.querySelector('.text') : null;
+        const hint = document.getElementById('pvp-challenge-intent');
+        const duelBrief = this.rankingFocusData && this.rankingFocusData.duelBrief
+            ? this.rankingFocusData.duelBrief
+            : null;
+        if (text) {
+            text.textContent = duelBrief ? '⚔️ 锁定约战' : '⚔️ 论道切磋';
+        }
+        if (btn) {
+            btn.title = duelBrief ? `${duelBrief.targetName}｜${duelBrief.engagementLabel}｜${duelBrief.modeLabel}` : '论道切磋';
+        }
+        if (hint) {
+            hint.textContent = duelBrief
+                ? `已锁定：${duelBrief.targetName} ｜ ${duelBrief.engagementLabel} ｜ ${duelBrief.modeLabel}`
+                : '未锁定焦点目标时，将自动按榜位推演对手。';
+        }
+    },
+
+    setRankingFocus(rank, dangerProfile = null) {
+        if (!rank || typeof rank !== 'object') return;
+        const safeRank = {
+            objectId: rank.objectId || (rank.user && rank.user.objectId) || `rank-${Date.now()}`,
+            user: rank.user && typeof rank.user === 'object'
+                ? {
+                    objectId: rank.user.objectId || 'unknown-user',
+                    username: rank.user.username || '未知修士'
+                }
+                : { objectId: 'unknown-user', username: '未知修士' },
+            score: Math.max(0, Math.floor(Number(rank.score) || 1000)),
+            realm: Math.max(1, Math.floor(Number(rank.realm) || 1)),
+            division: rank.division || (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getDivisionByScore === 'function'
+                ? PVPService.getDivisionByScore(Number(rank.score) || 1000)
+                : '潜龙榜')
+        };
+        const baseline = this.getCurrentRankBaseline();
+        const profile = (typeof PVPService !== 'undefined' && PVPService)
+            ? (
+                dangerProfile && typeof PVPService.normalizePVPDangerProfile === 'function'
+                    ? PVPService.normalizePVPDangerProfile(dangerProfile)
+                    : (typeof PVPService.getPVPDangerProfile === 'function'
+                        ? PVPService.getPVPDangerProfile({ rank: safeRank }, baseline)
+                        : dangerProfile)
+            )
+            : dangerProfile;
+        const duelBrief = (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getFocusDuelSlip === 'function')
+            ? PVPService.getFocusDuelSlip(
+                {
+                    rank: safeRank,
+                    dangerProfile: profile
+                },
+                baseline
+            )
+            : null;
+        const dossier = (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getFocusOpponentDossier === 'function')
+            ? PVPService.getFocusOpponentDossier(
+                {
+                    rank: safeRank,
+                    dangerProfile: profile,
+                    duelBrief
+                },
+                {
+                    ...baseline,
+                    listContext: this.lastLoadedRankings
+                }
+            )
+            : null;
+        this.rankingFocusId = safeRank.objectId;
+        this.rankingFocusData = {
+            rank: safeRank,
+            dangerProfile: profile,
+            duelBrief,
+            dossier
+        };
+        this.syncFocusedRowSelection();
+        this.renderRankingFocusCard();
+        this.renderChallengeIntent();
+    },
+
+    renderRankingFocusCard(state = null) {
+        const panel = document.getElementById('pvp-ranking-brief');
+        if (!panel) return;
+        if (state === 'loading') {
+            panel.dataset.riskTier = 'none';
+            panel.innerHTML = `
+                <div class="pvp-risk-kicker">榜单推演</div>
+                <div class="pvp-risk-title">正在推演本轮对手画像…</div>
+                <div class="pvp-risk-footnote">读取榜位、境界、赛季账本与套路结构，稍候即可查看 PVP DRI、对手档案、历史交手留痕、多场趋势、样本筛面与焦点约战单。</div>
+            `;
+            this.renderChallengeIntent();
+            return;
+        }
+        if (!this.rankingFocusData || !this.rankingFocusData.rank || !this.rankingFocusData.dangerProfile) {
+            panel.dataset.riskTier = 'none';
+            panel.innerHTML = `
+                <div class="pvp-risk-kicker">榜单推演</div>
+                <div class="pvp-risk-title">选择一名对手，查看本场读题建议</div>
+                <div class="pvp-risk-footnote">这里会显示 PVP DRI、对手档案、赛季题面、跨场对照、历史交手留痕、多场趋势、赛季账本筛面、主导风险轴、对策、资源预留与焦点约战单。</div>
+            `;
+            this.renderChallengeIntent();
+            return;
+        }
+
+        const focus = this.rankingFocusData;
+        const rank = focus.rank;
+        const duelBrief = focus.duelBrief && typeof focus.duelBrief === 'object' ? focus.duelBrief : null;
+        const dossier = focus.dossier && typeof focus.dossier === 'object' ? focus.dossier : null;
+        const profile = (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.normalizePVPDangerProfile === 'function')
+            ? PVPService.normalizePVPDangerProfile(focus.dangerProfile)
+            : focus.dangerProfile;
+        const dossierHistoryCards = dossier ? [
+            {
+                key: 'history',
+                label: '历史交手',
+                value: dossier.historyValue || '暂无直接交手',
+                detail: dossier.historyLine || '本赛季还没有与这名对手的真实留痕，先把这一把打成首条样本。',
+                tag: dossier.historyTag || (Number(dossier.historyCount) > 0 ? `本季 ${Math.max(0, Number(dossier.historyCount) || 0)} 场` : '待补样本')
+            },
+            {
+                key: 'trend',
+                label: '多场趋势',
+                value: dossier.trendValue || '趋势待形成',
+                detail: dossier.trendLine || '至少再完成 1 场真实样本，才会把节拍回暖或承压下滑写成趋势。',
+                tag: dossier.trendTag || (Number(dossier.trendSampleCount) > 0 ? `样本 ${Math.max(0, Number(dossier.trendSampleCount) || 0)} 场` : '样本待扩')
+            },
+            {
+                key: 'ledger',
+                label: '赛季账本',
+                value: dossier.ledgerValue || '本季账本 0 场',
+                detail: dossier.ledgerLine || '筛面会按当前卷面收束；当前还没有可比样本，先用这一把建立首条赛季账本记录。',
+                tag: dossier.ledgerTag || (Number(dossier.ledgerSampleCount) > 0 ? `账本 ${Math.max(0, Number(dossier.ledgerSampleCount) || 0)} 场` : '样本筛面'),
+                chips: Array.isArray(dossier.ledgerChips) ? dossier.ledgerChips.slice(0, 4) : [],
+                wide: true
+            }
+        ] : [];
+        panel.dataset.riskTier = profile.tierId || 'none';
+        panel.innerHTML = `
+            <div class="pvp-risk-kicker">${this.escapeHtml(profile.confidenceLabel || '榜单推演')} · 匹配前读题</div>
+            <div class="pvp-risk-header">
+                <div class="pvp-risk-heading">
+                    <div class="pvp-risk-title">焦点对手 · ${this.escapeHtml(rank.user?.username || '未知修士')}</div>
+                    <div class="pvp-risk-subtitle">${this.escapeHtml(rank.division || '潜龙榜')} · 第${this.escapeHtml(rank.realm || 1)}层 · ${this.escapeHtml(profile.opponent?.archetypeLabel || '均衡试探')}</div>
+                </div>
+                <div class="pvp-risk-dri tier-${this.escapeHtml(profile.tierId || 'none')}">DRI ${this.escapeHtml(profile.index || 0)}</div>
+            </div>
+            <div class="pvp-risk-chip-row">
+                <span class="pvp-risk-chip tier-${this.escapeHtml(profile.tierId || 'none')}">${this.escapeHtml(profile.tierLabel || '可控')}</span>
+                <span class="pvp-risk-chip accent">${this.escapeHtml(profile.dominantAxisLabel || '先手爆发')}</span>
+                ${(profile.tags || []).map((tag) => `<span class="pvp-risk-chip">${this.escapeHtml(tag)}</span>`).join('')}
+            </div>
+            <div class="pvp-risk-summary">${this.escapeHtml(profile.summary || '推演完成后会在这里展示风险摘要。')}</div>
+            ${dossier ? `
+                <div class="pvp-dossier">
+                    <div class="pvp-dossier-kicker">对手档案</div>
+                    <div class="pvp-dossier-grid">
+                        ${(dossier.clueCards || []).map((item) => `
+                            <div class="pvp-dossier-card">
+                                <div class="pvp-dossier-label">${this.escapeHtml(item.label || '档案')}</div>
+                                <div class="pvp-dossier-value">${this.escapeHtml(item.value || '待推演')}</div>
+                                <div class="pvp-dossier-detail">${this.escapeHtml(item.detail || '')}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="pvp-dossier-history-grid">
+                        ${dossierHistoryCards.map((item) => `
+                            <div class="pvp-dossier-card pvp-dossier-card-emphasis ${item.wide ? 'pvp-dossier-card-wide' : ''}" data-dossier-card="${this.escapeHtml(item.key)}">
+                                <div class="pvp-dossier-card-head">
+                                    <div class="pvp-dossier-label">${this.escapeHtml(item.label)}</div>
+                                    <div class="pvp-dossier-mini-tag">${this.escapeHtml(item.tag || '')}</div>
+                                </div>
+                                <div class="pvp-dossier-value">${this.escapeHtml(item.value || '待推演')}</div>
+                                <div class="pvp-dossier-detail">${this.escapeHtml(item.detail || '')}</div>
+                                ${Array.isArray(item.chips) && item.chips.length > 0 ? `
+                                    <div class="pvp-dossier-card-tags">
+                                        ${item.chips.map((chip) => `<span class="pvp-dossier-inline-chip">${this.escapeHtml(chip)}</span>`).join('')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="pvp-dossier-line">${this.escapeHtml(dossier.riskLine || '')}${dossier.scoreLine ? ` ｜ ${this.escapeHtml(dossier.scoreLine)}` : ''}</div>
+                    <div class="pvp-risk-chip-row pvp-dossier-tags">
+                        ${(dossier.tags || []).map((tag) => `<span class="pvp-risk-chip">${this.escapeHtml(tag)}</span>`).join('')}
+                    </div>
+                </div>
+            ` : ''}
+            <div class="pvp-risk-axis-grid">
+                ${(profile.axes || []).map((axis) => `
+                    <div class="pvp-risk-axis-item">
+                        <div class="pvp-risk-axis-label-row">
+                            <span>${this.escapeHtml(axis.label || '风险轴')}</span>
+                            <span>${this.escapeHtml(axis.value || 0)}</span>
+                        </div>
+                        <div class="pvp-risk-axis-track">
+                            <div class="pvp-risk-axis-fill tone-${this.escapeHtml(axis.id || 'burst')}" style="width:${Math.max(0, Math.min(100, Number(axis.value) || 0))}%"></div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="pvp-risk-line">
+                <span class="label">对策</span>
+                <span class="value">${this.escapeHtml(profile.counterplay || '优先稳住首拍与净化链。')}</span>
+            </div>
+            <div class="pvp-risk-line">
+                <span class="label">预留</span>
+                <span class="value">${this.escapeHtml(profile.reserveGuidance || '保留至少一次稳态回合与止损手段。')}</span>
+            </div>
+            ${duelBrief ? `
+                <div class="pvp-duel-slip">
+                    <div class="pvp-duel-slip-kicker">焦点约战单</div>
+                    <div class="pvp-duel-slip-head">
+                        <div class="pvp-duel-slip-title">${this.escapeHtml(duelBrief.engagementLabel || '练手')} · ${this.escapeHtml(duelBrief.modeLabel || '镜像演武')}</div>
+                        <div class="pvp-duel-slip-chip">${this.escapeHtml(duelBrief.chipText || `DRI ${profile.index || 0} · ${profile.tierLabel || '可控'}`)}</div>
+                    </div>
+                    <div class="pvp-duel-slip-tags">
+                        ${(duelBrief.tags || []).map((tag) => `<span class="pvp-duel-slip-tag">${this.escapeHtml(tag)}</span>`).join('')}
+                    </div>
+                    <div class="pvp-risk-line pvp-duel-line">
+                        <span class="label">胜场</span>
+                        <span class="value">${this.escapeHtml(duelBrief.winRewardText || '')}</span>
+                    </div>
+                    <div class="pvp-risk-line pvp-duel-line">
+                        <span class="label">败场</span>
+                        <span class="value">${this.escapeHtml(duelBrief.lossRewardText || '')}</span>
+                    </div>
+                    <div class="pvp-risk-line pvp-duel-line">
+                        <span class="label">模式</span>
+                        <span class="value">${this.escapeHtml(duelBrief.modeLine || '')}</span>
+                    </div>
+                    <div class="pvp-risk-line pvp-duel-line">
+                        <span class="label">建议</span>
+                        <span class="value">${this.escapeHtml(duelBrief.engagementLine || duelBrief.counterplayText || '')}</span>
+                    </div>
+                </div>
+            ` : ''}
+            <div class="pvp-risk-footnote">${this.escapeHtml(profile.note || '')}</div>
+        `;
+        this.renderChallengeIntent();
     },
 
     switchTab(tabName) {
@@ -88,6 +469,7 @@ window.PVPScene = {
         const listEl = document.getElementById('ranking-list');
         if (!listEl) return;
         const startedAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        this.renderRankingFocusCard('loading');
         // Keep loading spinner if empty, or clear
         listEl.innerHTML = `
             <div class="loading-ink">
@@ -105,9 +487,16 @@ window.PVPScene = {
 
             if (!rankings || rankings.length === 0) {
                 listEl.innerHTML = '<div class="loading-ink"><span>暂无榜单数据</span></div>';
+                this.rankingFocusData = null;
+                this.rankingFocusId = null;
+                this.lastLoadedRankings = [];
+                this.renderRankingFocusCard();
                 return;
             }
 
+            const baseline = this.getCurrentRankBaseline();
+            const myUserId = baseline.myRank && baseline.myRank.user ? baseline.myRank.user.objectId : null;
+            const entries = [];
             rankings.forEach((rank, index) => {
                 const row = document.createElement('div');
                 row.className = 'jade-slip-row';
@@ -119,9 +508,14 @@ window.PVPScene = {
 
                 const user = rank.user || { username: '未知修士' };
                 const realmName = rank.realm ? `第${rank.realm}层` : '未知境界';
+                const dangerProfile = (typeof PVPService.getPVPDangerProfile === 'function')
+                    ? PVPService.getPVPDangerProfile({ rank }, { ...baseline, listIndex: index })
+                    : null;
+                const rankId = rank.objectId || user.objectId || `rank-${index}`;
                 // Avatar Initials
                 const avatarChar = user.username ? user.username.charAt(0).toUpperCase() : '?';
 
+                row.dataset.rankId = rankId;
                 row.innerHTML = `
                     <div class="rank-index">${index + 1}</div>
                     
@@ -132,13 +526,29 @@ window.PVPScene = {
                     
                     <div class="rank-info">
                         <span class="rank-name">${user.username}</span>
-                        <div class="rank-realm-badge">${realmName}</div>
+                        <div class="rank-meta-strip">
+                            <div class="rank-realm-badge">${realmName}</div>
+                            ${dangerProfile ? `<div class="rank-risk-chip tier-${this.escapeHtml(dangerProfile.tierId || 'none')}">DRI ${this.escapeHtml(dangerProfile.index || 0)}</div>` : ''}
+                            ${dangerProfile ? `<div class="rank-risk-chip axis">${this.escapeHtml(dangerProfile.dominantAxisLabel || '风险轴')}</div>` : ''}
+                        </div>
+                        ${dangerProfile ? `<div class="rank-risk-note">${this.escapeHtml(dangerProfile.brief || dangerProfile.summary || '')}</div>` : ''}
                     </div>
                     
                     <div class="rank-score-display">${rank.score}</div>
                 `;
+                row.addEventListener('click', () => this.setRankingFocus(rank, dangerProfile));
                 listEl.appendChild(row);
+                entries.push({ rank, dangerProfile, rankId, isSelf: !!(myUserId && user.objectId === myUserId) });
             });
+            this.lastLoadedRankings = entries;
+            const focusedEntry = entries.find((entry) => entry.rankId === this.rankingFocusId)
+                || entries.find((entry) => !entry.isSelf)
+                || entries[0];
+            if (focusedEntry) {
+                this.setRankingFocus(focusedEntry.rank, focusedEntry.dangerProfile);
+            } else {
+                this.renderRankingFocusCard();
+            }
             if (window.game && window.game.performanceStats) {
                 const duration = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - startedAt;
                 const arr = window.game.performanceStats.pvpLoadDurations || [];
@@ -148,6 +558,9 @@ window.PVPScene = {
             }
         } catch (e) {
             listEl.innerHTML = '<div class="loading-ink" style="color:#f44">读取失败，请检查网络</div>';
+            this.rankingFocusData = null;
+            this.rankingFocusId = null;
+            this.renderRankingFocusCard();
             console.error(e);
         }
     },
@@ -167,6 +580,8 @@ window.PVPScene = {
             if (!PVPService.currentRankData) await PVPService.syncRank();
             const score = PVPService.currentRankData ? PVPService.currentRankData.score : 1000;
             const realm = PVPService.currentRankData ? PVPService.currentRankData.realm : 1;
+            const preferredRank = this.rankingFocusData && this.rankingFocusData.rank ? this.rankingFocusData.rank : null;
+            const preferredDangerProfile = this.rankingFocusData && this.rankingFocusData.dangerProfile ? this.rankingFocusData.dangerProfile : null;
 
             Utils.showBattleLog("神念搜寻中...");
             const timeoutMs = Math.max(2000, Number(this.matchingTimeoutMs) || 8000);
@@ -174,17 +589,47 @@ window.PVPScene = {
                 setTimeout(() => resolve({ success: false, timeout: true, message: '匹配超时，切换离线演武中...' }), timeoutMs);
             });
             let result = await Promise.race([
-                PVPService.findOpponent(score, realm, { allowPractice: true }),
+                PVPService.findOpponent(score, realm, {
+                    allowPractice: true,
+                    preferredRank,
+                    preferredDangerProfile
+                }),
                 timeoutResult
             ]);
 
             if (result && result.timeout && typeof PVPService.createPracticeOpponent === 'function') {
-                result = PVPService.createPracticeOpponent(score, realm, 'timeout');
+                result = PVPService.createPracticeOpponent(score, realm, 'timeout', {
+                    preferredRank,
+                    preferredDangerProfile
+                });
             }
 
             if (result.success) {
+                if (typeof PVPService.getPVPDangerProfile === 'function') {
+                    result.opponent.dangerProfile = PVPService.getPVPDangerProfile(result.opponent, {
+                        myScore: score,
+                        myRealm: realm,
+                        myRank: PVPService.currentRankData || null
+                    });
+                }
+                if (preferredRank && typeof PVPService.getFocusDuelSlip === 'function') {
+                    result.opponent.matchIntent = PVPService.getFocusDuelSlip(
+                        {
+                            rank: result.opponent.rank || preferredRank,
+                            dangerProfile: result.opponent.dangerProfile || preferredDangerProfile || null
+                        },
+                        {
+                            myScore: score,
+                            myRealm: realm,
+                            myRank: PVPService.currentRankData || null,
+                            forcePractice: !!(result.opponent.rank && result.opponent.rank.isLocal)
+                        }
+                    );
+                }
                 if (result.opponent && result.opponent.rank && result.opponent.rank.isLocal) {
-                    Utils.showBattleLog("已进入离线演武匹配");
+                    Utils.showBattleLog(preferredRank ? "已按焦点目标切入镜像演武" : "已进入离线演武匹配");
+                } else if (result.opponent && result.opponent.matchIntent) {
+                    Utils.showBattleLog(`已锁定：${result.opponent.matchIntent.targetName} · ${result.opponent.matchIntent.modeLabel}`);
                 }
                 this.startPVPBattle(result.opponent);
             } else {
@@ -222,6 +667,14 @@ window.PVPScene = {
             const opponentUsername = (opponentData.rank && opponentData.rank.user && opponentData.rank.user.username)
                 ? opponentData.rank.user.username
                 : '未知对手';
+            const matchIntent = opponentData.matchIntent && typeof opponentData.matchIntent === 'object'
+                ? opponentData.matchIntent
+                : null;
+            const dangerProfile = (opponentData.dangerProfile && typeof PVPService !== 'undefined' && PVPService && typeof PVPService.normalizePVPDangerProfile === 'function')
+                ? PVPService.normalizePVPDangerProfile(opponentData.dangerProfile)
+                : ((typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getPVPDangerProfile === 'function')
+                    ? PVPService.getPVPDangerProfile(opponentData, this.getCurrentRankBaseline())
+                    : null);
 
             // Construct Ghost
             const ghost = new GhostEnemy({
@@ -241,6 +694,14 @@ window.PVPScene = {
 
             gameRef.pvpOpponentRank = opponentData.rank;
             gameRef.pvpMatchTicket = opponentData.matchTicket || null;
+            gameRef.pvpDangerProfile = dangerProfile;
+            gameRef.pvpMatchIntent = matchIntent;
+            if (dangerProfile) {
+                Utils.showBattleLog(`${dangerProfile.line}｜对策：${dangerProfile.counterplay}`);
+            }
+            if (matchIntent && matchIntent.modeLine) {
+                Utils.showBattleLog(`约战单｜${matchIntent.modeLine}`);
+            }
 
             // Initialize Battle
             if (typeof gameRef.startBattle === 'function') {
@@ -262,6 +723,9 @@ window.PVPScene = {
                 game.mode = 'pve';
                 game.pvpMatchTicket = null;
                 game.pvpOpponentRank = null;
+                game.pvpDangerProfile = null;
+                game.pvpMatchIntent = null;
+                game.pvpResultReview = null;
             }
             // Attempt to return to PVP screen
             setTimeout(() => {

@@ -69,6 +69,10 @@ async function enterMap(page) {
     const riskLines = risk ? Array.from(risk.querySelectorAll('.map-risk-line')) : [];
     const overviewValues = overview ? Array.from(overview.querySelectorAll('.map-overview-value')).map((el) => normalize(el.textContent)) : [];
     const riskValues = risk ? Array.from(risk.querySelectorAll('.map-risk-value')).map((el) => normalize(el.textContent)) : [];
+    let payload = null;
+    try {
+      payload = JSON.parse(window.render_game_to_text());
+    } catch {}
 
     return {
       overviewVisible: visible(overview),
@@ -79,6 +83,19 @@ async function enterMap(page) {
       riskLineCount: riskLines.length,
       overviewValues,
       riskValues,
+      payloadFrontierRisk: payload?.map?.chapter?.frontierRisk || null,
+      payloadEngineeringFocus: payload?.map?.chapter?.engineeringFocus || null,
+      payloadEngineeringProjectCount: Array.isArray(payload?.map?.engineeringProjects) ? payload.map.engineeringProjects.length : 0,
+      payloadHasFactionSignals: Array.isArray(payload?.map?.chapter?.factionSignals),
+      payloadHasNemesisSignals: Array.isArray(payload?.map?.chapter?.nemesisSignals),
+      payloadHasBountyConflicts: Array.isArray(payload?.map?.chapter?.bountyConflicts),
+      payloadNemesisForecast: payload?.map?.chapter?.nemesisForecast || null,
+      payloadNodeEngineeringCount: Array.isArray(payload?.map?.activeNodes)
+        ? payload.map.activeNodes.filter((entry) => entry?.engineering && typeof entry.engineering.trackId === 'string').length
+        : 0,
+      payloadNodeRiskCount: Array.isArray(payload?.map?.activeNodes)
+        ? payload.map.activeNodes.filter((entry) => entry?.risk && typeof entry.risk.index === 'number').length
+        : 0,
       overviewRect: overview ? overview.getBoundingClientRect().toJSON() : null,
       riskRect: risk ? risk.getBoundingClientRect().toJSON() : null
     };
@@ -89,17 +106,32 @@ async function enterMap(page) {
     !!desktopProbe
       && desktopProbe.overviewVisible
       && desktopProbe.riskVisible
-      && desktopProbe.overviewItemCount >= 4
-      && desktopProbe.riskLineCount >= 3
+      && desktopProbe.overviewItemCount >= 8
+      && desktopProbe.riskLineCount >= 7
       && desktopProbe.overviewValues.every((entry) => entry.length > 0)
       && desktopProbe.riskValues.every((entry) => entry.length > 0)
       && /核心标签/.test(desktopProbe.overviewText || '')
       && /风险等级/.test(desktopProbe.overviewText || '')
+      && /前路主险/.test(desktopProbe.overviewText || '')
+      && /工程推进/.test(desktopProbe.overviewText || '')
       && /悬赏进度/.test(desktopProbe.overviewText || '')
       && /势力倾向/.test(desktopProbe.overviewText || '')
+      && /最近势力变化/.test(desktopProbe.overviewText || '')
+      && /追猎预判/.test(desktopProbe.overviewText || '')
       && /高危机制/.test(desktopProbe.riskText || '')
+      && /节点预警/.test(desktopProbe.riskText || '')
+      && /悬赏冲突/.test(desktopProbe.riskText || '')
+      && /追猎预判/.test(desktopProbe.riskText || '')
+      && /工程态势/.test(desktopProbe.riskText || '')
       && /防御策略/.test(desktopProbe.riskText || '')
-      && /资源预留/.test(desktopProbe.riskText || ''),
+      && /资源预留/.test(desktopProbe.riskText || '')
+      && !!desktopProbe.payloadFrontierRisk
+      && desktopProbe.payloadEngineeringProjectCount >= 4
+      && desktopProbe.payloadHasFactionSignals
+      && desktopProbe.payloadHasNemesisSignals
+      && desktopProbe.payloadHasBountyConflicts
+      && !!desktopProbe.payloadNemesisForecast
+      && desktopProbe.payloadNodeRiskCount >= 1,
     JSON.stringify(desktopProbe || null)
   );
   await safeScreenshot(page, path.join(outDir, 'map-overview-risk-desktop.png'));
@@ -150,12 +182,20 @@ async function enterMap(page) {
       && mobileProbe.overviewVisible
       && mobileProbe.riskVisible
       && mobileProbe.overviewHeight >= 120
-      && mobileProbe.riskHeight >= 110
+      && mobileProbe.riskHeight >= 145
       && mobileProbe.minRiskLineHeight >= 12
       && mobileProbe.stepsNeeded <= 2
       && mobileProbe.overviewValues.every((entry) => entry.length > 0)
       && mobileProbe.riskValues.every((entry) => entry.length > 0)
+      && /前路主险/.test(mobileProbe.overviewText || '')
+      && /工程推进/.test(mobileProbe.overviewText || '')
+      && /最近势力变化/.test(mobileProbe.overviewText || '')
+      && /追猎预判/.test(mobileProbe.overviewText || '')
       && /高危机制/.test(mobileProbe.riskText || '')
+      && /节点预警/.test(mobileProbe.riskText || '')
+      && /悬赏冲突/.test(mobileProbe.riskText || '')
+      && /追猎预判/.test(mobileProbe.riskText || '')
+      && /工程态势/.test(mobileProbe.riskText || '')
       && /防御策略/.test(mobileProbe.riskText || '')
       && /资源预留/.test(mobileProbe.riskText || ''),
     JSON.stringify(mobileProbe || null)

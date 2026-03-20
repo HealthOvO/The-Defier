@@ -292,6 +292,18 @@ class GameMap {
             });
         }
 
+        const engineeringShift = this.game && typeof this.game.getStrategicEngineeringWeightShift === 'function'
+            ? this.game.getStrategicEngineeringWeightShift()
+            : null;
+        if (engineeringShift && typeof engineeringShift === 'object') {
+            Object.keys(engineeringShift).forEach((key) => {
+                if (!Object.prototype.hasOwnProperty.call(weights, key)) return;
+                const delta = Number(engineeringShift[key]);
+                if (!Number.isFinite(delta)) return;
+                weights[key] += delta;
+            });
+        }
+
         this.applyStrategicNodeBias(weights, row, totalRows, realm, context);
         this.applyRouteDiversityPressure(weights, row, totalRows, context);
         this.applyLongTermDiversityPressure(weights, row, totalRows, context);
@@ -1306,12 +1318,29 @@ class GameMap {
         this.updateLegacyMissionTracker();
         this.updateEndlessPanel();
         this.updateRouteHintPanel();
+        const chapter = this.game && typeof this.game.getChapterDisplaySnapshot === 'function'
+            ? this.game.getChapterDisplaySnapshot(this.game.player?.realm || 1)
+            : null;
 
         // Update Node Classes
         this.nodes.forEach(row => {
             row.forEach(node => {
                 const el = document.querySelector(`.map-node-v3[data-node-id="${node.id}"]`);
                 if (el) {
+                    const riskProfile = this.resolveNodeRiskProfile(node, chapter);
+                    node.riskProfile = riskProfile;
+                    el.dataset.riskTier = riskProfile?.tierId || 'none';
+                    const tooltipEl = el.querySelector('.node-tooltip');
+                    if (tooltipEl) tooltipEl.innerHTML = this.buildNodeTooltipHtml(node, chapter);
+                    const existingBadge = el.querySelector('.node-risk-badge');
+                    const shouldShowBadge = !!(riskProfile && ['high', 'extreme'].includes(riskProfile.tierId) && node.accessible && !node.completed);
+                    if (existingBadge) existingBadge.remove();
+                    if (shouldShowBadge) {
+                        const badge = document.createElement('div');
+                        badge.className = `node-risk-badge tier-${riskProfile.tierId}`;
+                        badge.textContent = `DRI ${riskProfile.index}`;
+                        el.appendChild(badge);
+                    }
                     // Reset State Classes
                     el.classList.remove('completed', 'locked', 'current', 'accessible');
 
@@ -1336,6 +1365,9 @@ class GameMap {
         const wrapper = document.getElementById('map-content-wrapper');
         const svgLayer = document.getElementById('map-svg-layer');
         if (!wrapper || !svgLayer) return;
+        const chapter = this.game && typeof this.game.getChapterDisplaySnapshot === 'function'
+            ? this.game.getChapterDisplaySnapshot(this.game.player?.realm || 1)
+            : null;
 
         // V3 Flexbox Layout System (Centered & Robust)
         this.nodes.forEach((rowNodes, rowIndex) => {
@@ -1346,13 +1378,17 @@ class GameMap {
 
             rowNodes.forEach((node, i) => {
                 const nodeEl = document.createElement('div');
+                const riskProfile = this.resolveNodeRiskProfile(node, chapter);
+                node.riskProfile = riskProfile;
                 nodeEl.className = `map-node-v3 ${node.type}`;
                 nodeEl.dataset.nodeId = node.id;
+                nodeEl.dataset.riskTier = riskProfile?.tierId || 'none';
 
                 nodeEl.innerHTML = `
                     <div class="node-icon">${node.icon}</div>
                     ${node.polluted ? '<div class="pollution-mark">☠️</div>' : ''}
-                    <div class="node-tooltip">${this.getNodeTooltip(node.type)}${node.polluted ? '<br><span style="color:#ff4444">[煞气激荡] 此处灵脉受损，不可恢复生命，且能量消耗增加。</span>' : ''}</div>
+                    ${riskProfile && ['high', 'extreme'].includes(riskProfile.tierId) && node.accessible && !node.completed ? `<div class="node-risk-badge tier-${riskProfile.tierId}">DRI ${riskProfile.index}</div>` : ''}
+                    <div class="node-tooltip">${this.buildNodeTooltipHtml(node, chapter)}</div>
                 `;
 
                 nodeEl.addEventListener('click', () => this.onNodeClick(node));
@@ -1488,6 +1524,25 @@ class GameMap {
         return tips[type] || '未知区域';
     }
 
+    getNodeTypeLabel(type) {
+        const labels = {
+            enemy: '普通敌人',
+            elite: '精英敌人',
+            boss: '主宰天劫',
+            ghost_duel: '心魔对决',
+            event: '机缘事件',
+            shop: '坊市商路',
+            rest: '营地洞府',
+            trial: '试炼碑',
+            forge: '炼器坊',
+            observatory: '观星台',
+            spirit_grotto: '灵契窟',
+            forbidden_altar: '禁术坛',
+            memory_rift: '记忆裂隙'
+        };
+        return labels[type] || '未知区域';
+    }
+
     // 获取天域名称
     getRealmName(realm) {
         const names = {
@@ -1603,6 +1658,286 @@ class GameMap {
         return this.formatTagLabel(pathId);
     }
 
+    getDangerTierMetaByIndex(index = 0) {
+        const safeIndex = Math.max(0, Math.min(100, Math.floor(Number(index) || 0)));
+        if (safeIndex >= 76) return { id: 'extreme', label: '极高' };
+        if (safeIndex >= 61) return { id: 'high', label: '高压' };
+        if (safeIndex >= 46) return { id: 'medium', label: '中压' };
+        return { id: 'low', label: '可控' };
+    }
+
+    getNodeRiskBlueprint(type = '') {
+        const catalog = {
+            enemy: {
+                baseIndex: 52,
+                summary: '常规战会放大章节主轴压力。',
+                counterplay: '优先确认首轮防守与输出顺序，别让节奏被白白换掉。',
+                reserveHint: '入战前至少留 1 条护阵或过牌链。',
+                category: 'combat'
+            },
+            elite: {
+                baseIndex: 68,
+                summary: '精英节点会把本章压力集中放大。',
+                counterplay: '默认按小 Boss 对待，先规划减伤与收束窗口。',
+                reserveHint: '生命与关键消耗都要按高压战标准准备。',
+                category: 'combat'
+            },
+            boss: {
+                baseIndex: 90,
+                summary: '主宰战会同时检定章节机制与构筑成型度。',
+                counterplay: '把净化、过牌、爆发窗口都预留好，再进终局检定。',
+                reserveHint: '避免带着残血或空资源进场。',
+                category: 'combat'
+            },
+            ghost_duel: {
+                baseIndex: 64,
+                summary: '残影战常带额外干扰与突发节奏改写。',
+                counterplay: '把它视作偏控场的精英战，先稳住再换线。',
+                reserveHint: '保留 1 轮能打断连携的手段。',
+                category: 'combat'
+            },
+            event: {
+                baseIndex: 38,
+                summary: '事件节点更考验你对短期赚与长期亏的取舍。',
+                counterplay: '先看当前血线与资源底线，再决定是否搏收益。',
+                reserveHint: '避免在资源见底时再赌高波动选项。',
+                category: 'utility'
+            },
+            shop: {
+                baseIndex: 28,
+                summary: '商路风险低，但会放大灵石分配失误。',
+                counterplay: '优先买真正补短板的关键件，别把预算压空。',
+                reserveHint: '保底留一笔战后机动资金。',
+                category: 'utility'
+            },
+            rest: {
+                baseIndex: 22,
+                summary: '营地本身安全，但会影响后续节奏与路线价值。',
+                counterplay: '把它当作修错窗口，而不是无脑补血按钮。',
+                reserveHint: '若血线健康，可考虑为后段压力保留收益选择。',
+                category: 'recovery'
+            },
+            trial: {
+                baseIndex: 72,
+                summary: '试炼碑会主动提高压强，换来更高质量回报。',
+                counterplay: '只在当前构筑真能接住额外条件时再开试炼。',
+                reserveHint: '入场前确认爆发、过牌与容错至少具备两项。',
+                category: 'challenge'
+            },
+            forge: {
+                baseIndex: 34,
+                summary: '炼器坊主要吃经济与路线判断，风险来自投入顺序。',
+                counterplay: '只做能立刻提升当前章胜率的强化。',
+                reserveHint: '避免为了锻造把补给与商店预算榨干。',
+                category: 'utility'
+            },
+            observatory: {
+                baseIndex: 32,
+                summary: '观星台风险不高，但会决定后续路线结构。',
+                counterplay: '把它当成信息投资点，优先锁定能解释下一章的线索。',
+                reserveHint: '若前路压力高，优先拿稳定路线情报。',
+                category: 'utility'
+            },
+            spirit_grotto: {
+                baseIndex: 36,
+                summary: '灵契窟重在补战斗结构，风险来自机会成本。',
+                counterplay: '优先补当前最缺的同行段位或触发轴。',
+                reserveHint: '别在节奏未稳时把资源全砸向长线养成。',
+                category: 'utility'
+            },
+            forbidden_altar: {
+                baseIndex: 76,
+                summary: '禁术坛会把血线与资源税负同时推高。',
+                counterplay: '只有在能承受代价并吃满收益时再签誓。',
+                reserveHint: '确认血线、减伤和回复链至少满足两项。',
+                category: 'challenge'
+            },
+            memory_rift: {
+                baseIndex: 58,
+                summary: '记忆裂隙会改写命格与构筑，波动大于普通功能点。',
+                counterplay: '先确认当前构筑缺口，再决定是否重写命格节奏。',
+                reserveHint: '进入前预留至少一次后续补件机会。',
+                category: 'challenge'
+            }
+        };
+        return catalog[type] || {
+            baseIndex: 40,
+            summary: '前路信息尚不完整，建议按稳态路线推进。',
+            counterplay: '先保留容错，再逐步摸清节点价值。',
+            reserveHint: '为突发遭遇保留一轮机动资源。',
+            category: 'utility'
+        };
+    }
+
+    resolveNodeRiskDominantModifier(nodeType = '', dominantRisk = '') {
+        const dominantModifiers = {
+            burst: { enemy: 6, elite: 8, ghost_duel: 7, trial: 6, forbidden_altar: 4, boss: 10 },
+            sustain: { enemy: 3, elite: 5, trial: 5, memory_rift: 4, shop: 2, rest: -3, boss: 6 },
+            control: { elite: 6, ghost_duel: 8, trial: 6, observatory: 3, memory_rift: 4, boss: 7 },
+            tax: { enemy: 2, trial: 7, forge: 5, shop: 4, forbidden_altar: 8, memory_rift: 4, boss: 5 },
+            recovery: { enemy: 3, elite: 5, event: 2, rest: -4, shop: -2, boss: 6 }
+        };
+        return Math.max(
+            -8,
+            Math.min(
+                12,
+                Math.floor(Number(dominantModifiers[dominantRisk]?.[nodeType]) || 0)
+            )
+        );
+    }
+
+    resolveNodeRiskProfile(node, chapter = null) {
+        if (!node || typeof node !== 'object') return null;
+
+        const dangerProfile = chapter && chapter.dangerProfile ? chapter.dangerProfile : null;
+        const nemesis = chapter && chapter.nemesis ? chapter.nemesis : null;
+        const expeditionPayload = (this.game && typeof this.game.getExpeditionPayload === 'function')
+            ? this.game.getExpeditionPayload()
+            : null;
+        const blueprint = this.getNodeRiskBlueprint(node.type);
+        const rowCount = Math.max(1, (Array.isArray(this.nodes) ? this.nodes.length : 1) - 1);
+        const rowProgress = Math.max(0, Math.min(1, Number(node.row) / rowCount));
+        let index = Math.max(0, Math.min(100, Math.floor(Number(blueprint.baseIndex) || 0)));
+        const modifiers = [];
+
+        if (dangerProfile) {
+            const dominantShift = this.resolveNodeRiskDominantModifier(node.type, dangerProfile.dominantRisk);
+            if (dominantShift !== 0) {
+                index += dominantShift;
+                if (dominantShift > 0 && dangerProfile.dominantLabel) {
+                    modifiers.push(`${dangerProfile.dominantLabel}会在此被进一步放大`);
+                }
+            }
+            if (dangerProfile.tierId === 'high') index += 4;
+            if (dangerProfile.tierId === 'extreme') index += 8;
+            if (dangerProfile.tierId === 'medium') index += 2;
+        }
+
+        if (rowProgress >= 0.66 && ['combat', 'challenge'].includes(blueprint.category)) {
+            index += 6;
+            modifiers.push('章末节点容错更低');
+        } else if (rowProgress >= 0.34 && blueprint.category === 'challenge') {
+            index += 3;
+            modifiers.push('中盘开始就会检定当前成型度');
+        }
+
+        if (node.polluted) {
+            index += 12;
+            modifiers.push('煞气激荡会压缩恢复与费用容错');
+        }
+
+        const hostileCount = Array.isArray(expeditionPayload?.factions)
+            ? expeditionPayload.factions.filter((entry) => Number(entry?.stance) <= -2).length
+            : 0;
+        const alliedCount = Array.isArray(expeditionPayload?.factions)
+            ? expeditionPayload.factions.filter((entry) => Number(entry?.stance) >= 2).length
+            : 0;
+        if (hostileCount >= 2 && ['combat', 'challenge'].includes(blueprint.category)) {
+            index += 4;
+            modifiers.push('当前势力敌意会抬高前线波动');
+        }
+        if (alliedCount >= 2 && ['utility', 'recovery'].includes(blueprint.category)) {
+            index -= 3;
+            modifiers.push('友方关系让功能节点更稳');
+        }
+
+        if (
+            nemesis
+            && ['hunting', 'recurring', 'guarding', 'allied'].includes(String(nemesis.status || ''))
+            && Array.isArray(nemesis.triggerNodeTypes)
+            && nemesis.triggerNodeTypes.includes(node.type)
+        ) {
+            index += 12;
+            modifiers.push(`${nemesis.name} 可能在此现身`);
+        }
+
+        const activeBounties = Array.isArray(expeditionPayload?.activeBounties)
+            ? expeditionPayload.activeBounties
+            : [];
+        const bountyHook = activeBounties.find((entry) => String(entry?.progressText || '').length > 0) || null;
+
+        index = Math.max(0, Math.min(100, Math.round(index)));
+        const tier = this.getDangerTierMetaByIndex(index);
+        const summaryParts = [blueprint.summary];
+        if (modifiers.length > 0) summaryParts.push(modifiers[0]);
+        const counterplayParts = [blueprint.counterplay];
+        if (dangerProfile?.counterplay && dangerProfile.counterplay !== blueprint.counterplay && tier.id !== 'low') {
+            counterplayParts.push(dangerProfile.counterplay);
+        }
+        if (nemesis?.counterplay && modifiers.some((line) => /现身/.test(line))) {
+            counterplayParts.push(nemesis.counterplay);
+        }
+
+        const reserveParts = [
+            this.getChapterRiskResourceGuidance(dangerProfile, nemesis).replace(/[。！!]+$/g, ''),
+            blueprint.reserveHint
+        ];
+        if (bountyHook && ['utility', 'challenge'].includes(blueprint.category)) {
+            reserveParts.push(`若要兼顾悬赏，优先保证 ${bountyHook.name} 的推进节奏`);
+        }
+
+        return {
+            nodeId: node.id,
+            type: String(node.type || ''),
+            label: this.getNodeTypeLabel(node.type),
+            icon: String(node.icon || this.getNodeIcon(node.type) || '❓'),
+            index,
+            tierId: tier.id,
+            tierLabel: tier.label,
+            summary: this.joinDistinctMapLines(summaryParts),
+            counterplay: this.joinDistinctMapLines(counterplayParts),
+            reserveGuidance: this.joinDistinctMapLines(reserveParts, '。'),
+            modifierLines: modifiers.slice(0, 3),
+            polluted: !!node.polluted
+        };
+    }
+
+    getAccessibleNodeRiskForecast(chapter = null) {
+        const accessibleNodes = typeof this.getAccessibleNodes === 'function'
+            ? this.getAccessibleNodes()
+            : [];
+        const nodeRisks = accessibleNodes
+            .map((node) => this.resolveNodeRiskProfile(node, chapter))
+            .filter(Boolean)
+            .sort((a, b) => {
+                if (b.index !== a.index) return b.index - a.index;
+                return String(a.type || '').localeCompare(String(b.type || ''));
+            });
+        const topRisk = nodeRisks[0] || null;
+        return {
+            topRisk,
+            nodeRisks,
+            summary: topRisk
+                ? `${topRisk.label} · DRI ${topRisk.index} · ${topRisk.summary}`
+                : '当前暂无可选节点'
+        };
+    }
+
+    buildNodeTooltipHtml(node, chapter = null) {
+        const risk = this.resolveNodeRiskProfile(node, chapter);
+        const engineeringLine = this.resolveNodeEngineeringHint(node);
+        const pollutionLine = node && node.polluted
+            ? '<div class="node-tooltip-risk danger">煞气激荡：此处灵脉受损，不可恢复生命，且能量消耗增加。</div>'
+            : '';
+        if (!risk) {
+            return `
+                <div class="node-tooltip-title">${this.escapeMapText(this.getNodeTypeLabel(node?.type || ''))}</div>
+                <div class="node-tooltip-copy">${this.escapeMapText(this.getNodeTooltip(node?.type || ''))}</div>
+                ${engineeringLine ? `<div class="node-tooltip-risk engineering">${this.escapeMapText(engineeringLine)}</div>` : ''}
+                ${pollutionLine}
+            `;
+        }
+        return `
+            <div class="node-tooltip-title">${this.escapeMapText(`${risk.icon} ${risk.label} · DRI ${risk.index} · ${risk.tierLabel}`)}</div>
+            <div class="node-tooltip-copy">${this.escapeMapText(this.getNodeTooltip(node?.type || ''))}</div>
+            <div class="node-tooltip-risk">${this.escapeMapText(`前路主险：${risk.summary}`)}</div>
+            <div class="node-tooltip-risk">${this.escapeMapText(`对策：${risk.counterplay}`)}</div>
+            <div class="node-tooltip-risk">${this.escapeMapText(`预留：${risk.reserveGuidance}`)}</div>
+            ${engineeringLine ? `<div class="node-tooltip-risk engineering">${this.escapeMapText(engineeringLine)}</div>` : ''}
+            ${pollutionLine}
+        `;
+    }
+
     collectSpecialWarnings(limit = 3) {
         const accessibleNodes = typeof this.getAccessibleNodes === 'function'
             ? this.getAccessibleNodes()
@@ -1642,6 +1977,24 @@ class GameMap {
         return `盟友 ${allied} · 对立 ${hostile}${dominantLabel ? ` · 主轴 ${dominantLabel}` : ''}`;
     }
 
+    resolveRecentFactionSignal(expeditionPayload = null) {
+        const logs = Array.isArray(expeditionPayload?.recentFactionLogs)
+            ? expeditionPayload.recentFactionLogs
+            : [];
+        if (logs.length === 0) {
+            return '暂无新波动，当前势力还在试探你的路线。';
+        }
+        const lead = logs[0];
+        if (!lead) return '暂无新波动，当前势力还在试探你的路线。';
+        const name = String(lead.factionName || '未知势力');
+        const direction = Number(lead.delta) > 0
+            ? `↑${Math.abs(Number(lead.delta) || 0)}`
+            : Number(lead.delta) < 0
+                ? `↓${Math.abs(Number(lead.delta) || 0)}`
+                : String(lead.stanceLabel || '变动');
+        return `${name} ${direction} · ${String(lead.reason || lead.line || '局势刚刚发生了一次新的偏转。')}`;
+    }
+
     resolveBountyProgress(expeditionPayload = null) {
         const activeBounties = Array.isArray(expeditionPayload?.activeBounties)
             ? expeditionPayload.activeBounties
@@ -1667,12 +2020,118 @@ class GameMap {
         return '暂无章节悬赏';
     }
 
+    resolveBountyConflictSignal(expeditionPayload = null) {
+        const warnings = Array.isArray(expeditionPayload?.bountyConflictWarnings)
+            ? expeditionPayload.bountyConflictWarnings
+            : [];
+        if (warnings.length === 0) {
+            const activeBounties = Array.isArray(expeditionPayload?.activeBounties)
+                ? expeditionPayload.activeBounties
+                : [];
+            if (activeBounties.length > 0) {
+                return '当前承接的赏单与路线暂未出现明显冲突。';
+            }
+            return '尚未承接悬赏，暂无冲突压力。';
+        }
+        const lead = warnings[0];
+        if (!lead) return '当前承接的赏单与路线暂未出现明显冲突。';
+        return `${String(lead.bountyName || '当前悬赏')} · ${String(lead.label || '冲突提示')}${lead.detail ? ` · ${String(lead.detail)}` : ''}`;
+    }
+
+    resolveNemesisForecastSignal(expeditionPayload = null) {
+        const forecast = expeditionPayload?.nemesisForecast && typeof expeditionPayload.nemesisForecast === 'object'
+            ? expeditionPayload.nemesisForecast
+            : null;
+        if (!forecast) {
+            return '当前仇敌追猎线尚未形成明确压制窗口。';
+        }
+        if (forecast.line) {
+            return `${forecast.pressureLabel ? `${String(forecast.pressureLabel)} · ` : ''}${String(forecast.line)}`;
+        }
+        const parts = [
+            forecast.pressureLabel || '',
+            forecast.windowLabel || ''
+        ].filter(Boolean);
+        return parts.join(' · ') || '当前仇敌追猎线尚未形成明确压制窗口。';
+    }
+
+    normalizeMapCopy(text = '') {
+        return String(text || '')
+            .replace(/\s+/g, ' ')
+            .replace(/。{2,}/g, '。')
+            .replace(/；{2,}/g, '；')
+            .replace(/。；/g, '；')
+            .replace(/；。/g, '；')
+            .trim();
+    }
+
+    joinDistinctMapLines(lines = [], terminal = '') {
+        const seen = new Set();
+        const ordered = [];
+        (Array.isArray(lines) ? lines : []).forEach((entry) => {
+            const fragments = this.normalizeMapCopy(entry).split('；');
+            fragments.forEach((fragment) => {
+                const normalized = String(fragment || '').replace(/[；。]+$/g, '').trim();
+                if (!normalized || seen.has(normalized)) return;
+                seen.add(normalized);
+                ordered.push(normalized);
+            });
+        });
+        let result = ordered.join('；');
+        if (result && terminal && !result.endsWith(terminal)) {
+            result += terminal;
+        }
+        return result;
+    }
+
+    getStrategicEngineeringSnapshot() {
+        return this.game && typeof this.game.getStrategicEngineeringSnapshot === 'function'
+            ? this.game.getStrategicEngineeringSnapshot()
+            : null;
+    }
+
+    resolveStrategicEngineeringFocusSignal() {
+        const snapshot = this.getStrategicEngineeringSnapshot();
+        const focus = snapshot && snapshot.focusTrack ? snapshot.focusTrack : null;
+        if (!focus) {
+            return '尚未形成跨章工程，优先在观星、禁术、裂隙或灵契节点里选出一条主轴。';
+        }
+        return `${focus.icon || '✦'} ${focus.name} ${focus.tierLabel} · ${focus.effectSummary}${focus.nextTarget != null ? ` · 距${focus.nextTierLabel}还需 ${focus.remaining} 次${focus.nodeLabel}` : ' · 已达当前最高工事阶'}`;
+    }
+
+    resolveStrategicEngineeringRiskSignal() {
+        const snapshot = this.getStrategicEngineeringSnapshot();
+        const focus = snapshot && snapshot.focusTrack ? snapshot.focusTrack : null;
+        if (!focus) {
+            return '当前还没有明确的跨章工程主轴。';
+        }
+        const sideTrack = Array.isArray(snapshot.activeTracks)
+            ? snapshot.activeTracks.find((entry) => entry && entry.trackId !== focus.trackId)
+            : null;
+        return `主轴 ${focus.name} ${focus.tierLabel} · ${focus.effectSummary}${sideTrack ? ` · 副轴 ${sideTrack.name} ${sideTrack.tierLabel}` : ''}`;
+    }
+
+    resolveNodeEngineeringHint(node = null) {
+        const nodeType = String(node?.type || '');
+        if (!nodeType) return '';
+        const snapshot = this.getStrategicEngineeringSnapshot();
+        const track = snapshot && Array.isArray(snapshot.allTracks)
+            ? snapshot.allTracks.find((entry) => entry && entry.trackId === nodeType)
+            : null;
+        if (!track) return '';
+        if (track.nextTarget != null) {
+            return `工程收益：推进${track.name}${track.active ? ` ${track.tierLabel}` : ''} · ${track.effectSummary} · 距${track.nextTierLabel}还需 ${track.remaining} 次${track.nodeLabel}`;
+        }
+        return `工程收益：推进${track.name}${track.active ? ` ${track.tierLabel}` : ''} · ${track.effectSummary} · 当前已达最高工事阶`;
+    }
+
     getMapSituationOverviewModel(chapter = null) {
         const player = this.game && this.game.player ? this.game.player : null;
         const expeditionPayload = (this.game && typeof this.game.getExpeditionPayload === 'function')
             ? this.game.getExpeditionPayload()
             : null;
         const dangerProfile = chapter && chapter.dangerProfile ? chapter.dangerProfile : null;
+        const frontierRisk = this.getAccessibleNodeRiskForecast(chapter).topRisk;
 
         const tags = [];
         (Array.isArray(chapter?.focusTags) ? chapter.focusTags : [])
@@ -1704,8 +2163,14 @@ class GameMap {
                 ? `DRI ${dangerProfile.index} / 100 · ${dangerProfile.tierLabel || '未定'}`
                 : 'DRI 待推演 · 风险结构未定',
             riskTier: dangerProfile?.tierId || 'none',
+            frontierRisk: frontierRisk
+                ? `${frontierRisk.label} · DRI ${frontierRisk.index} · ${frontierRisk.tierLabel}${frontierRisk.modifierLines.length > 0 ? ` · ${frontierRisk.modifierLines[0]}` : ''}`
+                : '暂无前路情报',
+            engineeringFocus: this.resolveStrategicEngineeringFocusSignal(),
             bountyProgress: this.resolveBountyProgress(expeditionPayload),
-            factionTendency: this.resolveFactionTendency(expeditionPayload)
+            factionTendency: this.resolveFactionTendency(expeditionPayload),
+            recentFactionSignal: this.resolveRecentFactionSignal(expeditionPayload),
+            nemesisForecast: this.resolveNemesisForecastSignal(expeditionPayload)
         };
     }
 
@@ -1739,7 +2204,7 @@ class GameMap {
         if (activeBountyCount > 0) {
             notes.push(`在途悬赏 ${activeBountyCount} 条，预留 1 次补给机动`);
         }
-        return `${notes.join('；')}。`;
+        return this.joinDistinctMapLines(notes, '。');
     }
 
     updateMapSituationOverviewPanel(chapter = null) {
@@ -1770,12 +2235,28 @@ class GameMap {
                     <span class="map-overview-value">${this.escapeMapText(model.riskLevel)}</span>
                 </div>
                 <div class="map-overview-item">
+                    <span class="map-overview-label">前路主险</span>
+                    <span class="map-overview-value">${this.escapeMapText(model.frontierRisk)}</span>
+                </div>
+                <div class="map-overview-item">
+                    <span class="map-overview-label">工程推进</span>
+                    <span class="map-overview-value">${this.escapeMapText(model.engineeringFocus)}</span>
+                </div>
+                <div class="map-overview-item">
                     <span class="map-overview-label">悬赏进度</span>
                     <span class="map-overview-value">${this.escapeMapText(model.bountyProgress)}</span>
                 </div>
                 <div class="map-overview-item">
                     <span class="map-overview-label">势力倾向</span>
                     <span class="map-overview-value">${this.escapeMapText(model.factionTendency)}</span>
+                </div>
+                <div class="map-overview-item">
+                    <span class="map-overview-label">最近势力变化</span>
+                    <span class="map-overview-value">${this.escapeMapText(model.recentFactionSignal)}</span>
+                </div>
+                <div class="map-overview-item">
+                    <span class="map-overview-label">追猎预判</span>
+                    <span class="map-overview-value">${this.escapeMapText(model.nemesisForecast)}</span>
                 </div>
             </div>
         `;
@@ -1793,17 +2274,29 @@ class GameMap {
 
         const dangerProfile = chapter && chapter.dangerProfile ? chapter.dangerProfile : null;
         const nemesis = chapter && chapter.nemesis ? chapter.nemesis : null;
+        const frontierRisk = this.getAccessibleNodeRiskForecast(chapter).topRisk;
         const warningLine = Array.isArray(specialWarnings) && specialWarnings.length > 0
             ? `前路异象：${specialWarnings.join(' / ')}`
             : '前路异象：当前以常规战斗节点为主';
         const highRiskMechanic = dangerProfile
-            ? `${dangerProfile.tierLabel || '风险未定'} · ${dangerProfile.summary || '高压机制正在形成'}`
+            ? this.normalizeMapCopy(`${dangerProfile.tierLabel || '风险未定'} · ${dangerProfile.summary || '高压机制正在形成'}`)
             : '风险结构待推演，先用稳态路线收集战场情报。';
-        const defenseStrategy = [
+        const frontierLine = frontierRisk
+            ? this.normalizeMapCopy(`${frontierRisk.label} · DRI ${frontierRisk.index} · ${frontierRisk.summary}`)
+            : '当前暂无可选节点，等待地图推进后再评估前线风险。';
+        const expeditionPayload = (this.game && typeof this.game.getExpeditionPayload === 'function')
+            ? this.game.getExpeditionPayload()
+            : null;
+        const bountyConflictLine = this.resolveBountyConflictSignal(expeditionPayload);
+        const nemesisForecastLine = this.normalizeMapCopy(this.resolveNemesisForecastSignal(expeditionPayload));
+        const engineeringLine = this.normalizeMapCopy(this.resolveStrategicEngineeringRiskSignal());
+        const defenseStrategy = this.joinDistinctMapLines([
             dangerProfile?.counterplay || '',
-            nemesis?.counterplay || ''
-        ].filter(Boolean).join('；') || '优先保留防御链与过牌，先稳住前两轮，再决定爆发窗口。';
-        const reserveGuidance = this.getChapterRiskResourceGuidance(dangerProfile, nemesis);
+            frontierRisk?.counterplay || '',
+            nemesis?.counterplay || '',
+            expeditionPayload?.nemesisForecast?.counterplay || ''
+        ], '。') || '优先保留防御链与过牌，先稳住前两轮，再决定爆发窗口。';
+        const reserveGuidance = this.normalizeMapCopy(frontierRisk?.reserveGuidance || this.getChapterRiskResourceGuidance(dangerProfile, nemesis));
 
         panel.style.display = 'block';
         panel.dataset.riskTier = dangerProfile?.tierId || 'none';
@@ -1813,6 +2306,22 @@ class GameMap {
             <div class="map-risk-line">
                 <span class="map-risk-label">高危机制</span>
                 <span class="map-risk-value">${this.escapeMapText(highRiskMechanic)} · ${this.escapeMapText(warningLine)}</span>
+            </div>
+            <div class="map-risk-line">
+                <span class="map-risk-label">节点预警</span>
+                <span class="map-risk-value">${this.escapeMapText(frontierLine)}</span>
+            </div>
+            <div class="map-risk-line">
+                <span class="map-risk-label">悬赏冲突</span>
+                <span class="map-risk-value">${this.escapeMapText(bountyConflictLine)}</span>
+            </div>
+            <div class="map-risk-line">
+                <span class="map-risk-label">追猎预判</span>
+                <span class="map-risk-value">${this.escapeMapText(nemesisForecastLine)}</span>
+            </div>
+            <div class="map-risk-line">
+                <span class="map-risk-label">工程态势</span>
+                <span class="map-risk-value">${this.escapeMapText(engineeringLine)}</span>
             </div>
             <div class="map-risk-line">
                 <span class="map-risk-label">防御策略</span>
@@ -1843,6 +2352,10 @@ class GameMap {
         }
 
         const specialWarnings = this.collectSpecialWarnings(3);
+        const frontierRisk = this.getAccessibleNodeRiskForecast(chapter).topRisk;
+        const expeditionPayload = (this.game && typeof this.game.getExpeditionPayload === 'function')
+            ? this.game.getExpeditionPayload()
+            : null;
 
         const bossInfo = this.game && typeof this.game.getRealmBossInfo === 'function'
             ? this.game.getRealmBossInfo(this.game.player.realm)
@@ -1867,6 +2380,15 @@ class GameMap {
         const nemesisClue = nemesis && nemesis.clueRevealed && nemesis.clueLine
             ? `线索：${nemesis.clueLine}`
             : '线索：尚未显露，优先在事件/观星/记忆裂隙里找追猎痕迹。';
+        const nemesisForecast = expeditionPayload?.nemesisForecast && typeof expeditionPayload.nemesisForecast === 'object'
+            ? expeditionPayload.nemesisForecast
+            : null;
+        const nemesisForecastLine = nemesisForecast
+            ? `${nemesisForecast.pressureLabel || '追猎预判'} · ${nemesisForecast.line || (nemesisForecast.windowLabel || '继续观察仇敌链路。')}`
+            : '预判：当前还没有足够线索锁定下一次追猎窗口。';
+        const engineeringSnapshot = this.getStrategicEngineeringSnapshot();
+        const engineeringFocus = engineeringSnapshot && engineeringSnapshot.focusTrack ? engineeringSnapshot.focusTrack : null;
+        const engineeringLine = this.resolveStrategicEngineeringRiskSignal();
 
         this.updateMapSituationOverviewPanel(chapter);
         this.updateChapterRiskCardPanel(chapter, specialWarnings);
@@ -1896,6 +2418,10 @@ class GameMap {
                 <span class="chapter-line-value">${dangerCounterplay}</span>
             </div>
             <div class="chapter-brief-line compact">
+                <span class="chapter-line-label">工程</span>
+                <span class="chapter-line-value">${engineeringLine}</span>
+            </div>
+            <div class="chapter-brief-line compact">
                 <span class="chapter-line-label">宿敌</span>
                 <span class="chapter-line-value">${nemesisLine}</span>
             </div>
@@ -1908,14 +2434,21 @@ class GameMap {
                 <span class="chapter-line-value">${nemesisClue}</span>
             </div>
             <div class="chapter-brief-line compact">
+                <span class="chapter-line-label">预判</span>
+                <span class="chapter-line-value">${nemesisForecastLine}</span>
+            </div>
+            <div class="chapter-brief-line compact">
                 <span class="chapter-line-label">主宰</span>
                 <span class="chapter-line-value">${bossLine}</span>
             </div>
             <div class="chapter-brief-chip-row">
                 <span class="chapter-brief-chip dri ${dangerProfile ? `tier-${dangerProfile.tierId || 'medium'}` : 'tier-none'}">${dangerProfile ? `风险指数 · DRI ${dangerProfile.index} / 100` : '风险指数 · 待推演'}</span>
                 <span class="chapter-brief-chip nemesis ${nemesis ? `status-${nemesis.status || 'hunting'}` : 'status-none'}">${nemesis ? `宿敌追猎 · ${nemesis.statusLabel} · 压力 ${nemesis.pressureIndex}` : '宿敌追猎 · 暂无目标'}</span>
+                ${engineeringFocus ? `<span class="chapter-brief-chip engineering">${this.escapeMapText(`工程主轴 · ${engineeringFocus.name} ${engineeringFocus.tierLabel} · ${engineeringFocus.nextTarget != null ? `距${engineeringFocus.nextTierLabel}还需 ${engineeringFocus.remaining} 次${engineeringFocus.nodeLabel}` : '当前已达最高工事阶'}`)}</span>` : ''}
                 ${nemesis ? `<span class="chapter-brief-chip nemesis-reward">追猎赏格 · ${nemesis.rewardSummary || '暂无额外收益'}</span>` : ''}
                 ${nemesis && nemesis.currentVariantLabel ? `<span class="chapter-brief-chip nemesis-reward">${nemesis.currentVariantLabel}</span>` : ''}
+                ${nemesisForecast ? `<span class="chapter-brief-chip nemesis-forecast ${this.escapeMapText(`tier-${nemesisForecast.pressureTier || 'medium'}`)}">${this.escapeMapText(`追猎预判 · ${nemesisForecast.pressureLabel || '拉扯'} · ${nemesisForecast.windowLabel || '窗口待定'}`)}</span>` : ''}
+                ${frontierRisk ? `<span class="chapter-brief-chip warning">${this.escapeMapText(`前路主险 · ${frontierRisk.label} · DRI ${frontierRisk.index}`)}</span>` : ''}
                 ${(Array.isArray(chapter.focusTags) ? chapter.focusTags : [])
                     .slice(0, 3)
                     .map((tag) => `<span class="chapter-brief-chip">${tag}</span>`)
@@ -2121,6 +2654,9 @@ class GameMap {
         const pressureProfile = (typeof this.game.getEndlessPressureBehaviorProfile === 'function')
             ? this.game.getEndlessPressureBehaviorProfile()
             : null;
+        const dangerProfile = (typeof this.game.getEndlessDangerProfile === 'function')
+            ? this.game.getEndlessDangerProfile(state?.currentCycle)
+            : null;
         const cycleTheme = (typeof this.game.getEndlessCycleThemeProfile === 'function')
             ? this.game.getEndlessCycleThemeProfile()
             : null;
@@ -2162,6 +2698,21 @@ class GameMap {
         const seasonDesc = seasonProfile
             ? `${seasonProfile.desc || ''}｜季签：${seasonProfile.directiveName}（${seasonProfile.directiveRiskLabel || '平衡'} / ${seasonProfile.selectionModeLabel || '轮转推荐'}）· ${seasonProfile.directiveDesc || '保持稳态推进。'}`
             : '赛季尚未激活，等待进入无尽轮回后自动加载。';
+        const dangerLine = dangerProfile && dangerProfile.line
+            ? dangerProfile.line
+            : '轮回压强 DRI 待推演 · 进入轮回后自动生成主轴';
+        const dangerSummary = dangerProfile && dangerProfile.summary
+            ? dangerProfile.summary
+            : '等待压力、轮段与赛季数据收束后生成危险画像。';
+        const dangerCounterplay = dangerProfile && dangerProfile.counterplay
+            ? dangerProfile.counterplay
+            : '先稳住资源底线，再根据本轮主轴调整路线。';
+        const dangerReserve = dangerProfile && dangerProfile.reserveGuidance
+            ? dangerProfile.reserveGuidance
+            : '保留一条减伤、补件或净化线，避免深轮直接断档。';
+        const dangerAxes = dangerProfile && Array.isArray(dangerProfile.axes)
+            ? dangerProfile.axes
+            : [];
         const seasonClears = Math.max(0, Math.floor(Number(state?.seasonCycleClears) || 0));
         const seasonBosses = Math.max(0, Math.floor(Number(state?.seasonBossDefeated) || 0));
         const seasonScore = Math.max(0, Math.floor(Number(state?.seasonScore) || 0));
@@ -2208,6 +2759,27 @@ class GameMap {
                 <span class="endless-season-chip" title="${seasonDesc}">赛季：${seasonChipText}</span>
                 <span class="endless-directive-chip" title="${seasonDesc}">季签：${directiveChipText}</span>
                 <span class="endless-paranoia-chip ${paranoiaLevel > 0 ? 'active' : 'idle'}" title="${paranoiaSummary}">轮回偏执：${paranoiaLevel > 0 ? `第 ${paranoiaLevel} 层` : '未激活'}</span>
+            </div>
+            <div class="endless-danger-band ${dangerProfile ? `tier-${dangerProfile.tierId || 'controlled'}` : 'tier-none'}">
+                <div class="endless-danger-head">
+                    <strong>${dangerLine}</strong>
+                    <span>主轴：${dangerProfile?.dominantAxisLabel || '待推演'}</span>
+                </div>
+                <p class="endless-danger-summary">${dangerSummary}</p>
+                <div class="endless-danger-grid">
+                    ${dangerAxes.length > 0
+                        ? dangerAxes.map((axis) => `
+                            <div class="endless-danger-chip">
+                                <strong>${axis.label}</strong>
+                                <span>${Math.max(0, Math.floor(Number(axis.value) || 0))}</span>
+                            </div>
+                        `).join('')
+                        : '<div class="endless-danger-chip idle"><strong>风险维度</strong><span>待推演</span></div>'}
+                </div>
+                <div class="endless-danger-foot">
+                    <span class="endless-danger-counterplay" data-endless-counterplay>对策：${dangerCounterplay}</span>
+                    <span class="endless-danger-reserve" data-endless-reserve>预留：${dangerReserve}</span>
+                </div>
             </div>
             <div class="endless-theme-desc">${themeDesc}</div>
             <div class="endless-season-desc">${seasonDesc}</div>
@@ -2979,6 +3551,12 @@ class GameMap {
         if (!nodeCompletedProcessing) return; // 如果没有找到对应节点或已处理，直接返回
 
         this.applyPathNodeSynergyReward(node);
+        if (this.game && typeof this.game.recordStrategicNodeEngineering === 'function') {
+            this.game.recordStrategicNodeEngineering(node?.type, {
+                realm: this.game?.player?.realm || 0,
+                nodeId: node?.id || ''
+            });
+        }
 
         // 解锁下一行节点
         const nextRow = node.row + 1;

@@ -275,6 +275,408 @@
     padding-top: 20px;
 }
 
+.pvp-risk-brief {
+    margin: 0 18px 14px;
+    padding: 18px 20px;
+    border-radius: 18px;
+    border: 1px solid rgba(236, 194, 121, 0.24);
+    background:
+        linear-gradient(145deg, rgba(23, 18, 14, 0.9), rgba(17, 24, 39, 0.86)),
+        radial-gradient(circle at top right, rgba(94, 160, 255, 0.12), transparent 46%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 16px 42px rgba(0, 0, 0, 0.22);
+}
+
+.pvp-risk-kicker {
+    color: rgba(255, 213, 147, 0.82);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.pvp-risk-header {
+    margin-top: 8px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.pvp-risk-heading {
+    min-width: 0;
+}
+
+.pvp-risk-title {
+    color: rgba(255, 242, 220, 0.98);
+    font-size: 1.18rem;
+    letter-spacing: 0.03em;
+}
+
+.pvp-risk-subtitle {
+    margin-top: 5px;
+    color: rgba(198, 220, 255, 0.78);
+    font-size: 0.82rem;
+    letter-spacing: 0.05em;
+}
+
+.pvp-risk-dri {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 100px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(171, 203, 255, 0.34);
+    background: rgba(25, 51, 86, 0.34);
+    color: rgba(229, 242, 255, 0.96);
+    font-size: 0.92rem;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+}
+
+.pvp-risk-dri.tier-controlled {
+    border-color: rgba(143, 219, 181, 0.56);
+    background: rgba(20, 73, 50, 0.34);
+    color: rgba(225, 255, 238, 0.96);
+}
+
+.pvp-risk-dri.tier-medium {
+    border-color: rgba(226, 205, 139, 0.56);
+    background: rgba(78, 60, 22, 0.38);
+    color: rgba(255, 245, 219, 0.97);
+}
+
+.pvp-risk-dri.tier-high {
+    border-color: rgba(248, 165, 120, 0.6);
+    background: rgba(92, 47, 23, 0.42);
+    color: rgba(255, 231, 219, 0.98);
+}
+
+.pvp-risk-dri.tier-extreme {
+    border-color: rgba(255, 123, 123, 0.62);
+    background: rgba(95, 24, 24, 0.45);
+    color: rgba(255, 225, 225, 0.99);
+}
+
+.pvp-risk-chip-row {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.pvp-risk-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(236, 239, 244, 0.9);
+    font-size: 0.74rem;
+    line-height: 1.2;
+}
+
+.pvp-risk-chip.accent {
+    border-color: rgba(147, 205, 255, 0.35);
+    background: rgba(20, 49, 80, 0.32);
+    color: rgba(223, 241, 255, 0.98);
+}
+
+.pvp-risk-chip.tier-controlled {
+    border-color: rgba(143, 219, 181, 0.56);
+    color: rgba(225, 255, 238, 0.96);
+}
+
+.pvp-risk-chip.tier-medium {
+    border-color: rgba(226, 205, 139, 0.56);
+    color: rgba(255, 245, 219, 0.97);
+}
+
+.pvp-risk-chip.tier-high {
+    border-color: rgba(248, 165, 120, 0.6);
+    color: rgba(255, 231, 219, 0.98);
+}
+
+.pvp-risk-chip.tier-extreme {
+    border-color: rgba(255, 123, 123, 0.62);
+    color: rgba(255, 225, 225, 0.99);
+}
+
+.pvp-risk-summary {
+    margin-top: 12px;
+    color: rgba(234, 236, 242, 0.9);
+    font-size: 0.84rem;
+    line-height: 1.65;
+}
+
+.pvp-dossier {
+    margin-top: 14px;
+    padding: 14px 15px;
+    border-radius: 16px;
+    border: 1px solid rgba(140, 197, 255, 0.18);
+    background:
+        linear-gradient(145deg, rgba(17, 28, 45, 0.7), rgba(27, 23, 18, 0.68)),
+        radial-gradient(circle at top left, rgba(120, 174, 255, 0.12), transparent 44%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.pvp-dossier-kicker {
+    color: rgba(164, 218, 255, 0.88);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.pvp-dossier-grid {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.pvp-dossier-history-grid {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.pvp-dossier-card {
+    padding: 11px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.pvp-dossier-card-emphasis {
+    border-color: rgba(164, 218, 255, 0.16);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.025)),
+        radial-gradient(circle at top left, rgba(144, 194, 255, 0.09), transparent 48%);
+}
+
+.pvp-dossier-card-wide {
+    grid-column: 1 / -1;
+}
+
+.pvp-dossier-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.pvp-dossier-label {
+    color: rgba(154, 205, 255, 0.84);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+}
+
+.pvp-dossier-mini-tag {
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 226, 173, 0.2);
+    background: rgba(255, 226, 173, 0.08);
+    color: rgba(255, 232, 189, 0.9);
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    line-height: 1.2;
+}
+
+.pvp-dossier-value {
+    margin-top: 6px;
+    color: rgba(248, 242, 228, 0.98);
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.pvp-dossier-detail {
+    margin-top: 6px;
+    color: rgba(209, 218, 230, 0.76);
+    font-size: 0.74rem;
+    line-height: 1.55;
+}
+
+.pvp-dossier-card-tags {
+    margin-top: 9px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-dossier-inline-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(157, 205, 255, 0.18);
+    background: rgba(157, 205, 255, 0.08);
+    color: rgba(226, 239, 255, 0.92);
+    font-size: 0.67rem;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+}
+
+.pvp-dossier-line {
+    margin-top: 10px;
+    color: rgba(230, 236, 244, 0.84);
+    font-size: 0.76rem;
+    line-height: 1.55;
+}
+
+.pvp-dossier-tags {
+    margin-top: 10px;
+}
+
+.pvp-risk-axis-grid {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.pvp-risk-axis-item {
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.pvp-risk-axis-label-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: rgba(241, 239, 231, 0.92);
+    font-size: 0.76rem;
+    letter-spacing: 0.04em;
+}
+
+.pvp-risk-axis-track {
+    margin-top: 9px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+.pvp-risk-axis-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, rgba(164, 200, 255, 0.44), rgba(255, 223, 152, 0.76));
+}
+
+.pvp-risk-axis-fill.tone-burst {
+    background: linear-gradient(90deg, rgba(255, 118, 118, 0.4), rgba(255, 171, 120, 0.88));
+}
+
+.pvp-risk-axis-fill.tone-attrition {
+    background: linear-gradient(90deg, rgba(166, 226, 154, 0.4), rgba(255, 214, 120, 0.84));
+}
+
+.pvp-risk-axis-fill.tone-control {
+    background: linear-gradient(90deg, rgba(124, 196, 255, 0.4), rgba(175, 148, 255, 0.84));
+}
+
+.pvp-risk-axis-fill.tone-execution {
+    background: linear-gradient(90deg, rgba(255, 212, 117, 0.42), rgba(255, 146, 111, 0.84));
+}
+
+.pvp-risk-line {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 12px;
+}
+
+.pvp-risk-line .label {
+    color: rgba(148, 201, 255, 0.88);
+    font-size: 0.74rem;
+    letter-spacing: 0.08em;
+}
+
+.pvp-risk-line .value {
+    color: rgba(238, 239, 243, 0.92);
+    font-size: 0.8rem;
+    line-height: 1.58;
+}
+
+.pvp-risk-footnote {
+    margin-top: 10px;
+    color: rgba(206, 212, 223, 0.68);
+    font-size: 0.74rem;
+    line-height: 1.5;
+}
+
+.pvp-duel-slip {
+    margin-top: 14px;
+    padding: 14px 15px;
+    border-radius: 16px;
+    border: 1px solid rgba(120, 174, 255, 0.16);
+    background:
+        linear-gradient(145deg, rgba(12, 24, 41, 0.72), rgba(31, 25, 16, 0.7)),
+        radial-gradient(circle at top right, rgba(255, 203, 116, 0.08), transparent 42%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.pvp-duel-slip-kicker {
+    color: rgba(156, 212, 255, 0.86);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.pvp-duel-slip-head {
+    margin-top: 8px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.pvp-duel-slip-title {
+    color: rgba(245, 239, 226, 0.98);
+    font-size: 0.98rem;
+    letter-spacing: 0.04em;
+}
+
+.pvp-duel-slip-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(214, 183, 112, 0.28);
+    background: rgba(83, 59, 20, 0.28);
+    color: rgba(255, 237, 204, 0.96);
+    font-size: 0.76rem;
+    white-space: nowrap;
+}
+
+.pvp-duel-slip-tags {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.pvp-duel-slip-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(232, 236, 242, 0.88);
+    font-size: 0.72rem;
+}
+
+.pvp-duel-line {
+    margin-top: 8px;
+}
+
 /* --- Ranking Tab --- */
 .pvp-tab-pane {
     height: 100%;
@@ -296,7 +698,7 @@
     width: 100%;
     /* Force full width to prevent shrinking */
     overflow-y: auto;
-    padding: 10px 30px 100px 30px;
+    padding: 10px 30px 24px 30px;
     /* Mask to fade out top/bottom */
     mask-image: linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%);
     -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%);
@@ -460,6 +862,7 @@
     justify-content: center;
     gap: 6px;
     padding-left: 20px;
+    min-width: 0;
 }
 
 .rank-name {
@@ -486,6 +889,61 @@
     border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+.rank-meta-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.rank-risk-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(165, 198, 255, 0.18);
+    background: rgba(17, 39, 68, 0.34);
+    color: rgba(220, 236, 255, 0.94);
+    font-size: 0.72rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.rank-risk-chip.axis {
+    border-color: rgba(255, 221, 163, 0.18);
+    background: rgba(64, 46, 16, 0.34);
+    color: rgba(255, 241, 213, 0.96);
+}
+
+.rank-risk-chip.tier-controlled {
+    border-color: rgba(143, 219, 181, 0.46);
+    color: rgba(225, 255, 238, 0.96);
+}
+
+.rank-risk-chip.tier-medium {
+    border-color: rgba(226, 205, 139, 0.5);
+    color: rgba(255, 245, 219, 0.97);
+}
+
+.rank-risk-chip.tier-high {
+    border-color: rgba(248, 165, 120, 0.55);
+    color: rgba(255, 231, 219, 0.98);
+}
+
+.rank-risk-chip.tier-extreme {
+    border-color: rgba(255, 123, 123, 0.58);
+    color: rgba(255, 225, 225, 0.99);
+}
+
+.rank-risk-note {
+    color: rgba(201, 210, 223, 0.72);
+    font-size: 0.75rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* Score Display */
 .rank-score-display {
     text-align: right;
@@ -501,12 +959,30 @@
     text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
 }
 
+.jade-slip-row.is-focused {
+    border-color: rgba(207, 170, 112, 0.48);
+    background: rgba(33, 41, 57, 0.86);
+    box-shadow: 0 18px 38px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(207, 170, 112, 0.12) inset;
+}
+
 /* Footer Action */
 .pvp-nav-footer {
-    position: absolute;
-    bottom: 50px;
-    right: 80px;
+    width: 100%;
+    padding: 0 18px 18px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
     filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.6));
+}
+
+.challenge-intent-line {
+    max-width: 320px;
+    color: rgba(214, 225, 240, 0.82);
+    font-size: 0.76rem;
+    line-height: 1.45;
+    text-align: right;
 }
 
 .challenge-btn {
@@ -1819,6 +2295,118 @@ input:checked+.seal-slider .seal-face.on {
     padding-top: 20px;
 }
 
+.pvp-result-review {
+    margin-top: 22px;
+    padding: 18px 20px;
+    border-radius: 16px;
+    border: 1px solid rgba(207, 170, 112, 0.18);
+    background: linear-gradient(180deg, rgba(18, 23, 37, 0.96), rgba(11, 15, 24, 0.9));
+    text-align: left;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 14px 28px rgba(0, 0, 0, 0.24);
+}
+
+.pvp-result-overlay.victory .pvp-result-review {
+    border-color: rgba(207, 170, 112, 0.3);
+}
+
+.pvp-result-overlay.defeat .pvp-result-review {
+    border-color: rgba(155, 155, 155, 0.22);
+}
+
+.pvp-result-review-kicker {
+    font-size: 0.8rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: rgba(255, 231, 192, 0.72);
+    margin-bottom: 10px;
+}
+
+.pvp-result-review-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+}
+
+.pvp-result-review-copy {
+    min-width: 0;
+}
+
+.pvp-result-review-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #f7ead0;
+}
+
+.pvp-result-review-subtitle {
+    margin-top: 4px;
+    font-size: 0.92rem;
+    color: rgba(214, 221, 236, 0.74);
+}
+
+.pvp-result-review-chip {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 220, 190, 0.16);
+    font-family: 'Cinzel', serif;
+    color: #f8efe0;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.pvp-result-review-chip.tier-controlled {
+    background: rgba(122, 186, 160, 0.14);
+    border-color: rgba(122, 186, 160, 0.26);
+}
+
+.pvp-result-review-chip.tier-medium {
+    background: rgba(126, 162, 233, 0.16);
+    border-color: rgba(126, 162, 233, 0.28);
+}
+
+.pvp-result-review-chip.tier-high {
+    background: rgba(227, 155, 105, 0.17);
+    border-color: rgba(227, 155, 105, 0.32);
+}
+
+.pvp-result-review-chip.tier-extreme {
+    background: rgba(187, 82, 82, 0.18);
+    border-color: rgba(187, 82, 82, 0.34);
+}
+
+.pvp-result-review-summary {
+    margin-top: 12px;
+    color: rgba(239, 239, 243, 0.9);
+    line-height: 1.72;
+}
+
+.pvp-result-review-row {
+    display: grid;
+    grid-template-columns: 74px minmax(0, 1fr);
+    gap: 12px;
+    margin-top: 12px;
+    align-items: start;
+}
+
+.pvp-result-review-row .label {
+    color: #91c8ff;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
+
+.pvp-result-review-row .value {
+    color: rgba(238, 238, 244, 0.92);
+    line-height: 1.66;
+}
+
+.pvp-result-review-foot {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(246, 219, 172, 0.82);
+    font-size: 0.92rem;
+}
+
 .vs-text {
     font-style: italic;
     opacity: 0.5;
@@ -1924,9 +2512,26 @@ input:checked+.seal-slider .seal-face.on {
         padding-right: 10px;
     }
 
+    .pvp-risk-brief {
+        margin-left: 10px;
+        margin-right: 10px;
+    }
+
+    .challenge-intent-line {
+        max-width: 260px;
+    }
+
     .jade-slip-row {
         grid-template-columns: 68px 72px 1fr 120px;
         padding: 0 22px;
+    }
+
+    .pvp-result-review-head {
+        flex-direction: column;
+    }
+
+    .pvp-result-review-chip {
+        align-self: flex-start;
     }
 }
 
@@ -1989,8 +2594,52 @@ input:checked+.seal-slider .seal-face.on {
         border-radius: 18px;
     }
 
+    .pvp-risk-brief {
+        margin: 0 2px 12px;
+        padding: 14px;
+        border-radius: 16px;
+    }
+
+    .pvp-risk-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .pvp-risk-axis-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .pvp-dossier-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .pvp-dossier-history-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .pvp-dossier-card-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .pvp-duel-slip-head {
+        flex-direction: column;
+    }
+
+    .pvp-risk-line {
+        grid-template-columns: 38px 1fr;
+        gap: 10px;
+    }
+
+    .pvp-result-review-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
     .ranking-scroll-area {
-        padding: 4px 2px 84px;
+        padding: 4px 2px 18px;
         mask-image: none;
         -webkit-mask-image: none;
     }
@@ -1999,6 +2648,24 @@ input:checked+.seal-slider .seal-face.on {
         grid-template-columns: 52px 58px 1fr 88px;
         height: 76px;
         padding: 0 14px;
+    }
+
+    .rank-meta-strip {
+        gap: 6px;
+    }
+
+    .rank-risk-note {
+        font-size: 0.7rem;
+    }
+
+    .pvp-nav-footer {
+        padding: 0 16px 16px;
+        align-items: stretch;
+    }
+
+    .challenge-intent-line {
+        max-width: none;
+        text-align: left;
     }
 
     .defense-layout-split {

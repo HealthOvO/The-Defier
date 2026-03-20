@@ -6359,3 +6359,876 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 4.8 新流派与桥接组件
     - 4.9 章节事件库组合化
     - 4.10 统一局势总览条
+
+- 2026-03-17: V7 地图风险深化（节点级 DRI + 前路预警）（本轮）
+  - 本轮完成
+    - `js/core/map.js`
+      - 新增节点级风险评估模型：
+        - `getDangerTierMetaByIndex`
+        - `getNodeRiskBlueprint`
+        - `resolveNodeRiskDominantModifier`
+        - `resolveNodeRiskProfile`
+        - `getAccessibleNodeRiskForecast`
+        - `buildNodeTooltipHtml`
+      - 风险评估会综合：
+        - 节点类型基础压强
+        - 章节 DRI 主导维度
+        - 节点所在章节段位
+        - 污染状态
+        - 势力敌意/友好态势
+        - 宿敌触发节点
+        - 当前悬赏推进约束
+      - 局势总览条新增 `前路主险`
+      - 章节风险卡新增 `节点预警`
+      - 章节规则区 chip 行新增前路主险提示
+      - 地图节点 tooltip 升级为：
+        - DRI 数值 / 分层
+        - 前路主险说明
+        - 对策建议
+        - 资源预留建议
+      - 高压/极高压的可选节点新增 `DRI` 小徽记
+      - `updateMapState()` 会同步刷新节点风险徽记与 tooltip，避免状态变化后 UI 停留旧情报
+    - `js/game.js`
+      - `render_game_to_text().map.chapter` 新增 `frontierRisk`
+      - `render_game_to_text().map.activeNodes[]` 新增节点 `risk`
+      - `render_game_to_text().battle` 新增当前战斗节点 `nodeRisk`
+    - 样式
+      - `css/style.css`
+        - 节点 tooltip 改为多行信息布局
+        - 新增节点风险徽记样式
+        - 新增高压/极高压节点发光态
+        - 增补局势总览条高度，承接前路主险字段
+      - `css/mobile.css`
+        - 缩小移动端节点风险徽记
+        - 收紧移动端 tooltip 宽度与字号
+    - 测试增强
+      - 新增 `tests/sanity_map_node_risk_checks.js`
+        - 断言污染禁术坛、宿敌触发、悬赏牵引下的节点级 DRI 与对策输出
+        - 断言前路预测会优先选出最高压节点
+      - `tests/sanity_map_overview_risk_card_checks.js`
+        - 新增 `前路主险 / 节点预警` 断言
+      - `tests/browser_map_overview_risk_audit.mjs`
+        - 新增局势总览条 `前路主险` 文案断言
+        - 新增章节风险卡 `节点预警` 文案断言
+        - 新增 `render_game_to_text` 中 `frontierRisk / activeNodes[].risk` 透出断言
+      - `tests/run_node_checks.sh`
+        - 纳入 `sanity_map_node_risk_checks.js`
+      - `tests/run_browser_release_checks.sh`
+        - 纳入 `browser_map_overview_risk_audit.mjs`
+  - 本轮验证
+    - 语法：
+      - `node --check js/core/map.js` ✅
+      - `node --check js/game.js` ✅
+      - `node --check tests/sanity_map_node_risk_checks.js` ✅
+      - `node --check tests/browser_map_overview_risk_audit.mjs` ✅
+    - Node：
+      - `node tests/sanity_map_node_risk_checks.js` ✅
+      - `node tests/sanity_map_overview_risk_card_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器：
+      - `node tests/browser_map_overview_risk_audit.mjs http://127.0.0.1:4173 output/browser-map-overview-risk-v7-next` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/browser-audit-v7-next-map-risk` ✅
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-v7-next-map-risk` ✅
+      - 备注：`browser_audit` 首次在战斗页 `#end-turn-btn` 出现一次点击稳定性超时，复跑后通过；发布套件全量通过并拿到最终标记 `All browser release audits passed.`
+    - Playwright 客户端：
+      - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4173/?autotest=guest-map&character=linFeng&destiny=emberHeart&spirit=starFox&path=insight&realm=1" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-v7-next-map-risk-client` ✅
+  - 人工截图复核
+    - `output/web-v7-next-map-risk-client/shot-0.png`
+      - 已确认地图右侧同时显示：
+        - 局势总览条的 `前路主险`
+        - 章节风险卡的 `节点预警`
+        - 章节规则区的前路主险 chip
+    - `output/web-v7-next-map-risk-client/shot-1.png`
+      - 已确认地图节点会显示 `DRI` 风险徽记，且未挤爆底部节点布局
+  - 本轮结论
+    - DRI 已从章节级深化到节点级，玩家在选路前就能读懂“哪一格最危险、为什么危险、该留什么资源”
+    - 新增风险信息已同时写入 UI、tooltip、`render_game_to_text` 与发布门禁
+    - 当前未发现由本轮改动引入的阻塞性功能或 UI 缺陷
+
+- 2026-03-18: 协作规则固化（AGENTS）+ browser_audit 主菜单导航稳态化（本轮）
+  - 本轮完成
+    - 新增仓库级 [AGENTS.md](/Users/health/IdeaProjects/The-Defier/AGENTS.md)
+      - 明确 The Defier 默认在非微小任务中主动使用 subagent
+      - 明确 subagent 默认统一使用 `gpt-5.4`
+      - 明确浏览器门禁失败时的固定并行拆法
+      - 明确 `output/` 只认本轮最新 fresh 目录，旧产物不能直接当最终结论
+      - 明确 `tests/browser_audit.mjs` / `js/game.js` / `progress.md` / release gate 这类高耦合文件按单 owner 集成
+    - `tests/browser_audit.mjs`
+      - 新增 `showMainMenu()` 的真正同步等待，要求主菜单重新 active 且关键按钮可见
+      - 为 `collection` / `new game` 补上 click-or-fallback 路径，避免前序页面状态抖动导致隐藏按钮点击超时
+      - 将“未登录时不会直接跳进 save slots”和“会弹出 login-or-guest confirm”拆成两条独立断言，降低误判
+      - `end-turn` 仍保持更稳的强制点击 / DOM fallback 兜底
+  - Subagent 使用
+    - 本轮新开的 subagent 已改为 `gpt-5.4`
+    - 只读巡检结论已被吸收进 `AGENTS.md` 和 `browser_audit.mjs` 的收口修复
+  - 本轮验证
+    - 语法：
+      - `node --check tests/browser_audit.mjs` ✅
+    - 浏览器：
+      - `node tests/browser_audit.mjs http://127.0.0.1:4173 output/browser-audit-after-nav-fix` ✅
+      - 关键结果：
+        - `can open collection` ✅
+        - `can click new game` ✅
+        - `new game does not jump directly to save slots when logged out` ✅
+        - `new game shows login-or-guest confirm` ✅
+    - 环境备注：
+      - 本轮尝试直接通过 `bash tests/run_browser_release_checks.sh ...` 重跑整套 release 时，在当前沙箱环境下出现 Playwright/Chromium 启动权限错误（`mach_port_rendezvous ... Permission denied`）。
+      - 该问题属于当前执行环境限制，不是本轮代码逻辑回归；同环境下单跑 `node tests/browser_audit.mjs ...` 已可正常通过。
+  - 当前结论
+    - 仓库级“什么时候主动用 subagent、默认用什么模型、如何拆并行、如何判定最新产物”已经固化到 `AGENTS.md`
+    - `browser_audit` 主菜单导航链比前一轮稳定，最容易抖动的 `PVP -> main-menu -> collection -> new game` 路径已重新打通
+    - 若后续要做最终整套 browser release 封板，应在允许 Playwright 正常拉起 Chromium 的环境下再跑一遍 `run_browser_release_checks.sh`
+
+- 2026-03-18: 工程事件联动 2.1 实装收口（观星 / 裂隙 -> 事件池 + 事件回报）（本轮）
+  - 本轮完成
+    - `js/data/events.js`
+      - 新增 `STRATEGIC_ENGINEERING_EVENT_POOLS / STRATEGIC_ENGINEERING_EVENT_BIAS_CHANCE / STRATEGIC_ENGINEERING_EVENT_FEEDBACK`
+      - `getRandomEvent()` 正式接入战略工程事件偏置：
+        - `observatory` 会偏置 `artifactConfluxBazaar / convergenceRelay / harmonicAnvil`
+        - `memory_rift` 会偏置 `floatingMarketRift / artifactConfluxBazaar / convergenceRelay / harmonicAnvil`
+      - 不再只在“工程偏置分支”里生效；只要命中了对应工程事件，即使来源是命环路径 / 其他偏置，也会自动挂接工程强化
+      - 为命中的工程事件追加 `engineeringEventMeta`、`summary`、描述补句与选项级结果强化
+        - `observatory`：强化观测货单、命环经验、天机收益
+        - `memory_rift`：强化裂隙货位/折价、命环经验、裂隙残章补贴
+    - `tests/sanity_content_archetype_checks.js`
+      - 新增工程事件池完整性断言
+      - 新增 `observatory / memory_rift` 工程偏置直击断言
+      - 新增“其他偏置先命中时，工程强化仍会附着”的断言
+    - `tests/sanity_event_bias_distribution_checks.js`
+      - 新增工程偏置分布检验，验证 `observatory / memory_rift` 命中率达到可感知区间
+    - `tests/browser_event_branch_audit.mjs`
+      - 新增工程事件专用浏览器断言：
+        - 事件弹窗 `summary` / `engineeringEventMeta` 正常透出
+        - `artifactConfluxBazaar` 观星强化出现“额外货位 + 折价 + 天机”
+        - `floatingMarketRift` 裂隙强化出现“额外货位 + 折价 + 额外灵石 / 命环经验”
+      - 新增两张工程事件截图产物，直接保存工程联动 UI 证据
+  - 版本/文案同步
+    - `game-intro.html` 已包含“工程事件联动 2.1 已上线”，本轮无需额外修正文案口径
+  - 本轮验证
+    - 语法：
+      - `node --check js/data/events.js` ✅
+      - `node --check tests/browser_event_branch_audit.mjs` ✅
+    - Node：
+      - `node tests/sanity_content_archetype_checks.js` ✅
+      - `node tests/sanity_event_bias_distribution_checks.js` ✅
+      - `node tests/sanity_chapter_event_composer_ledger_checks.js` ✅
+      - `node tests/sanity_map_engineering_progress_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器：
+      - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4173 output/browser-event-branch-audit-engineering-v2_1-ui` ✅
+      - 关键新增通过项：
+        - `engineering modal metadata check (observatory)` ✅
+        - `engineering reward check (observatory)` ✅
+        - `engineering modal metadata check (memory_rift)` ✅
+        - `engineering reward check (memory_rift)` ✅
+      - 备注：
+        - 初次在当前沙箱内直接拉起 Chromium 时命中过 `mach_port_rendezvous ... Permission denied`
+        - 提权后同一浏览器审计命令已成功通过，说明阻塞点是环境权限，不是代码逻辑
+  - 人工截图复核
+    - `output/browser-event-branch-audit-engineering-v2_1-ui/engineering-observatory-event.png`
+      - 已确认弹窗里可见 `工程联动` 文案、局内摘要中的工程标签，以及“额外货位 +1 / 折价 8% / 天机 +1 / 命环经验 +12”
+    - `output/browser-event-branch-audit-engineering-v2_1-ui/engineering-memory-rift-event.png`
+      - 已确认弹窗里可见 `工程联动` 文案、局内摘要中的裂隙工程标签，以及“额外货位 +1 / 折价 10% / 灵石 +16 / 命环经验 +12”
+  - 本轮结论
+    - 工程化 2.1 已从“地图节点倾向”升级为“事件体验变化”，玩家现在能在事件层直接感知观星 / 裂隙主轴的回报差异
+    - 偏置、强化、UI 摘要、`render_game_to_text` 与浏览器审计已形成闭环
+    - 当前未发现由本轮改动引入的阻塞性功能或 UI 缺陷
+
+- 2026-03-18: 工程追猎联动 2.2 文案收口 + 浏览器复验（本轮）
+  - 本轮完成
+    - `game-intro.html`
+      - 将“工程追猎联动 2.2”从“下一迭代方向（V7.x）”迁入“当前版本重点”
+      - 文案同步升级为“跨章工程主轴会继续影响悬赏冲突、路线分歧、远征态势与仇敌追猎窗口”
+    - `js/game.js`
+      - 游戏内更新页同步将“工程追猎联动 2.2”迁入 `V7.0 已开发到位的核心能力`
+      - 更新说明补齐 `章节总览桥接` 与 `远征态势` 两个已实装影响面，避免内外介绍页口径不一致
+    - `progress.md`
+      - 追加本轮文案收口、测试与截图复核记录，补齐 `2.2` 的交付闭环
+  - 本轮验证
+    - 语法：
+      - `node --check js/game.js` ✅
+    - 浏览器：
+      - `node tests/browser_audit.mjs http://127.0.0.1:4174 output/browser-audit-v7-2_2` ✅
+      - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4174 output/browser-event-branch-audit-v7-2_2` ✅
+      - `node tests/browser_expedition_audit.mjs http://127.0.0.1:4174 output/browser-expedition-audit-v7-2_2` ✅
+  - 人工截图复核
+    - `output/browser-expedition-audit-v7-2_2/expedition-engineering-observatory.png`
+      - 已确认右侧态势总览、章节风险卡与工程推进卡均显示 `观星工程 II阶`，路线牵引、追猎预判与防御策略文案可读
+    - `output/browser-expedition-audit-v7-2_2/expedition-engineering-altar.png`
+      - 已确认 `禁术工程 II阶` 会在支线卡、悬赏冲突、追猎预判与章节风险卡同时透出高压联动信息
+    - `output/browser-expedition-audit-v7-2_2/expedition-observatory-link.png`
+      - 已确认观星联动提示、仇敌线索气泡与远征右栏的工程/追猎桥接同时存在，没有出现空白卡或字段缺失
+  - 本轮结论
+    - 工程追猎联动 `2.2` 的运行时、浏览器产物、静态介绍页与游戏内更新页口径现已一致
+    - 当前最新 `2.2` 相关浏览器产物目录为 `output/browser-audit-v7-2_2`、`output/browser-event-branch-audit-v7-2_2`、`output/browser-expedition-audit-v7-2_2`
+    - 本轮未发现新的阻塞性功能缺陷或 UI 漏项
+
+- 2026-03-18: 工程事件摘要 UI 泄漏修复 + 2.2 再回归（本轮）
+  - 本轮完成
+    - `js/game.js`
+      - 补全 `buildEventChoiceEffectSummary()` 的玩家可读映射，不再把 `openTemporaryShop / openCampfire / removeCardType / permaBuff / endlessPressure` 等内部 effect id 直接暴露到事件弹窗
+      - `openTemporaryShop` 现会展示为“开启汇流器商 / 裂隙行商 · 货位 N · 折价 X%”这类真实可读摘要；未知 effect 统一回落到 `label / title / name / 特殊效果`
+    - `tests/browser_event_branch_audit.mjs`
+      - `getEventModalSnapshot()` 新增抓取可见选项文本
+      - 新增“工程事件弹窗不得出现内部 effect id”断言，后续若再次把 `openTemporaryShop` 之类原样渲染到 UI，会直接在浏览器审计中失败
+    - 记录修正：
+      - 移除上一条进度记录里不存在的 `output/browser-guide-v7-2_2` / `output/browser-meta-v7-2_2` 假产物引用，保留这轮真实存在的目录名
+  - 本轮验证
+    - 语法：
+      - `node --check js/game.js && node --check tests/browser_event_branch_audit.mjs && node --check tests/browser_audit.mjs` ✅
+    - Node：
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器：
+      - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4174 output/browser-event-branch-audit-v7-2_2-rerun` ✅
+      - `node tests/browser_audit.mjs http://127.0.0.1:4174 output/browser-audit-v7-2_2-rerun` ✅
+      - `node tests/browser_expedition_audit.mjs http://127.0.0.1:4174 output/browser-expedition-audit-v7-2_2-rerun` ✅
+  - 人工截图复核
+    - `output/browser-event-branch-audit-v7-2_2-rerun/engineering-observatory-event.png`
+      - 已确认按钮摘要不再显示 `openTemporaryShop`，而是“开启汇流器商 · 货位 5 · 折价 8%”；工程摘要、补贴与命环/天机奖励仍正常可读
+    - `output/browser-event-branch-audit-v7-2_2-rerun/engineering-memory-rift-event.png`
+      - 已确认按钮摘要不再显示内部 effect id，而是“开启裂隙行商 · 货位 4 · 折价 10%”；裂隙补贴与命环经验加成仍正常展示
+    - `output/browser-audit-v7-2_2-rerun/03-battle.png`
+      - 已确认战斗 HUD、敌方信息、结束回合按钮与底部手牌区均正常显示，没有被本轮事件文案修复带出布局回归
+  - 本轮结论
+    - 本轮不是只做“报告复读”，而是通过人工截图复核抓到了一个自动化原先漏掉的真实 UI 泄漏问题，并已修复
+    - 工程 2.2 相关浏览器产物现同时保留首轮目录与 rerun 目录，最终可优先参考最新的 `output/browser-event-branch-audit-v7-2_2-rerun`、`output/browser-audit-v7-2_2-rerun`、`output/browser-expedition-audit-v7-2_2-rerun`
+    - 当前未发现新的阻塞性功能缺陷、UI 漏项或测试缺口
+
+- 2026-03-18: 挑战难度同轴化首轮落地（试炼压强 DRI + 观察站 UI）（本轮）
+  - 本轮完成
+    - `js/core/challenge_hub.js`
+      - 新增 `buildChallengeDangerProfile()`，把观察站挑战统一映射到四条难度轴：
+        - `先手爆发`
+        - `拉锯压强`
+        - `控场税负`
+        - `执行门槛`
+      - 依据 `battleModifiers / goalRealm / vowIds / mode / tags` 生成：
+        - `DRI` 数值
+        - `tierId / tierLabel`
+        - `dominantAxis`
+        - `summary / counterplay / reserveGuidance`
+      - `buildChallengeBundle()` / `buildReplayBundleFromArchiveEntry()` 现会同步挂接 `dangerProfile`
+      - 观察站挑战页新增：
+        - 主卡内的 `试炼压强` 分析块
+        - 右栏 `难度同轴` 摘要卡
+      - 角色锁定开局横幅与地图中的挑战运行横幅也会同步显示 `DRI` 与分层，形成“开局前读题 -> 局中维持认知”的同轴反馈
+      - `getChallengeHubPayload()` 新增：
+        - `pending.dangerProfile`
+        - `activeRun.dangerProfile`
+        - `hub.dangerProfile`
+    - `css/style.css`
+      - 新增挑战压强分析块的网格卡、标题行、摘要与对策样式
+      - 补充移动端两列自适应，避免 4 轴卡在窄屏下挤爆
+    - `tests/browser_challenge_audit.mjs`
+      - 新增挑战页 `dangerProfile`、压强卡、锁定开局横幅与地图运行横幅断言
+      - 断言浏览器 UI 与 `render_game_to_text().challenge.*.dangerProfile` 一致
+    - `tests/sanity_challenge_danger_profile_checks.js`
+      - 新增 Node 断言覆盖：
+        - `daily / weekly / global` 三档 bundle 都会生成 `dangerProfile`
+        - `global > daily`
+        - `weekly >= daily`
+        - `pending / hub / activeRun` payload 会正确透出 `dangerProfile`
+    - 文案同步
+      - `game-intro.html` 与 `js/game.js` 游戏介绍更新为：
+        - 当前版本重点已包含挑战端的 `试炼压强 DRI`
+        - `跨模式难度同轴化` 改写为“挑战端先落地，现已扩到无尽轮回，下一步主要推进 PVP”
+  - 本轮验证
+    - 语法：
+      - `node --check js/core/challenge_hub.js` ✅
+      - `node --check tests/browser_challenge_audit.mjs` ✅
+      - `node --check tests/sanity_challenge_danger_profile_checks.js` ✅
+    - Node：
+      - `node tests/sanity_challenge_danger_profile_checks.js` ✅
+      - `node tests/sanity_observatory_archive_checks.js` ✅
+    - 浏览器：
+      - `node tests/browser_challenge_audit.mjs http://127.0.0.1:4175 output/browser-challenge-audit-v7-difficulty-axis` ✅
+  - 人工截图复核
+    - `output/browser-challenge-audit-v7-difficulty-axis/challenge-hub-desktop.png`
+      - 已确认挑战主卡与右栏同时显示 `试炼压强 DRI`，四轴值、主轴和对策均可读，没有挤爆既有挑战布局
+    - `output/browser-challenge-audit-v7-difficulty-axis/challenge-hub-mobile.png`
+      - 已确认移动端周挑战页会把压强卡压成单列滚动视图，`DRI 70 / 100 · 高压` 与摘要仍清晰可见
+    - `output/browser-challenge-audit-v7-difficulty-axis/challenge-map-banner.png`
+      - 已确认地图挑战横幅会显示 `命盘签 + DRI + 分层`，局中读题信息不再只停留在观察站页
+  - 本轮结论
+    - “跨模式难度同轴化”已完成第一段落地：挑战端现在和主线地图共享 `DRI / 分层 / 主轴 / 对策` 这套读题语言
+    - 玩家在挑战页、锁定开局与地图推进中都能读到同一份风险语义，玩法学习成本更低
+    - 后续自然延续方向是继续把这套同轴风险标尺推进到 PVP，并深化跨模式赛季读题与移动端收口
+
+- 2026-03-18: 挑战样本回放增强落地（观察站样本洞察 + 回放训练重点）（本轮）
+  - 本轮完成
+    - `js/core/challenge_hub.js`
+      - 把已有的 `buildChallengeArchiveInsight()` 真正接入观察站留痕、同主题对比、远征线索与 replay payload
+      - 归档条目现会暴露 `insight`
+        - `title`
+        - `summary`
+        - `focusLines`
+        - `preferredNodeLine`
+        - `reasonLabel`
+      - `buildReplayBundleFromArchiveEntry()` 会把历史样本转成回放视角的 `archiveInsight`
+        - 成功样本会显示 `回放复刻`
+        - 失败样本会显示 `回放试错`
+      - `pendingChallengeStart / activeChallengeRun / getChallengeHubPayload()` 现会同步透出 `archiveInsight`
+      - 回放锁定开局横幅与地图运行横幅会持续展示训练重点，形成“观察站读样本 -> 锁定开局 -> 局中执行”的闭环
+    - `css/style.css`
+      - 新增 `challenge-record-insight` 相关样式
+      - 新增 `challenge-run-focus` 横幅样式
+      - 移动端下洞察行会改为纵向堆叠，避免窄屏挤爆
+    - `tests/sanity_observatory_archive_checks.js`
+      - 新增 archive / selectedGuide / pending replay / active replay / payload 的 `archiveInsight` 断言
+    - `tests/browser_challenge_audit.mjs`
+      - 新增观察站样本洞察、回放锁定开局训练重点、地图回放横幅训练重点断言
+    - 文案同步
+      - `game-intro.html`
+      - `js/game.js`
+      - 已把“挑战样本回放增强”从下一迭代方向挪入当前版本重点
+  - 本轮验证
+    - 语法：
+      - `node --check js/core/challenge_hub.js` ✅
+      - `node --check tests/browser_challenge_audit.mjs` ✅
+      - `node --check tests/sanity_observatory_archive_checks.js` ✅
+    - Node：
+      - `node tests/sanity_observatory_archive_checks.js` ✅
+    - 浏览器：
+      - `node tests/browser_challenge_audit.mjs http://127.0.0.1:4175 output/browser-challenge-audit-v7-replay-insight` ✅
+      - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4175 output/browser-mobile-layout-v7-replay-insight` ✅
+    - Develop-web-game skill 补充验证：
+      - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4175/?autotest=guest-map&character=linFeng&destiny=emberHeart&spirit=starFox&path=insight&realm=1" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-v7-replay-insight-client` ✅
+  - 人工截图复核
+    - `output/browser-challenge-audit-v7-replay-insight/challenge-archive-replay.png`
+      - 已确认观察站留痕卡与同主题对比卡都显示样本洞察，没有破坏挑战页双栏布局
+    - `output/browser-challenge-audit-v7-replay-insight/challenge-replay-banner.png`
+      - 已确认回放横幅会持续显示 `训练重点`，不会只在开局横幅里闪一下就消失
+    - `output/browser-mobile-layout-v7-replay-insight/mobile-expedition-panels.png`
+      - 已确认移动端远征/观星/态势面板仍无横向溢出，且精选命盘线索文案可读
+  - 本轮结论
+    - “失败可复盘、成功可复刻”的训练闭环已经正式落地到挑战观察站
+    - 玩家现在能从样本洞察直接进入回放，并在锁定开局与局中横幅持续收到训练重点提示
+    - 下一个更自然的主线是继续深化跨样本对比维度，并把同一套读题语言延续到 PVP
+
+- 2026-03-18: 无尽轮回 DRI 收口与 release gate 纠偏（真实全绿 + 门禁补强）（本轮）
+  - 本轮完成
+    - `js/core/map.js`
+      - 无尽 DRI 带新增独立 `对策 / 预留` 语义行：
+        - `endless-danger-counterplay`
+        - `endless-danger-reserve`
+      - 自动化不再只能从混合文案里猜字段，`browser_feature_audit` 可直接读取无尽 DRI 的应对提示与资源预留建议
+    - `js/core/battle.js`
+      - `applyEnemySquadEcology()` 增加角色化 fallback：
+        - 前锋未形成差异时补 `前锋追袭`
+        - 阵核未形成差异时补 `阵核固阵 / 阵核回稳`
+        - 扰阵未形成差异时补 `扰阵牵制`
+      - 敌阵生态现在不只会挂 tag，也会在行动链上形成可读差异
+    - 浏览器门禁脚本补强
+      - 统一为以下脚本补上“存在失败 finding 或 console error 时返回非零退出码”：
+        - `tests/browser_audit.mjs`
+        - `tests/browser_event_branch_audit.mjs`
+        - `tests/browser_feature_audit.mjs`
+        - `tests/browser_inheritance_audit.mjs`
+        - `tests/browser_mobile_layout_audit.mjs`
+        - `tests/browser_pvp_audit.mjs`
+      - 修复此前 release 脚本可能出现“终端显示 passed，但 `report.json` 内仍有红项”的假绿门禁漏洞
+    - 文案 / 进度同步
+      - 修正本文件内仍残留的“后续扩到无尽 / PVP”旧口径
+      - 现统一为“无尽已接入 DRI，下一步主要推进 PVP”
+  - 本轮验证
+    - 语法：
+      - `node --check js/core/battle.js` ✅
+      - `node --check js/core/map.js` ✅
+      - `node --check tests/browser_audit.mjs` ✅
+      - `node --check tests/browser_event_branch_audit.mjs` ✅
+      - `node --check tests/browser_feature_audit.mjs` ✅
+      - `node --check tests/browser_inheritance_audit.mjs` ✅
+      - `node --check tests/browser_mobile_layout_audit.mjs` ✅
+      - `node --check tests/browser_pvp_audit.mjs` ✅
+    - Node：
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器：
+      - `node tests/browser_feature_audit.mjs http://127.0.0.1:4175 output/browser-feature-v7-endless-dri-r4-fix` ✅
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4175 output/release-browser-audits-v7-endless-dri-r4` ✅
+      - 结尾确认：`[release-checks] All browser release audits passed.` ✅
+  - 关键产物
+    - `output/browser-feature-v7-endless-dri-r4-fix/report.json`
+      - 原先 2 条红项（敌阵生态 / 无尽 DRI 预留行）已清零
+    - `output/release-browser-audits-v7-endless-dri-r4/feature/report.json`
+      - 本轮 `feature` 审计全绿，且已纳入真实退出码
+    - `output/release-browser-audits-v7-endless-dri-r4/`
+      - 当前最新 browser release bundle，包含 16 组子审计产物
+    - `output/manual-endless-dri-check/endless-dri-panel.png`
+    - `output/manual-endless-dri-check/endless-dri-map-context.png`
+  - 本轮结论
+    - endless DRI 不仅功能落地，而且完成了一轮“审计脚本可信度”修复
+    - 当前 release gate 现在会对真实失败给出非零退出码，不再出现假绿
+    - 本轮最终状态为：Node checks 全绿 + browser release gate 全绿 + 文案口径已统一
+
+- 2026-03-19: PVP 赛后复盘卡落地 + 审计截图取景修复（本轮）
+  - 本轮完成
+    - `js/services/pvp-service.js`
+      - 新增 `getPvpResultReview()`：
+        - 基于当前 `dangerProfile`
+        - 结合胜负、道韵变化、天道币奖励与对手画像
+        - 产出 `胜场/败场复盘`、判词、补课点、收益行
+      - 让 PVP DRI 从“开战前可读”延长到“赛后可复盘”
+    - `index.html` / `css/pvp.css` / `js/game.js`
+      - PVP 结算页新增 `赛后复盘卡`
+        - 显示 `DRI / 分层`
+        - 显示判词（如 `稳中夺势 / 越压破局 / 高压失手`）
+        - 显示本局对策复盘与下一把资源预留建议
+        - 显示 `道韵 + 天道币 + 对手名` 汇总行
+      - `render_game_to_text().pvp.resultOverlay` 现会同步暴露复盘结构，方便自动化断言
+      - 新战斗开始、PVP 启动失败、关闭结算时都会清理旧的 `pvpResultReview`，避免状态残留
+    - `tests/browser_pvp_audit.mjs`
+      - 不再把最终证据图拍在防守页尾部
+      - 改为元素级截图：
+        - `pvp-audit.png` 直接拍 `#tab-ranking`
+        - `pvp-result.png` 直接拍结算复盘卡所在容器
+      - 新增结算复盘 DOM 与 `render_game_to_text().pvp.resultOverlay` 断言
+    - `tests/browser_pvp_mobile_audit.mjs`
+      - 新增登录弹窗关闭兜底
+      - 移动端证据图改为元素级截图：
+        - `pvp-mobile.png` 直接拍 `#pvp-ranking-brief`
+        - `pvp-mobile-defense.png` 直接拍 `#tab-defense`
+      - 解决此前 fullPage 截图在 PVP 内部滚动容器下拍到“近乎空白”取景的问题
+    - `tests/sanity_pvp_service_checks.js`
+      - 新增 `getPvpResultReview()` Node 断言
+      - 覆盖胜场复盘、败场复盘、天道币收益与道韵负变化
+    - 文案同步
+      - `game-intro.html`
+      - `js/game.js`
+      - `index.html`
+      - 已把“PVP 结算复盘”从未来项移入当前版本重点
+  - 本轮验证
+    - 语法：
+      - `node --check js/services/pvp-service.js` ✅
+      - `node --check js/game.js` ✅
+      - `node --check js/scenes/pvp-scene.js` ✅
+      - `node --check tests/browser_pvp_audit.mjs` ✅
+      - `node --check tests/browser_pvp_mobile_audit.mjs` ✅
+      - `node --check tests/sanity_pvp_service_checks.js` ✅
+    - Node：
+      - `node tests/sanity_pvp_service_checks.js` ✅
+    - 浏览器：
+      - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4175 output/browser-pvp-audit-v7-pvp-review-r2` ✅
+      - `node tests/browser_pvp_mobile_audit.mjs http://127.0.0.1:4175 output/browser-pvp-mobile-v7-pvp-review-r2` ✅
+    - Develop-web-game skill 补充验证：
+      - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:4175 --click-selector "#pvp-btn" --actions-file tests/actions/wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-pvp-review-r1` ✅
+  - 人工截图复核
+    - `output/browser-pvp-audit-v7-pvp-review-r2/pvp-audit.png`
+      - 已确认桌面端证据图直接显示榜单推演卡、DRI 芯片与榜单行，不再出现空白容器
+    - `output/browser-pvp-audit-v7-pvp-review-r2/pvp-result.png`
+      - 已确认结算页复盘卡可读，`DRI 54 · 中压`、判词、补课点与收益行均正常显示
+    - `output/browser-pvp-mobile-v7-pvp-review-r2/pvp-mobile.png`
+      - 已确认移动端直接拍到 PVP 风险卡本体，DRI、四轴与对策文案没有横向溢出
+    - `output/browser-pvp-mobile-v7-pvp-review-r2/pvp-mobile-defense.png`
+      - 已确认移动端防守页单列布局可读，阵法预览与道心卡没有挤爆
+    - `output/web-game-pvp-review-r1/shot-0.png`
+      - 已确认真实 PVP 榜单首屏渲染正常，挑战按钮、风险卡与榜单行同屏可见
+  - 本轮结论
+    - PVP 现在已经从“赛前读题”扩展到“赛后复盘”，玩法反馈闭环更完整
+    - PVP 浏览器审计的截图证据链已修正为可信取景，不再出现脚本通过但截图近乎空白的误导
+    - 下一条更自然的深化方向，是继续补对手档案回看与焦点约战收益预估，让榜单选择本身也更有决策感
+
+- 2026-03-19: PVP 焦点约战单 + 定向匹配落地（本轮）
+  - 本轮完成
+    - `js/services/pvp-service.js`
+      - 新增 `normalizeFocusRank()`，统一清洗榜单焦点目标。
+      - 新增 `getRatingDeltaPreview()` 与 `getFocusDuelSlip()`：
+        - 生成焦点约战单的 `冲榜 / 练手 / 避战` 意图
+        - 生成 `榜位直约 / 镜像演武` 模式说明
+        - 生成 `胜场 / 败场` 的天道币与道韵预估
+      - `createPracticeOpponent()` 支持焦点镜像：
+        - 选中榜位后，离线/兜底匹配不再跳去随机陌生对手
+        - 会按该榜位生成稳定、可复现的镜像对手
+      - `findOpponent()` 支持焦点优先：
+        - 在线时优先尝试锁定选中的榜位
+        - 若对方无残影或无法解析，则自动回落到该榜位的镜像演武
+    - `js/scenes/pvp-scene.js`
+      - `rankingFocusData` 现在同时持有 `duelBrief`
+      - 排行榜 brief 新增 `焦点约战单`：
+        - 胜场收益
+        - 败场损益
+        - 匹配模式
+        - 出战建议
+      - 底部 CTA 新增 `pvp-challenge-intent` 锁定提示
+      - `findMatch()` 会把当前焦点目标传入匹配服务
+      - `startPVPBattle()` 会把 `matchIntent` 写入游戏态与 `render_game_to_text`
+    - `js/game.js`
+      - 新增 `pvpMatchIntent`
+      - `render_game_to_text().pvp`
+        - `rankingFocus.duelBrief` 会暴露约战单结构
+        - `activeMatch.intent` 会暴露当前已锁定的约战意图
+      - PVP 开始失败、非 PVP 开战、关闭结算时都会清理 `pvpMatchIntent`
+    - `index.html` / `css/pvp.css`
+      - 排行榜 brief 文案与 `version-info` 同步为 `PVP复盘 · 焦点约战`
+      - 新增约战单卡片样式、底部锁定提示样式与移动端自适应
+    - `tests/sanity_pvp_service_checks.js`
+      - 新增 `getFocusDuelSlip()` 断言
+      - 新增焦点镜像匹配的稳定性与 `matchIntent` 断言
+    - `tests/browser_pvp_audit.mjs`
+      - 新增焦点约战单 DOM 断言
+      - 新增 `render_game_to_text().pvp.rankingFocus.duelBrief` 断言
+      - 新增 `activeMatch.intent` 断言，确认“选中谁，就约战谁/谁的镜像”
+    - `tests/browser_pvp_mobile_audit.mjs`
+      - 新增移动端约战单与底部锁定提示不溢出断言
+    - 文案同步
+      - `game-intro.html`
+      - `js/game.js`
+      - `index.html`
+      - 已把“焦点约战收益预估”从未来项移入当前版本能力
+  - 本轮验证
+    - 语法：
+      - `node --check js/scenes/pvp-scene.js` ✅
+      - `node --check js/services/pvp-service.js` ✅
+      - `node --check js/game.js` ✅
+    - Node：
+      - `node tests/sanity_pvp_service_checks.js` ✅
+      - `bash tests/run_node_checks.sh` ✅
+    - 浏览器专项：
+      - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4175 output/browser-pvp-audit-v7-focus-duel-r4` ✅
+      - `node tests/browser_pvp_mobile_audit.mjs http://127.0.0.1:4175 output/browser-pvp-mobile-v7-focus-duel-r4` ✅
+    - Develop-web-game skill 补充验证：
+      - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4175/?autotest=guest-pvp" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-pvp-focus-duel-r5` ✅
+    - Release gate：
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4175 output/release-browser-audits-v7-focus-duel-r2` ✅
+  - 人工截图复核
+    - `output/browser-pvp-audit-v7-focus-duel-r4/pvp-audit.png`
+      - 已确认桌面端榜单推演卡、焦点约战单、锁定提示与 CTA 同屏可读
+    - `output/browser-pvp-audit-v7-focus-duel-r4/pvp-result.png`
+      - 已确认赛后复盘卡仍正常显示，没有被焦点约战改动带坏
+    - `output/browser-pvp-mobile-v7-focus-duel-r4/pvp-mobile.png`
+      - 已确认移动端 DRI 卡与焦点约战单纵向排布稳定，无横向溢出
+    - `output/web-game-pvp-focus-duel-r5/shot-1.png`
+      - 已确认通过 `guest-pvp` 直达的真实运行态下，榜单首屏、焦点对手卡、约战单和锁定约战提示一致
+  - 当前结论
+    - PVP 现在已经从“赛前读题 -> 实战 -> 赛后复盘”进一步补齐到“榜单选人 -> 锁定约战 -> 镜像兜底 -> 赛后复盘”
+    - 焦点目标不再只是信息展示，而是真正驱动匹配与收益判断的可执行选择
+    - 下一条更自然的深化方向，是继续补对手档案回看与更细的赛季题面标签
+
+- 2026-03-19: PVP 焦点约战文案与验证证据收口
+  - 本轮完成
+    - `game-intro.html`
+      - 把焦点约战从“已有展示能力”明确补成“按焦点目标定向约战 + 无残影时自动回退同榜位镜像演武”的可执行能力说明
+    - `js/game.js`
+      - 游戏内指南的 `更新` 页已同步：
+        - 当前能力改为 `PVP 风险画像 + 焦点约战闭环`
+        - 下一步方向中移除已落地的“焦点约战收益预估”
+    - `progress.md`
+      - 修正上一轮记录中的产物路径
+      - 补记 `run_browser_release_checks.sh` 已通过
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node tests/browser_guide_modal_audit.mjs http://127.0.0.1:4175 output/browser-guide-v7-focus-duel-sync-r1` ✅
+    - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4175 output/browser-pvp-audit-v7-focus-duel-sync-r1` ✅
+    - `node tests/browser_pvp_mobile_audit.mjs http://127.0.0.1:4175 output/browser-pvp-mobile-v7-focus-duel-sync-r1` ✅
+    - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:4175 --click-selector "#pvp-btn" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-pvp-focus-duel-sync-r1` ✅
+    - 额外文本探针：
+      - 游戏内指南 `更新` 标签已确认 `hasFocusPreviewFutureText = false`
+      - 同时确认 `hasTargetedMatchText = true`
+      - 同时确认 `hasMirrorFallbackText = true`
+  - 人工复核
+    - `output/browser-guide-v7-focus-duel-sync-r1/guide-desktop-manual.png`
+      - 已确认指南弹窗桌面端可正常打开，布局未被本轮文案同步破坏
+    - `output/browser-pvp-audit-v7-focus-duel-sync-r1/pvp-audit.png`
+      - 已确认桌面端焦点约战单、收益行、模式说明与榜单内容同屏可读
+    - `output/browser-pvp-mobile-v7-focus-duel-sync-r1/pvp-mobile.png`
+      - 已确认移动端焦点约战单仍保持纵向排布，无横向溢出
+    - `output/web-game-pvp-focus-duel-sync-r1/shot-0.png`
+      - 已确认真实运行态下的榜单入口、焦点对手卡与约战单仍然一致
+
+- 2026-03-19: PVP `guest-pvp` 自动化直达补强
+  - 本轮完成
+    - `js/game.js`
+      - automation boot 新增 `?autotest=guest-pvp`
+      - 直达后会直接进入 `pvp-screen` 并调用 `PVPScene.onShow()`，不再依赖主菜单 `#pvp-btn` 的动画点击稳定性
+    - `tests/browser_automation_boot_audit.mjs`
+      - 新增 `guest-pvp` 场景
+      - 断言：
+        - 直达后当前页面为 `pvp-screen`
+        - `guestMode = true`
+        - `render_game_to_text().pvp.activeTab = ranking`
+        - `rankingFocus.rank` 与 `duelBrief` 已准备好
+        - DOM 中 `焦点对手` 标题与 `已锁定` 提示同步可见
+    - `game-intro.html`
+      - PVP 文案进一步明确为：
+        - 焦点目标会真实驱动定向匹配
+        - 若对方无残影，则自动回退为同榜位镜像演武
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check tests/browser_automation_boot_audit.mjs` ✅
+    - `node tests/browser_automation_boot_audit.mjs http://127.0.0.1:4175 output/web-automation-boot-audit-v7-pvp-r1` ✅
+    - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4175 output/browser-pvp-audit-v7-focus-duel-r4` ✅
+    - `node tests/browser_pvp_mobile_audit.mjs http://127.0.0.1:4175 output/browser-pvp-mobile-v7-focus-duel-r4` ✅
+    - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4175/?autotest=guest-pvp" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-pvp-focus-duel-r5` ✅
+    - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4175 output/release-browser-audits-v7-focus-duel-r2` ✅
+  - 人工复核
+    - `output/web-automation-boot-audit-v7-pvp-r1/guest-pvp.png`
+      - 自动化脚本本身在该轮命中过一次页面截图超时 fallback，未影响断言结果；`report.json` 已确认 `guest-pvp` 场景通过
+    - `output/browser-pvp-audit-v7-focus-duel-r4/pvp-audit.png`
+      - 已确认桌面端焦点约战卡、收益行与 CTA 锁定提示保持完整同屏
+    - `output/browser-pvp-mobile-v7-focus-duel-r4/pvp-mobile.png`
+      - 已确认移动端长卡片布局稳定，焦点约战单与风险卡都未横向溢出
+    - `output/web-game-pvp-focus-duel-r5/shot-1.png`
+      - 已确认 `guest-pvp` smoke 的第二帧已稳定拍到榜单与焦点约战卡
+  - 当前结论
+    - PVP 现在不仅有“焦点约战”玩法闭环，也具备了稳定的自动化直达入口
+    - 发布门禁再次通过，当前未发现由本轮引入的功能回归或 UI 崩坏
+    - `web_game_playwright_client` 在 `guest-pvp` 路径下首帧仍可能拍到空壳，但第二帧与正式浏览器审计截图均正常；问题只影响该 smoke 的首拍证据，不影响功能与 release gate 结论
+
+- 2026-03-19: PVP 焦点约战最终 fresh 证据收口（r4）
+  - 本轮完成
+    - `js/game.js`
+      - 游戏内指南 `机制` 页补齐了 `焦点约战 / 定向匹配 / 镜像演武兜底` 的现状说明。
+    - `progress.md`
+      - 以本轮最新 fresh 目录重新记录 PVP 与指南文案同步证据，避免继续引用旧的 r1/r2/r3 审计产物。
+  - 本轮验证
+    - `bash tests/run_node_checks.sh` ✅
+    - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4175 output/browser-pvp-audit-v7-focus-duel-r4` ✅
+    - `node tests/browser_pvp_mobile_audit.mjs http://127.0.0.1:4175 output/browser-pvp-mobile-v7-focus-duel-r4` ✅
+    - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url http://127.0.0.1:4175 --click-selector "#pvp-btn" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-pvp-focus-duel-r4` ✅
+    - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4175 output/release-browser-audits-v7-focus-duel-r4` ✅
+    - 运行时指南补充截图：
+      - `node --input-type=module <Playwright inline script>` → `output/guide-updates-v7-focus-duel-r3/guide-updates-pvp-line.png` ✅
+      - 已确认 `PVP 风险画像 + 焦点约战闭环` 条目在运行时指南 `更新` 页真实可见
+  - 人工复核
+    - `output/browser-pvp-audit-v7-focus-duel-r4/pvp-audit.png`
+      - 已确认桌面端焦点约战单、收益行、模式说明与 CTA 锁定提示同屏可读
+    - `output/browser-pvp-audit-v7-focus-duel-r4/pvp-result.png`
+      - 已确认赛后复盘卡仍保持可读，未被本轮文案同步带坏
+    - `output/browser-pvp-mobile-v7-focus-duel-r4/pvp-mobile.png`
+      - 已确认移动端焦点约战单纵向排布稳定，无横向溢出
+    - `output/web-game-pvp-focus-duel-r4/shot-0.png`
+      - 已确认真实 PVP 入口下的焦点对手卡、约战单与锁定约战按钮一致
+    - `output/release-browser-audits-v7-focus-duel-r4/guide/guide-desktop.png`
+      - 已确认游戏介绍弹窗桌面端可正常打开、切换标签并保持完整布局
+    - `output/guide-updates-v7-focus-duel-r3/guide-updates-pvp-line.png`
+      - 已确认 `更新` 页中的 PVP 条目已经显示“焦点约战闭环 / 定向匹配 / 镜像演武兜底”最新口径
+  - 当前结论
+    - 当前以 `output/release-browser-audits-v7-focus-duel-r4` 作为本轮最终 release gate 证据目录，浏览器门禁已完整全绿
+    - PVP 焦点约战的玩法、文案、运行时指南和截图证据已经回到同一口径
+
+- 2026-03-20: PVP 对手档案赛季深化（赛季题面 / 分段标签 / 跨场对照）
+  - 本轮完成
+    - `js/services/pvp-service.js`
+      - 在现有 `getFocusOpponentDossier()` 链路内补齐更细的赛季读题语义，不额外拆新面板或新状态源。
+      - 新增并接入：
+        - `getPvpSeasonSegmentMeta(...)`
+        - `getPvpRankingComparisonMeta(...)`
+      - 对手档案现在会额外给出：
+        - `赛季题面`
+        - `分段标签`
+        - `跨场对照`
+      - 继续沿用当前榜单上下文做“同榜均值 / 同段邻位”对照，避免凭空伪造历史交手数据。
+    - `js/scenes/pvp-scene.js`
+      - `ranking brief` 的对手档案区扩展为 6 张线索卡：
+        - `档案来源`
+        - `赛季题面`
+        - `分段标签`
+        - `守阵形态`
+        - `约战路径`
+        - `跨场对照`
+      - 同步空态/提示文案，让加载与说明文字和新档案字段保持一致。
+    - `js/game.js`
+      - `render_game_to_text()` 的 PVP 焦点快照继续只做状态导出，不承接业务判断。
+      - 对手档案导出补齐：
+        - `seasonName`
+        - `seasonDetail`
+        - `segmentLabel`
+        - `segmentLine`
+        - `comparisonValue`
+        - `comparisonLine`
+      - 档案 `tags` 与 `clueCards` 的导出裁剪上限同步扩到 6，避免文本态与界面显示脱节。
+    - `index.html`
+      - `#pvp-ranking-brief` 的占位/脚注文案同步到“赛季题面 / 跨场对照”口径。
+    - `game-intro.html`
+      - 当前版本说明已把 `赛季题面细分 / 分段标签 / 跨场对照线索` 调整为已上线能力。
+      - 下一步方向改为 `历史交手留痕与多场趋势对照`，避免把本轮已落地内容继续写成 future work。
+    - `tests`
+      - `tests/sanity_pvp_service_checks.js`
+        - 新增赛季档案字段、分段标签、跨场对照的 Node 合同断言。
+      - `tests/browser_pvp_audit.mjs`
+        - 新增桌面端对手档案 6 张线索卡、文本态暴露字段与结果闭环断言。
+      - `tests/browser_pvp_mobile_audit.mjs`
+        - 新增移动端赛季档案与长卡布局稳定性断言，确认无横向溢出。
+  - 本轮验证
+    - 语法检查
+      - `node --check js/services/pvp-service.js` ✅
+      - `node --check js/scenes/pvp-scene.js` ✅
+      - `node --check js/game.js` ✅
+      - `node --check tests/sanity_pvp_service_checks.js` ✅
+      - `node --check tests/browser_pvp_audit.mjs` ✅
+      - `node --check tests/browser_pvp_mobile_audit.mjs` ✅
+    - Node
+      - `node tests/sanity_pvp_service_checks.js` ✅
+    - Browser audits
+      - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4175 output/browser-pvp-audit-v7-season-dossier-r1` ✅
+      - `node tests/browser_pvp_mobile_audit.mjs http://127.0.0.1:4175 output/browser-pvp-mobile-v7-season-dossier-r1` ✅
+    - Develop-web-game skill 冒烟
+      - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4175/?autotest=guest-pvp" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-pvp-season-dossier-r1` ✅
+    - Release gate
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4175 output/release-browser-audits-v7-season-dossier-r1` ✅
+      - 最终输出：`[release-checks] All browser release audits passed.` ✅
+  - 人工复核
+    - `output/browser-pvp-audit-v7-season-dossier-r1/pvp-audit.png`
+      - 已确认桌面端对手档案 6 张线索卡完整可读，`赛季题面 / 分段标签 / 跨场对照` 均已进入首屏读题区。
+    - `output/browser-pvp-mobile-v7-season-dossier-r1/pvp-mobile.png`
+      - 已确认移动端长卡纵向排布稳定，无横向溢出，`dossier` 卡组仍在视口宽度内。
+    - `output/web-game-pvp-season-dossier-r1/shot-1.png`
+      - 已确认 `guest-pvp` 真实运行态下，丰富后的对手档案、焦点约战单与 CTA 仍保持同屏一致。
+    - `output/release-browser-audits-v7-season-dossier-r1`
+      - 已作为本轮最终 fresh release gate 目录，浏览器全量门禁通过。
+  - 当前结论
+    - PVP 对手档案已从“基础画像 + 焦点约战单”深化到“赛季题面 + 分段标签 + 跨场对照”的可执行读题层。
+    - 本轮继续坚持单一状态源：
+      - `PVPScene.setRankingFocus()` 负责焦点态
+      - `PVPService.getFocusOpponentDossier()` 负责档案生成
+      - `render_game_to_text()` 只负责导出
+    - 当前未发现由本轮引入的功能回归、UI 溢出或浏览器门禁失败。
+
+- 2026-03-20: PVP 对手档案继续深化（历史交手留痕 / 多场趋势对照）
+  - 本轮完成
+    - `js/services/pvp-service.js`
+      - 在现有 `getFocusOpponentDossier()` 链路内补齐真实交手留痕，不新开面板、不新开状态源。
+      - 经济态新增 `matchHistory`，并统一走 `normalizeMatchHistoryEntry/getRecentMatchHistory/appendMatchHistory`。
+      - `reportMatchResult()` 只在 accepted settlement 成功后写入历史，拒绝重复票据、过期票据与对手不匹配票据时不会污染样本。
+      - `getPvpDossierHistoryMeta(...)` 负责聚合：
+        - `历史交手`
+        - `多场趋势`
+        - `historyTag/historyCount`
+        - `trendTag/trendSampleCount`
+      - 继续保持口径：
+        - `历史交手` 只认真实同目标样本
+        - `多场趋势` 可在无直接样本时显式退回同赛季/同段/同主轴样本，但必须写明“同卷样本”
+    - `js/scenes/pvp-scene.js`
+      - `ranking brief` 内的对手档案继续扩展为 8 张卡：
+        - 原 6 张线索卡
+        - `历史交手`
+        - `多场趋势`
+      - 历史/趋势卡增加 `data-dossier-card=\"history|trend\"`，方便浏览器审计稳定取点。
+      - 加载态与空态文案同步改为“赛季题面 + 跨场对照 + 历史留痕 + 多场趋势”口径。
+    - `js/game.js`
+      - `render_game_to_text().pvp.rankingFocus.dossier` 导出补齐：
+        - `historyValue/historyLine/historyTag/historyCount`
+        - `trendValue/trendLine/trendTag/trendSampleCount`
+      - 继续保持 `render_game_to_text()` 只做状态导出，不承接业务判断。
+    - `css/pvp.css`
+      - 对手档案卡组新增历史/趋势强调卡样式。
+      - 移动端下继续保持纵向单列，不出现横向溢出。
+    - `index.html`
+      - `#pvp-ranking-brief` 占位脚注文案同步到新口径。
+    - `game-intro.html`
+      - 当前版本重点已把 `历史交手留痕 / 多场趋势对照` 调整为已上线能力。
+      - 下一迭代方向改为更长周期的赛季账本筛选与样本筛面，避免继续把已上线能力写成 future work。
+    - `tests`
+      - `tests/sanity_pvp_service_checks.js`
+        - 覆盖无直接样本空态、同卷回退、accepted settlement 写历史、重复/过期/对手不匹配票据不写历史、多场趋势聚合、跨赛季隔离。
+      - `tests/browser_pvp_audit.mjs`
+        - 覆盖桌面端历史/趋势卡可见、结算回到榜单后 dossier 读到新样本、切换目标不串样本。
+      - `tests/browser_pvp_mobile_audit.mjs`
+        - 覆盖移动端 8 张 dossier 卡、历史/趋势文本存在、真实样本回写后仍不溢出。
+  - 本轮验证
+    - 语法检查
+      - `node --check js/services/pvp-service.js` ✅
+      - `node --check js/scenes/pvp-scene.js` ✅
+      - `node --check js/game.js` ✅
+      - `node --check tests/sanity_pvp_service_checks.js` ✅
+      - `node --check tests/browser_pvp_audit.mjs` ✅
+      - `node --check tests/browser_pvp_mobile_audit.mjs` ✅
+    - Node
+      - `node tests/sanity_pvp_service_checks.js` ✅
+    - Browser audits
+      - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4175 output/pvp-history-trend-desktop-r2` ✅
+      - `node tests/browser_pvp_mobile_audit.mjs http://127.0.0.1:4175 output/pvp-history-trend-mobile` ✅
+    - Develop-web-game skill 冒烟
+      - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4175" --actions-file tests/actions/wait_steps.json --click-selector "#pvp-btn" --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-pvp-history-trend` ✅
+  - 人工复核
+    - `output/pvp-history-trend-desktop-r2/pvp-history-brief.png`
+      - 已确认桌面端对手档案卡组包含 `历史交手 / 多场趋势` 两张新增卡，且与原 6 张赛季线索卡在同一 dossier 区域内，不引入新面板。
+    - `output/pvp-history-trend-mobile/pvp-mobile-history.png`
+      - 已确认移动端历史/趋势真实回写后仍保持纵向展开稳定，无横向溢出。
+    - `output/web-game-pvp-history-trend/shot-1.png`
+      - 已确认 PVP 榜单真实运行态下，rich dossier、焦点约战单与 CTA 仍保持同屏结构。
+    - `output/web-game-pvp-history-trend/state-1.json`
+      - 已确认 `render_game_to_text().pvp.rankingFocus.dossier` 真实暴露 `history* / trend*` 字段。
+  - 当前结论
+    - PVP 对手档案已从“赛季题面 + 分段标签 + 跨场对照”进一步深化到“真实交手留痕 + 多场趋势对照”。
+    - 本轮继续坚持单一状态源：
+      - `PVPScene.setRankingFocus()` 负责焦点态
+      - `PVPService.getFocusOpponentDossier()` 负责档案生成
+      - `render_game_to_text()` 只负责导出
+    - 当前未发现由本轮引入的功能回归、UI 溢出或历史样本串目标问题。
+
+- 2026-03-20: PVP 历史/趋势链路复测收口（r2）
+  - 本轮修正
+    - `tests/sanity_pvp_service_checks.js`
+      - 把“多场聚合”改为受控 `historyState` 契约，不再依赖练习镜像的身份细节。
+      - 补齐空态脚注、同卷回退、历史元数据、奖励/道韵落盘、重复/过期/错目标票据不写历史断言。
+    - `tests/browser_pvp_audit.mjs`
+      - 修正“切换目标不串样本”的桌面断言：
+        - 允许 `historyCount === 0` 时显式回退为 `同卷近N场`
+        - 只拒绝把上一名对手的 `本季 N 场` 直接样本标签串到新目标
+    - `tests/browser_pvp_mobile_audit.mjs`
+      - 继续保留“真实结算后历史/趋势卡仍包裹在视口内”的移动端验收。
+  - 本轮验证
+    - `node tests/sanity_pvp_service_checks.js` ✅
+    - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4175 output/pvp-history-trend-desktop-r2` ✅
+    - `node tests/browser_pvp_mobile_audit.mjs http://127.0.0.1:4175 output/pvp-history-trend-mobile-r1` ✅
+    - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4175/?autotest=guest-pvp" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-pvp-history-trend-r2` ✅
+  - 人工复核
+    - `output/pvp-history-trend-desktop-r2/pvp-history-brief.png`
+      - 已确认桌面端 dossier 内新增 `历史交手 / 多场趋势` 两张强调卡，且结算回流后仍与 DRI、风险轴、焦点约战单处于同一信息区块。
+    - `output/pvp-history-trend-mobile-r1/pvp-mobile.png`
+      - 已确认移动端初始 8 张 dossier 卡与焦点约战单纵向排布稳定，无横向溢出。
+    - `output/web-game-pvp-history-trend-r2/shot-1.png`
+      - 已确认 `guest-pvp` 真实运行态下，榜单首屏、rich dossier、CTA 与左侧页签视觉结构正常。
+    - `output/web-game-pvp-history-trend-r2/state-1.json`
+      - 已确认 `render_game_to_text().pvp.rankingFocus.dossier` 真实暴露 `history* / trend*` 字段，且空态文案与 UI 一致。
+
+- 2026-03-20: PVP 赛季账本筛面收口（直样语义 + 文案同步 + fresh gate r2）
+  - 本轮完成
+    - `js/services/pvp-service.js`
+      - `getPvpDossierHistoryMeta()` 收紧为“历史交手只认直样”：
+        - 当 `historyCount === 0` 时，`历史交手` 固定保持 `暂无直接交手 / 待补样本`
+        - 同卷参照不再写进 `历史交手` 卡，统一留给 `多场趋势` 与 `赛季账本`
+      - 空态说明改为显式告知“同卷参照会收进多场趋势与赛季账本，不冒充直样”，避免把同卷样本误读成真实交手记录。
+    - `tests/sanity_pvp_service_checks.js`
+      - 更新无直样但有同卷样本时的 Node 合同：
+        - `historyValue` 必须保持 `暂无直接交手`
+        - `historyTag` 必须保持 `待补样本`
+        - `trend/ledger` 继续承接同卷参照样本
+    - `tests/browser_pvp_audit.mjs`
+      - 修正“切换目标不串样本”的桌面断言：
+        - 现在明确要求回到无直样空态
+        - 不再允许 `历史交手` 卡显示 `同卷近N场`
+    - `game-intro.html` / `index.html`
+      - 把当前能力与版本说明同步到 `赛季账本筛面 / 样本筛面摘要` 口径。
+      - `#pvp-ranking-brief` 脚注补回 `分段标签`，并统一术语，避免入口说明比真实 dossier 能力少一档。
+      - `version-info` 同步为 `PVP复盘 · 焦点约战 · 对手档案 · 赛季账本 · 样本筛面`。
+  - 本轮验证
+    - 语法检查
+      - `node --check js/services/pvp-service.js` ✅
+      - `node --check tests/sanity_pvp_service_checks.js` ✅
+      - `node --check tests/browser_pvp_audit.mjs` ✅
+    - Node
+      - `node tests/sanity_pvp_service_checks.js` ✅
+    - Browser audits
+      - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4175 output/browser-pvp-audit-v7-ledger-r2` ✅
+      - `node tests/browser_pvp_mobile_audit.mjs http://127.0.0.1:4175 output/browser-pvp-mobile-v7-ledger-r2` ✅
+    - Develop-web-game skill 冒烟
+      - `node --experimental-default-type=module "$HOME/.codex/skills/develop-web-game/scripts/web_game_playwright_client.js" --url "http://127.0.0.1:4175/?autotest=guest-pvp" --actions-file tests/actions/automation_wait_steps.json --iterations 2 --pause-ms 250 --screenshot-dir output/web-game-pvp-ledger-r2` ✅
+    - Release gate
+      - `bash tests/run_browser_release_checks.sh http://127.0.0.1:4175 output/release-browser-audits-v7-ledger-r2` ✅
+      - 最终输出：`[release-checks] All browser release audits passed.` ✅
+  - 人工复核
+    - `output/browser-pvp-audit-v7-ledger-r2/pvp-audit.png`
+      - 已确认无直样目标下，`历史交手` 卡回到 `暂无直接交手` 空态，不再把同卷参照写成真实战绩。
+    - `output/browser-pvp-audit-v7-ledger-r2/pvp-history-brief.png`
+      - 已确认结算回流后，`历史交手 / 多场趋势 / 赛季账本` 三张卡的职责边界清晰，账本仍保留 `直样 / 同卷` 拆分。
+    - `output/browser-pvp-mobile-v7-ledger-r2/pvp-mobile.png`
+      - 已确认移动端纵向排布仍稳定，新增语义收口没有引入横向溢出。
+    - `output/web-game-pvp-ledger-r2/shot-1.png`
+      - 已确认 `guest-pvp` 真实运行态下，榜单首屏、rich dossier 与焦点约战单保持可读。
+    - `output/web-game-pvp-ledger-r2/shot-0.png`
+      - 仍是 Playwright 通用客户端首拍的预渲染空壳，不作为最终验收截图；本轮稳定取景继续以 `shot-1.png` 为准。
+  - 当前结论
+    - PVP 现在已经把“真实交手留痕”和“同卷参照样本”彻底拆清，避免玩家把样本回退误读成直样战绩。
+    - 入口版本条、指南文案、PVP 首屏脚注与实际功能已重新对齐。
+    - 本轮 fresh release gate 目录以 `output/release-browser-audits-v7-ledger-r2` 为准。

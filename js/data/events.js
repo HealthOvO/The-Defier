@@ -3516,6 +3516,627 @@ const FATE_PATH_EVENT_POOLS = {
     destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden']
 };
 
+const STRATEGIC_ENGINEERING_EVENT_POOLS = {
+    observatory: ['starObservation', 'artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil', 'astralSupplyDepot', 'floatingMarketRift'],
+    memory_rift: ['floatingMarketRift', 'astralSupplyDepot', 'voidRift', 'voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard', 'artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil']
+};
+
+const STRATEGIC_ENGINEERING_EVENT_BIAS_CHANCE = {
+    observatory: [0, 0.24, 0.34, 0.44],
+    memory_rift: [0, 0.22, 0.32, 0.42]
+};
+
+const STRATEGIC_ENGINEERING_EVENT_FEEDBACK = {
+    observatory: [
+        '',
+        '观测回路刚接入这处异象，天机与命环校准收益开始抬升。',
+        '观测网已经锁定此地灵流，观测、校准与货单筛选都会更稳。',
+        '跨章观测网压住了灵流波动，本次事件会稳定吐出高价值观测结果。'
+    ],
+    memory_rift: [
+        '',
+        '裂隙回响开始渗入此地，构筑改写与裂隙补给窗口正在放大。',
+        '裂隙工程已经与当前路线并轨，改写构筑与裂隙补给收益进一步抬升。',
+        '深层裂隙回响已成网，本次事件会更偏向高压改写与重配收益。'
+    ]
+};
+
+function getTierScaledValue(values = [], tier = 0, fallback = 0) {
+    if (!Array.isArray(values) || values.length === 0) return fallback;
+    const index = Math.max(0, Math.min(values.length - 1, Math.floor(Number(tier) || 0)));
+    const value = Number(values[index]);
+    return Number.isFinite(value) ? value : fallback;
+}
+
+function getTierScaledEntry(values = [], tier = 0, fallback = null) {
+    if (!Array.isArray(values) || values.length === 0) return fallback;
+    const index = Math.max(0, Math.min(values.length - 1, Math.floor(Number(tier) || 0)));
+    return values[index] == null ? fallback : values[index];
+}
+
+function cloneEventTemplate(eventId = '') {
+    return EVENTS[eventId] ? JSON.parse(JSON.stringify(EVENTS[eventId])) : null;
+}
+
+function mergeEventSummary(base = '', extra = '') {
+    const parts = [base, extra]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean);
+    return parts.join(' · ');
+}
+
+function appendEventDescription(event, extra = '') {
+    if (!event || !extra) return;
+    const base = String(event.description || '').trim();
+    event.description = base ? `${base} ${extra}` : String(extra).trim();
+}
+
+function appendChoiceResult(choice, extra = '') {
+    if (!choice || !extra) return;
+    const base = String(choice.result || '').trim();
+    choice.result = base ? `${base}｜${extra}` : String(extra).trim();
+}
+
+function addChoiceEffects(choice, effects = [], options = {}) {
+    if (!choice || !Array.isArray(effects) || effects.length === 0) return;
+    const clonedEffects = effects
+        .filter((effect) => effect && typeof effect === 'object')
+        .map((effect) => JSON.parse(JSON.stringify(effect)));
+    if (!Array.isArray(choice.effects)) {
+        choice.effects = [];
+    }
+    if (options.prepend) {
+        choice.effects = [...clonedEffects, ...choice.effects];
+        return;
+    }
+    choice.effects.push(...clonedEffects);
+}
+
+function getEventChoice(event, index = 0) {
+    return Array.isArray(event?.choices) ? (event.choices[index] || null) : null;
+}
+
+function getStrategicEngineeringEventContext() {
+    let biasProfile = null;
+    try {
+        biasProfile = window?.game?.getStrategicEngineeringEventBiasProfile?.() || null;
+    } catch (e) {
+        biasProfile = null;
+    }
+    if (
+        biasProfile
+        && typeof biasProfile === 'object'
+        && typeof biasProfile.trackId === 'string'
+        && Array.isArray(biasProfile.eventIds)
+        && biasProfile.eventIds.length > 0
+    ) {
+        return {
+            trackId: String(biasProfile.trackId || ''),
+            tier: Math.max(0, Math.min(3, Math.floor(Number(biasProfile.tier) || 0))),
+            tierLabel: String(biasProfile.tierLabel || ''),
+            name: String(biasProfile.name || biasProfile.trackId || ''),
+            icon: String(biasProfile.icon || ''),
+            summary: String(biasProfile.summary || ''),
+            effectSummary: String(biasProfile.signal || ''),
+            rewardSummary: '',
+            eventPool: biasProfile.eventIds.filter((eventId) => !!EVENTS[eventId]),
+            isFocusTrack: true,
+            biasChance: Math.max(0, Math.min(0.75, Number(biasProfile.biasChance) || 0))
+        };
+    }
+
+    let snapshot = null;
+    try {
+        snapshot = window?.game?.getStrategicEngineeringSnapshot?.() || null;
+    } catch (e) {
+        snapshot = null;
+    }
+    if (!snapshot || typeof snapshot !== 'object') return null;
+
+    const focusTrack = snapshot.focusTrack && typeof snapshot.focusTrack === 'object'
+        ? snapshot.focusTrack
+        : null;
+    const activeTracks = Array.isArray(snapshot.activeTracks)
+        ? snapshot.activeTracks.filter((track) => track && typeof track === 'object')
+        : [];
+    const candidates = [];
+    if (focusTrack) candidates.push({ ...focusTrack, isFocusTrack: true });
+    activeTracks.forEach((track) => {
+        if (candidates.some((entry) => entry.trackId === track.trackId)) return;
+        candidates.push({ ...track, isFocusTrack: false });
+    });
+
+    const selectedTrack = candidates.find((track) => {
+        const trackId = String(track?.trackId || '');
+        return !!STRATEGIC_ENGINEERING_EVENT_POOLS[trackId] && Math.max(0, Math.floor(Number(track?.tier) || 0)) > 0;
+    });
+    if (!selectedTrack) return null;
+
+    const trackId = String(selectedTrack.trackId || '');
+    const tier = Math.max(0, Math.min(3, Math.floor(Number(selectedTrack.tier) || 0)));
+    const eventPool = (STRATEGIC_ENGINEERING_EVENT_POOLS[trackId] || []).filter((eventId) => !!EVENTS[eventId]);
+    if (eventPool.length === 0) return null;
+
+    return {
+        trackId,
+        tier,
+        tierLabel: String(selectedTrack.tierLabel || `T${tier}`),
+        name: String(selectedTrack.name || trackId),
+        icon: String(selectedTrack.icon || ''),
+        summary: String(snapshot.summary || ''),
+        effectSummary: String(selectedTrack.effectSummary || ''),
+        rewardSummary: '',
+        eventPool,
+        isFocusTrack: selectedTrack.isFocusTrack !== false,
+        biasChance: Math.max(0, Math.min(0.75, getTierScaledValue(STRATEGIC_ENGINEERING_EVENT_BIAS_CHANCE[trackId], tier, 0)))
+    };
+}
+
+function getStrategicEngineeringBoostSummary(context = null) {
+    if (!context) return '';
+    if (context.effectSummary) return String(context.effectSummary).trim();
+    const feedback = getTierScaledEntry(STRATEGIC_ENGINEERING_EVENT_FEEDBACK[context.trackId], context.tier, '');
+    if (feedback) return feedback;
+    return `${context.icon || ''}${context.name || '工程联动'} ${context.tierLabel || ''}`.trim();
+}
+
+function markStrategicEngineeringEventMeta(event, context = null, options = {}) {
+    if (!event || !context) return;
+    const summary = getStrategicEngineeringBoostSummary(context);
+    const rewardSummary = String(context.rewardSummary || '').trim();
+    event.engineeringEventMeta = {
+        trackId: context.trackId,
+        name: context.name,
+        icon: context.icon,
+        tier: context.tier,
+        tierLabel: context.tierLabel,
+        summary,
+        rewardSummary,
+        effectSummary: context.effectSummary || '',
+        source: String(options.source || 'runtime'),
+        selectedByEngineeringBias: options.source === 'engineering-bias',
+        biasChance: context.biasChance,
+        isFocusTrack: context.isFocusTrack !== false
+    };
+    event.engineeringResonance = {
+        trackId: context.trackId,
+        name: context.name,
+        icon: context.icon,
+        tier: context.tier,
+        tierLabel: context.tierLabel,
+        biasSource: options.source === 'engineering-bias' ? 'focus' : 'runtime',
+        signal: summary,
+        rewardSummary
+    };
+    event.summary = mergeEventSummary(event.summary, `工程联动：${summary}`);
+    appendEventDescription(event, `工程联动：${context.icon || ''}${context.name || '工程联动'} ${context.tierLabel || ''}正在改写此地回报。`.trim());
+}
+
+function applyObservatoryEngineeringAugment(event, context = null) {
+    const tier = Math.max(0, Math.floor(Number(context?.tier) || 0));
+    const insightBonus = getTierScaledValue([0, 1, 1, 2], tier, 0);
+    const shopDiscount = getTierScaledValue([1, 0.96, 0.92, 0.88], tier, 1);
+    const safeRingBonus = getTierScaledValue([0, 10, 16, 24], tier, 0);
+    const riskyRingBonus = getTierScaledValue([0, 6, 10, 14], tier, 0);
+    const goldBonus = getTierScaledValue([0, 8, 12, 18], tier, 0);
+
+    switch (event?.id) {
+        case 'starObservation': {
+            const deduceStars = getEventChoice(event, 0);
+            const stareAbyss = getEventChoice(event, 1);
+            addChoiceEffects(deduceStars, [
+                ...(safeRingBonus > 0 ? [{ type: 'ringExp', value: Math.max(8, Math.floor(safeRingBonus * 0.75)) }] : []),
+                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
+            ]);
+            appendChoiceResult(
+                deduceStars,
+                `观测网补录星轨：命环经验 +${Math.max(8, Math.floor(safeRingBonus * 0.75))}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
+            );
+            addChoiceEffects(stareAbyss, [
+                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
+                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
+            ]);
+            appendChoiceResult(
+                stareAbyss,
+                `深空残样被观测网回收：命环经验 +${riskyRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
+            );
+            break;
+        }
+        case 'artifactConfluxBazaar': {
+            const enterMarket = getEventChoice(event, 0);
+            const stipend = getEventChoice(event, 1);
+            const shopEffect = Array.isArray(enterMarket?.effects)
+                ? enterMarket.effects.find((effect) => effect && effect.type === 'openTemporaryShop')
+                : null;
+            if (shopEffect) {
+                shopEffect.offerCount = Math.max(3, Math.min(5, Math.floor(Number(shopEffect.offerCount) || 4) + 1));
+                shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier))
+                    ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount)
+                    : shopDiscount;
+            }
+            appendChoiceResult(
+                enterMarket,
+                `观测网校准货单：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`
+            );
+            const bonusEffects = [];
+            if (safeRingBonus > 0) bonusEffects.push({ type: 'ringExp', value: Math.max(6, Math.floor(safeRingBonus * 0.75)) });
+            if (insightBonus > 0) bonusEffects.push({ type: 'heavenlyInsight', value: insightBonus });
+            addChoiceEffects(stipend, bonusEffects);
+            appendChoiceResult(
+                stipend,
+                `观测回路追加命环校准 ${Math.max(6, Math.floor(safeRingBonus * 0.75))}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
+            );
+            break;
+        }
+        case 'convergenceRelay': {
+            const calibrate = getEventChoice(event, 0);
+            const overload = getEventChoice(event, 1);
+            addChoiceEffects(calibrate, [
+                ...(safeRingBonus > 0 ? [{ type: 'ringExp', value: safeRingBonus }] : []),
+                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
+            ]);
+            appendChoiceResult(
+                calibrate,
+                `观测回路同步校准：命环经验 +${safeRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
+            );
+            addChoiceEffects(overload, [
+                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
+                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
+            ]);
+            appendChoiceResult(
+                overload,
+                `高压观测带回参数：命环经验 +${riskyRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
+            );
+            break;
+        }
+        case 'harmonicAnvil': {
+            const stableForge = getEventChoice(event, 0);
+            const overloadForge = getEventChoice(event, 1);
+            addChoiceEffects(stableForge, [
+                ...(safeRingBonus > 0 ? [{ type: 'ringExp', value: Math.max(8, Math.floor(safeRingBonus * 0.85)) }] : []),
+                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
+            ], { prepend: true });
+            appendChoiceResult(
+                stableForge,
+                `观星锻环回传观测值：命环经验 +${Math.max(8, Math.floor(safeRingBonus * 0.85))}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
+            );
+            addChoiceEffects(overloadForge, [
+                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
+                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
+            ]);
+            appendChoiceResult(
+                overloadForge,
+                `高压熔接留下观测残样：命环经验 +${riskyRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
+            );
+            break;
+        }
+        case 'astralSupplyDepot': {
+            const enterDepot = getEventChoice(event, 0);
+            const stipend = getEventChoice(event, 1);
+            const shopEffect = Array.isArray(enterDepot?.effects)
+                ? enterDepot.effects.find((effect) => effect && effect.type === 'openTemporaryShop')
+                : null;
+            if (shopEffect) {
+                shopEffect.offerCount = Math.max(4, Math.min(6, Math.floor(Number(shopEffect.offerCount) || 4) + 1));
+                shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier))
+                    ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount)
+                    : shopDiscount;
+            }
+            appendChoiceResult(
+                enterDepot,
+                `观测网先行筛单：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`
+            );
+            addChoiceEffects(stipend, [
+                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : []),
+                ...(safeRingBonus > 0 ? [{ type: 'ringExp', value: Math.max(8, Math.floor(safeRingBonus * 0.72)) }] : []),
+                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
+            ]);
+            appendChoiceResult(
+                stipend,
+                `观测货单追加补贴：灵石 +${goldBonus}，命环经验 +${Math.max(8, Math.floor(safeRingBonus * 0.72))}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
+            );
+            break;
+        }
+        case 'floatingMarketRift': {
+            const enterMarket = getEventChoice(event, 0);
+            const passBy = getEventChoice(event, 1);
+            const shopEffect = Array.isArray(enterMarket?.effects)
+                ? enterMarket.effects.find((effect) => effect && effect.type === 'openTemporaryShop')
+                : null;
+            if (shopEffect) {
+                shopEffect.offerCount = Math.max(3, Math.min(5, Math.floor(Number(shopEffect.offerCount) || 3) + 1));
+                shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier))
+                    ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount)
+                    : shopDiscount;
+            }
+            appendChoiceResult(
+                enterMarket,
+                `观测网提前标记货单：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`
+            );
+            addChoiceEffects(passBy, [
+                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : []),
+                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
+                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
+            ]);
+            appendChoiceResult(
+                passBy,
+                `观测残样兑换：灵石 +${goldBonus}，命环经验 +${riskyRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
+            );
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+function applyMemoryRiftEngineeringAugment(event, context = null) {
+    const tier = Math.max(0, Math.floor(Number(context?.tier) || 0));
+    const ringBonus = getTierScaledValue([0, 12, 18, 26], tier, 0);
+    const riskyRingBonus = getTierScaledValue([0, 8, 12, 18], tier, 0);
+    const goldBonus = getTierScaledValue([0, 10, 16, 24], tier, 0);
+    const shopDiscount = getTierScaledValue([1, 0.95, 0.9, 0.86], tier, 1);
+    const expBuffCharges = getTierScaledValue([0, 1, 1, 2], tier, 0);
+
+    switch (event?.id) {
+        case 'floatingMarketRift': {
+            const enterMarket = getEventChoice(event, 0);
+            const passBy = getEventChoice(event, 1);
+            const shopEffect = Array.isArray(enterMarket?.effects)
+                ? enterMarket.effects.find((effect) => effect && effect.type === 'openTemporaryShop')
+                : null;
+            if (shopEffect) {
+                shopEffect.offerCount = Math.max(3, Math.min(5, Math.floor(Number(shopEffect.offerCount) || 3) + 1));
+                shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier))
+                    ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount)
+                    : shopDiscount;
+            }
+            appendChoiceResult(
+                enterMarket,
+                `裂隙回响扩张货位：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`
+            );
+            addChoiceEffects(passBy, [
+                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : []),
+                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : [])
+            ]);
+            appendChoiceResult(
+                passBy,
+                `裂隙残章回收：额外灵石 +${goldBonus}，命环经验 +${riskyRingBonus}`
+            );
+            break;
+        }
+        case 'astralSupplyDepot': {
+            const enterDepot = getEventChoice(event, 0);
+            const stipend = getEventChoice(event, 1);
+            const shopEffect = Array.isArray(enterDepot?.effects)
+                ? enterDepot.effects.find((effect) => effect && effect.type === 'openTemporaryShop')
+                : null;
+            if (shopEffect) {
+                shopEffect.offerCount = Math.max(4, Math.min(6, Math.floor(Number(shopEffect.offerCount) || 4) + 1));
+                shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier))
+                    ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount)
+                    : shopDiscount;
+            }
+            appendChoiceResult(
+                enterDepot,
+                `裂隙回响先做重配：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`
+            );
+            addChoiceEffects(stipend, [
+                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : []),
+                ...(ringBonus > 0 ? [{ type: 'ringExp', value: ringBonus }] : [])
+            ]);
+            appendChoiceResult(
+                stipend,
+                `裂隙补贴回收：灵石 +${goldBonus}，命环经验 +${ringBonus}`
+            );
+            break;
+        }
+        case 'voidRift': {
+            const delve = getEventChoice(event, 0);
+            const seal = getEventChoice(event, 1);
+            addChoiceEffects(delve, [
+                ...(goldBonus > 0 ? [{ type: 'gold', value: Math.max(8, Math.floor(goldBonus * 0.75)) }] : []),
+                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : [])
+            ]);
+            appendChoiceResult(
+                delve,
+                `裂隙样本被强制回收：灵石 +${Math.max(8, Math.floor(goldBonus * 0.75))}，命环经验 +${riskyRingBonus}`
+            );
+            addChoiceEffects(seal, [
+                ...(ringBonus > 0 ? [{ type: 'ringExp', value: ringBonus }] : []),
+                ...(expBuffCharges > 0 ? [{ type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: expBuffCharges }] : [])
+            ]);
+            appendChoiceResult(
+                seal,
+                `裂隙封印额外回灌：命环经验 +${ringBonus}${expBuffCharges > 0 ? `，命环经验增益 ${expBuffCharges} 场` : ''}`
+            );
+            break;
+        }
+        case 'voidBookkeeper': {
+            const signLedger = getEventChoice(event, 0);
+            const borrowTempo = getEventChoice(event, 1);
+            addChoiceEffects(signLedger, [
+                ...(ringBonus > 0 ? [{ type: 'ringExp', value: Math.max(8, Math.floor(ringBonus * 0.72)) }] : []),
+                ...(expBuffCharges > 0 ? [{ type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: 1 }] : [])
+            ]);
+            appendChoiceResult(
+                signLedger,
+                `裂隙账目留下残章：命环经验 +${Math.max(8, Math.floor(ringBonus * 0.72))}${expBuffCharges > 0 ? '，额外获得 1 层命环经验增益' : ''}`
+            );
+            addChoiceEffects(borrowTempo, [
+                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : []),
+                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : [])
+            ]);
+            appendChoiceResult(
+                borrowTempo,
+                `裂隙账页兑现溢价：灵石 +${goldBonus}，命环经验 +${riskyRingBonus}`
+            );
+            break;
+        }
+        case 'ashLedgerTrial': {
+            const cashOut = getEventChoice(event, 0);
+            const steadyNote = getEventChoice(event, 1);
+            addChoiceEffects(cashOut, [
+                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
+                ...(goldBonus > 0 ? [{ type: 'gold', value: Math.max(8, Math.floor(goldBonus * 0.75)) }] : [])
+            ]);
+            appendChoiceResult(
+                cashOut,
+                `裂隙页边注追加：命环经验 +${riskyRingBonus}，灵石 +${Math.max(8, Math.floor(goldBonus * 0.75))}`
+            );
+            addChoiceEffects(steadyNote, [
+                ...(ringBonus > 0 ? [{ type: 'ringExp', value: Math.max(12, Math.floor(ringBonus * 0.75)) }] : []),
+                ...(expBuffCharges > 0 ? [{ type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: expBuffCharges }] : [])
+            ]);
+            appendChoiceResult(
+                steadyNote,
+                `裂隙校对补偿：额外命环经验 +${Math.max(12, Math.floor(ringBonus * 0.75))}${expBuffCharges > 0 ? `，命环经验增益 ${expBuffCharges} 场` : ''}`
+            );
+            break;
+        }
+        case 'convergenceRitual': {
+            const converge = getEventChoice(event, 0);
+            const dismantle = getEventChoice(event, 1);
+            addChoiceEffects(converge, [
+                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
+                ...(goldBonus > 0 ? [{ type: 'gold', value: Math.max(6, Math.floor(goldBonus * 0.6)) }] : [])
+            ]);
+            appendChoiceResult(
+                converge,
+                `裂隙压缩残响：命环经验 +${riskyRingBonus}，灵石 +${Math.max(6, Math.floor(goldBonus * 0.6))}`
+            );
+            addChoiceEffects(dismantle, [
+                ...(ringBonus > 0 ? [{ type: 'ringExp', value: Math.max(12, Math.floor(ringBonus * 0.7)) }] : []),
+                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : [])
+            ]);
+            appendChoiceResult(
+                dismantle,
+                `裂隙拆解回收：额外命环经验 +${Math.max(12, Math.floor(ringBonus * 0.7))}，灵石 +${goldBonus}`
+            );
+            break;
+        }
+        case 'frontierContractBoard': {
+            const signContract = getEventChoice(event, 0);
+            const observe = getEventChoice(event, 1);
+            addChoiceEffects(signContract, [
+                ...(goldBonus > 0 ? [{ type: 'gold', value: Math.max(8, Math.floor(goldBonus * 0.75)) }] : []),
+                ...(expBuffCharges > 0 ? [{ type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: 1 }] : [])
+            ]);
+            appendChoiceResult(
+                signContract,
+                `裂隙情报返利：额外灵石 +${Math.max(8, Math.floor(goldBonus * 0.75))}${expBuffCharges > 0 ? '，并获得 1 层命环经验增益' : ''}`
+            );
+            addChoiceEffects(observe, [
+                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : []),
+                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : [])
+            ]);
+            appendChoiceResult(
+                observe,
+                `裂隙旁观记录：额外灵石 +${goldBonus}，命环经验 +${riskyRingBonus}`
+            );
+            break;
+        }
+        case 'artifactConfluxBazaar': {
+            const enterMarket = getEventChoice(event, 0);
+            const stipend = getEventChoice(event, 1);
+            const shopEffect = Array.isArray(enterMarket?.effects)
+                ? enterMarket.effects.find((effect) => effect && effect.type === 'openTemporaryShop')
+                : null;
+            if (shopEffect) {
+                shopEffect.offerCount = Math.max(3, Math.min(5, Math.floor(Number(shopEffect.offerCount) || 4) + 1));
+                shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier))
+                    ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount)
+                    : shopDiscount;
+            }
+            appendChoiceResult(
+                enterMarket,
+                `裂隙回响重排货单：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`
+            );
+            addChoiceEffects(stipend, [
+                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : []),
+                ...(ringBonus > 0 ? [{ type: 'ringExp', value: Math.max(8, Math.floor(ringBonus * 0.78)) }] : [])
+            ]);
+            appendChoiceResult(
+                stipend,
+                `裂隙回收补贴：额外灵石 +${goldBonus}，命环经验 +${Math.max(8, Math.floor(ringBonus * 0.78))}`
+            );
+            break;
+        }
+        case 'convergenceRelay': {
+            const calibrate = getEventChoice(event, 0);
+            const overload = getEventChoice(event, 1);
+            addChoiceEffects(calibrate, [
+                ...(ringBonus > 0 ? [{ type: 'ringExp', value: ringBonus }] : []),
+                ...(expBuffCharges > 0 ? [{ type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: expBuffCharges }] : [])
+            ]);
+            appendChoiceResult(
+                calibrate,
+                `裂隙回响并轨：命环经验 +${ringBonus}${expBuffCharges > 0 ? `，命环经验增益 ${expBuffCharges} 场` : ''}`
+            );
+            addChoiceEffects(overload, [
+                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
+                ...(goldBonus > 0 ? [{ type: 'gold', value: Math.max(8, Math.floor(goldBonus * 0.75)) }] : [])
+            ]);
+            appendChoiceResult(
+                overload,
+                `高压裂隙回灌：命环经验 +${riskyRingBonus}，灵石 +${Math.max(8, Math.floor(goldBonus * 0.75))}`
+            );
+            break;
+        }
+        case 'harmonicAnvil': {
+            const stableForge = getEventChoice(event, 0);
+            const overloadForge = getEventChoice(event, 1);
+            addChoiceEffects(stableForge, [
+                ...(ringBonus > 0 ? [{ type: 'ringExp', value: Math.max(10, Math.floor(ringBonus * 0.85)) }] : []),
+                ...(expBuffCharges > 0 ? [{ type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: expBuffCharges }] : [])
+            ], { prepend: true });
+            appendChoiceResult(
+                stableForge,
+                `裂隙锻环写回：命环经验 +${Math.max(10, Math.floor(ringBonus * 0.85))}${expBuffCharges > 0 ? `，命环经验增益 ${expBuffCharges} 场` : ''}`
+            );
+            addChoiceEffects(overloadForge, [
+                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
+                ...(expBuffCharges > 0 ? [{ type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: 1 }] : [])
+            ]);
+            appendChoiceResult(
+                overloadForge,
+                `裂隙熔接回响：命环经验 +${riskyRingBonus}${expBuffCharges > 0 ? '，额外获得 1 层命环经验增益' : ''}`
+            );
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+function applyStrategicEngineeringEventAugment(event, context = null, options = {}) {
+    if (!event || !context) return event;
+    if (event.engineeringEventMeta && event.engineeringEventMeta.trackId === context.trackId) {
+        return event;
+    }
+    markStrategicEngineeringEventMeta(event, context, options);
+    if (context.trackId === 'observatory') {
+        applyObservatoryEngineeringAugment(event, context);
+    } else if (context.trackId === 'memory_rift') {
+        applyMemoryRiftEngineeringAugment(event, context);
+    }
+    return event;
+}
+
+function finalizeRuntimeEvent(event, options = {}) {
+    if (!event || typeof event !== 'object') return null;
+    const engineeringContext = options.engineeringContext === undefined
+        ? getStrategicEngineeringEventContext()
+        : options.engineeringContext;
+    if (
+        engineeringContext
+        && Array.isArray(engineeringContext.eventPool)
+        && engineeringContext.eventPool.includes(event.id)
+    ) {
+        return applyStrategicEngineeringEventAugment(event, engineeringContext, options);
+    }
+    return event;
+}
+
 function canUseDebugEventHooks() {
     if (typeof window === 'undefined') return false;
     if (window.__ALLOW_DEBUG_EVENT_HOOKS__ === true) return true;
@@ -3527,14 +4148,24 @@ function canUseDebugEventHooks() {
 
 // 获取随机事件
 function getRandomEvent() {
+    const engineeringContext = getStrategicEngineeringEventContext();
+
     // Test hook: allow deterministic event replay in browser audits
     if (canUseDebugEventHooks()) {
         if (Array.isArray(window.__debugEventQueue) && window.__debugEventQueue.length > 0) {
             const forcedId = window.__debugEventQueue.shift();
-            if (forcedId && EVENTS[forcedId]) return { ...EVENTS[forcedId] };
+            if (forcedId && EVENTS[forcedId]) {
+                return finalizeRuntimeEvent(cloneEventTemplate(forcedId), {
+                    engineeringContext,
+                    source: 'debug-forced'
+                });
+            }
         }
         if (window.__debugEventId && EVENTS[window.__debugEventId]) {
-            return { ...EVENTS[window.__debugEventId] };
+            return finalizeRuntimeEvent(cloneEventTemplate(window.__debugEventId), {
+                engineeringContext,
+                source: 'debug-single'
+            });
         }
     }
 
@@ -3567,7 +4198,10 @@ function getRandomEvent() {
                 const uniquePool = Array.from(new Set(biasPool));
                 const forcedId = uniquePool[Math.floor(Math.random() * uniquePool.length)];
                 if (forcedId && EVENTS[forcedId]) {
-                    return JSON.parse(JSON.stringify(EVENTS[forcedId]));
+                    return finalizeRuntimeEvent(cloneEventTemplate(forcedId), {
+                        engineeringContext,
+                        source: 'endless-mutator'
+                    });
                 }
             }
         }
@@ -3579,7 +4213,10 @@ function getRandomEvent() {
             if (Array.isArray(endlessPool) && endlessPool.length > 0) {
                 const endlessEventId = endlessPool[Math.floor(Math.random() * endlessPool.length)];
                 if (EVENTS[endlessEventId]) {
-                    return JSON.parse(JSON.stringify(EVENTS[endlessEventId]));
+                    return finalizeRuntimeEvent(cloneEventTemplate(endlessEventId), {
+                        engineeringContext,
+                        source: 'endless-pool'
+                    });
                 }
             }
         }
@@ -3589,7 +4226,10 @@ function getRandomEvent() {
     if (chapterComposerContext && Math.random() < chapterComposerContext.composeChance) {
         const composedEvent = getComposedChapterEvent(chapterComposerContext);
         if (composedEvent) {
-            return composedEvent;
+            return finalizeRuntimeEvent(composedEvent, {
+                engineeringContext,
+                source: 'chapter-composer'
+            });
         }
     }
 
@@ -3621,7 +4261,10 @@ function getRandomEvent() {
     );
     if (pathPool.length > 0 && Math.random() < pathBiasChance) {
         const pathEventId = pathPool[Math.floor(Math.random() * pathPool.length)];
-        return JSON.parse(JSON.stringify(EVENTS[pathEventId]));
+        return finalizeRuntimeEvent(cloneEventTemplate(pathEventId), {
+            engineeringContext,
+            source: 'fate-path-bias'
+        });
     }
 
     let activeRunPathMeta = null;
@@ -3649,7 +4292,10 @@ function getRandomEvent() {
     );
     if (runPathMutationPool.length > 0 && Math.random() < runPathMutationBiasChance) {
         const runPathMutationEventId = runPathMutationPool[Math.floor(Math.random() * runPathMutationPool.length)];
-        return JSON.parse(JSON.stringify(EVENTS[runPathMutationEventId]));
+        return finalizeRuntimeEvent(cloneEventTemplate(runPathMutationEventId), {
+            engineeringContext,
+            source: 'run-path-mutation-bias'
+        });
     }
     const runPathBiasChance = Math.min(
         0.58,
@@ -3657,7 +4303,18 @@ function getRandomEvent() {
     );
     if (runPathPool.length > 0 && Math.random() < runPathBiasChance) {
         const runPathEventId = runPathPool[Math.floor(Math.random() * runPathPool.length)];
-        return JSON.parse(JSON.stringify(EVENTS[runPathEventId]));
+        return finalizeRuntimeEvent(cloneEventTemplate(runPathEventId), {
+            engineeringContext,
+            source: 'run-path-bias'
+        });
+    }
+
+    if (engineeringContext && engineeringContext.eventPool.length > 0 && Math.random() < engineeringContext.biasChance) {
+        const engineeringEventId = engineeringContext.eventPool[Math.floor(Math.random() * engineeringContext.eventPool.length)];
+        return finalizeRuntimeEvent(cloneEventTemplate(engineeringEventId), {
+            engineeringContext,
+            source: 'engineering-bias'
+        });
     }
 
     // 牌组成型后，事件投放向对应流派轻度偏置，提升构筑连贯性
@@ -3678,7 +4335,10 @@ function getRandomEvent() {
         : 0;
     if (archetypePool.length > 0 && Math.random() < Math.min(0.6, 0.35 + archetypeBiasBoost)) {
         const boostedId = archetypePool[Math.floor(Math.random() * archetypePool.length)];
-        return JSON.parse(JSON.stringify(EVENTS[boostedId]));
+        return finalizeRuntimeEvent(cloneEventTemplate(boostedId), {
+            engineeringContext,
+            source: 'archetype-bias'
+        });
     }
 
     const roll = Math.random();
@@ -3691,5 +4351,8 @@ function getRandomEvent() {
 
     const eventId = pool[Math.floor(Math.random() * pool.length)];
     // 中文注释：深拷贝事件，防止事件流程在运行时改写全局模板（尤其 choices/effects 数组）
-    return EVENTS[eventId] ? JSON.parse(JSON.stringify(EVENTS[eventId])) : null;
+    return finalizeRuntimeEvent(cloneEventTemplate(eventId), {
+        engineeringContext,
+        source: 'base-pool'
+    });
 }

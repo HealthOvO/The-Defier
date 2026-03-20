@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { safeAuditScreenshot } from './helpers/safe_audit_screenshot.mjs';
 
 const url = process.argv[2] || 'http://127.0.0.1:4173';
 const outDir = process.argv[3] || 'output/browser-chapter-flow-audit';
@@ -11,14 +12,6 @@ const consoleErrors = [];
 
 function add(name, pass, detail = '') {
   findings.push({ name, pass, detail });
-}
-
-async function safeScreenshot(page, outPath) {
-  try {
-    await page.screenshot({ path: outPath, fullPage: true, timeout: 5000 });
-  } catch (err) {
-    console.warn(`[browser_chapter_flow_audit] screenshot skipped: ${err?.message || err}`);
-  }
 }
 
 (async () => {
@@ -73,7 +66,7 @@ async function safeScreenshot(page, outPath) {
     !!probe?.ok,
     JSON.stringify(probe || null)
   );
-  await safeScreenshot(page, path.join(outDir, 'chapter-codex-final.png'));
+  await safeAuditScreenshot(page, path.join(outDir, 'chapter-codex-final.png'), 'browser_chapter_flow_audit', { timeout: 8000 });
 
   add('no console errors were emitted during chapter flow audit', consoleErrors.length === 0, JSON.stringify(consoleErrors));
 

@@ -50,6 +50,7 @@ function createSeededRandom(seed) {
   const CARDS = vm.runInContext('CARDS', ctx);
   const ARCHETYPE_PACKS = vm.runInContext('ARCHETYPE_PACKS', ctx);
   const ARCHETYPE_EVENT_POOLS = vm.runInContext('ARCHETYPE_EVENT_POOLS', ctx);
+  const STRATEGIC_ENGINEERING_EVENT_POOLS = vm.runInContext('STRATEGIC_ENGINEERING_EVENT_POOLS', ctx);
   const getRandomEvent = vm.runInContext('getRandomEvent', ctx);
 
   const samples = 1200;
@@ -77,6 +78,60 @@ function createSeededRandom(seed) {
     assert(
       hitRate >= minHitRate,
       `${archetypeId} event bias too weak: hitRate=${hitRate.toFixed(3)}, expected >= ${minHitRate}`
+    );
+  });
+
+  const engineeringCases = [
+    {
+      trackId: 'observatory',
+      tier: 2,
+      seed: 12001,
+      minHitRate: 0.22
+    },
+    {
+      trackId: 'memory_rift',
+      tier: 2,
+      seed: 12079,
+      minHitRate: 0.22
+    }
+  ];
+
+  engineeringCases.forEach(({ trackId, tier, seed, minHitRate: minTrackHitRate }) => {
+    const eventPool = STRATEGIC_ENGINEERING_EVENT_POOLS[trackId];
+    assert(Array.isArray(eventPool) && eventPool.length > 0, `invalid engineering event pool: ${trackId}`);
+
+    ctx.window.game = {
+      player: { deck: [] },
+      getStrategicEngineeringEventBiasProfile: () => ({
+        trackId,
+        name: trackId,
+        icon: trackId === 'observatory' ? '🔭' : '🪞',
+        tier,
+        tierLabel: `T${tier}`,
+        eventIds: eventPool,
+        biasChance: trackId === 'observatory' ? 0.34 : 0.32,
+        signal: 'engineering bias test'
+      })
+    };
+
+    ctx.Math.random = createSeededRandom(seed);
+    let hits = 0;
+    let resonanceHits = 0;
+    for (let i = 0; i < samples; i += 1) {
+      const event = getRandomEvent();
+      if (event && eventPool.includes(event.id)) hits += 1;
+      if (event && event.engineeringResonance && event.engineeringResonance.trackId === trackId) resonanceHits += 1;
+    }
+    const hitRate = hits / samples;
+    const resonanceRate = resonanceHits / samples;
+    results.push({ trackId, hitRate, resonanceRate });
+    assert(
+      hitRate >= minTrackHitRate,
+      `${trackId} engineering event bias too weak: hitRate=${hitRate.toFixed(3)}, expected >= ${minTrackHitRate}`
+    );
+    assert(
+      resonanceRate >= 0.16,
+      `${trackId} engineering resonance too weak: resonanceRate=${resonanceRate.toFixed(3)}, expected >= 0.16`
     );
   });
 

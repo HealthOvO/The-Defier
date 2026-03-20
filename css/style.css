@@ -1693,13 +1693,76 @@ body {
     border: 1px solid var(--accent-gold);
     padding: 8px 12px;
     border-radius: 6px;
-    font-size: 14px;
+    width: min(260px, 58vw);
+    font-size: 13px;
+    line-height: 1.45;
     color: #fff;
-    white-space: nowrap;
+    white-space: normal;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s;
     z-index: 20;
+}
+
+.node-tooltip-title {
+    color: #ffd892;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.node-tooltip-copy {
+    margin-top: 4px;
+    color: rgba(255, 255, 255, 0.92);
+}
+
+.node-tooltip-risk {
+    margin-top: 5px;
+    color: rgba(212, 235, 255, 0.92);
+    font-size: 0.76rem;
+}
+
+.node-tooltip-risk.danger {
+    color: #ff9d9d;
+}
+
+.node-tooltip-risk.engineering {
+    color: rgba(174, 232, 205, 0.94);
+}
+
+.node-risk-badge {
+    position: absolute;
+    right: -12px;
+    bottom: -10px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(12, 18, 28, 0.88);
+    color: rgba(255, 234, 214, 0.95);
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22);
+    pointer-events: none;
+    z-index: 6;
+}
+
+.node-risk-badge.tier-high {
+    border-color: rgba(255, 170, 110, 0.48);
+    color: #ffd1a6;
+}
+
+.node-risk-badge.tier-extreme {
+    border-color: rgba(255, 118, 118, 0.58);
+    color: #ffc0c0;
+    background: rgba(42, 16, 20, 0.92);
+}
+
+.map-node-v3.current[data-risk-tier="high"] {
+    box-shadow: 0 0 22px rgba(255, 163, 109, 0.28);
+}
+
+.map-node-v3.current[data-risk-tier="extreme"] {
+    box-shadow: 0 0 26px rgba(255, 100, 100, 0.34);
 }
 
 .pollution-mark {
@@ -1847,6 +1910,10 @@ body {
 }
 
 .expedition-observatory-card {
+    grid-column: span 2;
+}
+
+.expedition-signals-card {
     grid-column: span 2;
 }
 
@@ -1999,6 +2066,103 @@ body {
     line-height: 1.65;
 }
 
+.expedition-bounty-signal {
+    margin-top: -2px;
+}
+
+.expedition-warning-list,
+.expedition-signal-list {
+    display: grid;
+    gap: 8px;
+}
+
+.expedition-warning-item,
+.expedition-signal-item {
+    display: grid;
+    gap: 4px;
+    padding: 9px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(140, 169, 220, 0.18);
+    background: rgba(12, 21, 39, 0.52);
+}
+
+.expedition-warning-item strong,
+.expedition-signal-item strong {
+    color: #f8f3e4;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.expedition-warning-item span,
+.expedition-signal-item span {
+    color: rgba(221, 231, 247, 0.78);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.expedition-warning-item.high,
+.expedition-signal-item.warning.high {
+    border-color: rgba(255, 133, 133, 0.36);
+    background: linear-gradient(145deg, rgba(63, 23, 25, 0.74), rgba(37, 17, 21, 0.66));
+}
+
+.expedition-warning-item.medium,
+.expedition-signal-item.warning.medium {
+    border-color: rgba(255, 182, 120, 0.32);
+    background: linear-gradient(145deg, rgba(58, 34, 19, 0.72), rgba(31, 21, 13, 0.62));
+}
+
+.expedition-warning-item.low,
+.expedition-signal-item.warning.low {
+    border-color: rgba(132, 188, 255, 0.26);
+}
+
+.expedition-signal-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.expedition-signal-block {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(138, 180, 240, 0.18);
+    background: rgba(12, 21, 39, 0.44);
+}
+
+.expedition-signal-block.warning {
+    border-color: rgba(255, 173, 121, 0.2);
+    background: linear-gradient(145deg, rgba(31, 18, 11, 0.54), rgba(19, 16, 20, 0.48));
+}
+
+.expedition-signal-block.nemesis {
+    border-color: rgba(206, 160, 255, 0.22);
+    background: linear-gradient(145deg, rgba(25, 17, 42, 0.58), rgba(18, 13, 34, 0.52));
+}
+
+.expedition-signal-block.nemesis.high,
+.expedition-signal-block.nemesis.extreme {
+    border-color: rgba(255, 154, 154, 0.24);
+    background: linear-gradient(145deg, rgba(54, 20, 26, 0.6), rgba(33, 15, 25, 0.54));
+}
+
+.expedition-signal-item.nemesis.low {
+    border-color: rgba(166, 201, 255, 0.24);
+}
+
+.expedition-signal-item.nemesis.medium {
+    border-color: rgba(214, 177, 255, 0.26);
+    background: linear-gradient(145deg, rgba(31, 21, 56, 0.66), rgba(20, 14, 37, 0.58));
+}
+
+.expedition-signal-item.nemesis.high,
+.expedition-signal-item.nemesis.extreme {
+    border-color: rgba(255, 141, 141, 0.3);
+    background: linear-gradient(145deg, rgba(57, 22, 31, 0.72), rgba(34, 16, 24, 0.64));
+}
+
 .expedition-empty-note {
     padding: 14px 12px;
     border-radius: 14px;
@@ -2012,7 +2176,8 @@ body {
     }
 
     .expedition-overview-card,
-    .expedition-observatory-card {
+    .expedition-observatory-card,
+    .expedition-signals-card {
         grid-column: span 1;
     }
 }
@@ -9891,6 +10056,7 @@ body {
     min-height: 0;
     overflow-y: auto;
     padding-right: 5px;
+    padding-bottom: 4px;
     gap: var(--spacing-sm);
     /* Tighter gap */
     z-index: 1;
@@ -10107,6 +10273,24 @@ body {
     border-color: rgba(255, 198, 122, 0.5);
     background: linear-gradient(145deg, rgba(86, 57, 24, 0.78), rgba(54, 34, 18, 0.84));
     color: rgba(255, 238, 210, 0.98);
+}
+
+.realm-preview-actions {
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
+    padding-top: 10px;
+    background:
+        linear-gradient(180deg, rgba(10, 15, 20, 0), rgba(10, 15, 20, 0.82) 28%, rgba(10, 15, 20, 0.96) 100%);
+    z-index: 2;
+}
+
+.realm-preview-actions .menu-btn.large {
+    width: 100%;
+}
+
+.realm-preview-actions .realm-cost-display {
+    text-align: center;
 }
 
 .preview-loot-grid {
@@ -15563,7 +15747,7 @@ body {
 }
 
 .map-overview-item {
-    min-height: 50px;
+    min-height: 58px;
     padding: 6px 8px;
     border-radius: 10px;
     border: 1px solid rgba(132, 202, 255, 0.24);
@@ -15847,10 +16031,42 @@ body {
     color: rgba(255, 244, 214, 0.96);
 }
 
+.chapter-brief-chip.nemesis-forecast {
+    border-color: rgba(206, 177, 255, 0.34);
+    background: rgba(53, 35, 90, 0.34);
+    color: rgba(239, 230, 255, 0.96);
+}
+
+.chapter-brief-chip.nemesis-forecast.tier-low {
+    border-color: rgba(153, 205, 255, 0.32);
+    background: rgba(24, 52, 80, 0.34);
+}
+
+.chapter-brief-chip.nemesis-forecast.tier-medium {
+    border-color: rgba(209, 177, 255, 0.34);
+    background: rgba(45, 30, 75, 0.34);
+}
+
+.chapter-brief-chip.nemesis-forecast.tier-high {
+    border-color: rgba(255, 166, 132, 0.38);
+    background: rgba(93, 44, 28, 0.38);
+}
+
+.chapter-brief-chip.nemesis-forecast.tier-extreme {
+    border-color: rgba(255, 124, 124, 0.42);
+    background: rgba(101, 25, 28, 0.42);
+}
+
 .chapter-brief-chip.warning {
     border-color: rgba(140, 204, 255, 0.28);
     background: rgba(20, 45, 72, 0.34);
     color: rgba(218, 241, 255, 0.95);
+}
+
+.chapter-brief-chip.engineering {
+    border-color: rgba(146, 222, 184, 0.38);
+    background: rgba(19, 64, 44, 0.36);
+    color: rgba(228, 255, 238, 0.96);
 }
 
 .map-adventure-buffs {
@@ -16024,6 +16240,120 @@ body {
     border-color: rgba(255, 175, 124, 0.6);
     color: rgba(255, 234, 214, 0.97);
     background: rgba(96, 44, 24, 0.52);
+}
+
+.map-endless-panel .endless-danger-band {
+    margin-top: 6px;
+    padding: 8px 9px;
+    border-radius: 10px;
+    border: 1px solid rgba(120, 191, 236, 0.3);
+    background: linear-gradient(145deg, rgba(14, 34, 55, 0.56), rgba(8, 18, 34, 0.72));
+}
+
+.map-endless-panel .endless-danger-band.tier-controlled {
+    border-color: rgba(123, 214, 246, 0.36);
+    box-shadow: 0 0 0 1px rgba(90, 184, 223, 0.08) inset;
+}
+
+.map-endless-panel .endless-danger-band.tier-medium {
+    border-color: rgba(255, 198, 128, 0.44);
+    box-shadow: 0 0 0 1px rgba(255, 198, 128, 0.08) inset;
+}
+
+.map-endless-panel .endless-danger-band.tier-high {
+    border-color: rgba(255, 155, 102, 0.5);
+    box-shadow: 0 0 0 1px rgba(255, 148, 102, 0.1) inset;
+}
+
+.map-endless-panel .endless-danger-band.tier-extreme {
+    border-color: rgba(255, 108, 108, 0.58);
+    box-shadow: 0 0 0 1px rgba(255, 108, 108, 0.12) inset;
+}
+
+.map-endless-panel .endless-danger-band.tier-none {
+    border-color: rgba(123, 170, 196, 0.24);
+    background: linear-gradient(145deg, rgba(14, 28, 44, 0.5), rgba(8, 16, 29, 0.64));
+}
+
+.map-endless-panel .endless-danger-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.map-endless-panel .endless-danger-head strong {
+    font-size: 0.75rem;
+    color: rgba(255, 236, 208, 0.98);
+    letter-spacing: 0.02em;
+}
+
+.map-endless-panel .endless-danger-head span {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 202, 143, 0.3);
+    background: rgba(76, 46, 20, 0.44);
+    color: rgba(255, 228, 198, 0.94);
+    font-size: 0.67rem;
+}
+
+.map-endless-panel .endless-danger-summary {
+    margin: 6px 0 0;
+    color: rgba(214, 233, 248, 0.9);
+    font-size: 0.67rem;
+    line-height: 1.45;
+}
+
+.map-endless-panel .endless-danger-grid {
+    margin-top: 7px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.map-endless-panel .endless-danger-chip {
+    min-width: 0;
+    padding: 6px 7px;
+    border-radius: 9px;
+    border: 1px solid rgba(120, 187, 233, 0.22);
+    background: rgba(11, 24, 40, 0.54);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.map-endless-panel .endless-danger-chip strong {
+    font-size: 0.64rem;
+    color: rgba(149, 213, 255, 0.92);
+    line-height: 1.25;
+}
+
+.map-endless-panel .endless-danger-chip span {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: rgba(255, 236, 210, 0.96);
+}
+
+.map-endless-panel .endless-danger-chip.idle {
+    justify-content: center;
+    border-color: rgba(123, 170, 196, 0.24);
+    color: rgba(192, 223, 238, 0.84);
+    background: rgba(28, 46, 59, 0.34);
+}
+
+.map-endless-panel .endless-danger-foot {
+    margin-top: 7px;
+    display: grid;
+    gap: 5px;
+}
+
+.map-endless-panel .endless-danger-foot span {
+    color: rgba(218, 234, 247, 0.9);
+    font-size: 0.66rem;
+    line-height: 1.4;
 }
 
 .map-endless-panel .endless-theme-desc {
@@ -16514,7 +16844,7 @@ body {
     }
 
     .map-overview-item {
-        min-height: 44px;
+        min-height: 50px;
     }
 
     .map-chapter-risk-card {
@@ -18880,6 +19210,77 @@ body {
     line-height: 1.55;
 }
 
+.challenge-danger-band {
+    margin-top: 16px;
+    padding: 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 214, 138, 0.18);
+    background:
+        linear-gradient(135deg, rgba(47, 29, 8, 0.68), rgba(12, 22, 48, 0.78));
+    display: grid;
+    gap: 12px;
+}
+
+.challenge-danger-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+}
+
+.challenge-danger-head strong {
+    color: #f7e2b5;
+    font-size: 0.96rem;
+}
+
+.challenge-danger-head span {
+    color: rgba(255, 228, 172, 0.88);
+    font-size: 0.84rem;
+    white-space: nowrap;
+}
+
+.challenge-danger-summary {
+    margin: 0;
+    color: rgba(226, 234, 247, 0.8);
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+.challenge-danger-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.challenge-danger-chip {
+    padding: 12px 10px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 222, 163, 0.16);
+    background: rgba(13, 22, 46, 0.82);
+    text-align: center;
+}
+
+.challenge-danger-chip strong {
+    display: block;
+    color: #fff1cb;
+    font-size: 1rem;
+}
+
+.challenge-danger-chip span {
+    display: block;
+    margin-top: 6px;
+    color: rgba(211, 224, 249, 0.72);
+    font-size: 0.78rem;
+}
+
+.challenge-danger-foot {
+    display: grid;
+    gap: 6px;
+    color: rgba(205, 221, 247, 0.74);
+    font-size: 0.83rem;
+    line-height: 1.55;
+}
+
 .challenge-seed-line {
     display: flex;
     flex-wrap: wrap;
@@ -19053,6 +19454,68 @@ body {
     margin-top: 10px;
 }
 
+.challenge-record-insight {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(135, 177, 255, 0.18);
+    background: rgba(12, 24, 52, 0.78);
+    display: grid;
+    gap: 8px;
+}
+
+.challenge-record-insight strong {
+    color: #f7e2b5;
+    font-size: 0.92rem;
+}
+
+.challenge-record-insight p {
+    margin: 0;
+    color: rgba(219, 230, 249, 0.76);
+    font-size: 0.84rem;
+    line-height: 1.6;
+}
+
+.challenge-record-insight-lines {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.challenge-record-insight-line,
+.challenge-record-item .challenge-record-insight-line,
+.challenge-compare-card .challenge-record-insight-line,
+#challenge-hub-side .challenge-record-insight-line,
+.challenge-selection-banner .challenge-record-insight-line {
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(244, 204, 120, 0.18);
+    background: rgba(35, 28, 14, 0.56);
+    color: rgba(255, 232, 185, 0.88);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.challenge-record-insight.compact {
+    padding: 10px 12px;
+    gap: 6px;
+}
+
+.challenge-record-insight.compact strong {
+    font-size: 0.88rem;
+}
+
+.challenge-record-insight.compact p {
+    font-size: 0.8rem;
+}
+
 .challenge-record-actions {
     display: flex;
     flex-direction: column;
@@ -19220,6 +19683,13 @@ body {
     font-size: 0.85rem;
 }
 
+.challenge-run-focus {
+    color: rgba(255, 229, 172, 0.82);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .challenge-run-stats {
     margin-left: auto;
     display: flex;
@@ -19242,6 +19712,10 @@ body {
     .challenge-focus-meta {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    .challenge-danger-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 780px) {
@@ -19261,6 +19735,11 @@ body {
 
     .challenge-focus-meta {
         grid-template-columns: 1fr 1fr;
+    }
+
+    .challenge-danger-head {
+        flex-direction: column;
+        align-items: flex-start;
     }
 
     .challenge-run-banner {
@@ -19285,5 +19764,22 @@ body {
     .challenge-compare-head,
     .challenge-compare-actions {
         flex-direction: column;
+    }
+
+    .challenge-record-insight-lines {
+        flex-direction: column;
+    }
+
+    .challenge-record-insight-line,
+    .challenge-record-item .challenge-record-insight-line,
+    .challenge-compare-card .challenge-record-insight-line,
+    #challenge-hub-side .challenge-record-insight-line,
+    .challenge-selection-banner .challenge-record-insight-line {
+        display: block;
+        width: 100%;
+    }
+
+    .challenge-run-focus {
+        white-space: normal;
     }
 }

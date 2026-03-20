@@ -6,6 +6,30 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
+function assertEndlessDangerProfile(profile, label = 'danger profile') {
+  assert(profile && typeof profile === 'object', `${label} should exist`);
+  assert(Number.isFinite(Number(profile.index)), `${label} should expose numeric index`);
+  assert(typeof profile.tierId === 'string' && profile.tierId.length > 0, `${label} should expose tierId`);
+  assert(typeof profile.tierLabel === 'string' && profile.tierLabel.length > 0, `${label} should expose tierLabel`);
+  assert(typeof profile.dominantAxisId === 'string' && profile.dominantAxisId.length > 0, `${label} should expose dominantAxisId`);
+  assert(typeof profile.dominantAxisLabel === 'string' && profile.dominantAxisLabel.length > 0, `${label} should expose dominantAxisLabel`);
+  assert(typeof profile.summary === 'string' && profile.summary.length > 0, `${label} should expose summary`);
+  assert(typeof profile.counterplay === 'string' && profile.counterplay.length > 0, `${label} should expose counterplay`);
+  assert(typeof profile.reserveGuidance === 'string' && profile.reserveGuidance.length > 0, `${label} should expose reserveGuidance`);
+  assert(typeof profile.line === 'string' && /DRI/.test(profile.line), `${label} should expose DRI line`);
+  assert(Array.isArray(profile.axes) && profile.axes.length === 4, `${label} should expose four axes`);
+
+  const axisIds = profile.axes.map((axis) => axis && axis.id);
+  ['burst', 'attrition', 'control', 'execution'].forEach((axisId) => {
+    assert(axisIds.includes(axisId), `${label} should include ${axisId} axis`);
+  });
+  profile.axes.forEach((axis) => {
+    assert(axis && typeof axis === 'object', `${label} axis should be object`);
+    assert(typeof axis.label === 'string' && axis.label.length > 0, `${label} axis ${axis && axis.id} should expose label`);
+    assert(Number.isFinite(Number(axis.value)) && Number(axis.value) >= 0 && Number(axis.value) <= 100, `${label} axis ${axis && axis.id} should clamp value`);
+  });
+}
+
 (function run() {
   const code = fs.readFileSync(path.resolve(__dirname, '../js/game.js'), 'utf8');
 
@@ -161,6 +185,7 @@ function assert(cond, msg) {
       'getEndlessEventTuning',
       'getEndlessMapConfig',
       'getEndlessPressureBehaviorProfile',
+      'getEndlessDangerProfile',
       'buildEndlessPressurePatternVariant',
       'getEndlessBoonPool',
       'getEndlessBoonChoices',
@@ -305,6 +330,52 @@ function assert(cond, msg) {
     assert(updated.directiveChoices.some((item) => item.id === volatileDirective.id && item.selected), 'active directive choice should be reflected in profile choices');
   }
 
+  // 无尽 DRI 同轴画像
+  {
+    const { harness } = createHarness();
+    harness.endlessState = harness.createDefaultEndlessState();
+    harness.endlessState.unlocked = true;
+    harness.endlessState.active = true;
+    harness.endlessState.currentCycle = 6;
+    harness.endlessState.pressure = 2;
+
+    const baseline = harness.getEndlessDangerProfile(6);
+    assertEndlessDangerProfile(baseline, 'baseline endless danger profile');
+
+    const season = harness.getEndlessSeasonProfile(6);
+    const volatileDirective = season.directiveChoices.find((item) => item.riskTier === 'volatile') || season.directiveChoices[0];
+    harness.setEndlessSeasonDirective(volatileDirective.id);
+    const volatileProfile = harness.getEndlessDangerProfile(6);
+    assertEndlessDangerProfile(volatileProfile, 'volatile endless danger profile');
+    assert(
+      volatileProfile.index !== baseline.index ||
+        volatileProfile.dominantAxisId !== baseline.dominantAxisId ||
+        volatileProfile.summary !== baseline.summary ||
+        volatileProfile.counterplay !== baseline.counterplay,
+      `volatile directive should affect endless danger profile, baseline=${JSON.stringify(baseline)}, volatile=${JSON.stringify(volatileProfile)}`
+    );
+
+    harness.endlessState.pressure = 8;
+    harness.endlessState.paranoiaLevel = 1;
+    harness.endlessState.seasonCollapseStats = {
+      pressure_overload: 2,
+      sustain_break: 1,
+      mechanic_check: 1
+    };
+    const highPressureProfile = harness.getEndlessDangerProfile(6);
+    assertEndlessDangerProfile(highPressureProfile, 'high pressure endless danger profile');
+    assert(
+      highPressureProfile.index >= volatileProfile.index,
+      `high pressure state should not lower danger index, volatile=${volatileProfile.index}, high=${highPressureProfile.index}`
+    );
+    assert(
+      highPressureProfile.summary !== volatileProfile.summary ||
+        highPressureProfile.counterplay !== volatileProfile.counterplay ||
+        highPressureProfile.dominantAxisId !== volatileProfile.dominantAxisId,
+      'high pressure / collapse state should further reshape endless danger profile messaging'
+    );
+  }
+
   // 崩盘账本统计
   {
     const { harness } = createHarness();
@@ -358,6 +429,9 @@ function assert(cond, msg) {
     assert(profile.themeId && profile.themeSegmentIndex >= 1, 'pressure profile should expose theme metadata');
     assert(typeof profile.seasonId === 'string' && profile.seasonId.length > 0, 'pressure profile should expose season id');
     assert(typeof profile.seasonDirectiveId === 'string' && profile.seasonDirectiveId.length > 0, 'pressure profile should expose season directive id');
+
+    const dangerProfile = harness.getEndlessDangerProfile();
+    assertEndlessDangerProfile(dangerProfile, 'modifier-linked endless danger profile');
   }
 
   // 事件联动调参
