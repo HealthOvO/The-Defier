@@ -176,6 +176,9 @@ function buildRunPathMeta(catalog, runPath, progress) {
   assert(rewardPayload.reward && rewardPayload.reward.runPath && rewardPayload.reward.runPath.archive, `reward payload should expose archive feedback, got ${JSON.stringify(rewardPayload.reward)}`);
   assert(rewardPayload.reward.runPath.archive.recordName === '命盘观测录', `reward payload archive should expose record name, got ${JSON.stringify(rewardPayload.reward.runPath.archive)}`);
   assert(rewardPayload.reward.runPath.archive.firstClear === true, `reward payload archive should mark first clear, got ${JSON.stringify(rewardPayload.reward.runPath.archive)}`);
+  assert(rewardPayload.reward.runPath.narrative && rewardPayload.reward.runPath.narrative.kicker === '命盘档案', `reward payload should expose archive narrative kicker, got ${JSON.stringify(rewardPayload.reward.runPath.narrative)}`);
+  assert(/命盘观测录/.test(rewardPayload.reward.runPath.narrative?.title || ''), `reward narrative should mention archived record name, got ${JSON.stringify(rewardPayload.reward.runPath.narrative)}`);
+  assert(/首次收录|可回藏经阁继续复盘/.test(rewardPayload.reward.runPath.narrative?.foot || ''), `reward narrative foot should encourage codex follow-up, got ${JSON.stringify(rewardPayload.reward.runPath.narrative)}`);
 
   console.log('Run path archive feedback checks passed.');
 })();

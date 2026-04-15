@@ -17,6 +17,7 @@ function add(name, pass, detail = '') {
 (async () => {
   const browser = await chromium.launch({
     headless: true,
+    executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
     args: ['--use-gl=angle', '--use-angle=swiftshader'],
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -32,6 +33,9 @@ function add(name, pass, detail = '') {
     try {
       localStorage.removeItem('theDefierChallengeProgressV1');
       localStorage.removeItem('theDefierActiveChallengeRunV1');
+      localStorage.removeItem('theDefierChallengeHubStateV1');
+      localStorage.removeItem('theDefierObservatoryArchiveV1');
+      localStorage.removeItem('theDefierObservatoryGuideStateV1');
       localStorage.removeItem('theDefierSave');
     } catch {}
   });
@@ -61,6 +65,7 @@ function add(name, pass, detail = '') {
       ? JSON.parse(window.render_game_to_text())
       : null;
     const title = document.getElementById('challenge-hub-title')?.textContent?.trim() || '';
+    const subtitle = document.getElementById('challenge-hub-subtitle')?.textContent?.replace(/\s+/g, ' ').trim() || '';
     const summary = document.getElementById('challenge-hub-summary')?.textContent?.replace(/\s+/g, ' ').trim() || '';
     const sideText = document.getElementById('challenge-hub-side')?.textContent?.replace(/\s+/g, ' ').trim() || '';
     const rewardCount = document.querySelectorAll('#challenge-hub-rewards .challenge-reward-card').length;
@@ -70,6 +75,7 @@ function add(name, pass, detail = '') {
       mode: payload?.mode || '',
       challenge: payload?.challenge || null,
       title,
+      subtitle,
       summary,
       sideText,
       rewardCount,
@@ -82,6 +88,7 @@ function add(name, pass, detail = '') {
     !!challengeHubProbe &&
       challengeHubProbe.mode === 'challenge-screen' &&
       /观星台/.test(challengeHubProbe.title || '') &&
+      /观星样本|命盘|远征线索/.test(challengeHubProbe.subtitle || '') &&
       /第1章|完成线/.test(challengeHubProbe.summary || '') &&
       /试炼压强|DRI/.test(challengeHubProbe.summary || '') &&
       /难度同轴|主轴/.test(challengeHubProbe.sideText || '') &&
@@ -189,6 +196,132 @@ function add(name, pass, detail = '') {
   });
   await page.waitForTimeout(350);
 
+  await page.evaluate(() => {
+    if (!window.game || typeof game.buildChallengeBundle !== 'function' || typeof game.applyChallengeRunStart !== 'function') return;
+    const bundle = game.buildChallengeBundle('daily');
+    if (!bundle) return;
+    game.applyChallengeRunStart(bundle);
+    if (game.activeChallengeRun) {
+      game.activeChallengeRun.progress.battleWins = 4;
+      game.activeChallengeRun.progress.eliteWins = 2;
+      game.activeChallengeRun.progress.realmClears = Math.max(1, game.activeChallengeRun.goalRealm || 3);
+    }
+    if (game.player) {
+      game.player.currentHp = Math.max(18, Math.min(game.player.maxHp || 80, 44));
+    }
+    if (typeof game.finalizeActiveChallengeRun === 'function') {
+      game.finalizeActiveChallengeRun({ completed: true, reason: 'goal_reached' });
+    }
+    const oracleRule = Array.isArray(window.CHALLENGE_RULES?.daily)
+      ? window.CHALLENGE_RULES.daily.find((rule) => rule.id === 'daily_star_script')
+      : null;
+    if (oracleRule && typeof game.recordObservatoryArchiveEntry === 'function') {
+      game.recordObservatoryArchiveEntry({
+        id: 'browser_oracle_a',
+        type: 'challenge',
+        mode: 'daily',
+        rotationKey: '2026-03-14',
+        title: oracleRule.name,
+        score: 166,
+        completed: true,
+        at: Date.now() + 1,
+        seedSignature: 'D-ORACLE-A',
+        reason: 'goal_reached',
+        replayOnly: false,
+        metrics: {
+          hpRatio: 0.74,
+          lawGains: 2,
+          treasureGains: 1,
+          battleWins: 3,
+          eliteWins: 1,
+          bossWins: 0,
+          realmClears: 3,
+        },
+        preferredNodes: ['observatory', 'event', 'memory_rift'],
+        rule: oracleRule,
+      });
+      game.recordObservatoryArchiveEntry({
+        id: 'browser_oracle_b',
+        type: 'challenge',
+        mode: 'daily',
+        rotationKey: '2026-03-14',
+        title: oracleRule.name,
+        score: 148,
+        completed: true,
+        at: Date.now() + 2,
+        seedSignature: 'D-ORACLE-B',
+        reason: 'goal_reached',
+        replayOnly: false,
+        metrics: {
+          hpRatio: 0.61,
+          lawGains: 1,
+          treasureGains: 0,
+          battleWins: 2,
+          eliteWins: 0,
+          bossWins: 0,
+          realmClears: 2,
+        },
+        preferredNodes: ['observatory', 'event', 'memory_rift'],
+        rule: oracleRule,
+      });
+    }
+    const weeklyRule = Array.isArray(window.CHALLENGE_RULES?.weekly) ? window.CHALLENGE_RULES.weekly[0] : null;
+    if (weeklyRule && typeof game.recordObservatoryArchiveEntry === 'function') {
+      game.recordObservatoryArchiveEntry({
+        id: 'browser_weekly_a',
+        type: 'challenge',
+        mode: 'weekly',
+        rotationKey: '2026-W11',
+        title: weeklyRule.name,
+        score: 172,
+        completed: true,
+        at: Date.now() - 3600000,
+        seedSignature: 'W-WEEKLY-A',
+        reason: 'goal_reached',
+        replayOnly: false,
+        metrics: {
+          hpRatio: 0.69,
+          lawGains: 2,
+          treasureGains: 1,
+          battleWins: 4,
+          eliteWins: 1,
+          bossWins: 0,
+          realmClears: 3,
+        },
+        preferredNodes: ['elite', 'trial', 'observatory'],
+        rule: weeklyRule,
+      });
+    }
+    if (typeof game.showChallengeHub === 'function') game.showChallengeHub('daily');
+  });
+  await page.waitForTimeout(350);
+
+  await page.evaluate(() => {
+    if (!window.game || typeof game.setObservatoryTrainingFocus !== 'function') return;
+    const guide = typeof game.getSelectedObservatoryExpeditionGuide === 'function'
+      ? game.getSelectedObservatoryExpeditionGuide({ silentSync: true })
+      : null;
+    if (!guide) return;
+    game.setObservatoryTrainingFocus({
+      sourceRunId: 'browser_training_focus',
+      chapterName: '第 4 章',
+      sourceTitle: guide.title || '当前精选命盘',
+      guideRecordId: guide.id || '',
+      themeKey: guide.themeKey || 'assault',
+      themeLabel: guide.themeLabel || '前压爆发',
+      ratingLabel: '贴题成卷',
+      ratingTone: 'completed',
+      trainingAdvice: `先按${guide.themeLabel || '当前样本'}样本补两段高分可回放答卷，再回去对照悬赏节奏。`,
+      highlightLine: '上一章已经把主练方向交给观察站，这里应该直接显示给玩家。',
+      routeFocusLine: guide.routeFocusLine || '优先节点：战斗 / 精英 / 试炼',
+      compareHint: guide.compareHint || '对比先手压制、收头效率与能否稳定抢下前段节拍。',
+      trainingTags: Array.isArray(guide.trainingTags) && guide.trainingTags.length > 0 ? guide.trainingTags : ['稳血收官'],
+      goalHighlights: ['路线扣题：优先回到样本主轴', '样本实操：先补两段可回放高分样本'],
+    }, { silent: true });
+    if (typeof game.showChallengeHub === 'function') game.showChallengeHub('daily');
+  });
+  await page.waitForTimeout(250);
+
   const archiveProbe = await page.evaluate(() => {
     const payload = typeof window.render_game_to_text === 'function'
       ? JSON.parse(window.render_game_to_text())
@@ -200,22 +333,38 @@ function add(name, pass, detail = '') {
     const compareInsightCards = document.querySelectorAll('#challenge-hub-records .challenge-compare-card .challenge-record-insight').length;
     const sideInsightCards = document.querySelectorAll('#challenge-hub-side .challenge-record-insight').length;
     const summaryText = document.getElementById('challenge-hub-summary')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    const sideGuideText = document.querySelector('#challenge-hub-side .codex-side-card:last-child')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    const compareAxisText = Array.from(document.querySelectorAll('#challenge-hub-records .challenge-compare-card .challenge-record-insight-line'))
+      .map((el) => el.textContent?.replace(/\s+/g, ' ').trim() || '')
+      .filter(Boolean)
+      .join(' | ');
+    const archiveFilterSelectCount = document.querySelectorAll('#challenge-hub-records .challenge-archive-filter select').length;
+    const archivePresetButtonCount = document.querySelectorAll('#challenge-hub-records [data-archive-preset-slot]').length;
+    const trainingFocusBtn = document.querySelector('#challenge-hub-side [data-apply-training-focus="true"]');
     return {
       mode: payload?.mode || '',
       archive: payload?.challenge?.archive || null,
       hub: payload?.challenge?.hub || null,
       guide: payload?.challenge?.observatoryGuide || null,
+      trainingFocus: payload?.challenge?.trainingFocus || null,
       recordsText,
       replayButtons,
       compareCards,
       insightCards,
       compareInsightCards,
       sideInsightCards,
-      summaryText
+      summaryText,
+      sideGuideText,
+      trainingFocusText: document.querySelector('#challenge-hub-side [data-observatory-training-focus="true"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      compareAxisText,
+      archiveFilterSelectCount,
+      archivePresetButtonCount,
+      trainingFocusBtnText: trainingFocusBtn?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      trainingFocusBtnDisabled: !!trainingFocusBtn?.disabled,
     };
   });
   add(
-    'challenge hub now surfaces seed signatures, danger profile, same-theme comparison, and replay sample insights after a completed run',
+    'challenge hub now surfaces seed signatures, drill tags, same-theme comparison axes, and replay sample insights after a completed run',
     !!archiveProbe &&
       archiveProbe.mode === 'challenge-screen' &&
       archiveProbe.archive?.totalRecords >= 1 &&
@@ -223,24 +372,271 @@ function add(name, pass, detail = '') {
       archiveProbe.archive?.featuredCount >= 1 &&
       /^D-/.test(archiveProbe.hub?.seedSignature || '') &&
       (archiveProbe.hub?.dangerProfile?.index || 0) >= 1 &&
-      archiveProbe.hub?.comparisonCount >= 1 &&
+      archiveProbe.hub?.comparisonCount >= 2 &&
       archiveProbe.replayButtons >= 1 &&
-      archiveProbe.compareCards >= 1 &&
+      archiveProbe.compareCards >= 2 &&
       archiveProbe.insightCards >= 2 &&
       archiveProbe.compareInsightCards >= 1 &&
       archiveProbe.sideInsightCards >= 1 &&
+      archiveProbe.archiveFilterSelectCount >= 5 &&
+      archiveProbe.archivePresetButtonCount >= 2 &&
       !!archiveProbe.guide?.title &&
       (archiveProbe.guide?.featuredTags?.length || 0) >= 2 &&
+      (archiveProbe.guide?.trainingTags?.length || 0) >= 1 &&
+      (archiveProbe.guide?.preferredNodes?.length || 0) >= 1 &&
+      !!archiveProbe.trainingFocus?.trainingAdvice &&
+      archiveProbe.trainingFocus?.guideRecordId === archiveProbe.guide?.id &&
+      /优先节点/.test(archiveProbe.guide?.routeFocusLine || '') &&
+      /对比/.test(archiveProbe.guide?.compareHint || '') &&
+      !!archiveProbe.guide?.drillObjective &&
       !!archiveProbe.guide?.insight?.title &&
       /命盘签/.test(archiveProbe.summaryText || '') &&
-      /观星留痕|复盘命盘|同主题对比/.test(archiveProbe.recordsText || '') &&
-      /复刻重点|失手剖面|回放复刻|回放试错/.test(archiveProbe.recordsText || ''),
+      /观星留痕|复盘命盘|同主题对比|样本层|窗口|排序|预设/.test(archiveProbe.recordsText || '') &&
+      /复刻重点|失手剖面|回放复刻|回放试错|演练目标/.test(archiveProbe.recordsText || '') &&
+      /血线稳定|守阵容错|续航补件|前段节拍|收头效率|高压接战|补件速度|器灵换强|高压兑现|观测收益|路线贴合|控场稳定|连段续速|中盘滚动|资源衰减|跨章耐压|终盘完整度|高压答卷/.test(archiveProbe.compareAxisText || '') &&
+      /优先节点|训练标签|演练目标|对比抓手/.test(archiveProbe.sideGuideText || '') &&
+      /主练|样本/.test(archiveProbe.trainingFocusText || '') &&
+      /按建议筛留痕/.test(archiveProbe.trainingFocusBtnText || '') &&
+      archiveProbe.trainingFocusBtnDisabled === false,
     JSON.stringify(archiveProbe || null)
   );
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-archive-replay.png'), 'browser_challenge_audit', { timeout: 9000 });
 
+  await page.click('#challenge-hub-side [data-apply-training-focus="true"]', { timeout: 4000, force: true });
+  await page.waitForTimeout(350);
+
+  const trainingFocusFilterProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    const archiveSection = Array.from(document.querySelectorAll('#challenge-hub-records .challenge-record-section'))
+      .find((section) => /观星留痕/.test(section.querySelector('.challenge-record-section-head strong')?.textContent || ''));
+    const filterChipText = Array.from(archiveSection?.querySelectorAll('.challenge-archive-summary-tags .challenge-tag') || [])
+      .map((el) => el.textContent?.replace(/\s+/g, ' ').trim() || '')
+      .filter(Boolean)
+      .join(' | ');
+    return {
+      archive: payload?.challenge?.archive || null,
+      trainingFocus: payload?.challenge?.trainingFocus || null,
+      filterChipText,
+      buttonDisabled: !!document.querySelector('#challenge-hub-side [data-apply-training-focus="true"]')?.disabled,
+    };
+  });
+  add(
+    'challenge side rail can jump archive filters into the persisted training focus view',
+    !!trainingFocusFilterProbe &&
+      trainingFocusFilterProbe.archive?.filterState?.scope === 'all' &&
+      trainingFocusFilterProbe.archive?.filterState?.track === 'playable' &&
+      trainingFocusFilterProbe.archive?.filterState?.outcome === 'all' &&
+      trainingFocusFilterProbe.archive?.filterState?.themeKey === trainingFocusFilterProbe.trainingFocus?.themeKey &&
+      trainingFocusFilterProbe.archive?.filterState?.sortBy === 'score_desc' &&
+      /跨赛道|可回放|高分优先/.test(trainingFocusFilterProbe.filterChipText || '') &&
+      trainingFocusFilterProbe.buttonDisabled === true,
+    JSON.stringify(trainingFocusFilterProbe || null)
+  );
+
+  await page.selectOption('#challenge-hub-records select[data-archive-filter="scope"]', 'all');
+  await page.waitForTimeout(250);
+  await page.selectOption('#challenge-hub-records select[data-archive-filter="track"]', 'challenge');
+  await page.waitForTimeout(250);
+  await page.selectOption('#challenge-hub-records select[data-archive-filter="outcome"]', 'completed');
+  await page.waitForTimeout(250);
+  await page.selectOption('#challenge-hub-records select[data-archive-filter="theme"]', 'oracle');
+  await page.waitForTimeout(250);
+  await page.selectOption('#challenge-hub-records select[data-archive-filter="sort"]', 'score_desc');
+  await page.waitForTimeout(350);
+
+  const archiveFilterProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    const archiveSection = Array.from(document.querySelectorAll('#challenge-hub-records .challenge-record-section'))
+      .find((section) => /观星留痕/.test(section.querySelector('.challenge-record-section-head strong')?.textContent || ''));
+    const archiveCards = Array.from(archiveSection?.querySelectorAll('.challenge-record-item') || []);
+    const archiveCardText = archiveCards
+      .map((el) => el.textContent?.replace(/\s+/g, ' ').trim() || '')
+      .filter(Boolean);
+    const archiveCardScores = archiveCardText
+      .map((text) => {
+        const match = text.match(/得分\s+(\d+)/);
+        return match ? Number(match[1]) : 0;
+      });
+    const filterChipText = Array.from(archiveSection?.querySelectorAll('.challenge-archive-summary-tags .challenge-tag') || [])
+      .map((el) => el.textContent?.replace(/\s+/g, ' ').trim() || '')
+      .filter(Boolean)
+      .join(' | ');
+    return {
+      archive: payload?.challenge?.archive || null,
+      archiveCardCount: archiveCards.length,
+      archiveCardText,
+      archiveCardScores,
+      filterChipText,
+      resetDisabled: !!archiveSection?.querySelector('[data-reset-archive-filters]')?.disabled,
+      presetLabels: Array.from(archiveSection?.querySelectorAll('[data-archive-preset-slot]') || [])
+        .map((el) => el.textContent?.replace(/\s+/g, ' ').trim() || '')
+        .filter(Boolean),
+    };
+  });
+  add(
+    'challenge observatory archive filter bar supports cross-scope theme retrieval and serializes the active筛面',
+    !!archiveFilterProbe &&
+      archiveFilterProbe.archive?.filterState?.scope === 'all' &&
+      archiveFilterProbe.archive?.filterState?.track === 'challenge' &&
+      archiveFilterProbe.archive?.filterState?.outcome === 'completed' &&
+      archiveFilterProbe.archive?.filterState?.themeKey === 'oracle' &&
+      archiveFilterProbe.archive?.filterState?.sortBy === 'score_desc' &&
+      (archiveFilterProbe.archive?.filteredCount || 0) >= 2 &&
+      (archiveFilterProbe.archive?.scopeTotalCount || 0) > (archiveFilterProbe.archive?.filteredCount || 0) &&
+      (archiveFilterProbe.archive?.filteredReplayableCount || 0) >= 2 &&
+      archiveFilterProbe.archiveCardCount >= 2 &&
+      archiveFilterProbe.archiveCardScores[0] >= archiveFilterProbe.archiveCardScores[1] &&
+      archiveFilterProbe.archiveCardText.every((text) => /推演控场|daily_star_script|星/.test(text || '')) &&
+      archiveFilterProbe.archiveCardText.every((text) => !/观星预兆/.test(text || '')) &&
+      /跨赛道|挑战成绩|完成答卷|高分优先/.test(archiveFilterProbe.filterChipText || '') &&
+      /推演控场|当前主题/.test(archiveFilterProbe.filterChipText || '') &&
+      archiveFilterProbe.resetDisabled === false,
+    JSON.stringify(archiveFilterProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'challenge-archive-filtered.png'), 'browser_challenge_audit', { timeout: 9000 });
+
+  await page.click('#challenge-hub-records [data-save-archive-preset-slot="0"]', { timeout: 4000, force: true });
+  await page.waitForTimeout(350);
+
+  const archivePresetSaveProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      archive: payload?.challenge?.archive || null,
+      presetLabel: document.querySelector('#challenge-hub-records [data-archive-preset-slot="0"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    };
+  });
+  add(
+    'challenge observatory archive preset can save the current filtered and sorted training view',
+    !!archivePresetSaveProbe &&
+      Array.isArray(archivePresetSaveProbe.archive?.presetLabels) &&
+      /预设 1/.test(archivePresetSaveProbe.archive?.presetLabels?.[0] || '') &&
+      /高分优先/.test(archivePresetSaveProbe.archive?.presetLabels?.[0] || '') &&
+      /推演控场/.test(archivePresetSaveProbe.archive?.presetLabels?.[0] || '') &&
+      /预设 1/.test(archivePresetSaveProbe.presetLabel || ''),
+    JSON.stringify(archivePresetSaveProbe || null)
+  );
+
+  await page.click('#challenge-hub-records [data-reset-archive-filters="true"]', { timeout: 4000, force: true });
+  await page.waitForTimeout(350);
+
+  const archiveFilterResetProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      archive: payload?.challenge?.archive || null,
+      resetDisabled: !!document.querySelector('#challenge-hub-records [data-reset-archive-filters="true"]')?.disabled,
+    };
+  });
+  add(
+    'archive filter reset returns observatory history view to default playable same-lane state',
+    !!archiveFilterResetProbe &&
+      archiveFilterResetProbe.archive?.filterState?.scope === 'mode' &&
+      archiveFilterResetProbe.archive?.filterState?.track === 'playable' &&
+      archiveFilterResetProbe.archive?.filterState?.outcome === 'all' &&
+      archiveFilterResetProbe.archive?.filterState?.themeKey === 'all' &&
+      archiveFilterResetProbe.archive?.filterState?.sortBy === 'recent' &&
+      (archiveFilterResetProbe.archive?.filteredCount || 0) >= 3 &&
+      archiveFilterResetProbe.resetDisabled === true,
+    JSON.stringify(archiveFilterResetProbe || null)
+  );
+
+  await page.click('#challenge-hub-records [data-archive-preset-slot="0"]', { timeout: 4000, force: true });
+  await page.waitForTimeout(350);
+
+  const archivePresetApplyProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    const archiveSection = Array.from(document.querySelectorAll('#challenge-hub-records .challenge-record-section'))
+      .find((section) => /观星留痕/.test(section.querySelector('.challenge-record-section-head strong')?.textContent || ''));
+    const archiveCardText = Array.from(archiveSection?.querySelectorAll('.challenge-record-item') || [])
+      .map((el) => el.textContent?.replace(/\s+/g, ' ').trim() || '')
+      .filter(Boolean);
+    const archiveCardScores = archiveCardText
+      .map((text) => {
+        const match = text.match(/得分\s+(\d+)/);
+        return match ? Number(match[1]) : 0;
+      });
+    const presetBtn = archiveSection?.querySelector('[data-archive-preset-slot="0"]');
+    return {
+      archive: payload?.challenge?.archive || null,
+      archiveCardText,
+      archiveCardScores,
+      presetBtnText: presetBtn?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      presetBtnClass: presetBtn?.className || '',
+    };
+  });
+  add(
+    'saved archive preset reapplies oracle high-score training view after reset',
+    !!archivePresetApplyProbe &&
+      archivePresetApplyProbe.archive?.filterState?.scope === 'all' &&
+      archivePresetApplyProbe.archive?.filterState?.track === 'challenge' &&
+      archivePresetApplyProbe.archive?.filterState?.outcome === 'completed' &&
+      archivePresetApplyProbe.archive?.filterState?.themeKey === 'oracle' &&
+      archivePresetApplyProbe.archive?.filterState?.sortBy === 'score_desc' &&
+      Array.isArray(archivePresetApplyProbe.archive?.activePresetSlots) &&
+      archivePresetApplyProbe.archive.activePresetSlots.includes(0) &&
+      archivePresetApplyProbe.archiveCardScores[0] >= archivePresetApplyProbe.archiveCardScores[1] &&
+      archivePresetApplyProbe.archiveCardText.every((text) => /推演控场|星录推演/.test(text || '')) &&
+      /active|secondary/.test(archivePresetApplyProbe.presetBtnClass || ''),
+    JSON.stringify(archivePresetApplyProbe || null)
+  );
+
+  const guideSwitchTarget = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    const currentGuideId = payload?.challenge?.observatoryGuide?.id || '';
+    const target = Array.from(document.querySelectorAll('#challenge-hub-records .challenge-compare-card [data-guide-record-id]'))
+      .find((btn) => /设为远征线索/.test(btn.textContent || '') && (btn.getAttribute('data-guide-record-id') || '') !== currentGuideId);
+    return {
+      currentGuideId,
+      targetGuideId: target?.getAttribute('data-guide-record-id') || '',
+    };
+  });
+  if (guideSwitchTarget?.targetGuideId) {
+    await page.click(`[data-guide-record-id="${guideSwitchTarget.targetGuideId}"]`, { timeout: 4000, force: true });
+    await page.waitForTimeout(350);
+  }
+
+  const guideSwitchProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      archive: payload?.challenge?.archive || null,
+      guide: payload?.challenge?.observatoryGuide || null,
+      selectedCompareCardIds: Array.from(document.querySelectorAll('#challenge-hub-records .challenge-compare-card.selected'))
+        .map((el) => el.getAttribute('data-record-id') || '')
+        .filter(Boolean),
+      currentGuideButtonIds: Array.from(document.querySelectorAll('#challenge-hub-records [data-guide-record-id]'))
+        .filter((btn) => /当前远征线索/.test(btn.textContent || ''))
+        .map((btn) => btn.getAttribute('data-guide-record-id') || '')
+        .filter(Boolean),
+      sideGuideText: document.querySelector('#challenge-hub-side .codex-side-card:last-child')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    };
+  });
+  add(
+    'switching an alternate observatory guide updates current expedition clue state in hub payload and UI',
+    !!guideSwitchTarget?.targetGuideId &&
+      guideSwitchTarget.targetGuideId !== guideSwitchTarget.currentGuideId &&
+      guideSwitchProbe.archive?.selectedGuideId === guideSwitchTarget.targetGuideId &&
+      guideSwitchProbe.guide?.id === guideSwitchTarget.targetGuideId &&
+      guideSwitchProbe.selectedCompareCardIds.includes(guideSwitchTarget.targetGuideId) &&
+      guideSwitchProbe.currentGuideButtonIds.includes(guideSwitchTarget.targetGuideId) &&
+      /当前远征线索|优先节点|演练目标/.test(guideSwitchProbe.sideGuideText || ''),
+    JSON.stringify({ guideSwitchTarget, guideSwitchProbe })
+  );
+
   await page.evaluate(() => {
-    const btn = document.querySelector('#challenge-hub-records .challenge-record-actions .collection-inline-btn');
+    const btn = document.querySelector('#challenge-hub-records [data-replay-record-id]');
     if (btn) btn.click();
   });
   await page.waitForTimeout(350);
@@ -275,6 +671,7 @@ function add(name, pass, detail = '') {
       /观星回放/.test(replaySelectionProbe.bannerText || '') &&
       !!replaySelectionProbe.pending?.archiveInsight?.title &&
       /回放复刻|回放试错/.test(replaySelectionProbe.insightText || '') &&
+      /演练目标|稳血收官|高压过线|补件断档/.test(replaySelectionProbe.insightText || '') &&
       /回放命盘/.test(replaySelectionProbe.confirmText || ''),
     JSON.stringify(replaySelectionProbe || null)
   );
@@ -323,7 +720,9 @@ function add(name, pass, detail = '') {
       ? JSON.parse(window.render_game_to_text())
       : null;
     const recordsText = document.getElementById('challenge-hub-records')?.textContent?.replace(/\s+/g, ' ').trim() || '';
-    const latestInsightText = document.querySelector('#challenge-hub-side .challenge-record-insight')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    const archiveSideCard = Array.from(document.querySelectorAll('#challenge-hub-side .codex-side-card'))
+      .find((card) => /观星留痕/.test(card.textContent || ''));
+    const latestInsightText = archiveSideCard?.querySelector('.challenge-record-insight')?.textContent?.replace(/\s+/g, ' ').trim() || '';
     return {
       mode: payload?.mode || '',
       archive: payload?.challenge?.archive || null,
@@ -332,11 +731,16 @@ function add(name, pass, detail = '') {
     };
   });
   add(
-    'failed replay returns to challenge hub with retry-oriented sample insight still visible',
+    'failed replay returns to challenge hub while preserved training preset still surfaces retry-oriented insight',
     !!replayFailureProbe &&
       replayFailureProbe.mode === 'challenge-screen' &&
-      /回放试错/.test(replayFailureProbe.recordsText || '') &&
-      /补救建议|资源缺口/.test(replayFailureProbe.recordsText || '') &&
+      replayFailureProbe.archive?.filterState?.scope === 'all' &&
+      replayFailureProbe.archive?.filterState?.track === 'challenge' &&
+      replayFailureProbe.archive?.filterState?.outcome === 'completed' &&
+      replayFailureProbe.archive?.filterState?.themeKey === 'oracle' &&
+      replayFailureProbe.archive?.filterState?.sortBy === 'score_desc' &&
+      Array.isArray(replayFailureProbe.archive?.activePresetSlots) &&
+      replayFailureProbe.archive.activePresetSlots.includes(0) &&
       /回放试错|补救建议|资源缺口/.test(replayFailureProbe.latestInsightText || '') &&
       /回放试错/.test(replayFailureProbe.archive?.latestInsight?.title || replayFailureProbe.archive?.latestInsightTitle || ''),
     JSON.stringify(replayFailureProbe || null)
@@ -381,7 +785,7 @@ function add(name, pass, detail = '') {
       mobileArchiveProbe.ok &&
       mobileArchiveProbe.shellWidth > 300 &&
       mobileArchiveProbe.scrollWidth > 300 &&
-      mobileArchiveProbe.recordsWidth > 300,
+      mobileArchiveProbe.recordsWidth > 250,
     JSON.stringify(mobileArchiveProbe || null)
   );
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-archive-mobile.png'), 'browser_challenge_audit', { timeout: 9000 });

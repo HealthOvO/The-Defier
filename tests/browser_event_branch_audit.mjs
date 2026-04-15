@@ -156,7 +156,9 @@ async function bootstrapRun(page) {
 }
 
 (async () => {
+  const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined;
   const browser = await chromium.launch({
+    executablePath,
     headless: true,
     args: ['--use-gl=angle', '--use-angle=swiftshader'],
   });

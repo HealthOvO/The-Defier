@@ -2023,15 +2023,23 @@ body {
     align-items: center;
 }
 
+.expedition-choice-head > * {
+    min-width: 0;
+}
+
 .expedition-choice-head strong {
     color: #f8f3e4;
     font-size: 15px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
 }
 
 .expedition-choice-head span {
     color: rgba(214, 222, 240, 0.76);
     font-size: 12px;
     text-align: right;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
 }
 
 .expedition-choice-card p,
@@ -2059,11 +2067,79 @@ body {
     background: rgba(17, 27, 51, 0.62);
 }
 
+.expedition-observatory-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+}
+
+.expedition-observatory-action {
+    display: grid;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(128, 186, 255, 0.2);
+    background: rgba(12, 22, 43, 0.58);
+}
+
+.expedition-observatory-action.selected {
+    border-color: rgba(238, 194, 91, 0.42);
+    box-shadow: inset 0 0 0 1px rgba(238, 194, 91, 0.14);
+}
+
+.expedition-observatory-action .collection-inline-btn {
+    width: fit-content;
+    max-width: 100%;
+}
+
 .expedition-observatory-note,
 .expedition-empty-note {
     color: rgba(201, 219, 247, 0.74);
     font-size: 12px;
     line-height: 1.65;
+}
+
+.expedition-practice-topic-list,
+.expedition-answer-sheet-list {
+    gap: 12px;
+}
+
+.expedition-answer-goal-list {
+    display: grid;
+    gap: 8px;
+}
+
+.expedition-answer-goal {
+    display: grid;
+    gap: 4px;
+    padding: 9px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(140, 169, 220, 0.18);
+    background: rgba(12, 21, 39, 0.52);
+}
+
+.expedition-answer-goal.completed {
+    border-color: rgba(88, 181, 126, 0.42);
+}
+
+.expedition-answer-goal.selected {
+    border-color: rgba(238, 194, 91, 0.32);
+}
+
+.expedition-answer-goal.suggested {
+    border-color: rgba(112, 188, 255, 0.32);
+}
+
+.expedition-answer-goal strong {
+    color: #f8f3e4;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.expedition-answer-goal span {
+    color: rgba(216, 226, 244, 0.76);
+    font-size: 12px;
+    line-height: 1.55;
 }
 
 .expedition-bounty-signal {
@@ -2179,6 +2255,90 @@ body {
     .expedition-observatory-card,
     .expedition-signals-card {
         grid-column: span 1;
+    }
+}
+
+@media (max-width: 720px) {
+    .map-expedition-panels {
+        gap: 12px;
+        padding: 0 14px 16px;
+    }
+
+    .expedition-panel-card {
+        padding: 14px 14px 12px;
+        border-radius: 16px;
+    }
+
+    .expedition-observatory-source,
+    .expedition-observatory-card .expedition-choice-card,
+    .expedition-faction-card,
+    .expedition-nemesis-card,
+    .expedition-signal-block,
+    .expedition-warning-item,
+    .expedition-signal-item,
+    .expedition-empty-note {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    .expedition-observatory-card .expedition-choice-head {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .expedition-observatory-card .expedition-choice-head span {
+        text-align: left;
+    }
+
+    .expedition-observatory-actions,
+    .expedition-signal-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .expedition-observatory-action .collection-inline-btn {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .map-expedition-panels {
+        padding: 0 10px 14px;
+    }
+
+    .expedition-panel-card {
+        padding: 12px 12px 10px;
+    }
+
+    .expedition-card-title {
+        font-size: 16px;
+    }
+
+    .expedition-card-note {
+        font-size: 13px;
+    }
+
+    .expedition-observatory-card .expedition-choice-card p,
+    .expedition-faction-card p,
+    .expedition-nemesis-card p {
+        font-size: 12px;
+    }
+
+    .expedition-observatory-card .expedition-choice-meta,
+    .expedition-observatory-note,
+    .expedition-empty-note,
+    .expedition-observatory-card .expedition-answer-goal span,
+    .expedition-warning-item span,
+    .expedition-signal-item span {
+        font-size: 11px;
+    }
+
+    .expedition-observatory-card .expedition-chip {
+        padding: 5px 8px;
+        font-size: 11px;
+    }
+
+    .expedition-observatory-card .expedition-answer-goal {
+        padding: 8px 9px;
     }
 }
 
@@ -4260,6 +4420,205 @@ body {
     letter-spacing: 0.35px;
     margin-bottom: 8px;
     font-weight: 700;
+}
+
+.reward-narrative-brief {
+    width: 100%;
+    margin-top: 14px;
+    padding: 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(155, 208, 255, 0.24);
+    background:
+        radial-gradient(circle at top right, rgba(122, 192, 255, 0.16), transparent 38%),
+        linear-gradient(145deg, rgba(15, 34, 62, 0.92), rgba(18, 24, 49, 0.9));
+    box-shadow: 0 10px 24px rgba(2, 12, 28, 0.28);
+    display: grid;
+    gap: 8px;
+}
+
+.reward-narrative-brief.is-archived {
+    border-color: rgba(255, 204, 116, 0.4);
+    background:
+        radial-gradient(circle at top right, rgba(255, 214, 135, 0.18), transparent 42%),
+        linear-gradient(145deg, rgba(63, 34, 8, 0.92), rgba(18, 30, 49, 0.9));
+}
+
+.reward-narrative-kicker {
+    color: rgba(176, 223, 255, 0.92);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+}
+
+.reward-narrative-title {
+    color: rgba(244, 248, 255, 0.98);
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.45;
+}
+
+.reward-narrative-body,
+.reward-narrative-foot {
+    color: rgba(214, 226, 244, 0.86);
+    font-size: 0.74rem;
+    line-height: 1.65;
+}
+
+.reward-narrative-foot {
+    color: rgba(167, 203, 236, 0.84);
+}
+
+.reward-expedition-meta {
+    width: 100%;
+    margin-top: 14px;
+    padding: 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 183, 122, 0.34);
+    background:
+        radial-gradient(circle at top right, rgba(255, 198, 132, 0.18), transparent 42%),
+        linear-gradient(145deg, rgba(61, 31, 12, 0.92), rgba(24, 36, 59, 0.9));
+    box-shadow: 0 10px 24px rgba(24, 10, 3, 0.28);
+    display: grid;
+    gap: 10px;
+}
+
+.reward-expedition-meta.is-complete {
+    border-color: rgba(255, 212, 128, 0.48);
+    background:
+        radial-gradient(circle at top right, rgba(255, 218, 152, 0.22), transparent 44%),
+        linear-gradient(145deg, rgba(84, 46, 10, 0.94), rgba(24, 41, 58, 0.92));
+    box-shadow: 0 14px 30px rgba(52, 28, 5, 0.32);
+}
+
+.reward-expedition-kicker {
+    color: rgba(255, 222, 176, 0.94);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+.reward-expedition-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.reward-expedition-badge,
+.reward-expedition-score {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    line-height: 1.2;
+    letter-spacing: 0.24px;
+}
+
+.reward-expedition-badge {
+    border: 1px solid rgba(255, 214, 156, 0.34);
+    background: rgba(125, 72, 20, 0.28);
+    color: rgba(255, 239, 215, 0.98);
+    font-weight: 700;
+}
+
+.reward-expedition-score {
+    border: 1px solid rgba(173, 225, 255, 0.32);
+    background: rgba(28, 70, 96, 0.3);
+    color: rgba(221, 244, 255, 0.96);
+    font-weight: 700;
+}
+
+.reward-expedition-title {
+    color: rgba(248, 242, 233, 0.98);
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.45;
+}
+
+.reward-expedition-summary {
+    color: rgba(234, 220, 198, 0.88);
+    font-size: 0.73rem;
+    line-height: 1.65;
+}
+
+.reward-expedition-section {
+    display: grid;
+    gap: 6px;
+}
+
+.reward-expedition-section-title {
+    color: rgba(255, 214, 149, 0.92);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.22px;
+}
+
+.reward-expedition-list {
+    display: grid;
+    gap: 6px;
+}
+
+.reward-expedition-line {
+    padding: 9px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 205, 145, 0.18);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(247, 232, 209, 0.92);
+    font-size: 0.7rem;
+    line-height: 1.55;
+}
+
+.reward-expedition-line.muted {
+    border-color: rgba(157, 215, 255, 0.18);
+    background: rgba(18, 55, 74, 0.22);
+    color: rgba(210, 228, 243, 0.84);
+}
+
+.reward-expedition-advice {
+    display: grid;
+    gap: 4px;
+    padding: 11px 12px;
+    border-radius: 13px;
+    border: 1px solid rgba(137, 227, 255, 0.24);
+    background: linear-gradient(135deg, rgba(15, 52, 68, 0.32), rgba(69, 45, 18, 0.22));
+    color: rgba(220, 240, 252, 0.92);
+    font-size: 0.7rem;
+    line-height: 1.55;
+}
+
+.reward-expedition-advice-label {
+    color: rgba(156, 230, 255, 0.96);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.24px;
+}
+
+.reward-expedition-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+}
+
+.reward-expedition-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 213, 162, 0.26);
+    background: rgba(102, 65, 26, 0.28);
+    color: rgba(255, 238, 214, 0.96);
+    font-size: 0.68rem;
+    line-height: 1.2;
+    letter-spacing: 0.2px;
+}
+
+.reward-expedition-chip.focus {
+    border-color: rgba(154, 227, 255, 0.36);
+    background: rgba(29, 82, 112, 0.34);
+    color: rgba(226, 247, 255, 0.98);
 }
 
 .reward-meta-chips {
@@ -6462,9 +6821,60 @@ body {
         border-radius: 12px;
     }
 
+    .reward-expedition-meta {
+        padding: 10px;
+        border-radius: 12px;
+        gap: 8px;
+    }
+
+    .reward-narrative-brief {
+        padding: 10px;
+        border-radius: 12px;
+        gap: 6px;
+    }
+
+    .reward-narrative-kicker {
+        font-size: 0.68rem;
+    }
+
+    .reward-narrative-title {
+        font-size: 0.78rem;
+    }
+
+    .reward-narrative-body,
+    .reward-narrative-foot {
+        font-size: 0.64rem;
+    }
+
     .reward-run-path-header {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    .reward-expedition-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .reward-expedition-badge,
+    .reward-expedition-score {
+        justify-content: center;
+        font-size: 0.66rem;
+    }
+
+    .reward-expedition-title {
+        font-size: 0.78rem;
+    }
+
+    .reward-expedition-summary,
+    .reward-expedition-line,
+    .reward-expedition-advice {
+        font-size: 0.64rem;
+    }
+
+    .reward-expedition-advice-label,
+    .reward-expedition-section-title {
+        font-size: 0.62rem;
     }
 
     .reward-run-path-badge,
@@ -18552,6 +18962,12 @@ body {
     color: rgba(255, 227, 227, 0.94);
 }
 
+.collection-tag.emphasis {
+    border-color: rgba(255, 215, 122, 0.34);
+    background: rgba(73, 52, 13, 0.76);
+    color: rgba(255, 240, 196, 0.96);
+}
+
 .collection-status-chip {
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(255, 255, 255, 0.05);
@@ -18596,9 +19012,42 @@ body {
     color: rgba(255, 228, 228, 0.92);
 }
 
+.collection-status-chip.completed,
+.detail-status-chip.completed {
+    border-color: rgba(122, 224, 170, 0.36);
+    background: rgba(16, 61, 40, 0.72);
+    color: rgba(227, 255, 238, 0.94);
+}
+
+.collection-status-chip.selected,
+.detail-status-chip.selected {
+    border-color: rgba(122, 184, 255, 0.34);
+    background: rgba(18, 31, 61, 0.78);
+    color: rgba(224, 236, 255, 0.94);
+}
+
+.collection-status-chip.suggested,
+.detail-status-chip.suggested {
+    border-color: rgba(255, 215, 122, 0.36);
+    background: rgba(58, 42, 14, 0.72);
+    color: rgba(255, 241, 206, 0.94);
+}
+
 .collection-detail-shell {
     display: grid;
     gap: 14px;
+}
+
+.run-slate-card.tone-completed {
+    border-color: rgba(122, 224, 170, 0.2);
+}
+
+.run-slate-card.selected {
+    border-color: rgba(124, 209, 255, 0.34);
+}
+
+.run-slate-card.tone-suggested {
+    border-color: rgba(255, 215, 122, 0.2);
 }
 
 .collection-detail-hero,
@@ -18674,6 +19123,16 @@ body {
     cursor: not-allowed;
     opacity: 0.58;
     transform: none;
+}
+
+.collection-action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.collection-action-row .collection-inline-btn {
+    margin-top: 0;
 }
 
 .collection-detail-actions {
@@ -19388,6 +19847,108 @@ body {
     font-size: 0.95rem;
 }
 
+.challenge-archive-toolbar {
+    padding: 14px 16px;
+    border-radius: 20px;
+    border: 1px solid rgba(118, 166, 255, 0.16);
+    background: linear-gradient(180deg, rgba(10, 18, 38, 0.88), rgba(7, 13, 28, 0.94));
+    display: grid;
+    gap: 12px;
+}
+
+.challenge-archive-toolbar-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.challenge-archive-toolbar-head .challenge-compare-note {
+    flex: 1 1 auto;
+}
+
+.challenge-archive-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 10px;
+}
+
+.challenge-archive-filter {
+    display: grid;
+    gap: 6px;
+}
+
+.challenge-archive-filter span {
+    color: rgba(214, 225, 248, 0.76);
+    font-size: 0.8rem;
+}
+
+.challenge-archive-filter select {
+    width: 100%;
+    min-width: 0;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(128, 171, 255, 0.26);
+    background: rgba(12, 22, 46, 0.92);
+    color: #e7eefc;
+    font-size: 0.86rem;
+    outline: none;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.challenge-archive-filter select:hover {
+    border-color: rgba(164, 198, 255, 0.4);
+}
+
+.challenge-archive-filter select:focus {
+    border-color: rgba(240, 202, 121, 0.42);
+    box-shadow: 0 0 0 3px rgba(240, 202, 121, 0.12);
+    background: rgba(15, 27, 54, 0.96);
+}
+
+.challenge-archive-filter select option {
+    color: #e7eefc;
+    background: #10203f;
+}
+
+.challenge-archive-summary-tags {
+    margin-top: 0;
+}
+
+.challenge-archive-preset-bar {
+    gap: 10px;
+}
+
+.challenge-archive-preset-bar .collection-muted {
+    margin: 0;
+}
+
+.challenge-archive-preset-slots {
+    width: 100%;
+}
+
+.challenge-archive-preset-slot {
+    flex: 1 1 280px;
+    min-width: min(100%, 240px);
+}
+
+.challenge-archive-preset-btn {
+    max-width: min(100%, 280px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.challenge-archive-preset-btn.active {
+    border-color: rgba(240, 202, 121, 0.36);
+    box-shadow: inset 0 0 0 1px rgba(240, 202, 121, 0.14);
+}
+
+.collection-inline-btn.compact {
+    padding-inline: 10px;
+    min-width: 42px;
+}
+
 .challenge-reward-card,
 .challenge-record-item {
     padding: 14px 16px;
@@ -19759,6 +20320,20 @@ body {
     .challenge-record-actions {
         width: 100%;
         align-items: stretch;
+    }
+
+    .challenge-archive-toolbar-head {
+        flex-direction: column;
+    }
+
+    .challenge-archive-preset-slot {
+        width: 100%;
+    }
+
+    .challenge-archive-preset-btn {
+        max-width: 100%;
+        white-space: normal;
+        text-overflow: clip;
     }
 
     .challenge-compare-head,

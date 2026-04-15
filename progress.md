@@ -7232,3 +7232,242 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - PVP 现在已经把“真实交手留痕”和“同卷参照样本”彻底拆清，避免玩家把样本回退误读成直样战绩。
     - 入口版本条、指南文案、PVP 首屏脚注与实际功能已重新对齐。
     - 本轮 fresh release gate 目录以 `output/release-browser-audits-v7-ledger-r2` 为准。
+
+- 2026-04-13: 远征观星玩法文案同步与路线合卷规则收口
+  - 本轮完成
+    - `js/core/expedition_hub.js`
+      - `buildExpeditionObservatoryRoutePact()` 新增 guard：已完成或已领奖的章节悬赏，不再允许事后被观星线 retro-arm 成新的 `routePact`。
+      - 这样 late lock 的支线 / 观星 bonus 只会并卷仍在进行中的目标，避免把已结算赏单再并成新答卷。
+    - `tests/sanity_expedition_state_checks.js`
+      - 新增负向合同：已完成且已领奖的 aligned bounty 即便仍在 `activeBountyIds` 中，也不能再 build / arm 新的 `routePact`。
+      - 保留此前的正向覆盖：共鸣对齐、路线合卷推进、`battle_start` 时序、脏档 resonance 恢复。
+    - `game-intro.html`
+      - “当前版本重点” 已同步到 `观星线索 -> 命盘共鸣 -> 路线合卷 -> 开战 bonus / 章节答卷加成` 的现状口径。
+      - “下一迭代方向” 改成继续深化挑战观察站的跨样本对比维度、训练标签与远征 / 观星总结入口。
+  - `js/game.js`
+      - 游戏内指南的更新页补入 `观星共鸣 / 路线合卷` 条目，避免用户仍把这轮已上线能力看成 future work。
+      - `V7.x` 展望同步收口到“挑战观察站深化 + 远征 / 观星总结入口延展”口径。
+    - `js/core/challenge_hub.js`
+      - 观察站留痕 / 回放 insight 新增 `trainingTags / coachBrief / drillObjective`，让同一份样本同时拥有“这局怎么赢的”和“下一局该怎么练”的双层反馈。
+      - 同主题对比卡补入 `血线稳定 / 高压处理 / 补件效率` 三条固定对比轴，并把 `preferredNodes` 转成明确的 `优先节点` 路线提示。
+      - `observatoryGuide` payload 现会同步暴露 `preferredNodes / routeFocusLine / compareHint / trainingTags / drillObjective`，避免 UI 与调试 payload 口径分叉。
+    - `js/core/expedition_hub.js`
+      - 章节观星线索现会冻结训练标签、样本路径、教练提示与演练目标，并继续写入远征面板、构筑快照与章节答卷 score breakdown。
+      - 这样“观察站读题 -> 远征执行 -> 章节总结”的复盘语言终于打通成一条连续链路。
+    - `tests/sanity_observatory_archive_checks.js`
+      - 新增合同：archive insight / selected guide / challenge payload 必须带出训练标签、route focus、compare hint 与 drill objective。
+      - 同主题对比也新增固定 `compareAxes` 断言，确保后续不会退回成只看分数的样本列表。
+    - `tests/sanity_expedition_state_checks.js`
+      - 新增合同：观星线索进入章节状态后，训练标签 / 样本路径 / drill objective 必须继续存在于 payload、build snapshot 与 latest slate。
+    - `tests/browser_challenge_audit.mjs`
+      - 浏览器审计现在会主动清理 `theDefierObservatoryArchiveV1 / theDefierObservatoryGuideStateV1`，避免本地脏缓存污染 challenge 审计。
+      - 审计断言新增训练标签、演练目标、远征线索侧栏文本与同主题对比轴，确认这轮增强确实被玩家看得到，而不只是 payload 里存在。
+  - 本轮验证
+    - `node --check js/core/challenge_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check js/game.js` ✅
+    - `node --check tests/sanity_observatory_archive_checks.js` ✅
+    - `node --check tests/sanity_expedition_state_checks.js` ✅
+    - `node tests/sanity_observatory_archive_checks.js` ✅
+    - `node tests/sanity_expedition_state_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_challenge_audit.mjs http://127.0.0.1:4176 output/browser-challenge-playability-20260413` ✅
+  - 当前结论
+    - 远征观星这条线的用户可见说明、游戏内指南与测试合同已对齐到当前实现状态。
+    - `routePact` 现在只会绑定仍在进行中的章节悬赏，不再存在“已完成赏单事后并卷”的规则泄漏。
+
+- 2026-04-13: 挑战观察站主题对比轴与 guide 桥接验收收口
+  - 本轮完成
+    - `js/core/challenge_hub.js`
+      - `buildChallengeComparisonAxes()` 改为按主题输出专属对比轴：`稳守续航 / 推演控场 / 前压爆发 / 法宝共振 / 连携节拍 / 跨章耐压` 各自拥有不同的三条比较维度，不再把所有主题都压成同一套泛化标签。
+      - 观星留痕与同主题对比卡的 `设为远征线索 / 复盘命盘` 按钮补入 `data-guide-record-id / data-replay-record-id`，让浏览器门禁能稳定命中真实目标按钮，而不再靠“第一个按钮”做脆弱选择。
+    - `tests/sanity_observatory_archive_checks.js`
+      - 新增主题轴合同：当前 comparison 必须使用与 `themeKey` 对应的三条专属 label。
+      - 额外补入 `daily_star_script` 的 oracle 手工样本，确认 `观测收益 / 路线贴合 / 控场稳定` 这组 theme-specific axes 能稳定生成。
+    - `tests/browser_challenge_audit.mjs`
+      - 在 challenge 浏览器审计中额外构造第二份同主题样本，并新增“点击 alternate `设为远征线索`”的真实 UI 验收。
+      - 断言从 challenge hub 切换 guide 后，`challenge.archive.selectedGuideId`、`challenge.observatoryGuide.id`、selected compare card 与侧栏“当前远征线索”会同步切换。
+    - `tests/browser_expedition_audit.mjs`
+      - 初始场景改为先在观察站里构造两份样本并切到 alternate guide，再初始化 expedition。
+      - 新增 bridge 断言：expedition `observatoryLink.sourceRecordId / sourceTitle / trainingTags / routeFocusLine` 必须与当前选中的 observatory guide 对齐，确认“挑战页切线索 -> 远征真读到新 guide”已经闭环。
+    - `game-intro.html`
+      - `V7.x` 的挑战观察站展望收口：移除已完成的“主题专属对比轴 / guide 切换验收”，仅保留更长周期样本筛面与跨周检索。
+    - `js/game.js`
+      - 游戏内指南同步收口到新的 `V7.x` 口径，避免继续把已完成项挂成 future work。
+  - 本轮验证
+    - `node --check js/core/challenge_hub.js` ✅
+    - `node --check tests/sanity_observatory_archive_checks.js` ✅
+    - `node --check tests/browser_challenge_audit.mjs` ✅
+    - `node --check tests/browser_expedition_audit.mjs` ✅
+    - `node tests/sanity_observatory_archive_checks.js` ✅
+    - `node tests/sanity_expedition_state_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_challenge_audit.mjs http://127.0.0.1:4176 output/browser-challenge-guide-bridge-20260413` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_expedition_audit.mjs http://127.0.0.1:4176 output/browser-expedition-guide-bridge-20260413` ✅
+  - 当前结论
+    - 挑战观察站现在已经不只是在本地方法层“能切 guide”，而是完成了 `challenge UI -> selected guide state -> expedition observatoryLink` 的真实桥接验收。
+    - `V7.x` 在挑战观察站方向上的剩余主项，已收敛为“更长周期样本筛面 / 跨周检索 / 历史分层”。
+
+- 2026-04-13: 挑战观察站历史筛面与跨赛道检索收口
+  - 本轮完成
+    - `js/core/challenge_hub.js`
+      - `challengeHubState` 从仅存 `tab` 扩展为带 `archiveFilters` 的轻量状态机，按 `daily / weekly / global` 分别记住观察站筛面。
+      - 新增 `theDefierChallengeHubStateV1`，让 tab 与筛面状态在刷新后仍能恢复，不再只在单次会话内生效。
+      - `getObservatoryArchiveEntries()` 新增 `rotationKey / themeKey / completedOnly / failedOnly / replayOnly` 等过滤维度，历史留痕不再只能读固定 3 条切片。
+      - 新增 `get/set/reset/buildChallengeArchiveFilter*` 系列方法，把“本轮 / 同赛道 / 跨赛道”“可回放 / 挑战成绩 / 回放记录 / 观星预兆”“完成 / 失手 / 全部结果”“主题”四个维度收成可序列化的筛面。
+      - Challenge Hub 的 `观星留痕` 区升级为真实筛面：会渲染筛选控件、命中摘要、还原按钮，并允许直接检索旧周次 / 旧赛道样本，而不影响 `同主题对比` 与远征 guide 语义。
+      - `challenge.archive` payload 新增 `filterState / filterSummary / filteredCount / scopeTotalCount / filtered*Count` 等字段，浏览器门禁与调试输出终于能读到“当前玩家到底在看哪层历史样本”。
+    - `css/style.css`
+      - 新增观察站筛面工具条、筛选下拉框与摘要 tag 样式，并补移动端下的纵向折叠，避免新控件把 challenge records 区挤坏。
+    - `tests/sanity_observatory_archive_checks.js`
+      - 额外补入 weekly 样本与 oracle 样本，新增合同覆盖默认筛面、跨赛道 completed oracle 检索、failed replay 隔离、reset 行为，以及 payload 对筛面状态的序列化。
+    - `tests/browser_challenge_audit.mjs`
+      - 浏览器审计会主动构造 oracle / weekly 历史样本，新增真实 UI 门禁覆盖筛面切换、筛面 reset、payload 计数同步，再继续执行原有 guide 切换与 replay 链路。
+      - guide 切换目标改为限定命中 compare card 内的按钮，避免新增 archive 样本后再被“第一个按钮”类脆弱选择误伤。
+    - `tests/browser_expedition_audit.mjs`
+      - 初始清理补入 `theDefierChallengeHubStateV1`，避免 challenge 筛面持久化污染远征桥接审计。
+    - `game-intro.html`
+      - 当前版本重点补入“观察站可按窗口 / 样本层 / 结果 / 主题检索旧样本”。
+      - `V7.x` 展望继续收口到“筛面预设 / 样本排序 / 更长档期历史分层”，不再把本轮已完成的历史筛面继续挂成 future work。
+    - `js/game.js`
+      - 游戏内指南同步补入观察站历史筛面能力，并把挑战观察站后续方向改成新的 `V7.x` 口径。
+  - 本轮验证
+    - `node --check js/core/challenge_hub.js`
+    - `node --check js/game.js`
+    - `node --check tests/sanity_observatory_archive_checks.js`
+    - `node --check tests/browser_challenge_audit.mjs`
+    - `node --check tests/browser_expedition_audit.mjs`
+    - `node tests/sanity_observatory_archive_checks.js`
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_challenge_audit.mjs http://127.0.0.1:4176 output/browser-challenge-archive-filters-20260413`
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_expedition_audit.mjs http://127.0.0.1:4176 output/browser-expedition-guide-bridge-20260413`
+  - 当前结论
+    - 挑战观察站现在已经从“能留痕、能回放”继续扩成“能检索旧样本”的训练入口，玩家终于能按不同历史窗口翻旧档案找打法，而且筛面会在刷新后继续保留。
+    - 下一条更值得做的观察站深化项，已经从“先把筛面做出来”进一步收敛为“筛面预设 / 排序 / 更长档期分层”。
+
+- 2026-04-13: 挑战观察站筛面预设与样本排序收口
+  - 本轮完成
+    - `js/core/challenge_hub.js`
+      - 为观察站历史筛面补入 `sortBy`，首批提供 `recent / score_desc` 两种排序，让样本列表既能保持默认按最近留痕阅读，也能快速切到“高分优先”的训练视角。
+      - `challengeHubState` 新增按 `daily / weekly / global` 分槽的 `archivePresets`，每个页签提供 2 个轻量预设位，保存当前筛面与排序组合，并在刷新后继续恢复。
+      - `观星留痕` 工具条新增排序下拉、预设应用按钮、预设保存按钮与排序摘要；`challenge.archive` payload 继续补出 `sortLabel / activePresetSlots / presetLabels`，浏览器门禁与调试输出能直接看到当前训练预设。
+    - `css/style.css`
+      - 为观察站预设条、紧凑按钮与移动端换行补样式，避免新增按钮把历史样本区挤出横向滚动。
+    - `tests/sanity_observatory_archive_checks.js`
+      - 新增默认排序、高分优先排序、预设保存、状态持久化、重载恢复与 payload 字段合同，确保“筛面 + 排序 + 预设”是同一条序列化链。
+    - `tests/browser_challenge_audit.mjs`
+      - 浏览器门禁新增排序下拉、预设保存/恢复、高分样本顺序、预设标签与激活态断言。
+      - 回放失败验收同步调整为“保留当前训练预设，同时侧栏继续露出最新试错洞察”，避免旧门禁继续假设失败样本一定出现在当前筛面列表里。
+    - `game-intro.html`
+      - 当前版本重点同步改成“历史筛面 + 训练预设 + 样本排序”已上线。
+      - `V7.x` 展望收窄为“跨周检索 / 更长档期聚合 / 更细历史分层”。
+    - `js/game.js`
+      - 游戏内版本说明同步改成与外部介绍一致的观察站口径，避免继续把已上线的预设 / 排序写成 future work。
+  - 本轮验证
+    - `node --check js/core/challenge_hub.js`
+    - `node --check tests/sanity_observatory_archive_checks.js`
+    - `node --check tests/browser_challenge_audit.mjs`
+    - `node tests/sanity_observatory_archive_checks.js`
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_challenge_audit.mjs http://127.0.0.1:4176 output/browser-challenge-archive-filters-20260413`
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_expedition_audit.mjs http://127.0.0.1:4176 output/browser-expedition-guide-bridge-20260413`
+  - 当前结论
+    - 挑战观察站现在已经从“能检索旧样本”继续扩成“能保存训练筛面并按目标顺序翻样本”的训练入口，切筛面、切排序与回到常用视角的往返成本明显下降。
+    - `V7.x` 在挑战观察站上的剩余高价值项，已经继续收敛到“跨周检索 / 更长档期聚合 / 更细历史分层”，而不是继续补这轮已经上线的基础训练操作。
+
+- 2026-04-13: 远征观星推荐路线一键锁线收口
+  - 本轮完成
+    - `js/core/expedition_hub.js`
+      - 新增 `selectExpeditionRecommendedBranch()`，让观星卡里的推荐路线直接复用现有 `selectExpeditionBranch()` 语义，不另起一套支线系统。
+      - `observatoryLink.recommendedBranches` payload 新增 `selected`，调试输出、浏览器门禁与 UI 当前态终于能看同一份事实源。
+      - 观星联动卡把原本的纯文本“推荐路线”升级成“解释文案 + 快捷切线按钮区”，并补入稳定选择器 `data-observatory-recommended-branch`。
+    - `css/style.css`
+      - 新增观星推荐路线 action row / action card 样式，保证桌面端紧凑呈现、窄屏下自动换行，不把 bonus 区挤出横向滚动。
+    - `tests/sanity_expedition_state_checks.js`
+      - 新增合同：推荐路线 id 必须来自当前 `branchOptions`，快捷入口必须成功写入 `selectedBranchId`、进入 locked 态，并把 `recommendedBranches[].selected` 同步回 payload。
+      - 额外补入拒绝路径：非推荐 id 调用快捷入口时必须返回 `false` 且不得悄悄改写当前路线。
+    - `tests/browser_expedition_audit.mjs`
+      - 把原来直接调用 `game.selectExpeditionBranch()` 的 probe 升级为真实点击观星卡推荐按钮，验收 `UI click -> expedition state -> render_game_to_text -> rerender` 整条链路。
+    - `game-intro.html`
+      - 当前版本重点同步补成“观星线索支持按推荐路线一键锁线”，避免对外介绍还停留在只展示推荐路线的旧口径。
+    - `js/game.js`
+      - 游戏内更新页同步补入一键锁线能力，保持游戏内外版本说明一致。
+  - 本轮验证
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check tests/sanity_expedition_state_checks.js` ✅
+    - `node --check tests/browser_expedition_audit.mjs` ✅
+    - `node tests/sanity_expedition_state_checks.js` ✅
+    - `node tests/browser_expedition_audit.mjs http://127.0.0.1:4176 output/fresh-20260413-observatory-quick-lock` ✅
+  - 当前结论
+    - 远征里的观星推荐路线现在不再只是“看得到的建议”，而是能从观星卡直接执行的真实动作，观察站样本终于真正压缩了“读题 -> 选线 -> 开章”的操作距离。
+    - 本轮 fresh 浏览器审计目录以 `output/fresh-20260413-observatory-quick-lock` 为准。
+
+- 2026-04-15: 远征观星答卷纵切收口
+  - 本轮完成
+    - `js/core/expedition_hub.js`
+      - 观星联动卡的导语升级为“章节课题 -> 答卷状态 -> 观星回响”口径，不再把整条链路误写成单次 bonus。
+      - 为修行课题、章节答卷状态、观星推荐路线补入稳定 `data-*` 语义选择器，方便浏览器门禁读取真实字段，不再依赖当前 DOM 顺序碰运气。
+      - build snapshot 里的“观星 bonus”同步改成“观星加成”，避免对内 / 对外口径继续混用。
+    - `css/style.css`
+      - 为观星卡头部、推荐路线 action row 与答卷子卡补窄屏收口：长标题允许换行、推荐按钮改为移动端整行、`720px / 480px` 下统一减 padding 与字号，降低 observatory 大卡的信息挤压感。
+    - `tests/browser_expedition_audit.mjs`
+      - 初始、锁线、答卷状态读取改成优先走稳定 selector，不再把 `.expedition-choice-card.selected strong` 这类宽选择器当事实源。
+      - 真实浏览器链路补入 `practiceTopic` 冻结校验，确认 live guide 漂移不会串进已开章章节。
+      - 新增 `390px` / `360px` observatory 移动端不横向溢出的门禁与 fresh 截图，封板前能直接看到这张大卡在手机宽度下是否还可读。
+    - `game-intro.html`
+      - 当前版本重点同步改成“修行课题 -> 章节答卷状态 -> 章节观星回响”的可见玩法口径，并把“开战 bonus”统一改成“开战触发加成”。
+    - `js/game.js`
+      - 游戏内更新页同步收口到与外部介绍一致的观星答卷链路描述，避免游戏内外版本说明分叉。
+  - 本轮验证
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check js/game.js` ✅
+    - `node --check tests/browser_expedition_audit.mjs` ✅
+    - `node tests/sanity_expedition_state_checks.js` ✅
+    - `node tests/browser_expedition_audit.mjs http://127.0.0.1:4173 output/browser-expedition-audit-fresh` ✅
+
+- 2026-04-15: 归卷书架 Lite 收口
+  - 本轮完成
+    - `js/core/collection_hub.js`
+      - 新增 `slates / 归卷书架` 分区的稳定 `data-run-slate-*` 动作钩子，书架卡、设为主练、回观星复盘都不再只能靠文案匹配。
+    - `js/core/expedition_hub.js`
+      - 章节答卷现在会把 `practiceTopic / observatoryLink / themeKey` 一并写入并持久化，旧答卷缺 key 时也会按主题标签回补，避免主练回流串到默认 `assault`。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 归卷书架验收改成 selector 驱动，并补测“设为当前训练参考 -> 回观星复盘 -> 命盘档案室跳回书架”的整条闭环。
+    - `tests/sanity_expedition_state_checks.js`
+      - 新增章节答卷 reload 后仍能恢复 `themeKey / routeFocusLine / compareHint / trainingTags` 的断言，防止归档后信息衰减。
+  - 本轮验证
+    - `node tests/sanity_expedition_state_checks.js` ✅
+    - `node tests/sanity_run_slate_shelf_checks.js` ✅
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/browser-meta-screen-audit-run-slate-v2` ✅
+    - `node tests/browser_dongfu_audit.mjs http://127.0.0.1:4173 output/browser-dongfu-shelf-audit-v2` ✅
+    - `tests/run_node_checks.sh` 全量等价 PowerShell 回归 ✅
+    - `tests/run_browser_release_checks.sh` 全量等价 PowerShell 回归 ✅
+  - 当前结论
+    - 远征里的观星线索现在终于不是“读完就忘的 bonus 提示”，而是玩家能持续看到、持续推进的章节作答链路。
+    - 本轮 fresh 浏览器审计目录以 `output/browser-expedition-audit-fresh` 为准。
+
+- 2026-04-15: 远征奖励页补出观星回响总结卡
+  - 本轮完成
+    - `js/core/expedition_hub.js`
+      - 章节归卷时不再只把 `latestSlate` 存进档案，还会额外生成 reward settlement handoff，让奖励页能直接读取章节结算摘要。
+      - 为未成卷章节补入默认评级、偏题诊断与训练建议回退文案，避免只看到“有卡但没结论”的空心总结。
+    - `js/game.js`
+      - 奖励页新增远征 `reward-expedition-meta` 渲染链，并把章节归卷叙事接入 reward header / narrative brief / `renderGameToText().reward.expedition`。
+      - 继续前进、开新战斗与测试战入口都会同步清理远征 settlement transient state，避免上一章总结卡串到下一场普通战斗。
+      - 游戏内更新页同步补一句“奖励页会生成观星回响总结卡”，让游戏内外口径一致。
+    - `index.html`
+      - reward 右侧摘要 rail 新增独立的远征章节归卷卡槽，不与战利来源、命途结算卡互相覆盖。
+    - `css/style.css`
+      - 为观星回响总结卡补桌面 / 窄屏样式，保证结算 rail 在手机宽度下仍能读出评分、诊断与建议。
+    - `tests/sanity_expedition_state_checks.js`
+      - 补 `finalizeExpeditionChapter()` 后的 reward handoff 合同，确认章节归卷会留下可供结算 UI 消费的评级 / 诊断 / 建议字段。
+    - `tests/browser_run_path_reward_audit.mjs`
+      - 在既有 reward rail 浏览器门禁里新增 expedition settlement probe，校验新卡的 DOM、payload 镜像与 cleanup。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check tests/browser_run_path_reward_audit.mjs` ✅
+    - `node --check tests/sanity_expedition_state_checks.js` ✅
+    - `node tests/sanity_expedition_state_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_run_path_reward_audit.mjs http://127.0.0.1:4173 output/test-browser-run-path-reward-fresh` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_expedition_audit.mjs http://127.0.0.1:4173 output/browser-expedition-audit-fresh` ✅
+  - 当前结论
+    - 远征的“课题 -> 答卷 -> 归卷”现在终于在真实奖励页有了主舞台：章节结束时会把评分、偏题诊断、训练建议和关键留痕一起压成观星回响总结卡。
+    - 这条结算卡既能承接完整成卷，也能在“还没成卷”的章节给出默认诊断，不再出现只收档案、不做反馈的真空层。

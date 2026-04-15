@@ -34,6 +34,7 @@ function rectObj(rect) {
 (async () => {
   const browser = await chromium.launch({
     headless: true,
+    executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
     args: ['--use-gl=angle', '--use-angle=swiftshader'],
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
@@ -86,6 +87,23 @@ function rectObj(rect) {
         synergyThemeName: '轮段·反制晶格',
       },
     };
+    game.lastRunPathRewardMeta = {
+      pathId: 'insight',
+      name: '窥命流',
+      icon: '🪞',
+      completed: false,
+      entries: [
+        {
+          phaseId: 'insight_mid',
+          phaseLabel: '化境',
+          title: '窥盘校谱',
+          rewardText: '命环经验 +45',
+          nextPhaseLabel: '登峰',
+          nextPhaseTitle: '命盘问真',
+          completed: false,
+        },
+      ],
+    };
     game.showRewardScreen(145, true, { stealLaw: lawId, stealChance: 1 }, 32, { insight: 8, karma: 3 });
 
     const screen = document.getElementById('reward-screen');
@@ -94,6 +112,8 @@ function rectObj(rect) {
     const side = document.querySelector('.reward-side-column');
     const actions = document.querySelector('.reward-actions');
     const summary = document.querySelector('.reward-summary-card');
+    const narrative = document.getElementById('reward-narrative-brief');
+    const subtitle = document.querySelector('#reward-screen .reward-subtitle');
     const cards = Array.from(document.querySelectorAll('#reward-cards .card'));
     const skipBtn = document.querySelector('.skip-reward-btn');
     const expectedSkipCost = typeof game.getRewardSkipCost === 'function'
@@ -132,6 +152,8 @@ function rectObj(rect) {
         summaryRect.bottom <= actionsRect.top + 24 &&
         cardsInsideMain &&
         cardsAboveActions &&
+        /命盘档案|命盘问真/.test(narrative?.textContent || '') &&
+        /命盘样本|写入档案/.test(subtitle?.textContent || '') &&
         mainRect.right < viewportWidth &&
         sideRect.right <= viewportWidth &&
         (skipBtn.textContent || '').includes(`扣${expectedSkipCost}灵石`),
@@ -141,6 +163,8 @@ function rectObj(rect) {
       summaryRect,
       actionsRect,
       cardRects,
+      narrativeText: narrative?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      subtitleText: subtitle?.textContent?.replace(/\s+/g, ' ').trim() || '',
       skipText: skipBtn.textContent || '',
       expectedSkipCost,
     };
@@ -836,11 +860,14 @@ function rectObj(rect) {
 
     game.showCollection();
     if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('builds');
+    const buildSubtitle = (document.getElementById('collection-subtitle')?.textContent || '').replace(/\s+/g, ' ').trim();
     const buildHeroText = (document.getElementById('build-snapshot-hero')?.textContent || '').replace(/\s+/g, ' ').trim();
     const buildMetricCount = document.querySelectorAll('#build-snapshot-metrics .build-metric-card').length;
     const buildNotesText = (document.getElementById('build-snapshot-notes')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const buildGuideText = (document.getElementById('build-snapshot-guide')?.textContent || '').replace(/\s+/g, ' ').trim();
 
     if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('sanctum');
+    const sanctumSubtitle = (document.getElementById('collection-subtitle')?.textContent || '').replace(/\s+/g, ' ').trim();
     const roomCards = document.querySelectorAll('#sanctum-room-grid .sanctum-room-card').length;
     const researchItems = document.querySelectorAll('#sanctum-research-list .sanctum-research-item').length;
     const goalItems = document.querySelectorAll('#sanctum-goal-list .sanctum-goal-item, #sanctum-goal-list .codex-empty-state').length;
@@ -849,19 +876,23 @@ function rectObj(rect) {
     const progressText = (document.getElementById('sanctum-progress')?.textContent || '').replace(/\s+/g, ' ').trim();
     const roomText = (document.getElementById('sanctum-room-grid')?.textContent || '').replace(/\s+/g, ' ').trim();
     const researchText = (document.getElementById('sanctum-research-list')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumGuideText = (document.getElementById('sanctum-guide')?.textContent || '').replace(/\s+/g, ' ').trim();
     return {
       ok:
+        /实战样本/.test(buildSubtitle) &&
         /构筑画像|攻势抢拍|法则编织|护阵拖线|混成试作/.test(buildHeroText) &&
         buildMetricCount >= 4 &&
         /当前优势/.test(buildNotesText) &&
         /主要缺口/.test(buildNotesText) &&
         /下一轮补位|补件优先级队列/.test(buildNotesText) &&
         /样本对照/.test(buildNotesText) &&
+        /当前精选命盘|观星台/.test(buildGuideText) &&
         /自动推荐摘要|推荐角色|推荐套装/.test(buildNotesText) &&
         /章节适配|场域拟合分/.test(buildNotesText) &&
         /下一章风险镜像|下一章高危|高危·/.test(buildNotesText) &&
         /丹尊/.test(buildNotesText) &&
         /天道/.test(buildNotesText) &&
+        /命盘档案/.test(sanctumSubtitle) &&
         roomCards >= 5 &&
         researchItems >= 11 &&
         goalItems >= 1 &&
@@ -872,10 +903,14 @@ function rectObj(rect) {
         /局外中枢进度/.test(summaryText) &&
         /观星留痕|炼器铭刻|三段套装/.test(summaryText) &&
         /样本对照/.test(summaryText) &&
-        /法则：|法宝：|炼器研究：|套装共鸣：|炼器铭刻：|Boss 档案：|伏魔台记忆战：|样本对照：|观星留痕：/.test(progressText),
+        /法则：|法宝：|炼器研究：|套装共鸣：|炼器铭刻：|Boss 档案：|伏魔台记忆战：|样本对照：|观星留痕：/.test(progressText) &&
+        /当前精选命盘|命盘档案/.test(sanctumGuideText),
+      buildSubtitle,
       buildHeroText,
       buildMetricCount,
       buildNotesText,
+      buildGuideText,
+      sanctumSubtitle,
       roomCards,
       researchItems,
       goalItems,
@@ -883,7 +918,8 @@ function rectObj(rect) {
       roomText,
       researchText,
       summaryText,
-      progressText
+      progressText,
+      sanctumGuideText
     };
   });
   add(
@@ -896,6 +932,281 @@ function rectObj(rect) {
     document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
   });
   await safeAuditScreenshot(page, path.join(outDir, 'sanctum-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
+  const runSlateShelfProbe = await page.evaluate(() => {
+    if (!window.game) return { ok: false, reason: 'no_game' };
+    if (!game.player || !Array.isArray(game.player.collectedLaws)) {
+      game.guestMode = true;
+      game.startNewGame('linFeng');
+    }
+
+    const rawArchive = [
+      {
+        id: 'audit_run_slate_oracle',
+        chapterIndex: 5,
+        chapterName: '第 5 章·星穹回廊',
+        endingId: 'alliance',
+        endingName: '星图合卷',
+        endingIcon: '🔭',
+        score: 246,
+        scoreBreakdown: [
+          '章节答卷：天象合卷 · 3/3 项达成',
+          '训练建议：继续沿观星链路把线索写满，再回事件节点补收益兑现'
+        ],
+        branchName: '观测锁线',
+        bountyNames: ['星轨巡检'],
+        factionSummary: ['星港议会·协力'],
+        nemesisName: '镜池守望者',
+        nemesisStatus: 'allied',
+        nemesisStatusLabel: '已结盟',
+        tags: ['课题·推演控场', '答卷·天象合卷', '训练·路线贴合'],
+        practiceTopic: {
+          id: 'topic_oracle_audit',
+          sourceRecordId: 'guide_oracle_audit',
+          sourceTitle: '星镜试锋',
+          themeKey: 'oracle',
+          themeLabel: '推演控场',
+          routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+          compareHint: '对比观测收益、路线贴合与控场稳定。',
+          trainingTags: ['路线贴合', '控场稳定']
+        },
+        observatoryLink: {
+          sourceRecordId: 'guide_oracle_audit',
+          sourceTitle: '星镜试锋',
+          sourceThemeKey: 'oracle',
+          sourceThemeLabel: '推演控场',
+          routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+          compareHint: '对比观测收益、路线贴合与控场稳定。',
+          trainingTags: ['路线贴合', '控场稳定'],
+          drillObjective: '连续两次走观星相关节点并维持控场稳定。'
+        },
+        answerReview: {
+          title: '章节观星回响',
+          ratingLabel: '天象合卷',
+          ratingTone: 'completed',
+          trainingAdvice: '先沿观星链路把线索写满，再回事件节点补收益兑现。',
+          highlightLine: '这章已经把观测样本写成完整答卷，下一轮继续按同轴复盘。'
+        },
+        themeKey: 'oracle',
+        themeLabel: '推演控场',
+        ratingLabel: '天象合卷',
+        ratingTone: 'completed',
+        timestamp: 246000
+      },
+      {
+        id: 'audit_run_slate_assault',
+        chapterIndex: 4,
+        chapterName: '第 4 章·焚城试炼',
+        endingId: 'hunt',
+        endingName: '火线追猎',
+        endingIcon: '🔥',
+        score: 214,
+        scoreBreakdown: [
+          '章节答卷：贴题成卷 · 2/3 项达成',
+          '训练建议：先抢前两手节奏，再把爆发资源留到高压段兑现'
+        ],
+        branchName: '火线突进',
+        bountyNames: ['前锋清缴'],
+        factionSummary: ['燎原盟·支援'],
+        nemesisName: '炽烬追猎者',
+        nemesisStatus: 'released',
+        nemesisStatusLabel: '已解卷',
+        tags: ['课题·前压爆发', '答卷·贴题成卷', '训练·稳血收官'],
+        practiceTopic: {
+          id: 'topic_assault_audit',
+          sourceRecordId: 'guide_assault_audit',
+          sourceTitle: '焚脉试锋',
+          themeKey: 'assault',
+          themeLabel: '前压爆发',
+          routeFocusLine: '优先节点：战斗 / 精英 / 试炼',
+          compareHint: '对比先手压制、收头效率与高压段处理。',
+          trainingTags: ['稳血收官', '高压过线']
+        },
+        observatoryLink: {
+          sourceRecordId: 'guide_assault_audit',
+          sourceTitle: '焚脉试锋',
+          sourceThemeKey: 'assault',
+          sourceThemeLabel: '前压爆发',
+          routeFocusLine: '优先节点：战斗 / 精英 / 试炼',
+          compareHint: '对比先手压制、收头效率与高压段处理。',
+          trainingTags: ['稳血收官', '高压过线'],
+          drillObjective: '在第 2 次高压战前保留一段爆发或兜底。'
+        },
+        answerReview: {
+          title: '章节观星回响',
+          ratingLabel: '贴题成卷',
+          ratingTone: 'completed',
+          trainingAdvice: '先抢前两手节奏，再把爆发资源留到高压段兑现。',
+          highlightLine: '前段答卷已经贴题，下一轮继续沿战斗稠密线补题。'
+        },
+        themeKey: 'assault',
+        themeLabel: '前压爆发',
+        ratingLabel: '贴题成卷',
+        ratingTone: 'completed',
+        timestamp: 214000
+      }
+    ];
+
+    const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
+    if (typeof game.normalizeRunSlateArchive === 'function') {
+      game.runSlateArchive = game.normalizeRunSlateArchive(rawArchive);
+    } else {
+      game.runSlateArchive = rawArchive;
+    }
+    if (typeof game.persistRunSlateArchive === 'function') game.persistRunSlateArchive();
+    if (typeof game.setObservatoryTrainingFocus === 'function') {
+      game.setObservatoryTrainingFocus(null, { silent: true });
+    }
+    if (typeof game.ensureChallengeHubBootState === 'function') {
+      game.ensureChallengeHubBootState();
+    }
+    if (game.challengeHubState && typeof game.challengeHubState === 'object') {
+      game.challengeHubState.tab = 'daily';
+    }
+
+    game.showCollection();
+    if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('slates');
+
+    const slatesPanel = document.querySelector('#collection [data-collection-panel="slates"]');
+    const activeTab = document.querySelector('#collection [data-collection-tab].active')?.getAttribute('data-collection-tab') || '';
+    const activePanel = document.querySelector('#collection [data-collection-panel].active')?.getAttribute('data-collection-panel') || '';
+    if (!slatesPanel) {
+      return {
+        ok: false,
+        reason: 'missing_slates_panel',
+        activeTab,
+        activePanel,
+        subtitleText: text(document.getElementById('collection-subtitle'))
+      };
+    }
+
+    const panelText = text(slatesPanel);
+    const selectedRunSlateIdBefore = game.selectedRunSlateId || '';
+    let trainBtn = slatesPanel.querySelector('[data-run-slate-train-focus="true"]:not([disabled])');
+    let reviewBtn = slatesPanel.querySelector('[data-run-slate-review-observatory="true"]');
+    if ((!trainBtn || !reviewBtn) && slatesPanel.querySelectorAll) {
+      const shelfCards = Array.from(slatesPanel.querySelectorAll('[data-run-slate-card="true"][data-run-slate-id]'));
+      for (const card of shelfCards) {
+        card.click();
+        trainBtn = slatesPanel.querySelector('[data-run-slate-train-focus="true"]:not([disabled])');
+        reviewBtn = slatesPanel.querySelector('[data-run-slate-review-observatory="true"]');
+        if (trainBtn && reviewBtn) break;
+      }
+    }
+    const selectedRunSlateId = String(
+      trainBtn?.getAttribute('data-run-slate-id')
+      || reviewBtn?.getAttribute('data-run-slate-id')
+      || game.selectedRunSlateId
+      || selectedRunSlateIdBefore
+      || ''
+    );
+    const selectedSlate = rawArchive.find((entry) => entry.id === selectedRunSlateId) || null;
+    const expectedThemeKey = String(
+      selectedSlate?.themeKey
+      || selectedSlate?.practiceTopic?.themeKey
+      || selectedSlate?.observatoryLink?.sourceThemeKey
+      || ''
+    );
+    const expectedThemeLabel = String(
+      selectedSlate?.themeLabel
+      || selectedSlate?.practiceTopic?.themeLabel
+      || selectedSlate?.observatoryLink?.sourceThemeLabel
+      || ''
+    );
+    const expectedRouteFocusLine = String(
+      selectedSlate?.practiceTopic?.routeFocusLine
+      || selectedSlate?.practiceTopic?.routeHint
+      || selectedSlate?.observatoryLink?.routeFocusLine
+      || ''
+    );
+    const expectedCompareHint = String(
+      selectedSlate?.practiceTopic?.compareHint
+      || selectedSlate?.observatoryLink?.compareHint
+      || ''
+    );
+    const expectedTrainingTags = Array.from(new Set(
+      [
+        ...(Array.isArray(selectedSlate?.practiceTopic?.trainingTags) ? selectedSlate.practiceTopic.trainingTags : []),
+        ...(Array.isArray(selectedSlate?.observatoryLink?.trainingTags) ? selectedSlate.observatoryLink.trainingTags : [])
+      ].filter(Boolean)
+    ));
+    if (trainBtn) trainBtn.click();
+
+    const focus = typeof game.getObservatoryTrainingFocus === 'function'
+      ? game.getObservatoryTrainingFocus()
+      : null;
+    const slatesPanelAfterTrain = document.querySelector('#collection [data-collection-panel="slates"]');
+    const reviewBtnAfterTrain = slatesPanelAfterTrain?.querySelector('[data-run-slate-review-observatory="true"]') || null;
+    if (reviewBtnAfterTrain) reviewBtnAfterTrain.click();
+    const challengeFilters = typeof game.getChallengeArchiveFilterState === 'function'
+      ? game.getChallengeArchiveFilterState('daily')
+      : null;
+    const challengeScreen = game.currentScreen || '';
+    const challengeTab = game.challengeHubState?.tab || '';
+
+    game.showCollection();
+    if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('sanctum');
+    const archiveRoomCard = Array.from(document.querySelectorAll('#sanctum-room-grid .sanctum-room-card'))
+      .find((card) => /命盘档案室/.test(card.textContent || ''));
+    const archiveRoomButton = archiveRoomCard ? archiveRoomCard.querySelector('button') : null;
+    if (archiveRoomButton) archiveRoomButton.click();
+
+    const titleText = text(document.getElementById('collection-title'));
+    const subtitleText = text(document.getElementById('collection-subtitle'));
+    const activeTabAfterRoom = document.querySelector('#collection [data-collection-tab].active')?.getAttribute('data-collection-tab') || '';
+    const activePanelAfterRoom = document.querySelector('#collection [data-collection-panel].active')?.getAttribute('data-collection-panel') || '';
+
+    return {
+      ok:
+        activeTab === 'slates' &&
+        activePanel === 'slates' &&
+        /归卷书架/.test(titleText) &&
+        /章节答卷|训练建议/.test(subtitleText) &&
+        /章节答卷/.test(panelText) &&
+        /训练建议/.test(panelText) &&
+        /主题/.test(panelText) &&
+        /章节/.test(panelText) &&
+        /评级/.test(panelText) &&
+        !!trainBtn &&
+        !!reviewBtn &&
+        typeof game.setRunSlateShelfThemeFilter === 'function' &&
+        typeof game.setRunSlateShelfChapterFilter === 'function' &&
+        typeof game.setRunSlateShelfRatingFilter === 'function' &&
+        !!focus &&
+        focus.sourceRunId === selectedRunSlateId &&
+        focus.themeKey === expectedThemeKey &&
+        focus.themeLabel === expectedThemeLabel &&
+        focus.routeFocusLine === expectedRouteFocusLine &&
+        focus.compareHint === expectedCompareHint &&
+        expectedTrainingTags.every((tag) => (focus.trainingTags || []).includes(tag)) &&
+        challengeScreen === 'challenge-screen' &&
+        challengeTab === 'daily' &&
+        challengeFilters?.themeKey === expectedThemeKey &&
+        activeTabAfterRoom === 'slates' &&
+        activePanelAfterRoom === 'slates',
+      activeTab,
+      activePanel,
+      titleText,
+      subtitleText,
+      panelText,
+      selectedRunSlateId,
+      trainButtonText: trainBtn?.textContent || '',
+      reviewButtonText: reviewBtnAfterTrain?.textContent || reviewBtn?.textContent || '',
+      focus,
+      challengeScreen,
+      challengeTab,
+      challengeFilters,
+      activeTabAfterRoom,
+      activePanelAfterRoom,
+      archiveRoomText: text(archiveRoomCard)
+    };
+  });
+  add(
+    'run slate shelf exposes a dedicated slates tab with training reference action and sanctum jump-back',
+    !!runSlateShelfProbe?.ok,
+    JSON.stringify(runSlateShelfProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'run-slate-shelf-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   const treasureCompendiumProbe = await page.evaluate(() => {
     if (!window.game || typeof game.showTreasureCompendium !== 'function') return { ok: false, reason: 'no_compendium' };

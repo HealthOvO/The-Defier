@@ -23,6 +23,7 @@ class Game {
         this.stealAttempted = false;
         this.rewardCardSelected = false; // 防止重复选牌
         this.lastBattleRewardMeta = null;
+        this.lastExpeditionRewardMeta = null;
         this.lastRunPathRewardMeta = null;
         this.lastRunPathMapFeedback = null;
         this.runPathMapFeedbackTimer = null;
@@ -852,6 +853,43 @@ class Game {
                             squad: !!this.lastBattleRewardMeta.squad
                         }
                         : null,
+                    expedition: (() => {
+                        const expeditionMeta = this.getRewardExpeditionMeta();
+                        if (!expeditionMeta) return null;
+                        const brief = this.getRewardNarrativeBriefMeta();
+                        return {
+                            id: expeditionMeta.id || null,
+                            chapterName: expeditionMeta.chapterName || '',
+                            endingName: expeditionMeta.endingName || '',
+                            endingIcon: expeditionMeta.endingIcon || '',
+                            score: Math.max(0, Math.floor(Number(expeditionMeta.score) || 0)),
+                            scoreLabel: expeditionMeta.scoreLabel || '',
+                            ratingLabel: expeditionMeta.ratingLabel || '',
+                            ratingTone: expeditionMeta.ratingTone || 'idle',
+                            highlightLine: expeditionMeta.highlightLine || '',
+                            trainingAdvice: expeditionMeta.trainingAdvice || '',
+                            branchName: expeditionMeta.branchName || '',
+                            nemesisLine: expeditionMeta.nemesisLine || '',
+                            focusLines: Array.isArray(expeditionMeta.focusLines)
+                                ? expeditionMeta.focusLines.map((line) => String(line || '')).filter(Boolean)
+                                : [],
+                            breakdown: Array.isArray(expeditionMeta.breakdown)
+                                ? expeditionMeta.breakdown.map((line) => String(line || '')).filter(Boolean)
+                                : [],
+                            tags: Array.isArray(expeditionMeta.tags)
+                                ? expeditionMeta.tags.map((tag) => String(tag || '')).filter(Boolean)
+                                : [],
+                            narrative: brief && brief.surface === 'expedition'
+                                ? {
+                                    state: brief.state || 'tracking',
+                                    kicker: brief.kicker || '章节归卷',
+                                    title: brief.title || '',
+                                    body: brief.body || '',
+                                    foot: brief.foot || ''
+                                }
+                                : null
+                        };
+                    })(),
                     runPath: this.lastRunPathRewardMeta
                         ? {
                             pathId: this.lastRunPathRewardMeta.pathId || null,
@@ -877,7 +915,18 @@ class Game {
                                     rewardText: entry.rewardText || '',
                                     completed: !!entry.completed
                                 }))
-                                : []
+                                : [],
+                            narrative: (() => {
+                                const brief = this.getRewardNarrativeBriefMeta();
+                                if (!brief || brief.surface !== 'runPath') return null;
+                                return {
+                                    state: brief.state || 'tracking',
+                                    kicker: brief.kicker || '命盘档案',
+                                    title: brief.title || '',
+                                    body: brief.body || '',
+                                    foot: brief.foot || ''
+                                };
+                            })()
                         }
                         : null
                 }
@@ -12420,6 +12469,7 @@ class Game {
         this.currentBattleNode = node;
         this.stealAttempted = false;
         this.rewardCardSelected = false;
+        this.lastExpeditionRewardMeta = null;
         this.lastRunPathRewardMeta = null;
         this.dismissRunPathMapFeedback();
         this.comboCount = 0;
@@ -13005,6 +13055,191 @@ class Game {
         }
     }
 
+    getRewardExpeditionMeta() {
+        const source = this.lastExpeditionRewardMeta && typeof this.lastExpeditionRewardMeta === 'object'
+            ? this.lastExpeditionRewardMeta
+            : null;
+        if (!source || !source.id) return null;
+
+        const toTextArray = (value, limit = 6) => Array.isArray(value)
+            ? value.map((entry) => String(entry == null ? '' : entry).trim()).filter(Boolean).slice(0, limit)
+            : [];
+        const ratingTone = ['completed', 'selected', 'suggested', 'idle'].includes(String(source.ratingTone || ''))
+            ? String(source.ratingTone)
+            : 'idle';
+        const score = Math.max(0, Math.floor(Number(source.score) || 0));
+
+        return {
+            id: String(source.id || ''),
+            chapterName: String(source.chapterName || ''),
+            endingName: String(source.endingName || '章节归卷'),
+            endingIcon: String(source.endingIcon || '🧭'),
+            score,
+            scoreLabel: String(source.scoreLabel || `命盘评分 ${score}`),
+            ratingLabel: String(source.ratingLabel || ''),
+            ratingTone,
+            highlightLine: String(source.highlightLine || ''),
+            trainingAdvice: String(source.trainingAdvice || ''),
+            branchName: String(source.branchName || ''),
+            branchLine: String(source.branchLine || ''),
+            nemesisLine: String(source.nemesisLine || ''),
+            focusLines: toTextArray(source.focusLines || source.goalHighlights, 4),
+            breakdown: toTextArray(source.breakdown || source.scoreBreakdown, 4),
+            tags: toTextArray(source.tags, 6)
+        };
+    }
+
+    getRewardNarrativeBriefMeta() {
+        const expeditionMeta = this.getRewardExpeditionMeta();
+        if (expeditionMeta) {
+            return {
+                surface: 'expedition',
+                state: expeditionMeta.ratingTone === 'completed' ? 'archived' : 'tracking',
+                kicker: '章节归卷',
+                title: [expeditionMeta.chapterName, expeditionMeta.endingName].filter(Boolean).join(' · ') || '本章归卷已完成',
+                body: expeditionMeta.highlightLine
+                    || (expeditionMeta.ratingLabel
+                        ? `答卷评级：${expeditionMeta.ratingLabel}`
+                        : '这章的观星答卷已经归卷，可直接查看评级、偏题诊断与主线留痕。'),
+                foot: expeditionMeta.trainingAdvice
+                    ? `训练建议：${expeditionMeta.trainingAdvice}`
+                    : (expeditionMeta.branchLine || expeditionMeta.nemesisLine || '可回命盘档案室继续复盘本章答卷。')
+            };
+        }
+
+        const runPathMeta = this.lastRunPathRewardMeta && typeof this.lastRunPathRewardMeta === 'object'
+            ? this.lastRunPathRewardMeta
+            : null;
+        const currentRunPath = this.player && typeof this.player.getRunPathMeta === 'function'
+            ? this.player.getRunPathMeta()
+            : null;
+        const pathName = String(runPathMeta?.name || currentRunPath?.name || '').trim();
+        const entries = Array.isArray(runPathMeta?.entries)
+            ? runPathMeta.entries.filter((entry) => entry && typeof entry === 'object')
+            : [];
+        const latestEntry = entries.length > 0 ? entries[entries.length - 1] : null;
+        const archive = runPathMeta?.archive && typeof runPathMeta.archive === 'object'
+            ? runPathMeta.archive
+            : null;
+
+        if (archive && runPathMeta?.completed) {
+            const recordName = String(archive.recordName || archive.name || '命途战录').trim() || '命途战录';
+            const clears = Math.max(1, Math.floor(Number(archive.clears) || 1));
+            return {
+                surface: 'runPath',
+                state: 'archived',
+                kicker: '命盘档案',
+                title: `洞府已收录 · ${recordName}`,
+                body: String(
+                    archive.note
+                    || `${pathName || '这条命途'}的圆满样本已同步到洞府与构筑快照，可继续复盘下一轮路线。`
+                ),
+                foot: archive.firstClear
+                    ? '首次收录 · 可回藏经阁继续复盘'
+                    : `累计收录 ${clears} 次 · 可回藏经阁继续复盘`
+            };
+        }
+
+        if (latestEntry) {
+            const phaseLabel = [latestEntry.phaseLabel, latestEntry.title].filter(Boolean).join(' · ');
+            const nextLabel = [latestEntry.nextPhaseLabel, latestEntry.nextPhaseTitle].filter(Boolean).join(' · ');
+            return {
+                surface: 'runPath',
+                state: runPathMeta?.completed ? 'completed' : 'tracking',
+                kicker: '命盘档案',
+                title: phaseLabel
+                    ? `${pathName || '命途样本'} · ${phaseLabel}`
+                    : `${pathName || '命途样本'} · 本场样本已更新`,
+                body: nextLabel
+                    ? `下一段会追到 ${nextLabel}，现在可以按这份样本决定继续补件、改线或预留资源。`
+                    : '本场战利已先写入命盘样本，可回藏经阁对照这条路线的稳定解法。',
+                foot: String(
+                    latestEntry.rewardText
+                    || '圆满后会同步收入洞府与构筑快照。'
+                )
+            };
+        }
+
+        if (currentRunPath) {
+            return {
+                surface: 'runPath',
+                state: 'tracking',
+                kicker: '命盘档案',
+                title: `${currentRunPath.name || '当前命途'} · 样本持续归档中`,
+                body: '本场战利会先写成命盘留痕；三段目标圆满后，会同步收入洞府与构筑快照。',
+                foot: '去挑战或藏经阁继续对照样本，把这条路线磨成可复刻答卷。'
+            };
+        }
+
+        return null;
+    }
+
+    updateRewardHeaderCopy() {
+        if (typeof document === 'undefined') return;
+        const titleEl = document.querySelector('#reward-screen .reward-title');
+        const subtitleEl = document.querySelector('#reward-screen .reward-subtitle');
+        const narrative = this.getRewardNarrativeBriefMeta();
+
+        if (titleEl) {
+            titleEl.textContent = narrative?.surface === 'expedition'
+                ? '战斗胜利 · 章节归卷'
+                : narrative?.state === 'archived'
+                    ? '战斗胜利 · 命途圆满'
+                    : narrative
+                        ? '战斗胜利 · 样本更新'
+                        : '战斗胜利！';
+        }
+
+        if (subtitleEl) {
+            subtitleEl.textContent = narrative?.surface === 'expedition'
+                ? '先整理本场战利，再确认这一章的答卷评级、偏题诊断与训练建议，决定下一章继续补哪条主线。'
+                : narrative?.state === 'archived'
+                    ? '先整理本场战利，再把这份圆满样本压成命盘档案，决定下一轮继续追哪条修行线。'
+                    : narrative
+                        ? '先整理法则余烬，再确认这份命盘样本会如何写入档案、影响下一阶段推进。'
+                        : '先整理法则余烬，再把本场战利与关键留痕收成命盘线索，决定下一段推进节奏。';
+        }
+    }
+
+    renderRewardNarrativeBrief() {
+        const panel = document.getElementById('reward-narrative-brief');
+        if (!panel) return;
+
+        const brief = this.getRewardNarrativeBriefMeta();
+        if (!brief) {
+            panel.style.display = 'none';
+            panel.classList.remove('is-archived');
+            panel.innerHTML = '';
+            return;
+        }
+
+        const escape = (value) => {
+            if (
+                typeof DefierBattleFeedback !== 'undefined'
+                && DefierBattleFeedback
+                && typeof DefierBattleFeedback.escapeHtml === 'function'
+            ) {
+                return DefierBattleFeedback.escapeHtml(value);
+            }
+
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        };
+
+        panel.setAttribute('aria-live', 'polite');
+        panel.style.display = 'block';
+        panel.classList.toggle('is-archived', brief.state === 'archived');
+        panel.innerHTML = `
+            <div class="reward-narrative-kicker">${escape(brief.kicker || '命盘档案')}</div>
+            <div class="reward-narrative-title">${escape(brief.title || '本场样本已更新')}</div>
+            <div class="reward-narrative-body">${escape(brief.body || '')}</div>
+            ${brief.foot ? `<div class="reward-narrative-foot">${escape(brief.foot)}</div>` : ''}
+        `;
+    }
+
     renderRewardBattleMeta() {
         const panel = document.getElementById('reward-battle-meta');
         if (!panel) return;
@@ -13055,6 +13290,88 @@ class Game {
         panel.innerHTML = `
             <div class="reward-meta-title">本场战利来源</div>
             <div class="reward-meta-chips">${chips.join('')}</div>
+        `;
+    }
+
+    renderRewardExpeditionMeta() {
+        const panel = document.getElementById('reward-expedition-meta');
+        if (!panel) return;
+
+        const meta = this.getRewardExpeditionMeta();
+        if (!meta) {
+            panel.style.display = 'none';
+            panel.classList.remove('is-complete');
+            panel.dataset.tone = 'idle';
+            panel.innerHTML = '';
+            return;
+        }
+
+        const escape = (value) => {
+            if (
+                typeof DefierBattleFeedback !== 'undefined'
+                && DefierBattleFeedback
+                && typeof DefierBattleFeedback.escapeHtml === 'function'
+            ) {
+                return DefierBattleFeedback.escapeHtml(value);
+            }
+
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        };
+
+        const titleText = [
+            meta.endingName || '章节归卷',
+            meta.ratingLabel ? `答卷 ${meta.ratingLabel}` : ''
+        ].filter(Boolean).join(' · ');
+        const diagnosticLines = meta.focusLines.length > 0
+            ? meta.focusLines
+            : meta.breakdown.slice(0, 3);
+        const chips = [];
+        if (meta.ratingLabel) chips.push(`<span class="reward-expedition-chip focus">${escape(`评级 · ${meta.ratingLabel}`)}</span>`);
+        if (meta.branchName) chips.push(`<span class="reward-expedition-chip">${escape(`主线 · ${meta.branchName}`)}</span>`);
+        if (meta.nemesisLine) chips.push(`<span class="reward-expedition-chip">${escape(meta.nemesisLine)}</span>`);
+        meta.tags.forEach((tag) => {
+            chips.push(`<span class="reward-expedition-chip">${escape(tag)}</span>`);
+        });
+
+        panel.setAttribute('aria-live', 'polite');
+        panel.style.display = 'block';
+        panel.classList.toggle('is-complete', meta.ratingTone === 'completed');
+        panel.dataset.tone = meta.ratingTone || 'idle';
+        panel.innerHTML = `
+            <div class="reward-expedition-kicker">观星回响总结</div>
+            <div class="reward-expedition-header">
+                <div class="reward-expedition-badge">${escape(meta.endingIcon || '🧭')} ${escape(meta.chapterName || '章节归卷')}</div>
+                <div class="reward-expedition-score">${escape(meta.scoreLabel || `命盘评分 ${meta.score}`)}</div>
+            </div>
+            <div class="reward-expedition-title">${escape(titleText || '章节归卷已整理')}</div>
+            ${meta.highlightLine ? `<div class="reward-expedition-summary">${escape(meta.highlightLine)}</div>` : ''}
+            ${diagnosticLines.length > 0 ? `
+                <div class="reward-expedition-section">
+                    <div class="reward-expedition-section-title">作答诊断</div>
+                    <div class="reward-expedition-list">
+                        ${diagnosticLines.map((line) => `<div class="reward-expedition-line">${escape(line)}</div>`).join('')}
+                    </div>
+                </div>
+            ` : ''}
+            ${meta.trainingAdvice ? `
+                <div class="reward-expedition-advice">
+                    <span class="reward-expedition-advice-label">训练建议</span>
+                    <span>${escape(meta.trainingAdvice)}</span>
+                </div>
+            ` : ''}
+            ${meta.breakdown.length > 0 ? `
+                <div class="reward-expedition-section compact">
+                    <div class="reward-expedition-section-title">归卷留痕</div>
+                    <div class="reward-expedition-list">
+                        ${meta.breakdown.map((line) => `<div class="reward-expedition-line muted">${escape(line)}</div>`).join('')}
+                    </div>
+                </div>
+            ` : ''}
+            ${chips.length > 0 ? `<div class="reward-expedition-chip-row">${chips.join('')}</div>` : ''}
         `;
     }
 
@@ -13211,7 +13528,10 @@ class Game {
         if (Number(gainPayload.insight) > 0) bonusParts.push(`天机 +${Math.floor(Number(gainPayload.insight) || 0)}`);
         if (Number(gainPayload.karma) > 0) bonusParts.push(`业果 +${Math.floor(Number(gainPayload.karma) || 0)}`);
         rewardGold.textContent = `+${gold} 灵石 | 命环经验 +${ringExp}${bonusParts.length > 0 ? ' | ' + bonusParts.join(' | ') : ''}`;
+        this.updateRewardHeaderCopy();
         this.renderRewardBattleMeta();
+        this.renderRewardNarrativeBrief();
+        this.renderRewardExpeditionMeta();
         this.renderRewardRunPathMeta();
 
         // 法宝掉落判定
@@ -13487,6 +13807,7 @@ class Game {
 
         // 确保清除当前节点引用
         this.currentBattleNode = null;
+        this.lastExpeditionRewardMeta = null;
         this.lastRunPathRewardMeta = null;
         this.dismissRunPathMapFeedback();
 
@@ -15905,6 +16226,7 @@ class Game {
 
         // 3. 开始战斗
         this.showScreen('battle-screen');
+        this.lastExpeditionRewardMeta = null;
         this.lastRunPathRewardMeta = null;
         this.dismissRunPathMapFeedback();
         if (this.battle) {
@@ -16779,7 +17101,8 @@ class Game {
                     <li><strong>章节世界规则考试化</strong>：章节天象、地脉、主宰提示与路线建议形成统一语义。</li>
                     <li><strong>DRI 风险指数面板</strong>：章节简报、挑战观察站与无尽轮回现已共享风险指数、主导维度与对策提示，读题语言更统一。</li>
                     <li><strong>挑战试炼压强 DRI</strong>：观察站挑战页、锁定开局横幅与地图运行横幅现已同步展示试炼压强、主轴维度与应对提示。</li>
-                    <li><strong>挑战样本回放增强</strong>：观察站留痕会自动生成复刻重点 / 失手剖面，并在回放开局与地图横幅持续提示训练重点。</li>
+                    <li><strong>挑战观察站深化</strong>：观察站留痕现会自动生成复刻重点 / 失手剖面、训练标签、演练目标与同主题对比轴，并提供跨赛道历史留痕筛面、训练预设与样本排序，可按窗口 / 样本层 / 结果 / 主题检索旧样本并快速切回常用训练视角。</li>
+                            <li><strong>观星共鸣 / 路线合卷</strong>：挑战观察站给出的精选命盘现会冻结成章节观星线索，并展开“修行课题 -> 章节答卷状态 -> 章节观星回响”的作答链路，持续驱动命盘共鸣、路线合卷、开战触发加成、训练标签与样本路径，也支持按推荐路线一键锁线；章节归卷后，奖励页还会生成观星回响总结卡，直接给出答卷评级、偏题诊断与训练建议。</li>
                     <li><strong>仇敌追猎链路预判</strong>：地图总览、章节风险卡与远征态势会同步给出追猎历史、下一次高压窗口与建议对策。</li>
                     <li><strong>地图节点工程化 2.0</strong>：观星 / 禁术 / 裂隙 / 灵契线路会形成跨章工程主轴，持续改写后续地图结构。</li>
                     <li><strong>工程事件联动 2.1</strong>：观星 / 裂隙主轴会继续偏置章节事件池，并为命中事件追加货位、折价、命环、天机等强化。</li>
@@ -16802,7 +17125,7 @@ class Game {
                 <h3>🛰 下一迭代方向（V7.x）</h3>
                 <ul class="intro-list">
                     <li><strong>PVP 赛季题面深化</strong>：继续补更细的赛季题面提示、分段标签与跨场对照线索，让 PVP DRI 不只在开战前可读，也能继续承接到赛后复盘。</li>
-                    <li><strong>挑战观察站深化</strong>：继续补充跨样本对比维度、训练标签与更细的复盘导引。</li>
+                    <li><strong>挑战观察站深化</strong>：继续补跨周检索、更长档期聚合与更细历史分层，让观察站从“可检索样本库”继续走向长期打法训练器。</li>
                 </ul>
             </div>
 

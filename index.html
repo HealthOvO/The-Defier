@@ -459,7 +459,7 @@
             <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
             <div class="collection-heading-group">
                 <h2 id="collection-title">藏经阁 · 法则图鉴</h2>
-                <p id="collection-subtitle">补齐法则与共鸣链，规划命环装配顺序。</p>
+                <p id="collection-subtitle">补齐法则与共鸣链，把命环装配、命途样本与下一轮路线对成同一份档案。</p>
             </div>
         </div>
 
@@ -477,6 +477,8 @@
                     onclick="game.switchCollectionSection('bosses')">Boss</button>
                 <button type="button" class="collection-tab-btn" data-collection-tab="builds"
                     onclick="game.switchCollectionSection('builds')">构筑</button>
+                <button type="button" class="collection-tab-btn" data-collection-tab="slates"
+                    onclick="game.switchCollectionSection('slates')">归卷</button>
                 <button type="button" class="collection-tab-btn" data-collection-tab="sanctum"
                     onclick="game.switchCollectionSection('sanctum')">洞府</button>
             </div>
@@ -895,6 +897,64 @@
                 </div>
             </div>
 
+            <div class="collection-tab-panel" data-collection-panel="slates">
+                <div class="codex-scroll-container">
+                    <div class="codex-layout">
+                        <div class="codex-main-column">
+                            <div class="compendium-toolbar codex-toolbar">
+                                <label class="compendium-control">
+                                    <span>主题</span>
+                                    <select id="run-slate-shelf-theme-filter" onchange="game.setRunSlateShelfThemeFilter(this.value)">
+                                        <option value="all">全部主题</option>
+                                    </select>
+                                </label>
+                                <label class="compendium-control">
+                                    <span>章节</span>
+                                    <select id="run-slate-shelf-chapter-filter" onchange="game.setRunSlateShelfChapterFilter(this.value)">
+                                        <option value="all">全部章节</option>
+                                    </select>
+                                </label>
+                                <label class="compendium-control">
+                                    <span>评级</span>
+                                    <select id="run-slate-shelf-rating-filter" onchange="game.setRunSlateShelfRatingFilter(this.value)">
+                                        <option value="all">全部评级</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">📚</span>
+                                    <h3>归卷书架</h3>
+                                </div>
+                                <div class="collection-card-grid" id="run-slate-shelf-grid"></div>
+                            </div>
+
+                            <div class="codex-section">
+                                <div class="codex-section-header">
+                                    <span class="section-icon">🪶</span>
+                                    <h3>答卷详档</h3>
+                                </div>
+                                <div id="run-slate-shelf-detail"></div>
+                            </div>
+                        </div>
+
+                        <aside class="codex-side-column">
+                            <section class="codex-side-card" id="run-slate-shelf-summary">
+                                <span class="codex-side-kicker">书架总览</span>
+                                <h3>这轮都留下了什么</h3>
+                                <p>正在整理章节答卷与训练回流...</p>
+                            </section>
+                            <section class="codex-side-card codex-guide-card" id="run-slate-shelf-guide">
+                                <span class="codex-side-kicker">使用建议</span>
+                                <h3>怎么把书架喂回主线</h3>
+                                <p>正在整理归卷书架的复盘路径...</p>
+                            </section>
+                        </aside>
+                    </div>
+                </div>
+            </div>
+
             <div class="collection-tab-panel" data-collection-panel="sanctum">
                 <div class="codex-scroll-container">
                     <div class="codex-layout">
@@ -960,7 +1020,7 @@
             <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
             <div class="collection-heading-group">
                 <h2 id="challenge-hub-title">观星台 · 今日天机</h2>
-                <p id="challenge-hub-subtitle">每日一局短挑战，固定角色、章节目标与战场词缀。</p>
+                <p id="challenge-hub-subtitle">固定命盘会沉淀成观星样本，可回放、复盘，并继续设为远征线索。</p>
             </div>
         </div>
 
@@ -1386,7 +1446,7 @@
                 <div class="reward-header">
                     <span class="reward-kicker">战斗结算</span>
                     <h2 class="reward-title">战斗胜利！</h2>
-                    <p class="reward-subtitle">先整理法则余烬，再从本场战利中挑选一张核心卡牌，决定下一段推进节奏。</p>
+                    <p class="reward-subtitle">先整理法则余烬，再把本场战利与关键留痕收成命盘线索，决定下一段推进节奏。</p>
                 </div>
                 <div class="reward-layout">
                     <div class="reward-main-column">
@@ -1421,6 +1481,8 @@
                                 </div>
                             </div>
                             <div id="reward-battle-meta" class="reward-battle-meta" style="display:none;"></div>
+                            <div id="reward-narrative-brief" class="reward-narrative-brief" style="display:none;"></div>
+                            <div id="reward-expedition-meta" class="reward-expedition-meta" style="display:none;"></div>
                             <div id="reward-run-path-meta" class="reward-run-path-meta" style="display:none;"></div>
                         </div>
                         <div class="reward-actions reward-panel">

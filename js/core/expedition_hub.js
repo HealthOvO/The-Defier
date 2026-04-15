@@ -44,6 +44,14 @@
         return Math.max(min, Math.min(max, num));
     };
 
+    const intersectNodeTypes = (...groups) => {
+        const normalized = groups
+            .map((group) => readArray(group).map((value) => String(value || '')).filter(Boolean))
+            .filter((group) => group.length > 0);
+        if (normalized.length === 0) return [];
+        return Array.from(new Set(normalized[0].filter((value) => normalized.every((group) => group.includes(value))))).slice(0, 4);
+    };
+
     const isMapNodeMarkedCompleted = (mapInstance, node) => {
         if (!node || !mapInstance || !Array.isArray(mapInstance.nodes)) return false;
         const nodeId = String(node.id || '');
@@ -191,6 +199,19 @@
         };
     };
 
+    const formatObservatoryRewardLine = (reward = null) => {
+        const resolved = normalizeObservatoryLinkReward(reward);
+        const parts = [];
+        if (resolved.gold > 0) parts.push(`灵石 +${resolved.gold}`);
+        if (resolved.ringExp > 0) parts.push(`命环经验 +${resolved.ringExp}`);
+        if (resolved.heavenlyInsight > 0) parts.push(`天机 +${resolved.heavenlyInsight}`);
+        if (resolved.karma > 0) parts.push(`业果 +${resolved.karma}`);
+        if (resolved.block > 0) parts.push(`格挡 +${resolved.block}`);
+        if (resolved.heal > 0) parts.push(`恢复 ${resolved.heal}`);
+        if (resolved.energy > 0) parts.push(`灵力 +${resolved.energy}`);
+        return parts.join(' / ');
+    };
+
     const EXPEDITION_OBSERVATORY_BONUS_LIBRARY = {
         assault: [
             {
@@ -302,6 +323,64 @@
         ]
     };
 
+    const EXPEDITION_OBSERVATORY_THEME_LABELS = {
+        assault: '前压爆发',
+        bulwark: '稳守续航',
+        forge: '法宝共振',
+        oracle: '推演控场',
+        tempo: '连携节拍',
+        marathon: '跨章耐压'
+    };
+
+    const EXPEDITION_OBSERVATORY_THEME_KEY_BY_LABEL = Object.entries(EXPEDITION_OBSERVATORY_THEME_LABELS)
+        .reduce((result, [key, label]) => {
+            result[String(label || '').trim()] = key;
+            return result;
+        }, {});
+
+    const resolveExpeditionObservatoryThemeKey = (themeKey = '', themeLabel = '') => {
+        const safeThemeKey = String(themeKey || '').trim();
+        if (safeThemeKey) return safeThemeKey;
+        const safeThemeLabel = String(themeLabel || '').trim();
+        return EXPEDITION_OBSERVATORY_THEME_KEY_BY_LABEL[safeThemeLabel] || 'assault';
+    };
+
+    const OBSERVATORY_RESONANCE_SCORE_BONUS = 30;
+    const OBSERVATORY_ROUTE_PACT_SCORE_BONUS = 24;
+
+    const EXPEDITION_OBSERVATORY_RESONANCE_LIBRARY = {
+        assault: {
+            label: '前压共鸣',
+            target: 2,
+            reward: { gold: 24, ringExp: 12 }
+        },
+        bulwark: {
+            label: '守线共鸣',
+            target: 2,
+            reward: { heal: 10, heavenlyInsight: 1 }
+        },
+        forge: {
+            label: '器痕共鸣',
+            target: 2,
+            reward: { gold: 28, ringExp: 12 }
+        },
+        oracle: {
+            label: '星录共鸣',
+            target: 2,
+            reward: { heavenlyInsight: 1, ringExp: 12 }
+        },
+        tempo: {
+            label: '节拍共鸣',
+            target: 2,
+            reward: { gold: 18, ringExp: 10 }
+        },
+        marathon: {
+            label: '长线共鸣',
+            target: 3,
+            reward: { heavenlyInsight: 1, ringExp: 14 }
+        }
+    };
+
     const normalizeExpeditionObservatoryBonus = (bonus = null) => {
         const source = bonus && typeof bonus === 'object' ? bonus : {};
         return {
@@ -315,28 +394,160 @@
         };
     };
 
+    const normalizeExpeditionObservatoryResonance = (resonance = null) => {
+        const source = resonance && typeof resonance === 'object' ? resonance : null;
+        if (!source) return null;
+        const focusNodeTypes = readArray(source.focusNodeTypes).map((value) => String(value || '')).filter(Boolean).slice(0, 4);
+        const target = clampInt(source.target, 0, 6);
+        if (focusNodeTypes.length === 0 || target <= 0) return null;
+        const reward = normalizeObservatoryLinkReward(source.reward);
+        const rewardLine = String(source.rewardLine || formatObservatoryRewardLine(reward));
+        const label = String(source.label || '命盘共鸣');
+        const summary = String(source.summary || `沿 ${formatExpeditionNodeLabels(focusNodeTypes, '关键线路')} 继续推进 ${target} 次，可兑现 ${label}${rewardLine ? `：${rewardLine}` : ''}。`);
+        const progress = Math.min(clampInt(source.progress, 0, 99), target);
+        const completed = !!source.completed;
+        return {
+            label,
+            summary,
+            focusNodeTypes,
+            progress,
+            target,
+            reward,
+            rewardLine,
+            completed,
+            statusLine: (
+                completed
+                    ? `已兑现 ${label}${rewardLine ? `（${rewardLine}）` : ''}`
+                    : `命盘共鸣 ${progress}/${target}`
+            ),
+            completedAt: clampInt(source.completedAt, 0),
+            lastNodeType: String(source.lastNodeType || '')
+        };
+    };
+
+    const normalizeExpeditionObservatoryRoutePact = (routePact = null) => {
+        const source = routePact && typeof routePact === 'object' ? routePact : null;
+        if (!source) return null;
+        const focusNodeTypes = readArray(source.focusNodeTypes).map((value) => String(value || '')).filter(Boolean).slice(0, 4);
+        const target = clampInt(source.target, 0, 6);
+        if (!String(source.bountyId || '') || focusNodeTypes.length === 0 || target <= 0) return null;
+        const reward = normalizeObservatoryLinkReward(source.reward);
+        const rewardLine = String(source.rewardLine || formatObservatoryRewardLine(reward));
+        const label = String(source.label || '路线合卷');
+        const bountyName = String(source.bountyName || '章节悬赏');
+        const progress = Math.min(clampInt(source.progress, 0, 99), target);
+        const completed = !!source.completed;
+        const summary = String(
+            source.summary
+            || `已把「${bountyName}」并入本章答卷，沿 ${formatExpeditionNodeLabels(focusNodeTypes, '关键线路')} 线命中 ${target} 次，可额外兑现 ${label}${rewardLine ? `：${rewardLine}` : ''}。`
+        );
+        return {
+            label,
+            bountyId: String(source.bountyId || ''),
+            bountyName,
+            focusNodeTypes,
+            progress,
+            target,
+            reward,
+            rewardLine,
+            completed,
+            summary,
+            statusLine: completed
+                ? `已合卷 ${bountyName}${rewardLine ? `（${rewardLine}）` : ''}`
+                : `${label} ${progress}/${target} · ${bountyName}`,
+            branchId: String(source.branchId || ''),
+            branchName: String(source.branchName || ''),
+            engineeringTrackId: String(source.engineeringTrackId || ''),
+            engineeringTrackName: String(source.engineeringTrackName || ''),
+            completedAt: clampInt(source.completedAt, 0),
+            lastNodeType: String(source.lastNodeType || '')
+        };
+    };
+
+    const retargetExpeditionObservatoryResonanceForBonus = (resonance = null, bonus = null) => {
+        const current = normalizeExpeditionObservatoryResonance(resonance);
+        const selectedBonus = normalizeExpeditionObservatoryBonus(bonus);
+        if (!current || !selectedBonus?.id || selectedBonus.nodeTypes.length === 0) return current;
+        const focusNodeTypes = intersectNodeTypes(current.focusNodeTypes, selectedBonus.nodeTypes);
+        const resolvedFocus = focusNodeTypes.length > 0
+            ? focusNodeTypes
+            : selectedBonus.nodeTypes.slice(0, 4);
+        return normalizeExpeditionObservatoryResonance({
+            ...current,
+            focusNodeTypes: resolvedFocus,
+            summary: `沿 ${formatExpeditionNodeLabels(resolvedFocus, '关键线路')} 继续推进 ${current.target} 次，可兑现 ${current.label}${current.rewardLine ? `：${current.rewardLine}` : ''}。`,
+            progress: 0,
+            completed: false,
+            completedAt: 0,
+            lastNodeType: ''
+        });
+    };
+
+    const buildExpeditionObservatoryResonance = (guide = null) => {
+        const source = guide && typeof guide === 'object' ? guide : {};
+        const focusNodeTypes = readArray(source.preferredNodes).map((value) => String(value || '')).filter(Boolean).slice(0, 3);
+        if (focusNodeTypes.length === 0) return null;
+        const themeKey = resolveExpeditionObservatoryThemeKey(source.themeKey, source.themeLabel);
+        const profile = EXPEDITION_OBSERVATORY_RESONANCE_LIBRARY[themeKey] || EXPEDITION_OBSERVATORY_RESONANCE_LIBRARY.assault;
+        const reward = normalizeObservatoryLinkReward(profile.reward);
+        const rewardLine = formatObservatoryRewardLine(reward);
+        return normalizeExpeditionObservatoryResonance({
+            label: profile.label || `${source.themeLabel || '样本'}共鸣`,
+            summary: `沿 ${formatExpeditionNodeLabels(focusNodeTypes, '关键线路')} 继续推进 ${(clampInt(profile.target, 1, 6) || 2)} 次，可兑现 ${profile.label || '命盘共鸣'}${rewardLine ? `：${rewardLine}` : ''}。`,
+            focusNodeTypes,
+            progress: 0,
+            target: clampInt(profile.target, 1, 6) || 2,
+            reward,
+            rewardLine,
+            completed: false,
+            completedAt: 0,
+            lastNodeType: ''
+        });
+    };
+
     const normalizeExpeditionObservatoryLink = (link = null) => {
         const source = link && typeof link === 'object' ? link : null;
         if (!source || !source.sourceRecordId) return null;
+        const resolvedSourceThemeKey = resolveExpeditionObservatoryThemeKey(source.sourceThemeKey, source.sourceThemeLabel);
         const recommendedBranches = readArray(source.recommendedBranches).map((entry) => ({
             id: String(entry.id || ''),
             name: String(entry.name || ''),
             matchCount: clampInt(entry.matchCount, 0, 9)
         })).filter((entry) => entry.id).slice(0, 3);
+        const bonusOptions = readArray(source.bonusOptions).map((entry) => normalizeExpeditionObservatoryBonus(entry)).filter((entry) => entry.id).slice(0, 3);
+        const selectedBonusId = String(source.selectedBonusId || '');
+        const selectedBonus = bonusOptions.find((entry) => entry.id === selectedBonusId) || null;
+        const fallbackResonance = buildExpeditionObservatoryResonance({
+            themeKey: resolvedSourceThemeKey,
+            themeLabel: source.sourceThemeLabel,
+            preferredNodes: source.preferredNodes
+        });
+        const resonance = normalizeExpeditionObservatoryResonance(source.resonance)
+            || (selectedBonus
+                ? retargetExpeditionObservatoryResonanceForBonus(fallbackResonance, selectedBonus)
+                : fallbackResonance);
+        const routePact = normalizeExpeditionObservatoryRoutePact(source.routePact);
         return {
             sourceRecordId: String(source.sourceRecordId || ''),
             sourceTitle: String(source.sourceTitle || ''),
-            sourceThemeKey: String(source.sourceThemeKey || 'assault'),
+            sourceThemeKey: resolvedSourceThemeKey,
             sourceThemeLabel: String(source.sourceThemeLabel || '前压爆发'),
             sourceFeaturedTier: String(source.sourceFeaturedTier || ''),
             sourceFeaturedTags: readArray(source.sourceFeaturedTags).map((value) => String(value || '')).filter(Boolean).slice(0, 4),
+            trainingTags: readArray(source.trainingTags).map((value) => String(value || '')).filter(Boolean).slice(0, 3),
+            coachBrief: String(source.coachBrief || ''),
+            drillObjective: String(source.drillObjective || ''),
+            routeFocusLine: String(source.routeFocusLine || ''),
+            compareHint: String(source.compareHint || ''),
             sourceSeedSignature: String(source.sourceSeedSignature || ''),
             sourceScore: clampInt(source.sourceScore, 0, 9999),
             preferredNodes: readArray(source.preferredNodes).map((value) => String(value || '')).filter(Boolean).slice(0, 4),
             expeditionNote: String(source.expeditionNote || ''),
             recommendedBranches,
-            bonusOptions: readArray(source.bonusOptions).map((entry) => normalizeExpeditionObservatoryBonus(entry)).filter((entry) => entry.id).slice(0, 3),
-            selectedBonusId: String(source.selectedBonusId || '')
+            bonusOptions,
+            selectedBonusId,
+            resonance,
+            routePact
         };
     };
 
@@ -378,6 +589,378 @@
             default:
                 return [];
         }
+    };
+
+    const buildExpeditionPracticeTopic = (link = null, branchOptions = [], chapterIndex = 1) => {
+        const source = normalizeExpeditionObservatoryLink(link);
+        if (!source) return null;
+        const focusNodeTypes = readArray(source.preferredNodes).map((value) => String(value || '')).filter(Boolean).slice(0, 4);
+        const fallbackBranches = readArray(branchOptions)
+            .map((entry) => ({
+                id: String(entry?.id || ''),
+                name: String(entry?.name || ''),
+                matchCount: intersectNodeTypes(entry?.nodeBias, focusNodeTypes).length
+            }))
+            .filter((entry) => entry.id && entry.matchCount > 0)
+            .sort((a, b) => b.matchCount - a.matchCount || a.name.localeCompare(b.name, 'zh-Hans-CN'))
+            .slice(0, 3);
+        const recommendedBranches = readArray(source.recommendedBranches).length > 0
+            ? readArray(source.recommendedBranches).map((entry) => ({
+                id: String(entry.id || ''),
+                name: String(entry.name || ''),
+                matchCount: clampInt(entry.matchCount, 0, 9)
+            })).filter((entry) => entry.id)
+            : fallbackBranches;
+        const recommendedBranchNames = recommendedBranches.map((entry) => entry.name).filter(Boolean);
+        const focusLine = formatExpeditionNodeLabels(focusNodeTypes, source.routeFocusLine || '关键线路', 4);
+        const executionTarget = clampInt(source.resonance?.target, 1, 6) || Math.max(2, Math.min(3, Math.max(1, focusNodeTypes.length)));
+        const routeGoalLine = recommendedBranchNames.length > 0
+            ? `按样本优先锁定 ${recommendedBranchNames.map((name) => `「${name}」`).join(' / ')}。`
+            : `优先沿 ${source.routeFocusLine || focusLine} 组织本章路线。`;
+        const executionGoalLine = `沿 ${focusLine} 线推进 ${executionTarget} 次，跑出本章实操段。`;
+        const synthesisGoalLine = `承接一条与 ${focusLine} 同线的章节悬赏，把研判真正并成答卷。`;
+        return {
+            id: String(source.sourceRecordId ? `practice_topic:${source.sourceRecordId}` : `practice_topic:chapter${clampInt(chapterIndex, 1, 6)}`),
+            sourceRecordId: String(source.sourceRecordId || ''),
+            sourceTitle: String(source.sourceTitle || ''),
+            title: String(source.sourceThemeLabel ? `修行课题·${source.sourceThemeLabel}` : (source.sourceTitle || '修行课题')),
+            kicker: '修行课题',
+            themeKey: resolveExpeditionObservatoryThemeKey(source.sourceThemeKey, source.sourceThemeLabel),
+            themeLabel: String(source.sourceThemeLabel || ''),
+            sourceFeaturedTier: String(source.sourceFeaturedTier || '精选命盘'),
+            sourceSeedSignature: String(source.sourceSeedSignature || ''),
+            trainingTags: readArray(source.trainingTags).map((value) => String(value || '')).filter(Boolean).slice(0, 4),
+            objective: String(source.drillObjective || source.coachBrief || source.expeditionNote || ''),
+            routeHint: String(source.routeFocusLine || ''),
+            compareHint: String(source.compareHint || ''),
+            summary: String(source.expeditionNote || `本章会围绕「${source.sourceTitle || '当前样本'}」来答题，重点盯住 ${focusLine} 的线路节奏。`),
+            recommendedBranchIds: recommendedBranches.map((entry) => entry.id).filter(Boolean).slice(0, 3),
+            recommendedBranchNames: recommendedBranchNames.slice(0, 3),
+            focusNodeTypes,
+            focusNodeLabels: getExpeditionNodeLabels(focusNodeTypes, 4),
+            executionTarget,
+            goalLines: [routeGoalLine, executionGoalLine, synthesisGoalLine].filter(Boolean).slice(0, 3)
+        };
+    };
+
+    const normalizeExpeditionPracticeTopic = (topic = null, link = null, branchOptions = [], chapterIndex = 1) => {
+        const fallback = buildExpeditionPracticeTopic(link, branchOptions, chapterIndex);
+        const source = topic && typeof topic === 'object' ? topic : fallback;
+        if (!source && !fallback) return null;
+        const recommendedBranchIds = readArray(source?.recommendedBranchIds).map((value) => String(value || '')).filter(Boolean);
+        const recommendedBranchNames = readArray(source?.recommendedBranchNames).map((value) => String(value || '')).filter(Boolean);
+        const focusNodeTypes = readArray(source?.focusNodeTypes).map((value) => String(value || '')).filter(Boolean).slice(0, 4);
+        const focusNodeLabels = readArray(source?.focusNodeLabels).map((value) => String(value || '')).filter(Boolean).slice(0, 4);
+        const goalLines = readArray(source?.goalLines).map((value) => String(value || '')).filter(Boolean).slice(0, 3);
+        return {
+            id: String(source?.id || fallback?.id || ''),
+            sourceRecordId: String(source?.sourceRecordId || fallback?.sourceRecordId || ''),
+            sourceTitle: String(source?.sourceTitle || fallback?.sourceTitle || ''),
+            title: String(source?.title || fallback?.title || ''),
+            kicker: String(source?.kicker || fallback?.kicker || '修行课题'),
+            themeKey: resolveExpeditionObservatoryThemeKey(
+                source?.themeKey || fallback?.themeKey,
+                source?.themeLabel || fallback?.themeLabel
+            ),
+            themeLabel: String(source?.themeLabel || fallback?.themeLabel || ''),
+            sourceFeaturedTier: String(source?.sourceFeaturedTier || fallback?.sourceFeaturedTier || '精选命盘'),
+            sourceSeedSignature: String(source?.sourceSeedSignature || fallback?.sourceSeedSignature || ''),
+            trainingTags: readArray(source?.trainingTags).map((value) => String(value || '')).filter(Boolean).slice(0, 4),
+            objective: String(source?.objective || fallback?.objective || ''),
+            routeHint: String(source?.routeHint || source?.routeFocusLine || fallback?.routeHint || fallback?.routeFocusLine || ''),
+            compareHint: String(source?.compareHint || fallback?.compareHint || ''),
+            summary: String(source?.summary || fallback?.summary || ''),
+            recommendedBranchIds: (recommendedBranchIds.length > 0 ? recommendedBranchIds : readArray(fallback?.recommendedBranchIds)).slice(0, 3),
+            recommendedBranchNames: (recommendedBranchNames.length > 0 ? recommendedBranchNames : readArray(fallback?.recommendedBranchNames)).slice(0, 3),
+            focusNodeTypes: (focusNodeTypes.length > 0 ? focusNodeTypes : readArray(fallback?.focusNodeTypes)).slice(0, 4),
+            focusNodeLabels: (focusNodeLabels.length > 0 ? focusNodeLabels : readArray(fallback?.focusNodeLabels)).slice(0, 4),
+            executionTarget: clampInt(source?.executionTarget, 1, 6) || clampInt(fallback?.executionTarget, 1, 6) || 2,
+            goalLines: (goalLines.length > 0 ? goalLines : readArray(fallback?.goalLines)).slice(0, 3)
+        };
+    };
+
+    const normalizeExpeditionAnswerGoal = (goal = null, index = 0) => {
+        const source = goal && typeof goal === 'object' ? goal : {};
+        const target = clampInt(source.target, 1, 9) || 1;
+        return {
+            id: String(source.id || `answer_goal_${index}`),
+            label: String(source.label || `作答目标 ${index + 1}`),
+            progress: Math.min(clampInt(source.progress, 0, 99), target),
+            target,
+            completed: !!source.completed,
+            stateTone: ['completed', 'selected', 'suggested', 'idle'].includes(String(source.stateTone || ''))
+                ? String(source.stateTone)
+                : 'idle',
+            tagLabel: String(source.tagLabel || ''),
+            statusLine: String(source.statusLine || ''),
+            noteLine: String(source.noteLine || ''),
+            deviated: !!source.deviated
+        };
+    };
+
+    const normalizeExpeditionAnswerReview = (review = null) => {
+        const source = review && typeof review === 'object' ? review : null;
+        if (!source) return null;
+        return {
+            title: String(source.title || '章节观星回响'),
+            topicTitle: String(source.topicTitle || ''),
+            ratingLabel: String(source.ratingLabel || ''),
+            ratingTone: ['completed', 'selected', 'suggested', 'idle'].includes(String(source.ratingTone || ''))
+                ? String(source.ratingTone)
+                : 'idle',
+            overviewLine: String(source.overviewLine || ''),
+            highlightLine: String(source.highlightLine || ''),
+            trainingAdvice: String(source.trainingAdvice || ''),
+            goalHighlights: readArray(source.goalHighlights).map((value) => String(value || '')).filter(Boolean).slice(0, 3),
+            tags: readArray(source.tags).map((value) => String(value || '')).filter(Boolean).slice(0, 4)
+        };
+    };
+
+    const buildExpeditionAnswerSheet = (state = null, practiceTopic = null) => {
+        if (!state || !practiceTopic) return null;
+        const selectedBranch = readArray(state.branchOptions).find((entry) => entry.id === String(state.selectedBranchId || '')) || null;
+        const selectedBonus = readArray(state.observatoryLink?.bonusOptions).find((entry) => entry.id === String(state.observatoryLink?.selectedBonusId || '')) || null;
+        const resonance = normalizeExpeditionObservatoryResonance(state.observatoryLink?.resonance);
+        const routePact = normalizeExpeditionObservatoryRoutePact(state.observatoryLink?.routePact);
+        const recommendedBranchIds = readArray(practiceTopic.recommendedBranchIds).map((value) => String(value || '')).filter(Boolean);
+        const recommendedBranchNames = readArray(practiceTopic.recommendedBranchNames).map((value) => String(value || '')).filter(Boolean);
+        const executionFocusNodeTypes = state.observatoryLink?.selectedBonusId && resonance?.focusNodeTypes?.length
+            ? readArray(resonance.focusNodeTypes)
+            : readArray(practiceTopic.focusNodeTypes);
+        const executionFocusLine = formatExpeditionNodeLabels(executionFocusNodeTypes, '关键线路', 4);
+        const routeCompleted = !!selectedBranch && (
+            recommendedBranchIds.length > 0
+                ? recommendedBranchIds.includes(selectedBranch.id)
+                : intersectNodeTypes(selectedBranch.nodeBias, practiceTopic.focusNodeTypes).length > 0
+        );
+        const routeDeviated = !!selectedBranch && !routeCompleted;
+        const routeGoal = normalizeExpeditionAnswerGoal({
+            id: 'route_alignment',
+            label: '路线扣题',
+            progress: routeCompleted ? 1 : (selectedBranch ? 1 : 0),
+            target: 1,
+            completed: routeCompleted,
+            stateTone: routeCompleted ? 'completed' : (selectedBranch ? 'selected' : 'suggested'),
+            tagLabel: routeCompleted ? '贴题' : (routeDeviated ? '偏题' : '待锁线'),
+            statusLine: !selectedBranch
+                ? `待按样本锁线${recommendedBranchNames.length > 0 ? `：${recommendedBranchNames.join(' / ')}` : ''}`
+                : (routeCompleted
+                    ? `已按样本锁定「${selectedBranch.name}」`
+                    : `当前路线「${selectedBranch.name}」与样本主轴存在偏差`),
+            noteLine: recommendedBranchNames.length > 0
+                ? `推荐路线：${recommendedBranchNames.join(' / ')}`
+                : (practiceTopic.routeHint || `优先沿 ${formatExpeditionNodeLabels(practiceTopic.focusNodeTypes, '关键线路', 4)} 布局本章路线。`),
+            deviated: routeDeviated
+        });
+        const executionTarget = clampInt(practiceTopic.executionTarget, 1, 6) || 2;
+        const executionProgress = Math.min(
+            executionTarget,
+            executionFocusNodeTypes.reduce((sum, nodeType) => sum + clampInt(state.stats?.nodeVisits?.[nodeType], 0, 999), 0)
+        );
+        const executionCompleted = executionProgress >= executionTarget;
+        const executionGoal = normalizeExpeditionAnswerGoal({
+            id: 'sample_execution',
+            label: '样本实操',
+            progress: executionProgress,
+            target: executionTarget,
+            completed: executionCompleted,
+            stateTone: executionCompleted ? 'completed' : (executionProgress > 0 ? 'selected' : 'suggested'),
+            tagLabel: executionCompleted ? '跑通' : (executionProgress > 0 ? '进行中' : '待实操'),
+            statusLine: executionCompleted
+                ? `已沿 ${executionFocusLine} 跑完 ${executionTarget} 段实操`
+                : `沿 ${executionFocusLine} 推进 ${executionProgress}/${executionTarget}`,
+            noteLine: selectedBonus
+                ? `当前线索：${selectedBonus.label}${selectedBonus.consumed ? ' · 已触发' : ''}`
+                : '先锁 1 条观星线索，让样本开始真正记分。'
+        });
+        const activeBounties = readArray(state.activeBountyIds)
+            .map((id) => readArray(state.bountyDraft).find((entry) => entry.id === id) || null)
+            .filter(Boolean);
+        const alignedBounties = activeBounties.filter((entry) => intersectNodeTypes(getBountyFocusNodeTypes(entry), executionFocusNodeTypes).length > 0);
+        const synthesisGoal = normalizeExpeditionAnswerGoal({
+            id: 'chapter_synthesis',
+            label: '合卷作答',
+            progress: routePact ? routePact.progress : (alignedBounties.length > 0 ? 1 : 0),
+            target: routePact ? routePact.target : 1,
+            completed: !!routePact?.completed,
+            stateTone: routePact?.completed ? 'completed' : ((routePact || alignedBounties.length > 0) ? 'selected' : 'suggested'),
+            tagLabel: routePact?.completed ? '合卷' : ((routePact || alignedBounties.length > 0) ? '已挂卷' : '待并卷'),
+            statusLine: routePact?.completed
+                ? `已把「${routePact.bountyName}」并成章节答卷`
+                : (routePact
+                    ? `正在把「${routePact.bountyName}」并卷 ${routePact.progress}/${routePact.target}`
+                    : (alignedBounties.length > 0
+                        ? `已找到贴题悬赏「${alignedBounties[0].name}」`
+                        : `待承接一条与 ${executionFocusLine} 同线的章节悬赏`)),
+            noteLine: routePact
+                ? (routePact.rewardLine
+                    ? `合卷奖励：${routePact.rewardLine}`
+                    : routePact.summary)
+                : (alignedBounties.length > 0
+                    ? ((!state.observatoryLink?.selectedBonusId || !selectedBranch)
+                        ? `补齐${!state.observatoryLink?.selectedBonusId ? '观星线索' : '支线锁定'}后即可开始合卷。`
+                        : '继续沿样本线路推进，就能把这一卷真正写实。')
+                    : (practiceTopic.compareHint || '优先挑一条贴题悬赏，把路线研判写进章节答卷。'))
+        });
+        const goals = [routeGoal, executionGoal, synthesisGoal];
+        const completedGoals = goals.filter((goal) => goal.completed).length;
+        let ratingLabel = '待起题';
+        let ratingTone = 'suggested';
+        if (completedGoals >= goals.length && !routeGoal.deviated) {
+            ratingLabel = '天象合卷';
+            ratingTone = 'completed';
+        } else if (completedGoals >= 2 && !routeGoal.deviated) {
+            ratingLabel = '贴题成卷';
+            ratingTone = 'completed';
+        } else if (completedGoals >= 2) {
+            ratingLabel = '主线稳住';
+            ratingTone = 'selected';
+        } else if (completedGoals >= 1) {
+            ratingLabel = '仍在校卷';
+            ratingTone = 'selected';
+        } else if (selectedBonus || selectedBranch) {
+            ratingLabel = '已开卷';
+            ratingTone = 'selected';
+        }
+        let nextSuggestion = '';
+        if (!selectedBonus) {
+            nextSuggestion = '先从精选命盘里锁 1 条线索，让这章真正开始记分。';
+        } else if (!selectedBranch) {
+            nextSuggestion = recommendedBranchNames.length > 0
+                ? `优先切到 ${recommendedBranchNames.join(' / ')}，把样本节奏先定进主线。`
+                : '先锁定一条更贴样本的支线，让这章真正开始作答。';
+        } else if (routeGoal.deviated) {
+            nextSuggestion = recommendedBranchNames.length > 0
+                ? `当前路线偏题，优先切回 ${recommendedBranchNames.join(' / ')} 再继续推进。`
+                : `当前路线偏离样本，优先改回更常经过 ${executionFocusLine} 的支线。`;
+        } else if (!executionGoal.completed) {
+            nextSuggestion = `继续沿 ${executionFocusLine} 线推进 ${Math.max(0, executionGoal.target - executionGoal.progress)} 次，补齐实操段。`;
+        } else if (!synthesisGoal.completed) {
+            nextSuggestion = routePact
+                ? `再沿 ${formatExpeditionNodeLabels(routePact.focusNodeTypes, '关键线路', 4)} 推进 ${Math.max(0, routePact.target - routePact.progress)} 次，把「${routePact.bountyName}」真正并卷。`
+                : `承接一条与 ${executionFocusLine} 同线的章节悬赏，把研判真正写进答卷。`;
+        } else {
+            nextSuggestion = practiceTopic.compareHint
+                ? `结章时回看：${practiceTopic.compareHint}`
+                : `这章已经贴题，可以带着当前节奏完成收束。`;
+        }
+        const overviewLine = routeGoal.deviated
+            ? `已完成 ${completedGoals}/${goals.length} 条作答目标，当前路线偏题，建议先修回样本主轴。`
+            : `已完成 ${completedGoals}/${goals.length} 条作答目标，当前评级为「${ratingLabel}」。`;
+        return {
+            topicId: String(practiceTopic.id || ''),
+            clueLocked: !!selectedBonus,
+            clueStatusLine: selectedBonus
+                ? `已锁定线索「${selectedBonus.label}」`
+                : '待从精选命盘里锁 1 条线索',
+            ratingLabel,
+            ratingTone,
+            completedGoals,
+            totalGoals: goals.length,
+            nextSuggestion,
+            overviewLine,
+            goals,
+            reviewCard: normalizeExpeditionAnswerReview({
+                title: '章节观星回响',
+                topicTitle: practiceTopic.title || practiceTopic.sourceTitle || '',
+                ratingLabel,
+                ratingTone,
+                overviewLine,
+                highlightLine: routeGoal.deviated
+                    ? `当前路线与「${practiceTopic.sourceTitle || '当前样本'}」存在偏差，建议先修回贴题路线。`
+                    : `本章围绕「${practiceTopic.sourceTitle || '当前样本'}」作答，当前节奏已经开始成卷。`,
+                trainingAdvice: nextSuggestion,
+                goalHighlights: goals.map((goal) => `${goal.label}：${goal.statusLine}`).slice(0, 3),
+                tags: [
+                    practiceTopic.themeLabel ? `课题·${practiceTopic.themeLabel}` : '',
+                    practiceTopic.trainingTags?.[0] ? `训练·${practiceTopic.trainingTags[0]}` : '',
+                    `评级·${ratingLabel}`
+                ].filter(Boolean).slice(0, 4)
+            })
+        };
+    };
+
+    const serializeExpeditionPracticeTopic = (topic = null) => {
+        const source = normalizeExpeditionPracticeTopic(topic);
+        if (!source) return null;
+        return {
+            id: source.id,
+            sourceRecordId: source.sourceRecordId,
+            sourceTitle: source.sourceTitle,
+            title: source.title,
+            kicker: source.kicker,
+            themeKey: source.themeKey,
+            themeLabel: source.themeLabel,
+            sourceFeaturedTier: source.sourceFeaturedTier,
+            sourceSeedSignature: source.sourceSeedSignature,
+            trainingTags: readArray(source.trainingTags),
+            objective: source.objective,
+            routeHint: source.routeHint,
+            compareHint: source.compareHint,
+            summary: source.summary,
+            recommendedBranchIds: readArray(source.recommendedBranchIds),
+            recommendedBranchNames: readArray(source.recommendedBranchNames),
+            focusNodeTypes: readArray(source.focusNodeTypes),
+            focusNodeLabels: readArray(source.focusNodeLabels),
+            executionTarget: clampInt(source.executionTarget, 1, 6),
+            goalLines: readArray(source.goalLines)
+        };
+    };
+
+    const serializeExpeditionAnswerSheet = (sheet = null) => {
+        const source = sheet && typeof sheet === 'object' ? sheet : null;
+        if (!source) return null;
+        return {
+            topicId: String(source.topicId || ''),
+            clueLocked: !!source.clueLocked,
+            clueStatusLine: String(source.clueStatusLine || ''),
+            ratingLabel: String(source.ratingLabel || ''),
+            ratingTone: ['completed', 'selected', 'suggested', 'idle'].includes(String(source.ratingTone || ''))
+                ? String(source.ratingTone)
+                : 'idle',
+            completedGoals: clampInt(source.completedGoals, 0, 9),
+            totalGoals: clampInt(source.totalGoals, 1, 9),
+            nextSuggestion: String(source.nextSuggestion || ''),
+            overviewLine: String(source.overviewLine || ''),
+            goals: readArray(source.goals).map((goal, index) => normalizeExpeditionAnswerGoal(goal, index)),
+            reviewCard: normalizeExpeditionAnswerReview(source.reviewCard)
+        };
+    };
+
+    const buildObservatoryRoutePactReward = (focusNodeTypes = [], options = {}) => {
+        const focus = readArray(focusNodeTypes).map((value) => String(value || '')).filter(Boolean);
+        const reward = {};
+        if (focus.some((type) => ['enemy', 'elite', 'trial', 'boss'].includes(type))) {
+            reward.gold = (reward.gold || 0) + 20;
+            reward.ringExp = (reward.ringExp || 0) + 10;
+        }
+        if (focus.some((type) => ['observatory', 'memory_rift', 'event'].includes(type))) {
+            reward.heavenlyInsight = (reward.heavenlyInsight || 0) + 1;
+            reward.ringExp = (reward.ringExp || 0) + 4;
+        }
+        if (focus.some((type) => ['rest', 'shop', 'spirit_grotto'].includes(type))) {
+            reward.heal = (reward.heal || 0) + 8;
+            reward.gold = (reward.gold || 0) + 12;
+        }
+        if (focus.includes('forge')) {
+            reward.gold = (reward.gold || 0) + 14;
+            reward.ringExp = (reward.ringExp || 0) + 8;
+        }
+        if (focus.includes('forbidden_altar')) {
+            reward.karma = (reward.karma || 0) + 1;
+            reward.ringExp = (reward.ringExp || 0) + 6;
+        }
+        if (options.branchAligned) {
+            reward.gold = (reward.gold || 0) + 6;
+        }
+        if (options.engineeringAligned) {
+            reward.ringExp = (reward.ringExp || 0) + 4;
+        }
+        if (Object.keys(reward).length === 0) {
+            reward.gold = 18;
+            reward.ringExp = 8;
+        }
+        return normalizeObservatoryLinkReward(reward);
     };
 
     const isPressureBounty = (bounty = null) => {
@@ -626,7 +1209,7 @@
                 endingName: String(entry.endingName || ''),
                 endingIcon: String(entry.endingIcon || '🧭'),
                 score: clampInt(entry.score, 0, 9999),
-                scoreBreakdown: Array.isArray(entry.scoreBreakdown) ? entry.scoreBreakdown.map((line) => String(line || '')).filter(Boolean).slice(0, 6) : [],
+                scoreBreakdown: Array.isArray(entry.scoreBreakdown) ? entry.scoreBreakdown.map((line) => String(line || '')).filter(Boolean).slice(0, 8) : [],
                 branchName: String(entry.branchName || ''),
                 bountyNames: Array.isArray(entry.bountyNames) ? entry.bountyNames.map((line) => String(line || '')).filter(Boolean).slice(0, 4) : [],
                 factionSummary: Array.isArray(entry.factionSummary) ? entry.factionSummary.map((line) => String(line || '')).filter(Boolean).slice(0, 4) : [],
@@ -637,6 +1220,14 @@
                 nemesisFactionName: String(entry.nemesisFactionName || ''),
                 nemesisClueLine: String(entry.nemesisClueLine || ''),
                 tags: Array.isArray(entry.tags) ? entry.tags.map((line) => String(line || '')).filter(Boolean).slice(0, 8) : [],
+                practiceTopic: normalizeExpeditionPracticeTopic(
+                    entry.practiceTopic,
+                    entry.observatoryLink,
+                    [],
+                    clampInt(entry.chapterIndex, 1, 6) || 1
+                ),
+                observatoryLink: normalizeExpeditionObservatoryLink(entry.observatoryLink),
+                answerReview: normalizeExpeditionAnswerReview(entry.answerReview),
                 timestamp: clampInt(entry.timestamp, 0)
             }))
             .sort((a, b) => clampInt(b.timestamp, 0) - clampInt(a.timestamp, 0))
@@ -704,7 +1295,7 @@
             .map((entry, index) => normalizeNemesisHistoryEntry(entry, index))
             .slice(-MAX_NEMESIS_HISTORY);
         const nemesisSource = source.activeNemesis && typeof source.activeNemesis === 'object' ? source.activeNemesis : {};
-        return {
+        const normalizedState = {
             realm: clampInt(source.realm, 1, 18),
             chapterIndex: clampInt(source.chapterIndex, 1, 6),
             chapterName: String(source.chapterName || ''),
@@ -775,6 +1366,14 @@
                 }
             }
         };
+        normalizedState.practiceTopic = normalizeExpeditionPracticeTopic(
+            source.practiceTopic,
+            normalizedState.observatoryLink,
+            normalizedState.branchOptions,
+            normalizedState.chapterIndex
+        );
+        normalizedState.answerSheet = buildExpeditionAnswerSheet(normalizedState, normalizedState.practiceTopic);
+        return normalizedState;
     };
 
     Game.prototype.ensureExpeditionBootState = function () {
@@ -791,6 +1390,29 @@
     Game.prototype.getExpeditionState = function () {
         this.ensureExpeditionBootState();
         return this.expeditionState ? this.normalizeExpeditionState(this.expeditionState) : null;
+    };
+
+    Game.prototype.syncExpeditionPracticeState = function (state = null) {
+        const source = state && typeof state === 'object' ? state : this.getExpeditionState();
+        if (!source) return null;
+        source.practiceTopic = normalizeExpeditionPracticeTopic(
+            source.practiceTopic,
+            source.observatoryLink,
+            source.branchOptions,
+            source.chapterIndex
+        );
+        source.answerSheet = buildExpeditionAnswerSheet(source, source.practiceTopic);
+        return source;
+    };
+
+    Game.prototype.getExpeditionPracticeTopic = function (state = null) {
+        const source = state || this.getExpeditionState();
+        return source?.practiceTopic || null;
+    };
+
+    Game.prototype.getExpeditionAnswerSheet = function (state = null) {
+        const source = state || this.getExpeditionState();
+        return source?.answerSheet || null;
     };
 
     Game.prototype.getExpeditionBranchPool = function (chapterIndex = 1) {
@@ -853,13 +1475,19 @@
             sourceThemeLabel: guide.themeLabel,
             sourceFeaturedTier: guide.featuredTier,
             sourceFeaturedTags: guide.featuredTags,
+            trainingTags: guide.trainingTags,
+            coachBrief: guide.coachBrief,
+            drillObjective: guide.drillObjective,
+            routeFocusLine: guide.routeFocusLine,
+            compareHint: guide.compareHint,
             sourceSeedSignature: guide.seedSignature,
             sourceScore: guide.score,
             preferredNodes,
             expeditionNote: guide.expeditionNote,
             recommendedBranches,
             bonusOptions: this.buildExpeditionObservatoryBonusOptions(guide),
-            selectedBonusId: ''
+            selectedBonusId: '',
+            resonance: buildExpeditionObservatoryResonance(guide)
         });
     };
 
@@ -870,10 +1498,110 @@
         return readArray(link.bonusOptions).find((entry) => entry.id === link.selectedBonusId) || null;
     };
 
+    Game.prototype.getExpeditionObservatoryResonance = function (state = null) {
+        const source = state || this.getExpeditionState();
+        return normalizeExpeditionObservatoryResonance(source?.observatoryLink?.resonance);
+    };
+
+    Game.prototype.buildExpeditionObservatoryRoutePact = function (state = null, bounty = null) {
+        const source = state || this.getExpeditionState();
+        const rawBounty = bounty && typeof bounty === 'object'
+            ? bounty
+            : source?.bountyDraft?.find((entry) => entry.id === String(bounty || '')) || null;
+        const link = source?.observatoryLink;
+        const resonance = this.getExpeditionObservatoryResonance(source);
+        const targetBounty = rawBounty ? this.evaluateExpeditionBounty(rawBounty, source) : null;
+        if (!source || !link?.selectedBonusId || !targetBounty || !resonance) return null;
+        if (targetBounty.completed || targetBounty.rewardGranted) return null;
+
+        const bountyFocusNodeTypes = getBountyFocusNodeTypes(targetBounty);
+        const overlapFocus = intersectNodeTypes(resonance.focusNodeTypes, bountyFocusNodeTypes);
+        if (overlapFocus.length === 0) return null;
+
+        const selectedBranch = source.branchOptions.find((entry) => entry.id === source.selectedBranchId) || null;
+        const engineeringInfluence = this.getStrategicEngineeringExpeditionInfluence(source);
+        const branchFocus = selectedBranch ? intersectNodeTypes(overlapFocus, selectedBranch.nodeBias) : [];
+        const engineeringFocus = engineeringInfluence ? intersectNodeTypes(overlapFocus, engineeringInfluence.routeNodeTypes) : [];
+        const branchAligned = branchFocus.length > 0;
+        const engineeringAligned = engineeringFocus.length > 0;
+        const focusNodeTypes = branchAligned
+            ? branchFocus
+            : (engineeringAligned ? engineeringFocus : overlapFocus);
+        const target = branchAligned || engineeringAligned ? 2 : 3;
+        const reward = buildObservatoryRoutePactReward(focusNodeTypes, { branchAligned, engineeringAligned });
+        const rewardLine = formatObservatoryRewardLine(reward);
+        const leadParts = [
+            `已把「${targetBounty.name}」并入本章答卷`,
+            selectedBranch?.name ? `支线锚点为「${selectedBranch.name}」` : '',
+            engineeringInfluence?.engineeringTrackName ? `工程主轴为 ${engineeringInfluence.engineeringTrackName}` : ''
+        ].filter(Boolean);
+        return normalizeExpeditionObservatoryRoutePact({
+            label: '路线合卷',
+            bountyId: targetBounty.id,
+            bountyName: targetBounty.name,
+            focusNodeTypes,
+            progress: 0,
+            target,
+            reward,
+            rewardLine,
+            completed: false,
+            branchId: selectedBranch?.id || '',
+            branchName: selectedBranch?.name || '',
+            engineeringTrackId: engineeringInfluence?.engineeringTrackId || '',
+            engineeringTrackName: engineeringInfluence?.engineeringTrackName || '',
+            summary: `${leadParts.join(' · ')}，沿 ${formatExpeditionNodeLabels(focusNodeTypes, '关键线路')} 线命中 ${target} 次，可额外兑现 ${rewardLine || '章节奖励'}。`,
+            completedAt: 0,
+            lastNodeType: ''
+        });
+    };
+
+    Game.prototype.getExpeditionObservatoryRoutePact = function (state = null) {
+        const source = state || this.getExpeditionState();
+        return normalizeExpeditionObservatoryRoutePact(source?.observatoryLink?.routePact);
+    };
+
+    Game.prototype.tryArmExpeditionObservatoryRoutePact = function (state = null, preferredBountyId = '') {
+        const source = state || this.getExpeditionState();
+        const link = source?.observatoryLink;
+        if (!source || !link?.selectedBonusId || !source.selectedBranchId || link.routePact) return source;
+        const candidateIds = [
+            preferredBountyId,
+            ...readArray(source.activeBountyIds)
+        ].map((value) => String(value || '')).filter(Boolean);
+        const targetBounty = candidateIds
+            .map((id) => source.bountyDraft.find((entry) => entry.id === id) || null)
+            .find((entry) => entry && this.buildExpeditionObservatoryRoutePact(source, entry))
+            || null;
+        if (!targetBounty) return source;
+        const routePact = this.buildExpeditionObservatoryRoutePact(source, targetBounty);
+        if (!routePact) return source;
+        source.observatoryLink.routePact = routePact;
+        if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
+            Utils.showBattleLog(`【路线合卷】已把「${routePact.bountyName}」并入本章答卷，沿 ${formatExpeditionNodeLabels(routePact.focusNodeTypes, '关键线路')} 线推进 ${routePact.target} 次，可额外兑现奖励。`);
+        }
+        return source;
+    };
+
     Game.prototype.isExpeditionRecommendedBranch = function (state = null, branchId = '') {
         const source = state || this.getExpeditionState();
         if (!source?.observatoryLink || !branchId) return false;
         return readArray(source.observatoryLink.recommendedBranches).some((entry) => entry.id === branchId);
+    };
+
+    Game.prototype.selectExpeditionRecommendedBranch = function (branchId = '') {
+        const state = this.getExpeditionState();
+        const safeBranchId = String(branchId || '');
+        if (!state?.observatoryLink || !safeBranchId || !this.isExpeditionRecommendedBranch(state, safeBranchId)) return false;
+        const target = readArray(state.observatoryLink.recommendedBranches).find((entry) => entry.id === safeBranchId) || null;
+        if (!target) return false;
+        const previousBranchId = state.selectedBranchId || '';
+        const wasLocked = !!state.branchSelectionLocked;
+        const changed = previousBranchId !== safeBranchId;
+        const selected = this.selectExpeditionBranch(safeBranchId);
+        if (selected && changed && wasLocked && typeof Utils !== 'undefined' && Utils?.showBattleLog) {
+            Utils.showBattleLog(`【观星建议】已切到推荐路线：${target.name}。`);
+        }
+        return selected;
     };
 
     Game.prototype.selectExpeditionObservatoryBonus = function (bonusId = '') {
@@ -888,11 +1616,25 @@
         const target = readArray(state.observatoryLink.bonusOptions).find((entry) => entry.id === String(bonusId || ''));
         if (!target) return false;
         state.observatoryLink.selectedBonusId = target.id;
+        if (state.observatoryLink.resonance) {
+            state.observatoryLink.resonance = retargetExpeditionObservatoryResonanceForBonus(
+                {
+                    ...state.observatoryLink.resonance,
+                    progress: 0,
+                    completed: false,
+                    completedAt: 0,
+                    lastNodeType: ''
+                },
+                target
+            );
+        }
+        this.tryArmExpeditionObservatoryRoutePact(state);
+        this.syncExpeditionPracticeState(state);
         this.expeditionState = state;
         this.persistActiveExpeditionState();
         this.renderExpeditionMapPanels();
         if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
-            Utils.showBattleLog(`【观星线索】已启用「${target.label}」，本章会按精选命盘给出小幅支援。`);
+            Utils.showBattleLog(`【观星线索】已启用「${target.label}」，本章会按精选命盘给出小幅支援，并开始累计命盘共鸣。`);
         }
         return true;
     };
@@ -930,14 +1672,9 @@
             this.updatePlayerDisplay();
         }
         if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
-            const parts = [];
-            if (resolved.gold > 0) parts.push(`灵石 +${resolved.gold}`);
-            if (resolved.ringExp > 0) parts.push(`命环经验 +${resolved.ringExp}`);
-            if (resolved.heavenlyInsight > 0) parts.push(`天机 +${resolved.heavenlyInsight}`);
-            if (resolved.karma > 0) parts.push(`业果 +${resolved.karma}`);
-            if (resolved.block > 0) parts.push(`格挡 +${resolved.block}`);
-            if (resolved.heal > 0) parts.push(`恢复 ${resolved.heal}`);
-            if (resolved.energy > 0) parts.push(`灵力 +${resolved.energy}`);
+            const parts = formatObservatoryRewardLine(resolved)
+                ? formatObservatoryRewardLine(resolved).split(' / ')
+                : [];
             if (parts.length > 0) {
                 Utils.showBattleLog(`【观星线索】${label || '样本加成'}：${parts.join(' / ')}`);
             }
@@ -954,6 +1691,71 @@
         if (target.nodeTypes.length > 0 && !target.nodeTypes.includes(String(nodeType || ''))) return source;
         target.consumed = true;
         this.grantExpeditionObservatoryReward(target.rewards, target.label);
+        return source;
+    };
+
+    Game.prototype.advanceExpeditionObservatoryResonance = function (state = null, nodeType = '') {
+        const source = state || this.getExpeditionState();
+        const link = source?.observatoryLink;
+        const safeNodeType = String(nodeType || '').trim();
+        if (!link || !link.selectedBonusId || !safeNodeType) return source;
+
+        const resonance = this.getExpeditionObservatoryResonance(source);
+        if (!resonance || resonance.completed) return source;
+        if (!readArray(resonance.focusNodeTypes).includes(safeNodeType)) return source;
+
+        const nextProgress = clampInt((resonance.progress || 0) + 1, 0, resonance.target);
+        const completed = nextProgress >= resonance.target;
+        link.resonance = normalizeExpeditionObservatoryResonance({
+            ...resonance,
+            progress: nextProgress,
+            completed,
+            completedAt: completed ? Date.now() : 0,
+            lastNodeType: safeNodeType
+        });
+
+        if (completed) {
+            if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
+                Utils.showBattleLog(`【命盘共鸣】已按样本踏入 ${formatExpeditionNodeLabels(resonance.focusNodeTypes, '关键线路')}，兑现「${resonance.label}」。`);
+            }
+            this.grantExpeditionObservatoryReward(link.resonance.reward, link.resonance.label || '命盘共鸣');
+        } else if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
+            Utils.showBattleLog(`【命盘共鸣】${nextProgress}/${resonance.target}：继续沿 ${formatExpeditionNodeLabels(resonance.focusNodeTypes, '关键线路')} 线推进，可兑现「${resonance.label}」。`);
+        }
+        return source;
+    };
+
+    Game.prototype.advanceExpeditionObservatoryRoutePact = function (state = null, nodeType = '') {
+        const source = state || this.getExpeditionState();
+        const link = source?.observatoryLink;
+        const safeNodeType = String(nodeType || '').trim();
+        if (!link || !link.selectedBonusId || !safeNodeType) return source;
+
+        const routePact = this.getExpeditionObservatoryRoutePact(source);
+        if (!routePact || routePact.completed) return source;
+        if (!readArray(routePact.focusNodeTypes).includes(safeNodeType)) return source;
+
+        const nextProgress = clampInt((routePact.progress || 0) + 1, 0, routePact.target);
+        const completed = nextProgress >= routePact.target;
+        link.routePact = normalizeExpeditionObservatoryRoutePact({
+            ...routePact,
+            progress: nextProgress,
+            completed,
+            completedAt: completed ? Date.now() : 0,
+            lastNodeType: safeNodeType
+        });
+
+        if (completed) {
+            if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
+                Utils.showBattleLog(`【路线合卷】已把「${routePact.bountyName}」与样本路线真正并成一卷，额外兑现章节奖励。`);
+            }
+            this.grantExpeditionObservatoryReward(
+                link.routePact.reward,
+                `${link.routePact.label || '路线合卷'}·${link.routePact.bountyName || '章节悬赏'}`
+            );
+        } else if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
+            Utils.showBattleLog(`【路线合卷】${nextProgress}/${routePact.target}：继续沿 ${formatExpeditionNodeLabels(routePact.focusNodeTypes, '关键线路')} 线推进，可把「${routePact.bountyName}」并成章节答卷。`);
+        }
         return source;
     };
 
@@ -2132,6 +2934,8 @@
                 Utils.showBattleLog(`【裂界远征】已锁定支线区域：${target.name}`);
             }
         }
+        this.tryArmExpeditionObservatoryRoutePact(state);
+        this.syncExpeditionPracticeState(state);
         this.expeditionState = state;
         this.persistActiveExpeditionState();
         this.refreshExpeditionProgress(true);
@@ -2157,6 +2961,7 @@
             }
             activeIds.push(bountyId);
             state.activeBountyIds = activeIds;
+            this.tryArmExpeditionObservatoryRoutePact(state, bountyId);
             if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
                 Utils.showBattleLog(`【章节悬赏】已承接：${bounty.name}`);
                 const signal = this.getExpeditionBountySignalModel(state, bounty);
@@ -2166,6 +2971,7 @@
                 }
             }
         }
+        this.syncExpeditionPracticeState(state);
         this.expeditionState = state;
         this.persistActiveExpeditionState();
         this.refreshExpeditionProgress(true);
@@ -2260,6 +3066,7 @@
             ? Math.max(0, Math.min(1, safeNumber(this.player.currentHp, 0) / Math.max(1, safeNumber(this.player.maxHp, 1))))
             : safeNumber(state.stats.currentHpRatio, 0);
         state.stats.highestHpRatio = Math.max(safeNumber(state.stats.highestHpRatio, 0), safeNumber(state.stats.currentHpRatio, 0));
+        this.syncExpeditionPracticeState(state);
         this.expeditionState = state;
         this.persistActiveExpeditionState();
         return state;
@@ -2310,8 +3117,11 @@
         }
 
         this.consumeExpeditionObservatoryBonus(state, 'node_visit', type);
+        this.advanceExpeditionObservatoryResonance(state, type);
+        this.advanceExpeditionObservatoryRoutePact(state, type);
         this.advanceExpeditionNemesisState(state, { type }, { silent: false });
 
+        this.syncExpeditionPracticeState(state);
         this.expeditionState = state;
         this.refreshExpeditionProgress(true);
         this.renderExpeditionMapPanels();
@@ -2584,13 +3394,20 @@
             ? source.activeNemesis.battleVariants.find((entry) => entry.id === source.activeNemesis.currentVariantId) || source.activeNemesis.battleVariants[0]
             : null;
         const selectedObservatoryBonus = this.getSelectedExpeditionObservatoryBonus(source);
+        const observatoryResonance = this.getExpeditionObservatoryResonance(source);
+        const observatoryRoutePact = this.getExpeditionObservatoryRoutePact(source);
+        const practiceTopic = this.getExpeditionPracticeTopic(source);
+        const answerSheet = this.getExpeditionAnswerSheet(source);
+        const answerReview = normalizeExpeditionAnswerReview(answerSheet?.reviewCard);
         const score = clampInt(
             completedBounties.reduce((sum, entry) => sum + clampInt(entry.reward?.score || 0, 0, 9999), 0)
             + clampInt(nemesisReward.score || 0, 0, 9999)
             + (ending.id === 'alliance' ? 30 : 0)
             + (ending.id === 'assault' ? 40 : 0)
             + (ending.id === 'hunt' ? 55 : 0)
-            + (ending.id === 'sealed' ? 26 : 0),
+            + (ending.id === 'sealed' ? 26 : 0)
+            + (observatoryResonance?.completed ? OBSERVATORY_RESONANCE_SCORE_BONUS : 0)
+            + (observatoryRoutePact?.completed ? OBSERVATORY_ROUTE_PACT_SCORE_BONUS : 0),
             0,
             9999
         );
@@ -2604,6 +3421,15 @@
             score,
             scoreBreakdown: [
                 `${ending.icon} ${ending.name}`,
+                practiceTopic?.sourceTitle
+                    ? `课题样本：${practiceTopic.sourceTitle}`
+                    : null,
+                answerSheet
+                    ? `章节答卷：${answerSheet.ratingLabel} · ${answerSheet.completedGoals}/${answerSheet.totalGoals} 项达成`
+                    : null,
+                answerReview?.trainingAdvice
+                    ? `训练建议：${answerReview.trainingAdvice}`
+                    : null,
                 `已完成悬赏 ${completedBounties.length} 条`,
                 source.activeNemesis?.name
                     ? `仇敌结果：${source.activeNemesis.name} · ${nemesisStatusMeta.label}${source.activeNemesis.alliedFactionName ? ` · ${source.activeNemesis.alliedFactionName}` : ''}`
@@ -2615,6 +3441,30 @@
                 source.observatoryLink?.sourceTitle
                     ? `观星线索：${source.observatoryLink.sourceTitle}${selectedObservatoryBonus ? ` · ${selectedObservatoryBonus.label}` : ''}`
                     : null,
+                source.observatoryLink?.trainingTags?.length
+                    ? `训练标签：${source.observatoryLink.trainingTags.join(' / ')}`
+                    : null,
+                source.observatoryLink?.drillObjective
+                    ? `演练目标：${source.observatoryLink.drillObjective}`
+                    : (source.observatoryLink?.coachBrief
+                        ? `教练提示：${source.observatoryLink.coachBrief}`
+                        : null),
+                source.observatoryLink?.routeFocusLine
+                    ? `样本路径：${source.observatoryLink.routeFocusLine}`
+                    : null,
+                answerReview?.highlightLine
+                    ? `回响结论：${answerReview.highlightLine}`
+                    : null,
+                observatoryResonance?.completed
+                    ? `命盘共鸣：${observatoryResonance.label}${observatoryResonance.rewardLine ? ` · ${observatoryResonance.rewardLine}` : ''}`
+                    : (observatoryResonance && selectedObservatoryBonus
+                        ? `命盘共鸣：${observatoryResonance.progress}/${observatoryResonance.target}`
+                        : null),
+                observatoryRoutePact?.completed
+                    ? `路线合卷：${observatoryRoutePact.bountyName}${observatoryRoutePact.rewardLine ? ` · ${observatoryRoutePact.rewardLine}` : ''}`
+                    : (observatoryRoutePact
+                        ? `路线合卷：${observatoryRoutePact.progress}/${observatoryRoutePact.target} · ${observatoryRoutePact.bountyName}`
+                        : null),
                 `势力态势：${source.factions.map((entry) => `${entry.name}${entry.stance > 0 ? '+' : ''}${entry.stance}`).join(' / ')}`
             ].filter(Boolean),
             branchName: branch?.name || '未锁定支线',
@@ -2626,15 +3476,156 @@
             nemesisVariantLabel: currentVariant?.label || '',
             nemesisFactionName: source.activeNemesis?.alliedFactionName || '',
             nemesisClueLine: source.activeNemesis?.clueRevealed ? (source.activeNemesis?.clueLine || '') : '',
+            practiceTopic: serializeExpeditionPracticeTopic(practiceTopic),
+            observatoryLink: normalizeExpeditionObservatoryLink(source.observatoryLink),
+            answerReview,
             tags: [
                 branch?.name || '未锁支线',
+                answerReview?.ratingLabel ? `答卷·${answerReview.ratingLabel}` : '',
                 source.activeNemesis?.name ? `宿敌·${nemesisStatusMeta.label}` : '',
+                practiceTopic?.themeLabel ? `课题·${practiceTopic.themeLabel}` : '',
                 source.observatoryLink?.sourceThemeLabel ? `观星·${source.observatoryLink.sourceThemeLabel}` : '',
+                source.observatoryLink?.trainingTags?.[0] ? `训练·${source.observatoryLink.trainingTags[0]}` : '',
                 selectedObservatoryBonus?.label ? `线索·${selectedObservatoryBonus.label}` : '',
+                observatoryResonance?.completed ? `共鸣·${observatoryResonance.label}` : '',
+                observatoryRoutePact?.completed ? `合卷·${observatoryRoutePact.bountyName}` : '',
                 ...completedBounties.map((entry) => entry.name),
                 ...source.factions.filter((entry) => entry.stance >= 2).map((entry) => `${entry.name}结盟`)
             ].filter(Boolean).slice(0, 6),
             timestamp: Date.now()
+        };
+    };
+
+    Game.prototype.buildRewardExpeditionMeta = function (slate = null) {
+        const source = slate && typeof slate === 'object' ? slate : this.getLatestRunSlate();
+        if (!source) return null;
+
+        const answerReview = normalizeExpeditionAnswerReview(source.answerReview);
+        const breakdown = readArray(source.scoreBreakdown)
+            .map((line) => String(line || '').trim())
+            .filter(Boolean);
+        const focusLines = answerReview
+            ? readArray(answerReview.goalHighlights).map((line) => String(line || '').trim()).filter(Boolean).slice(0, 3)
+            : [];
+        const branchName = String(source.branchName || '');
+        const hasLockedBranch = !!branchName && !/未锁/.test(branchName);
+        const fallbackRatingLabel = hasLockedBranch ? '待复盘' : '待锁线';
+        const fallbackHighlightLine = hasLockedBranch
+            ? `这一章已留下「${branchName}」的归卷留痕，下一章继续沿同轴线路补题，就能把观星样本写成完整答卷。`
+            : `这一章暂时只留下 ${source.endingName || '章节留痕'}，下一章需要先锁定主线，再把观星样本补成答卷。`;
+        const fallbackTrainingAdvice = hasLockedBranch
+            ? `继续沿「${branchName}」推进，并至少完成 1 条同轴悬赏，把这一章从留痕补成成卷答复。`
+            : '先锁定 1 条章节主线，再沿观星样本推进关键线路与悬赏，把章节答卷真正做成卷。';
+        const fallbackFocusLines = [
+            hasLockedBranch
+                ? `路线锁定：已按「${branchName}」归卷，下一章继续沿同轴线路补题。`
+                : '路线锁定：本章尚未锁主线，下一章先补主线再做观星答卷。',
+            breakdown.find((line) => /悬赏/.test(line || '')) || '',
+            breakdown.find((line) => /仇敌结果/.test(line || '')) || ''
+        ].filter(Boolean).slice(0, 3);
+        const diagnosticLines = focusLines.length > 0
+            ? focusLines
+            : (fallbackFocusLines.length > 0
+                ? fallbackFocusLines
+                : breakdown.filter((line) => /章节答卷|回响结论|命盘共鸣|路线合卷|训练建议|课题样本/.test(line || '')).slice(0, 3));
+        const nemesisParts = [
+            source.nemesisName || '',
+            source.nemesisStatusLabel || source.nemesisStatus || '',
+            source.nemesisFactionName || ''
+        ].map((value) => String(value || '').trim()).filter(Boolean);
+        const score = clampInt(source.score, 0, 9999);
+
+        return {
+            id: String(source.id || ''),
+            chapterName: String(source.chapterName || `第${clampInt(source.chapterIndex, 1, 999) || 1}章`),
+            endingName: String(source.endingName || '章节归卷'),
+            endingIcon: String(source.endingIcon || '🧭'),
+            score,
+            scoreLabel: `命盘评分 ${score}`,
+            ratingLabel: String(answerReview?.ratingLabel || fallbackRatingLabel),
+            ratingTone: String(answerReview?.ratingTone || (hasLockedBranch ? 'selected' : 'suggested')),
+            highlightLine: String(answerReview?.highlightLine || answerReview?.overviewLine || fallbackHighlightLine),
+            trainingAdvice: String(answerReview?.trainingAdvice || fallbackTrainingAdvice),
+            focusLines: diagnosticLines,
+            breakdown: breakdown.slice(0, 4),
+            tags: readArray(source.tags).map((tag) => String(tag || '').trim()).filter(Boolean).slice(0, 6),
+            branchName,
+            branchLine: branchName ? `本章主线：${branchName}` : '',
+            nemesisLine: nemesisParts.length > 0 ? `宿敌留痕：${nemesisParts.join(' · ')}` : ''
+        };
+    };
+
+    Game.prototype.buildObservatoryTrainingFocusFromSlate = function (slate = null) {
+        const source = slate && typeof slate === 'object' ? slate : this.getLatestRunSlate();
+        if (!source) return null;
+        const answerReview = normalizeExpeditionAnswerReview(source.answerReview);
+        const trainingAdvice = String(answerReview?.trainingAdvice || '').trim();
+        if (!trainingAdvice) return null;
+        const observatoryLink = normalizeExpeditionObservatoryLink(source.observatoryLink);
+        const practiceTopic = normalizeExpeditionPracticeTopic(source.practiceTopic);
+        const selectedGuide = typeof this.getSelectedObservatoryExpeditionGuide === 'function'
+            ? this.getSelectedObservatoryExpeditionGuide({ silentSync: true })
+            : null;
+        const scoreBreakdown = readArray(source.scoreBreakdown).map((line) => String(line || '').trim()).filter(Boolean);
+        const sourceTitle = String(
+            practiceTopic?.sourceTitle
+            || observatoryLink?.sourceTitle
+            || scoreBreakdown.find((line) => /^课题样本：/.test(line))?.replace(/^课题样本：/, '')
+            || scoreBreakdown.find((line) => /^观星线索：/.test(line))?.replace(/^观星线索：/, '').split(' · ')[0]
+            || selectedGuide?.title
+            || ''
+        ).trim();
+        const themeLabel = String(
+            practiceTopic?.themeLabel
+            || observatoryLink?.sourceThemeLabel
+            || readArray(source.tags).find((tag) => /^课题·/.test(String(tag || '')))?.replace(/^课题·/, '')
+            || readArray(source.tags).find((tag) => /^观星·/.test(String(tag || '')))?.replace(/^观星·/, '')
+            || selectedGuide?.themeLabel
+            || ''
+        ).trim();
+        const themeKey = resolveExpeditionObservatoryThemeKey(
+            practiceTopic?.themeKey
+            || observatoryLink?.sourceThemeKey
+            || EXPEDITION_OBSERVATORY_THEME_KEY_BY_LABEL[themeLabel]
+            || selectedGuide?.themeKey,
+            themeLabel
+        );
+        const routeFocusLine = String(
+            practiceTopic?.routeHint
+            || observatoryLink?.routeFocusLine
+            || scoreBreakdown.find((line) => /^样本路径：/.test(line))?.replace(/^样本路径：/, '')
+            || selectedGuide?.routeFocusLine
+            || ''
+        ).trim();
+        const compareHint = String(practiceTopic?.compareHint || observatoryLink?.compareHint || selectedGuide?.compareHint || '').trim();
+        const trainingTags = Array.from(new Set(
+            [
+                ...readArray(practiceTopic?.trainingTags),
+                ...readArray(observatoryLink?.trainingTags),
+                ...readArray(selectedGuide?.trainingTags),
+                ...readArray(source.tags)
+                    .map((tag) => String(tag || '').trim())
+                    .filter((tag) => /^训练·/.test(tag))
+                    .map((tag) => tag.replace(/^训练·/, ''))
+            ].map((entry) => String(entry || '').trim()).filter(Boolean)
+        )).slice(0, 4);
+        return {
+            sourceRunId: String(source.id || ''),
+            chapterName: String(source.chapterName || `第${clampInt(source.chapterIndex, 1, 999) || 1}章`),
+            sourceTitle,
+            guideRecordId: String(practiceTopic?.sourceRecordId || observatoryLink?.sourceRecordId || ''),
+            themeKey,
+            themeLabel,
+            ratingLabel: String(answerReview?.ratingLabel || ''),
+            ratingTone: String(answerReview?.ratingTone || 'selected'),
+            trainingAdvice,
+            highlightLine: String(answerReview?.highlightLine || answerReview?.overviewLine || ''),
+            branchName: String(source.branchName || ''),
+            routeFocusLine,
+            compareHint,
+            trainingTags,
+            goalHighlights: readArray(answerReview?.goalHighlights).map((line) => String(line || '').trim()).filter(Boolean).slice(0, 3),
+            updatedAt: Date.now()
         };
     };
 
@@ -2650,6 +3641,12 @@
         this.persistRunSlateArchive();
         this.expeditionState = null;
         this.persistActiveExpeditionState();
+        this.lastExpeditionRewardMeta = reason === 'realm_clear'
+            ? this.buildRewardExpeditionMeta(slate)
+            : null;
+        if (reason === 'realm_clear' && typeof this.setObservatoryTrainingFocus === 'function') {
+            this.setObservatoryTrainingFocus(this.buildObservatoryTrainingFocusFromSlate(slate), { silent: true });
+        }
         this.renderExpeditionMapPanels();
         if (typeof this.recordCollectionUnlock === 'function') {
             this.recordCollectionUnlock('run_slate', {
@@ -2675,6 +3672,13 @@
         if (!state && !latestSlate) return null;
         const activeBounties = state ? this.getActiveExpeditionBounties(state) : [];
         const selectedObservatoryBonus = state ? this.getSelectedExpeditionObservatoryBonus(state) : null;
+        const observatoryResonance = state ? this.getExpeditionObservatoryResonance(state) : null;
+        const observatoryRoutePact = state ? this.getExpeditionObservatoryRoutePact(state) : null;
+        const practiceTopic = state ? this.getExpeditionPracticeTopic(state) : null;
+        const answerSheet = state ? this.getExpeditionAnswerSheet(state) : null;
+        const trainingFocus = typeof this.getObservatoryTrainingFocus === 'function'
+            ? this.getObservatoryTrainingFocus()
+            : null;
         const recentFactionLogs = state ? this.getRecentExpeditionFactionLogs(state, 4) : [];
         const recentNemesisLogs = state ? this.getRecentExpeditionNemesisLogs(state, 4) : [];
         const engineeringInfluence = state ? this.getStrategicEngineeringExpeditionInfluence(state) : null;
@@ -2724,6 +3728,8 @@
             chapterName: state?.chapterFullName || latestSlate?.chapterName || '',
             selectedBranchId: state?.selectedBranchId || '',
             selectedBranchName: state?.branchOptions?.find((entry) => entry.id === state.selectedBranchId)?.name || '',
+            practiceTopic: serializeExpeditionPracticeTopic(practiceTopic),
+            answerSheet: serializeExpeditionAnswerSheet(answerSheet),
             engineeringLink: engineeringInfluence
                 ? {
                     trackId: engineeringInfluence.engineeringTrackId,
@@ -2759,6 +3765,7 @@
                 progress: entry.progress,
                 progressText: getBountyProgressLabel(entry),
                 completed: !!entry.completed,
+                routePact: observatoryRoutePact?.bountyId === entry.id,
                 focusNodeTypes: readArray(bountySignalMap.get(entry.id)?.focusNodeTypes),
                 conflictWarnings: readArray(bountySignalMap.get(entry.id)?.conflictWarnings).map((warning) => serializeWarning(warning)),
                 conflictLabels: readArray(bountySignalMap.get(entry.id)?.conflictWarnings).map((warning) => warning.label),
@@ -2776,6 +3783,7 @@
                 progress: entry.progress,
                 progressText: getBountyProgressLabel(entry),
                 completed: !!entry.completed,
+                routePact: observatoryRoutePact?.bountyId === entry.id,
                 conflictWarnings: readArray(bountySignalMap.get(entry.id)?.conflictWarnings).map((warning) => serializeWarning(warning)),
                 signalLine: String(bountySignalMap.get(entry.id)?.summaryLine || ''),
                 engineeringTrackId: String(bountySignalMap.get(entry.id)?.engineeringTrackId || ''),
@@ -2876,11 +3884,17 @@
                     sourceThemeLabel: state.observatoryLink.sourceThemeLabel,
                     sourceFeaturedTier: state.observatoryLink.sourceFeaturedTier,
                     sourceFeaturedTags: readArray(state.observatoryLink.sourceFeaturedTags),
+                    trainingTags: readArray(state.observatoryLink.trainingTags),
+                    coachBrief: state.observatoryLink.coachBrief || '',
+                    drillObjective: state.observatoryLink.drillObjective || '',
+                    routeFocusLine: state.observatoryLink.routeFocusLine || '',
+                    compareHint: state.observatoryLink.compareHint || '',
                     sourceSeedSignature: state.observatoryLink.sourceSeedSignature,
                     recommendedBranches: readArray(state.observatoryLink.recommendedBranches).map((entry) => ({
                         id: entry.id,
                         name: entry.name,
-                        matchCount: clampInt(entry.matchCount, 0, 9)
+                        matchCount: clampInt(entry.matchCount, 0, 9),
+                        selected: entry.id === state.selectedBranchId
                     })),
                     bonusOptions: readArray(state.observatoryLink.bonusOptions).map((entry) => ({
                         id: entry.id,
@@ -2894,11 +3908,58 @@
                     selectedBonusId: state.observatoryLink.selectedBonusId || '',
                     selectedBonusLabel: selectedObservatoryBonus?.label || '',
                     selectedBonusConsumed: !!selectedObservatoryBonus?.consumed,
+                    resonance: observatoryResonance
+                        ? {
+                            label: observatoryResonance.label,
+                            summary: observatoryResonance.summary,
+                            focusNodeTypes: readArray(observatoryResonance.focusNodeTypes),
+                            progress: clampInt(observatoryResonance.progress, 0, observatoryResonance.target),
+                            target: clampInt(observatoryResonance.target, 0, 6),
+                            completed: !!observatoryResonance.completed,
+                            rewardLine: observatoryResonance.rewardLine || '',
+                            statusLine: observatoryResonance.statusLine || ''
+                        }
+                        : null,
+                    routePact: observatoryRoutePact
+                        ? {
+                            label: observatoryRoutePact.label,
+                            bountyId: observatoryRoutePact.bountyId,
+                            bountyName: observatoryRoutePact.bountyName,
+                            summary: observatoryRoutePact.summary,
+                            focusNodeTypes: readArray(observatoryRoutePact.focusNodeTypes),
+                            progress: clampInt(observatoryRoutePact.progress, 0, observatoryRoutePact.target),
+                            target: clampInt(observatoryRoutePact.target, 0, 6),
+                            completed: !!observatoryRoutePact.completed,
+                            rewardLine: observatoryRoutePact.rewardLine || '',
+                            statusLine: observatoryRoutePact.statusLine || '',
+                            branchName: observatoryRoutePact.branchName || '',
+                            engineeringTrackName: observatoryRoutePact.engineeringTrackName || ''
+                        }
+                        : null,
                     engineeringTrackId: observatoryEngineering?.engineeringTrackId || '',
                     engineeringTrackName: observatoryEngineering?.engineeringTrackName || '',
                     engineeringTierLabel: observatoryEngineering?.engineeringTierLabel || '',
                     huntIntel: observatoryEngineering?.huntIntel || '',
                     conflictPreview: observatoryEngineering?.conflictPreview || ''
+                }
+                : null,
+            trainingFocus: trainingFocus
+                ? {
+                    sourceRunId: trainingFocus.sourceRunId || '',
+                    chapterName: trainingFocus.chapterName || '',
+                    sourceTitle: trainingFocus.sourceTitle || '',
+                    guideRecordId: trainingFocus.guideRecordId || '',
+                    themeKey: trainingFocus.themeKey || '',
+                    themeLabel: trainingFocus.themeLabel || '',
+                    ratingLabel: trainingFocus.ratingLabel || '',
+                    ratingTone: trainingFocus.ratingTone || 'selected',
+                    trainingAdvice: trainingFocus.trainingAdvice || '',
+                    highlightLine: trainingFocus.highlightLine || '',
+                    branchName: trainingFocus.branchName || '',
+                    routeFocusLine: trainingFocus.routeFocusLine || '',
+                    compareHint: trainingFocus.compareHint || '',
+                    trainingTags: readArray(trainingFocus.trainingTags),
+                    goalHighlights: readArray(trainingFocus.goalHighlights)
                 }
                 : null,
             endingPreview: state ? this.determineExpeditionEnding(state) : null,
@@ -2908,9 +3969,13 @@
                     chapterName: latestSlate.chapterName,
                     endingName: latestSlate.endingName,
                     score: latestSlate.score,
+                    branchName: latestSlate.branchName || '',
+                    scoreBreakdown: readArray(latestSlate.scoreBreakdown),
+                    tags: readArray(latestSlate.tags),
                     nemesisStatus: latestSlate.nemesisStatus || '',
                     nemesisStatusLabel: latestSlate.nemesisStatusLabel || '',
-                    nemesisVariantLabel: latestSlate.nemesisVariantLabel || ''
+                    nemesisVariantLabel: latestSlate.nemesisVariantLabel || '',
+                    answerReview: normalizeExpeditionAnswerReview(latestSlate.answerReview)
                 }
                 : null
         };
@@ -2966,10 +4031,43 @@
             : null;
         const observatoryLink = state.observatoryLink || null;
         const selectedObservatoryBonus = this.getSelectedExpeditionObservatoryBonus(state);
+        const observatoryResonance = this.getExpeditionObservatoryResonance(state);
+        const observatoryRoutePact = this.getExpeditionObservatoryRoutePact(state);
+        const practiceTopic = this.getExpeditionPracticeTopic(state);
+        const answerSheet = this.getExpeditionAnswerSheet(state);
+        const answerReview = normalizeExpeditionAnswerReview(answerSheet?.reviewCard);
+        const trainingFocus = typeof this.getObservatoryTrainingFocus === 'function'
+            ? this.getObservatoryTrainingFocus()
+            : null;
+        const relayAdvice = String(trainingFocus?.trainingAdvice || '').trim();
+        const nextSuggestionLine = relayAdvice || answerSheet?.nextSuggestion || '继续推进当前线路。';
+        const nextSuggestionLabel = relayAdvice ? '上章主练' : '下一步建议';
+        const currentSuggestionLine = relayAdvice
+            && answerSheet?.nextSuggestion
+            && answerSheet.nextSuggestion !== relayAdvice
+            ? `本章推进：${answerSheet.nextSuggestion}`
+            : '';
         const recentFactionLogs = this.getRecentExpeditionFactionLogs(state, 4);
         const recentNemesisLogs = this.getRecentExpeditionNemesisLogs(state, 3);
         const engineeringInfluence = this.getStrategicEngineeringExpeditionInfluence(state);
         const nemesisForecast = this.getExpeditionNemesisForecast(state);
+        const observatoryRecommendedBranches = readArray(observatoryLink?.recommendedBranches);
+        const observatoryRecommendedNames = observatoryRecommendedBranches
+            .map((entry) => String(entry?.name || '').trim())
+            .filter(Boolean)
+            .join(' / ');
+        const observatorySelectedRecommendedBranch = observatoryRecommendedBranches.find((entry) => entry.id === state.selectedBranchId) || null;
+        const observatoryRecommendedSummary = observatoryRecommendedBranches.length > 0
+            ? (
+                observatorySelectedRecommendedBranch
+                    ? `观星建议会把样本节奏直接映射到本章支线，你仍可改走其他路线。当前推荐路线：${observatorySelectedRecommendedBranch.name}。`
+                    : (
+                        selectedBranch
+                            ? `观星建议会把样本节奏直接映射到本章支线，你仍可改走其他路线。当前可直接切回：${observatoryRecommendedNames}。`
+                            : `观星建议会把样本节奏直接映射到本章支线，你仍可改走其他路线。推荐路线：${observatoryRecommendedNames}。`
+                    )
+            )
+            : '';
         const branchEngineeringMap = new Map(state.branchOptions.map((entry) => [
             entry.id,
             this.getExpeditionBranchEngineeringInsight(state, entry, engineeringInfluence)
@@ -2991,6 +4089,8 @@
                     ${engineeringInfluence ? `<span class="expedition-chip">${escapeHtml(`工程主轴 · ${engineeringInfluence.engineeringTrackName} ${engineeringInfluence.engineeringTierLabel}`)}</span>` : ''}
                     ${observatoryLink?.sourceThemeLabel ? `<span class="expedition-chip">${escapeHtml(observatoryLink.sourceThemeLabel)} · 观星样本</span>` : ''}
                     ${selectedObservatoryBonus?.label ? `<span class="expedition-chip">${escapeHtml(selectedObservatoryBonus.label)}${selectedObservatoryBonus.consumed ? ' · 已触发' : ''}</span>` : ''}
+                    ${observatoryResonance ? `<span class="expedition-chip">${escapeHtml(`命盘共鸣 ${observatoryResonance.progress}/${observatoryResonance.target}${observatoryResonance.completed ? ' · 已兑现' : ''}`)}</span>` : ''}
+                    ${observatoryRoutePact ? `<span class="expedition-chip">${escapeHtml(`路线合卷 ${observatoryRoutePact.progress}/${observatoryRoutePact.target}${observatoryRoutePact.completed ? ' · 已合卷' : ''}`)}</span>` : ''}
                 </div>
             </section>
             <section class="expedition-panel-card">
@@ -3056,6 +4156,13 @@
                     : `<div class="expedition-observatory-note expedition-bounty-signal">${escapeHtml(signal.summaryLine || '当前赏单与路线暂未出现明显冲突。')}</div>`}
                             ${signal.engineeringNote
                     ? `<div class="expedition-observatory-note expedition-bounty-signal">${escapeHtml(`工程联动：${signal.engineeringNote}`)}</div>`
+                    : ''}
+                            ${observatoryRoutePact?.bountyId === entry.id
+                    ? `<div class="expedition-observatory-note expedition-bounty-signal">${escapeHtml(
+                        observatoryRoutePact.completed
+                            ? `路线合卷已兑现：${observatoryRoutePact.bountyName}${observatoryRoutePact.rewardLine ? `（${observatoryRoutePact.rewardLine}）` : ''}`
+                            : `路线合卷 ${observatoryRoutePact.progress}/${observatoryRoutePact.target}：沿 ${formatExpeditionNodeLabels(observatoryRoutePact.focusNodeTypes, '关键线路')} 线推进，可额外兑现 ${observatoryRoutePact.rewardLine || '章节奖励'}`
+                    )}</div>`
                     : ''}
                             <button type="button" class="collection-inline-btn ${state.activeBountyIds.includes(entry.id) ? 'secondary' : ''}"
                                 onclick="game.toggleExpeditionBounty('${escapeHtml(entry.id)}')">${state.activeBountyIds.includes(entry.id) ? '取消承接' : '承接悬赏'}</button>
@@ -3135,10 +4242,10 @@
                 ? `
                     <div class="expedition-observatory-source">
                         <div class="expedition-choice-head">
-                            <strong>${escapeHtml(observatoryLink.sourceTitle)}</strong>
+                            <strong data-observatory-source-title="true">${escapeHtml(observatoryLink.sourceTitle)}</strong>
                             <span>${escapeHtml(observatoryLink.sourceFeaturedTier || '精选命盘')}</span>
                         </div>
-                        <p>${escapeHtml(observatoryLink.expeditionNote || '观星台会把这份精选命盘转译为本章的小幅 bonus。')}</p>
+                        <p data-observatory-source-note="true">${escapeHtml(observatoryLink.expeditionNote || '观星台会把这份精选命盘冻结成章节课题，并继续驱动命盘共鸣、路线合卷与章节答卷回响。')}</p>
                         <div class="expedition-chip-row">
                             <span class="expedition-chip">${escapeHtml(observatoryLink.sourceThemeLabel)}</span>
                             <span class="expedition-chip">${escapeHtml(observatoryLink.sourceSeedSignature || '命盘签未定')}</span>
@@ -3148,11 +4255,144 @@
                             ${observatoryLink.sourceFeaturedTags.map((tag) => `<span class="expedition-chip">${escapeHtml(tag)}</span>`).join('')}
                         </div>`
                     : ''}
-                        ${observatoryLink.recommendedBranches.length > 0
-                    ? `<div class="expedition-observatory-note">推荐路线：${escapeHtml(observatoryLink.recommendedBranches.map((entry) => entry.name).join(' / '))}</div>`
+                        ${observatoryLink.trainingTags.length > 0
+                    ? `<div class="expedition-chip-row">
+                            ${observatoryLink.trainingTags.map((tag) => `<span class="expedition-chip">${escapeHtml(tag)}</span>`).join('')}
+                        </div>`
                     : ''}
+                        ${observatoryLink.routeFocusLine
+                    ? `<div class="expedition-observatory-note">${escapeHtml(observatoryLink.routeFocusLine)}</div>`
+                    : ''}
+                        ${observatoryLink.drillObjective
+                    ? `<div class="expedition-observatory-note">${escapeHtml(`演练目标：${observatoryLink.drillObjective}`)}</div>`
+                    : (observatoryLink.coachBrief
+                        ? `<div class="expedition-observatory-note">${escapeHtml(`教练提示：${observatoryLink.coachBrief}`)}</div>`
+                        : '')}
+                        ${observatoryLink.compareHint
+                    ? `<div class="expedition-observatory-note">${escapeHtml(`对比抓手：${observatoryLink.compareHint}`)}</div>`
+                    : ''}
+                        ${trainingFocus
+                    ? `<div class="expedition-observatory-note" data-observatory-training-focus="true">${escapeHtml(`${trainingFocus.chapterName || '上章归卷'}主练回流：${trainingFocus.trainingAdvice}`)}</div>`
+                    : ''}
+                        ${practiceTopic
+                    ? `<div class="expedition-choice-list expedition-practice-topic-list">
+                            <article class="expedition-choice-card suggested expedition-practice-topic-card" data-practice-topic-card="true">
+                                <div class="expedition-choice-head">
+                                    <strong data-practice-topic-title="true">${escapeHtml(practiceTopic.title || '修行课题')}</strong>
+                                    <span>${escapeHtml(practiceTopic.sourceFeaturedTier || '章节课题')}</span>
+                                </div>
+                                <p>${escapeHtml(practiceTopic.summary || practiceTopic.objective || '本章会围绕当前样本来作答。')}</p>
+                                <div class="expedition-chip-row">
+                                    <span class="expedition-chip">${escapeHtml(practiceTopic.sourceTitle || observatoryLink.sourceTitle || '当前样本')}</span>
+                                    ${practiceTopic.themeLabel ? `<span class="expedition-chip">${escapeHtml(practiceTopic.themeLabel)}</span>` : ''}
+                                    ${practiceTopic.sourceSeedSignature ? `<span class="expedition-chip">${escapeHtml(practiceTopic.sourceSeedSignature)}</span>` : ''}
+                                </div>
+                                ${practiceTopic.trainingTags.length > 0
+                            ? `<div class="expedition-chip-row">
+                                    ${practiceTopic.trainingTags.map((tag) => `<span class="expedition-chip">${escapeHtml(tag)}</span>`).join('')}
+                                </div>`
+                            : ''}
+                                <div class="expedition-choice-meta">
+                                    <span>${escapeHtml(practiceTopic.objective ? `训练目标：${practiceTopic.objective}` : `路线提示：${practiceTopic.routeHint || observatoryLink.routeFocusLine || '待定'}`)}</span>
+                                    ${practiceTopic.compareHint ? `<span>${escapeHtml(`对比抓手：${practiceTopic.compareHint}`)}</span>` : ''}
+                                </div>
+                                <div class="expedition-answer-goal-list">
+                                    ${practiceTopic.goalLines.map((line, index) => `
+                                        <div class="expedition-answer-goal suggested" data-practice-topic-goal="${escapeHtml(String(index))}">
+                                            <strong>${escapeHtml(`作答目标 ${index + 1}`)}</strong>
+                                            <span>${escapeHtml(line)}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </article>
+                        </div>`
+                    : ''}
+                        ${observatoryRecommendedSummary
+                    ? `<div class="expedition-observatory-note">${escapeHtml(observatoryRecommendedSummary)}</div>`
+                    : ''}
+                        ${observatoryRecommendedBranches.length > 0
+                    ? `<div class="expedition-observatory-actions">
+                            ${observatoryRecommendedBranches.map((entry) => {
+                        const isSelected = entry.id === state.selectedBranchId;
+                        const actionLabel = isSelected
+                            ? '当前推荐路线'
+                            : (selectedBranch ? '切到该路线' : '按样本锁线');
+                        return `
+                                <div class="expedition-observatory-action ${isSelected ? 'selected' : ''}" data-observatory-recommended-card="${escapeHtml(entry.id)}"${isSelected ? ' data-selected-recommended-branch="true"' : ''}>
+                                    <div class="expedition-choice-head">
+                                        <strong>${escapeHtml(entry.name)}</strong>
+                                        <span>${escapeHtml(`贴合 ${clampInt(entry.matchCount, 0, 9)} 项样本特征`)}</span>
+                                    </div>
+                                    <button type="button" class="collection-inline-btn ${isSelected ? 'secondary' : ''}"
+                                        data-observatory-recommended-branch="${escapeHtml(entry.id)}"
+                                        ${isSelected ? 'disabled' : ''}
+                                        onclick="game.selectExpeditionRecommendedBranch('${escapeHtml(entry.id)}')">${escapeHtml(actionLabel)}</button>
+                                </div>
+                            `;
+                    }).join('')}
+                        </div>`
+                    : ''}
+                        ${observatoryResonance
+                    ? `<div class="expedition-observatory-note">${escapeHtml(
+                        observatoryLink.selectedBonusId
+                            ? `命盘共鸣 ${observatoryResonance.progress}/${observatoryResonance.target}：沿 ${formatExpeditionNodeLabels(observatoryResonance.focusNodeTypes, '关键线路')} 线推进，${observatoryResonance.completed ? `已兑现 ${observatoryResonance.label}${observatoryResonance.rewardLine ? `（${observatoryResonance.rewardLine}）` : ''}` : `可兑现 ${observatoryResonance.label}${observatoryResonance.rewardLine ? `（${observatoryResonance.rewardLine}）` : ''}`}`
+                            : `锁定 1 条观星线索后，可沿 ${formatExpeditionNodeLabels(observatoryResonance.focusNodeTypes, '关键线路')} 线推进 ${observatoryResonance.target} 次，兑现 ${observatoryResonance.label}${observatoryResonance.rewardLine ? `（${observatoryResonance.rewardLine}）` : ''}`
+                    )}</div>`
+                    : ''}
+                        ${observatoryRoutePact
+                    ? `<div class="expedition-observatory-note">${escapeHtml(
+                        observatoryRoutePact.completed
+                            ? `路线合卷已把「${observatoryRoutePact.bountyName}」并成章节答卷${observatoryRoutePact.rewardLine ? `（${observatoryRoutePact.rewardLine}）` : ''}`
+                            : `路线合卷 ${observatoryRoutePact.progress}/${observatoryRoutePact.target}：把「${observatoryRoutePact.bountyName}」并入答卷，沿 ${formatExpeditionNodeLabels(observatoryRoutePact.focusNodeTypes, '关键线路')} 线推进，可额外兑现 ${observatoryRoutePact.rewardLine || '章节奖励'}`
+                    )}</div>`
+                    : (observatoryLink.selectedBonusId
+                        ? `<div class="expedition-observatory-note">${escapeHtml('路线合卷：锁定支线后，承接 1 条与样本路线重合的悬赏，可把研判真正并成章节答卷。')}</div>`
+                        : '')}
                         ${observatoryEngineering?.huntIntel ? `<div class="expedition-observatory-note">${escapeHtml(`工程情报：${observatoryEngineering.huntIntel}`)}</div>` : ''}
                         ${observatoryEngineering?.conflictPreview ? `<div class="expedition-observatory-note">${escapeHtml(observatoryEngineering.conflictPreview)}</div>` : ''}
+                        ${answerSheet
+                    ? `<div class="expedition-choice-list expedition-answer-sheet-list">
+                            <article class="expedition-choice-card ${escapeHtml(answerSheet.ratingTone === 'completed' ? 'completed' : (answerSheet.ratingTone === 'selected' ? 'selected' : 'suggested'))}" data-answer-sheet-card="true">
+                                <div class="expedition-choice-head">
+                                    <strong>章节答卷状态</strong>
+                                    <span data-answer-sheet-rating="true">${escapeHtml(answerSheet.ratingLabel || '待起题')}</span>
+                                </div>
+                                <p>${escapeHtml(answerSheet.overviewLine || answerSheet.clueStatusLine || '本章答卷尚在铺底。')}</p>
+                                <div class="expedition-choice-meta">
+                                    <span data-answer-sheet-status="clue">${escapeHtml(answerSheet.clueStatusLine || '待锁线索')}</span>
+                                    <span data-answer-sheet-next>${escapeHtml(`${nextSuggestionLabel}：${nextSuggestionLine}`)}</span>
+                                    ${currentSuggestionLine ? `<span data-answer-sheet-current>${escapeHtml(currentSuggestionLine)}</span>` : ''}
+                                </div>
+                                <div class="expedition-answer-goal-list">
+                                    ${answerSheet.goals.map((goal) => `
+                                        <div class="expedition-answer-goal ${escapeHtml(goal.stateTone || '')}" data-answer-sheet-goal="${escapeHtml(goal.id)}">
+                                            <strong>${escapeHtml(`${goal.label} · ${goal.tagLabel || (goal.completed ? '已完成' : `${goal.progress}/${goal.target}`)}`)}</strong>
+                                            <span>${escapeHtml(goal.statusLine || `${goal.progress}/${goal.target}`)}</span>
+                                            ${goal.noteLine ? `<span>${escapeHtml(goal.noteLine)}</span>` : ''}
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </article>
+                            ${answerReview
+                        ? `<article class="expedition-choice-card ${escapeHtml(answerReview.ratingTone === 'completed' ? 'completed' : (answerReview.ratingTone === 'selected' ? 'selected' : 'suggested'))}" data-answer-sheet-summary="true">
+                                <div class="expedition-choice-head">
+                                    <strong data-answer-sheet-summary-title="true">${escapeHtml(answerReview.title || '章节观星回响')}</strong>
+                                    <span>${escapeHtml(answerReview.ratingLabel || answerSheet.ratingLabel || '')}</span>
+                                </div>
+                                <p>${escapeHtml(answerReview.highlightLine || answerReview.overviewLine || '')}</p>
+                                ${answerReview.tags.length > 0
+                            ? `<div class="expedition-chip-row">
+                                    ${answerReview.tags.map((tag) => `<span class="expedition-chip">${escapeHtml(tag)}</span>`).join('')}
+                                </div>`
+                            : ''}
+                                <div class="expedition-choice-meta">
+                                    ${answerReview.goalHighlights.map((line, index) => `<span data-answer-sheet-summary-line="${escapeHtml(String(index))}">${escapeHtml(line)}</span>`).join('')}
+                                    ${answerReview.trainingAdvice ? `<span data-answer-sheet-training>${escapeHtml(`训练建议：${answerReview.trainingAdvice}`)}</span>` : ''}
+                                </div>
+                            </article>`
+                        : ''}
+                        </div>`
+                    : ''}
                     </div>
                     <div class="expedition-choice-list">
                         ${observatoryLink.bonusOptions.map((entry) => `
@@ -3267,20 +4507,30 @@
     };
 
     Game.prototype.startBattle = function (enemies, node = null) {
-        const prepared = this.mode !== 'pvp'
-            ? this.applyExpeditionBattleModifiers(enemies, node)
+        const enemyList = Array.isArray(enemies) ? enemies.filter(Boolean) : [enemies].filter(Boolean);
+        const isPvpBattle = enemyList.some((entry) => entry && entry.isGhost);
+        const battleNode = node || this.currentBattleNode || null;
+        if (battleNode && battleNode !== this.currentBattleNode) {
+            this.currentBattleNode = battleNode;
+        }
+        const prepared = !isPvpBattle
+            ? this.applyExpeditionBattleModifiers(enemies, battleNode)
             : enemies;
-        const result = typeof originalStartBattle === 'function'
-            ? originalStartBattle.call(this, prepared, node)
-            : undefined;
-        if (this.mode !== 'pvp') {
+        if (!isPvpBattle) {
             const state = this.getExpeditionState();
             if (state) {
-                this.consumeExpeditionObservatoryBonus(state, 'battle_start', String(node?.type || this.currentBattleNode?.type || ''));
+                this.consumeExpeditionObservatoryBonus(state, 'battle_start', String(battleNode?.type || ''));
+                this.syncExpeditionPracticeState(state);
                 this.expeditionState = state;
                 this.persistActiveExpeditionState();
             }
-            this.applyFriendlyFactionBattleSupport(node);
+        }
+        const result = typeof originalStartBattle === 'function'
+            ? originalStartBattle.call(this, prepared, battleNode)
+            : undefined;
+        if (!isPvpBattle) {
+            this.applyFriendlyFactionBattleSupport(battleNode);
+            this.renderExpeditionMapPanels();
         }
         return result;
     };
@@ -3367,6 +4617,58 @@
                         line: payload.expedition.engineeringLink.line
                     }
                     : null;
+                payload.map.chapter.practiceTopic = payload.expedition.practiceTopic
+                    ? {
+                        id: payload.expedition.practiceTopic.id,
+                        title: payload.expedition.practiceTopic.title,
+                        sourceTitle: payload.expedition.practiceTopic.sourceTitle,
+                        themeLabel: payload.expedition.practiceTopic.themeLabel,
+                        trainingTags: readArray(payload.expedition.practiceTopic.trainingTags),
+                        goalLines: readArray(payload.expedition.practiceTopic.goalLines),
+                        routeHint: payload.expedition.practiceTopic.routeHint,
+                        compareHint: payload.expedition.practiceTopic.compareHint
+                    }
+                    : null;
+                payload.map.chapter.answerSheet = payload.expedition.answerSheet
+                    ? {
+                        topicId: payload.expedition.answerSheet.topicId,
+                        clueLocked: !!payload.expedition.answerSheet.clueLocked,
+                        clueStatusLine: payload.expedition.answerSheet.clueStatusLine,
+                        ratingLabel: payload.expedition.answerSheet.ratingLabel,
+                        ratingTone: payload.expedition.answerSheet.ratingTone,
+                        completedGoals: payload.expedition.answerSheet.completedGoals,
+                        totalGoals: payload.expedition.answerSheet.totalGoals,
+                        nextSuggestion: payload.expedition.answerSheet.nextSuggestion,
+                        overviewLine: payload.expedition.answerSheet.overviewLine,
+                        goals: readArray(payload.expedition.answerSheet.goals).map((goal) => ({
+                            id: goal.id,
+                            label: goal.label,
+                            progress: goal.progress,
+                            target: goal.target,
+                            completed: !!goal.completed,
+                            stateTone: goal.stateTone || '',
+                            tagLabel: goal.tagLabel || '',
+                            statusLine: goal.statusLine || '',
+                            noteLine: goal.noteLine || '',
+                            deviated: !!goal.deviated
+                        })),
+                        reviewCard: normalizeExpeditionAnswerReview(payload.expedition.answerSheet.reviewCard)
+                    }
+                    : null;
+                payload.map.chapter.latestAnswerReview = payload.expedition.latestSlate?.answerReview
+                    ? normalizeExpeditionAnswerReview(payload.expedition.latestSlate.answerReview)
+                    : null;
+                payload.map.chapter.trainingFocus = payload.expedition.trainingFocus
+                    ? {
+                        chapterName: payload.expedition.trainingFocus.chapterName || '',
+                        sourceTitle: payload.expedition.trainingFocus.sourceTitle || '',
+                        themeLabel: payload.expedition.trainingFocus.themeLabel || '',
+                        trainingAdvice: payload.expedition.trainingFocus.trainingAdvice || '',
+                        routeFocusLine: payload.expedition.trainingFocus.routeFocusLine || '',
+                        compareHint: payload.expedition.trainingFocus.compareHint || '',
+                        goalHighlights: readArray(payload.expedition.trainingFocus.goalHighlights)
+                    }
+                    : null;
             }
             return JSON.stringify(payload);
         } catch (error) {
@@ -3411,6 +4713,13 @@
         const recentNemesisLogs = this.getRecentExpeditionNemesisLogs(expedition, 2);
         const engineeringInfluence = this.getStrategicEngineeringExpeditionInfluence(expedition);
         const nemesisForecast = this.getExpeditionNemesisForecast(expedition);
+        const observatoryResonance = this.getExpeditionObservatoryResonance(expedition);
+        const observatoryRoutePact = this.getExpeditionObservatoryRoutePact(expedition);
+        const practiceTopic = this.getExpeditionPracticeTopic(expedition);
+        const answerSheet = this.getExpeditionAnswerSheet(expedition);
+        const trainingFocus = typeof this.getObservatoryTrainingFocus === 'function'
+            ? this.getObservatoryTrainingFocus()
+            : null;
         const bountySignalMap = new Map(expedition.bountyDraft.map((entry) => [entry.id, this.getExpeditionBountySignalModel(expedition, entry)]));
         const bountyConflictWarnings = this.getExpeditionBountyConflictWarnings(expedition, bountySignalMap);
         snapshot.strengths = Array.isArray(snapshot.strengths) ? snapshot.strengths.slice() : [];
@@ -3435,13 +4744,54 @@
         if (bountyConflictWarnings.length > 0) {
             snapshot.gaps.push(`悬赏冲突：${bountyConflictWarnings[0].line}`);
         }
+        if (practiceTopic) {
+            snapshot.strengths.push(`修行课题当前围绕【${practiceTopic.sourceTitle || practiceTopic.title}】展开，主轴是「${practiceTopic.themeLabel || '章节样本'}」。`);
+            if (practiceTopic.trainingTags?.length > 0) {
+                snapshot.nextTargets.push(`答卷标签：${practiceTopic.trainingTags.join(' / ')}`);
+            }
+        }
+        if (answerSheet) {
+            snapshot.nextTargets.push(`章节答卷：${answerSheet.overviewLine}`);
+            snapshot.nextTargets.push(`训练建议：${answerSheet.nextSuggestion}`);
+            if (answerSheet.ratingTone === 'completed') {
+                snapshot.strengths.push(`当前答卷评级为【${answerSheet.ratingLabel}】，这章已经开始真正成卷。`);
+            } else if (answerSheet.goals.some((goal) => goal.deviated)) {
+                snapshot.gaps.push('当前答卷存在偏题风险，建议优先把路线修回样本主轴。');
+            }
+        }
+        if (trainingFocus?.trainingAdvice) {
+            snapshot.nextTargets.unshift(`上章主练：${trainingFocus.trainingAdvice}`);
+        }
         if (expedition.observatoryLink?.sourceTitle) {
             const selectedBonus = this.getSelectedExpeditionObservatoryBonus(expedition);
             snapshot.strengths.push(`观星线索当前读取【${expedition.observatoryLink.sourceTitle}】（${expedition.observatoryLink.sourceThemeLabel}），可把挑战样本反哺到本章远征。`);
+            if (expedition.observatoryLink.trainingTags?.length > 0) {
+                snapshot.strengths.push(`观星训练标签：${expedition.observatoryLink.trainingTags.join(' / ')}。`);
+            }
+            if (expedition.observatoryLink.routeFocusLine) {
+                snapshot.nextTargets.push(`样本路径：${expedition.observatoryLink.routeFocusLine}。`);
+            }
+            if (expedition.observatoryLink.drillObjective) {
+                snapshot.nextTargets.push(`观星演练：${expedition.observatoryLink.drillObjective}`);
+            } else if (expedition.observatoryLink.coachBrief) {
+                snapshot.nextTargets.push(`观星教练：${expedition.observatoryLink.coachBrief}`);
+            }
             if (selectedBonus) {
-                snapshot.strengths.push(`观星 bonus 已锁定为「${selectedBonus.label}」${selectedBonus.consumed ? '，本章已触发过一次。' : '，接下来会在对应节点给出一次小幅支援。'}`);
+                snapshot.strengths.push(`观星加成已锁定为「${selectedBonus.label}」${selectedBonus.consumed ? '，本章已触发过一次。' : '，接下来会在对应节点给出一次章节支援。'}`);
+                if (observatoryResonance?.completed) {
+                    snapshot.strengths.push(`命盘共鸣已兑现「${observatoryResonance.label}」${observatoryResonance.rewardLine ? `（${observatoryResonance.rewardLine}）` : ''}，本章的样本路线已经真正跑通。`);
+                } else if (observatoryResonance) {
+                    snapshot.nextTargets.push(`命盘共鸣：${observatoryResonance.progress}/${observatoryResonance.target}，继续沿 ${formatExpeditionNodeLabels(observatoryResonance.focusNodeTypes, '关键线路')} 线推进，可兑现「${observatoryResonance.label}」${observatoryResonance.rewardLine ? `（${observatoryResonance.rewardLine}）` : ''}。`);
+                }
+                if (observatoryRoutePact?.completed) {
+                    snapshot.strengths.push(`路线合卷已把「${observatoryRoutePact.bountyName}」并入章节答卷${observatoryRoutePact.rewardLine ? `（${observatoryRoutePact.rewardLine}）` : ''}，这一章的路线研判已经兑现成实利。`);
+                } else if (observatoryRoutePact) {
+                    snapshot.nextTargets.push(`路线合卷：${observatoryRoutePact.progress}/${observatoryRoutePact.target}，继续沿 ${formatExpeditionNodeLabels(observatoryRoutePact.focusNodeTypes, '关键线路')} 线推进，把「${observatoryRoutePact.bountyName}」并成章节答卷。`);
+                } else {
+                    snapshot.nextTargets.push('路线合卷：锁定支线后，承接 1 条与样本路线重合的悬赏，可把研判真正并成章节答卷。');
+                }
             } else {
-                snapshot.nextTargets.push('观星线索：从精选命盘里挑 1 条 bonus，本章会额外得到一次小幅支援。');
+                snapshot.nextTargets.push('观星线索：从精选命盘里挑 1 条观星加成，本章会额外得到一次章节支援。');
             }
             if (expedition.observatoryLink.recommendedBranches.length > 0 && !selectedBranch) {
                 snapshot.nextTargets.push(`观星建议：优先锁定 ${expedition.observatoryLink.recommendedBranches.map((entry) => `【${entry.name}】`).join(' / ')} 这几条更贴样本节奏的路线。`);
@@ -3491,9 +4841,9 @@
             note: latestSlate
                 ? `最新命盘：${latestSlate.chapterName} · ${latestSlate.endingName} · 评分 ${latestSlate.score}`
                 : '当前还没有远征命盘归档，打通一章后会自动留下第一张答卷。',
-            actionLabel: '查看构筑快照',
+            actionLabel: '查看归卷书架',
             actionType: 'collection',
-            actionValue: 'builds'
+            actionValue: 'slates'
         });
         data.researches.push({
             id: 'run_slate_archive_research',
@@ -3502,7 +4852,7 @@
             progress: archiveSummary.count > 0 ? 1 : 0,
             goal: 1,
             reward: '洞府会开始记录章节结局、仇敌结果与势力走向，为下一轮路线选择提供依据。',
-            section: 'builds',
+            section: 'slates',
             ready: archiveSummary.count > 0,
             progressText: `${archiveSummary.count > 0 ? 1 : 0}/1`
         });
@@ -3514,7 +4864,7 @@
                     ? `最新评分 ${latestSlate.score}，可继续通过更高悬赏完成度与仇敌追猎抬高命盘质量。`
                     : '推进任意主线章节，洞府会自动记录章节结局与势力走向。',
                 action: 'collection',
-                value: 'builds',
+                value: 'slates',
                 icon: latestSlate?.endingIcon || '🧭'
             });
         }

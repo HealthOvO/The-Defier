@@ -207,6 +207,9 @@ function buildRunPathMeta(catalog, runPath, progress) {
   const rewardPayload = JSON.parse(game.renderGameToText());
   assert(rewardPayload.reward && rewardPayload.reward.runPath && rewardPayload.reward.runPath.entryCount === 3, 'reward render_game_to_text should expose run path settlement summary');
   assert(rewardPayload.reward.runPath.archive && rewardPayload.reward.runPath.archive.recordName === '断命战录', `reward render_game_to_text should expose archive feedback, got ${JSON.stringify(rewardPayload.reward.runPath.archive)}`);
+  assert(rewardPayload.reward.runPath.narrative && rewardPayload.reward.runPath.narrative.kicker === '命盘档案', `reward render_game_to_text should expose reward narrative kicker, got ${JSON.stringify(rewardPayload.reward.runPath.narrative)}`);
+  assert(/洞府已收录/.test(rewardPayload.reward.runPath.narrative?.title || ''), `reward narrative title should announce archive sync, got ${JSON.stringify(rewardPayload.reward.runPath.narrative)}`);
+  assert(/首次收录|可回藏经阁继续复盘/.test(rewardPayload.reward.runPath.narrative?.foot || ''), `reward narrative foot should point back to codex review, got ${JSON.stringify(rewardPayload.reward.runPath.narrative)}`);
 
   game.currentBattleNode = { id: 1, type: 'boss' };
   game.rewardCardSelected = true;

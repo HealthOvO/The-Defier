@@ -8,31 +8,35 @@
     const SECTION_META = {
         laws: {
             title: '藏经阁 · 法则图鉴',
-            subtitle: '补齐法则与共鸣链，规划命环装配顺序。'
+            subtitle: '补齐法则与共鸣链，把命环装配、命途样本与下一轮路线对成同一份档案。'
         },
         spirits: {
             title: '藏经阁 · 灵契图鉴',
-            subtitle: '比对灵契来源、适配章节与下一阶成长方向。'
+            subtitle: '比对灵契来源、章节适配与样本表现，决定下一阶缔约方向。'
         },
         chapters: {
             title: '藏经阁 · 章节档案',
-            subtitle: '复盘章节天象、地脉、生态与路线提示。'
+            subtitle: '复盘章节天象、地脉与样本留痕，决定下轮路线与补题顺序。'
         },
         enemies: {
             title: '藏经阁 · 敌影档案',
-            subtitle: '记录常驻敌影的战术画像、压制手段与应对窗口。'
+            subtitle: '记录常驻敌影的战术画像、失手样本与应对窗口。'
         },
         bosses: {
             title: '藏经阁 · Boss 档案',
-            subtitle: '整理主宰机制、破局窗口与反制法宝。'
+            subtitle: '整理主宰机制、破局窗口与通关样本。'
         },
         builds: {
             title: '藏经阁 · 构筑快照',
-            subtitle: '把当前牌组、命环、灵契与战绩压成一张构筑画像。'
+            subtitle: '把当前牌组、命环、灵契与实战样本压成一张构筑画像。'
+        },
+        slates: {
+            title: '藏经阁 · 归卷书架',
+            subtitle: '把章节答卷、评分、偏题与训练建议收成可反复翻阅的修行书架。'
         },
         sanctum: {
             title: '洞府总览 · 藏经阁',
-            subtitle: '查看洞府房间、研究项、可领取目标与近期解锁记录。'
+            subtitle: '查看洞府房间、命盘档案、研究项与近期解锁记录。'
         }
     };
 
@@ -59,6 +63,16 @@
             .map((item) => item.trim())
             .filter(Boolean);
         return [...new Set(tokens)].slice(0, max);
+    };
+    const toStringArray = (value, max = 8) => Array.isArray(value)
+        ? value.map((item) => String(item || '').trim()).filter(Boolean).slice(0, max)
+        : [];
+    const normalizeRatingTone = (value) => ['completed', 'selected', 'suggested', 'idle'].includes(String(value || ''))
+        ? String(value)
+        : 'idle';
+    const extractTagValue = (values = [], prefix = '') => {
+        const entry = toStringArray(values, 12).find((item) => item.startsWith(prefix));
+        return entry ? entry.slice(prefix.length).trim() : '';
     };
     const escapeHtml = (value) => String(value ?? '')
         .replace(/&/g, '&amp;')
@@ -105,6 +119,7 @@
         if (typeof this.selectedChapterCodexId !== 'string') this.selectedChapterCodexId = '';
         if (typeof this.selectedEnemyCodexId !== 'string') this.selectedEnemyCodexId = '';
         if (typeof this.selectedBossArchiveId !== 'string') this.selectedBossArchiveId = '';
+        if (typeof this.selectedRunSlateId !== 'string') this.selectedRunSlateId = '';
     };
 
     Game.prototype.escapeCollectionHtml = function (value) {
@@ -123,7 +138,10 @@
             enemyQuery: sanitizeQuery(source.enemyQuery, 60),
             enemyFocus: ['all', 'scouted', 'upcoming', 'control'].includes(source.enemyFocus) ? source.enemyFocus : 'all',
             bossQuery: sanitizeQuery(source.bossQuery, 60),
-            bossFocus: ['all', 'defeated', 'pending', 'highpressure'].includes(source.bossFocus) ? source.bossFocus : 'all'
+            bossFocus: ['all', 'defeated', 'pending', 'highpressure'].includes(source.bossFocus) ? source.bossFocus : 'all',
+            slateTheme: sanitizeQuery(source.slateTheme || 'all', 40) || 'all',
+            slateChapter: sanitizeQuery(source.slateChapter || 'all', 40) || 'all',
+            slateRating: sanitizeQuery(source.slateRating || 'all', 40) || 'all'
         };
     };
 
@@ -1243,6 +1261,33 @@
         this.initCollection();
     };
 
+    Game.prototype.setRunSlateShelfThemeFilter = function (value = 'all') {
+        this.collectionHubState = this.normalizeCollectionHubState({
+            ...this.getCollectionHubState(),
+            slateTheme: value,
+            section: 'slates'
+        });
+        this.initCollection();
+    };
+
+    Game.prototype.setRunSlateShelfChapterFilter = function (value = 'all') {
+        this.collectionHubState = this.normalizeCollectionHubState({
+            ...this.getCollectionHubState(),
+            slateChapter: value,
+            section: 'slates'
+        });
+        this.initCollection();
+    };
+
+    Game.prototype.setRunSlateShelfRatingFilter = function (value = 'all') {
+        this.collectionHubState = this.normalizeCollectionHubState({
+            ...this.getCollectionHubState(),
+            slateRating: value,
+            section: 'slates'
+        });
+        this.initCollection();
+    };
+
     Game.prototype.getCollectionRealmProgress = function () {
         const currentRealm = Math.max(1, clampInt(this.player?.realm || 1, 1, 18));
         const maxClearedFromStats = Math.max(0, clampInt(this.achievementSystem?.stats?.realmCleared || 0, 0, 18));
@@ -2067,6 +2112,194 @@
             section: 'bosses'
         });
         this.initCollection();
+    };
+
+    Game.prototype.getRunSlateShelfEntries = function () {
+        this.ensureCollectionHubBootState();
+        const archive = Array.isArray(this.runSlateArchive) ? this.runSlateArchive.slice() : [];
+        const activeTrainingFocus = typeof this.getObservatoryTrainingFocus === 'function'
+            ? this.getObservatoryTrainingFocus()
+            : null;
+        return archive
+            .filter((entry) => entry && typeof entry === 'object' && entry.id)
+            .map((entry, index) => {
+                const answerReviewSource = entry.answerReview && typeof entry.answerReview === 'object'
+                    ? entry.answerReview
+                    : null;
+                const answerReview = answerReviewSource
+                    ? {
+                        title: String(answerReviewSource.title || '章节观星回响'),
+                        topicTitle: String(answerReviewSource.topicTitle || ''),
+                        ratingLabel: String(answerReviewSource.ratingLabel || ''),
+                        ratingTone: normalizeRatingTone(answerReviewSource.ratingTone),
+                        overviewLine: String(answerReviewSource.overviewLine || ''),
+                        highlightLine: String(answerReviewSource.highlightLine || ''),
+                        trainingAdvice: String(answerReviewSource.trainingAdvice || ''),
+                        goalHighlights: toStringArray(answerReviewSource.goalHighlights, 3),
+                        tags: toStringArray(answerReviewSource.tags, 4)
+                    }
+                    : null;
+                const trainingFocus = typeof this.buildObservatoryTrainingFocusFromSlate === 'function'
+                    ? this.buildObservatoryTrainingFocusFromSlate(entry)
+                    : null;
+                const themeKey = String(
+                    trainingFocus?.themeKey
+                    || extractTagValue(entry.tags, '课题·')
+                    || extractTagValue(entry.tags, '观星·')
+                    || ''
+                ).trim();
+                const themeLabel = String(
+                    trainingFocus?.themeLabel
+                    || extractTagValue(entry.tags, '课题·')
+                    || extractTagValue(entry.tags, '观星·')
+                    || ''
+                ).trim();
+                const ratingLabel = String(answerReview?.ratingLabel || trainingFocus?.ratingLabel || '待复盘').trim() || '待复盘';
+                const ratingTone = normalizeRatingTone(answerReview?.ratingTone || trainingFocus?.ratingTone || (answerReview?.trainingAdvice ? 'selected' : 'idle'));
+                const trainingAdvice = String(
+                    trainingFocus?.trainingAdvice
+                    || answerReview?.trainingAdvice
+                    || extractTagValue(entry.scoreBreakdown, '训练建议：')
+                    || ''
+                ).trim();
+                const highlightLine = String(
+                    trainingFocus?.highlightLine
+                    || answerReview?.highlightLine
+                    || answerReview?.overviewLine
+                    || extractTagValue(entry.scoreBreakdown, '回响结论：')
+                    || ''
+                ).trim();
+                const routeFocusLine = String(
+                    trainingFocus?.routeFocusLine
+                    || extractTagValue(entry.scoreBreakdown, '样本路径：')
+                    || ''
+                ).trim();
+                const sourceTitle = String(
+                    trainingFocus?.sourceTitle
+                    || answerReview?.topicTitle
+                    || extractTagValue(entry.scoreBreakdown, '课题样本：')
+                    || extractTagValue(entry.scoreBreakdown, '观星线索：')
+                    || ''
+                ).trim();
+                const goalHighlights = toStringArray(
+                    trainingFocus?.goalHighlights && trainingFocus.goalHighlights.length > 0
+                        ? trainingFocus.goalHighlights
+                        : answerReview?.goalHighlights,
+                    3
+                );
+                const trainingTags = (() => {
+                    const focusTags = toStringArray(trainingFocus?.trainingTags, 4);
+                    if (focusTags.length > 0) return focusTags;
+                    return entry.tags
+                        .filter((tag) => String(tag || '').startsWith('训练·'))
+                        .map((tag) => String(tag || '').replace(/^训练·/, '').trim())
+                        .filter(Boolean)
+                        .slice(0, 4);
+                })();
+                const summaryTags = [...new Set([
+                    ...toStringArray(entry.tags, 6),
+                    ...toStringArray(answerReview?.tags, 4)
+                ])].slice(0, 8);
+                const factionLine = toStringArray(entry.factionSummary, 3).join(' / ');
+                const bountyLine = toStringArray(entry.bountyNames, 3).join(' / ');
+                const isActiveTraining = String(activeTrainingFocus?.sourceRunId || '') === String(entry.id || '');
+                return {
+                    id: String(entry.id || ''),
+                    order: index,
+                    chapterIndex: clampInt(entry.chapterIndex || index + 1, 1, 6),
+                    chapterName: String(entry.chapterName || `第${index + 1}章`),
+                    endingName: String(entry.endingName || '待归卷'),
+                    endingIcon: String(entry.endingIcon || '🧭'),
+                    score: clampInt(entry.score || 0, 0, 9999),
+                    scoreBreakdown: toStringArray(entry.scoreBreakdown, 8),
+                    branchName: String(entry.branchName || '未锁定支线'),
+                    bountyNames: toStringArray(entry.bountyNames, 4),
+                    bountyLine,
+                    factionSummary: toStringArray(entry.factionSummary, 4),
+                    factionLine,
+                    nemesisName: String(entry.nemesisName || ''),
+                    nemesisStatusLabel: String(entry.nemesisStatusLabel || ''),
+                    nemesisVariantLabel: String(entry.nemesisVariantLabel || ''),
+                    nemesisFactionName: String(entry.nemesisFactionName || ''),
+                    nemesisClueLine: String(entry.nemesisClueLine || ''),
+                    themeKey,
+                    themeLabel,
+                    ratingLabel,
+                    ratingTone,
+                    trainingAdvice,
+                    highlightLine,
+                    routeFocusLine,
+                    compareHint: String(trainingFocus?.compareHint || '').trim(),
+                    sourceTitle,
+                    goalHighlights,
+                    trainingTags,
+                    tags: summaryTags,
+                    answerReview,
+                    currentTraining: isActiveTraining,
+                    trainingReady: !!trainingAdvice,
+                    focusGuideRecordId: String(trainingFocus?.guideRecordId || ''),
+                    timestamp: clampInt(entry.timestamp || 0, 0),
+                    timestampLabel: this.formatCollectionTimestamp(entry.timestamp || 0),
+                    rawEntry: entry
+                };
+            });
+    };
+
+    Game.prototype.getRunSlateShelfEntryById = function (runId = '') {
+        const safeRunId = String(runId || '').trim();
+        return this.getRunSlateShelfEntries().find((entry) => entry.id === safeRunId) || null;
+    };
+
+    Game.prototype.passesRunSlateShelfFilter = function (entry) {
+        const state = this.getCollectionHubState();
+        if (!entry) return false;
+        if (state.slateTheme !== 'all' && entry.themeKey !== state.slateTheme) return false;
+        if (state.slateChapter !== 'all' && String(entry.chapterIndex) !== String(state.slateChapter)) return false;
+        if (state.slateRating !== 'all' && entry.ratingLabel !== state.slateRating) return false;
+        return true;
+    };
+
+    Game.prototype.selectRunSlateShelfEntry = function (runId = '') {
+        this.selectedRunSlateId = String(runId || '');
+        this.collectionHubState = this.normalizeCollectionHubState({
+            ...this.getCollectionHubState(),
+            section: 'slates'
+        });
+        this.initCollection();
+    };
+
+    Game.prototype.applyRunSlateShelfTrainingFocus = function (runId = '', options = {}) {
+        const safeRunId = String(runId || '').trim();
+        const entry = this.getRunSlateShelfEntryById(safeRunId);
+        if (!entry || !entry.trainingReady) return null;
+        if (typeof this.buildObservatoryTrainingFocusFromSlate !== 'function' || typeof this.setObservatoryTrainingFocus !== 'function') {
+            return null;
+        }
+        const slate = (Array.isArray(this.runSlateArchive) ? this.runSlateArchive : []).find((item) => String(item?.id || '') === safeRunId) || entry.rawEntry;
+        const focus = this.buildObservatoryTrainingFocusFromSlate(slate);
+        if (!focus) return null;
+        const nextFocus = this.setObservatoryTrainingFocus(focus, { silent: true });
+        if (!options?.silent && typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+            Utils.showBattleLog(`已将 ${entry.chapterName} 的归卷答卷设为当前主练参考。`);
+        }
+        if (this.currentScreen === 'collection' && this.getCollectionHubState().section === 'slates') {
+            this.initCollection();
+        }
+        return nextFocus;
+    };
+
+    Game.prototype.reviewRunSlateInObservatory = function (runId = '', tab = '') {
+        const safeTab = ['daily', 'weekly', 'global'].includes(String(tab || this.challengeHubState?.tab || ''))
+            ? String(tab || this.challengeHubState?.tab || '')
+            : 'daily';
+        const focus = this.applyRunSlateShelfTrainingFocus(runId, { silent: true });
+        if (typeof this.showChallengeHub === 'function') {
+            this.showChallengeHub(safeTab);
+        }
+        if (focus && typeof this.applyObservatoryTrainingFocus === 'function') {
+            this.applyObservatoryTrainingFocus(safeTab);
+        }
+        return !!focus;
     };
 
     Game.prototype.getBuildSnapshotData = function () {
@@ -3214,6 +3447,9 @@
         if (!hero || !metrics || !notes || !highlights || !summary || !guide) return;
 
         const snapshot = this.getBuildSnapshotData();
+        const selectedGuide = typeof this.getSelectedObservatoryExpeditionGuide === 'function'
+            ? this.getSelectedObservatoryExpeditionGuide({ silentSync: true })
+            : null;
         const profile = snapshot.profile;
         hero.innerHTML = `
             <div class="collection-detail-shell">
@@ -3389,6 +3625,7 @@
             `<li>当前誓约：${escapeHtml(snapshot.vows.map((meta) => meta.name).join('、') || '暂无')}</li>`,
             `<li>当前命途：${escapeHtml(snapshot.runPath?.name || '未挂')} · 已完成命途 ${escapeHtml(snapshot.completedRunPaths || 0)} / ${escapeHtml(snapshot.totalRunPaths || 0)}</li>`,
             `<li>样本对照：${escapeHtml(snapshot.runPathSampleBoard?.count || 0)} 份 · ${snapshot.runPathSampleBoard?.bestTurn > 0 ? `当前最快 ${escapeHtml(snapshot.runPathSampleBoard.bestTurn)} 回合` : '尚未形成最快轮次'}</li>`,
+            `<li>当前精选命盘：${escapeHtml(selectedGuide ? `${selectedGuide.title} · ${selectedGuide.themeLabel || '观星样本'}` : '未锁定，可先去观星台精选一份命盘答卷')}</li>`,
             `<li>下一章风险：${escapeHtml(snapshot.nextChapterRiskTags.join(' / ') || '终章前暂无额外镜像')}</li>`,
             snapshot.sampleMismatchWarning ? `<li>误配告警：${escapeHtml(snapshot.sampleMismatchWarning.text)}</li>` : '',
             '</ul>'
@@ -3401,9 +3638,229 @@
             '<li>先看“下一章风险镜像”，确认下一章真正高危的是爆发、续航、控场还是资源税。</li>',
             '<li>再看“补件优先级队列”，按 1/2/3 的顺序补，不要平均摊资源。</li>',
             '<li>样本对照会告诉你这条命途到底是谁在打、打哪位 Boss 最稳、最快能压到多少回合。</li>',
+            selectedGuide
+                ? `<li>当前精选命盘：${escapeHtml(selectedGuide.title)} · ${escapeHtml(selectedGuide.themeLabel || '观星样本')}，适合先按这份开局答卷补前两手资源与路线。</li>`
+                : '<li>若还没有锁定精选命盘，先去观星台选一份高分答卷，再回这里对照补件顺序。</li>',
             '<li>若出现“误配告警”，优先纠偏场域，而不是继续硬抬当前章的随机收益。</li>',
             '</ul>'
         ].join('');
+    };
+
+    Game.prototype.renderRunSlateShelf = function () {
+        if (typeof document === 'undefined') return;
+        const grid = document.getElementById('run-slate-shelf-grid');
+        const detail = document.getElementById('run-slate-shelf-detail');
+        const summary = document.getElementById('run-slate-shelf-summary');
+        const guide = document.getElementById('run-slate-shelf-guide');
+        const themeFilter = document.getElementById('run-slate-shelf-theme-filter');
+        const chapterFilter = document.getElementById('run-slate-shelf-chapter-filter');
+        const ratingFilter = document.getElementById('run-slate-shelf-rating-filter');
+        if (!grid || !detail || !summary || !guide) return;
+
+        const state = this.getCollectionHubState();
+        const entries = this.getRunSlateShelfEntries();
+        const activeTrainingFocus = typeof this.getObservatoryTrainingFocus === 'function'
+            ? this.getObservatoryTrainingFocus()
+            : null;
+        const themeOptions = [
+            { value: 'all', label: `全部主题 · ${entries.length}` },
+            ...Array.from(entries.reduce((map, entry) => {
+                if (!entry.themeKey || map.has(entry.themeKey)) return map;
+                map.set(entry.themeKey, {
+                    value: entry.themeKey,
+                    label: `${entry.themeLabel || entry.themeKey} · ${entries.filter((item) => item.themeKey === entry.themeKey).length}`
+                });
+                return map;
+            }, new Map()).values())
+        ];
+        const chapterOptions = [
+            { value: 'all', label: `全部章节 · ${entries.length}` },
+            ...Array.from(entries.reduce((map, entry) => {
+                const key = String(entry.chapterIndex || '');
+                if (!key || map.has(key)) return map;
+                map.set(key, {
+                    value: key,
+                    label: `${entry.chapterName} · ${entries.filter((item) => String(item.chapterIndex) === key).length}`
+                });
+                return map;
+            }, new Map()).values())
+        ];
+        const ratingOptions = [
+            { value: 'all', label: `全部评级 · ${entries.length}` },
+            ...Array.from(entries.reduce((map, entry) => {
+                const key = String(entry.ratingLabel || '').trim();
+                if (!key || map.has(key)) return map;
+                map.set(key, {
+                    value: key,
+                    label: `${key} · ${entries.filter((item) => item.ratingLabel === key).length}`
+                });
+                return map;
+            }, new Map()).values())
+        ];
+
+        if (themeFilter) {
+            themeFilter.innerHTML = themeOptions.map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join('');
+            themeFilter.value = themeOptions.some((option) => option.value === state.slateTheme) ? state.slateTheme : 'all';
+        }
+        if (chapterFilter) {
+            chapterFilter.innerHTML = chapterOptions.map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join('');
+            chapterFilter.value = chapterOptions.some((option) => option.value === state.slateChapter) ? state.slateChapter : 'all';
+        }
+        if (ratingFilter) {
+            ratingFilter.innerHTML = ratingOptions.map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join('');
+            ratingFilter.value = ratingOptions.some((option) => option.value === state.slateRating) ? state.slateRating : 'all';
+        }
+
+        const filtered = entries.filter((entry) => this.passesRunSlateShelfFilter(entry));
+        const selected = filtered.find((entry) => entry.id === this.selectedRunSlateId) || filtered[0] || null;
+        this.selectedRunSlateId = selected?.id || '';
+
+        grid.innerHTML = filtered.length > 0
+            ? filtered.map((entry) => `
+                <button type="button"
+                    class="collection-card run-slate-card ${entry.id === this.selectedRunSlateId ? 'selected' : ''} tone-${escapeHtml(entry.ratingTone)}"
+                    data-run-slate-card="true"
+                    data-run-slate-id="${escapeHtml(entry.id)}"
+                    data-run-slate-selected="${entry.id === this.selectedRunSlateId ? 'true' : 'false'}"
+                    onclick="game.selectRunSlateShelfEntry('${escapeHtml(entry.id)}')">
+                    <div class="collection-card-top">
+                        <span class="collection-card-icon">${escapeHtml(entry.endingIcon || '🧭')}</span>
+                        <span class="collection-status-chip ${escapeHtml(entry.ratingTone)}">${escapeHtml(entry.ratingLabel)}</span>
+                    </div>
+                    <div class="collection-card-body">
+                        <span class="collection-card-kicker">${escapeHtml(entry.themeLabel || '归卷档案')}</span>
+                        <h4>${escapeHtml(`${entry.chapterName} · ${entry.endingName}`)}</h4>
+                        <p>${escapeHtml(entry.highlightLine || entry.trainingAdvice || `${entry.branchName} · ${entry.score} 分`)}</p>
+                    </div>
+                    <div class="collection-card-tags">
+                        <span class="collection-tag">评分 ${escapeHtml(entry.score)}</span>
+                        ${entry.sourceTitle ? `<span class="collection-tag">${escapeHtml(entry.sourceTitle)}</span>` : `<span class="collection-tag">${escapeHtml(entry.branchName)}</span>`}
+                        ${entry.trainingTags[0] ? `<span class="collection-tag">${escapeHtml(`主练·${entry.trainingTags[0]}`)}</span>` : ''}
+                        ${entry.currentTraining ? '<span class="collection-tag emphasis">当前主练</span>' : ''}
+                    </div>
+                </button>
+            `).join('')
+            : '<div class="codex-empty-state">当前筛面下还没有匹配的归卷答卷，试着切回全部主题或先完成一章远征。</div>';
+
+        summary.innerHTML = [
+            '<span class="codex-side-kicker">书架总览</span>',
+            '<h3>这轮都留下了什么</h3>',
+            '<div class="codex-summary-grid two-cols">',
+            `<div class="codex-summary-chip"><strong>${entries.length}</strong><span>已归卷答卷</span></div>`,
+            `<div class="codex-summary-chip"><strong>${filtered.length}</strong><span>当前筛中</span></div>`,
+            `<div class="codex-summary-chip"><strong>${entries.reduce((max, entry) => Math.max(max, entry.score), 0)}</strong><span>最高评分</span></div>`,
+            `<div class="codex-summary-chip"><strong>${entries.filter((entry) => entry.trainingReady).length}</strong><span>可回流主练</span></div>`,
+            '</div>',
+            '<ul class="codex-side-list compact">',
+            activeTrainingFocus?.trainingAdvice
+                ? `<li>当前主练：${escapeHtml(activeTrainingFocus.chapterName || '最近归卷')} · ${escapeHtml(activeTrainingFocus.trainingAdvice)}</li>`
+                : '<li>当前还没有主练回流，可从任意一份归卷答卷里指定新的训练参考。</li>',
+            selected
+                ? `<li>选中答卷：${escapeHtml(selected.chapterName)} · ${escapeHtml(selected.ratingLabel)} · 记录于 ${escapeHtml(selected.timestampLabel)}</li>`
+                : '<li>先完成一章远征，书架就会自动收进第一份章节答卷。</li>',
+            selected?.bountyLine ? `<li>悬赏收官：${escapeHtml(selected.bountyLine)}</li>` : '',
+            selected?.factionLine ? `<li>势力走向：${escapeHtml(selected.factionLine)}</li>` : '',
+            selected?.nemesisName ? `<li>追猎结果：${escapeHtml(`${selected.nemesisName} · ${selected.nemesisStatusLabel || '待定'}`)}</li>` : '',
+            '</ul>'
+        ].join('');
+
+        guide.innerHTML = [
+            '<span class="codex-side-kicker">使用建议</span>',
+            '<h3>怎么把书架喂回主线</h3>',
+            '<ul class="codex-side-list compact">',
+            '<li>先按主题筛一遍，看自己最近是在补哪类题，不要把不同课题的答卷混着比。</li>',
+            '<li>再按章节和评级缩小范围，优先复盘“高分但仍有偏题提醒”的卷子，这类最适合转成稳定主练。</li>',
+            '<li>“设为当前训练参考”只会更新这轮主练，不会清空观星留痕或旧样本。</li>',
+            '<li>“回观星复盘”会带着当前答卷的主练主题回到观察站，方便直接继续筛留痕。</li>',
+            selected?.compareHint ? `<li>当前卷的对照抓手：${escapeHtml(selected.compareHint)}</li>` : '',
+            '</ul>'
+        ].join('');
+
+        if (!selected) {
+            detail.innerHTML = '<div class="codex-empty-state">归卷书架当前为空，先打一章远征再回来复盘。</div>';
+            return;
+        }
+
+        const canSetTraining = selected.trainingReady
+            && typeof this.buildObservatoryTrainingFocusFromSlate === 'function'
+            && typeof this.setObservatoryTrainingFocus === 'function';
+        const canReviewInObservatory = canSetTraining && typeof this.showChallengeHub === 'function';
+        detail.innerHTML = `
+            <div class="collection-detail-shell">
+                <section class="collection-detail-hero">
+                    <div class="collection-detail-hero-main">
+                        <div class="collection-detail-icon">${escapeHtml(selected.endingIcon || '🧭')}</div>
+                        <div class="collection-detail-meta">
+                            <span class="codex-side-kicker">章节答卷</span>
+                            <h3>${escapeHtml(`${selected.chapterName} · ${selected.endingName}`)}</h3>
+                            <p>${escapeHtml(selected.highlightLine || selected.trainingAdvice || '这份答卷已经归卷，可继续拿来做路线与训练复盘。')}</p>
+                        </div>
+                    </div>
+                    <div class="detail-status-strip">
+                        <span class="detail-status-chip ${escapeHtml(selected.ratingTone)}">${escapeHtml(selected.ratingLabel)}</span>
+                        <span class="detail-status-chip">${escapeHtml(`评分 ${selected.score}`)}</span>
+                        <span class="detail-status-chip">${escapeHtml(selected.themeLabel || selected.branchName)}</span>
+                        ${selected.currentTraining ? '<span class="detail-status-chip ready">当前主练</span>' : ''}
+                    </div>
+                </section>
+                <div class="collection-action-row">
+                    <button type="button" class="collection-inline-btn"
+                        data-run-slate-train-focus="true"
+                        data-run-slate-id="${escapeHtml(selected.id)}"
+                        onclick="game.applyRunSlateShelfTrainingFocus('${escapeHtml(selected.id)}')"
+                        ${!canSetTraining || selected.currentTraining ? 'disabled' : ''}>${selected.currentTraining ? '当前训练参考' : '设为当前训练参考'}</button>
+                    <button type="button" class="collection-inline-btn secondary"
+                        data-run-slate-review-observatory="true"
+                        data-run-slate-id="${escapeHtml(selected.id)}"
+                        onclick="game.reviewRunSlateInObservatory('${escapeHtml(selected.id)}')"
+                        ${!canReviewInObservatory ? 'disabled' : ''}>回观星复盘</button>
+                </div>
+                <div class="collection-detail-grid">
+                    <section class="collection-detail-card">
+                        <span class="detail-mini-label">主练建议</span>
+                        <strong>${escapeHtml(selected.sourceTitle || selected.themeLabel || '章节回响')}</strong>
+                        <p>${escapeHtml(selected.trainingAdvice || '当前这份答卷还没有生成训练建议，先去完成带训练提示的章节答卷。')}</p>
+                    </section>
+                    <section class="collection-detail-card">
+                        <span class="detail-mini-label">样本路径</span>
+                        <p>${escapeHtml(selected.routeFocusLine || '这份归卷暂未留下样本路径，后续可在观星台继续补路线样本。')}</p>
+                        ${selected.compareHint ? `<p class="collection-muted">${escapeHtml(`对照抓手：${selected.compareHint}`)}</p>` : ''}
+                    </section>
+                    <section class="collection-detail-card">
+                        <span class="detail-mini-label">章节留痕</span>
+                        <p>${escapeHtml(selected.branchName)}</p>
+                        <p class="collection-muted">${escapeHtml(selected.bountyLine || '本卷没有额外悬赏收官记录。')}</p>
+                    </section>
+                    <section class="collection-detail-card">
+                        <span class="detail-mini-label">势力与追猎</span>
+                        <p>${escapeHtml(selected.factionLine || '本卷没有留下明显势力倾向。')}</p>
+                        <p class="collection-muted">${escapeHtml(selected.nemesisName ? `${selected.nemesisName} · ${selected.nemesisStatusLabel || '待定'}${selected.nemesisVariantLabel ? ` · ${selected.nemesisVariantLabel}` : ''}` : '本卷没有留下额外宿敌追猎记录。')}</p>
+                    </section>
+                    <section class="collection-detail-card">
+                        <span class="detail-mini-label">偏题与抓手</span>
+                        <ul class="collection-detail-list">
+                            ${(selected.goalHighlights.length > 0 ? selected.goalHighlights : ['当前卷没有额外抓手摘要，先看评分拆解里的路线记录。']).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
+                        </ul>
+                    </section>
+                    <section class="collection-detail-card">
+                        <span class="detail-mini-label">评分拆解</span>
+                        <ul class="collection-detail-list">
+                            ${(selected.scoreBreakdown.length > 0 ? selected.scoreBreakdown : ['这份归卷还没有额外拆解条目。']).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
+                        </ul>
+                    </section>
+                </div>
+                <section class="collection-detail-card">
+                    <span class="detail-mini-label">答卷标签</span>
+                    <div class="collection-card-tags">
+                        ${(selected.tags.length > 0 ? selected.tags : ['归卷书架', selected.ratingLabel, selected.themeLabel || '未定课题'])
+                .filter(Boolean)
+                .map((tag) => `<span class="collection-tag">${escapeHtml(tag)}</span>`).join('')}
+                        ${selected.trainingTags.map((tag) => `<span class="collection-tag emphasis">${escapeHtml(`主练·${tag}`)}</span>`).join('')}
+                    </div>
+                    ${selected.nemesisClueLine ? `<p class="collection-muted">${escapeHtml(`追猎线索：${selected.nemesisClueLine}`)}</p>` : ''}
+                </section>
+            </div>
+        `;
     };
 
     Game.prototype.renderSanctumOverview = function () {
@@ -3418,6 +3875,9 @@
         if (!roomGrid || !researchList || !goalList || !unlockFeed || !summary || !progressCard || !guide) return;
 
         const data = this.getSanctumOverviewData();
+        const selectedGuide = typeof this.getSelectedObservatoryExpeditionGuide === 'function'
+            ? this.getSelectedObservatoryExpeditionGuide({ silentSync: true })
+            : null;
         roomGrid.innerHTML = data.rooms.map((room) => `
             <article class="sanctum-room-card">
                 <div class="sanctum-room-top">
@@ -3498,6 +3958,7 @@
             `<div class="codex-summary-chip"><strong>${data.progress.clearedBossMemories || 0}</strong><span>记忆战留痕</span></div>`,
             `<div class="codex-summary-chip"><strong>${data.progress.completedRunPaths || 0}</strong><span>命途战录</span></div>`,
             `<div class="codex-summary-chip"><strong>${data.progress.runPathBossSampleCount || 0}</strong><span>样本对照</span></div>`,
+            `${data.progress.runSlateArchives !== undefined ? `<div class="codex-summary-chip"><strong>${data.progress.runSlateArchives || 0}</strong><span>归卷书架</span></div>` : ''}`,
             `<div class="codex-summary-chip"><strong>${data.progress.forgeActiveWorkshops || 0}</strong><span>炼器铭刻</span></div>`,
             `<div class="codex-summary-chip"><strong>${data.progress.forgeFullSets || 0}</strong><span>三段套装</span></div>`,
             `${data.progress.observatoryTraces !== undefined ? `<div class="codex-summary-chip"><strong>${data.progress.observatoryTraces || 0}</strong><span>观星留痕</span></div>` : ''}`,
@@ -3520,6 +3981,7 @@
             `<li>伏魔台记忆战：${data.progress.clearedBossMemories || 0} 次留痕 / ${data.progress.totalBossMemoryAttempts || 0} 次试作</li>`,
             `<li>命途碑廊：${data.progress.completedRunPaths || 0} / ${data.progress.totalRunPaths || 0} 条命途留痕 · 累计 ${data.progress.totalRunPathClears || 0} 次圆满</li>`,
             `<li>样本对照：${data.progress.runPathBossSampleCount || 0} 份实战样本 · 涉及 ${data.progress.sampledCharacters || 0} 名角色 / ${data.progress.sampledBosses || 0} 位主宰</li>`,
+            `${data.progress.runSlateArchives !== undefined ? `<li>归卷书架：${data.progress.runSlateArchives || 0} 份章节答卷 · 最高评分 ${data.progress.topRunSlateScore || 0}</li>` : ''}`,
             `${data.progress.observatoryTraces !== undefined ? `<li>观星留痕：${data.progress.observatoryTraces || 0} 条归档 / ${data.progress.observatoryReplays || 0} 次回放</li>` : ''}`,
             '</ul>'
         ].join('');
@@ -3532,6 +3994,10 @@
             '<li>研究项全部偏“解锁信息与入口”，不直接堆数值，方便后续继续扩系统。</li>',
             '<li>样本对照榜会把角色、命途裂变和 Boss 收官轮次压在一起，适合开局前先找一份稳定模板。</li>',
             '<li>命途碑廊会把圆满后的命途样本长期保存下来，适合拿来决定下一轮该追哪条主线、补哪组套装、怎么读 Boss。</li>',
+            `${data.progress.runSlateArchives !== undefined ? '<li>归卷书架会长期保存章节答卷与训练建议，适合先挑一份高分卷设为当前主练，再回观星台继续筛留痕。</li>' : ''}`,
+            selectedGuide
+                ? `<li>当前精选命盘：${escapeHtml(selectedGuide.title)} · ${escapeHtml(selectedGuide.themeLabel || '观星样本')}，它会作为洞府里最值得先复刻的一份命盘档案。</li>`
+                : '<li>若还没有锁定当前精选命盘，先去观星台选一份答卷，再回来把它当作洞府里的主参考样本。</li>',
             '<li>炼器室现在会标出核心件、形态件与器灵灌注资格，适合先在图鉴里定研究目标，再决定路线要去商店、精英还是事件。</li>',
             '<li>伏魔台的记忆战更适合拿来检验“我是否真的读懂了 Boss 出题”，而不是单纯比一次输赢。</li>',
             `${data.progress.observatoryTraces !== undefined ? '<li>观星台现在会沉淀命盘签和留痕，适合把高分轮换或好用命盘重新回放验证。</li>' : ''}`,
@@ -3546,6 +4012,7 @@
         this.renderEnemyCodex();
         this.renderBossArchive();
         this.renderBuildSnapshot();
+        this.renderRunSlateShelf();
         this.renderSanctumOverview();
     };
 

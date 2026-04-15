@@ -3,24 +3,25 @@
 
     const CHALLENGE_PROGRESS_KEY = 'theDefierChallengeProgressV1';
     const ACTIVE_CHALLENGE_RUN_KEY = 'theDefierActiveChallengeRunV1';
+    const CHALLENGE_HUB_STATE_KEY = 'theDefierChallengeHubStateV1';
     const OBSERVATORY_ARCHIVE_KEY = 'theDefierObservatoryArchiveV1';
     const OBSERVATORY_GUIDE_STATE_KEY = 'theDefierObservatoryGuideStateV1';
     const HUB_META = {
         daily: {
             title: '观星台 · 今日天机',
-            subtitle: '每日一局短挑战，固定角色、章节目标与战场词缀。',
+            subtitle: '固定命盘会沉淀成观星样本，可回放、复盘，并继续设为远征线索。',
             label: '今日天机',
             accentClass: 'daily'
         },
         weekly: {
             title: '观星台 · 七日劫数',
-            subtitle: '围绕同一套规则反复冲分，争取更高周积分。',
+            subtitle: '围绕同一套命盘反复冲分，把高分答卷压成观星档案。',
             label: '七日劫数',
             accentClass: 'weekly'
         },
         global: {
             title: '观星台 · 众生试炼',
-            subtitle: '统一规则下的长线冲榜，争夺本周最高试炼分。',
+            subtitle: '在统一规则下积累跨周样本，争夺本周最高试炼分与档案席位。',
             label: '众生试炼',
             accentClass: 'global'
         }
@@ -166,8 +167,125 @@
 
     const createObservatoryGuideState = () => ({
         selectedRecordId: '',
+        trainingFocus: null,
         updatedAt: 0
     });
+
+    const CHALLENGE_ARCHIVE_SCOPE_META = {
+        rotation: { label: '本轮' },
+        mode: { label: '同赛道' },
+        all: { label: '跨赛道' }
+    };
+
+    const CHALLENGE_ARCHIVE_TRACK_META = {
+        playable: { label: '可回放' },
+        challenge: { label: '挑战成绩' },
+        replay: { label: '回放记录' },
+        omen: { label: '观星预兆' },
+        all: { label: '全部留痕' }
+    };
+
+    const CHALLENGE_ARCHIVE_OUTCOME_META = {
+        all: { label: '全部结果' },
+        completed: { label: '完成答卷' },
+        failed: { label: '失手答卷' }
+    };
+
+    const CHALLENGE_ARCHIVE_SORT_META = {
+        recent: { label: '最新留痕' },
+        score_desc: { label: '高分优先' }
+    };
+
+    const createChallengeArchiveFilterState = () => ({
+        scope: 'mode',
+        track: 'playable',
+        outcome: 'all',
+        themeKey: 'all',
+        sortBy: 'recent'
+    });
+
+    const normalizeChallengeArchiveFilterState = (rawState = null) => {
+        const source = rawState && typeof rawState === 'object' ? rawState : {};
+        return {
+            scope: ['rotation', 'mode', 'all'].includes(source.scope) ? source.scope : 'mode',
+            track: ['playable', 'challenge', 'replay', 'omen', 'all'].includes(source.track) ? source.track : 'playable',
+            outcome: ['all', 'completed', 'failed'].includes(source.outcome) ? source.outcome : 'all',
+            themeKey: String(source.themeKey || 'all') || 'all',
+            sortBy: ['recent', 'score_desc'].includes(source.sortBy) ? source.sortBy : 'recent'
+        };
+    };
+
+    const normalizeChallengeArchivePresetEntry = (rawEntry = null) => {
+        if (!rawEntry || typeof rawEntry !== 'object') return null;
+        return {
+            state: normalizeChallengeArchiveFilterState(rawEntry.state),
+            updatedAt: clampInt(rawEntry.updatedAt, 0)
+        };
+    };
+
+    const normalizeChallengeArchivePresetSlots = (rawSlots = null) => {
+        const source = Array.isArray(rawSlots) ? rawSlots : [];
+        const next = source
+            .slice(0, 2)
+            .map((entry) => normalizeChallengeArchivePresetEntry(entry));
+        while (next.length < 2) next.push(null);
+        return next;
+    };
+
+    const createChallengeHubState = () => ({
+        tab: 'daily',
+        archiveFilters: {
+            daily: createChallengeArchiveFilterState(),
+            weekly: createChallengeArchiveFilterState(),
+            global: createChallengeArchiveFilterState()
+        },
+        archivePresets: {
+            daily: normalizeChallengeArchivePresetSlots(),
+            weekly: normalizeChallengeArchivePresetSlots(),
+            global: normalizeChallengeArchivePresetSlots()
+        }
+    });
+
+    const normalizeChallengeHubState = (rawState = null) => {
+        const source = rawState && typeof rawState === 'object' ? rawState : {};
+        const archiveFilters = source.archiveFilters && typeof source.archiveFilters === 'object'
+            ? source.archiveFilters
+            : {};
+        const archivePresets = source.archivePresets && typeof source.archivePresets === 'object'
+            ? source.archivePresets
+            : {};
+        return {
+            tab: ['daily', 'weekly', 'global'].includes(source.tab) ? source.tab : 'daily',
+            archiveFilters: {
+                daily: normalizeChallengeArchiveFilterState(archiveFilters.daily),
+                weekly: normalizeChallengeArchiveFilterState(archiveFilters.weekly),
+                global: normalizeChallengeArchiveFilterState(archiveFilters.global)
+            },
+            archivePresets: {
+                daily: normalizeChallengeArchivePresetSlots(archivePresets.daily),
+                weekly: normalizeChallengeArchivePresetSlots(archivePresets.weekly),
+                global: normalizeChallengeArchivePresetSlots(archivePresets.global)
+            }
+        };
+    };
+
+    const serializeChallengeArchiveFilterState = (state = null) => JSON.stringify(
+        normalizeChallengeArchiveFilterState(state || createChallengeArchiveFilterState())
+    );
+
+    const sortObservatoryArchiveEntries = (entries = [], sortBy = 'recent') => {
+        const safeSortBy = ['recent', 'score_desc'].includes(sortBy) ? sortBy : 'recent';
+        return (Array.isArray(entries) ? entries : [])
+            .slice()
+            .sort((a, b) => {
+                if (safeSortBy === 'score_desc') {
+                    return clampInt(b?.score, 0) - clampInt(a?.score, 0)
+                        || clampInt(b?.at, 0) - clampInt(a?.at, 0);
+                }
+                return clampInt(b?.at, 0) - clampInt(a?.at, 0)
+                    || clampInt(b?.score, 0) - clampInt(a?.score, 0);
+            });
+    };
 
     const normalizeTagList = (source = [], limit = 4) => {
         const seen = new Set();
@@ -181,6 +299,40 @@
                 return true;
             })
             .slice(0, Math.max(0, limit));
+    };
+
+    const normalizeObservatoryTrainingFocus = (focus = null) => {
+        const source = focus && typeof focus === 'object' ? focus : null;
+        if (!source) return null;
+        const trainingAdvice = String(source.trainingAdvice || '').trim();
+        if (!trainingAdvice) return null;
+        const themeLabel = String(source.themeLabel || '').trim();
+        const themeKey = String(source.themeKey || '').trim()
+            || Object.values(CHALLENGE_THEME_LIBRARY || {}).find((entry) => (
+                String(entry?.label || '').trim() === themeLabel
+                || String(entry?.signatureTag || '').trim() === themeLabel
+            ))?.key
+            || '';
+        return {
+            sourceRunId: String(source.sourceRunId || source.id || ''),
+            chapterName: String(source.chapterName || ''),
+            sourceTitle: String(source.sourceTitle || ''),
+            guideRecordId: String(source.guideRecordId || source.sourceRecordId || ''),
+            themeKey,
+            themeLabel,
+            ratingLabel: String(source.ratingLabel || ''),
+            ratingTone: ['completed', 'selected', 'suggested', 'idle'].includes(String(source.ratingTone || ''))
+                ? String(source.ratingTone)
+                : 'selected',
+            trainingAdvice,
+            highlightLine: String(source.highlightLine || ''),
+            branchName: String(source.branchName || ''),
+            routeFocusLine: String(source.routeFocusLine || ''),
+            compareHint: String(source.compareHint || ''),
+            trainingTags: normalizeTagList(source.trainingTags, 4),
+            goalHighlights: (Array.isArray(source.goalHighlights) ? source.goalHighlights : []).map((line) => String(line || '').trim()).filter(Boolean).slice(0, 3),
+            updatedAt: clampInt(source.updatedAt, 0) || Date.now()
+        };
     };
 
     const CHALLENGE_THEME_LIBRARY = {
@@ -356,7 +508,10 @@
             summary: String(source.summary || ''),
             focusLines: normalizeTagList(Array.isArray(source.focusLines) ? source.focusLines : [], 3),
             preferredNodeLine: String(source.preferredNodeLine || ''),
-            reasonLabel: String(source.reasonLabel || '')
+            reasonLabel: String(source.reasonLabel || ''),
+            trainingTags: normalizeTagList(Array.isArray(source.trainingTags) ? source.trainingTags : [], 3),
+            coachBrief: String(source.coachBrief || ''),
+            drillObjective: String(source.drillObjective || '')
         };
     };
 
@@ -387,13 +542,22 @@
 
     const serializeChallengeArchiveInsight = (insight = null) => {
         const normalized = normalizeChallengeArchiveInsight(insight);
-        if (!normalized.title && !normalized.summary && normalized.focusLines.length === 0) return null;
+        if (
+            !normalized.title
+            && !normalized.summary
+            && normalized.focusLines.length === 0
+            && normalized.trainingTags.length === 0
+            && !normalized.drillObjective
+        ) return null;
         return {
             title: normalized.title,
             summary: normalized.summary,
             focusLines: normalized.focusLines.slice(0, 3),
             preferredNodeLine: normalized.preferredNodeLine,
-            reasonLabel: normalized.reasonLabel
+            reasonLabel: normalized.reasonLabel,
+            trainingTags: normalized.trainingTags.slice(0, 3),
+            coachBrief: normalized.coachBrief,
+            drillObjective: normalized.drillObjective
         };
     };
 
@@ -448,6 +612,306 @@
         3
     );
 
+    const buildChallengePreferredNodeLine = (preferredNodes = []) => {
+        const labels = formatChallengePreferredNodes(preferredNodes);
+        return labels.length > 0 ? `优先节点：${labels.join(' / ')}` : '';
+    };
+
+    const buildChallengeTrainingTags = (entry = {}, themeMeta = null) => {
+        const source = entry && typeof entry === 'object' ? entry : {};
+        const metrics = normalizeChallengeMetricSnapshot(source.metrics);
+        const meta = themeMeta || resolveChallengeThemeMeta(source.rule, source.mode || 'daily');
+        const highPressureCount = clampInt(metrics.eliteWins + metrics.bossWins, 0, 99);
+        const resourceCount = clampInt(metrics.lawGains + metrics.treasureGains, 0, 99);
+        const tags = [];
+        if (metrics.hpRatio >= 0.78) {
+            tags.push('稳血收官');
+        } else if (!source.completed && metrics.hpRatio < 0.45) {
+            tags.push('血线修复');
+        }
+        if (highPressureCount >= 2) {
+            tags.push('高压过线');
+        } else if (!source.completed && highPressureCount >= 1) {
+            tags.push('高压纠偏');
+        }
+        if (resourceCount >= 3) {
+            tags.push('补件成型');
+        } else if (resourceCount === 0) {
+            tags.push(source.completed ? '极简过线' : '补件断档');
+        }
+        if (metrics.realmClears >= clampInt(source.rule?.goalRealm || source.goalRealm, 1, 18)) {
+            tags.push(clampInt(source.rule?.goalRealm || source.goalRealm, 1, 18) >= 6 ? '跨章耐压' : '准时冲线');
+        } else if (!source.completed && metrics.realmClears <= 1) {
+            tags.push('前段补课');
+        }
+        if (meta.key === 'oracle' && metrics.lawGains >= 1) tags.push('读图控场');
+        if (meta.key === 'assault' && highPressureCount >= 1) tags.push('前段抢拍');
+        return normalizeTagList(tags, 3);
+    };
+
+    const buildChallengeCoachBrief = (entry = {}, themeMeta = null) => {
+        const source = entry && typeof entry === 'object' ? entry : {};
+        const metrics = normalizeChallengeMetricSnapshot(source.metrics);
+        const meta = themeMeta || resolveChallengeThemeMeta(source.rule, source.mode || 'daily');
+        const preferredNodes = Array.isArray(source.preferredNodes) && source.preferredNodes.length > 0
+            ? source.preferredNodes
+            : meta.preferredNodes;
+        const preferredNodeLine = buildChallengePreferredNodeLine(preferredNodes);
+        const hpPercent = clampInt(Math.round(metrics.hpRatio * 100), 0, 100);
+        const highPressureCount = clampInt(metrics.eliteWins + metrics.bossWins, 0, 99);
+        const resourceCount = clampInt(metrics.lawGains + metrics.treasureGains, 0, 99);
+        if (source.completed) {
+            if (highPressureCount >= 2) {
+                return `${preferredNodeLine || '先沿主题关键节点走'}，并把爆发与兜底留到高压段再交。`;
+            }
+            if (hpPercent >= 78) {
+                return `${preferredNodeLine || '先沿主题关键节点走'}，把血线稳到收官再提速冲线。`;
+            }
+            if (resourceCount > 0) {
+                return `${preferredNodeLine || '先沿主题关键节点走'}，用现成补件把主题答卷压实。`;
+            }
+            return `${preferredNodeLine || '沿主题关键节点走'}，按这份命盘的节奏稳稳过线。`;
+        }
+        if (hpPercent < 45) {
+            return '先补恢复、护盾或减伤，把血线修回安全区后再接高压战。';
+        }
+        if (resourceCount === 0) {
+            return `${preferredNodeLine || '先沿主题关键节点走'}，先补 1 组关键件再继续冲线。`;
+        }
+        if (highPressureCount === 0) {
+            return `${preferredNodeLine || '先沿主题关键节点走'}，先补信息与资源，再去接第一场高压战。`;
+        }
+        return '把关键爆发与保命手段留到下一场高压战，先修正失手点再复刻。';
+    };
+
+    const buildChallengeDrillObjective = (entry = {}, themeMeta = null) => {
+        const source = entry && typeof entry === 'object' ? entry : {};
+        const metrics = normalizeChallengeMetricSnapshot(source.metrics);
+        const meta = themeMeta || resolveChallengeThemeMeta(source.rule, source.mode || 'daily');
+        const preferredNodes = Array.isArray(source.preferredNodes) && source.preferredNodes.length > 0
+            ? source.preferredNodes
+            : meta.preferredNodes;
+        const preferredNodeLabels = formatChallengePreferredNodes(preferredNodes);
+        const preferredNodeText = preferredNodeLabels.length > 0 ? preferredNodeLabels.join(' / ') : '主题关键节点';
+        const hpPercent = clampInt(Math.round(metrics.hpRatio * 100), 0, 100);
+        const highPressureCount = clampInt(metrics.eliteWins + metrics.bossWins, 0, 99);
+        const resourceCount = clampInt(metrics.lawGains + metrics.treasureGains, 0, 99);
+        const goalRealm = clampInt(source.rule?.goalRealm || source.goalRealm, 1, 18);
+        if (source.completed) {
+            if (highPressureCount >= 2) {
+                return `在第 ${goalRealm} 重前保留一段爆发或兜底，按原顺序处理 ${highPressureCount} 场高压战。`;
+            }
+            if (hpPercent >= 78) {
+                return `沿 ${preferredNodeText} 线推进，把血线维持在 ${Math.max(60, hpPercent - 10)}% 以上进入收官。`;
+            }
+            if (resourceCount > 0) {
+                return `先补齐当前样本里的法则 / 法宝关键件，再按 ${preferredNodeText} 线完成冲线。`;
+            }
+            return `沿 ${preferredNodeText} 线复刻这份命盘的推进顺序，稳定完成第 ${goalRealm} 重。`;
+        }
+        if (hpPercent < 45) {
+            return '先补恢复或护盾，把血线稳定到 55% 以上后再回到高压战。';
+        }
+        if (highPressureCount === 0) {
+            return `先踩 ${preferredNodeText} 补信息与资源，再去接第一场高压战。`;
+        }
+        if (resourceCount === 0) {
+            return '先补 1 组法则或法宝关键件，再回到当前主题路线继续推进。';
+        }
+        return `保留关键资源穿过下一场高压战，并把血线带进第 ${Math.max(1, metrics.realmClears + 1)} 重。`;
+    };
+
+    const formatChallengeComparisonDelta = (current, benchmark, unit = '') => {
+        const delta = clampInt(current - benchmark, -999, 999);
+        if (delta === 0) return '与主题标杆持平';
+        const amount = Math.abs(delta);
+        return delta > 0
+            ? `高于主题标杆 ${amount}${unit}`
+            : `低于主题标杆 ${amount}${unit}`;
+    };
+
+    const formatChallengeComparisonHpLine = (label, current, benchmark, isBenchmark) => (
+        `${label}：${current}% · ${isBenchmark ? '当前主题标杆' : formatChallengeComparisonDelta(current, benchmark, '%')}`
+    );
+
+    const formatChallengeComparisonPressureLine = (label, current, benchmark, isBenchmark) => (
+        `${label}：${current} 场 · ${isBenchmark ? '当前主题标杆' : formatChallengeComparisonDelta(current, benchmark, ' 场')}`
+    );
+
+    const formatChallengeComparisonScoreLine = (label, current, benchmark, isBenchmark) => (
+        `${label}：${current} 分 · ${isBenchmark ? '当前主题标杆' : formatChallengeComparisonDelta(current, benchmark, ' 分')}`
+    );
+
+    const formatChallengeComparisonProgressLine = (label, current, benchmark, target, isBenchmark) => {
+        if (isBenchmark) return `${label}：第 ${current} 重 / 完成线 ${target} 重 · 当前主题标杆`;
+        return `${label}：第 ${current} 重 / 完成线 ${target} 重 · ${current === benchmark ? '与主题标杆同段' : formatChallengeComparisonDelta(current, benchmark, ' 重')}`;
+    };
+
+    const formatChallengeComparisonResourceLine = (label, currentText, currentCount, benchmarkText, benchmarkCount, isBenchmark) => (
+        `${label}：${currentText}${isBenchmark ? ' · 当前主题标杆' : ` · ${currentCount === benchmarkCount ? `与标杆同档（${benchmarkText}）` : formatChallengeComparisonDelta(currentCount, benchmarkCount, ' 项')}`}`
+    );
+
+    const formatChallengeComparisonRouteLine = (label, preferredNodeLine, compareHint) => (
+        `${label}：${preferredNodeLine || compareHint || '按主题关键节点推进'}`
+    );
+
+    const buildChallengeComparisonAxes = (entry = {}, benchmarkEntry = null, themeMeta = null) => {
+        const metrics = normalizeChallengeMetricSnapshot(entry.metrics);
+        const benchmarkMetrics = normalizeChallengeMetricSnapshot(benchmarkEntry?.metrics);
+        const meta = themeMeta || resolveChallengeThemeMeta(entry.rule, entry.mode || 'daily');
+        const hpPercent = clampInt(Math.round(metrics.hpRatio * 100), 0, 100);
+        const benchmarkHpPercent = clampInt(Math.round(benchmarkMetrics.hpRatio * 100), 0, 100);
+        const highPressureCount = clampInt(metrics.eliteWins + metrics.bossWins, 0, 99);
+        const benchmarkHighPressureCount = clampInt(benchmarkMetrics.eliteWins + benchmarkMetrics.bossWins, 0, 99);
+        const resourceCount = clampInt(metrics.lawGains + metrics.treasureGains, 0, 99);
+        const benchmarkResourceCount = clampInt(benchmarkMetrics.lawGains + benchmarkMetrics.treasureGains, 0, 99);
+        const score = clampInt(entry.score, 0, 9999);
+        const benchmarkScore = clampInt(benchmarkEntry?.score, 0, 9999);
+        const goalRealm = clampInt(entry.rule?.goalRealm || entry.goalRealm, 1, 18);
+        const realmClears = clampInt(metrics.realmClears, 0, goalRealm);
+        const benchmarkRealmClears = clampInt(benchmarkMetrics.realmClears, 0, goalRealm);
+        const resourceText = resourceCount > 0
+            ? `法则 +${metrics.lawGains} / 法宝 +${metrics.treasureGains}`
+            : '尚未形成补件';
+        const benchmarkResourceText = benchmarkResourceCount > 0
+            ? `法则 +${benchmarkMetrics.lawGains} / 法宝 +${benchmarkMetrics.treasureGains}`
+            : '尚未形成补件';
+        const preferredNodes = Array.isArray(entry.preferredNodes) && entry.preferredNodes.length > 0
+            ? entry.preferredNodes
+            : meta.preferredNodes;
+        const preferredNodeLine = buildChallengePreferredNodeLine(preferredNodes);
+        const isBenchmark = !!benchmarkEntry && entry.id === benchmarkEntry.id;
+        switch (meta.key) {
+            case 'assault':
+                return [
+                    {
+                        key: 'tempo',
+                        label: '前段节拍',
+                        line: formatChallengeComparisonScoreLine('前段节拍', score, benchmarkScore, isBenchmark)
+                    },
+                    {
+                        key: 'finish',
+                        label: '收头效率',
+                        line: formatChallengeComparisonProgressLine('收头效率', realmClears, benchmarkRealmClears, goalRealm, isBenchmark)
+                    },
+                    {
+                        key: 'pressure',
+                        label: '高压接战',
+                        line: formatChallengeComparisonPressureLine('高压接战', highPressureCount, benchmarkHighPressureCount, isBenchmark)
+                    }
+                ];
+            case 'bulwark':
+                return [
+                    {
+                        key: 'stability',
+                        label: '血线稳定',
+                        line: formatChallengeComparisonHpLine('血线稳定', hpPercent, benchmarkHpPercent, isBenchmark)
+                    },
+                    {
+                        key: 'guard',
+                        label: '守阵容错',
+                        line: formatChallengeComparisonRouteLine('守阵容错', preferredNodeLine, meta.compareHint)
+                    },
+                    {
+                        key: 'sustain',
+                        label: '续航补件',
+                        line: formatChallengeComparisonResourceLine('续航补件', resourceText, resourceCount, benchmarkResourceText, benchmarkResourceCount, isBenchmark)
+                    }
+                ];
+            case 'forge':
+                return [
+                    {
+                        key: 'assembly',
+                        label: '补件速度',
+                        line: formatChallengeComparisonResourceLine('补件速度', resourceText, resourceCount, benchmarkResourceText, benchmarkResourceCount, isBenchmark)
+                    },
+                    {
+                        key: 'conversion',
+                        label: '器灵换强',
+                        line: formatChallengeComparisonScoreLine('器灵换强', score, benchmarkScore, isBenchmark)
+                    },
+                    {
+                        key: 'pressure',
+                        label: '高压兑现',
+                        line: formatChallengeComparisonPressureLine('高压兑现', highPressureCount, benchmarkHighPressureCount, isBenchmark)
+                    }
+                ];
+            case 'oracle':
+                return [
+                    {
+                        key: 'reading',
+                        label: '观测收益',
+                        line: formatChallengeComparisonResourceLine('观测收益', resourceText, resourceCount, benchmarkResourceText, benchmarkResourceCount, isBenchmark)
+                    },
+                    {
+                        key: 'route',
+                        label: '路线贴合',
+                        line: formatChallengeComparisonRouteLine('路线贴合', preferredNodeLine, meta.compareHint)
+                    },
+                    {
+                        key: 'control',
+                        label: '控场稳定',
+                        line: formatChallengeComparisonHpLine('控场稳定', hpPercent, benchmarkHpPercent, isBenchmark)
+                    }
+                ];
+            case 'tempo':
+                return [
+                    {
+                        key: 'chain',
+                        label: '连段续速',
+                        line: formatChallengeComparisonScoreLine('连段续速', score, benchmarkScore, isBenchmark)
+                    },
+                    {
+                        key: 'midgame',
+                        label: '中盘滚动',
+                        line: formatChallengeComparisonProgressLine('中盘滚动', realmClears, benchmarkRealmClears, goalRealm, isBenchmark)
+                    },
+                    {
+                        key: 'erosion',
+                        label: '资源衰减',
+                        line: formatChallengeComparisonHpLine('资源衰减', hpPercent, benchmarkHpPercent, isBenchmark)
+                    }
+                ];
+            case 'marathon':
+                return [
+                    {
+                        key: 'endurance',
+                        label: '跨章耐压',
+                        line: formatChallengeComparisonProgressLine('跨章耐压', realmClears, benchmarkRealmClears, goalRealm, isBenchmark)
+                    },
+                    {
+                        key: 'finish',
+                        label: '终盘完整度',
+                        line: formatChallengeComparisonHpLine('终盘完整度', hpPercent, benchmarkHpPercent, isBenchmark)
+                    },
+                    {
+                        key: 'pressure',
+                        label: '高压答卷',
+                        line: formatChallengeComparisonPressureLine('高压答卷', highPressureCount, benchmarkHighPressureCount, isBenchmark)
+                    }
+                ];
+            default:
+                break;
+        }
+        return [
+            {
+                key: 'stability',
+                label: '血线稳定',
+                line: formatChallengeComparisonHpLine('血线稳定', hpPercent, benchmarkHpPercent, isBenchmark)
+            },
+            {
+                key: 'pressure',
+                label: '高压处理',
+                line: formatChallengeComparisonPressureLine('高压处理', highPressureCount, benchmarkHighPressureCount, isBenchmark)
+            },
+            {
+                key: 'assembly',
+                label: '补件效率',
+                line: formatChallengeComparisonResourceLine('补件效率', resourceText, resourceCount, benchmarkResourceText, benchmarkResourceCount, isBenchmark)
+            }
+        ];
+    };
+
     const buildChallengeArchiveInsight = (entry = {}, themeMeta = null) => {
         const source = entry && typeof entry === 'object' ? entry : {};
         const metrics = normalizeChallengeMetricSnapshot(source.metrics);
@@ -457,9 +921,11 @@
                 ? source.preferredNodes
                 : meta.preferredNodes
         );
-        const preferredNodeLine = preferredNodeLabels.length > 0
-            ? `优先节点：${preferredNodeLabels.join(' / ')}`
-            : '';
+        const preferredNodeLine = buildChallengePreferredNodeLine(
+            Array.isArray(source.preferredNodes) && source.preferredNodes.length > 0
+                ? source.preferredNodes
+                : meta.preferredNodes
+        );
         const hpPercent = clampInt(Math.round(metrics.hpRatio * 100), 0, 100);
         const highPressureCount = clampInt(metrics.eliteWins + metrics.bossWins, 0, 99);
         const resourceParts = [];
@@ -467,6 +933,9 @@
         if (metrics.treasureGains > 0) resourceParts.push(`法宝 +${metrics.treasureGains}`);
         const reasonLabel = CHALLENGE_REASON_LIBRARY[source.reason]?.label || '本轮留痕';
         const focusLines = [];
+        const trainingTags = buildChallengeTrainingTags(source, meta);
+        const coachBrief = buildChallengeCoachBrief(source, meta);
+        const drillObjective = buildChallengeDrillObjective(source, meta);
         let title = source.replayOnly ? '回放样本' : '挑战留痕';
         let summary = `${meta.label} 主题已写入观察站，可继续拿来复盘。`;
 
@@ -521,21 +990,31 @@
             summary,
             focusLines: normalizeTagList(focusLines, 3),
             preferredNodeLine,
-            reasonLabel
+            reasonLabel,
+            trainingTags,
+            coachBrief,
+            drillObjective
         };
     };
 
     const renderChallengeInsightMarkup = (insight = null, options = {}) => {
         if (!insight || typeof insight !== 'object') return '';
         const compact = !!options.compact;
-        const lines = Array.isArray(insight.focusLines) ? insight.focusLines.filter(Boolean).slice(0, 3) : [];
-        if (!insight.title && !insight.summary && lines.length === 0) return '';
+        const trainingTags = normalizeTagList(Array.isArray(insight.trainingTags) ? insight.trainingTags : [], compact ? 2 : 3);
+        const lines = Array.isArray(insight.focusLines) ? insight.focusLines.filter(Boolean).slice(0, compact ? 2 : 3) : [];
+        const detailLines = insight.drillObjective
+            ? [...lines, `演练目标：${insight.drillObjective}`].slice(0, compact ? 3 : 4)
+            : lines;
+        if (!insight.title && !insight.summary && detailLines.length === 0 && trainingTags.length === 0) return '';
         return `
             <div class="challenge-record-insight${compact ? ' compact' : ''}">
                 ${insight.title ? `<strong>${escapeHtml(insight.title)}</strong>` : ''}
                 ${insight.summary ? `<p>${escapeHtml(insight.summary)}</p>` : ''}
-                ${lines.length > 0
-                    ? `<div class="challenge-record-insight-lines">${lines.map((line) => `<span class="challenge-record-insight-line">${escapeHtml(line)}</span>`).join('')}</div>`
+                ${trainingTags.length > 0
+                    ? `<div class="challenge-record-tags">${trainingTags.map((tag) => `<span class="challenge-tag">${escapeHtml(tag)}</span>`).join('')}</div>`
+                    : ''}
+                ${detailLines.length > 0
+                    ? `<div class="challenge-record-insight-lines">${detailLines.map((line) => `<span class="challenge-record-insight-line">${escapeHtml(line)}</span>`).join('')}</div>`
                     : ''}
             </div>
         `;
@@ -543,9 +1022,9 @@
 
     Game.prototype.ensureChallengeHubBootState = function () {
         if (!this.challengeHubState || typeof this.challengeHubState !== 'object') {
-            this.challengeHubState = { tab: 'daily' };
-        } else if (!['daily', 'weekly', 'global'].includes(this.challengeHubState.tab)) {
-            this.challengeHubState.tab = 'daily';
+            this.challengeHubState = this.loadChallengeHubState();
+        } else {
+            this.challengeHubState = normalizeChallengeHubState(this.challengeHubState);
         }
 
         if (!this.challengeProgressState || typeof this.challengeProgressState !== 'object') {
@@ -566,6 +1045,28 @@
 
         if (!this.observatoryGuideState || typeof this.observatoryGuideState !== 'object') {
             this.observatoryGuideState = this.loadObservatoryGuideState();
+        }
+    };
+
+    Game.prototype.loadChallengeHubState = function () {
+        try {
+            const raw = typeof localStorage !== 'undefined'
+                ? localStorage.getItem(CHALLENGE_HUB_STATE_KEY)
+                : null;
+            return normalizeChallengeHubState(raw ? JSON.parse(raw) : createChallengeHubState());
+        } catch (error) {
+            return normalizeChallengeHubState(createChallengeHubState());
+        }
+    };
+
+    Game.prototype.persistChallengeHubState = function () {
+        try {
+            if (typeof localStorage === 'undefined') return;
+            localStorage.setItem(CHALLENGE_HUB_STATE_KEY, JSON.stringify(
+                normalizeChallengeHubState(this.challengeHubState || createChallengeHubState())
+            ));
+        } catch (error) {
+            console.warn('Persist challenge hub state failed:', error);
         }
     };
 
@@ -675,6 +1176,7 @@
         const source = rawState && typeof rawState === 'object' ? rawState : {};
         return {
             selectedRecordId: String(source.selectedRecordId || ''),
+            trainingFocus: normalizeObservatoryTrainingFocus(source.trainingFocus),
             updatedAt: clampInt(source.updatedAt, 0)
         };
     };
@@ -769,20 +1271,36 @@
             : [];
         const limit = clampInt(options.limit, 0, 24) || 6;
         const mode = ['daily', 'weekly', 'global'].includes(options.mode) ? options.mode : '';
+        const rotationKey = String(options.rotationKey || '');
         const types = Array.isArray(options.types)
             ? options.types.map((item) => String(item || '')).filter(Boolean)
             : null;
         const replayableOnly = !!options.replayableOnly;
         const featuredOnly = !!options.featuredOnly;
-        return source
+        const completedOnly = !!options.completedOnly && !options.failedOnly;
+        const failedOnly = !!options.failedOnly && !options.completedOnly;
+        const replayOnly = typeof options.replayOnly === 'boolean'
+            ? options.replayOnly
+            : null;
+        const themeKey = String(options.themeKey || '').trim();
+        const sortBy = ['recent', 'score_desc'].includes(options.sortBy) ? options.sortBy : 'recent';
+        return sortObservatoryArchiveEntries(source
             .filter((entry) => {
                 if (!entry) return false;
                 if (mode && entry.mode !== mode) return false;
+                if (rotationKey && entry.rotationKey !== rotationKey) return false;
                 if (types && types.length > 0 && !types.includes(entry.type)) return false;
                 if (replayableOnly && !entry.replayable) return false;
                 if (featuredOnly && !entry.featured) return false;
+                if (completedOnly && !entry.completed) return false;
+                if (failedOnly && entry.completed) return false;
+                if (replayOnly !== null && !!entry.replayOnly !== replayOnly) return false;
+                if (themeKey && themeKey !== 'all') {
+                    if (!entry.rule?.id) return false;
+                    if (entry.themeKey !== themeKey) return false;
+                }
                 return true;
-            })
+            }), sortBy)
             .slice(0, limit);
     };
 
@@ -800,6 +1318,283 @@
             selectedGuideId: selectedGuide?.id || '',
             selectedGuideTitle: selectedGuide?.title || '',
             selectedGuideThemeLabel: selectedGuide?.themeLabel || ''
+        };
+    };
+
+    Game.prototype.getChallengeArchiveFilterState = function (tab = '') {
+        this.ensureChallengeHubBootState();
+        const safeTab = ['daily', 'weekly', 'global'].includes(tab)
+            ? tab
+            : (this.challengeHubState.tab || 'daily');
+        const next = normalizeChallengeArchiveFilterState(this.challengeHubState.archiveFilters?.[safeTab]);
+        this.challengeHubState.archiveFilters[safeTab] = next;
+        return { ...next };
+    };
+
+    Game.prototype.getChallengeArchivePresetSlots = function (tab = '') {
+        this.ensureChallengeHubBootState();
+        const safeTab = ['daily', 'weekly', 'global'].includes(tab)
+            ? tab
+            : (this.challengeHubState.tab || 'daily');
+        const next = normalizeChallengeArchivePresetSlots(this.challengeHubState.archivePresets?.[safeTab]);
+        this.challengeHubState.archivePresets[safeTab] = next;
+        return next.map((entry) => entry
+            ? {
+                state: normalizeChallengeArchiveFilterState(entry.state),
+                updatedAt: clampInt(entry.updatedAt, 0)
+            }
+            : null);
+    };
+
+    Game.prototype.getChallengeArchivePresetSummary = function (state = null) {
+        const resolved = normalizeChallengeArchiveFilterState(state || createChallengeArchiveFilterState());
+        const labels = [
+            CHALLENGE_ARCHIVE_SCOPE_META[resolved.scope]?.label || CHALLENGE_ARCHIVE_SCOPE_META.mode.label,
+            CHALLENGE_ARCHIVE_TRACK_META[resolved.track]?.label || CHALLENGE_ARCHIVE_TRACK_META.playable.label
+        ];
+        if (resolved.outcome !== 'all') {
+            labels.push(CHALLENGE_ARCHIVE_OUTCOME_META[resolved.outcome]?.label || resolved.outcome);
+        }
+        if (resolved.themeKey && resolved.themeKey !== 'all') {
+            labels.push(CHALLENGE_THEME_LIBRARY[resolved.themeKey]?.label || resolved.themeKey);
+        }
+        if (resolved.sortBy !== 'recent') {
+            labels.push(CHALLENGE_ARCHIVE_SORT_META[resolved.sortBy]?.label || resolved.sortBy);
+        }
+        return labels.join(' / ') || '默认视角';
+    };
+
+    Game.prototype.getChallengeArchivePresetLabel = function (slot = 0, tab = '') {
+        const index = clampInt(slot, 0, 1);
+        const preset = this.getChallengeArchivePresetSlots(tab)[index];
+        if (!preset?.state) return `预设 ${index + 1}（空）`;
+        return `预设 ${index + 1} · ${this.getChallengeArchivePresetSummary(preset.state)}`;
+    };
+
+    Game.prototype.isChallengeArchivePresetActive = function (slot = 0, tab = '') {
+        const index = clampInt(slot, 0, 1);
+        const preset = this.getChallengeArchivePresetSlots(tab)[index];
+        if (!preset?.state) return false;
+        return serializeChallengeArchiveFilterState(preset.state) === serializeChallengeArchiveFilterState(this.getChallengeArchiveFilterState(tab));
+    };
+
+    Game.prototype.saveChallengeArchivePreset = function (slot = 0, tab = '') {
+        this.ensureChallengeHubBootState();
+        const safeTab = ['daily', 'weekly', 'global'].includes(tab)
+            ? tab
+            : (this.challengeHubState.tab || 'daily');
+        const index = clampInt(slot, 0, 1);
+        const slots = this.getChallengeArchivePresetSlots(safeTab);
+        slots[index] = {
+            state: normalizeChallengeArchiveFilterState(this.getChallengeArchiveFilterState(safeTab)),
+            updatedAt: Date.now()
+        };
+        this.challengeHubState.archivePresets[safeTab] = normalizeChallengeArchivePresetSlots(slots);
+        this.persistChallengeHubState();
+        if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+            Utils.showBattleLog(`已保存观星筛面预设 ${index + 1}`);
+        }
+        if (this.currentScreen === 'challenge-screen') {
+            this.initChallengeHub();
+        }
+        return true;
+    };
+
+    Game.prototype.applyChallengeArchivePreset = function (slot = 0, tab = '') {
+        this.ensureChallengeHubBootState();
+        const safeTab = ['daily', 'weekly', 'global'].includes(tab)
+            ? tab
+            : (this.challengeHubState.tab || 'daily');
+        const index = clampInt(slot, 0, 1);
+        const preset = this.getChallengeArchivePresetSlots(safeTab)[index];
+        if (!preset?.state) {
+            if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+                Utils.showBattleLog(`观星筛面预设 ${index + 1} 为空`);
+            }
+            return false;
+        }
+        this.challengeHubState.archiveFilters[safeTab] = normalizeChallengeArchiveFilterState(preset.state);
+        this.persistChallengeHubState();
+        if (this.currentScreen === 'challenge-screen') {
+            this.initChallengeHub();
+        }
+        return true;
+    };
+
+    Game.prototype.setChallengeArchiveFilter = function (key = '', value = '', tab = '') {
+        this.ensureChallengeHubBootState();
+        const safeTab = ['daily', 'weekly', 'global'].includes(tab)
+            ? tab
+            : (this.challengeHubState.tab || 'daily');
+        if (!['scope', 'track', 'outcome', 'themeKey', 'sortBy'].includes(key)) {
+            return this.getChallengeArchiveFilterState(safeTab);
+        }
+        const next = normalizeChallengeArchiveFilterState({
+            ...this.getChallengeArchiveFilterState(safeTab),
+            [key]: value
+        });
+        this.challengeHubState.archiveFilters[safeTab] = next;
+        this.persistChallengeHubState();
+        if (this.currentScreen === 'challenge-screen') {
+            this.initChallengeHub();
+        }
+        return { ...next };
+    };
+
+    Game.prototype.resetChallengeArchiveFilters = function (tab = '') {
+        this.ensureChallengeHubBootState();
+        const safeTab = ['daily', 'weekly', 'global'].includes(tab)
+            ? tab
+            : (this.challengeHubState.tab || 'daily');
+        const next = createChallengeArchiveFilterState();
+        this.challengeHubState.archiveFilters[safeTab] = next;
+        this.persistChallengeHubState();
+        if (this.currentScreen === 'challenge-screen') {
+            this.initChallengeHub();
+        }
+        return { ...next };
+    };
+
+    Game.prototype.buildChallengeArchiveFilterQuery = function (filterState = null, bundle = null, options = {}) {
+        this.ensureChallengeHubBootState();
+        const safeTab = ['daily', 'weekly', 'global'].includes(bundle?.mode)
+            ? bundle.mode
+            : (['daily', 'weekly', 'global'].includes(options.tab) ? options.tab : (this.challengeHubState.tab || 'daily'));
+        const state = normalizeChallengeArchiveFilterState(filterState || this.getChallengeArchiveFilterState(safeTab));
+        const query = {
+            limit: clampInt(options.limit, 0, 24) || 24
+        };
+        if (state.scope === 'rotation') {
+            query.mode = safeTab;
+            query.rotationKey = String(bundle?.rotationKey || '');
+        } else if (state.scope === 'mode') {
+            query.mode = safeTab;
+        }
+        if (state.track === 'playable') {
+            query.types = ['challenge', 'replay'];
+            query.replayableOnly = true;
+        } else if (state.track === 'challenge') {
+            query.types = ['challenge'];
+        } else if (state.track === 'replay') {
+            query.types = ['replay'];
+        } else if (state.track === 'omen') {
+            query.types = ['omen'];
+        }
+        if (state.outcome === 'completed') {
+            query.completedOnly = true;
+        } else if (state.outcome === 'failed') {
+            query.failedOnly = true;
+        }
+        if (state.themeKey && state.themeKey !== 'all') {
+            query.themeKey = state.themeKey;
+        }
+        query.sortBy = state.sortBy;
+        return query;
+    };
+
+    Game.prototype.buildChallengeArchiveFilterBundle = function (bundle = null) {
+        this.ensureChallengeHubBootState();
+        const safeTab = ['daily', 'weekly', 'global'].includes(bundle?.mode)
+            ? bundle.mode
+            : (this.challengeHubState.tab || 'daily');
+        const state = this.getChallengeArchiveFilterState(safeTab);
+        const themeMeta = bundle?.themeMeta
+            || (bundle?.rule ? this.getChallengeThemeMeta(bundle.rule, safeTab) : null)
+            || CHALLENGE_THEME_LIBRARY.assault;
+        const scopeEntries = this.getObservatoryArchiveEntries(this.buildChallengeArchiveFilterQuery({
+            scope: state.scope,
+            track: 'all',
+            outcome: 'all',
+            themeKey: 'all'
+        }, bundle, { limit: 24, tab: safeTab }));
+        const entriesBeforeTheme = this.getObservatoryArchiveEntries(this.buildChallengeArchiveFilterQuery({
+            ...state,
+            themeKey: 'all'
+        }, bundle, { limit: 24, tab: safeTab }));
+        const entries = this.getObservatoryArchiveEntries(this.buildChallengeArchiveFilterQuery(state, bundle, { limit: 24, tab: safeTab }));
+        const themeOptions = [{ value: 'all', label: '全部主题' }];
+        const themeLabels = new Map();
+        const currentThemeKey = String(themeMeta?.key || '');
+        const currentThemeLabel = String(themeMeta?.label || '当前主题');
+        if (currentThemeKey) {
+            themeLabels.set(currentThemeKey, `当前主题 · ${currentThemeLabel}`);
+        }
+        entriesBeforeTheme
+            .filter((entry) => entry && entry.rule?.id && entry.type !== 'omen' && entry.themeKey)
+            .forEach((entry) => {
+                if (!themeLabels.has(entry.themeKey)) {
+                    themeLabels.set(entry.themeKey, entry.themeLabel || CHALLENGE_THEME_LIBRARY[entry.themeKey]?.label || entry.themeKey);
+                }
+            });
+        themeLabels.forEach((label, key) => {
+            themeOptions.push({ value: key, label });
+        });
+        if (state.themeKey !== 'all' && !themeLabels.has(state.themeKey)) {
+            themeOptions.push({
+                value: state.themeKey,
+                label: CHALLENGE_THEME_LIBRARY[state.themeKey]?.label || state.themeKey
+            });
+        }
+        const defaultState = createChallengeArchiveFilterState();
+        const scopeLabel = CHALLENGE_ARCHIVE_SCOPE_META[state.scope]?.label || CHALLENGE_ARCHIVE_SCOPE_META.mode.label;
+        const trackLabel = CHALLENGE_ARCHIVE_TRACK_META[state.track]?.label || CHALLENGE_ARCHIVE_TRACK_META.playable.label;
+        const outcomeLabel = CHALLENGE_ARCHIVE_OUTCOME_META[state.outcome]?.label || CHALLENGE_ARCHIVE_OUTCOME_META.all.label;
+        const themeLabel = state.themeKey === 'all'
+            ? '全部主题'
+            : (themeOptions.find((item) => item.value === state.themeKey)?.label
+                || CHALLENGE_THEME_LIBRARY[state.themeKey]?.label
+                || state.themeKey);
+        const sortLabel = CHALLENGE_ARCHIVE_SORT_META[state.sortBy]?.label || CHALLENGE_ARCHIVE_SORT_META.recent.label;
+        const isDefault = state.scope === defaultState.scope
+            && state.track === defaultState.track
+            && state.outcome === defaultState.outcome
+            && state.themeKey === defaultState.themeKey
+            && state.sortBy === defaultState.sortBy;
+        const presetSlots = this.getChallengeArchivePresetSlots(safeTab).map((preset, index) => ({
+            slot: index,
+            label: this.getChallengeArchivePresetLabel(index, safeTab),
+            empty: !preset?.state,
+            active: this.isChallengeArchivePresetActive(index, safeTab),
+            updatedAt: preset?.updatedAt || 0
+        }));
+        return {
+            state,
+            entries,
+            scopeOptions: ['rotation', 'mode', 'all'].map((value) => ({
+                value,
+                label: CHALLENGE_ARCHIVE_SCOPE_META[value]?.label || value
+            })),
+            trackOptions: ['playable', 'challenge', 'replay', 'omen', 'all'].map((value) => ({
+                value,
+                label: CHALLENGE_ARCHIVE_TRACK_META[value]?.label || value
+            })),
+            outcomeOptions: ['all', 'completed', 'failed'].map((value) => ({
+                value,
+                label: CHALLENGE_ARCHIVE_OUTCOME_META[value]?.label || value
+            })),
+            sortOptions: ['recent', 'score_desc'].map((value) => ({
+                value,
+                label: CHALLENGE_ARCHIVE_SORT_META[value]?.label || value
+            })),
+            themeOptions,
+            scopeLabel,
+            trackLabel,
+            outcomeLabel,
+            themeLabel,
+            sortLabel,
+            filterSummary: `${scopeLabel} · ${trackLabel} · ${outcomeLabel} · ${themeLabel}`,
+            viewSummary: `${scopeLabel} · ${trackLabel} · ${outcomeLabel} · ${themeLabel} · ${sortLabel}`,
+            matchedCount: entries.length,
+            scopeTotalCount: scopeEntries.length,
+            replayableCount: entries.filter((entry) => entry.replayable).length,
+            featuredCount: entries.filter((entry) => entry.featured).length,
+            completedCount: entries.filter((entry) => entry.completed).length,
+            failedCount: entries.filter((entry) => entry.type !== 'omen' && !entry.completed).length,
+            isDefault,
+            presetSlots,
+            emptyText: isDefault
+                ? '观星留痕还没有更多可检索样本，先完成一轮挑战、回放或观星推演。'
+                : '当前筛面暂无留痕，试试还原筛面或切到跨赛道查看更久以前的样本。'
         };
     };
 
@@ -824,6 +1619,7 @@
         const nextSelected = hasSelected ? state.selectedRecordId : (eligible[0]?.id || '');
         if (nextSelected !== state.selectedRecordId) {
             this.observatoryGuideState = this.normalizeObservatoryGuideState({
+                ...state,
                 selectedRecordId: nextSelected,
                 updatedAt: nextSelected ? Date.now() : 0
             });
@@ -832,6 +1628,64 @@
             this.observatoryGuideState = state;
         }
         return this.observatoryGuideState.selectedRecordId || '';
+    };
+
+    Game.prototype.getObservatoryTrainingFocus = function () {
+        this.ensureChallengeHubBootState();
+        const next = normalizeObservatoryTrainingFocus(this.observatoryGuideState?.trainingFocus);
+        this.observatoryGuideState.trainingFocus = next;
+        return next
+            ? {
+                ...next,
+                trainingTags: normalizeTagList(next.trainingTags, 4),
+                goalHighlights: (Array.isArray(next.goalHighlights) ? next.goalHighlights : []).map((line) => String(line || '').trim()).filter(Boolean).slice(0, 3)
+            }
+            : null;
+    };
+
+    Game.prototype.setObservatoryTrainingFocus = function (focus = null, options = {}) {
+        this.ensureChallengeHubBootState();
+        const nextFocus = normalizeObservatoryTrainingFocus(focus);
+        this.observatoryGuideState = this.normalizeObservatoryGuideState({
+            ...(this.observatoryGuideState || createObservatoryGuideState()),
+            trainingFocus: nextFocus,
+            updatedAt: Date.now()
+        });
+        this.persistObservatoryGuideState();
+        if (!options.silent && nextFocus && typeof Utils !== 'undefined' && Utils?.showBattleLog) {
+            Utils.showBattleLog(`观星台已记下【${nextFocus.chapterName || '最新章节'}】的主练建议。`, {
+                category: 'system',
+                duration: 2400
+            });
+        }
+        return nextFocus;
+    };
+
+    Game.prototype.applyObservatoryTrainingFocus = function (tab = '') {
+        this.ensureChallengeHubBootState();
+        const focus = this.getObservatoryTrainingFocus();
+        if (!focus?.themeKey) return false;
+        const safeTab = ['daily', 'weekly', 'global'].includes(tab)
+            ? tab
+            : (this.challengeHubState.tab || 'daily');
+        this.challengeHubState.archiveFilters[safeTab] = normalizeChallengeArchiveFilterState({
+            scope: 'all',
+            track: 'playable',
+            outcome: 'all',
+            themeKey: focus.themeKey,
+            sortBy: 'score_desc'
+        });
+        this.persistChallengeHubState();
+        if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
+            Utils.showBattleLog(`已切到【${focus.themeLabel || '当前主练'}】训练视角。`, {
+                category: 'system',
+                duration: 2400
+            });
+        }
+        if (this.currentScreen === 'challenge-screen') {
+            this.initChallengeHub();
+        }
+        return true;
     };
 
     Game.prototype.getSelectedObservatoryExpeditionGuide = function (options = {}) {
@@ -845,6 +1699,13 @@
         const entry = eligible.find((item) => item.id === guideState.selectedRecordId) || eligible[0] || null;
         if (!entry) return null;
         const themeMeta = resolveChallengeThemeMeta(entry.rule, entry.mode);
+        const preferredNodes = Array.isArray(entry.preferredNodes) && entry.preferredNodes.length > 0
+            ? entry.preferredNodes.slice(0, 4)
+            : themeMeta.preferredNodes.slice(0, 4);
+        const routeFocusLine = buildChallengePreferredNodeLine(preferredNodes);
+        const insight = entry.insight && hasChallengeArchiveInsight(entry.insight)
+            ? normalizeChallengeArchiveInsight(entry.insight)
+            : null;
         return {
             id: entry.id,
             title: entry.title,
@@ -860,12 +1721,12 @@
             featuredTier: entry.featuredTier,
             featuredTags: normalizeTagList(entry.featuredTags, 4),
             metricLine: formatChallengeMetricLine(entry.metrics),
-            preferredNodes: Array.isArray(entry.preferredNodes) && entry.preferredNodes.length > 0
-                ? entry.preferredNodes.slice(0, 4)
-                : themeMeta.preferredNodes.slice(0, 4),
-            insight: entry.insight && hasChallengeArchiveInsight(entry.insight)
-                ? normalizeChallengeArchiveInsight(entry.insight)
-                : null,
+            preferredNodes,
+            routeFocusLine,
+            insight,
+            trainingTags: insight ? normalizeTagList(insight.trainingTags, 3) : [],
+            coachBrief: insight?.coachBrief || '',
+            drillObjective: insight?.drillObjective || '',
             expeditionNote: themeMeta.expeditionNote,
             compareHint: themeMeta.compareHint
         };
@@ -877,6 +1738,7 @@
             .find((item) => item.id === String(recordId || ''));
         if (!this.isObservatoryEntryExpeditionEligible(entry)) return false;
         this.observatoryGuideState = this.normalizeObservatoryGuideState({
+            ...(this.observatoryGuideState || createObservatoryGuideState()),
             selectedRecordId: entry.id,
             updatedAt: Date.now()
         });
@@ -923,7 +1785,15 @@
         entries = entries
             .map((entry, index, source) => {
                 const topScore = clampInt(source[0]?.score, 0);
+                const benchmarkEntry = source[0] || entry;
                 const delta = topScore - clampInt(entry.score, 0);
+                const themeMeta = resolveChallengeThemeMeta(entry.rule, entry.mode);
+                const preferredNodes = Array.isArray(entry.preferredNodes) && entry.preferredNodes.length > 0
+                    ? entry.preferredNodes.slice(0, 4)
+                    : themeMeta.preferredNodes.slice(0, 4);
+                const insight = entry.insight && hasChallengeArchiveInsight(entry.insight)
+                    ? normalizeChallengeArchiveInsight(entry.insight)
+                    : null;
                 return {
                     id: entry.id,
                     title: entry.title,
@@ -940,9 +1810,13 @@
                     expeditionEligible: this.isObservatoryEntryExpeditionEligible(entry),
                     replayable: !!entry.replayable,
                     note: entry.note || '',
-                    insight: entry.insight && hasChallengeArchiveInsight(entry.insight)
-                        ? normalizeChallengeArchiveInsight(entry.insight)
-                        : null
+                    preferredNodes,
+                    routeFocusLine: buildChallengePreferredNodeLine(preferredNodes),
+                    compareAxes: buildChallengeComparisonAxes(entry, benchmarkEntry, themeMeta),
+                    insight,
+                    trainingTags: insight ? normalizeTagList(insight.trainingTags, 3) : [],
+                    coachBrief: insight?.coachBrief || '',
+                    drillObjective: insight?.drillObjective || ''
                 };
             });
         return {
@@ -1375,6 +2249,7 @@
     Game.prototype.showChallengeHub = function (tab = 'daily') {
         this.ensureChallengeHubBootState();
         this.challengeHubState.tab = ['daily', 'weekly', 'global'].includes(tab) ? tab : 'daily';
+        this.persistChallengeHubState();
         this.showScreen('challenge-screen');
         this.initChallengeHub();
     };
@@ -1382,6 +2257,7 @@
     Game.prototype.switchChallengeTab = function (tab = 'daily') {
         this.ensureChallengeHubBootState();
         this.challengeHubState.tab = ['daily', 'weekly', 'global'].includes(tab) ? tab : 'daily';
+        this.persistChallengeHubState();
         if (this.currentScreen !== 'challenge-screen') {
             this.showChallengeHub(this.challengeHubState.tab);
             return;
@@ -1422,6 +2298,8 @@
         const themeMeta = bundle.themeMeta || this.getChallengeThemeMeta(bundle.rule, bundle.mode);
         const dangerProfile = bundle.dangerProfile || this.buildChallengeDangerProfile(bundle.rule, bundle.mode, themeMeta);
         const selectedGuide = this.getSelectedObservatoryExpeditionGuide({ silentSync: true });
+        const trainingFocus = this.getObservatoryTrainingFocus();
+        const archiveFilters = this.buildChallengeArchiveFilterBundle(bundle);
         const comparison = this.buildObservatoryThemeComparison({
             mode: bundle.mode,
             rule: bundle.rule,
@@ -1429,12 +2307,28 @@
             themeLabel: themeMeta.label,
             compareHint: themeMeta.compareHint
         });
-        const replayEntries = this.getObservatoryArchiveEntries({
-            mode: bundle.mode,
-            types: ['challenge', 'replay'],
-            replayableOnly: true,
-            limit: 3
-        });
+        const archiveEntries = archiveFilters.entries;
+        const trainingFocusViewActive = !!trainingFocus?.themeKey
+            && archiveFilters.state.scope === 'all'
+            && archiveFilters.state.track === 'playable'
+            && archiveFilters.state.outcome === 'all'
+            && archiveFilters.state.themeKey === trainingFocus.themeKey
+            && archiveFilters.state.sortBy === 'score_desc';
+        const renderArchiveSelectOptions = (options = [], currentValue = '') => options.map((item) => `
+            <option value="${escapeHtml(item.value)}"${item.value === currentValue ? ' selected' : ''}>${escapeHtml(item.label)}</option>
+        `).join('');
+        const describeArchiveEntryLead = (entry) => {
+            if (!entry) return '观星留痕';
+            if (entry.type === 'omen') return '观星预兆';
+            return entry.replayOnly ? '命盘回放' : '观星留痕';
+        };
+        const describeArchiveEntrySummary = (entry) => {
+            const lead = describeArchiveEntryLead(entry);
+            if (entry?.type === 'omen') {
+                return `${lead} · ${entry.originLabel || '观星台'}${entry.note ? ` · ${entry.note}` : ''}`;
+            }
+            return `${lead} · ${entry?.completed ? '完成' : '中断'} · 得分 ${clampInt(entry?.score, 0)}${entry?.themeLabel ? ` · ${entry.themeLabel}` : ''}`;
+        };
 
         if (summaryEl) {
             const tags = normalizeTagList([themeMeta.signatureTag, ...(Array.isArray(bundle.rule.tags) ? bundle.rule.tags : [])], 4);
@@ -1459,7 +2353,7 @@
                     </div>
                     <div class="challenge-seed-line">
                         <span class="challenge-seed-chip">命盘签 ${escapeHtml(bundle.seedSignature)}</span>
-                        <span>完成后会生成命盘精选标签，并可直接设为远征线索。</span>
+                        <span>完成后会沉淀为命盘档案，可回放、复盘，并继续设为远征线索。</span>
                     </div>
                     <div class="challenge-theme-note">
                         <strong>${escapeHtml(themeMeta.label)}</strong>
@@ -1560,16 +2454,18 @@
                     </article>
                 `).join('')
                 : '<div class="codex-empty-state">当前轮换还没有留痕，去跑一局把分数打出来。</div>';
-            const replayMarkup = replayEntries.length > 0
-                ? replayEntries.map((entry) => `
+            const archiveMarkup = archiveEntries.length > 0
+                ? archiveEntries.map((entry) => `
                     <article class="challenge-record-item replayable">
                         <div>
                             <strong>${escapeHtml(entry.title || bundle.rule.name || '观星留痕')}</strong>
-                            <p>${escapeHtml(entry.replayOnly ? '命盘回放' : '观星留痕')} · ${entry.completed ? '完成' : '中断'} · 得分 ${clampInt(entry.score, 0)} · ${escapeHtml(entry.themeLabel || themeMeta.label)}</p>
+                            <p>${escapeHtml(describeArchiveEntrySummary(entry))}</p>
                             <div class="challenge-record-subline">
-                                <span class="challenge-seed-chip">${escapeHtml(entry.seedSignature || '命盘签未定')}</span>
+                                ${entry.seedSignature
+                    ? `<span class="challenge-seed-chip">${escapeHtml(entry.seedSignature)}</span>`
+                    : `<span>${escapeHtml(entry.originLabel || '观星台')}</span>`}
                                 <span>${escapeHtml(entry.rotationLabel || formatDateLabel(entry.mode, entry.rotationKey))}</span>
-                                <span>${escapeHtml(entry.featuredTier || '留痕')}</span>
+                                <span>${escapeHtml(entry.type === 'omen' ? '路线留痕' : (entry.featuredTier || '留痕'))}</span>
                             </div>
                             ${entry.featuredTags.length > 0
                 ? `<div class="challenge-record-tags">${entry.featuredTags.map((tag) => `<span class="challenge-tag">${escapeHtml(tag)}</span>`).join('')}</div>`
@@ -1578,20 +2474,24 @@
                         </div>
                         <div class="challenge-record-actions">
                             <span>${escapeHtml(this.formatCollectionTimestamp ? this.formatCollectionTimestamp(entry.at) : formatDateLabel(entry.mode, entry.rotationKey))}</span>
-                            <button type="button" class="collection-inline-btn secondary"
-                                onclick="game.beginObservatoryReplay('${escapeHtml(entry.id)}')">复盘命盘</button>
+                            ${entry.replayable
+                ? `<button type="button" class="collection-inline-btn secondary"
+                                data-replay-record-id="${escapeHtml(entry.id)}"
+                                onclick="game.beginObservatoryReplay('${escapeHtml(entry.id)}')">复盘命盘</button>`
+                : ''}
                             ${entry.featured
                 ? `<button type="button" class="collection-inline-btn ${selectedGuide?.id === entry.id ? 'secondary' : ''}"
+                                data-guide-record-id="${escapeHtml(entry.id)}"
                                 ${selectedGuide?.id === entry.id ? 'disabled' : ''}
                                 onclick="game.selectObservatoryExpeditionGuide('${escapeHtml(entry.id)}')">${selectedGuide?.id === entry.id ? '当前远征线索' : '设为远征线索'}</button>`
                 : ''}
                         </div>
                     </article>
                 `).join('')
-                : '<div class="codex-empty-state">观星留痕还没有可回放命盘，先完成一轮挑战或命盘回放。</div>';
+                : `<div class="codex-empty-state">${escapeHtml(archiveFilters.emptyText)}</div>`;
             const comparisonMarkup = comparison.entries.length > 0
                 ? comparison.entries.map((entry) => `
-                    <article class="challenge-compare-card ${entry.selected ? 'selected' : ''}">
+                    <article class="challenge-compare-card ${entry.selected ? 'selected' : ''}" data-record-id="${escapeHtml(entry.id)}">
                         <div class="challenge-compare-head">
                             <div>
                                 <strong>${escapeHtml(entry.title)}</strong>
@@ -1607,6 +2507,10 @@
                         <div class="challenge-record-tags">
                             ${entry.featuredTags.map((tag) => `<span class="challenge-tag">${escapeHtml(tag)}</span>`).join('')}
                         </div>
+                        ${entry.compareAxes?.length
+                ? `<div class="challenge-record-insight-lines">${entry.compareAxes.map((axis) => `<span class="challenge-record-insight-line">${escapeHtml(axis.line)}</span>`).join('')}</div>`
+                : ''}
+                        ${entry.routeFocusLine ? `<div class="challenge-compare-meta"><span>${escapeHtml(entry.routeFocusLine)}</span></div>` : ''}
                         ${renderChallengeInsightMarkup(entry.insight, { compact: true })}
                         <div class="challenge-compare-meta">
                             <span>${escapeHtml(entry.modeLabel)}</span>
@@ -1615,11 +2519,13 @@
                         <div class="challenge-compare-actions">
                             ${entry.expeditionEligible
                 ? `<button type="button" class="collection-inline-btn ${entry.selected ? 'secondary' : ''}"
+                                data-guide-record-id="${escapeHtml(entry.id)}"
                                 ${entry.selected ? 'disabled' : ''}
                                 onclick="game.selectObservatoryExpeditionGuide('${escapeHtml(entry.id)}')">${entry.selected ? '当前远征线索' : '设为远征线索'}</button>`
                 : ''}
                             ${entry.replayable
                 ? `<button type="button" class="collection-inline-btn secondary"
+                                data-replay-record-id="${escapeHtml(entry.id)}"
                                 onclick="game.beginObservatoryReplay('${escapeHtml(entry.id)}')">复盘命盘</button>`
                 : ''}
                         </div>
@@ -1637,9 +2543,71 @@
                 <section class="challenge-record-section">
                     <div class="challenge-record-section-head">
                         <strong>观星留痕</strong>
-                        <span>${escapeHtml(`${replayEntries.length} 条可回放命盘`)}</span>
+                        <span>${escapeHtml(`${archiveFilters.matchedCount} 条命中`)}</span>
                     </div>
-                    ${replayMarkup}
+                    <div class="challenge-archive-toolbar">
+                        <div class="challenge-archive-toolbar-head">
+                            <p class="challenge-compare-note">把可回放命盘、回放失手与观星预兆压成长期样本层，可按窗口、样本层、结果与主题检索。</p>
+                            <button type="button" class="collection-inline-btn secondary"
+                                data-reset-archive-filters="true"
+                                ${archiveFilters.isDefault ? 'disabled' : ''}
+                                onclick="game.resetChallengeArchiveFilters('${escapeHtml(bundle.mode)}')">还原筛面</button>
+                        </div>
+                        <div class="challenge-archive-filter-grid">
+                            <label class="challenge-archive-filter">
+                                <span>窗口</span>
+                                <select data-archive-filter="scope"
+                                    onchange="game.setChallengeArchiveFilter('scope', this.value, '${escapeHtml(bundle.mode)}')">${renderArchiveSelectOptions(archiveFilters.scopeOptions, archiveFilters.state.scope)}</select>
+                            </label>
+                            <label class="challenge-archive-filter">
+                                <span>样本层</span>
+                                <select data-archive-filter="track"
+                                    onchange="game.setChallengeArchiveFilter('track', this.value, '${escapeHtml(bundle.mode)}')">${renderArchiveSelectOptions(archiveFilters.trackOptions, archiveFilters.state.track)}</select>
+                            </label>
+                            <label class="challenge-archive-filter">
+                                <span>结果</span>
+                                <select data-archive-filter="outcome"
+                                    onchange="game.setChallengeArchiveFilter('outcome', this.value, '${escapeHtml(bundle.mode)}')">${renderArchiveSelectOptions(archiveFilters.outcomeOptions, archiveFilters.state.outcome)}</select>
+                            </label>
+                            <label class="challenge-archive-filter">
+                                <span>主题</span>
+                                <select data-archive-filter="theme"
+                                    onchange="game.setChallengeArchiveFilter('themeKey', this.value, '${escapeHtml(bundle.mode)}')">${renderArchiveSelectOptions(archiveFilters.themeOptions, archiveFilters.state.themeKey)}</select>
+                            </label>
+                            <label class="challenge-archive-filter">
+                                <span>排序</span>
+                                <select data-archive-filter="sort"
+                                    onchange="game.setChallengeArchiveFilter('sortBy', this.value, '${escapeHtml(bundle.mode)}')">${renderArchiveSelectOptions(archiveFilters.sortOptions, archiveFilters.state.sortBy)}</select>
+                            </label>
+                        </div>
+                        <div class="challenge-record-tags challenge-archive-summary-tags">
+                            <span class="challenge-tag">窗口：${escapeHtml(archiveFilters.scopeLabel)}</span>
+                            <span class="challenge-tag">样本层：${escapeHtml(archiveFilters.trackLabel)}</span>
+                            <span class="challenge-tag">结果：${escapeHtml(archiveFilters.outcomeLabel)}</span>
+                            <span class="challenge-tag">主题：${escapeHtml(archiveFilters.themeLabel)}</span>
+                            <span class="challenge-tag">排序：${escapeHtml(archiveFilters.sortLabel)}</span>
+                            <span class="challenge-tag">命中 ${clampInt(archiveFilters.matchedCount, 0)} 条</span>
+                            <span class="challenge-tag">精选 ${clampInt(archiveFilters.featuredCount, 0)} 条</span>
+                        </div>
+                        <div class="challenge-archive-preset-bar compendium-preset-bar">
+                            <p class="collection-muted">训练预设会保存当前筛面与排序，方便快速切回常用训练视角。</p>
+                            <div class="compendium-preset-slots challenge-archive-preset-slots">
+                                ${archiveFilters.presetSlots.map((preset) => `
+                                    <div class="compendium-preset-slot challenge-archive-preset-slot">
+                                        <button type="button" class="collection-inline-btn challenge-archive-preset-btn ${preset.active ? 'active secondary' : ''}"
+                                            data-archive-preset-slot="${preset.slot}"
+                                            title="${escapeHtml(preset.label)}"
+                                            onclick="game.applyChallengeArchivePreset(${preset.slot}, '${escapeHtml(bundle.mode)}')">${escapeHtml(preset.label)}</button>
+                                        <button type="button" class="collection-inline-btn secondary compact"
+                                            data-save-archive-preset-slot="${preset.slot}"
+                                            title="保存到${preset.slot + 1}号预设"
+                                            onclick="game.saveChallengeArchivePreset(${preset.slot}, '${escapeHtml(bundle.mode)}')">存</button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    ${archiveMarkup}
                 </section>
                 <section class="challenge-record-section">
                     <div class="challenge-record-section-head">
@@ -1687,6 +2655,25 @@
                     <p>${escapeHtml(nextReward ? nextReward.rewardText : '本轮奖励已全部领取，可以继续冲更高分。')}</p>
                 </section>
                 <section class="codex-side-card">
+                    <span class="codex-side-kicker">当前主练</span>
+                    <h3>${escapeHtml(trainingFocus ? `${trainingFocus.chapterName || '最新章节'} · ${trainingFocus.themeLabel || '训练建议'}` : '尚未生成主练建议')}</h3>
+                    <p data-observatory-training-focus="true">${escapeHtml(trainingFocus?.trainingAdvice || '完成一章裂界远征后，观星台会把训练建议沉淀到这里，方便下一轮先找对应样本。')}</p>
+                    ${trainingFocus?.highlightLine ? `<p class="collection-muted">${escapeHtml(trainingFocus.highlightLine)}</p>` : ''}
+                    ${trainingFocus?.routeFocusLine ? `<p class="collection-muted">${escapeHtml(trainingFocus.routeFocusLine)}</p>` : ''}
+                    ${trainingFocus?.goalHighlights?.length
+                ? `<div class="challenge-record-insight compact">
+                            ${trainingFocus.goalHighlights.map((line) => `<div class="challenge-record-insight-line">${escapeHtml(line)}</div>`).join('')}
+                        </div>`
+                : ''}
+                    ${trainingFocus?.trainingTags?.length
+                ? `<div class="challenge-record-tags">${trainingFocus.trainingTags.map((tag) => `<span class="challenge-tag">${escapeHtml(tag)}</span>`).join('')}</div>`
+                : ''}
+                    <button type="button" class="collection-inline-btn ${trainingFocusViewActive ? 'secondary' : ''}"
+                        data-apply-training-focus="true"
+                        ${!trainingFocus?.themeKey || trainingFocusViewActive ? 'disabled' : ''}
+                        onclick="game.applyObservatoryTrainingFocus('${escapeHtml(bundle.mode)}')">${trainingFocusViewActive ? '当前训练视角' : '按建议筛留痕'}</button>
+                </section>
+                <section class="codex-side-card">
                     <span class="codex-side-kicker">观星留痕</span>
                     <h3>回放档案</h3>
                     <div class="codex-summary-grid two-cols">
@@ -1696,8 +2683,9 @@
                         <div class="codex-summary-chip"><strong>${archiveSummary.featuredCount}</strong><span>精选命盘</span></div>
                     </div>
                     <p>${escapeHtml(archiveSummary.latest?.title
-                ? `最近留痕：${archiveSummary.latest.title}。`
-                : '完成任意观星挑战后，命盘签和成绩都会沉淀到这里。')}</p>
+                ? `最近归档：${archiveSummary.latest.title}。`
+                : '完成任意观星挑战后，命盘签、成绩与复盘提示都会沉淀成命盘档案。')}</p>
+                    <p class="collection-muted">${escapeHtml(`当前筛面：${archiveFilters.filterSummary} · 排序：${archiveFilters.sortLabel} · 命中 ${archiveFilters.matchedCount} 条 / 范围内共 ${archiveFilters.scopeTotalCount} 条。`)}</p>
                     ${renderChallengeInsightMarkup(archiveSummary.latest?.insight, { compact: true })}
                 </section>
                 <section class="codex-side-card">
@@ -1710,8 +2698,13 @@
                         <div class="codex-summary-chip"><strong>${clampInt(selectedGuide?.score || 0)}</strong><span>参考得分</span></div>
                     </div>
                     <p>${escapeHtml(selectedGuide?.expeditionNote || '远征入口会读取这里选中的精选命盘，并生成小幅 bonus 选项。')}</p>
+                    ${selectedGuide?.routeFocusLine ? `<p class="collection-muted">${escapeHtml(selectedGuide.routeFocusLine)}</p>` : ''}
+                    ${selectedGuide?.compareHint ? `<p class="collection-muted">${escapeHtml(`对比抓手：${selectedGuide.compareHint}`)}</p>` : ''}
                     ${selectedGuide?.featuredTags?.length
                 ? `<div class="challenge-record-tags">${selectedGuide.featuredTags.map((tag) => `<span class="challenge-tag">${escapeHtml(tag)}</span>`).join('')}</div>`
+                : ''}
+                    ${selectedGuide?.trainingTags?.length
+                ? `<div class="challenge-record-tags">${selectedGuide.trainingTags.map((tag) => `<span class="challenge-tag">${escapeHtml(tag)}</span>`).join('')}</div>`
                 : ''}
                     ${renderChallengeInsightMarkup(selectedGuide?.insight, { compact: true })}
                 </section>
@@ -2406,7 +3399,7 @@
         const replayFocus = run.replayOnly && run.archiveInsight
             ? (() => {
                 const insight = normalizeChallengeArchiveInsight(run.archiveInsight);
-                return insight.focusLines[0] || insight.summary || insight.title || '';
+                return insight.drillObjective || insight.focusLines[0] || insight.summary || insight.title || '';
             })()
             : '';
         banner.innerHTML = `
@@ -2632,6 +3625,7 @@
         const liveBundle = this.currentScreen === 'challenge-screen' ? this.buildChallengeBundle(tab) : null;
         const archive = this.getObservatoryArchiveSummary();
         const selectedGuide = this.getSelectedObservatoryExpeditionGuide({ silentSync: true });
+        const trainingFocus = this.getObservatoryTrainingFocus();
         const pendingDangerProfile = this.pendingChallengeStart?.rule
             ? this.buildChallengeDangerProfile(this.pendingChallengeStart.rule, this.pendingChallengeStart.mode)
             : null;
@@ -2668,6 +3662,7 @@
                 themeLabel: this.getChallengeThemeMeta(hubBundle.rule, hubBundle.mode).label
             })
             : null;
+        const archiveFilters = this.buildChallengeArchiveFilterBundle(liveBundle || hubBundle || null);
         const activeRunDangerProfile = this.activeChallengeRun
             ? this.buildChallengeDangerProfile(this.activeChallengeRun, this.activeChallengeRun.mode)
             : null;
@@ -2718,13 +3713,30 @@
                 replayCount: archive.replayCount,
                 replayableCount: archive.replayableCount,
                 featuredCount: archive.featuredCount,
+                filterState: archiveFilters.state,
+                filterSummary: archiveFilters.filterSummary,
+                sortLabel: archiveFilters.sortLabel,
+                filteredCount: archiveFilters.matchedCount,
+                filteredReplayableCount: archiveFilters.replayableCount,
+                filteredFeaturedCount: archiveFilters.featuredCount,
+                filteredCompletedCount: archiveFilters.completedCount,
+                filteredFailedCount: archiveFilters.failedCount,
+                scopeTotalCount: archiveFilters.scopeTotalCount,
+                filteredScopeLabel: archiveFilters.scopeLabel,
+                filteredTrackLabel: archiveFilters.trackLabel,
+                filteredOutcomeLabel: archiveFilters.outcomeLabel,
+                filteredThemeLabel: archiveFilters.themeLabel,
+                activePresetSlots: archiveFilters.presetSlots.filter((item) => item.active).map((item) => item.slot),
+                presetLabels: archiveFilters.presetSlots.map((item) => item.label),
                 latestTitle: archive.latest?.title || '',
                 latestSeedSignature: archive.latest?.seedSignature || '',
                 latestInsightTitle: archive.latest?.insight?.title || '',
                 latestInsight: serializeChallengeArchiveInsight(archive.latest?.insight),
                 selectedGuideId: selectedGuide?.id || '',
                 selectedGuideTitle: selectedGuide?.title || '',
-                selectedGuideThemeLabel: selectedGuide?.themeLabel || ''
+                selectedGuideThemeLabel: selectedGuide?.themeLabel || '',
+                trainingFocusAdvice: trainingFocus?.trainingAdvice || '',
+                trainingFocusThemeLabel: trainingFocus?.themeLabel || ''
             },
             observatoryGuide: selectedGuide
                 ? {
@@ -2734,7 +3746,33 @@
                     featuredTier: selectedGuide.featuredTier,
                     featuredTags: normalizeTagList(selectedGuide.featuredTags, 4),
                     seedSignature: selectedGuide.seedSignature || '',
+                    preferredNodes: Array.isArray(selectedGuide.preferredNodes) ? selectedGuide.preferredNodes.slice(0, 4) : [],
+                    routeFocusLine: selectedGuide.routeFocusLine || '',
+                    compareHint: selectedGuide.compareHint || '',
+                    expeditionNote: selectedGuide.expeditionNote || '',
+                    trainingTags: normalizeTagList(selectedGuide.trainingTags, 3),
+                    coachBrief: selectedGuide.coachBrief || '',
+                    drillObjective: selectedGuide.drillObjective || '',
                     insight: serializeChallengeArchiveInsight(selectedGuide.insight)
+                }
+                : null,
+            trainingFocus: trainingFocus
+                ? {
+                    sourceRunId: trainingFocus.sourceRunId || '',
+                    chapterName: trainingFocus.chapterName || '',
+                    sourceTitle: trainingFocus.sourceTitle || '',
+                    guideRecordId: trainingFocus.guideRecordId || '',
+                    themeKey: trainingFocus.themeKey || '',
+                    themeLabel: trainingFocus.themeLabel || '',
+                    ratingLabel: trainingFocus.ratingLabel || '',
+                    ratingTone: trainingFocus.ratingTone || 'selected',
+                    trainingAdvice: trainingFocus.trainingAdvice || '',
+                    highlightLine: trainingFocus.highlightLine || '',
+                    branchName: trainingFocus.branchName || '',
+                    routeFocusLine: trainingFocus.routeFocusLine || '',
+                    compareHint: trainingFocus.compareHint || '',
+                    trainingTags: normalizeTagList(trainingFocus.trainingTags, 4),
+                    goalHighlights: (Array.isArray(trainingFocus.goalHighlights) ? trainingFocus.goalHighlights : []).map((line) => String(line || '')).filter(Boolean)
                 }
                 : null
         };

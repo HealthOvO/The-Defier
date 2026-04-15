@@ -24,6 +24,7 @@ async function safeScreenshot(page, outPath) {
 (async () => {
   const browser = await chromium.launch({
     headless: true,
+    executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
     args: ['--use-gl=angle', '--use-angle=swiftshader'],
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
