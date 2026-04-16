@@ -1208,6 +1208,326 @@ function rectObj(rect) {
   );
   await safeAuditScreenshot(page, path.join(outDir, 'run-slate-shelf-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
+  const sanctumAgendaProbe = await page.evaluate(() => {
+    const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!window.game || typeof game.showCollection !== 'function' || typeof game.switchCollectionSection !== 'function') {
+      return { ok: false, reason: 'no_collection_game' };
+    }
+    if (!game.player) {
+      game.guestMode = true;
+      game.startNewGame('linFeng');
+    }
+    game.player.heavenlyInsight = Math.max(6, Number(game.player.heavenlyInsight) || 0);
+    game.player.karma = Math.max(4, Number(game.player.karma) || 0);
+    if (typeof game.resetSanctumAgendaRunState === 'function') {
+      game.resetSanctumAgendaRunState('new_run');
+    }
+    const rawArchive = [
+      {
+        id: 'run_slate_oracle_6',
+        chapterIndex: 6,
+        chapterName: '第 6 章·星镜归档',
+        endingId: 'alliance',
+        endingName: '星图合卷',
+        endingIcon: '🔭',
+        score: 256,
+        scoreBreakdown: [
+          '章节答卷：天象合卷 · 3/3 项达成',
+          '训练建议：继续沿观测锁线压路线贴合与控场节奏'
+        ],
+        branchName: '观测锁线',
+        bountyNames: ['星轨巡检'],
+        factionSummary: ['星港议会·协力'],
+        nemesisName: '镜池守望者',
+        nemesisStatus: 'allied',
+        nemesisStatusLabel: '已结盟',
+        tags: ['课题·推演控场', '答卷·天象合卷', '训练·路线贴合'],
+        practiceTopic: {
+          id: 'topic_oracle_6',
+          sourceRecordId: 'guide_oracle_6',
+          sourceTitle: '星镜试锋',
+          themeKey: 'oracle',
+          themeLabel: '推演控场',
+          routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+          compareHint: '对比观测收益、路线贴合与控场稳定。',
+          trainingTags: ['路线贴合', '控场稳定'],
+          goalLines: ['先走观星线再补事件收益']
+        },
+        observatoryLink: {
+          sourceRecordId: 'guide_oracle_6',
+          sourceTitle: '星镜试锋',
+          sourceThemeKey: 'oracle',
+          sourceThemeLabel: '推演控场',
+          routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+          compareHint: '对比观测收益、路线贴合与控场稳定。',
+          trainingTags: ['路线贴合', '控场稳定'],
+          drillObjective: '连续两次走观星相关节点并维持控场稳定。'
+        },
+        answerReview: {
+          title: '章节观星回响',
+          ratingLabel: '天象合卷',
+          ratingTone: 'completed',
+          trainingAdvice: '先沿观星链路把线索写满，再回事件节点补收益兑现。',
+          highlightLine: '这章已经把观测样本写成完整答卷，下一轮继续按同轴复盘。',
+          overviewLine: '章节答卷已稳定成卷。'
+        },
+        themeKey: 'oracle',
+        themeLabel: '推演控场',
+        ratingLabel: '天象合卷',
+        ratingTone: 'completed',
+        timestamp: 256000
+      }
+    ];
+    if (typeof game.normalizeRunSlateArchive === 'function') {
+      game.runSlateArchive = game.normalizeRunSlateArchive(rawArchive);
+    } else {
+      game.runSlateArchive = rawArchive;
+    }
+    if (typeof game.persistRunSlateArchive === 'function') game.persistRunSlateArchive();
+    const focus = typeof game.buildObservatoryTrainingFocusFromSlate === 'function'
+      ? game.buildObservatoryTrainingFocusFromSlate(rawArchive[0])
+      : null;
+    if (focus && typeof game.setObservatoryTrainingFocus === 'function') {
+      game.setObservatoryTrainingFocus(focus, { silent: true });
+    }
+
+    game.showCollection();
+    game.switchCollectionSection('sanctum');
+    const beforeSummary = text(document.getElementById('sanctum-summary'));
+    const candidateBtn = document.querySelector('#sanctum-research-list [data-sanctum-agenda-activate="true"]:not([disabled])');
+    const candidateAgendaId = String(candidateBtn?.getAttribute('data-sanctum-agenda-id') || '');
+    const candidateCardText = text(candidateBtn?.closest('.sanctum-research-item'));
+    if (candidateBtn) candidateBtn.click();
+    const dashboard = typeof game.getSanctumAgendaDashboard === 'function'
+      ? game.getSanctumAgendaDashboard()
+      : null;
+    const focusNodeType = String(dashboard?.active?.focusNodeTypes?.[0] || 'observatory');
+    const secondNodeType = String(dashboard?.active?.focusNodeTypes?.find((type) => type && type !== focusNodeType) || dashboard?.active?.focusNodeTypes?.[1] || focusNodeType);
+    if (typeof game.recordSanctumAgendaNodeProgress === 'function' && dashboard?.active) {
+      game.recordSanctumAgendaNodeProgress(focusNodeType, {
+        nodeId: 'agenda_probe_node_a',
+        chapterIndex: Number(dashboard.active.boundChapterIndex || game.getExpeditionState?.()?.chapterIndex || 0),
+        realm: Number(game.player?.realm || 0),
+        row: 1
+      });
+      if (typeof game.initCollection === 'function') game.initCollection();
+    }
+    const decisionBtn = document.querySelector('#sanctum-research-list [data-sanctum-agenda-decision="true"]:not([disabled])');
+    const decisionId = String(decisionBtn?.getAttribute('data-sanctum-agenda-decision-id') || '');
+    const decisionCardText = text(decisionBtn?.closest('.sanctum-research-item'));
+    if (decisionBtn) decisionBtn.click();
+    let dashboardAfterDecision = typeof game.getSanctumAgendaDashboard === 'function'
+      ? game.getSanctumAgendaDashboard()
+      : null;
+    if (typeof game.recordSanctumAgendaNodeProgress === 'function' && dashboardAfterDecision?.active) {
+      game.recordSanctumAgendaNodeProgress(secondNodeType, {
+        nodeId: 'agenda_probe_node_b',
+        chapterIndex: Number(dashboardAfterDecision.active.boundChapterIndex || game.getExpeditionState?.()?.chapterIndex || 0),
+        realm: Number(game.player?.realm || 0),
+        row: 2
+      });
+      if (typeof game.initCollection === 'function') game.initCollection();
+      dashboardAfterDecision = typeof game.getSanctumAgendaDashboard === 'function'
+        ? game.getSanctumAgendaDashboard()
+        : null;
+    }
+    const contractBtn = document.querySelector('#sanctum-research-list [data-sanctum-agenda-contract="true"]:not([disabled])');
+    const contractId = String(contractBtn?.getAttribute('data-sanctum-agenda-contract-id') || '');
+    const contractCardText = text(contractBtn?.closest('.sanctum-research-item'));
+    if (contractBtn) contractBtn.click();
+    const dashboardAfterContract = typeof game.getSanctumAgendaDashboard === 'function'
+      ? game.getSanctumAgendaDashboard()
+      : null;
+    const summaryText = text(document.getElementById('sanctum-summary'));
+    const guideText = text(document.getElementById('sanctum-guide'));
+    const researchText = text(document.getElementById('sanctum-research-list'));
+    let payload = {};
+    try {
+      payload = JSON.parse(typeof window.render_game_to_text === 'function' ? window.render_game_to_text() : '{}');
+    } catch (error) {
+      payload = {};
+    }
+    return {
+      ok:
+        !!candidateBtn &&
+        !!dashboard?.active &&
+        dashboard.active.agendaId === candidateAgendaId &&
+        !!decisionBtn &&
+        !!dashboardAfterDecision?.active &&
+        dashboardAfterDecision.active.selectedDecisionId === decisionId &&
+        !!contractBtn &&
+        !!dashboardAfterContract?.active &&
+        dashboardAfterContract.active.selectedContractId === contractId &&
+        /契押/.test(contractCardText) &&
+        /当前议程/.test(summaryText) &&
+        /结题门槛/.test(guideText) &&
+        /风险提醒/.test(guideText) &&
+        /当前处置|章中处置|执行中/.test(guideText) &&
+        /当前契约|锁线契约|待立契/.test(guideText) &&
+        /契押代价|契约负担|契押/.test(guideText) &&
+        /当前议程|稳线研究|高压研究|归卷研究/.test(researchText) &&
+        payload?.expedition?.agenda?.active?.agendaId === candidateAgendaId &&
+        payload?.expedition?.agenda?.active?.selectedDecisionId === decisionId &&
+        payload?.expedition?.agenda?.active?.selectedContractId === contractId &&
+        !!payload?.expedition?.agenda?.active?.contractSignCostLine &&
+        payload?.map?.chapter?.agenda?.active?.selectedContractId === contractId,
+      beforeSummary,
+      candidateAgendaId,
+      candidateCardText,
+      decisionId,
+      decisionCardText,
+      contractId,
+      contractCardText,
+      summaryText,
+      guideText,
+      researchText,
+      activeAgenda: dashboardAfterContract?.active || dashboardAfterDecision?.active || dashboard?.active || null,
+      payloadAgenda: payload?.expedition?.agenda || null
+    };
+  });
+  add(
+    'sanctum agenda can be activated from dongfu, unlock a chapter decision and contract, and propagate into summary and render payload',
+    !!sanctumAgendaProbe?.ok,
+    JSON.stringify(sanctumAgendaProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'sanctum-agenda-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
+  const sanctumAgendaFailureRecoveryProbe = await page.evaluate(async () => {
+    const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!window.game || typeof game.startNewGame !== 'function' || typeof game.startRealm !== 'function') {
+      return { ok: false, reason: 'no_runtime_game' };
+    }
+    document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
+    document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
+    game.guestMode = true;
+    game.startNewGame('linFeng');
+    game.player.heavenlyInsight = Math.max(6, Number(game.player.heavenlyInsight) || 0);
+    game.player.karma = Math.max(6, Number(game.player.karma) || 0);
+    if (typeof game.resetSanctumAgendaRunState === 'function') {
+      game.resetSanctumAgendaRunState('new_run');
+    }
+    game.startRealm(1, false);
+    const rawArchive = [
+      {
+        id: 'run_slate_oracle_6',
+        chapterIndex: 6,
+        chapterName: '第 6 章·星镜归档',
+        endingId: 'alliance',
+        endingName: '星图合卷',
+        endingIcon: '🔭',
+        score: 256,
+        scoreBreakdown: [
+          '章节答卷：天象合卷 · 3/3 项达成',
+          '训练建议：继续沿观测锁线压路线贴合与控场节奏'
+        ],
+        branchName: '观测锁线',
+        bountyNames: ['星轨巡检'],
+        factionSummary: ['星港议会·协力'],
+        nemesisName: '镜池守望者',
+        nemesisStatus: 'allied',
+        nemesisStatusLabel: '已结盟',
+        tags: ['课题·推演控场', '答卷·天象合卷', '训练·路线贴合'],
+        practiceTopic: {
+          id: 'topic_oracle_6',
+          sourceRecordId: 'guide_oracle_6',
+          sourceTitle: '星镜试锋',
+          themeKey: 'oracle',
+          themeLabel: '推演控场',
+          routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+          compareHint: '对比观测收益、路线贴合与控场稳定。',
+          trainingTags: ['路线贴合', '控场稳定'],
+          goalLines: ['先走观星线再补事件收益']
+        },
+        observatoryLink: {
+          sourceRecordId: 'guide_oracle_6',
+          sourceTitle: '星镜试锋',
+          sourceThemeKey: 'oracle',
+          sourceThemeLabel: '推演控场',
+          routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+          compareHint: '对比观测收益、路线贴合与控场稳定。',
+          trainingTags: ['路线贴合', '控场稳定'],
+          drillObjective: '连续两次走观星相关节点并维持控场稳定。'
+        },
+        answerReview: {
+          title: '章节观星回响',
+          ratingLabel: '天象合卷',
+          ratingTone: 'completed',
+          trainingAdvice: '先沿观星链路把线索写满，再回事件节点补收益兑现。',
+          highlightLine: '这章已经把观测样本写成完整答卷，下一轮继续按同轴复盘。',
+          overviewLine: '章节答卷已稳定成卷。'
+        },
+        themeKey: 'oracle',
+        themeLabel: '推演控场',
+        ratingLabel: '天象合卷',
+        ratingTone: 'completed',
+        timestamp: 256000
+      }
+    ];
+    if (typeof game.normalizeRunSlateArchive === 'function') {
+      game.runSlateArchive = game.normalizeRunSlateArchive(rawArchive);
+    } else {
+      game.runSlateArchive = rawArchive;
+    }
+    if (typeof game.persistRunSlateArchive === 'function') game.persistRunSlateArchive();
+    const focus = typeof game.buildObservatoryTrainingFocusFromSlate === 'function'
+      ? game.buildObservatoryTrainingFocusFromSlate(rawArchive[0])
+      : null;
+    if (focus && typeof game.setObservatoryTrainingFocus === 'function') {
+      game.setObservatoryTrainingFocus(focus, { silent: true });
+    }
+    const active = typeof game.activateSanctumAgenda === 'function'
+      ? game.activateSanctumAgenda('pressure_line')
+      : null;
+    const expeditionState = typeof game.getExpeditionState === 'function'
+      ? game.getExpeditionState()
+      : null;
+    const chapterIndex = Number(expeditionState?.chapterIndex || active?.boundChapterIndex || 1);
+    if (typeof game.recordSanctumAgendaNodeProgress === 'function' && active) {
+      game.recordSanctumAgendaNodeProgress('elite', {
+        nodeId: 'recovery_probe_elite',
+        chapterIndex,
+        realm: Number(game.player?.realm || 1),
+        row: 1
+      });
+    }
+    if (typeof game.onBattleLost === 'function') {
+      await game.onBattleLost();
+    }
+    const rewardModal = document.getElementById('reward-modal');
+    const rewardTitle = text(document.getElementById('reward-title'));
+    const rewardMessage = text(document.getElementById('reward-message'));
+    const gameOverText = text(document.getElementById('game-over-text'));
+    const latestSlate = typeof game.getLatestRunSlate === 'function'
+      ? game.getLatestRunSlate()
+      : null;
+    const agendaResolution = typeof game.getSanctumAgendaExpeditionSnapshot === 'function'
+      ? game.getSanctumAgendaExpeditionSnapshot({ latestRunId: String(latestSlate?.id || '') })?.lastResolved || null
+      : null;
+    return {
+      ok:
+        game.currentScreen === 'game-over-screen' &&
+        !!rewardModal?.classList?.contains('active') &&
+        /残卷回收/.test(rewardTitle) &&
+        /补卷提示/.test(rewardMessage) &&
+        /洞府已执行残卷回收/.test(gameOverText) &&
+        !!agendaResolution?.recoveryEligible,
+      currentScreen: game.currentScreen,
+      rewardTitle,
+      rewardMessage,
+      gameOverText,
+      agendaResolution
+    };
+  });
+  add(
+    'battle lost expedition flow surfaces sanctum recovery immediately on the game-over route',
+    !!sanctumAgendaFailureRecoveryProbe?.ok,
+    JSON.stringify(sanctumAgendaFailureRecoveryProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'sanctum-agenda-failure-recovery.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+  await page.evaluate(() => {
+    document.getElementById('reward-modal')?.classList.remove('active');
+  });
+
   const treasureCompendiumProbe = await page.evaluate(() => {
     if (!window.game || typeof game.showTreasureCompendium !== 'function') return { ok: false, reason: 'no_compendium' };
     if (!game.player) {

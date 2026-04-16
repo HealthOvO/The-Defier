@@ -304,6 +304,18 @@ class GameMap {
             });
         }
 
+        const agendaShift = this.game && typeof this.game.getSanctumAgendaWeightShift === 'function'
+            ? this.game.getSanctumAgendaWeightShift()
+            : null;
+        if (agendaShift && typeof agendaShift === 'object') {
+            Object.keys(agendaShift).forEach((key) => {
+                if (!Object.prototype.hasOwnProperty.call(weights, key)) return;
+                const delta = Number(agendaShift[key]);
+                if (!Number.isFinite(delta)) return;
+                weights[key] += delta;
+            });
+        }
+
         this.applyStrategicNodeBias(weights, row, totalRows, realm, context);
         this.applyRouteDiversityPressure(weights, row, totalRows, context);
         this.applyLongTermDiversityPressure(weights, row, totalRows, context);
@@ -3557,6 +3569,14 @@ class GameMap {
                 nodeId: node?.id || ''
             });
         }
+        const agendaProgress = this.game && typeof this.game.recordSanctumAgendaNodeProgress === 'function'
+            ? this.game.recordSanctumAgendaNodeProgress(node?.type, {
+                realm: this.game?.player?.realm || 0,
+                chapterIndex: this.game?.getExpeditionState?.()?.chapterIndex || 0,
+                nodeId: node?.id || '',
+                row: node?.row || 0
+            })
+            : null;
 
         // 解锁下一行节点
         const nextRow = node.row + 1;
@@ -3572,6 +3592,9 @@ class GameMap {
             ? this.game.getMapCacheKey(this.game.player.realm)
             : this.game.player.realm;
         this.saveStateToCache(cacheKey);
+        if (agendaProgress && this.game && typeof this.game.autoSave === 'function') {
+            this.game.autoSave();
+        }
 
         this.render();
     }

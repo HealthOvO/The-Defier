@@ -43,6 +43,7 @@ node tests/sanity_boss_memory_battle_checks.js
 node tests/sanity_weekly_challenge_checks.js
 node tests/sanity_challenge_danger_profile_checks.js
 node tests/sanity_observatory_archive_checks.js
+node tests/sanity_dongfu_agenda_system_checks.js
 node tests/sanity_spirit_companion_checks.js
 node tests/sanity_forge_workshop_checks.js
 node tests/sanity_trial_challenge_checks.js

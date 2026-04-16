@@ -9,13 +9,12 @@ class ParticleSystem {
         this.init();
     }
 
-    init() {
-        // 创建粒子容器
-        this.container = document.createElement('div');
-        this.container.className = 'particles-container';
-        this.container.id = 'particles-container';
+    createContainerElement() {
+        const container = document.createElement('div');
+        container.className = 'particles-container';
+        container.id = 'particles-container';
         // 关键修复：防止粒子容器遮挡点击
-        this.container.style.cssText = `
+        container.style.cssText = `
             position: fixed;
             top: 0;
             left: 0;
@@ -26,7 +25,24 @@ class ParticleSystem {
             overflow: hidden;
             background: transparent !important;
         `;
+        return container;
+    }
+
+    ensureContainer() {
+        if (typeof document === 'undefined' || !document.body) return null;
+        if (this.container && this.container.isConnected) return this.container;
+        const existing = document.getElementById('particles-container');
+        if (existing) {
+            this.container = existing;
+            return existing;
+        }
+        this.container = this.createContainerElement();
         document.body.appendChild(this.container);
+        return this.container;
+    }
+
+    init() {
+        this.ensureContainer();
 
         this.menuLoopId = null;
         this.mouseX = 0;
@@ -63,6 +79,10 @@ class ParticleSystem {
 
         this.menuLoopId = setInterval(() => {
             if (document.hidden) return;
+            if (!container.isConnected) {
+                this.stopMainMenuParticles();
+                return;
+            }
             this.createVoidParticle(container);
 
             if (Math.random() > 0.9) {
@@ -84,7 +104,7 @@ class ParticleSystem {
     }
 
     createVoidParticle(container) {
-        if (!container) return;
+        if (!container || !container.isConnected) return;
 
         const p = document.createElement('div');
         const size = Utils.random(2, 6);
@@ -133,7 +153,9 @@ class ParticleSystem {
             transition: all 1s ease-out; /* Fallback */
         `;
 
-        this.container.appendChild(p);
+        const host = this.ensureContainer();
+        if (!host) return null;
+        host.appendChild(p);
 
         // Animate
         requestAnimationFrame(() => {
@@ -165,7 +187,9 @@ class ParticleSystem {
             pointer-events: none;
         `;
 
-        this.container.appendChild(particle);
+        const host = this.ensureContainer();
+        if (!host) return null;
+        host.appendChild(particle);
 
         // 自动移除
         setTimeout(() => particle.remove(), duration);

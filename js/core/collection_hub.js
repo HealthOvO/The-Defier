@@ -2550,6 +2550,16 @@
     Game.prototype.getSanctumOverviewData = function () {
         const progress = this.getCollectionProgressSnapshot();
         const buildSnapshot = this.getBuildSnapshotData();
+        const agendaDashboard = typeof this.getSanctumAgendaDashboard === 'function'
+            ? this.getSanctumAgendaDashboard()
+            : {
+                active: null,
+                lastResolved: null,
+                candidates: [],
+                completedCount: 0,
+                failedCount: 0,
+                source: { ready: false }
+            };
         const currentSpirit = buildSnapshot.spirit;
         const latestRunPathRecord = typeof this.getLatestRunPathRecord === 'function'
             ? this.getLatestRunPathRecord()
@@ -2608,6 +2618,8 @@
                 };
             })
             .filter(Boolean);
+        progress.sanctumAgendaCompleted = agendaDashboard.completedCount || 0;
+        progress.sanctumAgendaFailed = agendaDashboard.failedCount || 0;
 
         const rooms = [
             {
@@ -2784,7 +2796,139 @@
             progressText: `${research.progress}/${research.goal}`
         }));
 
-        const fallbackGoals = researches
+        const agendaResearches = [];
+        if (agendaDashboard.active) {
+            agendaResearches.push({
+                id: `sanctum_agenda_active_${agendaDashboard.active.agendaId}`,
+                room: '洞府议程',
+                name: `当前议程 · ${agendaDashboard.active.name}`,
+                progress: agendaDashboard.active.progress || 0,
+                goal: agendaDashboard.active.target || 1,
+                reward: agendaDashboard.active.phaseLine || agendaDashboard.active.summaryLine || agendaDashboard.active.trainingAdvice || '本轮研究正在推进中。',
+                noteLine: [
+                    agendaDashboard.active.phaseLabel ? `当前阶段：${agendaDashboard.active.phaseLabel}` : '',
+                    agendaDashboard.active.selectedDecisionLabel ? `已选处置：${agendaDashboard.active.selectedDecisionLabel}` : '',
+                    agendaDashboard.active.selectedContractLabel ? `已立契约：${agendaDashboard.active.selectedContractLabel}` : '',
+                    agendaDashboard.active.focusNodeLine || agendaDashboard.active.sourceLine || ''
+                ].filter(Boolean).join(' · '),
+                section: 'slates',
+                actionType: 'collection',
+                actionValue: 'slates',
+                buttonLabel: '查看归卷书架',
+                toneClass: agendaDashboard.active.progress >= agendaDashboard.active.target ? 'ready' : 'tracking',
+                ready: agendaDashboard.active.progress >= agendaDashboard.active.target,
+                progressLabel: '进度',
+                progressText: `${agendaDashboard.active.progress || 0}/${agendaDashboard.active.target || 1}${agendaDashboard.active.phaseLabel ? ` · ${agendaDashboard.active.phaseLabel}` : ''}`,
+                agendaId: agendaDashboard.active.agendaId,
+                agendaState: 'active',
+                isAgenda: true
+            });
+            if (agendaDashboard.active.decisionState === 'pending' && Array.isArray(agendaDashboard.active.decisionOptions)) {
+                agendaDashboard.active.decisionOptions.forEach((decision) => {
+                    agendaResearches.push({
+                        id: `sanctum_agenda_decision_${agendaDashboard.active.agendaId}_${decision.id}`,
+                        room: '议程处置',
+                        name: `${agendaDashboard.active.name} · ${decision.label}`,
+                        progress: agendaDashboard.active.progress || 0,
+                        goal: agendaDashboard.active.target || 1,
+                        reward: decision.summaryLine || '为当前议程选择一条章中处置。',
+                        noteLine: decision.statusLine || agendaDashboard.active.decisionPromptLine || '',
+                        section: 'sanctum',
+                        actionType: 'agenda_decision',
+                        actionValue: decision.id,
+                        buttonLabel: decision.buttonLabel || '采用处置',
+                        disabled: false,
+                        toneClass: 'tracking',
+                        ready: false,
+                        progressLabel: '处置',
+                        progressText: decision.tagLabel || '待选',
+                        agendaId: agendaDashboard.active.agendaId,
+                        agendaState: 'pending_decision',
+                        isAgenda: true
+                    });
+                });
+            }
+            if (agendaDashboard.active.contractState === 'pending' && Array.isArray(agendaDashboard.active.contractOptions)) {
+                agendaDashboard.active.contractOptions.forEach((contract) => {
+                    agendaResearches.push({
+                        id: `sanctum_agenda_contract_${agendaDashboard.active.agendaId}_${contract.id}`,
+                        room: '锁线契约',
+                        name: `${agendaDashboard.active.name} · ${contract.label}`,
+                        progress: agendaDashboard.active.contractProgress || 0,
+                        goal: agendaDashboard.active.contractTarget || contract.target || 1,
+                        reward: contract.summaryLine || '为当前议程补一条锁线契约，争取章末额外奖赏。',
+                        noteLine: [
+                            contract.statusLine || agendaDashboard.active.contractPromptLine || '',
+                            contract.signCostLine ? `契押 ${contract.signCostLine}` : '',
+                            contract.burdenLine || ''
+                        ].filter(Boolean).join(' · '),
+                        section: 'sanctum',
+                        actionType: 'agenda_contract',
+                        actionValue: contract.id,
+                        buttonLabel: contract.buttonLabel || '立契锁线',
+                        disabled: false,
+                        toneClass: 'tracking',
+                        ready: false,
+                        progressLabel: '契约',
+                        progressText: contract.tagLabel || '待立',
+                        agendaId: agendaDashboard.active.agendaId,
+                        agendaState: 'pending_contract',
+                        isAgenda: true
+                    });
+                });
+            }
+        } else if (agendaDashboard.lastResolved) {
+            agendaResearches.push({
+                id: `sanctum_agenda_last_${agendaDashboard.lastResolved.agendaId}`,
+                room: '洞府议程',
+                name: `最近结题 · ${agendaDashboard.lastResolved.name}`,
+                progress: agendaDashboard.lastResolved.progress || 0,
+                goal: agendaDashboard.lastResolved.target || 1,
+                reward: agendaDashboard.lastResolved.recoveryLine || agendaDashboard.lastResolved.summaryLine || agendaDashboard.lastResolved.reasonLine || '上一轮研究已经留下结题结果。',
+                noteLine: agendaDashboard.lastResolved.recoveryHintLine || agendaDashboard.lastResolved.contractResolutionLine || agendaDashboard.lastResolved.grantedLine || agendaDashboard.lastResolved.reasonLine || '',
+                section: 'slates',
+                actionType: 'collection',
+                actionValue: 'slates',
+                buttonLabel: '查看归卷书架',
+                toneClass: agendaDashboard.lastResolved.outcome === 'success' ? 'ready' : 'tracking',
+                ready: agendaDashboard.lastResolved.outcome === 'success',
+                progressLabel: '结果',
+                progressText: `${agendaDashboard.lastResolved.progress || 0}/${agendaDashboard.lastResolved.target || 1}`,
+                agendaId: agendaDashboard.lastResolved.agendaId,
+                agendaState: agendaDashboard.lastResolved.outcome || 'failed',
+                isAgenda: true
+            });
+        }
+        agendaDashboard.candidates.forEach((candidate) => {
+            agendaResearches.push({
+                id: `sanctum_agenda_candidate_${candidate.agendaId}`,
+                room: '洞府议程',
+                name: candidate.name,
+                progress: candidate.progress || 0,
+                goal: candidate.target || 1,
+                reward: candidate.trainingAdvice || candidate.highlightLine || candidate.summaryLine || '当前候选议程正在等待立项。',
+                noteLine: candidate.active
+                    ? (candidate.focusNodeLine || candidate.sourceLine || '')
+                    : (candidate.sourceLine || candidate.focusNodeLine || ''),
+                section: 'slates',
+                actionType: 'agenda_activate',
+                actionValue: candidate.agendaId,
+                buttonLabel: candidate.buttonLabel || '立为本轮议程',
+                disabled: !!candidate.disabled,
+                toneClass: candidate.active ? 'ready' : candidate.toneClass,
+                ready: !!candidate.active,
+                progressLabel: candidate.active ? '进度' : '状态',
+                progressText: candidate.active
+                    ? `${candidate.progress || 0}/${candidate.target || 1}`
+                    : (candidate.statusLine || candidate.costLine || '待立项'),
+                agendaId: candidate.agendaId,
+                agendaState: candidate.active ? 'active' : 'candidate',
+                isAgenda: true
+            });
+        });
+        const combinedResearches = [...agendaResearches, ...researches];
+
+        const fallbackGoals = combinedResearches
             .filter((research) => research.ready)
             .slice(0, 2)
             .map((research) => ({
@@ -2800,7 +2944,8 @@
         return {
             progress,
             rooms,
-            researches,
+            researches: combinedResearches,
+            agenda: agendaDashboard,
             goals: achievements.length > 0 ? achievements : fallbackGoals,
             recentUnlocks: this.getCollectionUnlockHistory(6)
         };
@@ -3878,6 +4023,57 @@
         const selectedGuide = typeof this.getSelectedObservatoryExpeditionGuide === 'function'
             ? this.getSelectedObservatoryExpeditionGuide({ silentSync: true })
             : null;
+        const agenda = data.agenda && typeof data.agenda === 'object' ? data.agenda : {};
+        const activeAgenda = agenda.active && typeof agenda.active === 'object' ? agenda.active : null;
+        const lastAgenda = agenda.lastResolved && typeof agenda.lastResolved === 'object' ? agenda.lastResolved : null;
+        const resolveResearchAction = (research) => {
+            if (research.actionType === 'agenda_activate') {
+                return {
+                    label: research.buttonLabel || '立为本轮议程',
+                    onclick: `game.activateSanctumAgenda('${escapeHtml(research.actionValue || research.agendaId || '')}')`,
+                    disabled: !!research.disabled,
+                    extraAttrs: `data-sanctum-agenda-activate="true" data-sanctum-agenda-id="${escapeHtml(research.agendaId || research.actionValue || '')}"`
+                };
+            }
+            if (research.actionType === 'agenda_decision') {
+                return {
+                    label: research.buttonLabel || '采用处置',
+                    onclick: `game.chooseSanctumAgendaDecision('${escapeHtml(research.actionValue || '')}')`,
+                    disabled: !!research.disabled,
+                    extraAttrs: `data-sanctum-agenda-decision="true" data-sanctum-agenda-id="${escapeHtml(research.agendaId || '')}" data-sanctum-agenda-decision-id="${escapeHtml(research.actionValue || '')}"`
+                };
+            }
+            if (research.actionType === 'agenda_contract') {
+                return {
+                    label: research.buttonLabel || '立契锁线',
+                    onclick: `game.chooseSanctumAgendaContract('${escapeHtml(research.actionValue || '')}')`,
+                    disabled: !!research.disabled,
+                    extraAttrs: `data-sanctum-agenda-contract="true" data-sanctum-agenda-id="${escapeHtml(research.agendaId || '')}" data-sanctum-agenda-contract-id="${escapeHtml(research.actionValue || '')}"`
+                };
+            }
+            if (research.actionType === 'treasure') {
+                return {
+                    label: research.buttonLabel || '查看成果',
+                    onclick: 'game.showTreasureCompendium()',
+                    disabled: false,
+                    extraAttrs: ''
+                };
+            }
+            if (research.actionType === 'challenge') {
+                return {
+                    label: research.buttonLabel || '查看成果',
+                    onclick: `game.showChallengeHub('${escapeHtml(research.actionValue || 'daily')}')`,
+                    disabled: false,
+                    extraAttrs: ''
+                };
+            }
+            return {
+                label: research.buttonLabel || (research.ready ? '查看成果' : '查看线索'),
+                onclick: `game.switchCollectionSection('${escapeHtml(research.section || research.actionValue || 'builds')}')`,
+                disabled: false,
+                extraAttrs: ''
+            };
+        };
         roomGrid.innerHTML = data.rooms.map((room) => `
             <article class="sanctum-room-card">
                 <div class="sanctum-room-top">
@@ -3897,21 +4093,24 @@
             </article>
         `).join('');
 
-        researchList.innerHTML = data.researches.map((research) => `
-            <article class="sanctum-research-item ${research.ready ? 'ready' : 'tracking'}">
+        researchList.innerHTML = data.researches.map((research) => {
+            const action = resolveResearchAction(research);
+            return `
+            <article class="sanctum-research-item ${escapeHtml(research.toneClass || (research.ready ? 'ready' : 'tracking'))}"
+                ${research.isAgenda ? `data-sanctum-agenda-card="true" data-sanctum-agenda-id="${escapeHtml(research.agendaId || '')}" data-sanctum-agenda-state="${escapeHtml(research.agendaState || '')}"` : ''}>
                 <div class="sanctum-research-meta">
                     <strong>${escapeHtml(research.name)}</strong>
-                    <span>${escapeHtml(research.room)} · 进度 ${escapeHtml(research.progressText)}</span>
+                    <span>${escapeHtml(research.room)} · ${escapeHtml(research.progressLabel || '进度')} ${escapeHtml(research.progressText)}</span>
                 </div>
                 <p>${escapeHtml(research.reward)}</p>
+                ${research.noteLine ? `<p class="collection-muted">${escapeHtml(research.noteLine)}</p>` : ''}
                 <button type="button" class="collection-inline-btn"
-                    onclick="${research.actionType === 'treasure'
-                ? 'game.showTreasureCompendium()'
-                : research.actionType === 'challenge'
-                ? `game.showChallengeHub('${escapeHtml(research.actionValue || 'daily')}')`
-                : `game.switchCollectionSection('${escapeHtml(research.section)}')`}">${research.ready ? '查看成果' : '查看线索'}</button>
+                    ${action.disabled ? 'disabled' : ''}
+                    ${action.extraAttrs}
+                    onclick="${action.onclick}">${escapeHtml(action.label)}</button>
             </article>
-        `).join('');
+        `;
+        }).join('');
 
         goalList.innerHTML = data.goals.length > 0
             ? data.goals.map((goal) => `
@@ -3951,7 +4150,26 @@
         summary.innerHTML = [
             '<span class="codex-side-kicker">洞府概览</span>',
             '<h3>局外中枢进度</h3>',
+            activeAgenda
+                ? `<p data-sanctum-agenda-summary="true">${escapeHtml(`当前议程：${activeAgenda.name} · ${activeAgenda.progress}/${activeAgenda.target}${activeAgenda.phaseLabel ? ` · ${activeAgenda.phaseLabel}` : ''}`)}</p>`
+                : (lastAgenda
+                    ? `<p data-sanctum-agenda-summary="true">${escapeHtml(`最近结题：${lastAgenda.name} · ${lastAgenda.outcomeLabel || '研究留痕'}`)}</p>`
+                    : '<p data-sanctum-agenda-summary="true">当前还没有立下洞府议程，可先从归卷书架挑一份答卷作为本轮承诺。</p>'),
+            activeAgenda
+                ? `<p class="collection-muted">${escapeHtml(
+                    activeAgenda.selectedContractLabel
+                        ? `已立契约：${activeAgenda.selectedContractLabel} · ${activeAgenda.selectedContractLine || activeAgenda.phaseLine || activeAgenda.focusNodeLine || ''}`
+                        : activeAgenda.selectedDecisionLabel
+                        ? `已选处置：${activeAgenda.selectedDecisionLabel} · ${activeAgenda.selectedDecisionLine || activeAgenda.phaseLine || activeAgenda.focusNodeLine || ''}`
+                        : (activeAgenda.phaseLine || activeAgenda.focusNodeLine || activeAgenda.summaryLine || '')
+                )}</p>`
+                : (lastAgenda && (lastAgenda.recoveryLine || lastAgenda.grantedLine || lastAgenda.reasonLine || lastAgenda.summaryLine)
+                    ? `<p class="collection-muted">${escapeHtml(lastAgenda.recoveryLine || lastAgenda.grantedLine || lastAgenda.reasonLine || lastAgenda.summaryLine)}</p>`
+                    : ''),
             '<div class="codex-summary-grid two-cols">',
+            `${activeAgenda ? `<div class="codex-summary-chip"><strong>${escapeHtml(`${activeAgenda.progress}/${activeAgenda.target}`)}</strong><span>当前议程</span></div>` : ''}`,
+            `<div class="codex-summary-chip"><strong>${data.progress.sanctumAgendaCompleted || 0}</strong><span>议程结题</span></div>`,
+            `<div class="codex-summary-chip"><strong>${data.progress.sanctumAgendaFailed || 0}</strong><span>未成研究</span></div>`,
             `<div class="codex-summary-chip"><strong>${data.rooms.length}</strong><span>房间总览</span></div>`,
             `<div class="codex-summary-chip"><strong>${data.researches.filter((item) => item.ready).length}</strong><span>已满足研究</span></div>`,
             `<div class="codex-summary-chip"><strong>${data.progress.clearedChapters}</strong><span>已贯通章节</span></div>`,
@@ -3983,6 +4201,7 @@
             `<li>样本对照：${data.progress.runPathBossSampleCount || 0} 份实战样本 · 涉及 ${data.progress.sampledCharacters || 0} 名角色 / ${data.progress.sampledBosses || 0} 位主宰</li>`,
             `${data.progress.runSlateArchives !== undefined ? `<li>归卷书架：${data.progress.runSlateArchives || 0} 份章节答卷 · 最高评分 ${data.progress.topRunSlateScore || 0}</li>` : ''}`,
             `${data.progress.observatoryTraces !== undefined ? `<li>观星留痕：${data.progress.observatoryTraces || 0} 条归档 / ${data.progress.observatoryReplays || 0} 次回放</li>` : ''}`,
+            `<li>洞府议程：${data.progress.sanctumAgendaCompleted || 0} 次结题 / ${data.progress.sanctumAgendaFailed || 0} 次未成</li>`,
             '</ul>'
         ].join('');
 
@@ -3990,6 +4209,50 @@
             '<span class="codex-side-kicker">使用建议</span>',
             '<h3>洞府怎么喂主线</h3>',
             '<ul class="codex-side-list compact">',
+            activeAgenda
+                ? `<li>当前议程：${escapeHtml(activeAgenda.name)} · ${escapeHtml(activeAgenda.sourceLine || activeAgenda.themeLabel || '主练样本')}。</li>`
+                : (lastAgenda
+                    ? `<li>最近结题：${escapeHtml(lastAgenda.name)} · ${escapeHtml(lastAgenda.outcomeLabel || '研究留痕')}，${escapeHtml(lastAgenda.recoveryLine || lastAgenda.grantedLine || lastAgenda.reasonLine || '可回归卷书架继续校卷。')}</li>`
+                    : '<li>若还没有立项，先从归卷书架挑一份答卷设为主练，再回洞府选一个本轮议程。</li>'),
+            activeAgenda?.phaseLabel
+                ? `<li>当前阶段：${escapeHtml(activeAgenda.phaseLabel)} · ${escapeHtml(activeAgenda.phaseLine || activeAgenda.summaryLine || '本轮研究正在推进。')}</li>`
+                : '',
+            activeAgenda?.decisionState === 'pending'
+                ? `<li>章中处置：${escapeHtml(activeAgenda.decisionPromptLine || '已解锁一轮议程处置，可在研究列表里二选一。')}</li>`
+                : '',
+            activeAgenda?.contractState === 'pending'
+                ? `<li>锁线契约：${escapeHtml(activeAgenda.contractPromptLine || '已解锁一条锁线契约，可回研究列表里补签 bonus 条件。')}</li>`
+                : '',
+            activeAgenda?.selectedDecisionLabel
+                ? `<li>当前处置：${escapeHtml(activeAgenda.selectedDecisionLabel)} · ${escapeHtml(activeAgenda.selectedDecisionLine || '本章研究条件已按所选处置更新。')}</li>`
+                : '',
+            activeAgenda?.selectedContractLabel
+                ? `<li>当前契约：${escapeHtml(activeAgenda.selectedContractLabel)} · ${escapeHtml(activeAgenda.selectedContractLine || '本章已追加一条 bonus 锁线条件。')}</li>`
+                : '',
+            activeAgenda?.selectedContractLabel && activeAgenda?.contractSignCostLine
+                ? `<li>契押代价：${escapeHtml(activeAgenda.contractSignCostLine)}。</li>`
+                : '',
+            activeAgenda?.selectedContractLabel && activeAgenda?.contractBurdenLine
+                ? `<li>契约负担：${escapeHtml(activeAgenda.contractBurdenLine)}</li>`
+                : '',
+            activeAgenda
+                ? `<li>${escapeHtml(activeAgenda.focusNodeLine || '优先节点暂未锁定，先从观星与归卷线补出一条主轴。')}</li>`
+                : '',
+            activeAgenda
+                ? `<li>结题门槛：${escapeHtml(activeAgenda.successLine || '命中关键节点并把答卷维持在贴题以上。')}</li>`
+                : '',
+            activeAgenda?.selectedContractLabel
+                ? `<li>契约奖赏：${escapeHtml(activeAgenda.contractBonusLine || '若锁线条件兑现，会额外结算一笔契约奖赏。')}</li>`
+                : '',
+            (!activeAgenda && lastAgenda?.recoveryEligible)
+                ? `<li>失败回收：${escapeHtml(lastAgenda.recoveryLine || '本轮未能结题，但洞府已回收一部分残卷。')}</li>`
+                : '',
+            (!activeAgenda && lastAgenda?.recoveryHintLine)
+                ? `<li>${escapeHtml(lastAgenda.recoveryHintLine)}</li>`
+                : '',
+            activeAgenda
+                ? `<li>风险提醒：${escapeHtml(activeAgenda.failureLine || '若路线偏题或章节折损，本轮研究不会结成结构奖励。')}</li>`
+                : '',
             '<li>先从可领取目标拿到即时收益，再回到章节或 Boss 档案定路线。</li>',
             '<li>研究项全部偏“解锁信息与入口”，不直接堆数值，方便后续继续扩系统。</li>',
             '<li>样本对照榜会把角色、命途裂变和 Boss 收官轮次压在一起，适合开局前先找一份稳定模板。</li>',

@@ -271,7 +271,7 @@ window.PVPScene = {
             panel.innerHTML = `
                 <div class="pvp-risk-kicker">榜单推演</div>
                 <div class="pvp-risk-title">正在推演本轮对手画像…</div>
-                <div class="pvp-risk-footnote">读取榜位、境界、赛季账本与套路结构，稍候即可查看 PVP DRI、对手档案、历史交手留痕、多场趋势、样本筛面与焦点约战单。</div>
+                <div class="pvp-risk-footnote">读取榜位、境界、赛季账本与套路结构，稍候即可查看 PVP DRI、对手档案、分段标签、历史交手留痕、多场趋势、样本筛面摘要与焦点约战单。</div>
             `;
             this.renderChallengeIntent();
             return;
@@ -281,7 +281,7 @@ window.PVPScene = {
             panel.innerHTML = `
                 <div class="pvp-risk-kicker">榜单推演</div>
                 <div class="pvp-risk-title">选择一名对手，查看本场读题建议</div>
-                <div class="pvp-risk-footnote">这里会显示 PVP DRI、对手档案、赛季题面、跨场对照、历史交手留痕、多场趋势、赛季账本筛面、主导风险轴、对策、资源预留与焦点约战单。</div>
+                <div class="pvp-risk-footnote">这里会显示 PVP DRI、对手档案、赛季题面、分段标签、跨场对照、历史交手留痕、多场趋势、赛季账本筛面、样本筛面摘要、主导风险轴、对策、资源预留与焦点约战单。</div>
             `;
             this.renderChallengeIntent();
             return;

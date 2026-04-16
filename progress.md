@@ -1,5 +1,203 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-04-16: 洞府议程第三契约分支上线 + 契押真实代价落地
+  - 本轮完成
+    - `js/game.js`
+      - 三条现有洞府议程的锁线契约现均扩成三选一分支，分别补入 `rift_margin`、`rift_gamble`、`echo_annotation` 三条新契约，让同一议程在第二关键节点后出现更明确的策略分叉。
+      - 契约选择不再只是文案承诺；新增 `signCost / signCostLine / burdenLine` 规格后，签约时会真实扣除天机 / 业果，并把契押与负担写入 `selectedContractLine`、结题结论与远征快照；契约未兑现时，这笔契押也不会自动退回。
+      - `getSanctumAgendaExpeditionSnapshot()`、议程记录标准化与结题逻辑已同步暴露 `contractSignCostLine / contractBurdenLine`，成功、失败与 miss 路线都会带出“已支付契押”的结论线。
+    - `js/core/collection_hub.js`
+      - 洞府待选契约卡与 guide 现会直接显示 `契押`、`契约负担` 与对应提示，不再要求玩家靠记忆判断签约代价。
+    - `js/core/expedition_hub.js`
+      - 奖励页 `focusLines`、`agenda` meta、`render_game_to_text().map.chapter.agenda` 与 payload 已同步带出 `contractSignCostLine / contractBurdenLine`，方便自动化探针和局外总结读取真实契押信息。
+    - `tests/sanity_dongfu_agenda_system_checks.js`
+      - 回归扩到“三分支可选”“签约真实扣资源”“新分支结题”“reward meta / snapshot 投影契押字段”等路径。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 浏览器探针现在会校验契约卡存在 `契押` 文案、洞府 guide 出现 `契押代价 / 契约负担`，以及 payload 中真实暴露 `contractSignCostLine`。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check tests/sanity_dongfu_agenda_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_dongfu_agenda_system_checks.js` ✅
+    - `node tests/sanity_reward_modal_closure_checks.js` ✅
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - `node tests/sanity_expedition_state_checks.js` ✅
+    - `node tests/sanity_map_weight_checks.js` ✅
+    - `node tests/sanity_save_migration_checks.js` ✅
+    - `node tests/sanity_expedition_completion_gate_checks.js` ✅
+    - `$env:PLAYWRIGHT_EXECUTABLE_PATH='C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'; node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit` ✅
+  - 当前结论
+    - 洞府议程的锁线契约现在已经从“是否签”进化到“签哪条、付什么、背什么负担”的真实选择，玩家能在第二关键节点看到更明确的风险收益分叉。
+    - 契押与负担信息已贯通到洞府卡面、奖励页、文本快照与浏览器审计探针，本轮 fresh 产物可直接证明这条链路已经可见且可测。
+
+- 2026-04-16: 战败残卷回收即时提示收口 + 粒子容器失联防守
+  - 本轮完成
+    - `js/core/expedition_hub.js`
+      - `battle_lost` 包装层现在会在进入原始 game-over 流程前保留本轮已结题的洞府议程状态，并在 `clearSave()` 执行后恢复到内存中。
+      - 这样战败后的 `game-over` 路线不但会立即弹出 `残卷回收` 提示，还能继续通过 `getSanctumAgendaExpeditionSnapshot({ latestRunId })` 读取到本轮 `lastResolved`，避免 UI 已显示但快照已被清空的割裂。
+    - `js/core/particles.js`
+      - 粒子系统新增容器自愈：当 `particles-container` 在页面切换或异步动画期间脱离 DOM 时，`createSparkParticle()` / `createParticle()` 会先尝试重建容器，再决定是否落粒子。
+      - 主菜单浮尘循环也补了 `isConnected` 守卫，避免旧计时器继续向已销毁节点 `appendChild`，收口浏览器审计里被战败后续 UI 路线放大的 pageerror。
+  - 本轮验证
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check js/core/particles.js` ✅
+    - `node tests/sanity_dongfu_agenda_system_checks.js` ✅
+    - `node tests/sanity_reward_modal_closure_checks.js` ✅
+    - `$env:PLAYWRIGHT_EXECUTABLE_PATH='C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'; node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit` ✅
+  - 当前结论
+    - 洞府议程失败回收现在已经完整贯通到“战败即刻提示 + game-over 文案 + 最新快照可读”三条链路，不会再被 `clearSave()` 抹掉结题证据。
+    - fresh 浏览器审计已再次通过，当前 `output/web-meta-screen-audit` 产物不再带 `particles.js` 的 `appendChild` 控制台异常。
+
+- 2026-04-16: 洞府议程失败回收上线 + 残卷回收 payload / UI / 审计收口
+  - 本轮完成
+    - `js/game.js`
+      - 洞府议程新增失败回收分支：当议程未能结题但已写出有效样本时，会按投入强度触发 `残卷回收`，生成 `recoveryEligible / recoveryTier / recoveryLine / recoveryHintLine / recoveryReward` 等字段，并在失败时回收少量天机 / 业果 / 命环经验。
+      - `resolveSanctumAgenda()` 现会把“基础议程未成”“契约未兑现”“残卷回收”拆成三条并行结算线；成功奖励和失败回收分开发放，避免失败路径误推进成功专属工程。
+      - `getRewardExpeditionMeta()`、`normalizeRewardExpeditionMeta()`、`getSanctumAgendaExpeditionSnapshot()` 与游戏内版本说明已同步接入失败回收口径，`V7.x` 展望改口为“更多分支 + 更重契约代价”。
+    - `js/core/expedition_hub.js`
+      - 奖励页 `focusLines / tags / agenda`、`render_game_to_text().map.chapter.agenda.lastResolved` 与 payload 现已暴露失败回收字段，让 reward meta、文本渲染与自动化探针都能识别 `残卷回收`。
+    - `js/core/collection_hub.js`
+      - 洞府“最近结题”卡、summary 与 guide 现在会优先展示失败回收结果与补卷提示，不再只停在“研究未成 / 契约未兑现”两条结论上。
+    - `tests/sanity_dongfu_agenda_system_checks.js`
+      - 新增“部分推进后 battle_lost 触发 `trace` 档残卷回收”的断言，覆盖 `lastResolved / rewardMeta / snapshot` 投影与资源返还。
+      - 另补“零样本直接失败不会触发失败回收”的反向断言，避免把所有失败都误判为可回收。
+    - `game-intro.html`
+      - 当前版本重点已明确写到“失败回收 / 残卷回收”上线，下一迭代方向同步收口到“更多议程分支 + 更重契约代价”。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check tests/sanity_dongfu_agenda_system_checks.js` ✅
+    - `node tests/sanity_dongfu_agenda_system_checks.js` ✅
+    - `node tests/sanity_save_migration_checks.js` ✅
+    - `node tests/sanity_expedition_state_checks.js` ✅
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - `node tests/sanity_expedition_completion_gate_checks.js` ✅
+    - `node tests/sanity_reward_modal_closure_checks.js` ✅
+    - `tests/run_node_checks.sh` 所含全量 Node 清单已按等价顺序执行 ✅
+    - `$env:PLAYWRIGHT_EXECUTABLE_PATH='C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'; node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit` ✅
+  - 当前结论
+    - 洞府议程现在不再是“成功才有反馈、失败只剩空白”的单向系统，而是具备了可见、可回收、可继续补卷的失败缓冲层。
+    - 本轮 fresh 浏览器审计目录以 `output/web-meta-screen-audit` 为准，已再次覆盖洞府议程激活、处置、锁线契约与相关元页面稳定性。
+
+- 2026-04-16: 洞府议程锁线契约上线 + 旧事件弹窗 race 收口
+  - 本轮完成
+    - `js/game.js`
+      - 洞府议程已从“立项 -> 章中处置 -> 结题”继续扩成“立项 -> 章中处置 -> 锁线契约 -> 结题”，第二次关键节点命中后会解锁一轮锁线契约，为本章追加 bonus 条件与额外奖励。
+      - 新增 `selectedContract* / contractState / contractProgress / contractResolutionLine` 等状态字段，并把契约 bonus 奖励与基础议程成功判定拆开结算，支持“基础议程成功但契约未兑现”的分支。
+      - 为旧事件弹窗链补了一轮 `event-choices / modal-content` 判空防守，收口浏览器元页面审计里被放大的 `appendChild` 空节点 race。
+    - `js/core/collection_hub.js`
+      - 洞府总览现在会在研究列表里渲染“锁线契约”卡，并在 summary / guide 中显示待立契约、当前契约与契约奖赏提示。
+    - `js/core/expedition_hub.js`
+      - 奖励页 meta、构筑快照、`payload.expedition.agenda` 与 `render_game_to_text().map.chapter.agenda` 现已同步暴露契约字段与结论。
+    - `tests/sanity_dongfu_agenda_system_checks.js`
+      - 回归已扩到“契约兑现”和“契约未兑现但基础议程成功”两条路径，并补了 `lastResolved / rewardMeta` 契约断言。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 浏览器探针继续扩成“洞府激活议程 -> 章中处置 -> 锁线契约 -> payload/map.chapter.agenda 同步”的真实链路。
+    - `game-intro.html` / `js/game.js`
+      - 当前版本重点与 `V7.x` 展望已改口到“锁线契约已上线，后续继续做更重契约代价 / 失败回收 / 更多分支”。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check tests/sanity_dongfu_agenda_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_dongfu_agenda_system_checks.js` ✅
+    - `node tests/sanity_save_migration_checks.js` ✅
+    - `node tests/sanity_expedition_state_checks.js` ✅
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - `node tests/sanity_expedition_completion_gate_checks.js` ✅
+    - `node tests/sanity_map_weight_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit` ✅
+  - 当前结论
+    - 洞府议程现在已经形成“归卷 -> 立项 -> 章中处置 -> 锁线契约 -> 结题 -> 压成工程”的完整局外承诺循环。
+    - 本轮 fresh 浏览器审计目录以 `output/web-meta-screen-audit` 为准，已覆盖锁线契约选择与 payload / `map.chapter.agenda` 同步链路。
+
+- 2026-04-16: 洞府议程章中处置上线 + fresh meta screen 审计补齐
+  - 本轮完成
+    - `js/game.js`
+      - 洞府议程从“立项 -> 结题”扩成“立项 -> 章中处置 -> 结题”结构：关键节点首次命中后会解锁两条章中研究处置，玩家可在洞府里二选一。
+      - 三条议程现各自带有不同的章中 trade-off：保底方案会放宽结题门槛但压低回报，激进方案会提高关键节点 / 作答要求并换取更高的章末奖励与更强偏置。
+      - `selectedDecision* / phase* / statusLine` 已接入议程状态机、存档与远征 payload，结题总结也会带出处置标签。
+    - `js/core/collection_hub.js`
+      - 洞府总览的当前议程卡现会显示阶段、已选处置与章中提示。
+      - 当议程进入章中处置时，研究列表会额外渲染两张“议程处置”卡，并补入稳定 `data-sanctum-agenda-decision-*` 选择器。
+    - `js/core/expedition_hub.js`
+      - `getBuildSnapshotData()` 现会把活跃议程的阶段 / 处置提示写进构筑快照与远征 next targets。
+      - `render_game_to_text().map.chapter.agenda` 与 `payload.expedition.agenda.active` 现会继续暴露 `phaseLabel / selectedDecisionId / selectedDecisionLabel` 等字段。
+    - `tests/sanity_dongfu_agenda_system_checks.js`
+      - 合同新增“首个关键节点解锁章中处置 -> 选择激进方案 -> 目标与门槛上调 -> 成功结题仍可兑现”的回归。
+    - `tests/sanity_save_migration_checks.js`
+      - 补入 `sanctumAgendaState` 的迁移断言，避免旧档升级时漏掉议程状态根节点。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 浏览器 probe 继续深化为“洞府激活议程 -> 命中关键节点 -> 解锁并点击章中处置 -> summary / guide / render payload 同步更新”的真实链路。
+    - `index.html`
+      - 清理归卷书架与洞府总览仍带“正在整理...”口气的静态占位文案，改成完成态空态说明。
+    - `js/scenes/pvp-scene.js`
+      - PVP 榜单默认态脚注同步补齐“分段标签 / 样本筛面摘要”口径，减少不同入口的已上线能力描述分叉。
+    - `game-intro.html`
+      - 当前版本重点改成“洞府议程已支持章中研究处置”，`V7.x` 展望同步收口到更多分支 / 锁线契约 / 失败回收。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check js/scenes/pvp-scene.js` ✅
+    - `node --check tests/sanity_dongfu_agenda_system_checks.js` ✅
+    - `node --check tests/sanity_save_migration_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_dongfu_agenda_system_checks.js` ✅
+    - `node tests/sanity_save_migration_checks.js` ✅
+    - `node tests/sanity_expedition_state_checks.js` ✅
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - `node tests/sanity_expedition_completion_gate_checks.js` ✅
+    - `node tests/sanity_map_weight_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit` ✅
+  - 当前结论
+    - 洞府议程现在已经不只是“章前立项、章末判定”的承诺，而是会在章中长出一次真实 trade-off 的可玩系统。
+    - 本轮 fresh 浏览器审计目录以 `output/web-meta-screen-audit` 为准，已覆盖洞府议程激活、章中处置与 payload 同步链路。
+
+- 2026-04-16: 洞府议程 / 命盘研究 MVP 上线
+  - 本轮完成
+    - `js/game.js`
+      - 新增 `sanctumAgendaState` 持久化、归一化、候选目录、立项、节点推进、章末结题与奖励兑现链路。
+      - 议程以当前主练 / 最新归卷为事实源，支持 `稳线研究 / 高压研究 / 归卷研究` 三条候选，消耗 `天机 / 业果` 立项，并把成功研究继续压成跨章工程推进。
+      - 存档、迁移、奖励页叙事与 `render_game_to_text().reward.expedition` 已同步接入议程结果。
+    - `js/core/map.js`
+      - 地图节点权重现会读取洞府议程偏置，节点完成时也会记录议程关键节点推进。
+    - `js/core/expedition_hub.js`
+      - `finalizeExpeditionChapter()` 现会在归卷生成后结算议程成功 / 失败，并把结题结果写入 reward meta、`getExpeditionPayload()` 与 `render_game_to_text().map.chapter.agenda`。
+    - `js/core/collection_hub.js`
+      - 洞府总览新增议程摘要、候选项与激活按钮，`summary / researchList / guide` 三处都能看到当前议程、关键节点、结题门槛与风险提醒。
+      - 为浏览器审计补入稳定 `data-sanctum-agenda-*` 钩子。
+    - `tests/sanity_dongfu_agenda_system_checks.js`
+      - 新增洞府议程状态机合同测试，覆盖候选生成、资源消耗、节点推进、成功 / 失败结题、工程奖励与 reward meta handoff。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 新增洞府议程激活探针，校验洞府 UI 激活链路、摘要更新与 `render_game_to_text` payload 传播。
+    - `tests/run_node_checks.sh`
+      - 纳入新的洞府议程 Node 回归。
+    - `game-intro.html`
+      - 当前版本重点与下一迭代方向同步加入“洞府议程 / 命盘研究”口径。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/map.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node tests/sanity_dongfu_agenda_system_checks.js` ✅
+    - `node tests/sanity_run_slate_shelf_checks.js` ✅
+    - `node tests/sanity_observatory_archive_checks.js` ✅
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - `node tests/sanity_expedition_completion_gate_checks.js` ✅
+    - `node tests/sanity_expedition_state_checks.js` ✅
+    - `node tests/sanity_strategic_node_system_checks.js` ✅
+    - `node tests/sanity_map_weight_checks.js` ✅
+    - `node tests/sanity_map_engineering_progress_checks.js` ✅
+    - `node tests/sanity_save_migration_checks.js` ✅
+  - 当前结论
+    - 洞府现在不再只是“看信息”的局外页，而是第一次能把归卷答卷真正压成一条会影响本章路线与章末收益的可玩承诺。
+    - 浏览器审计脚本已补齐，但本机当前缺少 Playwright 的 Chromium executable，`node tests/browser_meta_screen_audit.mjs` 因运行环境缺浏览器未能在本轮完成实跑。
+
 - 2026-02-25: 已定位正确项目目录为 /Users/health/IdeaProjects/The-Defier（当前工作区 TimeList 与目标不一致）。
 - 2026-02-25: 目标文件缺失情况：js/core/card-effects.js、js/services/pvp-service.js、js/scenes/pvp-scene.js 不存在；对应逻辑位于 js/core/player.js 与 js/services/authService.js + js/game.js。
 - 2026-02-25: 模块1扫描完成，发现 battle.js 与 player.js 多处时序/竞态/空引用风险，准备第一轮修复。

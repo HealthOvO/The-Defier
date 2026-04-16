@@ -3496,7 +3496,7 @@
         };
     };
 
-    Game.prototype.buildRewardExpeditionMeta = function (slate = null) {
+    Game.prototype.buildRewardExpeditionMeta = function (slate = null, options = {}) {
         const source = slate && typeof slate === 'object' ? slate : this.getLatestRunSlate();
         if (!source) return null;
 
@@ -3528,6 +3528,29 @@
             : (fallbackFocusLines.length > 0
                 ? fallbackFocusLines
                 : breakdown.filter((line) => /章节答卷|回响结论|命盘共鸣|路线合卷|训练建议|课题样本/.test(line || '')).slice(0, 3));
+        const agendaResolution = options?.agendaResolution && typeof options.agendaResolution === 'object'
+            ? options.agendaResolution
+            : (typeof this.getSanctumAgendaExpeditionSnapshot === 'function'
+                ? this.getSanctumAgendaExpeditionSnapshot({ latestRunId: String(source.id || '') })?.lastResolved || null
+                : null);
+        const agendaFocusLine = agendaResolution?.summaryLine
+            ? String(agendaResolution.summaryLine || '').trim()
+            : '';
+        const agendaRecoveryLine = agendaResolution?.recoveryLine
+            ? String(agendaResolution.recoveryLine || '').trim()
+            : '';
+        const agendaContractLine = agendaResolution?.contractResolutionLine
+            ? String(agendaResolution.contractResolutionLine || '').trim()
+            : '';
+        const agendaContractCostLine = agendaResolution?.contractSignCostLine
+            ? `契押：${String(agendaResolution.contractSignCostLine || '').trim()}`
+            : '';
+        const agendaBreakdownLine = agendaResolution
+            ? `洞府议程：${String(agendaResolution.outcomeLabel || '研究未成').trim()}${agendaResolution.grantedLine ? ` · ${String(agendaResolution.grantedLine || '').trim()}` : (agendaResolution.reasonLine ? ` · ${String(agendaResolution.reasonLine || '').trim()}` : '')}`
+            : '';
+        const agendaContractBreakdownLine = agendaContractLine
+            ? `锁线契约：${agendaContractLine}`
+            : '';
         const nemesisParts = [
             source.nemesisName || '',
             source.nemesisStatusLabel || source.nemesisStatus || '',
@@ -3546,12 +3569,55 @@
             ratingTone: String(answerReview?.ratingTone || (hasLockedBranch ? 'selected' : 'suggested')),
             highlightLine: String(answerReview?.highlightLine || answerReview?.overviewLine || fallbackHighlightLine),
             trainingAdvice: String(answerReview?.trainingAdvice || fallbackTrainingAdvice),
-            focusLines: diagnosticLines,
-            breakdown: breakdown.slice(0, 4),
-            tags: readArray(source.tags).map((tag) => String(tag || '').trim()).filter(Boolean).slice(0, 6),
+            focusLines: [agendaFocusLine, agendaRecoveryLine, agendaContractLine, agendaContractCostLine, ...diagnosticLines].filter(Boolean).slice(0, 4),
+            breakdown: [agendaBreakdownLine, agendaContractBreakdownLine, ...breakdown].filter(Boolean).slice(0, 4),
+            tags: [
+                ...(agendaResolution ? [`议程·${String(agendaResolution.outcomeLabel || '研究未成').trim()}`] : []),
+                ...(agendaResolution?.selectedContractLabel ? [`契约·${agendaResolution.contractSuccess ? '兑现' : '未兑现'}`] : []),
+                ...(agendaResolution?.recoveryEligible ? [`回收·${String(agendaResolution.recoveryTierLabel || agendaResolution.recoveryLabel || '残卷').trim()}`] : []),
+                ...readArray(source.tags).map((tag) => String(tag || '').trim()).filter(Boolean)
+            ].filter(Boolean).slice(0, 6),
             branchName,
             branchLine: branchName ? `本章主线：${branchName}` : '',
-            nemesisLine: nemesisParts.length > 0 ? `宿敌留痕：${nemesisParts.join(' · ')}` : ''
+            nemesisLine: nemesisParts.length > 0 ? `宿敌留痕：${nemesisParts.join(' · ')}` : '',
+            agenda: agendaResolution
+                ? {
+                    agendaId: String(agendaResolution.agendaId || ''),
+                    icon: String(agendaResolution.icon || '🧮'),
+                    name: String(agendaResolution.name || '洞府议程'),
+                    outcome: String(agendaResolution.outcome || 'failed'),
+                    outcomeLabel: String(agendaResolution.outcomeLabel || ''),
+                    outcomeTone: String(agendaResolution.outcomeTone || ''),
+                    progress: clampInt(agendaResolution.progress, 0, 99),
+                    target: clampInt(agendaResolution.target, 0, 99),
+                    ratingLabel: String(agendaResolution.ratingLabel || ''),
+                    summaryLine: String(agendaResolution.summaryLine || ''),
+                    reasonLine: String(agendaResolution.reasonLine || ''),
+                    grantedLine: String(agendaResolution.grantedLine || ''),
+                    selectedDecisionLabel: String(agendaResolution.selectedDecisionLabel || ''),
+                    selectedContractLabel: String(agendaResolution.selectedContractLabel || ''),
+                    contractSignCostLine: String(agendaResolution.contractSignCostLine || ''),
+                    contractBurdenLine: String(agendaResolution.contractBurdenLine || ''),
+                    contractSuccess: !!agendaResolution.contractSuccess,
+                    contractResolutionLine: String(agendaResolution.contractResolutionLine || ''),
+                    recoveryEligible: !!agendaResolution.recoveryEligible,
+                    recoveryLabel: String(agendaResolution.recoveryLabel || ''),
+                    recoveryTier: String(agendaResolution.recoveryTier || ''),
+                    recoveryTierLabel: String(agendaResolution.recoveryTierLabel || ''),
+                    recoveryLine: String(agendaResolution.recoveryLine || ''),
+                    recoveryHintLine: String(agendaResolution.recoveryHintLine || ''),
+                    recoveryReward: agendaResolution.recoveryReward && typeof agendaResolution.recoveryReward === 'object'
+                        ? {
+                            insight: clampInt(agendaResolution.recoveryReward.insight, 0, 99),
+                            karma: clampInt(agendaResolution.recoveryReward.karma, 0, 99),
+                            ringExp: clampInt(agendaResolution.recoveryReward.ringExp, 0, 999)
+                        }
+                        : null,
+                    rewardTrackId: String(agendaResolution.rewardTrackId || ''),
+                    rewardTrackName: String(agendaResolution.rewardTrackName || ''),
+                    rewardTrackIcon: String(agendaResolution.rewardTrackIcon || '')
+                }
+                : null
         };
     };
 
@@ -3637,12 +3703,21 @@
         }
         const slate = this.buildRunSlateEntry(state);
         if (!slate) return null;
+        const agendaResolution = typeof this.resolveSanctumAgenda === 'function'
+            ? this.resolveSanctumAgenda(reason, {
+                state,
+                slate,
+                answerSheet: typeof this.getExpeditionAnswerSheet === 'function'
+                    ? this.getExpeditionAnswerSheet(state)
+                    : null
+            })
+            : null;
         this.runSlateArchive = this.normalizeRunSlateArchive([slate, ...(this.runSlateArchive || [])]);
         this.persistRunSlateArchive();
         this.expeditionState = null;
         this.persistActiveExpeditionState();
-        this.lastExpeditionRewardMeta = reason === 'realm_clear'
-            ? this.buildRewardExpeditionMeta(slate)
+        this.lastExpeditionRewardMeta = (reason === 'realm_clear' || agendaResolution?.recoveryEligible)
+            ? this.buildRewardExpeditionMeta(slate, { agendaResolution })
             : null;
         if (reason === 'realm_clear' && typeof this.setObservatoryTrainingFocus === 'function') {
             this.setObservatoryTrainingFocus(this.buildObservatoryTrainingFocusFromSlate(slate), { silent: true });
@@ -3678,6 +3753,9 @@
         const answerSheet = state ? this.getExpeditionAnswerSheet(state) : null;
         const trainingFocus = typeof this.getObservatoryTrainingFocus === 'function'
             ? this.getObservatoryTrainingFocus()
+            : null;
+        const agenda = typeof this.getSanctumAgendaExpeditionSnapshot === 'function'
+            ? this.getSanctumAgendaExpeditionSnapshot({ latestRunId: String(latestSlate?.id || '') })
             : null;
         const recentFactionLogs = state ? this.getRecentExpeditionFactionLogs(state, 4) : [];
         const recentNemesisLogs = state ? this.getRecentExpeditionNemesisLogs(state, 4) : [];
@@ -3730,6 +3808,7 @@
             selectedBranchName: state?.branchOptions?.find((entry) => entry.id === state.selectedBranchId)?.name || '',
             practiceTopic: serializeExpeditionPracticeTopic(practiceTopic),
             answerSheet: serializeExpeditionAnswerSheet(answerSheet),
+            agenda,
             engineeringLink: engineeringInfluence
                 ? {
                     trackId: engineeringInfluence.engineeringTrackId,
@@ -4489,12 +4568,49 @@
     };
 
     Game.prototype.onBattleLost = async function () {
+        let failureRecoveryNotice = null;
+        let preservedAgendaState = null;
         if (this.mode !== 'pvp' && this.getExpeditionState()) {
-            this.finalizeExpeditionChapter('battle_lost');
+            const slate = this.finalizeExpeditionChapter('battle_lost');
+            const agendaResolution = typeof this.getSanctumAgendaExpeditionSnapshot === 'function'
+                ? this.getSanctumAgendaExpeditionSnapshot({ latestRunId: String(slate?.id || '') })?.lastResolved || null
+                : null;
+            preservedAgendaState = typeof this.getSanctumAgendaSaveState === 'function'
+                ? this.getSanctumAgendaSaveState()
+                : null;
+            failureRecoveryNotice = typeof this.buildSanctumAgendaFailureRecoveryNotice === 'function'
+                ? this.buildSanctumAgendaFailureRecoveryNotice(agendaResolution)
+                : null;
         }
-        return typeof originalOnBattleLost === 'function'
+        const result = typeof originalOnBattleLost === 'function'
             ? originalOnBattleLost.call(this)
             : undefined;
+        if (result && typeof result.then === 'function') {
+            await result;
+        }
+        if (preservedAgendaState && typeof this.normalizeSanctumAgendaState === 'function') {
+            this.sanctumAgendaState = this.normalizeSanctumAgendaState(preservedAgendaState);
+        }
+        if (failureRecoveryNotice) {
+            const gameOverText = typeof document !== 'undefined'
+                ? document.getElementById('game-over-text')
+                : null;
+            if (gameOverText && failureRecoveryNotice.summaryLine && !String(gameOverText.textContent || '').includes(failureRecoveryNotice.summaryLine)) {
+                const baseText = String(gameOverText.textContent || '').trim();
+                gameOverText.textContent = baseText
+                    ? `${baseText}｜${failureRecoveryNotice.summaryLine}`
+                    : failureRecoveryNotice.summaryLine;
+            }
+            if (typeof this.showRewardModal === 'function') {
+                this.showRewardModal(
+                    failureRecoveryNotice.title,
+                    failureRecoveryNotice.message || failureRecoveryNotice.summaryLine,
+                    failureRecoveryNotice.icon || '📘'
+                );
+            }
+            this.lastExpeditionRewardMeta = null;
+        }
+        return result;
     };
 
     Game.prototype.onRealmComplete = function () {
@@ -4669,6 +4785,88 @@
                         goalHighlights: readArray(payload.expedition.trainingFocus.goalHighlights)
                     }
                     : null;
+                payload.map.chapter.agenda = payload.expedition.agenda
+                    ? {
+                        active: payload.expedition.agenda.active
+                            ? {
+                                agendaId: payload.expedition.agenda.active.agendaId || '',
+                                name: payload.expedition.agenda.active.name || '',
+                                icon: payload.expedition.agenda.active.icon || '',
+                                sourceTitle: payload.expedition.agenda.active.sourceTitle || '',
+                                themeLabel: payload.expedition.agenda.active.themeLabel || '',
+                                progress: payload.expedition.agenda.active.progress || 0,
+                                target: payload.expedition.agenda.active.target || 0,
+                                focusNodeTypes: readArray(payload.expedition.agenda.active.focusNodeTypes),
+                                focusNodeLine: payload.expedition.agenda.active.focusNodeLine || '',
+                                summaryLine: payload.expedition.agenda.active.summaryLine || '',
+                                phaseKey: payload.expedition.agenda.active.phaseKey || '',
+                                phaseLabel: payload.expedition.agenda.active.phaseLabel || '',
+                                phaseLine: payload.expedition.agenda.active.phaseLine || '',
+                                statusLine: payload.expedition.agenda.active.statusLine || '',
+                                costLine: payload.expedition.agenda.active.costLine || '',
+                                decisionState: payload.expedition.agenda.active.decisionState || 'locked',
+                                decisionPromptLine: payload.expedition.agenda.active.decisionPromptLine || '',
+                                selectedDecisionId: payload.expedition.agenda.active.selectedDecisionId || '',
+                                selectedDecisionLabel: payload.expedition.agenda.active.selectedDecisionLabel || '',
+                                selectedDecisionLine: payload.expedition.agenda.active.selectedDecisionLine || '',
+                                contractState: payload.expedition.agenda.active.contractState || 'locked',
+                                contractPromptLine: payload.expedition.agenda.active.contractPromptLine || '',
+                                selectedContractId: payload.expedition.agenda.active.selectedContractId || '',
+                                selectedContractLabel: payload.expedition.agenda.active.selectedContractLabel || '',
+                                selectedContractLine: payload.expedition.agenda.active.selectedContractLine || '',
+                                contractSignCostLine: payload.expedition.agenda.active.contractSignCostLine || '',
+                                contractBurdenLine: payload.expedition.agenda.active.contractBurdenLine || '',
+                                contractProgress: payload.expedition.agenda.active.contractProgress || 0,
+                                contractTarget: payload.expedition.agenda.active.contractTarget || 0,
+                                contractNodeTypes: readArray(payload.expedition.agenda.active.contractNodeTypes),
+                                rewardTrackId: payload.expedition.agenda.active.rewardTrackId || '',
+                                rewardTrackName: payload.expedition.agenda.active.rewardTrackName || '',
+                                rewardTrackIcon: payload.expedition.agenda.active.rewardTrackIcon || ''
+                            }
+                            : null,
+                        lastResolved: payload.expedition.agenda.lastResolved
+                            ? {
+                                agendaId: payload.expedition.agenda.lastResolved.agendaId || '',
+                                name: payload.expedition.agenda.lastResolved.name || '',
+                                icon: payload.expedition.agenda.lastResolved.icon || '',
+                                outcome: payload.expedition.agenda.lastResolved.outcome || '',
+                                outcomeLabel: payload.expedition.agenda.lastResolved.outcomeLabel || '',
+                                outcomeTone: payload.expedition.agenda.lastResolved.outcomeTone || '',
+                                progress: payload.expedition.agenda.lastResolved.progress || 0,
+                                target: payload.expedition.agenda.lastResolved.target || 0,
+                                ratingLabel: payload.expedition.agenda.lastResolved.ratingLabel || '',
+                                summaryLine: payload.expedition.agenda.lastResolved.summaryLine || '',
+                                reasonLine: payload.expedition.agenda.lastResolved.reasonLine || '',
+                                grantedLine: payload.expedition.agenda.lastResolved.grantedLine || '',
+                                phaseLabel: payload.expedition.agenda.lastResolved.phaseLabel || '',
+                                selectedDecisionLabel: payload.expedition.agenda.lastResolved.selectedDecisionLabel || '',
+                                selectedContractLabel: payload.expedition.agenda.lastResolved.selectedContractLabel || '',
+                                contractSignCostLine: payload.expedition.agenda.lastResolved.contractSignCostLine || '',
+                                contractBurdenLine: payload.expedition.agenda.lastResolved.contractBurdenLine || '',
+                                contractSuccess: !!payload.expedition.agenda.lastResolved.contractSuccess,
+                                contractResolutionLine: payload.expedition.agenda.lastResolved.contractResolutionLine || '',
+                                recoveryEligible: !!payload.expedition.agenda.lastResolved.recoveryEligible,
+                                recoveryLabel: payload.expedition.agenda.lastResolved.recoveryLabel || '',
+                                recoveryTier: payload.expedition.agenda.lastResolved.recoveryTier || '',
+                                recoveryTierLabel: payload.expedition.agenda.lastResolved.recoveryTierLabel || '',
+                                recoveryLine: payload.expedition.agenda.lastResolved.recoveryLine || '',
+                                recoveryHintLine: payload.expedition.agenda.lastResolved.recoveryHintLine || '',
+                                recoveryReward: payload.expedition.agenda.lastResolved.recoveryReward
+                                    ? {
+                                        insight: payload.expedition.agenda.lastResolved.recoveryReward.insight || 0,
+                                        karma: payload.expedition.agenda.lastResolved.recoveryReward.karma || 0,
+                                        ringExp: payload.expedition.agenda.lastResolved.recoveryReward.ringExp || 0
+                                    }
+                                    : null,
+                                rewardTrackId: payload.expedition.agenda.lastResolved.rewardTrackId || '',
+                                rewardTrackName: payload.expedition.agenda.lastResolved.rewardTrackName || '',
+                                rewardTrackIcon: payload.expedition.agenda.lastResolved.rewardTrackIcon || ''
+                            }
+                            : null,
+                        completedCount: payload.expedition.agenda.completedCount || 0,
+                        failedCount: payload.expedition.agenda.failedCount || 0
+                    }
+                    : null;
             }
             return JSON.stringify(payload);
         } catch (error) {
@@ -4720,6 +4918,10 @@
         const trainingFocus = typeof this.getObservatoryTrainingFocus === 'function'
             ? this.getObservatoryTrainingFocus()
             : null;
+        const agendaSnapshot = typeof this.getSanctumAgendaExpeditionSnapshot === 'function'
+            ? this.getSanctumAgendaExpeditionSnapshot({ latestRunId: String(this.getLatestRunSlate?.()?.id || '') })
+            : null;
+        const activeAgenda = agendaSnapshot?.active || null;
         const bountySignalMap = new Map(expedition.bountyDraft.map((entry) => [entry.id, this.getExpeditionBountySignalModel(expedition, entry)]));
         const bountyConflictWarnings = this.getExpeditionBountyConflictWarnings(expedition, bountySignalMap);
         snapshot.strengths = Array.isArray(snapshot.strengths) ? snapshot.strengths.slice() : [];
@@ -4757,6 +4959,20 @@
                 snapshot.strengths.push(`当前答卷评级为【${answerSheet.ratingLabel}】，这章已经开始真正成卷。`);
             } else if (answerSheet.goals.some((goal) => goal.deviated)) {
                 snapshot.gaps.push('当前答卷存在偏题风险，建议优先把路线修回样本主轴。');
+            }
+        }
+        if (activeAgenda) {
+            snapshot.strengths.push(`洞府议程当前为【${activeAgenda.name}】${activeAgenda.phaseLabel ? `，已进入「${activeAgenda.phaseLabel}」` : ''}。`);
+            if (activeAgenda.selectedContractLabel) {
+                snapshot.nextTargets.push(`锁线契约：已选「${activeAgenda.selectedContractLabel}」${activeAgenda.selectedContractLine ? `，${activeAgenda.selectedContractLine}` : ''}`);
+            } else if (activeAgenda.contractState === 'pending') {
+                snapshot.nextTargets.push(`锁线契约：${activeAgenda.contractPromptLine || '已解锁一条锁线契约，可回洞府补签 bonus 条件。'}`);
+            } else if (activeAgenda.selectedDecisionLabel) {
+                snapshot.nextTargets.push(`议程处置：已选「${activeAgenda.selectedDecisionLabel}」${activeAgenda.selectedDecisionLine ? `，${activeAgenda.selectedDecisionLine}` : ''}`);
+            } else if (activeAgenda.decisionState === 'pending') {
+                snapshot.nextTargets.push(`议程处置：${activeAgenda.decisionPromptLine || '已解锁一轮章中处置，可回洞府二选一。'}`);
+            } else {
+                snapshot.nextTargets.push(`洞府议程：${activeAgenda.phaseLine || activeAgenda.summaryLine || activeAgenda.focusNodeLine || '本章研究正在推进。'}`);
             }
         }
         if (trainingFocus?.trainingAdvice) {

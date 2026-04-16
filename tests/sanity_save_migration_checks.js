@@ -61,6 +61,8 @@ function assert(cond, msg) {
   assert(migrated.featureFlags && migrated.featureFlags.endlessModeV1 === true, 'endless flag should be attached');
   assert(migrated.endlessMeta && typeof migrated.endlessMeta === 'object', 'endless meta should be attached');
   assert(Number(migrated.endlessMeta.pressure) === 0, 'endless pressure should default to 0 in migrated saves');
+  assert(migrated.sanctumAgendaState && typeof migrated.sanctumAgendaState === 'object', 'sanctum agenda state should be attached');
+  assert(migrated.sanctumAgendaState.activeAgenda === null, 'migrated sanctum agenda should default to no active agenda');
   assert(typeof migrated.schemaMigratedAt === 'number', 'schemaMigratedAt should be timestamp');
 
   console.log('Save migration sanity checks passed.');
