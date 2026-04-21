@@ -1,5 +1,449 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-04-21: 天道敕令债账占位从 placeholder 收口为真实强目标位排班
+  - 本轮完成
+    - `js/game.js`
+      - `heavenlyMandate` 任务现保留 `source / sourceId / isPlaceholder / occupiesStrongSlot` 元数据，避免欠卷占位一旦进 lane 就丢失“它来自 debt pack”的身份。
+      - `buildHeavenlyMandateBoard()` 现会直接读取本周 `seasonBoard` 债账状态，并把 `debtPack` 按 `recommendedAnchorSection` 注入对应玩法线的强目标位；欠卷不再只是 expedition snapshot 里的额外 `focusTask` 镜像，而是真的替换掉本周的一格强任务。
+      - `getHeavenlyMandateExpeditionSnapshot()` 现把真实被占用的 lane task 回镜成 `focusTask`，并把该任务的 metadata 一起导出到 payload，保证 Sanctum / Expedition / Map 看到的是同一条占位任务。
+    - `tests/sanity_heavenly_mandate_system_checks.js`
+      - Node 门禁不再只断言“有一条 derived debt focus task”，而是升级为校验：
+        - 欠卷焦点任务不是 placeholder
+        - mandate lane 里真的存在同 id 的占位任务
+        - payload / render payload 会镜像这条占位任务
+        - 主验证 `clear_debt` 后，占位任务会从 lane 中释放，常规强任务恢复
+    - `tests/browser_meta_screen_audit.mjs`
+      - 新增 sanctum 浏览器探针，显式播种一笔跨周欠卷，校验页面文案、`[data-heavenly-mandate-task]` board、`expedition.mandate.focusTask` 与 `map.chapter.mandate.focusTask` 会共同指向同一条真实 debt-clearing lane occupation。
+    - `progress.md`
+      - 补记这轮真实收口，避免后续继续把 “debt focus 已做完” 误解成 placeholder 镜像也算 fully shipped。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `py -3 -m http.server 4181` 本地静态站 ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4181 output/web-meta-screen-audit/fresh-20260421-mandate-occupation` ✅
+  - 当前结论
+    - `debtPack -> heavenlyMandate` 这条链现在终于不只是“看起来优先做清账”的提示层，而是真的会占住一格本周强目标位。
+    - 主验证清债后，强目标位会恢复给常规 `endless / pvp / sanctum` 推进；浏览器层也已锁住 DOM 与 payload 对同一条占位任务 id 的镜像。
+    - 本轮 fresh 浏览器审计目录以 `output/web-meta-screen-audit/fresh-20260421-mandate-occupation` 为准。
+
+- 2026-04-21: Phase B 显式验证回写进入封板口径，补齐浏览器门禁与玩家可见说明
+  - 本轮完成
+    - `tests/browser_meta_screen_audit.mjs`
+      - reward 审计不再只靠“看起来像去做验证”的旧文案假设，而是显式播种并校验三类回写：
+        - `clear_debt`：主验证通过后，奖励页必须同时看到 `positive_sheet + debtPack.cleared + verification.writebackMode=clear_debt + weekVerdictLedger` 镜像。
+        - `degrade`：主验证失败后，奖励页必须同时看到 `risky_sheet + debtPack.degraded + verification.writebackMode=degrade + weekVerdictLedger` 镜像。
+        - `boost_recommendation`：旁验证成功后，奖励页必须看到 `side verification` 的补强回写，但不替代主验证主动作。
+      - 三组 probe 现都直接调用 `recordSeasonVerificationResult(...)`，并把断言收紧到 `resolvedStatus / debtPack.status / verificationOrders[*].writebackMode / weekVerdictLedger`，避免 UI 描述词轻微改动就把门禁带偏。
+    - `game-intro.html`
+      - 对外介绍与“当前版本重点”同步补明 shipped 语义：主验证通过会清债或升卷，主验证失败会把旧债转成反证/险卷，周挑战旁验证只负责补强推荐与复盘。
+    - `js/game.js`
+      - 游戏内更新页同步到相同口径，避免游戏内外继续停留在“有验证入口、有验证卡”的泛化描述，而漏掉真正已经上线的结果回写。
+    - `progress.md`
+      - 补记这轮封板收口，避免顶部历史记录继续把 `Phase B / 主旁验证结果回写` 误写成“下一轮待开发”。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `py -3 -m http.server 4181` 本地静态站 ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4181 output/web-meta-screen-audit/fresh-20260421-phase-b-writeback` ✅
+  - 当前结论
+    - Phase B 的显式验证回写现在不只在 Node 合同里成立，浏览器层也已经锁住“清债 / 降级 / 旁证补强”三条真实写回语义。
+    - 玩家可见说明现已明确：验证不再只是一个入口，而是真的会改写赛季裁定、欠卷状态和后续推荐。
+    - 本轮 fresh 浏览器审计目录以 `output/web-meta-screen-audit/fresh-20260421-phase-b-writeback` 为准。
+
+- 2026-04-19: 下一轮硬结算闭环继续收口为开发拆解，补齐 Phase / 字段 / 门禁蓝图
+  - 本轮完成
+    - `docs/designer_next_round_verdict_delivery_breakdown_v1.md`
+      - 新增“下一轮硬结算闭环开发拆解 V1”，把上一轮已经锁定的主切片继续压成可直接进入开发的分阶段蓝图。
+      - 明确拆出 `Phase A / Phase B / Phase C`，分别对应：
+        - `周裁定账本 + 债账占位`
+        - `主/旁验证结果回写`
+        - `谱系最小记录 + 降级收口`
+      - 写清最小可玩闭环、第一刀开发建议、owner / precedence 收口、最小字段合同、现有代码切入点，以及 Node / 浏览器门禁优先级，避免后续开发又滑回“继续加摘要层”的方向。
+    - `progress.md`
+      - 同步记录这轮从“方向性策划”继续推进到“可按模块开发”的收口结果，方便后续直接进入实现和测试。
+  - 本轮验证
+    - 使用 `game-design-theory` 技能复核本轮是否真的在增加选择密度，而不是只增加说明层。
+    - 并行派出 `gpt-5.4` 策划支线，分别负责：
+      - 模块拆解建议
+      - 反向挑战与 owner 冲突审查
+      - 代码落点与测试 chokepoint 扫描
+    - 本轮仍为策划文档轮，未新增运行时代码，因此未额外执行 Node / 浏览器测试。
+  - 当前结论
+    - 下一轮若要真正进入开发，最稳的第一刀不是继续补新的页面或历史层，而是先做：`week verdict ledger + debtPack.deferCount + heavenlyMandate 单强目标位占用`。
+    - 这刀一旦成立，玩家就会第一次明确感到“拖延真的会挤掉下周目标”，从而把当前已经落地的 `seasonBoard / debtPack / verificationOrders / heavenlyMandate / lineage` 串成真正可经营的押注链。
+    - 下一轮还必须提前钉死两个边界：`week verdict ledger` 只能做轻量快照，不能长成第二根长期状态机；`正卷 / 险卷 / 欠卷` 也必须只有一个最终 commit 点，避免章节结算与周切换双写 verdict。
+
+- 2026-04-19: 下一轮功能策划收口，锁定“硬结算闭环”作为主切片
+  - 本轮完成
+    - `docs/designer_next_round_verdict_execution_v1.md`
+      - 新增下一轮执行策划蓝图，把当前最值得继续推进的功能收束为：`周结算 -> 押卷结果 -> 债账包 -> 主/旁验证状 -> 回写下周目标`。
+      - 明确写清这轮为什么不该继续补观察站筛面、PVP 档案字段或更多 reward 摘要，而应该优先把 `seasonBoard / heavenlyMandate / lineage / aftereffect` 之间的硬结算回写做成真正可经营的押注链。
+      - 拆清下一轮的主玩法、MDA 目标、债账生命周期、验证状回写、拖延惩罚、owner / precedence matrix、UI 投影面与 Node / 浏览器门禁方向，方便后续直接按切片进入开发。
+    - `progress.md`
+      - 同步记录这轮策划结论，避免后续下一轮又回到“继续补更多局外摘要层”这种高信息量、低结构收益的方向。
+  - 本轮验证
+    - 使用 `gpt-5.4` 两条策划支线交叉校验：
+      - 一条聚焦“下一轮最值得先做的主切片”
+      - 一条聚焦“下一轮最容易掉进的信息增厚陷阱与 owner 冲突”
+    - 本轮为策划文档轮，未新增运行时代码，因此未额外执行 Node / 浏览器测试。
+  - 当前结论
+    - 下一轮最值得继续推进的，不是再横向补页面能力，而是把已经落地的 `正卷 / 险卷 / 欠卷 + 债账包 + 主/旁验证状` 继续压成真正会占用下周目标位、改变下一轮资源分配、并留下长期风格记录的硬结算闭环。
+    - 下一轮若要真正提升可玩性，核心不是“让玩家知道更多”，而是“让玩家必须对这周押成什么、欠了什么、现在该不该去证明作出更硬的取舍”。
+
+- 2026-04-19: 默认 release gate / 介绍文案收口，补齐近几轮已上线能力的封板门禁
+  - 本轮完成
+    - `tests/run_node_checks.sh`
+      - 默认 Node 门禁现补入 `tests/sanity_run_slate_shelf_checks.js`，归卷书架不再只是专项回归里测过，而是正式进入常规封板清单。
+    - `tests/run_browser_release_checks.sh`
+      - 默认浏览器 release gate 现补入 `browser_automation_boot_audit.mjs`、`browser_run_path_audit.mjs`、`browser_run_path_event_audit.mjs` 与 `browser_run_path_reward_audit.mjs`，把自动化启动链、章节主流程、事件回路与奖励结算审计一起纳入总门禁，不再只靠定向专项 fresh 目录证明。
+    - `game-intro.html`
+      - 对外介绍现补明：锁线期会优先把玩家推回当前承诺动作，定榜后的正卷 / 险卷会额外补出可点击的 `七日劫数` 旁验证状，避免 4/19 已上线行为只活在 `progress.md` 和专项审计里。
+    - `js/game.js`
+      - 游戏内更新页同步到相同口径，保持游戏内外版本说明一致，避免一边写“赛季裁定 / 债账 / 验证 / 下一步行动卡”，另一边却漏掉 lockline owner 与 weekly side verification。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `bash -n tests/run_node_checks.sh` ✅
+    - `bash -n tests/run_browser_release_checks.sh` ✅
+    - `node tests/sanity_run_slate_shelf_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH=\"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" node tests/browser_automation_boot_audit.mjs http://127.0.0.1:4181 output/release-browser-audits/fresh-20260419-full-gate/automation-boot` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH=\"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" node tests/browser_run_path_audit.mjs http://127.0.0.1:4181 output/release-browser-audits/fresh-20260419-full-gate/run-path` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH=\"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" node tests/browser_run_path_event_audit.mjs http://127.0.0.1:4181 output/release-browser-audits/fresh-20260419-full-gate/run-path-events` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH=\"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" node tests/browser_run_path_reward_audit.mjs http://127.0.0.1:4181 output/release-browser-audits/fresh-20260419-full-gate/run-path-reward` ✅
+    - 备注：当前 Bash 执行环境会把 `node` 路径丢失，直接跑 `bash tests/run_*_checks.sh` 会误报 `node: command not found`；因此本轮以 `bash -n` 校验脚本语法，并对新增门禁条目执行等价 Node / Playwright 命令完成闭环。
+  - 当前结论
+    - 这轮收口后，近几轮已经落地的章节主流程、奖励审计、自动化启动与归卷书架合同会正式进入默认封板门禁，不再只是“专项测过，但总门禁没接进去”。
+    - 介绍页与游戏内更新页也会和当前已上线行为重新对齐，避免玩家可见文案继续停留在“总括正确、细节滞后”的半封板状态。
+
+- 2026-04-19: 正卷 / 险卷旁验证状接入 weekly challenge，Sanctum CTA 与门禁收口
+  - 本轮完成
+    - `js/game.js`
+      - `positive_sheet / risky_sheet` 继续保留原有高压主验证，同时补出指向 `challenge` 的 secondary verification follow-up，让奖励页能明确告诉玩家“主验证之外，还有一张周劫旁证可补”。
+      - reward season board 现会为这两类裁定额外输出 `data-season-board-verification-followup` 行，把第二验证入口从 payload 语义推进成真实可见的局外 affordance。
+    - `js/core/collection_hub.js`
+      - season board 的 `challenge` action meta 现统一直达 `weekly` challenge hub，不再只落到泛化 challenge 页签。
+      - Build snapshot 与 Sanctum summary / research / goal 现会同步暴露 `旁验证状 · 七日劫数`，把 side verification 从“描述里提到过”升级成“洞府里真的能点开的第二验证链”。
+      - Sanctum research 项补入稳定的 `data-season-board-research*` 钩子，浏览器门禁可以分别点击 goal 与 research 两条 CTA，而不再只能靠文本计数假设动作仍然正确。
+    - `tests/sanity_season_board_system_checks.js`
+      - 收紧 `positive / risky / debt` 的 season-board 合同：旁验证顺序、`challenge -> weekly` 路由、Build snapshot 的 `旁验证` 提示，以及 Sanctum 的 `旁验证状` goal / research 现都纳入 Node 闭环。
+    - `tests/browser_meta_screen_audit.mjs`
+      - reward `debt / risky / positive` probe 现显式校验 `verificationOrders.length === 2`，并要求 `risky / positive` 的第二验证锚定 `challenge`，奖励 rail 里也必须看得到 secondary follow-up 行。
+      - Sanctum probe 现继续要求 side verification 的 goal / research 文案真实存在，并分别点击两条 CTA，确认都会落到 seeded 的 `weekly` challenge hub，且读到 `周劫旁证校卷` 这一轮播种内容，而不是只切到泛化周劫页。
+      - 修正了 challenge hub 审计选择器，改为读取真实的 `challenge-hub-title / subtitle / summary` DOM，避免“页面其实跳对了，但测试用错 selector 误报失败”。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH=\"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4181 output/web-meta-screen-audit/fresh-20260419-season-board-side-verification` ✅
+  - 当前结论
+    - `positive_sheet / risky_sheet` 现在不再只有一条高压验证主线，而是会额外保留一张 `七日劫数` 旁验证状；Reward、Build、Sanctum 与测试门禁都已对齐这条 secondary verification 语义。
+    - Sanctum 里的 side verification 不再只是说明文字，goal 和 research 两条按钮都会真实跳到 `weekly` challenge hub，且浏览器审计已锁定它们进入的是本轮 seeded 的 `周劫旁证校卷` 内容。
+    - 本轮 fresh 浏览器审计目录以 `output/web-meta-screen-audit/fresh-20260419-season-board-side-verification` 为准。
+
+- 2026-04-19: lockline 的 Collection CTA / Sanctum 反向门禁 / 浏览器三端镜像继续收口
+  - 本轮完成
+    - `js/core/collection_hub.js`
+      - `getBuildSnapshotData()` 与 `getSanctumOverviewData()` 现统一复用 season board 的 phase gate：`locking / sampling` 不再提前把 `verificationOrders` 变成 Build `nextTargets` 或 Sanctum `research / goal`，而是改成强调 `当前季盘行动 / nextTask`。
+      - Build 的 `赛季天道盘` 行改成 phase-aware：锁线期优先展示当前承诺推进，不再在通用引导里提前混入“再考虑外场验证”的尾巴。
+      - Sanctum 额外补入 `当前季盘行动` 的 research / goal 卡，让 lockline 从“把验证藏起来”进一步升级成“明确告诉玩家先回哪条承诺线继续推进”。
+      - season board 的 debt / verification / next-task CTA 现在不再一律塌回 `sanctum`；`endless -> map-screen`、`pvp -> pvp-screen`、`challenge -> challenge hub`、collection section 仍走原有 tab 切换，真正把“去哪里证明/清账/推进”变成可点击的正确入口。
+    - `tests/sanity_season_board_system_checks.js`
+      - `lockline` 新增 Collection 消费层合同：现在会显式断言 Sanctum 只保留 `季押卷 + 当前季盘行动`、不应出现 `结业验证状`，同时 Build 必须由 `季盘推进 / season_commitment` 驱动，不能提前混进 verification follow-up。
+      - 正卷 / 欠卷 / 险卷分支补了 verification CTA 路由断言，避免 `结业验证` 文案存在但 action 仍退回 `sanctum` 的假绿。
+    - `tests/browser_meta_screen_audit.mjs`
+      - lockline reward probe 现补上 `runSlateArchive` fixture，同步收紧为浏览器层直接对比 `reward / expedition / map.chapter` 的 `nextTask + progress + verificationOrders` 三端镜像，不再只看 settlement 文案。
+      - reward lockline probe 额外要求：hidden 不等于丢失，锁线期虽然不显示 verification 卡，但 payload 里仍必须保留 verification backlog，方便 ranking 期继续承接。
+      - 新增独立 `sanctumLocklineProbe`，专门审计 lockline 下 Sanctum 的反向语义：verification summary/card/chip/order/goal 都必须隐藏，但 `当前季盘行动` 与 `season_commitment / sanctum` 要真实可见。
+  - 本轮验证
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH=\"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4181 output/web-meta-screen-audit/fresh-20260419-collection-lockline-action-routing` ✅
+  - 当前结论
+    - `lockline` 现在在 Reward / Build / Sanctum 三层终于统一到同一套玩家语义：保留 verification backlog，但当前主行动必须回到 `season_commitment / sanctum`，不会再在局外层提前冒“结业验证状”。
+    - Collection CTA 也从“文字像对的”收口到了“按钮真的能去对地方”：无尽验证不再塌回洞府 tab，PVP 验证也会跳向真实证明面。
+    - 本轮 fresh 浏览器审计目录以 `output/web-meta-screen-audit/fresh-20260419-collection-lockline-action-routing` 为准。
+
+- 2026-04-19: 奖励页赛季裁定行动化收口
+  - 本轮完成
+    - `js/game.js`
+      - `getRewardNarrativeBriefMeta()` 改成稳定的非嵌套行动优先逻辑，reward brief 现在会按 `debt / risky / positive / locking / sampling` 分支优先给出“下一步行动”，同时保留 aftereffect 在锁线期的脚注可见性。
+      - 继续收口 `locking_sheet`：reward brief 正文改成优先取 `nextTask.hintLine / label`，不再退回只讲 settlement 摘要，让“押卷中”阶段真的把玩家推回当前承诺动作。
+      - season board 的 `nextTask` 选择改成 phase-aware 优先级：`lockline` 先取远征承诺、`ranking` 先取验算线、`sampling` 先取训练线，不再因为固定 lane 顺序把锁线期主行动误导到训练线。
+      - `updateRewardHeaderCopy()` 接入赛季裁定 outcome 与 next-action-source，reward header 不再固定写成泛化“章节归卷”，而是会直接显示 `赛季裁定` 语义并补稳定 `data-reward-header-*` 门禁钩子。
+      - `renderRewardExpeditionMeta()` 把 season board 从通用 `extra lines` 拆成裁定卡、债账卡、验证卡、下一步行动卡，并补 `data-season-board-settlement/debt/verification/next-task/action-reward` 等稳定 selector；同时给 verification 展示加了 phase gate，锁线 / 采样期不再误冒“结业验证”主行动。
+    - `js/core/collection_hub.js`
+      - season board 的 verification 摘要、chip、验证卡与 guide 同步加 phase gate，和 reward 页统一口径：`sampling / locking` 只强调 next task，`ranking + positive/risky/debt` 才突出验证动作。
+    - `css/style.css`
+      - 为 reward season board 新的行动卡补充 `focus / warning / tracking` 三种视觉层级，并补移动端字号收口，让“裁定 + 行动”在 rail 上更像主舞台而不是被混在摘要里。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 现有 desktop reward fixture 改为显式验证 `locking_sheet + nextTask` 语义，不再误把锁线期断言成 verification 路径。
+      - 新增独立 `rewardDebtProbe`，专门校验 `debt_sheet` 的债账卡、action source、header outcome 与 `reward / expedition / map.chapter` debt pack 镜像。
+      - 新增 `rewardRiskyProbe` 与 `rewardPositiveProbe`，分别补齐 `risky_sheet / positive_sheet` 在 reward 页的 outcome、action source、verification 可见性与主行动卡数量门禁。
+      - `locking` fixture 进一步收紧为显式 `locking_sheet + nextTask + verification hidden + actionCount === 1`，同时补上 `[data-season-board-chip="next"]` 的显式检查，确认 reward 页真的把锁线阶段的“下一步行动”以 chip affordance 露出来。
+      - `risky` probe 改成允许 secondary next-task card 存在，但 primary action 仍必须是 verification，避免继续假绿。
+    - `tests/sanity_season_board_system_checks.js`
+      - reward brief 合同从“优先 season board summary”改成“赛季裁定 kicker + 主行动 body + 状态/窗口 foot”，并补 debt reward brief 的 action 优先断言。
+      - 新增 `risky_sheet` 的 Node 闭环：post-activation risky settlement 现在不仅会校验 outcome / verification 优先级，还会继续锁 `rewardMeta -> rewardBrief -> reward / expedition / map.chapter` 镜像，以及 Sanctum / Build 下游对“险卷 + 补验证”语义的消费。
+      - 新增 `lockline / locking_sheet` 的 Node 闭环：现在会继续校验 reward meta、reward brief、`nextTask` 优先正文、foot 里的任务进度，以及 `reward / expedition / map.chapter` 三端对 `settlement + nextTask` 的镜像，避免锁线期又悄悄滑回 verification 文案。
+      - `lockline` fixture 继续收紧为显式 `season_commitment + expedition + sanctum`，把“押卷中应该优先回洞府承诺”从弱语义提升成真实合同。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_fate_aftereffect_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH=\"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4181 output/web-meta-screen-audit/fresh-20260419-131305` ✅
+  - 当前结论
+    - 奖励页里的赛季天道盘现在终于不再只是“这一章发生了什么”的摘要，而是会稳定按 `locking / positive / risky / debt` 分支先给裁定，再明确告诉玩家这周该去补承诺、补验证还是先清债账。
+    - reward 页、reward brief、Sanctum / Build 消费层与 `reward / expedition / map.chapter` 三端 payload 现已在 Node + 浏览器门禁里共同锁住，`locking` 不再能靠宽断言假绿，也不再会把 lockline reward brief 悄悄写回 verification/settlement 旧语义；`risky / positive` 也补上了独立 reward probe。
+    - `lockline` 现在会稳定把主行动指向 `season_commitment / expedition / sanctum`，reward brief 与 reward rail 的 `nextTask` 终于和阶段意图一致，不再被训练线未完成项抢走。
+    - 本轮 fresh 浏览器审计目录以 `output/web-meta-screen-audit/fresh-20260419-131305` 为准。
+
+- 2026-04-18: 季盘结算行动卡落地 / Sanctum・Build 显式消费押卷・债账・验证状
+  - 本轮完成
+    - `js/core/collection_hub.js`
+      - `buildSeasonBoardOverviewModel()` 现会标准化 `settlement / debtPack / verificationOrders`，让季盘在局外消费层不再只剩 phase/theme/progress 摘要。
+      - Build Snapshot 现会把 `季押卷` 裁定、`研究债账包` 与 `结业验证` 直接写进 `strengths / gaps / nextTargets / priorityQueue`，把季盘从“告诉你本周主轴”推进成“逼你先清什么、先证什么”的行动层。
+      - Sanctum Summary / Research / Goals / Detail Grid / Guide 全部新增季盘行动卡消费：`季押卷裁定卡`、`研究债账包`、`结业验证状`、对应 chips 与 action goal，洞府页现在能直接看见裁定结果和下一步该去哪里补件。
+      - 对 `anchorSection` 做了 collection-safe 收口，未知 section 会回落到 `sanctum`，避免季盘行动卡按钮把用户送到无效图鉴分区。
+    - `tests/sanity_season_board_system_checks.js`
+      - 补入 Build / Sanctum 行为合同：正卷场景必须出现 `季押卷` / `结业验证状` goal 与 research，欠卷场景必须出现 `债账包` goal、债账 research，以及 Build 上的 `债账回流` 引导。
+      - 补入 reward / expedition / map 三端镜像校验，直接对比 `settlement / debtPack / verificationOrders`，避免 reward 走缓存链、expedition 走实时链后悄悄漂移。
+    - `tests/browser_meta_screen_audit.mjs`
+      - reward probe 的 `seasonBoard` chip 查询现已收敛到 reward expedition 面板，修掉“吃到别处 seasonBoard chips 也会假绿”的风险。
+      - Sanctum browser audit 新增 `季押卷` / `结业验证` / `行动卡` / `season-board-goal` 断言，确认本轮新增 UI 不是只活在 payload 和 Node 合同里。
+    - `progress.md`
+      - 记录本轮季盘 UI owner 扩展与镜像门禁收口，方便后续继续做 debt / verification / challenge / pvp 的下一块独立切片。
+  - 本轮验证
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_aftereffect_system_checks.js` ✅
+    - 使用系统 Chrome 执行 `tests/browser_meta_screen_audit.mjs`，fresh 目录以 `output/web-meta-screen-audit/fresh-20260418-season-sanctum-action-cards` 为准 ✅
+  - 当前结论
+    - `seasonBoard` 在局外层已经不再只是摘要 owner，而是开始变成明确的“赛季裁定与行动单”：玩家现在能在 Build / Sanctum 里一眼看见这周是 `正卷 / 险卷 / 欠卷`，是否有 `债账包`，以及最优先该补哪张 `验证状`。
+    - 这一轮继续维持轻量派生路线：没有新增 save root，也没有重写 reward / expedition 主流程，而是先把现有 snapshot 里的隐藏行动字段变成真实 UI 和门禁；这样后续再往 `challenge / endless / pvp` 深挖，会更像顺着同一套 presentation contract 继续扩，而不是再堆一层解释文案。
+
+- 2026-04-18: 可玩性扩展策划续推 / 周结算・季押卷・结业验证链
+  - 本轮完成
+    - `docs/designer_major_upgrade_planning_v7.md`
+      - 新增“`赛季押卷与结业验证`”模块，把当前已经落地的天道敕令、洞府议程、界痕后效与赛季天道盘继续收束成 `周结算 -> 季押卷 -> 验证状 -> 清账回流` 主链。
+      - 明确 `agenda / seasonBoard / aftereffect / lineage` 的 owner 划分，避免已经出现过的“季盘与议程双重加码”问题继续扩大。
+      - 补入建议参数锚点、当前建议优先切片、行为级 QA 门禁与反目标，避免后续开发继续停留在“信息越来越厚、可玩押注不够硬”的状态。
+    - `docs/designer_major_upgrade_requirements_v6.md`
+      - 新增“首发后优先扩展”与“周结算 / 季押卷 / 结业验证”要求，明确下一轮不是再造新模式，而是给现有四层结构补一个更硬的结算层。
+      - 需求层同步锁定：`正卷 / 险卷 / 欠卷` 三类结算、`研究债账包`、`ranking` 阶段主 / 旁验证状，以及 owner / precedence matrix 的最小边界。
+    - `progress.md`
+      - 同步记录本轮策划结论，方便后续开发继续沿 `ranking / verification / debt` 主线推进。
+  - 本轮验证
+    - 使用 `gpt-5.4` 两条策划支线交叉校验：
+      - 一条聚焦“下一块最值得继续做的可玩性扩展模块”
+      - 一条聚焦“当前大版本策划里最容易落空的设计薄弱点”
+    - 本轮为文档策划轮，未新增运行时代码，因此未额外执行 Node / 浏览器测试。
+  - 当前结论
+    - 下一轮最值得继续推进的，不是继续堆更多摘要层或展示层，而是把当前的周目标、议程后果与赛季 `ranking` 方向，推进成一条真正可经营的 `押卷 / 欠账 / 验证 / 清账` 玩法链。
+    - 这条链一旦成立，后续无论继续做 Challenge / PVP / 无尽验证、谱系奖励层，还是赛季封板，都会建立在更硬的可玩主循环上，而不是继续增加“系统会总结你，但不会驱动你”的信息厚度。
+
+- 2026-04-18: 赛季天道盘路线引导落地 + 地图权重联动 / 文案同步 / 门禁复核
+  - 本轮完成
+    - `js/game.js`
+      - 新增 `buildSeasonBoardRouteDirective()` 与 `getSeasonBoardWeightShift()`，让季盘不再只是列任务，而是会根据当前阶段给出“观星采样 / 押卷锁线 / 镜战试炼”三类路线引导，并把引导文案同步写回 reward / guide 口径。
+      - `getSeasonBoardSnapshot()` 现会把路线提示并入 `guideLine / rewardLine`，奖励页、构筑快照、洞府总览与文本 payload 读到的是同一份季盘指令。
+      - 季盘路线 directive 现已改为按 `sampling / lockline / ranking` 阶段优先驱动，不再被 `nextTask.laneId` 偷偷改向；当 `ranking` 阶段仍存在洞府锁线节点时，季盘只保留阶段提醒，不再额外叠加地图偏置。
+    - `js/core/map.js`
+      - 地图节点权重已接入 `seasonBoard` 路线偏置，与工程偏置、洞府议程偏置、界痕后效并列生效，让季盘开始真实牵引下一章地图分叉。
+      - 当远征线已经有 `activeAgenda.focusNodeTypes` 时，季盘仍会保留路线文案，但不会再额外叠加 map shift，避免和洞府议程双重加码。
+    - `tests/sanity_season_board_system_checks.js`
+      - 补强阶段边界与 stale gating：无有效信号时停在 `sampling`；只有当前周归卷 / 主练信号时停在 `lockline`；旧周 endless、旧周 slate、错误 `seasonId` 的 PVP 历史都不能推进阶段。
+      - 新增 `路线引导：` 文案断言与 `getSeasonBoardWeightShift()` 合同，确认不同阶段会给出不同的真实偏置。
+      - 新增 `ranking + activeAgenda.focusNodeTypes` 只保留阶段提醒 / 不再叠加地图偏置的合同，以及 `ranking` 无锁线时仍走 `trial / elite / enemy / forbidden_altar` 验算偏置的正向合同。
+      - 继续补入 `pending aftereffect -> 下一章 active aftereffect` 的端到端合同，确认界痕后效在第 `N+1` 章生效时，`seasonBoard` 会从 `lockline` 切到 `ranking`，并同步把 guide / route shift 从锁线导向切到验算导向。
+      - 新增 `resetStorages()`，避免同一 VM 里前一组用例的 storage 写入污染后续场景。
+    - `tests/sanity_map_weight_checks.js`
+      - 新增“季盘路线偏置真实进入地图权重层”的合同，确认 `seasonBoard` 不再只是 UI 文案。
+      - 新增 agenda + aftereffect + seasonBoard 多来源叠加合同，确认地图权重层在归一化后仍保持“观星 / 事件 / 裂隙抬升、试炼抬升、敌压被 aftereffect 拉低、商路被共同压低”的可解释净方向。
+    - `progress.md` / `game-intro.html` / `js/game.js`
+      - 对外说明统一同步到“季盘已能给出路线引导，并轻度牵引下一章地图节点；洞府议程若已锁定焦点节点，则季盘只保留指引、不重复加码”的口径。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/map.js` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_map_weight_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_aftereffect_system_checks.js` ✅
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - 使用系统 Chrome 执行 `tests/browser_meta_screen_audit.mjs`，fresh 目录以 `output/web-meta-screen-audit/fresh-20260418-season-route-docsync` 为准 ✅
+  - 当前结论
+    - 赛季天道盘已经从“可见的外场组织层”继续推进成“会温和牵引章节路线的跨模式主轴”：玩家现在不仅能知道下一步该补哪条线，还会在下一章地图分叉里看到这条主轴开始给出真实倾向。
+    - 这一轮仍坚持轻量派生方案：优先复用精选命盘、章节归卷、洞府议程、界痕后效、无尽与 PVP 的现成信号做路线牵引，等玩法证明有效后，再考虑是否升级成更重的赛季状态机。
+
+- 2026-04-17: 赛季天道盘 MVP 上线 + Build / Sanctum / Reward / payload / 门禁收口
+  - 本轮完成
+    - `js/game.js`
+      - 新增 `getSeasonBoardSignalSnapshot()`、`getSeasonBoardPhaseMeta()`、`normalizeSeasonBoardSnapshot()`、`getSeasonBoardSnapshot()`，把训练线 / 远征线 / 验算线整理成轻量派生的 `seasonBoard` 组织层，而不是再引入一套新的持久化根状态。
+      - 奖励页链路补齐 `seasonBoard` 透传与标准化：`getRewardExpeditionMeta()`、`getRewardNarrativeBriefMeta()`、`renderRewardExpeditionMeta()` 与 reward payload 现在都会稳定暴露赛季摘要、阶段、进度、下一步和 lanes/tasks。
+      - 修正 `seasonBoard` 的章进度判定优先级：当前章节索引不再被旧 `latestSlate.chapterIndex` 卡住，live expedition / latest slate / agenda 章数会统一取更高值，避免季盘在后效激活时慢半拍。
+    - `js/core/expedition_hub.js`
+      - `buildRewardExpeditionMeta()`、`getExpeditionPayload()`、`render_game_to_text().map.chapter.seasonBoard` 已同步暴露 season board 摘要、进度、下一步与 lane/task 明细。
+      - `getBuildSnapshotData()` 现会绑定最新归卷上下文生成 `seasonBoard`，确保构筑快照、局外总结和 reward payload 使用同一份季盘来源。
+    - `js/core/collection_hub.js`
+      - Sanctum 最终 owner 现已接入 `seasonBoard`、对应 progress 字段、季盘 research 项和 `season_board_goal`，不再被后续 `getSanctumOverviewData()` 覆盖掉。
+      - Build Snapshot 最终 owner 现已把 `seasonBoard` 写入 `strengths / nextTargets / return`，构筑页会直接告诉玩家当前赛季主轴、所处阶段和下一步该补哪条线。
+      - Sanctum Summary / Progress / Guide / Lane Grid 已稳定消费 `seasonBoard`，并补齐 `data-season-board-*` 选择器给浏览器门禁读取。
+    - `tests/browser_meta_screen_audit.mjs`
+      - Reward probe 新增 `seasonBoard` 区块、chips 与 `reward.expedition.seasonBoard` payload 断言。
+      - Build / Sanctum probe 新增 `seasonBoard` summary / detail / progress / guide / lane grid / payload mirror 断言，覆盖 `payload.expedition.seasonBoard` 与 `payload.map.chapter.seasonBoard` 一致性。
+    - `tests/sanity_season_board_system_checks.js`
+      - 新增 Node 合同测试，覆盖 `seasonBoard` snapshot、Reward / Expedition / Build / Sanctum / render payload 全链路投影，以及 `reward.expedition`、`expedition`、`map.chapter` 三处镜像。
+    - `tests/run_node_checks.sh`
+      - `sanity_season_board_system_checks.js` 已接入总 Node 门禁脚本。
+  - 本轮验证
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `node tests/sanity_fate_aftereffect_system_checks.js` ✅
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - 以 `python -m http.server 4174` 启动本地静态站后，执行 `$env:PLAYWRIGHT_EXECUTABLE_PATH='C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'; node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/web-meta-screen-audit/fresh-20260417-season-board` ✅
+  - 当前结论
+    - 赛季天道盘已经从大版本策划条目进入首个可玩、可见、可导出的 MVP：玩家现在能在奖励页、构筑快照、洞府总览和文本 payload 中看到“本周主轴是什么、季盘处于哪个阶段、三条玩法线还差什么、下一步该补哪条线”。
+    - 这一轮延续的是轻量派生组织层方案：先复用现有精选命盘、归卷、洞府议程、命盘谱系、界痕后效、无尽与 PVP 信号，把跨模式组织层做成真实玩法，再决定后续是否要把它升级成更重的赛季状态机。
+
+- 2026-04-17: 界痕抉择 / 契约后效 MVP 上线 + 奖励页 / 洞府 / payload / 门禁收口
+  - 本轮完成
+    - `js/game.js`
+      - 新增 `fateAftereffectState` 的默认值、保存、读取、迁移与清档重置链路，保证契约后效不会只停留在本局临时态。
+      - 落地 `createDefaultFateAftereffectState()`、`createFateAftereffectFromSanctumAgenda()`、`getFateAftereffectSnapshot()`、`getFateAftereffectWeightShift()` 等核心逻辑，让洞府议程的成功、欠契与残卷回收都能沉淀为跨章后效。
+      - `resolveSanctumAgenda()` 现在会在结题时同步登记后效，并把后效摘要写回结题日志。
+      - 修复章外页面的章节判定优先级：没有 active expedition 时，不再被旧 `latestSlate.chapterIndex` 卡住后效状态；同时修正 `latestRunId` 命中 history 时 `primary / records` 可能混搭不同 run 的问题。
+      - 奖励页链路补齐 `aftereffects` 标准化：`getRewardExpeditionMeta()`、`getRewardNarrativeBriefMeta()`、`renderRewardExpeditionMeta()` 与 reward payload 现在都能稳定暴露后效摘要、状态与主记录。
+    - `js/core/map.js`
+      - 地图节点权重现在会叠加生效中的 aftereffect shift，让“契约后果”真正影响下一章路线，而不是只显示在 UI 文案里。
+    - `js/core/expedition_hub.js`
+      - `buildRewardExpeditionMeta()`、`getExpeditionPayload()` 与 `render_game_to_text().map.chapter.aftereffects` 已同步暴露后效摘要、状态、主记录和 records 列表。
+      - 调整 reward `focusLines` 的优先级，避免新增后效文案把原本的 `契押` / 契约结论从前四条诊断里挤掉。
+    - `js/core/collection_hub.js`
+      - 构筑快照与洞府总览现已接入后效摘要、缺口、下一步引导、进度行与 guide 轨道，并补齐 `data-fate-aftereffect-*` 选择器供浏览器审计读取。
+    - `tests/sanity_fate_aftereffect_system_checks.js`
+      - 新增 Node 合同测试，覆盖存档迁移、`contract_success / contract_miss / recovery` 三种后效生成、跨章 `pending -> active -> expired` 生命周期、章外 save prune、history snapshot 一致性，以及 `expedition / map.chapter / reward.expedition` 三处 payload 镜像。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 扩展 reward probe、build/sanctum probe 与 payload mirror probe，确认 Reward / Build / Sanctum 页面都能看到“界痕后效”，并校验 `payload.reward.expedition.aftereffects`、`payload.expedition.aftereffects`、`payload.map.chapter.aftereffects` 的关键字段一致。
+    - `tests/run_node_checks.sh`
+      - 新的 `sanity_fate_aftereffect_system_checks.js` 已接入总 Node 门禁脚本。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_fate_aftereffect_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_dongfu_agenda_system_checks.js` ✅
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - `node tests/sanity_expedition_state_checks.js` ✅
+    - `node tests/sanity_reward_modal_closure_checks.js` ✅
+    - `node tests/sanity_save_migration_checks.js` ✅
+    - `node tests/sanity_map_weight_checks.js` ✅
+    - 以 `python -m http.server 4173` 启动本地静态站后，执行 `$env:PLAYWRIGHT_EXECUTABLE_PATH='C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'; node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/browser-meta-screen-audit-fate-aftereffect-fresh-pass-2` ✅
+  - 当前结论
+    - 界痕抉择 / 契约后效已经从大版本策划项进入首个可玩、可见、可导出的 MVP：玩家现在不仅能在洞府结题时“知道自己欠了什么账”，还会在奖励页、构筑页、洞府页、文本 payload 和下一章地图偏置里真正看到这笔账如何继续追到后续章节。
+    - 这一轮延续的是轻量派生记录层方案：不额外引入重状态机，而是复用现有洞府议程、归卷、地图权重与浏览器门禁 chokepoint，把“跨章后果”先做成真实玩法，再决定后续是否要升级成更重的赛季系统。
+
+- 2026-04-17: 命盘谱系 MVP 上线 + 奖励页 / payload / 门禁收口
+  - 本轮完成
+    - `js/core/collection_hub.js`
+      - 新增 `getFateLineageSnapshot()`，从当前主修角色、命途战录、观星档案、洞府议程与研究历史中推导“角色 / 流派 / 节点 / 研究”四条谱系轨道，不额外引入新的持久化根状态。
+      - 构筑快照与洞府总览现已接入 `lineage` 视图模型，Build / Sanctum 页面会直接展示命盘谱系摘要、进度条、轨道卡和 guide 文案，并补齐 `data-fate-lineage-*` 选择器供浏览器审计读取。
+    - `js/core/expedition_hub.js`
+      - `buildRewardExpeditionMeta()`、`getExpeditionPayload()` 与 `render_game_to_text().map.chapter.lineage` 已同步暴露谱系摘要，远征完成后的局外 payload 能稳定携带这条长期记录层。
+    - `js/game.js`
+      - 奖励页链路补齐 `lineage` 透传与标准化：`getRewardExpeditionMeta()` 会保留结构化谱系字段，`getRewardNarrativeBriefMeta()` 会在缺少显式文案时回退到谱系摘要，`renderRewardExpeditionMeta()` 新增独立的“命盘谱系”展示区。
+      - 修复奖励页 `focusLines / breakdown` 的空数组 fallback 问题，避免已有谱系数据时仍被错误覆盖为默认文案。
+      - reward payload 导出现在已包含 `reward.expedition.lineage`，和远征 / 地图章节镜像保持一致。
+    - `tests/sanity_fate_lineage_system_checks.js`
+      - 新增 Node 合同测试，覆盖谱系快照、构筑页 / 洞府页视图模型、远征 payload / 地图镜像和奖励页 lineage 投影。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 浏览器审计新增 Fate Lineage probe，确认 Build / Sanctum / Reward 页面可见谱系 UI，并校验 `payload.expedition.lineage` 与 `payload.map.chapter.lineage` 镜像一致。
+    - `tests/run_node_checks.sh`
+      - Fate Lineage Node 合同测试已接入总门禁脚本。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node --check tests/sanity_fate_lineage_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - `node tests/sanity_expedition_state_checks.js` ✅
+    - 按 `tests/run_node_checks.sh` 中全部 `node ...` 指令，用 PowerShell 逐条执行全量 Node 门禁 ✅
+    - `bash tests/run_node_checks.sh` 在当前 Windows 机器上不可直接作为最终门禁，因为该 `bash` 环境未能解析到 `node`
+    - `$env:PLAYWRIGHT_EXECUTABLE_PATH='C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'; node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/browser-meta-screen-audit-fate-lineage-fresh-pass` ✅
+  - 当前结论
+    - 命盘谱系已经从大版本策划概念进入首个可见、可测、可导出的 MVP：玩家能在构筑快照、洞府总览、奖励页和文本 payload 中看到长期主修倾向，而不是只在策划文档里描述“角色身份沉淀”。
+    - 这一轮采取的是“派生记录层”方案：先复用既有 archive / payload / sanctum 记录形成可玩闭环，再决定后续是否需要把谱系升级成更重的持久化主系统。
+
+- 2026-04-17: 天道敕令周循环板 MVP 上线 + 洞府 / payload / 门禁收口
+  - 本轮完成
+    - `js/game.js`
+      - 新增 `heavenlyMandateState` 的默认值、保存、读取、迁移与清档重置链路，避免天道敕令只存在于运行时临时态。
+      - 落地 `getHeavenlyMandateWeekMeta()`、`getHeavenlyMandateSignalSnapshot()`、`buildHeavenlyMandateBoard()`、`getHeavenlyMandateExpeditionSnapshot()` 等周循环板核心逻辑，把本周题面统一收束为远征线 / 训练线 / 对抗线三条任务线。
+      - 修正“本周第一张答卷”判定：旧周归卷不会再误把当前周的远征任务直接点亮，周签判断会按当前 `weekTag` 过滤。
+    - `js/core/expedition_hub.js`
+      - `getExpeditionPayload()` 现会暴露 `payload.expedition.mandate`，并同步镜像到 `render_game_to_text().map.chapter.mandate`。
+      - 构筑快照与洞府概览已接入天道敕令摘要、下一步任务与进度字段，局外总结能直接读取这块周循环板。
+    - `js/core/collection_hub.js`
+      - 洞府总览新增天道敕令统一视图模型，优先消费新的 `data.mandate`，并兼容旧 fallback 口径。
+      - Sanctum 页面现会稳定展示敕令摘要、主题、周进度、三条任务线与任务明细，并补齐 `data-heavenly-mandate-*` 选择器，方便浏览器审计。
+      - 天道敕令 goal 卡判重与行为已统一，不再出现重复卡片或一张跳 challenge、一张跳 sanctum 的分裂状态。
+    - `tests/sanity_heavenly_mandate_system_checks.js`
+      - 新增 Node 合同测试，覆盖默认状态、存档迁移、旧周 / 本周归卷周过滤、`payload.expedition.mandate`、洞府总览视图模型与 `saveGame()` 持久化。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 新增轻量页面 probe，确认 Sanctum 页面可见“天道敕令”文案，并校验 `payload.expedition.mandate` / `payload.map.chapter.mandate` 镜像一致。
+    - `tests/run_node_checks.sh`
+      - 新的天道敕令 Node 合同测试已接入总门禁脚本。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node tests/sanity_dongfu_agenda_system_checks.js` ✅
+    - `node tests/sanity_codex_sanctum_checks.js` ✅
+    - `node tests/sanity_save_migration_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - 按 `tests/run_node_checks.sh` 同步出来的 `node ...` 列表，用 PowerShell 逐条执行全量 Node 门禁 ✅
+    - `$env:PLAYWRIGHT_EXECUTABLE_PATH='C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'; node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173` ✅
+  - 当前结论
+    - 天道敕令周循环板已经从大版本策划项进入首个可玩 MVP：本周题面会从现有 observatory / expedition / sanctum / challenge / endless / pvp 信号自动编排成一张三线周目标板，并在洞府里真实可见。
+    - 这块系统现在已经同时具备运行时状态、局外 UI、文本 payload、Node 合同测试和浏览器审计，不再是只写在策划文档里的“待开发 TODO”。
+
+- 2026-04-16: V9.0《命盘战争》大版本策划收口
+  - 本轮完成
+    - `docs/designer_major_upgrade_planning_v7.md`
+      - 新增下一次大版本完整策划案，主轴从“单页功能继续变厚”收束为“观察站读题 -> 远征作答 -> 洞府押注 -> PVP / 无尽验证 -> 谱系沉淀”的赛季命盘战争线。
+      - 明确本次大版本的四个核心结构层：`天道敕令周循环板`、`命盘谱系`、`界痕抉择 / 契约后效`、`赛季天道盘`，并给出 10-20 小时玩家循环、三阶段开发切片、QA 门禁与反目标。
+      - 工程上明确要求继续沿洞府议程主链纵深，优先在既有状态机 / payload / browser audit chokepoint 上扩容，而不是并发重写 battle、地图生态、PVP 与新局外系统。
+    - `docs/designer_major_upgrade_requirements_v6.md`
+      - 新增配套需求文档，把首发范围、第二阶段预留、模块级功能要求、字段要求、Node / 浏览器门禁要求和首发不承诺内容拆清。
+      - 需求层把首发重点锁定在“周目标 + 长期谱系 + 跨章后果 + 自动化门禁扩线”，避免大版本策划阶段就失控成全系统并发翻修。
+    - `progress.md`
+      - 顶部新增本条策划记录，方便后续继续开发时把版本目标、落地顺序与验收边界当作统一事实源。
+  - 本轮验证
+    - 使用 `gpt-5.4` 三条 challenger 支线交叉校验：
+      - 一条聚焦“大版本主轴是否真正串起 observatory / expedition / sanctum / endless / pvp”
+      - 一条聚焦“10-20 小时可玩性结构与内容层级”
+      - 一条聚焦“工程拆分、门禁与文档落点”
+    - 本轮为文档策划轮，未新增运行时代码，因此未额外执行 Node / 浏览器测试。
+  - 当前结论
+    - 下一次大版本不应再以“继续给某个页面加更多字段 / 更多筛面 / 更多文案分支”为目标，而应升级为一条跨模式、可失败、可追账、可沉淀身份的赛季命盘主循环。
+    - 推荐的开发顺序为：先扩议程主链与最小周目标，再做长期谱系与跨章后果可见化，最后再做赛季盘包装与对外版本收口。
+
 - 2026-04-16: 洞府议程第三契约分支上线 + 契押真实代价落地
   - 本轮完成
     - `js/game.js`

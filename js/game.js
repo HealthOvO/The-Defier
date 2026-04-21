@@ -28,6 +28,9 @@ class Game {
         this.lastRunPathMapFeedback = null;
         this.runPathMapFeedbackTimer = null;
         this.sanctumAgendaState = this.createDefaultSanctumAgendaState();
+        this.heavenlyMandateState = this.createDefaultHeavenlyMandateState();
+        this.seasonVerificationState = this.createDefaultSeasonVerificationState();
+        this.fateAftereffectState = this.createDefaultFateAftereffectState();
         this.comboCount = 0;
         this.lastCardType = null;
         this.selectedCharacterId = null;
@@ -880,6 +883,257 @@ class Game {
                             tags: Array.isArray(expeditionMeta.tags)
                                 ? expeditionMeta.tags.map((tag) => String(tag || '')).filter(Boolean)
                                 : [],
+                            seasonBoard: expeditionMeta.seasonBoard
+                                ? {
+                                    seasonId: expeditionMeta.seasonBoard.seasonId || '',
+                                    seasonLabel: expeditionMeta.seasonBoard.seasonLabel || '',
+                                    seasonName: expeditionMeta.seasonBoard.seasonName || '',
+                                    seasonIcon: expeditionMeta.seasonBoard.seasonIcon || '',
+                                    seasonSource: expeditionMeta.seasonBoard.seasonSource || '',
+                                    weekTag: expeditionMeta.seasonBoard.weekTag || '',
+                                    weekLabel: expeditionMeta.seasonBoard.weekLabel || '',
+                                    phaseId: expeditionMeta.seasonBoard.phaseId || '',
+                                    phaseLabel: expeditionMeta.seasonBoard.phaseLabel || '',
+                                    phaseIcon: expeditionMeta.seasonBoard.phaseIcon || '',
+                                    themeId: expeditionMeta.seasonBoard.themeId || '',
+                                    themeLabel: expeditionMeta.seasonBoard.themeLabel || '',
+                                    summaryLine: expeditionMeta.seasonBoard.summaryLine || '',
+                                    detailLine: expeditionMeta.seasonBoard.detailLine || '',
+                                    guideLine: expeditionMeta.seasonBoard.guideLine || '',
+                                    statusLine: expeditionMeta.seasonBoard.statusLine || '',
+                                    rewardLine: expeditionMeta.seasonBoard.rewardLine || '',
+                                    crossModeSummary: expeditionMeta.seasonBoard.crossModeSummary || '',
+                                    completedTaskCount: Math.max(0, Math.floor(Number(expeditionMeta.seasonBoard.completedTaskCount) || 0)),
+                                    totalTaskCount: Math.max(0, Math.floor(Number(expeditionMeta.seasonBoard.totalTaskCount) || 0)),
+                                    progress: expeditionMeta.seasonBoard.progress
+                                        ? {
+                                            completed: Math.max(0, Math.floor(Number(expeditionMeta.seasonBoard.progress.completed) || 0)),
+                                            total: Math.max(0, Math.floor(Number(expeditionMeta.seasonBoard.progress.total) || 0)),
+                                            progressText: expeditionMeta.seasonBoard.progress.progressText || '',
+                                            ratio: Math.max(0, Math.min(1, Number(expeditionMeta.seasonBoard.progress.ratio) || 0))
+                                        }
+                                        : null,
+                                    settlement: expeditionMeta.seasonBoard.settlement
+                                        ? {
+                                            id: expeditionMeta.seasonBoard.settlement.id || '',
+                                            sourceRunId: expeditionMeta.seasonBoard.settlement.sourceRunId || '',
+                                            chapterIndex: Math.max(0, Math.floor(Number(expeditionMeta.seasonBoard.settlement.chapterIndex) || 0)),
+                                            outcomeId: expeditionMeta.seasonBoard.settlement.outcomeId || '',
+                                            outcomeLabel: expeditionMeta.seasonBoard.settlement.outcomeLabel || '',
+                                            outcomeTone: expeditionMeta.seasonBoard.settlement.outcomeTone || '',
+                                            summaryLine: expeditionMeta.seasonBoard.settlement.summaryLine || '',
+                                            detailLine: expeditionMeta.seasonBoard.settlement.detailLine || '',
+                                            guideLine: expeditionMeta.seasonBoard.settlement.guideLine || '',
+                                            statusLine: expeditionMeta.seasonBoard.settlement.statusLine || '',
+                                            progressText: expeditionMeta.seasonBoard.settlement.progressText || '',
+                                            settlementWeekTag: expeditionMeta.seasonBoard.settlement.settlementWeekTag || '',
+                                            settlementPhaseId: expeditionMeta.seasonBoard.settlement.settlementPhaseId || '',
+                                            settlementSource: expeditionMeta.seasonBoard.settlement.settlementSource || '',
+                                            resolutionTier: expeditionMeta.seasonBoard.settlement.resolutionTier || '',
+                                            resolvedStatus: expeditionMeta.seasonBoard.settlement.resolvedStatus || '',
+                                            writebackLine: expeditionMeta.seasonBoard.settlement.writebackLine || '',
+                                            proofQuality: expeditionMeta.seasonBoard.settlement.proofQuality || '',
+                                            lineageStyle: expeditionMeta.seasonBoard.settlement.lineageStyle || '',
+                                            primaryVerificationRecordId: expeditionMeta.seasonBoard.settlement.primaryVerificationRecordId || '',
+                                            sideVerificationRecordId: expeditionMeta.seasonBoard.settlement.sideVerificationRecordId || '',
+                                            selectedContractLabel: expeditionMeta.seasonBoard.settlement.selectedContractLabel || '',
+                                            contractResolutionLine: expeditionMeta.seasonBoard.settlement.contractResolutionLine || '',
+                                            recoveryEligible: !!expeditionMeta.seasonBoard.settlement.recoveryEligible
+                                        }
+                                        : null,
+                                    debtPack: expeditionMeta.seasonBoard.debtPack
+                                        ? {
+                                            id: expeditionMeta.seasonBoard.debtPack.id || '',
+                                            sourceRunId: expeditionMeta.seasonBoard.debtPack.sourceRunId || '',
+                                            chapterIndex: Math.max(0, Math.floor(Number(expeditionMeta.seasonBoard.debtPack.chapterIndex) || 0)),
+                                            sourceAgendaId: expeditionMeta.seasonBoard.debtPack.sourceAgendaId || '',
+                                            sourceLabel: expeditionMeta.seasonBoard.debtPack.sourceLabel || '',
+                                            debtThemeId: expeditionMeta.seasonBoard.debtPack.debtThemeId || '',
+                                            debtThemeLabel: expeditionMeta.seasonBoard.debtPack.debtThemeLabel || '',
+                                            summaryLine: expeditionMeta.seasonBoard.debtPack.summaryLine || '',
+                                            detailLine: expeditionMeta.seasonBoard.debtPack.detailLine || '',
+                                            guideLine: expeditionMeta.seasonBoard.debtPack.guideLine || '',
+                                            statusLine: expeditionMeta.seasonBoard.debtPack.statusLine || '',
+                                            progressText: expeditionMeta.seasonBoard.debtPack.progressText || '',
+                                            settleWindowText: expeditionMeta.seasonBoard.debtPack.settleWindowText || '',
+                                            recommendedValidationLabel: expeditionMeta.seasonBoard.debtPack.recommendedValidationLabel || '',
+                                            recommendedAnchorSection: expeditionMeta.seasonBoard.debtPack.recommendedAnchorSection || '',
+                                            status: expeditionMeta.seasonBoard.debtPack.status || '',
+                                            deferCount: Math.max(0, Math.floor(Number(expeditionMeta.seasonBoard.debtPack.deferCount) || 0)),
+                                            openedWeekTag: expeditionMeta.seasonBoard.debtPack.openedWeekTag || '',
+                                            carryIntoWeekTag: expeditionMeta.seasonBoard.debtPack.carryIntoWeekTag || '',
+                                            occupiedMandateTaskId: expeditionMeta.seasonBoard.debtPack.occupiedMandateTaskId || '',
+                                            occupationReason: expeditionMeta.seasonBoard.debtPack.occupationReason || '',
+                                            occupiesStrongSlot: !!expeditionMeta.seasonBoard.debtPack.occupiesStrongSlot,
+                                            resolvedStatus: expeditionMeta.seasonBoard.debtPack.resolvedStatus || '',
+                                            writebackLine: expeditionMeta.seasonBoard.debtPack.writebackLine || '',
+                                            verificationRecordId: expeditionMeta.seasonBoard.debtPack.verificationRecordId || '',
+                                            selectedContractLabel: expeditionMeta.seasonBoard.debtPack.selectedContractLabel || '',
+                                            contractResolutionLine: expeditionMeta.seasonBoard.debtPack.contractResolutionLine || '',
+                                            recoveryEligible: !!expeditionMeta.seasonBoard.debtPack.recoveryEligible
+                                        }
+                                        : null,
+                                    weekVerdictLedger: expeditionMeta.seasonBoard.weekVerdictLedger?.current
+                                        ? {
+                                            current: {
+                                                ledgerId: expeditionMeta.seasonBoard.weekVerdictLedger.current.ledgerId || '',
+                                                weekTag: expeditionMeta.seasonBoard.weekVerdictLedger.current.weekTag || '',
+                                                weekLabel: expeditionMeta.seasonBoard.weekVerdictLedger.current.weekLabel || '',
+                                                phaseId: expeditionMeta.seasonBoard.weekVerdictLedger.current.phaseId || '',
+                                                phaseLabel: expeditionMeta.seasonBoard.weekVerdictLedger.current.phaseLabel || '',
+                                                sourceRunId: expeditionMeta.seasonBoard.weekVerdictLedger.current.sourceRunId || '',
+                                                chapterIndex: Math.max(0, Math.floor(Number(expeditionMeta.seasonBoard.weekVerdictLedger.current.chapterIndex) || 0)),
+                                                settlementId: expeditionMeta.seasonBoard.weekVerdictLedger.current.settlementId || '',
+                                                settlementOutcomeId: expeditionMeta.seasonBoard.weekVerdictLedger.current.settlementOutcomeId || '',
+                                                settlementOutcomeLabel: expeditionMeta.seasonBoard.weekVerdictLedger.current.settlementOutcomeLabel || '',
+                                                debtPackId: expeditionMeta.seasonBoard.weekVerdictLedger.current.debtPackId || '',
+                                                debtStatus: expeditionMeta.seasonBoard.weekVerdictLedger.current.debtStatus || '',
+                                                deferCount: Math.max(0, Math.floor(Number(expeditionMeta.seasonBoard.weekVerdictLedger.current.deferCount) || 0)),
+                                                carryIntoWeekTag: expeditionMeta.seasonBoard.weekVerdictLedger.current.carryIntoWeekTag || '',
+                                                primaryVerificationOrderId: expeditionMeta.seasonBoard.weekVerdictLedger.current.primaryVerificationOrderId || '',
+                                                sideVerificationOrderId: expeditionMeta.seasonBoard.weekVerdictLedger.current.sideVerificationOrderId || '',
+                                                resolutionTier: expeditionMeta.seasonBoard.weekVerdictLedger.current.resolutionTier || '',
+                                                resolvedStatus: expeditionMeta.seasonBoard.weekVerdictLedger.current.resolvedStatus || '',
+                                                primaryVerificationResultStatus: expeditionMeta.seasonBoard.weekVerdictLedger.current.primaryVerificationResultStatus || '',
+                                                sideVerificationResultStatus: expeditionMeta.seasonBoard.weekVerdictLedger.current.sideVerificationResultStatus || '',
+                                                primaryWritebackMode: expeditionMeta.seasonBoard.weekVerdictLedger.current.primaryWritebackMode || '',
+                                                sideWritebackMode: expeditionMeta.seasonBoard.weekVerdictLedger.current.sideWritebackMode || '',
+                                                writebackLine: expeditionMeta.seasonBoard.weekVerdictLedger.current.writebackLine || '',
+                                                proofQuality: expeditionMeta.seasonBoard.weekVerdictLedger.current.proofQuality || '',
+                                                lineageStyle: expeditionMeta.seasonBoard.weekVerdictLedger.current.lineageStyle || '',
+                                                carryIntoNextWeek: !!expeditionMeta.seasonBoard.weekVerdictLedger.current.carryIntoNextWeek,
+                                                settlementSource: expeditionMeta.seasonBoard.weekVerdictLedger.current.settlementSource || '',
+                                                summaryLine: expeditionMeta.seasonBoard.weekVerdictLedger.current.summaryLine || ''
+                                            }
+                                        }
+                                        : null,
+                                    verificationOrders: Array.isArray(expeditionMeta.seasonBoard.verificationOrders)
+                                        ? expeditionMeta.seasonBoard.verificationOrders.map((entry) => ({
+                                            id: entry?.id || '',
+                                            type: entry?.type || '',
+                                            role: entry?.role || '',
+                                            label: entry?.label || '',
+                                            summaryLine: entry?.summaryLine || '',
+                                            detailLine: entry?.detailLine || '',
+                                            hintLine: entry?.hintLine || '',
+                                            statusLine: entry?.statusLine || '',
+                                            anchorSection: entry?.anchorSection || '',
+                                            priority: Math.max(1, Math.floor(Number(entry?.priority) || 1)),
+                                            resultStatus: entry?.resultStatus || '',
+                                            writebackMode: entry?.writebackMode || '',
+                                            writebackLine: entry?.writebackLine || '',
+                                            sourceMode: entry?.sourceMode || '',
+                                            sourceModeLabel: entry?.sourceModeLabel || '',
+                                            resolvedRunId: entry?.resolvedRunId || '',
+                                            chapterIndex: Math.max(0, Math.floor(Number(entry?.chapterIndex) || 0)),
+                                            proofQuality: entry?.proofQuality || '',
+                                            lineageStyle: entry?.lineageStyle || '',
+                                            carryIntoNextWeek: !!entry?.carryIntoNextWeek
+                                        }))
+                                        : [],
+                                    nextTask: expeditionMeta.seasonBoard.nextTask
+                                        ? {
+                                            laneId: expeditionMeta.seasonBoard.nextTask.laneId || '',
+                                            laneLabel: expeditionMeta.seasonBoard.nextTask.laneLabel || '',
+                                            id: expeditionMeta.seasonBoard.nextTask.id || '',
+                                            label: expeditionMeta.seasonBoard.nextTask.label || '',
+                                            progressText: expeditionMeta.seasonBoard.nextTask.progressText || '',
+                                            hintLine: expeditionMeta.seasonBoard.nextTask.hintLine || '',
+                                            statusLine: expeditionMeta.seasonBoard.nextTask.statusLine || '',
+                                            anchorSection: expeditionMeta.seasonBoard.nextTask.anchorSection || ''
+                                        }
+                                        : null,
+                                    lanes: Array.isArray(expeditionMeta.seasonBoard.lanes)
+                                        ? expeditionMeta.seasonBoard.lanes.map((lane) => ({
+                                            id: lane?.id || '',
+                                            label: lane?.label || '',
+                                            icon: lane?.icon || '',
+                                            summaryLine: lane?.summaryLine || '',
+                                            completedCount: Math.max(0, Math.floor(Number(lane?.completedCount) || 0)),
+                                            totalCount: Math.max(0, Math.floor(Number(lane?.totalCount) || 0)),
+                                            tasks: Array.isArray(lane?.tasks)
+                                                ? lane.tasks.map((task) => ({
+                                                    id: task?.id || '',
+                                                    label: task?.label || '',
+                                                    icon: task?.icon || '',
+                                                    progress: Math.max(0, Math.floor(Number(task?.progress) || 0)),
+                                                    target: Math.max(0, Math.floor(Number(task?.target) || 0)),
+                                                    progressText: task?.progressText || '',
+                                                    completed: !!task?.completed,
+                                                    hintLine: task?.hintLine || '',
+                                                    statusLine: task?.statusLine || '',
+                                                    anchorSection: task?.anchorSection || ''
+                                                }))
+                                                : []
+                                        }))
+                                        : []
+                                }
+                                : null,
+                            lineage: expeditionMeta.lineage
+                                ? {
+                                    summaryLine: expeditionMeta.lineage.summaryLine || '',
+                                    detailLine: expeditionMeta.lineage.detailLine || '',
+                                    currentFocusLine: expeditionMeta.lineage.currentFocusLine || '',
+                                    styleLabel: expeditionMeta.lineage.styleLabel || '',
+                                    characterLabel: expeditionMeta.lineage.characterLabel || '',
+                                    nodeLabel: expeditionMeta.lineage.nodeLabel || '',
+                                    researchLabel: expeditionMeta.lineage.researchLabel || ''
+                                }
+                                : null,
+                            aftereffects: expeditionMeta.aftereffects
+                                ? {
+                                    summaryLine: expeditionMeta.aftereffects.summaryLine || '',
+                                    detailLine: expeditionMeta.aftereffects.detailLine || '',
+                                    guideLine: expeditionMeta.aftereffects.guideLine || '',
+                                    currentStatusLine: expeditionMeta.aftereffects.currentStatusLine || '',
+                                    activeCount: Math.max(0, Math.floor(Number(expeditionMeta.aftereffects.activeCount) || 0)),
+                                    pendingCount: Math.max(0, Math.floor(Number(expeditionMeta.aftereffects.pendingCount) || 0)),
+                                    primary: expeditionMeta.aftereffects.primary
+                                        ? {
+                                            recordId: expeditionMeta.aftereffects.primary.recordId || '',
+                                            icon: expeditionMeta.aftereffects.primary.icon || '',
+                                            name: expeditionMeta.aftereffects.primary.name || '',
+                                            templateId: expeditionMeta.aftereffects.primary.templateId || '',
+                                            templateLabel: expeditionMeta.aftereffects.primary.templateLabel || '',
+                                            outcomeId: expeditionMeta.aftereffects.primary.outcomeId || '',
+                                            outcomeLabel: expeditionMeta.aftereffects.primary.outcomeLabel || '',
+                                            sourceLine: expeditionMeta.aftereffects.primary.sourceLine || '',
+                                            positiveLine: expeditionMeta.aftereffects.primary.positiveLine || '',
+                                            negativeLine: expeditionMeta.aftereffects.primary.negativeLine || '',
+                                            summaryLine: expeditionMeta.aftereffects.primary.summaryLine || '',
+                                            detailLine: expeditionMeta.aftereffects.primary.detailLine || '',
+                                            status: expeditionMeta.aftereffects.primary.status || '',
+                                            statusLabel: expeditionMeta.aftereffects.primary.statusLabel || '',
+                                            statusLine: expeditionMeta.aftereffects.primary.statusLine || '',
+                                            remainingChapters: Math.max(0, Math.floor(Number(expeditionMeta.aftereffects.primary.remainingChapters) || 0)),
+                                            durationChapters: Math.max(1, Math.floor(Number(expeditionMeta.aftereffects.primary.durationChapters) || 1)),
+                                            activationChapterIndex: Math.max(0, Math.floor(Number(expeditionMeta.aftereffects.primary.activationChapterIndex) || 0))
+                                        }
+                                        : null,
+                                    records: Array.isArray(expeditionMeta.aftereffects.records)
+                                        ? expeditionMeta.aftereffects.records.map((entry) => ({
+                                            recordId: entry?.recordId || '',
+                                            icon: entry?.icon || '',
+                                            name: entry?.name || '',
+                                            templateId: entry?.templateId || '',
+                                            templateLabel: entry?.templateLabel || '',
+                                            outcomeId: entry?.outcomeId || '',
+                                            outcomeLabel: entry?.outcomeLabel || '',
+                                            sourceLine: entry?.sourceLine || '',
+                                            positiveLine: entry?.positiveLine || '',
+                                            negativeLine: entry?.negativeLine || '',
+                                            summaryLine: entry?.summaryLine || '',
+                                            detailLine: entry?.detailLine || '',
+                                            status: entry?.status || '',
+                                            statusLabel: entry?.statusLabel || '',
+                                            statusLine: entry?.statusLine || '',
+                                            remainingChapters: Math.max(0, Math.floor(Number(entry?.remainingChapters) || 0)),
+                                            durationChapters: Math.max(1, Math.floor(Number(entry?.durationChapters) || 1)),
+                                            activationChapterIndex: Math.max(0, Math.floor(Number(entry?.activationChapterIndex) || 0))
+                                        }))
+                                        : []
+                                }
+                                : null,
                             agenda: expeditionMeta.agenda
                                 ? {
                                     agendaId: expeditionMeta.agenda.agendaId || '',
@@ -6518,6 +6772,29 @@ class Game {
             collapseLabel: collapse.label,
             collapseDesc: collapse.desc
         });
+        if (typeof this.recordSeasonVerificationResult === 'function') {
+            this.recordSeasonVerificationResult({
+                recordId: `season_verification_${seasonProfile.weekTag || 'current'}_primary_endless`,
+                weekTag: seasonProfile.weekTag || '',
+                role: 'primary',
+                sourceMode: 'endless',
+                sourceModeLabel: '无尽轮回',
+                sourceLabel: `${seasonProfile.name || '无尽轮回'}${seasonProfile.directiveName ? ` · ${seasonProfile.directiveName}` : ''}`,
+                label: '无尽反证',
+                resultStatus: 'failed',
+                writebackMode: 'degrade',
+                writebackLine: '无尽轮回给出反证，本周押卷会先转入险卷/反例处理。',
+                resolvedRunId: seasonProfile.id || '',
+                chapterIndex: Math.max(0, Math.floor(Number(state.currentCycle) || 0) + 1),
+                proofQuality: 'thin',
+                lineageStyle: '长压试炼',
+                summaryLine: `${collapse.label}：${collapse.desc}`,
+                detailLine: `${seasonProfile.directiveName || '当前季签'} 没能撑住长压题面，先回收错题再扩主轴。`,
+                statusLine: '无尽轮回 · 反证已入账',
+                anchorSection: 'endless',
+                priority: 1
+            });
+        }
         return collapse;
     }
 
@@ -7468,6 +7745,9 @@ class Game {
         if (!this.isEndlessActive()) return;
         let state = this.ensureEndlessState();
         let seasonProfile = this.syncEndlessSeasonState();
+        const boardBeforeVerification = typeof this.getSeasonBoardSnapshot === 'function'
+            ? this.getSeasonBoardSnapshot()
+            : null;
         state = this.ensureEndlessState();
         const prevPressure = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
         const prevBarterHeat = Math.max(0, Math.min(9, Math.floor(Number(state.barterHeat) || 0)));
@@ -7495,6 +7775,34 @@ class Game {
             directiveClearId: seasonProfile?.directiveId || null
         }) || seasonProfile;
         state = this.ensureEndlessState();
+        if (typeof this.recordSeasonVerificationResult === 'function') {
+            const pendingDebt = ['open', 'deferred'].includes(String(boardBeforeVerification?.debtPack?.status || '').trim());
+            this.recordSeasonVerificationResult({
+                recordId: `season_verification_${seasonProfile?.weekTag || 'current'}_primary_endless`,
+                weekTag: seasonProfile?.weekTag || '',
+                role: 'primary',
+                sourceMode: 'endless',
+                sourceModeLabel: '无尽轮回',
+                sourceLabel: `${seasonProfile?.name || '无尽轮回'}${seasonProfile?.directiveName ? ` · ${seasonProfile.directiveName}` : ''}`,
+                label: '无尽高压验证',
+                resultStatus: 'verified',
+                writebackMode: pendingDebt ? 'clear_debt' : 'upgrade_verdict',
+                writebackLine: pendingDebt
+                    ? '无尽轮回主验证通过，欠卷会被清账并释放天命强目标。'
+                    : '无尽轮回主验证通过，本周押卷会升级为正卷。',
+                resolvedRunId: seasonProfile?.id || '',
+                chapterIndex: Math.max(0, nextCycle + 1),
+                proofQuality: nextCycle >= 4 ? 'decisive' : 'solid',
+                lineageStyle: '长压试炼',
+                summaryLine: pendingDebt
+                    ? '无尽通关已补齐主验证，这笔欠卷可以在季盘上清账。'
+                    : '无尽通关证明这条主轴在长压环境下依然成立。',
+                detailLine: `${seasonProfile?.directiveName || '当前季签'} · 赛季积分 ${Math.max(0, Math.floor(Number(state.seasonScore) || 0))} · 已清 ${Math.max(0, Math.floor(Number(state.seasonCycleClears) || 0))} 轮`,
+                statusLine: `无尽轮回 · 通过${seasonProfile?.directiveName ? ` · ${seasonProfile.directiveName}` : ''}`,
+                anchorSection: 'endless',
+                priority: 1
+            });
+        }
         const seasonProgressText = seasonProfile
             ? `，赛季进度 ${state.seasonCycleClears} 轮 / 主宰 ${state.seasonBossDefeated} / 赛季积分 ${state.seasonScore} / 目标 ${seasonProfile.goalTierLabel}`
             : '';
@@ -8681,6 +8989,15 @@ class Game {
                 sanctumAgendaState: typeof this.getSanctumAgendaSaveState === 'function'
                     ? this.getSanctumAgendaSaveState()
                     : this.createDefaultSanctumAgendaState(),
+                heavenlyMandateState: typeof this.getHeavenlyMandateSaveState === 'function'
+                    ? this.getHeavenlyMandateSaveState()
+                    : this.createDefaultHeavenlyMandateState(),
+                seasonVerificationState: typeof this.getSeasonVerificationSaveState === 'function'
+                    ? this.getSeasonVerificationSaveState()
+                    : this.createDefaultSeasonVerificationState(),
+                fateAftereffectState: typeof this.getFateAftereffectSaveState === 'function'
+                    ? this.getFateAftereffectSaveState()
+                    : this.createDefaultFateAftereffectState(),
                 chapterEventLedger: this.getChapterEventLedgerSaveState(),
                 schemaMigratedAt: Date.now(),
                 timestamp: Date.now()
@@ -8810,6 +9127,47 @@ class Game {
                 totalFailed: 0
             };
         };
+        const buildDefaultHeavenlyMandateState = () => {
+            if (typeof this.createDefaultHeavenlyMandateState === 'function') {
+                return this.createDefaultHeavenlyMandateState();
+            }
+            return {
+                version: 1,
+                weekTag: '',
+                weekLabel: '',
+                themeId: '',
+                themeLabel: '',
+                themeIcon: '',
+                themeKicker: '',
+                summaryLine: '',
+                lanes: [],
+                completedTaskCount: 0,
+                totalTaskCount: 0,
+                history: [],
+                lastSyncedAt: 0
+            };
+        };
+        const buildDefaultSeasonVerificationState = () => {
+            if (typeof this.createDefaultSeasonVerificationState === 'function') {
+                return this.createDefaultSeasonVerificationState();
+            }
+            return {
+                version: 1,
+                history: [],
+                lastResolved: null
+            };
+        };
+        const buildDefaultFateAftereffectState = () => {
+            if (typeof this.createDefaultFateAftereffectState === 'function') {
+                return this.createDefaultFateAftereffectState();
+            }
+            return {
+                version: 1,
+                records: [],
+                history: [],
+                lastResolved: null
+            };
+        };
         const normalizeLegacy = (source) => {
             const progress = source && typeof source === 'object' ? source : {};
             const essence = Math.max(0, Math.floor(Number(progress.essence) || 0));
@@ -8842,6 +9200,9 @@ class Game {
             migrated.endlessMeta = migrated.endlessMeta || buildDefaultEndless();
             migrated.encounterMeta = migrated.encounterMeta || buildDefaultEncounter();
             migrated.sanctumAgendaState = migrated.sanctumAgendaState || buildDefaultSanctumAgendaState();
+            migrated.heavenlyMandateState = migrated.heavenlyMandateState || buildDefaultHeavenlyMandateState();
+            migrated.seasonVerificationState = migrated.seasonVerificationState || buildDefaultSeasonVerificationState();
+            migrated.fateAftereffectState = migrated.fateAftereffectState || buildDefaultFateAftereffectState();
             migrated.chapterEventLedger = migrated.chapterEventLedger || buildDefaultChapterLedger();
             migrated.schemaMigratedAt = Date.now();
             migrated.version = '5.1.0';
@@ -8856,6 +9217,9 @@ class Game {
             migrated.endlessMeta = migrated.endlessMeta || buildDefaultEndless();
             migrated.encounterMeta = migrated.encounterMeta || buildDefaultEncounter();
             migrated.sanctumAgendaState = migrated.sanctumAgendaState || buildDefaultSanctumAgendaState();
+            migrated.heavenlyMandateState = migrated.heavenlyMandateState || buildDefaultHeavenlyMandateState();
+            migrated.seasonVerificationState = migrated.seasonVerificationState || buildDefaultSeasonVerificationState();
+            migrated.fateAftereffectState = migrated.fateAftereffectState || buildDefaultFateAftereffectState();
             migrated.chapterEventLedger = migrated.chapterEventLedger || buildDefaultChapterLedger();
             migrated.schemaMigratedAt = migrated.schemaMigratedAt || Date.now();
         }
@@ -8870,6 +9234,21 @@ class Game {
             migrated.sanctumAgendaState = this.normalizeSanctumAgendaState(migrated.sanctumAgendaState);
         } else {
             migrated.sanctumAgendaState = migrated.sanctumAgendaState || buildDefaultSanctumAgendaState();
+        }
+        if (typeof this.normalizeHeavenlyMandateState === 'function') {
+            migrated.heavenlyMandateState = this.normalizeHeavenlyMandateState(migrated.heavenlyMandateState);
+        } else {
+            migrated.heavenlyMandateState = migrated.heavenlyMandateState || buildDefaultHeavenlyMandateState();
+        }
+        if (typeof this.normalizeSeasonVerificationState === 'function') {
+            migrated.seasonVerificationState = this.normalizeSeasonVerificationState(migrated.seasonVerificationState);
+        } else {
+            migrated.seasonVerificationState = migrated.seasonVerificationState || buildDefaultSeasonVerificationState();
+        }
+        if (typeof this.normalizeFateAftereffectState === 'function') {
+            migrated.fateAftereffectState = this.normalizeFateAftereffectState(migrated.fateAftereffectState);
+        } else {
+            migrated.fateAftereffectState = migrated.fateAftereffectState || buildDefaultFateAftereffectState();
         }
         if (typeof this.normalizeChapterEventLedger === 'function') {
             migrated.chapterEventLedger = this.normalizeChapterEventLedger(migrated.chapterEventLedger);
@@ -9353,6 +9732,9 @@ class Game {
             this.endlessState = this.normalizeEndlessState(gameState.endlessMeta || this.endlessState);
             this.encounterState = this.normalizeEncounterState(gameState.encounterMeta || this.encounterState);
             this.sanctumAgendaState = this.normalizeSanctumAgendaState(gameState.sanctumAgendaState || this.sanctumAgendaState);
+            this.heavenlyMandateState = this.normalizeHeavenlyMandateState(gameState.heavenlyMandateState || this.heavenlyMandateState);
+            this.seasonVerificationState = this.normalizeSeasonVerificationState(gameState.seasonVerificationState || this.seasonVerificationState);
+            this.fateAftereffectState = this.normalizeFateAftereffectState(gameState.fateAftereffectState || this.fateAftereffectState);
             if (this.player && typeof this.player.ensureAdventureBuffs === 'function') {
                 this.player.ensureAdventureBuffs();
             }
@@ -9371,6 +9753,9 @@ class Game {
         if (this.automationBootConfig) return;
         localStorage.removeItem('theDefierSave');
         this.sanctumAgendaState = this.createDefaultSanctumAgendaState();
+        this.heavenlyMandateState = this.createDefaultHeavenlyMandateState();
+        this.seasonVerificationState = this.createDefaultSeasonVerificationState();
+        this.fateAftereffectState = this.createDefaultFateAftereffectState();
     }
 
     // 自动保存
@@ -12940,6 +13325,7 @@ class Game {
         const deltaVal = document.getElementById('pvp-score-delta');
         const oppName = document.getElementById('pvp-result-opponent');
         const oppScore = document.getElementById('pvp-result-opp-score');
+        const resolvedMatchTicket = this.pvpMatchTicket;
 
         // Report
         let result = {
@@ -12979,6 +13365,52 @@ class Game {
         }
         if (result && result.rejected) {
             Utils.showBattleLog('PVP 结算校验未通过，本场积分未变动。');
+        } else if (typeof this.recordSeasonVerificationResult === 'function') {
+            let pvpSeasonMeta = null;
+            const weekMeta = typeof this.getHeavenlyMandateWeekMeta === 'function'
+                ? this.getHeavenlyMandateWeekMeta()
+                : null;
+            if (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getCurrentSeasonMeta === 'function') {
+                try {
+                    pvpSeasonMeta = PVPService.getCurrentSeasonMeta();
+                } catch (error) {
+                    pvpSeasonMeta = null;
+                }
+            }
+            const boardBeforeVerification = typeof this.getSeasonBoardSnapshot === 'function'
+                ? this.getSeasonBoardSnapshot()
+                : null;
+            const pendingDebt = ['open', 'deferred'].includes(String(boardBeforeVerification?.debtPack?.status || '').trim());
+            const opponentName = this.pvpOpponentRank?.user?.username || '';
+            const delta = Math.floor(Number(result?.delta !== undefined ? result.delta : result?.ratingChange) || 0);
+            this.recordSeasonVerificationResult({
+                recordId: `season_verification_${String(weekMeta?.weekTag || 'current').trim()}_primary_pvp`,
+                weekTag: String(weekMeta?.weekTag || '').trim(),
+                weekLabel: String(weekMeta?.weekLabel || '').trim(),
+                role: 'primary',
+                sourceMode: 'pvp',
+                sourceModeLabel: '天道榜',
+                sourceLabel: `${pvpSeasonMeta?.name || '天道榜'}${opponentName ? ` · 对手 ${opponentName}` : ''}`,
+                label: '天道榜账本验证',
+                resultStatus: 'verified',
+                writebackMode: pendingDebt ? 'clear_debt' : 'upgrade_verdict',
+                writebackLine: pendingDebt
+                    ? '天道榜主验证通过，欠卷会在季盘上清账。'
+                    : '天道榜主验证通过，本周押卷会升级为正卷。',
+                resolvedRunId: String(result?.matchId || resolvedMatchTicket?.id || pvpSeasonMeta?.id || '').trim(),
+                chapterIndex: Math.max(0, Math.floor(Number(boardBeforeVerification?.settlement?.chapterIndex || 0) || 0)),
+                proofQuality: Math.abs(delta) >= 24 ? 'decisive' : 'solid',
+                lineageStyle: '镜战压强',
+                summaryLine: `${pvpSeasonMeta?.name || '天道榜'} 对局验证通过${opponentName ? `，已击穿 ${opponentName}` : '。'}`,
+                detailLine: [
+                    delta ? `积分 ${delta >= 0 ? `+${delta}` : `${delta}`}` : '',
+                    Number(result?.coinsAwarded) > 0 ? `天道币 +${Math.floor(Number(result.coinsAwarded) || 0)}` : '',
+                    pendingDebt ? '这场胜局会优先清掉季盘欠卷。' : '这场胜局会把本周押卷往正卷推进。'
+                ].filter(Boolean).join('｜'),
+                statusLine: '天道榜 · 通过',
+                anchorSection: 'pvp',
+                priority: 1
+            });
         }
         this.autoSave();
     }
@@ -12991,6 +13423,7 @@ class Game {
         const deltaVal = document.getElementById('pvp-score-delta');
         const oppName = document.getElementById('pvp-result-opponent');
         const oppScore = document.getElementById('pvp-result-opp-score');
+        const resolvedMatchTicket = this.pvpMatchTicket;
 
         // Report
         let result = {
@@ -13029,6 +13462,45 @@ class Game {
         }
         if (result && result.rejected) {
             Utils.showBattleLog('PVP 结算校验未通过，本场积分未变动。');
+        } else if (typeof this.recordSeasonVerificationResult === 'function') {
+            let pvpSeasonMeta = null;
+            const weekMeta = typeof this.getHeavenlyMandateWeekMeta === 'function'
+                ? this.getHeavenlyMandateWeekMeta()
+                : null;
+            if (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getCurrentSeasonMeta === 'function') {
+                try {
+                    pvpSeasonMeta = PVPService.getCurrentSeasonMeta();
+                } catch (error) {
+                    pvpSeasonMeta = null;
+                }
+            }
+            const opponentName = this.pvpOpponentRank?.user?.username || '';
+            const delta = Math.floor(Number(result?.delta !== undefined ? result.delta : result?.ratingChange) || 0);
+            this.recordSeasonVerificationResult({
+                recordId: `season_verification_${String(weekMeta?.weekTag || 'current').trim()}_primary_pvp`,
+                weekTag: String(weekMeta?.weekTag || '').trim(),
+                weekLabel: String(weekMeta?.weekLabel || '').trim(),
+                role: 'primary',
+                sourceMode: 'pvp',
+                sourceModeLabel: '天道榜',
+                sourceLabel: `${pvpSeasonMeta?.name || '天道榜'}${opponentName ? ` · 对手 ${opponentName}` : ''}`,
+                label: '天道榜反证',
+                resultStatus: 'failed',
+                writebackMode: 'degrade',
+                writebackLine: '天道榜给出了反证，本周押卷会先转入险卷/反例处理。',
+                resolvedRunId: String(result?.matchId || resolvedMatchTicket?.id || pvpSeasonMeta?.id || '').trim(),
+                proofQuality: 'thin',
+                lineageStyle: '镜战压强',
+                summaryLine: `${pvpSeasonMeta?.name || '天道榜'} 对局失利${opponentName ? `，${opponentName} 给出了当前主轴的反证。` : '，当前主轴需要重新复核。'}`,
+                detailLine: [
+                    delta ? `积分 ${delta}` : '',
+                    Number(result?.coinsAwarded) > 0 ? `天道币 +${Math.floor(Number(result.coinsAwarded) || 0)}` : '',
+                    '先收紧路线，再决定是否继续冲主验证。'
+                ].filter(Boolean).join('｜'),
+                statusLine: '天道榜 · 反证已入账',
+                anchorSection: 'pvp',
+                priority: 1
+            });
         }
         this.autoSave();
     }
@@ -13129,10 +13601,78 @@ class Game {
         const toTextArray = (value, limit = 6) => Array.isArray(value)
             ? value.map((entry) => String(entry == null ? '' : entry).trim()).filter(Boolean).slice(0, limit)
             : [];
+        const pickTextArray = (primary, fallback, limit = 6) => {
+            const primaryLines = toTextArray(primary, limit);
+            return primaryLines.length > 0 ? primaryLines : toTextArray(fallback, limit);
+        };
         const ratingTone = ['completed', 'selected', 'suggested', 'idle'].includes(String(source.ratingTone || ''))
             ? String(source.ratingTone)
             : 'idle';
         const score = Math.max(0, Math.floor(Number(source.score) || 0));
+        const lineage = (() => {
+            if (!source.lineage || typeof source.lineage !== 'object') return null;
+            const next = {
+                summaryLine: String(source.lineage.summaryLine || '').trim(),
+                detailLine: String(source.lineage.detailLine || '').trim(),
+                currentFocusLine: String(source.lineage.currentFocusLine || '').trim(),
+                styleLabel: String(source.lineage.styleLabel || '').trim(),
+                characterLabel: String(source.lineage.characterLabel || '').trim(),
+                nodeLabel: String(source.lineage.nodeLabel || '').trim(),
+                researchLabel: String(source.lineage.researchLabel || '').trim()
+            };
+            return Object.values(next).some(Boolean) ? next : null;
+        })();
+        const normalizeAftereffectRecord = (entry = null) => {
+            if (!entry || typeof entry !== 'object') return null;
+            const next = {
+                recordId: String(entry.recordId || entry.id || '').trim(),
+                icon: String(entry.icon || '').trim(),
+                name: String(entry.name || '').trim(),
+                templateId: String(entry.templateId || '').trim(),
+                templateLabel: String(entry.templateLabel || '').trim(),
+                outcomeId: String(entry.outcomeId || '').trim(),
+                outcomeLabel: String(entry.outcomeLabel || '').trim(),
+                sourceLine: String(entry.sourceLine || '').trim(),
+                positiveLine: String(entry.positiveLine || '').trim(),
+                negativeLine: String(entry.negativeLine || '').trim(),
+                summaryLine: String(entry.summaryLine || '').trim(),
+                detailLine: String(entry.detailLine || '').trim(),
+                status: String(entry.status || '').trim(),
+                statusLabel: String(entry.statusLabel || '').trim(),
+                statusLine: String(entry.statusLine || '').trim(),
+                remainingChapters: Math.max(0, Math.floor(Number(entry.remainingChapters) || 0)),
+                durationChapters: Math.max(1, Math.floor(Number(entry.durationChapters || entry.duration) || 1)),
+                activationChapterIndex: Math.max(0, Math.floor(Number(entry.activationChapterIndex) || 0))
+            };
+            return Object.values(next).some((value) => value !== '' && value !== 0) ? next : null;
+        };
+        const aftereffects = (() => {
+            if (!source.aftereffects || typeof source.aftereffects !== 'object') return null;
+            const primary = normalizeAftereffectRecord(source.aftereffects.primary);
+            const records = Array.isArray(source.aftereffects.records)
+                ? source.aftereffects.records.map((entry) => normalizeAftereffectRecord(entry)).filter(Boolean).slice(0, 3)
+                : [];
+            const next = {
+                summaryLine: String(source.aftereffects.summaryLine || '').trim(),
+                detailLine: String(source.aftereffects.detailLine || '').trim(),
+                guideLine: String(source.aftereffects.guideLine || '').trim(),
+                currentStatusLine: String(source.aftereffects.currentStatusLine || '').trim(),
+                activeCount: Math.max(0, Math.floor(Number(source.aftereffects.activeCount) || 0)),
+                pendingCount: Math.max(0, Math.floor(Number(source.aftereffects.pendingCount) || 0)),
+                primary: primary || records[0] || null,
+                records
+                };
+            return next.primary || next.summaryLine || next.detailLine || next.records.length > 0 ? next : null;
+        })();
+        const seasonBoard = (() => {
+            const boardSource = source.seasonBoard && typeof source.seasonBoard === 'object'
+                ? source.seasonBoard
+                : (typeof this.getSeasonBoardSnapshot === 'function'
+                    ? this.getSeasonBoardSnapshot({ latestSlate: source })
+                    : null);
+            if (!boardSource || typeof this.normalizeSeasonBoardSnapshot !== 'function') return null;
+            return this.normalizeSeasonBoardSnapshot(boardSource);
+        })();
 
         return {
             id: String(source.id || ''),
@@ -13148,9 +13688,12 @@ class Game {
             branchName: String(source.branchName || ''),
             branchLine: String(source.branchLine || ''),
             nemesisLine: String(source.nemesisLine || ''),
-            focusLines: toTextArray(source.focusLines || source.goalHighlights, 4),
-            breakdown: toTextArray(source.breakdown || source.scoreBreakdown, 4),
+            focusLines: pickTextArray(source.focusLines, source.goalHighlights, 4),
+            breakdown: pickTextArray(source.breakdown, source.scoreBreakdown, 4),
             tags: toTextArray(source.tags, 6),
+            seasonBoard,
+            lineage,
+            aftereffects,
             agenda: source.agenda && typeof source.agenda === 'object'
                 ? {
                     agendaId: String(source.agenda.agendaId || ''),
@@ -13196,16 +13739,174 @@ class Game {
             const agenda = expeditionMeta.agenda && typeof expeditionMeta.agenda === 'object'
                 ? expeditionMeta.agenda
                 : null;
-            const expeditionFoot = agenda?.grantedLine
-                || (expeditionMeta.trainingAdvice
-                    ? `训练建议：${expeditionMeta.trainingAdvice}`
-                    : (agenda?.reasonLine || expeditionMeta.branchLine || expeditionMeta.nemesisLine || '可回命盘档案室继续复盘本章答卷。'));
+            const seasonBoard = expeditionMeta.seasonBoard && typeof expeditionMeta.seasonBoard === 'object'
+                ? expeditionMeta.seasonBoard
+                : null;
+            const seasonSettlement = seasonBoard?.settlement && typeof seasonBoard.settlement === 'object'
+                ? seasonBoard.settlement
+                : null;
+            const seasonDebtPack = seasonBoard?.debtPack && typeof seasonBoard.debtPack === 'object'
+                ? seasonBoard.debtPack
+                : null;
+            const seasonVerificationOrders = Array.isArray(seasonBoard?.verificationOrders)
+                ? seasonBoard.verificationOrders.filter((entry) => entry && typeof entry === 'object')
+                : [];
+            const seasonNextTask = seasonBoard?.nextTask && typeof seasonBoard.nextTask === 'object'
+                ? seasonBoard.nextTask
+                : null;
+            const lineage = expeditionMeta.lineage && typeof expeditionMeta.lineage === 'object'
+                ? expeditionMeta.lineage
+                : null;
+            const aftereffects = expeditionMeta.aftereffects && typeof expeditionMeta.aftereffects === 'object'
+                ? expeditionMeta.aftereffects
+                : null;
+            const seasonSettlementOutcomeId = String(seasonSettlement?.outcomeId || '').trim();
+            const shouldSurfaceSeasonVerification = seasonBoard?.phaseId === 'ranking'
+                || ['positive_sheet', 'risky_sheet', 'debt_sheet'].includes(seasonSettlementOutcomeId);
+            const visibleSeasonVerificationOrders = shouldSurfaceSeasonVerification ? seasonVerificationOrders : [];
+            const primarySeasonVerification = visibleSeasonVerificationOrders.find((entry) => String(entry?.role || '').trim() === 'primary')
+                || visibleSeasonVerificationOrders[0]
+                || null;
+            const preferAftereffectFoot = ['sampling_sheet'].includes(seasonSettlementOutcomeId);
+            const actionSurfaceOutcomes = ['positive_sheet', 'risky_sheet', 'debt_sheet', 'locking_sheet'];
+            const resolveAnchorLabel = (anchorSection = '') => {
+                const labelMap = {
+                    sanctum: '洞府',
+                    endless: '无尽轮回',
+                    pvp: '天道榜',
+                    challenge: '七日劫数',
+                    observatory: '命盘档案室',
+                    map: '章节地图'
+                };
+                return labelMap[String(anchorSection || '').trim()] || '';
+            };
+            const rewardActionBody = (() => {
+                switch (seasonSettlementOutcomeId) {
+                    case 'debt_sheet':
+                        return seasonDebtPack?.guideLine
+                            || primarySeasonVerification?.summaryLine
+                            || primarySeasonVerification?.hintLine
+                            || seasonSettlement?.summaryLine
+                            || seasonBoard?.summaryLine
+                            || '';
+                    case 'risky_sheet':
+                        return primarySeasonVerification?.summaryLine
+                            || primarySeasonVerification?.hintLine
+                            || seasonSettlement?.guideLine
+                            || seasonSettlement?.summaryLine
+                            || seasonBoard?.summaryLine
+                            || '';
+                    case 'positive_sheet':
+                        return primarySeasonVerification?.summaryLine
+                            || primarySeasonVerification?.hintLine
+                            || seasonNextTask?.hintLine
+                            || seasonSettlement?.summaryLine
+                            || seasonBoard?.summaryLine
+                            || '';
+                    case 'locking_sheet':
+                        return seasonNextTask?.hintLine
+                            || (seasonNextTask?.label ? `当前押卷行动：${seasonNextTask.label}` : '')
+                            || seasonSettlement?.summaryLine
+                            || seasonBoard?.summaryLine
+                            || '';
+                    case 'sampling_sheet':
+                        return seasonNextTask?.hintLine
+                            || seasonSettlement?.summaryLine
+                            || seasonBoard?.summaryLine
+                            || '';
+                    default:
+                        return seasonBoard?.summaryLine || '';
+                }
+            })();
+            const rewardActionFoot = (() => {
+                const verificationAnchorLabel = resolveAnchorLabel(primarySeasonVerification?.anchorSection);
+                const debtAnchorLabel = resolveAnchorLabel(
+                    seasonDebtPack?.recommendedAnchorSection || primarySeasonVerification?.anchorSection
+                );
+                const nextTaskAnchorLabel = resolveAnchorLabel(seasonNextTask?.anchorSection);
+                switch (seasonSettlementOutcomeId) {
+                    case 'debt_sheet':
+                        return [
+                            seasonDebtPack?.settleWindowText ? `清账窗口 ${seasonDebtPack.settleWindowText}` : '',
+                            seasonDebtPack?.progressText || seasonDebtPack?.statusLine || primarySeasonVerification?.statusLine || '',
+                            debtAnchorLabel ? `建议前往 ${debtAnchorLabel}` : ''
+                        ].filter(Boolean).join(' · ');
+                    case 'risky_sheet':
+                        return [
+                            primarySeasonVerification?.statusLine
+                                || (seasonBoard?.progress?.progressText ? `验证进度 ${seasonBoard.progress.progressText}` : '')
+                                || seasonBoard?.statusLine
+                                || '',
+                            verificationAnchorLabel ? `建议前往 ${verificationAnchorLabel}` : ''
+                        ].filter(Boolean).join(' · ');
+                    case 'positive_sheet':
+                        return [
+                            primarySeasonVerification?.statusLine
+                                || seasonSettlement?.statusLine
+                                || seasonBoard?.statusLine
+                                || '',
+                            verificationAnchorLabel ? `继续去 ${verificationAnchorLabel}` : ''
+                        ].filter(Boolean).join(' · ');
+                    case 'locking_sheet':
+                        return [
+                            seasonNextTask?.progressText
+                                ? `${seasonNextTask.laneLabel || '当前任务'} ${seasonNextTask.progressText}`
+                                : '',
+                            seasonNextTask?.statusLine || seasonSettlement?.statusLine || seasonBoard?.statusLine || '',
+                            aftereffects?.currentStatusLine || aftereffects?.summaryLine || '',
+                            nextTaskAnchorLabel ? `从 ${nextTaskAnchorLabel} 继续` : ''
+                        ].filter(Boolean).join(' · ');
+                    case 'sampling_sheet':
+                        return [
+                            seasonNextTask?.progressText
+                                ? `${seasonNextTask.laneLabel || '当前任务'} ${seasonNextTask.progressText}`
+                                : '',
+                            seasonNextTask?.statusLine || seasonBoard?.statusLine || '',
+                            nextTaskAnchorLabel ? `建议前往 ${nextTaskAnchorLabel}` : ''
+                        ].filter(Boolean).join(' · ');
+                    default:
+                        return '';
+                }
+            })();
+            let expeditionFoot = rewardActionFoot;
+            if (!expeditionFoot) {
+                if (seasonBoard?.statusLine) {
+                    expeditionFoot = preferAftereffectFoot
+                        ? (
+                            aftereffects?.currentStatusLine
+                            || aftereffects?.summaryLine
+                            || seasonBoard?.statusLine
+                            || seasonBoard?.guideLine
+                        )
+                        : seasonBoard?.statusLine;
+                } else {
+                    expeditionFoot = seasonBoard?.guideLine
+                        || agenda?.grantedLine
+                        || aftereffects?.currentStatusLine
+                        || aftereffects?.summaryLine
+                        || '';
+                }
+            }
+            if (!expeditionFoot) {
+                expeditionFoot = agenda?.grantedLine
+                    || aftereffects?.currentStatusLine
+                    || aftereffects?.summaryLine
+                    || (lineage?.currentFocusLine
+                        ? `谱系校准：${lineage.currentFocusLine}`
+                        : (expeditionMeta.trainingAdvice
+                            ? `训练建议：${expeditionMeta.trainingAdvice}`
+                            : (agenda?.reasonLine || expeditionMeta.branchLine || expeditionMeta.nemesisLine || '可回命盘档案室继续复盘本章答卷。')));
+            }
             return {
                 surface: 'expedition',
-                state: expeditionMeta.ratingTone === 'completed' ? 'archived' : 'tracking',
-                kicker: '章节归卷',
-                title: [expeditionMeta.chapterName, expeditionMeta.endingName].filter(Boolean).join(' · ') || '本章归卷已完成',
-                body: expeditionMeta.highlightLine
+                state: actionSurfaceOutcomes.includes(seasonSettlementOutcomeId)
+                    ? 'tracking'
+                    : (expeditionMeta.ratingTone === 'completed' ? 'archived' : 'tracking'),
+                kicker: actionSurfaceOutcomes.includes(seasonSettlementOutcomeId) ? '赛季裁定' : '章节归卷',
+                title: [expeditionMeta.chapterName, seasonSettlement?.outcomeLabel || expeditionMeta.endingName].filter(Boolean).join(' · ') || '本章归卷已完成',
+                body: rewardActionBody
+                    || expeditionMeta.highlightLine
+                    || lineage?.summaryLine
                     || agenda?.summaryLine
                     || (expeditionMeta.ratingLabel
                         ? `答卷评级：${expeditionMeta.ratingLabel}`
@@ -13283,28 +13984,87 @@ class Game {
 
     updateRewardHeaderCopy() {
         if (typeof document === 'undefined') return;
+        const screenEl = document.getElementById('reward-screen');
         const titleEl = document.querySelector('#reward-screen .reward-title');
         const subtitleEl = document.querySelector('#reward-screen .reward-subtitle');
         const narrative = this.getRewardNarrativeBriefMeta();
+        const expeditionMeta = narrative?.surface === 'expedition'
+            ? this.getRewardExpeditionMeta()
+            : null;
+        const seasonBoard = expeditionMeta?.seasonBoard && typeof expeditionMeta.seasonBoard === 'object'
+            ? expeditionMeta.seasonBoard
+            : null;
+        const seasonSettlement = seasonBoard?.settlement && typeof seasonBoard.settlement === 'object'
+            ? seasonBoard.settlement
+            : null;
+        const seasonDebtPack = seasonBoard?.debtPack && typeof seasonBoard.debtPack === 'object'
+            ? seasonBoard.debtPack
+            : null;
+        const seasonNextTask = seasonBoard?.nextTask && typeof seasonBoard.nextTask === 'object'
+            ? seasonBoard.nextTask
+            : null;
+        const seasonSettlementOutcomeId = String(seasonSettlement?.outcomeId || '').trim();
+        const shouldSurfaceSeasonVerification = seasonBoard?.phaseId === 'ranking'
+            || ['positive_sheet', 'risky_sheet', 'debt_sheet'].includes(seasonSettlementOutcomeId);
+        const seasonVerificationOrders = shouldSurfaceSeasonVerification && Array.isArray(seasonBoard?.verificationOrders)
+            ? seasonBoard.verificationOrders.filter((entry) => entry && typeof entry === 'object')
+            : [];
+        const primarySeasonVerification = seasonVerificationOrders.find((entry) => String(entry?.role || '').trim() === 'primary')
+            || seasonVerificationOrders[0]
+            || null;
+        const headerActionSource = (() => {
+            if (seasonSettlementOutcomeId === 'debt_sheet' && seasonDebtPack) return 'debtPack';
+            if (['positive_sheet', 'risky_sheet'].includes(seasonSettlementOutcomeId) && primarySeasonVerification) return 'verification';
+            if (['locking_sheet', 'sampling_sheet'].includes(seasonSettlementOutcomeId) && seasonNextTask) return 'nextTask';
+            if (primarySeasonVerification) return 'verification';
+            if (seasonNextTask) return 'nextTask';
+            if (seasonBoard?.guideLine) return 'guide';
+            return narrative?.surface === 'expedition' ? 'training' : '';
+        })();
+        const expeditionSubtitle = (() => {
+            switch (seasonSettlementOutcomeId) {
+                case 'debt_sheet':
+                    return '先整理本场战利，再根据赛季裁定确认清账回流，决定先补哪条外场验证。';
+                case 'risky_sheet':
+                    return '先整理本场战利，再把这一章的险卷送去补一条外场验证，别让主轴只停在章节内。';
+                case 'positive_sheet':
+                    return '先整理本场战利，再决定这张正卷要继续扩样、冲榜，还是补更高压证明。';
+                case 'locking_sheet':
+                    return '先整理本场战利，再沿押卷承诺继续锁线，把下一章行动写成可兑现的主轴。';
+                case 'sampling_sheet':
+                    return '先整理本场战利，再把这章样本压成可押卷的主练方向。';
+                default:
+                    return '先整理本场战利，再确认这一章的答卷评级、偏题诊断与训练建议，决定下一章继续补哪条主线。';
+            }
+        })();
+
+        if (screenEl) {
+            screenEl.dataset.rewardHeaderSurface = narrative?.surface || '';
+            screenEl.dataset.rewardHeaderState = narrative?.state || '';
+            screenEl.dataset.rewardHeaderOutcome = seasonSettlementOutcomeId;
+            screenEl.dataset.rewardNextActionSource = headerActionSource;
+        }
 
         if (titleEl) {
             titleEl.textContent = narrative?.surface === 'expedition'
-                ? '战斗胜利 · 章节归卷'
+                ? (seasonSettlementOutcomeId ? '战斗胜利 · 赛季裁定' : '战斗胜利 · 章节归卷')
                 : narrative?.state === 'archived'
                     ? '战斗胜利 · 命途圆满'
                     : narrative
                         ? '战斗胜利 · 样本更新'
                         : '战斗胜利！';
+            titleEl.dataset.rewardHeaderOutcome = seasonSettlementOutcomeId;
         }
 
         if (subtitleEl) {
             subtitleEl.textContent = narrative?.surface === 'expedition'
-                ? '先整理本场战利，再确认这一章的答卷评级、偏题诊断与训练建议，决定下一章继续补哪条主线。'
+                ? expeditionSubtitle
                 : narrative?.state === 'archived'
                     ? '先整理本场战利，再把这份圆满样本压成命盘档案，决定下一轮继续追哪条修行线。'
                     : narrative
                         ? '先整理法则余烬，再确认这份命盘样本会如何写入档案、影响下一阶段推进。'
                         : '先整理法则余烬，再把本场战利与关键留痕收成命盘线索，决定下一段推进节奏。';
+            subtitleEl.dataset.rewardNextActionSource = headerActionSource;
         }
     }
 
@@ -13436,18 +14196,249 @@ class Game {
         const diagnosticLines = meta.focusLines.length > 0
             ? meta.focusLines
             : meta.breakdown.slice(0, 3);
+        const lineage = meta.lineage && typeof meta.lineage === 'object'
+            ? meta.lineage
+            : null;
+        const aftereffects = meta.aftereffects && typeof meta.aftereffects === 'object'
+            ? meta.aftereffects
+            : null;
+        const seasonBoard = meta.seasonBoard && typeof meta.seasonBoard === 'object'
+            ? meta.seasonBoard
+            : null;
+        const seasonBoardSettlement = seasonBoard?.settlement && typeof seasonBoard.settlement === 'object'
+            ? seasonBoard.settlement
+            : null;
+        const seasonBoardOutcomeId = String(seasonBoardSettlement?.outcomeId || '').trim();
+        const seasonBoardDebtPack = seasonBoard?.debtPack && typeof seasonBoard.debtPack === 'object'
+            ? seasonBoard.debtPack
+            : null;
+        const rawSeasonBoardVerificationOrders = Array.isArray(seasonBoard?.verificationOrders)
+            ? seasonBoard.verificationOrders.filter((entry) => entry && typeof entry === 'object')
+            : [];
+        const shouldSurfaceSeasonVerification = seasonBoard?.phaseId === 'ranking'
+            || ['positive_sheet', 'risky_sheet', 'debt_sheet'].includes(seasonBoardOutcomeId);
+        const seasonBoardVerificationOrders = shouldSurfaceSeasonVerification ? rawSeasonBoardVerificationOrders : [];
+        const primarySeasonVerification = seasonBoardVerificationOrders[0] || null;
+        const secondarySeasonVerification = seasonBoardVerificationOrders[1] || null;
+        const seasonBoardNextTask = seasonBoard?.nextTask && typeof seasonBoard.nextTask === 'object'
+            ? seasonBoard.nextTask
+            : null;
+        const resolveAnchorLabel = (anchorSection = '') => {
+            const labelMap = {
+                sanctum: '洞府',
+                endless: '无尽轮回',
+                pvp: '天道榜',
+                challenge: '七日劫数',
+                observatory: '命盘档案室',
+                map: '章节地图'
+            };
+            return labelMap[String(anchorSection || '').trim()] || '';
+        };
+        const primaryActionSource = (() => {
+            if (seasonBoardOutcomeId === 'debt_sheet' && seasonBoardDebtPack) return 'debtPack';
+            if (['positive_sheet', 'risky_sheet'].includes(seasonBoardOutcomeId) && primarySeasonVerification) return 'verification';
+            if (['locking_sheet', 'sampling_sheet'].includes(seasonBoardOutcomeId) && seasonBoardNextTask) return 'nextTask';
+            if (primarySeasonVerification) return 'verification';
+            if (seasonBoardDebtPack) return 'debtPack';
+            if (seasonBoardNextTask) return 'nextTask';
+            if (seasonBoard?.guideLine) return 'guide';
+            return '';
+        })();
+        const buildDataAttrs = (entries = {}) => Object.entries(entries)
+            .filter(([, value]) => value !== undefined && value !== null && value !== '')
+            .map(([key, value]) => ` ${key}="${escape(String(value))}"`)
+            .join('');
+        const buildActionCard = ({ tone = 'tracking', dataAttrs = {}, kicker = '', body = '', detail = '', metaLines = [] }) => {
+            const summaryLine = String(body || '').trim();
+            const detailLine = String(detail || '').trim();
+            const compactMeta = metaLines.map((line) => String(line || '').trim()).filter(Boolean).join(' · ');
+            if (!kicker && !summaryLine && !detailLine && !compactMeta) return '';
+            return `
+                <div class="reward-expedition-line reward-expedition-callout is-${tone}"${buildDataAttrs(dataAttrs)}>
+                    ${kicker ? `<div class="reward-expedition-callout-kicker">${escape(kicker)}</div>` : ''}
+                    ${summaryLine ? `<div class="reward-expedition-callout-body">${escape(summaryLine)}</div>` : ''}
+                    ${detailLine ? `<div class="reward-expedition-callout-detail">${escape(detailLine)}</div>` : ''}
+                    ${compactMeta ? `<div class="reward-expedition-callout-meta">${escape(compactMeta)}</div>` : ''}
+                </div>
+            `;
+        };
+        const lineageLines = lineage
+            ? [
+                String(lineage.summaryLine || '').trim(),
+                String(lineage.detailLine || '').trim(),
+                lineage.currentFocusLine ? `谱系校准：${String(lineage.currentFocusLine || '').trim()}` : ''
+            ].filter(Boolean)
+            : [];
+        const aftereffectLines = aftereffects
+            ? [
+                String(aftereffects.summaryLine || '').trim(),
+                String(aftereffects.currentStatusLine || '').trim(),
+                String(aftereffects.detailLine || '').trim()
+            ].filter(Boolean)
+            : [];
+        const seasonBoardSummaryLine = String(seasonBoard?.summaryLine || '').trim();
+        const seasonBoardDetailLine = String(
+            seasonBoard?.detailLine
+            || seasonBoard?.rewardLine
+            || seasonBoard?.statusLine
+            || ''
+        ).trim();
+        const seasonBoardGuideLine = String(
+            seasonBoard?.guideLine
+            || seasonBoard?.crossModeSummary
+            || ''
+        ).trim();
+        const seasonBoardSummaryIntro = seasonBoardSummaryLine && seasonBoardSummaryLine !== seasonBoardSettlement?.summaryLine
+            ? seasonBoardSummaryLine
+            : '';
+        const seasonBoardDetailIntro = seasonBoardDetailLine
+            && seasonBoardDetailLine !== seasonBoardSettlement?.detailLine
+            && seasonBoardDetailLine !== seasonBoardDebtPack?.detailLine
+            ? seasonBoardDetailLine
+            : '';
+        const seasonBoardSettlementCard = seasonBoardSettlement
+            ? buildActionCard({
+                tone: seasonBoardOutcomeId === 'debt_sheet' ? 'warning' : 'focus',
+                dataAttrs: {
+                    'data-season-board-settlement-reward': 'true',
+                    'data-season-board-outcome': seasonBoardOutcomeId
+                },
+                kicker: `本章裁定 · ${seasonBoardSettlement.outcomeLabel || '待押卷'}`,
+                body: seasonBoardSettlement.summaryLine || seasonBoardSummaryLine,
+                detail: seasonBoardSettlement.detailLine || '',
+                metaLines: [
+                    seasonBoard.phaseLabel || '',
+                    seasonBoard.progress?.progressText ? `赛季 ${seasonBoard.progress.progressText}` : '',
+                    seasonBoardSettlement.progressText || seasonBoardSettlement.statusLine || ''
+                ]
+            })
+            : '';
+        const seasonBoardDebtCard = seasonBoardDebtPack
+            ? buildActionCard({
+                tone: 'warning',
+                dataAttrs: {
+                    'data-season-board-debt-reward': 'true',
+                    'data-season-board-action-reward': primaryActionSource === 'debtPack' ? 'true' : '',
+                    'data-season-board-action-source': primaryActionSource === 'debtPack' ? 'debtPack' : ''
+                },
+                kicker: seasonBoardDebtPack.recommendedValidationLabel || '债账回流',
+                body: seasonBoardDebtPack.summaryLine || seasonBoardDebtPack.guideLine || seasonBoardDebtPack.progressText,
+                detail: seasonBoardDebtPack.guideLine || seasonBoardDebtPack.detailLine || '',
+                metaLines: [
+                    seasonBoardDebtPack.settleWindowText ? `窗口 ${seasonBoardDebtPack.settleWindowText}` : '',
+                    seasonBoardDebtPack.progressText || seasonBoardDebtPack.statusLine || '',
+                    resolveAnchorLabel(seasonBoardDebtPack.recommendedAnchorSection)
+                        ? `建议前往 ${resolveAnchorLabel(seasonBoardDebtPack.recommendedAnchorSection)}`
+                        : ''
+                ]
+            })
+            : '';
+        const seasonBoardVerificationCard = primarySeasonVerification
+            ? buildActionCard({
+                tone: 'tracking',
+                dataAttrs: {
+                    'data-season-board-verification-reward': 'true',
+                    'data-season-board-action-reward': primaryActionSource === 'verification' ? 'true' : '',
+                    'data-season-board-action-source': primaryActionSource === 'verification' ? 'verification' : ''
+                },
+                kicker: `下一步验证 · ${primarySeasonVerification.label || '待验证'}`,
+                body: primarySeasonVerification.summaryLine || primarySeasonVerification.hintLine || primarySeasonVerification.statusLine,
+                detail: primarySeasonVerification.hintLine && primarySeasonVerification.hintLine !== primarySeasonVerification.summaryLine
+                    ? primarySeasonVerification.hintLine
+                    : '',
+                metaLines: [
+                    primarySeasonVerification.statusLine || '',
+                    resolveAnchorLabel(primarySeasonVerification.anchorSection)
+                        ? `建议前往 ${resolveAnchorLabel(primarySeasonVerification.anchorSection)}`
+                        : ''
+                ]
+            })
+            : '';
+        const seasonBoardNextTaskCard = seasonBoardNextTask
+            ? buildActionCard({
+                tone: 'tracking',
+                dataAttrs: {
+                    'data-season-board-next-task-reward': 'true',
+                    'data-season-board-action-reward': primaryActionSource === 'nextTask' ? 'true' : '',
+                    'data-season-board-action-source': primaryActionSource === 'nextTask' ? 'nextTask' : ''
+                },
+                kicker: seasonBoardNextTask.laneLabel || '下一步行动',
+                body: seasonBoardNextTask.label || seasonBoardNextTask.hintLine || '等待下一步行动',
+                detail: seasonBoardNextTask.hintLine || '',
+                metaLines: [
+                    seasonBoardNextTask.progressText ? `当前进度 ${seasonBoardNextTask.progressText}` : '',
+                    seasonBoardNextTask.statusLine || '',
+                    resolveAnchorLabel(seasonBoardNextTask.anchorSection)
+                        ? `建议前往 ${resolveAnchorLabel(seasonBoardNextTask.anchorSection)}`
+                        : ''
+                ]
+            })
+            : '';
+        const secondaryVerificationLine = secondarySeasonVerification
+            ? `<div class="reward-expedition-line muted" data-season-board-verification-followup="true">${escape(
+                `后续验证：${secondarySeasonVerification.label || '验证状'} · ${secondarySeasonVerification.summaryLine || secondarySeasonVerification.hintLine || secondarySeasonVerification.statusLine || '待同步'}`
+            )}</div>`
+            : '';
         const chips = [];
+        const lineageChips = [];
+        const aftereffectChips = [];
+        const seasonBoardChips = [];
         if (meta.ratingLabel) chips.push(`<span class="reward-expedition-chip focus">${escape(`评级 · ${meta.ratingLabel}`)}</span>`);
         if (meta.branchName) chips.push(`<span class="reward-expedition-chip">${escape(`主线 · ${meta.branchName}`)}</span>`);
         if (meta.nemesisLine) chips.push(`<span class="reward-expedition-chip">${escape(meta.nemesisLine)}</span>`);
         meta.tags.forEach((tag) => {
             chips.push(`<span class="reward-expedition-chip">${escape(tag)}</span>`);
         });
+        if (lineage?.characterLabel) {
+            lineageChips.push(`<span class="reward-expedition-chip" data-fate-lineage-reward-chip="character">${escape(`角色 · ${lineage.characterLabel}`)}</span>`);
+        }
+        if (lineage?.styleLabel) {
+            lineageChips.push(`<span class="reward-expedition-chip" data-fate-lineage-reward-chip="style">${escape(`流派 · ${lineage.styleLabel}`)}</span>`);
+        }
+        if (lineage?.nodeLabel) {
+            lineageChips.push(`<span class="reward-expedition-chip" data-fate-lineage-reward-chip="node">${escape(`节点 · ${lineage.nodeLabel}`)}</span>`);
+        }
+        if (lineage?.researchLabel) {
+            lineageChips.push(`<span class="reward-expedition-chip" data-fate-lineage-reward-chip="research">${escape(`研究 · ${lineage.researchLabel}`)}</span>`);
+        }
+        if (aftereffects?.primary?.templateLabel) {
+            aftereffectChips.push(`<span class="reward-expedition-chip" data-fate-aftereffect-reward-chip="template">${escape(`后效 · ${aftereffects.primary.templateLabel}`)}</span>`);
+        }
+        if (aftereffects?.primary?.statusLabel) {
+            aftereffectChips.push(`<span class="reward-expedition-chip" data-fate-aftereffect-reward-chip="status">${escape(`状态 · ${aftereffects.primary.statusLabel}`)}</span>`);
+        }
+        if (aftereffects?.activeCount > 0 || aftereffects?.pendingCount > 0) {
+            aftereffectChips.push(`<span class="reward-expedition-chip" data-fate-aftereffect-reward-chip="count">${escape(`生效 ${aftereffects.activeCount || 0} / 待生效 ${aftereffects.pendingCount || 0}`)}</span>`);
+        }
+        if (seasonBoard?.phaseLabel) {
+            seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="phase">${escape(`阶段 · ${seasonBoard.phaseLabel}`)}</span>`);
+        }
+        if (seasonBoard?.themeLabel) {
+            seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="theme">${escape(`主轴 · ${seasonBoard.themeLabel}`)}</span>`);
+        }
+        if (seasonBoard?.progress?.progressText) {
+            seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="status">${escape(`进度 · ${seasonBoard.progress.progressText}`)}</span>`);
+        }
+        if (seasonBoardSettlement?.outcomeLabel) {
+            seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="settlement">${escape(`押卷 · ${seasonBoardSettlement.outcomeLabel}`)}</span>`);
+        }
+        if (seasonBoardDebtPack?.settleWindowText || seasonBoardDebtPack?.progressText) {
+            seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="debt">${escape(`债账 · ${seasonBoardDebtPack.settleWindowText || seasonBoardDebtPack.progressText}`)}</span>`);
+        }
+        if (primarySeasonVerification?.label) {
+            seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="verification">${escape(`验证 · ${primarySeasonVerification.label}`)}</span>`);
+        }
+        if (seasonBoardNextTask?.label && ['sampling_sheet', 'locking_sheet'].includes(seasonBoardOutcomeId)) {
+            seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="next">${escape(`行动 · ${seasonBoardNextTask.label}`)}</span>`);
+        }
 
         panel.setAttribute('aria-live', 'polite');
         panel.style.display = 'block';
         panel.classList.toggle('is-complete', meta.ratingTone === 'completed');
         panel.dataset.tone = meta.ratingTone || 'idle';
+        panel.dataset.seasonBoardOutcome = seasonBoardOutcomeId;
+        panel.dataset.seasonBoardActionSource = primaryActionSource;
+        panel.dataset.seasonBoardVerificationVisible = shouldSurfaceSeasonVerification ? 'true' : 'false';
         panel.innerHTML = `
             <div class="reward-expedition-kicker">观星回响总结</div>
             <div class="reward-expedition-header">
@@ -13468,6 +14459,39 @@ class Game {
                 <div class="reward-expedition-advice">
                     <span class="reward-expedition-advice-label">训练建议</span>
                     <span>${escape(meta.trainingAdvice)}</span>
+                </div>
+            ` : ''}
+            ${seasonBoard ? `
+                <div class="reward-expedition-section" data-season-board-reward="true">
+                    <div class="reward-expedition-section-title">赛季天道盘</div>
+                    ${seasonBoardSummaryIntro ? `<div class="reward-expedition-summary" data-season-board-summary="true">${escape(seasonBoardSummaryIntro)}</div>` : ''}
+                    ${seasonBoardSettlementCard}
+                    ${seasonBoardDebtCard}
+                    ${seasonBoardVerificationCard}
+                    ${secondaryVerificationLine}
+                    ${seasonBoardNextTaskCard}
+                    ${seasonBoardDetailIntro ? `<div class="reward-expedition-line muted" data-season-board-detail="true">${escape(seasonBoardDetailIntro)}</div>` : ''}
+                    ${seasonBoard?.progress?.progressText ? `<div class="reward-expedition-line muted" data-season-board-progress-row="true">${escape(`${seasonBoard.phaseLabel || '当前阶段'} · 赛季进度 ${seasonBoard.progress.progressText}`)}</div>` : ''}
+                    ${seasonBoardGuideLine ? `<div class="reward-expedition-line muted" data-season-board-guide="overview">${escape(seasonBoardGuideLine)}</div>` : ''}
+                    ${seasonBoardChips.length > 0 ? `<div class="reward-expedition-chip-row">${seasonBoardChips.join('')}</div>` : ''}
+                </div>
+            ` : ''}
+            ${lineageLines.length > 0 ? `
+                <div class="reward-expedition-section" data-fate-lineage-reward="true">
+                    <div class="reward-expedition-section-title">命盘谱系</div>
+                    <div class="reward-expedition-list">
+                        ${lineageLines.map((line) => `<div class="reward-expedition-line">${escape(line)}</div>`).join('')}
+                    </div>
+                    ${lineageChips.length > 0 ? `<div class="reward-expedition-chip-row">${lineageChips.join('')}</div>` : ''}
+                </div>
+            ` : ''}
+            ${aftereffectLines.length > 0 ? `
+                <div class="reward-expedition-section" data-fate-aftereffect-reward="true">
+                    <div class="reward-expedition-section-title">界痕后效</div>
+                    <div class="reward-expedition-list">
+                        ${aftereffectLines.map((line) => `<div class="reward-expedition-line" data-fate-aftereffect-reward-line="true">${escape(line)}</div>`).join('')}
+                    </div>
+                    ${aftereffectChips.length > 0 ? `<div class="reward-expedition-chip-row">${aftereffectChips.join('')}</div>` : ''}
                 </div>
             ` : ''}
             ${meta.breakdown.length > 0 ? `
@@ -17204,8 +18228,8 @@ class Game {
             <div class="intro-section">
                 <h3>🌌 当前版本状态（V7.0《命途裂变》开发线）</h3>
                 <p class="intro-text">
-                    当前主线已进入 V7.0 迭代：核心目标是把“命途构筑、章节考试、长线复盘”彻底打通。
-                    版本强调中盘转轴、章节风险识别和跨模式成长闭环，而不是单纯叠加体量。
+                    当前主线已进入 V7.0 迭代：核心目标是把“命途构筑、章节考试、赛季组织层、长线复盘”彻底打通。
+                    版本强调中盘转轴、章节风险识别、季盘组织与跨模式成长闭环，而不是单纯叠加体量。
                 </p>
             </div>
 
@@ -17215,6 +18239,7 @@ class Game {
                     <li><strong>命途主线三阶段</strong>：每局有明确阶段目标、阶段奖励与圆满归档。</li>
                     <li><strong>命途裂变中盘抉择</strong>：中盘可执行极化 / 转修 / 献祭等路线改写，提升局内分叉感。</li>
                     <li><strong>章节世界规则考试化</strong>：章节天象、地脉、主宰提示与路线建议形成统一语义。</li>
+                    <li><strong>赛季天道盘组织层</strong>：精选命盘、章节归卷、洞府承诺、界痕后效、无尽轮回与 PVP 天道榜现会统一整理成训练线 / 远征线 / 验算线三条季盘任务，并同步出现在奖励页、构筑快照、洞府总览与文本 payload；奖励页会按押卷中 / 正卷 / 险卷 / 欠卷分支直接露出赛季裁定、债账 / 验证 / 下一步行动卡，锁线期会优先强调当前承诺动作，定榜后的正卷 / 险卷还会额外露出可点击的“七日劫数”旁验证状，同时保留路线引导与地图轻偏置；主验证通过会直接清债或把押卷升成正卷，主验证失败会把旧债改记成反证/险卷，而周挑战旁验证只负责补强推荐与复盘，不会替代主验证本身。</li>
                     <li><strong>DRI 风险指数面板</strong>：章节简报、挑战观察站与无尽轮回现已共享风险指数、主导维度与对策提示，读题语言更统一。</li>
                     <li><strong>挑战试炼压强 DRI</strong>：观察站挑战页、锁定开局横幅与地图运行横幅现已同步展示试炼压强、主轴维度与应对提示。</li>
                     <li><strong>挑战观察站深化</strong>：观察站留痕现会自动生成复刻重点 / 失手剖面、训练标签、演练目标与同主题对比轴，并提供跨赛道历史留痕筛面、训练预设与样本排序，可按窗口 / 样本层 / 结果 / 主题检索旧样本并快速切回常用训练视角。</li>
@@ -17243,6 +18268,7 @@ class Game {
                     <li><strong>PVP 赛季题面深化</strong>：继续补更细的赛季题面提示、分段标签与跨场对照线索，让 PVP DRI 不只在开战前可读，也能继续承接到赛后复盘。</li>
                     <li><strong>挑战观察站深化</strong>：继续补跨周检索、更长档期聚合与更细历史分层，让观察站从“可检索样本库”继续走向长期打法训练器。</li>
                     <li><strong>洞府议程深化</strong>：继续补更多议程分支与更重的契约代价，让“归卷 -> 立项 -> 章中处置 -> 锁线契约 -> 残卷回收 / 结题 -> 压成工程”的循环继续长出更强的策略分叉。</li>
+                    <li><strong>赛季天道盘深化</strong>：继续补更完整的采样 / 锁线 / 定榜阶段包装、更多季盘 lane 奖励与跨周收口规则，让季盘在现有“赛季裁定 + 债账 / 验证 / 下一步行动卡 + 路线引导 + 地图轻偏置”基础上继续成长为真正的赛季外场规划板。</li>
                 </ul>
             </div>
 
@@ -18414,6 +19440,2986 @@ class Game {
             bonusPreview,
             summary: `${focusTrack.icon} ${focusTrack.name} ${focusTrack.tierLabel} 正在改写章节事件池${bonusPreview ? `，并为命中的工程事件追加 ${bonusPreview}` : ''}。`
         };
+    }
+
+    createDefaultHeavenlyMandateState() {
+        return {
+            version: 1,
+            weekTag: '',
+            weekLabel: '',
+            themeId: '',
+            themeLabel: '',
+            themeIcon: '',
+            themeKicker: '',
+            summaryLine: '',
+            lanes: [],
+            completedTaskCount: 0,
+            totalTaskCount: 0,
+            history: [],
+            lastSyncedAt: 0
+        };
+    }
+
+    normalizeHeavenlyMandateTask(source = null, index = 0, laneId = 'expedition') {
+        const root = source && typeof source === 'object' ? source : {};
+        const safeTarget = Math.max(1, Math.floor(Number(root.target) || 1));
+        const rawProgress = Math.max(0, Math.floor(Number(root.progress) || 0));
+        const completed = !!root.completed || rawProgress >= safeTarget;
+        const progress = Math.min(Math.max(rawProgress, completed ? safeTarget : 0), safeTarget);
+        const fallbackId = `${laneId}_task_${index + 1}`;
+        const fallbackLabel = `敕令任务 ${index + 1}`;
+        return {
+            id: String(root.id || fallbackId).trim().slice(0, 48) || fallbackId,
+            label: String(root.label || fallbackLabel).trim().slice(0, 80) || fallbackLabel,
+            icon: String(root.icon || '✦').trim().slice(0, 4) || '✦',
+            progress,
+            target: safeTarget,
+            completed,
+            progressText: `${progress}/${safeTarget}`,
+            hintLine: String(root.hintLine || root.noteLine || '').trim().slice(0, 220),
+            statusLine: String(root.statusLine || '').trim().slice(0, 180),
+            anchorSection: String(root.anchorSection || root.section || '').trim().slice(0, 24),
+            source: String(root.source || root.sourceType || '').trim().slice(0, 40),
+            sourceId: String(root.sourceId || '').trim().slice(0, 96),
+            isPlaceholder: !!root.isPlaceholder,
+            occupiesStrongSlot: !!root.occupiesStrongSlot
+        };
+    }
+
+    normalizeHeavenlyMandateFocusTask(source = null) {
+        const root = source && typeof source === 'object' ? source : null;
+        if (!root) return null;
+        const baseTask = this.normalizeHeavenlyMandateTask(root, 0, 'focus');
+        if (!baseTask) return null;
+        const next = {
+            ...baseTask,
+            progressText: String(root.progressText || baseTask.progressText || '').trim().slice(0, 80)
+                || baseTask.progressText,
+            source: String(root.source || root.sourceType || '').trim().slice(0, 40),
+            sourceId: String(root.sourceId || '').trim().slice(0, 96),
+            isPlaceholder: !!root.isPlaceholder,
+            occupiesStrongSlot: !!root.occupiesStrongSlot
+        };
+        return Object.values(next).some((value) => value !== '' && value !== 0 && value !== false)
+            ? next
+            : null;
+    }
+
+    buildHeavenlyMandateDebtFocusTask(debtPack = null) {
+        const safeDebtPack = debtPack && typeof debtPack === 'object' ? debtPack : null;
+        if (!safeDebtPack || !safeDebtPack.occupiesStrongSlot) return null;
+        return this.normalizeHeavenlyMandateFocusTask({
+            id: safeDebtPack.occupiedMandateTaskId || `season_debt_focus_${safeDebtPack.id || 'current'}`,
+            label: safeDebtPack.status === 'deferred' ? '优先清掉跨周欠卷' : '优先清掉本周欠卷',
+            icon: '📚',
+            progress: 0,
+            target: 1,
+            progressText: safeDebtPack.status === 'deferred'
+                ? `已拖延 ${Math.max(1, Math.floor(Number(safeDebtPack.deferCount) || 1))} 周`
+                : (safeDebtPack.progressText || safeDebtPack.settleWindowText || '本周内优先清账'),
+            completed: false,
+            hintLine: safeDebtPack.guideLine || safeDebtPack.detailLine || safeDebtPack.summaryLine || '先清账，再继续本周的定榜节奏。',
+            statusLine: [
+                safeDebtPack.statusLine || '',
+                safeDebtPack.status === 'deferred' && safeDebtPack.carryIntoWeekTag
+                    ? `已带入 ${safeDebtPack.carryIntoWeekTag}`
+                    : ''
+            ].filter(Boolean).join(' · '),
+            anchorSection: safeDebtPack.recommendedAnchorSection || 'sanctum',
+            source: 'seasonDebtPack',
+            sourceId: safeDebtPack.id || '',
+            isPlaceholder: false,
+            occupiesStrongSlot: true
+        });
+    }
+
+    normalizeHeavenlyMandateLane(source = null, index = 0) {
+        const root = source && typeof source === 'object' ? source : {};
+        const laneId = String(root.id || `lane_${index + 1}`).trim().slice(0, 32) || `lane_${index + 1}`;
+        const tasks = Array.isArray(root.tasks)
+            ? root.tasks
+                .map((task, taskIndex) => this.normalizeHeavenlyMandateTask(task, taskIndex, laneId))
+                .slice(0, 4)
+            : [];
+        return {
+            id: laneId,
+            label: String(root.label || `玩法线 ${index + 1}`).trim().slice(0, 32) || `玩法线 ${index + 1}`,
+            icon: String(root.icon || '✦').trim().slice(0, 4) || '✦',
+            summaryLine: String(root.summaryLine || root.noteLine || '').trim().slice(0, 200),
+            completedCount: tasks.filter((task) => task.completed).length,
+            totalCount: tasks.length,
+            tasks
+        };
+    }
+
+    normalizeHeavenlyMandateHistoryEntry(source = null, index = 0) {
+        const root = source && typeof source === 'object' ? source : {};
+        const fallbackWeekTag = `week_${index + 1}`;
+        const completedTaskCount = Math.max(0, Math.floor(Number(root.completedTaskCount) || 0));
+        const totalTaskCount = Math.max(completedTaskCount, Math.floor(Number(root.totalTaskCount) || 0));
+        return {
+            weekTag: String(root.weekTag || fallbackWeekTag).trim().slice(0, 24) || fallbackWeekTag,
+            weekLabel: String(root.weekLabel || '').trim().slice(0, 32),
+            themeId: String(root.themeId || '').trim().slice(0, 32),
+            themeLabel: String(root.themeLabel || '').trim().slice(0, 48),
+            summaryLine: String(root.summaryLine || '').trim().slice(0, 180),
+            completedTaskCount,
+            totalTaskCount,
+            completed: !!root.completed || (totalTaskCount > 0 && completedTaskCount >= totalTaskCount),
+            at: Math.max(0, Math.floor(Number(root.at ?? root.lastSyncedAt) || 0))
+        };
+    }
+
+    normalizeHeavenlyMandateState(source = null) {
+        const defaults = this.createDefaultHeavenlyMandateState();
+        const root = source && typeof source === 'object' ? source : {};
+        const lanes = Array.isArray(root.lanes)
+            ? root.lanes
+                .map((lane, index) => this.normalizeHeavenlyMandateLane(lane, index))
+                .slice(0, 3)
+            : [];
+        const completedTaskCount = lanes.reduce((sum, lane) => sum + lane.completedCount, 0);
+        const totalTaskCount = lanes.reduce((sum, lane) => sum + lane.totalCount, 0);
+        const history = Array.isArray(root.history)
+            ? root.history
+                .map((entry, index) => this.normalizeHeavenlyMandateHistoryEntry(entry, index))
+                .filter((entry) => entry.weekTag)
+                .slice(0, 6)
+            : [];
+        return {
+            version: Math.max(1, Math.floor(Number(root.version) || defaults.version)),
+            weekTag: String(root.weekTag || '').trim().slice(0, 24),
+            weekLabel: String(root.weekLabel || '').trim().slice(0, 32),
+            themeId: String(root.themeId || '').trim().slice(0, 32),
+            themeLabel: String(root.themeLabel || '').trim().slice(0, 48),
+            themeIcon: String(root.themeIcon || '').trim().slice(0, 4),
+            themeKicker: String(root.themeKicker || '').trim().slice(0, 24),
+            summaryLine: String(root.summaryLine || '').trim().slice(0, 220),
+            lanes,
+            completedTaskCount: Math.max(completedTaskCount, Math.floor(Number(root.completedTaskCount) || 0)),
+            totalTaskCount: Math.max(totalTaskCount, Math.floor(Number(root.totalTaskCount) || 0)),
+            history,
+            lastSyncedAt: Math.max(0, Math.floor(Number(root.lastSyncedAt) || 0))
+        };
+    }
+
+    ensureHeavenlyMandateState() {
+        this.heavenlyMandateState = this.normalizeHeavenlyMandateState(this.heavenlyMandateState);
+        return this.heavenlyMandateState;
+    }
+
+    createDefaultSeasonVerificationState() {
+        return {
+            version: 1,
+            weekTag: '',
+            weekLabel: '',
+            records: [],
+            history: [],
+            lastResolved: null
+        };
+    }
+
+    normalizeSeasonVerificationRecord(source = null, index = 0) {
+        const root = source && typeof source === 'object' ? source : {};
+        const sanitizeText = (value = '', limit = 180) => String(value || '').trim().slice(0, limit);
+        const role = ['primary', 'side'].includes(String(root.role || '').trim())
+            ? String(root.role || '').trim()
+            : (index === 0 ? 'primary' : 'side');
+        const sourceMode = ['pvp', 'endless', 'challenge', 'sanctum', 'hybrid', 'manual'].includes(String(root.sourceMode || '').trim())
+            ? String(root.sourceMode || '').trim()
+            : (
+                ['pvp', 'endless', 'challenge', 'sanctum'].includes(String(root.anchorSection || '').trim())
+                    ? String(root.anchorSection || '').trim()
+                    : (role === 'side' ? 'challenge' : 'manual')
+            );
+        const resultStatus = ['verified', 'failed', 'deferred', 'pending'].includes(String(root.resultStatus || '').trim())
+            ? String(root.resultStatus || '').trim()
+            : 'pending';
+        const writebackMode = ['clear_debt', 'upgrade_verdict', 'boost_recommendation', 'degrade', 'carry_forward', 'pending'].includes(String(root.writebackMode || '').trim())
+            ? String(root.writebackMode || '').trim()
+            : (
+                role === 'side'
+                    ? 'boost_recommendation'
+                    : (resultStatus === 'failed' ? 'degrade' : 'upgrade_verdict')
+            );
+        const proofQuality = ['thin', 'solid', 'decisive'].includes(String(root.proofQuality || '').trim())
+            ? String(root.proofQuality || '').trim()
+            : (resultStatus === 'verified' ? (role === 'primary' ? 'solid' : 'thin') : '');
+        const sourceModeLabelMap = {
+            pvp: '天道榜',
+            endless: '无尽轮回',
+            challenge: '七日劫数',
+            sanctum: '洞府锁线',
+            hybrid: '跨模验算',
+            manual: role === 'side' ? '旁验证' : '主验证'
+        };
+        const proofQualityLabelMap = {
+            thin: '薄证',
+            solid: '实证',
+            decisive: '铁证'
+        };
+        const resultStatusLabelMap = {
+            verified: '通过',
+            failed: '失利',
+            deferred: '延期',
+            pending: '待验证'
+        };
+        const sourceModeLabel = sanitizeText(root.sourceModeLabel || sourceModeLabelMap[sourceMode] || '验证', 32)
+            || (sourceModeLabelMap[sourceMode] || '验证');
+        const anchorSection = sanitizeText(
+            root.anchorSection
+            || (
+                sourceMode === 'pvp'
+                    ? 'pvp'
+                    : (sourceMode === 'endless'
+                        ? 'endless'
+                        : (sourceMode === 'challenge'
+                            ? 'challenge'
+                            : 'sanctum'))
+            ),
+            24
+        );
+        const weekTag = sanitizeText(root.weekTag || root.seasonWeekTag || '', 24);
+        const weekLabel = sanitizeText(root.weekLabel || '', 32);
+        const createdAt = Math.max(
+            0,
+            Math.floor(Number(root.createdAt || root.updatedAt || root.resolvedAt || Date.now()) || 0)
+        );
+        const updatedAt = Math.max(
+            createdAt,
+            Math.floor(Number(root.updatedAt || root.resolvedAt || root.createdAt || createdAt) || 0)
+        );
+        const fallbackId = sanitizeText(
+            root.recordId
+            || root.id
+            || `season_verification_${weekTag || 'current'}_${role}_${sourceMode}_${index + 1}`,
+            96
+        ) || `season_verification_${role}_${index + 1}`;
+        const record = {
+            recordId: fallbackId,
+            weekTag,
+            weekLabel,
+            role,
+            sourceMode,
+            sourceModeLabel,
+            sourceLabel: sanitizeText(root.sourceLabel || root.sourceName || '', 64),
+            label: sanitizeText(root.label || '', 64),
+            resultStatus,
+            writebackMode,
+            writebackLine: sanitizeText(root.writebackLine || '', 220),
+            resolvedRunId: sanitizeText(root.resolvedRunId || root.sourceRunId || '', 80),
+            chapterIndex: Math.max(0, Math.floor(Number(root.chapterIndex ?? root.boundChapterIndex) || 0)),
+            proofQuality,
+            lineageStyle: sanitizeText(root.lineageStyle || '', 48),
+            summaryLine: sanitizeText(root.summaryLine || '', 220),
+            detailLine: sanitizeText(root.detailLine || root.hintLine || '', 240),
+            statusLine: sanitizeText(root.statusLine || '', 160),
+            anchorSection,
+            priority: Math.max(1, Math.min(9, Math.floor(Number(root.priority) || (role === 'primary' ? 1 : 2)))),
+            carryIntoNextWeek: !!root.carryIntoNextWeek,
+            createdAt,
+            updatedAt
+        };
+
+        const defaultLabel = (() => {
+            if (record.label) return record.label;
+            if (record.sourceMode === 'challenge') return '七日劫数旁证';
+            if (record.sourceMode === 'endless') return record.resultStatus === 'failed' ? '无尽反证' : '无尽高压验证';
+            if (record.sourceMode === 'pvp') return record.resultStatus === 'failed' ? '天道榜反证' : '天道榜账本验证';
+            return role === 'side' ? '赛季旁验证' : '赛季主验证';
+        })();
+        record.label = sanitizeText(defaultLabel, 64) || defaultLabel;
+
+        if (!record.summaryLine) {
+            if (record.resultStatus === 'verified') {
+                record.summaryLine = record.role === 'primary'
+                    ? `${record.sourceModeLabel}已给本周主轴留下${proofQualityLabelMap[record.proofQuality] || '有效'}证明。`
+                    : `${record.sourceModeLabel}补上了一张不同节奏的旁验证。`;
+            } else if (record.resultStatus === 'failed') {
+                record.summaryLine = `${record.sourceModeLabel}给出了反证，这条主轴暂时不能直接定榜。`;
+            } else if (record.resultStatus === 'deferred') {
+                record.summaryLine = `${record.sourceModeLabel}尚未形成有效回写，本周先保留为待复核样本。`;
+            } else {
+                record.summaryLine = `${record.sourceModeLabel}验证状已挂起，等待真正落地后再回写季盘。`;
+            }
+        }
+
+        if (!record.writebackLine) {
+            if (record.writebackMode === 'clear_debt') {
+                record.writebackLine = '主验证已清掉欠卷，天命强目标会重新释放给定榜推进。';
+            } else if (record.writebackMode === 'upgrade_verdict') {
+                record.writebackLine = '主验证通过，本周押卷可以从险卷升级为正卷。';
+            } else if (record.writebackMode === 'boost_recommendation') {
+                record.writebackLine = '旁验证已补上第二份证明，季盘推荐会更偏向当前主修。';
+            } else if (record.writebackMode === 'degrade') {
+                record.writebackLine = '主验证给出反证，本周押卷会转入反证/险卷处理。';
+            } else if (record.writebackMode === 'carry_forward') {
+                record.writebackLine = '这条验证仍未完成，会继续带入后续周转。';
+            }
+        }
+
+        if (!record.detailLine) {
+            record.detailLine = [
+                record.sourceLabel ? `样本：${record.sourceLabel}` : '',
+                record.writebackLine || '',
+                record.lineageStyle ? `谱系偏向：${record.lineageStyle}` : ''
+            ].filter(Boolean).slice(0, 2).join('｜');
+        }
+
+        if (!record.statusLine) {
+            record.statusLine = [
+                role === 'primary' ? '主验证' : '旁验证',
+                record.sourceModeLabel,
+                resultStatusLabelMap[record.resultStatus] || '待验证',
+                proofQualityLabelMap[record.proofQuality] || ''
+            ].filter(Boolean).join(' · ');
+        }
+
+        return record;
+    }
+
+    normalizeSeasonVerificationState(source = null) {
+        const defaults = this.createDefaultSeasonVerificationState();
+        const root = source && typeof source === 'object' ? source : {};
+        const normalizeList = (value, limit = 8) => {
+            const seen = new Set();
+            return (Array.isArray(value) ? value : [])
+                .map((entry, index) => this.normalizeSeasonVerificationRecord(entry, index))
+                .filter((entry) => {
+                    if (!entry.recordId || seen.has(entry.recordId)) return false;
+                    seen.add(entry.recordId);
+                    return true;
+                })
+                .sort((a, b) => {
+                    if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
+                    return b.createdAt - a.createdAt;
+                })
+                .slice(0, limit);
+        };
+        const records = normalizeList(root.records, 6);
+        const history = normalizeList(
+            [
+                ...(Array.isArray(root.history) ? root.history : []),
+                ...(Array.isArray(root.records) ? root.records : [])
+            ],
+            18
+        );
+        const lastResolved = root.lastResolved && typeof root.lastResolved === 'object'
+            ? this.normalizeSeasonVerificationRecord(root.lastResolved)
+            : (history[0] || null);
+        return {
+            version: Math.max(1, Math.floor(Number(root.version) || defaults.version)),
+            weekTag: String(root.weekTag || '').trim().slice(0, 24),
+            weekLabel: String(root.weekLabel || '').trim().slice(0, 32),
+            records,
+            history,
+            lastResolved: lastResolved && lastResolved.recordId ? lastResolved : null
+        };
+    }
+
+    ensureSeasonVerificationState(options = {}) {
+        const state = this.normalizeSeasonVerificationState(this.seasonVerificationState);
+        const weekMeta = (options.weekTag || options.weekLabel)
+            ? {
+                weekTag: String(options.weekTag || '').trim(),
+                weekLabel: String(options.weekLabel || '').trim()
+            }
+            : (typeof this.getHeavenlyMandateWeekMeta === 'function'
+                ? this.getHeavenlyMandateWeekMeta(options.dateOverride || null)
+                : null);
+        const targetWeekTag = String(weekMeta?.weekTag || state.weekTag || '').trim();
+        const targetWeekLabel = String(weekMeta?.weekLabel || state.weekLabel || '').trim();
+        let records = Array.isArray(state.records) ? state.records.slice() : [];
+        let history = Array.isArray(state.history) ? state.history.slice() : [];
+
+        if (targetWeekTag) {
+            const carryRecords = [];
+            const nextRecords = [];
+            records.forEach((entry) => {
+                if (entry && entry.weekTag && entry.weekTag !== targetWeekTag) {
+                    carryRecords.push(entry);
+                } else if (entry) {
+                    nextRecords.push(entry);
+                }
+            });
+            carryRecords.forEach((entry) => {
+                const exists = history.findIndex((item) => item.recordId === entry.recordId);
+                if (exists >= 0) history.splice(exists, 1);
+                history.unshift(entry);
+            });
+            history = history.slice(0, 18);
+            records = nextRecords.slice(0, 6);
+        }
+
+        this.seasonVerificationState = this.normalizeSeasonVerificationState({
+            ...state,
+            weekTag: targetWeekTag || state.weekTag,
+            weekLabel: targetWeekLabel || state.weekLabel,
+            records,
+            history
+        });
+        return this.seasonVerificationState;
+    }
+
+    getSeasonVerificationSaveState() {
+        return this.ensureSeasonVerificationState();
+    }
+
+    recordSeasonVerificationResult(source = null) {
+        const root = source && typeof source === 'object' ? source : null;
+        if (!root) return null;
+        const effectiveAt = Math.max(
+            0,
+            Math.floor(Number(root.updatedAt || root.createdAt || root.resolvedAt || Date.now()) || 0)
+        );
+        const weekMeta = (root.weekTag || root.weekLabel)
+            ? {
+                weekTag: String(root.weekTag || '').trim(),
+                weekLabel: String(root.weekLabel || '').trim()
+            }
+            : (typeof this.getHeavenlyMandateWeekMeta === 'function'
+                ? this.getHeavenlyMandateWeekMeta(effectiveAt || null)
+                : null);
+        const state = this.ensureSeasonVerificationState({
+            weekTag: weekMeta?.weekTag || '',
+            weekLabel: weekMeta?.weekLabel || '',
+            dateOverride: effectiveAt || null
+        });
+        const record = this.normalizeSeasonVerificationRecord({
+            ...root,
+            weekTag: String(root.weekTag || weekMeta?.weekTag || state.weekTag || '').trim(),
+            weekLabel: String(root.weekLabel || weekMeta?.weekLabel || state.weekLabel || '').trim(),
+            updatedAt: effectiveAt || Date.now(),
+            createdAt: Math.max(0, Math.floor(Number(root.createdAt || effectiveAt || Date.now()) || 0))
+        });
+        if (!record.recordId) return null;
+
+        let records = Array.isArray(state.records) ? state.records.slice() : [];
+        const existingIndex = records.findIndex((entry) => (
+            entry.recordId === record.recordId
+            || (
+                entry.weekTag === record.weekTag
+                && entry.role === record.role
+                && entry.sourceMode === record.sourceMode
+            )
+        ));
+        if (existingIndex >= 0) records.splice(existingIndex, 1);
+        records.unshift(record);
+        records = records
+            .sort((a, b) => {
+                if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
+                return b.createdAt - a.createdAt;
+            })
+            .slice(0, 6);
+
+        let history = Array.isArray(state.history) ? state.history.slice() : [];
+        const historyIndex = history.findIndex((entry) => entry.recordId === record.recordId);
+        if (historyIndex >= 0) history.splice(historyIndex, 1);
+        history.unshift(record);
+        history = history.slice(0, 18);
+
+        this.seasonVerificationState = this.normalizeSeasonVerificationState({
+            ...state,
+            weekTag: record.weekTag || state.weekTag,
+            weekLabel: record.weekLabel || state.weekLabel,
+            records,
+            history,
+            lastResolved: ['verified', 'failed', 'deferred'].includes(record.resultStatus)
+                ? record
+                : state.lastResolved
+        });
+        return record;
+    }
+
+    getSeasonVerificationSnapshot(options = {}) {
+        const weekMeta = (options.weekTag || options.weekLabel)
+            ? {
+                weekTag: String(options.weekTag || '').trim(),
+                weekLabel: String(options.weekLabel || '').trim()
+            }
+            : (typeof this.getHeavenlyMandateWeekMeta === 'function'
+                ? this.getHeavenlyMandateWeekMeta(options.dateOverride || null)
+                : null);
+        const state = this.ensureSeasonVerificationState({
+            weekTag: weekMeta?.weekTag || '',
+            weekLabel: weekMeta?.weekLabel || '',
+            dateOverride: options.dateOverride || null
+        });
+        const weekTag = String(weekMeta?.weekTag || state.weekTag || '').trim();
+        const weekLabel = String(weekMeta?.weekLabel || state.weekLabel || '').trim();
+        const currentRecords = (Array.isArray(state.records) ? state.records : [])
+            .filter((entry) => !weekTag || !entry.weekTag || entry.weekTag === weekTag)
+            .sort((a, b) => {
+                if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
+                return b.createdAt - a.createdAt;
+            });
+        const selectLatestRoleRecord = (role) => currentRecords.find((entry) => entry.role === role) || null;
+        const primary = selectLatestRoleRecord('primary');
+        const side = selectLatestRoleRecord('side');
+        const verifiedCount = currentRecords.filter((entry) => entry.resultStatus === 'verified').length;
+        const failedCount = currentRecords.filter((entry) => entry.resultStatus === 'failed').length;
+        const pendingCount = currentRecords.filter((entry) => ['pending', 'deferred'].includes(entry.resultStatus)).length;
+        const lastResolved = state.lastResolved && typeof state.lastResolved === 'object'
+            ? this.normalizeSeasonVerificationRecord(state.lastResolved)
+            : null;
+        return {
+            version: state.version,
+            available: currentRecords.length > 0 || (Array.isArray(state.history) && state.history.length > 0),
+            weekTag,
+            weekLabel,
+            recordCount: currentRecords.length,
+            verifiedCount,
+            failedCount,
+            pendingCount,
+            primary,
+            side,
+            records: currentRecords.slice(0, 4),
+            history: (Array.isArray(state.history) ? state.history : []).slice(0, 6),
+            lastResolved: lastResolved && lastResolved.recordId ? lastResolved : (currentRecords[0] || null)
+        };
+    }
+
+    createDefaultFateAftereffectState() {
+        return {
+            version: 1,
+            records: [],
+            history: [],
+            lastResolved: null
+        };
+    }
+
+    normalizeFateAftereffectRecord(source = null, index = 0) {
+        const root = source && typeof source === 'object' ? source : {};
+        const sanitizeText = (value = '', limit = 180) => String(value || '').trim().slice(0, limit);
+        const templateId = ['route_bias', 'risk_bias', 'archive_bias'].includes(String(root.templateId || '').trim())
+            ? String(root.templateId || '').trim()
+            : 'route_bias';
+        const outcomeId = ['contract_success', 'contract_miss', 'recovery', 'stabilized'].includes(String(root.outcomeId || '').trim())
+            ? String(root.outcomeId || '').trim()
+            : 'stabilized';
+        const templateLabelMap = {
+            route_bias: '路线偏置',
+            risk_bias: '敌情偏置',
+            archive_bias: '归卷偏置'
+        };
+        const templateIconMap = {
+            route_bias: '🧭',
+            risk_bias: '🩸',
+            archive_bias: '🪞'
+        };
+        const outcomeLabelMap = {
+            contract_success: '契约兑现',
+            contract_miss: '契约未兑现',
+            recovery: '残卷回收',
+            stabilized: '界痕留痕'
+        };
+        const fallbackId = `aftereffect_${index + 1}`;
+        const record = {
+            recordId: sanitizeText(root.recordId || root.id || fallbackId, 80) || fallbackId,
+            icon: sanitizeText(root.icon || templateIconMap[templateId] || '🧭', 8) || '🧭',
+            name: sanitizeText(root.name || '', 60),
+            sourceRunId: sanitizeText(root.sourceRunId || '', 80),
+            sourceAgendaId: sanitizeText(root.sourceAgendaId || root.agendaId || '', 40),
+            sourceLabel: sanitizeText(root.sourceLabel || '', 80),
+            sourceLine: sanitizeText(root.sourceLine || '', 180),
+            sourceContractLabel: sanitizeText(root.sourceContractLabel || root.selectedContractLabel || '', 60),
+            sourceDecisionLabel: sanitizeText(root.sourceDecisionLabel || root.selectedDecisionLabel || '', 60),
+            templateId,
+            templateLabel: sanitizeText(root.templateLabel || templateLabelMap[templateId], 40) || templateLabelMap[templateId],
+            outcomeId,
+            outcomeLabel: sanitizeText(root.outcomeLabel || outcomeLabelMap[outcomeId], 40) || outcomeLabelMap[outcomeId],
+            chapterIndex: Math.max(0, Math.floor(Number(root.chapterIndex ?? root.boundChapterIndex) || 0)),
+            chapterName: sanitizeText(root.chapterName || root.boundChapterName || '', 60),
+            durationChapters: Math.max(1, Math.min(3, Math.floor(Number(root.durationChapters || root.duration || 1)))),
+            positiveLine: sanitizeText(root.positiveLine || '', 180),
+            negativeLine: sanitizeText(root.negativeLine || '', 180),
+            summaryLine: sanitizeText(root.summaryLine || '', 200),
+            detailLine: sanitizeText(root.detailLine || '', 220),
+            statusHintLine: sanitizeText(root.statusHintLine || '', 160),
+            weightShift: this.sanitizeSanctumAgendaWeightShift(root.weightShift),
+            createdAt: Math.max(0, Math.floor(Number(root.createdAt || root.updatedAt || 0) || 0))
+        };
+        if (!record.name) {
+            record.name = `${record.templateLabel} · ${record.outcomeLabel}`;
+        }
+        if (!record.sourceLine) {
+            record.sourceLine = [
+                record.sourceLabel,
+                record.sourceContractLabel ? `契约「${record.sourceContractLabel}」` : '',
+                !record.sourceContractLabel && record.sourceDecisionLabel ? `处置「${record.sourceDecisionLabel}」` : '',
+                record.chapterName
+            ].filter(Boolean).join(' · ');
+        }
+        if (!record.summaryLine) {
+            record.summaryLine = `${record.name}：${record.positiveLine || '已留下跨章后效。'}`;
+        }
+        if (!record.detailLine) {
+            record.detailLine = [
+                record.positiveLine ? `正向：${record.positiveLine}` : '',
+                record.negativeLine ? `代价：${record.negativeLine}` : ''
+            ].filter(Boolean).join('｜');
+        }
+        return record;
+    }
+
+    normalizeFateAftereffectState(source = null) {
+        const defaults = this.createDefaultFateAftereffectState();
+        const root = source && typeof source === 'object' ? source : {};
+        const records = Array.isArray(root.records)
+            ? root.records
+                .map((entry, index) => this.normalizeFateAftereffectRecord(entry, index))
+                .filter((entry) => entry.recordId)
+                .slice(-6)
+            : [];
+        const history = Array.isArray(root.history)
+            ? root.history
+                .map((entry, index) => this.normalizeFateAftereffectRecord(entry, index))
+                .filter((entry) => entry.recordId)
+                .slice(-10)
+            : [];
+        const lastResolved = root.lastResolved && typeof root.lastResolved === 'object'
+            ? this.normalizeFateAftereffectRecord(root.lastResolved)
+            : null;
+        return {
+            version: Math.max(1, Math.floor(Number(root.version) || defaults.version)),
+            records,
+            history,
+            lastResolved: lastResolved && lastResolved.recordId ? lastResolved : null
+        };
+    }
+
+    ensureFateAftereffectState(options = {}) {
+        const pruneExpired = !!options.pruneExpired;
+        const state = this.normalizeFateAftereffectState(this.fateAftereffectState);
+        if (pruneExpired && Array.isArray(state.records) && state.records.length > 0) {
+            const currentChapterIndex = this.getFateAftereffectCurrentChapterIndex(options);
+            if (currentChapterIndex > 0) {
+                const activeRecords = [];
+                const expiredMap = new Map(
+                    (Array.isArray(state.history) ? state.history : [])
+                        .map((entry) => {
+                            const normalized = this.normalizeFateAftereffectRecord(entry);
+                            return [normalized.recordId, normalized];
+                        })
+                );
+                state.records.forEach((entry) => {
+                    const runtime = this.getFateAftereffectRuntimeRecord(entry, { currentChapterIndex });
+                    if (runtime?.isExpired) {
+                        expiredMap.set(runtime.recordId, this.normalizeFateAftereffectRecord(runtime));
+                    } else if (runtime) {
+                        activeRecords.push(this.normalizeFateAftereffectRecord(runtime));
+                    }
+                });
+                state.records = activeRecords.slice(-6);
+                state.history = Array.from(expiredMap.values()).slice(-10);
+            }
+        }
+        this.fateAftereffectState = state;
+        return state;
+    }
+
+    getFateAftereffectSaveState() {
+        return this.ensureFateAftereffectState({ pruneExpired: true });
+    }
+
+    getFateAftereffectCurrentChapterIndex(context = {}) {
+        const direct = Math.max(0, Math.floor(Number(context.currentChapterIndex) || 0));
+        if (direct > 0) return direct;
+        const expeditionState = context.expeditionState && typeof context.expeditionState === 'object'
+            ? context.expeditionState
+            : (typeof this.getExpeditionState === 'function' ? this.getExpeditionState() : null);
+        const expeditionChapter = Math.max(0, Math.floor(Number(expeditionState?.chapterIndex) || 0));
+        if (expeditionChapter > 0) return expeditionChapter;
+        const playerChapter = Math.max(0, Math.floor(Number(this.player?.realm) || 0));
+        const latestSlate = context.latestSlate && typeof context.latestSlate === 'object'
+            ? context.latestSlate
+            : (typeof this.getLatestRunSlate === 'function' ? this.getLatestRunSlate() : null);
+        const slateChapter = Math.max(0, Math.floor(Number(latestSlate?.chapterIndex) || 0));
+        if (slateChapter > 0 || playerChapter > 0) return Math.max(slateChapter, playerChapter);
+        return 0;
+    }
+
+    getFateAftereffectRuntimeRecord(source = null, context = {}) {
+        const record = this.normalizeFateAftereffectRecord(source);
+        if (!record.recordId) return null;
+        const currentChapterIndex = this.getFateAftereffectCurrentChapterIndex(context);
+        const activationChapterIndex = Math.max(1, record.chapterIndex + 1);
+        let status = 'pending';
+        let statusLabel = '待生效';
+        let remainingChapters = record.durationChapters;
+        if (currentChapterIndex >= activationChapterIndex) {
+            const chaptersElapsed = currentChapterIndex - activationChapterIndex;
+            remainingChapters = Math.max(0, record.durationChapters - chaptersElapsed);
+            if (remainingChapters <= 0) {
+                status = 'expired';
+                statusLabel = '已收口';
+            } else {
+                status = 'active';
+                statusLabel = '生效中';
+            }
+        }
+        const statusLine = status === 'pending'
+            ? `第 ${activationChapterIndex} 章起生效 · 持续 ${record.durationChapters} 章`
+            : (status === 'active'
+                ? `当前生效 · 剩余 ${remainingChapters} 章`
+                : '已完成跨章收口');
+        return {
+            ...record,
+            currentChapterIndex,
+            activationChapterIndex,
+            remainingChapters,
+            status,
+            statusLabel,
+            statusLine,
+            appliesNow: status === 'active',
+            isExpired: status === 'expired'
+        };
+    }
+
+    createFateAftereffectFromSanctumAgenda(resolved = null, context = {}) {
+        if (!resolved || typeof resolved !== 'object' || !resolved.agendaId) return null;
+        const outcomeId = resolved.recoveryEligible
+            ? 'recovery'
+            : (resolved.contractResolved
+                ? (resolved.contractSuccess ? 'contract_success' : 'contract_miss')
+                : (resolved.outcome === 'success' ? 'stabilized' : ''));
+        if (!outcomeId) return null;
+        const rewardTrackId = String(resolved.rewardTrackId || '').trim();
+        const templateId = rewardTrackId === 'forbidden_altar'
+            ? 'risk_bias'
+            : (rewardTrackId === 'memory_rift' ? 'archive_bias' : 'route_bias');
+        const catalog = {
+            route_bias: {
+                contract_success: {
+                    name: '星镜余痕',
+                    icon: '🧭',
+                    durationChapters: 2,
+                    weightShift: { observatory: 0.028, event: 0.018, memory_rift: 0.014, enemy: -0.014, rest: -0.010 },
+                    positiveLine: '观星 / 事件 / 裂隙更容易连成同轴路线。',
+                    negativeLine: '战斗与营地窗口会略少，路线更容易被细线样本牵走。',
+                    summaryLine: '契约兑现后，观星锁线会继续牵引下一章路线。'
+                },
+                contract_miss: {
+                    name: '欠契偏航',
+                    icon: '🧭',
+                    durationChapters: 1,
+                    weightShift: { observatory: 0.018, event: 0.012, memory_rift: 0.010, rest: -0.016, shop: -0.010 },
+                    positiveLine: '观星 / 事件仍更容易刷到，便于补回未兑契账。',
+                    negativeLine: '修整与商路更少，补题压力会直接压到下一章。',
+                    summaryLine: '未兑现的锁线契约在下章留下了偏航账。'
+                },
+                recovery: {
+                    name: '残卷引线',
+                    icon: '🧭',
+                    durationChapters: 1,
+                    weightShift: { observatory: 0.012, event: 0.008, memory_rift: 0.006, enemy: -0.004 },
+                    positiveLine: '下一章仍会略偏观星 / 事件，方便把残卷线索补全。',
+                    negativeLine: '偏压较轻，但主线选择仍会被旧样本牵一下。',
+                    summaryLine: '残卷回收留下了一条较轻的路线牵引。'
+                },
+                stabilized: {
+                    name: '稳线回响',
+                    icon: '🧭',
+                    durationChapters: 1,
+                    weightShift: { observatory: 0.016, event: 0.012, memory_rift: 0.008, rest: -0.006 },
+                    positiveLine: '下一章更容易续上观星 / 事件主轴，便于把稳线收益滚起来。',
+                    negativeLine: '休整窗口略少，路线会更坚持当前主轴。',
+                    summaryLine: '结题后的稳线研究留下了短期路线偏置。'
+                }
+            },
+            risk_bias: {
+                contract_success: {
+                    name: '血线余压',
+                    icon: '🩸',
+                    durationChapters: 2,
+                    weightShift: { elite: 0.020, trial: 0.018, forbidden_altar: 0.016, rest: -0.018, shop: -0.012 },
+                    positiveLine: '精英 / 试炼 / 禁术节点更容易成串，便于继续验证高压模板。',
+                    negativeLine: '商路与营地更少，章节容错会明显下降。',
+                    summaryLine: '高压契约兑现后，下一轮仍会被压向敌情与风险线。'
+                },
+                contract_miss: {
+                    name: '欠压追痕',
+                    icon: '🩸',
+                    durationChapters: 1,
+                    weightShift: { enemy: 0.018, elite: 0.016, trial: 0.014, rest: -0.018, shop: -0.014 },
+                    positiveLine: '敌影与高压样本会更密，方便补完未收口的压强研究。',
+                    negativeLine: '休整窗口更稀，上一章欠下的高压代价会继续追着你。',
+                    summaryLine: '未兑现的高压契约把风险继续压到了下一章。'
+                },
+                recovery: {
+                    name: '残压余波',
+                    icon: '🩸',
+                    durationChapters: 1,
+                    weightShift: { trial: 0.012, elite: 0.008, enemy: 0.006, rest: -0.006 },
+                    positiveLine: '仍会稍微偏向试炼 / 精英，方便用轻量样本补回残卷。',
+                    negativeLine: '虽然只剩余波，但下章的风险密度依然会偏高一点。',
+                    summaryLine: '残卷回收保留了一点高压余波，但强度明显低于成功结题。'
+                },
+                stabilized: {
+                    name: '校压回响',
+                    icon: '🩸',
+                    durationChapters: 1,
+                    weightShift: { elite: 0.014, trial: 0.012, forbidden_altar: 0.010, rest: -0.008 },
+                    positiveLine: '高压节点会略微增多，便于继续把校压模板跑熟。',
+                    negativeLine: '休整与补给略少，下章需要更主动管控血线。',
+                    summaryLine: '这轮高压研究留下了一次短程敌情偏置。'
+                }
+            },
+            archive_bias: {
+                contract_success: {
+                    name: '归卷余映',
+                    icon: '🪞',
+                    durationChapters: 2,
+                    weightShift: { memory_rift: 0.022, observatory: 0.016, spirit_grotto: 0.014, enemy: -0.008, shop: -0.008 },
+                    positiveLine: '裂隙 / 观星 / 灵契节点更容易连成归卷线，档案收益更好补齐。',
+                    negativeLine: '直接推进主线的窗口更窄，商路节奏也会放慢。',
+                    summaryLine: '归卷契约兑现后，下一轮会更容易刷出档案系节点。'
+                },
+                contract_miss: {
+                    name: '欠卷旁注',
+                    icon: '🪞',
+                    durationChapters: 1,
+                    weightShift: { memory_rift: 0.018, observatory: 0.012, event: 0.010, shop: -0.014, rest: -0.008 },
+                    positiveLine: '归卷相关节点仍会增多，方便补回未结清的档案账。',
+                    negativeLine: '旁注与归档会拖慢主线收束，补给窗口也更少。',
+                    summaryLine: '未结清的归卷契账会在下一章继续拖住路线节奏。'
+                },
+                recovery: {
+                    name: '残卷旁辉',
+                    icon: '🪞',
+                    durationChapters: 1,
+                    weightShift: { memory_rift: 0.012, observatory: 0.008, spirit_grotto: 0.006, enemy: -0.004 },
+                    positiveLine: '仍会轻微偏向裂隙 / 观星，方便把回收到的残页补完整。',
+                    negativeLine: '代价较轻，但下章仍会多分一点心力给归档收束。',
+                    summaryLine: '残卷回收只留下轻量档案偏置，不会等同完整结题。'
+                },
+                stabilized: {
+                    name: '归档回响',
+                    icon: '🪞',
+                    durationChapters: 1,
+                    weightShift: { memory_rift: 0.016, observatory: 0.012, spirit_grotto: 0.008, enemy: -0.006 },
+                    positiveLine: '下一章更容易续上裂隙 / 观星 / 灵契线，便于把归卷收益继续压实。',
+                    negativeLine: '主线推进会稍慢，路线会更偏向收档与旁证。',
+                    summaryLine: '这轮归卷研究留下了一次短程档案偏置。'
+                }
+            }
+        };
+        const template = catalog[templateId]?.[outcomeId] || null;
+        if (!template) return null;
+        const chapterIndex = Math.max(0, Math.floor(Number(context.chapterIndex ?? resolved.boundChapterIndex) || 0));
+        const sourceRunId = String(resolved.sourceRunId || '').trim();
+        const record = this.normalizeFateAftereffectRecord({
+            recordId: `aftereffect_${sourceRunId || resolved.agendaId || Date.now()}_${outcomeId}`,
+            icon: template.icon,
+            name: template.name,
+            sourceRunId,
+            sourceAgendaId: resolved.agendaId,
+            sourceLabel: resolved.name || '洞府议程',
+            sourceLine: [
+                resolved.name || '洞府议程',
+                resolved.selectedContractLabel ? `契约「${resolved.selectedContractLabel}」` : '',
+                !resolved.selectedContractLabel && resolved.selectedDecisionLabel ? `处置「${resolved.selectedDecisionLabel}」` : '',
+                resolved.boundChapterName || resolved.chapterName || ''
+            ].filter(Boolean).join(' · '),
+            sourceContractLabel: resolved.selectedContractLabel || '',
+            sourceDecisionLabel: resolved.selectedDecisionLabel || '',
+            templateId,
+            outcomeId,
+            chapterIndex,
+            chapterName: resolved.boundChapterName || resolved.chapterName || '',
+            durationChapters: template.durationChapters,
+            positiveLine: template.positiveLine,
+            negativeLine: template.negativeLine,
+            summaryLine: `${template.name}：${template.summaryLine}`,
+            detailLine: [
+                `来源：${resolved.name || '洞府议程'}${resolved.selectedContractLabel ? ` · 契约「${resolved.selectedContractLabel}」` : (resolved.selectedDecisionLabel ? ` · 处置「${resolved.selectedDecisionLabel}」` : '')}`,
+                `正向：${template.positiveLine}`,
+                `代价：${template.negativeLine}`
+            ].filter(Boolean).join('｜'),
+            weightShift: template.weightShift,
+            createdAt: Date.now()
+        });
+        const state = this.ensureFateAftereffectState({
+            pruneExpired: true,
+            currentChapterIndex: chapterIndex
+        });
+        state.records = Array.isArray(state.records)
+            ? state.records
+                .filter((entry) => entry.recordId !== record.recordId && !(entry.sourceRunId === record.sourceRunId && entry.sourceAgendaId === record.sourceAgendaId))
+                .concat(record)
+                .slice(-6)
+            : [record];
+        state.history = Array.isArray(state.history)
+            ? state.history
+                .filter((entry) => entry.recordId !== record.recordId)
+                .concat(record)
+                .slice(-10)
+            : [record];
+        state.lastResolved = record;
+        this.fateAftereffectState = state;
+        return record;
+    }
+
+    getFateAftereffectSnapshot(context = {}) {
+        const currentChapterIndex = this.getFateAftereffectCurrentChapterIndex(context);
+        const state = this.ensureFateAftereffectState({
+            pruneExpired: true,
+            currentChapterIndex
+        });
+        const records = Array.isArray(state.records)
+            ? state.records
+                .map((entry) => this.getFateAftereffectRuntimeRecord(entry, { currentChapterIndex }))
+                .filter(Boolean)
+                .sort((a, b) => {
+                    const order = { active: 0, pending: 1, expired: 2 };
+                    const delta = (order[a.status] ?? 9) - (order[b.status] ?? 9);
+                    return delta !== 0 ? delta : ((b.createdAt || 0) - (a.createdAt || 0));
+                })
+            : [];
+        const history = Array.isArray(state.history)
+            ? state.history
+                .map((entry) => this.getFateAftereffectRuntimeRecord(entry, { currentChapterIndex }))
+                .filter(Boolean)
+                .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+            : [];
+        const latestRunId = String(context.latestRunId || '').trim();
+        const visibleRecords = latestRunId
+            ? records.filter((entry) => entry.sourceRunId === latestRunId)
+            : records;
+        const historyRecords = latestRunId
+            ? history.filter((entry) => entry.sourceRunId === latestRunId)
+            : history;
+        const runtimeLastResolved = state.lastResolved
+            ? this.getFateAftereffectRuntimeRecord(state.lastResolved, { currentChapterIndex })
+            : null;
+        const lastResolved = latestRunId
+            ? ((runtimeLastResolved && runtimeLastResolved.sourceRunId === latestRunId)
+                ? runtimeLastResolved
+                : (historyRecords[0] || null))
+            : runtimeLastResolved;
+        const selectedRecords = visibleRecords.length > 0
+            ? visibleRecords
+            : (historyRecords.length > 0 ? historyRecords : records);
+        const primary = selectedRecords[0] || lastResolved || history[0] || null;
+        if (!primary) return null;
+        const activeCount = records.filter((entry) => entry.status === 'active').length;
+        const pendingCount = records.filter((entry) => entry.status === 'pending').length;
+        const guideLine = primary.status === 'active'
+            ? `当前后效【${primary.name}】仍在生效，优先利用「${primary.positiveLine || '正向收益'}」，并提防「${primary.negativeLine || '负向代价'}」。`
+            : (primary.status === 'pending'
+                ? `后效【${primary.name}】会从第 ${primary.activationChapterIndex} 章开始生效，持续 ${primary.durationChapters} 章。`
+                : `最近一条后效【${primary.name}】已经收口。`);
+        return {
+            available: true,
+            title: '界痕抉择',
+            icon: primary.icon || '🧭',
+            actionValue: 'sanctum',
+            currentChapterIndex,
+            activeCount,
+            pendingCount,
+            recordCount: records.length,
+            summaryLine: primary.summaryLine || `${primary.name}：${primary.positiveLine || '已留下后效。'}`,
+            detailLine: primary.detailLine || primary.sourceLine || '',
+            guideLine,
+            currentStatusLine: primary.statusLine || '',
+            primary,
+            lastResolved,
+            records: selectedRecords.slice(0, 3)
+        };
+    }
+
+    getFateAftereffectWeightShift() {
+        const snapshot = this.getFateAftereffectSnapshot();
+        if (!snapshot || !Array.isArray(snapshot.records) || snapshot.records.length <= 0) return null;
+        const activeShifts = snapshot.records
+            .filter((entry) => entry.appliesNow)
+            .map((entry) => entry.weightShift)
+            .filter((entry) => entry && typeof entry === 'object');
+        if (activeShifts.length <= 0) return null;
+        return this.mergeSanctumAgendaWeightShifts(...activeShifts);
+    }
+
+    getHeavenlyMandateWeekMeta(dateOverride = null) {
+        const toDate = (value) => {
+            if (value instanceof Date) return new Date(value.getTime());
+            const candidate = value === null || value === undefined ? new Date() : new Date(value);
+            if (Number.isFinite(candidate.getTime())) return candidate;
+            return new Date();
+        };
+        const dateRef = toDate(dateOverride);
+        const endlessMeta = typeof this.getEndlessWeekMeta === 'function'
+            ? this.getEndlessWeekMeta(dateRef)
+            : null;
+        const challengeWeekTag = typeof this.getChallengeRotationKey === 'function'
+            ? String(this.getChallengeRotationKey('weekly', dateRef) || '').trim()
+            : '';
+        const fallbackWeekTag = String(endlessMeta?.weekTag || '').trim();
+        const weekTag = challengeWeekTag || fallbackWeekTag;
+        const weekMatch = weekTag.match(/^(\d+)-W(\d+)$/);
+        return {
+            year: weekMatch ? Number(weekMatch[1]) : Math.max(1970, Math.floor(Number(endlessMeta?.year) || dateRef.getUTCFullYear())),
+            weekNo: weekMatch ? Number(weekMatch[2]) : Math.max(1, Math.floor(Number(endlessMeta?.weekNo) || 1)),
+            weekTag: weekTag || '1970-W01',
+            weekIndex: Math.max(0, Math.floor(Number(endlessMeta?.weekIndex) || 0)),
+            weekLabel: weekMatch ? `${weekMatch[1]} · 第 ${Number(weekMatch[2])} 周` : '本周',
+            endlessWeekTag: fallbackWeekTag,
+            challengeWeekTag,
+            dateRef
+        };
+    }
+
+    getHeavenlyMandateSignalSnapshot(options = {}) {
+        const weekMeta = this.getHeavenlyMandateWeekMeta(options.dateOverride || null);
+        const latestSlate = typeof this.getLatestRunSlate === 'function'
+            ? this.getLatestRunSlate()
+            : null;
+        const validWeekTags = new Set(
+            [
+                String(weekMeta.weekTag || '').trim(),
+                String(weekMeta.endlessWeekTag || '').trim(),
+                String(weekMeta.challengeWeekTag || '').trim()
+            ].filter(Boolean)
+        );
+        const latestSlateAt = Math.max(
+            0,
+            Math.floor(Number(
+                latestSlate?.timestamp
+                ?? latestSlate?.completedAt
+                ?? latestSlate?.at
+                ?? latestSlate?.createdAt
+                ?? 0
+            ) || 0)
+        );
+        const latestSlateWeekMeta = latestSlateAt > 0
+            ? this.getHeavenlyMandateWeekMeta(latestSlateAt)
+            : null;
+        const latestSlateWeekTag = String(latestSlateWeekMeta?.weekTag || '').trim();
+        const weeklyLatestSlate = latestSlate && latestSlateWeekTag
+            ? (validWeekTags.size > 0 ? (validWeekTags.has(latestSlateWeekTag) ? latestSlate : null) : latestSlate)
+            : null;
+        const expeditionState = typeof this.getExpeditionState === 'function'
+            ? this.getExpeditionState()
+            : null;
+        const answerSheet = expeditionState && typeof this.getExpeditionAnswerSheet === 'function'
+            ? this.getExpeditionAnswerSheet(expeditionState)
+            : null;
+        const trainingFocus = typeof this.getObservatoryTrainingFocus === 'function'
+            ? this.getObservatoryTrainingFocus()
+            : null;
+        const selectedGuide = typeof this.getSelectedObservatoryExpeditionGuide === 'function'
+            ? this.getSelectedObservatoryExpeditionGuide({ silentSync: true })
+            : null;
+        const weeklyBundle = typeof this.buildChallengeBundle === 'function'
+            ? this.buildChallengeBundle('weekly', weekMeta.dateRef)
+            : null;
+        const weeklyArchiveEntries = typeof this.getObservatoryArchiveEntries === 'function'
+            ? this.getObservatoryArchiveEntries({
+                mode: 'weekly',
+                rotationKey: weekMeta.challengeWeekTag || weekMeta.weekTag,
+                limit: 12
+            })
+            : [];
+        const agendaSnapshot = typeof this.getSanctumAgendaExpeditionSnapshot === 'function'
+            ? this.getSanctumAgendaExpeditionSnapshot({ latestRunId: String((weeklyLatestSlate || latestSlate)?.id || '') })
+            : null;
+        const endlessState = typeof this.ensureEndlessState === 'function'
+            ? this.ensureEndlessState()
+            : (this.endlessState && typeof this.endlessState === 'object' ? this.endlessState : null);
+        const endlessSeason = typeof this.getEndlessSeasonProfile === 'function'
+            ? this.getEndlessSeasonProfile(
+                endlessState && typeof endlessState === 'object' ? endlessState.currentCycle : null,
+                weekMeta.dateRef
+            )
+            : null;
+        let pvpSeason = null;
+        let pvpHistory = [];
+        if (
+            typeof PVPService !== 'undefined'
+            && PVPService
+            && typeof PVPService.getCurrentSeasonMeta === 'function'
+        ) {
+            try {
+                pvpSeason = PVPService.getCurrentSeasonMeta();
+            } catch (error) {
+                pvpSeason = null;
+            }
+        }
+        if (
+            typeof PVPService !== 'undefined'
+            && PVPService
+            && typeof PVPService.getRecentMatchHistory === 'function'
+        ) {
+            try {
+                pvpHistory = PVPService.getRecentMatchHistory(24) || [];
+            } catch (error) {
+                pvpHistory = [];
+            }
+        }
+        const pvpSeasonId = String(pvpSeason?.id || '').trim();
+        const pvpSeasonMatches = Array.isArray(pvpHistory)
+            ? pvpHistory.filter((entry) => {
+                if (!entry || typeof entry !== 'object') return false;
+                if (!pvpSeasonId) return true;
+                return !entry.seasonId || entry.seasonId === pvpSeasonId;
+            })
+            : [];
+        const currentEndlessWeekTag = String(endlessState?.seasonWeekTag || '').trim();
+        const endlessMatchesWeek = validWeekTags.size > 0
+            ? validWeekTags.has(currentEndlessWeekTag)
+            : currentEndlessWeekTag.length > 0;
+        return {
+            weekTag: weekMeta.weekTag,
+            weekLabel: weekMeta.weekLabel,
+            weekIndex: weekMeta.weekIndex,
+            latestSlate: weeklyLatestSlate,
+            latestSlateWeekTag,
+            answerSheet,
+            trainingFocus,
+            selectedGuide,
+            weeklyBundle,
+            weeklyScore: Math.max(0, Math.floor(Number(weeklyBundle?.progress?.totalScore) || 0)),
+            weeklyArchiveCount: Array.isArray(weeklyArchiveEntries) ? weeklyArchiveEntries.length : 0,
+            agendaSnapshot,
+            activeAgenda: agendaSnapshot?.active || null,
+            lastAgenda: agendaSnapshot?.lastResolved || null,
+            endlessSeason,
+            endlessClears: endlessMatchesWeek ? Math.max(0, Math.floor(Number(endlessState?.seasonCycleClears) || 0)) : 0,
+            endlessScore: endlessMatchesWeek ? Math.max(0, Math.floor(Number(endlessState?.seasonScore) || 0)) : 0,
+            pvpSeason,
+            pvpSeasonName: String(pvpSeason?.name || '').trim(),
+            pvpSeasonMatchCount: pvpSeasonMatches.length,
+            pvpRecentOpponentName: String(pvpSeasonMatches[0]?.opponentName || '').trim()
+        };
+    }
+
+    getHeavenlyMandateThemeMeta(snapshot = null) {
+        const source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+        const catalog = {
+            star_reading: {
+                id: 'star_reading',
+                label: '观星校卷',
+                icon: '🔭',
+                kicker: '本周天道敕令',
+                summaryLine: '先读题，再把样本压成能兑现的主卷。'
+            },
+            seal_commitment: {
+                id: 'seal_commitment',
+                label: '押卷锁线',
+                icon: '📜',
+                kicker: '本周天道敕令',
+                summaryLine: '围绕洞府承诺推进章节，要求本周真正见到结题推进。'
+            },
+            mirror_trial: {
+                id: 'mirror_trial',
+                label: '镜战验算',
+                icon: '⚔️',
+                kicker: '本周天道敕令',
+                summaryLine: '把本周主练送去周挑战、无尽与天道榜做交叉验证。'
+            }
+        };
+        const fallbackOrder = ['star_reading', 'seal_commitment', 'mirror_trial'];
+        let themeId = fallbackOrder[Math.max(0, Math.floor(Number(source.weekIndex) || 0)) % fallbackOrder.length];
+        if ((source.pvpSeasonMatchCount || 0) > 0 || (source.endlessClears || 0) > 0) {
+            themeId = 'mirror_trial';
+        } else if (source.activeAgenda || source.latestSlate) {
+            themeId = 'seal_commitment';
+        }
+        const theme = catalog[themeId] || catalog.star_reading;
+        let summaryLine = theme.summaryLine;
+        if (themeId === 'star_reading' && source.selectedGuide?.title) {
+            summaryLine = `本周先围绕【${source.selectedGuide.title}】校卷，再把训练建议写回远征。`;
+        } else if (themeId === 'seal_commitment' && source.activeAgenda?.name) {
+            summaryLine = `本周核心是把【${source.activeAgenda.name}】推进成卷，再把洞府承诺带去章节结算。`;
+        } else if (themeId === 'mirror_trial' && source.pvpSeasonName) {
+            summaryLine = `本周主练要拿去【${source.pvpSeasonName}】与无尽轮回做交叉验算，确认打法不是只在单章成立。`;
+        }
+        return {
+            ...theme,
+            summaryLine
+        };
+    }
+
+    buildHeavenlyMandateBoard(options = {}) {
+        const signals = this.getHeavenlyMandateSignalSnapshot(options);
+        const theme = this.getHeavenlyMandateThemeMeta(signals);
+        const activeAgenda = signals.activeAgenda;
+        const lastAgenda = signals.lastAgenda;
+        const latestSlate = signals.latestSlate;
+        const selectedGuide = signals.selectedGuide;
+        const trainingFocus = signals.trainingFocus;
+        const weeklyBundle = signals.weeklyBundle;
+        const weeklyScoreTarget = theme.id === 'mirror_trial' ? 620 : 360;
+        const expeditionLane = {
+            id: 'expedition',
+            label: '远征线',
+            icon: '🧭',
+            summaryLine: activeAgenda
+                ? `当前正围绕【${activeAgenda.name}】压卷，章节内要继续沿 ${activeAgenda.focusNodeLine || '主轴'} 推进。`
+                : (latestSlate
+                    ? `本周已有一张章节答卷入档，下一步要把归卷样本继续压成洞府承诺。`
+                    : '先打一章远征留下本周第一张命盘答卷，再决定洞府押注。'),
+            tasks: [
+                {
+                    id: 'weekly_run_slate',
+                    label: latestSlate ? '本周答卷已入档' : '留下本周第一张答卷',
+                    icon: '🧭',
+                    progress: latestSlate ? 1 : 0,
+                    target: 1,
+                    hintLine: latestSlate
+                        ? `最新归卷：${latestSlate.chapterName || '章节'} · ${latestSlate.endingName || '已收卷'}${latestSlate.score ? ` · 评分 ${latestSlate.score}` : ''}`
+                        : '推进任意一章裂界远征，先把本周主练压成第一张命盘答卷。',
+                    statusLine: latestSlate?.ratingLabel || '',
+                    anchorSection: 'slates'
+                },
+                {
+                    id: 'weekly_sanctum_commitment',
+                    label: activeAgenda
+                        ? `推进 ${activeAgenda.name}`
+                        : (lastAgenda ? `复核 ${lastAgenda.name}` : '立下一道洞府承诺'),
+                    icon: '📜',
+                    progress: activeAgenda
+                        ? Math.max(0, Math.floor(Number(activeAgenda.progress) || 0))
+                        : (lastAgenda?.outcome === 'success' ? 1 : 0),
+                    target: activeAgenda
+                        ? Math.max(1, Math.floor(Number(activeAgenda.target) || 1))
+                        : 1,
+                    hintLine: activeAgenda
+                        ? (activeAgenda.phaseLine || activeAgenda.focusNodeLine || activeAgenda.summaryLine || '本轮承诺正在推进。')
+                        : (lastAgenda
+                            ? (lastAgenda.recoveryLine || lastAgenda.grantedLine || lastAgenda.reasonLine || '上一道洞府承诺已经留下结果。')
+                            : '从归卷书架挑一份样本，立为本周要兑现的洞府承诺。'),
+                    statusLine: activeAgenda?.phaseLabel || lastAgenda?.outcomeLabel || '',
+                    anchorSection: 'sanctum'
+                }
+            ]
+        };
+        const trainingLane = {
+            id: 'training',
+            label: '训练线',
+            icon: '🔭',
+            summaryLine: selectedGuide?.title
+                ? `当前主练线索已锁定为【${selectedGuide.title}】，接下来要把它推成真正可复用的周训练样本。`
+                : (trainingFocus?.trainingAdvice
+                    ? `当前已有主练建议，但还没有明确精选命盘，最好补一份更稳定的观星线索。`
+                    : '本周先在观星台锁定一份可复用主练，再去冲七日劫数。'),
+            tasks: [
+                {
+                    id: 'weekly_training_focus',
+                    label: (selectedGuide || trainingFocus) ? '主练线索已锁定' : '锁定本周主练线索',
+                    icon: '🔭',
+                    progress: (selectedGuide || trainingFocus) ? 1 : 0,
+                    target: 1,
+                    hintLine: selectedGuide
+                        ? `当前精选命盘：${selectedGuide.title} · ${selectedGuide.themeLabel || '观星样本'}`
+                        : (trainingFocus
+                            ? `当前主练：${trainingFocus.chapterName || '最近归卷'} · ${trainingFocus.trainingAdvice || trainingFocus.sourceTitle || '已给出训练建议'}`
+                            : '去观星台筛一份精选命盘，或先完成一轮周挑战补出主练建议。'),
+                    statusLine: selectedGuide?.themeLabel || trainingFocus?.themeLabel || '',
+                    anchorSection: 'chapters'
+                },
+                {
+                    id: 'weekly_challenge_score',
+                    label: `七日劫数累计 ${weeklyScoreTarget} 分`,
+                    icon: '🜁',
+                    progress: Math.min(Math.max(0, Math.floor(Number(signals.weeklyScore) || 0)), weeklyScoreTarget),
+                    target: weeklyScoreTarget,
+                    hintLine: weeklyBundle
+                        ? `${weeklyBundle.rule?.name || '本周轮换'} · 当前 ${Math.max(0, Math.floor(Number(signals.weeklyScore) || 0))} 分${signals.weeklyArchiveCount > 0 ? ` · 已归档 ${signals.weeklyArchiveCount} 份样本` : ''}`
+                        : '本周还没有周挑战记录，先去观星台跑一局七日劫数。',
+                    statusLine: weeklyBundle?.rotationLabel || signals.weekLabel || '',
+                    anchorSection: 'challenge'
+                }
+            ]
+        };
+        const versusLane = {
+            id: 'versus',
+            label: '对抗线',
+            icon: '⚔️',
+            summaryLine: (signals.endlessClears || 0) > 0 || (signals.pvpSeasonMatchCount || 0) > 0
+                ? '本周已经开始做跨模式验算，继续把主练送进高压场验证稳定性。'
+                : '用无尽与天道榜验证这周主练不是只在单章里成立的幻觉。',
+            tasks: [
+                {
+                    id: 'weekly_endless_clear',
+                    label: '无尽轮回通关 1 轮',
+                    icon: '∞',
+                    progress: Math.min(Math.max(0, Math.floor(Number(signals.endlessClears) || 0)), 1),
+                    target: 1,
+                    hintLine: signals.endlessSeason
+                        ? `${signals.endlessSeason.name || '当前赛季'} · 已清 ${Math.max(0, Math.floor(Number(signals.endlessClears) || 0))} 轮 / 赛季积分 ${Math.max(0, Math.floor(Number(signals.endlessScore) || 0))}`
+                        : '进入无尽轮回后，会开始记录本周赛季推进与压强验证结果。',
+                    statusLine: signals.endlessSeason?.directiveName || '',
+                    anchorSection: 'endless'
+                },
+                {
+                    id: 'weekly_pvp_ledger',
+                    label: '天道榜留下 2 场账本',
+                    icon: '⚔️',
+                    progress: Math.min(Math.max(0, Math.floor(Number(signals.pvpSeasonMatchCount) || 0)), 2),
+                    target: 2,
+                    hintLine: signals.pvpSeasonName
+                        ? `${signals.pvpSeasonName} · 已记 ${Math.max(0, Math.floor(Number(signals.pvpSeasonMatchCount) || 0))} 场${signals.pvpRecentOpponentName ? ` · 最近对手 ${signals.pvpRecentOpponentName}` : ''}`
+                        : 'PVP 账本会记录本季真实对局，至少打一场先建立首条样本。',
+                    statusLine: signals.pvpSeasonName || '',
+                    anchorSection: 'pvp'
+                }
+            ]
+        };
+        const rawLanes = [expeditionLane, trainingLane, versusLane];
+        const seasonSignals = typeof this.getSeasonBoardSignalSnapshot === 'function'
+            ? this.getSeasonBoardSignalSnapshot({
+                ...options,
+                latestSlate
+            })
+            : null;
+        const seasonPhase = seasonSignals && typeof this.getSeasonBoardPhaseMeta === 'function'
+            ? this.getSeasonBoardPhaseMeta(seasonSignals)
+            : null;
+        const seasonSettlementState = seasonSignals && typeof this.buildSeasonBoardSettlementState === 'function'
+            ? this.buildSeasonBoardSettlementState(seasonSignals, seasonPhase)
+            : null;
+        const mandateDebtPack = seasonSettlementState?.debtPack && typeof seasonSettlementState.debtPack === 'object'
+            ? seasonSettlementState.debtPack
+            : null;
+        const debtFocusTask = typeof this.buildHeavenlyMandateDebtFocusTask === 'function'
+            ? this.buildHeavenlyMandateDebtFocusTask(mandateDebtPack)
+            : null;
+        if (debtFocusTask) {
+            const laneIdByAnchorSection = {
+                slates: 'expedition',
+                sanctum: 'expedition',
+                chapters: 'training',
+                challenge: 'training',
+                endless: 'versus',
+                pvp: 'versus'
+            };
+            const targetLaneId = laneIdByAnchorSection[debtFocusTask.anchorSection] || 'versus';
+            const laneIndex = rawLanes.findIndex((lane) => lane.id === targetLaneId);
+            if (laneIndex >= 0) {
+                const targetLane = rawLanes[laneIndex];
+                const nextTasks = Array.isArray(targetLane.tasks) ? targetLane.tasks.slice() : [];
+                let replaceIndex = nextTasks.findIndex((task) => (
+                    String(task?.anchorSection || '').trim() === debtFocusTask.anchorSection
+                ));
+                if (replaceIndex < 0) {
+                    replaceIndex = nextTasks.findIndex((task) => !task?.completed);
+                }
+                if (replaceIndex < 0) replaceIndex = 0;
+                const nextTask = {
+                    ...(nextTasks[replaceIndex] || {}),
+                    ...debtFocusTask,
+                    id: debtFocusTask.id,
+                    label: debtFocusTask.label,
+                    icon: debtFocusTask.icon,
+                    progress: debtFocusTask.progress,
+                    target: debtFocusTask.target,
+                    completed: debtFocusTask.completed,
+                    progressText: debtFocusTask.progressText,
+                    hintLine: debtFocusTask.hintLine,
+                    statusLine: debtFocusTask.statusLine,
+                    anchorSection: debtFocusTask.anchorSection,
+                    source: debtFocusTask.source,
+                    sourceId: debtFocusTask.sourceId,
+                    isPlaceholder: debtFocusTask.isPlaceholder,
+                    occupiesStrongSlot: debtFocusTask.occupiesStrongSlot
+                };
+                if (nextTasks.length <= 0) {
+                    nextTasks.push(nextTask);
+                } else {
+                    nextTasks[replaceIndex] = nextTask;
+                }
+                rawLanes[laneIndex] = {
+                    ...targetLane,
+                    summaryLine: [
+                        mandateDebtPack?.status === 'deferred'
+                            ? '旧周欠卷已挤入本周强目标位，先清账再谈其他高压推进。'
+                            : '本周欠卷已经占住一个强目标位，主验证优先级被提前。',
+                        targetLane.summaryLine
+                    ].filter(Boolean).slice(0, 2).join('｜'),
+                    tasks: nextTasks
+                };
+            }
+        }
+        const lanes = rawLanes
+            .map((lane, index) => this.normalizeHeavenlyMandateLane(lane, index));
+        const completedTaskCount = lanes.reduce((sum, lane) => sum + lane.completedCount, 0);
+        const totalTaskCount = lanes.reduce((sum, lane) => sum + lane.totalCount, 0);
+        return {
+            version: 1,
+            weekTag: signals.weekTag,
+            weekLabel: signals.weekLabel,
+            themeId: theme.id,
+            themeLabel: theme.label,
+            themeIcon: theme.icon,
+            themeKicker: theme.kicker,
+            summaryLine: theme.summaryLine,
+            lanes,
+            completedTaskCount,
+            totalTaskCount
+        };
+    }
+
+    syncHeavenlyMandateState(options = {}) {
+        const state = this.ensureHeavenlyMandateState();
+        const board = this.buildHeavenlyMandateBoard(options);
+        let history = Array.isArray(state.history) ? state.history.slice() : [];
+        if (state.weekTag && state.weekTag !== board.weekTag && state.totalTaskCount > 0) {
+            const previousEntry = this.normalizeHeavenlyMandateHistoryEntry({
+                weekTag: state.weekTag,
+                weekLabel: state.weekLabel,
+                themeId: state.themeId,
+                themeLabel: state.themeLabel,
+                summaryLine: state.summaryLine,
+                completedTaskCount: state.completedTaskCount,
+                totalTaskCount: state.totalTaskCount,
+                completed: state.completedTaskCount >= state.totalTaskCount && state.totalTaskCount > 0,
+                at: state.lastSyncedAt || Date.now()
+            });
+            history = [previousEntry, ...history.filter((entry) => entry.weekTag !== previousEntry.weekTag)].slice(0, 6);
+        }
+        this.heavenlyMandateState = this.normalizeHeavenlyMandateState({
+            ...state,
+            ...board,
+            history,
+            lastSyncedAt: Date.now()
+        });
+        return this.heavenlyMandateState;
+    }
+
+    getHeavenlyMandateSaveState() {
+        return this.syncHeavenlyMandateState();
+    }
+
+    getHeavenlyMandateExpeditionSnapshot(options = {}) {
+        const state = this.syncHeavenlyMandateState(options);
+        if (!state.weekTag || state.lanes.length <= 0) return null;
+        const seasonBoard = typeof this.getSeasonBoardSnapshot === 'function'
+            ? this.getSeasonBoardSnapshot(options.latestSlate ? { latestSlate: options.latestSlate } : {})
+            : null;
+        const debtPack = seasonBoard?.debtPack && typeof seasonBoard.debtPack === 'object'
+            ? seasonBoard.debtPack
+            : null;
+        const occupiedLaneTask = debtPack?.occupiesStrongSlot && debtPack?.occupiedMandateTaskId
+            ? state.lanes
+                .flatMap((lane) => Array.isArray(lane?.tasks) ? lane.tasks : [])
+                .find((task) => task && task.id === debtPack.occupiedMandateTaskId) || null
+            : null;
+        const focusTask = debtPack?.occupiesStrongSlot
+            ? this.normalizeHeavenlyMandateFocusTask(
+                occupiedLaneTask
+                    ? {
+                        ...occupiedLaneTask,
+                        source: 'seasonDebtPack',
+                        sourceId: debtPack.id || '',
+                        isPlaceholder: false,
+                        occupiesStrongSlot: true
+                    }
+                    : (typeof this.buildHeavenlyMandateDebtFocusTask === 'function'
+                        ? this.buildHeavenlyMandateDebtFocusTask(debtPack)
+                        : null)
+            )
+            : null;
+        return {
+            weekTag: state.weekTag,
+            weekLabel: state.weekLabel,
+            themeId: state.themeId,
+            themeLabel: state.themeLabel,
+            themeIcon: state.themeIcon,
+            themeKicker: state.themeKicker,
+            summaryLine: state.summaryLine,
+            completedTaskCount: state.completedTaskCount,
+            totalTaskCount: state.totalTaskCount,
+            focusTask,
+            lanes: state.lanes.map((lane) => ({
+                id: lane.id,
+                label: lane.label,
+                icon: lane.icon,
+                summaryLine: lane.summaryLine,
+                completedCount: lane.completedCount,
+                totalCount: lane.totalCount,
+                tasks: lane.tasks.map((task) => ({
+                    id: task.id,
+                    label: task.label,
+                    icon: task.icon,
+                    progress: task.progress,
+                    target: task.target,
+                    progressText: task.progressText,
+                    completed: task.completed,
+                    hintLine: task.hintLine,
+                    statusLine: task.statusLine,
+                    anchorSection: task.anchorSection,
+                    source: task.source || '',
+                    sourceId: task.sourceId || '',
+                    isPlaceholder: !!task.isPlaceholder,
+                    occupiesStrongSlot: !!task.occupiesStrongSlot
+                }))
+            })),
+            history: state.history.map((entry) => ({
+                weekTag: entry.weekTag,
+                weekLabel: entry.weekLabel,
+                themeId: entry.themeId,
+                themeLabel: entry.themeLabel,
+                summaryLine: entry.summaryLine,
+                completedTaskCount: entry.completedTaskCount,
+                totalTaskCount: entry.totalTaskCount,
+                completed: entry.completed,
+                at: entry.at
+            }))
+        };
+    }
+
+    getSeasonBoardSignalSnapshot(options = {}) {
+        const baseSignals = typeof this.getHeavenlyMandateSignalSnapshot === 'function'
+            ? this.getHeavenlyMandateSignalSnapshot(options)
+            : {};
+        const overrideSlate = options.latestSlate && typeof options.latestSlate === 'object'
+            ? options.latestSlate
+            : null;
+        const latestSlate = overrideSlate || (baseSignals.latestSlate && typeof baseSignals.latestSlate === 'object'
+            ? baseSignals.latestSlate
+            : null);
+        const latestSlateAt = Math.max(
+            0,
+            Math.floor(Number(
+                latestSlate?.timestamp
+                ?? latestSlate?.completedAt
+                ?? latestSlate?.at
+                ?? latestSlate?.createdAt
+                ?? 0
+            ) || 0)
+        );
+        const latestSlateWeekTag = latestSlateAt > 0
+            ? String(this.getHeavenlyMandateWeekMeta(latestSlateAt)?.weekTag || '').trim()
+            : String(baseSignals.latestSlateWeekTag || '').trim();
+        const agendaSnapshot = typeof this.getSanctumAgendaExpeditionSnapshot === 'function'
+            ? this.getSanctumAgendaExpeditionSnapshot({ latestRunId: String(latestSlate?.id || '') })
+            : (baseSignals.agendaSnapshot && typeof baseSignals.agendaSnapshot === 'object'
+                ? baseSignals.agendaSnapshot
+                : null);
+        const activeAgenda = agendaSnapshot?.active || baseSignals.activeAgenda || null;
+        const lastAgenda = agendaSnapshot?.lastResolved || baseSignals.lastAgenda || null;
+        const expeditionState = typeof this.getExpeditionState === 'function'
+            ? this.getExpeditionState()
+            : null;
+        const currentChapterIndex = Math.max(
+            0,
+            Math.floor(Number(expeditionState?.chapterIndex) || 0),
+            Math.floor(Number(latestSlate?.chapterIndex) || 0),
+            Math.floor(Number(lastAgenda?.boundChapterIndex) || 0),
+            Math.floor(Number(activeAgenda?.boundChapterIndex) || 0)
+        );
+        const lineage = typeof this.getFateLineageSnapshot === 'function'
+            ? this.getFateLineageSnapshot({ latestSlate })
+            : null;
+        const aftereffects = typeof this.getFateAftereffectSnapshot === 'function'
+            ? this.getFateAftereffectSnapshot({
+                latestRunId: String(latestSlate?.id || ''),
+                latestSlate,
+                currentChapterIndex,
+                expeditionState
+            })
+            : null;
+        const seasonVerification = typeof this.getSeasonVerificationSnapshot === 'function'
+            ? this.getSeasonVerificationSnapshot({
+                weekTag: String(baseSignals.weekTag || '').trim(),
+                weekLabel: String(baseSignals.weekLabel || '').trim()
+            })
+            : null;
+        return {
+            ...baseSignals,
+            latestSlate,
+            latestSlateWeekTag,
+            agendaSnapshot,
+            activeAgenda,
+            lastAgenda,
+            currentChapterIndex,
+            seasonVerification,
+            lineage,
+            aftereffects
+        };
+    }
+
+    getSeasonBoardPhaseMeta(snapshot = null) {
+        const source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+        const weeklyScore = Math.max(0, Math.floor(Number(source.weeklyScore) || 0));
+        const endlessClears = Math.max(0, Math.floor(Number(source.endlessClears) || 0));
+        const pvpSeasonMatchCount = Math.max(0, Math.floor(Number(source.pvpSeasonMatchCount) || 0));
+        const aftereffectActive = Math.max(0, Math.floor(Number(source.aftereffects?.activeCount) || 0));
+        const explicitVerificationCount = Math.max(0, Math.floor(Number(source.seasonVerification?.recordCount) || 0));
+        const verificationReady = weeklyScore >= 360
+            || endlessClears > 0
+            || pvpSeasonMatchCount > 0
+            || aftereffectActive > 0
+            || explicitVerificationCount > 0;
+        if (verificationReady) {
+            return {
+                id: 'ranking',
+                label: '定榜期',
+                icon: '🏁'
+            };
+        }
+        const locklineReady = !!source.latestSlate
+            || !!source.activeAgenda
+            || !!source.lastAgenda
+            || !!source.selectedGuide
+            || !!source.trainingFocus;
+        if (locklineReady) {
+            return {
+                id: 'lockline',
+                label: '锁线期',
+                icon: '📜'
+            };
+        }
+        return {
+            id: 'sampling',
+            label: '采样期',
+            icon: '🔭'
+        };
+    }
+
+    normalizeSeasonBoardSettlement(source = null) {
+        const root = source && typeof source === 'object' ? source : null;
+        if (!root) return null;
+        const outcomeId = (() => {
+            const raw = String(root.outcomeId || '').trim();
+            const allowed = new Set(['sampling_sheet', 'locking_sheet', 'positive_sheet', 'risky_sheet', 'debt_sheet']);
+            return allowed.has(raw) ? raw : 'sampling_sheet';
+        })();
+        const labelCatalog = {
+            sampling_sheet: '待采样',
+            locking_sheet: '押卷中',
+            positive_sheet: '正卷',
+            risky_sheet: '险卷',
+            debt_sheet: '欠卷'
+        };
+        const toneCatalog = {
+            sampling_sheet: 'idle',
+            locking_sheet: 'selected',
+            positive_sheet: 'completed',
+            risky_sheet: 'suggested',
+            debt_sheet: 'warning'
+        };
+        const next = {
+            id: String(root.id || root.recordId || `season_settlement_${outcomeId}`).trim().slice(0, 80) || `season_settlement_${outcomeId}`,
+            sourceRunId: String(root.sourceRunId || '').trim().slice(0, 80),
+            chapterIndex: Math.max(0, Math.floor(Number(root.chapterIndex) || 0)),
+            outcomeId,
+            outcomeLabel: String(root.outcomeLabel || labelCatalog[outcomeId] || '待采样').trim().slice(0, 24) || '待采样',
+            outcomeTone: String(root.outcomeTone || toneCatalog[outcomeId] || 'idle').trim().slice(0, 24) || 'idle',
+            summaryLine: String(root.summaryLine || '').trim().slice(0, 220),
+            detailLine: String(root.detailLine || '').trim().slice(0, 240),
+            guideLine: String(root.guideLine || '').trim().slice(0, 240),
+            statusLine: String(root.statusLine || '').trim().slice(0, 220),
+            progressText: String(root.progressText || '').trim().slice(0, 80),
+            settlementWeekTag: String(root.settlementWeekTag || root.weekTag || '').trim().slice(0, 24),
+            settlementPhaseId: String(root.settlementPhaseId || root.phaseId || '').trim().slice(0, 32),
+            settlementSource: String(root.settlementSource || root.source || 'derived').trim().slice(0, 24) || 'derived',
+            resolutionTier: String(root.resolutionTier || outcomeId).trim().slice(0, 24) || outcomeId,
+            resolvedStatus: String(root.resolvedStatus || '').trim().slice(0, 24),
+            writebackLine: String(root.writebackLine || '').trim().slice(0, 220),
+            proofQuality: String(root.proofQuality || '').trim().slice(0, 24),
+            lineageStyle: String(root.lineageStyle || '').trim().slice(0, 48),
+            primaryVerificationRecordId: String(root.primaryVerificationRecordId || '').trim().slice(0, 96),
+            sideVerificationRecordId: String(root.sideVerificationRecordId || '').trim().slice(0, 96),
+            selectedContractLabel: String(root.selectedContractLabel || '').trim().slice(0, 40),
+            contractResolutionLine: String(root.contractResolutionLine || '').trim().slice(0, 220),
+            recoveryEligible: !!root.recoveryEligible
+        };
+        return Object.values(next).some((value) => value !== '' && value !== 0 && value !== false)
+            ? next
+            : null;
+    }
+
+    normalizeSeasonBoardDebtPack(source = null) {
+        const root = source && typeof source === 'object' ? source : null;
+        if (!root) return null;
+        const status = (() => {
+            const raw = String(root.status || '').trim();
+            return ['open', 'deferred', 'cleared', 'degraded'].includes(raw) ? raw : 'open';
+        })();
+        const next = {
+            id: String(root.id || root.recordId || 'season_debt_pack').trim().slice(0, 96) || 'season_debt_pack',
+            sourceRunId: String(root.sourceRunId || '').trim().slice(0, 80),
+            chapterIndex: Math.max(0, Math.floor(Number(root.chapterIndex) || 0)),
+            sourceAgendaId: String(root.sourceAgendaId || '').trim().slice(0, 64),
+            sourceLabel: String(root.sourceLabel || '').trim().slice(0, 64),
+            debtThemeId: String(root.debtThemeId || '').trim().slice(0, 40),
+            debtThemeLabel: String(root.debtThemeLabel || '').trim().slice(0, 48),
+            summaryLine: String(root.summaryLine || '').trim().slice(0, 220),
+            detailLine: String(root.detailLine || '').trim().slice(0, 260),
+            guideLine: String(root.guideLine || '').trim().slice(0, 240),
+            statusLine: String(root.statusLine || '').trim().slice(0, 220),
+            progressText: String(root.progressText || '').trim().slice(0, 80),
+            settleWindowText: String(root.settleWindowText || '').trim().slice(0, 48),
+            recommendedValidationLabel: String(root.recommendedValidationLabel || '').trim().slice(0, 48),
+            recommendedAnchorSection: String(root.recommendedAnchorSection || '').trim().slice(0, 24),
+            status,
+            deferCount: Math.max(0, Math.floor(Number(root.deferCount) || 0)),
+            openedWeekTag: String(root.openedWeekTag || '').trim().slice(0, 24),
+            carryIntoWeekTag: String(root.carryIntoWeekTag || '').trim().slice(0, 24),
+            occupiedMandateTaskId: String(root.occupiedMandateTaskId || '').trim().slice(0, 64),
+            occupationReason: String(root.occupationReason || '').trim().slice(0, 180),
+            occupiesStrongSlot: !!root.occupiesStrongSlot,
+            resolvedStatus: String(root.resolvedStatus || '').trim().slice(0, 24),
+            writebackLine: String(root.writebackLine || '').trim().slice(0, 220),
+            verificationRecordId: String(root.verificationRecordId || '').trim().slice(0, 96),
+            selectedContractLabel: String(root.selectedContractLabel || '').trim().slice(0, 40),
+            contractResolutionLine: String(root.contractResolutionLine || '').trim().slice(0, 220),
+            recoveryEligible: !!root.recoveryEligible
+        };
+        return Object.values(next).some((value) => value !== '' && value !== 0 && value !== false)
+            ? next
+            : null;
+    }
+
+    normalizeSeasonBoardVerificationOrder(source = null, index = 0) {
+        const root = source && typeof source === 'object' ? source : null;
+        if (!root) return null;
+        const next = {
+            id: String(root.id || `season_verification_${index + 1}`).trim().slice(0, 64) || `season_verification_${index + 1}`,
+            type: String(root.type || 'verify').trim().slice(0, 24) || 'verify',
+            role: ['primary', 'side'].includes(String(root.role || '').trim())
+                ? String(root.role).trim()
+                : (index === 0 ? 'primary' : 'side'),
+            label: String(root.label || `验证状 ${index + 1}`).trim().slice(0, 64) || `验证状 ${index + 1}`,
+            summaryLine: String(root.summaryLine || '').trim().slice(0, 220),
+            detailLine: String(root.detailLine || '').trim().slice(0, 240),
+            hintLine: String(root.hintLine || '').trim().slice(0, 220),
+            statusLine: String(root.statusLine || '').trim().slice(0, 120),
+            anchorSection: String(root.anchorSection || '').trim().slice(0, 24),
+            priority: Math.max(1, Math.min(9, Math.floor(Number(root.priority) || index + 1))),
+            resultStatus: String(root.resultStatus || '').trim().slice(0, 24),
+            writebackMode: String(root.writebackMode || '').trim().slice(0, 32),
+            writebackLine: String(root.writebackLine || '').trim().slice(0, 220),
+            sourceMode: String(root.sourceMode || '').trim().slice(0, 24),
+            sourceModeLabel: String(root.sourceModeLabel || '').trim().slice(0, 32),
+            resolvedRunId: String(root.resolvedRunId || '').trim().slice(0, 80),
+            chapterIndex: Math.max(0, Math.floor(Number(root.chapterIndex) || 0)),
+            proofQuality: String(root.proofQuality || '').trim().slice(0, 24),
+            lineageStyle: String(root.lineageStyle || '').trim().slice(0, 48),
+            carryIntoNextWeek: !!root.carryIntoNextWeek
+        };
+        return Object.values(next).some((value) => value !== '' && value !== 0)
+            ? next
+            : null;
+    }
+
+    normalizeSeasonBoardWeekVerdictLedger(source = null) {
+        const root = source && typeof source === 'object' ? source : null;
+        if (!root) return null;
+        const currentSource = root.current && typeof root.current === 'object' ? root.current : root;
+        const current = currentSource
+            ? {
+                ledgerId: String(currentSource.ledgerId || currentSource.id || '').trim().slice(0, 96),
+                weekTag: String(currentSource.weekTag || '').trim().slice(0, 24),
+                weekLabel: String(currentSource.weekLabel || '').trim().slice(0, 32),
+                phaseId: String(currentSource.phaseId || '').trim().slice(0, 32),
+                phaseLabel: String(currentSource.phaseLabel || '').trim().slice(0, 24),
+                sourceRunId: String(currentSource.sourceRunId || '').trim().slice(0, 80),
+                chapterIndex: Math.max(0, Math.floor(Number(currentSource.chapterIndex) || 0)),
+                settlementId: String(currentSource.settlementId || '').trim().slice(0, 96),
+                settlementOutcomeId: String(currentSource.settlementOutcomeId || '').trim().slice(0, 32),
+                settlementOutcomeLabel: String(currentSource.settlementOutcomeLabel || '').trim().slice(0, 24),
+                debtPackId: String(currentSource.debtPackId || '').trim().slice(0, 96),
+                debtStatus: String(currentSource.debtStatus || '').trim().slice(0, 24),
+                deferCount: Math.max(0, Math.floor(Number(currentSource.deferCount) || 0)),
+                carryIntoWeekTag: String(currentSource.carryIntoWeekTag || '').trim().slice(0, 24),
+                primaryVerificationOrderId: String(currentSource.primaryVerificationOrderId || '').trim().slice(0, 64),
+                sideVerificationOrderId: String(currentSource.sideVerificationOrderId || '').trim().slice(0, 64),
+                resolutionTier: String(currentSource.resolutionTier || '').trim().slice(0, 24),
+                resolvedStatus: String(currentSource.resolvedStatus || '').trim().slice(0, 24),
+                primaryVerificationResultStatus: String(currentSource.primaryVerificationResultStatus || '').trim().slice(0, 24),
+                sideVerificationResultStatus: String(currentSource.sideVerificationResultStatus || '').trim().slice(0, 24),
+                primaryWritebackMode: String(currentSource.primaryWritebackMode || '').trim().slice(0, 32),
+                sideWritebackMode: String(currentSource.sideWritebackMode || '').trim().slice(0, 32),
+                writebackLine: String(currentSource.writebackLine || '').trim().slice(0, 220),
+                proofQuality: String(currentSource.proofQuality || '').trim().slice(0, 24),
+                lineageStyle: String(currentSource.lineageStyle || '').trim().slice(0, 48),
+                carryIntoNextWeek: !!currentSource.carryIntoNextWeek,
+                settlementSource: String(currentSource.settlementSource || '').trim().slice(0, 24),
+                summaryLine: String(currentSource.summaryLine || '').trim().slice(0, 220)
+            }
+            : null;
+        return current && Object.values(current).some((value) => value !== '' && value !== 0)
+            ? { current }
+            : null;
+    }
+
+    buildSeasonBoardSettlementState(signals = {}, phase = null) {
+        const safeSignals = signals && typeof signals === 'object' ? signals : {};
+        const safePhase = phase && typeof phase === 'object' ? phase : this.getSeasonBoardPhaseMeta(safeSignals);
+        const lastAgenda = safeSignals.lastAgenda && typeof safeSignals.lastAgenda === 'object'
+            ? safeSignals.lastAgenda
+            : null;
+        const aftereffects = safeSignals.aftereffects && typeof safeSignals.aftereffects === 'object'
+            ? safeSignals.aftereffects
+            : null;
+        const primaryAftereffect = aftereffects?.primary && typeof aftereffects.primary === 'object'
+            ? aftereffects.primary
+            : null;
+        const seasonVerification = safeSignals.seasonVerification && typeof safeSignals.seasonVerification === 'object'
+            ? safeSignals.seasonVerification
+            : null;
+        const primaryVerification = seasonVerification?.primary && typeof seasonVerification.primary === 'object'
+            ? seasonVerification.primary
+            : null;
+        const sideVerification = seasonVerification?.side && typeof seasonVerification.side === 'object'
+            ? seasonVerification.side
+            : null;
+        const primaryResultStatus = String(primaryVerification?.resultStatus || '').trim();
+        const sideResultStatus = String(sideVerification?.resultStatus || '').trim();
+        const primaryWritebackMode = String(primaryVerification?.writebackMode || '').trim();
+        const primaryVerified = primaryResultStatus === 'verified';
+        const primaryFailed = primaryResultStatus === 'failed';
+        const sideVerified = sideResultStatus === 'verified';
+        const endlessClears = Math.max(0, Math.floor(Number(safeSignals.endlessClears) || 0));
+        const pvpMatches = Math.max(0, Math.floor(Number(safeSignals.pvpSeasonMatchCount) || 0));
+        const hasCrossVerification = endlessClears > 0 || pvpMatches > 0;
+        const hasDebt = !!(
+            lastAgenda?.recoveryEligible
+            || (lastAgenda?.selectedContractLabel && lastAgenda?.contractResolved && lastAgenda?.contractSuccess === false)
+            || ['contract_miss', 'recovery'].includes(String(primaryAftereffect?.outcomeId || '').trim())
+            || (lastAgenda?.outcome && !['success', 'completed'].includes(String(lastAgenda.outcome || '').trim()))
+        );
+        const sourceRunId = String(
+            lastAgenda?.sourceRunId
+            || primaryAftereffect?.sourceRunId
+            || safeSignals.latestSlate?.id
+            || ''
+        ).trim();
+        const sourceSlate = sourceRunId && Array.isArray(this.runSlateArchive)
+            ? this.runSlateArchive.find((entry) => String(entry?.id || '').trim() === sourceRunId) || null
+            : null;
+        const chapterIndex = Math.max(
+            0,
+            Math.floor(Number(
+                lastAgenda?.boundChapterIndex
+                ?? lastAgenda?.chapterIndex
+                ?? primaryAftereffect?.chapterIndex
+                ?? safeSignals.latestSlate?.chapterIndex
+                ?? 0
+            ) || 0)
+        );
+        const currentWeekTag = String(safeSignals.weekTag || '').trim();
+        const currentWeekIndex = Math.max(0, Math.floor(Number(safeSignals.weekIndex) || 0));
+        const toWeekIndex = (weekTag = '') => {
+            const match = String(weekTag || '').trim().match(/^(\d+)-W(\d+)$/);
+            return match ? (Math.max(0, Number(match[1])) * 100 + Math.max(0, Number(match[2]))) : 0;
+        };
+        const openedAt = Math.max(
+            0,
+            Math.floor(Number(
+                lastAgenda?.updatedAt
+                ?? lastAgenda?.resolvedAt
+                ?? lastAgenda?.completedAt
+                ?? lastAgenda?.selectedAt
+                ?? primaryAftereffect?.createdAt
+                ?? sourceSlate?.timestamp
+                ?? (safeSignals.latestSlate?.id === sourceRunId ? safeSignals.latestSlate?.timestamp : 0)
+                ?? 0
+            ) || 0)
+        );
+        const openedWeekMeta = openedAt > 0 && typeof this.getHeavenlyMandateWeekMeta === 'function'
+            ? this.getHeavenlyMandateWeekMeta(openedAt)
+            : null;
+        const openedWeekTag = String(
+            lastAgenda?.openedWeekTag
+            || primaryAftereffect?.openedWeekTag
+            || openedWeekMeta?.weekTag
+            || ''
+        ).trim();
+        const openedWeekIndex = Math.max(
+            0,
+            Math.floor(Number(openedWeekMeta?.weekIndex) || 0),
+            toWeekIndex(openedWeekTag)
+        );
+        const weekDelta = hasDebt && currentWeekTag && openedWeekTag && currentWeekTag !== openedWeekTag
+            ? Math.max(
+                1,
+                (currentWeekIndex > 0 && openedWeekIndex > 0)
+                    ? currentWeekIndex - openedWeekIndex
+                    : 1
+            )
+            : 0;
+        const debtClearedByVerification = hasDebt && primaryVerified && primaryWritebackMode === 'clear_debt';
+        const debtDegradedByVerification = hasDebt && primaryFailed;
+        const debtStatus = hasDebt
+            ? (debtClearedByVerification
+                ? 'cleared'
+                : (debtDegradedByVerification
+                    ? 'degraded'
+                    : (weekDelta > 0 ? 'deferred' : 'open')))
+            : '';
+        const debtOccupiesStrongSlot = ['open', 'deferred'].includes(debtStatus);
+        const occupiedMandateTaskId = debtOccupiesStrongSlot
+            ? `season_mandate_debt_focus_${String(lastAgenda?.agendaId || sourceRunId || currentWeekTag || 'current').trim().slice(0, 40)}`
+            : '';
+        const occupationReason = debtStatus === 'deferred'
+            ? `旧周欠卷已带入 ${currentWeekTag || safeSignals.weekLabel || '本周'}，强目标先让位给清账。`
+            : (debtStatus === 'open'
+                ? '本周刚形成欠卷，强目标先切到清账。'
+                : (debtStatus === 'cleared'
+                    ? '主验证已清账，强目标重新释放给赛季推进。'
+                    : '主验证给出反证，欠卷改记为反例，不再继续占据强目标。'));
+        const debtProgressText = debtStatus === 'deferred'
+            ? `已拖延 ${Math.max(1, weekDelta)} 周`
+            : (debtStatus === 'cleared'
+                ? '已清账'
+                : (debtStatus === 'degraded'
+                    ? '反证已入账'
+                    : (primaryAftereffect?.remainingChapters > 0
+                        ? `清账窗口 ${Math.max(1, Math.floor(Number(primaryAftereffect.remainingChapters) || 1))} 章`
+                        : '本周内优先清账')));
+        const debtStatusLine = debtStatus === 'deferred'
+            ? `欠卷已拖延 ${Math.max(1, weekDelta)} 周`
+            : (debtStatus === 'cleared'
+                ? (primaryVerification?.statusLine || '欠卷已清账')
+                : (debtStatus === 'degraded'
+                    ? (primaryVerification?.statusLine || '欠卷已转为反证')
+                    : (primaryAftereffect?.statusLine || '欠卷待清账')));
+        const debtGuideLine = debtStatus === 'deferred'
+            ? `这笔欠卷已带入 ${safeSignals.weekLabel || currentWeekTag || '本周'}，先清账，再决定这一周是否继续冲定榜验证。`
+            : (debtStatus === 'cleared'
+                ? (primaryVerification?.writebackLine || '主验证已经完成清账，可以回到定榜推进。')
+                : (debtStatus === 'degraded'
+                    ? (primaryVerification?.writebackLine || '这笔欠卷已经转成反证，先修正主轴再继续扩线。')
+                    : '先处理上一道承诺留下的欠卷，再决定这一周是否值得继续冲定榜验证。'));
+
+        let outcomeId = 'sampling_sheet';
+        if (safePhase.id === 'lockline') {
+            outcomeId = 'locking_sheet';
+        } else if (safePhase.id === 'ranking') {
+            if (primaryVerified) {
+                outcomeId = 'positive_sheet';
+            } else if (hasDebt && !debtClearedByVerification && !debtDegradedByVerification) {
+                outcomeId = 'debt_sheet';
+            } else if (primaryFailed) {
+                outcomeId = 'risky_sheet';
+            } else {
+                outcomeId = hasCrossVerification
+                    ? 'positive_sheet'
+                    : 'risky_sheet';
+            }
+        }
+
+        const labelCatalog = {
+            sampling_sheet: '待采样',
+            locking_sheet: '押卷中',
+            positive_sheet: '正卷',
+            risky_sheet: '险卷',
+            debt_sheet: '欠卷'
+        };
+        const toneCatalog = {
+            sampling_sheet: 'idle',
+            locking_sheet: 'selected',
+            positive_sheet: 'completed',
+            risky_sheet: 'suggested',
+            debt_sheet: 'warning'
+        };
+        const proofQualityLabelMap = {
+            thin: '薄证',
+            solid: '实证',
+            decisive: '铁证'
+        };
+        const proofQuality = String(
+            primaryVerification?.proofQuality
+            || sideVerification?.proofQuality
+            || (hasCrossVerification ? 'solid' : '')
+        ).trim();
+        const proofQualityLabel = proofQualityLabelMap[proofQuality] || '';
+        const lineageStyle = String(primaryVerification?.lineageStyle || sideVerification?.lineageStyle || '').trim();
+        const primaryVerificationRecordId = String(primaryVerification?.recordId || '').trim();
+        const sideVerificationRecordId = String(sideVerification?.recordId || '').trim();
+        const primaryWritebackLine = String(primaryVerification?.writebackLine || '').trim();
+        const sideWritebackLine = String(sideVerification?.writebackLine || '').trim();
+        const resolvedStatus = primaryVerified
+            ? 'verified'
+            : (primaryFailed
+                ? 'failed'
+                : (sideVerified ? 'reinforced' : (debtStatus || 'pending')));
+        const settlementSourceRunId = String(primaryVerification?.resolvedRunId || sourceRunId || '').trim();
+        const settlementChapterIndex = Math.max(
+            chapterIndex,
+            Math.floor(Number(primaryVerification?.chapterIndex) || 0),
+            Math.floor(Number(sideVerification?.chapterIndex) || 0)
+        );
+        const summaryCatalog = {
+            sampling_sheet: '当前仍在采样，本周主轴还没有结成可押卷的赛季答卷。',
+            locking_sheet: '当前样本已经开始押卷，但还要继续把章节承诺真正锁进洞府与归卷。',
+            positive_sheet: primaryVerified
+                ? (debtClearedByVerification
+                    ? '主验证已经回写，本周欠卷已清，本周押卷改判为「正卷」。'
+                    : '主验证已经回写，本周押卷升级为「正卷」。')
+                : '本周押卷已结成「正卷」，这条主轴已经通过至少一条高压验证。',
+            risky_sheet: primaryFailed
+                ? '主验证给出了反证，本周押卷暂降为「险卷」，需要重新校准主轴。'
+                : '本周押卷已结成「险卷」，路线已成形，但还需要外场验证决定能否真正定榜。',
+            debt_sheet: sideVerified
+                ? '旁验证已经补上，但上一道承诺留下的欠卷仍待主验证清账。'
+                : '本周押卷暂结成「欠卷」，上一道承诺留下了待清的研究债账。'
+        };
+        const detailCatalog = {
+            sampling_sheet: safeSignals.selectedGuide?.title
+                ? `当前主练样本：${safeSignals.selectedGuide.title}。先把它压成一张本周可复盘的章节答卷。`
+                : '先锁一份精选命盘或本周归卷，再决定真正要押哪条主线。',
+            locking_sheet: lastAgenda?.phaseLine
+                || lastAgenda?.focusNodeLine
+                || lastAgenda?.summaryLine
+                || '当前押卷正在推进，先把承诺写成真正的章节留痕。',
+            positive_sheet: [
+                primaryVerification?.summaryLine || '',
+                primaryVerification?.detailLine || primaryWritebackLine || '',
+                sideVerified ? (sideVerification?.summaryLine || sideWritebackLine || '') : '',
+                !primaryVerified && lastAgenda?.contractResolutionLine ? lastAgenda.contractResolutionLine : '',
+                !primaryVerified && endlessClears > 0 ? `无尽已清 ${endlessClears} 轮` : '',
+                !primaryVerified && pvpMatches > 0 ? `天道榜已留 ${pvpMatches} 场账本` : ''
+            ].filter(Boolean).slice(0, 2).join('｜'),
+            risky_sheet: [
+                primaryFailed ? (primaryVerification?.summaryLine || '') : '',
+                !primaryFailed && sideVerified ? (sideVerification?.summaryLine || sideWritebackLine || '') : '',
+                primaryFailed
+                    ? (primaryVerification?.detailLine || primaryWritebackLine || '')
+                    : (lastAgenda?.contractResolutionLine || ''),
+                primaryFailed
+                    ? ''
+                    : '当前主轴还缺最后一轮高压验算，适合继续补无尽或天道榜样本。'
+            ].filter(Boolean).slice(0, 2).join('｜'),
+            debt_sheet: [
+                primaryAftereffect?.detailLine || '',
+                sideVerified ? (sideVerification?.summaryLine || sideWritebackLine || '') : '',
+                lastAgenda?.recoveryHintLine || lastAgenda?.recoveryLine || lastAgenda?.reasonLine || ''
+            ].filter(Boolean).slice(0, 2).join('｜')
+        };
+        const progressCatalog = {
+            sampling_sheet: '等待第一张归卷',
+            locking_sheet: lastAgenda
+                ? `${Math.max(0, Math.floor(Number(lastAgenda.progress) || 0))}/${Math.max(1, Math.floor(Number(lastAgenda.target) || 1))} 项押卷推进`
+                : '等待洞府承诺立项',
+            positive_sheet: primaryVerified
+                ? `${primaryVerification?.sourceModeLabel || '主验证'} 已回写`
+                : `无尽 ${endlessClears}/1 · 天道榜 ${Math.min(pvpMatches, 2)}/2`,
+            risky_sheet: primaryFailed
+                ? '反证已入账'
+                : `待补外场验证 ${hasCrossVerification ? 0 : 1} 条`,
+            debt_sheet: primaryAftereffect?.remainingChapters > 0
+                ? `清账窗口 ${Math.max(1, Math.floor(Number(primaryAftereffect.remainingChapters) || 1))} 章`
+                : '本周内优先清账'
+        };
+        const guideCatalog = {
+            sampling_sheet: '先把本周主练样本压成一张可复盘答卷，再决定要不要立项押卷。',
+            locking_sheet: '继续沿洞府承诺推进，先把押卷锁进章节结算，再考虑外场验证。',
+            positive_sheet: primaryVerified
+                ? (sideVerified
+                    ? '主验证与旁验证都已回写，可以继续沿当前主修扩样本。'
+                    : '主验证已回写，可继续补一张不同节奏的旁验证巩固这条正卷。')
+                : (hasCrossVerification
+                    ? '当前正卷已经站住脚，主验证可继续补无尽或天道榜，旁验证可去七日劫数复盘。'
+                    : '主轴已经成形，但还没留下真正的高压验证样本。'),
+            risky_sheet: primaryFailed
+                ? '先根据反证收紧路线，再决定是补旁证、换验证入口，还是重新建立主验证。'
+                : (sideVerified
+                    ? '旁验证已经补齐，但仍需把这条险卷送去无尽或天道榜做真正的主验证。'
+                    : '先把当前险卷送去无尽或天道榜做一次高压验证，再用七日劫数补一张挑战旁证。'),
+            debt_sheet: sideVerified
+                ? '旁验证已经给出补强，但仍需主验证真正清账后才能释放本周定榜节奏。'
+                : '先处理上一道承诺留下的欠卷，再决定这一周是否值得继续冲定榜验证。'
+        };
+        const statusCatalog = {
+            sampling_sheet: '待形成可押卷主轴',
+            locking_sheet: '洞府承诺推进中',
+            positive_sheet: primaryVerified
+                ? [
+                    debtClearedByVerification ? '欠卷已清' : '主验证通过',
+                    primaryVerification?.sourceModeLabel || '',
+                    proofQualityLabel
+                ].filter(Boolean).join(' · ')
+                : '正卷已通过至少一条外场验证',
+            risky_sheet: primaryFailed
+                ? [
+                    '主验证失利',
+                    primaryVerification?.sourceModeLabel || '',
+                    proofQualityLabel
+                ].filter(Boolean).join(' · ')
+                : (sideVerified
+                    ? [
+                        '旁验证已补',
+                        sideVerification?.sourceModeLabel || '',
+                        '险卷待主验证'
+                    ].filter(Boolean).join(' · ')
+                    : '险卷待做外场定榜验证'),
+            debt_sheet: sideVerified
+                ? [
+                    '旁验证已补',
+                    sideVerification?.sourceModeLabel || '',
+                    debtStatusLine
+                ].filter(Boolean).join(' · ')
+                : '欠卷待清账'
+        };
+
+        const settlement = this.normalizeSeasonBoardSettlement({
+            id: `season_settlement_${outcomeId}_${settlementSourceRunId || safeSignals.weekTag || 'current'}`,
+            sourceRunId: settlementSourceRunId,
+            chapterIndex: settlementChapterIndex,
+            outcomeId,
+            outcomeLabel: labelCatalog[outcomeId],
+            outcomeTone: toneCatalog[outcomeId],
+            summaryLine: summaryCatalog[outcomeId],
+            detailLine: detailCatalog[outcomeId],
+            guideLine: guideCatalog[outcomeId],
+            statusLine: statusCatalog[outcomeId],
+            progressText: progressCatalog[outcomeId],
+            settlementWeekTag: currentWeekTag,
+            settlementPhaseId: safePhase.id,
+            settlementSource: primaryVerification ? 'season_verification' : (sourceRunId ? 'run_slate' : (lastAgenda ? 'agenda' : 'derived')),
+            resolutionTier: primaryVerified
+                ? (debtClearedByVerification ? 'recovered' : 'confirmed')
+                : (primaryFailed
+                    ? 'degraded'
+                    : (outcomeId === 'risky_sheet'
+                        ? 'provisional'
+                        : (outcomeId === 'debt_sheet'
+                            ? 'debt'
+                            : (outcomeId === 'locking_sheet' ? 'commit' : 'sampling')))),
+            resolvedStatus,
+            writebackLine: primaryWritebackLine || sideWritebackLine || '',
+            proofQuality,
+            lineageStyle,
+            primaryVerificationRecordId,
+            sideVerificationRecordId,
+            selectedContractLabel: String(lastAgenda?.selectedContractLabel || '').trim(),
+            contractResolutionLine: String(lastAgenda?.contractResolutionLine || '').trim(),
+            recoveryEligible: !!lastAgenda?.recoveryEligible
+        });
+
+        const debtPack = debtStatus
+            ? this.normalizeSeasonBoardDebtPack({
+                id: `season_debt_${settlementSourceRunId || lastAgenda?.agendaId || safeSignals.weekTag || 'current'}`,
+                sourceRunId: settlementSourceRunId,
+                chapterIndex: settlementChapterIndex,
+                sourceAgendaId: String(lastAgenda?.agendaId || '').trim(),
+                sourceLabel: String(lastAgenda?.name || primaryAftereffect?.sourceLabel || '赛季欠卷').trim(),
+                debtThemeId: String(primaryAftereffect?.templateId || safeSignals.activeAgenda?.rewardTrackId || '').trim(),
+                debtThemeLabel: String(primaryAftereffect?.templateLabel || safeSignals.activeAgenda?.rewardTrackName || '研究债账').trim(),
+                summaryLine: debtStatus === 'cleared'
+                    ? `研究债账已清：${String(primaryVerification?.summaryLine || primaryWritebackLine || lastAgenda?.recoveryLine || '这笔欠卷已经完成清账。').trim()}`
+                    : (debtStatus === 'degraded'
+                        ? `研究债账转为反证：${String(primaryVerification?.summaryLine || primaryWritebackLine || lastAgenda?.reasonLine || '这笔欠卷已经转成反证。').trim()}`
+                        : (primaryAftereffect?.summaryLine
+                            ? `研究债账：${String(primaryAftereffect.summaryLine || '').trim()}`
+                            : `研究债账：${String(lastAgenda?.recoveryLine || lastAgenda?.reasonLine || '上一道押卷承诺仍待清账。').trim()}`)),
+                detailLine: [
+                    debtStatus === 'cleared' || debtStatus === 'degraded'
+                        ? (primaryVerification?.detailLine || primaryWritebackLine || '')
+                        : (primaryAftereffect?.detailLine || ''),
+                    sideVerified ? (sideVerification?.summaryLine || sideWritebackLine || '') : '',
+                    lastAgenda?.recoveryHintLine || lastAgenda?.contractResolutionLine || ''
+                ].filter(Boolean).slice(0, 2).join('｜'),
+                guideLine: debtGuideLine,
+                statusLine: debtStatusLine,
+                progressText: debtProgressText,
+                settleWindowText: debtStatus === 'deferred'
+                    ? `已带入 ${safeSignals.weekLabel || currentWeekTag || '本周'}`
+                    : (debtStatus === 'cleared'
+                        ? '本周已清'
+                        : (debtStatus === 'degraded'
+                            ? '反证归档'
+                            : (primaryAftereffect?.remainingChapters > 0
+                                ? `剩余 ${Math.max(1, Math.floor(Number(primaryAftereffect.remainingChapters) || 1))} 章`
+                                : '本周内清账'))),
+                recommendedValidationLabel: debtStatus === 'cleared'
+                    ? '清账已回写'
+                    : (debtStatus === 'degraded' ? '反证归档' : '清债验证'),
+                recommendedAnchorSection: String(
+                    primaryVerification?.anchorSection
+                    || sideVerification?.anchorSection
+                    || (safeSignals.endlessSeason ? 'endless' : (safeSignals.pvpSeason ? 'pvp' : 'sanctum'))
+                ).trim(),
+                status: debtStatus,
+                deferCount: debtStatus === 'deferred' ? weekDelta : 0,
+                openedWeekTag,
+                carryIntoWeekTag: debtStatus === 'deferred' ? currentWeekTag : '',
+                occupiedMandateTaskId,
+                occupationReason,
+                occupiesStrongSlot: debtOccupiesStrongSlot,
+                resolvedStatus,
+                writebackLine: primaryWritebackLine || sideWritebackLine || '',
+                verificationRecordId: primaryVerificationRecordId,
+                selectedContractLabel: String(lastAgenda?.selectedContractLabel || '').trim(),
+                contractResolutionLine: String(lastAgenda?.contractResolutionLine || '').trim(),
+                recoveryEligible: !!lastAgenda?.recoveryEligible
+            })
+            : null;
+
+        const debtPending = debtPack && ['open', 'deferred'].includes(String(debtPack.status || '').trim());
+        const needEndless = endlessClears < 1;
+        const needPvp = pvpMatches < 2;
+        const weeklyScore = Math.max(0, Math.floor(Number(safeSignals.weeklyScore) || 0));
+        const weeklyArchiveCount = Math.max(0, Math.floor(Number(safeSignals.weeklyArchiveCount) || 0));
+        const weeklyChallengeTarget = 360;
+        const weeklyChallengeProgress = `${Math.min(weeklyScore, weeklyChallengeTarget)}/${weeklyChallengeTarget}`;
+        const weeklyChallengeLabel = '七日劫数';
+        const weeklyChallengeName = String(safeSignals.weeklyBundle?.rule?.name || weeklyChallengeLabel).trim() || weeklyChallengeLabel;
+        const challengeSideVerificationOrder = !debtPending && ['positive_sheet', 'risky_sheet'].includes(String(settlement?.outcomeId || '').trim())
+            ? {
+                id: 'challenge_followup',
+                type: 'challenge_followup',
+                role: 'side',
+                label: settlement?.outcomeId === 'positive_sheet' ? '补一轮七日劫数旁证' : '补一轮七日劫数试压',
+                summaryLine: settlement?.outcomeId === 'positive_sheet'
+                    ? (
+                        weeklyScore >= weeklyChallengeTarget
+                            ? '用七日劫数继续复盘这条正卷，补一张不同节奏的旁验证。'
+                            : '去七日劫数打一轮，把当前正卷补成一张挑战旁证。'
+                    )
+                    : (
+                        weeklyScore >= weeklyChallengeTarget
+                            ? '先用七日劫数复盘当前险卷，再决定去无尽还是天道榜冲定榜。'
+                            : '先去七日劫数打一轮，把当前险卷压成一张挑战旁证。'
+                    ),
+                hintLine: safeSignals.weeklyBundle
+                    ? `${weeklyChallengeName} · 当前 ${weeklyScore} 分${weeklyArchiveCount > 0 ? ` · 已归档 ${weeklyArchiveCount} 份样本` : ''}`
+                    : '周挑战会用固定命盘复刻这周主练，适合补一张挑战旁证。',
+                statusLine: `${weeklyChallengeLabel} ${weeklyChallengeProgress}${weeklyArchiveCount > 0 ? ` · 归档 ${weeklyArchiveCount}` : ''}`,
+                anchorSection: 'challenge',
+                priority: 2
+            }
+            : null;
+        const crossModeFollowupOrder = {
+            id: debtPending ? 'rank_after_clear' : (needEndless ? 'pvp_followup' : 'endless_followup'),
+            type: debtPending ? 'rank_after_clear' : 'followup',
+            role: 'side',
+            label: debtPending ? '清账后再冲定榜验证' : (needEndless ? '补一场天道榜账本' : '补一轮无尽样本'),
+            summaryLine: debtPending
+                ? '欠卷清掉后，再把这条主轴送去无尽或天道榜补齐定榜证明。'
+                : (needEndless
+                    ? '补一场真实对局账本，让本周主轴留下外场反证。'
+                    : '再补一轮无尽样本，确认这条路线在更长压力线上依然成立。'),
+            hintLine: debtPending
+                ? '先清账，再定榜，避免把未结的旧账继续压到下一周。'
+                : (needEndless
+                    ? `${safeSignals.pvpSeasonName || '天道榜'} 会更快给出真实外场样本。`
+                    : `${safeSignals.endlessSeason?.name || '无尽轮回'} 更适合补长线压强证明。`),
+            statusLine: debtPending
+                ? '清账后解锁'
+                : `无尽 ${endlessClears}/1 · 天道榜 ${Math.min(pvpMatches, 2)}/2`,
+            anchorSection: debtPending ? (needEndless ? 'endless' : 'pvp') : (needEndless ? 'pvp' : 'endless'),
+            priority: 2
+        };
+        const explicitPrimaryOrder = primaryVerification
+            ? {
+                id: primaryVerification.recordId || 'season_primary_verification',
+                type: primaryVerified ? 'verification_result' : (primaryFailed ? 'verification_counterexample' : 'verification_pending'),
+                role: 'primary',
+                label: primaryVerification.label || (primaryVerified ? '主验证已回写' : '主验证待复核'),
+                summaryLine: primaryVerification.summaryLine || '',
+                detailLine: primaryVerification.detailLine || primaryWritebackLine || '',
+                hintLine: primaryWritebackLine || primaryVerification.detailLine || '',
+                statusLine: primaryVerification.statusLine || '',
+                anchorSection: primaryVerification.anchorSection || (needEndless ? 'endless' : 'pvp'),
+                priority: 1,
+                resultStatus: primaryResultStatus,
+                writebackMode: primaryWritebackMode,
+                writebackLine: primaryWritebackLine,
+                sourceMode: primaryVerification.sourceMode || '',
+                sourceModeLabel: primaryVerification.sourceModeLabel || '',
+                resolvedRunId: primaryVerification.resolvedRunId || '',
+                chapterIndex: primaryVerification.chapterIndex || 0,
+                proofQuality: primaryVerification.proofQuality || '',
+                lineageStyle: primaryVerification.lineageStyle || '',
+                carryIntoNextWeek: !!primaryVerification.carryIntoNextWeek
+            }
+            : null;
+        const explicitSideOrder = sideVerification
+            ? {
+                id: sideVerification.recordId || 'season_side_verification',
+                type: sideVerified ? 'verification_side_result' : 'verification_side_pending',
+                role: 'side',
+                label: sideVerification.label || '旁验证状',
+                summaryLine: sideVerification.summaryLine || '',
+                detailLine: sideVerification.detailLine || sideWritebackLine || '',
+                hintLine: sideWritebackLine || sideVerification.detailLine || '',
+                statusLine: sideVerification.statusLine || '',
+                anchorSection: sideVerification.anchorSection || 'challenge',
+                priority: 2,
+                resultStatus: sideResultStatus,
+                writebackMode: sideVerification.writebackMode || '',
+                writebackLine: sideWritebackLine,
+                sourceMode: sideVerification.sourceMode || '',
+                sourceModeLabel: sideVerification.sourceModeLabel || '',
+                resolvedRunId: sideVerification.resolvedRunId || '',
+                chapterIndex: sideVerification.chapterIndex || 0,
+                proofQuality: sideVerification.proofQuality || '',
+                lineageStyle: sideVerification.lineageStyle || '',
+                carryIntoNextWeek: !!sideVerification.carryIntoNextWeek
+            }
+            : null;
+        const fallbackPrimaryOrder = debtPending
+            ? {
+                id: 'clear_debt',
+                type: 'clear_debt',
+                role: 'primary',
+                label: '优先清掉本周欠卷',
+                summaryLine: debtPack.summaryLine,
+                detailLine: debtPack.detailLine || '',
+                hintLine: debtPack.guideLine,
+                statusLine: debtPack.progressText || debtPack.statusLine,
+                anchorSection: debtPack.recommendedAnchorSection || 'sanctum',
+                priority: 1
+            }
+            : {
+                id: settlement?.outcomeId === 'positive_sheet' ? 'rank_expand' : 'rank_verify',
+                type: settlement?.outcomeId === 'positive_sheet' ? 'rank_expand' : 'rank_verify',
+                role: 'primary',
+                label: settlement?.outcomeId === 'positive_sheet' ? '扩大本周定榜样本' : '把当前险卷送去高压验证',
+                summaryLine: needEndless
+                    ? '先补 1 轮无尽轮回，把当前主轴送进更高压环境继续验算。'
+                    : (needPvp
+                        ? '再补 1-2 场天道榜账本，确认这条路线不是只在章节里成立。'
+                        : '无尽与天道榜都已留痕，可继续冲更高分或反例样本。'),
+                hintLine: needEndless
+                    ? `${safeSignals.endlessSeason?.name || '无尽轮回'} 当前仍缺 1 轮跨模证明。`
+                    : (needPvp
+                        ? `${safeSignals.pvpSeasonName || '天道榜'} 还缺 ${Math.max(0, 2 - pvpMatches)} 场账本。`
+                        : '当前正卷已经具备定榜基础，可继续扩样本或冲更高压证明。'),
+                statusLine: `无尽 ${endlessClears}/1 · 天道榜 ${Math.min(pvpMatches, 2)}/2`,
+                anchorSection: needEndless ? 'endless' : 'pvp',
+                priority: 1
+            };
+        const verificationOrders = [
+            explicitPrimaryOrder || fallbackPrimaryOrder,
+            explicitSideOrder || challengeSideVerificationOrder || crossModeFollowupOrder
+        ].map((entry, index) => this.normalizeSeasonBoardVerificationOrder({
+            ...entry,
+            role: entry?.role || (index === 0 ? 'primary' : 'side')
+        }, index)).filter(Boolean);
+
+        return {
+            settlement,
+            debtPack,
+            verificationOrders
+        };
+    }
+
+    normalizeSeasonBoardSnapshot(source = null) {
+        const root = source && typeof source === 'object' ? source : null;
+        if (!root) return null;
+        const lanes = Array.isArray(root.lanes)
+            ? root.lanes
+                .map((lane, index) => this.normalizeHeavenlyMandateLane(lane, index))
+                .slice(0, 3)
+            : [];
+        const laneCompletedTaskCount = lanes.reduce((sum, lane) => sum + lane.completedCount, 0);
+        const laneTotalTaskCount = lanes.reduce((sum, lane) => sum + lane.totalCount, 0);
+        const explicitTotal = Math.max(
+            0,
+            Math.floor(Number(
+                root.totalTaskCount
+                ?? root.progress?.total
+                ?? 0
+            ) || 0)
+        );
+        const totalTaskCount = Math.max(laneTotalTaskCount, explicitTotal);
+        const explicitCompleted = Math.max(
+            0,
+            Math.floor(Number(
+                root.completedTaskCount
+                ?? root.progress?.completed
+                ?? 0
+            ) || 0)
+        );
+        const completedTaskCount = totalTaskCount > 0
+            ? Math.min(totalTaskCount, Math.max(laneCompletedTaskCount, explicitCompleted))
+            : Math.max(laneCompletedTaskCount, explicitCompleted);
+        const progressText = String(
+            root.progress?.progressText
+            || (totalTaskCount > 0 ? `${completedTaskCount}/${totalTaskCount}` : '待同步')
+        ).trim() || '待同步';
+        const progressRatio = totalTaskCount > 0
+            ? Math.max(0, Math.min(1, completedTaskCount / Math.max(1, totalTaskCount)))
+            : 0;
+        const phaseId = String(root.phaseId || 'sampling').trim().slice(0, 32) || 'sampling';
+        const phaseLabelCatalog = {
+            sampling: '采样期',
+            lockline: '锁线期',
+            ranking: '定榜期'
+        };
+        const phaseIconCatalog = {
+            sampling: '🔭',
+            lockline: '📜',
+            ranking: '🏁'
+        };
+        const phaseLabel = String(root.phaseLabel || phaseLabelCatalog[phaseId] || '采样期').trim() || '采样期';
+        const phaseIcon = String(root.phaseIcon || phaseIconCatalog[phaseId] || '🔭').trim() || '🔭';
+        const lanePriorityByPhase = {
+            ranking: ['verification', 'expedition', 'training'],
+            lockline: ['expedition', 'training', 'verification'],
+            sampling: ['training', 'expedition', 'verification']
+        };
+        const prioritizedLaneIds = Array.isArray(lanePriorityByPhase[phaseId])
+            ? lanePriorityByPhase[phaseId]
+            : lanePriorityByPhase.sampling;
+        const prioritizedLanes = [
+            ...prioritizedLaneIds
+                .map((laneId) => lanes.find((lane) => lane && lane.id === laneId))
+                .filter(Boolean),
+            ...lanes.filter((lane) => lane && !prioritizedLaneIds.includes(lane.id))
+        ];
+        const nextTask = prioritizedLanes.reduce((result, lane) => {
+            if (result) return result;
+            const task = Array.isArray(lane.tasks)
+                ? lane.tasks.find((entry) => entry && !entry.completed)
+                : null;
+            return task
+                ? {
+                    laneId: lane.id,
+                    laneLabel: lane.label,
+                    task
+                }
+                : null;
+        }, null);
+        const themeLabel = String(root.themeLabel || root.seasonLabel || '本周主轴').trim() || '本周主轴';
+        const themeId = String(root.themeId || root.phaseId || 'season_axis').trim().slice(0, 40) || 'season_axis';
+        const summaryLine = String(
+            root.summaryLine
+            || `赛季天道盘当前围绕【${themeLabel}】展开，已进入「${phaseLabel}」。`
+        ).trim();
+        const detailLine = String(
+            root.detailLine
+            || [
+                root.seasonName ? `赛季：${String(root.seasonName || '').trim()}` : '',
+                root.weekLabel ? `轮转：${String(root.weekLabel || '').trim()}` : '',
+                root.crossModeSummary ? `验算：${String(root.crossModeSummary || '').trim()}` : ''
+            ].filter(Boolean).slice(0, 2).join('｜')
+        ).trim();
+        const guideLine = String(
+            root.guideLine
+            || (nextTask
+                ? `下一步：${nextTask.task.label}${nextTask.task.hintLine ? ` · ${nextTask.task.hintLine}` : ''}`
+                : '本周季盘任务已齐备，可以继续冲更高分或扩充跨模样本。')
+        ).trim();
+        const crossModeSummary = String(root.crossModeSummary || '').trim();
+        const statusLine = String(
+            root.statusLine
+            || [phaseLabel, `赛季进度 ${progressText}`, crossModeSummary].filter(Boolean).join(' · ')
+        ).trim();
+        const rewardLine = String(
+            root.rewardLine
+            || `本章归卷会把赛季天道盘推进到 ${progressText}${nextTask ? `，接下来建议 ${nextTask.task.label}` : '，当前主轴已经成型。'}`
+        ).trim();
+        const settlement = this.normalizeSeasonBoardSettlement(root.settlement);
+        const debtPack = this.normalizeSeasonBoardDebtPack(root.debtPack);
+        const weekVerdictLedger = this.normalizeSeasonBoardWeekVerdictLedger(root.weekVerdictLedger);
+        const verificationOrders = Array.isArray(root.verificationOrders)
+            ? root.verificationOrders
+                .map((entry, index) => this.normalizeSeasonBoardVerificationOrder(entry, index))
+                .filter(Boolean)
+                .slice(0, 2)
+            : [];
+        return {
+            seasonId: String(root.seasonId || 'season_board').trim().slice(0, 64) || 'season_board',
+            seasonLabel: String(root.seasonLabel || root.seasonName || '赛季天道盘').trim().slice(0, 64) || '赛季天道盘',
+            seasonName: String(root.seasonName || root.seasonLabel || '赛季天道盘').trim().slice(0, 80) || '赛季天道盘',
+            seasonIcon: String(root.seasonIcon || '🜂').trim().slice(0, 4) || '🜂',
+            seasonSource: String(root.seasonSource || 'derived').trim().slice(0, 24) || 'derived',
+            weekTag: String(root.weekTag || '').trim().slice(0, 24),
+            weekLabel: String(root.weekLabel || '').trim().slice(0, 32),
+            phaseId,
+            phaseLabel,
+            phaseIcon,
+            themeId,
+            themeLabel: themeLabel.slice(0, 64),
+            summaryLine: summaryLine.slice(0, 220),
+            detailLine: detailLine.slice(0, 240),
+            guideLine: guideLine.slice(0, 240),
+            statusLine: statusLine.slice(0, 220),
+            rewardLine: rewardLine.slice(0, 220),
+            crossModeSummary: crossModeSummary.slice(0, 200),
+            completedTaskCount,
+            totalTaskCount,
+            progress: {
+                completed: completedTaskCount,
+                total: totalTaskCount,
+                progressText: progressText.slice(0, 24),
+                ratio: progressRatio
+            },
+            settlement,
+            debtPack,
+            weekVerdictLedger,
+            verificationOrders,
+            lanes,
+            nextTask: nextTask
+                ? {
+                    laneId: nextTask.laneId,
+                    laneLabel: nextTask.laneLabel,
+                    id: nextTask.task.id,
+                    label: nextTask.task.label,
+                    progressText: nextTask.task.progressText,
+                    hintLine: nextTask.task.hintLine,
+                    statusLine: nextTask.task.statusLine,
+                    anchorSection: nextTask.task.anchorSection
+                }
+                : null
+        };
+    }
+
+    buildSeasonBoardRouteDirective(options = {}) {
+        const board = options.board && typeof options.board === 'object' ? options.board : null;
+        const signals = options.signals && typeof options.signals === 'object' ? options.signals : {};
+        const phaseId = String(board?.phaseId || options.phaseId || '').trim();
+        const defaultLaneId = phaseId === 'ranking'
+            ? 'verification'
+            : (phaseId === 'lockline' ? 'expedition' : 'training');
+        const nextLaneId = defaultLaneId;
+        const normalizeNodeTypes = (value = null, limit = 4) => {
+            if (typeof this.normalizeSanctumAgendaNodeTypes === 'function') {
+                return this.normalizeSanctumAgendaNodeTypes(value, limit);
+            }
+            return Array.isArray(value)
+                ? value.map((entry) => String(entry || '').trim()).filter(Boolean).slice(0, limit)
+                : [];
+        };
+        const nodeTypeLabel = (nodeType = '') => {
+            const catalog = {
+                enemy: '战斗',
+                elite: '精英',
+                event: '事件',
+                shop: '商路',
+                trial: '试炼',
+                forge: '锻炉',
+                rest: '歇息',
+                observatory: '观星',
+                spirit_grotto: '灵契',
+                forbidden_altar: '禁术',
+                memory_rift: '裂隙'
+            };
+            return catalog[String(nodeType || '').trim()] || String(nodeType || '').trim();
+        };
+        const buildFocusLabel = (nodeTypes = []) => normalizeNodeTypes(nodeTypes)
+            .map((nodeType) => nodeTypeLabel(nodeType))
+            .join(' / ');
+        const agendaNodeTypes = normalizeNodeTypes(signals.activeAgenda?.focusNodeTypes, 4);
+        const agendaFocusLabel = buildFocusLabel(agendaNodeTypes);
+        const baseCatalog = {
+            training: {
+                id: 'season_route_training',
+                laneId: 'training',
+                label: '观星采样线',
+                nodeTypes: ['observatory', 'event', 'memory_rift'],
+                weightShift: {
+                    observatory: 0.012,
+                    event: 0.01,
+                    memory_rift: 0.012,
+                    enemy: -0.01,
+                    elite: -0.006
+                },
+                summaryLine: '观星 / 事件 / 裂隙节点会略多，方便继续补齐主练样本与谱系沉淀。',
+                rewardLine: '下一章地图会轻度偏向观星 / 事件 / 裂隙，方便把当前主练继续压成稳定样本。'
+            },
+            expedition: {
+                id: 'season_route_expedition',
+                laneId: 'expedition',
+                label: '押卷锁线',
+                nodeTypes: ['event', 'observatory', 'memory_rift'],
+                weightShift: {
+                    event: 0.008,
+                    observatory: 0.008,
+                    memory_rift: 0.006,
+                    shop: -0.004,
+                    rest: -0.003
+                },
+                summaryLine: '事件 / 观星 / 裂隙节点会略多，方便尽快把本周答卷压成洞府承诺。',
+                rewardLine: '下一章地图会轻度偏向事件 / 观星 / 裂隙，方便尽快把本周答卷锁进洞府承诺。'
+            },
+            verification: {
+                id: 'season_route_verification',
+                laneId: 'verification',
+                label: '镜战试炼线',
+                nodeTypes: ['trial', 'elite', 'enemy', 'forbidden_altar'],
+                weightShift: {
+                    trial: 0.012,
+                    elite: 0.01,
+                    enemy: 0.006,
+                    forbidden_altar: 0.008,
+                    rest: -0.008,
+                    shop: -0.006
+                },
+                summaryLine: '试炼 / 精英 / 战斗 / 禁术节点会略多，方便继续补齐无尽压强与外场验算样本。',
+                rewardLine: '下一章地图会轻度偏向试炼 / 精英 / 战斗 / 禁术，方便把当前主练送去高压环境验证。'
+            }
+        };
+        let directive = baseCatalog[nextLaneId] || baseCatalog.training;
+        if (nextLaneId === 'training') {
+            const focusTitle = String(signals.selectedGuide?.title || '').trim();
+            const focusTheme = String(signals.trainingFocus?.themeLabel || '').trim();
+            if (focusTitle) {
+                directive = {
+                    ...directive,
+                    label: `${focusTitle} 采样线`,
+                    summaryLine: `观星 / 事件 / 裂隙节点会略多，方便继续围绕【${focusTitle}】补样本与训练留痕。`,
+                    rewardLine: `下一章地图会轻度偏向观星 / 事件 / 裂隙，方便把【${focusTitle}】继续压成稳定主练。`
+                };
+            } else if (focusTheme) {
+                directive = {
+                    ...directive,
+                    label: `${focusTheme} 校卷线`,
+                    summaryLine: `观星 / 事件 / 裂隙节点会略多，方便继续围绕【${focusTheme}】补观测样本与训练答卷。`,
+                    rewardLine: `下一章地图会轻度偏向观星 / 事件 / 裂隙，方便把【${focusTheme}】继续写回主练。`
+                };
+            }
+        } else if (nextLaneId === 'expedition') {
+            if (agendaNodeTypes.length > 0) {
+                directive = {
+                    ...directive,
+                    id: 'season_route_lockline',
+                    label: `${String(signals.activeAgenda?.selectedContractLabel || signals.activeAgenda?.name || '洞府锁线').trim() || '洞府锁线'}路线`,
+                    nodeTypes: agendaNodeTypes,
+                    weightShift: null,
+                    summaryLine: `${agendaFocusLabel} 节点会继续被洞府承诺牵引，季盘会顺势把这条锁线压向结题。`,
+                    rewardLine: `当前洞府承诺会继续牵引 ${agendaFocusLabel} 节点，下一章更适合沿锁线继续压卷。`
+                };
+            } else if (signals.latestSlate?.themeLabel) {
+                directive = {
+                    ...directive,
+                    label: `${String(signals.latestSlate.themeLabel || '').trim()} 归卷线`
+                };
+            }
+        } else if (nextLaneId === 'verification') {
+            const focusPvp = Math.max(0, Math.floor(Number(signals.pvpSeasonMatchCount) || 0)) < 2;
+            const focusEndless = Math.max(0, Math.floor(Number(signals.endlessClears) || 0)) < 1;
+            if (focusPvp && !focusEndless) {
+                directive = {
+                    ...directive,
+                    label: '天道榜验算线',
+                    summaryLine: '试炼 / 精英 / 战斗 / 禁术节点会略多，方便把当前主练送去天道榜前继续补压强样本。',
+                    rewardLine: '下一章地图会轻度偏向试炼 / 精英 / 战斗 / 禁术，方便先把 PVP 验算样本补齐。'
+                };
+            } else if (!focusPvp && focusEndless) {
+                directive = {
+                    ...directive,
+                    label: '无尽验算线',
+                    summaryLine: '试炼 / 精英 / 战斗 / 禁术节点会略多，方便把当前主练送去无尽轮回前继续补压强样本。',
+                    rewardLine: '下一章地图会轻度偏向试炼 / 精英 / 战斗 / 禁术，方便先把无尽压强验算补齐。'
+                };
+            }
+        }
+        if (agendaNodeTypes.length > 0 && phaseId === 'ranking') {
+            directive = {
+                ...directive,
+                weightShift: null,
+                summaryLine: `${agendaFocusLabel} 节点仍由洞府承诺牵引；${directive.label} 只保留阶段提醒，不再额外改写地图权重。`,
+                rewardLine: `当前洞府承诺会继续牵引 ${agendaFocusLabel} 节点；季盘本阶段只保留${directive.label}提醒，不再额外叠加地图偏置。`
+            };
+        }
+        const shift = directive.weightShift && typeof directive.weightShift === 'object'
+            ? (typeof this.sanitizeSanctumAgendaWeightShift === 'function'
+                ? this.sanitizeSanctumAgendaWeightShift(directive.weightShift)
+                : { ...directive.weightShift })
+            : null;
+        return {
+            ...directive,
+            nodeTypes: normalizeNodeTypes(directive.nodeTypes, 4),
+            weightShift: shift && Object.keys(shift).length > 0 ? shift : null
+        };
+    }
+
+    getSeasonBoardSnapshot(options = {}) {
+        const signals = this.getSeasonBoardSignalSnapshot(options);
+        const phase = this.getSeasonBoardPhaseMeta(signals);
+        const mandateTheme = typeof this.getHeavenlyMandateThemeMeta === 'function'
+            ? this.getHeavenlyMandateThemeMeta(signals)
+            : {
+                id: phase.id,
+                label: phase.label,
+                icon: phase.icon,
+                summaryLine: ''
+            };
+        const lineage = signals.lineage && typeof signals.lineage === 'object'
+            ? signals.lineage
+            : null;
+        const aftereffects = signals.aftereffects && typeof signals.aftereffects === 'object'
+            ? signals.aftereffects
+            : null;
+        const styleTrackCount = [
+            lineage?.characterTrack?.dominantLabel,
+            lineage?.styleTrack?.dominantLabel,
+            lineage?.nodeTrack?.dominantLabel,
+            lineage?.researchTrack?.dominantLabel
+        ].filter(Boolean).length;
+        const trainingLane = {
+            id: 'training',
+            label: '训练线',
+            icon: '🔭',
+            summaryLine: signals.selectedGuide?.title
+                ? `当前主练样本已锁到【${signals.selectedGuide.title}】，接下来要把谱系与周挑战结果继续压实。`
+                : (signals.trainingFocus?.trainingAdvice
+                    ? `当前已有主练建议，下一步要把这份建议继续压成稳定可复用的赛季样本。`
+                    : '先锁定一份本周主练样本，再把训练建议与谱系沉淀写成长期主轴。'),
+            tasks: [
+                {
+                    id: 'season_training_focus',
+                    label: (signals.selectedGuide || signals.trainingFocus) ? '本周主练已锁定' : '锁定本周主练样本',
+                    icon: '🔭',
+                    progress: (signals.selectedGuide || signals.trainingFocus) ? 1 : 0,
+                    target: 1,
+                    hintLine: signals.selectedGuide
+                        ? `当前精选命盘：${signals.selectedGuide.title} · ${signals.selectedGuide.themeLabel || '赛季样本'}`
+                        : (signals.trainingFocus
+                            ? `当前主练：${signals.trainingFocus.chapterName || '最近归卷'} · ${signals.trainingFocus.trainingAdvice || signals.trainingFocus.sourceTitle || '已给出训练建议'}`
+                            : '去观星台锁一份精选命盘，或先补一局七日劫数拿到主练建议。'),
+                    statusLine: signals.selectedGuide?.themeLabel || signals.trainingFocus?.themeLabel || '',
+                    anchorSection: 'chapters'
+                },
+                {
+                    id: 'season_lineage_anchor',
+                    label: '命盘谱系沉淀 3 条主修轴',
+                    icon: '🪞',
+                    progress: Math.min(styleTrackCount, 3),
+                    target: 3,
+                    hintLine: lineage?.currentFocusLine
+                        || lineage?.detailLine
+                        || '继续积累角色、流派、节点与研究的长期留痕，把本周主练写成可复刻谱系。',
+                    statusLine: lineage?.summaryLine || lineage?.styleTrack?.dominantLabel || '',
+                    anchorSection: 'builds'
+                }
+            ]
+        };
+        const expeditionLane = {
+            id: 'expedition',
+            label: '远征线',
+            icon: '🧭',
+            summaryLine: signals.activeAgenda
+                ? `当前正围绕【${signals.activeAgenda.name}】压卷，章节推进要继续沿 ${signals.activeAgenda.focusNodeLine || '主轴'} 走。`
+                : (signals.latestSlate
+                    ? `最近一张章节答卷已经写回赛季主轴，下一步要把它继续锁进洞府承诺与章节复盘。`
+                    : '先推进一章远征留下第一张章节答卷，再决定这周真正要押哪条主线。'),
+            tasks: [
+                {
+                    id: 'season_run_slate',
+                    label: signals.latestSlate ? '本周章节答卷已入档' : '留下本周第一张章节答卷',
+                    icon: '🧭',
+                    progress: signals.latestSlate ? 1 : 0,
+                    target: 1,
+                    hintLine: signals.latestSlate
+                        ? `最新归卷：${signals.latestSlate.chapterName || '章节'} · ${signals.latestSlate.endingName || '已收卷'}${signals.latestSlate.score ? ` · 评分 ${signals.latestSlate.score}` : ''}`
+                        : '推进任意一章裂界远征，把本周主轴先写成第一张可复盘答卷。',
+                    statusLine: signals.latestSlate?.ratingLabel || '',
+                    anchorSection: 'slates'
+                },
+                {
+                    id: 'season_commitment',
+                    label: signals.activeAgenda
+                        ? `推进 ${signals.activeAgenda.name}`
+                        : (signals.lastAgenda ? `复核 ${signals.lastAgenda.name}` : '立下一道洞府锁线承诺'),
+                    icon: '📜',
+                    progress: signals.activeAgenda
+                        ? Math.max(0, Math.floor(Number(signals.activeAgenda.progress) || 0))
+                        : (signals.lastAgenda?.outcome === 'success' ? 1 : 0),
+                    target: signals.activeAgenda
+                        ? Math.max(1, Math.floor(Number(signals.activeAgenda.target) || 1))
+                        : 1,
+                    hintLine: signals.activeAgenda
+                        ? (signals.activeAgenda.phaseLine || signals.activeAgenda.focusNodeLine || signals.activeAgenda.summaryLine || '本轮承诺正在推进。')
+                        : (signals.lastAgenda
+                            ? (signals.lastAgenda.recoveryLine || signals.lastAgenda.grantedLine || signals.lastAgenda.reasonLine || '上一道洞府承诺已经留下结题结果。')
+                            : '从归卷书架挑一份答卷设为本周承诺，让赛季主轴真正锁进章节推进。'),
+                    statusLine: signals.activeAgenda?.phaseLabel || signals.lastAgenda?.outcomeLabel || '',
+                    anchorSection: 'sanctum'
+                }
+            ]
+        };
+        const crossModeSummary = [
+            signals.endlessSeason
+                ? `无尽 ${Math.max(0, Math.floor(Number(signals.endlessClears) || 0))} 轮`
+                : '',
+            signals.pvpSeasonName
+                ? `天道榜 ${Math.max(0, Math.floor(Number(signals.pvpSeasonMatchCount) || 0))} 场`
+                : '',
+            aftereffects?.currentStatusLine || ''
+        ].filter(Boolean).join(' · ');
+        const verificationLane = {
+            id: 'verification',
+            label: '验算线',
+            icon: '🏁',
+            summaryLine: crossModeSummary
+                ? `本周已经开始做跨模验算：${crossModeSummary}。`
+                : '用无尽轮回、天道榜与长期后效去确认这周主练不是只在单章里成立的错觉。',
+            tasks: [
+                {
+                    id: 'season_endless_clear',
+                    label: '无尽轮回通关 1 轮',
+                    icon: '∞',
+                    progress: Math.min(Math.max(0, Math.floor(Number(signals.endlessClears) || 0)), 1),
+                    target: 1,
+                    hintLine: signals.endlessSeason
+                        ? `${signals.endlessSeason.name || '当前赛季'} · 已清 ${Math.max(0, Math.floor(Number(signals.endlessClears) || 0))} 轮${signals.endlessScore ? ` · 积分 ${Math.max(0, Math.floor(Number(signals.endlessScore) || 0))}` : ''}`
+                        : '进入无尽轮回后，会开始记录这周主轴在高压环境下是否还能成立。',
+                    statusLine: signals.endlessSeason?.directiveName || '',
+                    anchorSection: 'endless'
+                },
+                {
+                    id: 'season_pvp_ledger',
+                    label: '天道榜留下 2 场账本',
+                    icon: '⚔️',
+                    progress: Math.min(Math.max(0, Math.floor(Number(signals.pvpSeasonMatchCount) || 0)), 2),
+                    target: 2,
+                    hintLine: signals.pvpSeasonName
+                        ? `${signals.pvpSeasonName} · 已记 ${Math.max(0, Math.floor(Number(signals.pvpSeasonMatchCount) || 0))} 场${signals.pvpRecentOpponentName ? ` · 最近对手 ${signals.pvpRecentOpponentName}` : ''}`
+                        : 'PVP 账本会记录本周真实对局，至少打一场先建立赛季外场样本。',
+                    statusLine: aftereffects?.currentStatusLine || signals.pvpSeasonName || '',
+                    anchorSection: 'pvp'
+                }
+            ]
+        };
+        const lanes = [trainingLane, expeditionLane, verificationLane]
+            .map((lane, index) => this.normalizeHeavenlyMandateLane(lane, index));
+        const completedTaskCount = lanes.reduce((sum, lane) => sum + lane.completedCount, 0);
+        const totalTaskCount = lanes.reduce((sum, lane) => sum + lane.totalCount, 0);
+        const themeId = String(
+            signals.selectedGuide?.themeKey
+            || signals.trainingFocus?.themeKey
+            || signals.activeAgenda?.themeKey
+            || signals.latestSlate?.themeKey
+            || lineage?.styleTrack?.dominantId
+            || mandateTheme.id
+            || phase.id
+        ).trim() || phase.id;
+        const themeLabel = String(
+            signals.selectedGuide?.themeLabel
+            || signals.trainingFocus?.themeLabel
+            || signals.activeAgenda?.themeLabel
+            || signals.latestSlate?.themeLabel
+            || lineage?.styleTrack?.dominantLabel
+            || mandateTheme.label
+            || '本周主轴'
+        ).trim() || '本周主轴';
+        const seasonSource = signals.endlessSeason?.id && signals.pvpSeason?.id
+            ? 'hybrid'
+            : signals.endlessSeason?.id
+                ? 'endless'
+                : signals.pvpSeason?.id
+                    ? 'pvp'
+                    : 'weekly';
+        const seasonName = seasonSource === 'hybrid'
+            && signals.endlessSeason?.name
+            && signals.pvpSeasonName
+            && signals.endlessSeason.name !== signals.pvpSeasonName
+            ? `${signals.endlessSeason.name} / ${signals.pvpSeasonName}`
+            : (signals.endlessSeason?.name
+                || signals.pvpSeasonName
+                || `${signals.weekLabel || signals.weekTag || '本周轮转'} · 赛季天道盘`);
+        const settlementState = this.buildSeasonBoardSettlementState(signals, phase);
+        const settlement = settlementState?.settlement || null;
+        const debtPack = settlementState?.debtPack || null;
+        const verificationOrders = Array.isArray(settlementState?.verificationOrders)
+            ? settlementState.verificationOrders
+            : [];
+        const weekVerdictLedger = this.normalizeSeasonBoardWeekVerdictLedger({
+            current: {
+                ledgerId: `season_verdict_${signals.weekTag || 'current'}_${settlement?.outcomeId || phase.id}_${settlement?.sourceRunId || debtPack?.id || 'current'}`,
+                weekTag: signals.weekTag,
+                weekLabel: signals.weekLabel,
+                phaseId: phase.id,
+                phaseLabel: phase.label,
+                sourceRunId: settlement?.sourceRunId || debtPack?.sourceRunId || signals.latestSlate?.id || '',
+                chapterIndex: settlement?.chapterIndex || debtPack?.chapterIndex || 0,
+                settlementId: settlement?.id || '',
+                settlementOutcomeId: settlement?.outcomeId || '',
+                settlementOutcomeLabel: settlement?.outcomeLabel || '',
+                debtPackId: debtPack?.id || '',
+                debtStatus: debtPack?.status || '',
+                deferCount: debtPack?.deferCount || 0,
+                carryIntoWeekTag: debtPack?.carryIntoWeekTag || '',
+                primaryVerificationOrderId: verificationOrders[0]?.id || '',
+                sideVerificationOrderId: verificationOrders[1]?.id || '',
+                resolutionTier: settlement?.resolutionTier || '',
+                resolvedStatus: settlement?.resolvedStatus || debtPack?.resolvedStatus || '',
+                primaryVerificationResultStatus: verificationOrders[0]?.resultStatus || '',
+                sideVerificationResultStatus: verificationOrders[1]?.resultStatus || '',
+                primaryWritebackMode: verificationOrders[0]?.writebackMode || '',
+                sideWritebackMode: verificationOrders[1]?.writebackMode || '',
+                writebackLine: settlement?.writebackLine || debtPack?.writebackLine || verificationOrders[0]?.writebackLine || verificationOrders[1]?.writebackLine || '',
+                proofQuality: settlement?.proofQuality || verificationOrders[0]?.proofQuality || verificationOrders[1]?.proofQuality || '',
+                lineageStyle: settlement?.lineageStyle || verificationOrders[0]?.lineageStyle || verificationOrders[1]?.lineageStyle || '',
+                carryIntoNextWeek: !!verificationOrders[0]?.carryIntoNextWeek || !!verificationOrders[1]?.carryIntoNextWeek,
+                settlementSource: settlement?.settlementSource || seasonSource || 'derived',
+                summaryLine: debtPack?.summaryLine || settlement?.summaryLine || ''
+            }
+        });
+        const board = this.normalizeSeasonBoardSnapshot({
+            seasonId: String(signals.endlessSeason?.id || signals.pvpSeason?.id || `season_board:${signals.weekTag || 'current'}`),
+            seasonLabel: signals.endlessSeason?.name || signals.pvpSeasonName || '赛季天道盘',
+            seasonName,
+            seasonIcon: signals.endlessSeason?.icon || phase.icon || mandateTheme.icon || '🜂',
+            seasonSource,
+            weekTag: signals.weekTag,
+            weekLabel: signals.weekLabel,
+            phaseId: phase.id,
+            phaseLabel: phase.label,
+            phaseIcon: phase.icon,
+            themeId,
+            themeLabel,
+            summaryLine: `赛季天道盘当前围绕【${themeLabel}】展开，已进入「${phase.label}」。${settlement?.outcomeLabel ? ` 当前押卷：${settlement.outcomeLabel}。` : ''}`,
+            detailLine: [
+                mandateTheme.label ? `轮转题面：${mandateTheme.label}` : '',
+                settlement?.detailLine || '',
+                debtPack?.summaryLine || '',
+                signals.latestSlate?.ratingLabel ? `最近答卷：${signals.latestSlate.ratingLabel}` : '',
+                signals.activeAgenda?.selectedContractLabel ? `锁线契约：${signals.activeAgenda.selectedContractLabel}` : '',
+                aftereffects?.currentStatusLine ? `后效：${aftereffects.currentStatusLine}` : ''
+            ].filter(Boolean).slice(0, 2).join('｜'),
+            guideLine: [
+                settlement?.guideLine || '',
+                verificationOrders[0]?.summaryLine || ''
+            ].filter(Boolean).join(' · '),
+            statusLine: [
+                phase.label,
+                settlement?.outcomeLabel ? `当前押卷 ${settlement.outcomeLabel}` : '',
+                debtPack?.progressText || verificationOrders[0]?.statusLine || ''
+            ].filter(Boolean).join(' · '),
+            rewardLine: [
+                settlement?.summaryLine || '',
+                debtPack?.guideLine || verificationOrders[0]?.summaryLine || ''
+            ].filter(Boolean).join(' '),
+            crossModeSummary,
+            completedTaskCount,
+            totalTaskCount,
+            settlement,
+            debtPack,
+            weekVerdictLedger,
+            verificationOrders,
+            lanes
+        });
+        const routeDirective = this.buildSeasonBoardRouteDirective({
+            board,
+            signals
+        });
+        if (!routeDirective) return board;
+        return this.normalizeSeasonBoardSnapshot({
+            ...board,
+            guideLine: [
+                board.guideLine,
+                routeDirective.summaryLine ? `路线引导：${routeDirective.summaryLine}` : ''
+            ].filter(Boolean).join(' '),
+            rewardLine: [
+                board.rewardLine,
+                routeDirective.rewardLine || ''
+            ].filter(Boolean).join(' ')
+        });
+    }
+
+    getSeasonBoardWeightShift(options = {}) {
+        const board = this.getSeasonBoardSnapshot(options);
+        const signals = this.getSeasonBoardSignalSnapshot(options);
+        const directive = this.buildSeasonBoardRouteDirective({
+            board,
+            signals
+        });
+        const shift = directive?.weightShift && typeof directive.weightShift === 'object'
+            ? (typeof this.sanitizeSanctumAgendaWeightShift === 'function'
+                ? this.sanitizeSanctumAgendaWeightShift(directive.weightShift)
+                : { ...directive.weightShift })
+            : null;
+        return shift && Object.keys(shift).length > 0 ? shift : null;
     }
 
     createDefaultSanctumAgendaState() {
@@ -20267,10 +24273,18 @@ class Game {
         resolved.grantedLine = grantedLine || (outcome === 'success'
             ? resolved.rewardLine
             : (resolved.recoveryEligible ? resolved.recoveryLine : ''));
+        const aftereffect = this.createFateAftereffectFromSanctumAgenda(resolved, {
+            chapterIndex,
+            latestRunId: resolved.sourceRunId || ''
+        });
+        const runtimeAftereffect = aftereffect
+            ? this.getFateAftereffectRuntimeRecord(aftereffect, { currentChapterIndex: chapterIndex })
+            : null;
         resolved.logLine = [
             resolved.summaryLine,
             resolved.recoveryLine || '',
             resolved.contractResolutionLine || '',
+            runtimeAftereffect?.summaryLine || '',
             outcome === 'success' ? (resolved.grantedLine || '') : ''
         ].filter(Boolean).join('｜');
         state.activeAgenda = null;

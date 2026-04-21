@@ -3250,6 +3250,43 @@
             this.recordChallengeCompletion(run, { ...options, featuredProfile });
         }
         this.recordChallengeArchiveResult(run, { ...options, featuredProfile });
+        if (
+            !run.replayOnly
+            && options.completed
+            && run.mode === 'weekly'
+            && typeof this.recordSeasonVerificationResult === 'function'
+        ) {
+            this.recordSeasonVerificationResult({
+                recordId: `season_verification_${String(run.rotationKey || 'current').trim()}_side_challenge`,
+                weekTag: String(run.rotationKey || '').trim(),
+                weekLabel: String(run.rotationLabel || '').trim(),
+                role: 'side',
+                sourceMode: 'challenge',
+                sourceModeLabel: '七日劫数',
+                sourceLabel: String(run.ruleName || run.modeLabel || '七日劫数').trim(),
+                label: '七日劫数旁证',
+                resultStatus: 'verified',
+                writebackMode: 'boost_recommendation',
+                writebackLine: '周挑战旁证已经回写，季盘会更偏向当前主修并给出更稳的复盘建议。',
+                resolvedRunId: `challenge:${run.mode}:${run.rotationKey}:${run.ruleId}`,
+                chapterIndex: clampInt(run.goalRealm, 0, 999),
+                proofQuality: clampInt(run.finalScore, 0) >= 480 ? 'solid' : 'thin',
+                lineageStyle: String(featuredProfile?.themeLabel || '').trim(),
+                summaryLine: clampInt(run.finalScore, 0) >= 360
+                    ? '七日劫数已经补上一张稳定旁证，这周主练不再只靠单一路线说话。'
+                    : '七日劫数已留下旁证样本，足够给本周主练多一层不同节奏的证明。',
+                detailLine: [
+                    String(run.ruleName || '').trim(),
+                    `得分 ${clampInt(run.finalScore, 0)}`,
+                    Array.isArray(featuredProfile?.featuredTags) && featuredProfile.featuredTags.length > 0
+                        ? featuredProfile.featuredTags.slice(0, 2).join(' / ')
+                        : ''
+                ].filter(Boolean).join('｜'),
+                statusLine: `七日劫数 · 已归档 ${clampInt(run.finalScore, 0)} 分`,
+                anchorSection: 'challenge',
+                priority: 2
+            });
+        }
 
         if (!run.replayOnly && options.completed && typeof this.recordCollectionUnlock === 'function') {
             this.recordCollectionUnlock('challenge', {

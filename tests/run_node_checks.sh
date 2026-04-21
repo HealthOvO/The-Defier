@@ -37,6 +37,7 @@ node tests/sanity_run_vow_system_checks.js
 node tests/sanity_chapter_world_rule_checks.js
 node tests/sanity_chapter_battlefield_runtime_checks.js
 node tests/sanity_codex_sanctum_checks.js
+node tests/sanity_fate_lineage_system_checks.js
 node tests/sanity_codex_unlock_flow_checks.js
 node tests/sanity_enemy_codex_checks.js
 node tests/sanity_boss_memory_battle_checks.js
@@ -44,6 +45,9 @@ node tests/sanity_weekly_challenge_checks.js
 node tests/sanity_challenge_danger_profile_checks.js
 node tests/sanity_observatory_archive_checks.js
 node tests/sanity_dongfu_agenda_system_checks.js
+node tests/sanity_heavenly_mandate_system_checks.js
+node tests/sanity_season_board_system_checks.js
+node tests/sanity_fate_aftereffect_system_checks.js
 node tests/sanity_spirit_companion_checks.js
 node tests/sanity_forge_workshop_checks.js
 node tests/sanity_trial_challenge_checks.js
@@ -73,6 +77,7 @@ node tests/sanity_pvp_shop_checks.js
 node tests/sanity_shop_strategy_system_checks.js
 node tests/sanity_expedition_completion_gate_checks.js
 node tests/sanity_expedition_state_checks.js
+node tests/sanity_run_slate_shelf_checks.js
 node tests/sanity_expedition_nemesis_depth_checks.js
 node tests/sanity_planning_todo_checks.js
 node tests/verify_assets.js

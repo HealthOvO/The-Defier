@@ -167,7 +167,87 @@ function loadFile(ctx, filePath) {
     `engineering shift should lower enemy weight when the shift says so (${engineeringNeutralW.enemy} -> ${engineeringBiasedW.enemy})`
   );
 
-  // 9) 命环路径应在节点层面形成差异化路线
+  // 9) 赛季天道盘路线引导也应真实进入节点权重层
+  const mapSeasonNeutral = createMapForPlayer();
+  const mapSeasonBiased = createMapForPlayer({}, {
+    getSeasonBoardWeightShift: () => ({
+      trial: 0.05,
+      enemy: 0.03,
+      rest: -0.05
+    })
+  });
+  const seasonNeutralW = mapSeasonNeutral.getDynamicNodeWeights(4, totalRows, realm);
+  const seasonBiasedW = mapSeasonBiased.getDynamicNodeWeights(4, totalRows, realm);
+  assert(
+    seasonBiasedW.trial > seasonNeutralW.trial,
+    `season board route shift should raise trial weight (${seasonNeutralW.trial} -> ${seasonBiasedW.trial})`
+  );
+  assert(
+    seasonBiasedW.enemy > seasonNeutralW.enemy,
+    `season board route shift should raise enemy weight (${seasonNeutralW.enemy} -> ${seasonBiasedW.enemy})`
+  );
+  assert(
+    seasonBiasedW.rest < seasonNeutralW.rest,
+    `season board route shift should lower rest weight (${seasonNeutralW.rest} -> ${seasonBiasedW.rest})`
+  );
+
+  // 9b) 多来源偏置叠加时，净方向应保持可解释
+  const mapSeasonOnly = createMapForPlayer({}, {
+    getSeasonBoardWeightShift: () => ({
+      trial: 0.05,
+      enemy: 0.07,
+      rest: -0.05
+    })
+  });
+  const mapOverlayCombined = createMapForPlayer({}, {
+    getSeasonBoardWeightShift: () => ({
+      trial: 0.05,
+      enemy: 0.07,
+      rest: -0.05
+    }),
+    getSanctumAgendaWeightShift: () => ({
+      observatory: 0.05,
+      event: 0.04,
+      memory_rift: 0.05,
+      rest: -0.02,
+      shop: -0.02
+    }),
+    getFateAftereffectWeightShift: () => ({
+      observatory: 0.03,
+      event: 0.03,
+      enemy: -0.02,
+      rest: -0.02,
+      shop: -0.02
+    })
+  });
+  const seasonOnlyW = mapSeasonOnly.getDynamicNodeWeights(4, totalRows, realm);
+  const overlayCombinedW = mapOverlayCombined.getDynamicNodeWeights(4, totalRows, realm);
+  assert(
+    overlayCombinedW.observatory > seasonOnlyW.observatory,
+    `combined shifts should raise observatory beyond season-only bias (${seasonOnlyW.observatory} -> ${overlayCombinedW.observatory})`
+  );
+  assert(
+    overlayCombinedW.event > seasonOnlyW.event,
+    `combined shifts should raise event beyond season-only bias (${seasonOnlyW.event} -> ${overlayCombinedW.event})`
+  );
+  assert(
+    overlayCombinedW.memory_rift > seasonOnlyW.memory_rift,
+    `combined shifts should raise memory_rift beyond season-only bias (${seasonOnlyW.memory_rift} -> ${overlayCombinedW.memory_rift})`
+  );
+  assert(
+    overlayCombinedW.trial > seasonNeutralW.trial,
+    `season board trial boost should survive multi-source stacking (${seasonNeutralW.trial} -> ${overlayCombinedW.trial})`
+  );
+  assert(
+    overlayCombinedW.enemy < seasonOnlyW.enemy,
+    `aftereffect should pull enemy pressure down from the season-only route bias (${seasonOnlyW.enemy} -> ${overlayCombinedW.enemy})`
+  );
+  assert(
+    overlayCombinedW.shop < seasonOnlyW.shop,
+    `stacked negative shop shifts should lower shop further (${seasonOnlyW.shop} -> ${overlayCombinedW.shop})`
+  );
+
+  // 10) 命环路径应在节点层面形成差异化路线
   const mapConvergencePath = createMapForPlayer({
     fateRing: { path: 'convergence' }
   });
@@ -189,7 +269,7 @@ function loadFile(ctx, filePath) {
     `resonance path should raise rest/trial (${neutralPathW.rest}, ${neutralPathW.trial}) -> (${resonancePathW.rest}, ${resonancePathW.trial})`
   );
 
-  // 10) 相邻层同质化压力：连续战斗倾向后应降低敌人权重并抬升功能节点
+  // 11) 相邻层同质化压力：连续战斗倾向后应降低敌人权重并抬升功能节点
   const mapDiversity = createMapForPlayer();
   const baselineW = mapDiversity.getDynamicNodeWeights(4, totalRows, realm);
   const pressuredW = mapDiversity.getDynamicNodeWeights(4, totalRows, realm, {
@@ -206,7 +286,7 @@ function loadFile(ctx, filePath) {
     `diversity pressure should raise event/trial (${baselineW.event}, ${baselineW.trial}) -> (${pressuredW.event}, ${pressuredW.trial})`
   );
 
-  // 11) 同一行已出现节点类型后，下一个节点应倾向不同类型
+  // 12) 同一行已出现节点类型后，下一个节点应倾向不同类型
   const inRowBaselineW = mapDiversity.getDynamicNodeWeights(4, totalRows, realm, {
     previousRowNodes: [],
     previousTwoRowNodes: [],
@@ -226,7 +306,7 @@ function loadFile(ctx, filePath) {
     `in-row pressure should increase non-combat options (shop ${inRowBaselineW.shop} -> ${inRowPressuredW.shop}, event ${inRowBaselineW.event} -> ${inRowPressuredW.event})`
   );
 
-  // 12) 长程记忆去重：最近多层长期偏向同类型时，后续应抑制该类型
+  // 13) 长程记忆去重：最近多层长期偏向同类型时，后续应抑制该类型
   mapDiversity.nodes = [
     [{ type: 'enemy' }, { type: 'elite' }, { type: 'enemy' }],
     [{ type: 'enemy' }, { type: 'enemy' }],
@@ -252,7 +332,7 @@ function loadFile(ctx, filePath) {
     `long-term pressure should push utility nodes (trial ${longMemoryNeutralW.trial} -> ${longMemoryPressuredW.trial}, event ${longMemoryNeutralW.event} -> ${longMemoryPressuredW.event})`
   );
 
-  // 12) 稀有节点保底：连续多层未出现事件/商店时应抬升对应权重
+  // 14) 稀有节点保底：连续多层未出现事件/商店时应抬升对应权重
   const pityBaseW = mapDiversity.getDynamicNodeWeights(5, totalRows, realm, {
     historyRows: [
       [{ type: 'enemy' }, { type: 'event' }],

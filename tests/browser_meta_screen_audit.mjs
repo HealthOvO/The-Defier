@@ -66,8 +66,119 @@ function rectObj(rect) {
     game.startNewGame('linFeng');
     game.startRealm(1, false);
     const lawId = typeof LAWS !== 'undefined' ? Object.keys(LAWS)[0] : null;
+    if (typeof game.player?.setRunPath === 'function') game.player.setRunPath('insight');
+    if (typeof game.player?.setRunDestiny === 'function') game.player.setRunDestiny('rebelScale', 1);
     if (game.player) {
       game.player.getStealBonus = () => 0;
+    }
+    const rewardLineageSlate = {
+      id: 'reward_lineage_probe',
+      chapterIndex: 6,
+      chapterName: '第 6 章·星镜归档',
+      endingId: 'alliance',
+      endingName: '星图合卷',
+      endingIcon: '🔭',
+      score: 256,
+      branchName: '观测锁线',
+      tags: ['课题·推演控场', '答卷·天象合卷'],
+      answerReview: {
+        ratingLabel: '天象合卷',
+        ratingTone: 'completed',
+        trainingAdvice: '继续沿观测锁线压路线贴合与控场节奏。',
+        highlightLine: '本章答卷已经压成可复盘的观测样本。'
+      },
+      practiceTopic: {
+        id: 'reward_lineage_probe_topic',
+        sourceRecordId: 'reward_lineage_probe_guide',
+        sourceTitle: '星镜试锋',
+        themeKey: 'oracle',
+        themeLabel: '推演控场',
+        routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+        compareHint: '对比观测收益、路线贴合与控场稳定。',
+        trainingTags: ['路线贴合', '控场稳定'],
+        goalLines: ['先走观星线再补事件收益']
+      },
+      observatoryLink: {
+        sourceRecordId: 'reward_lineage_probe_guide',
+        sourceTitle: '星镜试锋',
+        sourceThemeKey: 'oracle',
+        sourceThemeLabel: '推演控场',
+        routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+        compareHint: '对比观测收益、路线贴合与控场稳定。',
+        trainingTags: ['路线贴合', '控场稳定'],
+        drillObjective: '连续两次走观星相关节点并维持控场稳定。'
+      },
+      timestamp: Date.now()
+    };
+    if (typeof game.normalizeRunSlateArchive === 'function') {
+      game.runSlateArchive = game.normalizeRunSlateArchive([rewardLineageSlate]);
+    } else {
+      game.runSlateArchive = [rewardLineageSlate];
+    }
+    if (typeof game.persistRunSlateArchive === 'function') game.persistRunSlateArchive();
+    if (typeof game.recordRunPathBossSample === 'function' && typeof game.player?.getRunPathMeta === 'function') {
+      game.recordRunPathBossSample(game.player.getRunPathMeta(), {
+        id: 'danZun',
+        name: '丹尊',
+        icon: '🗿',
+        realm: 6
+      }, {
+        characterId: 'linFeng',
+        turns: 4,
+        completedAt: Date.now() - 1000
+      });
+    }
+    if (typeof game.buildObservatoryTrainingFocusFromSlate === 'function' && typeof game.setObservatoryTrainingFocus === 'function') {
+      const focus = game.buildObservatoryTrainingFocusFromSlate(rewardLineageSlate);
+      if (focus) game.setObservatoryTrainingFocus(focus, { silent: true });
+    }
+    if (typeof game.normalizeFateAftereffectState === 'function') {
+      game.fateAftereffectState = game.normalizeFateAftereffectState({
+        records: [
+          {
+            recordId: 'reward_aftereffect_pending',
+            icon: '🧭',
+            name: '星镜余痕',
+            sourceRunId: rewardLineageSlate.id,
+            sourceAgendaId: 'reward_aftereffect_agenda',
+            sourceLabel: '星镜稳线',
+            sourceContractLabel: '星镜锁线',
+            templateId: 'route_bias',
+            outcomeId: 'contract_success',
+            chapterIndex: rewardLineageSlate.chapterIndex,
+            chapterName: rewardLineageSlate.chapterName,
+            durationChapters: 2,
+            positiveLine: '观星 / 事件 / 裂隙更容易连成同轴路线。',
+            negativeLine: '战斗与营地窗口会略少，路线更容易被细线样本牵走。',
+            summaryLine: '星镜余痕：契约兑现后，观星锁线会继续牵引下一章路线。',
+            detailLine: '来源：星镜稳线 · 契约「星镜锁线」｜正向：观星 / 事件 / 裂隙更容易连成同轴路线。｜代价：战斗与营地窗口会略少，路线更容易被细线样本牵走。',
+            createdAt: Date.now() - 600
+          }
+        ],
+        history: [],
+        lastResolved: {
+          recordId: 'reward_aftereffect_pending',
+          icon: '🧭',
+          name: '星镜余痕',
+          sourceRunId: rewardLineageSlate.id,
+          sourceAgendaId: 'reward_aftereffect_agenda',
+          sourceLabel: '星镜稳线',
+          sourceContractLabel: '星镜锁线',
+          templateId: 'route_bias',
+          outcomeId: 'contract_success',
+          chapterIndex: rewardLineageSlate.chapterIndex,
+          chapterName: rewardLineageSlate.chapterName,
+          durationChapters: 2,
+          positiveLine: '观星 / 事件 / 裂隙更容易连成同轴路线。',
+          negativeLine: '战斗与营地窗口会略少，路线更容易被细线样本牵走。',
+          summaryLine: '星镜余痕：契约兑现后，观星锁线会继续牵引下一章路线。',
+          detailLine: '来源：星镜稳线 · 契约「星镜锁线」｜正向：观星 / 事件 / 裂隙更容易连成同轴路线。｜代价：战斗与营地窗口会略少，路线更容易被细线样本牵走。',
+          createdAt: Date.now() - 600
+        }
+      });
+    }
+    if (typeof game.buildRewardExpeditionMeta === 'function') {
+      game.lastExpeditionRewardMeta = game.buildRewardExpeditionMeta(rewardLineageSlate);
     }
     game.currentBattleNode = { type: 'elite', id: 990001, completed: false };
     game.stealAttempted = false;
@@ -113,7 +224,9 @@ function rectObj(rect) {
     const actions = document.querySelector('.reward-actions');
     const summary = document.querySelector('.reward-summary-card');
     const narrative = document.getElementById('reward-narrative-brief');
+    const title = document.querySelector('#reward-screen .reward-title');
     const subtitle = document.querySelector('#reward-screen .reward-subtitle');
+    const expeditionPanel = document.getElementById('reward-expedition-meta');
     const cards = Array.from(document.querySelectorAll('#reward-cards .card'));
     const skipBtn = document.querySelector('.skip-reward-btn');
     const expectedSkipCost = typeof game.getRewardSkipCost === 'function'
@@ -143,6 +256,36 @@ function rectObj(rect) {
     const cardRects = cards.map((card) => toRect(card));
     const cardsInsideMain = cardRects.every((rect) => rect.left >= mainRect.left - 4 && rect.right <= mainRect.right + 4);
     const cardsAboveActions = cardRects.every((rect) => rect.bottom < actionsRect.bottom);
+    const rewardExpeditionText = expeditionPanel?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    let rewardPayload = {};
+    try {
+      rewardPayload = JSON.parse(typeof window.render_game_to_text === 'function' ? window.render_game_to_text() : '{}');
+    } catch (error) {
+      rewardPayload = {};
+    }
+    const rewardLineage = rewardPayload?.reward?.expedition?.lineage || null;
+    const rewardAftereffects = rewardPayload?.reward?.expedition?.aftereffects || null;
+    const rewardSeasonBoard = rewardPayload?.reward?.expedition?.seasonBoard || null;
+    const rewardAftereffectText = (document.querySelector('[data-fate-aftereffect-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardAftereffectChipText = Array.from(document.querySelectorAll('[data-fate-aftereffect-reward-chip]'))
+      .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
+      .join(' ')
+      .trim();
+    const rewardHeaderOutcome = screen?.dataset?.rewardHeaderOutcome || '';
+    const rewardNextActionSource = screen?.dataset?.rewardNextActionSource || '';
+    const rewardSeasonBoardActionCount = expeditionPanel?.querySelectorAll('[data-season-board-action-reward="true"]').length || 0;
+    const rewardSeasonBoardText = (document.querySelector('[data-season-board-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardSettlementText = (document.querySelector('[data-season-board-settlement-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardActionText = (document.querySelector('[data-season-board-action-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardVerificationText = (document.querySelector('[data-season-board-verification-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardNextTaskText = (document.querySelector('[data-season-board-next-task-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardNextChipText = (expeditionPanel?.querySelector('[data-season-board-chip="next"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardChipText = Array.from(expeditionPanel?.querySelectorAll('[data-season-board-chip]') || [])
+      .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
+      .join(' ')
+      .trim();
+    const expeditionSeasonBoard = rewardPayload?.expedition?.seasonBoard || null;
+    const chapterSeasonBoard = rewardPayload?.map?.chapter?.seasonBoard || null;
 
     return {
       ok:
@@ -152,8 +295,69 @@ function rectObj(rect) {
         summaryRect.bottom <= actionsRect.top + 24 &&
         cardsInsideMain &&
         cardsAboveActions &&
-        /命盘档案|命盘问真/.test(narrative?.textContent || '') &&
-        /命盘样本|写入档案/.test(subtitle?.textContent || '') &&
+        /赛季裁定|章节归卷|命盘档案|命盘问真/.test(narrative?.textContent || '') &&
+        /赛季裁定|章节归卷/.test(title?.textContent || '') &&
+        /清账回流|外场验证|扩样|锁线|主练方向|答卷评级|训练建议/.test(subtitle?.textContent || '') &&
+        /命盘谱系/.test(rewardExpeditionText) &&
+        /谱系留痕|谱系校准/.test(rewardExpeditionText) &&
+        /界痕后效/.test(rewardExpeditionText) &&
+        /赛季天道盘/.test(rewardExpeditionText) &&
+        rewardAftereffectText.length > 0 &&
+        rewardSeasonBoardText.length > 0 &&
+        rewardSeasonBoardSettlementText.length > 0 &&
+        rewardSeasonBoardActionText.length > 0 &&
+        /后效|状态|生效/.test(rewardAftereffectChipText) &&
+        /阶段|主轴|进度|行动/.test(rewardSeasonBoardChipText) &&
+        !!rewardLineage &&
+        !!rewardLineage.summaryLine &&
+        !!rewardAftereffects &&
+        !!rewardAftereffects.summaryLine &&
+        !!rewardAftereffects.currentStatusLine &&
+        !!rewardAftereffects.primary &&
+        !!rewardAftereffects.primary.templateLabel &&
+        !!rewardSeasonBoard &&
+        !!rewardSeasonBoard.summaryLine &&
+        !!rewardSeasonBoard.settlement &&
+        !!rewardSeasonBoard.settlement.outcomeLabel &&
+        !!rewardSeasonBoard.progress &&
+        !!rewardSeasonBoard.progress.progressText &&
+        !!rewardSeasonBoard.nextTask &&
+        rewardSeasonBoard.settlement.outcomeId === 'locking_sheet' &&
+        rewardSeasonBoard.nextTask.id === 'season_commitment' &&
+        rewardSeasonBoard.nextTask.anchorSection === 'sanctum' &&
+        rewardHeaderOutcome === rewardSeasonBoard.settlement.outcomeId &&
+        rewardNextActionSource === 'nextTask' &&
+        expeditionPanel?.dataset?.seasonBoardOutcome === 'locking_sheet' &&
+        expeditionPanel?.dataset?.seasonBoardActionSource === 'nextTask' &&
+        expeditionPanel?.dataset?.seasonBoardVerificationVisible === 'false' &&
+        rewardSeasonBoardActionCount === 1 &&
+        Array.isArray(rewardSeasonBoard.verificationOrders) &&
+        rewardSeasonBoard.verificationOrders.length >= 1 &&
+        rewardSeasonBoardText.includes(rewardSeasonBoard.settlement.outcomeLabel) &&
+        rewardSeasonBoardSettlementText.includes(rewardSeasonBoard.settlement.outcomeLabel) &&
+        rewardSeasonBoardActionText.includes(
+          rewardSeasonBoard.nextTask?.hintLine
+            || rewardSeasonBoard.nextTask?.label
+            || ''
+        ) &&
+        rewardSeasonBoardNextTaskText.length > 0 &&
+        rewardSeasonBoardNextChipText.includes(
+          rewardSeasonBoard.nextTask?.label
+            || ''
+        ) &&
+        !rewardSeasonBoardVerificationText &&
+        !expeditionPanel?.querySelector('[data-season-board-chip="verification"]') &&
+        !expeditionPanel?.querySelector('[data-season-board-chip="debt"]') &&
+        !!expeditionSeasonBoard &&
+        !!chapterSeasonBoard &&
+        JSON.stringify(rewardSeasonBoard.nextTask || null) === JSON.stringify(expeditionSeasonBoard.nextTask || null) &&
+        JSON.stringify(rewardSeasonBoard.nextTask || null) === JSON.stringify(chapterSeasonBoard.nextTask || null) &&
+        JSON.stringify(rewardSeasonBoard.settlement || null) === JSON.stringify(expeditionSeasonBoard.settlement || null) &&
+        JSON.stringify(rewardSeasonBoard.settlement || null) === JSON.stringify(chapterSeasonBoard.settlement || null) &&
+        rewardSeasonBoard.progress?.progressText === expeditionSeasonBoard.progress?.progressText &&
+        rewardSeasonBoard.progress?.progressText === chapterSeasonBoard.progress?.progressText &&
+        JSON.stringify(rewardSeasonBoard.verificationOrders || []) === JSON.stringify(expeditionSeasonBoard.verificationOrders || []) &&
+        JSON.stringify(rewardSeasonBoard.verificationOrders || []) === JSON.stringify(chapterSeasonBoard.verificationOrders || []) &&
         mainRect.right < viewportWidth &&
         sideRect.right <= viewportWidth &&
         (skipBtn.textContent || '').includes(`扣${expectedSkipCost}灵石`),
@@ -163,8 +367,27 @@ function rectObj(rect) {
       summaryRect,
       actionsRect,
       cardRects,
+      titleText: title?.textContent?.replace(/\s+/g, ' ').trim() || '',
       narrativeText: narrative?.textContent?.replace(/\s+/g, ' ').trim() || '',
       subtitleText: subtitle?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      rewardHeaderOutcome,
+      rewardNextActionSource,
+      rewardSeasonBoardActionCount,
+      rewardExpeditionText,
+      rewardLineage,
+      rewardAftereffects,
+      rewardSeasonBoard,
+      expeditionSeasonBoard,
+      chapterSeasonBoard,
+      rewardAftereffectText,
+      rewardAftereffectChipText,
+      rewardSeasonBoardText,
+      rewardSeasonBoardSettlementText,
+      rewardSeasonBoardActionText,
+      rewardSeasonBoardVerificationText,
+      rewardSeasonBoardNextTaskText,
+      rewardSeasonBoardNextChipText,
+      rewardSeasonBoardChipText,
       skipText: skipBtn.textContent || '',
       expectedSkipCost,
     };
@@ -203,6 +426,970 @@ function rectObj(rect) {
   );
   await safeAuditScreenshot(page, path.join(outDir, 'reward-layout-after-steal.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1200);
+  const sanctumLocklineProbe = await page.evaluate(() => {
+    const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!window.game) return { ok: false, reason: 'no_game' };
+    game.guestMode = true;
+    game.startNewGame('linFeng');
+    game.startRealm(1, false);
+    const locklineSlate = {
+      id: 'sanctum_lockline_probe',
+      chapterIndex: 6,
+      chapterName: '第 6 章·锁线归卷',
+      endingId: 'alliance',
+      endingName: '押卷中',
+      endingIcon: '⚖️',
+      score: 188,
+      branchName: '洞府承诺',
+      tags: ['课题·推演控场', '答卷·样本入档'],
+      answerReview: {
+        ratingLabel: '样本入档',
+        ratingTone: 'selected',
+        trainingAdvice: '沿洞府承诺继续压卷，不要提前把锁线样本当成已定榜答案。',
+        highlightLine: '这轮只把样本锁进押卷，下一步仍要回洞府兑现承诺。'
+      },
+      practiceTopic: {
+        id: 'sanctum_lockline_probe_topic',
+        sourceRecordId: 'sanctum_lockline_probe_guide',
+        sourceTitle: '锁线试锋',
+        themeKey: 'oracle',
+        themeLabel: '推演控场',
+        routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+        compareHint: '先把当前押卷承诺补齐，再决定是否进高压验证。',
+        trainingTags: ['路线贴合', '控场稳定'],
+        goalLines: ['先回洞府确认押卷承诺']
+      },
+      observatoryLink: {
+        sourceRecordId: 'sanctum_lockline_probe_guide',
+        sourceTitle: '锁线试锋',
+        sourceThemeKey: 'oracle',
+        sourceThemeLabel: '推演控场',
+        routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+        compareHint: '先回洞府确认押卷承诺。',
+        trainingTags: ['路线贴合', '控场稳定'],
+        drillObjective: '把锁线样本补成可继续推进的洞府承诺。'
+      },
+      timestamp: Date.now()
+    };
+    if (typeof game.normalizeRunSlateArchive === 'function') {
+      game.runSlateArchive = game.normalizeRunSlateArchive([locklineSlate]);
+    } else {
+      game.runSlateArchive = [locklineSlate];
+    }
+    if (typeof game.persistRunSlateArchive === 'function') game.persistRunSlateArchive();
+    const focus = typeof game.buildObservatoryTrainingFocusFromSlate === 'function'
+      ? game.buildObservatoryTrainingFocusFromSlate(locklineSlate)
+      : null;
+    if (focus && typeof game.setObservatoryTrainingFocus === 'function') {
+      game.setObservatoryTrainingFocus(focus, { silent: true });
+    }
+    game.showCollection();
+    if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('sanctum');
+    if (typeof game.initCollection === 'function') game.initCollection();
+
+    const summaryText = text(document.getElementById('sanctum-summary'));
+    const researchText = text(document.getElementById('sanctum-research-list'));
+    const goalText = text(document.getElementById('sanctum-goal-list'));
+    const guideText = text(document.getElementById('sanctum-guide'));
+    const seasonBoardSummary = text(document.querySelector('#sanctum-summary [data-season-board-summary="true"]'));
+    const seasonBoardSettlement = text(document.querySelector('#sanctum-summary [data-season-board-settlement="true"]'));
+    const seasonBoardVerification = text(document.querySelector('#sanctum-summary [data-season-board-verification="true"]'));
+    const seasonBoardVerificationCard = document.querySelector('#sanctum-summary [data-season-board-verification-card="true"]');
+    const seasonBoardVerificationChip = document.querySelector('#sanctum-summary [data-season-board-chip="verification"]');
+    const seasonBoardVerificationOrderCount = document.querySelectorAll('#sanctum-summary [data-season-board-verification-order="true"]').length;
+    const seasonBoardNextTaskGoalText = Array.from(document.querySelectorAll('#sanctum-goal-list [data-season-board-goal="true"]'))
+      .map((node) => text(node))
+      .find((value) => /当前季盘行动/.test(value)) || '';
+    const seasonBoardVerificationGoalCount = Array.from(document.querySelectorAll('#sanctum-goal-list [data-season-board-goal="true"]'))
+      .filter((node) => /verification/.test(String(node.getAttribute('data-season-board-goal-id') || '')))
+      .length;
+
+    let payload = {};
+    try {
+      payload = JSON.parse(typeof window.render_game_to_text === 'function' ? window.render_game_to_text() : '{}');
+    } catch (error) {
+      payload = {};
+    }
+    const expeditionSeasonBoard = payload?.expedition?.seasonBoard || null;
+    const chapterSeasonBoard = payload?.map?.chapter?.seasonBoard || null;
+
+    return {
+      ok:
+        !!expeditionSeasonBoard &&
+        !!chapterSeasonBoard &&
+        expeditionSeasonBoard.phaseId === 'lockline' &&
+        expeditionSeasonBoard.settlement?.outcomeId === 'locking_sheet' &&
+        expeditionSeasonBoard.nextTask?.id === 'season_commitment' &&
+        expeditionSeasonBoard.nextTask?.anchorSection === 'sanctum' &&
+        JSON.stringify(expeditionSeasonBoard.nextTask || null) === JSON.stringify(chapterSeasonBoard.nextTask || null) &&
+        expeditionSeasonBoard.progress?.progressText === chapterSeasonBoard.progress?.progressText &&
+        Array.isArray(expeditionSeasonBoard.verificationOrders) &&
+        expeditionSeasonBoard.verificationOrders.length >= 1 &&
+        JSON.stringify(expeditionSeasonBoard.verificationOrders || []) === JSON.stringify(chapterSeasonBoard.verificationOrders || []) &&
+        seasonBoardSummary.length > 0 &&
+        /季押卷/.test(seasonBoardSettlement) &&
+        /押卷中/.test(`${summaryText} ${seasonBoardSettlement}`) &&
+        !seasonBoardVerification &&
+        !seasonBoardVerificationCard &&
+        !seasonBoardVerificationChip &&
+        seasonBoardVerificationOrderCount === 0 &&
+        seasonBoardVerificationGoalCount === 0 &&
+        !/结业验证状/.test(researchText) &&
+        !/结业验证状/.test(goalText) &&
+        seasonBoardNextTaskGoalText.includes(expeditionSeasonBoard.nextTask?.label || '') &&
+        researchText.includes(expeditionSeasonBoard.nextTask?.label || '') &&
+        guideText.includes('赛季天道盘') &&
+        summaryText.includes('押卷中'),
+      summaryText,
+      researchText,
+      goalText,
+      guideText,
+      seasonBoardSummary,
+      seasonBoardSettlement,
+      seasonBoardVerification,
+      seasonBoardVerificationOrderCount,
+      seasonBoardVerificationGoalCount,
+      seasonBoardNextTaskGoalText,
+      expeditionSeasonBoard,
+      chapterSeasonBoard
+    };
+  });
+  add(
+    'sanctum lockline keeps verification hidden while preserving next-task and payload mirrors',
+    !!sanctumLocklineProbe?.ok,
+    JSON.stringify(sanctumLocklineProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'sanctum-lockline-season-board.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+  const rewardDebtClearProbe = await page.evaluate(() => {
+    if (!window.game) return { ok: false, reason: 'no_game' };
+    game.guestMode = true;
+    game.startNewGame('linFeng');
+    game.startRealm(1, false);
+    const lawId = typeof LAWS !== 'undefined' ? Object.keys(LAWS)[0] : null;
+    if (typeof game.player?.setRunPath === 'function') game.player.setRunPath('insight');
+    if (typeof game.player?.setRunDestiny === 'function') game.player.setRunDestiny('rebelScale', 1);
+    if (game.player) {
+      game.player.getStealBonus = () => 0;
+    }
+    const originalBuildChallengeBundle = typeof game.buildChallengeBundle === 'function'
+      ? game.buildChallengeBundle.bind(game)
+      : null;
+    game.buildChallengeBundle = (mode, dateRef) => {
+      if (mode !== 'weekly') {
+        return originalBuildChallengeBundle ? originalBuildChallengeBundle(mode, dateRef) : null;
+      }
+      return {
+        mode: 'weekly',
+        meta: {
+          title: '观星台 · 七日劫数',
+          subtitle: '围绕同一套命盘反复冲分，把高分答卷压成观星档案。',
+          label: '七日劫数',
+          accentClass: 'weekly'
+        },
+        rule: {
+          id: 'debt_probe_rule',
+          name: '镜债补证劫数',
+          objective: '围绕镜债补证反复冲分，先把欠卷补成可复盘的挑战旁证。',
+          goalRealm: 3
+        },
+        rotationKey: '2026-W16',
+        rotationLabel: '本周题面 · 镜债补证',
+        seedSignature: 'W-DEBT-PROBE',
+        progress: {
+          completions: 1,
+          bestScore: 180,
+          totalScore: 180
+        },
+        records: [],
+        rewards: [
+          {
+            id: 'debt_probe_rule_reward_1',
+            label: '累计 180 分',
+            target: 180,
+            claimed: false
+          }
+        ]
+      };
+    };
+    const debtRewardSlate = {
+      id: 'reward_debt_probe',
+      chapterIndex: 6,
+      chapterName: '第 6 章·镜债归档',
+      endingId: 'research_debt',
+      endingName: '镜债回流',
+      endingIcon: '📚',
+      score: 202,
+      branchName: '镜债校卷',
+      tags: ['课题·推演控场', '答卷·留痕待补'],
+      answerReview: {
+        ratingLabel: '留痕待补',
+        ratingTone: 'selected',
+        trainingAdvice: '先把上一道押卷留下的债账补掉，再考虑冲更高压样本。',
+        highlightLine: '这轮押卷没有真正结成，下一章需要优先清账。'
+      },
+      practiceTopic: {
+        id: 'reward_debt_probe_topic',
+        sourceRecordId: 'reward_debt_probe_guide',
+        sourceTitle: '镜债试锋',
+        themeKey: 'oracle',
+        themeLabel: '推演控场',
+        routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+        compareHint: '先确认残卷回收，再决定是否继续把主轴压成更高压样本。',
+        trainingTags: ['清账回流', '控场稳定'],
+        goalLines: ['先补一轮镜债验证，再决定是否继续冲榜']
+      },
+      observatoryLink: {
+        sourceRecordId: 'reward_debt_probe_guide',
+        sourceTitle: '镜债试锋',
+        sourceThemeKey: 'oracle',
+        sourceThemeLabel: '推演控场',
+        routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+        compareHint: '先确认残卷回收，再决定是否继续把主轴压成更高压样本。',
+        trainingTags: ['清账回流', '控场稳定'],
+        drillObjective: '先补一轮镜债验证，再决定是否继续冲榜。'
+      },
+      timestamp: Date.now()
+    };
+    game.runSlateArchive = typeof game.normalizeRunSlateArchive === 'function'
+      ? game.normalizeRunSlateArchive([debtRewardSlate])
+      : [debtRewardSlate];
+    if (typeof game.persistRunSlateArchive === 'function') game.persistRunSlateArchive();
+    if (typeof game.buildObservatoryTrainingFocusFromSlate === 'function' && typeof game.setObservatoryTrainingFocus === 'function') {
+      const focus = game.buildObservatoryTrainingFocusFromSlate(debtRewardSlate);
+      if (focus) game.setObservatoryTrainingFocus(focus, { silent: true });
+    }
+    if (typeof game.normalizeSanctumAgendaState === 'function') {
+      game.sanctumAgendaState = game.normalizeSanctumAgendaState({
+        lastResolved: {
+          agendaId: 'reward_debt_probe_agenda',
+          icon: '🧮',
+          name: '镜债校卷',
+          sourceRunId: debtRewardSlate.id,
+          sourceTitle: '镜债试锋',
+          themeKey: 'oracle',
+          themeLabel: '推演控场',
+          ratingLabel: '留痕待补',
+          ratingTone: 'selected',
+          trainingAdvice: '先把上一道押卷留下的债账补掉，再考虑冲更高压样本。',
+          highlightLine: '这轮押卷没有真正结成，下一章需要优先清账。',
+          routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+          focusNodeTypes: ['observatory', 'event', 'memory_rift'],
+          focusNodeLine: '优先节点：观星 / 事件 / 裂隙',
+          progress: 1,
+          target: 3,
+          selectedDecisionLabel: '保卷回收',
+          selectedDecisionLine: '先保住残卷，再找机会补押卷主轴。',
+          selectedContractLabel: '镜债锁线',
+          selectedContractLine: '锁住观星 / 事件 / 裂隙线路，但欠下一笔清账任务。',
+          contractResolved: true,
+          contractSuccess: false,
+          contractResolutionLine: '锁线契约：镜债锁线未兑现 · 契押：🔮 1',
+          contractSignCostLine: '🔮 1',
+          outcome: 'failed',
+          outcomeLabel: '研究未成',
+          grantedLine: '',
+          reasonLine: '本轮没有把锁线答卷真正补成卷，洞府改以债账方式追踪。',
+          summaryLine: '镜债校卷没有结成，留下了一笔待清的研究债账。',
+          recoveryEligible: true,
+          recoveryLabel: '残卷回收',
+          recoveryTier: 'partial',
+          recoveryTierLabel: '轻回收',
+          recoveryLine: '洞府已回收一部分残卷，但下一轮要优先补这笔镜债。',
+          recoveryHintLine: '先去高压环境补一轮镜债验证，再决定要不要继续冲榜。',
+          rewardTrackId: 'observatory',
+          rewardTrackName: '命盘档案室',
+          rewardTrackIcon: '🔭'
+        },
+        history: [],
+        totalCompleted: 0,
+        totalFailed: 1
+      });
+    }
+    const endlessState = typeof game.ensureEndlessState === 'function' ? game.ensureEndlessState() : null;
+    const weekMeta = typeof game.getHeavenlyMandateWeekMeta === 'function'
+      ? game.getHeavenlyMandateWeekMeta()
+      : null;
+    if (endlessState) {
+      endlessState.currentCycle = 1;
+      endlessState.seasonWeekTag = weekMeta?.weekTag || endlessState.seasonWeekTag || '';
+      endlessState.seasonCycleClears = 1;
+      endlessState.seasonScore = 132;
+    }
+    if (typeof game.recordSeasonVerificationResult === 'function') {
+      game.recordSeasonVerificationResult({
+        recordId: `browser_reward_debt_clear_${weekMeta?.weekTag || 'current'}`,
+        weekTag: weekMeta?.weekTag || '',
+        weekLabel: weekMeta?.weekLabel || '',
+        role: 'primary',
+        sourceMode: 'endless',
+        sourceModeLabel: '无尽轮回',
+        label: '无尽高压验证',
+        resultStatus: 'verified',
+        writebackMode: 'clear_debt',
+        writebackLine: '无尽轮回主验证通过，欠卷会被清账并释放天命强目标。',
+        resolvedRunId: 'browser_reward_debt_clear',
+        chapterIndex: debtRewardSlate.chapterIndex,
+        proofQuality: 'solid',
+        lineageStyle: '长压试炼',
+        summaryLine: '无尽通关已补齐主验证，这笔欠卷可以在季盘上清账。',
+        detailLine: '无尽长压验证通过，说明旧债已经被真正消化。',
+        statusLine: '无尽轮回 · 通过',
+        anchorSection: 'endless',
+        priority: 1
+      });
+    }
+    if (typeof game.buildRewardExpeditionMeta === 'function') {
+      game.lastExpeditionRewardMeta = game.buildRewardExpeditionMeta(debtRewardSlate);
+    }
+    game.currentBattleNode = { type: 'elite', id: 990003, completed: false };
+    game.stealAttempted = false;
+    game.lastBattleRewardMeta = {
+      encounter: {
+        themeId: 'theme_debt_probe',
+        themeName: '轮段·镜债回流',
+        tierStage: 2,
+        goldBonus: 14,
+        ringExpBonus: 8,
+      },
+    };
+    game.showRewardScreen(118, true, { stealLaw: lawId, stealChance: 1 }, 28, { insight: 6, karma: 2 });
+
+    let rewardPayload = {};
+    try {
+      rewardPayload = JSON.parse(typeof window.render_game_to_text === 'function' ? window.render_game_to_text() : '{}');
+    } catch (error) {
+      rewardPayload = {};
+    }
+    const screen = document.getElementById('reward-screen');
+    const rewardSeasonBoard = rewardPayload?.reward?.expedition?.seasonBoard || null;
+    const expeditionSeasonBoard = rewardPayload?.expedition?.seasonBoard || null;
+    const chapterSeasonBoard = rewardPayload?.map?.chapter?.seasonBoard || null;
+    const rewardSeasonBoardText = (document.querySelector('[data-season-board-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardChipText = Array.from(document.querySelectorAll('#reward-expedition-meta [data-season-board-chip]'))
+      .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
+      .join(' ')
+      .trim();
+    const rewardSeasonBoardDebtText = (document.querySelector('[data-season-board-debt-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardVerificationText = (document.querySelector('[data-season-board-verification-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardActionText = (document.querySelector('[data-season-board-action-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardFollowupText = (document.querySelector('[data-season-board-verification-followup="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardWeekVerdictLedger = rewardSeasonBoard?.weekVerdictLedger?.current || null;
+
+    return {
+      ok:
+        !!rewardSeasonBoard &&
+        rewardSeasonBoard?.settlement?.outcomeId === 'positive_sheet' &&
+        rewardSeasonBoard?.settlement?.resolvedStatus === 'verified' &&
+        rewardSeasonBoard?.debtPack?.status === 'cleared' &&
+        rewardSeasonBoard?.debtPack?.occupiesStrongSlot === false &&
+        Array.isArray(rewardSeasonBoard?.verificationOrders) &&
+        rewardSeasonBoard.verificationOrders.length === 2 &&
+        rewardSeasonBoard?.verificationOrders?.[0]?.resultStatus === 'verified' &&
+        rewardSeasonBoard?.verificationOrders?.[0]?.writebackMode === 'clear_debt' &&
+        rewardSeasonBoard?.verificationOrders?.[0]?.anchorSection === 'endless' &&
+        rewardSeasonBoardText.includes(rewardSeasonBoard.debtPack.summaryLine) &&
+        rewardSeasonBoardDebtText.includes(rewardSeasonBoard.debtPack.summaryLine) &&
+        rewardSeasonBoardVerificationText.includes(
+          rewardSeasonBoard?.verificationOrders?.[0]?.summaryLine
+            || rewardSeasonBoard?.verificationOrders?.[0]?.hintLine
+            || ''
+        ) &&
+        rewardSeasonBoardActionText.includes(
+          rewardSeasonBoard?.verificationOrders?.[0]?.summaryLine
+            || rewardSeasonBoard?.verificationOrders?.[0]?.hintLine
+            || ''
+        ) &&
+        /旁验证|七日劫数/.test(rewardSeasonBoardFollowupText) &&
+        rewardSeasonBoardChipText.includes('债账') &&
+        rewardSeasonBoardChipText.includes('验证') &&
+        screen?.dataset?.rewardHeaderOutcome === 'positive_sheet' &&
+        screen?.dataset?.rewardNextActionSource === 'verification' &&
+        rewardWeekVerdictLedger?.resolvedStatus === 'verified' &&
+        rewardWeekVerdictLedger?.primaryVerificationResultStatus === 'verified' &&
+        rewardWeekVerdictLedger?.primaryWritebackMode === 'clear_debt' &&
+        JSON.stringify(rewardSeasonBoard?.debtPack || null) === JSON.stringify(expeditionSeasonBoard?.debtPack || null) &&
+        JSON.stringify(rewardSeasonBoard?.debtPack || null) === JSON.stringify(chapterSeasonBoard?.debtPack || null) &&
+        JSON.stringify(rewardSeasonBoard?.weekVerdictLedger || null) === JSON.stringify(expeditionSeasonBoard?.weekVerdictLedger || null) &&
+        JSON.stringify(rewardSeasonBoard?.weekVerdictLedger || null) === JSON.stringify(chapterSeasonBoard?.weekVerdictLedger || null),
+      rewardHeaderOutcome: screen?.dataset?.rewardHeaderOutcome || '',
+      rewardNextActionSource: screen?.dataset?.rewardNextActionSource || '',
+      rewardSeasonBoard,
+      expeditionSeasonBoard,
+      chapterSeasonBoard,
+      rewardSeasonBoardText,
+      rewardSeasonBoardChipText,
+      rewardSeasonBoardDebtText,
+      rewardSeasonBoardVerificationText,
+      rewardSeasonBoardFollowupText,
+      rewardSeasonBoardActionText,
+      rewardWeekVerdictLedger,
+    };
+  });
+  add(
+    'reward screen surfaces explicit debt clear writeback across settlement, debt record and week ledger mirrors',
+    !!rewardDebtClearProbe?.ok,
+    JSON.stringify(rewardDebtClearProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'reward-debt-clear-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1200);
+  const rewardDegradeProbe = await page.evaluate(() => {
+    if (!window.game) return { ok: false, reason: 'no_game' };
+    game.guestMode = true;
+    game.startNewGame('linFeng');
+    game.startRealm(1, false);
+    const lawId = typeof LAWS !== 'undefined' ? Object.keys(LAWS)[0] : null;
+    if (typeof game.player?.setRunPath === 'function') game.player.setRunPath('insight');
+    if (typeof game.player?.setRunDestiny === 'function') game.player.setRunDestiny('rebelScale', 1);
+    if (game.player) {
+      game.player.getStealBonus = () => 0;
+    }
+    const originalBuildChallengeBundle = typeof game.buildChallengeBundle === 'function'
+      ? game.buildChallengeBundle.bind(game)
+      : null;
+    game.buildChallengeBundle = (mode, dateRef) => {
+      if (mode !== 'weekly') {
+        return originalBuildChallengeBundle ? originalBuildChallengeBundle(mode, dateRef) : null;
+      }
+      return {
+        mode: 'weekly',
+        meta: {
+          title: '观星台 · 七日劫数',
+          subtitle: '围绕同一套命盘反复冲分，把高分答卷压成观星档案。',
+          label: '七日劫数',
+          accentClass: 'weekly'
+        },
+        rule: {
+          id: 'degrade_probe_rule',
+          name: '镜债反证劫数',
+          objective: '围绕镜债反证反复冲分，确认这条旧债是否还值得继续压。',
+          goalRealm: 3
+        },
+        rotationKey: '2026-W16',
+        rotationLabel: '本周题面 · 镜债反证',
+        seedSignature: 'W-DEGRADE-PROBE',
+        progress: {
+          completions: 1,
+          bestScore: 212,
+          totalScore: 212
+        },
+        records: [],
+        rewards: [
+          {
+            id: 'degrade_probe_rule_reward_1',
+            label: '累计 180 分',
+            target: 180,
+            claimed: false
+          }
+        ]
+      };
+    };
+    const degradedRewardSlate = {
+      id: 'reward_degrade_probe',
+      chapterIndex: 6,
+      chapterName: '第 6 章·镜债反证',
+      endingId: 'research_debt',
+      endingName: '镜债待清',
+      endingIcon: '📚',
+      score: 227,
+      branchName: '镜债反证',
+      tags: ['课题·推演控场', '答卷·镜债待清'],
+      answerReview: {
+        ratingLabel: '留痕待补',
+        ratingTone: 'selected',
+        trainingAdvice: '这笔镜债需要主验证给出明确结论，先别急着继续扩样。',
+        highlightLine: '旧债还没清干净，先看高压验证会给出清账还是反证。'
+      },
+      practiceTopic: {
+        id: 'reward_degrade_probe_topic',
+        sourceRecordId: 'reward_degrade_probe_guide',
+        sourceTitle: '镜债反证',
+        themeKey: 'oracle',
+        themeLabel: '推演控场',
+        routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+        compareHint: '先确认旧债是否能被真正修正，再决定要不要继续压这条主轴。',
+        trainingTags: ['镜债回流', '反证筛查'],
+        goalLines: ['先把主验证做完，再决定镜债是清账还是降级']
+      },
+      observatoryLink: {
+        sourceRecordId: 'reward_degrade_probe_guide',
+        sourceTitle: '镜债反证',
+        sourceThemeKey: 'oracle',
+        sourceThemeLabel: '推演控场',
+        routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+        compareHint: '先确认旧债是否能被真正修正，再决定要不要继续压这条主轴。',
+        trainingTags: ['镜债回流', '反证筛查'],
+        drillObjective: '先把主验证做完，再决定镜债是清账还是降级。'
+      },
+      timestamp: Date.now()
+    };
+    game.runSlateArchive = typeof game.normalizeRunSlateArchive === 'function'
+      ? game.normalizeRunSlateArchive([degradedRewardSlate])
+      : [degradedRewardSlate];
+    if (typeof game.persistRunSlateArchive === 'function') game.persistRunSlateArchive();
+    if (typeof game.buildObservatoryTrainingFocusFromSlate === 'function' && typeof game.setObservatoryTrainingFocus === 'function') {
+      const focus = game.buildObservatoryTrainingFocusFromSlate(degradedRewardSlate);
+      if (focus) game.setObservatoryTrainingFocus(focus, { silent: true });
+    }
+    if (typeof game.normalizeSanctumAgendaState === 'function') {
+      game.sanctumAgendaState = game.normalizeSanctumAgendaState({
+        lastResolved: {
+          agendaId: 'reward_degrade_probe_agenda',
+          icon: '🧮',
+          name: '镜债反证',
+          sourceRunId: degradedRewardSlate.id,
+          sourceTitle: '镜债反证',
+          themeKey: 'oracle',
+          themeLabel: '推演控场',
+          ratingLabel: '留痕待补',
+          ratingTone: 'selected',
+          trainingAdvice: '这笔镜债需要主验证给出明确结论，先别急着继续扩样。',
+          highlightLine: '旧债还没清干净，先看高压验证会给出清账还是反证。',
+          routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+          focusNodeTypes: ['observatory', 'event', 'memory_rift'],
+          focusNodeLine: '优先节点：观星 / 事件 / 裂隙',
+          progress: 1,
+          target: 3,
+          selectedDecisionLabel: '保卷回收',
+          selectedDecisionLine: '先保住残卷，再确认这条镜债主轴是否还值得继续压。',
+          selectedContractLabel: '镜债锁线',
+          selectedContractLine: '锁住观星 / 事件 / 裂隙线路，但欠下一笔清账任务。',
+          contractResolved: true,
+          contractSuccess: false,
+          contractResolutionLine: '锁线契约：镜债锁线未兑现 · 契押：🔮 1',
+          contractSignCostLine: '🔮 1',
+          outcome: 'failed',
+          outcomeLabel: '研究未成',
+          grantedLine: '',
+          reasonLine: '这笔镜债还没被真正修正，若高压验证继续失利，就该先转成反证处理。',
+          summaryLine: '镜债反证说明旧债仍未真正清账。',
+          recoveryEligible: true,
+          recoveryLabel: '残卷回收',
+          recoveryTier: 'partial',
+          recoveryTierLabel: '轻回收',
+          recoveryLine: '洞府已回收一部分残卷，但这笔镜债仍待主验证给出明确结论。',
+          recoveryHintLine: '无尽或天道榜主验证通过前，这笔镜债都还不能释放强目标。',
+          rewardTrackId: 'observatory',
+          rewardTrackName: '命盘档案室',
+          rewardTrackIcon: '🔭'
+        },
+        history: [],
+        totalCompleted: 0,
+        totalFailed: 1
+      });
+    }
+    if (typeof game.normalizeFateAftereffectState === 'function') {
+      game.fateAftereffectState = game.normalizeFateAftereffectState({
+        records: [],
+        history: [],
+        lastResolved: {
+          recordId: 'reward_degrade_probe_aftereffect',
+          icon: '🩸',
+          name: '镜债回流',
+          sourceRunId: degradedRewardSlate.id,
+          sourceAgendaId: 'reward_degrade_probe_agenda',
+          sourceLabel: '镜债反证',
+          templateId: 'risk_bias',
+          outcomeId: 'recovery',
+          chapterIndex: degradedRewardSlate.chapterIndex,
+          chapterName: degradedRewardSlate.chapterName,
+          durationChapters: 2,
+          positiveLine: '先清账再扩线。',
+          negativeLine: '若继续强压，会把旧债拖成跨周风险。',
+          summaryLine: '镜债回流：旧债仍未真正清账。',
+          detailLine: '研究债账仍在回流，需要主验证给出真正写回。',
+          createdAt: Date.now() - (7 * 24 * 60 * 60 * 1000)
+        }
+      });
+    }
+    const endlessState = typeof game.ensureEndlessState === 'function' ? game.ensureEndlessState() : null;
+    const weekMeta = typeof game.getHeavenlyMandateWeekMeta === 'function'
+      ? game.getHeavenlyMandateWeekMeta()
+      : null;
+    if (endlessState) {
+      endlessState.currentCycle = 1;
+      endlessState.seasonWeekTag = weekMeta?.weekTag || endlessState.seasonWeekTag || '';
+      endlessState.seasonCycleClears = 0;
+      endlessState.seasonScore = 0;
+    }
+    if (typeof game.recordSeasonVerificationResult === 'function') {
+      game.recordSeasonVerificationResult({
+        recordId: `browser_reward_degrade_${weekMeta?.weekTag || 'current'}`,
+        weekTag: weekMeta?.weekTag || '',
+        weekLabel: weekMeta?.weekLabel || '',
+        role: 'primary',
+        sourceMode: 'pvp',
+        sourceModeLabel: '天道榜',
+        label: '天道榜反证',
+        resultStatus: 'failed',
+        writebackMode: 'degrade',
+        writebackLine: '天道榜给出了反证，本周押卷会先转入险卷/反例处理。',
+        resolvedRunId: 'browser_reward_degrade',
+        chapterIndex: degradedRewardSlate.chapterIndex,
+        proofQuality: 'thin',
+        lineageStyle: '镜战压强',
+        summaryLine: '天道榜给出反证，这条旧债路线还不足以重新定榜。',
+        detailLine: '镜战题面说明这条旧债路线还没完成真正修正。',
+        statusLine: '天道榜 · 反证已入账',
+        anchorSection: 'pvp',
+        priority: 1
+      });
+    }
+    if (typeof game.buildRewardExpeditionMeta === 'function') {
+      game.lastExpeditionRewardMeta = game.buildRewardExpeditionMeta(degradedRewardSlate);
+    }
+    game.currentBattleNode = { type: 'elite', id: 990004, completed: false };
+    game.stealAttempted = false;
+    game.lastBattleRewardMeta = {
+      encounter: {
+        themeId: 'theme_degrade_probe',
+        themeName: '轮段·镜债反证',
+        tierStage: 2,
+        goldBonus: 16,
+        ringExpBonus: 10,
+      },
+    };
+    game.showRewardScreen(128, true, { stealLaw: lawId, stealChance: 1 }, 26, { insight: 7, karma: 2 });
+
+    let rewardPayload = {};
+    try {
+      rewardPayload = JSON.parse(typeof window.render_game_to_text === 'function' ? window.render_game_to_text() : '{}');
+    } catch (error) {
+      rewardPayload = {};
+    }
+    const screen = document.getElementById('reward-screen');
+    const expeditionPanel = document.getElementById('reward-expedition-meta');
+    const subtitle = document.querySelector('#reward-screen .reward-subtitle');
+    const rewardSeasonBoard = rewardPayload?.reward?.expedition?.seasonBoard || null;
+    const expeditionSeasonBoard = rewardPayload?.expedition?.seasonBoard || null;
+    const chapterSeasonBoard = rewardPayload?.map?.chapter?.seasonBoard || null;
+    const rewardSeasonBoardChipText = Array.from(document.querySelectorAll('#reward-expedition-meta [data-season-board-chip]'))
+      .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
+      .join(' ')
+      .trim();
+    const rewardSeasonBoardActionCount = document.querySelectorAll('#reward-expedition-meta [data-season-board-action-reward="true"]').length;
+    const rewardSeasonBoardActionText = (document.querySelector('[data-season-board-action-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardVerificationText = (document.querySelector('[data-season-board-verification-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardDebtText = (document.querySelector('[data-season-board-debt-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardNextTaskText = (document.querySelector('[data-season-board-next-task-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardFollowupText = (document.querySelector('[data-season-board-verification-followup="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardWeekVerdictLedger = rewardSeasonBoard?.weekVerdictLedger?.current || null;
+
+    return {
+      ok:
+        !!rewardSeasonBoard &&
+        rewardSeasonBoard?.settlement?.outcomeId === 'risky_sheet' &&
+        rewardSeasonBoard?.settlement?.resolvedStatus === 'failed' &&
+        rewardSeasonBoard?.debtPack?.status === 'degraded' &&
+        rewardSeasonBoard?.debtPack?.occupiesStrongSlot === false &&
+        !!rewardSeasonBoard?.verificationOrders?.[0]?.summaryLine &&
+        Array.isArray(rewardSeasonBoard?.verificationOrders) &&
+        rewardSeasonBoard.verificationOrders.length === 2 &&
+        rewardSeasonBoard?.verificationOrders?.[0]?.resultStatus === 'failed' &&
+        rewardSeasonBoard?.verificationOrders?.[0]?.writebackMode === 'degrade' &&
+        rewardSeasonBoard?.verificationOrders?.[0]?.anchorSection === 'pvp' &&
+        rewardSeasonBoard.verificationOrders?.[1]?.anchorSection === 'challenge' &&
+        screen?.dataset?.rewardHeaderOutcome === 'risky_sheet' &&
+        screen?.dataset?.rewardNextActionSource === 'verification' &&
+        expeditionPanel?.dataset?.seasonBoardOutcome === 'risky_sheet' &&
+        expeditionPanel?.dataset?.seasonBoardActionSource === 'verification' &&
+        expeditionPanel?.dataset?.seasonBoardVerificationVisible === 'true' &&
+        rewardSeasonBoardActionCount === 1 &&
+        /反证|险卷|验证/.test(subtitle?.textContent || '') &&
+        rewardSeasonBoardActionText.includes(
+          rewardSeasonBoard.verificationOrders?.[0]?.summaryLine
+            || rewardSeasonBoard.verificationOrders?.[0]?.hintLine
+            || ''
+        ) &&
+        rewardSeasonBoardDebtText.includes(rewardSeasonBoard.debtPack.summaryLine || '') &&
+        rewardSeasonBoardVerificationText.includes(
+          rewardSeasonBoard.verificationOrders?.[0]?.summaryLine
+            || rewardSeasonBoard.verificationOrders?.[0]?.hintLine
+            || ''
+        ) &&
+        rewardSeasonBoardChipText.includes('验证') &&
+        rewardSeasonBoardChipText.includes('债账') &&
+        /旁验证|七日劫数/.test(rewardSeasonBoardFollowupText) &&
+        rewardSeasonBoardFollowupText.includes(
+          rewardSeasonBoard.verificationOrders?.[1]?.label
+          || rewardSeasonBoard.verificationOrders?.[1]?.summaryLine
+          || '七日劫数'
+        ) &&
+        (
+          !rewardSeasonBoard?.nextTask
+          || rewardSeasonBoardNextTaskText.includes(
+            rewardSeasonBoard.nextTask?.label
+              || rewardSeasonBoard.nextTask?.hintLine
+              || ''
+          )
+        ) &&
+        rewardWeekVerdictLedger?.resolvedStatus === 'failed' &&
+        rewardWeekVerdictLedger?.primaryVerificationResultStatus === 'failed' &&
+        rewardWeekVerdictLedger?.primaryWritebackMode === 'degrade' &&
+        JSON.stringify(rewardSeasonBoard?.debtPack || null) === JSON.stringify(expeditionSeasonBoard?.debtPack || null) &&
+        JSON.stringify(rewardSeasonBoard?.debtPack || null) === JSON.stringify(chapterSeasonBoard?.debtPack || null),
+      rewardHeaderOutcome: screen?.dataset?.rewardHeaderOutcome || '',
+      rewardNextActionSource: screen?.dataset?.rewardNextActionSource || '',
+      subtitleText: subtitle?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      rewardSeasonBoard,
+      expeditionSeasonBoard,
+      chapterSeasonBoard,
+      rewardSeasonBoardChipText,
+      rewardSeasonBoardActionCount,
+      rewardSeasonBoardActionText,
+      rewardSeasonBoardVerificationText,
+      rewardSeasonBoardDebtText,
+      rewardSeasonBoardNextTaskText,
+      rewardSeasonBoardFollowupText,
+      rewardWeekVerdictLedger,
+    };
+  });
+  add(
+    'reward screen surfaces failed primary writeback as a degraded debt record and risky settlement',
+    !!rewardDegradeProbe?.ok,
+    JSON.stringify(rewardDegradeProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'reward-degrade-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1200);
+  const rewardSideVerificationProbe = await page.evaluate(() => {
+    if (!window.game) return { ok: false, reason: 'no_game' };
+    game.guestMode = true;
+    game.startNewGame('linFeng');
+    game.startRealm(1, false);
+    const lawId = typeof LAWS !== 'undefined' ? Object.keys(LAWS)[0] : null;
+    if (typeof game.player?.setRunPath === 'function') game.player.setRunPath('insight');
+    if (typeof game.player?.setRunDestiny === 'function') game.player.setRunDestiny('rebelScale', 1);
+    if (game.player) {
+      game.player.getStealBonus = () => 0;
+    }
+    const originalBuildChallengeBundle = typeof game.buildChallengeBundle === 'function'
+      ? game.buildChallengeBundle.bind(game)
+      : null;
+    game.buildChallengeBundle = (mode, dateRef) => {
+      if (mode !== 'weekly') {
+        return originalBuildChallengeBundle ? originalBuildChallengeBundle(mode, dateRef) : null;
+      }
+      return {
+        mode: 'weekly',
+        meta: {
+          title: '观星台 · 七日劫数',
+          subtitle: '围绕同一套命盘反复冲分，把高分答卷压成观星档案。',
+          label: '七日劫数',
+          accentClass: 'weekly'
+        },
+        rule: {
+          id: 'side_verification_probe_rule',
+          name: '险卷旁证劫数',
+          objective: '围绕险卷旁证反复冲分，为当前主练补一张挑战旁证。',
+          goalRealm: 4
+        },
+        rotationKey: '2026-W16',
+        rotationLabel: '本周题面 · 险卷旁证',
+        seedSignature: 'W-SIDE-VERIFICATION-PROBE',
+        progress: {
+          completions: 1,
+          bestScore: 412,
+          totalScore: 412
+        },
+        records: [],
+        rewards: [
+          {
+            id: 'side_verification_probe_rule_reward_1',
+            label: '累计 360 分',
+            target: 360,
+            claimed: false
+          }
+        ]
+      };
+    };
+    const sideVerificationRewardSlate = {
+      id: 'reward_side_verification_probe',
+      chapterIndex: 6,
+      chapterName: '第 6 章·险卷归档',
+      endingId: 'risky_rank',
+      endingName: '险卷待定',
+      endingIcon: '⚖️',
+      score: 241,
+      branchName: '险卷旁证',
+      tags: ['课题·推演控场', '答卷·险卷待证'],
+      answerReview: {
+        ratingLabel: '定榜样本',
+        ratingTone: 'selected',
+        trainingAdvice: '先给当前险卷补一张挑战旁证，但别把它当成主验证的替代品。',
+        highlightLine: '路线已经成形，这周可以先补一张周挑战旁证稳住建议。'
+      },
+      practiceTopic: {
+        id: 'reward_side_verification_probe_topic',
+        sourceRecordId: 'reward_side_verification_probe_guide',
+        sourceTitle: '险卷旁证',
+        themeKey: 'oracle',
+        themeLabel: '推演控场',
+        routeFocusLine: '优先节点：试炼 / 精英 / 战斗 / 禁术',
+        compareHint: '先补一张不同节奏的挑战旁证，再决定要不要把主验证送去更高压环境。',
+        trainingTags: ['旁证', '挑战复盘'],
+        goalLines: ['先补旁证，再决定去无尽还是天道榜做主验证']
+      },
+      observatoryLink: {
+        sourceRecordId: 'reward_side_verification_probe_guide',
+        sourceTitle: '险卷旁证',
+        sourceThemeKey: 'oracle',
+        sourceThemeLabel: '推演控场',
+        routeFocusLine: '优先节点：试炼 / 精英 / 战斗 / 禁术',
+        compareHint: '先补一张不同节奏的挑战旁证，再决定要不要把主验证送去更高压环境。',
+        trainingTags: ['旁证', '挑战复盘'],
+        drillObjective: '先补旁证，再决定去无尽还是天道榜做主验证。'
+      },
+      timestamp: Date.now()
+    };
+    game.runSlateArchive = typeof game.normalizeRunSlateArchive === 'function'
+      ? game.normalizeRunSlateArchive([sideVerificationRewardSlate])
+      : [sideVerificationRewardSlate];
+    if (typeof game.persistRunSlateArchive === 'function') game.persistRunSlateArchive();
+    if (typeof game.buildObservatoryTrainingFocusFromSlate === 'function' && typeof game.setObservatoryTrainingFocus === 'function') {
+      const focus = game.buildObservatoryTrainingFocusFromSlate(sideVerificationRewardSlate);
+      if (focus) game.setObservatoryTrainingFocus(focus, { silent: true });
+    }
+    const endlessState = typeof game.ensureEndlessState === 'function' ? game.ensureEndlessState() : null;
+    const weekMeta = typeof game.getHeavenlyMandateWeekMeta === 'function'
+      ? game.getHeavenlyMandateWeekMeta()
+      : null;
+    if (endlessState) {
+      endlessState.currentCycle = 1;
+      endlessState.seasonWeekTag = weekMeta?.weekTag || endlessState.seasonWeekTag || '';
+      endlessState.seasonCycleClears = 0;
+      endlessState.seasonScore = 0;
+    }
+    if (typeof game.recordSeasonVerificationResult === 'function') {
+      game.recordSeasonVerificationResult({
+        recordId: `browser_reward_side_verification_${weekMeta?.weekTag || 'current'}`,
+        weekTag: weekMeta?.weekTag || '',
+        weekLabel: weekMeta?.weekLabel || '',
+        role: 'side',
+        sourceMode: 'challenge',
+        sourceModeLabel: '七日劫数',
+        label: '七日劫数旁证',
+        resultStatus: 'verified',
+        writebackMode: 'boost_recommendation',
+        writebackLine: '周挑战旁证已经回写，季盘会更偏向当前主修并给出更稳的复盘建议。',
+        resolvedRunId: 'browser_reward_side_verification',
+        chapterIndex: sideVerificationRewardSlate.chapterIndex,
+        proofQuality: 'thin',
+        lineageStyle: '推演控场',
+        summaryLine: '七日劫数已经补上一张稳定旁证，这周主练不再只靠单一路线说话。',
+        detailLine: '挑战旁证会强化赛季推荐，但不会直接替代主验证。',
+        statusLine: '七日劫数 · 已归档 412 分',
+        anchorSection: 'challenge',
+        priority: 2
+      });
+    }
+    if (typeof game.buildRewardExpeditionMeta === 'function') {
+      game.lastExpeditionRewardMeta = game.buildRewardExpeditionMeta(sideVerificationRewardSlate);
+    }
+    game.currentBattleNode = { type: 'elite', id: 990005, completed: false };
+    game.stealAttempted = false;
+    game.lastBattleRewardMeta = {
+      encounter: {
+        themeId: 'theme_side_verification_probe',
+        themeName: '轮段·险卷旁证',
+        tierStage: 3,
+        goldBonus: 20,
+        ringExpBonus: 12,
+      },
+    };
+    game.showRewardScreen(156, true, { stealLaw: lawId, stealChance: 1 }, 34, { insight: 10, karma: 3 });
+
+    let rewardPayload = {};
+    try {
+      rewardPayload = JSON.parse(typeof window.render_game_to_text === 'function' ? window.render_game_to_text() : '{}');
+    } catch (error) {
+      rewardPayload = {};
+    }
+    const screen = document.getElementById('reward-screen');
+    const expeditionPanel = document.getElementById('reward-expedition-meta');
+    const subtitle = document.querySelector('#reward-screen .reward-subtitle');
+    const rewardSeasonBoard = rewardPayload?.reward?.expedition?.seasonBoard || null;
+    const expeditionSeasonBoard = rewardPayload?.expedition?.seasonBoard || null;
+    const chapterSeasonBoard = rewardPayload?.map?.chapter?.seasonBoard || null;
+    const rewardSeasonBoardChipText = Array.from(document.querySelectorAll('#reward-expedition-meta [data-season-board-chip]'))
+      .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
+      .join(' ')
+      .trim();
+    const rewardSeasonBoardActionCount = document.querySelectorAll('#reward-expedition-meta [data-season-board-action-reward="true"]').length;
+    const rewardSeasonBoardActionText = (document.querySelector('[data-season-board-action-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardVerificationText = (document.querySelector('[data-season-board-verification-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardDebtText = (document.querySelector('[data-season-board-debt-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardFollowupText = (document.querySelector('[data-season-board-verification-followup="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardWeekVerdictLedger = rewardSeasonBoard?.weekVerdictLedger?.current || null;
+
+    return {
+      ok:
+        !!rewardSeasonBoard &&
+        rewardSeasonBoard?.settlement?.outcomeId === 'risky_sheet' &&
+        rewardSeasonBoard?.settlement?.resolvedStatus === 'reinforced' &&
+        rewardSeasonBoard?.debtPack == null &&
+        Array.isArray(rewardSeasonBoard?.verificationOrders) &&
+        rewardSeasonBoard.verificationOrders.length === 2 &&
+        rewardSeasonBoard?.verificationOrders?.[1]?.resultStatus === 'verified' &&
+        rewardSeasonBoard?.verificationOrders?.[1]?.writebackMode === 'boost_recommendation' &&
+        rewardSeasonBoard.verificationOrders?.[1]?.anchorSection === 'challenge' &&
+        screen?.dataset?.rewardHeaderOutcome === 'risky_sheet' &&
+        screen?.dataset?.rewardNextActionSource === 'verification' &&
+        expeditionPanel?.dataset?.seasonBoardOutcome === 'risky_sheet' &&
+        expeditionPanel?.dataset?.seasonBoardActionSource === 'verification' &&
+        expeditionPanel?.dataset?.seasonBoardVerificationVisible === 'true' &&
+        rewardSeasonBoardActionCount === 1 &&
+        /旁证|险卷|验证/.test(subtitle?.textContent || '') &&
+        rewardSeasonBoardActionText.includes(
+          rewardSeasonBoard.verificationOrders?.[0]?.summaryLine
+            || rewardSeasonBoard.verificationOrders?.[0]?.hintLine
+            || ''
+        ) &&
+        rewardSeasonBoardVerificationText.includes(
+          rewardSeasonBoard.verificationOrders?.[0]?.summaryLine
+            || rewardSeasonBoard.verificationOrders?.[0]?.hintLine
+            || ''
+        ) &&
+        rewardSeasonBoardChipText.includes('验证') &&
+        !rewardSeasonBoardChipText.includes('债账') &&
+        !rewardSeasonBoardDebtText &&
+        /旁验证|七日劫数/.test(rewardSeasonBoardFollowupText) &&
+        rewardSeasonBoardFollowupText.includes(
+          rewardSeasonBoard.verificationOrders?.[1]?.summaryLine
+          || rewardSeasonBoard.verificationOrders?.[1]?.label
+          || '七日劫数'
+        ) &&
+        rewardWeekVerdictLedger?.resolvedStatus === 'reinforced' &&
+        rewardWeekVerdictLedger?.sideVerificationResultStatus === 'verified' &&
+        rewardWeekVerdictLedger?.sideWritebackMode === 'boost_recommendation' &&
+        JSON.stringify(rewardSeasonBoard?.weekVerdictLedger || null) === JSON.stringify(expeditionSeasonBoard?.weekVerdictLedger || null) &&
+        JSON.stringify(rewardSeasonBoard?.weekVerdictLedger || null) === JSON.stringify(chapterSeasonBoard?.weekVerdictLedger || null),
+      rewardHeaderOutcome: screen?.dataset?.rewardHeaderOutcome || '',
+      rewardNextActionSource: screen?.dataset?.rewardNextActionSource || '',
+      subtitleText: subtitle?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      rewardSeasonBoard,
+      expeditionSeasonBoard,
+      chapterSeasonBoard,
+      rewardSeasonBoardChipText,
+      rewardSeasonBoardActionCount,
+      rewardSeasonBoardActionText,
+      rewardSeasonBoardVerificationText,
+      rewardSeasonBoardDebtText,
+      rewardSeasonBoardFollowupText,
+      rewardWeekVerdictLedger,
+    };
+  });
+  add(
+    'reward screen surfaces side verification writeback as a reinforcement, not a replacement for primary proof',
+    !!rewardSideVerificationProbe?.ok,
+    JSON.stringify(rewardSideVerificationProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'reward-side-verification-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
@@ -212,16 +1399,116 @@ function rectObj(rect) {
     game.startNewGame('linFeng');
     game.startRealm(1, false);
     const lawId = typeof LAWS !== 'undefined' ? Object.keys(LAWS)[0] : null;
+    if (typeof game.player?.setRunPath === 'function') game.player.setRunPath('insight');
+    if (typeof game.player?.setRunDestiny === 'function') game.player.setRunDestiny('rebelScale', 1);
     if (game.player) {
       game.player.getStealBonus = () => 0;
+    }
+    const originalBuildChallengeBundle = typeof game.buildChallengeBundle === 'function'
+      ? game.buildChallengeBundle.bind(game)
+      : null;
+    game.buildChallengeBundle = (mode, dateRef) => {
+      if (mode !== 'weekly') {
+        return originalBuildChallengeBundle ? originalBuildChallengeBundle(mode, dateRef) : null;
+      }
+      return {
+        mode: 'weekly',
+        meta: {
+          title: '观星台 · 七日劫数',
+          subtitle: '围绕同一套命盘反复冲分，把高分答卷压成观星档案。',
+          label: '七日劫数',
+          accentClass: 'weekly'
+        },
+        rule: {
+          id: 'mobile_positive_probe_rule',
+          name: '移动端周劫复盘',
+          objective: '围绕移动端周劫复盘继续冲分，确认正卷旁验证在窄屏下也能完整消费。',
+          goalRealm: 4
+        },
+        rotationKey: '2026-W16',
+        rotationLabel: '本周题面 · 七日劫数旁证',
+        seedSignature: 'W-MOBILE-PROBE',
+        progress: {
+          completions: 1,
+          bestScore: 420,
+          totalScore: 420
+        },
+        records: [],
+        rewards: [
+          {
+            id: 'mobile_positive_probe_rule_reward_1',
+            label: '累计 360 分',
+            target: 360,
+            claimed: false
+          }
+        ]
+      };
+    };
+    const positiveRewardSlate = {
+      id: 'reward_mobile_positive_probe',
+      chapterIndex: 6,
+      chapterName: '第 6 章·正卷归档',
+      endingId: 'positive_rank',
+      endingName: '正卷扩样',
+      endingIcon: '🧾',
+      score: 268,
+      branchName: '正卷扩样',
+      tags: ['课题·推演控场', '答卷·正卷扩样'],
+      answerReview: {
+        ratingLabel: '天象合卷',
+        ratingTone: 'completed',
+        trainingAdvice: '当前正卷已经站住脚，可以继续补更高分样本或开始冲定榜验证。',
+        highlightLine: '这轮押卷已经过了第一条高压证明，接下来更适合扩样而不是补债。'
+      },
+      practiceTopic: {
+        id: 'reward_mobile_positive_probe_topic',
+        sourceRecordId: 'reward_mobile_positive_probe_guide',
+        sourceTitle: '正卷试锋',
+        themeKey: 'oracle',
+        themeLabel: '推演控场',
+        routeFocusLine: '优先节点：观星 / 试炼 / 精英',
+        compareHint: '先确认正卷已经站住，再决定继续冲榜还是补更高分样本。',
+        trainingTags: ['扩样', '冲榜'],
+        goalLines: ['继续扩大定榜样本，而不是回头清债']
+      },
+      observatoryLink: {
+        sourceRecordId: 'reward_mobile_positive_probe_guide',
+        sourceTitle: '正卷试锋',
+        sourceThemeKey: 'oracle',
+        sourceThemeLabel: '推演控场',
+        routeFocusLine: '优先节点：观星 / 试炼 / 精英',
+        compareHint: '先确认正卷已经站住，再决定继续冲榜还是补更高分样本。',
+        trainingTags: ['扩样', '冲榜'],
+        drillObjective: '继续扩大定榜样本，而不是回头清债。'
+      },
+      timestamp: Date.now()
+    };
+    game.runSlateArchive = typeof game.normalizeRunSlateArchive === 'function'
+      ? game.normalizeRunSlateArchive([positiveRewardSlate])
+      : [positiveRewardSlate];
+    if (typeof game.persistRunSlateArchive === 'function') game.persistRunSlateArchive();
+    if (typeof game.buildObservatoryTrainingFocusFromSlate === 'function' && typeof game.setObservatoryTrainingFocus === 'function') {
+      const focus = game.buildObservatoryTrainingFocusFromSlate(positiveRewardSlate);
+      if (focus) game.setObservatoryTrainingFocus(focus, { silent: true });
+    }
+    const endlessState = typeof game.ensureEndlessState === 'function' ? game.ensureEndlessState() : null;
+    if (endlessState) {
+      const weekMeta = typeof game.getHeavenlyMandateWeekMeta === 'function' ? game.getHeavenlyMandateWeekMeta() : null;
+      endlessState.currentCycle = 1;
+      endlessState.seasonWeekTag = weekMeta?.weekTag || endlessState.seasonWeekTag || '';
+      endlessState.seasonCycleClears = 1;
+      endlessState.seasonScore = 188;
+    }
+    if (typeof game.buildRewardExpeditionMeta === 'function') {
+      game.lastExpeditionRewardMeta = game.buildRewardExpeditionMeta(positiveRewardSlate);
     }
     game.currentBattleNode = { type: 'elite', id: 990002, completed: false };
     game.stealAttempted = false;
     game.lastBattleRewardMeta = {
       encounter: {
-        themeId: 'theme_counter_lattice',
-        themeName: '轮段·反制晶格',
-        tierStage: 2,
+        themeId: 'theme_mobile_positive_probe',
+        themeName: '轮段·移动端正卷扩样',
+        tierStage: 3,
         goldBonus: 18,
         ringExpBonus: 9,
       },
@@ -230,8 +1517,12 @@ function rectObj(rect) {
     const main = document.querySelector('.reward-main-column');
     const side = document.querySelector('.reward-side-column');
     const actions = document.querySelector('.reward-actions');
+    const expeditionPanel = document.getElementById('reward-expedition-meta');
     const cards = Array.from(document.querySelectorAll('#reward-cards .card'));
-    if (!main || !side || !actions || cards.length < 2) return { ok: false, reason: 'missing_reward_mobile_nodes' };
+    const verificationCard = document.querySelector('[data-season-board-verification-reward="true"]');
+    const verificationFollowup = document.querySelector('[data-season-board-verification-followup="true"]');
+    const rewardScreen = document.getElementById('reward-screen');
+    if (!main || !side || !actions || !expeditionPanel || cards.length < 2) return { ok: false, reason: 'missing_reward_mobile_nodes' };
     const toRect = (el) => {
       const rect = el.getBoundingClientRect();
       return {
@@ -247,15 +1538,36 @@ function rectObj(rect) {
     const sideRect = toRect(side);
     const actionsRect = toRect(actions);
     const cardRects = cards.map((card) => toRect(card));
+    const expeditionPanelRect = toRect(expeditionPanel);
+    const verificationCardRect = verificationCard ? toRect(verificationCard) : null;
+    const verificationFollowupRect = verificationFollowup ? toRect(verificationFollowup) : null;
+    const verificationText = (verificationCard?.textContent || '').replace(/\s+/g, ' ').trim();
+    const followupText = (verificationFollowup?.textContent || '').replace(/\s+/g, ' ').trim();
     return {
       ok:
         sideRect.top >= mainRect.bottom - 6 &&
         cardRects.every((rect) => rect.left >= mainRect.left - 4 && rect.right <= mainRect.right + 4) &&
-        actionsRect.width <= sideRect.width + 2,
+        actionsRect.width <= sideRect.width + 2 &&
+        rewardScreen?.dataset?.rewardNextActionSource === 'verification' &&
+        expeditionPanel?.dataset?.seasonBoardVerificationVisible === 'true' &&
+        !!verificationCard &&
+        !!verificationFollowup &&
+        /扩大本周定榜样本/.test(verificationText) &&
+        /旁验证|七日劫数/.test(followupText) &&
+        expeditionPanel.scrollWidth <= expeditionPanel.clientWidth + 2 &&
+        main.scrollWidth <= main.clientWidth + 2 &&
+        side.scrollWidth <= side.clientWidth + 2 &&
+        verificationCardRect?.right <= expeditionPanelRect.right + 2 &&
+        verificationFollowupRect?.right <= expeditionPanelRect.right + 2,
       mainRect,
       sideRect,
       actionsRect,
       cardRects,
+      expeditionPanelRect,
+      verificationCardRect,
+      verificationFollowupRect,
+      verificationText,
+      followupText,
     };
   });
   add(
@@ -831,6 +2143,269 @@ function rectObj(rect) {
         completedAt: Date.now() - 1000
       });
     }
+    if (typeof game.recordRunPathCompletion === 'function' && typeof game.player?.getRunPathMeta === 'function') {
+      game.recordRunPathCompletion(game.player.getRunPathMeta(), {
+        completedAt: Date.now() - 500,
+        realm: 6,
+        characterId: 'linFeng',
+        phaseMeta: { id: 'insight_final', title: '命盘问真' },
+        rewardText: '天机 +2 / 灵石 +80'
+      });
+    }
+    const lineageSlate = {
+      id: 'audit-fate-lineage-slate',
+      chapterIndex: 6,
+      chapterName: '第 6 章·星镜归档',
+      endingId: 'alliance',
+      endingName: '星图合卷',
+      endingIcon: '🔭',
+      score: 268,
+      branchName: '观测锁线',
+      tags: ['课题·推演控场', '答卷·天象合卷'],
+      answerReview: {
+        ratingLabel: '天象合卷',
+        ratingTone: 'completed',
+        trainingAdvice: '继续沿观测锁线压路线贴合与控场节奏。',
+        highlightLine: '这章已经把观测样本写成完整答卷，下一轮继续按同轴复盘。'
+      },
+      practiceTopic: {
+        id: 'audit-fate-lineage-topic',
+        sourceRecordId: 'audit-fate-lineage-guide',
+        sourceTitle: '星镜试锋',
+        themeKey: 'oracle',
+        themeLabel: '推演控场',
+        routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+        compareHint: '对比观测收益、路线贴合与控场稳定。',
+        trainingTags: ['路线贴合', '控场稳定'],
+        goalLines: ['先走观星线再补事件收益']
+      },
+      observatoryLink: {
+        sourceRecordId: 'audit-fate-lineage-guide',
+        sourceTitle: '星镜试锋',
+        sourceThemeKey: 'oracle',
+        sourceThemeLabel: '推演控场',
+        routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+        compareHint: '对比观测收益、路线贴合与控场稳定。',
+        trainingTags: ['路线贴合', '控场稳定'],
+        drillObjective: '连续两次走观星相关节点并维持控场稳定。'
+      },
+      timestamp: Date.now()
+    };
+    if (typeof game.normalizeRunSlateArchive === 'function') {
+      game.runSlateArchive = game.normalizeRunSlateArchive([lineageSlate]);
+    } else {
+      game.runSlateArchive = [lineageSlate];
+    }
+    if (typeof game.persistRunSlateArchive === 'function') game.persistRunSlateArchive();
+    const trainingFocus = typeof game.buildObservatoryTrainingFocusFromSlate === 'function'
+      ? game.buildObservatoryTrainingFocusFromSlate(lineageSlate)
+      : null;
+    if (trainingFocus && typeof game.setObservatoryTrainingFocus === 'function') {
+      game.setObservatoryTrainingFocus(trainingFocus, { silent: true });
+    }
+    const originalBuildChallengeBundle = typeof game.buildChallengeBundle === 'function'
+      ? game.buildChallengeBundle.bind(game)
+      : null;
+    game.buildChallengeBundle = (mode, dateRef) => {
+      if (mode !== 'weekly') {
+        return originalBuildChallengeBundle ? originalBuildChallengeBundle(mode, dateRef) : null;
+      }
+      return {
+        mode: 'weekly',
+        meta: {
+          title: '观星台 · 七日劫数',
+          subtitle: '围绕同一套命盘反复冲分，把高分答卷压成观星档案。',
+          label: '七日劫数',
+          accentClass: 'weekly'
+        },
+        rule: {
+          id: 'build_sanctum_probe_weekly',
+          name: '周劫旁证校卷',
+          objective: '围绕周劫旁证校卷继续冲分，验证 Sanctum 旁验证状会直达 weekly challenge。',
+          goalRealm: 4
+        },
+        rotationKey: '2026-W16',
+        rotationLabel: '本周题面 · 七日劫数复盘',
+        seedSignature: 'W-SANCTUM-PROBE',
+        progress: {
+          completions: 1,
+          bestScore: 420,
+          totalScore: 420
+        },
+        records: [],
+        rewards: [
+          {
+            id: 'build_sanctum_probe_weekly_reward_1',
+            label: '累计 360 分',
+            target: 360,
+            claimed: false
+          }
+        ]
+      };
+    };
+    const endlessState = typeof game.ensureEndlessState === 'function' ? game.ensureEndlessState() : null;
+    if (endlessState) {
+      const weekMeta = typeof game.getHeavenlyMandateWeekMeta === 'function' ? game.getHeavenlyMandateWeekMeta() : null;
+      endlessState.currentCycle = 1;
+      endlessState.seasonWeekTag = weekMeta?.weekTag || endlessState.seasonWeekTag || '';
+      endlessState.seasonCycleClears = 1;
+      endlessState.seasonScore = 188;
+    }
+    if (typeof game.normalizeSanctumAgendaState === 'function') {
+      const now = Date.now();
+      game.sanctumAgendaState = game.normalizeSanctumAgendaState({
+        lastResolved: {
+          agendaId: 'audit_lineage_steady',
+          icon: '🧮',
+          name: '星镜稳线',
+          sourceRunId: lineageSlate.id,
+          sourceTitle: '星镜试锋',
+          themeKey: 'oracle',
+          themeLabel: '推演控场',
+          ratingLabel: '天象合卷',
+          ratingTone: 'completed',
+          trainingAdvice: '继续沿观测锁线压路线贴合与控场节奏。',
+          highlightLine: '把星镜试锋压成可复用周样本。',
+          routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+          focusNodeTypes: ['observatory', 'event', 'rift'],
+          focusNodeLine: '优先节点：观星 / 事件 / 裂隙',
+          progress: 3,
+          target: 3,
+          selectedDecisionLabel: '加倍投入',
+          selectedDecisionLine: '继续沿观星链路补齐收益兑现。',
+          selectedContractLabel: '星镜锁线',
+          selectedContractLine: '锁定观星 / 事件 / 裂隙线路。',
+          contractResolved: true,
+          contractSuccess: true,
+          contractResolutionLine: '锁线契约：星镜锁线已兑现 · 契押：🔮 1',
+          contractSignCostLine: '🔮 1',
+          outcome: 'success',
+          outcomeLabel: '结题成功',
+          grantedLine: '洞府奖励：观星留痕 +1',
+          summaryLine: '星镜稳线已结题，路线贴合与控场节奏进入长期记录。',
+          rewardTrackId: 'observatory',
+          rewardTrackName: '命盘档案室',
+          rewardTrackIcon: '🔭',
+          selectedAt: now - 2000,
+          updatedAt: now - 1500
+        },
+        history: [
+          {
+            agendaId: 'audit_lineage_archive',
+            icon: '🧮',
+            name: '残卷归档',
+            sourceRunId: 'audit_lineage_history',
+            sourceTitle: '旧档归卷',
+            themeKey: 'oracle',
+            themeLabel: '答卷归档',
+            routeFocusLine: '优先节点：观星 / 记忆裂隙 / 事件',
+            focusNodeTypes: ['observatory', 'memory_rift', 'event'],
+            focusNodeLine: '优先节点：观星 / 记忆裂隙 / 事件',
+            progress: 2,
+            target: 2,
+            selectedDecisionLabel: '稳步归档',
+            selectedDecisionLine: '优先把已成型样本收入洞府。',
+            selectedContractLabel: '镜段封样',
+            selectedContractLine: '优先观星 / 记忆裂隙 / 事件。',
+            contractResolved: true,
+            contractSuccess: true,
+            contractResolutionLine: '锁线契约：镜段封样已兑现',
+            outcome: 'success',
+            outcomeLabel: '结题成功',
+            summaryLine: '残卷归档稳定完成，研究侧开始保留长期存档偏好。',
+            selectedAt: now - 6000,
+            updatedAt: now - 5500
+          }
+        ],
+        totalCompleted: 2,
+        totalFailed: 0
+      });
+    }
+    if (typeof game.normalizeFateAftereffectState === 'function') {
+      const now = Date.now();
+      game.fateAftereffectState = game.normalizeFateAftereffectState({
+        records: [
+          {
+            recordId: 'audit_aftereffect_active',
+            icon: '🧭',
+            name: '星镜余痕',
+            sourceRunId: lineageSlate.id,
+            sourceAgendaId: 'audit_lineage_steady',
+            sourceLabel: '星镜稳线',
+            sourceContractLabel: '星镜锁线',
+            templateId: 'route_bias',
+            outcomeId: 'contract_success',
+            chapterIndex: 5,
+            chapterName: '第 5 章·镜湖回路',
+            durationChapters: 2,
+            positiveLine: '观星 / 事件 / 裂隙更容易连成同轴路线。',
+            negativeLine: '战斗与营地窗口会略少，路线更容易被细线样本牵走。',
+            summaryLine: '星镜余痕：契约兑现后，观星锁线会继续牵引下一章路线。',
+            detailLine: '来源：星镜稳线 · 契约「星镜锁线」｜正向：观星 / 事件 / 裂隙更容易连成同轴路线。｜代价：战斗与营地窗口会略少，路线更容易被细线样本牵走。',
+            createdAt: now - 2200
+          },
+          {
+            recordId: 'audit_aftereffect_pending',
+            icon: '🪞',
+            name: '残卷旁辉',
+            sourceRunId: lineageSlate.id,
+            sourceAgendaId: 'audit_lineage_archive',
+            sourceLabel: '残卷归档',
+            sourceDecisionLabel: '稳步归档',
+            templateId: 'archive_bias',
+            outcomeId: 'recovery',
+            chapterIndex: lineageSlate.chapterIndex,
+            chapterName: lineageSlate.chapterName,
+            durationChapters: 1,
+            positiveLine: '仍会轻微偏向裂隙 / 观星，方便把回收到的残页补完整。',
+            negativeLine: '代价较轻，但下章仍会多分一点心力给归档收束。',
+            summaryLine: '残卷旁辉：残卷回收只留下轻量档案偏置，不会等同完整结题。',
+            detailLine: '来源：残卷归档 · 处置「稳步归档」｜正向：仍会轻微偏向裂隙 / 观星，方便把回收到的残页补完整。｜代价：代价较轻，但下章仍会多分一点心力给归档收束。',
+            createdAt: now - 1200
+          }
+        ],
+        history: [
+          {
+            recordId: 'audit_aftereffect_history',
+            icon: '🩸',
+            name: '欠压追痕',
+            sourceRunId: 'audit_aftereffect_history_run',
+            sourceAgendaId: 'audit_aftereffect_history_agenda',
+            sourceLabel: '血线校压',
+            sourceContractLabel: '压线誓约',
+            templateId: 'risk_bias',
+            outcomeId: 'contract_miss',
+            chapterIndex: 4,
+            chapterName: '第 4 章·血环抄录',
+            durationChapters: 1,
+            positiveLine: '敌影与高压样本会更密，方便补完未收口的压强研究。',
+            negativeLine: '休整窗口更稀，上一章欠下的高压代价会继续追着你。',
+            summaryLine: '欠压追痕：未兑现的高压契约把风险继续压到了下一章。',
+            detailLine: '来源：血线校压 · 契约「压线誓约」｜正向：敌影与高压样本会更密，方便补完未收口的压强研究。｜代价：休整窗口更稀，上一章欠下的高压代价会继续追着你。',
+            createdAt: now - 5200
+          }
+        ],
+        lastResolved: {
+          recordId: 'audit_aftereffect_pending',
+          icon: '🪞',
+          name: '残卷旁辉',
+          sourceRunId: lineageSlate.id,
+          sourceAgendaId: 'audit_lineage_archive',
+          sourceLabel: '残卷归档',
+          sourceDecisionLabel: '稳步归档',
+          templateId: 'archive_bias',
+          outcomeId: 'recovery',
+          chapterIndex: lineageSlate.chapterIndex,
+          chapterName: lineageSlate.chapterName,
+          durationChapters: 1,
+          positiveLine: '仍会轻微偏向裂隙 / 观星，方便把回收到的残页补完整。',
+          negativeLine: '代价较轻，但下章仍会多分一点心力给归档收束。',
+          summaryLine: '残卷旁辉：残卷回收只留下轻量档案偏置，不会等同完整结题。',
+          detailLine: '来源：残卷归档 · 处置「稳步归档」｜正向：仍会轻微偏向裂隙 / 观星，方便把回收到的残页补完整。｜代价：代价较轻，但下章仍会多分一点心力给归档收束。',
+          createdAt: now - 1200
+        }
+      });
+    }
     if (typeof game.recordObservatoryArchiveEntry === 'function') {
       game.recordObservatoryArchiveEntry({
         id: 'audit-observatory-record',
@@ -865,6 +2440,10 @@ function rectObj(rect) {
     const buildMetricCount = document.querySelectorAll('#build-snapshot-metrics .build-metric-card').length;
     const buildNotesText = (document.getElementById('build-snapshot-notes')?.textContent || '').replace(/\s+/g, ' ').trim();
     const buildGuideText = (document.getElementById('build-snapshot-guide')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const buildLineageCardText = (document.querySelector('[data-fate-lineage-card="build"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const buildLineageSummary = (document.querySelector('[data-fate-lineage-summary="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const buildLineageGuide = (document.querySelector('[data-fate-lineage-guide="build"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const buildLineageTrackCount = document.querySelectorAll('[data-fate-lineage-card="build"] [data-fate-lineage-track]').length;
 
     if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('sanctum');
     const sanctumSubtitle = (document.getElementById('collection-subtitle')?.textContent || '').replace(/\s+/g, ' ').trim();
@@ -876,7 +2455,70 @@ function rectObj(rect) {
     const progressText = (document.getElementById('sanctum-progress')?.textContent || '').replace(/\s+/g, ' ').trim();
     const roomText = (document.getElementById('sanctum-room-grid')?.textContent || '').replace(/\s+/g, ' ').trim();
     const researchText = (document.getElementById('sanctum-research-list')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const goalText = (document.getElementById('sanctum-goal-list')?.textContent || '').replace(/\s+/g, ' ').trim();
     const sanctumGuideText = (document.getElementById('sanctum-guide')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumLineageDetail = (document.querySelector('[data-fate-lineage-detail="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumLineageProgress = (document.querySelector('[data-fate-lineage-progress-row="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumLineageGuide = (document.querySelector('[data-fate-lineage-guide="overview"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumLineageChipsText = Array.from(document.querySelectorAll('[data-fate-lineage-chip]'))
+      .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
+      .join(' ')
+      .trim();
+    const sanctumLineageTrackCount = document.querySelectorAll('[data-fate-lineage-track]').length;
+    const sanctumAftereffectSummary = (document.querySelector('[data-fate-aftereffect-summary="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumAftereffectDetail = (document.querySelector('[data-fate-aftereffect-detail="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumAftereffectProgress = (document.querySelector('[data-fate-aftereffect-progress-row="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumAftereffectGuide = (document.querySelector('[data-fate-aftereffect-guide="overview"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumAftereffectChipsText = Array.from(document.querySelectorAll('[data-fate-aftereffect-chip]'))
+      .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
+      .join(' ')
+      .trim();
+    const sanctumAftereffectTrackCount = document.querySelectorAll('[data-fate-aftereffect-track]').length;
+    const sanctumSeasonBoardSummary = (document.querySelector('#sanctum-summary [data-season-board-summary="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardDetail = (document.querySelector('#sanctum-summary [data-season-board-detail="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardSettlement = (document.querySelector('#sanctum-summary [data-season-board-settlement="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardVerification = (document.querySelector('#sanctum-summary [data-season-board-verification="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardProgress = (document.querySelector('#sanctum-progress [data-season-board-progress-row="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardGuide = (document.querySelector('#sanctum-guide [data-season-board-guide="overview"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardSettlementGuide = (document.querySelector('#sanctum-guide [data-season-board-guide="settlement"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardVerificationGuide = (document.querySelector('#sanctum-guide [data-season-board-guide="verification"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardChipsText = Array.from(document.querySelectorAll('#sanctum-summary [data-season-board-chip]'))
+      .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
+      .join(' ')
+      .trim();
+    const sanctumSeasonBoardSettlementCardText = (document.querySelector('#sanctum-summary [data-season-board-settlement-card="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardVerificationCardText = (document.querySelector('#sanctum-summary [data-season-board-verification-card="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardGoalCount = document.querySelectorAll('#sanctum-goal-list [data-season-board-goal="true"]').length;
+    const sanctumSeasonBoardLaneCount = document.querySelectorAll('#sanctum-summary [data-season-board-lane="true"]').length;
+    const sanctumSeasonBoardTaskCount = document.querySelectorAll('#sanctum-summary [data-season-board-task="true"]').length;
+    const sanctumSeasonBoardTaskTexts = Array.from(document.querySelectorAll('#sanctum-summary [data-season-board-task="true"]'))
+      .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    const sanctumSeasonBoardVerificationCount = document.querySelectorAll('#sanctum-summary [data-season-board-verification-order="true"]').length;
+    const sanctumSeasonBoardSideVerificationGoalCount = document.querySelectorAll('#sanctum-goal-list [data-season-board-goal-id^="season_board_side_verification_goal_"]').length;
+    const sanctumSeasonBoardSideVerificationResearchCount = Array.from(document.querySelectorAll('#sanctum-research-list .sanctum-research-item'))
+      .filter((el) => /旁验证状|七日劫数/.test((el.textContent || '').replace(/\s+/g, ' ').trim()))
+      .length;
+    const sanctumSeasonBoardSideVerificationText = [
+      researchText,
+      summaryText,
+      goalText,
+      sanctumSeasonBoardVerificationCardText,
+      sanctumSeasonBoardVerificationGuide
+    ]
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    let payload = {};
+    try {
+      payload = JSON.parse(typeof window.render_game_to_text === 'function' ? window.render_game_to_text() : '{}');
+    } catch (error) {
+      payload = {};
+    }
+    const expeditionSeasonBoard = payload?.expedition?.seasonBoard || null;
+    const chapterSeasonBoard = payload?.map?.chapter?.seasonBoard || null;
+    const expeditionAftereffects = payload?.expedition?.aftereffects || null;
+    const chapterAftereffects = payload?.map?.chapter?.aftereffects || null;
     return {
       ok:
         /实战样本/.test(buildSubtitle) &&
@@ -885,6 +2527,8 @@ function rectObj(rect) {
         /当前优势/.test(buildNotesText) &&
         /主要缺口/.test(buildNotesText) &&
         /下一轮补位|补件优先级队列/.test(buildNotesText) &&
+        /界痕后效/.test(buildNotesText) &&
+        /契约后效/.test(buildNotesText) &&
         /样本对照/.test(buildNotesText) &&
         /当前精选命盘|观星台/.test(buildGuideText) &&
         /自动推荐摘要|推荐角色|推荐套装/.test(buildNotesText) &&
@@ -892,24 +2536,91 @@ function rectObj(rect) {
         /下一章风险镜像|下一章高危|高危·/.test(buildNotesText) &&
         /丹尊/.test(buildNotesText) &&
         /天道/.test(buildNotesText) &&
+        /押卷|验证/.test(buildNotesText) &&
         /命盘档案/.test(sanctumSubtitle) &&
         roomCards >= 5 &&
         researchItems >= 11 &&
         goalItems >= 1 &&
         unlockItems >= 2 &&
+        /命盘谱系/.test(buildLineageCardText) &&
+        /长期主修|待沉淀/.test(buildLineageSummary) &&
+        /长期主修|谱系校准|角色|流派|节点|研究/.test(buildLineageGuide) &&
+        buildLineageTrackCount >= 4 &&
         /命盘档案室/.test(roomText) &&
         /远征命盘归档/.test(researchText) &&
         /实战样本对照榜/.test(researchText) &&
+        /季押卷|结业验证状/.test(researchText) &&
+        sanctumLineageDetail.length > 0 &&
+        /命盘谱系：角色 .*流派 .*节点 .*研究 /.test(sanctumLineageProgress) &&
+        /最近研究|角色谱系|流派谱系|节点谱系|研究谱系/.test(sanctumLineageGuide) &&
+        /主修流派|研究倾向/.test(sanctumLineageChipsText) &&
+        sanctumLineageTrackCount >= 4 &&
+        sanctumSeasonBoardSummary.length > 0 &&
+        sanctumSeasonBoardDetail.length > 0 &&
+        /季押卷/.test(sanctumSeasonBoardSettlement) &&
+        /结业验证/.test(sanctumSeasonBoardVerification) &&
+        /赛季天道盘：.+ · (采样期|锁线期|定榜期) · /.test(sanctumSeasonBoardProgress) &&
+        /赛季天道盘：/.test(sanctumSeasonBoardGuide) &&
+        /季押卷/.test(sanctumSeasonBoardSettlementGuide) &&
+        /结业验证/.test(sanctumSeasonBoardVerificationGuide) &&
+        /季盘阶段|赛季主轴|季盘进度|季押卷/.test(sanctumSeasonBoardChipsText) &&
+        /季押卷裁定/.test(sanctumSeasonBoardSettlementCardText) &&
+        /结业验证状/.test(sanctumSeasonBoardVerificationCardText) &&
+        sanctumSeasonBoardGoalCount >= 2 &&
+        sanctumSeasonBoardLaneCount >= 3 &&
+        sanctumSeasonBoardTaskCount >= 3 &&
+        sanctumSeasonBoardTaskTexts.every((text) => !/(\d+\/\d+).+\1/.test(text)) &&
+        sanctumSeasonBoardVerificationCount >= 2 &&
+        sanctumSeasonBoardSideVerificationGoalCount >= 1 &&
+        sanctumSeasonBoardSideVerificationResearchCount >= 1 &&
+        /旁验证状|七日劫数/.test(sanctumSeasonBoardSideVerificationText) &&
+        sanctumAftereffectSummary.length > 0 &&
+        sanctumAftereffectDetail.length > 0 &&
+        /界痕后效：生效 \d+ \/ 待生效 \d+/.test(sanctumAftereffectProgress) &&
+        /后效|生效/.test(sanctumAftereffectGuide) &&
+        /界痕类型|当前状态|偏置/.test(sanctumAftereffectChipsText) &&
+        sanctumAftereffectTrackCount >= 1 &&
         /局外中枢进度/.test(summaryText) &&
         /观星留痕|炼器铭刻|三段套装/.test(summaryText) &&
         /样本对照/.test(summaryText) &&
-        /法则：|法宝：|炼器研究：|套装共鸣：|炼器铭刻：|Boss 档案：|伏魔台记忆战：|样本对照：|观星留痕：/.test(progressText) &&
-        /当前精选命盘|命盘档案/.test(sanctumGuideText),
+        /法则：|法宝：|炼器研究：|套装共鸣：|炼器铭刻：|Boss 档案：|伏魔台记忆战：|样本对照：|观星留痕：|赛季天道盘：/.test(progressText) &&
+        /界痕后效：生效 \d+ \/ 待生效 \d+/.test(progressText) &&
+        /当前精选命盘|命盘档案|赛季天道盘：/.test(sanctumGuideText) &&
+        !!expeditionSeasonBoard &&
+        !!chapterSeasonBoard &&
+        expeditionSeasonBoard.summaryLine === chapterSeasonBoard.summaryLine &&
+        expeditionSeasonBoard.detailLine === chapterSeasonBoard.detailLine &&
+        expeditionSeasonBoard.guideLine === chapterSeasonBoard.guideLine &&
+        expeditionSeasonBoard.statusLine === chapterSeasonBoard.statusLine &&
+        expeditionSeasonBoard.phaseLabel === chapterSeasonBoard.phaseLabel &&
+        expeditionSeasonBoard.themeLabel === chapterSeasonBoard.themeLabel &&
+        expeditionSeasonBoard.progress?.progressText === chapterSeasonBoard.progress?.progressText &&
+        expeditionSeasonBoard.completedTaskCount === chapterSeasonBoard.completedTaskCount &&
+        expeditionSeasonBoard.totalTaskCount === chapterSeasonBoard.totalTaskCount &&
+        expeditionSeasonBoard.lanes?.length === chapterSeasonBoard.lanes?.length &&
+        (expeditionSeasonBoard.totalTaskCount || 0) >= 3 &&
+        !!expeditionAftereffects &&
+        !!chapterAftereffects &&
+        expeditionAftereffects.summaryLine === chapterAftereffects.summaryLine &&
+        expeditionAftereffects.detailLine === chapterAftereffects.detailLine &&
+        expeditionAftereffects.guideLine === chapterAftereffects.guideLine &&
+        expeditionAftereffects.currentStatusLine === chapterAftereffects.currentStatusLine &&
+        chapterAftereffects.activeCount === expeditionAftereffects.activeCount &&
+        chapterAftereffects.pendingCount === expeditionAftereffects.pendingCount &&
+        ((expeditionAftereffects.activeCount || 0) + (expeditionAftereffects.pendingCount || 0)) >= 1 &&
+        chapterAftereffects.primary?.name === expeditionAftereffects.primary?.name &&
+        chapterAftereffects.primary?.templateId === expeditionAftereffects.primary?.templateId &&
+        chapterAftereffects.primary?.status === expeditionAftereffects.primary?.status &&
+        chapterAftereffects.primary?.statusLine === expeditionAftereffects.primary?.statusLine,
       buildSubtitle,
       buildHeroText,
       buildMetricCount,
       buildNotesText,
       buildGuideText,
+      buildLineageCardText,
+      buildLineageSummary,
+      buildLineageGuide,
+      buildLineageTrackCount,
       sanctumSubtitle,
       roomCards,
       researchItems,
@@ -919,7 +2630,41 @@ function rectObj(rect) {
       researchText,
       summaryText,
       progressText,
-      sanctumGuideText
+      sanctumGuideText,
+      sanctumLineageDetail,
+      sanctumLineageProgress,
+      sanctumLineageGuide,
+      sanctumLineageChipsText,
+      sanctumLineageTrackCount,
+      sanctumSeasonBoardSummary,
+      sanctumSeasonBoardDetail,
+      sanctumSeasonBoardSettlement,
+      sanctumSeasonBoardVerification,
+      sanctumSeasonBoardProgress,
+      sanctumSeasonBoardGuide,
+      sanctumSeasonBoardSettlementGuide,
+      sanctumSeasonBoardVerificationGuide,
+      sanctumSeasonBoardChipsText,
+      sanctumSeasonBoardSettlementCardText,
+      sanctumSeasonBoardVerificationCardText,
+      sanctumSeasonBoardGoalCount,
+      sanctumSeasonBoardLaneCount,
+      sanctumSeasonBoardTaskCount,
+      sanctumSeasonBoardTaskTexts,
+      sanctumSeasonBoardVerificationCount,
+      sanctumSeasonBoardSideVerificationGoalCount,
+      sanctumSeasonBoardSideVerificationResearchCount,
+      sanctumSeasonBoardSideVerificationText,
+      sanctumAftereffectSummary,
+      sanctumAftereffectDetail,
+      sanctumAftereffectProgress,
+      sanctumAftereffectGuide,
+      sanctumAftereffectChipsText,
+      sanctumAftereffectTrackCount,
+      expeditionSeasonBoard,
+      chapterSeasonBoard,
+      expeditionAftereffects,
+      chapterAftereffects
     };
   });
   add(
@@ -932,6 +2677,390 @@ function rectObj(rect) {
     document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
   });
   await safeAuditScreenshot(page, path.join(outDir, 'sanctum-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
+  const reopenSanctumCollection = async () => {
+    await page.evaluate(() => {
+      if (!window.game || typeof game.showCollection !== 'function') return;
+      game.showCollection();
+      if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('sanctum');
+      if (typeof game.initCollection === 'function') game.initCollection();
+    });
+    await page.waitForTimeout(250);
+  };
+  const runSanctumSideVerificationClickProbe = async ({ selector, missingReason, countKey, screenshotName }) => {
+    const actionCount = await page.locator(selector).count();
+    let probe = {
+      ok: false,
+      reason: missingReason,
+      [countKey]: actionCount
+    };
+    if (actionCount <= 0) return probe;
+
+    await page.click(selector, { timeout: 5000, force: true });
+    try {
+      await page.waitForFunction(() => {
+        const titleText = (document.getElementById('challenge-hub-title')?.textContent || '').replace(/\s+/g, ' ').trim();
+        const summaryText = (document.getElementById('challenge-hub-summary')?.textContent || '').replace(/\s+/g, ' ').trim();
+        return window.game?.currentScreen === 'challenge-screen' && titleText.length > 0 && summaryText.length > 0;
+      }, { timeout: 5000 });
+      probe = await page.evaluate(({ key, count }) => {
+        const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
+        const activeTab = document.querySelector('#challenge-screen [data-challenge-tab].active')?.getAttribute('data-challenge-tab') || '';
+        const activeTabText = text(document.querySelector('#challenge-screen [data-challenge-tab].active'));
+        const titleText = text(document.getElementById('challenge-hub-title'));
+        const subtitleText = text(document.getElementById('challenge-hub-subtitle'));
+        const scoreSummaryText = text(document.getElementById('challenge-hub-summary'));
+        return {
+          ok:
+            game.currentScreen === 'challenge-screen' &&
+            game.challengeHubState?.tab === 'weekly' &&
+            activeTab === 'weekly' &&
+            /七日劫数/.test(`${titleText} ${subtitleText} ${activeTabText}`) &&
+            /周劫旁证校卷/.test(scoreSummaryText) &&
+            /周累计积分|历史最高单次/.test(scoreSummaryText),
+          currentScreen: game.currentScreen || '',
+          challengeTab: game.challengeHubState?.tab || '',
+          activeTab,
+          activeTabText,
+          titleText,
+          subtitleText,
+          scoreSummaryText,
+          [key]: count
+        };
+      }, { key: countKey, count: actionCount });
+    } catch (error) {
+      probe = {
+        ok: false,
+        reason: 'challenge_hub_not_ready',
+        [countKey]: actionCount,
+        error: error?.message || String(error)
+      };
+    }
+    await safeAuditScreenshot(page, path.join(outDir, screenshotName), 'browser_meta_screen_audit', { timeout: 9000 });
+    return probe;
+  };
+
+  await reopenSanctumCollection();
+  const sanctumSideVerificationGoalSelector = '#sanctum-goal-list [data-season-board-goal-id^="season_board_side_verification_goal_"] [data-season-board-action="true"]';
+  const sanctumSideVerificationClickProbe = await runSanctumSideVerificationClickProbe({
+    selector: sanctumSideVerificationGoalSelector,
+    missingReason: 'missing_side_verification_goal_button',
+    countKey: 'goalCount',
+    screenshotName: 'challenge-side-verification-weekly.png'
+  });
+  add(
+    'sanctum side verification goal clicks through to weekly challenge hub',
+    !!sanctumSideVerificationClickProbe?.ok,
+    JSON.stringify(sanctumSideVerificationClickProbe || null)
+  );
+
+  await reopenSanctumCollection();
+  const sanctumSideVerificationResearchSelector = '#sanctum-research-list [data-season-board-research-id^="season_board_side_verification_"] [data-season-board-research-action="true"]';
+  const sanctumSideVerificationResearchClickProbe = await runSanctumSideVerificationClickProbe({
+    selector: sanctumSideVerificationResearchSelector,
+    missingReason: 'missing_side_verification_research_button',
+    countKey: 'researchCount',
+    screenshotName: 'challenge-side-verification-research-weekly.png'
+  });
+  add(
+    'sanctum side verification research clicks through to seeded weekly challenge hub',
+    !!sanctumSideVerificationResearchClickProbe?.ok,
+    JSON.stringify(sanctumSideVerificationResearchClickProbe || null)
+  );
+
+  const sanctumHeavenlyMandateProbe = await page.evaluate(() => {
+    const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!window.game || !game.player || typeof game.showCollection !== 'function') {
+      return { ok: false, reason: 'no_game' };
+    }
+    if (typeof game.player?.setRunPath === 'function') game.player.setRunPath('insight');
+    if (typeof game.player?.setRunDestiny === 'function') game.player.setRunDestiny('rebelScale', 1);
+    const rawArchive = [
+      {
+        id: 'run_slate_mandate_probe_6',
+        chapterIndex: 6,
+        chapterName: '第 6 章·星镜归档',
+        endingId: 'alliance',
+        endingName: '星图合卷',
+        endingIcon: '🔭',
+        score: 256,
+        branchName: '观测锁线',
+        tags: ['课题·推演控场', '答卷·天象合卷'],
+        answerReview: {
+          ratingLabel: '天象合卷',
+          ratingTone: 'completed',
+          trainingAdvice: '继续沿观测锁线压路线贴合与控场节奏。'
+        },
+        timestamp: 256000
+      }
+    ];
+    if (typeof game.recordRunPathBossSample === 'function' && typeof game.player?.getRunPathMeta === 'function') {
+      game.recordRunPathBossSample(game.player.getRunPathMeta(), {
+        id: 'danZun',
+        name: '丹尊',
+        icon: '🗿',
+        realm: 6
+      }, {
+        characterId: 'linFeng',
+        turns: 4,
+        completedAt: Date.now() - 1000
+      });
+    }
+    if (typeof game.normalizeRunSlateArchive === 'function') {
+      game.runSlateArchive = game.normalizeRunSlateArchive(rawArchive);
+    } else {
+      game.runSlateArchive = rawArchive;
+    }
+    if (typeof game.persistRunSlateArchive === 'function') game.persistRunSlateArchive();
+    const focus = typeof game.buildObservatoryTrainingFocusFromSlate === 'function'
+      ? game.buildObservatoryTrainingFocusFromSlate(rawArchive[0])
+      : null;
+    if (focus && typeof game.setObservatoryTrainingFocus === 'function') {
+      game.setObservatoryTrainingFocus(focus, { silent: true });
+    }
+    if (typeof game.normalizeSanctumAgendaState === 'function') {
+      game.sanctumAgendaState = game.normalizeSanctumAgendaState({
+        lastResolved: {
+          agendaId: 'audit_lineage_payload',
+          icon: '🧮',
+          name: '星镜稳线',
+          sourceRunId: rawArchive[0].id,
+          sourceTitle: '星镜试锋',
+          themeKey: 'oracle',
+          themeLabel: '推演控场',
+          routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+          focusNodeTypes: ['observatory', 'event', 'rift'],
+          focusNodeLine: '优先节点：观星 / 事件 / 裂隙',
+          progress: 3,
+          target: 3,
+          selectedDecisionLabel: '加倍投入',
+          selectedDecisionLine: '继续沿观星链路补齐收益兑现。',
+          selectedContractLabel: '星镜锁线',
+          selectedContractLine: '锁定观星 / 事件 / 裂隙线路。',
+          contractResolved: true,
+          contractSuccess: true,
+          contractResolutionLine: '锁线契约：星镜锁线已兑现',
+          outcome: 'success',
+          outcomeLabel: '结题成功',
+          summaryLine: '星镜稳线已结题，路线贴合与控场节奏进入长期记录。',
+          selectedAt: Date.now() - 2000,
+          updatedAt: Date.now() - 1500
+        },
+        history: [],
+        totalCompleted: 1,
+        totalFailed: 0
+      });
+    }
+
+    game.showCollection();
+    if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('sanctum');
+    if (typeof game.initCollection === 'function') game.initCollection();
+
+    const subtitleText = text(document.getElementById('collection-subtitle'));
+    const summaryText = text(document.getElementById('sanctum-summary'));
+    const goalText = text(document.getElementById('sanctum-goal-list'));
+    const guideText = text(document.getElementById('sanctum-guide'));
+    const heavenlyMandateText = [
+      text(document.querySelector('[data-heavenly-mandate-summary="true"]')),
+      text(document.querySelector('[data-heavenly-mandate-guide="overview"]')),
+      summaryText,
+      goalText,
+      guideText
+    ].join(' ').trim();
+
+    let payload = {};
+    try {
+      payload = JSON.parse(typeof window.render_game_to_text === 'function' ? window.render_game_to_text() : '{}');
+    } catch (error) {
+      payload = {};
+    }
+    const expeditionMandate = payload?.expedition?.mandate || null;
+    const chapterMandate = payload?.map?.chapter?.mandate || null;
+    const expeditionLineage = payload?.expedition?.lineage || null;
+    const chapterLineage = payload?.map?.chapter?.lineage || null;
+
+    return {
+      ok:
+        /命盘档案/.test(subtitleText) &&
+        /天道敕令/.test(heavenlyMandateText) &&
+        !!expeditionMandate &&
+        !!expeditionMandate.weekTag &&
+        !!expeditionMandate.themeLabel &&
+        Array.isArray(expeditionMandate.lanes) &&
+        expeditionMandate.lanes.length === 3 &&
+        !!expeditionLineage &&
+        !!expeditionLineage.summaryLine &&
+        Array.isArray(expeditionLineage.tracks) &&
+        expeditionLineage.tracks.length >= 4 &&
+        !!chapterMandate &&
+        chapterMandate.weekTag === expeditionMandate.weekTag &&
+        chapterMandate.themeId === expeditionMandate.themeId &&
+        !!chapterLineage &&
+        chapterLineage.summaryLine === expeditionLineage.summaryLine &&
+        chapterLineage.detailLine === expeditionLineage.detailLine &&
+        (chapterLineage.progress?.trackedCharacters || 0) === (expeditionLineage.progress?.trackedCharacters || 0) &&
+        (chapterLineage.progress?.trackedStyles || 0) === (expeditionLineage.progress?.trackedStyles || 0) &&
+        (chapterLineage.progress?.trackedNodes || 0) === (expeditionLineage.progress?.trackedNodes || 0) &&
+        (chapterLineage.progress?.researchHistoryCount || 0) === (expeditionLineage.progress?.researchHistoryCount || 0),
+      subtitleText,
+      heavenlyMandateText,
+      expeditionMandate,
+      chapterMandate,
+      expeditionLineage,
+      chapterLineage
+    };
+  });
+  add(
+    'sanctum page surfaces heavenly mandate wording and payload mandate snapshots',
+    !!sanctumHeavenlyMandateProbe?.ok,
+    JSON.stringify(sanctumHeavenlyMandateProbe || null)
+  );
+
+  const sanctumHeavenlyMandateDebtProbe = await page.evaluate(() => {
+    const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!window.game || !game.player || typeof game.showCollection !== 'function') {
+      return { ok: false, reason: 'no_game' };
+    }
+    const currentWeekTag = typeof game.getHeavenlyMandateWeekMeta === 'function'
+      ? String(game.getHeavenlyMandateWeekMeta().weekTag || '').trim()
+      : '';
+    const debtSlate = {
+      id: 'audit_heavenly_mandate_debt_pack',
+      chapterIndex: 5,
+      chapterName: '第 5 章·镜债旧卷',
+      endingId: 'debt_probe',
+      endingName: '留痕待补',
+      endingIcon: '📚',
+      score: 204,
+      branchName: '镜债锁线',
+      tags: ['课题·镜债校卷', '答卷·留痕待补'],
+      answerReview: {
+        ratingLabel: '留痕待补',
+        ratingTone: 'selected',
+        trainingAdvice: '先把上一道押卷留下的债账补掉，再考虑冲更高压样本。'
+      },
+      timestamp: Date.now() - (8 * 24 * 60 * 60 * 1000)
+    };
+    if (typeof game.normalizeRunSlateArchive === 'function') {
+      game.runSlateArchive = game.normalizeRunSlateArchive([debtSlate]);
+    } else {
+      game.runSlateArchive = [debtSlate];
+    }
+    if (typeof game.persistRunSlateArchive === 'function') game.persistRunSlateArchive();
+    if (typeof game.normalizeSanctumAgendaState === 'function') {
+      game.sanctumAgendaState = game.normalizeSanctumAgendaState({
+        lastResolved: {
+          agendaId: 'audit_heavenly_mandate_debt_agenda',
+          icon: '🧮',
+          name: '镜债校卷',
+          sourceRunId: debtSlate.id,
+          sourceTitle: '镜债试锋',
+          themeKey: 'oracle',
+          themeLabel: '推演控场',
+          ratingLabel: '留痕待补',
+          ratingTone: 'selected',
+          trainingAdvice: '先把上一道押卷留下的债账补掉，再考虑冲更高压样本。',
+          highlightLine: '这轮押卷没有真正结成，下一章需要优先清账。',
+          routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+          focusNodeTypes: ['observatory', 'event', 'memory_rift'],
+          focusNodeLine: '优先节点：观星 / 事件 / 裂隙',
+          progress: 1,
+          target: 3,
+          selectedDecisionLabel: '保卷回收',
+          selectedDecisionLine: '先保住残卷，再找机会补押卷主轴。',
+          selectedContractLabel: '镜债锁线',
+          selectedContractLine: '锁住观星 / 事件 / 裂隙线路，但欠下一笔清账任务。',
+          contractResolved: true,
+          contractSuccess: false,
+          contractResolutionLine: '锁线契约：镜债锁线未兑现 · 契押：🔮 1',
+          contractSignCostLine: '🔮 1',
+          outcome: 'failed',
+          outcomeLabel: '研究未成',
+          grantedLine: '',
+          reasonLine: '本轮没有把锁线答卷真正补成卷，洞府改以债账方式追踪。',
+          summaryLine: '镜债校卷没有结成，留下了一笔待清的研究债账。',
+          recoveryEligible: true,
+          recoveryLabel: '残卷回收',
+          recoveryTier: 'partial',
+          recoveryTierLabel: '轻回收',
+          recoveryLine: '洞府已回收一部分残卷，但下一轮要优先补这笔镜债。',
+          recoveryHintLine: '先去高压环境补一轮镜债验证，再决定要不要继续冲榜。',
+          rewardTrackId: 'observatory',
+          rewardTrackName: '命盘档案室',
+          rewardTrackIcon: '🔭'
+        },
+        history: [],
+        totalCompleted: 0,
+        totalFailed: 1
+      });
+    }
+    const endlessState = typeof game.ensureEndlessState === 'function'
+      ? game.ensureEndlessState()
+      : null;
+    if (endlessState) {
+      endlessState.currentCycle = 1;
+      endlessState.seasonWeekTag = currentWeekTag;
+      endlessState.seasonCycleClears = 1;
+      endlessState.seasonScore = 128;
+    }
+
+    game.showCollection();
+    if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('sanctum');
+    if (typeof game.initCollection === 'function') game.initCollection();
+
+    const heavenlyMandateText = [
+      text(document.querySelector('[data-heavenly-mandate-summary="true"]')),
+      text(document.querySelector('[data-heavenly-mandate-detail="true"]')),
+      text(document.querySelector('[data-heavenly-mandate-guide="overview"]')),
+      text(document.querySelector('[data-heavenly-mandate-guide="goal"]'))
+    ].join(' ').trim();
+    const boardTaskTexts = Array.from(document.querySelectorAll('[data-heavenly-mandate-task="true"]'))
+      .map((node) => text(node))
+      .filter(Boolean);
+    const goalAction = document.querySelector('#sanctum-goal-list [data-heavenly-mandate-action="true"]');
+
+    let payload = {};
+    try {
+      payload = JSON.parse(typeof window.render_game_to_text === 'function' ? window.render_game_to_text() : '{}');
+    } catch (error) {
+      payload = {};
+    }
+    const expeditionMandate = payload?.expedition?.mandate || null;
+    const chapterMandate = payload?.map?.chapter?.mandate || null;
+    const occupiedTask = (expeditionMandate?.lanes || [])
+      .flatMap((lane) => (Array.isArray(lane?.tasks) ? lane.tasks : []))
+      .find((task) => task.id === expeditionMandate?.focusTask?.id) || null;
+    const mirroredNode = expeditionMandate?.focusTask?.id
+      ? document.querySelector(`[data-heavenly-mandate-task-id="${expeditionMandate.focusTask.id}"]`)
+      : null;
+
+    return {
+      ok:
+        /债|欠卷|清/.test(heavenlyMandateText) &&
+        boardTaskTexts.some((line) => /债|欠卷|清/.test(line)) &&
+        !!goalAction &&
+        !!expeditionMandate?.focusTask &&
+        expeditionMandate.focusTask.source === 'seasonDebtPack' &&
+        expeditionMandate.focusTask.isPlaceholder === false &&
+        expeditionMandate.focusTask.occupiesStrongSlot === true &&
+        !!occupiedTask &&
+        occupiedTask.id === expeditionMandate.focusTask.id &&
+        occupiedTask.occupiesStrongSlot === true &&
+        !!mirroredNode &&
+        !!chapterMandate?.focusTask &&
+        chapterMandate.focusTask.id === expeditionMandate.focusTask.id,
+      heavenlyMandateText,
+      boardTaskTexts,
+      expeditionMandate,
+      chapterMandate,
+      occupiedTask
+    };
+  });
+  add(
+    'sanctum page surfaces debt-clearing as a real heavenly mandate lane occupation',
+    !!sanctumHeavenlyMandateDebtProbe?.ok,
+    JSON.stringify(sanctumHeavenlyMandateDebtProbe || null)
+  );
 
   const runSlateShelfProbe = await page.evaluate(() => {
     if (!window.game) return { ok: false, reason: 'no_game' };

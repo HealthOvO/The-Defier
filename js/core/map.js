@@ -316,6 +316,30 @@ class GameMap {
             });
         }
 
+        const aftereffectShift = this.game && typeof this.game.getFateAftereffectWeightShift === 'function'
+            ? this.game.getFateAftereffectWeightShift()
+            : null;
+        if (aftereffectShift && typeof aftereffectShift === 'object') {
+            Object.keys(aftereffectShift).forEach((key) => {
+                if (!Object.prototype.hasOwnProperty.call(weights, key)) return;
+                const delta = Number(aftereffectShift[key]);
+                if (!Number.isFinite(delta)) return;
+                weights[key] += delta;
+            });
+        }
+
+        const seasonBoardShift = this.game && typeof this.game.getSeasonBoardWeightShift === 'function'
+            ? this.game.getSeasonBoardWeightShift()
+            : null;
+        if (seasonBoardShift && typeof seasonBoardShift === 'object') {
+            Object.keys(seasonBoardShift).forEach((key) => {
+                if (!Object.prototype.hasOwnProperty.call(weights, key)) return;
+                const delta = Number(seasonBoardShift[key]);
+                if (!Number.isFinite(delta)) return;
+                weights[key] += delta;
+            });
+        }
+
         this.applyStrategicNodeBias(weights, row, totalRows, realm, context);
         this.applyRouteDiversityPressure(weights, row, totalRows, context);
         this.applyLongTermDiversityPressure(weights, row, totalRows, context);

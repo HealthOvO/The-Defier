@@ -927,6 +927,190 @@
         };
     };
 
+    const serializeSeasonBoardSnapshot = (board = null) => {
+        const source = board && typeof board === 'object' ? board : null;
+        if (!source) return null;
+        const settlement = source.settlement && typeof source.settlement === 'object'
+            ? {
+                id: String(source.settlement.id || ''),
+                sourceRunId: String(source.settlement.sourceRunId || ''),
+                chapterIndex: clampInt(source.settlement.chapterIndex, 0, 999),
+                outcomeId: String(source.settlement.outcomeId || ''),
+                outcomeLabel: String(source.settlement.outcomeLabel || ''),
+                outcomeTone: String(source.settlement.outcomeTone || ''),
+                summaryLine: String(source.settlement.summaryLine || ''),
+                detailLine: String(source.settlement.detailLine || ''),
+                guideLine: String(source.settlement.guideLine || ''),
+                statusLine: String(source.settlement.statusLine || ''),
+                progressText: String(source.settlement.progressText || ''),
+                settlementWeekTag: String(source.settlement.settlementWeekTag || ''),
+                settlementPhaseId: String(source.settlement.settlementPhaseId || ''),
+                settlementSource: String(source.settlement.settlementSource || ''),
+                resolutionTier: String(source.settlement.resolutionTier || ''),
+                resolvedStatus: String(source.settlement.resolvedStatus || ''),
+                writebackLine: String(source.settlement.writebackLine || ''),
+                proofQuality: String(source.settlement.proofQuality || ''),
+                lineageStyle: String(source.settlement.lineageStyle || ''),
+                primaryVerificationRecordId: String(source.settlement.primaryVerificationRecordId || ''),
+                sideVerificationRecordId: String(source.settlement.sideVerificationRecordId || ''),
+                selectedContractLabel: String(source.settlement.selectedContractLabel || ''),
+                contractResolutionLine: String(source.settlement.contractResolutionLine || ''),
+                recoveryEligible: !!source.settlement.recoveryEligible
+            }
+            : null;
+        const debtPack = source.debtPack && typeof source.debtPack === 'object'
+            ? {
+                id: String(source.debtPack.id || ''),
+                sourceRunId: String(source.debtPack.sourceRunId || ''),
+                chapterIndex: clampInt(source.debtPack.chapterIndex, 0, 999),
+                sourceAgendaId: String(source.debtPack.sourceAgendaId || ''),
+                sourceLabel: String(source.debtPack.sourceLabel || ''),
+                debtThemeId: String(source.debtPack.debtThemeId || ''),
+                debtThemeLabel: String(source.debtPack.debtThemeLabel || ''),
+                summaryLine: String(source.debtPack.summaryLine || ''),
+                detailLine: String(source.debtPack.detailLine || ''),
+                guideLine: String(source.debtPack.guideLine || ''),
+                statusLine: String(source.debtPack.statusLine || ''),
+                progressText: String(source.debtPack.progressText || ''),
+                settleWindowText: String(source.debtPack.settleWindowText || ''),
+                recommendedValidationLabel: String(source.debtPack.recommendedValidationLabel || ''),
+                recommendedAnchorSection: String(source.debtPack.recommendedAnchorSection || ''),
+                status: String(source.debtPack.status || ''),
+                deferCount: clampInt(source.debtPack.deferCount, 0, 99),
+                openedWeekTag: String(source.debtPack.openedWeekTag || ''),
+                carryIntoWeekTag: String(source.debtPack.carryIntoWeekTag || ''),
+                occupiedMandateTaskId: String(source.debtPack.occupiedMandateTaskId || ''),
+                occupationReason: String(source.debtPack.occupationReason || ''),
+                occupiesStrongSlot: !!source.debtPack.occupiesStrongSlot,
+                resolvedStatus: String(source.debtPack.resolvedStatus || ''),
+                writebackLine: String(source.debtPack.writebackLine || ''),
+                verificationRecordId: String(source.debtPack.verificationRecordId || ''),
+                selectedContractLabel: String(source.debtPack.selectedContractLabel || ''),
+                contractResolutionLine: String(source.debtPack.contractResolutionLine || ''),
+                recoveryEligible: !!source.debtPack.recoveryEligible
+            }
+            : null;
+        const lanes = readArray(source.lanes).map((lane) => ({
+            id: String(lane?.id || ''),
+            label: String(lane?.label || ''),
+            icon: String(lane?.icon || ''),
+            summaryLine: String(lane?.summaryLine || ''),
+            completedCount: clampInt(lane?.completedCount, 0, 99),
+            totalCount: clampInt(lane?.totalCount, 0, 99),
+            tasks: readArray(lane?.tasks).map((task) => ({
+                id: String(task?.id || ''),
+                label: String(task?.label || ''),
+                icon: String(task?.icon || ''),
+                progress: clampInt(task?.progress, 0, 99),
+                target: clampInt(task?.target, 1, 99),
+                progressText: String(task?.progressText || ''),
+                completed: !!task?.completed,
+                hintLine: String(task?.hintLine || ''),
+                statusLine: String(task?.statusLine || ''),
+                anchorSection: String(task?.anchorSection || '')
+            }))
+        }));
+        return {
+            seasonId: String(source.seasonId || ''),
+            seasonLabel: String(source.seasonLabel || ''),
+            seasonName: String(source.seasonName || ''),
+            seasonIcon: String(source.seasonIcon || ''),
+            seasonSource: String(source.seasonSource || ''),
+            weekTag: String(source.weekTag || ''),
+            weekLabel: String(source.weekLabel || ''),
+            phaseId: String(source.phaseId || ''),
+            phaseLabel: String(source.phaseLabel || ''),
+            phaseIcon: String(source.phaseIcon || ''),
+            themeId: String(source.themeId || ''),
+            themeLabel: String(source.themeLabel || ''),
+            summaryLine: String(source.summaryLine || ''),
+            detailLine: String(source.detailLine || ''),
+            guideLine: String(source.guideLine || ''),
+            statusLine: String(source.statusLine || ''),
+            rewardLine: String(source.rewardLine || ''),
+            crossModeSummary: String(source.crossModeSummary || ''),
+            completedTaskCount: clampInt(source.completedTaskCount, 0, 99),
+            totalTaskCount: clampInt(source.totalTaskCount, 0, 99),
+            progress: {
+                completed: clampInt(source.progress?.completed ?? source.completedTaskCount, 0, 99),
+                total: clampInt(source.progress?.total ?? source.totalTaskCount, 0, 99),
+                progressText: String(source.progress?.progressText || ''),
+                ratio: Math.max(0, Math.min(1, safeNumber(source.progress?.ratio, 0)))
+            },
+            settlement,
+            debtPack,
+            weekVerdictLedger: source.weekVerdictLedger?.current
+                ? {
+                    current: {
+                        ledgerId: String(source.weekVerdictLedger.current.ledgerId || ''),
+                        weekTag: String(source.weekVerdictLedger.current.weekTag || ''),
+                        weekLabel: String(source.weekVerdictLedger.current.weekLabel || ''),
+                        phaseId: String(source.weekVerdictLedger.current.phaseId || ''),
+                        phaseLabel: String(source.weekVerdictLedger.current.phaseLabel || ''),
+                        sourceRunId: String(source.weekVerdictLedger.current.sourceRunId || ''),
+                        chapterIndex: clampInt(source.weekVerdictLedger.current.chapterIndex, 0, 999),
+                        settlementId: String(source.weekVerdictLedger.current.settlementId || ''),
+                        settlementOutcomeId: String(source.weekVerdictLedger.current.settlementOutcomeId || ''),
+                        settlementOutcomeLabel: String(source.weekVerdictLedger.current.settlementOutcomeLabel || ''),
+                        debtPackId: String(source.weekVerdictLedger.current.debtPackId || ''),
+                        debtStatus: String(source.weekVerdictLedger.current.debtStatus || ''),
+                        deferCount: clampInt(source.weekVerdictLedger.current.deferCount, 0, 99),
+                        carryIntoWeekTag: String(source.weekVerdictLedger.current.carryIntoWeekTag || ''),
+                        primaryVerificationOrderId: String(source.weekVerdictLedger.current.primaryVerificationOrderId || ''),
+                        sideVerificationOrderId: String(source.weekVerdictLedger.current.sideVerificationOrderId || ''),
+                        resolutionTier: String(source.weekVerdictLedger.current.resolutionTier || ''),
+                        resolvedStatus: String(source.weekVerdictLedger.current.resolvedStatus || ''),
+                        primaryVerificationResultStatus: String(source.weekVerdictLedger.current.primaryVerificationResultStatus || ''),
+                        sideVerificationResultStatus: String(source.weekVerdictLedger.current.sideVerificationResultStatus || ''),
+                        primaryWritebackMode: String(source.weekVerdictLedger.current.primaryWritebackMode || ''),
+                        sideWritebackMode: String(source.weekVerdictLedger.current.sideWritebackMode || ''),
+                        writebackLine: String(source.weekVerdictLedger.current.writebackLine || ''),
+                        proofQuality: String(source.weekVerdictLedger.current.proofQuality || ''),
+                        lineageStyle: String(source.weekVerdictLedger.current.lineageStyle || ''),
+                        carryIntoNextWeek: !!source.weekVerdictLedger.current.carryIntoNextWeek,
+                        settlementSource: String(source.weekVerdictLedger.current.settlementSource || ''),
+                        summaryLine: String(source.weekVerdictLedger.current.summaryLine || '')
+                    }
+                }
+                : null,
+            verificationOrders: readArray(source.verificationOrders).map((entry, index) => ({
+                id: String(entry?.id || `season_verification_${index + 1}`),
+                type: String(entry?.type || 'verify'),
+                role: String(entry?.role || ''),
+                label: String(entry?.label || `验证状 ${index + 1}`),
+                summaryLine: String(entry?.summaryLine || ''),
+                detailLine: String(entry?.detailLine || ''),
+                hintLine: String(entry?.hintLine || ''),
+                statusLine: String(entry?.statusLine || ''),
+                anchorSection: String(entry?.anchorSection || ''),
+                priority: clampInt(entry?.priority, 1, 9),
+                resultStatus: String(entry?.resultStatus || ''),
+                writebackMode: String(entry?.writebackMode || ''),
+                writebackLine: String(entry?.writebackLine || ''),
+                sourceMode: String(entry?.sourceMode || ''),
+                sourceModeLabel: String(entry?.sourceModeLabel || ''),
+                resolvedRunId: String(entry?.resolvedRunId || ''),
+                chapterIndex: clampInt(entry?.chapterIndex, 0, 999),
+                proofQuality: String(entry?.proofQuality || ''),
+                lineageStyle: String(entry?.lineageStyle || ''),
+                carryIntoNextWeek: !!entry?.carryIntoNextWeek
+            })),
+            nextTask: source.nextTask && typeof source.nextTask === 'object'
+                ? {
+                    laneId: String(source.nextTask.laneId || ''),
+                    laneLabel: String(source.nextTask.laneLabel || ''),
+                    id: String(source.nextTask.id || ''),
+                    label: String(source.nextTask.label || ''),
+                    progressText: String(source.nextTask.progressText || ''),
+                    hintLine: String(source.nextTask.hintLine || ''),
+                    statusLine: String(source.nextTask.statusLine || ''),
+                    anchorSection: String(source.nextTask.anchorSection || '')
+                }
+                : null,
+            lanes
+        };
+    };
+
     const buildObservatoryRoutePactReward = (focusNodeTypes = [], options = {}) => {
         const focus = readArray(focusNodeTypes).map((value) => String(value || '')).filter(Boolean);
         const reward = {};
@@ -3551,6 +3735,43 @@
         const agendaContractBreakdownLine = agendaContractLine
             ? `锁线契约：${agendaContractLine}`
             : '';
+        const lineage = typeof this.getFateLineageSnapshot === 'function'
+            ? this.getFateLineageSnapshot({ latestSlate: source })
+            : null;
+        const lineageSummaryLine = lineage?.summaryLine
+            ? `命盘谱系：${String(lineage.summaryLine || '').trim()}`
+            : '';
+        const lineageDetailLine = lineage?.detailLine
+            ? `谱系留痕：${String(lineage.detailLine || '').trim()}`
+            : '';
+        const aftereffects = typeof this.getFateAftereffectSnapshot === 'function'
+            ? this.getFateAftereffectSnapshot({
+                latestRunId: String(source.id || ''),
+                latestSlate: source,
+                currentChapterIndex: clampInt(source.chapterIndex, 0, 999)
+            })
+            : null;
+        const seasonBoard = typeof this.getSeasonBoardSnapshot === 'function'
+            ? this.getSeasonBoardSnapshot({ latestSlate: source })
+            : null;
+        const aftereffectSummaryLine = aftereffects?.summaryLine
+            ? `界痕后效：${String(aftereffects.summaryLine || '').trim()}`
+            : '';
+        const aftereffectStatusLine = aftereffects?.currentStatusLine
+            ? `后效状态：${String(aftereffects.currentStatusLine || '').trim()}`
+            : '';
+        const aftereffectDetailLine = aftereffects?.detailLine
+            ? `契约后效：${String(aftereffects.detailLine || '').trim()}`
+            : '';
+        const seasonSettlementLine = seasonBoard?.settlement?.summaryLine
+            ? `赛季押卷：${String(seasonBoard.settlement.summaryLine || '').trim()}`
+            : '';
+        const seasonDebtLine = seasonBoard?.debtPack?.summaryLine
+            ? String(seasonBoard.debtPack.summaryLine || '').trim()
+            : '';
+        const seasonVerificationLine = seasonBoard?.verificationOrders?.[0]?.summaryLine
+            ? `结业验证：${String(seasonBoard.verificationOrders[0].summaryLine || '').trim()}`
+            : '';
         const nemesisParts = [
             source.nemesisName || '',
             source.nemesisStatusLabel || source.nemesisStatus || '',
@@ -3569,17 +3790,85 @@
             ratingTone: String(answerReview?.ratingTone || (hasLockedBranch ? 'selected' : 'suggested')),
             highlightLine: String(answerReview?.highlightLine || answerReview?.overviewLine || fallbackHighlightLine),
             trainingAdvice: String(answerReview?.trainingAdvice || fallbackTrainingAdvice),
-            focusLines: [agendaFocusLine, agendaRecoveryLine, agendaContractLine, agendaContractCostLine, ...diagnosticLines].filter(Boolean).slice(0, 4),
-            breakdown: [agendaBreakdownLine, agendaContractBreakdownLine, ...breakdown].filter(Boolean).slice(0, 4),
+            focusLines: [seasonSettlementLine, agendaFocusLine, lineageSummaryLine, agendaRecoveryLine, agendaContractLine, agendaContractCostLine, aftereffectSummaryLine, aftereffectStatusLine, ...diagnosticLines].filter(Boolean).slice(0, 4),
+            breakdown: [seasonDebtLine, seasonVerificationLine, agendaBreakdownLine, lineageDetailLine, aftereffectDetailLine, agendaContractBreakdownLine, ...breakdown].filter(Boolean).slice(0, 4),
             tags: [
+                ...(seasonBoard?.settlement?.outcomeLabel ? [`押卷·${String(seasonBoard.settlement.outcomeLabel || '').trim()}`] : []),
+                ...(seasonBoard?.debtPack?.id ? ['债账·待清'] : []),
                 ...(agendaResolution ? [`议程·${String(agendaResolution.outcomeLabel || '研究未成').trim()}`] : []),
                 ...(agendaResolution?.selectedContractLabel ? [`契约·${agendaResolution.contractSuccess ? '兑现' : '未兑现'}`] : []),
                 ...(agendaResolution?.recoveryEligible ? [`回收·${String(agendaResolution.recoveryTierLabel || agendaResolution.recoveryLabel || '残卷').trim()}`] : []),
+                ...(lineage?.styleTrack?.dominantLabel ? [`谱系·${String(lineage.styleTrack.dominantLabel || '').trim()}`] : []),
+                ...(aftereffects?.primary?.templateLabel ? [`后效·${String(aftereffects.primary.templateLabel || '').trim()}`] : []),
                 ...readArray(source.tags).map((tag) => String(tag || '').trim()).filter(Boolean)
             ].filter(Boolean).slice(0, 6),
             branchName,
             branchLine: branchName ? `本章主线：${branchName}` : '',
             nemesisLine: nemesisParts.length > 0 ? `宿敌留痕：${nemesisParts.join(' · ')}` : '',
+            seasonBoard: serializeSeasonBoardSnapshot(seasonBoard),
+            lineage: lineage && typeof lineage === 'object'
+                ? {
+                    summaryLine: lineage.summaryLine || '',
+                    detailLine: lineage.detailLine || '',
+                    currentFocusLine: lineage.currentFocusLine || '',
+                    styleLabel: lineage.styleTrack?.dominantLabel || '',
+                    characterLabel: lineage.characterTrack?.dominantLabel || '',
+                    nodeLabel: lineage.nodeTrack?.dominantLabel || '',
+                    researchLabel: lineage.researchTrack?.dominantLabel || ''
+                }
+                : null,
+            aftereffects: aftereffects
+                ? {
+                    summaryLine: aftereffects.summaryLine || '',
+                    detailLine: aftereffects.detailLine || '',
+                    guideLine: aftereffects.guideLine || '',
+                    currentStatusLine: aftereffects.currentStatusLine || '',
+                    activeCount: clampInt(aftereffects.activeCount, 0, 99),
+                    pendingCount: clampInt(aftereffects.pendingCount, 0, 99),
+                    primary: aftereffects.primary
+                        ? {
+                            recordId: String(aftereffects.primary.recordId || ''),
+                            icon: String(aftereffects.primary.icon || ''),
+                            name: String(aftereffects.primary.name || ''),
+                            templateId: String(aftereffects.primary.templateId || ''),
+                            templateLabel: String(aftereffects.primary.templateLabel || ''),
+                            outcomeId: String(aftereffects.primary.outcomeId || ''),
+                            outcomeLabel: String(aftereffects.primary.outcomeLabel || ''),
+                            sourceLine: String(aftereffects.primary.sourceLine || ''),
+                            positiveLine: String(aftereffects.primary.positiveLine || ''),
+                            negativeLine: String(aftereffects.primary.negativeLine || ''),
+                            summaryLine: String(aftereffects.primary.summaryLine || ''),
+                            detailLine: String(aftereffects.primary.detailLine || ''),
+                            status: String(aftereffects.primary.status || ''),
+                            statusLabel: String(aftereffects.primary.statusLabel || ''),
+                            statusLine: String(aftereffects.primary.statusLine || ''),
+                            remainingChapters: clampInt(aftereffects.primary.remainingChapters, 0, 9),
+                            durationChapters: clampInt(aftereffects.primary.durationChapters, 1, 3),
+                            activationChapterIndex: clampInt(aftereffects.primary.activationChapterIndex, 0, 999)
+                        }
+                        : null,
+                    records: readArray(aftereffects.records).map((entry) => ({
+                        recordId: String(entry?.recordId || ''),
+                        icon: String(entry?.icon || ''),
+                        name: String(entry?.name || ''),
+                        templateId: String(entry?.templateId || ''),
+                        templateLabel: String(entry?.templateLabel || ''),
+                        outcomeId: String(entry?.outcomeId || ''),
+                        outcomeLabel: String(entry?.outcomeLabel || ''),
+                        sourceLine: String(entry?.sourceLine || ''),
+                        positiveLine: String(entry?.positiveLine || ''),
+                        negativeLine: String(entry?.negativeLine || ''),
+                        summaryLine: String(entry?.summaryLine || ''),
+                        detailLine: String(entry?.detailLine || ''),
+                        status: String(entry?.status || ''),
+                        statusLabel: String(entry?.statusLabel || ''),
+                        statusLine: String(entry?.statusLine || ''),
+                        remainingChapters: clampInt(entry?.remainingChapters, 0, 9),
+                        durationChapters: clampInt(entry?.durationChapters, 1, 3),
+                        activationChapterIndex: clampInt(entry?.activationChapterIndex, 0, 999)
+                    }))
+                }
+                : null,
             agenda: agendaResolution
                 ? {
                     agendaId: String(agendaResolution.agendaId || ''),
@@ -3757,6 +4046,22 @@
         const agenda = typeof this.getSanctumAgendaExpeditionSnapshot === 'function'
             ? this.getSanctumAgendaExpeditionSnapshot({ latestRunId: String(latestSlate?.id || '') })
             : null;
+        const mandate = typeof this.getHeavenlyMandateExpeditionSnapshot === 'function'
+            ? this.getHeavenlyMandateExpeditionSnapshot()
+            : null;
+        const lineage = typeof this.getFateLineageSnapshot === 'function'
+            ? this.getFateLineageSnapshot({ latestSlate })
+            : null;
+        const aftereffects = typeof this.getFateAftereffectSnapshot === 'function'
+            ? this.getFateAftereffectSnapshot({
+                latestRunId: String(latestSlate?.id || ''),
+                latestSlate,
+                expeditionState: state
+            })
+            : null;
+        const seasonBoard = typeof this.getSeasonBoardSnapshot === 'function'
+            ? this.getSeasonBoardSnapshot({ latestSlate })
+            : null;
         const recentFactionLogs = state ? this.getRecentExpeditionFactionLogs(state, 4) : [];
         const recentNemesisLogs = state ? this.getRecentExpeditionNemesisLogs(state, 4) : [];
         const engineeringInfluence = state ? this.getStrategicEngineeringExpeditionInfluence(state) : null;
@@ -3809,6 +4114,10 @@
             practiceTopic: serializeExpeditionPracticeTopic(practiceTopic),
             answerSheet: serializeExpeditionAnswerSheet(answerSheet),
             agenda,
+            mandate,
+            seasonBoard: serializeSeasonBoardSnapshot(seasonBoard),
+            lineage,
+            aftereffects,
             engineeringLink: engineeringInfluence
                 ? {
                     trackId: engineeringInfluence.engineeringTrackId,
@@ -4867,6 +5176,334 @@
                         failedCount: payload.expedition.agenda.failedCount || 0
                     }
                     : null;
+                payload.map.chapter.seasonBoard = payload.expedition.seasonBoard
+                    ? {
+                        seasonId: payload.expedition.seasonBoard.seasonId || '',
+                        seasonLabel: payload.expedition.seasonBoard.seasonLabel || '',
+                        seasonName: payload.expedition.seasonBoard.seasonName || '',
+                        seasonIcon: payload.expedition.seasonBoard.seasonIcon || '',
+                        seasonSource: payload.expedition.seasonBoard.seasonSource || '',
+                        weekTag: payload.expedition.seasonBoard.weekTag || '',
+                        weekLabel: payload.expedition.seasonBoard.weekLabel || '',
+                        phaseId: payload.expedition.seasonBoard.phaseId || '',
+                        phaseLabel: payload.expedition.seasonBoard.phaseLabel || '',
+                        phaseIcon: payload.expedition.seasonBoard.phaseIcon || '',
+                        themeId: payload.expedition.seasonBoard.themeId || '',
+                        themeLabel: payload.expedition.seasonBoard.themeLabel || '',
+                        summaryLine: payload.expedition.seasonBoard.summaryLine || '',
+                        detailLine: payload.expedition.seasonBoard.detailLine || '',
+                        guideLine: payload.expedition.seasonBoard.guideLine || '',
+                        statusLine: payload.expedition.seasonBoard.statusLine || '',
+                        rewardLine: payload.expedition.seasonBoard.rewardLine || '',
+                        crossModeSummary: payload.expedition.seasonBoard.crossModeSummary || '',
+                        completedTaskCount: payload.expedition.seasonBoard.completedTaskCount || 0,
+                        totalTaskCount: payload.expedition.seasonBoard.totalTaskCount || 0,
+                        progress: payload.expedition.seasonBoard.progress
+                            ? {
+                                completed: payload.expedition.seasonBoard.progress.completed || 0,
+                                total: payload.expedition.seasonBoard.progress.total || 0,
+                                progressText: payload.expedition.seasonBoard.progress.progressText || '',
+                                ratio: payload.expedition.seasonBoard.progress.ratio || 0
+                            }
+                            : null,
+                        settlement: payload.expedition.seasonBoard.settlement
+                            ? {
+                                id: payload.expedition.seasonBoard.settlement.id || '',
+                                sourceRunId: payload.expedition.seasonBoard.settlement.sourceRunId || '',
+                                chapterIndex: payload.expedition.seasonBoard.settlement.chapterIndex || 0,
+                                outcomeId: payload.expedition.seasonBoard.settlement.outcomeId || '',
+                                outcomeLabel: payload.expedition.seasonBoard.settlement.outcomeLabel || '',
+                                outcomeTone: payload.expedition.seasonBoard.settlement.outcomeTone || '',
+                                summaryLine: payload.expedition.seasonBoard.settlement.summaryLine || '',
+                                detailLine: payload.expedition.seasonBoard.settlement.detailLine || '',
+                                guideLine: payload.expedition.seasonBoard.settlement.guideLine || '',
+                                statusLine: payload.expedition.seasonBoard.settlement.statusLine || '',
+                                progressText: payload.expedition.seasonBoard.settlement.progressText || '',
+                                settlementWeekTag: payload.expedition.seasonBoard.settlement.settlementWeekTag || '',
+                                settlementPhaseId: payload.expedition.seasonBoard.settlement.settlementPhaseId || '',
+                                settlementSource: payload.expedition.seasonBoard.settlement.settlementSource || '',
+                                resolutionTier: payload.expedition.seasonBoard.settlement.resolutionTier || '',
+                                resolvedStatus: payload.expedition.seasonBoard.settlement.resolvedStatus || '',
+                                writebackLine: payload.expedition.seasonBoard.settlement.writebackLine || '',
+                                proofQuality: payload.expedition.seasonBoard.settlement.proofQuality || '',
+                                lineageStyle: payload.expedition.seasonBoard.settlement.lineageStyle || '',
+                                primaryVerificationRecordId: payload.expedition.seasonBoard.settlement.primaryVerificationRecordId || '',
+                                sideVerificationRecordId: payload.expedition.seasonBoard.settlement.sideVerificationRecordId || '',
+                                selectedContractLabel: payload.expedition.seasonBoard.settlement.selectedContractLabel || '',
+                                contractResolutionLine: payload.expedition.seasonBoard.settlement.contractResolutionLine || '',
+                                recoveryEligible: !!payload.expedition.seasonBoard.settlement.recoveryEligible
+                            }
+                            : null,
+                        debtPack: payload.expedition.seasonBoard.debtPack
+                            ? {
+                                id: payload.expedition.seasonBoard.debtPack.id || '',
+                                sourceRunId: payload.expedition.seasonBoard.debtPack.sourceRunId || '',
+                                chapterIndex: payload.expedition.seasonBoard.debtPack.chapterIndex || 0,
+                                sourceAgendaId: payload.expedition.seasonBoard.debtPack.sourceAgendaId || '',
+                                sourceLabel: payload.expedition.seasonBoard.debtPack.sourceLabel || '',
+                                debtThemeId: payload.expedition.seasonBoard.debtPack.debtThemeId || '',
+                                debtThemeLabel: payload.expedition.seasonBoard.debtPack.debtThemeLabel || '',
+                                summaryLine: payload.expedition.seasonBoard.debtPack.summaryLine || '',
+                                detailLine: payload.expedition.seasonBoard.debtPack.detailLine || '',
+                                guideLine: payload.expedition.seasonBoard.debtPack.guideLine || '',
+                                statusLine: payload.expedition.seasonBoard.debtPack.statusLine || '',
+                                progressText: payload.expedition.seasonBoard.debtPack.progressText || '',
+                                settleWindowText: payload.expedition.seasonBoard.debtPack.settleWindowText || '',
+                                recommendedValidationLabel: payload.expedition.seasonBoard.debtPack.recommendedValidationLabel || '',
+                                recommendedAnchorSection: payload.expedition.seasonBoard.debtPack.recommendedAnchorSection || '',
+                                status: payload.expedition.seasonBoard.debtPack.status || '',
+                                deferCount: payload.expedition.seasonBoard.debtPack.deferCount || 0,
+                                openedWeekTag: payload.expedition.seasonBoard.debtPack.openedWeekTag || '',
+                                carryIntoWeekTag: payload.expedition.seasonBoard.debtPack.carryIntoWeekTag || '',
+                                occupiedMandateTaskId: payload.expedition.seasonBoard.debtPack.occupiedMandateTaskId || '',
+                                occupationReason: payload.expedition.seasonBoard.debtPack.occupationReason || '',
+                                occupiesStrongSlot: !!payload.expedition.seasonBoard.debtPack.occupiesStrongSlot,
+                                resolvedStatus: payload.expedition.seasonBoard.debtPack.resolvedStatus || '',
+                                writebackLine: payload.expedition.seasonBoard.debtPack.writebackLine || '',
+                                verificationRecordId: payload.expedition.seasonBoard.debtPack.verificationRecordId || '',
+                                selectedContractLabel: payload.expedition.seasonBoard.debtPack.selectedContractLabel || '',
+                                contractResolutionLine: payload.expedition.seasonBoard.debtPack.contractResolutionLine || '',
+                                recoveryEligible: !!payload.expedition.seasonBoard.debtPack.recoveryEligible
+                            }
+                            : null,
+                        weekVerdictLedger: payload.expedition.seasonBoard.weekVerdictLedger?.current
+                            ? {
+                                current: {
+                                    ledgerId: payload.expedition.seasonBoard.weekVerdictLedger.current.ledgerId || '',
+                                    weekTag: payload.expedition.seasonBoard.weekVerdictLedger.current.weekTag || '',
+                                    weekLabel: payload.expedition.seasonBoard.weekVerdictLedger.current.weekLabel || '',
+                                    phaseId: payload.expedition.seasonBoard.weekVerdictLedger.current.phaseId || '',
+                                    phaseLabel: payload.expedition.seasonBoard.weekVerdictLedger.current.phaseLabel || '',
+                                    sourceRunId: payload.expedition.seasonBoard.weekVerdictLedger.current.sourceRunId || '',
+                                    chapterIndex: payload.expedition.seasonBoard.weekVerdictLedger.current.chapterIndex || 0,
+                                    settlementId: payload.expedition.seasonBoard.weekVerdictLedger.current.settlementId || '',
+                                    settlementOutcomeId: payload.expedition.seasonBoard.weekVerdictLedger.current.settlementOutcomeId || '',
+                                    settlementOutcomeLabel: payload.expedition.seasonBoard.weekVerdictLedger.current.settlementOutcomeLabel || '',
+                                    debtPackId: payload.expedition.seasonBoard.weekVerdictLedger.current.debtPackId || '',
+                                    debtStatus: payload.expedition.seasonBoard.weekVerdictLedger.current.debtStatus || '',
+                                    deferCount: payload.expedition.seasonBoard.weekVerdictLedger.current.deferCount || 0,
+                                    carryIntoWeekTag: payload.expedition.seasonBoard.weekVerdictLedger.current.carryIntoWeekTag || '',
+                                    primaryVerificationOrderId: payload.expedition.seasonBoard.weekVerdictLedger.current.primaryVerificationOrderId || '',
+                                    sideVerificationOrderId: payload.expedition.seasonBoard.weekVerdictLedger.current.sideVerificationOrderId || '',
+                                    resolutionTier: payload.expedition.seasonBoard.weekVerdictLedger.current.resolutionTier || '',
+                                    resolvedStatus: payload.expedition.seasonBoard.weekVerdictLedger.current.resolvedStatus || '',
+                                    primaryVerificationResultStatus: payload.expedition.seasonBoard.weekVerdictLedger.current.primaryVerificationResultStatus || '',
+                                    sideVerificationResultStatus: payload.expedition.seasonBoard.weekVerdictLedger.current.sideVerificationResultStatus || '',
+                                    primaryWritebackMode: payload.expedition.seasonBoard.weekVerdictLedger.current.primaryWritebackMode || '',
+                                    sideWritebackMode: payload.expedition.seasonBoard.weekVerdictLedger.current.sideWritebackMode || '',
+                                    writebackLine: payload.expedition.seasonBoard.weekVerdictLedger.current.writebackLine || '',
+                                    proofQuality: payload.expedition.seasonBoard.weekVerdictLedger.current.proofQuality || '',
+                                    lineageStyle: payload.expedition.seasonBoard.weekVerdictLedger.current.lineageStyle || '',
+                                    carryIntoNextWeek: !!payload.expedition.seasonBoard.weekVerdictLedger.current.carryIntoNextWeek,
+                                    settlementSource: payload.expedition.seasonBoard.weekVerdictLedger.current.settlementSource || '',
+                                    summaryLine: payload.expedition.seasonBoard.weekVerdictLedger.current.summaryLine || ''
+                                }
+                            }
+                            : null,
+                        verificationOrders: readArray(payload.expedition.seasonBoard.verificationOrders).map((entry) => ({
+                            id: entry?.id || '',
+                            type: entry?.type || '',
+                            role: entry?.role || '',
+                            label: entry?.label || '',
+                            summaryLine: entry?.summaryLine || '',
+                            detailLine: entry?.detailLine || '',
+                            hintLine: entry?.hintLine || '',
+                            statusLine: entry?.statusLine || '',
+                            anchorSection: entry?.anchorSection || '',
+                            priority: entry?.priority || 0,
+                            resultStatus: entry?.resultStatus || '',
+                            writebackMode: entry?.writebackMode || '',
+                            writebackLine: entry?.writebackLine || '',
+                            sourceMode: entry?.sourceMode || '',
+                            sourceModeLabel: entry?.sourceModeLabel || '',
+                            resolvedRunId: entry?.resolvedRunId || '',
+                            chapterIndex: entry?.chapterIndex || 0,
+                            proofQuality: entry?.proofQuality || '',
+                            lineageStyle: entry?.lineageStyle || '',
+                            carryIntoNextWeek: !!entry?.carryIntoNextWeek
+                        })),
+                        nextTask: payload.expedition.seasonBoard.nextTask
+                            ? {
+                                laneId: payload.expedition.seasonBoard.nextTask.laneId || '',
+                                laneLabel: payload.expedition.seasonBoard.nextTask.laneLabel || '',
+                                id: payload.expedition.seasonBoard.nextTask.id || '',
+                                label: payload.expedition.seasonBoard.nextTask.label || '',
+                                progressText: payload.expedition.seasonBoard.nextTask.progressText || '',
+                                hintLine: payload.expedition.seasonBoard.nextTask.hintLine || '',
+                                statusLine: payload.expedition.seasonBoard.nextTask.statusLine || '',
+                                anchorSection: payload.expedition.seasonBoard.nextTask.anchorSection || ''
+                            }
+                            : null,
+                        lanes: readArray(payload.expedition.seasonBoard.lanes).map((lane) => ({
+                            id: lane?.id || '',
+                            label: lane?.label || '',
+                            icon: lane?.icon || '',
+                            summaryLine: lane?.summaryLine || '',
+                            completedCount: lane?.completedCount || 0,
+                            totalCount: lane?.totalCount || 0,
+                            tasks: readArray(lane?.tasks).map((task) => ({
+                                id: task?.id || '',
+                                label: task?.label || '',
+                                icon: task?.icon || '',
+                                progress: task?.progress || 0,
+                                target: task?.target || 0,
+                                progressText: task?.progressText || '',
+                                completed: !!task?.completed,
+                                hintLine: task?.hintLine || '',
+                                statusLine: task?.statusLine || '',
+                                anchorSection: task?.anchorSection || ''
+                            }))
+                        }))
+                    }
+                    : null;
+                payload.map.chapter.mandate = payload.expedition.mandate
+                    ? {
+                        weekTag: payload.expedition.mandate.weekTag || '',
+                        weekLabel: payload.expedition.mandate.weekLabel || '',
+                        themeId: payload.expedition.mandate.themeId || '',
+                        themeLabel: payload.expedition.mandate.themeLabel || '',
+                        themeIcon: payload.expedition.mandate.themeIcon || '',
+                        themeKicker: payload.expedition.mandate.themeKicker || '',
+                        summaryLine: payload.expedition.mandate.summaryLine || '',
+                        completedTaskCount: payload.expedition.mandate.completedTaskCount || 0,
+                        totalTaskCount: payload.expedition.mandate.totalTaskCount || 0,
+                        focusTask: payload.expedition.mandate.focusTask
+                            ? {
+                                id: payload.expedition.mandate.focusTask.id || '',
+                                label: payload.expedition.mandate.focusTask.label || '',
+                                icon: payload.expedition.mandate.focusTask.icon || '',
+                                progress: payload.expedition.mandate.focusTask.progress || 0,
+                                target: payload.expedition.mandate.focusTask.target || 0,
+                                completed: !!payload.expedition.mandate.focusTask.completed,
+                                progressText: payload.expedition.mandate.focusTask.progressText || '',
+                                hintLine: payload.expedition.mandate.focusTask.hintLine || '',
+                                statusLine: payload.expedition.mandate.focusTask.statusLine || '',
+                                anchorSection: payload.expedition.mandate.focusTask.anchorSection || '',
+                                source: payload.expedition.mandate.focusTask.source || '',
+                                sourceId: payload.expedition.mandate.focusTask.sourceId || '',
+                                isPlaceholder: !!payload.expedition.mandate.focusTask.isPlaceholder,
+                                occupiesStrongSlot: !!payload.expedition.mandate.focusTask.occupiesStrongSlot
+                            }
+                            : null,
+                        lanes: readArray(payload.expedition.mandate.lanes).map((lane) => ({
+                            id: lane?.id || '',
+                            label: lane?.label || '',
+                            icon: lane?.icon || '',
+                            summaryLine: lane?.summaryLine || '',
+                            completedCount: lane?.completedCount || 0,
+                            totalCount: lane?.totalCount || 0,
+                            tasks: readArray(lane?.tasks).map((task) => ({
+                                id: task?.id || '',
+                                label: task?.label || '',
+                                icon: task?.icon || '',
+                                progress: task?.progress || 0,
+                                target: task?.target || 0,
+                                progressText: task?.progressText || '',
+                                completed: !!task?.completed,
+                                hintLine: task?.hintLine || '',
+                                statusLine: task?.statusLine || '',
+                                anchorSection: task?.anchorSection || ''
+                            }))
+                        })),
+                        history: readArray(payload.expedition.mandate.history).map((entry) => ({
+                            weekTag: entry?.weekTag || '',
+                            weekLabel: entry?.weekLabel || '',
+                            themeId: entry?.themeId || '',
+                            themeLabel: entry?.themeLabel || '',
+                            summaryLine: entry?.summaryLine || '',
+                            completedTaskCount: entry?.completedTaskCount || 0,
+                            totalTaskCount: entry?.totalTaskCount || 0,
+                            completed: !!entry?.completed,
+                            at: entry?.at || 0
+                        }))
+                    }
+                    : null;
+                payload.map.chapter.lineage = payload.expedition.lineage
+                    ? {
+                        summaryLine: payload.expedition.lineage.summaryLine || '',
+                        detailLine: payload.expedition.lineage.detailLine || '',
+                        currentFocusLine: payload.expedition.lineage.currentFocusLine || '',
+                        progress: payload.expedition.lineage.progress
+                            ? {
+                                trackedCharacters: payload.expedition.lineage.progress.trackedCharacters || 0,
+                                trackedStyles: payload.expedition.lineage.progress.trackedStyles || 0,
+                                trackedNodes: payload.expedition.lineage.progress.trackedNodes || 0,
+                                researchHistoryCount: payload.expedition.lineage.progress.researchHistoryCount || 0
+                            }
+                            : null,
+                        tracks: readArray(payload.expedition.lineage.tracks).map((track) => ({
+                            id: track?.id || '',
+                            label: track?.label || '',
+                            icon: track?.icon || '',
+                            summaryLine: track?.summaryLine || '',
+                            progressText: track?.progressText || '',
+                            dominantId: track?.dominantId || '',
+                            dominantLabel: track?.dominantLabel || '',
+                            entries: readArray(track?.entries).map((entry) => ({
+                                id: entry?.id || '',
+                                label: entry?.label || '',
+                                icon: entry?.icon || '',
+                                value: entry?.value || 0,
+                                valueText: entry?.valueText || '',
+                                noteLine: entry?.noteLine || '',
+                                tags: readArray(entry?.tags),
+                                anchorSection: entry?.anchorSection || ''
+                            }))
+                        }))
+                    }
+                    : null;
+                payload.map.chapter.aftereffects = payload.expedition.aftereffects
+                    ? {
+                        summaryLine: payload.expedition.aftereffects.summaryLine || '',
+                        detailLine: payload.expedition.aftereffects.detailLine || '',
+                        guideLine: payload.expedition.aftereffects.guideLine || '',
+                        currentStatusLine: payload.expedition.aftereffects.currentStatusLine || '',
+                        activeCount: payload.expedition.aftereffects.activeCount || 0,
+                        pendingCount: payload.expedition.aftereffects.pendingCount || 0,
+                        primary: payload.expedition.aftereffects.primary
+                            ? {
+                                recordId: payload.expedition.aftereffects.primary.recordId || '',
+                                icon: payload.expedition.aftereffects.primary.icon || '',
+                                name: payload.expedition.aftereffects.primary.name || '',
+                                templateId: payload.expedition.aftereffects.primary.templateId || '',
+                                templateLabel: payload.expedition.aftereffects.primary.templateLabel || '',
+                                outcomeId: payload.expedition.aftereffects.primary.outcomeId || '',
+                                outcomeLabel: payload.expedition.aftereffects.primary.outcomeLabel || '',
+                                sourceLine: payload.expedition.aftereffects.primary.sourceLine || '',
+                                positiveLine: payload.expedition.aftereffects.primary.positiveLine || '',
+                                negativeLine: payload.expedition.aftereffects.primary.negativeLine || '',
+                                summaryLine: payload.expedition.aftereffects.primary.summaryLine || '',
+                                detailLine: payload.expedition.aftereffects.primary.detailLine || '',
+                                status: payload.expedition.aftereffects.primary.status || '',
+                                statusLabel: payload.expedition.aftereffects.primary.statusLabel || '',
+                                statusLine: payload.expedition.aftereffects.primary.statusLine || '',
+                                remainingChapters: payload.expedition.aftereffects.primary.remainingChapters || 0,
+                                durationChapters: payload.expedition.aftereffects.primary.durationChapters || 0,
+                                activationChapterIndex: payload.expedition.aftereffects.primary.activationChapterIndex || 0
+                            }
+                            : null,
+                        records: readArray(payload.expedition.aftereffects.records).map((entry) => ({
+                            recordId: entry?.recordId || '',
+                            icon: entry?.icon || '',
+                            name: entry?.name || '',
+                            templateId: entry?.templateId || '',
+                            templateLabel: entry?.templateLabel || '',
+                            outcomeId: entry?.outcomeId || '',
+                            outcomeLabel: entry?.outcomeLabel || '',
+                            sourceLine: entry?.sourceLine || '',
+                            positiveLine: entry?.positiveLine || '',
+                            negativeLine: entry?.negativeLine || '',
+                            summaryLine: entry?.summaryLine || '',
+                            detailLine: entry?.detailLine || '',
+                            status: entry?.status || '',
+                            statusLabel: entry?.statusLabel || '',
+                            statusLine: entry?.statusLine || '',
+                            remainingChapters: entry?.remainingChapters || 0,
+                            durationChapters: entry?.durationChapters || 0,
+                            activationChapterIndex: entry?.activationChapterIndex || 0
+                        }))
+                    }
+                    : null;
             }
             return JSON.stringify(payload);
         } catch (error) {
@@ -4903,8 +5540,35 @@
         const snapshot = typeof originalGetBuildSnapshotData === 'function'
             ? originalGetBuildSnapshotData.call(this)
             : {};
+        const latestSlate = typeof this.getLatestRunSlate === 'function'
+            ? this.getLatestRunSlate()
+            : null;
+        const mandateSnapshot = typeof this.getHeavenlyMandateExpeditionSnapshot === 'function'
+            ? this.getHeavenlyMandateExpeditionSnapshot()
+            : null;
+        const seasonBoard = typeof this.getSeasonBoardSnapshot === 'function'
+            ? this.getSeasonBoardSnapshot(latestSlate ? { latestSlate } : {})
+            : null;
+        const aftereffects = typeof this.getFateAftereffectSnapshot === 'function'
+            ? this.getFateAftereffectSnapshot()
+            : null;
         const expedition = this.getExpeditionState();
-        if (!expedition) return snapshot;
+        if (!expedition) {
+            if (mandateSnapshot) {
+                snapshot.heavenlyMandate = mandateSnapshot;
+            }
+            if (seasonBoard) {
+                snapshot.seasonBoard = seasonBoard;
+                snapshot.strengths = Array.isArray(snapshot.strengths) ? snapshot.strengths.slice() : [];
+                snapshot.nextTargets = Array.isArray(snapshot.nextTargets) ? snapshot.nextTargets.slice() : [];
+                snapshot.strengths.unshift(`赛季天道盘当前围绕【${seasonBoard.themeLabel || '本周主轴'}】推进，处于「${seasonBoard.phaseLabel || '采样期'}」。`);
+                snapshot.nextTargets.unshift(`赛季天道盘：${seasonBoard.guideLine || seasonBoard.statusLine || seasonBoard.summaryLine || '继续补齐本周主轴。'}`);
+            }
+            if (aftereffects) {
+                snapshot.fateAftereffects = aftereffects;
+            }
+            return snapshot;
+        }
         const selectedBranch = expedition.branchOptions.find((entry) => entry.id === expedition.selectedBranchId);
         const activeBounties = this.getActiveExpeditionBounties(expedition);
         const recentFactionLogs = this.getRecentExpeditionFactionLogs(expedition, 2);
@@ -4922,11 +5586,45 @@
             ? this.getSanctumAgendaExpeditionSnapshot({ latestRunId: String(this.getLatestRunSlate?.()?.id || '') })
             : null;
         const activeAgenda = agendaSnapshot?.active || null;
+        const nextMandateTask = mandateSnapshot && Array.isArray(mandateSnapshot.lanes)
+            ? mandateSnapshot.lanes
+                .flatMap((lane) => Array.isArray(lane.tasks) ? lane.tasks : [])
+                .find((task) => !task.completed) || null
+            : null;
         const bountySignalMap = new Map(expedition.bountyDraft.map((entry) => [entry.id, this.getExpeditionBountySignalModel(expedition, entry)]));
         const bountyConflictWarnings = this.getExpeditionBountyConflictWarnings(expedition, bountySignalMap);
         snapshot.strengths = Array.isArray(snapshot.strengths) ? snapshot.strengths.slice() : [];
         snapshot.gaps = Array.isArray(snapshot.gaps) ? snapshot.gaps.slice() : [];
         snapshot.nextTargets = Array.isArray(snapshot.nextTargets) ? snapshot.nextTargets.slice() : [];
+        if (aftereffects) {
+            snapshot.fateAftereffects = aftereffects;
+            const primaryAftereffect = aftereffects.primary || null;
+            if (primaryAftereffect?.positiveLine) {
+                snapshot.strengths.unshift(`界痕后效【${primaryAftereffect.name || primaryAftereffect.templateLabel || '跨章偏置'}】${primaryAftereffect.status === 'active' ? '正在生效' : '已绑定下章'}：${primaryAftereffect.positiveLine}`);
+            }
+            if (primaryAftereffect?.negativeLine) {
+                snapshot.gaps.unshift(`契约后效代价：${primaryAftereffect.negativeLine}`);
+            }
+            if (aftereffects.currentStatusLine) {
+                snapshot.nextTargets.unshift(`后效状态：${aftereffects.currentStatusLine}`);
+            }
+        }
+        if (mandateSnapshot) {
+            snapshot.strengths.unshift(`天道敕令本周为【${mandateSnapshot.themeLabel || '周循环'}】${mandateSnapshot.totalTaskCount > 0 ? `，已完成 ${mandateSnapshot.completedTaskCount}/${mandateSnapshot.totalTaskCount}` : ''}。`);
+            if (nextMandateTask) {
+                snapshot.nextTargets.unshift(`天道敕令：${nextMandateTask.label}（${nextMandateTask.progressText || `${nextMandateTask.progress || 0}/${nextMandateTask.target || 1}`}${nextMandateTask.hintLine ? ` · ${nextMandateTask.hintLine}` : ''}）`);
+            } else if (mandateSnapshot.summaryLine) {
+                snapshot.nextTargets.unshift(`天道敕令：${mandateSnapshot.summaryLine}`);
+            }
+        }
+        if (seasonBoard) {
+            snapshot.seasonBoard = seasonBoard;
+            snapshot.strengths.unshift(`赛季天道盘当前围绕【${seasonBoard.themeLabel || '本周主轴'}】推进，处于「${seasonBoard.phaseLabel || '采样期'}」。`);
+            if (seasonBoard.crossModeSummary) {
+                snapshot.strengths.push(`赛季验算：${seasonBoard.crossModeSummary}`);
+            }
+            snapshot.nextTargets.unshift(`赛季天道盘：${seasonBoard.guideLine || seasonBoard.statusLine || seasonBoard.summaryLine || '继续补齐本周主轴。'}`);
+        }
         if (engineeringInfluence) {
             snapshot.strengths.push(`工程主轴当前为【${engineeringInfluence.engineeringTrackName} ${engineeringInfluence.engineeringTierLabel}】，正在以「${engineeringInfluence.routeDirective}」改写远征。`);
         }
@@ -5027,6 +5725,7 @@
         if (recentNemesisLogs.length > 0) {
             snapshot.nextTargets.push(`追猎日志：${recentNemesisLogs[0].line}`);
         }
+        snapshot.heavenlyMandate = mandateSnapshot;
         snapshot.expedition = this.getExpeditionPayload();
         return snapshot;
     };
@@ -5049,6 +5748,34 @@
         data.progress = data.progress && typeof data.progress === 'object' ? { ...data.progress } : {};
         data.progress.runSlateArchives = archiveSummary.count;
         data.progress.topRunSlateScore = archiveSummary.topScore;
+        const mandate = typeof this.getHeavenlyMandateExpeditionSnapshot === 'function'
+            ? this.getHeavenlyMandateExpeditionSnapshot()
+            : null;
+        const seasonBoard = typeof this.getSeasonBoardSnapshot === 'function'
+            ? this.getSeasonBoardSnapshot()
+            : null;
+        const aftereffects = typeof this.getFateAftereffectSnapshot === 'function'
+            ? this.getFateAftereffectSnapshot()
+            : null;
+        data.mandate = mandate;
+        data.seasonBoard = seasonBoard;
+        data.aftereffects = aftereffects;
+        if (mandate) {
+            data.progress.heavenlyMandateCompletedTasks = Math.max(0, Math.floor(Number(mandate.completedTaskCount) || 0));
+            data.progress.heavenlyMandateTotalTasks = Math.max(0, Math.floor(Number(mandate.totalTaskCount) || 0));
+            data.progress.heavenlyMandateWeekTag = String(mandate.weekTag || '').trim();
+            data.progress.heavenlyMandateThemeLabel = String(mandate.themeLabel || '').trim();
+        }
+        if (seasonBoard) {
+            data.progress.seasonBoardCompletedTasks = Math.max(0, Math.floor(Number(seasonBoard.completedTaskCount) || 0));
+            data.progress.seasonBoardTotalTasks = Math.max(0, Math.floor(Number(seasonBoard.totalTaskCount) || 0));
+            data.progress.seasonBoardPhaseLabel = String(seasonBoard.phaseLabel || '').trim();
+            data.progress.seasonBoardThemeLabel = String(seasonBoard.themeLabel || '').trim();
+        }
+        if (aftereffects) {
+            data.progress.fateAftereffectActive = Math.max(0, Math.floor(Number(aftereffects.activeCount) || 0));
+            data.progress.fateAftereffectPending = Math.max(0, Math.floor(Number(aftereffects.pendingCount) || 0));
+        }
         data.rooms.push({
             id: 'run_slate_archive',
             icon: '🧭',
@@ -5082,6 +5809,26 @@
                 action: 'collection',
                 value: 'slates',
                 icon: latestSlate?.endingIcon || '🧭'
+            });
+        }
+        if (mandate && !data.goals.find((goal) => goal.id === 'heavenly_mandate_goal')) {
+            data.goals.unshift({
+                id: 'heavenly_mandate_goal',
+                title: `天道敕令 · ${mandate.themeLabel || '本周修行'}`,
+                note: `${mandate.summaryLine || '本周天道敕令已经落定。'}${mandate.totalTaskCount > 0 ? ` · ${mandate.completedTaskCount}/${mandate.totalTaskCount}` : ''}`,
+                action: 'collection',
+                value: 'sanctum',
+                icon: mandate.themeIcon || '📜'
+            });
+        }
+        if (seasonBoard && !data.goals.find((goal) => goal.id === 'season_board_goal')) {
+            data.goals.unshift({
+                id: 'season_board_goal',
+                title: `赛季天道盘 · ${seasonBoard.phaseLabel || '采样期'}`,
+                note: `${seasonBoard.summaryLine || '赛季主轴正在同步。'}${seasonBoard.totalTaskCount > 0 ? ` · ${seasonBoard.completedTaskCount}/${seasonBoard.totalTaskCount}` : ''}`,
+                action: 'collection',
+                value: 'sanctum',
+                icon: seasonBoard.phaseIcon || seasonBoard.seasonIcon || '🏁'
             });
         }
         return data;

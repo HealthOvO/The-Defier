@@ -4577,6 +4577,52 @@ body {
     color: rgba(210, 228, 243, 0.84);
 }
 
+.reward-expedition-callout {
+    display: grid;
+    gap: 4px;
+}
+
+.reward-expedition-callout.is-focus {
+    border-color: rgba(149, 223, 255, 0.3);
+    background: linear-gradient(135deg, rgba(20, 63, 89, 0.36), rgba(81, 58, 22, 0.18));
+}
+
+.reward-expedition-callout.is-warning {
+    border-color: rgba(255, 171, 132, 0.34);
+    background: linear-gradient(135deg, rgba(88, 37, 26, 0.36), rgba(82, 61, 18, 0.2));
+}
+
+.reward-expedition-callout.is-tracking {
+    border-color: rgba(255, 214, 149, 0.24);
+    background: linear-gradient(135deg, rgba(69, 52, 20, 0.3), rgba(16, 52, 69, 0.18));
+}
+
+.reward-expedition-callout-kicker {
+    color: rgba(255, 214, 149, 0.96);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.22px;
+}
+
+.reward-expedition-callout-body {
+    color: rgba(248, 242, 233, 0.98);
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.5;
+}
+
+.reward-expedition-callout-detail {
+    color: rgba(231, 222, 206, 0.9);
+    font-size: 0.67rem;
+    line-height: 1.55;
+}
+
+.reward-expedition-callout-meta {
+    color: rgba(201, 225, 241, 0.78);
+    font-size: 0.62rem;
+    line-height: 1.5;
+}
+
 .reward-expedition-advice {
     display: grid;
     gap: 4px;
@@ -6870,6 +6916,16 @@ body {
     .reward-expedition-line,
     .reward-expedition-advice {
         font-size: 0.64rem;
+    }
+
+    .reward-expedition-callout-body {
+        font-size: 0.7rem;
+    }
+
+    .reward-expedition-callout-kicker,
+    .reward-expedition-callout-detail,
+    .reward-expedition-callout-meta {
+        font-size: 0.58rem;
     }
 
     .reward-expedition-advice-label,
