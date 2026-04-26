@@ -280,6 +280,9 @@ function rectObj(rect) {
     const rewardSeasonBoardVerificationText = (document.querySelector('[data-season-board-verification-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardNextTaskText = (document.querySelector('[data-season-board-next-task-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardNextChipText = (expeditionPanel?.querySelector('[data-season-board-chip="next"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardPrimaryHandoff = expeditionPanel?.querySelector('[data-season-board-action-reward="true"] [data-season-board-handoff-cta="true"]') || null;
+    const rewardHandoffButtonCount = expeditionPanel?.querySelectorAll('[data-season-board-handoff-cta="true"]').length || 0;
+    const rewardPrimaryHandoffText = (rewardPrimaryHandoff?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardChipText = Array.from(expeditionPanel?.querySelectorAll('[data-season-board-chip]') || [])
       .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
       .join(' ')
@@ -325,6 +328,27 @@ function rectObj(rect) {
         rewardSeasonBoard.settlement.outcomeId === 'locking_sheet' &&
         rewardSeasonBoard.nextTask.id === 'season_commitment' &&
         rewardSeasonBoard.nextTask.anchorSection === 'sanctum' &&
+        rewardSeasonBoard.nextTask.source === 'settlement' &&
+        rewardSeasonBoard.nextTask.sourceId === rewardSeasonBoard.settlement.id &&
+        rewardSeasonBoard.nextTask.taskSource === 'lane' &&
+        rewardSeasonBoard.nextTask.taskSourceId === rewardSeasonBoard.nextTask.id &&
+        rewardSeasonBoard.nextTask.actionType === 'collection' &&
+        rewardSeasonBoard.nextTask.actionValue === 'sanctum' &&
+        rewardSeasonBoard.nextTask.ctaLabel === rewardSeasonBoard.nextWeekGoal?.buttonLabel &&
+        rewardSeasonBoard.nextWeekGoal?.source === rewardSeasonBoard.nextTask.source &&
+        rewardSeasonBoard.nextWeekGoal?.sourceId === rewardSeasonBoard.nextTask.sourceId &&
+        rewardSeasonBoard.nextWeekGoal?.taskSource === rewardSeasonBoard.nextTask.taskSource &&
+        rewardSeasonBoard.nextWeekGoal?.taskSourceId === rewardSeasonBoard.nextTask.taskSourceId &&
+        rewardSeasonBoard.nextWeekGoal?.action === rewardSeasonBoard.nextTask.actionType &&
+        rewardSeasonBoard.nextWeekGoal?.value === rewardSeasonBoard.nextTask.actionValue &&
+        rewardPrimaryHandoff?.dataset?.seasonBoardHandoffSourceKey === 'nextTask' &&
+        rewardPrimaryHandoff?.dataset?.seasonBoardHandoffAction === rewardSeasonBoard.nextWeekGoal?.action &&
+        rewardPrimaryHandoff?.dataset?.seasonBoardHandoffValue === rewardSeasonBoard.nextWeekGoal?.value &&
+        rewardPrimaryHandoff?.dataset?.seasonBoardHandoffSource === rewardSeasonBoard.nextWeekGoal?.source &&
+        rewardPrimaryHandoff?.dataset?.seasonBoardHandoffSourceId === rewardSeasonBoard.nextWeekGoal?.sourceId &&
+        rewardPrimaryHandoff?.dataset?.seasonBoardHandoffTaskId === rewardSeasonBoard.nextWeekGoal?.taskId &&
+        rewardPrimaryHandoffText === rewardSeasonBoard.nextWeekGoal?.buttonLabel &&
+        rewardHandoffButtonCount >= 1 &&
         rewardHeaderOutcome === rewardSeasonBoard.settlement.outcomeId &&
         rewardNextActionSource === 'nextTask' &&
         expeditionPanel?.dataset?.seasonBoardOutcome === 'locking_sheet' &&
@@ -352,6 +376,8 @@ function rectObj(rect) {
         !!chapterSeasonBoard &&
         JSON.stringify(rewardSeasonBoard.nextTask || null) === JSON.stringify(expeditionSeasonBoard.nextTask || null) &&
         JSON.stringify(rewardSeasonBoard.nextTask || null) === JSON.stringify(chapterSeasonBoard.nextTask || null) &&
+        JSON.stringify(rewardSeasonBoard.nextWeekGoal || null) === JSON.stringify(expeditionSeasonBoard.nextWeekGoal || null) &&
+        JSON.stringify(rewardSeasonBoard.nextWeekGoal || null) === JSON.stringify(chapterSeasonBoard.nextWeekGoal || null) &&
         JSON.stringify(rewardSeasonBoard.settlement || null) === JSON.stringify(expeditionSeasonBoard.settlement || null) &&
         JSON.stringify(rewardSeasonBoard.settlement || null) === JSON.stringify(chapterSeasonBoard.settlement || null) &&
         rewardSeasonBoard.progress?.progressText === expeditionSeasonBoard.progress?.progressText &&
@@ -387,6 +413,9 @@ function rectObj(rect) {
       rewardSeasonBoardVerificationText,
       rewardSeasonBoardNextTaskText,
       rewardSeasonBoardNextChipText,
+      rewardPrimaryHandoffDataset: rewardPrimaryHandoff ? { ...rewardPrimaryHandoff.dataset } : null,
+      rewardPrimaryHandoffText,
+      rewardHandoffButtonCount,
       rewardSeasonBoardChipText,
       skipText: skipBtn.textContent || '',
       expectedSkipCost,
@@ -425,6 +454,126 @@ function rectObj(rect) {
     JSON.stringify(rewardResolveProbe || null)
   );
   await safeAuditScreenshot(page, path.join(outDir, 'reward-layout-after-steal.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
+  const rewardSeasonHandoffSelector = '#reward-expedition-meta [data-season-board-action-reward="true"] [data-season-board-handoff-cta="true"]';
+  const rewardSeasonHandoffButton = page.locator(rewardSeasonHandoffSelector).first();
+  let rewardSeasonHandoffClickProbe = null;
+  if ((await rewardSeasonHandoffButton.count()) < 1) {
+    rewardSeasonHandoffClickProbe = { ok: false, reason: 'missing_reward_handoff_button' };
+  } else {
+    try {
+      const rewardSeasonHandoffBefore = await rewardSeasonHandoffButton.evaluate((btn) => {
+        const rect = btn.getBoundingClientRect();
+        return {
+          currentScreen: window.game?.currentScreen || '',
+          section: window.game?.collectionHubState?.section || '',
+          dataset: { ...btn.dataset },
+          text: (btn.textContent || '').replace(/\s+/g, ' ').trim(),
+          visible: rect.width > 0 && rect.height > 0,
+        };
+      });
+      await rewardSeasonHandoffButton.scrollIntoViewIfNeeded({ timeout: 5000 });
+      await rewardSeasonHandoffButton.click({ timeout: 5000 });
+      await page.waitForFunction(
+        (expectedSection) => window.game?.currentScreen === 'collection'
+          && window.game?.collectionHubState?.section === expectedSection,
+        rewardSeasonHandoffBefore.dataset.seasonBoardHandoffValue,
+        { timeout: 5000 }
+      );
+      await page.waitForFunction(
+        () => window.game?.pendingRewardSeasonBoardHandoffNotice === null
+          && !!window.game?.lastRewardSeasonBoardHandoffArrivalNotice
+          && !!document.querySelector('[data-season-board-handoff-arrival="true"]'),
+        null,
+        { timeout: 5000 }
+      );
+      const rewardSeasonHandoffFocusButton = page.locator('[data-season-board-handoff-focus="true"]').first();
+      if ((await rewardSeasonHandoffFocusButton.count()) < 1) {
+        throw new Error('missing_reward_handoff_focus_button');
+      }
+      const rewardSeasonHandoffFocusBefore = await rewardSeasonHandoffFocusButton.evaluate((btn) => ({
+        dataset: { ...btn.dataset },
+        text: (btn.textContent || '').replace(/\s+/g, ' ').trim(),
+      }));
+      await rewardSeasonHandoffFocusButton.click({ timeout: 5000 });
+      await page.waitForFunction(
+        () => window.game?.lastRewardSeasonBoardHandoffArrivalFocus?.ok === true
+          && !!document.querySelector('[data-season-board-handoff-focused="true"]'),
+        null,
+        { timeout: 5000 }
+      );
+      rewardSeasonHandoffClickProbe = await page.evaluate(({ before, focusBefore }) => {
+        const last = game.lastRewardSeasonBoardHandoff || null;
+        const pending = game.pendingRewardSeasonBoardHandoffNotice || null;
+        const arrival = game.lastRewardSeasonBoardHandoffArrivalNotice || null;
+        const focus = game.lastRewardSeasonBoardHandoffArrivalFocus || null;
+        const notice = document.querySelector('[data-season-board-handoff-arrival="true"]');
+        const focusButton = document.querySelector('[data-season-board-handoff-focus="true"]');
+        const focused = document.querySelector('[data-season-board-handoff-focused="true"]');
+        const actionTarget = document.querySelector('[data-season-board-handoff-action-target="true"]');
+        const noticeText = (notice?.textContent || '').replace(/\s+/g, ' ').trim();
+        const focusedText = (focused?.textContent || '').replace(/\s+/g, ' ').trim();
+        const focusedDataset = focused?.dataset || {};
+        const focusTaskMatched = !arrival?.taskId
+          || focusedDataset.seasonBoardGoalTaskId === arrival.taskId
+          || focusedDataset.seasonBoardResearchTaskId === arrival.taskId
+          || focusedDataset.seasonBoardTaskId === arrival.taskId
+          || focusedText.includes(arrival.title || '');
+        return {
+          ok:
+            before.visible === true &&
+            game.currentScreen === 'collection' &&
+            game.collectionHubState?.section === before.dataset.seasonBoardHandoffValue &&
+            last?.sourceKey === before.dataset.seasonBoardHandoffSourceKey &&
+            last?.action === before.dataset.seasonBoardHandoffAction &&
+            last?.value === before.dataset.seasonBoardHandoffValue &&
+            last?.source === before.dataset.seasonBoardHandoffSource &&
+            last?.sourceId === before.dataset.seasonBoardHandoffSourceId &&
+            pending === null &&
+            arrival?.value === before.dataset.seasonBoardHandoffValue &&
+            arrival?.source === before.dataset.seasonBoardHandoffSource &&
+            notice?.dataset?.seasonBoardHandoffArrival === 'true' &&
+            notice?.dataset?.seasonBoardHandoffValue === before.dataset.seasonBoardHandoffValue &&
+            notice?.dataset?.seasonBoardHandoffSource === before.dataset.seasonBoardHandoffSource &&
+            noticeText.includes(before.text) &&
+            noticeText.includes('已定位到') &&
+            focusBefore.text === (arrival?.focusLabel || '') &&
+            focusButton?.dataset?.seasonBoardHandoffFocus === 'true' &&
+            focusButton?.dataset?.seasonBoardHandoffTaskId === (arrival?.taskId || '') &&
+            focus?.ok === true &&
+            ['goal', 'research', 'task', 'lane'].includes(focus?.kind || '') &&
+            focused?.dataset?.seasonBoardHandoffFocused === 'true' &&
+            focused?.dataset?.seasonBoardHandoffFocusSourceKey === before.dataset.seasonBoardHandoffSourceKey &&
+            focusTaskMatched &&
+            (!!actionTarget || ['task', 'lane'].includes(focus?.kind || '')),
+          before,
+          focusBefore,
+          after: {
+            currentScreen: game.currentScreen || '',
+            section: game.collectionHubState?.section || '',
+            last,
+            pending,
+            arrival,
+            focus,
+            notice: notice ? { dataset: { ...notice.dataset }, text: noticeText } : null,
+            focused: focused ? { dataset: { ...focused.dataset }, text: focusedText } : null,
+            actionTarget: actionTarget ? { dataset: { ...actionTarget.dataset }, text: (actionTarget.textContent || '').replace(/\s+/g, ' ').trim() } : null,
+          },
+        };
+      }, { before: rewardSeasonHandoffBefore, focusBefore: rewardSeasonHandoffFocusBefore });
+    } catch (error) {
+      rewardSeasonHandoffClickProbe = {
+        ok: false,
+        reason: 'playwright_reward_handoff_click_failed',
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+  add(
+    'reward season-board handoff CTA clicks through, renders arrival feedback, and focuses the next action',
+    !!rewardSeasonHandoffClickProbe?.ok,
+    JSON.stringify(rewardSeasonHandoffClickProbe || null)
+  );
 
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
@@ -505,6 +654,14 @@ function rectObj(rect) {
     const seasonBoardVerificationGoalCount = Array.from(document.querySelectorAll('#sanctum-goal-list [data-season-board-goal="true"]'))
       .filter((node) => /verification/.test(String(node.getAttribute('data-season-board-goal-id') || '')))
       .length;
+    const seasonBoardCommitmentTask = document.querySelector('#sanctum-summary [data-season-board-task-id="season_commitment"]');
+    const seasonBoardCommitmentAction = seasonBoardCommitmentTask?.querySelector('[data-season-board-task-action="true"]') || null;
+    const seasonBoardCommitmentTargetLabel = seasonBoardCommitmentAction?.dataset?.seasonBoardTaskTargetLabel || '';
+    const seasonBoardCommitmentActionText = text(seasonBoardCommitmentAction);
+    if (seasonBoardCommitmentAction) {
+      seasonBoardCommitmentAction.click();
+    }
+    const seasonBoardTaskFollow = game.lastSeasonBoardTaskFollow || null;
 
     let payload = {};
     try {
@@ -523,7 +680,18 @@ function rectObj(rect) {
         expeditionSeasonBoard.settlement?.outcomeId === 'locking_sheet' &&
         expeditionSeasonBoard.nextTask?.id === 'season_commitment' &&
         expeditionSeasonBoard.nextTask?.anchorSection === 'sanctum' &&
+        expeditionSeasonBoard.nextTask?.source === 'settlement' &&
+        expeditionSeasonBoard.nextTask?.sourceId === expeditionSeasonBoard.settlement?.id &&
+        expeditionSeasonBoard.nextTask?.taskSource === 'lane' &&
+        expeditionSeasonBoard.nextTask?.taskSourceId === expeditionSeasonBoard.nextTask?.id &&
+        expeditionSeasonBoard.nextWeekGoal?.source === expeditionSeasonBoard.nextTask?.source &&
+        expeditionSeasonBoard.nextWeekGoal?.sourceId === expeditionSeasonBoard.nextTask?.sourceId &&
+        expeditionSeasonBoard.nextWeekGoal?.taskSource === expeditionSeasonBoard.nextTask?.taskSource &&
+        expeditionSeasonBoard.nextWeekGoal?.taskSourceId === expeditionSeasonBoard.nextTask?.taskSourceId &&
+        expeditionSeasonBoard.nextWeekGoal?.action === expeditionSeasonBoard.nextTask?.actionType &&
+        expeditionSeasonBoard.nextWeekGoal?.value === expeditionSeasonBoard.nextTask?.actionValue &&
         JSON.stringify(expeditionSeasonBoard.nextTask || null) === JSON.stringify(chapterSeasonBoard.nextTask || null) &&
+        JSON.stringify(expeditionSeasonBoard.nextWeekGoal || null) === JSON.stringify(chapterSeasonBoard.nextWeekGoal || null) &&
         expeditionSeasonBoard.progress?.progressText === chapterSeasonBoard.progress?.progressText &&
         Array.isArray(expeditionSeasonBoard.verificationOrders) &&
         expeditionSeasonBoard.verificationOrders.length >= 1 &&
@@ -539,6 +707,22 @@ function rectObj(rect) {
         !/结业验证状/.test(researchText) &&
         !/结业验证状/.test(goalText) &&
         seasonBoardNextTaskGoalText.includes(expeditionSeasonBoard.nextTask?.label || '') &&
+        seasonBoardCommitmentTask?.dataset?.seasonBoardTaskId === expeditionSeasonBoard.nextTask?.id &&
+        seasonBoardCommitmentTask?.dataset?.seasonBoardLaneId === expeditionSeasonBoard.nextTask?.laneId &&
+        seasonBoardCommitmentTask?.dataset?.seasonBoardTaskActionType === expeditionSeasonBoard.nextTask?.actionType &&
+        seasonBoardCommitmentTask?.dataset?.seasonBoardTaskActionValue === expeditionSeasonBoard.nextTask?.actionValue &&
+        seasonBoardCommitmentAction?.dataset?.seasonBoardTaskAction === 'true' &&
+        seasonBoardCommitmentAction?.dataset?.seasonBoardTaskActionId === expeditionSeasonBoard.nextTask?.id &&
+        seasonBoardCommitmentAction?.dataset?.seasonBoardTaskActionType === expeditionSeasonBoard.nextTask?.actionType &&
+        seasonBoardCommitmentAction?.dataset?.seasonBoardTaskActionValue === expeditionSeasonBoard.nextTask?.actionValue &&
+        seasonBoardCommitmentTargetLabel === '洞府' &&
+        seasonBoardCommitmentActionText === expeditionSeasonBoard.nextTask?.ctaLabel &&
+        seasonBoardTaskFollow?.taskId === expeditionSeasonBoard.nextTask?.id &&
+        seasonBoardTaskFollow?.laneId === expeditionSeasonBoard.nextTask?.laneId &&
+        seasonBoardTaskFollow?.actionType === expeditionSeasonBoard.nextTask?.actionType &&
+        seasonBoardTaskFollow?.actionValue === expeditionSeasonBoard.nextTask?.actionValue &&
+        game.currentScreen === 'collection' &&
+        game.collectionHubState?.section === expeditionSeasonBoard.nextTask?.actionValue &&
         researchText.includes(expeditionSeasonBoard.nextTask?.label || '') &&
         guideText.includes('赛季天道盘') &&
         summaryText.includes('押卷中'),
@@ -552,6 +736,10 @@ function rectObj(rect) {
       seasonBoardVerificationOrderCount,
       seasonBoardVerificationGoalCount,
       seasonBoardNextTaskGoalText,
+      seasonBoardCommitmentTaskDataset: seasonBoardCommitmentTask ? { ...seasonBoardCommitmentTask.dataset } : null,
+      seasonBoardCommitmentActionDataset: seasonBoardCommitmentAction ? { ...seasonBoardCommitmentAction.dataset } : null,
+      seasonBoardCommitmentActionText,
+      seasonBoardTaskFollow,
       expeditionSeasonBoard,
       chapterSeasonBoard
     };
@@ -1324,6 +1512,8 @@ function rectObj(rect) {
     const rewardSeasonBoardVerificationText = (document.querySelector('[data-season-board-verification-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardDebtText = (document.querySelector('[data-season-board-debt-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardFollowupText = (document.querySelector('[data-season-board-verification-followup="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardPrimaryHandoff = expeditionPanel?.querySelector('[data-season-board-verification-reward="true"] [data-season-board-handoff-cta="true"]') || null;
+    const rewardSideHandoff = expeditionPanel?.querySelector('[data-season-board-verification-followup="true"] [data-season-board-handoff-cta="true"]') || null;
     const rewardWeekVerdictLedger = rewardSeasonBoard?.weekVerdictLedger?.current || null;
 
     return {
@@ -1363,6 +1553,15 @@ function rectObj(rect) {
           || rewardSeasonBoard.verificationOrders?.[1]?.label
           || '七日劫数'
         ) &&
+        rewardPrimaryHandoff?.dataset?.seasonBoardHandoffSourceKey === 'verification' &&
+        rewardPrimaryHandoff?.dataset?.seasonBoardHandoffAction === rewardSeasonBoard.nextWeekGoal?.action &&
+        rewardPrimaryHandoff?.dataset?.seasonBoardHandoffValue === rewardSeasonBoard.nextWeekGoal?.value &&
+        rewardPrimaryHandoff?.dataset?.seasonBoardHandoffSource === rewardSeasonBoard.nextWeekGoal?.source &&
+        rewardPrimaryHandoff?.dataset?.seasonBoardHandoffSourceId === rewardSeasonBoard.nextWeekGoal?.sourceId &&
+        rewardSideHandoff?.dataset?.seasonBoardHandoffSourceKey === 'sideVerification' &&
+        rewardSideHandoff?.dataset?.seasonBoardHandoffAction === 'challenge' &&
+        rewardSideHandoff?.dataset?.seasonBoardHandoffValue === 'weekly' &&
+        rewardSideHandoff?.dataset?.seasonBoardHandoffSourceId === rewardSeasonBoard.verificationOrders?.[1]?.id &&
         rewardWeekVerdictLedger?.resolvedStatus === 'reinforced' &&
         rewardWeekVerdictLedger?.sideVerificationResultStatus === 'verified' &&
         rewardWeekVerdictLedger?.sideWritebackMode === 'boost_recommendation' &&
@@ -1380,6 +1579,8 @@ function rectObj(rect) {
       rewardSeasonBoardVerificationText,
       rewardSeasonBoardDebtText,
       rewardSeasonBoardFollowupText,
+      rewardPrimaryHandoffDataset: rewardPrimaryHandoff ? { ...rewardPrimaryHandoff.dataset } : null,
+      rewardSideHandoffDataset: rewardSideHandoff ? { ...rewardSideHandoff.dataset } : null,
       rewardWeekVerdictLedger,
     };
   });
@@ -2768,6 +2969,197 @@ function rectObj(rect) {
     JSON.stringify(sanctumSideVerificationResearchClickProbe || null)
   );
 
+  const sanctumSeasonVerificationArchiveProbe = await page.evaluate(() => {
+    const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!window.game || !game.player || typeof game.showCollection !== 'function') {
+      return { ok: false, reason: 'no_game' };
+    }
+    const weekMeta = typeof game.getHeavenlyMandateWeekMeta === 'function'
+      ? game.getHeavenlyMandateWeekMeta()
+      : { weekTag: 'current', weekLabel: '本周轮转' };
+    const now = Date.now();
+    if (typeof game.recordSeasonVerificationResult === 'function') {
+      game.recordSeasonVerificationResult({
+        recordId: `browser_archive_weekly_${weekMeta?.weekTag || 'current'}`,
+        weekTag: weekMeta?.weekTag || '',
+        weekLabel: weekMeta?.weekLabel || '',
+        role: 'side',
+        sourceMode: 'challenge',
+        sourceModeLabel: '七日劫数',
+        sourceLabel: '周劫旁证校卷',
+        label: '周劫旁证校卷',
+        resultStatus: 'verified',
+        writebackMode: 'boost_recommendation',
+        writebackLine: '周挑战旁证补上了第二份证明，当前主修的推荐权重会继续抬高。',
+        resolvedRunId: 'browser_archive_weekly_record',
+        chapterIndex: 6,
+        proofQuality: 'thin',
+        lineageStyle: '旁证补样',
+        summaryLine: '周挑战样本已经补成旁验证，可继续回看这份周判。',
+        detailLine: '这条旁验证会落入周判记录，并能直接带你回到周挑战复核。',
+        statusLine: '七日劫数 · 通过',
+        anchorSection: 'challenge',
+        priority: 2,
+        createdAt: now - 2000,
+        updatedAt: now - 2000
+      });
+      game.recordSeasonVerificationResult({
+        recordId: `browser_archive_pvp_${weekMeta?.weekTag || 'current'}`,
+        weekTag: weekMeta?.weekTag || '',
+        weekLabel: weekMeta?.weekLabel || '',
+        role: 'primary',
+        sourceMode: 'pvp',
+        sourceModeLabel: '天道榜',
+        sourceLabel: '天道榜 · 周判复核',
+        label: '天道榜账本验证',
+        resultStatus: 'verified',
+        writebackMode: 'upgrade_verdict',
+        writebackLine: '天道榜主验证通过，本周押卷会继续维持正卷结论。',
+        resolvedRunId: 'browser_archive_pvp_record',
+        chapterIndex: 6,
+        proofQuality: 'solid',
+        lineageStyle: '镜战压强',
+        summaryLine: '天道榜主验证已经把当前主轴压成正卷，可以直接从周判记录跳回去复核。',
+        detailLine: '这条周判记录会优先挂在 archive 顶部，并保留一键回到天道榜的入口。',
+        statusLine: '天道榜 · 通过',
+        anchorSection: 'pvp',
+        priority: 1,
+        createdAt: now - 1000,
+        updatedAt: now - 1000
+      });
+    }
+    game.showCollection('sanctum');
+    if (typeof game.initCollection === 'function') game.initCollection();
+    const archiveCard = document.querySelector('#sanctum-summary [data-season-board-archive-card="true"]');
+    const archiveStatusText = text(document.querySelector('#sanctum-summary [data-season-board-archive-status="true"]'));
+    const archiveEntries = Array.from(document.querySelectorAll('#sanctum-summary [data-season-board-archive-entry="true"]'));
+    const archiveAnchors = archiveEntries.map((node) => String(node.getAttribute('data-season-board-archive-anchor') || ''));
+    const archiveResearchButton = document.querySelector('#sanctum-research-list [data-season-board-research-id="season_board_verification_archive"] [data-season-board-research-action="true"]');
+    const archiveSummaryText = text(archiveCard);
+    const sanctumData = typeof game.getSanctumOverviewData === 'function'
+      ? game.getSanctumOverviewData()
+      : null;
+    const archive = sanctumData?.seasonBoard?.verificationArchive || null;
+    return {
+      ok:
+        !!archiveCard &&
+        !!archiveResearchButton &&
+        archiveEntries.length >= 2 &&
+        archiveAnchors.includes('pvp') &&
+        archiveAnchors.includes('challenge') &&
+        archiveStatusText.length > 0 &&
+        /周判记录/.test(archiveSummaryText) &&
+        !!archive &&
+        archive.totalRecords >= 2 &&
+        archive.latestEntry?.anchorSection === 'pvp',
+      archiveEntryCount: archiveEntries.length,
+      archiveAnchors,
+      archiveStatusText,
+      archiveSummaryText,
+      archiveTotal: archive?.totalRecords || 0,
+      archiveLatestAnchor: archive?.latestEntry?.anchorSection || ''
+    };
+  });
+  add(
+    'sanctum surfaces a season verification archive card and research entry',
+    !!sanctumSeasonVerificationArchiveProbe?.ok,
+    JSON.stringify(sanctumSeasonVerificationArchiveProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'sanctum-season-verification-archive.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
+  const seasonVerificationArchiveResearchSelector = '#sanctum-research-list [data-season-board-research-id="season_board_verification_archive"] [data-season-board-research-action="true"]';
+  const seasonVerificationArchiveResearchCount = await page.locator(seasonVerificationArchiveResearchSelector).count();
+  let seasonVerificationArchiveWeeklyProbe = {
+    ok: false,
+    reason: 'missing_archive_research_button',
+    researchCount: seasonVerificationArchiveResearchCount
+  };
+  if (seasonVerificationArchiveResearchCount > 0) {
+    await page.click(seasonVerificationArchiveResearchSelector, { timeout: 5000, force: true });
+    try {
+      await page.waitForFunction(() => {
+        const section = document.querySelector('[data-season-verification-archive="true"]');
+        return window.game?.currentScreen === 'challenge-screen' && !!section;
+      }, { timeout: 5000 });
+      seasonVerificationArchiveWeeklyProbe = await page.evaluate(({ count }) => {
+        const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
+        const archiveSection = document.querySelector('[data-season-verification-archive="true"]');
+        const archiveEntries = Array.from(document.querySelectorAll('[data-season-verification-archive-entry="true"]'));
+        const archiveActions = Array.from(document.querySelectorAll('[data-season-verification-archive-action="true"]'));
+        return {
+          ok:
+            game.currentScreen === 'challenge-screen' &&
+            game.challengeHubState?.tab === 'weekly' &&
+            !!archiveSection &&
+            archiveEntries.length >= 2 &&
+            archiveActions.length >= 2 &&
+            /周判记录/.test(text(archiveSection)) &&
+            /天道榜|七日劫数/.test(text(archiveSection)),
+          currentScreen: game.currentScreen || '',
+          challengeTab: game.challengeHubState?.tab || '',
+          archiveSectionText: text(archiveSection),
+          archiveEntryCount: archiveEntries.length,
+          archiveActionCount: archiveActions.length,
+          researchCount: count
+        };
+      }, { count: seasonVerificationArchiveResearchCount });
+    } catch (error) {
+      seasonVerificationArchiveWeeklyProbe = {
+        ok: false,
+        reason: 'weekly_archive_not_ready',
+        researchCount: seasonVerificationArchiveResearchCount,
+        error: error?.message || String(error)
+      };
+    }
+  }
+  add(
+    'season verification archive research opens weekly challenge archive',
+    !!seasonVerificationArchiveWeeklyProbe?.ok,
+    JSON.stringify(seasonVerificationArchiveWeeklyProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'season-verification-archive-weekly.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
+  await reopenSanctumCollection();
+  const seasonVerificationArchivePvpSelector = '#sanctum-summary [data-season-board-archive-entry="true"][data-season-board-archive-anchor="pvp"] [data-season-board-archive-action="true"]';
+  const seasonVerificationArchivePvpCount = await page.locator(seasonVerificationArchivePvpSelector).count();
+  let seasonVerificationArchivePvpProbe = {
+    ok: false,
+    reason: 'missing_archive_pvp_button',
+    actionCount: seasonVerificationArchivePvpCount
+  };
+  if (seasonVerificationArchivePvpCount > 0) {
+    await page.click(seasonVerificationArchivePvpSelector, { timeout: 5000, force: true });
+    try {
+      await page.waitForFunction(() => window.game?.currentScreen === 'pvp-screen', { timeout: 5000 });
+      seasonVerificationArchivePvpProbe = await page.evaluate(({ count }) => {
+        const pvpScreen = document.getElementById('pvp-screen');
+        const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
+        return {
+          ok:
+            game.currentScreen === 'pvp-screen' &&
+            !!pvpScreen &&
+            /天道榜|PVP/.test(text(pvpScreen)),
+          currentScreen: game.currentScreen || '',
+          pvpScreenText: text(pvpScreen).slice(0, 240),
+          actionCount: count
+        };
+      }, { count: seasonVerificationArchivePvpCount });
+    } catch (error) {
+      seasonVerificationArchivePvpProbe = {
+        ok: false,
+        reason: 'pvp_screen_not_ready',
+        actionCount: seasonVerificationArchivePvpCount,
+        error: error?.message || String(error)
+      };
+    }
+  }
+  add(
+    'season verification archive action can jump from sanctum to pvp review',
+    !!seasonVerificationArchivePvpProbe?.ok,
+    JSON.stringify(seasonVerificationArchivePvpProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'season-verification-archive-pvp.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
   const sanctumHeavenlyMandateProbe = await page.evaluate(() => {
     const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
     if (!window.game || !game.player || typeof game.showCollection !== 'function') {
@@ -2867,6 +3259,13 @@ function rectObj(rect) {
       goalText,
       guideText
     ].join(' ').trim();
+    const focusAction = document.querySelector('[data-heavenly-mandate-focus-action="true"]');
+    const runSlateAction = document.querySelector('[data-heavenly-mandate-task-action-id="weekly_run_slate"]');
+    const challengeAction = document.querySelector('[data-heavenly-mandate-task-action-id="weekly_challenge_score"]');
+    const goalAction = document.querySelector('#sanctum-goal-list [data-heavenly-mandate-action="true"]');
+    const boardTaskTexts = Array.from(document.querySelectorAll('[data-heavenly-mandate-task="true"]'))
+      .map((node) => text(node))
+      .filter(Boolean);
 
     let payload = {};
     try {
@@ -2878,6 +3277,58 @@ function rectObj(rect) {
     const chapterMandate = payload?.map?.chapter?.mandate || null;
     const expeditionLineage = payload?.expedition?.lineage || null;
     const chapterLineage = payload?.map?.chapter?.lineage || null;
+    const mirroredNode = expeditionMandate?.focusTask?.id
+      ? document.querySelector(`[data-heavenly-mandate-task-id="${expeditionMandate.focusTask.id}"]`)
+      : null;
+    const mirroredAction = mirroredNode?.querySelector?.('[data-heavenly-mandate-task-action="true"]') || null;
+    const matchesMandateRoute = (route, task) => {
+      if (!route || !task) return false;
+      if (task.actionType === 'collection') {
+        return route.currentScreen === 'collection' && route.section === task.actionValue;
+      }
+      if (task.actionType === 'challenge') {
+        return route.currentScreen === 'challenge-screen' && route.challengeTab === task.actionValue;
+      }
+      if (task.actionType === 'screen') {
+        return route.currentScreen === task.actionValue;
+      }
+      return false;
+    };
+    const routeResults = {};
+    const restoreSanctum = () => {
+      game.showCollection();
+      if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('sanctum');
+      if (typeof game.initCollection === 'function') game.initCollection();
+    };
+    if (runSlateAction) {
+      runSlateAction.click();
+      routeResults.runSlate = {
+        currentScreen: game.currentScreen || '',
+        section: typeof game.getCollectionHubState === 'function'
+          ? (game.getCollectionHubState()?.section || '')
+          : ''
+      };
+      restoreSanctum();
+    }
+    if (challengeAction) {
+      challengeAction.click();
+      routeResults.challenge = {
+        currentScreen: game.currentScreen || '',
+        challengeTab: game.challengeHubState?.tab || ''
+      };
+      restoreSanctum();
+    }
+    if (goalAction) {
+      goalAction.click();
+      routeResults.goal = {
+        currentScreen: game.currentScreen || '',
+        section: typeof game.getCollectionHubState === 'function'
+          ? (game.getCollectionHubState()?.section || '')
+          : '',
+        challengeTab: game.challengeHubState?.tab || ''
+      };
+      restoreSanctum();
+    }
 
     return {
       ok:
@@ -2886,8 +3337,30 @@ function rectObj(rect) {
         !!expeditionMandate &&
         !!expeditionMandate.weekTag &&
         !!expeditionMandate.themeLabel &&
+        !!expeditionMandate.focusTask &&
+        !!expeditionMandate.focusTask.actionType &&
+        !!expeditionMandate.focusTask.actionValue &&
+        expeditionMandate.nextTask?.id === expeditionMandate.focusTask.id &&
+        expeditionMandate.actionType === expeditionMandate.focusTask.actionType &&
+        expeditionMandate.actionValue === expeditionMandate.focusTask.actionValue &&
+        expeditionMandate.ctaLabel === expeditionMandate.focusTask.ctaLabel &&
         Array.isArray(expeditionMandate.lanes) &&
         expeditionMandate.lanes.length === 3 &&
+        boardTaskTexts.length >= 3 &&
+        !!focusAction &&
+        !!runSlateAction &&
+        !!challengeAction &&
+        !!goalAction &&
+        !!mirroredNode &&
+        !!mirroredAction &&
+        text(goalAction) === expeditionMandate.focusTask.ctaLabel &&
+        text(focusAction) === expeditionMandate.focusTask.ctaLabel &&
+        text(mirroredAction) === expeditionMandate.focusTask.ctaLabel &&
+        routeResults.runSlate?.currentScreen === 'collection' &&
+        routeResults.runSlate?.section === 'slates' &&
+        routeResults.challenge?.currentScreen === 'challenge-screen' &&
+        routeResults.challenge?.challengeTab === 'weekly' &&
+        matchesMandateRoute(routeResults.goal, expeditionMandate.focusTask) &&
         !!expeditionLineage &&
         !!expeditionLineage.summaryLine &&
         Array.isArray(expeditionLineage.tracks) &&
@@ -2895,6 +3368,9 @@ function rectObj(rect) {
         !!chapterMandate &&
         chapterMandate.weekTag === expeditionMandate.weekTag &&
         chapterMandate.themeId === expeditionMandate.themeId &&
+        chapterMandate.focusTask?.id === expeditionMandate.focusTask?.id &&
+        chapterMandate.focusTask?.actionType === expeditionMandate.focusTask?.actionType &&
+        chapterMandate.focusTask?.actionValue === expeditionMandate.focusTask?.actionValue &&
         !!chapterLineage &&
         chapterLineage.summaryLine === expeditionLineage.summaryLine &&
         chapterLineage.detailLine === expeditionLineage.detailLine &&
@@ -2904,6 +3380,8 @@ function rectObj(rect) {
         (chapterLineage.progress?.researchHistoryCount || 0) === (expeditionLineage.progress?.researchHistoryCount || 0),
       subtitleText,
       heavenlyMandateText,
+      boardTaskTexts,
+      routeResults,
       expeditionMandate,
       chapterMandate,
       expeditionLineage,
@@ -3018,6 +3496,10 @@ function rectObj(rect) {
       .map((node) => text(node))
       .filter(Boolean);
     const goalAction = document.querySelector('#sanctum-goal-list [data-heavenly-mandate-action="true"]');
+    const focusAction = document.querySelector('[data-heavenly-mandate-focus-action="true"]');
+    const taskActionTexts = Array.from(document.querySelectorAll('[data-heavenly-mandate-task-action="true"]'))
+      .map((node) => text(node))
+      .filter(Boolean);
 
     let payload = {};
     try {
@@ -3033,24 +3515,89 @@ function rectObj(rect) {
     const mirroredNode = expeditionMandate?.focusTask?.id
       ? document.querySelector(`[data-heavenly-mandate-task-id="${expeditionMandate.focusTask.id}"]`)
       : null;
+    const mirroredAction = mirroredNode?.querySelector?.('[data-heavenly-mandate-task-action="true"]') || null;
+    const captureMandateRoute = () => ({
+      currentScreen: game.currentScreen || '',
+      section: typeof game.getCollectionHubState === 'function'
+        ? (game.getCollectionHubState()?.section || '')
+        : '',
+      challengeTab: game.challengeHubState?.tab || ''
+    });
+    const matchesMandateRoute = (route, task) => {
+      if (!route || !task) return false;
+      if (task.actionType === 'collection') {
+        return route.currentScreen === 'collection' && route.section === task.actionValue;
+      }
+      if (task.actionType === 'challenge') {
+        return route.currentScreen === 'challenge-screen' && route.challengeTab === task.actionValue;
+      }
+      if (task.actionType === 'screen') {
+        return route.currentScreen === task.actionValue;
+      }
+      return false;
+    };
+    const restoreSanctum = () => {
+      game.showCollection();
+      if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('sanctum');
+      if (typeof game.initCollection === 'function') game.initCollection();
+    };
+    const routeResults = {};
+    if (goalAction) {
+      goalAction.click();
+      routeResults.goal = captureMandateRoute();
+      restoreSanctum();
+    }
+    const focusActionNode = document.querySelector('[data-heavenly-mandate-focus-action="true"]');
+    if (focusActionNode) {
+      focusActionNode.click();
+      routeResults.focus = captureMandateRoute();
+      restoreSanctum();
+    }
+    const mirroredActionNode = expeditionMandate?.focusTask?.id
+      ? document.querySelector(`[data-heavenly-mandate-task-id="${expeditionMandate.focusTask.id}"] [data-heavenly-mandate-task-action="true"]`)
+      : null;
+    if (mirroredActionNode) {
+      mirroredActionNode.click();
+      routeResults.mirrored = captureMandateRoute();
+      restoreSanctum();
+    }
 
     return {
       ok:
         /债|欠卷|清/.test(heavenlyMandateText) &&
         boardTaskTexts.some((line) => /债|欠卷|清/.test(line)) &&
         !!goalAction &&
+        !!focusAction &&
+        taskActionTexts.length > 0 &&
         !!expeditionMandate?.focusTask &&
         expeditionMandate.focusTask.source === 'seasonDebtPack' &&
         expeditionMandate.focusTask.isPlaceholder === false &&
         expeditionMandate.focusTask.occupiesStrongSlot === true &&
+        expeditionMandate.actionType === expeditionMandate.focusTask.actionType &&
+        expeditionMandate.actionValue === expeditionMandate.focusTask.actionValue &&
+        expeditionMandate.ctaLabel === expeditionMandate.focusTask.ctaLabel &&
+        text(goalAction) === expeditionMandate.focusTask.ctaLabel &&
+        text(focusAction) === expeditionMandate.focusTask.ctaLabel &&
+        taskActionTexts.includes(expeditionMandate.focusTask.ctaLabel) &&
         !!occupiedTask &&
         occupiedTask.id === expeditionMandate.focusTask.id &&
         occupiedTask.occupiesStrongSlot === true &&
+        occupiedTask.actionType === expeditionMandate.focusTask.actionType &&
+        occupiedTask.actionValue === expeditionMandate.focusTask.actionValue &&
         !!mirroredNode &&
+        !!mirroredAction &&
+        text(mirroredAction) === expeditionMandate.focusTask.ctaLabel &&
+        matchesMandateRoute(routeResults.goal, expeditionMandate.focusTask) &&
+        matchesMandateRoute(routeResults.focus, expeditionMandate.focusTask) &&
+        matchesMandateRoute(routeResults.mirrored, expeditionMandate.focusTask) &&
         !!chapterMandate?.focusTask &&
-        chapterMandate.focusTask.id === expeditionMandate.focusTask.id,
+        chapterMandate.focusTask.id === expeditionMandate.focusTask.id &&
+        chapterMandate.focusTask.actionType === expeditionMandate.focusTask.actionType &&
+        chapterMandate.focusTask.actionValue === expeditionMandate.focusTask.actionValue,
       heavenlyMandateText,
       boardTaskTexts,
+      taskActionTexts,
+      routeResults,
       expeditionMandate,
       chapterMandate,
       occupiedTask

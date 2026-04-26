@@ -1104,7 +1104,30 @@
                     progressText: String(source.nextTask.progressText || ''),
                     hintLine: String(source.nextTask.hintLine || ''),
                     statusLine: String(source.nextTask.statusLine || ''),
-                    anchorSection: String(source.nextTask.anchorSection || '')
+                    anchorSection: String(source.nextTask.anchorSection || ''),
+                    actionType: String(source.nextTask.actionType || ''),
+                    actionValue: String(source.nextTask.actionValue || ''),
+                    ctaLabel: String(source.nextTask.ctaLabel || ''),
+                    source: String(source.nextTask.source || ''),
+                    sourceId: String(source.nextTask.sourceId || ''),
+                    taskSource: String(source.nextTask.taskSource || ''),
+                    taskSourceId: String(source.nextTask.taskSourceId || '')
+                }
+                : null,
+            nextWeekGoal: source.nextWeekGoal && typeof source.nextWeekGoal === 'object'
+                ? {
+                    title: String(source.nextWeekGoal.title || ''),
+                    note: String(source.nextWeekGoal.note || ''),
+                    action: String(source.nextWeekGoal.action || ''),
+                    value: String(source.nextWeekGoal.value || ''),
+                    buttonLabel: String(source.nextWeekGoal.buttonLabel || source.nextWeekGoal.ctaLabel || ''),
+                    source: String(source.nextWeekGoal.source || ''),
+                    sourceId: String(source.nextWeekGoal.sourceId || ''),
+                    taskSource: String(source.nextWeekGoal.taskSource || ''),
+                    taskSourceId: String(source.nextWeekGoal.taskSourceId || ''),
+                    taskId: String(source.nextWeekGoal.taskId || ''),
+                    laneId: String(source.nextWeekGoal.laneId || ''),
+                    anchorSection: String(source.nextWeekGoal.anchorSection || '')
                 }
                 : null,
             lanes
@@ -3790,7 +3813,7 @@
             ratingTone: String(answerReview?.ratingTone || (hasLockedBranch ? 'selected' : 'suggested')),
             highlightLine: String(answerReview?.highlightLine || answerReview?.overviewLine || fallbackHighlightLine),
             trainingAdvice: String(answerReview?.trainingAdvice || fallbackTrainingAdvice),
-            focusLines: [seasonSettlementLine, agendaFocusLine, lineageSummaryLine, agendaRecoveryLine, agendaContractLine, agendaContractCostLine, aftereffectSummaryLine, aftereffectStatusLine, ...diagnosticLines].filter(Boolean).slice(0, 4),
+            focusLines: [agendaFocusLine, seasonSettlementLine, lineageSummaryLine, agendaRecoveryLine, agendaContractLine, agendaContractCostLine, aftereffectSummaryLine, aftereffectStatusLine, ...diagnosticLines].filter(Boolean).slice(0, 4),
             breakdown: [seasonDebtLine, seasonVerificationLine, agendaBreakdownLine, lineageDetailLine, aftereffectDetailLine, agendaContractBreakdownLine, ...breakdown].filter(Boolean).slice(0, 4),
             tags: [
                 ...(seasonBoard?.settlement?.outcomeLabel ? [`押卷·${String(seasonBoard.settlement.outcomeLabel || '').trim()}`] : []),
@@ -5331,7 +5354,30 @@
                                 progressText: payload.expedition.seasonBoard.nextTask.progressText || '',
                                 hintLine: payload.expedition.seasonBoard.nextTask.hintLine || '',
                                 statusLine: payload.expedition.seasonBoard.nextTask.statusLine || '',
-                                anchorSection: payload.expedition.seasonBoard.nextTask.anchorSection || ''
+                                anchorSection: payload.expedition.seasonBoard.nextTask.anchorSection || '',
+                                actionType: payload.expedition.seasonBoard.nextTask.actionType || '',
+                                actionValue: payload.expedition.seasonBoard.nextTask.actionValue || '',
+                                ctaLabel: payload.expedition.seasonBoard.nextTask.ctaLabel || '',
+                                source: payload.expedition.seasonBoard.nextTask.source || '',
+                                sourceId: payload.expedition.seasonBoard.nextTask.sourceId || '',
+                                taskSource: payload.expedition.seasonBoard.nextTask.taskSource || '',
+                                taskSourceId: payload.expedition.seasonBoard.nextTask.taskSourceId || ''
+                            }
+                            : null,
+                        nextWeekGoal: payload.expedition.seasonBoard.nextWeekGoal
+                            ? {
+                                title: payload.expedition.seasonBoard.nextWeekGoal.title || '',
+                                note: payload.expedition.seasonBoard.nextWeekGoal.note || '',
+                                action: payload.expedition.seasonBoard.nextWeekGoal.action || '',
+                                value: payload.expedition.seasonBoard.nextWeekGoal.value || '',
+                                buttonLabel: payload.expedition.seasonBoard.nextWeekGoal.buttonLabel || '',
+                                source: payload.expedition.seasonBoard.nextWeekGoal.source || '',
+                                sourceId: payload.expedition.seasonBoard.nextWeekGoal.sourceId || '',
+                                taskSource: payload.expedition.seasonBoard.nextWeekGoal.taskSource || '',
+                                taskSourceId: payload.expedition.seasonBoard.nextWeekGoal.taskSourceId || '',
+                                taskId: payload.expedition.seasonBoard.nextWeekGoal.taskId || '',
+                                laneId: payload.expedition.seasonBoard.nextWeekGoal.laneId || '',
+                                anchorSection: payload.expedition.seasonBoard.nextWeekGoal.anchorSection || ''
                             }
                             : null,
                         lanes: readArray(payload.expedition.seasonBoard.lanes).map((lane) => ({
@@ -5367,6 +5413,9 @@
                         summaryLine: payload.expedition.mandate.summaryLine || '',
                         completedTaskCount: payload.expedition.mandate.completedTaskCount || 0,
                         totalTaskCount: payload.expedition.mandate.totalTaskCount || 0,
+                        actionType: payload.expedition.mandate.actionType || '',
+                        actionValue: payload.expedition.mandate.actionValue || '',
+                        ctaLabel: payload.expedition.mandate.ctaLabel || '',
                         focusTask: payload.expedition.mandate.focusTask
                             ? {
                                 id: payload.expedition.mandate.focusTask.id || '',
@@ -5379,10 +5428,34 @@
                                 hintLine: payload.expedition.mandate.focusTask.hintLine || '',
                                 statusLine: payload.expedition.mandate.focusTask.statusLine || '',
                                 anchorSection: payload.expedition.mandate.focusTask.anchorSection || '',
+                                actionType: payload.expedition.mandate.focusTask.actionType || '',
+                                actionValue: payload.expedition.mandate.focusTask.actionValue || '',
+                                ctaLabel: payload.expedition.mandate.focusTask.ctaLabel || '',
                                 source: payload.expedition.mandate.focusTask.source || '',
                                 sourceId: payload.expedition.mandate.focusTask.sourceId || '',
                                 isPlaceholder: !!payload.expedition.mandate.focusTask.isPlaceholder,
                                 occupiesStrongSlot: !!payload.expedition.mandate.focusTask.occupiesStrongSlot
+                            }
+                            : null,
+                        nextTask: payload.expedition.mandate.nextTask
+                            ? {
+                                id: payload.expedition.mandate.nextTask.id || '',
+                                label: payload.expedition.mandate.nextTask.label || '',
+                                icon: payload.expedition.mandate.nextTask.icon || '',
+                                progress: payload.expedition.mandate.nextTask.progress || 0,
+                                target: payload.expedition.mandate.nextTask.target || 0,
+                                completed: !!payload.expedition.mandate.nextTask.completed,
+                                progressText: payload.expedition.mandate.nextTask.progressText || '',
+                                hintLine: payload.expedition.mandate.nextTask.hintLine || '',
+                                statusLine: payload.expedition.mandate.nextTask.statusLine || '',
+                                anchorSection: payload.expedition.mandate.nextTask.anchorSection || '',
+                                actionType: payload.expedition.mandate.nextTask.actionType || '',
+                                actionValue: payload.expedition.mandate.nextTask.actionValue || '',
+                                ctaLabel: payload.expedition.mandate.nextTask.ctaLabel || '',
+                                source: payload.expedition.mandate.nextTask.source || '',
+                                sourceId: payload.expedition.mandate.nextTask.sourceId || '',
+                                isPlaceholder: !!payload.expedition.mandate.nextTask.isPlaceholder,
+                                occupiesStrongSlot: !!payload.expedition.mandate.nextTask.occupiesStrongSlot
                             }
                             : null,
                         lanes: readArray(payload.expedition.mandate.lanes).map((lane) => ({
@@ -5402,7 +5475,10 @@
                                 completed: !!task?.completed,
                                 hintLine: task?.hintLine || '',
                                 statusLine: task?.statusLine || '',
-                                anchorSection: task?.anchorSection || ''
+                                anchorSection: task?.anchorSection || '',
+                                actionType: task?.actionType || '',
+                                actionValue: task?.actionValue || '',
+                                ctaLabel: task?.ctaLabel || ''
                             }))
                         })),
                         history: readArray(payload.expedition.mandate.history).map((entry) => ({
@@ -5816,8 +5892,10 @@
                 id: 'heavenly_mandate_goal',
                 title: `天道敕令 · ${mandate.themeLabel || '本周修行'}`,
                 note: `${mandate.summaryLine || '本周天道敕令已经落定。'}${mandate.totalTaskCount > 0 ? ` · ${mandate.completedTaskCount}/${mandate.totalTaskCount}` : ''}`,
-                action: 'collection',
-                value: 'sanctum',
+                action: String(mandate.actionType || 'collection').trim() || 'collection',
+                value: String(mandate.actionValue || 'sanctum').trim() || 'sanctum',
+                buttonLabel: String(mandate.ctaLabel || '前往推进').trim() || '前往推进',
+                followTaskId: String(mandate.focusTask?.id || '').trim(),
                 icon: mandate.themeIcon || '📜'
             });
         }

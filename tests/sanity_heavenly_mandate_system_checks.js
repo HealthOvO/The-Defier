@@ -285,18 +285,87 @@ function loadFile(ctx, filePath) {
   const runSlateTask = expeditionLane.tasks.find((task) => task.id === 'weekly_run_slate');
   assert(runSlateTask && runSlateTask.completed, `current-week slate should complete weekly run task, got ${JSON.stringify(runSlateTask)}`);
   assert(trainingLane.tasks.some((task) => task.id === 'weekly_training_focus' && task.completed), `training lane should acknowledge current focus, got ${JSON.stringify(trainingLane)}`);
+  assert(
+    mandateSnapshot?.focusTask?.id === 'weekly_sanctum_commitment'
+      && mandateSnapshot?.focusTask?.actionType === 'collection'
+      && mandateSnapshot?.focusTask?.actionValue === 'sanctum'
+      && typeof mandateSnapshot?.focusTask?.ctaLabel === 'string'
+      && mandateSnapshot?.nextTask?.id === mandateSnapshot?.focusTask?.id
+      && mandateSnapshot?.actionType === mandateSnapshot?.focusTask?.actionType
+      && mandateSnapshot?.actionValue === mandateSnapshot?.focusTask?.actionValue,
+    `mandate snapshot should surface a current actionable focus task, got ${JSON.stringify(mandateSnapshot)}`
+  );
 
   const payload = game.getExpeditionPayload();
   assert(payload && payload.mandate && payload.mandate.weekTag === currentWeekTag, `expedition payload should expose heavenly mandate snapshot, got ${JSON.stringify(payload)}`);
   assert(Array.isArray(payload.mandate.lanes) && payload.mandate.lanes.length === 3, `expedition payload mandate should preserve lanes, got ${JSON.stringify(payload?.mandate)}`);
+  assert(
+    JSON.stringify(payload?.mandate?.focusTask || null) === JSON.stringify(mandateSnapshot?.focusTask || null)
+      && JSON.stringify(payload?.mandate?.nextTask || null) === JSON.stringify(mandateSnapshot?.nextTask || null),
+    `expedition payload should mirror mandate focus/next task semantics, got ${JSON.stringify(payload?.mandate)} vs ${JSON.stringify(mandateSnapshot)}`
+  );
 
   const renderedPayload = JSON.parse(game.renderGameToText());
   assert(renderedPayload?.expedition?.mandate?.weekTag === currentWeekTag, `render payload should expose expedition mandate, got ${JSON.stringify(renderedPayload?.expedition?.mandate)}`);
+  assert(
+    JSON.stringify(renderedPayload?.expedition?.mandate?.focusTask || null) === JSON.stringify(mandateSnapshot?.focusTask || null)
+      && JSON.stringify(renderedPayload?.map?.chapter?.mandate?.focusTask || null) === JSON.stringify(mandateSnapshot?.focusTask || null)
+      && JSON.stringify(renderedPayload?.expedition?.mandate?.nextTask || null) === JSON.stringify(mandateSnapshot?.nextTask || null),
+    `render payload should mirror mandate action surfaces into expedition/map, got ${JSON.stringify(renderedPayload?.expedition?.mandate)} vs ${JSON.stringify(renderedPayload?.map?.chapter?.mandate)}`
+  );
 
   const sanctumOverview = game.getSanctumOverviewData();
   assert(sanctumOverview?.heavenlyMandate?.weekTag === currentWeekTag, `sanctum overview should expose heavenly mandate view model, got ${JSON.stringify(sanctumOverview?.heavenlyMandate)}`);
   assert(Array.isArray(sanctumOverview?.heavenlyMandate?.lanes) && sanctumOverview.heavenlyMandate.lanes.length === 3, `sanctum overview should expose mandate lanes, got ${JSON.stringify(sanctumOverview?.heavenlyMandate)}`);
   assert(sanctumOverview.goals.some((goal) => goal.id === 'heavenly_mandate_goal'), `sanctum overview should inject a heavenly mandate goal card, got ${JSON.stringify(sanctumOverview.goals)}`);
+  const mandateGoal = sanctumOverview.goals.find((goal) => goal.id === 'heavenly_mandate_goal') || null;
+  assert(
+    sanctumOverview?.heavenlyMandate?.focusTask?.id === mandateSnapshot?.focusTask?.id
+      && mandateGoal?.action === 'collection'
+      && mandateGoal?.value === 'sanctum'
+      && typeof mandateGoal?.buttonLabel === 'string'
+      && mandateGoal?.followTaskId === mandateSnapshot?.focusTask?.id,
+    `sanctum overview should reuse the mandate focus task as a routed goal surface, got ${JSON.stringify({ heavenlyMandate: sanctumOverview?.heavenlyMandate, mandateGoal })}`
+  );
+  assert(
+    !/【(?:sanctum|slates|chapters|challenge|pvp|endless|map)】/.test(String(sanctumOverview?.heavenlyMandate?.guideLine || '')),
+    `sanctum heavenly mandate guide copy should avoid leaking raw anchor ids, got ${JSON.stringify(sanctumOverview?.heavenlyMandate)}`
+  );
+
+  const navigationEvents = [];
+  game.switchCollectionSection = (section = 'laws') => {
+    navigationEvents.push({ type: 'collection', section });
+  };
+  game.showChallengeHub = (tab = 'daily') => {
+    navigationEvents.push({ type: 'challenge', tab });
+  };
+  game.showScreen = (screen = 'map-screen') => {
+    navigationEvents.push({ type: 'screen', screen });
+  };
+  game.startEndlessMode = () => {
+    navigationEvents.push({ type: 'endless-start' });
+  };
+  game.isEndlessActive = () => false;
+  assert(game.followHeavenlyMandateTask('weekly_run_slate') === true, 'followHeavenlyMandateTask should navigate for run slate tasks');
+  assert(
+    navigationEvents.pop()?.section === 'slates',
+    `run slate mandate task should route to slates, got ${JSON.stringify(navigationEvents)}`
+  );
+  assert(game.followHeavenlyMandateTask('weekly_challenge_score') === true, 'followHeavenlyMandateTask should navigate for weekly challenge tasks');
+  assert(
+    JSON.stringify(navigationEvents.pop() || null) === JSON.stringify({ type: 'challenge', tab: 'weekly' }),
+    `weekly challenge mandate task should route to challenge hub, got ${JSON.stringify(navigationEvents)}`
+  );
+  assert(game.followHeavenlyMandateTask('weekly_pvp_ledger') === true, 'followHeavenlyMandateTask should navigate for pvp tasks');
+  assert(
+    JSON.stringify(navigationEvents.pop() || null) === JSON.stringify({ type: 'screen', screen: 'pvp-screen' }),
+    `pvp mandate task should route to pvp screen, got ${JSON.stringify(navigationEvents)}`
+  );
+  assert(game.followHeavenlyMandateTask('weekly_endless_clear') === true, 'followHeavenlyMandateTask should navigate for endless tasks');
+  assert(
+    JSON.stringify(navigationEvents.pop() || null) === JSON.stringify({ type: 'endless-start' }),
+    `endless mandate task should start endless mode when not already active, got ${JSON.stringify(navigationEvents)}`
+  );
 
   const debtGame = createGame();
   ctx.game = debtGame;
@@ -370,6 +439,8 @@ function loadFile(ctx, filePath) {
     debtMandateSnapshot?.focusTask?.source === 'seasonDebtPack'
       && !debtMandateSnapshot?.focusTask?.isPlaceholder
       && debtMandateSnapshot?.focusTask?.occupiesStrongSlot
+      && debtMandateSnapshot?.focusTask?.actionType === 'screen'
+      && debtMandateSnapshot?.focusTask?.actionValue === 'map-screen'
       && occupiedMandateTask?.occupiesStrongSlot
       && occupiedMandateTask?.laneId === 'versus'
       && /债|欠卷|清/.test(String(debtMandateSnapshot?.focusTask?.label || '')),
@@ -411,6 +482,10 @@ function loadFile(ctx, filePath) {
     `sanctum heavenly mandate copy should pivot to the debt-clearing focus, got ${JSON.stringify(debtSanctumOverview?.heavenlyMandate)}`
   );
   assert(
+    !/【(?:sanctum|slates|chapters|challenge|pvp|endless|map)】/.test(String(debtSanctumOverview?.heavenlyMandate?.guideLine || '')),
+    `debt-focused heavenly mandate guide copy should use player-facing target labels, got ${JSON.stringify(debtSanctumOverview?.heavenlyMandate)}`
+  );
+  assert(
     debtSanctumOverview.goals.some((goal) =>
       goal.id === 'heavenly_mandate_goal'
       && /债|欠卷|清/.test(`${String(goal.title || '')} ${String(goal.note || '')}`)
@@ -421,6 +496,11 @@ function loadFile(ctx, filePath) {
   assert(
     debtMandateGoal?.action === 'screen' && debtMandateGoal?.value === 'map-screen',
     `sanctum heavenly mandate goal card should route using the focus task action surface, got ${JSON.stringify(debtMandateGoal)}`
+  );
+  assert(
+    debtMandateGoal?.buttonLabel === debtMandateSnapshot?.focusTask?.ctaLabel
+      && debtMandateGoal?.followTaskId === debtMandateSnapshot?.focusTask?.id,
+    `sanctum heavenly mandate goal card should keep mandate follow metadata aligned with the occupied focus task, got ${JSON.stringify({ debtMandateGoal, focusTask: debtMandateSnapshot?.focusTask })}`
   );
   debtGame.recordSeasonVerificationResult({
     role: 'primary',
@@ -445,14 +525,16 @@ function loadFile(ctx, filePath) {
     .flatMap((lane) => (Array.isArray(lane?.tasks) ? lane.tasks : []))
     .find((task) => task.id === debtMandateSnapshot?.focusTask?.id) || null;
   assert(
-    !releasedMandateSnapshot?.focusTask
+    releasedMandateSnapshot?.focusTask?.id !== debtMandateSnapshot?.focusTask?.id
+      && releasedMandateSnapshot?.focusTask?.source !== 'seasonDebtPack'
       && !releasedOccupiedTask
       && releasedMandateSnapshot?.lanes?.find((lane) => lane.id === 'versus')?.tasks?.[0]?.id === 'weekly_endless_clear',
     `cleared debt should release the heavenly mandate strong slot and restore the regular lane task, got ${JSON.stringify(releasedMandateSnapshot)}`
   );
   const releasedSanctumOverview = debtGame.getSanctumOverviewData();
   assert(
-    !releasedSanctumOverview?.heavenlyMandate?.focusTask,
+    releasedSanctumOverview?.heavenlyMandate?.focusTask?.id === releasedMandateSnapshot?.focusTask?.id
+      && releasedSanctumOverview?.heavenlyMandate?.focusTask?.source !== 'seasonDebtPack',
     `sanctum heavenly mandate view should also release the debt focus after main verification clears it, got ${JSON.stringify(releasedSanctumOverview?.heavenlyMandate)}`
   );
 

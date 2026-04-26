@@ -2989,8 +2989,17 @@ async function safeScreenshot(page, outPath) {
     const afterSeasonLedger = panel?.querySelector('.endless-season-ledger')?.textContent?.trim() || '';
     const pulseUpBeforeClick = !!panel?.classList.contains('pressure-up');
     const directiveNoteBeforeClick = panel?.querySelector('.endless-directive-note')?.textContent?.trim() || '';
-    const volatileDirectiveBtn = Array.from(panel?.querySelectorAll('.endless-directive-option.risk-volatile') || [])[0] || null;
-    if (volatileDirectiveBtn) volatileDirectiveBtn.click();
+    const directiveButtons = Array.from(panel?.querySelectorAll('.endless-directive-option[data-endless-directive]') || [])
+      .filter((button) => button.getAttribute('data-endless-directive') !== 'auto');
+    const targetDirectiveBtn =
+      directiveButtons.find((button) => button.classList.contains('risk-volatile') && !button.classList.contains('active')) ||
+      directiveButtons.find((button) => !button.classList.contains('active')) ||
+      directiveButtons[0] ||
+      null;
+    const clickedDirectiveId = targetDirectiveBtn?.getAttribute('data-endless-directive') || '';
+    const clickedDirectiveName = targetDirectiveBtn?.querySelector('.directive-name')?.textContent?.trim() || targetDirectiveBtn?.textContent?.trim() || '';
+    const clickedDirectiveRisk = targetDirectiveBtn?.querySelector('.directive-risk')?.textContent?.trim() || '';
+    if (targetDirectiveBtn) targetDirectiveBtn.click();
     const directiveNoteAfterClick = panel?.querySelector('.endless-directive-note')?.textContent?.trim() || '';
     const afterDirectiveDangerUi = collectDangerUi(panel);
     const afterDirectiveDangerPayload = readDangerPayload();
@@ -3045,6 +3054,9 @@ async function safeScreenshot(page, outPath) {
       afterSeasonLedger,
       directiveNoteBeforeClick,
       directiveNoteAfterClick,
+      clickedDirectiveId,
+      clickedDirectiveName,
+      clickedDirectiveRisk,
       collapseNote,
       dangerPayload: textState?.endlessDangerProfile || afterDirectiveDangerPayload || null,
       seasonPayload: textState?.endlessSeason || null
@@ -3083,7 +3095,10 @@ async function safeScreenshot(page, outPath) {
       /对策|当前：/.test(endlessPressurePanelProbe.afterDirectiveCounterplay || '') &&
       (endlessPressurePanelProbe.afterDirectiveReserve || '').length > 0 &&
       /当前：/.test(endlessPressurePanelProbe.directiveNoteBeforeClick || '') &&
-      /激进|玩家钦定/.test(endlessPressurePanelProbe.directiveNoteAfterClick || '') &&
+      /当前：/.test(endlessPressurePanelProbe.directiveNoteAfterClick || '') &&
+      (endlessPressurePanelProbe.clickedDirectiveRisk
+        ? (endlessPressurePanelProbe.directiveNoteAfterClick || '').includes(endlessPressurePanelProbe.clickedDirectiveRisk)
+        : /激进|平衡|稳进/.test(endlessPressurePanelProbe.directiveNoteAfterClick || '')) &&
       (
         endlessPressurePanelProbe.afterDirectiveDangerHead !== endlessPressurePanelProbe.afterPressureDangerHead ||
         endlessPressurePanelProbe.afterDirectiveDangerSummary !== endlessPressurePanelProbe.afterPressureDangerSummary ||

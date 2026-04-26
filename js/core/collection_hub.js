@@ -110,6 +110,8 @@
                             const target = Math.max(1, clampInt(task.target, 1, 9999));
                             const completed = !!task.completed || rawProgress >= target;
                             const progress = completed ? target : Math.min(rawProgress, target);
+                            const anchorSection = String(task.anchorSection || '').trim();
+                            const actionMeta = resolveSeasonBoardActionMeta(anchorSection, 'sanctum');
                             return {
                                 id: String(task.id || `${String(lane.id || `lane_${laneIndex + 1}`)}_task_${taskIndex + 1}`).trim(),
                                 label: String(task.label || `敕令任务 ${taskIndex + 1}`).trim(),
@@ -120,7 +122,11 @@
                                 completed,
                                 hintLine: String(task.hintLine || '').trim(),
                                 statusLine: String(task.statusLine || (completed ? '已完成' : `${progress}/${target}`)).trim(),
-                                anchorSection: String(task.anchorSection || '').trim()
+                                anchorSection,
+                                actionType: String(task.actionType || actionMeta.actionType || '').trim() || actionMeta.actionType,
+                                actionValue: String(task.actionValue || actionMeta.actionValue || '').trim() || actionMeta.actionValue,
+                                ctaLabel: String(task.ctaLabel || actionMeta.ctaLabel || (completed ? '沿此复核' : '前往推进')).trim()
+                                    || (completed ? '沿此复核' : '前往推进')
                             };
                         });
                     const completedCount = Math.min(tasks.length, clampInt(lane.completedCount, 0, tasks.length || 9999));
@@ -152,7 +158,9 @@
             ? mandate.focusTask
             : (legacy?.focusTask && typeof legacy.focusTask === 'object' ? legacy.focusTask : null);
         const focusTask = focusTaskSource
-            ? {
+            ? (() => {
+                const actionMeta = resolveSeasonBoardActionMeta(String(focusTaskSource.anchorSection || '').trim(), 'sanctum');
+                return {
                 id: String(focusTaskSource.id || 'heavenly_mandate_focus').trim() || 'heavenly_mandate_focus',
                 label: String(focusTaskSource.label || '本周焦点').trim() || '本周焦点',
                 icon: String(focusTaskSource.icon || '📜').trim() || '📜',
@@ -163,11 +171,15 @@
                 hintLine: String(focusTaskSource.hintLine || '').trim(),
                 statusLine: String(focusTaskSource.statusLine || '').trim(),
                 anchorSection: String(focusTaskSource.anchorSection || '').trim(),
+                actionType: String(focusTaskSource.actionType || actionMeta.actionType || '').trim() || actionMeta.actionType,
+                actionValue: String(focusTaskSource.actionValue || actionMeta.actionValue || '').trim() || actionMeta.actionValue,
+                ctaLabel: String(focusTaskSource.ctaLabel || actionMeta.ctaLabel || '前往推进').trim() || '前往推进',
                 source: String(focusTaskSource.source || '').trim(),
                 sourceId: String(focusTaskSource.sourceId || '').trim(),
                 isPlaceholder: !!focusTaskSource.isPlaceholder,
                 occupiesStrongSlot: !!focusTaskSource.occupiesStrongSlot
-            }
+            };
+            })()
             : null;
         const nextTask = focusTask || lanes.flatMap((lane) => lane.tasks).find((task) => !task.completed) || null;
         const weekTag = String(mandate?.weekTag || legacy?.weekTag || '').trim();
@@ -189,16 +201,20 @@
                 ? `${themeKicker || '本周天道敕令'}${totalTaskCount > 0 ? ` · 已完成 ${completedTaskCount}/${totalTaskCount}` : ''}`
                 : ''))
         ).trim();
+        const mandateActionMeta = resolveSeasonBoardActionMeta(
+            String(mandate?.actionValue || nextTask?.anchorSection || legacy?.actionValue || '').trim(),
+            'sanctum'
+        );
+        const mandateGuideTargetLabel = String(mandateActionMeta.targetLabel || '').trim();
         const guideLine = String(
             legacy?.guideLine
             || (nextTask
-                ? `先沿${nextTask.anchorSection ? `【${nextTask.anchorSection}】` : '当前主线'}补完「${nextTask.label}」，再回洞府复核其余两条玩法线。`
+                ? `先沿${mandateGuideTargetLabel ? `【${mandateGuideTargetLabel}】` : '当前主线'}补完「${nextTask.label}」，再回洞府复核其余两条玩法线。`
                 : (mandate && lanes.length > 0
                 ? `本周共 ${lanes.length} 条任务线，适合按远征、训练、对抗三线同步补进度。`
                 : '')
             )
         ).trim();
-
         return {
             available: !!mandate || !!legacy,
             isBoard: !!mandate,
@@ -220,9 +236,11 @@
             completedTaskCount,
             totalTaskCount,
             progressText: totalTaskCount > 0 ? `${completedTaskCount}/${totalTaskCount}` : '待同步',
-            actionType: String(mandate?.actionType || legacy?.actionType || 'collection').trim() || 'collection',
-            actionValue: String(mandate?.actionValue || legacy?.actionValue || 'sanctum').trim() || 'sanctum',
+            actionType: String(mandate?.actionType || legacy?.actionType || mandateActionMeta.actionType || 'collection').trim() || 'collection',
+            actionValue: String(mandate?.actionValue || legacy?.actionValue || mandateActionMeta.actionValue || 'sanctum').trim() || 'sanctum',
+            ctaLabel: String(mandate?.ctaLabel || legacy?.ctaLabel || nextTask?.ctaLabel || mandateActionMeta.ctaLabel || '前往推进').trim() || '前往推进',
             focusTask,
+            nextTask,
             lanes
         };
     };
@@ -266,6 +284,8 @@
                             const target = Math.max(1, clampInt(task.target, 1, 9999));
                             const completed = !!task.completed || rawProgress >= target;
                             const progress = completed ? target : Math.min(rawProgress, target);
+                            const anchorSection = String(task.anchorSection || '').trim();
+                            const actionMeta = resolveSeasonBoardActionMeta(anchorSection || task.actionValue || '', 'sanctum');
                             return {
                                 id: String(task.id || `${String(lane.id || `lane_${laneIndex + 1}`)}_task_${taskIndex + 1}`).trim(),
                                 label: String(task.label || `季盘任务 ${taskIndex + 1}`).trim(),
@@ -276,7 +296,11 @@
                                 completed,
                                 hintLine: String(task.hintLine || '').trim(),
                                 statusLine: String(task.statusLine || '').trim(),
-                                anchorSection: String(task.anchorSection || '').trim()
+                                anchorSection,
+                                actionType: String(task.actionType || actionMeta.actionType || '').trim() || actionMeta.actionType,
+                                actionValue: String(task.actionValue || actionMeta.actionValue || '').trim() || actionMeta.actionValue,
+                                ctaLabel: String(task.ctaLabel || actionMeta.ctaLabel || (completed ? '沿此复核' : '前往推进')).trim()
+                                    || (completed ? '沿此复核' : '前往推进')
                             };
                         });
                     const completedCount = Math.min(tasks.length, clampInt(lane.completedCount, 0, tasks.length || 9999));
@@ -417,6 +441,118 @@
                 }
             }
             : null;
+        const normalizeSeasonVerificationArchiveEntry = (entry = null, index = 0) => {
+            const root = entry && typeof entry === 'object' ? entry : {};
+            return {
+                recordId: String(root.recordId || root.id || `season_verification_archive_${index + 1}`).trim() || `season_verification_archive_${index + 1}`,
+                weekTag: String(root.weekTag || '').trim(),
+                weekLabel: String(root.weekLabel || '').trim(),
+                role: String(root.role || '').trim(),
+                roleLabel: String(root.roleLabel || '').trim(),
+                sourceMode: String(root.sourceMode || '').trim(),
+                sourceModeLabel: String(root.sourceModeLabel || '').trim(),
+                resultStatus: String(root.resultStatus || '').trim(),
+                resultLabel: String(root.resultLabel || '').trim(),
+                writebackMode: String(root.writebackMode || '').trim(),
+                writebackLabel: String(root.writebackLabel || '').trim(),
+                phaseId: String(root.phaseId || '').trim(),
+                phaseLabel: String(root.phaseLabel || '').trim(),
+                settlementOutcomeId: String(root.settlementOutcomeId || '').trim(),
+                settlementOutcomeLabel: String(root.settlementOutcomeLabel || '').trim(),
+                settlementSource: String(root.settlementSource || '').trim(),
+                debtStatus: String(root.debtStatus || '').trim(),
+                deferCount: clampInt(root.deferCount, 0, 9999),
+                carryIntoWeekTag: String(root.carryIntoWeekTag || '').trim(),
+                carryIntoNextWeek: !!root.carryIntoNextWeek,
+                summaryLine: String(root.summaryLine || '').trim(),
+                detailLine: String(root.detailLine || '').trim(),
+                writebackLine: String(root.writebackLine || '').trim(),
+                statusLine: String(root.statusLine || '').trim(),
+                noteLine: String(root.noteLine || '').trim(),
+                kicker: String(root.kicker || '').trim(),
+                tagLine: String(root.tagLine || '').trim(),
+                lineageStyle: String(root.lineageStyle || '').trim(),
+                chapterIndex: clampInt(root.chapterIndex, 0, 9999),
+                anchorSection: String(root.anchorSection || '').trim(),
+                actionType: String(root.actionType || '').trim() || 'collection',
+                actionValue: String(root.actionValue || '').trim() || 'sanctum',
+                ctaLabel: String(root.ctaLabel || '').trim() || '沿此复核',
+                createdAt: clampInt(root.createdAt, 0),
+                updatedAt: clampInt(root.updatedAt, 0)
+            };
+        };
+        const verificationArchiveEntries = board?.verificationArchive && typeof board.verificationArchive === 'object'
+            ? readArray(board.verificationArchive.entries)
+                .filter((entry) => entry && typeof entry === 'object')
+                .slice(0, 6)
+                .map(normalizeSeasonVerificationArchiveEntry)
+            : [];
+        const verificationArchiveLatest = board?.verificationArchive?.latestEntry && typeof board.verificationArchive.latestEntry === 'object'
+            ? normalizeSeasonVerificationArchiveEntry(board.verificationArchive.latestEntry)
+            : (verificationArchiveEntries[0] || null);
+        const verificationArchive = {
+            available: !!board?.verificationArchive?.available || verificationArchiveEntries.length > 0 || !!verificationArchiveLatest,
+            totalRecords: clampInt(board?.verificationArchive?.totalRecords, verificationArchiveEntries.length, 9999),
+            verifiedCount: clampInt(board?.verificationArchive?.verifiedCount, 0, 9999),
+            failedCount: clampInt(board?.verificationArchive?.failedCount, 0, 9999),
+            deferredCount: clampInt(board?.verificationArchive?.deferredCount, 0, 9999),
+            pendingCount: clampInt(board?.verificationArchive?.pendingCount, 0, 9999),
+            summaryLine: String(board?.verificationArchive?.summaryLine || '').trim(),
+            detailLine: String(board?.verificationArchive?.detailLine || '').trim(),
+            progressText: String(board?.verificationArchive?.progressText || '').trim(),
+            latestEntry: verificationArchiveLatest,
+            entries: verificationArchiveEntries
+        };
+        const nextTask = board?.nextTask && typeof board.nextTask === 'object'
+            ? {
+                laneId: String(board.nextTask.laneId || '').trim(),
+                laneLabel: String(board.nextTask.laneLabel || '').trim(),
+                id: String(board.nextTask.id || '').trim(),
+                label: String(board.nextTask.label || '').trim(),
+                progressText: String(board.nextTask.progressText || '').trim(),
+                hintLine: String(board.nextTask.hintLine || '').trim(),
+                statusLine: String(board.nextTask.statusLine || '').trim(),
+                anchorSection: String(board.nextTask.anchorSection || '').trim(),
+                actionType: String(board.nextTask.actionType || '').trim(),
+                actionValue: String(board.nextTask.actionValue || '').trim(),
+                ctaLabel: String(board.nextTask.ctaLabel || '').trim(),
+                source: String(board.nextTask.source || '').trim(),
+                sourceId: String(board.nextTask.sourceId || '').trim(),
+                taskSource: String(board.nextTask.taskSource || '').trim(),
+                taskSourceId: String(board.nextTask.taskSourceId || '').trim()
+            }
+            : null;
+        const nextWeekGoal = board?.nextWeekGoal && typeof board.nextWeekGoal === 'object'
+            ? {
+                title: String(board.nextWeekGoal.title || '').trim(),
+                note: String(board.nextWeekGoal.note || '').trim(),
+                action: String(board.nextWeekGoal.action || '').trim(),
+                value: String(board.nextWeekGoal.value || '').trim(),
+                buttonLabel: String(board.nextWeekGoal.buttonLabel || board.nextWeekGoal.ctaLabel || '').trim(),
+                source: String(board.nextWeekGoal.source || '').trim(),
+                sourceId: String(board.nextWeekGoal.sourceId || '').trim(),
+                taskSource: String(board.nextWeekGoal.taskSource || '').trim(),
+                taskSourceId: String(board.nextWeekGoal.taskSourceId || '').trim(),
+                taskId: String(board.nextWeekGoal.taskId || '').trim(),
+                laneId: String(board.nextWeekGoal.laneId || '').trim(),
+                anchorSection: String(board.nextWeekGoal.anchorSection || '').trim()
+            }
+            : (nextTask
+                ? {
+                    title: nextTask.label,
+                    note: [nextTask.hintLine, nextTask.statusLine, nextTask.progressText].filter(Boolean).join(' · '),
+                    action: nextTask.actionType || 'collection',
+                    value: nextTask.actionValue || nextTask.anchorSection || 'sanctum',
+                    buttonLabel: nextTask.ctaLabel || '前往推进',
+                    source: nextTask.source || 'lane',
+                    sourceId: nextTask.sourceId || nextTask.id,
+                    taskSource: nextTask.taskSource || 'lane',
+                    taskSourceId: nextTask.taskSourceId || nextTask.id,
+                    taskId: nextTask.id,
+                    laneId: nextTask.laneId,
+                    anchorSection: nextTask.anchorSection
+                }
+                : null);
         return {
             available: !!board,
             title: '赛季天道盘',
@@ -441,21 +577,12 @@
             settlement,
             debtPack,
             weekVerdictLedger,
+            verificationArchive,
             verificationOrders,
             primaryVerification: verificationOrderPair.primary,
             secondaryVerification: verificationOrderPair.secondary,
-            nextTask: board?.nextTask && typeof board.nextTask === 'object'
-                ? {
-                    laneId: String(board.nextTask.laneId || '').trim(),
-                    laneLabel: String(board.nextTask.laneLabel || '').trim(),
-                    id: String(board.nextTask.id || '').trim(),
-                    label: String(board.nextTask.label || '').trim(),
-                    progressText: String(board.nextTask.progressText || '').trim(),
-                    hintLine: String(board.nextTask.hintLine || '').trim(),
-                    statusLine: String(board.nextTask.statusLine || '').trim(),
-                    anchorSection: String(board.nextTask.anchorSection || '').trim()
-                }
-                : null,
+            nextTask,
+            nextWeekGoal,
             lanes
         };
     };
@@ -480,34 +607,59 @@
         const fallback = SECTION_META[fallbackTarget]
             ? fallbackTarget
             : 'sanctum';
+        const collectionTargetLabelMap = {
+            laws: '法则图鉴',
+            spirits: '灵契图鉴',
+            chapters: '章节档案',
+            enemies: '敌影档案',
+            bosses: 'Boss 档案',
+            builds: '构筑快照',
+            slates: '归卷书架',
+            sanctum: '洞府'
+        };
+        const collectionAction = (value, ctaLabel) => ({
+            actionType: 'collection',
+            actionValue: value,
+            ctaLabel,
+            targetLabel: collectionTargetLabelMap[value] || SECTION_META[value]?.title || '当前主线'
+        });
         if (SECTION_META[normalizedTarget]) {
-            return {
-                actionType: 'collection',
-                actionValue: normalizedTarget
+            const collectionCtaLabelMap = {
+                builds: '查看构筑',
+                chapters: '查看章节',
+                sanctum: '回看洞府',
+                slates: '查看归卷'
             };
+            return collectionAction(
+                normalizedTarget,
+                collectionCtaLabelMap[normalizedTarget] || '前往推进'
+            );
         }
         switch (normalizedTarget) {
             case 'challenge':
                 return {
                     actionType: 'challenge',
-                    actionValue: 'weekly'
+                    actionValue: 'weekly',
+                    ctaLabel: '前往周挑战',
+                    targetLabel: '周挑战'
                 };
             case 'pvp':
                 return {
                     actionType: 'screen',
-                    actionValue: 'pvp-screen'
+                    actionValue: 'pvp-screen',
+                    ctaLabel: '前往天道榜',
+                    targetLabel: '天道榜'
                 };
             case 'endless':
             case 'map':
                 return {
                     actionType: 'screen',
-                    actionValue: 'map-screen'
+                    actionValue: 'map-screen',
+                    ctaLabel: normalizedTarget === 'endless' ? '重返无尽' : '返回地图',
+                    targetLabel: normalizedTarget === 'endless' ? '无尽轮回' : '地图'
                 };
             default:
-                return {
-                    actionType: 'collection',
-                    actionValue: fallback
-                };
+                return collectionAction(fallback, fallback === 'sanctum' ? '回看洞府' : '前往推进');
         }
     };
 
@@ -582,6 +734,325 @@
 
     Game.prototype.getCollectionSectionMeta = function (section = 'laws') {
         return SECTION_META[section] || SECTION_META.laws;
+    };
+
+    Game.prototype.getRewardSeasonBoardHandoffArrivalNotice = function (section = '') {
+        const notice = this.pendingRewardSeasonBoardHandoffNotice && typeof this.pendingRewardSeasonBoardHandoffNotice === 'object'
+            ? this.pendingRewardSeasonBoardHandoffNotice
+            : null;
+        if (!notice) return null;
+
+        const action = String(notice.action || '').trim();
+        if (action !== 'collection') return null;
+
+        const targetSection = String(notice.value || notice.anchorSection || 'sanctum').trim() || 'sanctum';
+        const currentSection = String(section || this.collectionHubState?.section || '').trim();
+        if (currentSection && targetSection && currentSection !== targetSection) return null;
+
+        const source = String(notice.source || '').trim();
+        const sourceKey = String(notice.sourceKey || '').trim();
+        const sourceLabelMap = {
+            debt_pack: '债账包',
+            lane: '赛季任务',
+            settlement: '季押卷',
+            verification: '结业验证'
+        };
+        const sourceKeyLabelMap = {
+            debtPack: '债账包',
+            nextTask: '下周行动',
+            nextWeekGoal: '下周目标',
+            primary: '赛季行动',
+            sideVerification: '旁证验证',
+            verification: '结业验证'
+        };
+        const targetLabelMap = {
+            laws: '法则图鉴',
+            spirits: '灵契图鉴',
+            chapters: '章节档案',
+            enemies: '敌影档案',
+            bosses: 'Boss 档案',
+            builds: '构筑快照',
+            slates: '归卷书架',
+            sanctum: '洞府'
+        };
+
+        return {
+            sourceKey,
+            action,
+            value: targetSection,
+            buttonLabel: String(notice.buttonLabel || '前往推进').trim() || '前往推进',
+            source,
+            sourceId: String(notice.sourceId || '').trim(),
+            taskSource: String(notice.taskSource || '').trim(),
+            taskSourceId: String(notice.taskSourceId || '').trim(),
+            taskId: String(notice.taskId || '').trim(),
+            laneId: String(notice.laneId || '').trim(),
+            anchorSection: String(notice.anchorSection || '').trim(),
+            focusLabel: String(notice.focusLabel || '定位季盘任务').trim() || '定位季盘任务',
+            title: String(notice.title || '').trim(),
+            note: String(notice.note || '').trim(),
+            sourceLabel: sourceLabelMap[source] || sourceKeyLabelMap[sourceKey] || '赛季行动',
+            targetLabel: targetLabelMap[targetSection] || SECTION_META[targetSection]?.title || targetSection || '藏经阁',
+            createdAt: clampInt(notice.createdAt || Date.now(), 0)
+        };
+    };
+
+    Game.prototype.renderRewardSeasonBoardHandoffArrival = function (section = '') {
+        if (typeof document === 'undefined') return;
+        const heading = document.querySelector('#collection .collection-heading-group');
+        let noticeEl = document.getElementById('collection-season-board-handoff-arrival');
+        const notice = this.getRewardSeasonBoardHandoffArrivalNotice(section);
+        if (!heading || !notice) {
+            if (noticeEl) noticeEl.remove();
+            return;
+        }
+
+        if (!noticeEl) {
+            noticeEl = document.createElement('div');
+            noticeEl.id = 'collection-season-board-handoff-arrival';
+            heading.appendChild(noticeEl);
+        }
+
+        noticeEl.className = 'collection-handoff-arrival';
+        noticeEl.dataset.seasonBoardHandoffArrival = 'true';
+        noticeEl.dataset.seasonBoardHandoffSourceKey = notice.sourceKey;
+        noticeEl.dataset.seasonBoardHandoffAction = notice.action;
+        noticeEl.dataset.seasonBoardHandoffValue = notice.value;
+        noticeEl.dataset.seasonBoardHandoffSource = notice.source;
+        noticeEl.dataset.seasonBoardHandoffSourceId = notice.sourceId;
+        noticeEl.dataset.seasonBoardHandoffTaskSource = notice.taskSource;
+        noticeEl.dataset.seasonBoardHandoffTaskSourceId = notice.taskSourceId;
+        noticeEl.dataset.seasonBoardHandoffTaskId = notice.taskId;
+        noticeEl.dataset.seasonBoardHandoffLaneId = notice.laneId;
+        noticeEl.dataset.seasonBoardHandoffAnchor = notice.anchorSection;
+        noticeEl.dataset.seasonBoardHandoffFocusLabel = notice.focusLabel;
+        noticeEl.innerHTML = `
+            <span class="collection-handoff-arrival-kicker">赛季行动已定位</span>
+            <strong>${escapeHtml(notice.title || `${notice.sourceLabel}行动`)}</strong>
+            <p>${escapeHtml(`${notice.buttonLabel} · 来自${notice.sourceLabel} · 已定位到 ${notice.targetLabel}${notice.note ? ` · ${notice.note}` : ''}`)}</p>
+            <button type="button" class="collection-inline-btn collection-handoff-arrival-btn"
+                data-season-board-handoff-focus="true"
+                data-season-board-handoff-task-id="${escapeHtml(notice.taskId)}"
+                data-season-board-handoff-lane-id="${escapeHtml(notice.laneId)}"
+                onclick="game.focusRewardSeasonBoardHandoffArrival()">${escapeHtml(notice.focusLabel)}</button>
+        `;
+        this.lastRewardSeasonBoardHandoffArrivalNotice = { ...notice };
+        const renderedPendingNotice = this.pendingRewardSeasonBoardHandoffNotice;
+        if (renderedPendingNotice && typeof setTimeout === 'function') {
+            setTimeout(() => {
+                if (this.pendingRewardSeasonBoardHandoffNotice === renderedPendingNotice) {
+                    this.pendingRewardSeasonBoardHandoffNotice = null;
+                }
+            }, 0);
+        }
+    };
+
+    Game.prototype.getRewardSeasonBoardHandoffArrivalFocusNotice = function () {
+        const pending = typeof this.getRewardSeasonBoardHandoffArrivalNotice === 'function'
+            ? this.getRewardSeasonBoardHandoffArrivalNotice(this.collectionHubState?.section || '')
+            : null;
+        const raw = pending || (
+            this.lastRewardSeasonBoardHandoffArrivalNotice && typeof this.lastRewardSeasonBoardHandoffArrivalNotice === 'object'
+                ? this.lastRewardSeasonBoardHandoffArrivalNotice
+                : null
+        );
+        if (!raw) return null;
+        const action = String(raw.action || '').trim();
+        if (action !== 'collection') return null;
+        const value = String(raw.value || raw.anchorSection || 'sanctum').trim() || 'sanctum';
+        return {
+            ...raw,
+            action,
+            value,
+            sourceKey: String(raw.sourceKey || '').trim(),
+            source: String(raw.source || '').trim(),
+            sourceId: String(raw.sourceId || '').trim(),
+            taskSource: String(raw.taskSource || '').trim(),
+            taskSourceId: String(raw.taskSourceId || '').trim(),
+            taskId: String(raw.taskId || '').trim(),
+            laneId: String(raw.laneId || '').trim(),
+            focusLabel: String(raw.focusLabel || '定位季盘任务').trim() || '定位季盘任务'
+        };
+    };
+
+    Game.prototype.clearRewardSeasonBoardHandoffArrivalFocus = function () {
+        if (typeof document === 'undefined') return;
+        document.querySelectorAll('[data-season-board-handoff-focused="true"], [data-season-board-handoff-action-target="true"]').forEach((el) => {
+            el.classList?.remove('season-board-handoff-focus', 'season-board-handoff-action-target');
+            delete el.dataset.seasonBoardHandoffFocused;
+            delete el.dataset.seasonBoardHandoffFocusKind;
+            delete el.dataset.seasonBoardHandoffFocusSourceKey;
+            delete el.dataset.seasonBoardHandoffActionTarget;
+        });
+    };
+
+    Game.prototype.findRewardSeasonBoardHandoffArrivalTarget = function (notice = {}) {
+        if (typeof document === 'undefined') return null;
+        const sourceKey = String(notice.sourceKey || '').trim();
+        const source = String(notice.source || '').trim();
+        const sourceId = String(notice.sourceId || '').trim();
+        const taskSource = String(notice.taskSource || '').trim();
+        const taskSourceId = String(notice.taskSourceId || '').trim();
+        const taskId = String(notice.taskId || '').trim();
+        const laneId = String(notice.laneId || '').trim();
+        const textIncludes = (value = '', token = '') => {
+            const safeValue = String(value || '');
+            const safeToken = String(token || '').trim();
+            return !!safeToken && safeValue.includes(safeToken);
+        };
+        const findNode = (selector, predicate) => Array.from(document.querySelectorAll(selector))
+            .find((el) => {
+                try {
+                    return predicate(el, el.dataset || {});
+                } catch (_error) {
+                    return false;
+                }
+            }) || null;
+        const matchesTaskLane = (taskValue = '', laneValue = '') => {
+            if (!taskId) return false;
+            return String(taskValue || '') === taskId && (!laneId || String(laneValue || '') === laneId);
+        };
+        const matchesSource = (nodeSource = '', nodeSourceId = '', nodeTaskSource = '', nodeTaskSourceId = '') => {
+            if (source && String(nodeSource || '') === source && (!sourceId || String(nodeSourceId || '') === sourceId)) return true;
+            if (taskSource && String(nodeTaskSource || '') === taskSource && (!taskSourceId || String(nodeTaskSourceId || '') === taskSourceId)) return true;
+            return false;
+        };
+        const goal = findNode('[data-season-board-goal="true"]', (_el, ds) => (
+            matchesTaskLane(ds.seasonBoardGoalTaskId, ds.seasonBoardGoalLaneId)
+            || matchesSource(ds.seasonBoardGoalSource, ds.seasonBoardGoalSourceId, ds.seasonBoardGoalTaskSource, ds.seasonBoardGoalTaskSourceId)
+            || textIncludes(ds.seasonBoardGoalId, taskId)
+            || textIncludes(ds.seasonBoardGoalId, sourceId)
+        ));
+        if (goal) {
+            return {
+                kind: 'goal',
+                element: goal,
+                action: goal.querySelector('[data-season-board-action="true"]'),
+                id: goal.dataset.seasonBoardGoalId || ''
+            };
+        }
+        const research = findNode('[data-season-board-research="true"]', (_el, ds) => (
+            matchesTaskLane(ds.seasonBoardResearchTaskId, ds.seasonBoardResearchLaneId)
+            || matchesSource(ds.seasonBoardResearchSource, ds.seasonBoardResearchSourceId, ds.seasonBoardResearchTaskSource, ds.seasonBoardResearchTaskSourceId)
+            || textIncludes(ds.seasonBoardResearchId, taskId)
+            || textIncludes(ds.seasonBoardResearchId, sourceId)
+        ));
+        if (research) {
+            return {
+                kind: 'research',
+                element: research,
+                action: research.querySelector('[data-season-board-research-action="true"]'),
+                id: research.dataset.seasonBoardResearchId || ''
+            };
+        }
+        const task = findNode('[data-season-board-task="true"]', (_el, ds) => (
+            matchesTaskLane(ds.seasonBoardTaskId, ds.seasonBoardLaneId)
+            || (!!taskId && ds.seasonBoardTaskId === taskId)
+        ));
+        if (task) {
+            return {
+                kind: 'task',
+                element: task,
+                action: null,
+                id: task.dataset.seasonBoardTaskId || ''
+            };
+        }
+        const lane = findNode('[data-season-board-lane="true"]', (_el, ds) => (
+            !!laneId && ds.seasonBoardLaneId === laneId
+        ));
+        if (lane) {
+            return {
+                kind: 'lane',
+                element: lane,
+                action: null,
+                id: lane.dataset.seasonBoardLaneId || ''
+            };
+        }
+        const fallbackGoal = sourceKey
+            ? findNode('[data-season-board-goal="true"], [data-season-board-research="true"]', (el, ds) => (
+                textIncludes(ds.seasonBoardGoalId || ds.seasonBoardResearchId || el.textContent || '', sourceKey)
+            ))
+            : null;
+        return fallbackGoal
+            ? {
+                kind: fallbackGoal.dataset.seasonBoardGoal ? 'goal' : 'research',
+                element: fallbackGoal,
+                action: fallbackGoal.querySelector('[data-season-board-action="true"], [data-season-board-research-action="true"]'),
+                id: fallbackGoal.dataset.seasonBoardGoalId || fallbackGoal.dataset.seasonBoardResearchId || ''
+            }
+            : null;
+    };
+
+    Game.prototype.focusRewardSeasonBoardHandoffArrival = function (retryAttempt = 0) {
+        if (typeof document === 'undefined') return false;
+        const notice = this.getRewardSeasonBoardHandoffArrivalFocusNotice();
+        if (!notice) return false;
+        const targetSection = notice.value || notice.anchorSection || 'sanctum';
+        let switchedSection = false;
+        if (this.currentScreen !== 'collection' || this.collectionHubState?.section !== targetSection) {
+            if (typeof this.switchCollectionSection === 'function') {
+                this.switchCollectionSection(targetSection);
+                switchedSection = true;
+            } else if (typeof this.showCollection === 'function') {
+                this.showCollection(targetSection);
+                switchedSection = true;
+            }
+        }
+        this.clearRewardSeasonBoardHandoffArrivalFocus();
+        const target = this.findRewardSeasonBoardHandoffArrivalTarget(notice);
+        if (!target?.element) {
+            if ((switchedSection || retryAttempt > 0) && retryAttempt < 2 && typeof setTimeout === 'function') {
+                this.lastRewardSeasonBoardHandoffArrivalFocus = {
+                    ok: false,
+                    reason: 'target_retry_pending',
+                    taskId: notice.taskId,
+                    laneId: notice.laneId,
+                    retryAttempt,
+                    focusedAt: Date.now()
+                };
+                setTimeout(() => this.focusRewardSeasonBoardHandoffArrival(retryAttempt + 1), 50);
+                return false;
+            }
+            this.lastRewardSeasonBoardHandoffArrivalFocus = {
+                ok: false,
+                reason: 'target_not_found',
+                taskId: notice.taskId,
+                laneId: notice.laneId,
+                retryAttempt,
+                focusedAt: Date.now()
+            };
+            return false;
+        }
+        target.element.classList.add('season-board-handoff-focus');
+        target.element.dataset.seasonBoardHandoffFocused = 'true';
+        target.element.dataset.seasonBoardHandoffFocusKind = target.kind;
+        target.element.dataset.seasonBoardHandoffFocusSourceKey = notice.sourceKey;
+        if (target.action) {
+            target.action.classList.add('season-board-handoff-action-target');
+            target.action.dataset.seasonBoardHandoffActionTarget = 'true';
+        }
+        if (typeof target.element.scrollIntoView === 'function') {
+            target.element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        }
+        const focusTarget = target.action || target.element;
+        if (typeof focusTarget.focus === 'function') {
+            try {
+                focusTarget.focus({ preventScroll: true });
+            } catch (_error) {
+                focusTarget.focus();
+            }
+        }
+        this.lastRewardSeasonBoardHandoffArrivalFocus = {
+            ok: true,
+            kind: target.kind,
+            id: target.id,
+            sourceKey: notice.sourceKey,
+            taskId: notice.taskId,
+            laneId: notice.laneId,
+            hasAction: !!target.action,
+            focusedAt: Date.now()
+        };
+        return true;
     };
 
     Game.prototype.loadCollectionUnlockHistory = function () {
@@ -1386,6 +1857,9 @@
         const secondarySeasonVerification = seasonVerification?.side && typeof seasonVerification.side === 'object'
             ? seasonVerification.side
             : null;
+        const seasonVerificationHistoryCount = Array.isArray(seasonVerification?.history)
+            ? seasonVerification.history.length
+            : 0;
         const slateFocus = latestSlate && typeof this.buildObservatoryTrainingFocusFromSlate === 'function'
             ? this.buildObservatoryTrainingFocusFromSlate(latestSlate)
             : null;
@@ -1406,6 +1880,7 @@
                 .filter((entry) => entry && typeof entry === 'object' && entry.agendaId)
                 .slice(-6)
             : [];
+        const researchHistoryCount = Math.max(historyRecords.length, seasonVerificationHistoryCount);
         const runPathRecords = Object.keys(this.runPathRecords || {})
             .map((pathId) => (typeof this.getRunPathRecord === 'function'
                 ? this.getRunPathRecord(pathId)
@@ -1463,6 +1938,165 @@
                 }))
                 : []
         });
+
+        const verdictStyleMap = new Map();
+        const classifySeasonVerdictStyle = (source = null) => {
+            if (!source || typeof source !== 'object') return null;
+            const role = String(source.role || '').trim();
+            const resultStatus = String(
+                source.resultStatus
+                || source.primaryVerificationResultStatus
+                || source.resolvedStatus
+                || ''
+            ).trim();
+            const writebackMode = String(
+                source.writebackMode
+                || source.primaryWritebackMode
+                || ''
+            ).trim();
+            if (!writebackMode && !resultStatus) return null;
+            if (role === 'side' && writebackMode === 'boost_recommendation') return null;
+
+            let id = '';
+            let label = '';
+            let icon = '';
+            let fallbackNote = '';
+            if (writebackMode === 'clear_debt') {
+                id = 'debt_recovery';
+                label = '清账追收';
+                icon = '🧾';
+                fallbackNote = '主验证清掉欠卷后，谱系会开始记录“先清账再扩线”的处理习惯。';
+            } else if (
+                writebackMode === 'carry_forward'
+                || resultStatus === 'deferred'
+                || writebackMode === 'pending'
+            ) {
+                id = 'deferred_cleanup';
+                label = '延账收尾';
+                icon = '⏳';
+                fallbackNote = '这笔账被继续带入后续周转，谱系会把拖延与收尾节奏一起记下来。';
+            } else if (
+                ['upgrade_verdict', 'degrade'].includes(writebackMode)
+                || ['verified', 'failed'].includes(resultStatus)
+            ) {
+                id = 'risky_push';
+                label = '押榜抢线';
+                icon = '⚔️';
+                fallbackNote = '高压定榜与押卷推进会在这里沉淀成长期押榜风格。';
+            } else {
+                return null;
+            }
+
+            const sourceModeLabel = String(source.sourceModeLabel || source.sourceLabel || source.label || '').trim();
+            const detailLine = String(source.writebackLine || source.summaryLine || source.detailLine || '').trim();
+            const lineageStyle = String(source.lineageStyle || '').trim();
+            const statusLabelMap = {
+                verified: '通过',
+                failed: '失利',
+                deferred: '延期',
+                pending: '待验证'
+            };
+            const noteLine = [
+                [
+                    sourceModeLabel,
+                    statusLabelMap[resultStatus] || ''
+                ].filter(Boolean).join(' · '),
+                detailLine || fallbackNote
+            ].filter(Boolean).slice(0, 2).join('｜') || fallbackNote;
+
+            return {
+                id,
+                label,
+                icon,
+                noteLine,
+                tags: [lineageStyle, sourceModeLabel].filter(Boolean).slice(0, 3),
+                latestAt: clampInt(source.updatedAt || source.createdAt || Date.now(), 0),
+                sourceKey: String(
+                    source.recordId
+                    || source.ledgerId
+                    || `${source.weekTag || 'current'}:${role || 'primary'}:${writebackMode || resultStatus || 'verdict'}`
+                ).trim()
+            };
+        };
+        const addVerdictStyleSource = (source = null) => {
+            const verdictStyle = classifySeasonVerdictStyle(source);
+            if (!verdictStyle || !verdictStyle.id || !verdictStyle.sourceKey) return;
+            const existing = verdictStyleMap.get(verdictStyle.id) || {
+                id: verdictStyle.id,
+                label: verdictStyle.label,
+                icon: verdictStyle.icon,
+                value: 0,
+                valueText: '',
+                noteLine: '',
+                tags: [],
+                anchorSection: 'sanctum',
+                latestAt: 0,
+                sourceKeys: new Set()
+            };
+            if (!existing.sourceKeys.has(verdictStyle.sourceKey)) {
+                existing.value += 1;
+                existing.sourceKeys.add(verdictStyle.sourceKey);
+            }
+            existing.latestAt = Math.max(existing.latestAt, verdictStyle.latestAt || 0);
+            if (verdictStyle.noteLine) {
+                existing.noteLine = verdictStyle.noteLine;
+            }
+            existing.tags = Array.from(new Set([...(existing.tags || []), ...(verdictStyle.tags || [])])).slice(0, 3);
+            verdictStyleMap.set(verdictStyle.id, existing);
+        };
+        (Array.isArray(seasonVerification?.history) ? seasonVerification.history : []).forEach(addVerdictStyleSource);
+        const verdictStyleFallbacks = [
+            {
+                id: 'debt_recovery',
+                label: '清账风格',
+                dominantLabel: '清账追收',
+                icon: '🧾',
+                noteLine: '把欠卷清成主验证通过后，谱系会开始记录“先清账再扩线”的处理习惯。'
+            },
+            {
+                id: 'risky_push',
+                label: '押榜风格',
+                dominantLabel: '押榜抢线',
+                icon: '⚔️',
+                noteLine: '高压定榜、押卷升级与正险切换会在这里沉淀成长期押榜口味。'
+            },
+            {
+                id: 'deferred_cleanup',
+                label: '拖延风格',
+                dominantLabel: '延账收尾',
+                icon: '⏳',
+                noteLine: '把账继续拖到后续周转时，谱系会记下你更常见的收尾节奏。'
+            }
+        ];
+        const verdictStyleEntries = verdictStyleFallbacks.map((meta) => {
+            const entry = verdictStyleMap.get(meta.id);
+            return {
+                id: `season_${meta.id}`,
+                label: meta.label,
+                dominantLabel: meta.dominantLabel,
+                icon: meta.icon,
+                value: clampInt(entry?.value || 0, 0, 9999),
+                valueText: entry?.value > 0
+                    ? `${meta.dominantLabel} · ${entry.value} 次`
+                    : `等待${meta.label}`,
+                noteLine: entry?.noteLine || meta.noteLine,
+                tags: entry?.tags || [],
+                anchorSection: 'sanctum',
+                latestAt: clampInt(entry?.latestAt || 0, 0)
+            };
+        });
+        const dominantVerdictStyle = rankEntries(
+            verdictStyleEntries
+                .filter((entry) => entry.value > 0)
+                .map((entry) => ({
+                    ...entry,
+                    label: entry.dominantLabel
+                })),
+            1
+        )[0] || null;
+        const debtRecoveryStyle = verdictStyleEntries.find((entry) => entry.id === 'season_debt_recovery') || null;
+        const riskyPushStyle = verdictStyleEntries.find((entry) => entry.id === 'season_risky_push') || null;
+        const deferredCleanupStyle = verdictStyleEntries.find((entry) => entry.id === 'season_deferred_cleanup') || null;
 
         const characterMap = new Map();
         samples.forEach((sample) => {
@@ -1847,17 +2481,54 @@
                 valueText: outcomeFacet ? `${outcomeFacet.label} · ${outcomeFacet.value} 次` : (lastResolved?.outcomeLabel || '等待研究结果'),
                 noteLine: outcomeFacet?.noteLine || lastResolved?.recoveryLine || lastResolved?.grantedLine || lastResolved?.reasonLine || '成功结题与残卷回收都会逐步沉淀成研究收束习惯。',
                 anchorSection: 'sanctum'
+            },
+            {
+                id: debtRecoveryStyle?.id || 'season_debt_recovery',
+                label: debtRecoveryStyle?.label || '清账风格',
+                icon: debtRecoveryStyle?.icon || '🧾',
+                value: debtRecoveryStyle?.value || 0,
+                valueText: debtRecoveryStyle?.valueText || '等待清账留痕',
+                noteLine: debtRecoveryStyle?.noteLine || '把欠卷清成主验证通过后，谱系会开始记录“先清账再扩线”的处理习惯。',
+                anchorSection: 'sanctum'
+            },
+            {
+                id: riskyPushStyle?.id || 'season_risky_push',
+                label: riskyPushStyle?.label || '押榜风格',
+                icon: riskyPushStyle?.icon || '⚔️',
+                value: riskyPushStyle?.value || 0,
+                valueText: riskyPushStyle?.valueText || '等待押榜留痕',
+                noteLine: riskyPushStyle?.noteLine || '高压定榜、押卷升级与正险切换会在这里沉淀成长期押榜口味。',
+                anchorSection: 'sanctum'
+            },
+            {
+                id: deferredCleanupStyle?.id || 'season_deferred_cleanup',
+                label: deferredCleanupStyle?.label || '拖延风格',
+                icon: deferredCleanupStyle?.icon || '⏳',
+                value: deferredCleanupStyle?.value || 0,
+                valueText: deferredCleanupStyle?.valueText || '等待拖延留痕',
+                noteLine: deferredCleanupStyle?.noteLine || '把账继续拖到后续周转时，谱系会记下你更常见的收尾节奏。',
+                anchorSection: 'sanctum'
             }
         ];
-        const dominantResearch = agendaFacet || (activeAgenda ? { label: activeAgenda.name, id: activeAgenda.agendaId || 'active' } : null);
+        const dominantResearchBase = agendaFacet || (activeAgenda ? { label: activeAgenda.name, id: activeAgenda.agendaId || 'active' } : null);
+        const dominantResearch = dominantVerdictStyle
+            ? {
+                label: dominantVerdictStyle.label,
+                id: dominantVerdictStyle.id
+            }
+            : dominantResearchBase;
         const researchTrack = buildTrack({
             id: 'research',
             label: '研究谱系',
             icon: '📚',
-            summaryLine: dominantResearch
-                ? `研究谱系当前更常围绕【${dominantResearch.label}】推进，处置与契约倾向也开始留下稳定留痕。`
-                : '研究谱系仍待第一批议程结果真正沉淀下来。',
-            progressText: historyRecords.length > 0 ? `${historyRecords.length} 份研究留痕` : '等待研究结题',
+            summaryLine: dominantVerdictStyle
+                ? `研究谱系当前更常留下【${dominantVerdictStyle.label}】这类赛季裁定习惯${dominantResearchBase?.label ? `，并继续围绕【${dominantResearchBase.label}】推进。` : '。'}`
+                : (dominantResearchBase
+                    ? `研究谱系当前更常围绕【${dominantResearchBase.label}】推进，处置与契约倾向也开始留下稳定留痕。`
+                    : '研究谱系仍待第一批议程结果真正沉淀下来。'),
+            progressText: researchHistoryCount > 0 || dominantVerdictStyle
+                ? `${researchHistoryCount} 份研究留痕 · ${verdictStyleEntries.filter((entry) => entry.value > 0).length} 类赛季裁定`
+                : '等待研究结题',
             entries: researchEntries,
             dominantId: dominantResearch?.id || '',
             dominantLabel: dominantResearch?.label || '',
@@ -1874,16 +2545,19 @@
             || samples.length > 0
             || archiveEntries.length > 0
             || runPathRecords.length > 0
+            || seasonVerification?.available
         );
         const summaryParts = [
             dominantCharacter?.label || currentCharacter?.name || '',
             dominantStyle?.label || currentRunPath?.name || currentDestiny?.name || '',
             dominantNode?.label || '',
-            dominantResearch?.label || ''
+            dominantResearchBase?.label || ''
         ].filter(Boolean);
         const summaryLine = summaryParts.length > 0
-            ? `长期主修正在向【${summaryParts.join(' / ')}】收束。`
-            : '命盘谱系仍待第一批长期留痕落档。';
+            ? `长期主修正在向【${summaryParts.join(' / ')}】收束${dominantVerdictStyle?.label ? `，赛季裁定更常留下【${dominantVerdictStyle.label}】。` : '。'}`
+            : (dominantVerdictStyle?.label
+                ? `命盘谱系已经开始记录【${dominantVerdictStyle.label}】这类赛季裁定习惯。`
+                : '命盘谱系仍待第一批长期留痕落档。');
         const baseDetailLine = activeAgenda
             ? `当前研究：${activeAgenda.name} · ${activeAgenda.phaseLabel || activeAgenda.selectedDecisionLabel || activeAgenda.selectedContractLabel || activeAgenda.summaryLine || '洞府样本正在推进。'}`
             : (lastResolved
@@ -1893,14 +2567,19 @@
             baseDetailLine,
             primarySeasonVerification?.writebackLine
                 ? `赛季回写：${primarySeasonVerification.writebackLine}`
-                : (secondarySeasonVerification?.writebackLine ? `旁证回写：${secondarySeasonVerification.writebackLine}` : '')
+                : (dominantVerdictStyle?.noteLine
+                    ? `裁定留痕：${dominantVerdictStyle.noteLine}`
+                    : (secondarySeasonVerification?.writebackLine ? `旁证回写：${secondarySeasonVerification.writebackLine}` : ''))
         ].filter(Boolean).slice(0, 2).join('｜');
         const currentFocusLine = [
             selectedGuide?.title ? `精选命盘【${selectedGuide.title}】` : '',
             trainingFocus?.chapterName ? `当前主练 ${trainingFocus.chapterName}` : '',
             primarySeasonVerification?.label ? `主验证 ${primarySeasonVerification.label}` : '',
             latestSlate?.chapterName ? `最近答卷 ${latestSlate.chapterName}` : '',
-            !primarySeasonVerification?.label && secondarySeasonVerification?.label ? `旁证 ${secondarySeasonVerification.label}` : ''
+            !primarySeasonVerification?.label && secondarySeasonVerification?.label ? `旁证 ${secondarySeasonVerification.label}` : '',
+            !primarySeasonVerification?.label && !secondarySeasonVerification?.label && dominantVerdictStyle?.label
+                ? `当前裁定 ${dominantVerdictStyle.label}`
+                : ''
         ].filter(Boolean).slice(0, 3).join(' · ');
         const nextTargets = [];
         if (primarySeasonVerification?.resultStatus === 'verified') {
@@ -1919,12 +2598,19 @@
         if (nodeEntries.length < 3) {
             nextTargets.push('继续用观星、归卷和洞府议程补节点偏好，至少让 3 条路线主轴稳定留痕。');
         }
-        if (historyRecords.length <= 0) {
+        if (researchHistoryCount <= 0) {
             nextTargets.push(activeAgenda
                 ? `把【${activeAgenda.name}】结成一次留痕，让研究谱系开始记录处置、契约与回收倾向。`
                 : '回洞府立下一道议程并真正结题，研究谱系才会开始稳定成长。');
         } else if (!contractFacet && activeAgenda && !activeAgenda.selectedContractLabel) {
             nextTargets.push('至少兑现 1 次锁线契约，让研究谱系不只记录议程类型，也记录风险口味。');
+        }
+        if ((debtRecoveryStyle?.value || 0) <= 0) {
+            nextTargets.push('至少把 1 笔欠卷清成主验证通过，让命盘谱系真正开始记录清账风格。');
+        } else if ((deferredCleanupStyle?.value || 0) > 0 && (!primarySeasonVerification || primarySeasonVerification.resultStatus !== 'verified')) {
+            nextTargets.push('先把一笔延账收成真清账，避免谱系继续只留下“把账带进下周”的收尾习惯。');
+        } else if ((riskyPushStyle?.value || 0) <= 0) {
+            nextTargets.push('去打一场能回写季盘的高压主验证，把押榜风格从准备状态升级为长期留痕。');
         }
 
         return {
@@ -1935,13 +2621,14 @@
             summaryLine,
             detailLine,
             currentFocusLine,
-            guideLine: '先把角色与流派压成稳定模板，再用节点偏好和研究结果验证这套主修是不是能长期成立。',
+            guideLine: '先把角色与流派压成稳定模板，再用节点偏好、研究结果与赛季裁定风格验证这套主修是不是能长期成立。',
             actionValue: 'builds',
             progress: {
                 trackedCharacters: characterEntries.filter((entry) => entry.value > 0).length,
                 trackedStyles: dedupedStyleEntries.filter((entry) => entry.value > 0 || /^destiny_/.test(entry.id)).length,
                 trackedNodes: nodeEntries.length,
-                researchHistoryCount: historyRecords.length
+                researchHistoryCount,
+                trackedVerdictStyles: verdictStyleEntries.filter((entry) => entry.value > 0).length
             },
             nextTargets: nextTargets.slice(0, 3),
             tracks,
@@ -1952,7 +2639,8 @@
             recentRecords: [
                 dominantCharacter?.noteLine || '',
                 dominantStyle?.noteLine || '',
-                lastResolved?.summaryLine || ''
+                lastResolved?.summaryLine || '',
+                dominantVerdictStyle?.noteLine || ''
             ].filter(Boolean).slice(0, 3)
         };
     };
@@ -3762,7 +4450,16 @@
         const seasonDebtActionMeta = resolveSeasonBoardActionMeta(seasonDebtPack?.recommendedAnchorSection, 'sanctum');
         const seasonVerificationActionMeta = resolveSeasonBoardActionMeta(primarySeasonVerification?.anchorSection, 'sanctum');
         const seasonSideVerificationActionMeta = resolveSeasonBoardActionMeta(secondarySeasonVerification?.anchorSection, 'sanctum');
-        const seasonNextTaskActionMeta = resolveSeasonBoardActionMeta(seasonNextTask?.anchorSection, 'sanctum');
+        const seasonNextTaskResolvedActionMeta = resolveSeasonBoardActionMeta(seasonNextTask?.anchorSection, 'sanctum');
+        const seasonNextTaskActionMeta = {
+            ...seasonNextTaskResolvedActionMeta,
+            actionType: seasonNextTask?.actionType || seasonNextTaskResolvedActionMeta.actionType,
+            actionValue: seasonNextTask?.actionValue || seasonNextTaskResolvedActionMeta.actionValue,
+            ctaLabel: seasonNextTask?.ctaLabel || seasonNextTaskResolvedActionMeta.ctaLabel
+        };
+        const seasonNextWeekGoal = seasonBoard?.nextWeekGoal && typeof seasonBoard.nextWeekGoal === 'object'
+            ? seasonBoard.nextWeekGoal
+            : null;
         const seasonNextTaskLine = !shouldSurfaceSeasonVerification && seasonNextTask
             ? getSeasonBoardNextTaskLine(seasonNextTask)
             : '';
@@ -3873,10 +4570,11 @@
                 const detailLine = nextTask
                     ? `当前优先补「${nextTask.label}」${nextTask.progressText ? ` · ${nextTask.progressText}` : ''}${nextTask.hintLine ? ` · ${nextTask.hintLine}` : ''}`
                     : (mandateSnapshot.summaryLine || fallback.detailLine);
-                const guideLine = nextTask
-                    ? `先沿${nextTask.anchorSection ? `【${nextTask.anchorSection}】` : '当前主线'}补完「${nextTask.label}」，再回洞府复核其余两条玩法线。`
-                    : `本周敕令已全部成卷，可转去更高压模式验证这套主练是否稳定。`;
                 const focusTaskActionMeta = resolveSeasonBoardActionMeta(nextTask?.anchorSection, 'sanctum');
+                const focusTargetLabel = String(focusTaskActionMeta.targetLabel || '').trim();
+                const guideLine = nextTask
+                    ? `先沿${focusTargetLabel ? `【${focusTargetLabel}】` : '当前主线'}补完「${nextTask.label}」，再回洞府复核其余两条玩法线。`
+                    : `本周敕令已全部成卷，可转去更高压模式验证这套主练是否稳定。`;
                 return {
                     available: true,
                     source: 'mandate',
@@ -3901,8 +4599,10 @@
                     totalTaskCount,
                     focusTask,
                     lanes,
+                    nextTask,
                     actionType: focusTaskActionMeta.actionType,
-                    actionValue: focusTaskActionMeta.actionValue
+                    actionValue: focusTaskActionMeta.actionValue,
+                    ctaLabel: focusTaskActionMeta.ctaLabel || '前往推进'
                 };
             }
 
@@ -3964,9 +4664,15 @@
                 completedTaskCount: completedGoals,
                 totalTaskCount: Math.max(1, goals.length),
                 lanes: [],
-                actionValue: 'sanctum'
+                actionValue: 'sanctum',
+                ctaLabel: '回看洞府'
             };
         })();
+        const heavenlyMandateFocusTask = heavenlyMandate?.focusTask && typeof heavenlyMandate.focusTask === 'object'
+            ? heavenlyMandate.focusTask
+            : (heavenlyMandate?.nextTask && typeof heavenlyMandate.nextTask === 'object'
+                ? heavenlyMandate.nextTask
+                : null);
         const achievements = unclaimedAchievementIds
             .slice(0, 3)
             .map((achievementId) => {
@@ -4348,6 +5054,12 @@
         }
         const seasonBoardResearches = [];
         if (seasonBoard) {
+            const seasonVerificationArchive = seasonBoard.verificationArchive && typeof seasonBoard.verificationArchive === 'object'
+                ? seasonBoard.verificationArchive
+                : null;
+            const latestSeasonVerificationArchive = seasonVerificationArchive?.latestEntry && typeof seasonVerificationArchive.latestEntry === 'object'
+                ? seasonVerificationArchive.latestEntry
+                : (Array.isArray(seasonVerificationArchive?.entries) ? seasonVerificationArchive.entries[0] : null);
             seasonBoardResearches.push({
                 id: 'season_board_record_layer',
                 room: '观星台',
@@ -4377,6 +5089,8 @@
                     actionType: 'collection',
                     actionValue: 'sanctum',
                     buttonLabel: '查看裁定',
+                    source: 'settlement',
+                    sourceId: seasonSettlement.outcomeId || '',
                     ready: seasonSettlement.outcomeId === 'positive_sheet',
                     toneClass: seasonSettlement.outcomeId === 'positive_sheet' ? 'ready' : 'tracking',
                     progressText: seasonSettlement.progressText || seasonSettlement.outcomeLabel || '待裁定'
@@ -4398,6 +5112,8 @@
                     actionType: seasonDebtActionMeta.actionType,
                     actionValue: seasonDebtActionMeta.actionValue,
                     buttonLabel: '前往清账',
+                    source: 'debt_pack',
+                    sourceId: seasonDebtPack.id || '',
                     ready: false,
                     toneClass: 'tracking',
                     progressText: seasonDebtPack.progressText || seasonDebtPack.settleWindowText || '待清账'
@@ -4415,7 +5131,13 @@
                     section: seasonNextTaskActionMeta.actionType === 'collection' ? seasonNextTaskActionMeta.actionValue : 'sanctum',
                     actionType: seasonNextTaskActionMeta.actionType,
                     actionValue: seasonNextTaskActionMeta.actionValue,
-                    buttonLabel: '前往推进',
+                    buttonLabel: seasonNextTaskActionMeta.ctaLabel || '前往推进',
+                    source: seasonNextTask.source || '',
+                    sourceId: seasonNextTask.sourceId || '',
+                    taskSource: seasonNextTask.taskSource || '',
+                    taskSourceId: seasonNextTask.taskSourceId || '',
+                    taskId: seasonNextTask.id || '',
+                    laneId: seasonNextTask.laneId || '',
                     ready: false,
                     toneClass: 'tracking',
                     progressText: seasonNextTask.progressText || seasonNextTask.statusLine || '待推进'
@@ -4464,6 +5186,27 @@
                     progressText: secondarySeasonVerification.statusLine || '待验证'
                 });
             }
+            if (seasonVerificationArchive?.available) {
+                seasonBoardResearches.push({
+                    id: 'season_board_verification_archive',
+                    room: '周判记录',
+                    name: `周判记录 · ${latestSeasonVerificationArchive?.weekLabel || seasonBoard.weekLabel || '本周轮转'}`,
+                    progress: Math.min(clampInt(seasonVerificationArchive.totalRecords || 0, 0, 999), 3),
+                    goal: Math.max(1, Math.min(clampInt(seasonVerificationArchive.totalRecords || 0, 0, 999), 3) || 1),
+                    reward: seasonVerificationArchive.summaryLine || '把每周主验证、旁验证和清账回写压成可复核的长期周判记录。',
+                    noteLine: [
+                        latestSeasonVerificationArchive?.noteLine || '',
+                        seasonVerificationArchive.detailLine || ''
+                    ].filter(Boolean).slice(0, 2).join(' · '),
+                    section: 'sanctum',
+                    actionType: 'challenge',
+                    actionValue: 'weekly',
+                    buttonLabel: '查看全部周判',
+                    ready: clampInt(seasonVerificationArchive.totalRecords || 0, 0, 999) > 0,
+                    toneClass: clampInt(seasonVerificationArchive.totalRecords || 0, 0, 999) > 0 ? 'tracking' : 'idle',
+                    progressText: seasonVerificationArchive.progressText || '等待首条周判'
+                });
+            }
         }
         const combinedResearches = [...agendaResearches, ...seasonBoardResearches, ...lineageResearches, ...aftereffectResearches, ...researches];
 
@@ -4486,6 +5229,8 @@
             note: `${heavenlyMandate.weekTag || heavenlyMandate.weekLabel} · ${heavenlyMandate.goalTitle} · ${heavenlyMandate.goalProgressText}`,
             action: heavenlyMandate.actionType || 'collection',
             value: heavenlyMandate.actionValue || 'sanctum',
+            buttonLabel: heavenlyMandate.ctaLabel || '前往推进',
+            followTaskId: heavenlyMandateFocusTask?.id || '',
             icon: heavenlyMandate.icon || '📜',
             isHeavenlyMandate: true,
             weekTag: heavenlyMandate.weekTag || '',
@@ -4527,10 +5272,17 @@
         const seasonBoardNextTaskGoal = seasonNextTaskLine
             ? {
                 id: `season_board_next_task_goal_${seasonNextTask.id || 'task'}`,
-                title: `当前季盘行动 · ${seasonNextTask.label || '待推进'}`,
-                note: [seasonNextTaskLine, seasonNextTaskNoteLine].filter(Boolean).join(' · '),
-                action: seasonNextTaskActionMeta.actionType,
-                value: seasonNextTaskActionMeta.actionValue,
+                title: `当前季盘行动 · ${seasonNextWeekGoal?.title || seasonNextTask.label || '待推进'}`,
+                note: seasonNextWeekGoal?.note || [seasonNextTaskLine, seasonNextTaskNoteLine].filter(Boolean).join(' · '),
+                action: seasonNextWeekGoal?.action || seasonNextTaskActionMeta.actionType,
+                value: seasonNextWeekGoal?.value || seasonNextTaskActionMeta.actionValue,
+                buttonLabel: seasonNextWeekGoal?.buttonLabel || seasonNextTaskActionMeta.ctaLabel || '前往推进',
+                source: seasonNextWeekGoal?.source || seasonNextTask.source || '',
+                sourceId: seasonNextWeekGoal?.sourceId || seasonNextTask.sourceId || '',
+                taskSource: seasonNextWeekGoal?.taskSource || seasonNextTask.taskSource || '',
+                taskSourceId: seasonNextWeekGoal?.taskSourceId || seasonNextTask.taskSourceId || '',
+                taskId: seasonNextWeekGoal?.taskId || seasonNextTask.id || '',
+                laneId: seasonNextWeekGoal?.laneId || seasonNextTask.laneId || '',
                 icon: '🧭',
                 isSeasonBoardGoal: true
             }
@@ -4611,6 +5363,7 @@
         const subtitleEl = document.getElementById('collection-subtitle');
         if (titleEl) titleEl.textContent = meta.title;
         if (subtitleEl) subtitleEl.textContent = meta.subtitle;
+        this.renderRewardSeasonBoardHandoffArrival(state.section);
 
         document.querySelectorAll('#collection [data-collection-tab]').forEach((button) => {
             button.classList.toggle('active', button.dataset.collectionTab === state.section);
@@ -5707,6 +6460,15 @@
             data.mandate && typeof data.mandate === 'object' ? data.mandate : null,
             data.heavenlyMandate && typeof data.heavenlyMandate === 'object' ? data.heavenlyMandate : null
         );
+        const heavenlyMandateFocusTask = heavenlyMandate.focusTask && typeof heavenlyMandate.focusTask === 'object'
+            ? heavenlyMandate.focusTask
+            : (heavenlyMandate.nextTask && typeof heavenlyMandate.nextTask === 'object'
+                ? heavenlyMandate.nextTask
+                : null);
+        const heavenlyMandateFocusActionMeta = resolveSeasonBoardActionMeta(
+            heavenlyMandateFocusTask?.anchorSection,
+            'sanctum'
+        );
         const seasonBoardLanes = Array.isArray(seasonBoard.lanes) ? seasonBoard.lanes : [];
         const seasonSettlement = seasonBoard.settlement && typeof seasonBoard.settlement === 'object'
             ? seasonBoard.settlement
@@ -5714,6 +6476,15 @@
         const seasonDebtPack = seasonBoard.debtPack && typeof seasonBoard.debtPack === 'object'
             ? seasonBoard.debtPack
             : null;
+        const seasonVerificationArchive = seasonBoard.verificationArchive && typeof seasonBoard.verificationArchive === 'object'
+            ? seasonBoard.verificationArchive
+            : null;
+        const seasonVerificationArchiveEntries = Array.isArray(seasonVerificationArchive?.entries)
+            ? seasonVerificationArchive.entries.filter((entry) => entry && typeof entry === 'object').slice(0, 3)
+            : [];
+        const seasonVerificationArchiveLatest = seasonVerificationArchive?.latestEntry && typeof seasonVerificationArchive.latestEntry === 'object'
+            ? seasonVerificationArchive.latestEntry
+            : (seasonVerificationArchiveEntries[0] || null);
         const shouldSurfaceSeasonVerification = shouldSurfaceSeasonBoardVerification(seasonBoard, seasonSettlement);
         const seasonVerificationOrders = shouldSurfaceSeasonVerification && Array.isArray(seasonBoard.verificationOrders)
             ? seasonBoard.verificationOrders.filter((entry) => entry && typeof entry === 'object')
@@ -5802,7 +6573,7 @@
             return `
             <article class="sanctum-research-item ${escapeHtml(research.toneClass || (research.ready ? 'ready' : 'tracking'))}"
                 ${research.isAgenda ? `data-sanctum-agenda-card="true" data-sanctum-agenda-id="${escapeHtml(research.agendaId || '')}" data-sanctum-agenda-state="${escapeHtml(research.agendaState || '')}"` : ''}
-                ${isSeasonBoardResearch ? `data-season-board-research="true" data-season-board-research-id="${escapeHtml(research.id || '')}"` : ''}>
+                ${isSeasonBoardResearch ? `data-season-board-research="true" data-season-board-research-id="${escapeHtml(research.id || '')}" data-season-board-research-source="${escapeHtml(research.source || '')}" data-season-board-research-source-id="${escapeHtml(research.sourceId || '')}" data-season-board-research-task-source="${escapeHtml(research.taskSource || '')}" data-season-board-research-task-source-id="${escapeHtml(research.taskSourceId || '')}" data-season-board-research-task-id="${escapeHtml(research.taskId || '')}" data-season-board-research-lane-id="${escapeHtml(research.laneId || '')}"` : ''}>
                 <div class="sanctum-research-meta">
                     <strong>${escapeHtml(research.name)}</strong>
                     <span>${escapeHtml(research.room)} · ${escapeHtml(research.progressLabel || '进度')} ${escapeHtml(research.progressText)}</span>
@@ -5825,7 +6596,7 @@
                 return `
                 <article class="sanctum-goal-item"
                     ${isHeavenlyMandateGoal ? `data-heavenly-mandate-goal="true" data-heavenly-mandate-week="${escapeHtml(goal.weekTag || heavenlyMandate.weekTag || '')}" data-heavenly-mandate-directive="${escapeHtml(goal.directiveName || heavenlyMandate.directiveName || '')}"` : ''}
-                    ${isSeasonBoardGoal ? `data-season-board-goal="true" data-season-board-goal-id="${escapeHtml(goal.id || '')}"` : ''}>
+                    ${isSeasonBoardGoal ? `data-season-board-goal="true" data-season-board-goal-id="${escapeHtml(goal.id || '')}" data-season-board-goal-source="${escapeHtml(goal.source || '')}" data-season-board-goal-source-id="${escapeHtml(goal.sourceId || '')}" data-season-board-goal-task-source="${escapeHtml(goal.taskSource || '')}" data-season-board-goal-task-source-id="${escapeHtml(goal.taskSourceId || '')}" data-season-board-goal-task-id="${escapeHtml(goal.taskId || '')}" data-season-board-goal-lane-id="${escapeHtml(goal.laneId || '')}"` : ''}>
                     <div class="sanctum-goal-top">
                         <span class="sanctum-goal-icon">${escapeHtml(goal.icon || '🎯')}</span>
                         <div>
@@ -5836,7 +6607,9 @@
                     <button type="button" class="collection-inline-btn"
                         ${isHeavenlyMandateGoal ? 'data-heavenly-mandate-action="true"' : ''}
                         ${isSeasonBoardGoal ? 'data-season-board-action="true"' : ''}
-                        onclick="${goal.action === 'claim'
+                        onclick="${isHeavenlyMandateGoal && goal.followTaskId
+                ? `game.followHeavenlyMandateTask('${escapeHtml(goal.followTaskId)}')`
+                : goal.action === 'claim'
                 ? `game.claimAchievement('${escapeHtml(goal.id)}')`
                 : goal.action === 'treasure'
                     ? 'game.showTreasureCompendium()'
@@ -5844,7 +6617,7 @@
                     ? `game.showChallengeHub('${escapeHtml(goal.value || 'global')}')`
                 : goal.action === 'screen'
                     ? `game.showScreen('${escapeHtml(goal.value || 'map-screen')}')`
-                : `game.switchCollectionSection('${escapeHtml(goal.value || 'builds')}')`}">${goal.action === 'claim' ? '领取奖励' : '前往查看'}</button>
+                : `game.switchCollectionSection('${escapeHtml(goal.value || 'builds')}')`}">${goal.action === 'claim' ? '领取奖励' : escapeHtml(goal.buttonLabel || '前往查看')}</button>
                 </article>
             `;
             }).join('')
@@ -6005,6 +6778,32 @@
                             </ul>
                         </section>
                     ` : ''}
+                    ${seasonVerificationArchive?.available ? `
+                        <section class="collection-detail-card"
+                            data-season-board-archive-card="true"
+                            data-season-board-archive-total="${escapeHtml(String(seasonVerificationArchive.totalRecords || 0))}">
+                            <span class="detail-mini-label">${escapeHtml('🗂️ 周判记录')}</span>
+                            <strong>${escapeHtml(seasonVerificationArchiveLatest?.weekLabel || seasonBoard.weekLabel || '本周轮转')}</strong>
+                            <p data-season-board-archive-status="true">${escapeHtml(seasonVerificationArchive.summaryLine || '周判记录会把每周主验证与旁验证压成长期归档。')}</p>
+                            <ul class="collection-detail-list compact">
+                                ${seasonVerificationArchiveEntries.length > 0
+                ? seasonVerificationArchiveEntries.map((entry) => `
+                                    <li
+                                        data-season-board-archive-entry="true"
+                                        data-season-board-archive-record-id="${escapeHtml(entry.recordId || '')}"
+                                        data-season-board-archive-anchor="${escapeHtml(entry.anchorSection || '')}">
+                                        <div>${escapeHtml(entry.kicker || `${entry.weekLabel || entry.weekTag || '本周轮转'} · ${entry.roleLabel || '周判记录'}`)}</div>
+                                        <div class="collection-muted">${escapeHtml(entry.noteLine || entry.summaryLine || entry.writebackLine || entry.detailLine || '周判记录已归档。')}</div>
+                                        <button type="button" class="collection-inline-btn secondary"
+                                            data-season-board-archive-action="true"
+                                            onclick="game.followSeasonVerificationRecord('${escapeHtml(entry.recordId || '')}')">${escapeHtml(entry.ctaLabel || '沿此复核')}</button>
+                                    </li>
+                                `).join('')
+                : `<li>${escapeHtml(seasonVerificationArchive.detailLine || '当前还没有真正落档的周判记录，先去补一张主验证或旁验证。')}</li>`}
+                            </ul>
+                            <p class="collection-muted">${escapeHtml(seasonVerificationArchive.progressText || `已归档 ${seasonVerificationArchive.totalRecords || 0} 条`)}</p>
+                        </section>
+                    ` : ''}
                     ${seasonBoardLanes.map((lane) => `
                         <section class="collection-detail-card"
                             data-season-board-lane="true"
@@ -6019,8 +6818,23 @@
                                         data-season-board-task-id="${escapeHtml(task.id)}"
                                         data-season-board-task-completed="${task.completed ? 'true' : 'false'}"
                                         data-season-board-lane-id="${escapeHtml(lane.id)}"
-                                        data-season-board-task-anchor="${escapeHtml(task.anchorSection || '')}">
-                                        ${escapeHtml(`${task.completed ? '已成' : '进行中'} · ${task.label}${task.progressText ? ` · ${task.progressText}` : ''}${task.statusLine ? ` · ${task.statusLine}` : ''}${task.hintLine ? ` · ${task.hintLine}` : ''}`)}
+                                        data-season-board-task-anchor="${escapeHtml(task.anchorSection || '')}"
+                                        data-season-board-task-action-type="${escapeHtml(task.actionType || '')}"
+                                        data-season-board-task-action-value="${escapeHtml(task.actionValue || '')}">
+                                        <div>${escapeHtml(`${task.completed ? '已成' : '进行中'} · ${task.label}${task.progressText ? ` · ${task.progressText}` : ''}${task.statusLine ? ` · ${task.statusLine}` : ''}${task.hintLine ? ` · ${task.hintLine}` : ''}`)}</div>
+                                        ${(task.actionType || task.anchorSection || task.actionValue) ? `
+                                            <div class="season-board-task-action-row">
+                                                <span class="collection-muted"
+                                                    data-season-board-task-target-label="${escapeHtml(task.id)}">${escapeHtml(`去向：${resolveSeasonBoardActionMeta(task.anchorSection || task.actionValue || 'sanctum', 'sanctum').targetLabel || task.anchorSection || '洞府'}`)}</span>
+                                                <button type="button" class="collection-inline-btn secondary compact"
+                                                    data-season-board-task-action="true"
+                                                    data-season-board-task-action-id="${escapeHtml(task.id)}"
+                                                    data-season-board-task-action-type="${escapeHtml(task.actionType || '')}"
+                                                    data-season-board-task-action-value="${escapeHtml(task.actionValue || '')}"
+                                                    data-season-board-task-target-label="${escapeHtml(resolveSeasonBoardActionMeta(task.anchorSection || task.actionValue || 'sanctum', 'sanctum').targetLabel || '')}"
+                                                    onclick="game.followSeasonBoardTask('${escapeHtml(task.id)}')">${escapeHtml(task.ctaLabel || (task.completed ? '沿此复核' : '前往推进'))}</button>
+                                            </div>
+                                        ` : ''}
                                     </li>
                                 `).join('')}
                             </ul>
@@ -6038,7 +6852,31 @@
                         <span class="detail-mini-label">${escapeHtml(`${heavenlyMandate.icon || '📜'} ${heavenlyMandate.title || '天道敕令'}`)}</span>
                         <strong data-heavenly-mandate-theme="true">${escapeHtml(heavenlyMandate.themeLabel || heavenlyMandate.directiveName || '待启敕令')}</strong>
                         <p data-heavenly-mandate-progress="true">${escapeHtml(`${heavenlyMandate.weekLabel || heavenlyMandate.weekTag || '本周轮转'} · 周进度 ${heavenlyMandate.progressText || '待同步'}`)}</p>
+                        ${heavenlyMandate.detailLine ? `<p class="collection-muted">${escapeHtml(heavenlyMandate.detailLine)}</p>` : ''}
                     </section>
+                    ${heavenlyMandateFocusTask ? `
+                        <section class="collection-detail-card"
+                            data-heavenly-mandate-focus-card="true"
+                            data-heavenly-mandate-focus-id="${escapeHtml(heavenlyMandateFocusTask.id || '')}"
+                            data-heavenly-mandate-focus-anchor="${escapeHtml(heavenlyMandateFocusTask.anchorSection || '')}">
+                            <span class="detail-mini-label">${escapeHtml(`${heavenlyMandateFocusTask.icon || '📜'} 当前焦点`)}</span>
+                            <strong>${escapeHtml(heavenlyMandateFocusTask.label || heavenlyMandate.goalTitle || '当前焦点')}</strong>
+                            <p data-heavenly-mandate-focus-progress="true">${escapeHtml(heavenlyMandateFocusTask.progressText || heavenlyMandate.goalProgressText || '待推进')}</p>
+                            <ul class="collection-detail-list compact">
+                                ${[
+                heavenlyMandateFocusTask.hintLine || '',
+                heavenlyMandateFocusTask.statusLine || '',
+                heavenlyMandateFocusTask.anchorSection
+                    ? `去向：${heavenlyMandateFocusActionMeta.targetLabel || heavenlyMandateFocusTask.anchorSection}`
+                    : ''
+            ].filter(Boolean).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
+                            </ul>
+                            <button type="button" class="collection-inline-btn"
+                                data-heavenly-mandate-focus-action="true"
+                                data-heavenly-mandate-focus-task-id="${escapeHtml(heavenlyMandateFocusTask.id || '')}"
+                                onclick="game.followHeavenlyMandateTask('${escapeHtml(heavenlyMandateFocusTask.id || '')}')">${escapeHtml(heavenlyMandateFocusTask.ctaLabel || heavenlyMandate.ctaLabel || '前往推进')}</button>
+                        </section>
+                    ` : ''}
                     ${heavenlyMandateBoard.map((lane) => `
                         <section class="collection-detail-card"
                             data-heavenly-mandate-lane="true"
@@ -6054,7 +6892,11 @@
                                         data-heavenly-mandate-task-completed="${task.completed ? 'true' : 'false'}"
                                         data-heavenly-mandate-lane-id="${escapeHtml(lane.id)}"
                                         data-heavenly-mandate-task-anchor="${escapeHtml(task.anchorSection || '')}">
-                                        ${escapeHtml(`${task.completed ? '已成' : '进行中'} · ${task.label}${task.progressText ? ` · ${task.progressText}` : ''}${task.statusLine ? ` · ${task.statusLine}` : ''}${task.hintLine ? ` · ${task.hintLine}` : ''}`)}
+                                        <div>${escapeHtml(`${task.completed ? '已成' : '进行中'} · ${task.label}${task.progressText ? ` · ${task.progressText}` : ''}${task.statusLine ? ` · ${task.statusLine}` : ''}${task.hintLine ? ` · ${task.hintLine}` : ''}`)}</div>
+                                        <button type="button" class="collection-inline-btn secondary"
+                                            data-heavenly-mandate-task-action="true"
+                                            data-heavenly-mandate-task-action-id="${escapeHtml(task.id)}"
+                                            onclick="game.followHeavenlyMandateTask('${escapeHtml(task.id)}')">${escapeHtml(task.ctaLabel || (task.completed ? '沿此复核' : '前往推进'))}</button>
                                     </li>
                                 `).join('')}
                             </ul>

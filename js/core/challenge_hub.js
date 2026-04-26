@@ -2308,6 +2308,12 @@
             compareHint: themeMeta.compareHint
         });
         const archiveEntries = archiveFilters.entries;
+        const seasonVerificationArchive = bundle.mode === 'weekly' && typeof this.getSeasonVerificationArchiveSnapshot === 'function'
+            ? this.getSeasonVerificationArchiveSnapshot()
+            : null;
+        const seasonVerificationArchiveEntries = bundle.mode === 'weekly' && Array.isArray(seasonVerificationArchive?.entries)
+            ? seasonVerificationArchive.entries.filter((entry) => entry && typeof entry === 'object').slice(0, 6)
+            : [];
         const trainingFocusViewActive = !!trainingFocus?.themeKey
             && archiveFilters.state.scope === 'all'
             && archiveFilters.state.track === 'playable'
@@ -2489,6 +2495,33 @@
                     </article>
                 `).join('')
                 : `<div class="codex-empty-state">${escapeHtml(archiveFilters.emptyText)}</div>`;
+            const verificationArchiveMarkup = seasonVerificationArchiveEntries.length > 0
+                ? seasonVerificationArchiveEntries.map((entry) => `
+                    <article class="challenge-record-item replayable"
+                        data-season-verification-archive-entry="true"
+                        data-season-verification-record-id="${escapeHtml(entry.recordId || '')}"
+                        data-season-verification-anchor="${escapeHtml(entry.anchorSection || '')}">
+                        <div>
+                            <strong>${escapeHtml(entry.kicker || `${entry.weekLabel || entry.weekTag || '本周轮转'} · ${entry.roleLabel || '周判记录'}`)}</strong>
+                            <p>${escapeHtml(entry.noteLine || entry.summaryLine || entry.writebackLine || entry.detailLine || '周判记录已归档。')}</p>
+                            <div class="challenge-record-subline">
+                                ${[
+                    entry.sourceModeLabel || entry.roleLabel || '验证',
+                    entry.phaseLabel || '',
+                    entry.settlementOutcomeLabel || '',
+                    entry.lineageStyle || ''
+                ].filter(Boolean).map((line) => `<span>${escapeHtml(line)}</span>`).join('')}
+                            </div>
+                        </div>
+                        <div class="challenge-record-actions">
+                            <span>${escapeHtml(entry.resultLabel || entry.writebackLabel || '已归档')}</span>
+                            <button type="button" class="collection-inline-btn secondary"
+                                data-season-verification-archive-action="true"
+                                onclick="game.followSeasonVerificationRecord('${escapeHtml(entry.recordId || '')}')">${escapeHtml(entry.ctaLabel || '沿此复核')}</button>
+                        </div>
+                    </article>
+                `).join('')
+                : '<div class="codex-empty-state">当前轮换还没有周判记录，先去补一张真正落档的主验证或旁验证。</div>';
             const comparisonMarkup = comparison.entries.length > 0
                 ? comparison.entries.map((entry) => `
                     <article class="challenge-compare-card ${entry.selected ? 'selected' : ''}" data-record-id="${escapeHtml(entry.id)}">
@@ -2540,6 +2573,18 @@
                     </div>
                     ${currentRecordsMarkup}
                 </section>
+                ${bundle.mode === 'weekly' ? `
+                    <section class="challenge-record-section"
+                        data-season-verification-archive="true"
+                        data-season-verification-total="${escapeHtml(String(seasonVerificationArchive?.totalRecords || 0))}">
+                        <div class="challenge-record-section-head">
+                            <strong>周判记录</strong>
+                            <span>${escapeHtml(`${seasonVerificationArchive?.totalRecords || 0} 条归档`)}</span>
+                        </div>
+                        <p class="challenge-compare-note">${escapeHtml(seasonVerificationArchive?.summaryLine || '把每周主验证、旁验证与清账回写压成同一层长期周判记录。')}</p>
+                        ${verificationArchiveMarkup}
+                    </section>
+                ` : ''}
                 <section class="challenge-record-section">
                     <div class="challenge-record-section-head">
                         <strong>观星留痕</strong>

@@ -4623,6 +4623,27 @@ body {
     line-height: 1.5;
 }
 
+.reward-expedition-handoff-btn {
+    justify-self: start;
+    margin-top: 4px;
+    border: 1px solid rgba(124, 209, 255, 0.34);
+    border-radius: 999px;
+    padding: 7px 11px;
+    background: linear-gradient(135deg, rgba(25, 72, 101, 0.86), rgba(86, 61, 24, 0.7));
+    color: rgba(244, 250, 255, 0.96);
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.reward-expedition-handoff-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(154, 225, 255, 0.56);
+    background: linear-gradient(135deg, rgba(35, 88, 121, 0.96), rgba(111, 78, 28, 0.82));
+}
+
 .reward-expedition-advice {
     display: grid;
     gap: 4px;
@@ -18803,6 +18824,96 @@ body {
     font-size: 0.95rem;
 }
 
+.collection-handoff-arrival {
+    position: relative;
+    margin-top: 10px;
+    padding: 12px 14px 12px 16px;
+    display: grid;
+    gap: 4px;
+    overflow: hidden;
+    border-radius: 16px;
+    border: 1px solid rgba(124, 209, 255, 0.3);
+    background:
+        linear-gradient(135deg, rgba(30, 72, 104, 0.88), rgba(62, 43, 16, 0.72)),
+        radial-gradient(circle at top right, rgba(255, 215, 122, 0.2), transparent 38%);
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.collection-handoff-arrival::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: linear-gradient(180deg, rgba(124, 209, 255, 0.88), rgba(255, 215, 122, 0.82));
+}
+
+.collection-handoff-arrival-kicker {
+    color: rgba(173, 218, 255, 0.78);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+}
+
+.collection-handoff-arrival strong {
+    color: #f5f9ff;
+    font-size: 0.98rem;
+}
+
+.collection-handoff-arrival p {
+    color: rgba(226, 236, 250, 0.78);
+    font-size: 0.86rem;
+    line-height: 1.55;
+}
+
+.collection-handoff-arrival-btn {
+    justify-self: flex-start;
+    margin-top: 4px;
+    border-color: rgba(255, 215, 122, 0.42);
+    background: rgba(255, 215, 122, 0.14);
+    color: #fff7d7;
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
+}
+
+.collection-handoff-arrival-btn:hover {
+    border-color: rgba(255, 232, 166, 0.72);
+    background: rgba(255, 215, 122, 0.22);
+}
+
+.collection-handoff-arrival-btn:focus-visible {
+    outline: 2px solid rgba(255, 232, 166, 0.86);
+    outline-offset: 3px;
+    border-color: rgba(255, 232, 166, 0.82);
+    background: rgba(255, 215, 122, 0.24);
+}
+
+.sanctum-goal-item.season-board-handoff-focus,
+.sanctum-research-item.season-board-handoff-focus,
+.collection-detail-card.season-board-handoff-focus,
+.collection-detail-list li.season-board-handoff-focus {
+    position: relative;
+    border-color: rgba(255, 215, 122, 0.62);
+    background:
+        linear-gradient(135deg, rgba(255, 215, 122, 0.14), rgba(80, 178, 255, 0.08)),
+        rgba(11, 19, 38, 0.76);
+    box-shadow: 0 0 0 1px rgba(255, 215, 122, 0.18), 0 18px 34px rgba(0, 0, 0, 0.22);
+}
+
+.sanctum-goal-item.season-board-handoff-focus:focus-within,
+.sanctum-research-item.season-board-handoff-focus:focus-within,
+.collection-detail-card.season-board-handoff-focus:focus-within,
+.collection-detail-list li.season-board-handoff-focus:focus-within {
+    box-shadow: 0 0 0 2px rgba(255, 232, 166, 0.34), 0 20px 38px rgba(0, 0, 0, 0.24);
+}
+
+.season-board-handoff-action-target {
+    outline: 2px solid rgba(255, 215, 122, 0.72);
+    outline-offset: 3px;
+}
+
+.season-board-handoff-action-target:focus-visible {
+    outline-color: rgba(255, 246, 200, 0.94);
+}
+
 .collection-tab-bar {
     display: flex;
     flex-wrap: wrap;
@@ -19179,6 +19290,18 @@ body {
     cursor: not-allowed;
     opacity: 0.58;
     transform: none;
+}
+
+.season-board-task-action-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    margin-top: 8px;
+}
+
+.season-board-task-action-row .collection-inline-btn {
+    margin-top: 0;
 }
 
 .collection-action-row {

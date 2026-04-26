@@ -1,5 +1,192 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-04-26: 洞府赛季天道盘任务行升级为可直接推进的行动入口
+  - 本轮完成
+    - `js/game.js`
+      - 新增 `followSeasonBoardTask(taskId)`，会从 reward meta、洞府数据与 live season board 中收集 `nextTask / lanes.tasks`，按任务 id 找到目标后复用 `jumpToSeasonVerificationAnchor()` 路由，并记录 `lastSeasonBoardTaskFollow` 供调试与测试追踪。
+      - `normalizeHeavenlyMandateTask()` 的任务 id 上限从 48 提到 64，避免 debt strong-slot id 与 `nextWeekGoal.taskId / debtPack.occupiedMandateTaskId` 出现截断不一致。
+      - 欠卷 `open/deferred` 时，赛季天道盘本体的验算线会把普通无尽 / PVP 验算任务动态改写为真实清债强目标；`nextTask / nextWeekGoal` 继续保持 `source=debt_pack`，但 `taskSourceId` 保持 lane task 自身 id，避免行动来源和任务本体来源混淆。
+    - `js/core/collection_hub.js`
+      - 洞府 `seasonBoard.lanes.tasks` 现在会保留 `actionType / actionValue / ctaLabel`，不再在 UI overview 模型里丢失任务级路由。
+      - 每条季盘任务行新增“去向”说明和 `data-season-board-task-action="true"` CTA，按钮会调用 `game.followSeasonBoardTask(task.id)`，并暴露 `data-season-board-task-action-id/type/value/target-label` 供浏览器门禁和后续聚焦逻辑使用。
+    - `css/style.css`
+      - 新增 `.season-board-task-action-row`，让任务行的去向标签与按钮在桌面和窄屏下都能自然换行，不挤压原有 season-board / mandate 卡片层级。
+    - `tests/sanity_season_board_system_checks.js`
+      - lockline 场景新增任务级路由断言，确认 `season_commitment` 带有 `collection/sanctum` 元数据，并且 `followSeasonBoardTask('season_commitment')` 能真实进入洞府。
+      - debt 场景新增断言，确认欠卷会投影成验算线里的具体清债任务，且 `nextTask` 指向这条强目标而不是泛化的无尽 / PVP 任务。
+    - `tests/browser_meta_screen_audit.mjs`
+      - sanctum lockline probe 新增 task row CTA 检查：读取 `data-season-board-task-action*`、点击按钮，并断言 `lastSeasonBoardTaskFollow` 与 `nextTask` 的 task/lane/action/value 完全一致。
+    - `game-intro.html`
+      - 当前版本说明同步为洞府季盘任务行已能直接显示去向并点击推进，欠卷会把验算线首要任务改写成具体清债验证。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/browser-meta-screen-audit-season-task-actions-final` ✅
+  - 当前结论
+    - 洞府季盘不再只有 goal / research 层可以行动；训练线、远征线、验算线里的 task row 已经成为可点击的下一步入口。
+    - 欠卷场景现在会把“清债验证”收进季盘任务本体，奖励页与洞府高亮会指向具体清债任务，而不是只落到普通验算任务。
+    - 本轮 fresh 浏览器审计目录以 `output/browser-meta-screen-audit-season-task-actions-final` 为准，35 条 meta-screen findings 全绿且无 console error。
+
+- 2026-04-25: 奖励页赛季行动到达横幅升级为可聚焦下一步
+  - 本轮完成
+    - `js/core/collection_hub.js`
+      - `getRewardSeasonBoardHandoffArrivalNotice()` 现在会规范 `focusLabel`，到达横幅不再只是说明来源，而会提供“定位季盘任务”操作。
+      - 新增 `getRewardSeasonBoardHandoffArrivalFocusNotice()` / `findRewardSeasonBoardHandoffArrivalTarget()` / `focusRewardSeasonBoardHandoffArrival()`：点击横幅按钮后，优先定位洞府现有 season-board goal，再兜底定位 research、task 或 lane，并写入 `lastRewardSeasonBoardHandoffArrivalFocus`。
+      - `focusRewardSeasonBoardHandoffArrival()` 在切换 collection section 后若首轮找不到目标，会短延迟重试两次，避免未来渲染链异步化时误报 `target_not_found`。
+      - 洞府 season-board goal / research 卡补齐 `source / sourceId / taskSource / taskSourceId / taskId / laneId` dataset，确保奖励页 handoff 能用结构化身份找到同一条行动，而不是只靠文案匹配。
+    - `css/style.css`
+      - 为 arrival 横幅补可点击按钮样式，并新增 `season-board-handoff-focus` / `season-board-handoff-action-target` 高亮，让玩家能直接看到下一步卡片和已有 CTA。
+      - 补齐 arrival 按钮、目标卡片与目标 CTA 的 `focus-visible / focus-within` 视觉态，让键盘与程序 focus 都有可见反馈。
+    - `tests/sanity_season_board_system_checks.js`
+      - lockline reward handoff 断言扩展到 `taskId / laneId / focusLabel`，锁定 arrival notice 与 `nextWeekGoal` 的任务身份一致。
+    - `tests/browser_meta_screen_audit.mjs`
+      - reward handoff 浏览器 probe 现在会点击 arrival 横幅里的 `data-season-board-handoff-focus` 按钮，等待目标 DOM 写入 `data-season-board-handoff-focused="true"`，并验证目标行动 CTA 或任务行被稳定高亮。
+    - `game-intro.html`
+      - 当前版本说明同步为奖励页 CTA 已具备“跳转 -> 到达说明 -> 聚焦洞府下一步行动”的闭环。
+  - 本轮验证
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/browser-meta-screen-audit-handoff-focus-polish-final` ✅
+  - 当前结论
+    - 奖励页赛季行动现在形成“点击 CTA -> 目标页 arrival 横幅 -> 点击定位 -> 洞府下一步行动高亮”的完整反馈闭环；玩家不再只知道自己被送到洞府，还能看到具体要推进哪张季盘卡。
+    - 本轮 fresh 浏览器审计目录以 `output/browser-meta-screen-audit-handoff-focus-polish-final` 为准，35 条 meta-screen findings 全绿且无 console error。
+
+- 2026-04-25: 奖励页赛季行动落地反馈闭环完成
+  - 本轮完成
+    - `js/game.js`
+      - `getRewardSeasonBoardHandoffTarget()` 现在会把 `nextWeekGoal.title / note` 一并规范进 handoff target，让跳转后仍能知道“为什么来到这里”。
+      - `followRewardSeasonBoardHandoff()` 会写入 `pendingRewardSeasonBoardHandoffNotice` 与 `lastRewardSeasonBoardHandoff`，保留 `sourceKey / action / value / buttonLabel / source / sourceId / taskSource / taskId / laneId / anchorSection / title / note` 供目标页渲染和调试追踪。
+    - `js/core/collection_hub.js`
+      - 新增 reward season-board arrival notice 规范化与渲染逻辑：奖励页 CTA 跳到藏经阁后，页头会显示“赛季行动已定位”横幅，说明来源、目标页与本次行动文案。
+      - 横幅独立使用 `data-season-board-handoff-arrival` 与完整 `data-season-board-handoff-*` 结构钩子，不复用既有 season board summary/detail 节点。
+      - pending notice 会在首帧渲染后延迟清理，同时保留 `lastRewardSeasonBoardHandoffArrivalNotice`，避免二次渲染吞掉横幅，也避免后续长期残留旧 pending。
+    - `css/style.css`
+      - 新增 collection handoff arrival 横幅样式，让奖励页行动落地后在藏经阁页头形成清晰反馈层级。
+    - `tests/sanity_season_board_system_checks.js`
+      - lockline nextTask 真实执行 `followRewardSeasonBoardHandoff('nextTask')` 后，新增断言 pending notice 保留 title/note/buttonLabel/source，并能被 collection arrival helper 解析为“季押卷 -> 洞府”。
+    - `tests/browser_meta_screen_audit.mjs`
+      - reward CTA 点击探针从 DOM `btn.click()` 升级为 Playwright `locator().click()`，覆盖真实可见性、可点击性与跳转时序。
+      - 点击奖励页主行动 CTA 后，浏览器门禁会等待 `pendingRewardSeasonBoardHandoffNotice` 被消费、`lastRewardSeasonBoardHandoffArrivalNotice` 写入，并断言目标页存在 `data-season-board-handoff-arrival="true"` 横幅，文本包含按钮文案和“已定位到”。
+    - `game-intro.html`
+      - 当前版本说明同步为奖励页 CTA 已具备目标页落地反馈；下一迭代方向改为继续补更多来源分支的结果反馈与跨页回跳。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/browser-meta-screen-audit-season-arrival-final` ✅
+  - 当前结论
+    - 奖励页赛季行动现在形成“点击 -> 结构化跳转 -> 目标页说明来源与目标”的反馈闭环；玩家不会只看到页面切换，而能看到本次赛季行动为何把自己送到洞府/藏经阁目标位。
+    - 本轮 fresh 浏览器审计目录以 `output/browser-meta-screen-audit-season-arrival-final` 为准，meta-screen findings 全绿且无 console error。
+
+- 2026-04-25: 奖励页赛季行动卡升级为 nextWeekGoal 可点击推进器
+  - 本轮完成
+    - `js/game.js`
+      - 新增 `getRewardSeasonBoardHandoffTarget()`，让奖励页不再从文案反推跳转，而是直接消费 `seasonBoard.nextWeekGoal.action / value / buttonLabel / source / sourceId / taskSource / taskSourceId`。
+      - 新增 `followRewardSeasonBoardHandoff()`，按结构化 action 分发到 `collection / screen / challenge / treasure`，并记录 `lastRewardSeasonBoardHandoff` 供调试和测试追踪。
+      - 奖励页的债账卡、主验证卡、下一步行动卡、旁验证 follow-up 现在都会渲染可点击 CTA，并透出 `data-season-board-handoff-*` 数据钩子。
+    - `css/style.css`
+      - 补齐 reward season handoff CTA 样式，让它在行动卡内保持明确的“下一步推进”层级。
+    - `tests/sanity_season_board_system_checks.js`
+      - 新增/补强 reward handoff target 合同，覆盖 `verification / sideVerification / nextTask / debtPack` 的结构化来源与路由。
+      - lockline 场景会实际执行 `followRewardSeasonBoardHandoff('nextTask')`，确认奖励页 CTA 能进入 `collection/sanctum` 并保留 source provenance。
+    - `tests/browser_meta_screen_audit.mjs`
+      - reward desktop probe 现会断言主 CTA 的 `data-season-board-handoff-*` 与 `nextWeekGoal` 完全一致。
+      - 新增浏览器点击探针：点击奖励页主行动 CTA 后，必须从 reward screen 进入目标 collection section，并同步记录 `lastRewardSeasonBoardHandoff`。
+      - side verification reward probe 现会检查主验证 CTA 与旁验证 CTA 的 sourceKey/action/value/sourceId，避免按钮只“看起来存在”。
+    - `game-intro.html`
+      - 当前版本说明改为奖励页已能消费 `nextWeekGoal` 直接跳转，不再把这件事写成下一迭代待办。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `git diff --check` 仅剩 CRLF 提示 ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/browser-meta-screen-audit-reward-handoff` ✅
+  - 当前结论
+    - 奖励页赛季卡片现在不只是解释“下一步是什么”，而是能把玩家直接送进对应玩法入口；主行动来源仍由 `nextWeekGoal` 统一托管，债账、定榜、押卷锁线不会互相抢解释权。
+    - 本轮 fresh 浏览器审计目录以 `output/browser-meta-screen-audit-reward-handoff` 为准，35 条 meta-screen findings 全绿且无 console error。
+
+- 2026-04-25: 赛季天道盘 nextTask 来源合同与 nextWeekGoal 周目标投影落地
+  - 本轮完成
+    - `js/game.js`
+      - `normalizeSeasonBoardSnapshot()` 现会给 `seasonBoard.nextTask` 固化 `source / sourceId / actionType / actionValue / ctaLabel`，把下一步行动明确标成 `settlement / debt_pack / verification / lane` 四类来源。
+      - 新增 `seasonBoard.nextWeekGoal` 结构投影，直接从当前 next task 派生 `title / note / action / value / buttonLabel / source / sourceId / taskId / laneId / anchorSection`，避免奖励页、洞府、远征和地图各自重新猜“为什么是这一步”。
+      - `renderGameToText()` 的 reward season board 序列化同步透传新字段，确保文本 payload 也能看到同一条本周目标。
+    - `js/core/collection_hub.js`
+      - Sanctum season board overview 现保留 next task 的来源与行动元数据，并把 `nextWeekGoal` 带进 `当前季盘行动` goal / research 路由。
+      - 锁线期的当前行动仍优先指向 `season_commitment / sanctum`，但现在同时带有 `source=settlement`，明确它不是验证 backlog 抢占出来的提示。
+    - `js/core/expedition_hub.js`
+      - `serializeSeasonBoardSnapshot()` 与 `map.chapter.seasonBoard` 镜像同步保留 `nextTask` 行动字段和 `nextWeekGoal`，让 reward / expedition / map 三端不再只镜像旧的 label/hint。
+    - `tests/sanity_season_board_system_checks.js`
+      - 新增 `assertSeasonBoardNextProjection()` 合同，统一校验 next task source 必须落在四类稳定来源内，行动路由必须匹配 anchor，`nextWeekGoal` 必须镜像同一条 source/action/task identity。
+      - 覆盖 `positive ranking -> verification`、`lockline -> settlement`、`debt ranking -> debt_pack` 三类关键场景，并继续校验 reward / expedition / map / sanctum 的跨层镜像。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `python -m http.server 4173 --bind 127.0.0.1` 本地静态站 ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/browser-meta-screen-audit-next-week-goal` ✅
+  - 当前结论
+    - 这轮没有继续增加说明厚度，而是把“下一步为什么是它”压成稳定数据合同：锁线来自押卷 settlement、定榜来自 verification、欠卷来自 debt pack。
+    - reward 债账卡 / 主验证卡 / 下一步行动卡的真实可点击推进器已在上方同日记录中落地，并复用 `nextWeekGoal.action/value/source`，不再从文案或 anchor 二次推断。
+    - 本轮 fresh 浏览器审计目录以 `output/browser-meta-screen-audit-next-week-goal` 为准。
+
+- 2026-04-21: Phase C 谱系最小扩展落地，命盘谱系开始记录清账 / 押榜 / 拖延三类赛季裁定风格
+  - 本轮完成
+    - `js/core/collection_hub.js`
+      - `getFateLineageSnapshot()` 现会直接消费 `seasonVerification.history`，把 `clear_debt / upgrade_verdict / carry_forward` 等真实回写压成三类长期裁定风格：
+        - `清账风格`
+        - `押榜风格`
+        - `拖延风格`
+      - 研究谱系不再只记录议程类型、处置与契约，也会把“你更常怎样处理欠卷与定榜”一起沉成长期倾向；概览文案、当前聚焦与下一步建议也会把这些风格带出来。
+      - `researchTrack` 的 dominant label 现会优先显式暴露最新形成的赛季裁定风格，让洞府总览 / 构筑摘要不再只知道“研究什么”，也知道“通常怎么结这笔账”。
+    - `tests/sanity_fate_lineage_system_checks.js`
+      - 新增跨周验证历史样本，分别播种：
+        - `clear_debt`
+        - `carry_forward`
+        - `upgrade_verdict`
+      - Node 合同现会显式校验：
+        - 谱系 progress 会统计 `trackedVerdictStyles`
+        - 研究谱系会暴露三类裁定风格条目
+        - 当前 dominant research label 会随最新裁定风格切到 `押榜抢线`
+        - `summaryLine` 会把赛季裁定风格写进长期身份描述
+    - `game-intro.html`
+      - “当前版本重点”现补明：命盘谱系会记录清账、押榜、拖延三类赛季裁定风格。
+      - “下一迭代方向”口径改为优先 `赛季硬结算闭环 / 验证记录与任务闭环`，不再把 PVP 档案深化和观察站深化误写成当前第一优先级。
+  - 本轮验证
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check tests/sanity_fate_lineage_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `py -3 -m http.server 4190` 本地静态站 ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4190 output/web-meta-screen-audit/fresh-20260421-lineage-verdict-style` ✅
+  - 当前结论
+    - 这轮后，`seasonVerificationState` 不再只是驱动本周说明卡；它开始真的把“清债 / 押榜 / 拖延”沉进命盘谱系，形成玩家可持续感知的长期身份差异。
+    - 当前最适合继续接着做的下一块，已从“再补更多说明页”收束为两条清晰后续：
+      - `season verification archive / 周判记录`
+      - `heavenly mandate / season board` 可点击任务闭环
+    - 本轮 fresh 浏览器审计目录以 `output/web-meta-screen-audit/fresh-20260421-lineage-verdict-style` 为准。
+
 - 2026-04-21: 天道敕令债账占位从 placeholder 收口为真实强目标位排班
   - 本轮完成
     - `js/game.js`

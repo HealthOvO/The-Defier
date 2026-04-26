@@ -372,6 +372,53 @@ function loadFile(ctx, filePath) {
     totalFailed: 0
   });
   game.recordSeasonVerificationResult({
+    weekTag: '2026-W14',
+    weekLabel: '第14周',
+    role: 'primary',
+    sourceMode: 'endless',
+    sourceModeLabel: '无尽轮回',
+    sourceLabel: '无尽高压账本',
+    label: '无尽清账验证',
+    resultStatus: 'verified',
+    writebackMode: 'clear_debt',
+    writebackLine: '无尽主验证通过，旧欠卷已经清账并释放强目标位。',
+    resolvedRunId: 'fate_lineage_endless_clear',
+    chapterIndex: freshSlate.chapterIndex - 1,
+    proofQuality: 'solid',
+    lineageStyle: '长压试炼',
+    summaryLine: '无尽账本证明这笔旧债可以在高压环境下补清。',
+    detailLine: '欠卷被真主验证收掉，谱系开始记录先清账再扩线的习惯。',
+    statusLine: '无尽轮回 · 通过',
+    anchorSection: 'endless',
+    priority: 1,
+    createdAt: now - 14000,
+    updatedAt: now - 14000
+  });
+  game.recordSeasonVerificationResult({
+    weekTag: '2026-W15',
+    weekLabel: '第15周',
+    role: 'primary',
+    sourceMode: 'sanctum',
+    sourceModeLabel: '洞府锁线',
+    sourceLabel: '洞府清账延后',
+    label: '洞府账本延期',
+    resultStatus: 'deferred',
+    writebackMode: 'carry_forward',
+    writebackLine: '这笔账暂缓处理，会继续带入下周强目标位。',
+    resolvedRunId: 'fate_lineage_deferred_cleanup',
+    chapterIndex: freshSlate.chapterIndex - 1,
+    proofQuality: '',
+    lineageStyle: '稳线归档',
+    summaryLine: '本周选择先保留锁线资源，这笔账会继续压到后续周转。',
+    detailLine: '拖延没有蒸发，只是把清账压力继续顺延。',
+    statusLine: '洞府锁线 · 延期',
+    anchorSection: 'sanctum',
+    priority: 2,
+    carryIntoNextWeek: true,
+    createdAt: now - 9000,
+    updatedAt: now - 9000
+  });
+  game.recordSeasonVerificationResult({
     role: 'primary',
     sourceMode: 'pvp',
     sourceModeLabel: '天道榜',
@@ -401,6 +448,28 @@ function loadFile(ctx, filePath) {
       && Array.isArray(lineageSnapshot.nextTargets)
       && lineageSnapshot.nextTargets.some((line) => /谱系回写|主验证已回写|外场也能成立/.test(String(line || ''))),
     `fate lineage should absorb season verification writeback cues into detail/current-focus/next-target lines, got ${JSON.stringify(lineageSnapshot)}`
+  );
+  assert(
+    lineageSnapshot.progress?.trackedVerdictStyles === 3
+      && lineageSnapshot.researchTrack?.dominantLabel === '押榜抢线'
+      && Array.isArray(lineageSnapshot.researchTrack?.entries)
+      && ['清账风格', '押榜风格', '拖延风格'].every((label) => lineageSnapshot.researchTrack.entries.some((entry) => entry.label === label))
+      && /押榜抢线/.test(String(lineageSnapshot.summaryLine || '')),
+    `fate lineage should expose clear/push/deferred verdict styles, got ${JSON.stringify(lineageSnapshot?.researchTrack)}`
+  );
+  const seasonVerificationSnapshot = game.getSeasonVerificationSnapshot();
+  assert(
+    Array.isArray(seasonVerificationSnapshot.history)
+      && seasonVerificationSnapshot.history.length === 3
+      && seasonVerificationSnapshot.history[0]?.resolvedRunId === 'fate_lineage_pvp_proof'
+      && seasonVerificationSnapshot.history[1]?.writebackMode === 'carry_forward'
+      && seasonVerificationSnapshot.history[1]?.carryIntoNextWeek === true
+      && seasonVerificationSnapshot.history[2]?.resolvedRunId === 'fate_lineage_endless_clear',
+    `season verification history should keep sorted archive order and preserve deferred carry-forward metadata, got ${JSON.stringify(seasonVerificationSnapshot?.history)}`
+  );
+  assert(
+    lineageSnapshot.progress?.researchHistoryCount === seasonVerificationSnapshot.history.length,
+    `fate lineage should count season verification archive size directly, got ${JSON.stringify({ progress: lineageSnapshot.progress, history: seasonVerificationSnapshot.history })}`
   );
   const repeatedSnapshot = game.getFateLineageSnapshot({ latestSlate: freshSlate });
   assert(

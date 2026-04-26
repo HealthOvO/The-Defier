@@ -36,6 +36,82 @@ function getExpectedSeasonBoardAction(anchorSection = '') {
   }
 }
 
+function assertSeasonBoardNextProjection(board, label, expectedSource = '', expectedSourceId = '') {
+  const sourceLabel = label || 'season board';
+  const validSources = new Set(['settlement', 'debt_pack', 'verification', 'lane']);
+  assert(board?.nextTask, `${sourceLabel} should expose a nextTask projection, got ${JSON.stringify(board)}`);
+  assert(
+    validSources.has(board.nextTask.source),
+    `${sourceLabel} nextTask should expose a stable source type, got ${JSON.stringify(board.nextTask)}`
+  );
+  if (expectedSource) {
+    assert(
+      board.nextTask.source === expectedSource,
+      `${sourceLabel} nextTask should use source ${expectedSource}, got ${JSON.stringify(board.nextTask)}`
+    );
+  }
+  if (expectedSourceId) {
+    assert(
+      board.nextTask.sourceId === expectedSourceId,
+      `${sourceLabel} nextTask should point sourceId to ${expectedSourceId}, got ${JSON.stringify(board.nextTask)}`
+    );
+  }
+  assert(
+    board.nextTask.taskSource === 'lane'
+      && board.nextTask.taskSourceId === board.nextTask.id,
+    `${sourceLabel} nextTask should preserve lane-task provenance separately from action source, got ${JSON.stringify(board.nextTask)}`
+  );
+  const expectedAction = getExpectedSeasonBoardAction(board.nextTask.anchorSection);
+  assert(
+    board.nextTask.actionType === expectedAction.action
+      && board.nextTask.actionValue === expectedAction.value
+      && board.nextTask.ctaLabel,
+    `${sourceLabel} nextTask should expose actionable routing metadata, got ${JSON.stringify(board.nextTask)}`
+  );
+  assert(
+    board?.nextWeekGoal?.source === board.nextTask.source
+      && board.nextWeekGoal?.sourceId === board.nextTask.sourceId
+      && board.nextWeekGoal?.taskId === board.nextTask.id
+      && board.nextWeekGoal?.laneId === board.nextTask.laneId,
+    `${sourceLabel} nextWeekGoal should mirror the nextTask source identity, got ${JSON.stringify(board?.nextWeekGoal)} vs ${JSON.stringify(board.nextTask)}`
+  );
+  assert(
+    board.nextWeekGoal?.taskSource === board.nextTask.taskSource
+      && board.nextWeekGoal?.taskSourceId === board.nextTask.taskSourceId,
+    `${sourceLabel} nextWeekGoal should preserve lane-task provenance, got ${JSON.stringify(board?.nextWeekGoal)} vs ${JSON.stringify(board.nextTask)}`
+  );
+  assert(
+    board.nextWeekGoal?.action === board.nextTask.actionType
+      && board.nextWeekGoal?.value === board.nextTask.actionValue
+      && board.nextWeekGoal?.buttonLabel === board.nextTask.ctaLabel,
+    `${sourceLabel} nextWeekGoal should mirror the nextTask action route, got ${JSON.stringify(board?.nextWeekGoal)} vs ${JSON.stringify(board.nextTask)}`
+  );
+}
+
+function assertSeasonBoardHandoffTarget(game, board, sourceKey, label) {
+  const sourceLabel = label || sourceKey || 'season board handoff';
+  assert(
+    typeof game.getRewardSeasonBoardHandoffTarget === 'function',
+    `${sourceLabel} should expose getRewardSeasonBoardHandoffTarget`
+  );
+  const target = game.getRewardSeasonBoardHandoffTarget(sourceKey);
+  assert(target, `${sourceLabel} should resolve a reward handoff target, got ${JSON.stringify(target)}`);
+  assert(
+    target.action === board.nextWeekGoal?.action
+      && target.value === board.nextWeekGoal?.value
+      && target.buttonLabel === board.nextWeekGoal?.buttonLabel,
+    `${sourceLabel} should consume nextWeekGoal routing, got ${JSON.stringify(target)} vs ${JSON.stringify(board.nextWeekGoal)}`
+  );
+  assert(
+    target.source === board.nextWeekGoal?.source
+      && target.sourceId === board.nextWeekGoal?.sourceId
+      && target.taskSource === board.nextWeekGoal?.taskSource
+      && target.taskSourceId === board.nextWeekGoal?.taskSourceId,
+    `${sourceLabel} should preserve nextWeekGoal source identity, got ${JSON.stringify(target)} vs ${JSON.stringify(board.nextWeekGoal)}`
+  );
+  return target;
+}
+
 function loadFile(ctx, filePath) {
   const code = fs.readFileSync(filePath, 'utf8');
   vm.runInContext(code, ctx, { filename: filePath });
@@ -425,6 +501,7 @@ function loadFile(ctx, filePath) {
       && seasonBoard.verificationOrders?.[1]?.role === 'side',
     `season board verification orders should expose explicit primary/side roles, got ${JSON.stringify(seasonBoard?.verificationOrders)}`
   );
+  assertSeasonBoardNextProjection(seasonBoard, 'positive ranking board', 'verification', seasonBoard.verificationOrders?.[0]?.id || '');
   assert(
     seasonBoard.weekVerdictLedger?.current?.settlementOutcomeId === 'positive_sheet'
       && seasonBoard.weekVerdictLedger?.current?.primaryVerificationOrderId === seasonBoard.verificationOrders?.[0]?.id
@@ -449,6 +526,22 @@ function loadFile(ctx, filePath) {
   assert(
     normalizedRewardMeta.seasonBoard?.settlement?.outcomeLabel === '正卷',
     `reward expedition season board should keep the positive settlement snapshot, got ${JSON.stringify(normalizedRewardMeta?.seasonBoard)}`
+  );
+  assertSeasonBoardNextProjection(normalizedRewardMeta.seasonBoard, 'positive reward expedition board', 'verification', normalizedRewardMeta.seasonBoard.verificationOrders?.[0]?.id || '');
+  assertSeasonBoardHandoffTarget(game, normalizedRewardMeta.seasonBoard, 'verification', 'positive reward verification handoff');
+  const positiveSideVerification = normalizedRewardMeta.seasonBoard.verificationOrders?.[1] || null;
+  const positiveSideHandoff = game.getRewardSeasonBoardHandoffTarget('sideVerification');
+  const positiveSideExpectedAction = getExpectedSeasonBoardAction(positiveSideVerification?.anchorSection);
+  assert(
+    positiveSideVerification
+      && positiveSideHandoff?.source === 'verification'
+      && positiveSideHandoff?.sourceId === positiveSideVerification.id
+      && positiveSideHandoff?.action === positiveSideExpectedAction.action
+      && positiveSideHandoff?.value === positiveSideExpectedAction.value,
+    `positive reward side-verification handoff should route from the side order anchor, got ${JSON.stringify({
+      side: positiveSideVerification,
+      handoff: positiveSideHandoff
+    })}`
   );
 
   const rewardBrief = game.getRewardNarrativeBriefMeta();
@@ -488,6 +581,7 @@ function loadFile(ctx, filePath) {
     expeditionPayload.seasonBoard?.settlement?.outcomeLabel === '正卷',
     `expedition payload season board should mirror positive settlement state, got ${JSON.stringify(expeditionPayload.seasonBoard)}`
   );
+  assertSeasonBoardNextProjection(expeditionPayload.seasonBoard, 'positive expedition payload board', 'verification', expeditionPayload.seasonBoard.verificationOrders?.[0]?.id || '');
 
   const sanctumData = game.getSanctumOverviewData();
   assert(sanctumData?.seasonBoard, `sanctum data should include season board, got ${JSON.stringify(sanctumData)}`);
@@ -602,6 +696,16 @@ function loadFile(ctx, filePath) {
       && JSON.stringify(payload?.reward?.expedition?.seasonBoard?.weekVerdictLedger || null) === JSON.stringify(payload?.map?.chapter?.seasonBoard?.weekVerdictLedger || null),
     `reward / expedition / map payload should mirror week verdict ledger state, got ${JSON.stringify(payload?.reward?.expedition?.seasonBoard)} vs ${JSON.stringify(payload?.expedition?.seasonBoard)} vs ${JSON.stringify(payload?.map?.chapter?.seasonBoard)}`
   );
+  assert(
+    JSON.stringify(payload?.reward?.expedition?.seasonBoard?.nextTask || null) === JSON.stringify(payload?.expedition?.seasonBoard?.nextTask || null)
+      && JSON.stringify(payload?.reward?.expedition?.seasonBoard?.nextTask || null) === JSON.stringify(payload?.map?.chapter?.seasonBoard?.nextTask || null),
+    `reward / expedition / map payload should mirror nextTask state, got ${JSON.stringify(payload?.reward?.expedition?.seasonBoard)} vs ${JSON.stringify(payload?.expedition?.seasonBoard)} vs ${JSON.stringify(payload?.map?.chapter?.seasonBoard)}`
+  );
+  assert(
+    JSON.stringify(payload?.reward?.expedition?.seasonBoard?.nextWeekGoal || null) === JSON.stringify(payload?.expedition?.seasonBoard?.nextWeekGoal || null)
+      && JSON.stringify(payload?.reward?.expedition?.seasonBoard?.nextWeekGoal || null) === JSON.stringify(payload?.map?.chapter?.seasonBoard?.nextWeekGoal || null),
+    `reward / expedition / map payload should mirror nextWeekGoal state, got ${JSON.stringify(payload?.reward?.expedition?.seasonBoard)} vs ${JSON.stringify(payload?.expedition?.seasonBoard)} vs ${JSON.stringify(payload?.map?.chapter?.seasonBoard)}`
+  );
 
   const originalPvpSeasonMeta = ctx.PVPService.getCurrentSeasonMeta;
   const originalPvpRecentMatchHistory = ctx.PVPService.getRecentMatchHistory;
@@ -620,6 +724,7 @@ function loadFile(ctx, filePath) {
     samplingBoard.phaseId === 'sampling',
     `season board should stay in sampling phase without weekly, slate, agenda, endless or pvp signals, got ${JSON.stringify(samplingBoard)}`
   );
+  assertSeasonBoardNextProjection(samplingBoard, 'sampling season board', 'lane', samplingBoard.nextTask?.id || '');
 
   resetStorages();
   const locklineGame = createGame();
@@ -655,6 +760,7 @@ function loadFile(ctx, filePath) {
       && locklineBoard.nextTask?.anchorSection === 'sanctum',
     `lockline season board should prioritize the expedition commitment action, got ${JSON.stringify(locklineBoard?.nextTask)}`
   );
+  assertSeasonBoardNextProjection(locklineBoard, 'lockline season board', 'settlement', locklineBoard.settlement?.id || '');
   assert(
     /路线引导：/.test(String(locklineBoard.guideLine || '')),
     `lockline season board should include route guidance, got ${JSON.stringify(locklineBoard)}`
@@ -679,6 +785,59 @@ function loadFile(ctx, filePath) {
     normalizedLocklineRewardMeta?.seasonBoard?.nextTask?.label === locklineBoard.nextTask?.label,
     `lockline reward expedition meta should preserve the next-task action, got ${JSON.stringify(normalizedLocklineRewardMeta?.seasonBoard?.nextTask)}`
   );
+  assertSeasonBoardNextProjection(normalizedLocklineRewardMeta.seasonBoard, 'lockline reward expedition board', 'settlement', normalizedLocklineRewardMeta.seasonBoard.settlement?.id || '');
+  const locklineRewardHandoff = assertSeasonBoardHandoffTarget(
+    locklineGame,
+    normalizedLocklineRewardMeta.seasonBoard,
+    'nextTask',
+    'lockline reward next-task handoff'
+  );
+  assert(
+    locklineRewardHandoff.taskId === normalizedLocklineRewardMeta.seasonBoard.nextTask?.id
+      && locklineRewardHandoff.laneId === normalizedLocklineRewardMeta.seasonBoard.nextTask?.laneId,
+    `lockline reward handoff should keep next-task identity, got ${JSON.stringify(locklineRewardHandoff)}`
+  );
+  const originalLocklineSwitchCollectionSection = locklineGame.switchCollectionSection;
+  let locklineFollowSection = '';
+  locklineGame.switchCollectionSection = (section) => {
+    locklineFollowSection = section;
+    locklineGame.currentScreen = 'collection';
+  };
+  assert(
+    locklineGame.followRewardSeasonBoardHandoff('nextTask') === true
+      && locklineFollowSection === normalizedLocklineRewardMeta.seasonBoard.nextWeekGoal?.value
+      && locklineGame.lastRewardSeasonBoardHandoff?.source === 'settlement',
+    `lockline reward handoff should route through the nextWeekGoal action, got ${JSON.stringify({
+      locklineFollowSection,
+      last: locklineGame.lastRewardSeasonBoardHandoff
+    })}`
+  );
+  const locklineArrivalNotice = locklineGame.pendingRewardSeasonBoardHandoffNotice;
+  const locklineCollectionArrival = typeof locklineGame.getRewardSeasonBoardHandoffArrivalNotice === 'function'
+    ? locklineGame.getRewardSeasonBoardHandoffArrivalNotice(locklineFollowSection)
+    : null;
+  assert(
+    locklineArrivalNotice?.source === 'settlement'
+      && locklineArrivalNotice?.value === normalizedLocklineRewardMeta.seasonBoard.nextWeekGoal?.value
+      && locklineArrivalNotice?.buttonLabel === normalizedLocklineRewardMeta.seasonBoard.nextWeekGoal?.buttonLabel
+      && locklineArrivalNotice?.taskId === normalizedLocklineRewardMeta.seasonBoard.nextWeekGoal?.taskId
+      && locklineArrivalNotice?.laneId === normalizedLocklineRewardMeta.seasonBoard.nextWeekGoal?.laneId
+      && typeof locklineArrivalNotice?.title === 'string'
+      && locklineArrivalNotice.title.length > 0
+      && typeof locklineArrivalNotice?.note === 'string'
+      && locklineArrivalNotice.note.length > 0
+      && locklineArrivalNotice?.createdAt > 0
+      && locklineCollectionArrival?.focusLabel === '定位季盘任务'
+      && locklineCollectionArrival?.taskId === normalizedLocklineRewardMeta.seasonBoard.nextWeekGoal?.taskId
+      && locklineCollectionArrival?.laneId === normalizedLocklineRewardMeta.seasonBoard.nextWeekGoal?.laneId
+      && locklineCollectionArrival?.sourceLabel === '季押卷'
+      && locklineCollectionArrival?.targetLabel === '洞府',
+    `lockline reward handoff should prepare a collection arrival notice, got ${JSON.stringify({
+      raw: locklineArrivalNotice,
+      collection: locklineCollectionArrival
+    })}`
+  );
+  locklineGame.switchCollectionSection = originalLocklineSwitchCollectionSection;
   const locklineRewardBrief = locklineGame.getRewardNarrativeBriefMeta();
   assert(
     locklineRewardBrief?.kicker === '赛季裁定',
@@ -716,6 +875,7 @@ function loadFile(ctx, filePath) {
     locklineExpeditionPayload?.seasonBoard?.nextTask?.label === locklineBoard.nextTask?.label,
     `lockline expedition payload should mirror next-task state, got ${JSON.stringify(locklineExpeditionPayload?.seasonBoard)}` 
   );
+  assertSeasonBoardNextProjection(locklineExpeditionPayload.seasonBoard, 'lockline expedition payload board', 'settlement', locklineExpeditionPayload.seasonBoard.settlement?.id || '');
   locklineGame.currentScreen = 'reward-screen';
   const locklinePayload = JSON.parse(locklineGame.renderGameToText());
   assert(
@@ -740,12 +900,46 @@ function loadFile(ctx, filePath) {
       && JSON.stringify(locklinePayload?.reward?.expedition?.seasonBoard?.nextTask || null) === JSON.stringify(locklinePayload?.map?.chapter?.seasonBoard?.nextTask || null),
     `lockline reward / expedition / map payload should mirror next-task state, got ${JSON.stringify(locklinePayload?.reward?.expedition?.seasonBoard)} vs ${JSON.stringify(locklinePayload?.expedition?.seasonBoard)} vs ${JSON.stringify(locklinePayload?.map?.chapter?.seasonBoard)}`
   );
+  assert(
+    JSON.stringify(locklinePayload?.reward?.expedition?.seasonBoard?.nextWeekGoal || null) === JSON.stringify(locklinePayload?.expedition?.seasonBoard?.nextWeekGoal || null)
+      && JSON.stringify(locklinePayload?.reward?.expedition?.seasonBoard?.nextWeekGoal || null) === JSON.stringify(locklinePayload?.map?.chapter?.seasonBoard?.nextWeekGoal || null),
+    `lockline reward / expedition / map payload should mirror next-week goal state, got ${JSON.stringify(locklinePayload?.reward?.expedition?.seasonBoard)} vs ${JSON.stringify(locklinePayload?.expedition?.seasonBoard)} vs ${JSON.stringify(locklinePayload?.map?.chapter?.seasonBoard)}`
+  );
   const locklineNextTaskNeedle = locklineBoard.nextTask?.hintLine || locklineBoard.nextTask?.label || '';
   const locklineSanctumData = locklineGame.getSanctumOverviewData();
   assert(
     locklineSanctumData?.seasonBoard?.nextTask?.id === 'season_commitment',
     `lockline sanctum data should preserve the next-task action, got ${JSON.stringify(locklineSanctumData?.seasonBoard)}`
   );
+  assertSeasonBoardNextProjection(locklineSanctumData.seasonBoard, 'lockline sanctum board', 'settlement', locklineSanctumData.seasonBoard.settlement?.id || '');
+  const locklineSeasonTask = (locklineSanctumData.seasonBoard.lanes || [])
+    .flatMap((lane) => (Array.isArray(lane?.tasks)
+      ? lane.tasks.map((task) => ({ ...task, laneId: lane.id }))
+      : []))
+    .find((task) => task.id === 'season_commitment') || null;
+  assert(
+    locklineSeasonTask?.actionType === 'collection'
+      && locklineSeasonTask?.actionValue === 'sanctum'
+      && locklineSeasonTask?.ctaLabel,
+    `lockline season task should expose direct task-level route metadata, got ${JSON.stringify(locklineSeasonTask)}`
+  );
+  let locklineTaskFollowSection = '';
+  locklineGame.switchCollectionSection = (section) => {
+    locklineTaskFollowSection = section;
+    locklineGame.currentScreen = 'collection';
+  };
+  assert(
+    locklineGame.followSeasonBoardTask('season_commitment') === true
+      && locklineTaskFollowSection === 'sanctum'
+      && locklineGame.lastSeasonBoardTaskFollow?.taskId === 'season_commitment'
+      && locklineGame.lastSeasonBoardTaskFollow?.laneId === 'expedition'
+      && locklineGame.lastSeasonBoardTaskFollow?.anchorSection === 'sanctum',
+    `lockline season task follow should route directly from the task row metadata, got ${JSON.stringify({
+      locklineTaskFollowSection,
+      last: locklineGame.lastSeasonBoardTaskFollow
+    })}`
+  );
+  locklineGame.switchCollectionSection = originalLocklineSwitchCollectionSection;
   assert(
     Array.isArray(locklineSanctumData.goals)
       && locklineSanctumData.goals.some((goal) => /季押卷/.test(String(goal.title || '')) && /押卷中/.test(`${String(goal.title || '')} ${String(goal.note || '')}`)),
@@ -1006,6 +1200,24 @@ function loadFile(ctx, filePath) {
       && debtBoard.verificationOrders?.[1]?.role === 'side',
     `ranking debt board should expose explicit primary/side verification roles, got ${JSON.stringify(debtBoard?.verificationOrders)}`
   );
+  assertSeasonBoardNextProjection(debtBoard, 'ranking debt board', 'debt_pack', debtBoard.debtPack?.id || '');
+  const debtLaneTask = (debtBoard.lanes || [])
+    .flatMap((lane) => (Array.isArray(lane?.tasks)
+      ? lane.tasks.map((task) => ({ ...task, laneId: lane.id }))
+      : []))
+    .find((task) => task.id === debtBoard.debtPack?.occupiedMandateTaskId) || null;
+  assert(
+    debtBoard.nextTask?.id === debtBoard.debtPack?.occupiedMandateTaskId
+      && debtBoard.nextTask?.laneId === 'verification'
+      && debtLaneTask?.occupiesStrongSlot
+      && debtLaneTask?.source === 'seasonDebtPack'
+      && /债|欠卷|清/.test(String(debtLaneTask?.label || '')),
+    `ranking debt board should project the debt pack into a concrete verification lane task, got ${JSON.stringify({
+      nextTask: debtBoard.nextTask,
+      debtPack: debtBoard.debtPack,
+      debtLaneTask
+    })}`
+  );
   assert(
     debtBoard.weekVerdictLedger?.current?.settlementOutcomeId === 'debt_sheet'
       && debtBoard.weekVerdictLedger?.current?.debtPackId === debtBoard.debtPack?.id
@@ -1050,6 +1262,8 @@ function loadFile(ctx, filePath) {
     normalizedDebtRewardMeta?.seasonBoard?.debtPack?.summaryLine === debtBoard.debtPack.summaryLine,
     `reward expedition meta should mirror season-board debt pack summary, got ${JSON.stringify(normalizedDebtRewardMeta?.seasonBoard)}`
   );
+  assertSeasonBoardNextProjection(normalizedDebtRewardMeta.seasonBoard, 'debt reward expedition board', 'debt_pack', normalizedDebtRewardMeta.seasonBoard.debtPack?.id || '');
+  assertSeasonBoardHandoffTarget(debtGame, normalizedDebtRewardMeta.seasonBoard, 'debtPack', 'debt reward pack handoff');
   const debtRewardBrief = debtGame.getRewardNarrativeBriefMeta();
   assert(
     debtRewardBrief?.kicker === '赛季裁定',
@@ -1096,6 +1310,17 @@ function loadFile(ctx, filePath) {
       && JSON.stringify(debtPayload?.reward?.expedition?.seasonBoard?.weekVerdictLedger || null) === JSON.stringify(debtPayload?.map?.chapter?.seasonBoard?.weekVerdictLedger || null),
     `reward / expedition / map payload should mirror debt week verdict ledger state, got ${JSON.stringify(debtPayload?.reward?.expedition?.seasonBoard)} vs ${JSON.stringify(debtPayload?.expedition?.seasonBoard)} vs ${JSON.stringify(debtPayload?.map?.chapter?.seasonBoard)}` 
   );
+  assert(
+    JSON.stringify(debtPayload?.reward?.expedition?.seasonBoard?.nextTask || null) === JSON.stringify(debtPayload?.expedition?.seasonBoard?.nextTask || null)
+      && JSON.stringify(debtPayload?.reward?.expedition?.seasonBoard?.nextTask || null) === JSON.stringify(debtPayload?.map?.chapter?.seasonBoard?.nextTask || null),
+    `reward / expedition / map payload should mirror debt next-task state, got ${JSON.stringify(debtPayload?.reward?.expedition?.seasonBoard)} vs ${JSON.stringify(debtPayload?.expedition?.seasonBoard)} vs ${JSON.stringify(debtPayload?.map?.chapter?.seasonBoard)}`
+  );
+  assert(
+    JSON.stringify(debtPayload?.reward?.expedition?.seasonBoard?.nextWeekGoal || null) === JSON.stringify(debtPayload?.expedition?.seasonBoard?.nextWeekGoal || null)
+      && JSON.stringify(debtPayload?.reward?.expedition?.seasonBoard?.nextWeekGoal || null) === JSON.stringify(debtPayload?.map?.chapter?.seasonBoard?.nextWeekGoal || null),
+    `reward / expedition / map payload should mirror debt next-week goal state, got ${JSON.stringify(debtPayload?.reward?.expedition?.seasonBoard)} vs ${JSON.stringify(debtPayload?.expedition?.seasonBoard)} vs ${JSON.stringify(debtPayload?.map?.chapter?.seasonBoard)}`
+  );
+  assertSeasonBoardNextProjection(debtPayload.expedition.seasonBoard, 'debt render expedition board', 'debt_pack', debtPayload.expedition.seasonBoard.debtPack?.id || '');
   debtGame.recordSeasonVerificationResult({
     role: 'primary',
     sourceMode: 'endless',
@@ -1143,6 +1368,24 @@ function loadFile(ctx, filePath) {
       && clearedDebtBoard.weekVerdictLedger?.current?.primaryVerificationResultStatus === 'verified'
       && clearedDebtBoard.weekVerdictLedger?.current?.primaryWritebackMode === 'clear_debt',
     `debt-clear writeback should flow into the week verdict ledger, got ${JSON.stringify(clearedDebtBoard?.weekVerdictLedger)}`
+  );
+  assert(
+    clearedDebtBoard.debtPack?.verificationRecordId === clearedDebtBoard.settlement?.primaryVerificationRecordId
+      && clearedDebtBoard.settlement?.primaryVerificationRecordId === clearedDebtBoard.verificationOrders?.[0]?.id,
+    `debt-clear writeback should keep verification record ids aligned across debt pack / settlement / verification order, got ${JSON.stringify({ debtPack: clearedDebtBoard?.debtPack, settlement: clearedDebtBoard?.settlement, verificationOrders: clearedDebtBoard?.verificationOrders })}`
+  );
+  assert(
+    clearedDebtBoard.verificationArchive?.available
+      && clearedDebtBoard.verificationArchive?.totalRecords >= 1
+      && clearedDebtBoard.verificationArchive?.latestEntry?.recordId === clearedDebtBoard.verificationOrders?.[0]?.id
+      && clearedDebtBoard.verificationArchive?.latestEntry?.settlementOutcomeId === 'positive_sheet'
+      && clearedDebtBoard.verificationArchive?.latestEntry?.settlementOutcomeLabel === clearedDebtBoard.settlement?.outcomeLabel
+      && clearedDebtBoard.verificationArchive?.latestEntry?.settlementSource === clearedDebtBoard.weekVerdictLedger?.current?.settlementSource
+      && typeof clearedDebtBoard.verificationArchive?.latestEntry?.carryIntoWeekTag === 'string'
+      && Number.isFinite(clearedDebtBoard.verificationArchive?.latestEntry?.deferCount)
+      && clearedDebtBoard.verificationArchive?.latestEntry?.actionType === 'screen'
+      && clearedDebtBoard.verificationArchive?.latestEntry?.actionValue === 'map-screen',
+    `debt-clear writeback should surface an endless-followup archive entry with mirrored verdict metadata, got ${JSON.stringify(clearedDebtBoard?.verificationArchive)}`
   );
 
   resetStorages();
@@ -1236,6 +1479,23 @@ function loadFile(ctx, filePath) {
       && degradedDebtBoard.verificationOrders?.[0]?.writebackMode === 'degrade'
       && degradedDebtBoard.verificationOrders?.[0]?.anchorSection === 'pvp',
     `explicit primary verification failure should surface the failed primary writeback order, got ${JSON.stringify(degradedDebtBoard?.verificationOrders)}`
+  );
+  assert(
+    degradedDebtBoard.debtPack?.verificationRecordId === degradedDebtBoard.settlement?.primaryVerificationRecordId
+      && degradedDebtBoard.settlement?.primaryVerificationRecordId === degradedDebtBoard.verificationOrders?.[0]?.id,
+    `degraded debt writeback should keep verification record ids aligned across debt pack / settlement / verification order, got ${JSON.stringify({ debtPack: degradedDebtBoard?.debtPack, settlement: degradedDebtBoard?.settlement, verificationOrders: degradedDebtBoard?.verificationOrders })}`
+  );
+  assert(
+    degradedDebtBoard.verificationArchive?.available
+      && degradedDebtBoard.verificationArchive?.latestEntry?.recordId === degradedDebtBoard.verificationOrders?.[0]?.id
+      && degradedDebtBoard.verificationArchive?.latestEntry?.settlementOutcomeId === 'risky_sheet'
+      && degradedDebtBoard.verificationArchive?.latestEntry?.settlementOutcomeLabel === degradedDebtBoard.settlement?.outcomeLabel
+      && degradedDebtBoard.verificationArchive?.latestEntry?.settlementSource === degradedDebtBoard.weekVerdictLedger?.current?.settlementSource
+      && typeof degradedDebtBoard.verificationArchive?.latestEntry?.carryIntoWeekTag === 'string'
+      && Number.isFinite(degradedDebtBoard.verificationArchive?.latestEntry?.deferCount)
+      && degradedDebtBoard.verificationArchive?.latestEntry?.actionType === 'screen'
+      && degradedDebtBoard.verificationArchive?.latestEntry?.actionValue === 'pvp-screen',
+    `degraded debt writeback should surface a pvp-followup archive entry with mirrored verdict metadata, got ${JSON.stringify(degradedDebtBoard?.verificationArchive)}`
   );
 
   resetStorages();
