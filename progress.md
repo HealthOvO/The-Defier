@@ -1,5 +1,248 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-04-27: 诸界会审 M0 上线
+  - 本轮策划
+    - 按 `game-design-theory` 的反馈循环原则，本轮继续扩展赛季天道盘的“读盘反馈”，目标是让玩家在看完诸界战线、本周法旨和战役史卷后，明确“副线如何处理”，但不新增奖励、不新增第二任务源、不新增第二主 CTA。
+    - 设计边界保持为纯派生：`frontier.council` 挂在 `seasonBoard.frontier` 下，只从 `frontier / decree / chronicle / items` 现算，不升成顶层 `seasonBoard.council`，不写入 `seasonVerificationState`，不碰 `claimedLaneRewards`、`weekVerdictLedger`、`verificationArchive`。
+    - subagent 反向巡检后收紧字段：会审只保留 `summaryLine / verdictLine / focusLine / supportLine / auditLine / riskLine / laneOpinions / source / sourceId` 等纪要字段，不输出 `actionType / actionValue / ctaLabel`，避免后续误接第二行动入口。
+  - 本轮完成
+    - `js/game.js`
+      - 新增 `buildSeasonBoardFrontierCouncil()` 与 `normalizeSeasonBoardFrontierCouncil()`，把诸界会审规范为 `seasonBoard.frontier.council` 子对象，包含本周裁语、主线意见、副线保留口径、风险线和最多 3 条 `laneOpinions`。
+      - `buildSeasonBoardFrontier()` 在 `decree -> chronicle` 后继续派生 `council`；`normalizeSeasonBoardFrontier()` 会基于 live frontier 重新规范 council，保持 reward 旧快照不会带偏当前会审。
+      - reward 文本 payload 的 `serializeSeasonBoardFrontier()` 补入 council 白名单；奖励页增加一个会审 muted line、一个轻量 chip 和 panel dataset，不新增 handoff button。
+    - `js/core/expedition_hub.js`
+      - `serializeFrontier()` 与 `cloneSeasonBoardFrontier()` 补入 council 白名单，保证 reward / expedition / map 继续镜像同一份 `frontier.council`。
+    - `js/core/collection_hub.js`
+      - 洞府 overview model 解析 council。
+      - 洞府 summary、概览 chip、赛季盘 card 和 guide 各增加一条会审轻提示；没有进入 goals / researches / tasks，也没有新增 action 属性。
+    - `js/core/map.js`
+      - 章节简报增加一条 `data-map-season-board-frontier-council` 会审行和一个 `frontier-council` chip，继续保持 map 无第二 CTA。
+    - `tests/sanity_season_board_system_checks.js`
+      - `assertSeasonBoardFrontier()` 覆盖 `frontier.council` 的主线 lane、状态、纪要字段、三线 opinions 和无 `actionType / actionValue / ctaLabel`。
+      - 持久化负断言加入 `council`，确保派生会审不会落入 `seasonVerificationState`。
+    - `tests/browser_meta_screen_audit.mjs`
+      - reward probe 覆盖 council 文案、chip、节点计数、payload 形态和 reward / expedition / map council JSON 镜像。
+      - map probe 覆盖会审 brief line、chip、dataset 与无 frontier action。
+      - sanctum probe 覆盖会审 summary / guide / card / chip、计数为 1、无 frontier action，以及 expedition / map frontier 镜像。
+    - `game-intro.html`
+      - 当前版本说明同步为 `seasonBoard.frontier.council` 诸界会审 M0 已上线。
+      - 下一迭代方向从“推进诸界会审”调整为“诸界会审结算与战役史卷结算”。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check js/core/map.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/browser-meta-screen-audit-season-frontier-council` ✅
+  - 当前结论
+    - 赛季天道盘现在具备 `frontier -> decree -> chronicle -> council` 四层只读反馈链：主压线、周法旨、战役史卷、诸界会审分别解决“该补哪条线”“本周遵守什么约束”“本周战线进展如何复盘”“副线是否抢行动”。
+    - 本轮 fresh 浏览器审计目录以 `output/browser-meta-screen-audit-season-frontier-council` 为准，meta-screen findings 全绿且无 console error。
+    - 后续若继续扩展，优先把诸界会审和战役史卷沉淀为可选择、可结算的长期战线循环，但仍需保持 `seasonBoard.lanes / nextTask / weekVerdictLedger` 是任务与历史真源，`frontier.council` 只做派生读面。
+
+- 2026-04-27: 战役史卷 M0 上线
+  - 本轮策划
+    - 按 `game-design-theory` 的反馈循环原则，本轮继续扩展赛季天道盘的“读盘反馈”，但不新增任务系统、不新增经济领取、不新增第二主 CTA；战役史卷只把 `seasonBoard.frontier` 和 `frontier.decree` 已有结论压成可读周战报。
+    - 设计边界保持为纯派生：`frontier.chronicle` 挂在 `seasonBoard.frontier` 下，不升成顶层 `seasonBoard.chronicle`，不写入 `seasonVerificationState`，不碰 `claimedLaneRewards`、`weekVerdictLedger`、`verificationArchive`。
+    - subagent 反向巡检后收紧字段：史卷保留 `actionLaneId / actionTargetLabel / taskId / source / sourceId` 作为 provenance，不输出新的 `actionType / actionValue / ctaLabel` 合同，避免后续误接第二行动入口。
+  - 本轮完成
+    - `js/game.js`
+      - 新增 `buildSeasonBoardFrontierChronicle()` 与 `normalizeSeasonBoardFrontierChronicle()`，从 frontier / decree / 三线 items 派生 `title / summaryLine / currentEntryLine / progressLine / lessonLine / nextRecordLine`。
+      - `buildSeasonBoardFrontier()` 在派生 decree 后同步派生 chronicle；`normalizeSeasonBoardFrontier()` 把 chronicle 作为 frontier child 归一化。
+      - reward 文本 payload 的 `serializeSeasonBoardFrontier()` 补入 chronicle 白名单；奖励页增加一条史卷 muted line、一个 `data-season-board-chip="frontier-chronicle"` chip 和 panel dataset，但不新增 handoff button。
+    - `js/core/expedition_hub.js`
+      - 远征 payload `serializeFrontier()` 与地图镜像 `cloneSeasonBoardFrontier()` 补入 chronicle，确保 reward / expedition / map.chapter 继续读取同一份 `frontier` 子树。
+    - `js/core/collection_hub.js`
+      - 洞府 overview model 解析 `frontier.chronicle`。
+      - 洞府总览新增一行史卷 summary、一个史卷 chip、概览卡一行 current entry、guide 一行下一笔记录；不进入 goals / researches / tasks，也不新增 `data-season-board-frontier-action`。
+    - `js/core/map.js`
+      - 地图章节 brief 增加只读“史卷”行与 `data-map-season-board-chip="frontier-chronicle"` chip，展示周战报、三线记录与下一跳目标；不接入点击推进。
+    - `tests/sanity_season_board_system_checks.js`
+      - `assertSeasonBoardFrontier()` 扩展 chronicle 合同断言，覆盖 lane/action/status 与 frontier 对齐、稳定文案槽、`三线记录` 文案。
+      - 持久化负向门禁改为 `assertSeasonBoardFrontierDerivedNotPersisted()`，同时禁止 `frontier / decree / chronicle` 进入 `seasonVerificationState`。
+    - `tests/browser_meta_screen_audit.mjs`
+      - reward probe 覆盖史卷文本、chip、节点数、panel dataset、payload mirror。
+      - map probe 覆盖章节 brief 史卷行、chip、dataset 与无第二 action。
+      - sanctum probe 覆盖史卷 summary / guide / card / chip、计数为 1、无 frontier action，以及 expedition / map frontier 镜像。
+    - `game-intro.html`
+      - 当前版本说明同步为 `seasonBoard.frontier.chronicle` 战役史卷 M0 已上线。
+      - 下一迭代方向从“开发战役史卷”调整为“诸界会审与战役史卷结算”。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check js/core/map.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/browser-meta-screen-audit-season-frontier-chronicle` ✅
+  - 当前结论
+    - 赛季天道盘现在具备 `frontier -> decree -> chronicle` 三层只读反馈链：主压线、周法旨、战役史卷分别解决“该补哪条线”“本周遵守什么约束”“本周战线进展如何复盘”。
+    - 本轮 fresh 浏览器审计目录以 `output/browser-meta-screen-audit-season-frontier-chronicle` 为准，meta-screen findings 全绿且无 console error。
+    - 后续若继续扩展，优先做诸界会审或战役史卷结算，但必须继续保持 `seasonBoard.lanes / nextTask / weekVerdictLedger` 是真实任务与历史账本，`frontier.chronicle` 只做派生读面。
+
+- 2026-04-27: 本周法旨派生层上线
+  - 本轮策划
+    - 按 `game-design-theory` 的反馈循环原则，本轮继续扩展诸界战线，但不新开任务系统、不新增经济领取、不新增第二主 CTA；“本周法旨”只负责把 `seasonBoard.frontier` 已经算出的主战线压成一条明确的周约束、完成口径与风险提示。
+    - 设计边界保持为纯派生：`frontier.decree` 从 `primaryFrontId / statusId / pressureScore / actionTargetLabel / phase / weekTag` 现算，不写入 `seasonVerificationState`、不占用 `claimedLaneRewards`、不改 `weekVerdictLedger` schema。
+    - 可玩性目标是把“知道哪条线承压”再推进一步成“知道本周先遵守什么规则”：训练线强调先补样本，远征线强调先锁章节答卷，验算线强调先完成主验证或清债口径。
+  - 本轮完成
+    - `js/game.js`
+      - 新增 `buildSeasonBoardFrontierDecree()` 与 `normalizeSeasonBoardFrontierDecree()`，把本周法旨规范为 `seasonBoard.frontier.decree` 子对象，包含 `title / summaryLine / constraintLine / successLine / riskLine / focusLine / tone / actionTargetLabel` 等字段。
+      - `buildSeasonBoardFrontier()` 在构造 frontier 时同步派生 decree；`normalizeSeasonBoardFrontier()` 会基于 live frontier 重新规范 decree，避免 reward 旧快照把法旨文案带偏。
+      - reward 文本 payload 的 `serializeSeasonBoardFrontier()` 补入 decree 白名单；奖励页增加一个法旨 muted line、一个轻量 chip 和 panel dataset，但不新增 handoff button。
+    - `js/core/expedition_hub.js`
+      - 远征 payload `serializeFrontier()` 与地图镜像 `cloneSeasonBoardFrontier()` 补入完整 decree，确保 reward / expedition / map.chapter 三处 JSON 保持同一份法旨对象。
+    - `js/core/collection_hub.js`
+      - 洞府 overview model 的 frontier 子树补入 decree 规范化。
+      - 洞府总览新增一行法旨 summary、一个法旨 chip、概览卡一行 focus、guide 一行完成口径；继续保持无 `data-season-board-frontier-action`。
+    - `js/core/map.js`
+      - 地图章节 brief 增加只读“法旨”行与 `data-map-season-board-chip="frontier-decree"` chip，展示本周约束与下一跳目标；不接入任何点击推进。
+    - `tests/sanity_season_board_system_checks.js`
+      - `assertSeasonBoardFrontier()` 扩展 decree 合同断言，覆盖 lane/action/status 与 frontier 对齐、稳定文案槽、tone 元数据。
+      - 既有 reward / expedition / map frontier mirror 断言会连同 decree 一起比较，锁住 payload 漂移。
+    - `tests/browser_meta_screen_audit.mjs`
+      - reward probe 覆盖法旨文本、chip、节点数、panel dataset、payload mirror。
+      - map probe 覆盖章节 brief 法旨行、chip、dataset 与无第二 action。
+      - sanctum probe 覆盖法旨 summary / guide / card / chip、计数为 1、无 frontier action，以及 expedition / map frontier 镜像。
+    - `game-intro.html`
+      - 当前版本说明同步为 `seasonBoard.frontier.decree` 已能给出本周约束、完成口径、风险线与下一跳焦点。
+      - 下一迭代方向把“本周法旨”移出待开发项，后续重点转向战役史卷与诸界会审。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check js/core/map.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/browser-meta-screen-audit-season-frontier-decree` ✅
+  - 当前结论
+    - 赛季天道盘现在能从三条季盘分线派生“诸界战线态势”，并继续派生“本周法旨”，让玩家同时知道主压线、约束条件、完成口径和下一跳。
+    - 本轮 fresh 浏览器审计目录以 `output/browser-meta-screen-audit-season-frontier-decree` 为准，meta-screen findings 全绿且无 console error。
+    - 后续若继续做可玩性扩展，优先把 `frontier.decree` 沉淀为战役史卷 / 诸界会审的可回看和可结算记录；仍需保持 `seasonBoard.lanes` 是任务真源，避免把 decree 变成第二套任务账本。
+
+- 2026-04-27: 诸界战线态势层骨架上线
+  - 本轮策划
+    - 按 `game-design-theory` 的反馈循环原则，本轮不新开一套任务系统，而是在赛季天道盘上派生“当前应先补哪条线”的弱态势层：三条分线仍是唯一任务来源，`seasonBoard.frontier` 只负责压成主战线、压强、摘要与行动去向。
+    - 可玩性目标是降低中后局读盘成本：玩家完成一局后能立刻看到训练线 / 远征线 / 验算线哪条最紧，洞府里也能看到同一条主压提示，但不会出现第二个主 CTA 或额外可领取经济。
+    - 本轮只落 M0/M1 骨架：先保证派生态势、跨 payload 镜像、reward 弱提示、sanctum 弱提示和测试门禁稳定；后续再把它扩成“本周法旨 / 战役史卷 / 诸界会审”的可选择、可回看、可结算长期战线循环。
+  - 本轮完成
+    - `js/game.js`
+      - 新增 `buildSeasonBoardFrontier()` 与 `normalizeSeasonBoardFrontier()`，从 `lanes / phase / debtPack / verificationOrders / nextTask` 派生三条 frontier item、主战线、压强等级、摘要、guide 与单一路由。
+      - `normalizeSeasonBoardSnapshot()` 现在把 `frontier` 作为 `seasonBoard` 的规范子对象输出，保持它是派生态势而不是独立持久账本；`normalizeSeasonBoardFrontier()` 优先采用 live 派生出来的 canonical 字段，再回退到 source/root，降低 reward 侧旧态势漂移风险。
+      - `frontier` 明确拆出 `actionLaneId / actionTargetLabel / actionLine`，把“当前主战线是哪条 lane”和“下一跳去哪个页面”分离，避免后续误把 `primaryFrontId` 和 `actionValue` 当成同一语义。
+      - reward expedition meta 增加一个 `data-season-board-chip="frontier"` chip、一个 muted 提示行和 panel dataset，用来提示主战线与压强；同时继续保持原有 season board handoff 作为唯一主行动。
+      - reward 文本 payload 的手写序列化补入 `frontier`，避免 reward 分支丢掉态势层。
+    - `js/core/expedition_hub.js`
+      - 远征 payload 与地图 `map.chapter.seasonBoard` 克隆都补入完整 `frontier` 字段，确保 reward / expedition / map 三处读取同一份态势对象。
+    - `js/core/map.js`
+      - 地图章节 brief 增加只读 `data-map-season-board-frontier` 行与 `data-map-season-board-chip="frontier"` chip，用来展示当前主战线、压强和下一跳目标；不接入 handoff、不新增第二 CTA。
+    - `js/core/collection_hub.js`
+      - 洞府 overview 模型补入 frontier 规范化。
+      - 洞府总览只增加一行 summary、一个 chip、概览卡内一行 detail 和 guide 内一行建议，不新增 front board 面板，也不新增 `data-season-board-frontier-action`。
+    - `tests/sanity_season_board_system_checks.js`
+      - 增加 `assertSeasonBoardFrontier()` 与 `assertSeasonBoardFrontierMirror()`，覆盖采样期主压训练线、锁线期主压远征线、定榜 / 欠卷 / 险卷主压验算线，以及 reward / expedition / map 三处 JSON 镜像一致性。
+    - `tests/browser_meta_screen_audit.mjs`
+      - reward probe 覆盖 frontier chip、唯一 muted 行、panel dataset、`frontier.items.length === 3`、reward / expedition / map 镜像和 `rewardHandoffButtonCount === 1`。
+      - sanctum lockline 与通用 sanctum probe 覆盖 frontier summary / guide / card / chip、summary 计数为 1、frontier action 计数为 0，以及 expedition / map 镜像。
+      - 新增 map chapter brief DOM 断言，确认地图页实际展示 frontier 轻提示，并锁住 `mapFrontierActionCount === 0`。
+    - `game-intro.html`
+      - 当前版本说明同步为 `seasonBoard.frontier` 已能给出主战线、压强与行动去向。
+      - 下一迭代方向同步为继续推进本周法旨、战役史卷与诸界会审，把当前弱态势扩成长期战线循环。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check js/core/map.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/browser-meta-screen-audit-season-frontier-final-fixed` ✅
+  - 当前结论
+    - 赛季天道盘现在能把训练线 / 远征线 / 验算线压成一个跨页面一致的“诸界战线态势”，在 reward、sanctum 与 map 端提供轻量决策反馈。
+    - 本轮 fresh 浏览器审计目录以 `output/browser-meta-screen-audit-season-frontier-final-fixed` 为准，meta-screen findings 全绿且无 console error。
+    - 最终 subagent 反向巡检未发现阻塞问题，重点确认了 frontier live 派生优先、主战线和下一跳语义拆分、map 无第二 CTA、reward / expedition / map 镜像无漂移。
+    - 后续若继续分模块开发，优先把 frontier 升级为“本周法旨 / 战役史卷 / 诸界会审”三段循环，但要继续保持任务来源单一，避免和 `seasonBoard.lanes`、分线结题赏、nextWeekGoal 形成三套并行真相源。
+
+- 2026-04-26: 赛季天道盘分线结题赏上线
+  - 本轮策划
+    - 按 `game-design-theory` 的奖励循环原则，本轮把“完成分线任务”从纯状态展示推进成“完成 -> 明确可领 -> 领取后写账本 -> 同周防重复”的短闭环。
+    - 奖励设计保持小额、确定性、每周一次：训练线给 `天机 +1 / 命环经验 +8`，远征线给 `业果 +1 / 命环经验 +8`，验算线给 `天机 +1 / 业果 +1`，只绑定 `weekTag + laneId`，不引入天道币或 PVP 经济耦合。
+    - 采纳 subagent 风险结论：领取账本必须独立于派生 snapshot；领取时先占用 `claimedLaneRewards` 防重复点击，若发奖异常则回滚 claim marker 与本次资源变化，避免误封账本。
+  - 本轮完成
+    - `js/game.js`
+      - 新增分线奖励定义、奖励文案格式化、`claimedLaneRewards` 规范化、`buildSeasonBoardLaneRewards()` 与 `claimSeasonBoardLaneReward(laneId)`。
+      - `normalizeSeasonBoardSnapshot()` 现在输出 `laneRewards / laneRewardSummary / lanes[].reward` 三处镜像，奖励页可直接显示三条分线结题赏并暴露 `data-season-board-lane-reward*` 钩子。
+      - 领取成功会记录 `lastSeasonBoardLaneRewardClaim`，发放天机 / 业果 / 命环经验 / 灵石，并重渲奖励页与藏经阁；重复领取返回 `already_claimed` 且不重复发资源，发奖失败会返回 `grant_failed` 并回滚到可重试状态。
+    - `js/core/collection_hub.js`
+      - 洞府赛季天道盘总览新增分线结题赏 chip、lane 行内奖励状态、可点击领取按钮，以及 claimable research / goal 入口。
+      - overview 模型会从顶层 `laneRewards` 或 `lanes[].reward` 双向补齐，降低奖励页、洞府页与文本 payload 的镜像漂移。
+    - `js/core/expedition_hub.js`
+      - 远征 / 地图 payload 序列化同步保留 `laneRewards / laneRewardSummary / lanes[].reward`，让 reward、expedition、map.chapter 三处保持同一份分线奖励状态。
+    - `tests/sanity_season_board_system_checks.js`
+      - 新增完成训练线的手工夹具，覆盖可领取、领取后资源变化、账本持久化、发奖失败回滚、二次领取防重、周切换隔离，以及 reward / expedition / map 镜像一致性。
+    - `tests/browser_meta_screen_audit.mjs`
+      - reward 屏与 sanctum probe 都覆盖三条分线奖励 DOM、claim button、chip 计数、领取后的 claimed 状态、payload 镜像和资源变化。
+      - 修正测试夹具隔离：领取 probe 会重置赛季验证状态，洞府 probe 后重新加载页面，避免 `claimedLaneRewards` 与临时 `getSeasonBoardSnapshot()` 覆盖污染后续 debt / verification probe。
+    - `game-intro.html`
+      - 当前版本说明同步为三条季盘分线已拥有每周一次的分线结题赏，并说明 `claimedLaneRewards` 防重复领取账本。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/browser-meta-screen-audit-season-lane-rewards-isolated` ✅
+  - 当前结论
+    - 赛季天道盘现在不只负责展示训练线 / 远征线 / 验算线进度，也能把“完成一线”转成可领取、可验证、可防重的周奖励。
+    - 本轮 fresh 浏览器审计目录以 `output/browser-meta-screen-audit-season-lane-rewards-isolated` 为准，meta-screen findings 全绿且无 console error。
+    - 后续若继续扩展季盘可玩性，优先处理分线结题赏的跨周回看、补领策略、右栏长内容折叠，以及更多按 phase / lane 定制的奖励变体。
+
+- 2026-04-26: 洞府季盘任务行补齐到达回执与定位反馈
+  - 本轮策划
+    - 按 `game-design-theory` 的核心循环原则，本轮不再继续堆静态说明，而是补齐“玩家点击季盘任务行 -> 目标页立刻反馈 -> 能定位到具体任务行”的短闭环。
+    - 同步采纳 subagent 策划结论：下一轮大版本目标建议收束为“赛季天道盘分线结题赏”，按训练线 / 远征线 / 验算线提供每周一次、绑定 `weekTag + laneId` 的小额确定性奖励；本轮先不引入经济 claim state，避免和周切换、重复发奖产生耦合风险。
+  - 本轮完成
+    - `js/game.js`
+      - `followSeasonBoardTask(taskId)` 现在不仅记录 `lastSeasonBoardTaskFollow`，还会生成 `lastSeasonBoardTaskFollowNotice`；当目标是藏经阁 section 时，同步写入 `pendingSeasonBoardTaskFollowNotice`。
+      - notice 会保留 `sourceKey=task / action / value / buttonLabel / source / sourceId / taskSource / taskSourceId / taskId / laneId / laneLabel / title / note / focusLabel`，让任务行自己的点击行为也拥有和奖励页 handoff 类似的可追踪落地信息。
+    - `js/core/collection_hub.js`
+      - 新增 `getSeasonBoardTaskFollowArrivalNotice()` / `renderSeasonBoardTaskFollowArrival()` / `getSeasonBoardTaskFollowArrivalFocusNotice()` / `findSeasonBoardTaskFollowArrivalTarget()` / `focusSeasonBoardTaskFollowArrival()`。
+      - 目标仍是藏经阁 section 的洞府任务行 CTA 点击后，藏经阁页头会显示“季盘任务已定位”横幅，说明本次任务、来源 lane、目标页与行动文案。
+      - 横幅按钮“定位任务行”会优先高亮对应 `data-season-board-task` 行及其 task CTA，再兜底到 lane / goal / research，避免玩家从任务行跳转后仍不知道当前要推进哪一条。
+    - `tests/sanity_season_board_system_checks.js`
+      - lockline 场景新增任务行 arrival notice 合同断言，确认 `season_commitment` 任务 CTA 会准备 `collection/sanctum` 到达回执，并且回执使用 `nextTask` 的稳定来源身份而不是 UI lane task 的空来源。
+    - `tests/browser_meta_screen_audit.mjs`
+      - sanctum lockline probe 扩展为点击任务行 CTA 后验证“季盘任务已定位”横幅、focus 按钮、`lastSeasonBoardTaskFollowArrivalNotice`、`lastSeasonBoardTaskFollowArrivalFocus`、pending 消费清理以及 DOM 高亮的 task 行本体。
+    - `game-intro.html`
+      - 当前版本说明同步为洞府季盘任务行已具备“点击 -> 到达回执 -> 定位任务行”的反馈闭环；下一迭代方向补入“分线结题赏”作为后续可玩性扩展重点。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4174 output/browser-meta-screen-audit-season-task-arrival-strict` ✅
+  - 当前结论
+    - 奖励页 handoff 和洞府任务行 CTA 现在都拥有到达反馈与定位能力：前者定位季盘 goal / research / task，后者优先定位任务行本体。
+    - 本轮 fresh 浏览器审计目录以 `output/browser-meta-screen-audit-season-task-arrival-strict` 为准，meta-screen findings 全绿且无 console error。
+    - 下一轮若继续扩展季盘可玩性，优先开发“分线结题赏”，但需要先加独立 `seasonBoardRewardState`，只记录 `weekTag -> claimedLaneIds`，不能从派生 snapshot 直接发奖。
+
 - 2026-04-26: 洞府赛季天道盘任务行升级为可直接推进的行动入口
   - 本轮完成
     - `js/game.js`

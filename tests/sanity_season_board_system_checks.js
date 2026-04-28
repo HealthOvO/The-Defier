@@ -112,6 +112,182 @@ function assertSeasonBoardHandoffTarget(game, board, sourceKey, label) {
   return target;
 }
 
+function assertSeasonBoardLaneRewardsMirror(payload, label) {
+  const sourceLabel = label || 'season board payload';
+  const rewardBoard = payload?.reward?.expedition?.seasonBoard || null;
+  const expeditionBoard = payload?.expedition?.seasonBoard || null;
+  const chapterBoard = payload?.map?.chapter?.seasonBoard || null;
+  assert(
+    Array.isArray(rewardBoard?.laneRewards)
+      && Array.isArray(expeditionBoard?.laneRewards)
+      && Array.isArray(chapterBoard?.laneRewards),
+    `${sourceLabel} should expose laneRewards in reward / expedition / map mirrors, got ${JSON.stringify({
+      reward: rewardBoard,
+      expedition: expeditionBoard,
+      chapter: chapterBoard
+    })}`
+  );
+  assert(
+    JSON.stringify(rewardBoard.laneRewards) === JSON.stringify(expeditionBoard.laneRewards)
+      && JSON.stringify(rewardBoard.laneRewards) === JSON.stringify(chapterBoard.laneRewards),
+    `${sourceLabel} should mirror laneRewards across reward / expedition / map, got ${JSON.stringify({
+      reward: rewardBoard.laneRewards,
+      expedition: expeditionBoard.laneRewards,
+      chapter: chapterBoard.laneRewards
+    })}`
+  );
+  assert(
+    JSON.stringify(rewardBoard.laneRewardSummary || null) === JSON.stringify(expeditionBoard.laneRewardSummary || null)
+      && JSON.stringify(rewardBoard.laneRewardSummary || null) === JSON.stringify(chapterBoard.laneRewardSummary || null),
+    `${sourceLabel} should mirror laneRewardSummary across reward / expedition / map, got ${JSON.stringify({
+      reward: rewardBoard.laneRewardSummary,
+      expedition: expeditionBoard.laneRewardSummary,
+      chapter: chapterBoard.laneRewardSummary
+    })}`
+  );
+  return rewardBoard.laneRewards;
+}
+
+function assertSeasonBoardFrontier(board, label, expectedPrimaryFrontId = '') {
+  const sourceLabel = label || 'season board frontier';
+  assert(board?.frontier, `${sourceLabel} should expose a frontier state, got ${JSON.stringify(board)}`);
+  assert(
+    board.frontier.available === true
+      && board.frontier.primaryFrontId
+      && board.frontier.primaryFrontLabel
+      && board.frontier.summaryLine
+      && board.frontier.guideLine,
+    `${sourceLabel} should expose a compact primary front summary and guide, got ${JSON.stringify(board.frontier)}`
+  );
+  if (expectedPrimaryFrontId) {
+    assert(
+      board.frontier.primaryFrontId === expectedPrimaryFrontId,
+      `${sourceLabel} should use ${expectedPrimaryFrontId} as primary front, got ${JSON.stringify(board.frontier)}`
+    );
+  }
+  assert(
+    ['stable', 'pending', 'pressure', 'high_pressure'].includes(board.frontier.statusId)
+      && Number.isFinite(Number(board.frontier.pressureScore)),
+    `${sourceLabel} should expose stable pressure metadata, got ${JSON.stringify(board.frontier)}`
+  );
+  assert(
+    Array.isArray(board.frontier.items)
+      && board.frontier.items.length === 3
+      && board.frontier.items.some((item) => item.id === board.frontier.primaryFrontId && item.role === 'primary'),
+    `${sourceLabel} should expose three compact front items with one primary item, got ${JSON.stringify(board.frontier)}`
+  );
+  assert(
+    board.frontier.actionType
+      && board.frontier.actionValue
+      && board.frontier.ctaLabel,
+    `${sourceLabel} should preserve a single action route for the primary front, got ${JSON.stringify(board.frontier)}`
+  );
+  assert(
+    board.frontier.actionLaneId === board.frontier.primaryFrontId
+      && board.frontier.actionTargetLabel
+      && board.frontier.actionLine,
+    `${sourceLabel} should keep primary lane identity separate from the concrete action target, got ${JSON.stringify(board.frontier)}`
+  );
+  assert(
+    board.frontier.decree
+      && board.frontier.decree.available === true
+      && board.frontier.decree.laneId === board.frontier.primaryFrontId
+      && board.frontier.decree.actionLaneId === board.frontier.actionLaneId
+      && board.frontier.decree.actionTargetLabel === board.frontier.actionTargetLabel
+      && board.frontier.decree.statusId === board.frontier.statusId
+      && board.frontier.decree.summaryLine
+      && board.frontier.decree.constraintLine
+      && board.frontier.decree.successLine,
+    `${sourceLabel} should derive a compact weekly decree from the frontier, got ${JSON.stringify(board.frontier)}`
+  );
+  assert(
+    /本周法旨/.test(String(board.frontier.decree.title || board.frontier.decree.summaryLine || ''))
+      && ['urgent', 'focused', 'watch', 'steady'].includes(board.frontier.decree.tone),
+    `${sourceLabel} decree should expose stable title and tone metadata, got ${JSON.stringify(board.frontier.decree)}`
+  );
+  assert(
+    board.frontier.chronicle
+      && board.frontier.chronicle.available === true
+      && board.frontier.chronicle.laneId === board.frontier.primaryFrontId
+      && board.frontier.chronicle.actionLaneId === board.frontier.actionLaneId
+      && board.frontier.chronicle.actionTargetLabel === board.frontier.actionTargetLabel
+      && board.frontier.chronicle.statusId === board.frontier.statusId
+      && board.frontier.chronicle.summaryLine
+      && board.frontier.chronicle.currentEntryLine
+      && board.frontier.chronicle.progressLine,
+    `${sourceLabel} should derive a compact campaign chronicle from the frontier, got ${JSON.stringify(board.frontier)}`
+  );
+  assert(
+    /战役史卷/.test(String(board.frontier.chronicle.title || board.frontier.chronicle.summaryLine || ''))
+      && /三线记录/.test(String(board.frontier.chronicle.progressLine || '')),
+    `${sourceLabel} chronicle should expose stable title and progress recap, got ${JSON.stringify(board.frontier.chronicle)}`
+  );
+  assert(
+    board.frontier.council
+      && board.frontier.council.available === true
+      && board.frontier.council.laneId === board.frontier.primaryFrontId
+      && board.frontier.council.statusId === board.frontier.statusId
+      && board.frontier.council.summaryLine
+      && board.frontier.council.verdictLine
+      && board.frontier.council.focusLine,
+    `${sourceLabel} should derive a compact council memo from the frontier, got ${JSON.stringify(board.frontier)}`
+  );
+  assert(
+    /诸界会审/.test(String(board.frontier.council.title || board.frontier.council.summaryLine || ''))
+      && Array.isArray(board.frontier.council.laneOpinions)
+      && board.frontier.council.laneOpinions.length === 3
+      && board.frontier.council.laneOpinions.some((opinion) => opinion.laneId === board.frontier.primaryFrontId)
+      && board.frontier.council.laneOpinions.every((opinion) => board.frontier.items.some((item) => item.laneId === opinion.laneId || item.id === opinion.laneId))
+      && !Object.prototype.hasOwnProperty.call(board.frontier.council, 'actionType')
+      && !Object.prototype.hasOwnProperty.call(board.frontier.council, 'actionValue')
+      && !Object.prototype.hasOwnProperty.call(board.frontier.council, 'ctaLabel'),
+    `${sourceLabel} council should stay read-only and mirror three frontier lanes, got ${JSON.stringify(board.frontier.council)}`
+  );
+}
+
+function assertSeasonBoardFrontierMirror(payload, label) {
+  const sourceLabel = label || 'season board payload';
+  const rewardFrontier = payload?.reward?.expedition?.seasonBoard?.frontier || null;
+  const expeditionFrontier = payload?.expedition?.seasonBoard?.frontier || null;
+  const chapterFrontier = payload?.map?.chapter?.seasonBoard?.frontier || null;
+  assert(
+    rewardFrontier && expeditionFrontier && chapterFrontier,
+    `${sourceLabel} should expose frontier in reward / expedition / map mirrors, got ${JSON.stringify({
+      reward: rewardFrontier,
+      expedition: expeditionFrontier,
+      chapter: chapterFrontier
+    })}`
+  );
+  assert(
+    JSON.stringify(rewardFrontier) === JSON.stringify(expeditionFrontier)
+      && JSON.stringify(rewardFrontier) === JSON.stringify(chapterFrontier),
+    `${sourceLabel} should mirror frontier across reward / expedition / map, got ${JSON.stringify({
+      reward: rewardFrontier,
+      expedition: expeditionFrontier,
+      chapter: chapterFrontier
+    })}`
+  );
+  return rewardFrontier;
+}
+
+function hasNestedKey(value, keySet) {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some((entry) => hasNestedKey(entry, keySet));
+  return Object.entries(value).some(([key, entry]) => keySet.has(key) || hasNestedKey(entry, keySet));
+}
+
+function assertSeasonBoardFrontierDerivedNotPersisted(game, storage, label) {
+  const sourceLabel = label || 'season board derived frontier persistence';
+  assert(typeof game?.saveGame === 'function', `${sourceLabel} should be able to save game state`);
+  game.saveGame();
+  const saved = JSON.parse(storage.getItem('theDefierSave') || '{}');
+  assert(
+    saved?.seasonVerificationState
+      && !hasNestedKey(saved.seasonVerificationState, new Set(['frontier', 'decree', 'chronicle', 'council'])),
+    `${sourceLabel} should keep frontier decree chronicle and council out of seasonVerificationState, got ${JSON.stringify(saved?.seasonVerificationState)}`
+  );
+}
+
 function loadFile(ctx, filePath) {
   const code = fs.readFileSync(filePath, 'utf8');
   vm.runInContext(code, ctx, { filename: filePath });
@@ -502,6 +678,8 @@ function loadFile(ctx, filePath) {
     `season board verification orders should expose explicit primary/side roles, got ${JSON.stringify(seasonBoard?.verificationOrders)}`
   );
   assertSeasonBoardNextProjection(seasonBoard, 'positive ranking board', 'verification', seasonBoard.verificationOrders?.[0]?.id || '');
+  assertSeasonBoardFrontier(seasonBoard, 'positive ranking board frontier', 'verification');
+  assertSeasonBoardFrontierDerivedNotPersisted(game, ctx.localStorage, 'positive ranking board derived frontier persistence');
   assert(
     seasonBoard.weekVerdictLedger?.current?.settlementOutcomeId === 'positive_sheet'
       && seasonBoard.weekVerdictLedger?.current?.primaryVerificationOrderId === seasonBoard.verificationOrders?.[0]?.id
@@ -528,6 +706,7 @@ function loadFile(ctx, filePath) {
     `reward expedition season board should keep the positive settlement snapshot, got ${JSON.stringify(normalizedRewardMeta?.seasonBoard)}`
   );
   assertSeasonBoardNextProjection(normalizedRewardMeta.seasonBoard, 'positive reward expedition board', 'verification', normalizedRewardMeta.seasonBoard.verificationOrders?.[0]?.id || '');
+  assertSeasonBoardFrontier(normalizedRewardMeta.seasonBoard, 'positive reward expedition board frontier', 'verification');
   assertSeasonBoardHandoffTarget(game, normalizedRewardMeta.seasonBoard, 'verification', 'positive reward verification handoff');
   const positiveSideVerification = normalizedRewardMeta.seasonBoard.verificationOrders?.[1] || null;
   const positiveSideHandoff = game.getRewardSeasonBoardHandoffTarget('sideVerification');
@@ -582,9 +761,11 @@ function loadFile(ctx, filePath) {
     `expedition payload season board should mirror positive settlement state, got ${JSON.stringify(expeditionPayload.seasonBoard)}`
   );
   assertSeasonBoardNextProjection(expeditionPayload.seasonBoard, 'positive expedition payload board', 'verification', expeditionPayload.seasonBoard.verificationOrders?.[0]?.id || '');
+  assertSeasonBoardFrontier(expeditionPayload.seasonBoard, 'positive expedition payload board frontier', 'verification');
 
   const sanctumData = game.getSanctumOverviewData();
   assert(sanctumData?.seasonBoard, `sanctum data should include season board, got ${JSON.stringify(sanctumData)}`);
+  assertSeasonBoardFrontier(sanctumData.seasonBoard, 'positive sanctum board frontier', 'verification');
   assert(
     sanctumData.progress?.seasonBoardPhaseLabel === '定榜期',
     `sanctum progress should expose season board phase, got ${JSON.stringify(sanctumData.progress)}`
@@ -696,6 +877,7 @@ function loadFile(ctx, filePath) {
       && JSON.stringify(payload?.reward?.expedition?.seasonBoard?.weekVerdictLedger || null) === JSON.stringify(payload?.map?.chapter?.seasonBoard?.weekVerdictLedger || null),
     `reward / expedition / map payload should mirror week verdict ledger state, got ${JSON.stringify(payload?.reward?.expedition?.seasonBoard)} vs ${JSON.stringify(payload?.expedition?.seasonBoard)} vs ${JSON.stringify(payload?.map?.chapter?.seasonBoard)}`
   );
+  assertSeasonBoardFrontierMirror(payload, 'positive reward payload');
   assert(
     JSON.stringify(payload?.reward?.expedition?.seasonBoard?.nextTask || null) === JSON.stringify(payload?.expedition?.seasonBoard?.nextTask || null)
       && JSON.stringify(payload?.reward?.expedition?.seasonBoard?.nextTask || null) === JSON.stringify(payload?.map?.chapter?.seasonBoard?.nextTask || null),
@@ -725,6 +907,7 @@ function loadFile(ctx, filePath) {
     `season board should stay in sampling phase without weekly, slate, agenda, endless or pvp signals, got ${JSON.stringify(samplingBoard)}`
   );
   assertSeasonBoardNextProjection(samplingBoard, 'sampling season board', 'lane', samplingBoard.nextTask?.id || '');
+  assertSeasonBoardFrontier(samplingBoard, 'sampling season board frontier', 'training');
 
   resetStorages();
   const locklineGame = createGame();
@@ -761,9 +944,213 @@ function loadFile(ctx, filePath) {
     `lockline season board should prioritize the expedition commitment action, got ${JSON.stringify(locklineBoard?.nextTask)}`
   );
   assertSeasonBoardNextProjection(locklineBoard, 'lockline season board', 'settlement', locklineBoard.settlement?.id || '');
+  assertSeasonBoardFrontier(locklineBoard, 'lockline season board frontier', 'expedition');
   assert(
     /路线引导：/.test(String(locklineBoard.guideLine || '')),
     `lockline season board should include route guidance, got ${JSON.stringify(locklineBoard)}`
+  );
+  const locklineTrainingReward = (locklineBoard.laneRewards || []).find((reward) => reward?.laneId === 'training') || null;
+  const locklineExpeditionReward = (locklineBoard.laneRewards || []).find((reward) => reward?.laneId === 'expedition') || null;
+  const locklineVerificationReward = (locklineBoard.laneRewards || []).find((reward) => reward?.laneId === 'verification') || null;
+  assert(
+    Array.isArray(locklineBoard.laneRewards)
+      && locklineBoard.laneRewards.length === 3
+      && locklineBoard.laneRewardSummary?.readyCount === 0
+      && locklineBoard.laneRewardSummary?.claimableCount === 0
+      && locklineBoard.laneRewardSummary?.claimedCount === 0
+      && locklineTrainingReward?.ready === false
+      && locklineTrainingReward?.claimable === false
+      && locklineTrainingReward?.claimed === false
+      && locklineTrainingReward?.rewardKey === 'season_lane_reward:training:v1'
+      && /天机 \+1/.test(locklineTrainingReward?.rewardLine || '')
+      && /命环经验 \+8/.test(locklineTrainingReward?.rewardLine || '')
+      && locklineExpeditionReward?.ready === false
+      && locklineExpeditionReward?.claimable === false
+      && locklineVerificationReward?.ready === false
+      && locklineVerificationReward?.claimable === false,
+    `lockline season board should expose one claimable training lane reward and keep unfinished lanes locked, got ${JSON.stringify(locklineBoard?.laneRewards)} / ${JSON.stringify(locklineBoard?.laneRewardSummary)}`
+  );
+  assert(
+    locklineBoard.lanes?.find((lane) => lane.id === 'training')?.reward?.laneId === 'training'
+      && locklineBoard.lanes?.find((lane) => lane.id === 'training')?.reward?.claimable === false
+      && locklineBoard.lanes?.find((lane) => lane.id === 'expedition')?.reward?.claimable === false,
+    `lockline season board should attach lane reward state to each lane, got ${JSON.stringify(locklineBoard?.lanes)}`
+  );
+  resetStorages();
+  const laneRewardGame = createGame();
+  laneRewardGame.runSlateArchive = laneRewardGame.normalizeRunSlateArchive([locklineSlate]);
+  laneRewardGame.persistRunSlateArchive();
+  const laneRewardFocus = laneRewardGame.buildObservatoryTrainingFocusFromSlate(locklineSlate);
+  laneRewardGame.setObservatoryTrainingFocus(laneRewardFocus, { silent: true });
+  const laneRewardBaseBoard = laneRewardGame.getSeasonBoardSnapshot({ latestSlate: locklineSlate });
+  const completeLane = (lane) => ({
+    ...lane,
+    tasks: (Array.isArray(lane?.tasks) ? lane.tasks : []).map((task) => {
+      const target = Math.max(1, Math.floor(Number(task?.target) || 1));
+      return {
+        ...task,
+        progress: target,
+        target,
+        completed: true,
+        progressText: `${target}/${target}`
+      };
+    })
+  });
+  const laneRewardBoardSource = {
+    ...laneRewardBaseBoard,
+    lanes: laneRewardBaseBoard.lanes.map((lane) => lane.id === 'training' ? completeLane(lane) : lane)
+  };
+  laneRewardGame.getSeasonBoardSnapshot = () => laneRewardGame.normalizeSeasonBoardSnapshot(laneRewardBoardSource);
+  const laneRewardBoard = laneRewardGame.getSeasonBoardSnapshot();
+  const laneRewardTrainingReward = (laneRewardBoard.laneRewards || []).find((reward) => reward?.laneId === 'training') || null;
+  const laneRewardExpeditionReward = (laneRewardBoard.laneRewards || []).find((reward) => reward?.laneId === 'expedition') || null;
+  assert(
+    laneRewardBoard.laneRewardSummary?.readyCount === 1
+      && laneRewardBoard.laneRewardSummary?.claimableCount === 1
+      && laneRewardBoard.laneRewardSummary?.claimedCount === 0
+      && laneRewardTrainingReward?.ready === true
+      && laneRewardTrainingReward?.claimable === true
+      && laneRewardTrainingReward?.claimed === false
+      && laneRewardExpeditionReward?.ready === false
+      && laneRewardExpeditionReward?.claimable === false,
+    `manual completed lane board should expose exactly one claimable lane reward, got ${JSON.stringify(laneRewardBoard?.laneRewards)} / ${JSON.stringify(laneRewardBoard?.laneRewardSummary)}`
+  );
+  const laneRewardSanctumBeforeClaim = laneRewardGame.getSanctumOverviewData();
+  assert(
+    laneRewardSanctumBeforeClaim?.seasonBoard?.laneRewardSummary?.claimableCount === 1
+      && Array.isArray(laneRewardSanctumBeforeClaim.seasonBoard?.laneRewards)
+      && laneRewardSanctumBeforeClaim.seasonBoard.laneRewards.some((reward) => reward.laneId === 'training' && reward.claimable)
+      && Array.isArray(laneRewardSanctumBeforeClaim.researches)
+      && laneRewardSanctumBeforeClaim.researches.some((research) => research.actionType === 'season_board_lane_reward' && research.laneId === 'training' && research.ready === true)
+      && laneRewardSanctumBeforeClaim.researches.some((research) => research.actionType === 'season_board_lane_reward' && research.laneId === 'expedition' && research.ready === false)
+      && Array.isArray(laneRewardSanctumBeforeClaim.goals)
+      && laneRewardSanctumBeforeClaim.goals.some((goal) => goal.action === 'season_board_lane_reward' && goal.laneId === 'training'),
+    `lockline sanctum overview should project claimable lane rewards before claim, got ${JSON.stringify({
+      board: laneRewardSanctumBeforeClaim?.seasonBoard,
+      researches: laneRewardSanctumBeforeClaim?.researches,
+      goals: laneRewardSanctumBeforeClaim?.goals
+    })}`
+  );
+  const locklineInsightBeforeLaneReward = laneRewardGame.player.heavenlyInsight;
+  const locklineKarmaBeforeLaneReward = laneRewardGame.player.karma;
+  const locklineRingExpBeforeLaneReward = Math.max(0, Math.floor(Number(laneRewardGame.player.fateRing?.exp) || 0));
+  const originalGrantFateRingExp = laneRewardGame.grantFateRingExp;
+  laneRewardGame.grantFateRingExp = function () {
+    throw new Error('simulated lane reward grant failure');
+  };
+  const failedLaneRewardClaim = laneRewardGame.claimSeasonBoardLaneReward('training');
+  laneRewardGame.grantFateRingExp = originalGrantFateRingExp;
+  const failedClaimBoard = laneRewardGame.getSeasonBoardSnapshot();
+  const failedClaimTrainingReward = (failedClaimBoard.laneRewards || []).find((reward) => reward?.laneId === 'training') || null;
+  assert(
+    failedLaneRewardClaim?.ok === false
+      && failedLaneRewardClaim?.reason === 'grant_failed'
+      && !laneRewardGame.seasonVerificationState?.claimedLaneRewards?.[laneRewardBoard.weekTag]?.training
+      && failedClaimTrainingReward?.claimable === true
+      && failedClaimTrainingReward?.claimed === false
+      && laneRewardGame.player.heavenlyInsight === locklineInsightBeforeLaneReward
+      && laneRewardGame.player.karma === locklineKarmaBeforeLaneReward
+      && Math.max(0, Math.floor(Number(laneRewardGame.player.fateRing?.exp) || 0)) === locklineRingExpBeforeLaneReward,
+    `failed lane reward grant should roll back claim marker and resource changes, got ${JSON.stringify({
+      claim: failedLaneRewardClaim,
+      claims: laneRewardGame.seasonVerificationState?.claimedLaneRewards,
+      reward: failedClaimTrainingReward,
+      resources: {
+        insight: laneRewardGame.player.heavenlyInsight,
+        karma: laneRewardGame.player.karma,
+        ringExp: laneRewardGame.player.fateRing?.exp
+      }
+    })}`
+  );
+  const locklineLaneRewardClaim = laneRewardGame.claimSeasonBoardLaneReward('training');
+  assert(
+    locklineLaneRewardClaim?.ok === true
+      && locklineLaneRewardClaim?.laneId === 'training'
+      && locklineLaneRewardClaim?.weekTag === laneRewardBoard.weekTag
+      && locklineLaneRewardClaim?.gains?.insight === 1
+      && locklineLaneRewardClaim?.gains?.karma === 0
+      && locklineLaneRewardClaim?.gains?.ringExp === 8
+      && laneRewardGame.player.heavenlyInsight === locklineInsightBeforeLaneReward + 1
+      && laneRewardGame.player.karma === locklineKarmaBeforeLaneReward
+      && Math.max(0, Math.floor(Number(laneRewardGame.player.fateRing?.exp) || 0)) >= locklineRingExpBeforeLaneReward + 8,
+    `lockline training lane reward should grant its deterministic payout once, got ${JSON.stringify({
+      claim: locklineLaneRewardClaim,
+      before: {
+        insight: locklineInsightBeforeLaneReward,
+        karma: locklineKarmaBeforeLaneReward,
+        ringExp: locklineRingExpBeforeLaneReward
+      },
+      after: {
+        insight: laneRewardGame.player.heavenlyInsight,
+        karma: laneRewardGame.player.karma,
+        ringExp: laneRewardGame.player.fateRing?.exp
+      }
+    })}`
+  );
+  assert(
+    laneRewardGame.seasonVerificationState?.claimedLaneRewards?.[laneRewardBoard.weekTag]?.training?.claimed === true
+      && laneRewardGame.seasonVerificationState.claimedLaneRewards[laneRewardBoard.weekTag].training.rewardKey === 'season_lane_reward:training:v1',
+    `lockline training lane reward should persist under weekTag + laneId, got ${JSON.stringify(laneRewardGame.seasonVerificationState?.claimedLaneRewards)}`
+  );
+  const locklineBoardAfterLaneClaim = laneRewardGame.getSeasonBoardSnapshot();
+  const locklineTrainingRewardAfterClaim = (locklineBoardAfterLaneClaim.laneRewards || []).find((reward) => reward?.laneId === 'training') || null;
+  assert(
+    locklineBoardAfterLaneClaim.laneRewardSummary?.readyCount === 1
+      && locklineBoardAfterLaneClaim.laneRewardSummary?.claimableCount === 0
+      && locklineBoardAfterLaneClaim.laneRewardSummary?.claimedCount === 1
+      && locklineTrainingRewardAfterClaim?.claimed === true
+      && locklineTrainingRewardAfterClaim?.claimable === false
+      && locklineTrainingRewardAfterClaim?.status === 'claimed'
+      && locklineTrainingRewardAfterClaim?.claimedAt > 0,
+    `lockline board should switch training lane reward to claimed after claim, got ${JSON.stringify(locklineBoardAfterLaneClaim?.laneRewards)} / ${JSON.stringify(locklineBoardAfterLaneClaim?.laneRewardSummary)}`
+  );
+  const locklineSecondLaneRewardClaim = laneRewardGame.claimSeasonBoardLaneReward('training');
+  assert(
+    locklineSecondLaneRewardClaim?.ok === false
+      && locklineSecondLaneRewardClaim?.reason === 'already_claimed'
+      && laneRewardGame.player.heavenlyInsight === locklineInsightBeforeLaneReward + 1
+      && laneRewardGame.player.karma === locklineKarmaBeforeLaneReward,
+    `lockline training lane reward should reject duplicate claims without paying again, got ${JSON.stringify(locklineSecondLaneRewardClaim)}`
+  );
+  const locklineSanctumAfterClaim = laneRewardGame.getSanctumOverviewData();
+  assert(
+    locklineSanctumAfterClaim?.seasonBoard?.laneRewardSummary?.claimableCount === 0
+      && locklineSanctumAfterClaim.seasonBoard?.laneRewardSummary?.claimedCount === 1
+      && Array.isArray(locklineSanctumAfterClaim.researches)
+      && locklineSanctumAfterClaim.researches.some((research) => research.actionType === 'season_board_lane_reward' && research.laneId === 'training' && research.ready === false && research.disabled === true && research.progressText === '已领取')
+      && Array.isArray(locklineSanctumAfterClaim.goals)
+      && !locklineSanctumAfterClaim.goals.some((goal) => goal.action === 'season_board_lane_reward' && goal.laneId === 'training'),
+    `lockline sanctum overview should remove claimable lane reward goals after claim while preserving claimed research state, got ${JSON.stringify({
+      board: locklineSanctumAfterClaim?.seasonBoard,
+      researches: locklineSanctumAfterClaim?.researches,
+      goals: locklineSanctumAfterClaim?.goals
+    })}`
+  );
+  laneRewardGame.lastExpeditionRewardMeta = laneRewardGame.buildRewardExpeditionMeta(locklineSlate);
+  laneRewardGame.currentScreen = 'reward-screen';
+  const laneRewardPayload = JSON.parse(laneRewardGame.renderGameToText());
+  const laneRewardPayloadLaneRewards = assertSeasonBoardLaneRewardsMirror(laneRewardPayload, 'lane reward claim payload');
+  assert(
+    laneRewardPayloadLaneRewards.some((reward) => reward.laneId === 'training' && reward.claimed === true && reward.claimable === false)
+      && laneRewardPayload?.reward?.expedition?.seasonBoard?.laneRewardSummary?.claimedCount === 1
+      && laneRewardPayload?.reward?.expedition?.seasonBoard?.lanes?.find((lane) => lane.id === 'training')?.reward?.claimed === true,
+    `lane reward claim payload should keep claimed rewards mirrored and attached to lanes, got ${JSON.stringify(laneRewardPayload?.reward?.expedition?.seasonBoard)}`
+  );
+  const nextWeekTag = `${laneRewardBoard.weekTag || 'current'}-next`.slice(0, 24);
+  const locklineNextWeekLaneRewards = laneRewardGame.buildSeasonBoardLaneRewards(laneRewardBoard.lanes, {
+    weekTag: nextWeekTag,
+    weekLabel: '下周轮转',
+    phaseId: laneRewardBoard.phaseId,
+    phaseLabel: laneRewardBoard.phaseLabel
+  });
+  assert(
+    locklineNextWeekLaneRewards.some((reward) => reward.laneId === 'training' && reward.claimable === true && reward.claimed === false)
+      && !laneRewardGame.seasonVerificationState?.claimedLaneRewards?.[nextWeekTag]?.training,
+    `lane reward claim state should be isolated by weekTag + laneId, got ${JSON.stringify({
+      nextWeekTag,
+      rewards: locklineNextWeekLaneRewards,
+      claims: laneRewardGame.seasonVerificationState?.claimedLaneRewards
+    })}`
   );
   const locklineRouteShift = locklineGame.getSeasonBoardWeightShift({ latestSlate: locklineSlate });
   assert(
@@ -784,6 +1171,11 @@ function loadFile(ctx, filePath) {
   assert(
     normalizedLocklineRewardMeta?.seasonBoard?.nextTask?.label === locklineBoard.nextTask?.label,
     `lockline reward expedition meta should preserve the next-task action, got ${JSON.stringify(normalizedLocklineRewardMeta?.seasonBoard?.nextTask)}`
+  );
+  assert(
+    JSON.stringify(normalizedLocklineRewardMeta?.seasonBoard?.laneRewards || []) === JSON.stringify(locklineBoard.laneRewards || [])
+      && JSON.stringify(normalizedLocklineRewardMeta?.seasonBoard?.laneRewardSummary || null) === JSON.stringify(locklineBoard.laneRewardSummary || null),
+    `lockline reward expedition meta should preserve lane reward state, got ${JSON.stringify(normalizedLocklineRewardMeta?.seasonBoard?.laneRewards)} / ${JSON.stringify(normalizedLocklineRewardMeta?.seasonBoard?.laneRewardSummary)}`
   );
   assertSeasonBoardNextProjection(normalizedLocklineRewardMeta.seasonBoard, 'lockline reward expedition board', 'settlement', normalizedLocklineRewardMeta.seasonBoard.settlement?.id || '');
   const locklineRewardHandoff = assertSeasonBoardHandoffTarget(
@@ -905,6 +1297,14 @@ function loadFile(ctx, filePath) {
       && JSON.stringify(locklinePayload?.reward?.expedition?.seasonBoard?.nextWeekGoal || null) === JSON.stringify(locklinePayload?.map?.chapter?.seasonBoard?.nextWeekGoal || null),
     `lockline reward / expedition / map payload should mirror next-week goal state, got ${JSON.stringify(locklinePayload?.reward?.expedition?.seasonBoard)} vs ${JSON.stringify(locklinePayload?.expedition?.seasonBoard)} vs ${JSON.stringify(locklinePayload?.map?.chapter?.seasonBoard)}`
   );
+  assertSeasonBoardFrontierMirror(locklinePayload, 'lockline reward payload');
+  const locklinePayloadLaneRewards = assertSeasonBoardLaneRewardsMirror(locklinePayload, 'lockline reward payload');
+  assert(
+    locklinePayloadLaneRewards.length === 3
+      && locklinePayload?.reward?.expedition?.seasonBoard?.laneRewardSummary?.claimableCount === 0
+      && locklinePayload?.reward?.expedition?.seasonBoard?.lanes?.find((lane) => lane.id === 'training')?.reward?.laneId === 'training',
+    `lockline reward payload should keep locked lane rewards mirrored and attached to lanes, got ${JSON.stringify(locklinePayload?.reward?.expedition?.seasonBoard)}`
+  );
   const locklineNextTaskNeedle = locklineBoard.nextTask?.hintLine || locklineBoard.nextTask?.label || '';
   const locklineSanctumData = locklineGame.getSanctumOverviewData();
   assert(
@@ -912,6 +1312,7 @@ function loadFile(ctx, filePath) {
     `lockline sanctum data should preserve the next-task action, got ${JSON.stringify(locklineSanctumData?.seasonBoard)}`
   );
   assertSeasonBoardNextProjection(locklineSanctumData.seasonBoard, 'lockline sanctum board', 'settlement', locklineSanctumData.seasonBoard.settlement?.id || '');
+  assertSeasonBoardFrontier(locklineSanctumData.seasonBoard, 'lockline sanctum board frontier', 'expedition');
   const locklineSeasonTask = (locklineSanctumData.seasonBoard.lanes || [])
     .flatMap((lane) => (Array.isArray(lane?.tasks)
       ? lane.tasks.map((task) => ({ ...task, laneId: lane.id }))
@@ -939,6 +1340,61 @@ function loadFile(ctx, filePath) {
       last: locklineGame.lastSeasonBoardTaskFollow
     })}`
   );
+  const locklineTaskArrivalNotice = locklineGame.pendingSeasonBoardTaskFollowNotice;
+  const locklineTaskCollectionArrival = typeof locklineGame.getSeasonBoardTaskFollowArrivalNotice === 'function'
+    ? locklineGame.getSeasonBoardTaskFollowArrivalNotice(locklineTaskFollowSection)
+    : null;
+  assert(
+    locklineGame.lastSeasonBoardTaskFollowNotice?.sourceKey === 'task'
+      && locklineTaskArrivalNotice?.sourceKey === 'task'
+      && locklineTaskArrivalNotice?.action === 'collection'
+      && locklineTaskArrivalNotice?.value === 'sanctum'
+      && locklineTaskArrivalNotice?.taskId === locklineSeasonTask.id
+      && locklineTaskArrivalNotice?.laneId === locklineSeasonTask.laneId
+      && locklineTaskArrivalNotice?.source === normalizedLocklineRewardMeta.seasonBoard.nextTask?.source
+      && locklineTaskArrivalNotice?.sourceId === normalizedLocklineRewardMeta.seasonBoard.nextTask?.sourceId
+      && locklineTaskArrivalNotice?.taskSource === normalizedLocklineRewardMeta.seasonBoard.nextTask?.taskSource
+      && locklineTaskArrivalNotice?.taskSourceId === normalizedLocklineRewardMeta.seasonBoard.nextTask?.taskSourceId
+      && locklineTaskArrivalNotice?.buttonLabel === locklineSeasonTask.ctaLabel
+      && locklineTaskArrivalNotice?.title === locklineSeasonTask.label
+      && locklineTaskArrivalNotice?.focusLabel === '定位任务行'
+      && locklineTaskCollectionArrival?.sourceKey === 'task'
+      && locklineTaskCollectionArrival?.taskId === locklineSeasonTask.id
+      && locklineTaskCollectionArrival?.laneId === locklineSeasonTask.laneId
+      && locklineTaskCollectionArrival?.sourceLabel === '季押卷'
+      && locklineTaskCollectionArrival?.targetLabel === '洞府',
+    `lockline season task follow should prepare a task arrival notice, got ${JSON.stringify({
+      raw: locklineTaskArrivalNotice,
+      collection: locklineTaskCollectionArrival,
+      last: locklineGame.lastSeasonBoardTaskFollowNotice,
+      task: locklineSeasonTask
+    })}`
+  );
+  const originalLocklineShowScreen = locklineGame.showScreen;
+  let locklineNonCollectionScreen = '';
+  locklineGame.pendingSeasonBoardTaskFollowNotice = { sourceKey: 'stale_collection_notice' };
+  locklineGame.showScreen = (screen) => {
+    locklineNonCollectionScreen = screen;
+    locklineGame.currentScreen = screen;
+  };
+  assert(
+    locklineGame.followSeasonBoardTask('season_pvp_ledger') === true
+      && locklineNonCollectionScreen === 'pvp-screen'
+      && locklineGame.pendingSeasonBoardTaskFollowNotice === null
+      && locklineGame.lastSeasonBoardTaskFollow?.taskId === 'season_pvp_ledger'
+      && locklineGame.lastSeasonBoardTaskFollow?.actionType === 'screen'
+      && locklineGame.lastSeasonBoardTaskFollow?.actionValue === 'pvp-screen'
+      && locklineGame.lastSeasonBoardTaskFollowNotice?.action === 'screen'
+      && locklineGame.lastSeasonBoardTaskFollowNotice?.value === 'pvp-screen'
+      && locklineGame.getSeasonBoardTaskFollowArrivalNotice('sanctum') === null,
+    `lockline non-collection season task follow should not retain a collection arrival notice, got ${JSON.stringify({
+      locklineNonCollectionScreen,
+      pending: locklineGame.pendingSeasonBoardTaskFollowNotice,
+      last: locklineGame.lastSeasonBoardTaskFollow,
+      notice: locklineGame.lastSeasonBoardTaskFollowNotice
+    })}`
+  );
+  locklineGame.showScreen = originalLocklineShowScreen;
   locklineGame.switchCollectionSection = originalLocklineSwitchCollectionSection;
   assert(
     Array.isArray(locklineSanctumData.goals)
@@ -1201,6 +1657,7 @@ function loadFile(ctx, filePath) {
     `ranking debt board should expose explicit primary/side verification roles, got ${JSON.stringify(debtBoard?.verificationOrders)}`
   );
   assertSeasonBoardNextProjection(debtBoard, 'ranking debt board', 'debt_pack', debtBoard.debtPack?.id || '');
+  assertSeasonBoardFrontier(debtBoard, 'ranking debt board frontier', 'verification');
   const debtLaneTask = (debtBoard.lanes || [])
     .flatMap((lane) => (Array.isArray(lane?.tasks)
       ? lane.tasks.map((task) => ({ ...task, laneId: lane.id }))
@@ -1320,6 +1777,7 @@ function loadFile(ctx, filePath) {
       && JSON.stringify(debtPayload?.reward?.expedition?.seasonBoard?.nextWeekGoal || null) === JSON.stringify(debtPayload?.map?.chapter?.seasonBoard?.nextWeekGoal || null),
     `reward / expedition / map payload should mirror debt next-week goal state, got ${JSON.stringify(debtPayload?.reward?.expedition?.seasonBoard)} vs ${JSON.stringify(debtPayload?.expedition?.seasonBoard)} vs ${JSON.stringify(debtPayload?.map?.chapter?.seasonBoard)}`
   );
+  assertSeasonBoardFrontierMirror(debtPayload, 'debt reward payload');
   assertSeasonBoardNextProjection(debtPayload.expedition.seasonBoard, 'debt render expedition board', 'debt_pack', debtPayload.expedition.seasonBoard.debtPack?.id || '');
   debtGame.recordSeasonVerificationResult({
     role: 'primary',
@@ -1614,6 +2072,7 @@ function loadFile(ctx, filePath) {
     postActivationBoard.phaseId === 'ranking',
     `season board should enter ranking once the aftereffect becomes active, got ${JSON.stringify(postActivationBoard)}`
   );
+  assertSeasonBoardFrontier(postActivationBoard, 'post-activation risky frontier', 'verification');
   assert(
     postActivationBoard.settlement?.outcomeId === 'risky_sheet' && postActivationBoard.settlement?.outcomeLabel === '险卷',
     `post-activation season board should classify the board as a risky sheet before cross-mode proofs arrive, got ${JSON.stringify(postActivationBoard?.settlement)}`
@@ -1682,6 +2141,7 @@ function loadFile(ctx, filePath) {
     riskyExpeditionPayload?.seasonBoard?.settlement?.outcomeId === 'risky_sheet',
     `risky expedition payload should mirror risky settlement state, got ${JSON.stringify(riskyExpeditionPayload?.seasonBoard)}`
   );
+  assertSeasonBoardFrontier(riskyExpeditionPayload.seasonBoard, 'risky expedition payload frontier', 'verification');
   const riskySanctumData = aftereffectTransitionGame.getSanctumOverviewData();
   assert(
     Array.isArray(riskySanctumData.goals)
@@ -1756,6 +2216,7 @@ function loadFile(ctx, filePath) {
       && JSON.stringify(riskyPayload?.reward?.expedition?.seasonBoard?.verificationOrders || []) === JSON.stringify(riskyPayload?.map?.chapter?.seasonBoard?.verificationOrders || []),
     `risky reward / expedition / map payload should mirror verification orders, got ${JSON.stringify(riskyPayload?.reward?.expedition?.seasonBoard)} vs ${JSON.stringify(riskyPayload?.expedition?.seasonBoard)} vs ${JSON.stringify(riskyPayload?.map?.chapter?.seasonBoard)}` 
   );
+  assertSeasonBoardFrontierMirror(riskyPayload, 'risky reward payload');
   aftereffectTransitionGame.recordSeasonVerificationResult({
     role: 'side',
     sourceMode: 'challenge',

@@ -2392,6 +2392,48 @@ class GameMap {
         const expeditionPayload = (this.game && typeof this.game.getExpeditionPayload === 'function')
             ? this.game.getExpeditionPayload()
             : null;
+        const seasonBoardFrontier = expeditionPayload?.seasonBoard?.frontier && typeof expeditionPayload.seasonBoard.frontier === 'object'
+            ? expeditionPayload.seasonBoard.frontier
+            : null;
+        const seasonBoardFrontierDecree = seasonBoardFrontier?.decree && typeof seasonBoardFrontier.decree === 'object'
+            ? seasonBoardFrontier.decree
+            : null;
+        const seasonBoardFrontierChronicle = seasonBoardFrontier?.chronicle && typeof seasonBoardFrontier.chronicle === 'object'
+            ? seasonBoardFrontier.chronicle
+            : null;
+        const seasonBoardFrontierCouncil = seasonBoardFrontier?.council && typeof seasonBoardFrontier.council === 'object'
+            ? seasonBoardFrontier.council
+            : null;
+        const seasonBoardFrontierLine = seasonBoardFrontier
+            ? [
+                seasonBoardFrontier.summaryLine
+                    || `诸界战线：${seasonBoardFrontier.primaryFrontLabel || seasonBoardFrontier.primaryFrontShortLabel || '主战线'} · ${seasonBoardFrontier.pressureLabel || seasonBoardFrontier.statusLabel || '稳态'}`,
+                seasonBoardFrontier.actionTargetLabel
+                    ? `下一跳 ${seasonBoardFrontier.actionTargetLabel}`
+                    : ''
+            ].filter(Boolean).join(' · ')
+            : '';
+        const seasonBoardFrontierDecreeLine = seasonBoardFrontierDecree
+            ? [
+                seasonBoardFrontierDecree.summaryLine || seasonBoardFrontierDecree.title || '本周法旨',
+                seasonBoardFrontierDecree.constraintLine || '',
+                seasonBoardFrontierDecree.actionTargetLabel ? `下一跳 ${seasonBoardFrontierDecree.actionTargetLabel}` : ''
+            ].filter(Boolean).join(' · ')
+            : '';
+        const seasonBoardFrontierChronicleLine = seasonBoardFrontierChronicle
+            ? [
+                seasonBoardFrontierChronicle.summaryLine || seasonBoardFrontierChronicle.title || '战役史卷',
+                seasonBoardFrontierChronicle.progressLine || '',
+                seasonBoardFrontierChronicle.actionTargetLabel ? `下一跳 ${seasonBoardFrontierChronicle.actionTargetLabel}` : ''
+            ].filter(Boolean).join(' · ')
+            : '';
+        const seasonBoardFrontierCouncilLine = seasonBoardFrontierCouncil
+            ? [
+                seasonBoardFrontierCouncil.summaryLine || seasonBoardFrontierCouncil.title || '诸界会审',
+                seasonBoardFrontierCouncil.verdictLine || '',
+                seasonBoardFrontierCouncil.supportLine || ''
+            ].filter(Boolean).join(' · ')
+            : '';
 
         const bossInfo = this.game && typeof this.game.getRealmBossInfo === 'function'
             ? this.game.getRealmBossInfo(this.game.player.realm)
@@ -2457,6 +2499,38 @@ class GameMap {
                 <span class="chapter-line-label">工程</span>
                 <span class="chapter-line-value">${engineeringLine}</span>
             </div>
+            ${seasonBoardFrontier ? `<div class="chapter-brief-line compact"
+                data-map-season-board-frontier="true"
+                data-season-board-frontier-id="${this.escapeMapText(seasonBoardFrontier.primaryFrontId || '')}"
+                data-season-board-frontier-pressure="${this.escapeMapText(seasonBoardFrontier.statusId || '')}"
+                data-season-board-frontier-action-lane-id="${this.escapeMapText(seasonBoardFrontier.actionLaneId || '')}"
+                data-season-board-frontier-action-target="${this.escapeMapText(seasonBoardFrontier.actionTargetLabel || '')}">
+                <span class="chapter-line-label">战线</span>
+                <span class="chapter-line-value">${this.escapeMapText(seasonBoardFrontierLine)}</span>
+            </div>` : ''}
+            ${seasonBoardFrontierDecree ? `<div class="chapter-brief-line compact"
+                data-map-season-board-frontier-decree="true"
+                data-season-board-frontier-decree-id="${this.escapeMapText(seasonBoardFrontierDecree.id || '')}"
+                data-season-board-frontier-decree-lane-id="${this.escapeMapText(seasonBoardFrontierDecree.laneId || '')}"
+                data-season-board-frontier-decree-action-target="${this.escapeMapText(seasonBoardFrontierDecree.actionTargetLabel || '')}">
+                <span class="chapter-line-label">法旨</span>
+                <span class="chapter-line-value">${this.escapeMapText(seasonBoardFrontierDecreeLine)}</span>
+            </div>` : ''}
+            ${seasonBoardFrontierChronicle ? `<div class="chapter-brief-line compact"
+                data-map-season-board-frontier-chronicle="true"
+                data-season-board-frontier-chronicle-id="${this.escapeMapText(seasonBoardFrontierChronicle.id || '')}"
+                data-season-board-frontier-chronicle-lane-id="${this.escapeMapText(seasonBoardFrontierChronicle.laneId || '')}"
+                data-season-board-frontier-chronicle-action-target="${this.escapeMapText(seasonBoardFrontierChronicle.actionTargetLabel || '')}">
+                <span class="chapter-line-label">史卷</span>
+                <span class="chapter-line-value">${this.escapeMapText(seasonBoardFrontierChronicleLine)}</span>
+            </div>` : ''}
+            ${seasonBoardFrontierCouncil ? `<div class="chapter-brief-line compact"
+                data-map-season-board-frontier-council="true"
+                data-season-board-frontier-council-id="${this.escapeMapText(seasonBoardFrontierCouncil.id || '')}"
+                data-season-board-frontier-council-lane-id="${this.escapeMapText(seasonBoardFrontierCouncil.laneId || '')}">
+                <span class="chapter-line-label">会审</span>
+                <span class="chapter-line-value">${this.escapeMapText(seasonBoardFrontierCouncilLine)}</span>
+            </div>` : ''}
             <div class="chapter-brief-line compact">
                 <span class="chapter-line-label">宿敌</span>
                 <span class="chapter-line-value">${nemesisLine}</span>
@@ -2485,6 +2559,10 @@ class GameMap {
                 ${nemesis && nemesis.currentVariantLabel ? `<span class="chapter-brief-chip nemesis-reward">${nemesis.currentVariantLabel}</span>` : ''}
                 ${nemesisForecast ? `<span class="chapter-brief-chip nemesis-forecast ${this.escapeMapText(`tier-${nemesisForecast.pressureTier || 'medium'}`)}">${this.escapeMapText(`追猎预判 · ${nemesisForecast.pressureLabel || '拉扯'} · ${nemesisForecast.windowLabel || '窗口待定'}`)}</span>` : ''}
                 ${frontierRisk ? `<span class="chapter-brief-chip warning">${this.escapeMapText(`前路主险 · ${frontierRisk.label} · DRI ${frontierRisk.index}`)}</span>` : ''}
+                ${seasonBoardFrontier ? `<span class="chapter-brief-chip warning" data-map-season-board-chip="frontier">${this.escapeMapText(`诸界战线 · ${seasonBoardFrontier.primaryFrontShortLabel || seasonBoardFrontier.primaryFrontLabel || '主战线'} · ${seasonBoardFrontier.pressureLabel || seasonBoardFrontier.statusLabel || '稳态'}`)}</span>` : ''}
+                ${seasonBoardFrontierDecree ? `<span class="chapter-brief-chip warning" data-map-season-board-chip="frontier-decree">${this.escapeMapText(`本周法旨 · ${seasonBoardFrontierDecree.laneLabel || seasonBoardFrontier.primaryFrontShortLabel || '主战线'} · ${seasonBoardFrontierDecree.toneLabel || '本周'}`)}</span>` : ''}
+                ${seasonBoardFrontierChronicle ? `<span class="chapter-brief-chip warning" data-map-season-board-chip="frontier-chronicle">${this.escapeMapText(`战役史卷 · ${seasonBoardFrontierChronicle.laneLabel || seasonBoardFrontier.primaryFrontShortLabel || '主战线'} · ${seasonBoardFrontierChronicle.phaseLabel || '本周'}`)}</span>` : ''}
+                ${seasonBoardFrontierCouncil ? `<span class="chapter-brief-chip warning" data-map-season-board-chip="frontier-council">${this.escapeMapText(`诸界会审 · ${seasonBoardFrontierCouncil.laneLabel || seasonBoardFrontier.primaryFrontShortLabel || '主战线'} · ${seasonBoardFrontierCouncil.phaseLabel || '本周'}`)}</span>` : ''}
                 ${(Array.isArray(chapter.focusTags) ? chapter.focusTags : [])
                     .slice(0, 3)
                     .map((tag) => `<span class="chapter-brief-chip">${tag}</span>`)

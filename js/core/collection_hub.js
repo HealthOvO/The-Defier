@@ -270,6 +270,40 @@
     };
     const buildSeasonBoardOverviewModel = (source = null) => {
         const board = source && typeof source === 'object' ? source : null;
+        const normalizeLaneReward = (reward = null, fallbackLaneId = '', fallbackLaneLabel = '') => {
+            const root = reward && typeof reward === 'object' ? reward : null;
+            if (!root) return null;
+            const gains = root.gains && typeof root.gains === 'object' ? root.gains : {};
+            const laneId = String(root.laneId || fallbackLaneId || '').trim();
+            if (!laneId) return null;
+            return {
+                id: String(root.id || `season_lane_reward_${String(root.weekTag || 'current').trim()}_${laneId}`).trim(),
+                weekTag: String(root.weekTag || '').trim(),
+                weekLabel: String(root.weekLabel || '').trim(),
+                laneId,
+                laneLabel: String(root.laneLabel || fallbackLaneLabel || '').trim(),
+                laneIcon: String(root.laneIcon || '').trim(),
+                rewardKey: String(root.rewardKey || '').trim(),
+                label: String(root.label || '').trim(),
+                summaryLine: String(root.summaryLine || '').trim(),
+                detailLine: String(root.detailLine || '').trim(),
+                status: String(root.status || '').trim(),
+                statusLabel: String(root.statusLabel || '').trim(),
+                ready: !!root.ready,
+                claimable: !!root.claimable,
+                claimed: !!root.claimed,
+                claimedAt: clampInt(root.claimedAt || 0, 0),
+                rewardLine: String(root.rewardLine || '').trim(),
+                gains: {
+                    insight: clampInt(gains.insight ?? gains.heavenlyInsight, 0, 99),
+                    karma: clampInt(gains.karma, 0, 99),
+                    ringExp: clampInt(gains.ringExp, 0, 999),
+                    gold: clampInt(gains.gold, 0, 999999)
+                },
+                buttonLabel: String(root.buttonLabel || '').trim(),
+                progressText: String(root.progressText || '').trim()
+            };
+        };
         const lanes = board
             ? readArray(board.lanes)
                 .filter((lane) => lane && typeof lane === 'object')
@@ -305,17 +339,45 @@
                         });
                     const completedCount = Math.min(tasks.length, clampInt(lane.completedCount, 0, tasks.length || 9999));
                     const totalCount = Math.max(tasks.length, clampInt(lane.totalCount, 0, 9999));
+                    const laneId = String(lane.id || `lane_${laneIndex + 1}`).trim() || `lane_${laneIndex + 1}`;
+                    const laneLabel = String(lane.label || `任务线 ${laneIndex + 1}`).trim() || `任务线 ${laneIndex + 1}`;
                     return {
-                        id: String(lane.id || `lane_${laneIndex + 1}`).trim() || `lane_${laneIndex + 1}`,
-                        label: String(lane.label || `任务线 ${laneIndex + 1}`).trim() || `任务线 ${laneIndex + 1}`,
+                        id: laneId,
+                        label: laneLabel,
                         icon: String(lane.icon || '✦').trim() || '✦',
                         summaryLine: String(lane.summaryLine || '').trim(),
                         completedCount,
                         totalCount,
-                        tasks
+                        tasks,
+                        reward: normalizeLaneReward(lane.reward, laneId, laneLabel)
                     };
                 })
             : [];
+        const topLevelLaneRewards = board
+            ? readArray(board.laneRewards)
+                .map((reward) => normalizeLaneReward(reward))
+                .filter(Boolean)
+            : [];
+        const laneRewards = topLevelLaneRewards.length > 0
+            ? topLevelLaneRewards
+            : lanes.map((lane) => lane.reward).filter(Boolean);
+        const laneRewardById = new Map(laneRewards.map((reward) => [reward.laneId, reward]));
+        const lanesWithRewards = lanes.map((lane) => ({
+            ...lane,
+            reward: lane.reward || laneRewardById.get(lane.id) || null
+        }));
+        const resolveSummaryCount = (value, fallback = 0) => {
+            const num = Number(value);
+            return Number.isFinite(num)
+                ? Math.max(0, Math.min(99, Math.floor(num)))
+                : fallback;
+        };
+        const laneRewardSummary = {
+            readyCount: resolveSummaryCount(board?.laneRewardSummary?.readyCount, laneRewards.filter((entry) => entry.ready).length),
+            claimableCount: resolveSummaryCount(board?.laneRewardSummary?.claimableCount, laneRewards.filter((entry) => entry.claimable).length),
+            claimedCount: resolveSummaryCount(board?.laneRewardSummary?.claimedCount, laneRewards.filter((entry) => entry.claimed).length),
+            totalCount: resolveSummaryCount(board?.laneRewardSummary?.totalCount, laneRewards.length)
+        };
         const completedTaskCount = board
             ? Math.min(
                 lanes.reduce((sum, lane) => sum + lane.tasks.filter((task) => task.completed).length, 0),
@@ -503,6 +565,162 @@
             latestEntry: verificationArchiveLatest,
             entries: verificationArchiveEntries
         };
+        const frontier = board?.frontier && typeof board.frontier === 'object'
+            ? (() => {
+                const root = board.frontier;
+                const actionMeta = resolveSeasonBoardActionMeta(root.actionValue || root.primaryAnchorSection || 'sanctum', 'sanctum');
+                const decreeRoot = root.decree && typeof root.decree === 'object' ? root.decree : null;
+                const decree = decreeRoot
+                    ? {
+                        available: decreeRoot.available !== false,
+                        id: String(decreeRoot.id || '').trim(),
+                        weekTag: String(decreeRoot.weekTag || '').trim(),
+                        phaseId: String(decreeRoot.phaseId || '').trim(),
+                        phaseLabel: String(decreeRoot.phaseLabel || '').trim(),
+                        laneId: String(decreeRoot.laneId || '').trim(),
+                        laneLabel: String(decreeRoot.laneLabel || '').trim(),
+                        fullLaneLabel: String(decreeRoot.fullLaneLabel || '').trim(),
+                        statusId: String(decreeRoot.statusId || '').trim(),
+                        statusLabel: String(decreeRoot.statusLabel || '').trim(),
+                        pressureScore: clampInt(decreeRoot.pressureScore, 0, 3),
+                        tone: String(decreeRoot.tone || '').trim(),
+                        toneLabel: String(decreeRoot.toneLabel || '').trim(),
+                        title: String(decreeRoot.title || '').trim(),
+                        summaryLine: String(decreeRoot.summaryLine || '').trim(),
+                        constraintLine: String(decreeRoot.constraintLine || '').trim(),
+                        successLine: String(decreeRoot.successLine || '').trim(),
+                        riskLine: String(decreeRoot.riskLine || '').trim(),
+                        focusLine: String(decreeRoot.focusLine || '').trim(),
+                        actionLaneId: String(decreeRoot.actionLaneId || '').trim(),
+                        actionType: String(decreeRoot.actionType || '').trim(),
+                        actionValue: String(decreeRoot.actionValue || '').trim(),
+                        actionTargetLabel: String(decreeRoot.actionTargetLabel || '').trim(),
+                        taskId: String(decreeRoot.taskId || '').trim(),
+                        source: String(decreeRoot.source || '').trim(),
+                        sourceId: String(decreeRoot.sourceId || '').trim()
+                    }
+                    : null;
+                const chronicleRoot = root.chronicle && typeof root.chronicle === 'object' ? root.chronicle : null;
+                const chronicle = chronicleRoot
+                    ? {
+                        available: chronicleRoot.available !== false,
+                        id: String(chronicleRoot.id || '').trim(),
+                        weekTag: String(chronicleRoot.weekTag || '').trim(),
+                        phaseId: String(chronicleRoot.phaseId || '').trim(),
+                        phaseLabel: String(chronicleRoot.phaseLabel || '').trim(),
+                        laneId: String(chronicleRoot.laneId || '').trim(),
+                        laneLabel: String(chronicleRoot.laneLabel || '').trim(),
+                        fullLaneLabel: String(chronicleRoot.fullLaneLabel || '').trim(),
+                        statusId: String(chronicleRoot.statusId || '').trim(),
+                        statusLabel: String(chronicleRoot.statusLabel || '').trim(),
+                        pressureScore: clampInt(chronicleRoot.pressureScore, 0, 3),
+                        title: String(chronicleRoot.title || '').trim(),
+                        summaryLine: String(chronicleRoot.summaryLine || '').trim(),
+                        currentEntryLine: String(chronicleRoot.currentEntryLine || '').trim(),
+                        progressLine: String(chronicleRoot.progressLine || '').trim(),
+                        lessonLine: String(chronicleRoot.lessonLine || '').trim(),
+                        nextRecordLine: String(chronicleRoot.nextRecordLine || '').trim(),
+                        actionLaneId: String(chronicleRoot.actionLaneId || '').trim(),
+                        actionTargetLabel: String(chronicleRoot.actionTargetLabel || '').trim(),
+                        taskId: String(chronicleRoot.taskId || '').trim(),
+                        source: String(chronicleRoot.source || '').trim(),
+                        sourceId: String(chronicleRoot.sourceId || '').trim()
+                    }
+                    : null;
+                const councilRoot = root.council && typeof root.council === 'object' ? root.council : null;
+                const council = councilRoot
+                    ? {
+                        available: councilRoot.available !== false,
+                        id: String(councilRoot.id || '').trim(),
+                        weekTag: String(councilRoot.weekTag || '').trim(),
+                        phaseId: String(councilRoot.phaseId || '').trim(),
+                        phaseLabel: String(councilRoot.phaseLabel || '').trim(),
+                        laneId: String(councilRoot.laneId || '').trim(),
+                        laneLabel: String(councilRoot.laneLabel || '').trim(),
+                        fullLaneLabel: String(councilRoot.fullLaneLabel || '').trim(),
+                        statusId: String(councilRoot.statusId || '').trim(),
+                        statusLabel: String(councilRoot.statusLabel || '').trim(),
+                        pressureScore: clampInt(councilRoot.pressureScore, 0, 3),
+                        title: String(councilRoot.title || '').trim(),
+                        summaryLine: String(councilRoot.summaryLine || '').trim(),
+                        verdictLine: String(councilRoot.verdictLine || '').trim(),
+                        focusLine: String(councilRoot.focusLine || '').trim(),
+                        supportLine: String(councilRoot.supportLine || '').trim(),
+                        auditLine: String(councilRoot.auditLine || '').trim(),
+                        riskLine: String(councilRoot.riskLine || '').trim(),
+                        source: String(councilRoot.source || '').trim(),
+                        sourceId: String(councilRoot.sourceId || '').trim(),
+                        laneOpinions: readArray(councilRoot.laneOpinions)
+                            .filter((entry) => entry && typeof entry === 'object')
+                            .slice(0, 3)
+                            .map((entry) => ({
+                                laneId: String(entry.laneId || '').trim(),
+                                laneLabel: String(entry.laneLabel || '').trim(),
+                                role: String(entry.role || '').trim(),
+                                stance: String(entry.stance || '').trim(),
+                                stanceLabel: String(entry.stanceLabel || '').trim(),
+                                noteLine: String(entry.noteLine || '').trim()
+                            }))
+                    }
+                    : null;
+                return {
+                    available: root.available !== false,
+                    id: String(root.id || 'season_board_frontier').trim() || 'season_board_frontier',
+                    statusId: String(root.statusId || '').trim(),
+                    statusLabel: String(root.statusLabel || root.pressureLabel || '稳态').trim() || '稳态',
+                    pressureScore: clampInt(root.pressureScore, 0, 3),
+                    pressureLabel: String(root.pressureLabel || root.statusLabel || '稳态').trim() || '稳态',
+                    primaryFrontId: String(root.primaryFrontId || root.primaryLaneId || '').trim(),
+                    primaryFrontLabel: String(root.primaryFrontLabel || '诸界战线').trim() || '诸界战线',
+                    primaryFrontShortLabel: String(root.primaryFrontShortLabel || root.primaryFrontLabel || '主战线').trim() || '主战线',
+                    primaryLaneId: String(root.primaryLaneId || root.primaryFrontId || '').trim(),
+                    primaryAnchorSection: String(root.primaryAnchorSection || '').trim(),
+                    summaryLine: String(root.summaryLine || '').trim(),
+                    detailLine: String(root.detailLine || '').trim(),
+                    guideLine: String(root.guideLine || '').trim(),
+                    actionLaneId: String(root.actionLaneId || root.primaryFrontId || root.primaryLaneId || '').trim(),
+                    actionType: String(root.actionType || actionMeta.actionType || 'collection').trim() || actionMeta.actionType || 'collection',
+                    actionValue: String(root.actionValue || actionMeta.actionValue || 'sanctum').trim() || actionMeta.actionValue || 'sanctum',
+                    ctaLabel: String(root.ctaLabel || actionMeta.ctaLabel || '前往推进').trim() || actionMeta.ctaLabel || '前往推进',
+                    actionTargetLabel: String(root.actionTargetLabel || actionMeta.targetLabel || '当前主线').trim() || actionMeta.targetLabel || '当前主线',
+                    actionLine: String(root.actionLine || '').trim(),
+                    source: String(root.source || '').trim(),
+                    sourceId: String(root.sourceId || '').trim(),
+                    taskSource: String(root.taskSource || '').trim(),
+                    taskSourceId: String(root.taskSourceId || '').trim(),
+                    taskId: String(root.taskId || '').trim(),
+                    decree,
+                    chronicle,
+                    council,
+                    items: readArray(root.items)
+                        .filter((entry) => entry && typeof entry === 'object')
+                        .slice(0, 3)
+                        .map((entry, index) => ({
+                            id: String(entry.id || entry.laneId || `frontier_${index + 1}`).trim() || `frontier_${index + 1}`,
+                            laneId: String(entry.laneId || entry.id || '').trim(),
+                            label: String(entry.label || entry.shortLabel || `战线 ${index + 1}`).trim() || `战线 ${index + 1}`,
+                            shortLabel: String(entry.shortLabel || entry.label || `战线 ${index + 1}`).trim() || `战线 ${index + 1}`,
+                            icon: String(entry.icon || '✦').trim() || '✦',
+                            role: String(entry.role || '').trim(),
+                            roleLabel: String(entry.roleLabel || '').trim(),
+                            statusId: String(entry.statusId || '').trim(),
+                            statusLabel: String(entry.statusLabel || '').trim(),
+                            pressureScore: clampInt(entry.pressureScore, 0, 3),
+                            pressureLabel: String(entry.pressureLabel || entry.statusLabel || '').trim(),
+                            progressText: String(entry.progressText || '').trim(),
+                            completed: !!entry.completed,
+                            summaryLine: String(entry.summaryLine || '').trim(),
+                            detailLine: String(entry.detailLine || '').trim(),
+                            anchorSection: String(entry.anchorSection || '').trim(),
+                            actionType: String(entry.actionType || '').trim(),
+                            actionValue: String(entry.actionValue || '').trim(),
+                            ctaLabel: String(entry.ctaLabel || '').trim(),
+                            actionTargetLabel: String(entry.actionTargetLabel || '').trim(),
+                            priority: clampInt(entry.priority || index + 1, 1, 9)
+                        }))
+                };
+            })()
+            : null;
         const nextTask = board?.nextTask && typeof board.nextTask === 'object'
             ? {
                 laneId: String(board.nextTask.laneId || '').trim(),
@@ -579,11 +797,14 @@
             weekVerdictLedger,
             verificationArchive,
             verificationOrders,
+            laneRewards,
+            laneRewardSummary,
+            frontier,
             primaryVerification: verificationOrderPair.primary,
             secondaryVerification: verificationOrderPair.secondary,
             nextTask,
             nextWeekGoal,
-            lanes
+            lanes: lanesWithRewards
         };
     };
     const shouldSurfaceSeasonBoardVerification = (seasonBoard = null, seasonSettlement = seasonBoard?.settlement) => {
@@ -998,6 +1219,9 @@
                 switchedSection = true;
             }
         }
+        if (typeof this.clearSeasonBoardTaskFollowArrivalFocus === 'function') {
+            this.clearSeasonBoardTaskFollowArrivalFocus();
+        }
         this.clearRewardSeasonBoardHandoffArrivalFocus();
         const target = this.findRewardSeasonBoardHandoffArrivalTarget(notice);
         if (!target?.element) {
@@ -1043,6 +1267,269 @@
             }
         }
         this.lastRewardSeasonBoardHandoffArrivalFocus = {
+            ok: true,
+            kind: target.kind,
+            id: target.id,
+            sourceKey: notice.sourceKey,
+            taskId: notice.taskId,
+            laneId: notice.laneId,
+            hasAction: !!target.action,
+            focusedAt: Date.now()
+        };
+        return true;
+    };
+
+    Game.prototype.getSeasonBoardTaskFollowArrivalNotice = function (section = '') {
+        const notice = this.pendingSeasonBoardTaskFollowNotice && typeof this.pendingSeasonBoardTaskFollowNotice === 'object'
+            ? this.pendingSeasonBoardTaskFollowNotice
+            : null;
+        if (!notice) return null;
+
+        const action = String(notice.action || '').trim();
+        if (action !== 'collection') return null;
+
+        const targetSection = String(notice.value || notice.anchorSection || 'sanctum').trim() || 'sanctum';
+        const currentSection = String(section || this.collectionHubState?.section || '').trim();
+        if (currentSection && targetSection && currentSection !== targetSection) return null;
+
+        const source = String(notice.source || '').trim();
+        const sourceLabelMap = {
+            debt_pack: '债账包',
+            lane: '赛季任务',
+            settlement: '季押卷',
+            verification: '结业验证'
+        };
+        const targetLabelMap = {
+            laws: '法则图鉴',
+            spirits: '灵契图鉴',
+            chapters: '章节档案',
+            enemies: '敌影档案',
+            bosses: 'Boss 档案',
+            builds: '构筑快照',
+            slates: '归卷书架',
+            sanctum: '洞府'
+        };
+
+        return {
+            sourceKey: String(notice.sourceKey || 'task').trim() || 'task',
+            action,
+            value: targetSection,
+            buttonLabel: String(notice.buttonLabel || '前往推进').trim() || '前往推进',
+            source,
+            sourceId: String(notice.sourceId || '').trim(),
+            taskSource: String(notice.taskSource || '').trim(),
+            taskSourceId: String(notice.taskSourceId || '').trim(),
+            taskId: String(notice.taskId || '').trim(),
+            laneId: String(notice.laneId || '').trim(),
+            laneLabel: String(notice.laneLabel || '').trim(),
+            anchorSection: String(notice.anchorSection || '').trim(),
+            focusLabel: String(notice.focusLabel || '定位任务行').trim() || '定位任务行',
+            title: String(notice.title || '季盘任务').trim() || '季盘任务',
+            note: String(notice.note || '').trim(),
+            sourceLabel: sourceLabelMap[source] || '季盘任务',
+            targetLabel: targetLabelMap[targetSection] || SECTION_META[targetSection]?.title || targetSection || '藏经阁',
+            createdAt: clampInt(notice.createdAt || Date.now(), 0)
+        };
+    };
+
+    Game.prototype.renderSeasonBoardTaskFollowArrival = function (section = '') {
+        if (typeof document === 'undefined') return;
+        const heading = document.querySelector('#collection .collection-heading-group');
+        let noticeEl = document.getElementById('collection-season-board-task-arrival');
+        const notice = this.getSeasonBoardTaskFollowArrivalNotice(section);
+        if (!heading || !notice) {
+            if (noticeEl) noticeEl.remove();
+            return;
+        }
+
+        if (!noticeEl) {
+            noticeEl = document.createElement('div');
+            noticeEl.id = 'collection-season-board-task-arrival';
+            heading.appendChild(noticeEl);
+        }
+
+        noticeEl.className = 'collection-handoff-arrival collection-task-follow-arrival';
+        noticeEl.dataset.seasonBoardTaskArrival = 'true';
+        noticeEl.dataset.seasonBoardTaskSourceKey = notice.sourceKey;
+        noticeEl.dataset.seasonBoardTaskAction = notice.action;
+        noticeEl.dataset.seasonBoardTaskValue = notice.value;
+        noticeEl.dataset.seasonBoardTaskSource = notice.source;
+        noticeEl.dataset.seasonBoardTaskSourceId = notice.sourceId;
+        noticeEl.dataset.seasonBoardTaskTaskSource = notice.taskSource;
+        noticeEl.dataset.seasonBoardTaskTaskSourceId = notice.taskSourceId;
+        noticeEl.dataset.seasonBoardTaskTaskId = notice.taskId;
+        noticeEl.dataset.seasonBoardTaskLaneId = notice.laneId;
+        noticeEl.dataset.seasonBoardTaskLaneLabel = notice.laneLabel;
+        noticeEl.dataset.seasonBoardTaskAnchor = notice.anchorSection;
+        noticeEl.dataset.seasonBoardTaskFocusLabel = notice.focusLabel;
+        noticeEl.innerHTML = `
+            <span class="collection-handoff-arrival-kicker">季盘任务已定位</span>
+            <strong>${escapeHtml(notice.title || '季盘任务')}</strong>
+            <p>${escapeHtml(`${notice.buttonLabel} · 来自${notice.sourceLabel}${notice.laneLabel ? ` / ${notice.laneLabel}` : ''} · 已定位到 ${notice.targetLabel}${notice.note ? ` · ${notice.note}` : ''}`)}</p>
+            <button type="button" class="collection-inline-btn collection-handoff-arrival-btn"
+                data-season-board-task-arrival-focus="true"
+                data-season-board-task-arrival-task-id="${escapeHtml(notice.taskId)}"
+                data-season-board-task-arrival-lane-id="${escapeHtml(notice.laneId)}"
+                onclick="game.focusSeasonBoardTaskFollowArrival()">${escapeHtml(notice.focusLabel)}</button>
+        `;
+        this.lastSeasonBoardTaskFollowArrivalNotice = { ...notice };
+        const renderedPendingNotice = this.pendingSeasonBoardTaskFollowNotice;
+        if (renderedPendingNotice && typeof setTimeout === 'function') {
+            setTimeout(() => {
+                if (this.pendingSeasonBoardTaskFollowNotice === renderedPendingNotice) {
+                    this.pendingSeasonBoardTaskFollowNotice = null;
+                }
+            }, 0);
+        }
+    };
+
+    Game.prototype.getSeasonBoardTaskFollowArrivalFocusNotice = function () {
+        const pending = typeof this.getSeasonBoardTaskFollowArrivalNotice === 'function'
+            ? this.getSeasonBoardTaskFollowArrivalNotice(this.collectionHubState?.section || '')
+            : null;
+        const raw = pending || (
+            this.lastSeasonBoardTaskFollowArrivalNotice && typeof this.lastSeasonBoardTaskFollowArrivalNotice === 'object'
+                ? this.lastSeasonBoardTaskFollowArrivalNotice
+                : null
+        );
+        if (!raw) return null;
+        const action = String(raw.action || '').trim();
+        if (action !== 'collection') return null;
+        const value = String(raw.value || raw.anchorSection || 'sanctum').trim() || 'sanctum';
+        return {
+            ...raw,
+            action,
+            value,
+            sourceKey: String(raw.sourceKey || 'task').trim() || 'task',
+            source: String(raw.source || '').trim(),
+            sourceId: String(raw.sourceId || '').trim(),
+            taskSource: String(raw.taskSource || '').trim(),
+            taskSourceId: String(raw.taskSourceId || '').trim(),
+            taskId: String(raw.taskId || '').trim(),
+            laneId: String(raw.laneId || '').trim(),
+            focusLabel: String(raw.focusLabel || '定位任务行').trim() || '定位任务行'
+        };
+    };
+
+    Game.prototype.clearSeasonBoardTaskFollowArrivalFocus = function () {
+        if (typeof document === 'undefined') return;
+        document.querySelectorAll('[data-season-board-task-arrival-focused="true"], [data-season-board-task-arrival-action-target="true"]').forEach((el) => {
+            el.classList?.remove('season-board-handoff-focus', 'season-board-handoff-action-target');
+            delete el.dataset.seasonBoardTaskArrivalFocused;
+            delete el.dataset.seasonBoardTaskArrivalFocusKind;
+            delete el.dataset.seasonBoardTaskArrivalFocusSourceKey;
+            delete el.dataset.seasonBoardTaskArrivalActionTarget;
+        });
+    };
+
+    Game.prototype.findSeasonBoardTaskFollowArrivalTarget = function (notice = {}) {
+        if (typeof document === 'undefined') return null;
+        const taskId = String(notice.taskId || '').trim();
+        const laneId = String(notice.laneId || '').trim();
+        const findNode = (selector, predicate) => Array.from(document.querySelectorAll(selector))
+            .find((el) => {
+                try {
+                    return predicate(el, el.dataset || {});
+                } catch (_error) {
+                    return false;
+                }
+            }) || null;
+        const matchesTaskLane = (taskValue = '', laneValue = '') => (
+            !!taskId
+            && String(taskValue || '') === taskId
+            && (!laneId || String(laneValue || '') === laneId)
+        );
+        const task = findNode('[data-season-board-task="true"]', (_el, ds) => (
+            matchesTaskLane(ds.seasonBoardTaskId, ds.seasonBoardLaneId)
+            || (!!taskId && ds.seasonBoardTaskId === taskId)
+        ));
+        if (task) {
+            return {
+                kind: 'task',
+                element: task,
+                action: task.querySelector('[data-season-board-task-action="true"]'),
+                id: task.dataset.seasonBoardTaskId || ''
+            };
+        }
+        const lane = findNode('[data-season-board-lane="true"]', (_el, ds) => (
+            !!laneId && ds.seasonBoardLaneId === laneId
+        ));
+        if (lane) {
+            return {
+                kind: 'lane',
+                element: lane,
+                action: null,
+                id: lane.dataset.seasonBoardLaneId || ''
+            };
+        }
+        return typeof this.findRewardSeasonBoardHandoffArrivalTarget === 'function'
+            ? this.findRewardSeasonBoardHandoffArrivalTarget(notice)
+            : null;
+    };
+
+    Game.prototype.focusSeasonBoardTaskFollowArrival = function (retryAttempt = 0) {
+        if (typeof document === 'undefined') return false;
+        const notice = this.getSeasonBoardTaskFollowArrivalFocusNotice();
+        if (!notice) return false;
+        const targetSection = notice.value || notice.anchorSection || 'sanctum';
+        let switchedSection = false;
+        if (this.currentScreen !== 'collection' || this.collectionHubState?.section !== targetSection) {
+            if (typeof this.switchCollectionSection === 'function') {
+                this.switchCollectionSection(targetSection);
+                switchedSection = true;
+            } else if (typeof this.showCollection === 'function') {
+                this.showCollection(targetSection);
+                switchedSection = true;
+            }
+        }
+        if (typeof this.clearRewardSeasonBoardHandoffArrivalFocus === 'function') {
+            this.clearRewardSeasonBoardHandoffArrivalFocus();
+        }
+        this.clearSeasonBoardTaskFollowArrivalFocus();
+        const target = this.findSeasonBoardTaskFollowArrivalTarget(notice);
+        if (!target?.element) {
+            if ((switchedSection || retryAttempt > 0) && retryAttempt < 2 && typeof setTimeout === 'function') {
+                this.lastSeasonBoardTaskFollowArrivalFocus = {
+                    ok: false,
+                    reason: 'target_retry_pending',
+                    taskId: notice.taskId,
+                    laneId: notice.laneId,
+                    retryAttempt,
+                    focusedAt: Date.now()
+                };
+                setTimeout(() => this.focusSeasonBoardTaskFollowArrival(retryAttempt + 1), 50);
+                return false;
+            }
+            this.lastSeasonBoardTaskFollowArrivalFocus = {
+                ok: false,
+                reason: 'target_not_found',
+                taskId: notice.taskId,
+                laneId: notice.laneId,
+                retryAttempt,
+                focusedAt: Date.now()
+            };
+            return false;
+        }
+        target.element.classList.add('season-board-handoff-focus');
+        target.element.dataset.seasonBoardTaskArrivalFocused = 'true';
+        target.element.dataset.seasonBoardTaskArrivalFocusKind = target.kind;
+        target.element.dataset.seasonBoardTaskArrivalFocusSourceKey = notice.sourceKey;
+        if (target.action) {
+            target.action.classList.add('season-board-handoff-action-target');
+            target.action.dataset.seasonBoardTaskArrivalActionTarget = 'true';
+        }
+        if (typeof target.element.scrollIntoView === 'function') {
+            target.element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        }
+        const focusTarget = target.action || target.element;
+        if (typeof focusTarget.focus === 'function') {
+            try {
+                focusTarget.focus({ preventScroll: true });
+            } catch (_error) {
+                focusTarget.focus();
+            }
+        }
+        this.lastSeasonBoardTaskFollowArrivalFocus = {
             ok: true,
             kind: target.kind,
             id: target.id,
@@ -5054,6 +5541,9 @@
         }
         const seasonBoardResearches = [];
         if (seasonBoard) {
+            const seasonBoardLaneRewards = Array.isArray(seasonBoard.laneRewards)
+                ? seasonBoard.laneRewards.filter((entry) => entry && typeof entry === 'object')
+                : [];
             const seasonVerificationArchive = seasonBoard.verificationArchive && typeof seasonBoard.verificationArchive === 'object'
                 ? seasonBoard.verificationArchive
                 : null;
@@ -5072,6 +5562,28 @@
                 ready: clampInt(seasonBoard.completedTaskCount || 0, 0, 999) >= Math.max(1, clampInt(seasonBoard.totalTaskCount || 0, 0, 999)),
                 toneClass: clampInt(seasonBoard.completedTaskCount || 0, 0, 999) > 0 ? 'tracking' : 'idle',
                 progressText: seasonBoard.progress?.progressText || `${clampInt(seasonBoard.completedTaskCount || 0, 0, 999)}/${Math.max(1, clampInt(seasonBoard.totalTaskCount || 0, 0, 999))}`
+            });
+            seasonBoardLaneRewards.forEach((reward) => {
+                seasonBoardResearches.push({
+                    id: `season_board_lane_reward_${reward.weekTag || seasonBoard.weekTag || 'current'}_${reward.laneId || 'lane'}`,
+                    room: '分线结题赏',
+                    name: `${reward.laneLabel || reward.label || '分线'} · ${reward.statusLabel || '结题赏'}`,
+                    progress: reward.ready ? 1 : 0,
+                    goal: 1,
+                    reward: reward.summaryLine || '每条赛季分线结题后，本周可领取一次小额确定性奖励。',
+                    noteLine: [reward.rewardLine || '', reward.detailLine || ''].filter(Boolean).join(' · '),
+                    section: 'sanctum',
+                    actionType: 'season_board_lane_reward',
+                    actionValue: reward.laneId || '',
+                    buttonLabel: reward.buttonLabel || (reward.claimable ? '领取结题赏' : (reward.claimed ? '已领取' : '未结题')),
+                    source: 'lane_reward',
+                    sourceId: reward.rewardKey || '',
+                    laneId: reward.laneId || '',
+                    ready: !!reward.claimable,
+                    disabled: !reward.claimable,
+                    toneClass: reward.claimed ? 'ready' : (reward.claimable ? 'ready' : 'tracking'),
+                    progressText: reward.statusLabel || reward.progressText || '未结题'
+                });
             });
             if (seasonSettlement) {
                 seasonBoardResearches.push({
@@ -5309,6 +5821,23 @@
                 isSeasonBoardGoal: true
             }
             : null;
+        const seasonBoardLaneRewardGoals = seasonBoard && Array.isArray(seasonBoard.laneRewards)
+            ? seasonBoard.laneRewards
+                .filter((reward) => reward && reward.claimable)
+                .map((reward) => ({
+                    id: `season_board_lane_reward_goal_${reward.weekTag || seasonBoard.weekTag || 'current'}_${reward.laneId || 'lane'}`,
+                    title: `${reward.laneLabel || reward.label || '分线'} · 结题赏`,
+                    note: [reward.rewardLine || '', reward.summaryLine || ''].filter(Boolean).join(' · '),
+                    action: 'season_board_lane_reward',
+                    value: reward.laneId || '',
+                    buttonLabel: reward.buttonLabel || '领取结题赏',
+                    laneId: reward.laneId || '',
+                    source: 'lane_reward',
+                    sourceId: reward.rewardKey || '',
+                    icon: reward.laneIcon || '🎁',
+                    isSeasonBoardGoal: true
+                }))
+            : [];
         const lineageGoal = lineage?.available
             ? {
                 id: 'fate_lineage_goal',
@@ -5342,6 +5871,7 @@
             goals: [
                 heavenlyMandateGoal,
                 ...(seasonBoardGoal ? [seasonBoardGoal] : []),
+                ...seasonBoardLaneRewardGoals,
                 ...(seasonBoardSettlementGoal ? [seasonBoardSettlementGoal] : []),
                 ...(seasonBoardDebtGoal ? [seasonBoardDebtGoal] : []),
                 ...(seasonBoardNextTaskGoal ? [seasonBoardNextTaskGoal] : []),
@@ -5364,6 +5894,7 @@
         if (titleEl) titleEl.textContent = meta.title;
         if (subtitleEl) subtitleEl.textContent = meta.subtitle;
         this.renderRewardSeasonBoardHandoffArrival(state.section);
+        this.renderSeasonBoardTaskFollowArrival(state.section);
 
         document.querySelectorAll('#collection [data-collection-tab]').forEach((button) => {
             button.classList.toggle('active', button.dataset.collectionTab === state.section);
@@ -6470,11 +7001,27 @@
             'sanctum'
         );
         const seasonBoardLanes = Array.isArray(seasonBoard.lanes) ? seasonBoard.lanes : [];
+        const seasonBoardLaneRewards = Array.isArray(seasonBoard.laneRewards)
+            ? seasonBoard.laneRewards.filter((entry) => entry && typeof entry === 'object')
+            : [];
+        const seasonBoardClaimableLaneRewards = seasonBoardLaneRewards.filter((entry) => entry.claimable);
         const seasonSettlement = seasonBoard.settlement && typeof seasonBoard.settlement === 'object'
             ? seasonBoard.settlement
             : null;
         const seasonDebtPack = seasonBoard.debtPack && typeof seasonBoard.debtPack === 'object'
             ? seasonBoard.debtPack
+            : null;
+        const seasonFrontier = seasonBoard.frontier && typeof seasonBoard.frontier === 'object'
+            ? seasonBoard.frontier
+            : null;
+        const seasonFrontierDecree = seasonFrontier?.decree && typeof seasonFrontier.decree === 'object'
+            ? seasonFrontier.decree
+            : null;
+        const seasonFrontierChronicle = seasonFrontier?.chronicle && typeof seasonFrontier.chronicle === 'object'
+            ? seasonFrontier.chronicle
+            : null;
+        const seasonFrontierCouncil = seasonFrontier?.council && typeof seasonFrontier.council === 'object'
+            ? seasonFrontier.council
             : null;
         const seasonVerificationArchive = seasonBoard.verificationArchive && typeof seasonBoard.verificationArchive === 'object'
             ? seasonBoard.verificationArchive
@@ -6539,6 +7086,14 @@
                     onclick: `game.showScreen('${escapeHtml(research.actionValue || 'map-screen')}')`,
                     disabled: false,
                     extraAttrs: ''
+                };
+            }
+            if (research.actionType === 'season_board_lane_reward') {
+                return {
+                    label: research.buttonLabel || (research.ready ? '领取结题赏' : '查看结题赏'),
+                    onclick: `game.claimSeasonBoardLaneReward('${escapeHtml(research.actionValue || research.laneId || '')}')`,
+                    disabled: !!research.disabled || !research.ready,
+                    extraAttrs: `data-season-board-lane-reward-claim="true" data-season-board-lane-reward-lane-id="${escapeHtml(research.actionValue || research.laneId || '')}"`
                 };
             }
             return {
@@ -6607,8 +7162,11 @@
                     <button type="button" class="collection-inline-btn"
                         ${isHeavenlyMandateGoal ? 'data-heavenly-mandate-action="true"' : ''}
                         ${isSeasonBoardGoal ? 'data-season-board-action="true"' : ''}
+                        ${goal.action === 'season_board_lane_reward' ? `data-season-board-lane-reward-claim="true" data-season-board-lane-reward-lane-id="${escapeHtml(goal.laneId || goal.value || '')}" data-season-board-lane-reward-claimable="true"` : ''}
                         onclick="${isHeavenlyMandateGoal && goal.followTaskId
                 ? `game.followHeavenlyMandateTask('${escapeHtml(goal.followTaskId)}')`
+                : goal.action === 'season_board_lane_reward'
+                ? `game.claimSeasonBoardLaneReward('${escapeHtml(goal.laneId || goal.value || '')}')`
                 : goal.action === 'claim'
                 ? `game.claimAchievement('${escapeHtml(goal.id)}')`
                 : goal.action === 'treasure'
@@ -6669,6 +7227,18 @@
             seasonBoard.detailLine
                 ? `<p class="collection-muted" data-season-board-detail="true">${escapeHtml(seasonBoard.detailLine)}</p>`
                 : '',
+            seasonFrontier
+                ? `<p class="collection-muted" data-season-board-frontier="true" data-season-board-frontier-id="${escapeHtml(seasonFrontier.primaryFrontId || '')}" data-season-board-frontier-pressure="${escapeHtml(seasonFrontier.statusId || '')}">${escapeHtml(seasonFrontier.summaryLine || `诸界战线：${seasonFrontier.primaryFrontLabel || '主战线'} · ${seasonFrontier.pressureLabel || seasonFrontier.statusLabel || '稳态'}`)}</p>`
+                : '',
+            seasonFrontierDecree
+                ? `<p class="collection-muted" data-season-board-frontier-decree="true" data-season-board-frontier-decree-id="${escapeHtml(seasonFrontierDecree.id || '')}" data-season-board-frontier-decree-lane-id="${escapeHtml(seasonFrontierDecree.laneId || '')}">${escapeHtml([seasonFrontierDecree.summaryLine || seasonFrontierDecree.title || '', seasonFrontierDecree.constraintLine || ''].filter(Boolean).join(' · '))}</p>`
+                : '',
+            seasonFrontierChronicle
+                ? `<p class="collection-muted" data-season-board-frontier-chronicle="true" data-season-board-frontier-chronicle-id="${escapeHtml(seasonFrontierChronicle.id || '')}" data-season-board-frontier-chronicle-lane-id="${escapeHtml(seasonFrontierChronicle.laneId || '')}">${escapeHtml([seasonFrontierChronicle.summaryLine || seasonFrontierChronicle.title || '', seasonFrontierChronicle.progressLine || ''].filter(Boolean).join(' · '))}</p>`
+                : '',
+            seasonFrontierCouncil
+                ? `<p class="collection-muted" data-season-board-frontier-council="true" data-season-board-frontier-council-id="${escapeHtml(seasonFrontierCouncil.id || '')}" data-season-board-frontier-council-lane-id="${escapeHtml(seasonFrontierCouncil.laneId || '')}">${escapeHtml([seasonFrontierCouncil.summaryLine || seasonFrontierCouncil.title || '', seasonFrontierCouncil.verdictLine || ''].filter(Boolean).join(' · '))}</p>`
+                : '',
             seasonSettlement
                 ? `<p class="collection-muted" data-season-board-settlement="true">${escapeHtml(`季押卷：${seasonSettlement.outcomeLabel || '待押卷'}${seasonSettlement.summaryLine ? ` · ${seasonSettlement.summaryLine}` : ''}`)}</p>`
                 : '',
@@ -6698,6 +7268,11 @@
             `${seasonBoard.available ? `<div class="codex-summary-chip" data-season-board-chip="phase"><strong>${escapeHtml(seasonBoard.phaseLabel || '采样期')}</strong><span>季盘阶段</span></div>` : ''}`,
             `${seasonBoard.available ? `<div class="codex-summary-chip" data-season-board-chip="theme"><strong>${escapeHtml(seasonBoard.themeLabel || '本周主轴')}</strong><span>赛季主轴</span></div>` : ''}`,
             `${seasonBoard.available ? `<div class="codex-summary-chip" data-season-board-chip="status"><strong>${escapeHtml(seasonBoard.progressText || '待同步')}</strong><span>季盘进度</span></div>` : ''}`,
+            `${seasonFrontier ? `<div class="codex-summary-chip" data-season-board-chip="frontier" data-season-board-frontier-chip="true"><strong>${escapeHtml(seasonFrontier.primaryFrontShortLabel || seasonFrontier.primaryFrontLabel || '主战线')}</strong><span>${escapeHtml(seasonFrontier.pressureLabel || seasonFrontier.statusLabel || '战线态势')}</span></div>` : ''}`,
+            `${seasonFrontierDecree ? `<div class="codex-summary-chip" data-season-board-chip="frontier-decree" data-season-board-frontier-decree-chip="true"><strong>${escapeHtml(seasonFrontierDecree.laneLabel || seasonFrontier.primaryFrontShortLabel || '主战线')}</strong><span>${escapeHtml(`法旨 · ${seasonFrontierDecree.toneLabel || '本周'}`)}</span></div>` : ''}`,
+            `${seasonFrontierChronicle ? `<div class="codex-summary-chip" data-season-board-chip="frontier-chronicle" data-season-board-frontier-chronicle-chip="true"><strong>${escapeHtml(seasonFrontierChronicle.laneLabel || seasonFrontier.primaryFrontShortLabel || '主战线')}</strong><span>${escapeHtml(`史卷 · ${seasonFrontierChronicle.phaseLabel || '本周'}`)}</span></div>` : ''}`,
+            `${seasonFrontierCouncil ? `<div class="codex-summary-chip" data-season-board-chip="frontier-council" data-season-board-frontier-council-chip="true"><strong>${escapeHtml(seasonFrontierCouncil.laneLabel || seasonFrontier.primaryFrontShortLabel || '主战线')}</strong><span>${escapeHtml(`会审 · ${seasonFrontierCouncil.phaseLabel || '本周'}`)}</span></div>` : ''}`,
+            `${seasonBoardLaneRewards.length > 0 ? `<div class="codex-summary-chip" data-season-board-chip="lane-reward"><strong>${escapeHtml(`${seasonBoardClaimableLaneRewards.length}/${seasonBoardLaneRewards.length}`)}</strong><span>分线结题赏</span></div>` : ''}`,
             `${seasonSettlement ? `<div class="codex-summary-chip" data-season-board-chip="settlement"><strong>${escapeHtml(seasonSettlement.outcomeLabel || '待押卷')}</strong><span>季押卷</span></div>` : ''}`,
             `${seasonDebtPack ? `<div class="codex-summary-chip" data-season-board-chip="debt"><strong>${escapeHtml(seasonDebtPack.progressText || seasonDebtPack.settleWindowText || seasonDebtPack.debtThemeLabel || '待清账')}</strong><span>债账窗口</span></div>` : ''}`,
             `${primarySeasonVerification ? `<div class="codex-summary-chip" data-season-board-chip="verification"><strong>${escapeHtml(primarySeasonVerification.label || '待验证')}</strong><span>结业验证</span></div>` : ''}`,
@@ -6730,6 +7305,10 @@
                         <strong>${escapeHtml(seasonBoard.themeLabel || '本周主轴')}</strong>
                         <p data-season-board-progress-row="true">${escapeHtml(`${seasonBoard.weekLabel || seasonBoard.weekTag || '本周轮转'} · ${seasonBoard.phaseLabel || '采样期'} · ${seasonBoard.progressText || '待同步'}`)}</p>
                         ${seasonBoard.statusLine ? `<p class="collection-muted">${escapeHtml(seasonBoard.statusLine)}</p>` : ''}
+                        ${seasonFrontier ? `<p class="collection-muted" data-season-board-frontier-card="true">${escapeHtml(seasonFrontier.detailLine || seasonFrontier.guideLine || seasonFrontier.summaryLine || `${seasonFrontier.primaryFrontLabel || '主战线'} · ${seasonFrontier.pressureLabel || '稳态'}`)}</p>` : ''}
+                        ${seasonFrontierDecree ? `<p class="collection-muted" data-season-board-frontier-decree-card="true">${escapeHtml(seasonFrontierDecree.focusLine || seasonFrontierDecree.successLine || seasonFrontierDecree.summaryLine || seasonFrontierDecree.title || '本周法旨待同步')}</p>` : ''}
+                        ${seasonFrontierChronicle ? `<p class="collection-muted" data-season-board-frontier-chronicle-card="true">${escapeHtml(seasonFrontierChronicle.currentEntryLine || seasonFrontierChronicle.progressLine || seasonFrontierChronicle.summaryLine || '战役史卷待同步')}</p>` : ''}
+                        ${seasonFrontierCouncil ? `<p class="collection-muted" data-season-board-frontier-council-card="true">${escapeHtml(seasonFrontierCouncil.focusLine || seasonFrontierCouncil.supportLine || seasonFrontierCouncil.summaryLine || '诸界会审待同步')}</p>` : ''}
                     </section>
                     ${seasonSettlement ? `
                         <section class="collection-detail-card" data-season-board-settlement-card="true">
@@ -6811,6 +7390,21 @@
                             <span class="detail-mini-label">${escapeHtml(`${lane.icon || '✦'} ${lane.label || '玩法线'}`)}</span>
                             <strong>${escapeHtml(`${lane.completedCount || 0}/${lane.totalCount || 0}`)}</strong>
                             <p>${escapeHtml(lane.summaryLine || '本条玩法线正在等待赛季同步。')}</p>
+                            ${lane.reward ? `
+                                <div class="season-board-task-action-row"
+                                    data-season-board-lane-reward="true"
+                                    data-season-board-lane-reward-lane-id="${escapeHtml(lane.reward.laneId || lane.id || '')}"
+                                    data-season-board-lane-reward-status="${escapeHtml(lane.reward.status || '')}"
+                                    data-season-board-lane-reward-week="${escapeHtml(lane.reward.weekTag || seasonBoard.weekTag || '')}">
+                                    <span class="collection-muted">${escapeHtml(`${lane.reward.statusLabel || '结题赏'}：${lane.reward.rewardLine || lane.reward.summaryLine || '完成后领取'}`)}</span>
+                                    <button type="button" class="collection-inline-btn secondary compact"
+                                        data-season-board-lane-reward-claim="true"
+                                        data-season-board-lane-reward-lane-id="${escapeHtml(lane.reward.laneId || lane.id || '')}"
+                                        data-season-board-lane-reward-claimable="${lane.reward.claimable ? 'true' : 'false'}"
+                                        ${lane.reward.claimable ? '' : 'disabled'}
+                                        onclick="game.claimSeasonBoardLaneReward('${escapeHtml(lane.reward.laneId || lane.id || '')}')">${escapeHtml(lane.reward.buttonLabel || (lane.reward.claimable ? '领取结题赏' : (lane.reward.statusLabel || '未结题')))}</button>
+                                </div>
+                            ` : ''}
                             <ul class="collection-detail-list compact">
                                 ${(lane.tasks.length > 0 ? lane.tasks : [{ id: `${lane.id || 'lane'}_empty`, label: '等待任务同步', progressText: '', completed: false, hintLine: '', statusLine: '', anchorSection: '' }]).map((task) => `
                                     <li
@@ -6976,6 +7570,18 @@
                 : '',
             seasonBoard.available
                 ? `<li data-season-board-guide="overview">赛季天道盘：${escapeHtml(seasonBoard.summaryLine || '赛季主轴正在同步。')}${seasonBoard.guideLine ? ` · ${escapeHtml(seasonBoard.guideLine)}` : ''}</li>`
+                : '',
+            seasonFrontier
+                ? `<li data-season-board-frontier-guide="true">${escapeHtml(seasonFrontier.guideLine || seasonFrontier.summaryLine || `诸界战线当前主压在 ${seasonFrontier.primaryFrontLabel || '主战线'}。`)}</li>`
+                : '',
+            seasonFrontierDecree
+                ? `<li data-season-board-frontier-decree-guide="true">${escapeHtml([seasonFrontierDecree.title || '本周法旨', seasonFrontierDecree.successLine || seasonFrontierDecree.riskLine || '优先补主战线一格。'].filter(Boolean).join('：'))}</li>`
+                : '',
+            seasonFrontierChronicle
+                ? `<li data-season-board-frontier-chronicle-guide="true">${escapeHtml([seasonFrontierChronicle.title || '战役史卷', seasonFrontierChronicle.nextRecordLine || seasonFrontierChronicle.lessonLine || '完成主战线后回季盘复核史卷。'].filter(Boolean).join('：'))}</li>`
+                : '',
+            seasonFrontierCouncil
+                ? `<li data-season-board-frontier-council-guide="true">${escapeHtml([seasonFrontierCouncil.title || '诸界会审', seasonFrontierCouncil.verdictLine || seasonFrontierCouncil.supportLine || '先守主线，副线保留证据。'].filter(Boolean).join('：'))}</li>`
                 : '',
             seasonSettlement
                 ? `<li data-season-board-guide="settlement">${escapeHtml(`季押卷：${seasonSettlement.summaryLine || seasonSettlement.detailLine || seasonSettlement.guideLine || seasonSettlement.outcomeLabel || '等待裁定同步。'}`)}</li>`

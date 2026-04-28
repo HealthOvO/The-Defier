@@ -990,6 +990,186 @@
                 recoveryEligible: !!source.debtPack.recoveryEligible
             }
             : null;
+        const serializeLaneReward = (reward = null, fallbackLaneId = '', fallbackLaneLabel = '') => {
+            const root = reward && typeof reward === 'object' ? reward : null;
+            if (!root) return null;
+            const gains = root.gains && typeof root.gains === 'object' ? root.gains : {};
+            return {
+                id: String(root.id || ''),
+                weekTag: String(root.weekTag || ''),
+                weekLabel: String(root.weekLabel || ''),
+                laneId: String(root.laneId || fallbackLaneId || ''),
+                laneLabel: String(root.laneLabel || fallbackLaneLabel || ''),
+                laneIcon: String(root.laneIcon || ''),
+                rewardKey: String(root.rewardKey || ''),
+                label: String(root.label || ''),
+                summaryLine: String(root.summaryLine || ''),
+                detailLine: String(root.detailLine || ''),
+                status: String(root.status || ''),
+                statusLabel: String(root.statusLabel || ''),
+                ready: !!root.ready,
+                claimable: !!root.claimable,
+                claimed: !!root.claimed,
+                claimedAt: clampInt(root.claimedAt, 0, Number.MAX_SAFE_INTEGER),
+                rewardLine: String(root.rewardLine || ''),
+                gains: {
+                    insight: clampInt(gains.insight ?? gains.heavenlyInsight, 0, 99),
+                    karma: clampInt(gains.karma, 0, 99),
+                    ringExp: clampInt(gains.ringExp, 0, 999),
+                    gold: clampInt(gains.gold, 0, 999999)
+                },
+                buttonLabel: String(root.buttonLabel || ''),
+                progressText: String(root.progressText || '')
+            };
+        };
+        const serializeFrontier = (frontier = null) => {
+            const root = frontier && typeof frontier === 'object' ? frontier : null;
+            if (!root) return null;
+            const decreeRoot = root.decree && typeof root.decree === 'object' ? root.decree : null;
+            const decree = decreeRoot
+                ? {
+                    available: decreeRoot.available !== false,
+                    id: String(decreeRoot.id || ''),
+                    weekTag: String(decreeRoot.weekTag || ''),
+                    phaseId: String(decreeRoot.phaseId || ''),
+                    phaseLabel: String(decreeRoot.phaseLabel || ''),
+                    laneId: String(decreeRoot.laneId || ''),
+                    laneLabel: String(decreeRoot.laneLabel || ''),
+                    fullLaneLabel: String(decreeRoot.fullLaneLabel || ''),
+                    statusId: String(decreeRoot.statusId || ''),
+                    statusLabel: String(decreeRoot.statusLabel || ''),
+                    pressureScore: clampInt(decreeRoot.pressureScore, 0, 3),
+                    tone: String(decreeRoot.tone || ''),
+                    toneLabel: String(decreeRoot.toneLabel || ''),
+                    title: String(decreeRoot.title || ''),
+                    summaryLine: String(decreeRoot.summaryLine || ''),
+                    constraintLine: String(decreeRoot.constraintLine || ''),
+                    successLine: String(decreeRoot.successLine || ''),
+                    riskLine: String(decreeRoot.riskLine || ''),
+                    focusLine: String(decreeRoot.focusLine || ''),
+                    actionLaneId: String(decreeRoot.actionLaneId || ''),
+                    actionType: String(decreeRoot.actionType || ''),
+                    actionValue: String(decreeRoot.actionValue || ''),
+                    actionTargetLabel: String(decreeRoot.actionTargetLabel || ''),
+                    taskId: String(decreeRoot.taskId || ''),
+                    source: String(decreeRoot.source || ''),
+                    sourceId: String(decreeRoot.sourceId || '')
+                }
+                : null;
+            const chronicleRoot = root.chronicle && typeof root.chronicle === 'object' ? root.chronicle : null;
+            const chronicle = chronicleRoot
+                ? {
+                    available: chronicleRoot.available !== false,
+                    id: String(chronicleRoot.id || ''),
+                    weekTag: String(chronicleRoot.weekTag || ''),
+                    phaseId: String(chronicleRoot.phaseId || ''),
+                    phaseLabel: String(chronicleRoot.phaseLabel || ''),
+                    laneId: String(chronicleRoot.laneId || ''),
+                    laneLabel: String(chronicleRoot.laneLabel || ''),
+                    fullLaneLabel: String(chronicleRoot.fullLaneLabel || ''),
+                    statusId: String(chronicleRoot.statusId || ''),
+                    statusLabel: String(chronicleRoot.statusLabel || ''),
+                    pressureScore: clampInt(chronicleRoot.pressureScore, 0, 3),
+                    title: String(chronicleRoot.title || ''),
+                    summaryLine: String(chronicleRoot.summaryLine || ''),
+                    currentEntryLine: String(chronicleRoot.currentEntryLine || ''),
+                    progressLine: String(chronicleRoot.progressLine || ''),
+                    lessonLine: String(chronicleRoot.lessonLine || ''),
+                    nextRecordLine: String(chronicleRoot.nextRecordLine || ''),
+                    actionLaneId: String(chronicleRoot.actionLaneId || ''),
+                    actionTargetLabel: String(chronicleRoot.actionTargetLabel || ''),
+                    taskId: String(chronicleRoot.taskId || ''),
+                    source: String(chronicleRoot.source || ''),
+                    sourceId: String(chronicleRoot.sourceId || '')
+                }
+                : null;
+            const councilRoot = root.council && typeof root.council === 'object' ? root.council : null;
+            const council = councilRoot
+                ? {
+                    available: councilRoot.available !== false,
+                    id: String(councilRoot.id || ''),
+                    weekTag: String(councilRoot.weekTag || ''),
+                    phaseId: String(councilRoot.phaseId || ''),
+                    phaseLabel: String(councilRoot.phaseLabel || ''),
+                    laneId: String(councilRoot.laneId || ''),
+                    laneLabel: String(councilRoot.laneLabel || ''),
+                    fullLaneLabel: String(councilRoot.fullLaneLabel || ''),
+                    statusId: String(councilRoot.statusId || ''),
+                    statusLabel: String(councilRoot.statusLabel || ''),
+                    pressureScore: clampInt(councilRoot.pressureScore, 0, 3),
+                    title: String(councilRoot.title || ''),
+                    summaryLine: String(councilRoot.summaryLine || ''),
+                    verdictLine: String(councilRoot.verdictLine || ''),
+                    focusLine: String(councilRoot.focusLine || ''),
+                    supportLine: String(councilRoot.supportLine || ''),
+                    auditLine: String(councilRoot.auditLine || ''),
+                    riskLine: String(councilRoot.riskLine || ''),
+                    source: String(councilRoot.source || ''),
+                    sourceId: String(councilRoot.sourceId || ''),
+                    laneOpinions: readArray(councilRoot.laneOpinions).map((opinion) => ({
+                        laneId: String(opinion?.laneId || ''),
+                        laneLabel: String(opinion?.laneLabel || ''),
+                        role: String(opinion?.role || ''),
+                        stance: String(opinion?.stance || ''),
+                        stanceLabel: String(opinion?.stanceLabel || ''),
+                        noteLine: String(opinion?.noteLine || '')
+                    }))
+                }
+                : null;
+            return {
+                available: root.available !== false,
+                id: String(root.id || ''),
+                statusId: String(root.statusId || ''),
+                statusLabel: String(root.statusLabel || ''),
+                pressureScore: clampInt(root.pressureScore, 0, 3),
+                pressureLabel: String(root.pressureLabel || ''),
+                primaryFrontId: String(root.primaryFrontId || ''),
+                primaryFrontLabel: String(root.primaryFrontLabel || ''),
+                primaryFrontShortLabel: String(root.primaryFrontShortLabel || ''),
+                primaryLaneId: String(root.primaryLaneId || ''),
+                primaryAnchorSection: String(root.primaryAnchorSection || ''),
+                summaryLine: String(root.summaryLine || ''),
+                detailLine: String(root.detailLine || ''),
+                guideLine: String(root.guideLine || ''),
+                actionLaneId: String(root.actionLaneId || ''),
+                actionType: String(root.actionType || ''),
+                actionValue: String(root.actionValue || ''),
+                ctaLabel: String(root.ctaLabel || ''),
+                actionTargetLabel: String(root.actionTargetLabel || ''),
+                actionLine: String(root.actionLine || ''),
+                source: String(root.source || ''),
+                sourceId: String(root.sourceId || ''),
+                taskSource: String(root.taskSource || ''),
+                taskSourceId: String(root.taskSourceId || ''),
+                taskId: String(root.taskId || ''),
+                decree,
+                chronicle,
+                council,
+                items: readArray(root.items).map((item, index) => ({
+                    id: String(item?.id || ''),
+                    laneId: String(item?.laneId || ''),
+                    label: String(item?.label || ''),
+                    shortLabel: String(item?.shortLabel || ''),
+                    icon: String(item?.icon || ''),
+                    role: String(item?.role || ''),
+                    roleLabel: String(item?.roleLabel || ''),
+                    statusId: String(item?.statusId || ''),
+                    statusLabel: String(item?.statusLabel || ''),
+                    pressureScore: clampInt(item?.pressureScore, 0, 3),
+                    pressureLabel: String(item?.pressureLabel || ''),
+                    progressText: String(item?.progressText || ''),
+                    completed: !!item?.completed,
+                    summaryLine: String(item?.summaryLine || ''),
+                    detailLine: String(item?.detailLine || ''),
+                    anchorSection: String(item?.anchorSection || ''),
+                    actionType: String(item?.actionType || ''),
+                    actionValue: String(item?.actionValue || ''),
+                    ctaLabel: String(item?.ctaLabel || ''),
+                    actionTargetLabel: String(item?.actionTargetLabel || ''),
+                    priority: clampInt(item?.priority || index + 1, 1, 9)
+                }))
+            };
+        };
         const lanes = readArray(source.lanes).map((lane) => ({
             id: String(lane?.id || ''),
             label: String(lane?.label || ''),
@@ -997,6 +1177,7 @@
             summaryLine: String(lane?.summaryLine || ''),
             completedCount: clampInt(lane?.completedCount, 0, 99),
             totalCount: clampInt(lane?.totalCount, 0, 99),
+            reward: serializeLaneReward(lane?.reward, lane?.id, lane?.label),
             tasks: readArray(lane?.tasks).map((task) => ({
                 id: String(task?.id || ''),
                 label: String(task?.label || ''),
@@ -1010,6 +1191,23 @@
                 anchorSection: String(task?.anchorSection || '')
             }))
         }));
+        const laneRewards = readArray(source.laneRewards)
+            .map((reward) => serializeLaneReward(reward))
+            .filter(Boolean);
+        const canonicalLaneRewards = laneRewards.length > 0
+            ? laneRewards
+            : lanes.map((lane) => lane.reward).filter(Boolean);
+        const laneRewardById = new Map(canonicalLaneRewards.map((reward) => [reward.laneId, reward]));
+        const lanesWithRewards = lanes.map((lane) => ({
+            ...lane,
+            reward: lane.reward || laneRewardById.get(lane.id) || null
+        }));
+        const resolveSummaryCount = (value, fallback = 0) => {
+            const num = Number(value);
+            return Number.isFinite(num)
+                ? Math.max(0, Math.min(99, Math.floor(num)))
+                : fallback;
+        };
         return {
             seasonId: String(source.seasonId || ''),
             seasonLabel: String(source.seasonLabel || ''),
@@ -1095,6 +1293,14 @@
                 lineageStyle: String(entry?.lineageStyle || ''),
                 carryIntoNextWeek: !!entry?.carryIntoNextWeek
             })),
+            laneRewards: canonicalLaneRewards,
+            laneRewardSummary: {
+                readyCount: resolveSummaryCount(source.laneRewardSummary?.readyCount, canonicalLaneRewards.filter((entry) => entry.ready).length),
+                claimableCount: resolveSummaryCount(source.laneRewardSummary?.claimableCount, canonicalLaneRewards.filter((entry) => entry.claimable).length),
+                claimedCount: resolveSummaryCount(source.laneRewardSummary?.claimedCount, canonicalLaneRewards.filter((entry) => entry.claimed).length),
+                totalCount: resolveSummaryCount(source.laneRewardSummary?.totalCount, canonicalLaneRewards.length)
+            },
+            frontier: serializeFrontier(source.frontier),
             nextTask: source.nextTask && typeof source.nextTask === 'object'
                 ? {
                     laneId: String(source.nextTask.laneId || ''),
@@ -1130,7 +1336,7 @@
                     anchorSection: String(source.nextWeekGoal.anchorSection || '')
                 }
                 : null,
-            lanes
+            lanes: lanesWithRewards
         };
     };
 
@@ -5199,6 +5405,181 @@
                         failedCount: payload.expedition.agenda.failedCount || 0
                     }
                     : null;
+                const cloneSeasonBoardLaneReward = (reward = null) => {
+                    if (!reward || typeof reward !== 'object') return null;
+                    const gains = reward.gains && typeof reward.gains === 'object' ? reward.gains : {};
+                    return {
+                        id: reward.id || '',
+                        weekTag: reward.weekTag || '',
+                        weekLabel: reward.weekLabel || '',
+                        laneId: reward.laneId || '',
+                        laneLabel: reward.laneLabel || '',
+                        laneIcon: reward.laneIcon || '',
+                        rewardKey: reward.rewardKey || '',
+                        label: reward.label || '',
+                        summaryLine: reward.summaryLine || '',
+                        detailLine: reward.detailLine || '',
+                        status: reward.status || '',
+                        statusLabel: reward.statusLabel || '',
+                        ready: !!reward.ready,
+                        claimable: !!reward.claimable,
+                        claimed: !!reward.claimed,
+                        claimedAt: reward.claimedAt || 0,
+                        rewardLine: reward.rewardLine || '',
+                        gains: {
+                            insight: gains.insight || 0,
+                            karma: gains.karma || 0,
+                            ringExp: gains.ringExp || 0,
+                            gold: gains.gold || 0
+                        },
+                        buttonLabel: reward.buttonLabel || '',
+                        progressText: reward.progressText || ''
+                    };
+                };
+                const cloneSeasonBoardFrontier = (frontier = null) => {
+                    if (!frontier || typeof frontier !== 'object') return null;
+                    const decree = frontier.decree && typeof frontier.decree === 'object'
+                        ? {
+                            available: frontier.decree.available !== false,
+                            id: frontier.decree.id || '',
+                            weekTag: frontier.decree.weekTag || '',
+                            phaseId: frontier.decree.phaseId || '',
+                            phaseLabel: frontier.decree.phaseLabel || '',
+                            laneId: frontier.decree.laneId || '',
+                            laneLabel: frontier.decree.laneLabel || '',
+                            fullLaneLabel: frontier.decree.fullLaneLabel || '',
+                            statusId: frontier.decree.statusId || '',
+                            statusLabel: frontier.decree.statusLabel || '',
+                            pressureScore: frontier.decree.pressureScore || 0,
+                            tone: frontier.decree.tone || '',
+                            toneLabel: frontier.decree.toneLabel || '',
+                            title: frontier.decree.title || '',
+                            summaryLine: frontier.decree.summaryLine || '',
+                            constraintLine: frontier.decree.constraintLine || '',
+                            successLine: frontier.decree.successLine || '',
+                            riskLine: frontier.decree.riskLine || '',
+                            focusLine: frontier.decree.focusLine || '',
+                            actionLaneId: frontier.decree.actionLaneId || '',
+                            actionType: frontier.decree.actionType || '',
+                            actionValue: frontier.decree.actionValue || '',
+                            actionTargetLabel: frontier.decree.actionTargetLabel || '',
+                            taskId: frontier.decree.taskId || '',
+                            source: frontier.decree.source || '',
+                            sourceId: frontier.decree.sourceId || ''
+                        }
+                        : null;
+                    const chronicle = frontier.chronicle && typeof frontier.chronicle === 'object'
+                        ? {
+                            available: frontier.chronicle.available !== false,
+                            id: frontier.chronicle.id || '',
+                            weekTag: frontier.chronicle.weekTag || '',
+                            phaseId: frontier.chronicle.phaseId || '',
+                            phaseLabel: frontier.chronicle.phaseLabel || '',
+                            laneId: frontier.chronicle.laneId || '',
+                            laneLabel: frontier.chronicle.laneLabel || '',
+                            fullLaneLabel: frontier.chronicle.fullLaneLabel || '',
+                            statusId: frontier.chronicle.statusId || '',
+                            statusLabel: frontier.chronicle.statusLabel || '',
+                            pressureScore: frontier.chronicle.pressureScore || 0,
+                            title: frontier.chronicle.title || '',
+                            summaryLine: frontier.chronicle.summaryLine || '',
+                            currentEntryLine: frontier.chronicle.currentEntryLine || '',
+                            progressLine: frontier.chronicle.progressLine || '',
+                            lessonLine: frontier.chronicle.lessonLine || '',
+                            nextRecordLine: frontier.chronicle.nextRecordLine || '',
+                            actionLaneId: frontier.chronicle.actionLaneId || '',
+                            actionTargetLabel: frontier.chronicle.actionTargetLabel || '',
+                            taskId: frontier.chronicle.taskId || '',
+                            source: frontier.chronicle.source || '',
+                            sourceId: frontier.chronicle.sourceId || ''
+                        }
+                        : null;
+                    const council = frontier.council && typeof frontier.council === 'object'
+                        ? {
+                            available: frontier.council.available !== false,
+                            id: frontier.council.id || '',
+                            weekTag: frontier.council.weekTag || '',
+                            phaseId: frontier.council.phaseId || '',
+                            phaseLabel: frontier.council.phaseLabel || '',
+                            laneId: frontier.council.laneId || '',
+                            laneLabel: frontier.council.laneLabel || '',
+                            fullLaneLabel: frontier.council.fullLaneLabel || '',
+                            statusId: frontier.council.statusId || '',
+                            statusLabel: frontier.council.statusLabel || '',
+                            pressureScore: frontier.council.pressureScore || 0,
+                            title: frontier.council.title || '',
+                            summaryLine: frontier.council.summaryLine || '',
+                            verdictLine: frontier.council.verdictLine || '',
+                            focusLine: frontier.council.focusLine || '',
+                            supportLine: frontier.council.supportLine || '',
+                            auditLine: frontier.council.auditLine || '',
+                            riskLine: frontier.council.riskLine || '',
+                            source: frontier.council.source || '',
+                            sourceId: frontier.council.sourceId || '',
+                            laneOpinions: readArray(frontier.council.laneOpinions).map((opinion) => ({
+                                laneId: opinion?.laneId || '',
+                                laneLabel: opinion?.laneLabel || '',
+                                role: opinion?.role || '',
+                                stance: opinion?.stance || '',
+                                stanceLabel: opinion?.stanceLabel || '',
+                                noteLine: opinion?.noteLine || ''
+                            }))
+                        }
+                        : null;
+                    return {
+                        available: frontier.available !== false,
+                        id: frontier.id || '',
+                        statusId: frontier.statusId || '',
+                        statusLabel: frontier.statusLabel || '',
+                        pressureScore: frontier.pressureScore || 0,
+                        pressureLabel: frontier.pressureLabel || '',
+                        primaryFrontId: frontier.primaryFrontId || '',
+                        primaryFrontLabel: frontier.primaryFrontLabel || '',
+                        primaryFrontShortLabel: frontier.primaryFrontShortLabel || '',
+                        primaryLaneId: frontier.primaryLaneId || '',
+                        primaryAnchorSection: frontier.primaryAnchorSection || '',
+                        summaryLine: frontier.summaryLine || '',
+                        detailLine: frontier.detailLine || '',
+                        guideLine: frontier.guideLine || '',
+                        actionLaneId: frontier.actionLaneId || '',
+                        actionType: frontier.actionType || '',
+                        actionValue: frontier.actionValue || '',
+                        ctaLabel: frontier.ctaLabel || '',
+                        actionTargetLabel: frontier.actionTargetLabel || '',
+                        actionLine: frontier.actionLine || '',
+                        source: frontier.source || '',
+                        sourceId: frontier.sourceId || '',
+                        taskSource: frontier.taskSource || '',
+                        taskSourceId: frontier.taskSourceId || '',
+                        taskId: frontier.taskId || '',
+                        decree,
+                        chronicle,
+                        council,
+                        items: readArray(frontier.items).map((item) => ({
+                            id: item?.id || '',
+                            laneId: item?.laneId || '',
+                            label: item?.label || '',
+                            shortLabel: item?.shortLabel || '',
+                            icon: item?.icon || '',
+                            role: item?.role || '',
+                            roleLabel: item?.roleLabel || '',
+                            statusId: item?.statusId || '',
+                            statusLabel: item?.statusLabel || '',
+                            pressureScore: item?.pressureScore || 0,
+                            pressureLabel: item?.pressureLabel || '',
+                            progressText: item?.progressText || '',
+                            completed: !!item?.completed,
+                            summaryLine: item?.summaryLine || '',
+                            detailLine: item?.detailLine || '',
+                            anchorSection: item?.anchorSection || '',
+                            actionType: item?.actionType || '',
+                            actionValue: item?.actionValue || '',
+                            ctaLabel: item?.ctaLabel || '',
+                            actionTargetLabel: item?.actionTargetLabel || '',
+                            priority: item?.priority || 0
+                        }))
+                    };
+                };
                 payload.map.chapter.seasonBoard = payload.expedition.seasonBoard
                     ? {
                         seasonId: payload.expedition.seasonBoard.seasonId || '',
@@ -5345,6 +5726,16 @@
                             lineageStyle: entry?.lineageStyle || '',
                             carryIntoNextWeek: !!entry?.carryIntoNextWeek
                         })),
+                        laneRewards: readArray(payload.expedition.seasonBoard.laneRewards)
+                            .map((reward) => cloneSeasonBoardLaneReward(reward))
+                            .filter(Boolean),
+                        laneRewardSummary: {
+                            readyCount: payload.expedition.seasonBoard.laneRewardSummary?.readyCount || 0,
+                            claimableCount: payload.expedition.seasonBoard.laneRewardSummary?.claimableCount || 0,
+                            claimedCount: payload.expedition.seasonBoard.laneRewardSummary?.claimedCount || 0,
+                            totalCount: payload.expedition.seasonBoard.laneRewardSummary?.totalCount || 0
+                        },
+                        frontier: cloneSeasonBoardFrontier(payload.expedition.seasonBoard.frontier),
                         nextTask: payload.expedition.seasonBoard.nextTask
                             ? {
                                 laneId: payload.expedition.seasonBoard.nextTask.laneId || '',
@@ -5387,6 +5778,7 @@
                             summaryLine: lane?.summaryLine || '',
                             completedCount: lane?.completedCount || 0,
                             totalCount: lane?.totalCount || 0,
+                            reward: cloneSeasonBoardLaneReward(lane?.reward),
                             tasks: readArray(lane?.tasks).map((task) => ({
                                 id: task?.id || '',
                                 label: task?.label || '',
