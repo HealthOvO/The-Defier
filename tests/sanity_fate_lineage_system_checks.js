@@ -437,11 +437,65 @@ function loadFile(ctx, filePath) {
     anchorSection: 'pvp',
     priority: 1
   });
+  game.seasonVerificationState = game.normalizeSeasonVerificationState({
+    ...game.seasonVerificationState,
+    history: [
+      ...(Array.isArray(game.seasonVerificationState?.history) ? game.seasonVerificationState.history : []),
+      {
+        recordId: 'fate_lineage_frontier_resolution_balance',
+        recordKind: 'frontier_resolution',
+        weekTag: '2026-W16',
+        weekLabel: '第16周',
+        role: 'side',
+        sourceMode: 'sanctum',
+        sourceModeLabel: '诸界会审',
+        label: '诸界会审裁记',
+        resultStatus: 'verified',
+        writebackMode: 'boost_recommendation',
+        frontierResolutionId: 'fate_lineage_frontier_resolution_balance',
+        frontierResolutionChoiceId: 'rebalance_support',
+        frontierResolutionLabel: '副线补证',
+        frontierResolutionStance: 'support_balancer',
+        frontierResolutionSupportLaneId: 'training',
+        frontierResolutionSupportLaneLabel: '采样战线',
+        frontierResolutionSummaryLine: '会审裁记：给采样战线补一份旁证。',
+        chronicleSealStatus: 'sealed',
+        chronicleSealLine: '战役史卷已封记：副线补证。',
+        councilResolutionLine: '诸界会审裁定：副线补证。',
+        frontierResolutionSubmittedAt: now - 6500,
+        createdAt: now - 6500,
+        updatedAt: now - 6500
+      },
+      {
+        recordId: 'fate_lineage_frontier_resolution_hold',
+        recordKind: 'frontier_resolution',
+        weekTag: '2026-W15',
+        weekLabel: '第15周',
+        role: 'side',
+        sourceMode: 'sanctum',
+        sourceModeLabel: '诸界会审',
+        label: '诸界会审裁记',
+        resultStatus: 'verified',
+        writebackMode: 'upgrade_verdict',
+        frontierResolutionId: 'fate_lineage_frontier_resolution_hold',
+        frontierResolutionChoiceId: 'hold_primary',
+        frontierResolutionLabel: '守主战线',
+        frontierResolutionStance: 'frontier_loyalist',
+        frontierResolutionSummaryLine: '会审裁记：继续守住主战线。',
+        chronicleSealStatus: 'sealed',
+        chronicleSealLine: '战役史卷已封记：守主战线。',
+        councilResolutionLine: '诸界会审裁定：守主战线。',
+        frontierResolutionSubmittedAt: now - 8500,
+        createdAt: now - 8500,
+        updatedAt: now - 8500
+      }
+    ]
+  });
 
   const lineageSnapshot = game.getFateLineageSnapshot({ latestSlate: freshSlate });
   assert(lineageSnapshot && lineageSnapshot.available === true, `fate lineage snapshot should be available, got ${JSON.stringify(lineageSnapshot)}`);
   assert(Array.isArray(lineageSnapshot.tracks) && lineageSnapshot.tracks.length >= 4, `fate lineage should expose four tracks, got ${JSON.stringify(lineageSnapshot?.tracks)}`);
-  assert(['character', 'style', 'node', 'research'].every((id) => lineageSnapshot.tracks.some((track) => track.id === id)), `fate lineage should expose character/style/node/research tracks, got ${JSON.stringify(lineageSnapshot.tracks)}`);
+  assert(['character', 'style', 'node', 'research', 'frontier'].every((id) => lineageSnapshot.tracks.some((track) => track.id === id)), `fate lineage should expose character/style/node/research/frontier tracks, got ${JSON.stringify(lineageSnapshot.tracks)}`);
   assert(
     /赛季回写|天道榜主验证通过/.test(String(lineageSnapshot.detailLine || ''))
       && /主验证/.test(String(lineageSnapshot.currentFocusLine || ''))
@@ -456,6 +510,18 @@ function loadFile(ctx, filePath) {
       && ['清账风格', '押榜风格', '拖延风格'].every((label) => lineageSnapshot.researchTrack.entries.some((entry) => entry.label === label))
       && /押榜抢线/.test(String(lineageSnapshot.summaryLine || '')),
     `fate lineage should expose clear/push/deferred verdict styles, got ${JSON.stringify(lineageSnapshot?.researchTrack)}`
+  );
+  assert(
+    lineageSnapshot.progress?.frontierResolutionHistoryCount === 2
+      && lineageSnapshot.progress?.trackedFrontierStyles === 2
+      && lineageSnapshot.frontierTrack?.dominantLabel === '平衡派'
+      && lineageSnapshot.frontierTrack.entries.some((entry) => entry.id === 'support_balancer' && entry.value === 1)
+      && lineageSnapshot.frontierTrack.entries.some((entry) => entry.id === 'frontier_loyalist' && entry.value === 1),
+    `fate lineage should expose frontier council style accumulation without merging it into verification styles, got ${JSON.stringify({
+      progress: lineageSnapshot.progress,
+      frontierTrack: lineageSnapshot.frontierTrack,
+      researchTrack: lineageSnapshot.researchTrack
+    })}`
   );
   const seasonVerificationSnapshot = game.getSeasonVerificationSnapshot();
   assert(

@@ -1339,10 +1339,19 @@ class GameMap {
 
             // Target element in that row
             const targetRowEl = document.querySelector(`.node-row-v3[data-row-index="${targetRowIndex}"]`);
+            const scrollContainer = document.getElementById('map-scroll-container');
             if (targetRowEl) {
-                targetRowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Keep map positioning inside the map pane only. scrollIntoView can move
+                // the whole map surface on mobile, which leaves the page visually cut off.
+                if (scrollContainer) {
+                    const targetTop = targetRowEl.offsetTop - ((scrollContainer.clientHeight - targetRowEl.offsetHeight) / 2);
+                    scrollContainer.scrollTo({
+                        top: Math.max(0, targetTop),
+                        left: 0,
+                        behavior: 'auto',
+                    });
+                }
             } else {
-                const scrollContainer = document.getElementById('map-scroll-container');
                 if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
             }
         }, 150);

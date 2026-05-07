@@ -985,6 +985,111 @@ class Game {
                                         : []
                                 }
                                 : null;
+                            const resolution = frontier.resolution && typeof frontier.resolution === 'object'
+                                ? {
+                                    available: frontier.resolution.available !== false,
+                                    submitted: !!frontier.resolution.submitted,
+                                    id: frontier.resolution.id || '',
+                                    weekTag: frontier.resolution.weekTag || '',
+                                    phaseId: frontier.resolution.phaseId || '',
+                                    phaseLabel: frontier.resolution.phaseLabel || '',
+                                    laneId: frontier.resolution.laneId || '',
+                                    laneLabel: frontier.resolution.laneLabel || '',
+                                    fullLaneLabel: frontier.resolution.fullLaneLabel || '',
+                                    statusId: frontier.resolution.statusId || '',
+                                    statusLabel: frontier.resolution.statusLabel || '',
+                                    choiceId: frontier.resolution.choiceId || '',
+                                    choiceLabel: frontier.resolution.choiceLabel || '',
+                                    suggestedChoiceId: frontier.resolution.suggestedChoiceId || '',
+                                    suggestedChoiceLabel: frontier.resolution.suggestedChoiceLabel || '',
+                                    stanceId: frontier.resolution.stanceId || '',
+                                    supportLaneId: frontier.resolution.supportLaneId || '',
+                                    supportLaneLabel: frontier.resolution.supportLaneLabel || '',
+                                    settlementOutcomeId: frontier.resolution.settlementOutcomeId || '',
+                                    settlementOutcomeLabel: frontier.resolution.settlementOutcomeLabel || '',
+                                    resolutionTier: frontier.resolution.resolutionTier || '',
+                                    resolvedStatus: frontier.resolution.resolvedStatus || '',
+                                    proofQuality: frontier.resolution.proofQuality || '',
+                                    lineageStyle: frontier.resolution.lineageStyle || '',
+                                    summaryLine: frontier.resolution.summaryLine || '',
+                                    chronicleSealLine: frontier.resolution.chronicleSealLine || '',
+                                    councilResolutionLine: frontier.resolution.councilResolutionLine || '',
+                                    source: frontier.resolution.source || '',
+                                    sourceId: frontier.resolution.sourceId || '',
+                                    submittedAt: Math.max(0, Math.floor(Number(frontier.resolution.submittedAt) || 0))
+                                }
+                                : null;
+                            const chronicleArchive = frontier.chronicleArchive && typeof frontier.chronicleArchive === 'object'
+                                ? {
+                                    available: frontier.chronicleArchive.available !== false,
+                                    id: frontier.chronicleArchive.id || '',
+                                    weekTag: frontier.chronicleArchive.weekTag || '',
+                                    weekLabel: frontier.chronicleArchive.weekLabel || '',
+                                    totalRecords: Math.max(0, Math.floor(Number(frontier.chronicleArchive.totalRecords) || 0)),
+                                    sealedCount: Math.max(0, Math.floor(Number(frontier.chronicleArchive.sealedCount) || 0)),
+                                    countsByChoice: {
+                                        hold_primary: Math.max(0, Math.floor(Number(frontier.chronicleArchive.countsByChoice?.hold_primary) || 0)),
+                                        rebalance_support: Math.max(0, Math.floor(Number(frontier.chronicleArchive.countsByChoice?.rebalance_support) || 0)),
+                                        seal_dispute: Math.max(0, Math.floor(Number(frontier.chronicleArchive.countsByChoice?.seal_dispute) || 0))
+                                    },
+                                    countsByStance: {
+                                        frontier_loyalist: Math.max(0, Math.floor(Number(frontier.chronicleArchive.countsByStance?.frontier_loyalist) || 0)),
+                                        support_balancer: Math.max(0, Math.floor(Number(frontier.chronicleArchive.countsByStance?.support_balancer) || 0)),
+                                        dispute_archivist: Math.max(0, Math.floor(Number(frontier.chronicleArchive.countsByStance?.dispute_archivist) || 0))
+                                    },
+                                    dominantStanceId: frontier.chronicleArchive.dominantStanceId || '',
+                                    dominantStanceLabel: frontier.chronicleArchive.dominantStanceLabel || '',
+                                    summaryLine: frontier.chronicleArchive.summaryLine || '',
+                                    detailLine: frontier.chronicleArchive.detailLine || '',
+                                    progressText: frontier.chronicleArchive.progressText || '',
+                                    latestEntry: frontier.chronicleArchive.latestEntry && typeof frontier.chronicleArchive.latestEntry === 'object'
+                                        ? {
+                                            recordId: frontier.chronicleArchive.latestEntry.recordId || '',
+                                            weekTag: frontier.chronicleArchive.latestEntry.weekTag || '',
+                                            weekLabel: frontier.chronicleArchive.latestEntry.weekLabel || '',
+                                            choiceId: frontier.chronicleArchive.latestEntry.choiceId || '',
+                                            choiceLabel: frontier.chronicleArchive.latestEntry.choiceLabel || '',
+                                            stanceId: frontier.chronicleArchive.latestEntry.stanceId || '',
+                                            stanceLabel: frontier.chronicleArchive.latestEntry.stanceLabel || '',
+                                            supportLaneId: frontier.chronicleArchive.latestEntry.supportLaneId || '',
+                                            supportLaneLabel: frontier.chronicleArchive.latestEntry.supportLaneLabel || '',
+                                            summaryLine: frontier.chronicleArchive.latestEntry.summaryLine || '',
+                                            chronicleSealLine: frontier.chronicleArchive.latestEntry.chronicleSealLine || '',
+                                            councilResolutionLine: frontier.chronicleArchive.latestEntry.councilResolutionLine || '',
+                                            submittedAt: Math.max(0, Math.floor(Number(frontier.chronicleArchive.latestEntry.submittedAt) || 0))
+                                        }
+                                        : null,
+                                    styleEntries: Array.isArray(frontier.chronicleArchive.styleEntries)
+                                        ? frontier.chronicleArchive.styleEntries.map((entry) => ({
+                                            id: entry?.id || '',
+                                            label: entry?.label || '',
+                                            choiceId: entry?.choiceId || '',
+                                            choiceLabel: entry?.choiceLabel || '',
+                                            count: Math.max(0, Math.floor(Number(entry?.count) || 0)),
+                                            countText: entry?.countText || '',
+                                            summaryLine: entry?.summaryLine || '',
+                                            latestAt: Math.max(0, Math.floor(Number(entry?.latestAt) || 0))
+                                        }))
+                                        : [],
+                                    entries: Array.isArray(frontier.chronicleArchive.entries)
+                                        ? frontier.chronicleArchive.entries.map((entry) => ({
+                                            recordId: entry?.recordId || '',
+                                            weekTag: entry?.weekTag || '',
+                                            weekLabel: entry?.weekLabel || '',
+                                            choiceId: entry?.choiceId || '',
+                                            choiceLabel: entry?.choiceLabel || '',
+                                            stanceId: entry?.stanceId || '',
+                                            stanceLabel: entry?.stanceLabel || '',
+                                            supportLaneId: entry?.supportLaneId || '',
+                                            supportLaneLabel: entry?.supportLaneLabel || '',
+                                            summaryLine: entry?.summaryLine || '',
+                                            chronicleSealLine: entry?.chronicleSealLine || '',
+                                            councilResolutionLine: entry?.councilResolutionLine || '',
+                                            submittedAt: Math.max(0, Math.floor(Number(entry?.submittedAt) || 0))
+                                        }))
+                                        : []
+                                }
+                                : null;
                             return {
                                 available: frontier.available !== false,
                                 id: frontier.id || '',
@@ -1014,6 +1119,8 @@ class Game {
                                 decree,
                                 chronicle,
                                 council,
+                                resolution,
+                                chronicleArchive,
                                 items: Array.isArray(frontier.items)
                                     ? frontier.items.map((item) => ({
                                         id: item?.id || '',
@@ -1183,7 +1290,18 @@ class Game {
                                                 lineageStyle: expeditionMeta.seasonBoard.weekVerdictLedger.current.lineageStyle || '',
                                                 carryIntoNextWeek: !!expeditionMeta.seasonBoard.weekVerdictLedger.current.carryIntoNextWeek,
                                                 settlementSource: expeditionMeta.seasonBoard.weekVerdictLedger.current.settlementSource || '',
-                                                summaryLine: expeditionMeta.seasonBoard.weekVerdictLedger.current.summaryLine || ''
+                                                summaryLine: expeditionMeta.seasonBoard.weekVerdictLedger.current.summaryLine || '',
+                                                frontierResolutionId: expeditionMeta.seasonBoard.weekVerdictLedger.current.frontierResolutionId || '',
+                                                frontierResolutionChoiceId: expeditionMeta.seasonBoard.weekVerdictLedger.current.frontierResolutionChoiceId || '',
+                                                frontierResolutionLabel: expeditionMeta.seasonBoard.weekVerdictLedger.current.frontierResolutionLabel || '',
+                                                frontierResolutionStance: expeditionMeta.seasonBoard.weekVerdictLedger.current.frontierResolutionStance || '',
+                                                frontierResolutionSupportLaneId: expeditionMeta.seasonBoard.weekVerdictLedger.current.frontierResolutionSupportLaneId || '',
+                                                frontierResolutionSupportLaneLabel: expeditionMeta.seasonBoard.weekVerdictLedger.current.frontierResolutionSupportLaneLabel || '',
+                                                frontierResolutionSummaryLine: expeditionMeta.seasonBoard.weekVerdictLedger.current.frontierResolutionSummaryLine || '',
+                                                chronicleSealStatus: expeditionMeta.seasonBoard.weekVerdictLedger.current.chronicleSealStatus || '',
+                                                chronicleSealLine: expeditionMeta.seasonBoard.weekVerdictLedger.current.chronicleSealLine || '',
+                                                councilResolutionLine: expeditionMeta.seasonBoard.weekVerdictLedger.current.councilResolutionLine || '',
+                                                frontierResolutionSubmittedAt: Math.max(0, Math.floor(Number(expeditionMeta.seasonBoard.weekVerdictLedger.current.frontierResolutionSubmittedAt) || 0))
                                             }
                                         }
                                         : null,
@@ -12203,6 +12321,64 @@ class Game {
     }
 
     // 显示界面
+    resetScreenScrollPosition(screen) {
+        if (!screen) return;
+        const scrollTargets = [
+            screen,
+            ...Array.from(screen.querySelectorAll([
+                '.map-scroll-container',
+                '.codex-scroll-container',
+                '.treasure-compendium-layout',
+                '.ink-scroll-container',
+                '.shop-container',
+                '.reward-shell',
+                '.challenge-scroll-container',
+            ].join(','))),
+        ];
+        try {
+            if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+                window.scrollTo(0, 0);
+            }
+            scrollTargets.forEach((target) => {
+                target.scrollTop = 0;
+                target.scrollLeft = 0;
+                if (typeof target.scrollTo === 'function') {
+                    target.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+                }
+            });
+        } catch (error) {
+            console.warn('[UI] Failed to reset screen scroll position:', error);
+        }
+    }
+
+    dismissBattleOverlaysForScreen(screenId) {
+        if (screenId === 'battle-screen') return;
+
+        const log = document.getElementById('battle-log');
+        if (log) {
+            log.classList.remove('show', 'log-damage', 'log-status', 'log-system', 'log-reward', 'log-warning');
+        }
+
+        const panel = document.getElementById('battle-log-panel');
+        if (panel) {
+            panel.classList.remove('active');
+        }
+
+        if (typeof Utils !== 'undefined' && Utils && Utils._logTimer) {
+            clearTimeout(Utils._logTimer);
+            Utils._logTimer = null;
+        }
+    }
+
+    resetScreenAmbientState(screenId) {
+        if (screenId !== 'realm-select-screen') return;
+
+        const bg = document.getElementById('dynamic-bg');
+        if (bg) {
+            bg.remove();
+        }
+    }
+
     showScreen(screenId) {
         console.log(`[Debug] showScreen called for: ${screenId}`);
         document.querySelectorAll('.screen').forEach(screen => {
@@ -12215,7 +12391,28 @@ class Game {
             // Safety: Ensure screen is visible before running logic that might crash
             screen.classList.add('active');
             this.currentScreen = screenId;
+            if (document.body) {
+                document.body.dataset.currentScreen = screenId;
+            }
+            this.dismissBattleOverlaysForScreen(screenId);
+            this.resetScreenAmbientState(screenId);
+            this.resetScreenScrollPosition(screen);
             console.log(`[Debug] Screen ${screenId} set to active class.`);
+
+            if (screenId === 'map-screen') {
+                const resetMapScroll = () => {
+                    const mapSurface = screen.querySelector('.map-screen-v3');
+                    if (mapSurface) {
+                        mapSurface.scrollTop = 0;
+                        mapSurface.scrollLeft = 0;
+                        if (typeof mapSurface.scrollTo === 'function') {
+                            mapSurface.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+                        }
+                    }
+                };
+                setTimeout(resetMapScroll, 0);
+                setTimeout(resetMapScroll, 220);
+            }
 
             // Use Try-Catch to prevent logical errors from blocking UI rendering (Black Screen Fix)
             try {
@@ -14751,6 +14948,9 @@ class Game {
         const seasonBoardFrontierChronicle = seasonBoardFrontier?.chronicle && typeof seasonBoardFrontier.chronicle === 'object'
             ? seasonBoardFrontier.chronicle
             : null;
+        const seasonBoardFrontierChronicleArchive = seasonBoardFrontier?.chronicleArchive && typeof seasonBoardFrontier.chronicleArchive === 'object'
+            ? seasonBoardFrontier.chronicleArchive
+            : null;
         const seasonBoardFrontierCouncil = seasonBoardFrontier?.council && typeof seasonBoardFrontier.council === 'object'
             ? seasonBoardFrontier.council
             : null;
@@ -15050,6 +15250,9 @@ class Game {
         }
         if (seasonBoardFrontierChronicle?.title) {
             seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="frontier-chronicle" data-season-board-frontier-chronicle-chip="true">${escape(`史卷 · ${seasonBoardFrontierChronicle.laneLabel || seasonBoardFrontier.primaryFrontShortLabel || '主战线'} · ${seasonBoardFrontierChronicle.phaseLabel || '本周'}`)}</span>`);
+        }
+        if (seasonBoardFrontierChronicleArchive?.available) {
+            seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="frontier-chronicle-archive" data-season-board-frontier-chronicle-archive-chip="true">${escape(`史卷回看 · ${seasonBoardFrontierChronicleArchive.dominantStanceLabel || '待沉淀'} · ${seasonBoardFrontierChronicleArchive.progressText || `${seasonBoardFrontierChronicleArchive.totalRecords || 0} 条`}`)}</span>`);
         }
         if (seasonBoardFrontierCouncil?.title) {
             seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="frontier-council" data-season-board-frontier-council-chip="true">${escape(`会审 · ${seasonBoardFrontierCouncil.laneLabel || seasonBoardFrontier.primaryFrontShortLabel || '主战线'} · ${seasonBoardFrontierCouncil.phaseLabel || '本周'}`)}</span>`);
@@ -20424,6 +20627,7 @@ class Game {
         ) || `season_verification_${role}_${index + 1}`;
         const record = {
             recordId: fallbackId,
+            recordKind: sanitizeText(root.recordKind || (root.frontierResolutionChoiceId || root.frontierResolutionId ? 'frontier_resolution' : ''), 40),
             weekTag,
             weekLabel,
             role,
@@ -20454,6 +20658,17 @@ class Game {
             statusLine: sanitizeText(root.statusLine || '', 160),
             anchorSection,
             priority: Math.max(1, Math.min(9, Math.floor(Number(root.priority) || (role === 'primary' ? 1 : 2)))),
+            frontierResolutionId: sanitizeText(root.frontierResolutionId || '', 96),
+            frontierResolutionChoiceId: sanitizeText(root.frontierResolutionChoiceId || root.resolutionChoiceId || root.choiceId || '', 32),
+            frontierResolutionLabel: sanitizeText(root.frontierResolutionLabel || root.choiceLabel || '', 32),
+            frontierResolutionStance: sanitizeText(root.frontierResolutionStance || '', 48),
+            frontierResolutionSupportLaneId: sanitizeText(root.frontierResolutionSupportLaneId || root.supportLaneId || '', 32),
+            frontierResolutionSupportLaneLabel: sanitizeText(root.frontierResolutionSupportLaneLabel || root.supportLaneLabel || '', 24),
+            frontierResolutionSummaryLine: sanitizeText(root.frontierResolutionSummaryLine || '', 220),
+            chronicleSealStatus: sanitizeText(root.chronicleSealStatus || '', 24),
+            chronicleSealLine: sanitizeText(root.chronicleSealLine || '', 220),
+            councilResolutionLine: sanitizeText(root.councilResolutionLine || '', 220),
+            frontierResolutionSubmittedAt: Math.max(0, Math.floor(Number(root.frontierResolutionSubmittedAt || root.resolutionSubmittedAt || 0) || 0)),
             carryIntoNextWeek: !!root.carryIntoNextWeek,
             createdAt,
             updatedAt
@@ -20786,29 +21001,351 @@ class Game {
                 if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
                 return b.createdAt - a.createdAt;
             });
-        const selectLatestRoleRecord = (role) => currentRecords.find((entry) => entry.role === role) || null;
+        const isFrontierResolutionRecord = (entry) => (
+            String(entry?.recordKind || '').trim() === 'frontier_resolution'
+            || !!entry?.frontierResolutionChoiceId
+            || !!entry?.frontierResolutionId
+        );
+        const verificationRecords = currentRecords.filter((entry) => !isFrontierResolutionRecord(entry));
+        const verificationHistory = (Array.isArray(state.history) ? state.history : [])
+            .filter((entry) => !isFrontierResolutionRecord(entry));
+        const selectLatestRoleRecord = (role) => verificationRecords.find((entry) => entry.role === role) || null;
         const primary = selectLatestRoleRecord('primary');
         const side = selectLatestRoleRecord('side');
-        const verifiedCount = currentRecords.filter((entry) => entry.resultStatus === 'verified').length;
-        const failedCount = currentRecords.filter((entry) => entry.resultStatus === 'failed').length;
-        const pendingCount = currentRecords.filter((entry) => ['pending', 'deferred'].includes(entry.resultStatus)).length;
+        const verifiedCount = verificationRecords.filter((entry) => entry.resultStatus === 'verified').length;
+        const failedCount = verificationRecords.filter((entry) => entry.resultStatus === 'failed').length;
+        const pendingCount = verificationRecords.filter((entry) => ['pending', 'deferred'].includes(entry.resultStatus)).length;
         const lastResolved = state.lastResolved && typeof state.lastResolved === 'object'
             ? this.normalizeSeasonVerificationRecord(state.lastResolved)
             : null;
+        const effectiveLastResolved = lastResolved && lastResolved.recordId && !isFrontierResolutionRecord(lastResolved)
+            ? lastResolved
+            : (verificationRecords[0] || null);
         return {
             version: state.version,
-            available: currentRecords.length > 0 || (Array.isArray(state.history) && state.history.length > 0),
+            available: verificationRecords.length > 0 || verificationHistory.length > 0,
             weekTag,
             weekLabel,
-            recordCount: currentRecords.length,
+            recordCount: verificationRecords.length,
             verifiedCount,
             failedCount,
             pendingCount,
             primary,
             side,
-            records: currentRecords.slice(0, 4),
-            history: (Array.isArray(state.history) ? state.history : []).slice(0, 6),
-            lastResolved: lastResolved && lastResolved.recordId ? lastResolved : (currentRecords[0] || null)
+            records: verificationRecords.slice(0, 4),
+            history: verificationHistory.slice(0, 6),
+            lastResolved: effectiveLastResolved
+        };
+    }
+
+    getCommittedSeasonBoardFrontierResolution(options = {}) {
+        const sanitizeText = (value = '', limit = 120) => String(value || '').trim().slice(0, limit);
+        const targetWeekTag = sanitizeText(options.weekTag || options.seasonVerification?.weekTag || '', 24);
+        const sourceState = options.seasonVerification && typeof options.seasonVerification === 'object'
+            ? options.seasonVerification
+            : this.ensureSeasonVerificationState({
+                weekTag: targetWeekTag,
+                weekLabel: options.weekLabel || ''
+            });
+        const records = [
+            ...(Array.isArray(sourceState?.records) ? sourceState.records : []),
+            ...(Array.isArray(sourceState?.history) ? sourceState.history : [])
+        ]
+            .map((entry, index) => this.normalizeSeasonVerificationRecord(entry, index))
+            .filter((entry) => {
+                if (!entry || typeof entry !== 'object') return false;
+                if (targetWeekTag && entry.weekTag !== targetWeekTag) return false;
+                return String(entry.recordKind || '').trim() === 'frontier_resolution'
+                    || !!entry.frontierResolutionChoiceId
+                    || !!entry.frontierResolutionId;
+            })
+            .sort((a, b) => {
+                const aAt = Math.max(a.frontierResolutionSubmittedAt || 0, a.updatedAt || 0, a.createdAt || 0);
+                const bAt = Math.max(b.frontierResolutionSubmittedAt || 0, b.updatedAt || 0, b.createdAt || 0);
+                return bAt - aAt;
+            });
+        const record = records[0] || null;
+        if (!record?.frontierResolutionChoiceId && !record?.frontierResolutionId) return null;
+        const choiceId = sanitizeText(record.frontierResolutionChoiceId, 32);
+        if (!['hold_primary', 'rebalance_support', 'seal_dispute'].includes(choiceId)) return null;
+        return {
+            frontierResolutionId: sanitizeText(record.frontierResolutionId || record.recordId, 96),
+            frontierResolutionChoiceId: choiceId,
+            frontierResolutionLabel: sanitizeText(record.frontierResolutionLabel, 32),
+            frontierResolutionStance: sanitizeText(record.frontierResolutionStance, 48),
+            frontierResolutionSupportLaneId: sanitizeText(record.frontierResolutionSupportLaneId, 32),
+            frontierResolutionSupportLaneLabel: sanitizeText(record.frontierResolutionSupportLaneLabel, 24),
+            frontierResolutionSummaryLine: sanitizeText(record.frontierResolutionSummaryLine || record.summaryLine, 220),
+            chronicleSealStatus: sanitizeText(record.chronicleSealStatus || 'sealed', 24),
+            chronicleSealLine: sanitizeText(record.chronicleSealLine, 220),
+            councilResolutionLine: sanitizeText(record.councilResolutionLine, 220),
+            frontierResolutionSubmittedAt: Math.max(0, Math.floor(Number(record.frontierResolutionSubmittedAt || record.updatedAt || 0) || 0))
+        };
+    }
+
+    getSeasonBoardFrontierResolutionArchiveRecords(options = {}) {
+        const sourceState = options.seasonVerificationState && typeof options.seasonVerificationState === 'object'
+            ? options.seasonVerificationState
+            : (this.seasonVerificationState && typeof this.seasonVerificationState === 'object'
+                ? this.seasonVerificationState
+                : null);
+        const rawRecords = [
+            ...(Array.isArray(sourceState?.records) ? sourceState.records : []),
+            ...(Array.isArray(sourceState?.history) ? sourceState.history : [])
+        ];
+        const validChoices = new Set(['hold_primary', 'rebalance_support', 'seal_dispute']);
+        const seen = new Set();
+        return rawRecords
+            .map((entry, index) => this.normalizeSeasonVerificationRecord(entry, index))
+            .filter((entry) => {
+                if (!entry || typeof entry !== 'object') return false;
+                const choiceId = String(entry.frontierResolutionChoiceId || '').trim();
+                const isFrontierResolution = String(entry.recordKind || '').trim() === 'frontier_resolution'
+                    || !!choiceId
+                    || !!entry.frontierResolutionId;
+                if (!isFrontierResolution || !validChoices.has(choiceId)) return false;
+                const key = String(
+                    entry.recordId
+                    || entry.frontierResolutionId
+                    || `${entry.weekTag || 'weekless'}:${choiceId}:${entry.frontierResolutionSubmittedAt || entry.updatedAt || index}`
+                ).trim();
+                if (!key || seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .sort((a, b) => {
+                const aAt = Math.max(a.frontierResolutionSubmittedAt || 0, a.updatedAt || 0, a.createdAt || 0);
+                const bAt = Math.max(b.frontierResolutionSubmittedAt || 0, b.updatedAt || 0, b.createdAt || 0);
+                if (bAt !== aAt) return bAt - aAt;
+                return String(b.weekTag || '').localeCompare(String(a.weekTag || ''));
+            });
+    }
+
+    buildSeasonBoardFrontierChronicleArchive(frontier = null, context = {}) {
+        const root = frontier && typeof frontier === 'object' ? frontier : null;
+        const sanitize = (value = '', limit = 120) => String(value || '').trim().slice(0, limit);
+        const records = this.getSeasonBoardFrontierResolutionArchiveRecords({
+            seasonVerificationState: context.seasonVerificationState
+        });
+        if (records.length <= 0) return null;
+        const stanceCatalog = {
+            frontier_loyalist: {
+                label: '守线派',
+                choiceId: 'hold_primary',
+                choiceLabel: '守主战线',
+                summaryLine: '长期倾向继续守住主战线，把强目标先压成稳定成果。'
+            },
+            support_balancer: {
+                label: '平衡派',
+                choiceId: 'rebalance_support',
+                choiceLabel: '副线补证',
+                summaryLine: '长期倾向给副线保留证据，让主线推进时也不丢旁证窗口。'
+            },
+            dispute_archivist: {
+                label: '归档派',
+                choiceId: 'seal_dispute',
+                choiceLabel: '封存争议',
+                summaryLine: '长期倾向把争议先封入史卷，保留回看证据而不强改排班。'
+            }
+        };
+        const choiceToStance = {
+            hold_primary: 'frontier_loyalist',
+            rebalance_support: 'support_balancer',
+            seal_dispute: 'dispute_archivist'
+        };
+        const choiceLabelMap = {
+            hold_primary: '守主战线',
+            rebalance_support: '副线补证',
+            seal_dispute: '封存争议'
+        };
+        const countsByChoice = { hold_primary: 0, rebalance_support: 0, seal_dispute: 0 };
+        const countsByStance = {
+            frontier_loyalist: 0,
+            support_balancer: 0,
+            dispute_archivist: 0
+        };
+        const latestAtByStance = {
+            frontier_loyalist: 0,
+            support_balancer: 0,
+            dispute_archivist: 0
+        };
+        const entries = records.map((record, index) => {
+            const choiceId = sanitize(record.frontierResolutionChoiceId, 32);
+            const fallbackStanceId = choiceToStance[choiceId] || 'frontier_loyalist';
+            const rawStanceId = sanitize(record.frontierResolutionStance || fallbackStanceId, 48);
+            const stanceId = stanceCatalog[rawStanceId] ? rawStanceId : fallbackStanceId;
+            const stanceMeta = stanceCatalog[stanceId] || stanceCatalog.frontier_loyalist;
+            const submittedAt = Math.max(0, Math.floor(Number(record.frontierResolutionSubmittedAt || record.updatedAt || record.createdAt || 0) || 0));
+            countsByChoice[choiceId] = (countsByChoice[choiceId] || 0) + 1;
+            countsByStance[stanceId] = (countsByStance[stanceId] || 0) + 1;
+            latestAtByStance[stanceId] = Math.max(latestAtByStance[stanceId] || 0, submittedAt);
+            return {
+                recordId: sanitize(record.recordId || record.frontierResolutionId || `frontier_resolution_archive_${index + 1}`, 96),
+                weekTag: sanitize(record.weekTag, 24),
+                weekLabel: sanitize(record.weekLabel || record.weekTag || '未标周裁记', 32),
+                choiceId,
+                choiceLabel: sanitize(record.frontierResolutionLabel || choiceLabelMap[choiceId] || stanceMeta.choiceLabel, 32),
+                stanceId,
+                stanceLabel: stanceMeta.label,
+                supportLaneId: sanitize(record.frontierResolutionSupportLaneId, 32),
+                supportLaneLabel: sanitize(record.frontierResolutionSupportLaneLabel, 24),
+                summaryLine: sanitize(record.frontierResolutionSummaryLine || record.summaryLine, 220),
+                chronicleSealLine: sanitize(record.chronicleSealLine, 220),
+                councilResolutionLine: sanitize(record.councilResolutionLine, 220),
+                submittedAt
+            };
+        });
+        const styleEntries = Object.entries(stanceCatalog).map(([stanceId, meta]) => ({
+            id: stanceId,
+            label: meta.label,
+            choiceId: meta.choiceId,
+            choiceLabel: meta.choiceLabel,
+            count: Math.max(0, Math.floor(Number(countsByStance[stanceId]) || 0)),
+            countText: countsByStance[stanceId] > 0 ? `${countsByStance[stanceId]} 次裁记` : '等待裁记',
+            summaryLine: meta.summaryLine,
+            latestAt: Math.max(0, Math.floor(Number(latestAtByStance[stanceId]) || 0))
+        }));
+        const dominantStyle = styleEntries
+            .filter((entry) => entry.count > 0)
+            .sort((a, b) => {
+                if (b.count !== a.count) return b.count - a.count;
+                return b.latestAt - a.latestAt;
+            })[0] || null;
+        const latestEntry = entries[0] || null;
+        const primaryLaneLabel = sanitize(root?.primaryFrontShortLabel || root?.primaryFrontLabel || latestEntry?.choiceLabel || '主战线', 24);
+        return {
+            available: true,
+            id: `season_frontier_chronicle_archive_${sanitize(context.weekTag || latestEntry?.weekTag || 'current', 24) || 'current'}`,
+            weekTag: sanitize(context.weekTag || latestEntry?.weekTag || '', 24),
+            weekLabel: sanitize(context.weekLabel || latestEntry?.weekLabel || '', 32),
+            totalRecords: entries.length,
+            sealedCount: entries.length,
+            countsByChoice,
+            countsByStance,
+            dominantStanceId: dominantStyle?.id || '',
+            dominantStanceLabel: dominantStyle?.label || '',
+            summaryLine: dominantStyle
+                ? `战役史卷已封存 ${entries.length} 条会审裁记，当前更常呈现【${dominantStyle.label}】。`
+                : '战役史卷正在等待第一条会审裁记封存。',
+            detailLine: latestEntry
+                ? `最近封记：${latestEntry.weekLabel || latestEntry.weekTag || '本周'} · ${latestEntry.choiceLabel || '裁记'}${latestEntry.supportLaneLabel ? ` · 副线 ${latestEntry.supportLaneLabel}` : ''}。`
+                : `完成本周【${primaryLaneLabel}】会审后，史卷会开始累计长期裁记风格。`,
+            progressText: entries.length > 0 ? `已封 ${entries.length} 条` : '等待封记',
+            latestEntry,
+            styleEntries,
+            entries: entries.slice(0, 6)
+        };
+    }
+
+    normalizeSeasonBoardFrontierChronicleArchive(source = null, context = {}) {
+        const derived = this.buildSeasonBoardFrontierChronicleArchive(context.frontier || null, context);
+        const root = source && typeof source === 'object' ? source : derived;
+        if (!root) return null;
+        const sanitize = (value = '', limit = 120) => String(value || '').trim().slice(0, limit);
+        const choiceLabelMap = {
+            hold_primary: '守主战线',
+            rebalance_support: '副线补证',
+            seal_dispute: '封存争议'
+        };
+        const stanceLabelMap = {
+            frontier_loyalist: '守线派',
+            support_balancer: '平衡派',
+            dispute_archivist: '归档派'
+        };
+        const normalizeEntry = (entry = null, index = 0) => {
+            const item = entry && typeof entry === 'object' ? entry : {};
+            const choiceId = ['hold_primary', 'rebalance_support', 'seal_dispute'].includes(String(item.choiceId || '').trim())
+                ? String(item.choiceId || '').trim()
+                : '';
+            if (!choiceId) return null;
+            const stanceId = String(item.stanceId || '').trim().slice(0, 48)
+                || (choiceId === 'rebalance_support'
+                    ? 'support_balancer'
+                    : (choiceId === 'seal_dispute' ? 'dispute_archivist' : 'frontier_loyalist'));
+            const fallbackStanceId = choiceId === 'rebalance_support'
+                ? 'support_balancer'
+                : (choiceId === 'seal_dispute' ? 'dispute_archivist' : 'frontier_loyalist');
+            const effectiveStanceId = stanceLabelMap[stanceId] ? stanceId : fallbackStanceId;
+            return {
+                recordId: sanitize(item.recordId || item.id || `frontier_resolution_archive_${index + 1}`, 96),
+                weekTag: sanitize(item.weekTag, 24),
+                weekLabel: sanitize(item.weekLabel || item.weekTag || '未标周裁记', 32),
+                choiceId,
+                choiceLabel: sanitize(item.choiceLabel || choiceLabelMap[choiceId] || '裁记', 32),
+                stanceId: effectiveStanceId,
+                stanceLabel: sanitize(item.stanceLabel || stanceLabelMap[effectiveStanceId] || '裁记风格', 32),
+                supportLaneId: sanitize(item.supportLaneId, 32),
+                supportLaneLabel: sanitize(item.supportLaneLabel, 24),
+                summaryLine: sanitize(item.summaryLine, 220),
+                chronicleSealLine: sanitize(item.chronicleSealLine, 220),
+                councilResolutionLine: sanitize(item.councilResolutionLine, 220),
+                submittedAt: Math.max(0, Math.floor(Number(item.submittedAt || item.updatedAt || item.createdAt || 0) || 0))
+            };
+        };
+        const entries = (Array.isArray(root.entries) ? root.entries : [])
+            .map(normalizeEntry)
+            .filter(Boolean)
+            .slice(0, 6);
+        const latestEntry = normalizeEntry(root.latestEntry) || entries[0] || null;
+        const styleEntries = (Array.isArray(root.styleEntries) ? root.styleEntries : [])
+            .filter((entry) => entry && typeof entry === 'object')
+            .slice(0, 3)
+            .map((entry) => {
+                const stanceId = sanitize(entry.id || entry.stanceId, 48);
+                const count = Math.max(0, Math.floor(Number(entry.count || entry.value || 0) || 0));
+                return {
+                    id: stanceId,
+                    label: sanitize(entry.label || stanceLabelMap[stanceId] || '裁记风格', 32),
+                    choiceId: sanitize(entry.choiceId, 32),
+                    choiceLabel: sanitize(entry.choiceLabel || choiceLabelMap[entry.choiceId] || '', 32),
+                    count,
+                    countText: sanitize(entry.countText || (count > 0 ? `${count} 次裁记` : '等待裁记'), 48),
+                    summaryLine: sanitize(entry.summaryLine, 180),
+                    latestAt: Math.max(0, Math.floor(Number(entry.latestAt || 0) || 0))
+                };
+            });
+        const totalRecords = Math.max(
+            entries.length,
+            Math.max(0, Math.floor(Number(root.totalRecords || root.sealedCount || 0) || 0))
+        );
+        if (root.available === false || totalRecords <= 0 || !latestEntry) return null;
+        const countsByChoice = ['hold_primary', 'rebalance_support', 'seal_dispute'].reduce((acc, choiceId) => {
+            acc[choiceId] = Math.max(0, Math.floor(Number(root.countsByChoice?.[choiceId]) || 0));
+            return acc;
+        }, {});
+        if (Object.values(countsByChoice).every((value) => value <= 0)) {
+            entries.forEach((entry) => {
+                countsByChoice[entry.choiceId] = (countsByChoice[entry.choiceId] || 0) + 1;
+            });
+        }
+        const countsByStance = ['frontier_loyalist', 'support_balancer', 'dispute_archivist'].reduce((acc, stanceId) => {
+            acc[stanceId] = Math.max(0, Math.floor(Number(root.countsByStance?.[stanceId]) || 0));
+            return acc;
+        }, {});
+        if (Object.values(countsByStance).every((value) => value <= 0)) {
+            entries.forEach((entry) => {
+                countsByStance[entry.stanceId] = (countsByStance[entry.stanceId] || 0) + 1;
+            });
+        }
+        const dominantStanceId = sanitize(root.dominantStanceId || styleEntries.find((entry) => entry.count > 0)?.id || latestEntry.stanceId, 48);
+        const dominantStanceLabel = sanitize(root.dominantStanceLabel || stanceLabelMap[dominantStanceId] || latestEntry.stanceLabel, 32);
+        return {
+            available: true,
+            id: sanitize(root.id || `season_frontier_chronicle_archive_${context.weekTag || latestEntry.weekTag || 'current'}`, 96),
+            weekTag: sanitize(root.weekTag || context.weekTag || latestEntry.weekTag || '', 24),
+            weekLabel: sanitize(root.weekLabel || context.weekLabel || latestEntry.weekLabel || '', 32),
+            totalRecords,
+            sealedCount: Math.max(totalRecords, Math.floor(Number(root.sealedCount || 0) || 0)),
+            countsByChoice,
+            countsByStance,
+            dominantStanceId,
+            dominantStanceLabel,
+            summaryLine: sanitize(root.summaryLine || `战役史卷已封存 ${totalRecords} 条会审裁记，当前更常呈现【${dominantStanceLabel || '裁记风格'}】。`, 220),
+            detailLine: sanitize(root.detailLine || `最近封记：${latestEntry.weekLabel || latestEntry.weekTag || '本周'} · ${latestEntry.choiceLabel || '裁记'}。`, 220),
+            progressText: sanitize(root.progressText || `已封 ${totalRecords} 条`, 48),
+            latestEntry,
+            styleEntries,
+            entries
         };
     }
 
@@ -21009,8 +21546,15 @@ class Game {
             deferred: '延期',
             pending: '待验证'
         };
+        const isFrontierResolutionRecord = (entry) => (
+            String(entry?.recordKind || '').trim() === 'frontier_resolution'
+            || !!entry?.frontierResolutionChoiceId
+            || !!entry?.frontierResolutionId
+        );
         const source = Array.isArray(seasonVerification?.history) ? seasonVerification.history : [];
-        const entries = source.map((rawEntry, index) => {
+        const entries = source
+            .filter((rawEntry) => !isFrontierResolutionRecord(rawEntry))
+            .map((rawEntry, index) => {
             const record = this.normalizeSeasonVerificationRecord(rawEntry, index);
             const matchesCurrentWeek = !!currentWeekTag && String(record.weekTag || '').trim() === currentWeekTag;
             const effectivePhaseId = String(record.phaseId || (matchesCurrentWeek ? phase?.id : '') || '').trim();
@@ -21104,7 +21648,10 @@ class Game {
             ? `已归档 ${entries.length} 条`
             : '等待首条周判';
         return this.normalizeSeasonVerificationArchiveSnapshot({
-            available: entries.length > 0 || (Array.isArray(seasonVerification?.records) && seasonVerification.records.length > 0),
+            available: entries.length > 0 || (
+                Array.isArray(seasonVerification?.records)
+                && seasonVerification.records.some((entry) => !isFrontierResolutionRecord(entry))
+            ),
             weekTag: currentWeekTag,
             weekLabel: currentWeekLabel,
             totalRecords: entries.length,
@@ -22635,7 +23182,18 @@ class Game {
                 lineageStyle: String(currentSource.lineageStyle || '').trim().slice(0, 48),
                 carryIntoNextWeek: !!currentSource.carryIntoNextWeek,
                 settlementSource: String(currentSource.settlementSource || '').trim().slice(0, 24),
-                summaryLine: String(currentSource.summaryLine || '').trim().slice(0, 220)
+                summaryLine: String(currentSource.summaryLine || '').trim().slice(0, 220),
+                frontierResolutionId: String(currentSource.frontierResolutionId || '').trim().slice(0, 96),
+                frontierResolutionChoiceId: String(currentSource.frontierResolutionChoiceId || currentSource.resolutionChoiceId || currentSource.choiceId || '').trim().slice(0, 32),
+                frontierResolutionLabel: String(currentSource.frontierResolutionLabel || currentSource.choiceLabel || '').trim().slice(0, 32),
+                frontierResolutionStance: String(currentSource.frontierResolutionStance || '').trim().slice(0, 48),
+                frontierResolutionSupportLaneId: String(currentSource.frontierResolutionSupportLaneId || currentSource.supportLaneId || '').trim().slice(0, 32),
+                frontierResolutionSupportLaneLabel: String(currentSource.frontierResolutionSupportLaneLabel || currentSource.supportLaneLabel || '').trim().slice(0, 24),
+                frontierResolutionSummaryLine: String(currentSource.frontierResolutionSummaryLine || '').trim().slice(0, 220),
+                chronicleSealStatus: String(currentSource.chronicleSealStatus || '').trim().slice(0, 24),
+                chronicleSealLine: String(currentSource.chronicleSealLine || '').trim().slice(0, 220),
+                councilResolutionLine: String(currentSource.councilResolutionLine || '').trim().slice(0, 220),
+                frontierResolutionSubmittedAt: Math.max(0, Math.floor(Number(currentSource.frontierResolutionSubmittedAt || currentSource.resolutionSubmittedAt) || 0))
             }
             : null;
         return current && Object.values(current).some((value) => value !== '' && value !== 0)
@@ -23519,6 +24077,12 @@ class Game {
             phaseLabel,
             weekTag
         });
+        frontier.resolution = this.buildSeasonBoardFrontierResolution(frontier, {
+            ...context,
+            phaseId,
+            phaseLabel,
+            weekTag
+        });
         return frontier;
     }
 
@@ -23746,6 +24310,178 @@ class Game {
         };
     }
 
+    buildSeasonBoardFrontierResolution(frontier = null, context = {}) {
+        const root = frontier && typeof frontier === 'object' ? frontier : null;
+        if (!root) return null;
+        const sanitize = (value = '', limit = 120) => String(value || '').trim().slice(0, limit);
+        const laneId = sanitize(root.primaryFrontId || root.primaryLaneId || root.actionLaneId || '', 32);
+        if (!laneId) return null;
+        const laneLabel = sanitize(root.primaryFrontShortLabel || root.primaryFrontLabel || '主战线', 24) || '主战线';
+        const fullLaneLabel = sanitize(root.primaryFrontLabel || root.primaryFrontShortLabel || laneLabel, 48) || laneLabel;
+        const pressureScore = Math.max(0, Math.min(3, Math.floor(Number(root.pressureScore) || 0)));
+        const statusId = sanitize(root.statusId || (pressureScore >= 3 ? 'high_pressure' : (pressureScore >= 2 ? 'pressure' : (pressureScore >= 1 ? 'pending' : 'stable'))), 24);
+        const statusLabel = sanitize(root.statusLabel || root.pressureLabel || (pressureScore >= 3 ? '高压' : (pressureScore >= 2 ? '承压' : (pressureScore >= 1 ? '待补样' : '稳态'))), 24);
+        const weekTag = sanitize(context.weekTag || root.weekTag || '', 24);
+        const phaseId = sanitize(context.phaseId || root.phaseId || '', 32) || 'sampling';
+        const phaseLabel = sanitize(context.phaseLabel || root.phaseLabel || '', 24) || '采样期';
+        const settlement = context.settlement && typeof context.settlement === 'object' ? context.settlement : null;
+        const debtPack = context.debtPack && typeof context.debtPack === 'object' ? context.debtPack : null;
+        const weekVerdictCurrent = context.weekVerdictLedger?.current && typeof context.weekVerdictLedger.current === 'object'
+            ? context.weekVerdictLedger.current
+            : null;
+        const council = root.council && typeof root.council === 'object' ? root.council : null;
+        const chronicle = root.chronicle && typeof root.chronicle === 'object' ? root.chronicle : null;
+        const supportOpinion = Array.isArray(council?.laneOpinions)
+            ? council.laneOpinions.find((opinion) => opinion && opinion.laneId && opinion.laneId !== laneId && opinion.role !== 'reserve')
+                || council.laneOpinions.find((opinion) => opinion && opinion.laneId && opinion.laneId !== laneId)
+                || null
+            : null;
+        const supportLaneId = sanitize(
+            weekVerdictCurrent?.frontierResolutionSupportLaneId
+            || weekVerdictCurrent?.supportLaneId
+            || supportOpinion?.laneId
+            || '',
+            32
+        );
+        const supportLaneLabel = sanitize(
+            weekVerdictCurrent?.frontierResolutionSupportLaneLabel
+            || weekVerdictCurrent?.supportLaneLabel
+            || supportOpinion?.laneLabel
+            || '',
+            24
+        );
+        const settlementOutcomeId = sanitize(
+            settlement?.outcomeId
+            || weekVerdictCurrent?.settlementOutcomeId
+            || '',
+            32
+        );
+        const settlementOutcomeLabel = sanitize(
+            settlement?.outcomeLabel
+            || weekVerdictCurrent?.settlementOutcomeLabel
+            || '',
+            24
+        );
+        const debtStatus = sanitize(debtPack?.status || weekVerdictCurrent?.debtStatus || '', 24);
+        const hardDebtActive = ['open', 'deferred'].includes(debtStatus) || settlementOutcomeId === 'debt_sheet';
+        const primaryComplete = Array.isArray(root.items)
+            ? !!root.items.find((item) => (item?.laneId === laneId || item?.id === laneId) && item.completed)
+            : false;
+        const suggestedChoiceId = hardDebtActive
+            ? 'hold_primary'
+            : (supportLaneId && primaryComplete ? 'rebalance_support' : 'hold_primary');
+        const choiceCatalog = {
+            hold_primary: {
+                label: '守主战线',
+                stanceId: 'frontier_loyalist',
+                summary: `会审裁记待封：建议继续守住【${laneLabel}】，先完成主战线一格。`
+            },
+            rebalance_support: {
+                label: '副线补证',
+                stanceId: 'support_balancer',
+                summary: `会审裁记待封：建议在不抢强目标的前提下，给【${supportLaneLabel || '副战线'}】补一份证据。`
+            },
+            seal_dispute: {
+                label: '封存争议',
+                stanceId: 'dispute_archivist',
+                summary: '会审裁记待封：建议本周只封存争议，不改写下周普通排班。'
+            }
+        };
+        const rawChoiceId = sanitize(
+            weekVerdictCurrent?.frontierResolutionChoiceId
+            || weekVerdictCurrent?.resolutionChoiceId
+            || weekVerdictCurrent?.choiceId
+            || '',
+            32
+        );
+        const submittedChoiceId = Object.prototype.hasOwnProperty.call(choiceCatalog, rawChoiceId) ? rawChoiceId : '';
+        const submitted = !!(
+            weekVerdictCurrent?.frontierResolutionId
+            || weekVerdictCurrent?.frontierResolutionSubmittedAt
+            || weekVerdictCurrent?.chronicleSealStatus === 'sealed'
+            || submittedChoiceId
+        );
+        const effectiveChoiceId = submitted ? (submittedChoiceId || suggestedChoiceId) : suggestedChoiceId;
+        const choiceMeta = choiceCatalog[effectiveChoiceId] || choiceCatalog.hold_primary;
+        const source = weekVerdictCurrent
+            ? 'week_verdict_ledger'
+            : (settlement ? 'settlement' : 'frontier');
+        const sourceId = sanitize(
+            weekVerdictCurrent?.ledgerId
+            || settlement?.id
+            || root.id
+            || '',
+            96
+        );
+        const choiceLabel = submitted
+            ? sanitize(weekVerdictCurrent?.frontierResolutionLabel || weekVerdictCurrent?.choiceLabel || choiceMeta.label, 32)
+            : '';
+        const summaryLine = sanitize(
+            weekVerdictCurrent?.frontierResolutionSummaryLine
+            || weekVerdictCurrent?.councilResolutionLine
+            || (
+                submitted
+                    ? `本周会审裁记：采用【${choiceLabel || choiceMeta.label}】，${effectiveChoiceId === 'rebalance_support' ? `副线【${supportLaneLabel || '副战线'}】获得补证优先。` : (effectiveChoiceId === 'seal_dispute' ? '争议先封入史卷，不改写排班。' : `主战线【${laneLabel}】继续优先。`)}`
+                    : choiceMeta.summary
+            ),
+            220
+        );
+        const chronicleSealLine = sanitize(
+            weekVerdictCurrent?.chronicleSealLine
+            || (
+                submitted
+                    ? `战役史卷已封记：${choiceLabel || choiceMeta.label} · ${laneLabel}${supportLaneLabel ? ` / ${supportLaneLabel}` : ''}。`
+                    : `战役史卷待封记：${chronicle?.nextRecordLine || `完成【${laneLabel}】一格后回季盘封记。`}`
+            ),
+            220
+        );
+        const councilResolutionLine = sanitize(
+            weekVerdictCurrent?.councilResolutionLine
+            || (
+                submitted
+                    ? `诸界会审裁定：${summaryLine}`
+                    : `诸界会审待裁记：${council?.verdictLine || `先守【${laneLabel}】，副线保留证据。`}`
+            ),
+            220
+        );
+        return {
+            available: true,
+            submitted,
+            id: sanitize(
+                weekVerdictCurrent?.frontierResolutionId
+                || `season_frontier_resolution_${weekTag || 'current'}_${submitted ? effectiveChoiceId : 'pending'}_${laneId}`,
+                96
+            ),
+            weekTag,
+            phaseId,
+            phaseLabel,
+            laneId,
+            laneLabel,
+            fullLaneLabel,
+            statusId,
+            statusLabel,
+            choiceId: submitted ? effectiveChoiceId : '',
+            choiceLabel,
+            suggestedChoiceId,
+            suggestedChoiceLabel: choiceCatalog[suggestedChoiceId]?.label || choiceCatalog.hold_primary.label,
+            stanceId: sanitize(weekVerdictCurrent?.frontierResolutionStance || choiceMeta.stanceId, 48),
+            supportLaneId,
+            supportLaneLabel,
+            settlementOutcomeId,
+            settlementOutcomeLabel,
+            resolutionTier: sanitize(settlement?.resolutionTier || weekVerdictCurrent?.resolutionTier || '', 24),
+            resolvedStatus: sanitize(settlement?.resolvedStatus || weekVerdictCurrent?.resolvedStatus || debtStatus || '', 24),
+            proofQuality: sanitize(settlement?.proofQuality || weekVerdictCurrent?.proofQuality || '', 24),
+            lineageStyle: sanitize(settlement?.lineageStyle || weekVerdictCurrent?.lineageStyle || '', 48),
+            summaryLine,
+            chronicleSealLine,
+            councilResolutionLine,
+            source,
+            sourceId,
+            submittedAt: Math.max(0, Math.floor(Number(weekVerdictCurrent?.frontierResolutionSubmittedAt || 0) || 0))
+        };
+    }
+
     normalizeSeasonBoardFrontierDecree(source = null, context = {}) {
         const frontier = context.frontier && typeof context.frontier === 'object' ? context.frontier : null;
         const derived = this.buildSeasonBoardFrontierDecree(frontier, context);
@@ -23933,6 +24669,84 @@ class Game {
             : null;
     }
 
+    normalizeSeasonBoardFrontierResolution(source = null, context = {}) {
+        const frontier = context.frontier && typeof context.frontier === 'object' ? context.frontier : null;
+        const derived = this.buildSeasonBoardFrontierResolution(frontier, context);
+        const root = source && typeof source === 'object' ? source : derived;
+        if (!root) return null;
+        const canonical = derived && typeof derived === 'object'
+            ? {
+                ...derived,
+                ...(root.submitted ? root : {})
+            }
+            : root;
+        const sanitize = (value = '', limit = 120) => String(value || '').trim().slice(0, limit);
+        const laneId = sanitize(canonical.laneId || root.laneId || frontier?.primaryFrontId || '', 32);
+        if (!laneId) return null;
+        const suggestedChoiceId = ['hold_primary', 'rebalance_support', 'seal_dispute'].includes(String(canonical.suggestedChoiceId || '').trim())
+            ? String(canonical.suggestedChoiceId || '').trim()
+            : 'hold_primary';
+        const choiceId = ['hold_primary', 'rebalance_support', 'seal_dispute'].includes(String(canonical.choiceId || '').trim())
+            ? String(canonical.choiceId || '').trim()
+            : '';
+        const submitted = !!canonical.submitted && !!choiceId;
+        const choiceLabelMap = {
+            hold_primary: '守主战线',
+            rebalance_support: '副线补证',
+            seal_dispute: '封存争议'
+        };
+        const normalized = {
+            available: root.available !== false,
+            submitted,
+            id: sanitize(canonical.id || root.id || `season_frontier_resolution_${context.weekTag || 'current'}_${submitted ? choiceId : 'pending'}_${laneId}`, 96),
+            weekTag: sanitize(canonical.weekTag || root.weekTag || context.weekTag || '', 24),
+            phaseId: sanitize(canonical.phaseId || root.phaseId || context.phaseId || '', 32) || 'sampling',
+            phaseLabel: sanitize(canonical.phaseLabel || root.phaseLabel || context.phaseLabel || '', 24) || '采样期',
+            laneId,
+            laneLabel: sanitize(canonical.laneLabel || root.laneLabel || frontier?.primaryFrontShortLabel || frontier?.primaryFrontLabel || '主战线', 24) || '主战线',
+            fullLaneLabel: sanitize(canonical.fullLaneLabel || root.fullLaneLabel || frontier?.primaryFrontLabel || frontier?.primaryFrontShortLabel || '主战线', 48) || '主战线',
+            statusId: sanitize(canonical.statusId || root.statusId || frontier?.statusId || '', 24),
+            statusLabel: sanitize(canonical.statusLabel || root.statusLabel || frontier?.statusLabel || frontier?.pressureLabel || '', 24),
+            choiceId: submitted ? choiceId : '',
+            choiceLabel: submitted ? (sanitize(canonical.choiceLabel || root.choiceLabel || choiceLabelMap[choiceId] || '', 32)) : '',
+            suggestedChoiceId,
+            suggestedChoiceLabel: sanitize(canonical.suggestedChoiceLabel || root.suggestedChoiceLabel || choiceLabelMap[suggestedChoiceId] || '', 32),
+            stanceId: sanitize(canonical.stanceId || root.stanceId || '', 48),
+            supportLaneId: sanitize(canonical.supportLaneId || root.supportLaneId || '', 32),
+            supportLaneLabel: sanitize(canonical.supportLaneLabel || root.supportLaneLabel || '', 24),
+            settlementOutcomeId: sanitize(canonical.settlementOutcomeId || root.settlementOutcomeId || context.settlement?.outcomeId || '', 32),
+            settlementOutcomeLabel: sanitize(canonical.settlementOutcomeLabel || root.settlementOutcomeLabel || context.settlement?.outcomeLabel || '', 24),
+            resolutionTier: sanitize(canonical.resolutionTier || root.resolutionTier || context.settlement?.resolutionTier || '', 24),
+            resolvedStatus: sanitize(canonical.resolvedStatus || root.resolvedStatus || context.settlement?.resolvedStatus || '', 24),
+            proofQuality: sanitize(canonical.proofQuality || root.proofQuality || context.settlement?.proofQuality || '', 24),
+            lineageStyle: sanitize(canonical.lineageStyle || root.lineageStyle || context.settlement?.lineageStyle || '', 48),
+            summaryLine: sanitize(canonical.summaryLine || root.summaryLine || '', 220),
+            chronicleSealLine: sanitize(canonical.chronicleSealLine || root.chronicleSealLine || '', 220),
+            councilResolutionLine: sanitize(canonical.councilResolutionLine || root.councilResolutionLine || '', 220),
+            source: sanitize(canonical.source || root.source || 'frontier', 40) || 'frontier',
+            sourceId: sanitize(canonical.sourceId || root.sourceId || frontier?.id || '', 96),
+            submittedAt: Math.max(0, Math.floor(Number(canonical.submittedAt || root.submittedAt) || 0))
+        };
+        if (!normalized.summaryLine) {
+            normalized.summaryLine = normalized.submitted
+                ? `本周会审裁记：采用【${normalized.choiceLabel || '裁记'}】，写入战役史卷。`
+                : `会审裁记待封：建议【${normalized.suggestedChoiceLabel || '守主战线'}】。`;
+        }
+        if (!normalized.chronicleSealLine) {
+            normalized.chronicleSealLine = normalized.submitted
+                ? `战役史卷已封记：${normalized.choiceLabel || normalized.laneLabel}。`
+                : `战役史卷待封记：完成【${normalized.laneLabel}】一格后回季盘封记。`;
+        }
+        if (!normalized.councilResolutionLine) {
+            normalized.councilResolutionLine = normalized.submitted
+                ? `诸界会审裁定：${normalized.summaryLine}`
+                : `诸界会审待裁记：先守【${normalized.laneLabel}】，副线保留证据。`;
+        }
+        return normalized.summaryLine || normalized.chronicleSealLine || normalized.councilResolutionLine
+            ? normalized
+            : null;
+    }
+
     normalizeSeasonBoardFrontier(source = null, context = {}) {
         const derived = this.buildSeasonBoardFrontier(context.lanes, context);
         const root = source && typeof source === 'object' ? source : derived;
@@ -24023,6 +24837,8 @@ class Game {
             decree: null,
             chronicle: null,
             council: null,
+            resolution: null,
+            chronicleArchive: null,
             items
         };
         if (!normalized.actionLine) {
@@ -24040,9 +24856,223 @@ class Game {
             ...context,
             frontier: normalized
         });
+        normalized.resolution = this.normalizeSeasonBoardFrontierResolution(canonical.resolution || root.resolution, {
+            ...context,
+            frontier: normalized
+        });
+        normalized.chronicleArchive = this.normalizeSeasonBoardFrontierChronicleArchive(canonical.chronicleArchive || root.chronicleArchive, {
+            ...context,
+            frontier: normalized
+        });
         return normalized.summaryLine || normalized.guideLine || normalized.items.length > 0
             ? normalized
             : null;
+    }
+
+    commitSeasonBoardFrontierResolution(choiceId = '', options = {}) {
+        const sanitizeText = (value = '', limit = 120) => String(value || '').trim().slice(0, limit);
+        const choiceCatalog = {
+            hold_primary: {
+                label: '守主战线',
+                stanceId: 'frontier_loyalist',
+                writebackMode: 'upgrade_verdict'
+            },
+            rebalance_support: {
+                label: '副线补证',
+                stanceId: 'support_balancer',
+                writebackMode: 'boost_recommendation'
+            },
+            seal_dispute: {
+                label: '封存争议',
+                stanceId: 'dispute_archivist',
+                writebackMode: 'carry_forward'
+            }
+        };
+        const targetChoiceId = sanitizeText(choiceId, 32);
+        const failure = (reason, detail = {}) => {
+            this.lastSeasonBoardFrontierResolutionCommit = {
+                ok: false,
+                reason,
+                choiceId: targetChoiceId,
+                ...detail,
+                submittedAt: 0
+            };
+            return this.lastSeasonBoardFrontierResolutionCommit;
+        };
+        if (!Object.prototype.hasOwnProperty.call(choiceCatalog, targetChoiceId)) {
+            return failure('invalid_choice');
+        }
+
+        const board = options?.board && typeof options.board === 'object'
+            ? this.normalizeSeasonBoardSnapshot(options.board)
+            : (typeof this.getSeasonBoardSnapshot === 'function'
+                ? this.getSeasonBoardSnapshot(options)
+                : null);
+        const frontier = board?.frontier && typeof board.frontier === 'object' ? board.frontier : null;
+        const resolution = frontier?.resolution && typeof frontier.resolution === 'object' ? frontier.resolution : null;
+        if (!board || !frontier || !resolution?.available) {
+            return failure('not_available', { board });
+        }
+        const weekTag = sanitizeText(resolution.weekTag || board.weekTag || '', 24);
+        const weekLabel = sanitizeText(board.weekLabel || '', 32);
+        if (!weekTag) return failure('missing_week', { resolution });
+
+        const state = this.ensureSeasonVerificationState({ weekTag, weekLabel });
+        const existing = this.getCommittedSeasonBoardFrontierResolution({
+            weekTag,
+            weekLabel,
+            seasonVerification: state
+        });
+        if (existing || resolution.submitted) {
+            return failure('already_submitted', {
+                resolution,
+                committed: existing
+            });
+        }
+
+        const meta = choiceCatalog[targetChoiceId];
+        const primaryLaneId = sanitizeText(resolution.laneId || frontier.primaryFrontId || '', 32);
+        const primaryLaneLabel = sanitizeText(resolution.laneLabel || frontier.primaryFrontShortLabel || frontier.primaryFrontLabel || '主战线', 24) || '主战线';
+        const supportItem = Array.isArray(frontier.items)
+            ? frontier.items.find((item) => item && item.laneId && item.laneId !== primaryLaneId && item.role !== 'reserve')
+                || frontier.items.find((item) => item && item.laneId && item.laneId !== primaryLaneId)
+                || null
+            : null;
+        const supportLaneId = targetChoiceId === 'rebalance_support'
+            ? sanitizeText(resolution.supportLaneId || supportItem?.laneId || supportItem?.id || '', 32)
+            : '';
+        const supportLaneLabel = targetChoiceId === 'rebalance_support'
+            ? sanitizeText(resolution.supportLaneLabel || supportItem?.shortLabel || supportItem?.label || '副战线', 24)
+            : '';
+        const submittedAt = Math.max(0, Math.floor(Number(options.submittedAt || Date.now()) || 0));
+        const ledger = board.weekVerdictLedger?.current && typeof board.weekVerdictLedger.current === 'object'
+            ? board.weekVerdictLedger.current
+            : null;
+        const settlement = board.settlement && typeof board.settlement === 'object' ? board.settlement : null;
+        const summaryLine = targetChoiceId === 'rebalance_support'
+            ? `本周会审裁记：给【${supportLaneLabel || '副战线'}】补一份旁证，但不抢【${primaryLaneLabel}】主行动。`
+            : (targetChoiceId === 'seal_dispute'
+                ? '本周会审裁记：争议先封入史卷，本周不改写三线排班。'
+                : `本周会审裁记：继续守住【${primaryLaneLabel}】，先完成主战线一格。`);
+        const chronicleSealLine = targetChoiceId === 'rebalance_support'
+            ? `战役史卷已封记：${meta.label} · ${primaryLaneLabel}${supportLaneLabel ? ` / ${supportLaneLabel}` : ''}。`
+            : (targetChoiceId === 'seal_dispute'
+                ? `战役史卷已封记：${meta.label} · 会审争议暂不改写排班。`
+                : `战役史卷已封记：${meta.label} · ${primaryLaneLabel}继续优先。`);
+        const councilResolutionLine = `诸界会审裁定：${summaryLine}`;
+        const record = this.normalizeSeasonVerificationRecord({
+            recordId: `season_frontier_resolution_${weekTag}`,
+            recordKind: 'frontier_resolution',
+            weekTag,
+            weekLabel,
+            role: 'side',
+            sourceMode: 'sanctum',
+            sourceModeLabel: '诸界会审',
+            sourceLabel: frontier.primaryFrontLabel || primaryLaneLabel,
+            label: '诸界会审裁记',
+            resultStatus: 'verified',
+            writebackMode: meta.writebackMode,
+            phaseId: sanitizeText(board.phaseId || resolution.phaseId || ledger?.phaseId || '', 32),
+            phaseLabel: sanitizeText(board.phaseLabel || resolution.phaseLabel || ledger?.phaseLabel || '', 24),
+            settlementId: sanitizeText(settlement?.id || ledger?.settlementId || '', 96),
+            settlementOutcomeId: sanitizeText(settlement?.outcomeId || resolution.settlementOutcomeId || ledger?.settlementOutcomeId || '', 32),
+            settlementOutcomeLabel: sanitizeText(settlement?.outcomeLabel || resolution.settlementOutcomeLabel || ledger?.settlementOutcomeLabel || '', 24),
+            settlementSource: sanitizeText(settlement?.settlementSource || ledger?.settlementSource || '', 24),
+            ledgerId: sanitizeText(ledger?.ledgerId || resolution.sourceId || '', 96),
+            debtPackId: sanitizeText(board.debtPack?.id || ledger?.debtPackId || '', 96),
+            debtStatus: sanitizeText(board.debtPack?.status || ledger?.debtStatus || '', 24),
+            deferCount: Math.max(0, Math.floor(Number(board.debtPack?.deferCount || ledger?.deferCount || 0) || 0)),
+            carryIntoWeekTag: sanitizeText(board.debtPack?.carryIntoWeekTag || ledger?.carryIntoWeekTag || '', 24),
+            proofQuality: sanitizeText(resolution.proofQuality || ledger?.proofQuality || '', 24),
+            lineageStyle: sanitizeText(resolution.lineageStyle || ledger?.lineageStyle || '', 48),
+            summaryLine,
+            detailLine: [resolution.councilResolutionLine || '', resolution.chronicleSealLine || ''].filter(Boolean).slice(0, 2).join('｜'),
+            statusLine: `会审裁记 · ${meta.label} · 已封记`,
+            anchorSection: 'sanctum',
+            priority: 3,
+            frontierResolutionId: `season_frontier_resolution_${weekTag}_${targetChoiceId}`,
+            frontierResolutionChoiceId: targetChoiceId,
+            frontierResolutionLabel: meta.label,
+            frontierResolutionStance: meta.stanceId,
+            frontierResolutionSupportLaneId: supportLaneId,
+            frontierResolutionSupportLaneLabel: supportLaneLabel,
+            frontierResolutionSummaryLine: summaryLine,
+            chronicleSealStatus: 'sealed',
+            chronicleSealLine,
+            councilResolutionLine,
+            frontierResolutionSubmittedAt: submittedAt,
+            createdAt: submittedAt,
+            updatedAt: submittedAt
+        });
+        if (!record?.recordId) return failure('record_failed', { resolution });
+
+        const isSameResolutionRecord = (entry) => (
+            entry
+            && (
+                entry.recordId === record.recordId
+                || (
+                    entry.weekTag === weekTag
+                    && (
+                        String(entry.recordKind || '').trim() === 'frontier_resolution'
+                        || !!entry.frontierResolutionChoiceId
+                        || !!entry.frontierResolutionId
+                    )
+                )
+            )
+        );
+        const records = [
+            record,
+            ...(Array.isArray(state.records) ? state.records.filter((entry) => !isSameResolutionRecord(entry)) : [])
+        ].slice(0, 6);
+        const history = [
+            record,
+            ...(Array.isArray(state.history) ? state.history.filter((entry) => !isSameResolutionRecord(entry)) : [])
+        ].slice(0, 18);
+        this.seasonVerificationState = this.normalizeSeasonVerificationState({
+            ...state,
+            weekTag,
+            weekLabel,
+            records,
+            history,
+            lastResolved: state.lastResolved
+        });
+
+        const committed = this.getCommittedSeasonBoardFrontierResolution({
+            weekTag,
+            weekLabel,
+            seasonVerification: this.seasonVerificationState
+        });
+        this.lastSeasonBoardFrontierResolutionCommit = {
+            ok: true,
+            reason: 'submitted',
+            choiceId: targetChoiceId,
+            weekTag,
+            record,
+            committed,
+            resolution: {
+                ...resolution,
+                submitted: true,
+                choiceId: targetChoiceId,
+                choiceLabel: meta.label,
+                summaryLine,
+                chronicleSealLine,
+                councilResolutionLine,
+                submittedAt
+            },
+            submittedAt
+        };
+
+        if (typeof this.saveGame === 'function') {
+            this.saveGame();
+        }
+        if (typeof document !== 'undefined') {
+            if (typeof this.renderRewardExpeditionMeta === 'function') this.renderRewardExpeditionMeta();
+            if (typeof this.updateRewardHeaderCopy === 'function') this.updateRewardHeaderCopy();
+            if (typeof this.renderSanctumOverview === 'function' && document.getElementById('sanctum-summary')) {
+                this.renderSanctumOverview();
+            }
+        }
+        return this.lastSeasonBoardFrontierResolutionCommit;
     }
 
     claimSeasonBoardLaneReward(laneId = '', options = {}) {
@@ -24270,7 +25300,7 @@ class Game {
             lockline: ['expedition', 'training', 'verification'],
             sampling: ['training', 'expedition', 'verification']
         };
-        const prioritizedLaneIds = Array.isArray(lanePriorityByPhase[phaseId])
+        const basePrioritizedLaneIds = Array.isArray(lanePriorityByPhase[phaseId])
             ? lanePriorityByPhase[phaseId]
             : lanePriorityByPhase.sampling;
         const settlement = this.normalizeSeasonBoardSettlement(root.settlement);
@@ -24283,6 +25313,61 @@ class Game {
                 .filter(Boolean)
                 .slice(0, 2)
             : [];
+        const hasIncompleteLaneTask = (laneId = '') => {
+            const lane = lanes.find((entry) => entry && entry.id === laneId);
+            return !!(lane && Array.isArray(lane.tasks) && lane.tasks.some((task) => task && !task.completed));
+        };
+        const currentVerdict = weekVerdictLedger?.current && typeof weekVerdictLedger.current === 'object'
+            ? weekVerdictLedger.current
+            : null;
+        const activeDebtStatus = String(debtPack?.status || currentVerdict?.debtStatus || '').trim();
+        const settlementOutcomeId = String(settlement?.outcomeId || currentVerdict?.settlementOutcomeId || '').trim();
+        const hardSettlementOutcomes = new Set(['locking_sheet', 'positive_sheet', 'risky_sheet', 'debt_sheet']);
+        const hardVerificationGate = phaseId === 'ranking'
+            || hardSettlementOutcomes.has(settlementOutcomeId)
+            || verificationOrders.some((order) => (
+                String(order?.type || '').trim() === 'clear_debt'
+            ));
+        const hardDebtGate = !!(
+            debtPack
+            && ['open', 'deferred'].includes(activeDebtStatus)
+            && (
+                debtPack.occupiesStrongSlot
+                || settlementOutcomeId === 'debt_sheet'
+                || verificationOrders.some((order) => String(order?.type || '').trim() === 'clear_debt')
+            )
+        );
+        const explicitNextWeekGoal = root.nextWeekGoal && typeof root.nextWeekGoal === 'object'
+            ? root.nextWeekGoal
+            : null;
+        const explicitStrongNextWeekGoal = !!(
+            explicitNextWeekGoal
+            && String(explicitNextWeekGoal.source || '').trim()
+            && String(explicitNextWeekGoal.source || '').trim() !== 'lane'
+        );
+        const frontierResolutionChoiceId = String(
+            currentVerdict?.frontierResolutionChoiceId
+            || currentVerdict?.resolutionChoiceId
+            || currentVerdict?.choiceId
+            || ''
+        ).trim();
+        const frontierResolutionSupportLaneId = String(
+            currentVerdict?.frontierResolutionSupportLaneId
+            || currentVerdict?.supportLaneId
+            || ''
+        ).trim();
+        const canApplyFrontierResolutionLaneBias = frontierResolutionChoiceId === 'rebalance_support'
+            && !hardDebtGate
+            && !hardVerificationGate
+            && !explicitStrongNextWeekGoal
+            && basePrioritizedLaneIds.includes(frontierResolutionSupportLaneId)
+            && hasIncompleteLaneTask(frontierResolutionSupportLaneId);
+        const prioritizedLaneIds = canApplyFrontierResolutionLaneBias
+            ? [
+                frontierResolutionSupportLaneId,
+                ...basePrioritizedLaneIds.filter((laneId) => laneId !== frontierResolutionSupportLaneId)
+            ]
+            : basePrioritizedLaneIds;
         const prioritizedLanes = [
             ...prioritizedLaneIds
                 .map((laneId) => lanes.find((lane) => lane && lane.id === laneId))
@@ -24402,31 +25487,41 @@ class Game {
         const rootNextWeekGoal = root.nextWeekGoal && typeof root.nextWeekGoal === 'object'
             ? root.nextWeekGoal
             : null;
+        const rootNextWeekGoalMatchesNextTask = !!(
+            rootNextWeekGoal
+            && nextTaskPayload
+            && (!rootNextWeekGoal.taskId || String(rootNextWeekGoal.taskId || '').trim() === nextTaskPayload.id)
+            && (!rootNextWeekGoal.taskSourceId || String(rootNextWeekGoal.taskSourceId || '').trim() === nextTaskPayload.taskSourceId)
+            && (!rootNextWeekGoal.laneId || String(rootNextWeekGoal.laneId || '').trim() === nextTaskPayload.laneId)
+            && (!rootNextWeekGoal.source || normalizeNextTaskSource(rootNextWeekGoal.source) === nextTaskPayload.source)
+            && (!rootNextWeekGoal.sourceId || String(rootNextWeekGoal.sourceId || '').trim() === nextTaskPayload.sourceId)
+        );
+        const rootNextWeekGoalSeed = rootNextWeekGoalMatchesNextTask ? rootNextWeekGoal : null;
         const nextWeekGoal = nextTaskPayload
             ? {
-                title: String(rootNextWeekGoal?.title || nextTaskPayload.label || '').trim().slice(0, 80),
+                title: String(rootNextWeekGoalSeed?.title || nextTaskPayload.label || '').trim().slice(0, 80),
                 note: String(
-                    rootNextWeekGoal?.note
+                    rootNextWeekGoalSeed?.note
                     || [
                         nextTaskPayload.hintLine || '',
                         nextTaskPayload.statusLine || '',
                         nextTaskPayload.progressText ? `进度 ${nextTaskPayload.progressText}` : ''
                     ].filter(Boolean).join(' · ')
                 ).trim().slice(0, 220),
-                action: String(rootNextWeekGoal?.action || nextTaskPayload.actionType || '').trim().slice(0, 24)
+                action: String(rootNextWeekGoalSeed?.action || nextTaskPayload.actionType || '').trim().slice(0, 24)
                     || nextTaskPayload.actionType,
-                value: String(rootNextWeekGoal?.value || nextTaskPayload.actionValue || '').trim().slice(0, 40)
+                value: String(rootNextWeekGoalSeed?.value || nextTaskPayload.actionValue || '').trim().slice(0, 40)
                     || nextTaskPayload.actionValue,
-                buttonLabel: String(rootNextWeekGoal?.buttonLabel || rootNextWeekGoal?.ctaLabel || nextTaskPayload.ctaLabel || '前往推进').trim().slice(0, 24)
+                buttonLabel: String(rootNextWeekGoalSeed?.buttonLabel || rootNextWeekGoalSeed?.ctaLabel || nextTaskPayload.ctaLabel || '前往推进').trim().slice(0, 24)
                     || '前往推进',
-                source: normalizeNextTaskSource(rootNextWeekGoal?.source) || nextTaskPayload.source,
-                sourceId: String(rootNextWeekGoal?.sourceId || nextTaskPayload.sourceId || '').trim().slice(0, 96),
-                taskSource: String(rootNextWeekGoal?.taskSource || nextTaskPayload.taskSource || 'lane').trim().slice(0, 40)
+                source: normalizeNextTaskSource(rootNextWeekGoalSeed?.source) || nextTaskPayload.source,
+                sourceId: String(rootNextWeekGoalSeed?.sourceId || nextTaskPayload.sourceId || '').trim().slice(0, 96),
+                taskSource: String(rootNextWeekGoalSeed?.taskSource || nextTaskPayload.taskSource || 'lane').trim().slice(0, 40)
                     || 'lane',
-                taskSourceId: String(rootNextWeekGoal?.taskSourceId || nextTaskPayload.taskSourceId || nextTaskPayload.id || '').trim().slice(0, 96),
-                taskId: String(rootNextWeekGoal?.taskId || nextTaskPayload.id || '').trim().slice(0, 64),
-                laneId: String(rootNextWeekGoal?.laneId || nextTaskPayload.laneId || '').trim().slice(0, 32),
-                anchorSection: String(rootNextWeekGoal?.anchorSection || nextTaskPayload.anchorSection || '').trim().slice(0, 24)
+                taskSourceId: String(rootNextWeekGoalSeed?.taskSourceId || nextTaskPayload.taskSourceId || nextTaskPayload.id || '').trim().slice(0, 96),
+                taskId: String(rootNextWeekGoalSeed?.taskId || nextTaskPayload.id || '').trim().slice(0, 64),
+                laneId: String(rootNextWeekGoalSeed?.laneId || nextTaskPayload.laneId || '').trim().slice(0, 32),
+                anchorSection: String(rootNextWeekGoalSeed?.anchorSection || nextTaskPayload.anchorSection || '').trim().slice(0, 24)
             }
             : null;
         const themeLabel = String(root.themeLabel || root.seasonLabel || '本周主轴').trim() || '本周主轴';
@@ -24480,7 +25575,10 @@ class Game {
             phaseId,
             phaseLabel,
             weekTag: String(root.weekTag || '').trim().slice(0, 24),
+            settlement,
             debtPack,
+            weekVerdictLedger,
+            seasonVerificationState: this.seasonVerificationState,
             verificationOrders,
             nextTask: nextTaskPayload
         });
@@ -24532,7 +25630,14 @@ class Game {
         const defaultLaneId = phaseId === 'ranking'
             ? 'verification'
             : (phaseId === 'lockline' ? 'expedition' : 'training');
-        const nextLaneId = defaultLaneId;
+        const boardNextTask = board?.nextTask && typeof board.nextTask === 'object'
+            ? board.nextTask
+            : null;
+        const boardNextLaneId = ['training', 'expedition', 'verification'].includes(String(boardNextTask?.laneId || '').trim())
+            && String(boardNextTask?.source || '').trim() === 'lane'
+            ? String(boardNextTask.laneId || '').trim()
+            : '';
+        const nextLaneId = boardNextLaneId || defaultLaneId;
         const normalizeNodeTypes = (value = null, limit = 4) => {
             if (typeof this.normalizeSanctumAgendaNodeTypes === 'function') {
                 return this.normalizeSanctumAgendaNodeTypes(value, limit);
@@ -24917,6 +26022,12 @@ class Game {
             : (signals.endlessSeason?.name
                 || signals.pvpSeasonName
                 || `${signals.weekLabel || signals.weekTag || '本周轮转'} · 赛季天道盘`);
+        const committedFrontierResolution = typeof this.getCommittedSeasonBoardFrontierResolution === 'function'
+            ? this.getCommittedSeasonBoardFrontierResolution({
+                weekTag: signals.weekTag,
+                weekLabel: signals.weekLabel
+            })
+            : null;
         const weekVerdictLedger = this.normalizeSeasonBoardWeekVerdictLedger({
             current: {
                 ledgerId: `season_verdict_${signals.weekTag || 'current'}_${settlement?.outcomeId || phase.id}_${settlement?.sourceRunId || debtPack?.id || 'current'}`,
@@ -24946,7 +26057,8 @@ class Game {
                 lineageStyle: settlement?.lineageStyle || verificationOrders[0]?.lineageStyle || verificationOrders[1]?.lineageStyle || '',
                 carryIntoNextWeek: !!verificationOrders[0]?.carryIntoNextWeek || !!verificationOrders[1]?.carryIntoNextWeek,
                 settlementSource: settlement?.settlementSource || seasonSource || 'derived',
-                summaryLine: debtPack?.summaryLine || settlement?.summaryLine || ''
+                summaryLine: debtPack?.summaryLine || settlement?.summaryLine || '',
+                ...(committedFrontierResolution || {})
             }
         });
         const verificationArchive = this.buildSeasonVerificationArchiveSnapshot({

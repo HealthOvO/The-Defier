@@ -243,6 +243,30 @@ function assertSeasonBoardFrontier(board, label, expectedPrimaryFrontId = '') {
       && !Object.prototype.hasOwnProperty.call(board.frontier.council, 'ctaLabel'),
     `${sourceLabel} council should stay read-only and mirror three frontier lanes, got ${JSON.stringify(board.frontier.council)}`
   );
+  assert(
+    board.frontier.resolution
+      && board.frontier.resolution.available === true
+      && board.frontier.resolution.laneId === board.frontier.primaryFrontId
+      && board.frontier.resolution.statusId === board.frontier.statusId
+      && typeof board.frontier.resolution.submitted === 'boolean'
+      && ['hold_primary', 'rebalance_support', 'seal_dispute'].includes(board.frontier.resolution.suggestedChoiceId)
+      && board.frontier.resolution.summaryLine
+      && board.frontier.resolution.chronicleSealLine
+      && board.frontier.resolution.councilResolutionLine,
+    `${sourceLabel} should derive a read-only frontier resolution projection, got ${JSON.stringify(board.frontier)}`
+  );
+  if (board.settlement?.outcomeId) {
+    assert(
+      board.frontier.resolution.settlementOutcomeId === board.settlement.outcomeId,
+      `${sourceLabel} resolution should mirror settlement outcome, got ${JSON.stringify(board.frontier.resolution)} vs ${JSON.stringify(board.settlement)}`
+    );
+  }
+  assert(
+    !Object.prototype.hasOwnProperty.call(board.frontier.resolution, 'actionType')
+      && !Object.prototype.hasOwnProperty.call(board.frontier.resolution, 'actionValue')
+      && !Object.prototype.hasOwnProperty.call(board.frontier.resolution, 'ctaLabel'),
+    `${sourceLabel} resolution should not become a second action source, got ${JSON.stringify(board.frontier.resolution)}`
+  );
 }
 
 function assertSeasonBoardFrontierMirror(payload, label) {
@@ -283,8 +307,8 @@ function assertSeasonBoardFrontierDerivedNotPersisted(game, storage, label) {
   const saved = JSON.parse(storage.getItem('theDefierSave') || '{}');
   assert(
     saved?.seasonVerificationState
-      && !hasNestedKey(saved.seasonVerificationState, new Set(['frontier', 'decree', 'chronicle', 'council'])),
-    `${sourceLabel} should keep frontier decree chronicle and council out of seasonVerificationState, got ${JSON.stringify(saved?.seasonVerificationState)}`
+      && !hasNestedKey(saved.seasonVerificationState, new Set(['frontier', 'decree', 'chronicle', 'council', 'resolution', 'chronicleArchive'])),
+    `${sourceLabel} should keep frontier decree chronicle council resolution and chronicleArchive out of seasonVerificationState, got ${JSON.stringify(saved?.seasonVerificationState)}`
   );
 }
 
@@ -687,6 +711,253 @@ function loadFile(ctx, filePath) {
       && !seasonBoard.weekVerdictLedger?.current?.debtPackId,
     `positive ranking board should expose a current-week verdict ledger, got ${JSON.stringify(seasonBoard?.weekVerdictLedger)}`
   );
+  const submittedResolutionBoard = game.normalizeSeasonBoardSnapshot({
+    ...seasonBoard,
+    weekVerdictLedger: {
+      current: {
+        ...seasonBoard.weekVerdictLedger.current,
+        frontierResolutionId: `${seasonBoard.weekVerdictLedger.current.ledgerId}:frontier_resolution`,
+        frontierResolutionChoiceId: 'rebalance_support',
+        frontierResolutionLabel: '副线补证',
+        frontierResolutionStance: 'support_balancer',
+        frontierResolutionSupportLaneId: 'training',
+        frontierResolutionSupportLaneLabel: '采样战线',
+        frontierResolutionSummaryLine: '本周会审裁记：给采样战线补一份旁证。',
+        chronicleSealStatus: 'sealed',
+        chronicleSealLine: '战役史卷已封记：副线补证。',
+        councilResolutionLine: '诸界会审裁定：副线补证，不抢主验证。',
+        frontierResolutionSubmittedAt: now
+      }
+    }
+  });
+  assert(
+    submittedResolutionBoard?.frontier?.resolution?.submitted === true
+      && submittedResolutionBoard.frontier.resolution.choiceId === 'rebalance_support'
+      && submittedResolutionBoard.frontier.resolution.supportLaneId === 'training'
+      && submittedResolutionBoard.frontier.resolution.source === 'week_verdict_ledger'
+      && /已封记/.test(String(submittedResolutionBoard.frontier.resolution.chronicleSealLine || '')),
+    `explicit week verdict frontier resolution should project as a submitted read-only seal, got ${JSON.stringify(submittedResolutionBoard?.frontier?.resolution)}`
+  );
+  assert(
+    typeof game.commitSeasonBoardFrontierResolution === 'function',
+    'game should expose commitSeasonBoardFrontierResolution for Sanctum-side council seals'
+  );
+  const invalidResolutionCommit = game.commitSeasonBoardFrontierResolution('invalid_choice', { board: seasonBoard, submittedAt: now + 1 });
+  assert(
+    invalidResolutionCommit?.ok === false && invalidResolutionCommit.reason === 'invalid_choice',
+    `invalid frontier resolution choices should fail without mutating state, got ${JSON.stringify(invalidResolutionCommit)}`
+  );
+  const resourceBeforeResolutionCommit = {
+    heavenlyInsight: game.player.heavenlyInsight,
+    karma: game.player.karma,
+    gold: game.player.gold,
+    fateRingExp: game.player.fateRing?.exp || 0
+  };
+  const claimedLaneRewardsBeforeResolutionCommit = JSON.stringify(game.seasonVerificationState?.claimedLaneRewards || {});
+  const resolutionCommit = game.commitSeasonBoardFrontierResolution('rebalance_support', {
+    board: seasonBoard,
+    submittedAt: now + 2
+  });
+  assert(
+    resolutionCommit?.ok === true
+      && resolutionCommit.choiceId === 'rebalance_support'
+      && resolutionCommit.record?.recordKind === 'frontier_resolution'
+      && resolutionCommit.record?.frontierResolutionChoiceId === 'rebalance_support',
+    `frontier resolution commit should persist a minimal frontier_resolution record, got ${JSON.stringify(resolutionCommit)}`
+  );
+  const committedSeasonBoard = game.getSeasonBoardSnapshot({ latestSlate: freshSlate });
+  assert(
+    committedSeasonBoard?.frontier?.resolution?.submitted === true
+      && committedSeasonBoard.frontier.resolution.choiceId === 'rebalance_support'
+      && committedSeasonBoard.frontier.resolution.source === 'week_verdict_ledger'
+      && committedSeasonBoard.weekVerdictLedger?.current?.frontierResolutionChoiceId === 'rebalance_support'
+      && /副线补证/.test(String(committedSeasonBoard.frontier.resolution.choiceLabel || committedSeasonBoard.frontier.resolution.summaryLine || '')),
+    `committed frontier resolution should flow from durable record into the week verdict ledger projection, got ${JSON.stringify(committedSeasonBoard?.frontier?.resolution)} / ${JSON.stringify(committedSeasonBoard?.weekVerdictLedger)}`
+  );
+  assert(
+    committedSeasonBoard.nextTask?.source === 'verification'
+      && committedSeasonBoard.nextTask?.sourceId === seasonBoard.verificationOrders?.[0]?.id
+      && committedSeasonBoard.nextTask?.laneId === 'verification'
+      && committedSeasonBoard.nextWeekGoal?.source === committedSeasonBoard.nextTask.source
+      && committedSeasonBoard.nextWeekGoal?.sourceId === committedSeasonBoard.nextTask.sourceId
+      && committedSeasonBoard.nextWeekGoal?.taskId === committedSeasonBoard.nextTask.id,
+    `durable rebalance_support should not override positive/ranking primary verification routing, got ${JSON.stringify({
+      nextTask: committedSeasonBoard.nextTask,
+      nextWeekGoal: committedSeasonBoard.nextWeekGoal,
+      verificationOrders: committedSeasonBoard.verificationOrders
+    })}`
+  );
+  const staleNextWeekGoalBoard = game.normalizeSeasonBoardSnapshot({
+    ...committedSeasonBoard,
+    nextWeekGoal: {
+      ...committedSeasonBoard.nextWeekGoal,
+      sourceId: 'stale_verification_source_id'
+    }
+  });
+  assert(
+    staleNextWeekGoalBoard.nextWeekGoal?.sourceId === staleNextWeekGoalBoard.nextTask?.sourceId
+      && staleNextWeekGoalBoard.nextWeekGoal?.sourceId !== 'stale_verification_source_id',
+    `nextWeekGoal normalization should discard stale sourceId seeds when nextTask identity changes, got ${JSON.stringify({
+      nextTask: staleNextWeekGoalBoard.nextTask,
+      nextWeekGoal: staleNextWeekGoalBoard.nextWeekGoal
+    })}`
+  );
+  const postResolutionVerificationSnapshot = game.getSeasonVerificationSnapshot({
+    weekTag: committedSeasonBoard.weekTag,
+    weekLabel: committedSeasonBoard.weekLabel
+  });
+  assert(
+    postResolutionVerificationSnapshot.recordCount === 0
+      && !postResolutionVerificationSnapshot.primary
+      && !postResolutionVerificationSnapshot.side
+      && postResolutionVerificationSnapshot.records.every((entry) => entry.recordKind !== 'frontier_resolution' && !entry.frontierResolutionChoiceId)
+      && postResolutionVerificationSnapshot.history.every((entry) => entry.recordKind !== 'frontier_resolution' && !entry.frontierResolutionChoiceId)
+      && !postResolutionVerificationSnapshot.lastResolved,
+    `frontier resolution records should not surface as main/side/latest verification entries, got ${JSON.stringify(postResolutionVerificationSnapshot)}`
+  );
+  assert(
+    !committedSeasonBoard.verificationArchive?.latestEntry
+      && !committedSeasonBoard.verificationArchive?.entries?.some((entry) => /frontier_resolution/.test(String(entry.recordId || entry.recordKind || ''))),
+    `frontier resolution records should stay out of the verification archive, got ${JSON.stringify(committedSeasonBoard.verificationArchive)}`
+  );
+  game.seasonVerificationState = game.normalizeSeasonVerificationState({
+    ...game.seasonVerificationState,
+    history: [
+      ...(Array.isArray(game.seasonVerificationState?.history) ? game.seasonVerificationState.history : []),
+      {
+        recordId: 'frontier_resolution_history_hold_primary',
+        recordKind: 'frontier_resolution',
+        weekTag: '2026-W13',
+        weekLabel: '第13周',
+        role: 'side',
+        sourceMode: 'sanctum',
+        sourceModeLabel: '诸界会审',
+        label: '诸界会审裁记',
+        resultStatus: 'verified',
+        writebackMode: 'upgrade_verdict',
+        frontierResolutionId: 'frontier_resolution_history_hold_primary',
+        frontierResolutionChoiceId: 'hold_primary',
+        frontierResolutionLabel: '守主战线',
+        frontierResolutionStance: 'frontier_loyalist',
+        frontierResolutionSummaryLine: '第13周会审裁记：继续守主战线。',
+        chronicleSealStatus: 'sealed',
+        chronicleSealLine: '战役史卷已封记：守主战线。',
+        councilResolutionLine: '诸界会审裁定：守主战线。',
+        frontierResolutionSubmittedAt: now - 5000,
+        createdAt: now - 5000,
+        updatedAt: now - 5000
+      },
+      {
+        recordId: 'frontier_resolution_history_seal_dispute',
+        recordKind: 'frontier_resolution',
+        weekTag: '2026-W12',
+        weekLabel: '第12周',
+        role: 'side',
+        sourceMode: 'sanctum',
+        sourceModeLabel: '诸界会审',
+        label: '诸界会审裁记',
+        resultStatus: 'verified',
+        writebackMode: 'carry_forward',
+        frontierResolutionId: 'frontier_resolution_history_seal_dispute',
+        frontierResolutionChoiceId: 'seal_dispute',
+        frontierResolutionLabel: '封存争议',
+        frontierResolutionStance: 'dispute_archivist',
+        frontierResolutionSummaryLine: '第12周会审裁记：争议先封入史卷。',
+        chronicleSealStatus: 'sealed',
+        chronicleSealLine: '战役史卷已封记：封存争议。',
+        councilResolutionLine: '诸界会审裁定：封存争议。',
+        frontierResolutionSubmittedAt: now - 8000,
+        createdAt: now - 8000,
+        updatedAt: now - 8000
+      }
+    ]
+  });
+  const multiWeekResolutionBoard = game.getSeasonBoardSnapshot({ latestSlate: freshSlate });
+  const chronicleArchive = multiWeekResolutionBoard?.frontier?.chronicleArchive;
+  assert(
+    chronicleArchive?.available === true
+      && chronicleArchive.totalRecords >= 3
+      && chronicleArchive.countsByChoice?.rebalance_support >= 1
+      && chronicleArchive.countsByChoice?.hold_primary >= 1
+      && chronicleArchive.countsByChoice?.seal_dispute >= 1
+      && chronicleArchive.entries?.length >= 3
+      && chronicleArchive.latestEntry?.choiceId === 'rebalance_support'
+      && /平衡派|副线补证/.test(String(chronicleArchive.dominantStanceLabel || chronicleArchive.summaryLine || '')),
+    `frontier chronicle archive should summarize multi-week frontier resolution seals, got ${JSON.stringify(chronicleArchive)}`
+  );
+  assert(
+    !multiWeekResolutionBoard.verificationArchive?.entries?.some((entry) => /frontier_resolution/.test(String(entry.recordId || entry.recordKind || ''))),
+    `frontier chronicle archive should not pollute the season verification archive, got ${JSON.stringify(multiWeekResolutionBoard.verificationArchive)}`
+  );
+  const lineageWithFrontierArchive = game.getFateLineageSnapshot({ latestSlate: freshSlate });
+  assert(
+    lineageWithFrontierArchive?.frontierTrack
+      && lineageWithFrontierArchive.frontierTrack.dominantLabel === '平衡派'
+      && lineageWithFrontierArchive.frontierTrack.entries.some((entry) => entry.id === 'frontier_loyalist' && entry.value >= 1)
+      && lineageWithFrontierArchive.frontierTrack.entries.some((entry) => entry.id === 'support_balancer' && entry.value >= 1)
+      && lineageWithFrontierArchive.frontierTrack.entries.some((entry) => entry.id === 'dispute_archivist' && entry.value >= 1)
+      && lineageWithFrontierArchive.progress?.frontierResolutionHistoryCount >= 3,
+    `fate lineage should expose frontier resolution style accumulation, got ${JSON.stringify(lineageWithFrontierArchive?.frontierTrack)} / ${JSON.stringify(lineageWithFrontierArchive?.progress)}`
+  );
+  const mirroredFrontierArchive = JSON.parse(game.renderGameToText())?.expedition?.seasonBoard?.frontier?.chronicleArchive;
+  assert(
+    mirroredFrontierArchive?.totalRecords === chronicleArchive.totalRecords
+      && mirroredFrontierArchive.latestEntry?.choiceId === chronicleArchive.latestEntry?.choiceId,
+    `render payload should mirror frontier chronicle archive, got ${JSON.stringify(mirroredFrontierArchive)}`
+  );
+  const duplicateResolutionCommit = game.commitSeasonBoardFrontierResolution('hold_primary', {
+    board: seasonBoard,
+    submittedAt: now + 3
+  });
+  assert(
+    duplicateResolutionCommit?.ok === false && duplicateResolutionCommit.reason === 'already_submitted',
+    `duplicate frontier resolution commits should be rejected for the same week, got ${JSON.stringify(duplicateResolutionCommit)}`
+  );
+  assert(
+    game.player.heavenlyInsight === resourceBeforeResolutionCommit.heavenlyInsight
+      && game.player.karma === resourceBeforeResolutionCommit.karma
+      && game.player.gold === resourceBeforeResolutionCommit.gold
+      && (game.player.fateRing?.exp || 0) === resourceBeforeResolutionCommit.fateRingExp,
+    `frontier resolution commit should not grant resources, got ${JSON.stringify({
+      before: resourceBeforeResolutionCommit,
+      after: {
+        heavenlyInsight: game.player.heavenlyInsight,
+        karma: game.player.karma,
+        gold: game.player.gold,
+        fateRingExp: game.player.fateRing?.exp || 0
+      }
+    })}`
+  );
+  assert(
+    JSON.stringify(game.seasonVerificationState?.claimedLaneRewards || {}) === claimedLaneRewardsBeforeResolutionCommit,
+    `frontier resolution commit should not write claimedLaneRewards, got ${JSON.stringify(game.seasonVerificationState?.claimedLaneRewards || {})}`
+  );
+  const committedStateAfterResolution = game.seasonVerificationState;
+  game.seasonVerificationState = game.normalizeSeasonVerificationState({
+    ...committedStateAfterResolution,
+    records: [
+      {
+        recordId: 'legacy_weekless_frontier_resolution',
+        recordKind: 'frontier_resolution',
+        sourceMode: 'sanctum',
+        frontierResolutionId: 'legacy_weekless_frontier_resolution',
+        frontierResolutionChoiceId: 'hold_primary',
+        frontierResolutionLabel: '守主战线',
+        frontierResolutionSubmittedAt: now - 1000
+      }
+    ],
+    history: []
+  });
+  const weeklessLegacyResolution = game.getCommittedSeasonBoardFrontierResolution({
+    weekTag: '2099-W01',
+    weekLabel: '2099 · 第 1 周'
+  });
+  assert(
+    !weeklessLegacyResolution,
+    `weekless legacy frontier resolution records should not block another target week, got ${JSON.stringify(weeklessLegacyResolution)}`
+  );
+  game.seasonVerificationState = committedStateAfterResolution;
+  assertSeasonBoardFrontierDerivedNotPersisted(game, ctx.localStorage, 'committed frontier resolution persistence boundary');
   const rankingRouteShift = game.getSeasonBoardWeightShift({ latestSlate: freshSlate });
   assert(
     rankingRouteShift && rankingRouteShift.trial > 0 && rankingRouteShift.enemy > 0,
@@ -908,6 +1179,80 @@ function loadFile(ctx, filePath) {
   );
   assertSeasonBoardNextProjection(samplingBoard, 'sampling season board', 'lane', samplingBoard.nextTask?.id || '');
   assertSeasonBoardFrontier(samplingBoard, 'sampling season board frontier', 'training');
+  const samplingSupportBiasedBoard = samplingGame.normalizeSeasonBoardSnapshot({
+    ...samplingBoard,
+    weekVerdictLedger: {
+      current: {
+        ...(samplingBoard.weekVerdictLedger?.current || {}),
+        frontierResolutionId: 'sampling_frontier_resolution_support_bias',
+        frontierResolutionChoiceId: 'rebalance_support',
+        frontierResolutionLabel: '副线补证',
+        frontierResolutionStance: 'support_balancer',
+        frontierResolutionSupportLaneId: 'expedition',
+        frontierResolutionSupportLaneLabel: '推进战线',
+        frontierResolutionSummaryLine: '本周会审裁记：给推进战线补一份旁证。',
+        chronicleSealStatus: 'sealed',
+        chronicleSealLine: '战役史卷已封记：副线补证。',
+        councilResolutionLine: '诸界会审裁定：副线补证，只前移普通分线。',
+        frontierResolutionSubmittedAt: now + 10
+      }
+    }
+  });
+  assert(
+    samplingSupportBiasedBoard?.nextTask?.laneId === 'expedition'
+      && samplingSupportBiasedBoard.nextTask?.source === 'lane'
+      && samplingSupportBiasedBoard.nextWeekGoal?.laneId === 'expedition'
+      && samplingSupportBiasedBoard.frontier?.primaryFrontId === 'expedition',
+    `rebalance_support should lightly move the support lane ahead only in ordinary sampling order, got ${JSON.stringify({
+      nextTask: samplingSupportBiasedBoard?.nextTask,
+      nextWeekGoal: samplingSupportBiasedBoard?.nextWeekGoal,
+      frontier: samplingSupportBiasedBoard?.frontier
+    })}`
+  );
+  const samplingDisputeBoard = samplingGame.normalizeSeasonBoardSnapshot({
+    ...samplingBoard,
+    weekVerdictLedger: {
+      current: {
+        ...(samplingBoard.weekVerdictLedger?.current || {}),
+        frontierResolutionId: 'sampling_frontier_resolution_dispute',
+        frontierResolutionChoiceId: 'seal_dispute',
+        frontierResolutionLabel: '封存争议',
+        frontierResolutionStance: 'dispute_archivist',
+        frontierResolutionSupportLaneId: 'expedition',
+        frontierResolutionSupportLaneLabel: '推进战线',
+        chronicleSealStatus: 'sealed',
+        frontierResolutionSubmittedAt: now + 11
+      }
+    }
+  });
+  assert(
+    samplingDisputeBoard?.nextTask?.laneId === samplingBoard.nextTask?.laneId
+      && samplingDisputeBoard.nextWeekGoal?.laneId === samplingBoard.nextWeekGoal?.laneId,
+    `seal_dispute should preserve ordinary lane order, got ${JSON.stringify({
+      base: samplingBoard.nextTask,
+      dispute: samplingDisputeBoard?.nextTask
+    })}`
+  );
+  const samplingResolutionCommit = samplingGame.commitSeasonBoardFrontierResolution('rebalance_support', {
+    board: samplingBoard,
+    submittedAt: now + 13
+  });
+  const samplingCommittedSupportBoard = samplingGame.getSeasonBoardSnapshot();
+  const samplingCommittedRouteShift = samplingGame.getSeasonBoardWeightShift();
+  assert(
+    samplingResolutionCommit?.ok === true
+      && samplingCommittedSupportBoard?.weekVerdictLedger?.current?.frontierResolutionChoiceId === 'rebalance_support'
+      && samplingCommittedSupportBoard.nextTask?.laneId === 'expedition'
+      && samplingCommittedSupportBoard.nextTask?.source === 'lane'
+      && samplingCommittedSupportBoard.nextWeekGoal?.laneId === 'expedition'
+      && samplingCommittedRouteShift?.event > 0,
+    `durable rebalance_support should flow into ordinary lane ordering and route bias, got ${JSON.stringify({
+      commit: samplingResolutionCommit,
+      nextTask: samplingCommittedSupportBoard?.nextTask,
+      nextWeekGoal: samplingCommittedSupportBoard?.nextWeekGoal,
+      routeShift: samplingCommittedRouteShift
+    })}`
+  );
 
   resetStorages();
   const locklineGame = createGame();
@@ -945,6 +1290,31 @@ function loadFile(ctx, filePath) {
   );
   assertSeasonBoardNextProjection(locklineBoard, 'lockline season board', 'settlement', locklineBoard.settlement?.id || '');
   assertSeasonBoardFrontier(locklineBoard, 'lockline season board frontier', 'expedition');
+  const locklineSupportBiasedBoard = locklineGame.normalizeSeasonBoardSnapshot({
+    ...locklineBoard,
+    weekVerdictLedger: {
+      current: {
+        ...(locklineBoard.weekVerdictLedger?.current || {}),
+        frontierResolutionId: 'lockline_frontier_resolution_support_bias',
+        frontierResolutionChoiceId: 'rebalance_support',
+        frontierResolutionLabel: '副线补证',
+        frontierResolutionStance: 'support_balancer',
+        frontierResolutionSupportLaneId: 'training',
+        frontierResolutionSupportLaneLabel: '采样战线',
+        chronicleSealStatus: 'sealed',
+        frontierResolutionSubmittedAt: now + 12
+      }
+    }
+  });
+  assert(
+    locklineSupportBiasedBoard?.nextTask?.laneId === 'expedition'
+      && locklineSupportBiasedBoard.nextTask?.source === 'settlement'
+      && locklineSupportBiasedBoard.nextWeekGoal?.laneId === 'expedition',
+    `rebalance_support should not override a locking-sheet settlement route, got ${JSON.stringify({
+      nextTask: locklineSupportBiasedBoard?.nextTask,
+      nextWeekGoal: locklineSupportBiasedBoard?.nextWeekGoal
+    })}`
+  );
   assert(
     /路线引导：/.test(String(locklineBoard.guideLine || '')),
     `lockline season board should include route guidance, got ${JSON.stringify(locklineBoard)}`
@@ -1658,6 +2028,33 @@ function loadFile(ctx, filePath) {
   );
   assertSeasonBoardNextProjection(debtBoard, 'ranking debt board', 'debt_pack', debtBoard.debtPack?.id || '');
   assertSeasonBoardFrontier(debtBoard, 'ranking debt board frontier', 'verification');
+  const debtSupportBiasedBoard = debtGame.normalizeSeasonBoardSnapshot({
+    ...debtBoard,
+    weekVerdictLedger: {
+      current: {
+        ...(debtBoard.weekVerdictLedger?.current || {}),
+        frontierResolutionId: 'debt_frontier_resolution_support_bias',
+        frontierResolutionChoiceId: 'rebalance_support',
+        frontierResolutionLabel: '副线补证',
+        frontierResolutionStance: 'support_balancer',
+        frontierResolutionSupportLaneId: 'training',
+        frontierResolutionSupportLaneLabel: '采样战线',
+        chronicleSealStatus: 'sealed',
+        frontierResolutionSubmittedAt: now + 20
+      }
+    }
+  });
+  assert(
+    debtSupportBiasedBoard?.nextTask?.source === 'debt_pack'
+      && debtSupportBiasedBoard.nextTask?.id === debtBoard.nextTask?.id
+      && debtSupportBiasedBoard.nextTask?.laneId === 'verification'
+      && debtSupportBiasedBoard.nextWeekGoal?.source === 'debt_pack',
+    `rebalance_support should not override debt strong-slot routing, got ${JSON.stringify({
+      base: debtBoard.nextTask,
+      biased: debtSupportBiasedBoard?.nextTask,
+      nextWeekGoal: debtSupportBiasedBoard?.nextWeekGoal
+    })}`
+  );
   const debtLaneTask = (debtBoard.lanes || [])
     .flatMap((lane) => (Array.isArray(lane?.tasks)
       ? lane.tasks.map((task) => ({ ...task, laneId: lane.id }))

@@ -3211,10 +3211,21 @@ function rectObj(rect) {
     const sanctumSeasonBoardFrontierCouncilGuide = (document.querySelector('#sanctum-guide [data-season-board-frontier-council-guide="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const sanctumSeasonBoardFrontierCouncilChipText = (document.querySelector('#sanctum-summary [data-season-board-chip="frontier-council"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const sanctumSeasonBoardFrontierCouncilCardText = (document.querySelector('#sanctum-summary [data-season-board-frontier-council-card="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardFrontierResolution = (document.querySelector('#sanctum-summary [data-season-board-frontier-resolution="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardFrontierResolutionGuide = (document.querySelector('#sanctum-guide [data-season-board-frontier-resolution-guide="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardFrontierResolutionChipText = (document.querySelector('#sanctum-summary [data-season-board-chip="frontier-resolution"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardFrontierResolutionCardText = (document.querySelector('#sanctum-summary [data-season-board-frontier-resolution-card="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardFrontierResolutionPanelText = (document.querySelector('#sanctum-summary [data-season-board-frontier-resolution-panel="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardFrontierResolutionSubmitted = document.querySelector('#sanctum-summary [data-season-board-frontier-resolution-submitted="true"]') ? true : false;
     const sanctumSeasonBoardFrontierCount = document.querySelectorAll('#sanctum-summary [data-season-board-frontier="true"]').length;
     const sanctumSeasonBoardFrontierDecreeCount = document.querySelectorAll('#sanctum-summary [data-season-board-frontier-decree="true"]').length;
     const sanctumSeasonBoardFrontierChronicleCount = document.querySelectorAll('#sanctum-summary [data-season-board-frontier-chronicle="true"]').length;
     const sanctumSeasonBoardFrontierCouncilCount = document.querySelectorAll('#sanctum-summary [data-season-board-frontier-council="true"]').length;
+    const sanctumSeasonBoardFrontierResolutionCount = document.querySelectorAll('#sanctum-summary [data-season-board-frontier-resolution="true"]').length;
+    const sanctumSeasonBoardFrontierResolutionPanelCount = document.querySelectorAll('#sanctum-summary [data-season-board-frontier-resolution-panel="true"]').length;
+    const sanctumSeasonBoardFrontierResolutionChoiceCount = document.querySelectorAll('#sanctum-summary [data-season-board-frontier-resolution-choice="true"]').length;
+    const sanctumSeasonBoardFrontierResolutionResearchChoiceCount = document.querySelectorAll('#sanctum-research-list [data-season-board-frontier-resolution-choice="true"]').length;
+    const sanctumSeasonBoardFrontierResolutionGoalActionCount = document.querySelectorAll('#sanctum-goal-list [data-season-board-frontier-resolution-goal-action="true"]').length;
     const sanctumSeasonBoardFrontierActionCount = document.querySelectorAll('[data-season-board-frontier-action="true"]').length;
     const sanctumSeasonBoardSettlement = (document.querySelector('#sanctum-summary [data-season-board-settlement="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const sanctumSeasonBoardVerification = (document.querySelector('#sanctum-summary [data-season-board-verification="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
@@ -3313,10 +3324,20 @@ function rectObj(rect) {
         sanctumSeasonBoardFrontierCouncilGuide.length > 0 &&
         /会审/.test(sanctumSeasonBoardFrontierCouncilChipText) &&
         sanctumSeasonBoardFrontierCouncilCardText.length > 0 &&
+        sanctumSeasonBoardFrontierResolution.length > 0 &&
+        sanctumSeasonBoardFrontierResolutionGuide.length > 0 &&
+        /裁记|会审/.test(sanctumSeasonBoardFrontierResolutionChipText) &&
+        sanctumSeasonBoardFrontierResolutionCardText.length > 0 &&
+        /会审裁记/.test(sanctumSeasonBoardFrontierResolutionPanelText) &&
         sanctumSeasonBoardFrontierCount === 1 &&
         sanctumSeasonBoardFrontierDecreeCount === 1 &&
         sanctumSeasonBoardFrontierChronicleCount === 1 &&
         sanctumSeasonBoardFrontierCouncilCount === 1 &&
+        sanctumSeasonBoardFrontierResolutionCount === 1 &&
+        sanctumSeasonBoardFrontierResolutionPanelCount === 1 &&
+        (sanctumSeasonBoardFrontierResolutionSubmitted || sanctumSeasonBoardFrontierResolutionChoiceCount >= 3) &&
+        sanctumSeasonBoardFrontierResolutionResearchChoiceCount === 0 &&
+        sanctumSeasonBoardFrontierResolutionGoalActionCount === 0 &&
         sanctumSeasonBoardFrontierActionCount === 0 &&
         /季押卷/.test(sanctumSeasonBoardSettlement) &&
         /结业验证/.test(sanctumSeasonBoardVerification) &&
@@ -3328,6 +3349,7 @@ function rectObj(rect) {
         /法旨/.test(sanctumSeasonBoardChipsText) &&
         /史卷/.test(sanctumSeasonBoardChipsText) &&
         /会审/.test(sanctumSeasonBoardChipsText) &&
+        /裁记/.test(sanctumSeasonBoardChipsText) &&
         /季押卷裁定/.test(sanctumSeasonBoardSettlementCardText) &&
         /结业验证状/.test(sanctumSeasonBoardVerificationCardText) &&
         sanctumSeasonBoardGoalCount >= 2 &&
@@ -3759,6 +3781,80 @@ function rectObj(rect) {
     JSON.stringify(seasonVerificationArchivePvpProbe || null)
   );
   await safeAuditScreenshot(page, path.join(outDir, 'season-verification-archive-pvp.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
+  await reopenSanctumCollection();
+  const frontierResolutionChoiceSelector = '#sanctum-summary [data-season-board-frontier-resolution-choice="true"][data-season-board-frontier-resolution-choice-id="rebalance_support"]';
+  const frontierResolutionChoiceCount = await page.locator(frontierResolutionChoiceSelector).count();
+  let frontierResolutionCommitProbe = {
+    ok: false,
+    reason: 'missing_frontier_resolution_choice',
+    choiceCount: frontierResolutionChoiceCount
+  };
+  if (frontierResolutionChoiceCount > 0) {
+    await page.click(frontierResolutionChoiceSelector, { timeout: 5000, force: true });
+    try {
+      await page.waitForFunction(() => (
+        window.game?.lastSeasonBoardFrontierResolutionCommit?.ok === true
+        || document.querySelector('#sanctum-summary [data-season-board-frontier-resolution-submitted="true"]')
+      ), { timeout: 5000 });
+      frontierResolutionCommitProbe = await page.evaluate(({ count }) => {
+        const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
+        const hasNestedKey = (value, keys) => {
+          if (!value || typeof value !== 'object') return false;
+          if (Array.isArray(value)) return value.some((entry) => hasNestedKey(entry, keys));
+          return Object.entries(value).some(([key, entry]) => keys.has(key) || hasNestedKey(entry, keys));
+        };
+        const board = typeof game.getSeasonBoardSnapshot === 'function' ? game.getSeasonBoardSnapshot() : null;
+        const resolution = board?.frontier?.resolution || null;
+        const chronicleArchive = board?.frontier?.chronicleArchive || null;
+        const state = game.seasonVerificationState || {};
+        const forbiddenProjectionKeys = new Set(['frontier', 'decree', 'chronicle', 'council', 'resolution', 'chronicleArchive']);
+        const projectionLeak = hasNestedKey(state, forbiddenProjectionKeys);
+        const frontierActionCount = document.querySelectorAll('[data-season-board-frontier-action="true"]').length;
+        const archivePanel = document.querySelector('#sanctum-summary [data-season-board-frontier-chronicle-archive-panel="true"]');
+        const archiveEntries = document.querySelectorAll('#sanctum-summary [data-season-board-frontier-chronicle-archive-entry="true"]').length;
+        return {
+          ok:
+            game.lastSeasonBoardFrontierResolutionCommit?.ok === true &&
+            game.lastSeasonBoardFrontierResolutionCommit.choiceId === 'rebalance_support' &&
+            resolution?.submitted === true &&
+            resolution.choiceId === 'rebalance_support' &&
+            board?.weekVerdictLedger?.current?.frontierResolutionChoiceId === 'rebalance_support' &&
+            chronicleArchive?.available === true &&
+            chronicleArchive.totalRecords >= 1 &&
+            chronicleArchive.latestEntry?.choiceId === 'rebalance_support' &&
+            text(archivePanel).length > 0 &&
+            archiveEntries >= 1 &&
+            !projectionLeak &&
+            frontierActionCount === 0 &&
+            text(document.querySelector('#sanctum-summary [data-season-board-frontier-resolution-submitted="true"]')).length > 0,
+          choiceCount: count,
+          commit: game.lastSeasonBoardFrontierResolutionCommit || null,
+          resolution,
+          chronicleArchive,
+          archivePanelText: text(archivePanel),
+          archiveEntries,
+          ledger: board?.weekVerdictLedger?.current || null,
+          submittedText: text(document.querySelector('#sanctum-summary [data-season-board-frontier-resolution-submitted="true"]')),
+          projectionLeak,
+          frontierActionCount
+        };
+      }, { count: frontierResolutionChoiceCount });
+    } catch (error) {
+      frontierResolutionCommitProbe = {
+        ok: false,
+        reason: 'frontier_resolution_commit_not_reflected',
+        choiceCount: frontierResolutionChoiceCount,
+        error: error?.message || String(error)
+      };
+    }
+  }
+  add(
+    'sanctum frontier resolution choice commits once and renders submitted seal',
+    !!frontierResolutionCommitProbe?.ok,
+    JSON.stringify(frontierResolutionCommitProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'sanctum-frontier-resolution-commit.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   const sanctumHeavenlyMandateProbe = await page.evaluate(() => {
     const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();

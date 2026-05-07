@@ -1,0 +1,2434 @@
+/* ===================================
+   Layout Fixes
+   Last-loaded containment overrides for clipping, overlap and short viewport bugs.
+   =================================== */
+
+.screen,
+.screen * {
+    box-sizing: border-box;
+}
+
+.screen {
+    min-width: 0;
+}
+
+.screen-header {
+    position: relative;
+    z-index: 60;
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+.screen-header > * {
+    min-width: 0;
+}
+
+.screen-header h2,
+.collection-heading-group,
+.header-title-group {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+#main-menu .ink-canvas {
+    pointer-events: none;
+}
+
+/* Character selection: keep the footer in normal flow so it cannot cover cards. */
+#character-selection-screen {
+    overflow: hidden;
+}
+
+#character-selection-screen .character-selection-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    padding-bottom: 24px;
+}
+
+#character-selection-screen .character-selection-footer {
+    position: relative;
+    bottom: auto;
+    z-index: 8;
+    flex: 0 0 auto;
+    padding: 14px 16px 18px;
+    background: linear-gradient(180deg, rgba(2, 5, 12, 0), rgba(2, 5, 12, 0.84) 20%, rgba(2, 5, 12, 0.98) 100%);
+}
+
+/* Archive and compendium screens: the shell owns scrolling, not the fixed screen. */
+#collection,
+#treasure-compendium {
+    overflow: hidden;
+}
+
+#collection .codex-shell,
+#treasure-compendium .treasure-compendium-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+#collection .collection-tab-panel.active {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+#collection .collection-tab-panel .codex-scroll-container {
+    height: 100%;
+    max-height: none;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+#collection .codex-layout,
+#treasure-compendium .treasure-compendium-layout {
+    min-width: 0;
+}
+
+#collection .codex-main-column,
+#collection .codex-side-column,
+#treasure-compendium .treasure-compendium-main,
+#treasure-compendium .treasure-compendium-side {
+    min-width: 0;
+}
+
+#treasure-compendium .treasure-compendium-layout {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+#treasure-compendium .treasure-compendium-main {
+    min-height: 0;
+}
+
+/* Realm select: keep the action button out of the scrollable text column. */
+#realm-select-screen .realm-preview-panel {
+    overflow: hidden;
+}
+
+#realm-select-screen {
+    background:
+        radial-gradient(circle at 12% 0%, rgba(88, 142, 255, 0.12), transparent 26%),
+        radial-gradient(circle at 88% 100%, rgba(236, 186, 102, 0.08), transparent 24%),
+        linear-gradient(180deg, #07111f 0%, #040914 55%, #02050a 100%);
+}
+
+#realm-select-screen .screen-header {
+    border-color: rgba(113, 158, 244, 0.18);
+    background:
+        radial-gradient(circle at 0% 0%, rgba(244, 197, 110, 0.08), transparent 36%),
+        linear-gradient(180deg, rgba(13, 21, 47, 0.92), rgba(6, 10, 24, 0.98));
+}
+
+#realm-select-screen .realm-select-layout {
+    border-color: rgba(113, 158, 244, 0.18);
+    background:
+        radial-gradient(circle at 100% 0%, rgba(104, 156, 255, 0.1), transparent 34%),
+        linear-gradient(180deg, rgba(11, 18, 40, 0.9), rgba(5, 9, 22, 0.96));
+}
+
+#realm-select-screen .realm-preview-panel {
+    border-color: rgba(113, 158, 244, 0.18);
+    background: rgba(10, 15, 20, 0.8);
+}
+
+#realm-select-screen .realm-preview-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+#realm-select-screen .preview-header {
+    flex: 0 0 auto;
+}
+
+#realm-select-screen .preview-inner-container,
+#realm-select-screen .preview-scroll-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-bottom: 12px;
+    padding-right: 5px;
+}
+
+#realm-select-screen .realm-preview-actions {
+    position: relative;
+    bottom: auto;
+    flex: 0 0 auto;
+    margin-top: 10px;
+    padding-top: 12px;
+    padding-bottom: 2px;
+}
+
+/* PVP hub and result screens: short windows must scroll vertically. */
+#pvp-screen {
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+#pvp-screen .pvp-layout-split {
+    height: auto;
+    min-height: calc(100dvh - 136px);
+}
+
+#pvp-screen .screen-header.transparent {
+    height: auto;
+    min-height: 88px;
+}
+
+#pvp-screen .challenge-btn {
+    width: min(260px, 100%);
+    height: auto;
+    min-height: 64px;
+    padding: 12px 22px;
+    overflow: hidden;
+    white-space: normal;
+    line-height: 1.18;
+    letter-spacing: 0.12em;
+    text-align: center;
+}
+
+#pvp-screen .ranking-scroll-area,
+#pvp-screen .jade-slip-row,
+#pvp-screen .rank-risk-note {
+    min-width: 0;
+}
+
+#pvp-screen .rank-risk-note {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+#pvp-result-overlay.pvp-result-overlay {
+    align-items: flex-start;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 18px;
+}
+
+#pvp-result-overlay .pvp-result-container {
+    width: min(560px, calc(100vw - 36px));
+    max-width: calc(100vw - 36px);
+    max-height: none;
+    margin: 0 auto;
+}
+
+/* Modal close controls must stay above detail panels. */
+.modal-content {
+    isolation: isolate;
+}
+
+.modal-close,
+.modal-close-floating {
+    z-index: 120;
+}
+
+#treasure-detail-modal .modal-close,
+#law-detail-modal .modal-close,
+.treasure-detail-view .modal-close,
+.law-detail-view .modal-close {
+    background: rgba(5, 8, 18, 0.92);
+    border-color: rgba(255, 226, 166, 0.42);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+
+.treasure-detail-view,
+.law-detail-view,
+.card-detail-container {
+    isolation: isolate;
+}
+
+.card-detail-overlay {
+    padding: 18px;
+    overflow: auto;
+}
+
+.card-detail-container {
+    width: min(800px, calc(100vw - 36px));
+    height: min(500px, calc(100dvh - 36px));
+    max-width: calc(100vw - 36px);
+    max-height: calc(100dvh - 36px);
+}
+
+/* Deck modal: remove the hard 800px floor and keep generated card grids inside. */
+#deck-modal .deck-view {
+    min-width: 0;
+    width: min(920px, calc(100vw - 28px));
+    max-width: calc(100vw - 28px);
+    height: min(85dvh, 760px);
+    max-height: calc(100dvh - 28px);
+    padding: 22px;
+}
+
+#deck-modal .deck-view > h2,
+#deck-modal .deck-view-header {
+    flex: 0 0 auto;
+}
+
+#deck-modal #deck-view-cards,
+#deck-modal .deck-cards,
+#deck-modal .deck-view-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+#deck-modal .deck-grid {
+    grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+    justify-items: center;
+    gap: 14px 8px;
+    padding: 10px 4px 18px;
+}
+
+#deck-modal .deck-card-wrapper {
+    width: 112px;
+    height: 156px;
+}
+
+#deck-modal .deck-card-wrapper .card {
+    transform: scale(0.68) rotateX(14deg) rotateY(0deg);
+}
+
+#pvp-screen .challenge-btn .btn-glow {
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+#battle-command-panel {
+    z-index: 520;
+}
+
+/* Battle log toast: avoid covering non-battle pages and mobile hand cards. */
+body[data-current-screen]:not([data-current-screen="battle-screen"]) #battle-log {
+    top: max(clamp(56px, 7dvh, 82px), env(safe-area-inset-top));
+    bottom: auto;
+    max-width: min(88vw, 600px);
+    transform: translate(-50%, -8px);
+    z-index: 950;
+}
+
+body[data-current-screen]:not([data-current-screen="battle-screen"]) #battle-log.show {
+    transform: translate(-50%, 0);
+}
+
+body[data-current-screen="battle-screen"] #battle-log {
+    bottom: clamp(272px, 29dvh, 320px);
+    z-index: 610;
+}
+
+#battle-screen:not(.active) .battle-log {
+    display: none !important;
+}
+
+#battle-screen #hand-cards .card {
+    margin-left: 0;
+}
+
+/* Purification: footer participates in layout instead of overlaying the card list. */
+#purification-modal {
+    overflow: hidden;
+    padding: 12px;
+}
+
+#purification-modal .purification-container {
+    width: min(1400px, calc(100vw - 24px));
+    height: min(88dvh, 900px);
+    max-height: calc(100dvh - 24px);
+    min-height: 0;
+}
+
+#purification-modal .purification-header {
+    flex: 0 0 auto;
+    margin-bottom: clamp(14px, 3vh, 34px);
+}
+
+#purification-modal .purification-scroll-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding-bottom: 20px;
+}
+
+#purification-modal .purification-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    padding-bottom: 24px;
+}
+
+#purification-modal .purification-footer {
+    position: relative;
+    bottom: auto;
+    left: auto;
+    flex: 0 0 auto;
+    width: 100%;
+    padding: 16px 18px 4px;
+    pointer-events: auto;
+    flex-wrap: wrap;
+    align-items: center;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.82));
+}
+
+#purification-modal .purification-cost {
+    position: static;
+    transform: none;
+    flex: 1 1 100%;
+    text-align: center;
+}
+
+/* Battle hand: avoid clipped first/last cards and keep piles outside the scroll lane. */
+@media (max-width: 768px) {
+    #main-menu {
+        min-height: 100dvh;
+        padding: 10px 0 18px;
+    }
+
+    #main-menu .menu-content {
+        width: min(94vw, 420px);
+        max-width: calc(100vw - 18px);
+        padding: 14px 14px 18px;
+    }
+
+    #main-menu .game-logo {
+        margin-bottom: 0;
+    }
+
+    #main-menu .logo-img {
+        max-width: 156px;
+        width: 44vw;
+    }
+
+    #main-menu .game-description {
+        margin-bottom: 12px;
+        line-height: 1.45;
+    }
+
+    #main-menu .menu-buttons {
+        gap: 8px;
+    }
+
+    #main-menu .talisman-btn,
+    #main-menu .menu-btn {
+        width: min(292px, calc(100vw - 56px));
+        min-height: 48px;
+    }
+
+    #main-menu .menu-utilities {
+        margin-top: 16px;
+        gap: 10px;
+        row-gap: 18px;
+    }
+
+    #collection .screen-header,
+    #treasure-compendium .screen-header {
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px;
+    }
+
+    #collection .collection-heading-group h2,
+    #treasure-compendium .screen-header h2 {
+        font-size: 1.22rem;
+        line-height: 1.25;
+        text-align: left;
+    }
+
+    #collection .collection-heading-group p {
+        font-size: 0.78rem;
+        line-height: 1.35;
+    }
+
+    #collection .codex-shell,
+    #treasure-compendium .treasure-compendium-shell {
+        width: calc(100vw - 16px);
+        margin: 8px auto 12px;
+    }
+
+    #collection .collection-tab-bar {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        flex: 0 0 auto;
+        overflow: visible;
+        gap: 8px;
+        width: 100%;
+        margin-bottom: 10px;
+        padding: 10px;
+        position: relative;
+        z-index: 3;
+    }
+
+    #collection .collection-tab-btn {
+        width: 100%;
+        min-width: 0;
+        min-height: 44px;
+        padding: 8px 6px;
+        white-space: nowrap;
+    }
+
+    #collection .collection-tab-panel.active {
+        display: flex;
+        flex-direction: column;
+    }
+
+    #collection .codex-layout,
+    #treasure-compendium .treasure-compendium-layout {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        width: 100%;
+    }
+
+    #collection .codex-side-column,
+    #treasure-compendium .treasure-compendium-side {
+        position: relative;
+        width: 100%;
+        margin-top: 28px;
+        z-index: 1;
+    }
+
+    #collection .codex-main-column {
+        position: relative;
+        z-index: 2;
+    }
+
+    #collection .collection-card,
+    #collection .collection-inline-btn {
+        position: relative;
+        z-index: 3;
+    }
+
+    #collection .compendium-toolbar,
+    #collection .codex-toolbar,
+    #treasure-compendium .compendium-toolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
+        padding: 12px;
+        width: 100%;
+        overflow: hidden;
+    }
+
+    #collection .compendium-control,
+    #collection .compendium-control.compendium-control-wide,
+    #treasure-compendium .compendium-control,
+    #treasure-compendium .compendium-control.compendium-control-wide {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        flex-basis: auto;
+    }
+
+    #collection .compendium-control input,
+    #collection .compendium-control select,
+    #treasure-compendium .compendium-control input,
+    #treasure-compendium .compendium-control select {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    #treasure-compendium .compendium-chip-row {
+        flex-wrap: wrap;
+    }
+
+    #collection .collection-card-grid,
+    #collection .sanctum-room-grid,
+    #collection .collection-detail-grid,
+    #collection .build-metric-grid,
+    #collection .collection-mini-grid,
+    #treasure-compendium .compendium-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #pvp-screen .screen-header.transparent {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 10px;
+        min-height: 0;
+        padding: 12px 12px 8px;
+    }
+
+    #pvp-screen .screen-header.transparent .back-btn {
+        position: relative;
+        z-index: 2;
+        flex: 0 0 auto;
+    }
+
+    #pvp-screen .header-title-group {
+        position: static;
+        transform: none;
+        flex: 1 1 210px;
+        text-align: left;
+    }
+
+    #pvp-screen .pvp-layout-split {
+        min-height: 0;
+        padding: 10px 10px 18px;
+    }
+
+    #pvp-screen .challenge-btn {
+        width: 100%;
+        min-height: 58px;
+        font-size: 1.18rem;
+        letter-spacing: 0.08em;
+    }
+
+    #realm-select-screen .realm-select-layout {
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    #realm-select-screen .realm-list-container {
+        flex: 0 0 auto;
+        max-height: min(32dvh, 260px);
+    }
+
+    #realm-select-screen .realm-preview-panel {
+        flex: 1 1 auto;
+        min-height: 0;
+        padding-bottom: 12px;
+    }
+
+    #realm-select-screen .preview-inner-container,
+    #realm-select-screen .preview-scroll-body {
+        padding-bottom: 10px;
+    }
+
+    #realm-select-screen .realm-preview-actions {
+        margin-top: 8px;
+        padding-top: 10px;
+    }
+
+    #realm-select-screen #enter-realm-btn {
+        min-height: 46px;
+    }
+
+    #pvp-result-overlay.pvp-result-overlay {
+        padding: 12px;
+    }
+
+    #pvp-result-overlay .pvp-result-container {
+        width: calc(100vw - 24px);
+        max-width: calc(100vw - 24px);
+        padding: 22px 16px;
+    }
+
+    #pvp-result-overlay .result-title {
+        font-size: clamp(2.15rem, 12vw, 3rem);
+        margin-bottom: 18px;
+    }
+
+    #pvp-result-overlay .result-content {
+        margin-bottom: 18px;
+    }
+
+    #pvp-result-overlay .pvp-result-review {
+        padding: 14px;
+    }
+
+    #deck-modal .deck-view {
+        width: calc(100vw - 20px);
+        max-width: calc(100vw - 20px);
+        height: min(88dvh, 760px);
+        max-height: calc(100dvh - 20px);
+        padding: 18px 12px;
+    }
+
+    #deck-modal .deck-grid {
+        grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+        gap: 10px 4px;
+    }
+
+    #deck-modal .deck-card-wrapper {
+        width: 92px;
+        height: 132px;
+    }
+
+    #deck-modal .deck-card-wrapper .card {
+        transform: scale(0.58) rotateX(10deg) rotateY(0deg);
+    }
+
+    #purification-modal {
+        padding: 10px;
+    }
+
+    #purification-modal .purification-container {
+        width: calc(100vw - 20px);
+        height: calc(100dvh - 20px);
+    }
+
+    #purification-modal .purification-title {
+        font-size: clamp(2.4rem, 15vw, 3.6rem);
+        letter-spacing: 0.12em;
+    }
+
+    #purification-modal .purification-subtitle {
+        font-size: 0.8rem;
+        letter-spacing: 0.18em;
+    }
+
+    #purification-modal .purification-scroll-area {
+        padding: 12px 8px 10px;
+    }
+
+    #purification-modal .purification-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 18px;
+        padding-bottom: 12px;
+    }
+
+    #purification-modal .purification-footer {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        padding: 10px 8px 0;
+    }
+
+    #purification-modal .purification-cost {
+        grid-column: 1 / -1;
+        font-size: 0.95rem;
+    }
+
+    #purification-modal .purification-btn {
+        width: 100%;
+        min-width: 0;
+        padding: 10px 12px;
+        font-size: 0.98rem;
+    }
+
+    #battle-screen .hand-area {
+        overflow: hidden;
+        padding: 8px 4px 24px;
+        transform: none;
+    }
+
+    body[data-current-screen="battle-screen"] #battle-log {
+        bottom: clamp(244px, 30dvh, 286px);
+        max-width: calc(100vw - 28px);
+        padding: 8px 12px;
+        font-size: 0.8rem;
+        line-height: 1.36;
+        z-index: 610;
+    }
+
+    #battle-screen .hand-cards {
+        width: 100%;
+        max-width: 100%;
+        justify-content: flex-start;
+        align-items: flex-end;
+        gap: 8px;
+        padding: 0 64px 8px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-padding-inline: 64px;
+        scroll-snap-type: x proximity;
+    }
+
+    #battle-screen #hand-cards .card,
+    #battle-screen .hand-cards .card {
+        flex: 0 0 var(--card-width-mobile);
+        margin-left: 0;
+        scroll-snap-align: center;
+        transform: none;
+        padding: 6px 5px;
+        border-width: 2px;
+    }
+
+    #battle-screen #hand-cards .card:first-child {
+        margin-left: 0;
+    }
+
+    #battle-screen #hand-cards .card:hover,
+    #battle-screen #hand-cards .card.selected {
+        transform: translateY(-28px) scale(1.06);
+        z-index: 120;
+    }
+
+    #battle-screen .deck-pile,
+    #battle-screen .discard-pile,
+    #battle-screen .pile-btn {
+        z-index: 320;
+    }
+
+    #battle-screen .deck-pile {
+        margin-left: 2px;
+    }
+
+    #battle-screen .discard-pile {
+        margin-right: 2px;
+    }
+
+    #battle-screen #hand-cards .card-cost {
+        width: 22px;
+        height: 22px;
+        top: -6px;
+        left: -6px;
+        font-size: 0.78rem;
+        border-width: 1px;
+    }
+
+    #battle-screen #hand-cards .card-header {
+        min-height: 22px;
+        margin-bottom: 3px;
+        padding: 2px 0 2px 12px;
+        border-bottom-width: 1px;
+    }
+
+    #battle-screen #hand-cards .card-name,
+    #battle-screen #hand-cards .card-title {
+        font-size: 0.68rem;
+        line-height: 1.08;
+    }
+
+    #battle-screen #hand-cards .card-image,
+    #battle-screen #hand-cards .card-art {
+        flex-basis: 26px;
+        min-height: 26px;
+        margin: 2px 0;
+        font-size: 1.55rem;
+    }
+
+    #battle-screen #hand-cards .card-desc {
+        min-height: 36px;
+        max-height: 42px;
+        padding: 3px 4px;
+        font-size: 0.52rem;
+        line-height: 1.2;
+    }
+
+    #battle-screen #hand-cards .card-type {
+        min-height: 11px;
+        margin-top: 2px;
+        font-size: 0.46rem;
+        line-height: 1;
+        letter-spacing: 0.03em;
+    }
+
+    #battle-command-panel,
+    #legacy-mission-tracker,
+    #boss-act-panel,
+    #battle-environment {
+        max-width: calc(100vw - 12px);
+    }
+
+    #battle-command-panel {
+        left: 6px;
+        right: 6px;
+        width: auto;
+    }
+
+    #game-over-screen {
+        overflow-y: auto;
+        padding: 18px;
+    }
+
+    #game-over-screen .game-over-container {
+        max-height: none;
+        margin: auto;
+    }
+
+    #game-over-screen .game-over-buttons {
+        flex-wrap: wrap;
+    }
+
+    .card-detail-overlay {
+        align-items: flex-start;
+        padding: 10px;
+    }
+
+    .card-detail-container {
+        width: calc(100vw - 20px);
+        height: auto;
+        max-width: calc(100vw - 20px);
+        max-height: calc(100dvh - 20px);
+        overflow-y: auto;
+        flex-direction: column;
+    }
+
+    .card-preview-wrapper {
+        transform: scale(1);
+    }
+
+    .cd-preview-pane {
+        flex: 0 0 auto;
+        min-height: 220px;
+        border-right: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .cd-info-pane {
+        min-height: 0;
+        padding: 18px;
+    }
+}
+
+@media (max-height: 760px) {
+    #game-over-screen {
+        overflow-y: auto;
+        padding: 16px;
+    }
+
+    #game-over-screen .game-over-container {
+        max-height: none;
+        margin: auto;
+    }
+
+    #game-over-screen .game-over-buttons {
+        flex-wrap: wrap;
+    }
+
+    #character-selection-screen .character-selection-container {
+        padding-top: 12px;
+        gap: 18px;
+    }
+
+    #character-selection-screen .story-intro {
+        margin-bottom: 12px;
+        padding: 14px 24px;
+    }
+}
+
+/* Terminal visual pass: this intentionally sits last so it wins over older
+   mobile overrides above. */
+@media (max-width: 768px) {
+    body[data-current-screen="battle-screen"] #battle-log,
+    #battle-screen .battle-log {
+        bottom: clamp(236px, 29dvh, 260px);
+        max-width: min(48vw, 176px);
+        padding: 7px 10px;
+        font-size: 0.76rem;
+        line-height: 1.28;
+    }
+
+    #battle-screen .end-turn-btn {
+        right: 8px;
+        bottom: clamp(174px, 22dvh, 200px);
+        min-height: 42px;
+        padding: 8px 14px;
+    }
+
+    #realm-select-screen .realm-list-container {
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+        max-height: min(24dvh, 194px);
+    }
+
+    #realm-select-screen .realm-list-container::-webkit-scrollbar {
+        display: none;
+    }
+
+    #ring-modal .ring-scene-container {
+        display: grid;
+        grid-template-rows: minmax(190px, 25dvh) minmax(0, 1fr);
+        gap: 8px;
+        height: 100dvh;
+        min-height: 0;
+        padding: 10px;
+        overflow: hidden;
+        perspective: none;
+        background:
+            radial-gradient(circle at 50% 14%, rgba(52, 82, 126, 0.24), transparent 36%),
+            linear-gradient(180deg, rgba(9, 14, 24, 0.98), rgba(4, 8, 14, 1));
+    }
+
+    #ring-modal .ring-scene {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        padding: 0;
+        overflow: hidden;
+        pointer-events: auto;
+    }
+
+    #ring-modal .ring-system {
+        width: min(318px, calc(100vw - 48px));
+        height: min(318px, calc(100vw - 48px));
+        margin: -28px auto -18px;
+        transform: scale(0.56) !important;
+        transform-origin: center center;
+    }
+
+    #ring-modal .modal-close-floating {
+        top: 14px;
+        right: 14px;
+    }
+
+    #ring-modal .ring-ui-overlay {
+        position: relative;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        gap: 8px;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        padding: 0;
+        overflow: hidden;
+        pointer-events: auto;
+    }
+
+    #ring-modal .ring-ui-panel,
+    #ring-modal .ring-ui-panel.left {
+        position: relative;
+        top: auto;
+        right: auto;
+        bottom: auto;
+        left: auto;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: auto;
+        min-height: 0;
+        max-height: none;
+        margin: 0;
+        padding: 12px;
+        overflow: hidden;
+        transform: none !important;
+        background:
+            radial-gradient(circle at 12% 0%, rgba(255, 215, 122, 0.08), transparent 32%),
+            rgba(0, 0, 0, 0.72);
+        border-radius: 16px;
+    }
+
+    #ring-modal .ring-ui-panel.right {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        min-height: 0;
+        max-height: none;
+        margin: 0;
+        padding: 12px;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at 88% 0%, rgba(78, 111, 189, 0.12), transparent 34%),
+            rgba(0, 0, 0, 0.72);
+        border-radius: 16px;
+    }
+
+    #ring-modal .ring-ui-panel .panel-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    #ring-modal .ring-ui-panel.right .panel-header {
+        flex: 0 0 auto;
+    }
+
+    #ring-modal .ring-ui-panel.right .law-library-grid {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    #ring-modal .ring-ui-footer {
+        position: relative;
+        top: auto;
+        right: auto;
+        bottom: auto;
+        left: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 40px;
+        margin: 0;
+        padding: 8px 10px;
+        transform: none;
+    }
+}
+
+@media (max-width: 768px) and (max-height: 780px) {
+    #ring-modal .ring-scene-container {
+        grid-template-rows: 176px minmax(0, 1fr);
+    }
+
+    #ring-modal .ring-system {
+        transform: scale(0.52) !important;
+    }
+}
+
+/* Final visual pass: mobile battle, realm select and fate ring need a stronger
+   content-first layout than the older fixed-band mobile rules. */
+@media (max-width: 768px) {
+    #battle-screen .battle-container {
+        padding-top: clamp(48px, 7dvh, 56px);
+        justify-content: flex-start;
+    }
+
+    #battle-screen .battle-command-panel,
+    #battle-screen #battle-command-panel {
+        top: max(54px, calc(env(safe-area-inset-top) + 44px));
+        max-height: min(94px, 12dvh);
+        padding: 5px 7px;
+        border-radius: 11px;
+        overflow-y: auto;
+    }
+
+    #battle-screen .battle-command-panel .battle-command-list,
+    #battle-screen #battle-command-panel .battle-command-list {
+        gap: 3px;
+        margin-top: 4px;
+    }
+
+    #battle-screen .battle-command-panel .battle-command-btn,
+    #battle-screen #battle-command-panel .battle-command-btn {
+        min-height: 36px;
+        padding: 4px 5px;
+    }
+
+    #battle-screen .battle-command-panel .battle-command-name,
+    #battle-screen #battle-command-panel .battle-command-name {
+        font-size: 0.6rem;
+    }
+
+    #battle-screen .battle-command-panel .battle-command-meta,
+    #battle-screen #battle-command-panel .battle-command-meta {
+        font-size: 0.49rem;
+        line-height: 1.12;
+    }
+
+    #battle-screen .battle-command-panel .battle-tactical-advisor,
+    #battle-screen #battle-command-panel .battle-tactical-advisor {
+        display: none;
+    }
+
+    #battle-screen .boss-act-panel,
+    #battle-screen #boss-act-panel {
+        top: clamp(150px, 19dvh, 162px);
+        left: 50%;
+        right: auto;
+        width: min(308px, calc(100vw - 32px));
+        transform: translateX(-50%);
+        max-height: 46px;
+        padding: 7px 10px;
+        overflow: hidden;
+    }
+
+    #battle-screen #boss-act-panel .boss-act-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 5px;
+        align-items: center;
+    }
+
+    #battle-screen #boss-act-panel .boss-act-title {
+        font-size: 0.72rem;
+        line-height: 1.18;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    #battle-screen #boss-act-panel .boss-act-subtitle,
+    #battle-screen #boss-act-panel .boss-act-hp {
+        font-size: 0.56rem;
+    }
+
+    #battle-screen #boss-act-panel .boss-act-body {
+        display: none;
+    }
+
+    #battle-screen .enemy-area {
+        flex: 0 0 clamp(316px, 43dvh, 360px);
+        height: auto;
+        min-height: 0;
+        margin-bottom: 6px;
+        padding: 0 8px 4px;
+        align-items: flex-end;
+        transform: none;
+    }
+
+    #battle-screen .enemy-container {
+        gap: 8px;
+        transform: scale(0.86);
+        transform-origin: center bottom;
+    }
+
+    #battle-screen .battle-middle {
+        top: 28dvh;
+        height: 38px;
+        min-height: 38px;
+    }
+
+    #battle-screen .hand-area {
+        min-height: 168px;
+        height: 178px;
+        padding: 6px 4px 20px;
+    }
+
+    #battle-screen .hand-cards {
+        gap: 7px;
+        padding: 0 58px 6px;
+    }
+
+    body[data-current-screen="battle-screen"] #battle-log,
+    #battle-screen .battle-log {
+        bottom: clamp(206px, 25dvh, 232px);
+    }
+
+    #battle-screen .end-turn-btn {
+        right: 8px;
+        bottom: clamp(174px, 22dvh, 200px);
+        min-height: 42px;
+        padding: 8px 14px;
+    }
+
+    #realm-select-screen .screen-header {
+        min-height: 60px;
+        padding: 10px 14px;
+    }
+
+    #realm-select-screen .realm-select-layout {
+        gap: 10px;
+        padding: 10px;
+    }
+
+    #realm-select-screen .realm-list-container {
+        min-height: 0;
+        max-height: min(22dvh, 174px);
+        padding: 8px 8px 12px;
+        gap: 10px;
+    }
+
+    #realm-select-screen .realm-card {
+        width: min(78vw, 304px);
+        min-width: min(78vw, 304px);
+        height: clamp(136px, 18dvh, 154px);
+        min-height: clamp(136px, 18dvh, 154px);
+        margin-right: 10px;
+    }
+
+    #realm-select-screen .realm-info {
+        padding: 0 10px 12px;
+    }
+
+    #realm-select-screen .realm-info h3 {
+        font-size: 0.98rem;
+        line-height: 1.18;
+    }
+
+    #realm-select-screen .realm-env-preview {
+        font-size: 0.72rem;
+    }
+
+    #realm-select-screen .realm-preview-panel {
+        flex: 1 1 auto;
+        min-height: 0;
+        padding: 10px;
+    }
+
+    #realm-select-screen .realm-preview-content {
+        gap: 8px;
+    }
+
+    #realm-select-screen .preview-header {
+        min-height: 54px;
+        gap: 8px;
+        padding-bottom: 8px;
+    }
+
+    #realm-select-screen .preview-icon {
+        width: 50px;
+        height: 50px;
+        min-width: 50px;
+        font-size: 1.55rem;
+    }
+
+    #realm-select-screen .preview-header h3 {
+        font-size: 1.28rem;
+        line-height: 1.18;
+    }
+
+    #realm-select-screen .preview-scroll-body {
+        gap: 8px;
+        padding-right: 4px;
+    }
+
+    #realm-select-screen .preview-section,
+    #realm-select-screen .preview-rewards {
+        padding: 8px 10px;
+    }
+
+    #realm-select-screen .preview-section h4,
+    #realm-select-screen .preview-rewards h4 {
+        min-height: 0;
+        margin-bottom: 5px;
+        line-height: 1.2;
+    }
+
+    #realm-select-screen .preview-text {
+        font-size: 0.82rem;
+        line-height: 1.35;
+    }
+
+    #realm-select-screen .realm-preview-actions {
+        margin-top: 6px;
+        padding-top: 8px;
+    }
+
+    #realm-select-screen #enter-realm-btn {
+        min-height: 44px;
+    }
+
+    #ring-modal .ring-scene-container {
+        height: 100dvh;
+        gap: 8px;
+        padding: 10px;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at 50% 18%, rgba(52, 82, 126, 0.24), transparent 38%),
+            linear-gradient(180deg, rgba(9, 14, 24, 0.98), rgba(4, 8, 14, 1));
+    }
+
+    #ring-modal .ring-scene {
+        flex: 0 0 min(30dvh, 240px);
+        min-height: 220px;
+        padding-top: 0;
+        overflow: hidden;
+    }
+
+    #ring-modal .ring-system {
+        width: min(318px, calc(100vw - 48px));
+        height: min(318px, calc(100vw - 48px));
+        margin: -18px auto 0;
+        transform: scale(0.58) !important;
+        transform-origin: center center;
+    }
+
+    #ring-modal .modal-close-floating {
+        top: 14px;
+        right: 14px;
+    }
+
+    #ring-modal .ring-ui-overlay {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+        gap: 8px;
+        padding: 0;
+    }
+
+    #ring-modal .ring-ui-panel.left {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+        padding: 12px;
+        background:
+            radial-gradient(circle at 12% 0%, rgba(255, 215, 122, 0.08), transparent 32%),
+            rgba(0, 0, 0, 0.72);
+        border-radius: 16px;
+    }
+
+    #ring-modal .ring-ui-panel .panel-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+
+    #ring-modal .ring-ui-footer {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        padding: 8px 10px;
+    }
+}
+
+@media (max-width: 768px) and (max-height: 780px) {
+    #battle-screen .battle-command-panel,
+    #battle-screen #battle-command-panel {
+        max-height: 86px;
+    }
+
+    #battle-screen .enemy-area {
+        flex-basis: clamp(282px, 40dvh, 316px);
+    }
+
+    #battle-screen .hand-area {
+        height: 166px;
+        min-height: 158px;
+    }
+
+    #realm-select-screen .realm-list-container {
+        max-height: 148px;
+    }
+
+    #realm-select-screen .realm-card {
+        height: 128px;
+        min-height: 128px;
+    }
+
+    #ring-modal .ring-scene {
+        flex-basis: 190px;
+        min-height: 190px;
+    }
+
+    #ring-modal .ring-system {
+        transform: scale(0.52) !important;
+    }
+}
+
+@media (min-width: 769px) and (max-width: 1240px) {
+    #pvp-screen .pvp-layout-split {
+        gap: clamp(18px, 3vw, 36px);
+        padding-left: clamp(20px, 4vw, 52px);
+        padding-right: clamp(20px, 4vw, 52px);
+    }
+
+    #pvp-screen .jade-slip-row {
+        grid-template-columns: 64px 70px minmax(0, 1fr) minmax(92px, auto);
+        padding-left: 18px;
+        padding-right: 18px;
+    }
+}
+
+/* Final visual audit pass: make critical content complete instead of clipped. */
+#character-select .ink-scroll-container {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+#character-select .ink-scroll-content {
+    min-height: 0;
+}
+
+#character-select .fate-ring-info-panel {
+    min-height: 0;
+    height: auto;
+    overflow: visible;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px 18px;
+}
+
+#character-select .fate-ring-info-panel::after {
+    z-index: 0;
+    pointer-events: none;
+}
+
+#character-select .fate-ring-info-panel > * {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+}
+
+#character-select .ring-info-header {
+    flex: 1 1 180px;
+}
+
+#character-select .ring-stats-text {
+    flex: 1 1 140px;
+    text-align: right;
+    white-space: normal;
+}
+
+#event-modal .modal-content.event-view {
+    width: min(520px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+    max-height: calc(100dvh - 32px);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    overflow: hidden !important;
+}
+
+#event-modal .event-header {
+    flex: 0 0 auto;
+}
+
+#event-modal .event-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+#event-modal .event-choices {
+    padding-bottom: 4px;
+}
+
+#event-modal .event-choice {
+    min-height: 0;
+}
+
+#battle-screen #battle-tactical-advisor.collapsed {
+    min-height: 40px;
+    max-height: 48px;
+    overflow: hidden;
+}
+
+#card-modal .modal-content.card-detail {
+    width: min(360px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+    max-height: calc(100dvh - 32px);
+    padding: 18px;
+    display: grid;
+    place-items: center;
+    overflow: visible;
+}
+
+#card-modal .modal-content.card-detail .modal-close {
+    top: 10px;
+    right: 10px;
+}
+
+#card-modal #modal-card,
+#card-modal .card-large {
+    width: 100%;
+    min-height: 260px;
+    display: grid;
+    place-items: center;
+    padding: 10px 0;
+}
+
+#card-modal #modal-card .card,
+#card-modal .card-large .card {
+    width: 150px;
+    height: 210px;
+    margin-left: 0;
+    transform: none;
+}
+
+#shop-screen .shop-card-wrapper .card {
+    height: auto;
+    min-height: 218px;
+    margin-left: 0;
+    overflow: visible;
+}
+
+#shop-screen .shop-card-wrapper .card-desc {
+    display: block;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+    -webkit-line-clamp: unset;
+    line-height: 1.28;
+}
+
+#shop-screen .shop-card-wrapper .card-type {
+    flex: 0 0 auto;
+}
+
+#reward-screen .reward-cards .card,
+#reward-screen .reward-card-stage .card,
+#reward-screen .reward-card {
+    height: auto;
+    min-height: 214px;
+    overflow: visible;
+}
+
+#reward-screen .reward-cards .card-desc,
+#reward-screen .reward-card-stage .card-desc,
+#reward-screen .reward-card .card-desc {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+}
+
+#reward-screen .reward-cards .card-type,
+#reward-screen .reward-card-stage .card-type,
+#reward-screen .reward-card .card-type {
+    flex: 0 0 auto;
+}
+
+#map-screen .map-screen-v3 {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    overflow: hidden;
+}
+
+#map-screen #map-expedition-panels {
+    grid-row: 3;
+    min-height: 0;
+    max-height: min(22dvh, 220px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+
+#map-screen .map-v3-header {
+    grid-row: 1;
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+    max-height: min(28dvh, 260px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 12px;
+    padding: 14px 18px 12px;
+    pointer-events: auto;
+    background:
+        linear-gradient(180deg, rgba(4, 8, 20, 0.96), rgba(6, 11, 26, 0.9)),
+        radial-gradient(circle at top left, rgba(100, 177, 255, 0.14), transparent 44%);
+    border-bottom: 1px solid rgba(125, 186, 255, 0.16);
+}
+
+#map-screen .map-v3-header .back-btn {
+    grid-column: 1;
+    position: relative;
+    z-index: 2;
+}
+
+#map-screen .map-header-right {
+    grid-column: 2;
+    width: 100%;
+    max-width: 980px;
+    min-width: 0;
+    justify-self: end;
+    align-items: stretch;
+}
+
+#map-screen .player-status-bar {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+#map-screen .map-situation-overview,
+#map-screen .map-chapter-risk-card,
+#map-screen .map-chapter-brief,
+#map-screen .map-adventure-buffs,
+#map-screen .map-route-hints,
+#map-screen .map-endless-panel,
+#map-screen .map-legacy-mission,
+#map-screen .map-run-path-flash {
+    width: 100%;
+    max-width: 100%;
+}
+
+#map-screen .map-scroll-container {
+    grid-row: 2;
+    min-height: 0;
+    height: 100%;
+    scroll-behavior: auto;
+    padding-top: 16px;
+    padding-bottom: 72px;
+}
+
+#map-screen .map-content-wrapper {
+    min-height: 100%;
+    padding-top: 24px;
+    padding-bottom: 56px;
+}
+
+#map-screen .map-footer {
+    grid-row: 4;
+    position: relative;
+    z-index: 30;
+    flex: 0 0 auto;
+    background: rgba(5, 7, 18, 0.92);
+    border-top: 1px solid rgba(125, 186, 255, 0.12);
+}
+
+#map-screen .map-expedition-panels {
+    gap: 12px;
+    padding: 0 20px 16px;
+}
+
+#map-screen .expedition-panel-card {
+    padding: 12px 14px 10px;
+    gap: 8px;
+}
+
+#map-screen .expedition-card-title {
+    font-size: 16px;
+    line-height: 1.2;
+}
+
+#map-screen .expedition-card-note {
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+#map-screen .expedition-chip-row {
+    gap: 6px;
+}
+
+#map-screen .expedition-chip {
+    padding: 5px 9px;
+    font-size: 11px;
+}
+
+#map-screen .expedition-choice-list,
+#map-screen .expedition-faction-list {
+    gap: 8px;
+}
+
+#map-screen .expedition-choice-card,
+#map-screen .expedition-faction-card,
+#map-screen .expedition-nemesis-card {
+    padding: 10px 10px 8px;
+    gap: 6px;
+}
+
+#map-screen .expedition-choice-head {
+    align-items: flex-start;
+    gap: 8px;
+}
+
+#map-screen .expedition-choice-head strong {
+    min-width: 0;
+}
+
+#map-screen .expedition-choice-card p,
+#map-screen .expedition-faction-card p,
+#map-screen .expedition-nemesis-card p,
+#map-screen .expedition-observatory-note,
+#map-screen .expedition-empty-note,
+#map-screen .expedition-signal-item span,
+#map-screen .expedition-warning-item span {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+}
+
+#map-screen .expedition-choice-meta {
+    gap: 4px 8px;
+}
+
+@media (max-height: 760px) {
+    #event-modal .modal-content.event-view {
+        max-height: calc(100dvh - 24px);
+    }
+
+    #event-modal .event-header {
+        padding: 12px 16px;
+    }
+
+    #event-modal .event-view .event-icon {
+        width: 54px;
+        height: 54px;
+        font-size: 2rem;
+    }
+
+    #event-modal .event-body {
+        padding: 14px 16px;
+    }
+
+    #map-screen .map-v3-header {
+        max-height: min(22dvh, 190px);
+        padding: 10px 14px 8px;
+    }
+
+    #map-screen #map-expedition-panels {
+        max-height: min(18dvh, 160px);
+    }
+
+    #map-screen .map-scroll-container {
+        padding-top: 12px;
+        padding-bottom: 64px;
+    }
+
+    #map-screen .map-content-wrapper {
+        padding-top: 18px;
+        padding-bottom: 48px;
+    }
+}
+
+@media (max-width: 768px) {
+    #character-select .fate-ring-info-panel {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        padding: 14px 16px;
+        gap: 12px;
+    }
+
+    #character-select .ring-info-header {
+        gap: 8px;
+    }
+
+    #character-select .ring-visual-mini {
+        width: 42px;
+        height: 42px;
+        justify-self: center;
+    }
+
+    #character-select .ring-stats-text {
+        text-align: left;
+    }
+
+    #map-screen .map-screen-v3 {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr) auto auto;
+    }
+
+    #map-screen .map-v3-header {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        max-height: min(24dvh, 220px);
+        padding: 10px;
+        gap: 8px;
+    }
+
+    #map-screen #map-expedition-panels {
+        max-height: min(18dvh, 170px);
+    }
+
+    #map-screen .map-v3-header .back-btn {
+        align-self: flex-start;
+    }
+
+    #map-screen .map-header-right {
+        width: 100%;
+        gap: 7px;
+    }
+
+    #map-screen .player-status-bar {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        width: 100%;
+        margin-top: 0;
+        padding: 6px;
+    }
+
+    #map-screen .status-item {
+        min-width: 0;
+        justify-content: center;
+        padding: 5px 6px;
+        font-size: 0.74rem;
+        white-space: nowrap;
+    }
+
+    #map-screen .map-situation-overview,
+    #map-screen .map-chapter-risk-card,
+    #map-screen .map-chapter-brief,
+    #map-screen .map-adventure-buffs,
+    #map-screen .map-route-hints,
+    #map-screen .map-endless-panel,
+    #map-screen .map-legacy-mission,
+    #map-screen .map-run-path-flash {
+        width: 100%;
+    }
+
+    #map-screen .map-scroll-container {
+        padding-top: 10px;
+        padding-bottom: 64px;
+    }
+
+    #map-screen .map-content-wrapper {
+        padding-top: 16px;
+        padding-bottom: 52px;
+    }
+
+    #map-screen .map-footer {
+        gap: 8px;
+        padding: 10px;
+    }
+
+    #collection .compendium-toolbar,
+    #collection .codex-toolbar,
+    #treasure-compendium .compendium-toolbar {
+        display: flex;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        flex: 0 0 auto;
+        height: auto !important;
+        max-height: none !important;
+        min-height: max-content;
+        overflow: visible;
+        align-items: stretch;
+        align-self: stretch;
+        position: relative;
+        z-index: 6;
+        margin-bottom: 16px;
+    }
+
+    #collection .codex-main-column,
+    #treasure-compendium .treasure-compendium-main {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        height: auto;
+        min-height: max-content;
+        overflow: visible;
+    }
+
+    #collection .codex-section,
+    #treasure-compendium .compendium-stats-wrapper,
+    #treasure-compendium .compendium-grid-container {
+        position: relative;
+        z-index: 1;
+        flex: 0 0 auto;
+    }
+
+    #collection .compendium-toolbar.codex-toolbar,
+    #treasure-compendium .compendium-toolbar {
+        grid-auto-rows: unset;
+    }
+
+    #collection .compendium-control,
+    #collection .compendium-control.compendium-control-wide,
+    #treasure-compendium .compendium-control,
+    #treasure-compendium .compendium-control.compendium-control-wide {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        flex: 0 0 auto;
+    }
+
+    #collection .compendium-chip-groups,
+    #collection .compendium-chip-group,
+    #collection .compendium-chip-row,
+    #treasure-compendium .compendium-chip-groups,
+    #treasure-compendium .compendium-chip-group,
+    #treasure-compendium .compendium-chip-row,
+    #treasure-compendium .compendium-preset-bar,
+    #treasure-compendium .compendium-preset-slots {
+        width: 100%;
+        min-width: 0;
+        max-height: none;
+        overflow: visible;
+    }
+
+    #collection .compendium-chip,
+    #treasure-compendium .compendium-chip {
+        min-height: 34px;
+        white-space: normal;
+    }
+
+    #treasure-compendium .compendium-preset-slots {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+    }
+
+    #treasure-compendium .compendium-preset-slot {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+    }
+
+    #treasure-compendium .compendium-grid-container {
+        overflow: visible;
+    }
+
+    #ring-modal.active {
+        align-items: stretch;
+        justify-content: stretch;
+        overflow: hidden;
+    }
+
+    #ring-modal .modal-content {
+        width: calc(100vw - 20px);
+        height: calc(100dvh - 20px);
+        max-width: calc(100vw - 20px);
+        max-height: calc(100dvh - 20px);
+        margin: 10px auto;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    #ring-modal .ring-scene-container {
+        height: 100dvh;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow-x: hidden;
+        overflow-y: auto;
+        perspective: none;
+        gap: 12px;
+        padding: 16px 10px 16px;
+    }
+
+    #ring-modal .ring-scene {
+        position: relative;
+        flex: 0 0 min(34dvh, 300px);
+        width: 100%;
+        height: auto;
+        min-height: 248px;
+        overflow: visible;
+        pointer-events: auto;
+        padding-top: 10px;
+    }
+
+    #ring-modal .ring-system {
+        width: min(330px, calc(100vw - 28px));
+        height: min(330px, calc(100vw - 28px));
+        margin: 0 auto;
+        transform: scale(0.64) !important;
+        transform-origin: center center;
+    }
+
+    #ring-modal .ring-ui-overlay {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        width: 100%;
+        height: auto;
+        min-height: 0;
+        padding: 0;
+        pointer-events: auto;
+    }
+
+    #ring-modal .ring-ui-panel,
+    #ring-modal .ring-ui-panel.left,
+    #ring-modal .ring-ui-panel.right {
+        position: relative;
+        top: auto;
+        right: auto;
+        bottom: auto;
+        left: auto;
+        width: 100%;
+        height: auto;
+        max-height: none;
+        margin: 0;
+        padding: 14px;
+        overflow: visible;
+        transform: none !important;
+    }
+
+    #ring-modal .ring-ui-panel.right {
+        display: none;
+    }
+
+    #ring-modal .ring-ui-panel .panel-body {
+        max-height: none;
+        overflow: visible;
+    }
+
+    #ring-modal .ring-ui-footer {
+        position: relative;
+        top: auto;
+        right: auto;
+        bottom: auto;
+        left: auto;
+        display: block;
+        width: 100%;
+        margin: 0;
+        padding: 10px 12px;
+        transform: none;
+        pointer-events: auto;
+        background: rgba(0, 0, 0, 0.72);
+        border: 1px solid rgba(255, 215, 0, 0.16);
+        border-radius: 14px;
+    }
+
+    #ring-modal .instruction-text {
+        display: block;
+        width: 100%;
+        margin: 0;
+        white-space: normal;
+        line-height: 1.4;
+        text-align: center;
+    }
+
+    #card-modal .modal-content.card-detail {
+        width: min(340px, calc(100vw - 20px));
+        max-width: calc(100vw - 20px);
+        padding: 16px;
+    }
+
+    #card-modal #modal-card,
+    #card-modal .card-large {
+        min-height: 280px;
+    }
+
+    #card-modal #modal-card .card,
+    #card-modal .card-large .card {
+        width: 158px;
+        height: 220px;
+        padding: 8px;
+        font-size: 0.9rem;
+    }
+
+    #shop-screen .shop-card-wrapper .card {
+        width: 126px;
+        min-height: 218px;
+    }
+
+    #shop-screen .shop-card-wrapper .card-desc {
+        font-size: 0.62rem;
+    }
+}
+
+@media (max-height: 760px) {
+    #reward-screen .reward-container {
+        padding-top: 18px;
+    }
+
+    #reward-screen .reward-title {
+        font-size: clamp(2.45rem, 5.6vw, 3.3rem);
+        line-height: 1.05;
+    }
+
+    #reward-screen .reward-cards {
+        align-items: start;
+    }
+
+    #reward-screen .reward-cards .card,
+    #reward-screen .reward-card-stage .card,
+    #reward-screen .reward-card {
+        width: 138px;
+        min-height: 206px;
+        padding: 9px;
+    }
+
+    #reward-screen .reward-cards .card-header,
+    #reward-screen .reward-card-stage .card-header,
+    #reward-screen .reward-card .card-header {
+        min-height: 28px;
+        margin-bottom: 6px;
+    }
+
+    #reward-screen .reward-cards .card-image,
+    #reward-screen .reward-cards .card-art,
+    #reward-screen .reward-card-stage .card-image,
+    #reward-screen .reward-card-stage .card-art,
+    #reward-screen .reward-card .card-image,
+    #reward-screen .reward-card .card-art {
+        height: 36px;
+        min-height: 36px;
+        margin: 4px 0;
+        font-size: 2.2rem;
+    }
+
+    #reward-screen .reward-cards .card-desc,
+    #reward-screen .reward-card-stage .card-desc,
+    #reward-screen .reward-card .card-desc {
+        font-size: 0.66rem;
+        line-height: 1.25;
+        padding: 5px;
+    }
+}
+
+/* Terminal visual pass: this block must remain at EOF so it wins over the
+   older duplicated mobile overrides above. */
+@media (max-width: 768px) {
+    body[data-current-screen="battle-screen"] #battle-log,
+    #battle-screen .battle-log {
+        bottom: clamp(236px, 29dvh, 260px);
+        max-width: min(48vw, 176px);
+        padding: 7px 10px;
+        font-size: 0.76rem;
+        line-height: 1.28;
+    }
+
+    #battle-screen .end-turn-btn {
+        right: 8px;
+        bottom: clamp(174px, 22dvh, 200px);
+        min-height: 42px;
+        padding: 8px 14px;
+    }
+
+    #realm-select-screen .realm-list-container {
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+    }
+
+    #realm-select-screen .realm-list-container::-webkit-scrollbar {
+        display: none;
+    }
+
+    #ring-modal .ring-scene-container {
+        display: grid;
+        grid-template-rows: minmax(202px, 27dvh) minmax(0, 1fr);
+        gap: 8px;
+        height: 100dvh;
+        min-height: 0;
+        padding: 10px;
+        overflow: hidden;
+        perspective: none;
+        background:
+            radial-gradient(circle at 50% 14%, rgba(52, 82, 126, 0.24), transparent 36%),
+            linear-gradient(180deg, rgba(9, 14, 24, 0.98), rgba(4, 8, 14, 1));
+    }
+
+    #ring-modal .ring-scene {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        padding: 0;
+        overflow: hidden;
+        pointer-events: auto;
+    }
+
+    #ring-modal .ring-system {
+        width: min(318px, calc(100vw - 48px));
+        height: min(318px, calc(100vw - 48px));
+        margin: -28px auto -18px;
+        transform: scale(0.56) !important;
+        transform-origin: center center;
+    }
+
+    #ring-modal .modal-close-floating {
+        top: 14px;
+        right: 14px;
+    }
+
+    #ring-modal .ring-ui-overlay {
+        position: relative;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+        gap: 8px;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        padding: 0;
+        overflow: hidden;
+        pointer-events: auto;
+    }
+
+    #ring-modal .ring-ui-panel,
+    #ring-modal .ring-ui-panel.left {
+        position: relative;
+        top: auto;
+        right: auto;
+        bottom: auto;
+        left: auto;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: auto;
+        min-height: 0;
+        max-height: none;
+        margin: 0;
+        padding: 12px;
+        overflow: hidden;
+        transform: none !important;
+        background:
+            radial-gradient(circle at 12% 0%, rgba(255, 215, 122, 0.08), transparent 32%),
+            rgba(0, 0, 0, 0.72);
+        border-radius: 16px;
+    }
+
+    #ring-modal .ring-ui-panel.right {
+        display: none;
+    }
+
+    #ring-modal .ring-ui-panel .panel-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    #ring-modal .ring-ui-footer {
+        position: relative;
+        top: auto;
+        right: auto;
+        bottom: auto;
+        left: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 40px;
+        margin: 0;
+        padding: 8px 10px;
+        transform: none;
+    }
+}
+
+@media (max-width: 768px) and (max-height: 780px) {
+    #ring-modal .ring-scene-container {
+        grid-template-rows: 184px minmax(0, 1fr);
+    }
+
+    #ring-modal .ring-system {
+        transform: scale(0.52) !important;
+    }
+}
+
+/* Absolute final mobile ring override. Keep this below the duplicated mobile
+   blocks so the library panel is not hidden again. */
+@media (max-width: 768px) {
+    #ring-modal .ring-scene-container {
+        display: grid;
+        grid-template-rows: minmax(260px, 32dvh) minmax(0, 1fr);
+        gap: 8px;
+        height: 100dvh;
+        min-height: 0;
+        overflow: hidden;
+        padding: 10px;
+    }
+
+    #ring-modal .ring-scene {
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    #ring-modal .ring-ui-overlay {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        gap: 8px;
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    #ring-modal .ring-ui-panel.left {
+        grid-row: 1;
+    }
+
+    #ring-modal .ring-ui-panel.right {
+        grid-row: 2;
+        display: flex !important;
+        flex-direction: column;
+        width: 100%;
+        min-height: 0;
+        margin: 0;
+        padding: 12px;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at 88% 0%, rgba(78, 111, 189, 0.12), transparent 34%),
+            rgba(0, 0, 0, 0.72);
+        border-radius: 16px;
+        transform: none !important;
+    }
+
+    #ring-modal .ring-ui-panel.right .panel-header {
+        flex: 0 0 auto;
+    }
+
+    #ring-modal .ring-ui-panel.right .law-library-grid {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    #ring-modal .ring-ui-panel.right .resonance-area {
+        flex: 0 0 auto;
+    }
+
+    #ring-modal .ring-ui-footer {
+        grid-row: 3;
+    }
+}
+
+@media (max-width: 768px) {
+    #ring-modal .ring-ui-overlay {
+        grid-template-columns: minmax(0, 1fr) !important;
+        grid-auto-flow: row;
+    }
+
+    #ring-modal .ring-ui-panel.left,
+    #ring-modal .ring-ui-panel.right,
+    #ring-modal .ring-ui-footer {
+        grid-column: 1 / -1 !important;
+        width: 100%;
+        min-width: 0;
+    }
+
+    #ring-modal .ring-ui-panel.left {
+        grid-row: 1 !important;
+    }
+
+    #ring-modal .ring-ui-panel.right {
+        grid-row: 2 !important;
+        align-self: stretch;
+    }
+
+    #ring-modal .ring-ui-footer {
+        grid-row: 3 !important;
+    }
+}
+
+/* Audit cleanup: the realm-card shimmer used an oversized absolute pseudo
+   element, which inflated scrollHeight and looked like hidden content. */
+@keyframes realm-card-contained-shimmer {
+    0% {
+        transform: translateX(-115%) skewX(-18deg);
+    }
+
+    100% {
+        transform: translateX(115%) skewX(-18deg);
+    }
+}
+
+#realm-select-screen .realm-card:not(.locked)::before {
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: linear-gradient(105deg,
+            transparent 0%,
+            transparent 43%,
+            rgba(207, 170, 112, 0.16) 50%,
+            transparent 57%,
+            transparent 100%) !important;
+    animation: realm-card-contained-shimmer 6s infinite linear !important;
+    transform: translateX(-115%) skewX(-18deg);
+}
+
+#realm-select-screen .realm-card.endless-card::before {
+    background: linear-gradient(105deg,
+            transparent 0%,
+            transparent 42%,
+            rgba(84, 200, 255, 0.2) 50%,
+            transparent 58%,
+            transparent 100%) !important;
+}
+
+@media (max-width: 768px) {
+    #map-screen .map-content-wrapper {
+        overflow-x: visible !important;
+    }
+
+    #map-screen .map-scroll-container {
+        overflow-x: auto !important;
+        overscroll-behavior-x: contain;
+        touch-action: pan-y;
+    }
+
+    #map-screen .map-scroll-container::-webkit-scrollbar {
+        display: none;
+    }
+
+    #realm-select-screen .realm-list-container {
+        overflow-x: auto;
+        overflow-y: auto;
+    }
+
+    #ring-modal .ring-scene-container {
+        grid-template-rows: minmax(296px, 35dvh) minmax(0, 1fr);
+    }
+
+    #ring-modal .ring-scene {
+        overflow: visible !important;
+    }
+}

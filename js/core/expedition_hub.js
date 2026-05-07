@@ -1116,6 +1116,109 @@
                     }))
                 }
                 : null;
+            const resolutionRoot = root.resolution && typeof root.resolution === 'object' ? root.resolution : null;
+            const resolution = resolutionRoot
+                ? {
+                    available: resolutionRoot.available !== false,
+                    submitted: !!resolutionRoot.submitted,
+                    id: String(resolutionRoot.id || ''),
+                    weekTag: String(resolutionRoot.weekTag || ''),
+                    phaseId: String(resolutionRoot.phaseId || ''),
+                    phaseLabel: String(resolutionRoot.phaseLabel || ''),
+                    laneId: String(resolutionRoot.laneId || ''),
+                    laneLabel: String(resolutionRoot.laneLabel || ''),
+                    fullLaneLabel: String(resolutionRoot.fullLaneLabel || ''),
+                    statusId: String(resolutionRoot.statusId || ''),
+                    statusLabel: String(resolutionRoot.statusLabel || ''),
+                    choiceId: String(resolutionRoot.choiceId || ''),
+                    choiceLabel: String(resolutionRoot.choiceLabel || ''),
+                    suggestedChoiceId: String(resolutionRoot.suggestedChoiceId || ''),
+                    suggestedChoiceLabel: String(resolutionRoot.suggestedChoiceLabel || ''),
+                    stanceId: String(resolutionRoot.stanceId || ''),
+                    supportLaneId: String(resolutionRoot.supportLaneId || ''),
+                    supportLaneLabel: String(resolutionRoot.supportLaneLabel || ''),
+                    settlementOutcomeId: String(resolutionRoot.settlementOutcomeId || ''),
+                    settlementOutcomeLabel: String(resolutionRoot.settlementOutcomeLabel || ''),
+                    resolutionTier: String(resolutionRoot.resolutionTier || ''),
+                    resolvedStatus: String(resolutionRoot.resolvedStatus || ''),
+                    proofQuality: String(resolutionRoot.proofQuality || ''),
+                    lineageStyle: String(resolutionRoot.lineageStyle || ''),
+                    summaryLine: String(resolutionRoot.summaryLine || ''),
+                    chronicleSealLine: String(resolutionRoot.chronicleSealLine || ''),
+                    councilResolutionLine: String(resolutionRoot.councilResolutionLine || ''),
+                    source: String(resolutionRoot.source || ''),
+                    sourceId: String(resolutionRoot.sourceId || ''),
+                    submittedAt: clampInt(resolutionRoot.submittedAt, 0, 9999999999999)
+                }
+                : null;
+            const archiveRoot = root.chronicleArchive && typeof root.chronicleArchive === 'object' ? root.chronicleArchive : null;
+            const chronicleArchive = archiveRoot
+                ? {
+                    available: archiveRoot.available !== false,
+                    id: String(archiveRoot.id || ''),
+                    weekTag: String(archiveRoot.weekTag || ''),
+                    weekLabel: String(archiveRoot.weekLabel || ''),
+                    totalRecords: clampInt(archiveRoot.totalRecords, 0, 9999),
+                    sealedCount: clampInt(archiveRoot.sealedCount, 0, 9999),
+                    countsByChoice: {
+                        hold_primary: clampInt(archiveRoot.countsByChoice?.hold_primary, 0, 9999),
+                        rebalance_support: clampInt(archiveRoot.countsByChoice?.rebalance_support, 0, 9999),
+                        seal_dispute: clampInt(archiveRoot.countsByChoice?.seal_dispute, 0, 9999)
+                    },
+                    countsByStance: {
+                        frontier_loyalist: clampInt(archiveRoot.countsByStance?.frontier_loyalist, 0, 9999),
+                        support_balancer: clampInt(archiveRoot.countsByStance?.support_balancer, 0, 9999),
+                        dispute_archivist: clampInt(archiveRoot.countsByStance?.dispute_archivist, 0, 9999)
+                    },
+                    dominantStanceId: String(archiveRoot.dominantStanceId || ''),
+                    dominantStanceLabel: String(archiveRoot.dominantStanceLabel || ''),
+                    summaryLine: String(archiveRoot.summaryLine || ''),
+                    detailLine: String(archiveRoot.detailLine || ''),
+                    progressText: String(archiveRoot.progressText || ''),
+                    latestEntry: archiveRoot.latestEntry && typeof archiveRoot.latestEntry === 'object'
+                        ? {
+                            recordId: String(archiveRoot.latestEntry.recordId || ''),
+                            weekTag: String(archiveRoot.latestEntry.weekTag || ''),
+                            weekLabel: String(archiveRoot.latestEntry.weekLabel || ''),
+                            choiceId: String(archiveRoot.latestEntry.choiceId || ''),
+                            choiceLabel: String(archiveRoot.latestEntry.choiceLabel || ''),
+                            stanceId: String(archiveRoot.latestEntry.stanceId || ''),
+                            stanceLabel: String(archiveRoot.latestEntry.stanceLabel || ''),
+                            supportLaneId: String(archiveRoot.latestEntry.supportLaneId || ''),
+                            supportLaneLabel: String(archiveRoot.latestEntry.supportLaneLabel || ''),
+                            summaryLine: String(archiveRoot.latestEntry.summaryLine || ''),
+                            chronicleSealLine: String(archiveRoot.latestEntry.chronicleSealLine || ''),
+                            councilResolutionLine: String(archiveRoot.latestEntry.councilResolutionLine || ''),
+                            submittedAt: clampInt(archiveRoot.latestEntry.submittedAt, 0, 9999999999999)
+                        }
+                        : null,
+                    styleEntries: readArray(archiveRoot.styleEntries).map((entry) => ({
+                        id: String(entry?.id || ''),
+                        label: String(entry?.label || ''),
+                        choiceId: String(entry?.choiceId || ''),
+                        choiceLabel: String(entry?.choiceLabel || ''),
+                        count: clampInt(entry?.count, 0, 9999),
+                        countText: String(entry?.countText || ''),
+                        summaryLine: String(entry?.summaryLine || ''),
+                        latestAt: clampInt(entry?.latestAt, 0, 9999999999999)
+                    })),
+                    entries: readArray(archiveRoot.entries).map((entry) => ({
+                        recordId: String(entry?.recordId || ''),
+                        weekTag: String(entry?.weekTag || ''),
+                        weekLabel: String(entry?.weekLabel || ''),
+                        choiceId: String(entry?.choiceId || ''),
+                        choiceLabel: String(entry?.choiceLabel || ''),
+                        stanceId: String(entry?.stanceId || ''),
+                        stanceLabel: String(entry?.stanceLabel || ''),
+                        supportLaneId: String(entry?.supportLaneId || ''),
+                        supportLaneLabel: String(entry?.supportLaneLabel || ''),
+                        summaryLine: String(entry?.summaryLine || ''),
+                        chronicleSealLine: String(entry?.chronicleSealLine || ''),
+                        councilResolutionLine: String(entry?.councilResolutionLine || ''),
+                        submittedAt: clampInt(entry?.submittedAt, 0, 9999999999999)
+                    }))
+                }
+                : null;
             return {
                 available: root.available !== false,
                 id: String(root.id || ''),
@@ -1145,6 +1248,8 @@
                 decree,
                 chronicle,
                 council,
+                resolution,
+                chronicleArchive,
                 items: readArray(root.items).map((item, index) => ({
                     id: String(item?.id || ''),
                     laneId: String(item?.laneId || ''),
@@ -1263,13 +1368,24 @@
                         primaryWritebackMode: String(source.weekVerdictLedger.current.primaryWritebackMode || ''),
                         sideWritebackMode: String(source.weekVerdictLedger.current.sideWritebackMode || ''),
                         writebackLine: String(source.weekVerdictLedger.current.writebackLine || ''),
-                        proofQuality: String(source.weekVerdictLedger.current.proofQuality || ''),
-                        lineageStyle: String(source.weekVerdictLedger.current.lineageStyle || ''),
-                        carryIntoNextWeek: !!source.weekVerdictLedger.current.carryIntoNextWeek,
-                        settlementSource: String(source.weekVerdictLedger.current.settlementSource || ''),
-                        summaryLine: String(source.weekVerdictLedger.current.summaryLine || '')
+                            proofQuality: String(source.weekVerdictLedger.current.proofQuality || ''),
+                            lineageStyle: String(source.weekVerdictLedger.current.lineageStyle || ''),
+                            carryIntoNextWeek: !!source.weekVerdictLedger.current.carryIntoNextWeek,
+                            settlementSource: String(source.weekVerdictLedger.current.settlementSource || ''),
+                            summaryLine: String(source.weekVerdictLedger.current.summaryLine || ''),
+                            frontierResolutionId: String(source.weekVerdictLedger.current.frontierResolutionId || ''),
+                            frontierResolutionChoiceId: String(source.weekVerdictLedger.current.frontierResolutionChoiceId || ''),
+                            frontierResolutionLabel: String(source.weekVerdictLedger.current.frontierResolutionLabel || ''),
+                            frontierResolutionStance: String(source.weekVerdictLedger.current.frontierResolutionStance || ''),
+                            frontierResolutionSupportLaneId: String(source.weekVerdictLedger.current.frontierResolutionSupportLaneId || ''),
+                            frontierResolutionSupportLaneLabel: String(source.weekVerdictLedger.current.frontierResolutionSupportLaneLabel || ''),
+                            frontierResolutionSummaryLine: String(source.weekVerdictLedger.current.frontierResolutionSummaryLine || ''),
+                            chronicleSealStatus: String(source.weekVerdictLedger.current.chronicleSealStatus || ''),
+                            chronicleSealLine: String(source.weekVerdictLedger.current.chronicleSealLine || ''),
+                            councilResolutionLine: String(source.weekVerdictLedger.current.councilResolutionLine || ''),
+                            frontierResolutionSubmittedAt: clampInt(source.weekVerdictLedger.current.frontierResolutionSubmittedAt, 0, 9999999999999)
+                        }
                     }
-                }
                 : null,
             verificationOrders: readArray(source.verificationOrders).map((entry, index) => ({
                 id: String(entry?.id || `season_verification_${index + 1}`),
@@ -5526,6 +5642,107 @@
                             }))
                         }
                         : null;
+                    const resolution = frontier.resolution && typeof frontier.resolution === 'object'
+                        ? {
+                            available: frontier.resolution.available !== false,
+                            submitted: !!frontier.resolution.submitted,
+                            id: frontier.resolution.id || '',
+                            weekTag: frontier.resolution.weekTag || '',
+                            phaseId: frontier.resolution.phaseId || '',
+                            phaseLabel: frontier.resolution.phaseLabel || '',
+                            laneId: frontier.resolution.laneId || '',
+                            laneLabel: frontier.resolution.laneLabel || '',
+                            fullLaneLabel: frontier.resolution.fullLaneLabel || '',
+                            statusId: frontier.resolution.statusId || '',
+                            statusLabel: frontier.resolution.statusLabel || '',
+                            choiceId: frontier.resolution.choiceId || '',
+                            choiceLabel: frontier.resolution.choiceLabel || '',
+                            suggestedChoiceId: frontier.resolution.suggestedChoiceId || '',
+                            suggestedChoiceLabel: frontier.resolution.suggestedChoiceLabel || '',
+                            stanceId: frontier.resolution.stanceId || '',
+                            supportLaneId: frontier.resolution.supportLaneId || '',
+                            supportLaneLabel: frontier.resolution.supportLaneLabel || '',
+                            settlementOutcomeId: frontier.resolution.settlementOutcomeId || '',
+                            settlementOutcomeLabel: frontier.resolution.settlementOutcomeLabel || '',
+                            resolutionTier: frontier.resolution.resolutionTier || '',
+                            resolvedStatus: frontier.resolution.resolvedStatus || '',
+                            proofQuality: frontier.resolution.proofQuality || '',
+                            lineageStyle: frontier.resolution.lineageStyle || '',
+                            summaryLine: frontier.resolution.summaryLine || '',
+                            chronicleSealLine: frontier.resolution.chronicleSealLine || '',
+                            councilResolutionLine: frontier.resolution.councilResolutionLine || '',
+                            source: frontier.resolution.source || '',
+                            sourceId: frontier.resolution.sourceId || '',
+                            submittedAt: frontier.resolution.submittedAt || 0
+                        }
+                        : null;
+                    const chronicleArchive = frontier.chronicleArchive && typeof frontier.chronicleArchive === 'object'
+                        ? {
+                            available: frontier.chronicleArchive.available !== false,
+                            id: frontier.chronicleArchive.id || '',
+                            weekTag: frontier.chronicleArchive.weekTag || '',
+                            weekLabel: frontier.chronicleArchive.weekLabel || '',
+                            totalRecords: frontier.chronicleArchive.totalRecords || 0,
+                            sealedCount: frontier.chronicleArchive.sealedCount || 0,
+                            countsByChoice: {
+                                hold_primary: frontier.chronicleArchive.countsByChoice?.hold_primary || 0,
+                                rebalance_support: frontier.chronicleArchive.countsByChoice?.rebalance_support || 0,
+                                seal_dispute: frontier.chronicleArchive.countsByChoice?.seal_dispute || 0
+                            },
+                            countsByStance: {
+                                frontier_loyalist: frontier.chronicleArchive.countsByStance?.frontier_loyalist || 0,
+                                support_balancer: frontier.chronicleArchive.countsByStance?.support_balancer || 0,
+                                dispute_archivist: frontier.chronicleArchive.countsByStance?.dispute_archivist || 0
+                            },
+                            dominantStanceId: frontier.chronicleArchive.dominantStanceId || '',
+                            dominantStanceLabel: frontier.chronicleArchive.dominantStanceLabel || '',
+                            summaryLine: frontier.chronicleArchive.summaryLine || '',
+                            detailLine: frontier.chronicleArchive.detailLine || '',
+                            progressText: frontier.chronicleArchive.progressText || '',
+                            latestEntry: frontier.chronicleArchive.latestEntry && typeof frontier.chronicleArchive.latestEntry === 'object'
+                                ? {
+                                    recordId: frontier.chronicleArchive.latestEntry.recordId || '',
+                                    weekTag: frontier.chronicleArchive.latestEntry.weekTag || '',
+                                    weekLabel: frontier.chronicleArchive.latestEntry.weekLabel || '',
+                                    choiceId: frontier.chronicleArchive.latestEntry.choiceId || '',
+                                    choiceLabel: frontier.chronicleArchive.latestEntry.choiceLabel || '',
+                                    stanceId: frontier.chronicleArchive.latestEntry.stanceId || '',
+                                    stanceLabel: frontier.chronicleArchive.latestEntry.stanceLabel || '',
+                                    supportLaneId: frontier.chronicleArchive.latestEntry.supportLaneId || '',
+                                    supportLaneLabel: frontier.chronicleArchive.latestEntry.supportLaneLabel || '',
+                                    summaryLine: frontier.chronicleArchive.latestEntry.summaryLine || '',
+                                    chronicleSealLine: frontier.chronicleArchive.latestEntry.chronicleSealLine || '',
+                                    councilResolutionLine: frontier.chronicleArchive.latestEntry.councilResolutionLine || '',
+                                    submittedAt: frontier.chronicleArchive.latestEntry.submittedAt || 0
+                                }
+                                : null,
+                            styleEntries: readArray(frontier.chronicleArchive.styleEntries).map((entry) => ({
+                                id: entry?.id || '',
+                                label: entry?.label || '',
+                                choiceId: entry?.choiceId || '',
+                                choiceLabel: entry?.choiceLabel || '',
+                                count: entry?.count || 0,
+                                countText: entry?.countText || '',
+                                summaryLine: entry?.summaryLine || '',
+                                latestAt: entry?.latestAt || 0
+                            })),
+                            entries: readArray(frontier.chronicleArchive.entries).map((entry) => ({
+                                recordId: entry?.recordId || '',
+                                weekTag: entry?.weekTag || '',
+                                weekLabel: entry?.weekLabel || '',
+                                choiceId: entry?.choiceId || '',
+                                choiceLabel: entry?.choiceLabel || '',
+                                stanceId: entry?.stanceId || '',
+                                stanceLabel: entry?.stanceLabel || '',
+                                supportLaneId: entry?.supportLaneId || '',
+                                supportLaneLabel: entry?.supportLaneLabel || '',
+                                summaryLine: entry?.summaryLine || '',
+                                chronicleSealLine: entry?.chronicleSealLine || '',
+                                councilResolutionLine: entry?.councilResolutionLine || '',
+                                submittedAt: entry?.submittedAt || 0
+                            }))
+                        }
+                        : null;
                     return {
                         available: frontier.available !== false,
                         id: frontier.id || '',
@@ -5555,6 +5772,8 @@
                         decree,
                         chronicle,
                         council,
+                        resolution,
+                        chronicleArchive,
                         items: readArray(frontier.items).map((item) => ({
                             id: item?.id || '',
                             laneId: item?.laneId || '',
@@ -5696,13 +5915,24 @@
                                     primaryWritebackMode: payload.expedition.seasonBoard.weekVerdictLedger.current.primaryWritebackMode || '',
                                     sideWritebackMode: payload.expedition.seasonBoard.weekVerdictLedger.current.sideWritebackMode || '',
                                     writebackLine: payload.expedition.seasonBoard.weekVerdictLedger.current.writebackLine || '',
-                                    proofQuality: payload.expedition.seasonBoard.weekVerdictLedger.current.proofQuality || '',
-                                    lineageStyle: payload.expedition.seasonBoard.weekVerdictLedger.current.lineageStyle || '',
-                                    carryIntoNextWeek: !!payload.expedition.seasonBoard.weekVerdictLedger.current.carryIntoNextWeek,
-                                    settlementSource: payload.expedition.seasonBoard.weekVerdictLedger.current.settlementSource || '',
-                                    summaryLine: payload.expedition.seasonBoard.weekVerdictLedger.current.summaryLine || ''
-                                }
-                            }
+                            proofQuality: payload.expedition.seasonBoard.weekVerdictLedger.current.proofQuality || '',
+                            lineageStyle: payload.expedition.seasonBoard.weekVerdictLedger.current.lineageStyle || '',
+                            carryIntoNextWeek: !!payload.expedition.seasonBoard.weekVerdictLedger.current.carryIntoNextWeek,
+                            settlementSource: payload.expedition.seasonBoard.weekVerdictLedger.current.settlementSource || '',
+                            summaryLine: payload.expedition.seasonBoard.weekVerdictLedger.current.summaryLine || '',
+                            frontierResolutionId: payload.expedition.seasonBoard.weekVerdictLedger.current.frontierResolutionId || '',
+                            frontierResolutionChoiceId: payload.expedition.seasonBoard.weekVerdictLedger.current.frontierResolutionChoiceId || '',
+                            frontierResolutionLabel: payload.expedition.seasonBoard.weekVerdictLedger.current.frontierResolutionLabel || '',
+                            frontierResolutionStance: payload.expedition.seasonBoard.weekVerdictLedger.current.frontierResolutionStance || '',
+                            frontierResolutionSupportLaneId: payload.expedition.seasonBoard.weekVerdictLedger.current.frontierResolutionSupportLaneId || '',
+                            frontierResolutionSupportLaneLabel: payload.expedition.seasonBoard.weekVerdictLedger.current.frontierResolutionSupportLaneLabel || '',
+                            frontierResolutionSummaryLine: payload.expedition.seasonBoard.weekVerdictLedger.current.frontierResolutionSummaryLine || '',
+                            chronicleSealStatus: payload.expedition.seasonBoard.weekVerdictLedger.current.chronicleSealStatus || '',
+                            chronicleSealLine: payload.expedition.seasonBoard.weekVerdictLedger.current.chronicleSealLine || '',
+                            councilResolutionLine: payload.expedition.seasonBoard.weekVerdictLedger.current.councilResolutionLine || '',
+                            frontierResolutionSubmittedAt: payload.expedition.seasonBoard.weekVerdictLedger.current.frontierResolutionSubmittedAt || 0
+                        }
+                    }
                             : null,
                         verificationOrders: readArray(payload.expedition.seasonBoard.verificationOrders).map((entry) => ({
                             id: entry?.id || '',

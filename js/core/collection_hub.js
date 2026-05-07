@@ -499,7 +499,18 @@
                     lineageStyle: String(board.weekVerdictLedger.current.lineageStyle || '').trim(),
                     carryIntoNextWeek: !!board.weekVerdictLedger.current.carryIntoNextWeek,
                     settlementSource: String(board.weekVerdictLedger.current.settlementSource || '').trim(),
-                    summaryLine: String(board.weekVerdictLedger.current.summaryLine || '').trim()
+                    summaryLine: String(board.weekVerdictLedger.current.summaryLine || '').trim(),
+                    frontierResolutionId: String(board.weekVerdictLedger.current.frontierResolutionId || '').trim(),
+                    frontierResolutionChoiceId: String(board.weekVerdictLedger.current.frontierResolutionChoiceId || '').trim(),
+                    frontierResolutionLabel: String(board.weekVerdictLedger.current.frontierResolutionLabel || '').trim(),
+                    frontierResolutionStance: String(board.weekVerdictLedger.current.frontierResolutionStance || '').trim(),
+                    frontierResolutionSupportLaneId: String(board.weekVerdictLedger.current.frontierResolutionSupportLaneId || '').trim(),
+                    frontierResolutionSupportLaneLabel: String(board.weekVerdictLedger.current.frontierResolutionSupportLaneLabel || '').trim(),
+                    frontierResolutionSummaryLine: String(board.weekVerdictLedger.current.frontierResolutionSummaryLine || '').trim(),
+                    chronicleSealStatus: String(board.weekVerdictLedger.current.chronicleSealStatus || '').trim(),
+                    chronicleSealLine: String(board.weekVerdictLedger.current.chronicleSealLine || '').trim(),
+                    councilResolutionLine: String(board.weekVerdictLedger.current.councilResolutionLine || '').trim(),
+                    frontierResolutionSubmittedAt: clampInt(board.weekVerdictLedger.current.frontierResolutionSubmittedAt, 0, 9999999999999)
                 }
             }
             : null;
@@ -663,6 +674,115 @@
                             }))
                     }
                     : null;
+                const resolutionRoot = root.resolution && typeof root.resolution === 'object' ? root.resolution : null;
+                const resolution = resolutionRoot
+                    ? {
+                        available: resolutionRoot.available !== false,
+                        submitted: !!resolutionRoot.submitted,
+                        id: String(resolutionRoot.id || '').trim(),
+                        weekTag: String(resolutionRoot.weekTag || '').trim(),
+                        phaseId: String(resolutionRoot.phaseId || '').trim(),
+                        phaseLabel: String(resolutionRoot.phaseLabel || '').trim(),
+                        laneId: String(resolutionRoot.laneId || '').trim(),
+                        laneLabel: String(resolutionRoot.laneLabel || '').trim(),
+                        fullLaneLabel: String(resolutionRoot.fullLaneLabel || '').trim(),
+                        statusId: String(resolutionRoot.statusId || '').trim(),
+                        statusLabel: String(resolutionRoot.statusLabel || '').trim(),
+                        choiceId: String(resolutionRoot.choiceId || '').trim(),
+                        choiceLabel: String(resolutionRoot.choiceLabel || '').trim(),
+                        suggestedChoiceId: String(resolutionRoot.suggestedChoiceId || '').trim(),
+                        suggestedChoiceLabel: String(resolutionRoot.suggestedChoiceLabel || '').trim(),
+                        stanceId: String(resolutionRoot.stanceId || '').trim(),
+                        supportLaneId: String(resolutionRoot.supportLaneId || '').trim(),
+                        supportLaneLabel: String(resolutionRoot.supportLaneLabel || '').trim(),
+                        settlementOutcomeId: String(resolutionRoot.settlementOutcomeId || '').trim(),
+                        settlementOutcomeLabel: String(resolutionRoot.settlementOutcomeLabel || '').trim(),
+                        resolutionTier: String(resolutionRoot.resolutionTier || '').trim(),
+                        resolvedStatus: String(resolutionRoot.resolvedStatus || '').trim(),
+                        proofQuality: String(resolutionRoot.proofQuality || '').trim(),
+                        lineageStyle: String(resolutionRoot.lineageStyle || '').trim(),
+                        summaryLine: String(resolutionRoot.summaryLine || '').trim(),
+                        chronicleSealLine: String(resolutionRoot.chronicleSealLine || '').trim(),
+                        councilResolutionLine: String(resolutionRoot.councilResolutionLine || '').trim(),
+                        source: String(resolutionRoot.source || '').trim(),
+                        sourceId: String(resolutionRoot.sourceId || '').trim(),
+                        submittedAt: clampInt(resolutionRoot.submittedAt, 0, 9999999999999)
+                    }
+                    : null;
+                const archiveRoot = root.chronicleArchive && typeof root.chronicleArchive === 'object' ? root.chronicleArchive : null;
+                const chronicleArchive = archiveRoot
+                    ? {
+                        available: archiveRoot.available !== false,
+                        id: String(archiveRoot.id || '').trim(),
+                        weekTag: String(archiveRoot.weekTag || '').trim(),
+                        weekLabel: String(archiveRoot.weekLabel || '').trim(),
+                        totalRecords: clampInt(archiveRoot.totalRecords, 0, 9999),
+                        sealedCount: clampInt(archiveRoot.sealedCount, 0, 9999),
+                        countsByChoice: {
+                            hold_primary: clampInt(archiveRoot.countsByChoice?.hold_primary, 0, 9999),
+                            rebalance_support: clampInt(archiveRoot.countsByChoice?.rebalance_support, 0, 9999),
+                            seal_dispute: clampInt(archiveRoot.countsByChoice?.seal_dispute, 0, 9999)
+                        },
+                        countsByStance: {
+                            frontier_loyalist: clampInt(archiveRoot.countsByStance?.frontier_loyalist, 0, 9999),
+                            support_balancer: clampInt(archiveRoot.countsByStance?.support_balancer, 0, 9999),
+                            dispute_archivist: clampInt(archiveRoot.countsByStance?.dispute_archivist, 0, 9999)
+                        },
+                        dominantStanceId: String(archiveRoot.dominantStanceId || '').trim(),
+                        dominantStanceLabel: String(archiveRoot.dominantStanceLabel || '').trim(),
+                        summaryLine: String(archiveRoot.summaryLine || '').trim(),
+                        detailLine: String(archiveRoot.detailLine || '').trim(),
+                        progressText: String(archiveRoot.progressText || '').trim(),
+                        latestEntry: archiveRoot.latestEntry && typeof archiveRoot.latestEntry === 'object'
+                            ? {
+                                recordId: String(archiveRoot.latestEntry.recordId || '').trim(),
+                                weekTag: String(archiveRoot.latestEntry.weekTag || '').trim(),
+                                weekLabel: String(archiveRoot.latestEntry.weekLabel || '').trim(),
+                                choiceId: String(archiveRoot.latestEntry.choiceId || '').trim(),
+                                choiceLabel: String(archiveRoot.latestEntry.choiceLabel || '').trim(),
+                                stanceId: String(archiveRoot.latestEntry.stanceId || '').trim(),
+                                stanceLabel: String(archiveRoot.latestEntry.stanceLabel || '').trim(),
+                                supportLaneId: String(archiveRoot.latestEntry.supportLaneId || '').trim(),
+                                supportLaneLabel: String(archiveRoot.latestEntry.supportLaneLabel || '').trim(),
+                                summaryLine: String(archiveRoot.latestEntry.summaryLine || '').trim(),
+                                chronicleSealLine: String(archiveRoot.latestEntry.chronicleSealLine || '').trim(),
+                                councilResolutionLine: String(archiveRoot.latestEntry.councilResolutionLine || '').trim(),
+                                submittedAt: clampInt(archiveRoot.latestEntry.submittedAt, 0, 9999999999999)
+                            }
+                            : null,
+                        styleEntries: readArray(archiveRoot.styleEntries)
+                            .filter((entry) => entry && typeof entry === 'object')
+                            .slice(0, 3)
+                            .map((entry) => ({
+                                id: String(entry.id || '').trim(),
+                                label: String(entry.label || '').trim(),
+                                choiceId: String(entry.choiceId || '').trim(),
+                                choiceLabel: String(entry.choiceLabel || '').trim(),
+                                count: clampInt(entry.count, 0, 9999),
+                                countText: String(entry.countText || '').trim(),
+                                summaryLine: String(entry.summaryLine || '').trim(),
+                                latestAt: clampInt(entry.latestAt, 0, 9999999999999)
+                            })),
+                        entries: readArray(archiveRoot.entries)
+                            .filter((entry) => entry && typeof entry === 'object')
+                            .slice(0, 6)
+                            .map((entry) => ({
+                                recordId: String(entry.recordId || '').trim(),
+                                weekTag: String(entry.weekTag || '').trim(),
+                                weekLabel: String(entry.weekLabel || '').trim(),
+                                choiceId: String(entry.choiceId || '').trim(),
+                                choiceLabel: String(entry.choiceLabel || '').trim(),
+                                stanceId: String(entry.stanceId || '').trim(),
+                                stanceLabel: String(entry.stanceLabel || '').trim(),
+                                supportLaneId: String(entry.supportLaneId || '').trim(),
+                                supportLaneLabel: String(entry.supportLaneLabel || '').trim(),
+                                summaryLine: String(entry.summaryLine || '').trim(),
+                                chronicleSealLine: String(entry.chronicleSealLine || '').trim(),
+                                councilResolutionLine: String(entry.councilResolutionLine || '').trim(),
+                                submittedAt: clampInt(entry.submittedAt, 0, 9999999999999)
+                            }))
+                    }
+                    : null;
                 return {
                     available: root.available !== false,
                     id: String(root.id || 'season_board_frontier').trim() || 'season_board_frontier',
@@ -692,6 +812,8 @@
                     decree,
                     chronicle,
                     council,
+                    resolution,
+                    chronicleArchive,
                     items: readArray(root.items)
                         .filter((entry) => entry && typeof entry === 'object')
                         .slice(0, 3)
@@ -2347,6 +2469,12 @@
         const seasonVerificationHistoryCount = Array.isArray(seasonVerification?.history)
             ? seasonVerification.history.length
             : 0;
+        const frontierResolutionRecords = typeof this.getSeasonBoardFrontierResolutionArchiveRecords === 'function'
+            ? this.getSeasonBoardFrontierResolutionArchiveRecords()
+            : [];
+        const frontierResolutionHistoryCount = Array.isArray(frontierResolutionRecords)
+            ? frontierResolutionRecords.length
+            : 0;
         const slateFocus = latestSlate && typeof this.buildObservatoryTrainingFocusFromSlate === 'function'
             ? this.buildObservatoryTrainingFocusFromSlate(latestSlate)
             : null;
@@ -2584,6 +2712,104 @@
         const debtRecoveryStyle = verdictStyleEntries.find((entry) => entry.id === 'season_debt_recovery') || null;
         const riskyPushStyle = verdictStyleEntries.find((entry) => entry.id === 'season_risky_push') || null;
         const deferredCleanupStyle = verdictStyleEntries.find((entry) => entry.id === 'season_deferred_cleanup') || null;
+
+        const frontierStyleCatalog = {
+            frontier_loyalist: {
+                id: 'frontier_loyalist',
+                label: '守线派',
+                icon: '🛡️',
+                choiceId: 'hold_primary',
+                choiceLabel: '守主战线',
+                noteLine: '连续守住主战线时，谱系会把你记录成先稳主目标再扩线的处理风格。'
+            },
+            support_balancer: {
+                id: 'support_balancer',
+                label: '平衡派',
+                icon: '⚖️',
+                choiceId: 'rebalance_support',
+                choiceLabel: '副线补证',
+                noteLine: '经常给副线补证时，谱系会记录你更重视旁证和跨线兜底。'
+            },
+            dispute_archivist: {
+                id: 'dispute_archivist',
+                label: '归档派',
+                icon: '🗂️',
+                choiceId: 'seal_dispute',
+                choiceLabel: '封存争议',
+                noteLine: '多次封存争议时，谱系会记录你更倾向保留回看证据而不是强行改排班。'
+            }
+        };
+        const frontierChoiceToStyle = {
+            hold_primary: 'frontier_loyalist',
+            rebalance_support: 'support_balancer',
+            seal_dispute: 'dispute_archivist'
+        };
+        const frontierStyleMap = new Map();
+        const frontierResolutionEntries = (Array.isArray(frontierResolutionRecords) ? frontierResolutionRecords : [])
+            .map((record, index) => {
+                const choiceId = String(record.frontierResolutionChoiceId || '').trim();
+                const styleId = String(record.frontierResolutionStance || frontierChoiceToStyle[choiceId] || '').trim();
+                const meta = frontierStyleCatalog[styleId] || frontierStyleCatalog[frontierChoiceToStyle[choiceId]];
+                if (!choiceId || !meta) return null;
+                const sourceKey = String(
+                    record.recordId
+                    || record.frontierResolutionId
+                    || `${record.weekTag || 'weekless'}:${choiceId}:${record.frontierResolutionSubmittedAt || record.updatedAt || index}`
+                ).trim();
+                const latestAt = clampInt(record.frontierResolutionSubmittedAt || record.updatedAt || record.createdAt || 0, 0);
+                const existing = frontierStyleMap.get(meta.id) || {
+                    id: meta.id,
+                    label: meta.label,
+                    icon: meta.icon,
+                    value: 0,
+                    valueText: '',
+                    noteLine: meta.noteLine,
+                    tags: [],
+                    anchorSection: 'sanctum',
+                    latestAt: 0,
+                    sourceKeys: new Set()
+                };
+                if (sourceKey && !existing.sourceKeys.has(sourceKey)) {
+                    existing.value += 1;
+                    existing.sourceKeys.add(sourceKey);
+                }
+                existing.latestAt = Math.max(existing.latestAt, latestAt);
+                existing.noteLine = record.frontierResolutionSummaryLine || record.summaryLine || record.chronicleSealLine || existing.noteLine;
+                existing.tags = Array.from(new Set([
+                    ...(existing.tags || []),
+                    record.weekLabel || record.weekTag || '',
+                    record.frontierResolutionSupportLaneLabel || ''
+                ].filter(Boolean))).slice(0, 3);
+                frontierStyleMap.set(meta.id, existing);
+                return {
+                    id: `frontier_resolution_${sourceKey || index + 1}`,
+                    label: record.frontierResolutionLabel || meta.choiceLabel,
+                    icon: meta.icon,
+                    value: 1,
+                    valueText: record.weekLabel || record.weekTag || '会审裁记',
+                    noteLine: record.frontierResolutionSummaryLine || record.summaryLine || record.chronicleSealLine || meta.noteLine,
+                    tags: [meta.label, record.frontierResolutionSupportLaneLabel || ''].filter(Boolean).slice(0, 3),
+                    anchorSection: 'sanctum',
+                    latestAt
+                };
+            })
+            .filter(Boolean);
+        const frontierStyleEntries = Object.values(frontierStyleCatalog).map((meta) => {
+            const entry = frontierStyleMap.get(meta.id);
+            return {
+                id: meta.id,
+                label: meta.label,
+                icon: meta.icon,
+                value: clampInt(entry?.value || 0, 0, 9999),
+                valueText: entry?.value > 0 ? `${meta.choiceLabel} · ${entry.value} 次` : `等待${meta.label}`,
+                noteLine: entry?.noteLine || meta.noteLine,
+                tags: entry?.tags || [],
+                anchorSection: 'sanctum',
+                latestAt: clampInt(entry?.latestAt || 0, 0)
+            };
+        });
+        const dominantFrontierStyle = rankEntries(frontierStyleEntries.filter((entry) => entry.value > 0), 1)[0] || null;
+        const latestFrontierResolution = frontierResolutionEntries[0] || null;
 
         const characterMap = new Map();
         samples.forEach((sample) => {
@@ -3021,8 +3247,23 @@
             dominantLabel: dominantResearch?.label || '',
             anchorSection: 'sanctum'
         });
+        const frontierTrack = buildTrack({
+            id: 'frontier',
+            label: '战线裁记',
+            icon: dominantFrontierStyle?.icon || '⚖️',
+            summaryLine: dominantFrontierStyle
+                ? `会审裁记当前更常留下【${dominantFrontierStyle.label}】风格，已累计 ${frontierResolutionHistoryCount} 条战役史卷。`
+                : '战线裁记仍待第一条会审封记，之后会沉淀成长期处理分歧的风格。',
+            progressText: frontierResolutionHistoryCount > 0
+                ? `已封 ${frontierResolutionHistoryCount} 条裁记`
+                : '等待会审封记',
+            entries: frontierStyleEntries,
+            dominantId: dominantFrontierStyle?.id || '',
+            dominantLabel: dominantFrontierStyle?.label || '',
+            anchorSection: 'sanctum'
+        });
 
-        const tracks = [characterTrack, styleTrack, nodeTrack, researchTrack];
+        const tracks = [characterTrack, styleTrack, nodeTrack, researchTrack, frontierTrack];
         const available = !!(
             currentCharacter
             || currentRunPath
@@ -3033,6 +3274,7 @@
             || archiveEntries.length > 0
             || runPathRecords.length > 0
             || seasonVerification?.available
+            || frontierResolutionHistoryCount > 0
         );
         const summaryParts = [
             dominantCharacter?.label || currentCharacter?.name || '',
@@ -3041,10 +3283,12 @@
             dominantResearchBase?.label || ''
         ].filter(Boolean);
         const summaryLine = summaryParts.length > 0
-            ? `长期主修正在向【${summaryParts.join(' / ')}】收束${dominantVerdictStyle?.label ? `，赛季裁定更常留下【${dominantVerdictStyle.label}】。` : '。'}`
+            ? `长期主修正在向【${summaryParts.join(' / ')}】收束${dominantVerdictStyle?.label ? `，赛季裁定更常留下【${dominantVerdictStyle.label}】` : ''}${dominantFrontierStyle?.label ? `${dominantVerdictStyle?.label ? '，' : '，'}会审裁记偏向【${dominantFrontierStyle.label}】` : ''}。`
             : (dominantVerdictStyle?.label
-                ? `命盘谱系已经开始记录【${dominantVerdictStyle.label}】这类赛季裁定习惯。`
-                : '命盘谱系仍待第一批长期留痕落档。');
+                ? `命盘谱系已经开始记录【${dominantVerdictStyle.label}】这类赛季裁定习惯${dominantFrontierStyle?.label ? `，会审裁记偏向【${dominantFrontierStyle.label}】。` : '。'}`
+                : (dominantFrontierStyle?.label
+                    ? `命盘谱系已经开始记录【${dominantFrontierStyle.label}】这类会审裁记风格。`
+                    : '命盘谱系仍待第一批长期留痕落档。'));
         const baseDetailLine = activeAgenda
             ? `当前研究：${activeAgenda.name} · ${activeAgenda.phaseLabel || activeAgenda.selectedDecisionLabel || activeAgenda.selectedContractLabel || activeAgenda.summaryLine || '洞府样本正在推进。'}`
             : (lastResolved
@@ -3056,7 +3300,7 @@
                 ? `赛季回写：${primarySeasonVerification.writebackLine}`
                 : (dominantVerdictStyle?.noteLine
                     ? `裁定留痕：${dominantVerdictStyle.noteLine}`
-                    : (secondarySeasonVerification?.writebackLine ? `旁证回写：${secondarySeasonVerification.writebackLine}` : ''))
+                    : (latestFrontierResolution?.noteLine ? `会审留痕：${latestFrontierResolution.noteLine}` : (secondarySeasonVerification?.writebackLine ? `旁证回写：${secondarySeasonVerification.writebackLine}` : '')))
         ].filter(Boolean).slice(0, 2).join('｜');
         const currentFocusLine = [
             selectedGuide?.title ? `精选命盘【${selectedGuide.title}】` : '',
@@ -3099,6 +3343,9 @@
         } else if ((riskyPushStyle?.value || 0) <= 0) {
             nextTargets.push('去打一场能回写季盘的高压主验证，把押榜风格从准备状态升级为长期留痕。');
         }
+        if (frontierResolutionHistoryCount <= 0) {
+            nextTargets.push('在洞府完成 1 次会审裁记，把战线分歧写成可回看的长期风格。');
+        }
 
         return {
             version: 1,
@@ -3115,7 +3362,9 @@
                 trackedStyles: dedupedStyleEntries.filter((entry) => entry.value > 0 || /^destiny_/.test(entry.id)).length,
                 trackedNodes: nodeEntries.length,
                 researchHistoryCount,
-                trackedVerdictStyles: verdictStyleEntries.filter((entry) => entry.value > 0).length
+                trackedVerdictStyles: verdictStyleEntries.filter((entry) => entry.value > 0).length,
+                frontierResolutionHistoryCount,
+                trackedFrontierStyles: frontierStyleEntries.filter((entry) => entry.value > 0).length
             },
             nextTargets: nextTargets.slice(0, 3),
             tracks,
@@ -3123,11 +3372,13 @@
             styleTrack,
             nodeTrack,
             researchTrack,
+            frontierTrack,
             recentRecords: [
                 dominantCharacter?.noteLine || '',
                 dominantStyle?.noteLine || '',
                 lastResolved?.summaryLine || '',
-                dominantVerdictStyle?.noteLine || ''
+                dominantVerdictStyle?.noteLine || '',
+                latestFrontierResolution?.noteLine || ''
             ].filter(Boolean).slice(0, 3)
         };
     };
@@ -4947,6 +5198,36 @@
         const seasonNextWeekGoal = seasonBoard?.nextWeekGoal && typeof seasonBoard.nextWeekGoal === 'object'
             ? seasonBoard.nextWeekGoal
             : null;
+        const seasonFrontierResolution = seasonBoard?.frontier?.resolution && typeof seasonBoard.frontier.resolution === 'object'
+            ? seasonBoard.frontier.resolution
+            : null;
+        const seasonFrontierResolutionChoiceLabels = {
+            hold_primary: '守主战线',
+            rebalance_support: '副线补证',
+            seal_dispute: '封存争议'
+        };
+        const seasonFrontierResolutionChoices = seasonFrontierResolution
+            ? [
+                {
+                    id: 'hold_primary',
+                    label: seasonFrontierResolutionChoiceLabels.hold_primary,
+                    note: `继续守住【${seasonFrontierResolution.laneLabel || '主战线'}】，先完成主线一格。`
+                },
+                {
+                    id: 'rebalance_support',
+                    label: seasonFrontierResolutionChoiceLabels.rebalance_support,
+                    note: `给【${seasonFrontierResolution.supportLaneLabel || '副战线'}】补一份旁证，不抢主行动。`
+                },
+                {
+                    id: 'seal_dispute',
+                    label: seasonFrontierResolutionChoiceLabels.seal_dispute,
+                    note: '争议先封入史卷，本周不改写排班。'
+                }
+            ]
+            : [];
+        const seasonFrontierResolutionSuggestedChoiceId = seasonFrontierResolutionChoiceLabels[seasonFrontierResolution?.suggestedChoiceId]
+            ? seasonFrontierResolution.suggestedChoiceId
+            : 'hold_primary';
         const seasonNextTaskLine = !shouldSurfaceSeasonVerification && seasonNextTask
             ? getSeasonBoardNextTaskLine(seasonNextTask)
             : '';
@@ -5188,6 +5469,7 @@
             progress.lineageStyles = clampInt(lineage.progress?.trackedStyles || 0, 0, 999);
             progress.lineageNodes = clampInt(lineage.progress?.trackedNodes || 0, 0, 999);
             progress.lineageResearchHistory = clampInt(lineage.progress?.researchHistoryCount || 0, 0, 999);
+            progress.lineageFrontierResolutions = clampInt(lineage.progress?.frontierResolutionHistoryCount || 0, 0, 999);
         }
         if (aftereffects?.available) {
             progress.fateAftereffectActive = clampInt(aftereffects.activeCount || 0, 0, 999);
@@ -7020,9 +7302,48 @@
         const seasonFrontierChronicle = seasonFrontier?.chronicle && typeof seasonFrontier.chronicle === 'object'
             ? seasonFrontier.chronicle
             : null;
+        const seasonFrontierChronicleArchive = seasonFrontier?.chronicleArchive && typeof seasonFrontier.chronicleArchive === 'object'
+            ? seasonFrontier.chronicleArchive
+            : null;
+        const seasonFrontierChronicleArchiveEntries = Array.isArray(seasonFrontierChronicleArchive?.entries)
+            ? seasonFrontierChronicleArchive.entries.filter((entry) => entry && typeof entry === 'object').slice(0, 4)
+            : [];
+        const seasonFrontierChronicleArchiveLatest = seasonFrontierChronicleArchive?.latestEntry && typeof seasonFrontierChronicleArchive.latestEntry === 'object'
+            ? seasonFrontierChronicleArchive.latestEntry
+            : (seasonFrontierChronicleArchiveEntries[0] || null);
         const seasonFrontierCouncil = seasonFrontier?.council && typeof seasonFrontier.council === 'object'
             ? seasonFrontier.council
             : null;
+        const seasonFrontierResolution = seasonFrontier?.resolution && typeof seasonFrontier.resolution === 'object'
+            ? seasonFrontier.resolution
+            : null;
+        const seasonFrontierResolutionChoiceLabels = {
+            hold_primary: '守主战线',
+            rebalance_support: '副线补证',
+            seal_dispute: '封存争议'
+        };
+        const seasonFrontierResolutionChoices = seasonFrontierResolution
+            ? [
+                {
+                    id: 'hold_primary',
+                    label: seasonFrontierResolutionChoiceLabels.hold_primary,
+                    note: `守住${seasonFrontierResolution.laneLabel || '主战线'}`
+                },
+                {
+                    id: 'rebalance_support',
+                    label: seasonFrontierResolutionChoiceLabels.rebalance_support,
+                    note: `补证${seasonFrontierResolution.supportLaneLabel || '副战线'}`
+                },
+                {
+                    id: 'seal_dispute',
+                    label: seasonFrontierResolutionChoiceLabels.seal_dispute,
+                    note: '封存争议'
+                }
+            ]
+            : [];
+        const seasonFrontierResolutionSuggestedChoiceId = seasonFrontierResolutionChoiceLabels[seasonFrontierResolution?.suggestedChoiceId]
+            ? seasonFrontierResolution.suggestedChoiceId
+            : 'hold_primary';
         const seasonVerificationArchive = seasonBoard.verificationArchive && typeof seasonBoard.verificationArchive === 'object'
             ? seasonBoard.verificationArchive
             : null;
@@ -7163,6 +7484,7 @@
                         ${isHeavenlyMandateGoal ? 'data-heavenly-mandate-action="true"' : ''}
                         ${isSeasonBoardGoal ? 'data-season-board-action="true"' : ''}
                         ${goal.action === 'season_board_lane_reward' ? `data-season-board-lane-reward-claim="true" data-season-board-lane-reward-lane-id="${escapeHtml(goal.laneId || goal.value || '')}" data-season-board-lane-reward-claimable="true"` : ''}
+                        ${goal.disabled ? 'disabled' : ''}
                         onclick="${isHeavenlyMandateGoal && goal.followTaskId
                 ? `game.followHeavenlyMandateTask('${escapeHtml(goal.followTaskId)}')`
                 : goal.action === 'season_board_lane_reward'
@@ -7236,8 +7558,14 @@
             seasonFrontierChronicle
                 ? `<p class="collection-muted" data-season-board-frontier-chronicle="true" data-season-board-frontier-chronicle-id="${escapeHtml(seasonFrontierChronicle.id || '')}" data-season-board-frontier-chronicle-lane-id="${escapeHtml(seasonFrontierChronicle.laneId || '')}">${escapeHtml([seasonFrontierChronicle.summaryLine || seasonFrontierChronicle.title || '', seasonFrontierChronicle.progressLine || ''].filter(Boolean).join(' · '))}</p>`
                 : '',
+            seasonFrontierChronicleArchive
+                ? `<p class="collection-muted" data-season-board-frontier-chronicle-archive="true" data-season-board-frontier-chronicle-archive-id="${escapeHtml(seasonFrontierChronicleArchive.id || '')}" data-season-board-frontier-chronicle-archive-total="${escapeHtml(String(seasonFrontierChronicleArchive.totalRecords || 0))}">${escapeHtml([seasonFrontierChronicleArchive.summaryLine || '', seasonFrontierChronicleArchive.detailLine || ''].filter(Boolean).join(' · '))}</p>`
+                : '',
             seasonFrontierCouncil
                 ? `<p class="collection-muted" data-season-board-frontier-council="true" data-season-board-frontier-council-id="${escapeHtml(seasonFrontierCouncil.id || '')}" data-season-board-frontier-council-lane-id="${escapeHtml(seasonFrontierCouncil.laneId || '')}">${escapeHtml([seasonFrontierCouncil.summaryLine || seasonFrontierCouncil.title || '', seasonFrontierCouncil.verdictLine || ''].filter(Boolean).join(' · '))}</p>`
+                : '',
+            seasonFrontierResolution
+                ? `<p class="collection-muted" data-season-board-frontier-resolution="true" data-season-board-frontier-resolution-id="${escapeHtml(seasonFrontierResolution.id || '')}" data-season-board-frontier-resolution-submitted="${seasonFrontierResolution.submitted ? 'true' : 'false'}" data-season-board-frontier-resolution-choice-id="${escapeHtml(seasonFrontierResolution.choiceId || seasonFrontierResolution.suggestedChoiceId || '')}">${escapeHtml([seasonFrontierResolution.summaryLine || '', seasonFrontierResolution.submitted ? (seasonFrontierResolution.chronicleSealLine || '') : `建议：${seasonFrontierResolution.suggestedChoiceLabel || seasonFrontierResolutionChoiceLabels[seasonFrontierResolutionSuggestedChoiceId] || '守主战线'}`].filter(Boolean).join(' · '))}</p>`
                 : '',
             seasonSettlement
                 ? `<p class="collection-muted" data-season-board-settlement="true">${escapeHtml(`季押卷：${seasonSettlement.outcomeLabel || '待押卷'}${seasonSettlement.summaryLine ? ` · ${seasonSettlement.summaryLine}` : ''}`)}</p>`
@@ -7271,13 +7599,16 @@
             `${seasonFrontier ? `<div class="codex-summary-chip" data-season-board-chip="frontier" data-season-board-frontier-chip="true"><strong>${escapeHtml(seasonFrontier.primaryFrontShortLabel || seasonFrontier.primaryFrontLabel || '主战线')}</strong><span>${escapeHtml(seasonFrontier.pressureLabel || seasonFrontier.statusLabel || '战线态势')}</span></div>` : ''}`,
             `${seasonFrontierDecree ? `<div class="codex-summary-chip" data-season-board-chip="frontier-decree" data-season-board-frontier-decree-chip="true"><strong>${escapeHtml(seasonFrontierDecree.laneLabel || seasonFrontier.primaryFrontShortLabel || '主战线')}</strong><span>${escapeHtml(`法旨 · ${seasonFrontierDecree.toneLabel || '本周'}`)}</span></div>` : ''}`,
             `${seasonFrontierChronicle ? `<div class="codex-summary-chip" data-season-board-chip="frontier-chronicle" data-season-board-frontier-chronicle-chip="true"><strong>${escapeHtml(seasonFrontierChronicle.laneLabel || seasonFrontier.primaryFrontShortLabel || '主战线')}</strong><span>${escapeHtml(`史卷 · ${seasonFrontierChronicle.phaseLabel || '本周'}`)}</span></div>` : ''}`,
+            `${seasonFrontierChronicleArchive ? `<div class="codex-summary-chip" data-season-board-chip="frontier-chronicle-archive" data-season-board-frontier-chronicle-archive-chip="true"><strong>${escapeHtml(seasonFrontierChronicleArchive.dominantStanceLabel || seasonFrontierChronicleArchiveLatest?.stanceLabel || '待沉淀')}</strong><span>${escapeHtml(seasonFrontierChronicleArchive.progressText || `史卷 ${seasonFrontierChronicleArchive.totalRecords || 0} 条`)}</span></div>` : ''}`,
             `${seasonFrontierCouncil ? `<div class="codex-summary-chip" data-season-board-chip="frontier-council" data-season-board-frontier-council-chip="true"><strong>${escapeHtml(seasonFrontierCouncil.laneLabel || seasonFrontier.primaryFrontShortLabel || '主战线')}</strong><span>${escapeHtml(`会审 · ${seasonFrontierCouncil.phaseLabel || '本周'}`)}</span></div>` : ''}`,
+            `${seasonFrontierResolution ? `<div class="codex-summary-chip" data-season-board-chip="frontier-resolution" data-season-board-frontier-resolution-chip="true"><strong>${escapeHtml(seasonFrontierResolution.submitted ? (seasonFrontierResolution.choiceLabel || '已封记') : (seasonFrontierResolution.suggestedChoiceLabel || seasonFrontierResolutionChoiceLabels[seasonFrontierResolutionSuggestedChoiceId] || '待裁记'))}</strong><span>${escapeHtml(seasonFrontierResolution.submitted ? '裁记已封' : '会审裁记')}</span></div>` : ''}`,
             `${seasonBoardLaneRewards.length > 0 ? `<div class="codex-summary-chip" data-season-board-chip="lane-reward"><strong>${escapeHtml(`${seasonBoardClaimableLaneRewards.length}/${seasonBoardLaneRewards.length}`)}</strong><span>分线结题赏</span></div>` : ''}`,
             `${seasonSettlement ? `<div class="codex-summary-chip" data-season-board-chip="settlement"><strong>${escapeHtml(seasonSettlement.outcomeLabel || '待押卷')}</strong><span>季押卷</span></div>` : ''}`,
             `${seasonDebtPack ? `<div class="codex-summary-chip" data-season-board-chip="debt"><strong>${escapeHtml(seasonDebtPack.progressText || seasonDebtPack.settleWindowText || seasonDebtPack.debtThemeLabel || '待清账')}</strong><span>债账窗口</span></div>` : ''}`,
             `${primarySeasonVerification ? `<div class="codex-summary-chip" data-season-board-chip="verification"><strong>${escapeHtml(primarySeasonVerification.label || '待验证')}</strong><span>结业验证</span></div>` : ''}`,
             `${lineage?.available ? `<div class="codex-summary-chip" data-fate-lineage-chip="style"><strong>${escapeHtml(lineage.styleTrack?.dominantLabel || '待沉淀')}</strong><span>主修流派</span></div>` : ''}`,
             `${lineage?.available ? `<div class="codex-summary-chip" data-fate-lineage-chip="research"><strong>${escapeHtml(lineage.researchTrack?.dominantLabel || '待结题')}</strong><span>研究倾向</span></div>` : ''}`,
+            `${lineage?.frontierTrack ? `<div class="codex-summary-chip" data-fate-lineage-chip="frontier"><strong>${escapeHtml(lineage.frontierTrack.dominantLabel || '待封记')}</strong><span>会审风格</span></div>` : ''}`,
             `${primaryAftereffect?.templateLabel ? `<div class="codex-summary-chip" data-fate-aftereffect-chip="template"><strong>${escapeHtml(primaryAftereffect.templateLabel || '跨章偏置')}</strong><span>界痕类型</span></div>` : ''}`,
             `${primaryAftereffect?.statusLabel ? `<div class="codex-summary-chip" data-fate-aftereffect-chip="status"><strong>${escapeHtml(primaryAftereffect.statusLabel || '待生效')}</strong><span>当前状态</span></div>` : ''}`,
             `<div class="codex-summary-chip"><strong>${data.progress.sanctumAgendaCompleted || 0}</strong><span>议程结题</span></div>`,
@@ -7308,8 +7639,64 @@
                         ${seasonFrontier ? `<p class="collection-muted" data-season-board-frontier-card="true">${escapeHtml(seasonFrontier.detailLine || seasonFrontier.guideLine || seasonFrontier.summaryLine || `${seasonFrontier.primaryFrontLabel || '主战线'} · ${seasonFrontier.pressureLabel || '稳态'}`)}</p>` : ''}
                         ${seasonFrontierDecree ? `<p class="collection-muted" data-season-board-frontier-decree-card="true">${escapeHtml(seasonFrontierDecree.focusLine || seasonFrontierDecree.successLine || seasonFrontierDecree.summaryLine || seasonFrontierDecree.title || '本周法旨待同步')}</p>` : ''}
                         ${seasonFrontierChronicle ? `<p class="collection-muted" data-season-board-frontier-chronicle-card="true">${escapeHtml(seasonFrontierChronicle.currentEntryLine || seasonFrontierChronicle.progressLine || seasonFrontierChronicle.summaryLine || '战役史卷待同步')}</p>` : ''}
+                        ${seasonFrontierChronicleArchive ? `<p class="collection-muted" data-season-board-frontier-chronicle-archive-card="true">${escapeHtml(seasonFrontierChronicleArchive.detailLine || seasonFrontierChronicleArchive.summaryLine || '战役史卷长期回看待同步')}</p>` : ''}
                         ${seasonFrontierCouncil ? `<p class="collection-muted" data-season-board-frontier-council-card="true">${escapeHtml(seasonFrontierCouncil.focusLine || seasonFrontierCouncil.supportLine || seasonFrontierCouncil.summaryLine || '诸界会审待同步')}</p>` : ''}
+                        ${seasonFrontierResolution ? `<p class="collection-muted" data-season-board-frontier-resolution-card="true">${escapeHtml(seasonFrontierResolution.councilResolutionLine || seasonFrontierResolution.summaryLine || '会审裁记待同步')}</p>` : ''}
                     </section>
+                    ${seasonFrontierResolution ? `
+                        <section class="collection-detail-card"
+                            data-season-board-frontier-resolution-panel="true"
+                            data-season-board-frontier-resolution-id="${escapeHtml(seasonFrontierResolution.id || '')}"
+                            data-season-board-frontier-resolution-submitted="${seasonFrontierResolution.submitted ? 'true' : 'false'}">
+                            <span class="detail-mini-label">${escapeHtml('⚖️ 会审裁记')}</span>
+                            <strong>${escapeHtml(seasonFrontierResolution.submitted ? (seasonFrontierResolution.choiceLabel || '已封记') : (seasonFrontierResolution.suggestedChoiceLabel || seasonFrontierResolutionChoiceLabels[seasonFrontierResolutionSuggestedChoiceId] || '待裁记'))}</strong>
+                            <p data-season-board-frontier-resolution-status="true">${escapeHtml(seasonFrontierResolution.summaryLine || '选择一条本周会审裁记，封入周判账本。')}</p>
+                            <ul class="collection-detail-list compact">
+                                ${[
+                seasonFrontierResolution.councilResolutionLine || '',
+                seasonFrontierResolution.chronicleSealLine || '',
+                seasonFrontierResolution.supportLaneLabel ? `副线候选：${seasonFrontierResolution.supportLaneLabel}` : '',
+                seasonFrontierResolution.settlementOutcomeLabel ? `押卷结果：${seasonFrontierResolution.settlementOutcomeLabel}` : ''
+            ].filter(Boolean).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
+                            </ul>
+                            ${seasonFrontierResolution.submitted
+                ? `<p class="collection-muted" data-season-board-frontier-resolution-submitted="true">${escapeHtml(`已封记：${seasonFrontierResolution.choiceLabel || '裁记'}${seasonFrontierResolution.submittedAt ? ` · ${new Date(seasonFrontierResolution.submittedAt).toLocaleString('zh-CN')}` : ''}`)}</p>`
+                : `<div class="season-board-task-action-row" data-season-board-frontier-resolution-choice-row="true">
+                                    ${seasonFrontierResolutionChoices.map((choice) => `
+                                        <button type="button" class="collection-inline-btn secondary compact"
+                                            data-season-board-frontier-resolution-choice="true"
+                                            data-season-board-frontier-resolution-id="${escapeHtml(seasonFrontierResolution.id || '')}"
+                                            data-season-board-frontier-resolution-choice-id="${escapeHtml(choice.id)}"
+                                            data-season-board-frontier-resolution-suggested="${choice.id === seasonFrontierResolutionSuggestedChoiceId ? 'true' : 'false'}"
+                                            onclick="game.commitSeasonBoardFrontierResolution('${escapeHtml(choice.id)}')">${escapeHtml(choice.label)}</button>
+                                    `).join('')}
+                                </div>`}
+                        </section>
+                    ` : ''}
+                    ${seasonFrontierChronicleArchive ? `
+                        <section class="collection-detail-card"
+                            data-season-board-frontier-chronicle-archive-panel="true"
+                            data-season-board-frontier-chronicle-archive-id="${escapeHtml(seasonFrontierChronicleArchive.id || '')}"
+                            data-season-board-frontier-chronicle-archive-total="${escapeHtml(String(seasonFrontierChronicleArchive.totalRecords || 0))}">
+                            <span class="detail-mini-label">${escapeHtml('🗂️ 战役史卷回看')}</span>
+                            <strong>${escapeHtml(seasonFrontierChronicleArchive.dominantStanceLabel || seasonFrontierChronicleArchiveLatest?.stanceLabel || '裁记谱系')}</strong>
+                            <p data-season-board-frontier-chronicle-archive-status="true">${escapeHtml(seasonFrontierChronicleArchive.summaryLine || '会审裁记会在这里压成长线风格。')}</p>
+                            <ul class="collection-detail-list compact">
+                                ${seasonFrontierChronicleArchiveEntries.length > 0
+                ? seasonFrontierChronicleArchiveEntries.map((entry) => `
+                                    <li
+                                        data-season-board-frontier-chronicle-archive-entry="true"
+                                        data-season-board-frontier-chronicle-archive-record-id="${escapeHtml(entry.recordId || '')}"
+                                        data-season-board-frontier-chronicle-archive-choice-id="${escapeHtml(entry.choiceId || '')}">
+                                        <div>${escapeHtml(`${entry.weekLabel || entry.weekTag || '未标周'} · ${entry.choiceLabel || '裁记'} · ${entry.stanceLabel || '裁记风格'}`)}</div>
+                                        <div class="collection-muted">${escapeHtml(entry.summaryLine || entry.chronicleSealLine || entry.councilResolutionLine || '战役史卷已封记。')}</div>
+                                    </li>
+                                `).join('')
+                : `<li>${escapeHtml(seasonFrontierChronicleArchive.detailLine || '完成一次会审裁记后，战役史卷会开始累计长期风格。')}</li>`}
+                            </ul>
+                            <p class="collection-muted">${escapeHtml(seasonFrontierChronicleArchive.detailLine || seasonFrontierChronicleArchive.progressText || `已封 ${seasonFrontierChronicleArchive.totalRecords || 0} 条`)}</p>
+                        </section>
+                    ` : ''}
                     ${seasonSettlement ? `
                         <section class="collection-detail-card" data-season-board-settlement-card="true">
                             <span class="detail-mini-label">${escapeHtml(`${seasonSettlement.outcomeId === 'positive_sheet' ? '🧾' : (seasonSettlement.outcomeId === 'debt_sheet' ? '📉' : '⚖️')} 季押卷裁定`)}</span>
@@ -7521,7 +7908,7 @@
             `${heavenlyMandate.available ? `<li data-heavenly-mandate-progress-row="true">天道敕令：${escapeHtml(heavenlyMandate.weekLabel || heavenlyMandate.weekTag || '本周轮转')} · ${escapeHtml(heavenlyMandate.themeLabel || heavenlyMandate.directiveName || '待启敕令')} · ${escapeHtml(heavenlyMandate.progressText || '待同步')}</li>` : ''}`,
             `${seasonBoard.available ? `<li data-season-board-progress-row="true">赛季天道盘：${escapeHtml(seasonBoard.weekLabel || seasonBoard.weekTag || '本周轮转')} · ${escapeHtml(seasonBoard.phaseLabel || '采样期')} · ${escapeHtml(seasonBoard.progressText || '待同步')}</li>` : ''}`,
             `${seasonSettlement ? `<li data-season-board-progress-settlement="true">季押卷：${escapeHtml(seasonSettlement.outcomeLabel || '待押卷')} · ${escapeHtml(seasonSettlement.progressText || seasonSettlement.statusLine || seasonSettlement.summaryLine || '待裁定')}</li>` : ''}`,
-            `${lineage?.available ? `<li data-fate-lineage-progress-row="true">命盘谱系：角色 ${escapeHtml(data.progress.lineageCharacters || 0)} / 流派 ${escapeHtml(data.progress.lineageStyles || 0)} / 节点 ${escapeHtml(data.progress.lineageNodes || 0)} / 研究 ${escapeHtml(data.progress.lineageResearchHistory || 0)}</li>` : ''}`,
+            `${lineage?.available ? `<li data-fate-lineage-progress-row="true">命盘谱系：角色 ${escapeHtml(data.progress.lineageCharacters || 0)} / 流派 ${escapeHtml(data.progress.lineageStyles || 0)} / 节点 ${escapeHtml(data.progress.lineageNodes || 0)} / 研究 ${escapeHtml(data.progress.lineageResearchHistory || 0)} / 会审 ${escapeHtml(data.progress.lineageFrontierResolutions || 0)}</li>` : ''}`,
             `${aftereffects?.available ? `<li data-fate-aftereffect-progress-row="true">界痕后效：生效 ${escapeHtml(data.progress.fateAftereffectActive || 0)} / 待生效 ${escapeHtml(data.progress.fateAftereffectPending || 0)} · ${escapeHtml(primaryAftereffect?.templateLabel || primaryAftereffect?.name || '跨章偏置')}</li>` : ''}`,
             '</ul>'
         ].join('');
@@ -7580,8 +7967,14 @@
             seasonFrontierChronicle
                 ? `<li data-season-board-frontier-chronicle-guide="true">${escapeHtml([seasonFrontierChronicle.title || '战役史卷', seasonFrontierChronicle.nextRecordLine || seasonFrontierChronicle.lessonLine || '完成主战线后回季盘复核史卷。'].filter(Boolean).join('：'))}</li>`
                 : '',
+            seasonFrontierChronicleArchive
+                ? `<li data-season-board-frontier-chronicle-archive-guide="true">${escapeHtml(['战役史卷回看', seasonFrontierChronicleArchive.summaryLine || seasonFrontierChronicleArchive.detailLine || '多周会审裁记会在这里累计成长期风格。'].filter(Boolean).join('：'))}</li>`
+                : '',
             seasonFrontierCouncil
                 ? `<li data-season-board-frontier-council-guide="true">${escapeHtml([seasonFrontierCouncil.title || '诸界会审', seasonFrontierCouncil.verdictLine || seasonFrontierCouncil.supportLine || '先守主线，副线保留证据。'].filter(Boolean).join('：'))}</li>`
+                : '',
+            seasonFrontierResolution
+                ? `<li data-season-board-frontier-resolution-guide="true">${escapeHtml([seasonFrontierResolution.submitted ? '会审裁记已封' : '会审裁记待封', seasonFrontierResolution.submitted ? (seasonFrontierResolution.councilResolutionLine || seasonFrontierResolution.summaryLine || '') : (seasonFrontierResolution.summaryLine || `建议先封记「${seasonFrontierResolution.suggestedChoiceLabel || seasonFrontierResolutionChoiceLabels[seasonFrontierResolutionSuggestedChoiceId] || '守主战线'}」。`)].filter(Boolean).join('：'))}</li>`
                 : '',
             seasonSettlement
                 ? `<li data-season-board-guide="settlement">${escapeHtml(`季押卷：${seasonSettlement.summaryLine || seasonSettlement.detailLine || seasonSettlement.guideLine || seasonSettlement.outcomeLabel || '等待裁定同步。'}`)}</li>`

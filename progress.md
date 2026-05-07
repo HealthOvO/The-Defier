@@ -1,5 +1,172 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-04-29: V9.1《诸界战线：会审归卷》Phase D 开发完成
+  - 本轮策划
+    - Phase D 不再继续横向增加季盘说明层，而是把 Phase A-C 已落地的会审裁记、封记事实与普通排班偏置推进为长期回看：玩家连续几周采用“守主战线 / 副线补证 / 封存争议”后，可以在战役史卷中看到累计倾向，并在命盘谱系中沉淀为守线派 / 平衡派 / 归档派。
+    - 持久真源继续保持为 `seasonVerificationState.records / history` 中的扁平 `recordKind: frontier_resolution` 记录，不新增 `frontier / decree / chronicle / council / resolution / chronicleArchive` 嵌套持久化。
+    - 史卷回看只做只读派生和身份沉淀，不新增 reward 第二主 CTA、不新增 map frontier action、不写 `claimedLaneRewards`、不发资源，也不让 `frontier_resolution` 混入主/旁验证状。
+  - 本轮完成
+    - `js/game.js`
+      - 新增 `getSeasonBoardFrontierResolutionArchiveRecords()`，从 `seasonVerificationState.records/history` 读取并去重多周 `frontier_resolution` 历史。
+      - 新增 `buildSeasonBoardFrontierChronicleArchive()` 与 `normalizeSeasonBoardFrontierChronicleArchive()`，派生 `frontier.chronicleArchive`，输出 `available / totalRecords / countsByChoice / countsByStance / dominantStance / latestEntry / entries / styleEntries` 等只读回看字段。
+      - `normalizeSeasonBoardFrontier()`、`normalizeSeasonBoardSnapshot()` 与 reward 文本 payload serializer 同步接入 `chronicleArchive`，但不增加任何 action 字段。
+    - `js/core/collection_hub.js`
+      - Season board overview model 同步保留 `frontier.resolution` 与 `frontier.chronicleArchive`。
+      - Sanctum summary 新增“战役史卷回看”chip、card、panel、entry 列表和 guide 行，让玩家能在洞府直接看到多周裁记累计。
+      - 命盘谱系新增 `frontierTrack`，把 `hold_primary / rebalance_support / seal_dispute` 分别累计为守线派 / 平衡派 / 归档派，并在 progress 和 summary chip 中显示会审风格。
+    - `js/core/expedition_hub.js`
+      - season board frontier 序列化与克隆逻辑同步保留 `chronicleArchive`，确保 reward / expedition / map / Sanctum 的只读投影一致。
+    - `tests/sanity_season_board_system_checks.js`
+      - 增加多周 `frontier_resolution` fixture，覆盖三类 choice 计数、latest entry、chronicleArchive payload 镜像、`frontier_resolution` 不污染 `verificationArchive`，以及命盘谱系 `frontierTrack` 暴露三类风格。
+    - `tests/sanity_fate_lineage_system_checks.js`
+      - 谱系 track 从 character/style/node/research 扩展为 character/style/node/research/frontier，断言 frontier 风格独立于验证风格。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 浏览器 Sanctum 点击 probe 扩展为检查 `frontier.chronicleArchive`、回看 panel、entry、无 projection leak、无 frontier action source。
+    - `docs/designer_next_version_frontier_settlement_planning_v1.md`
+      - Phase D 状态从“待开发 / 下一刀”更新为已完成，并把下一版本建议改为 V9.2 三周战役章。
+    - `game-intro.html`
+      - 当前版本重点同步为会审裁记 Phase D，明确战役史卷多周回看、命盘谱系 `frontierTrack` 和下一轮“三周一章”方向。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/sanity_fate_lineage_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4187 output/browser-meta-screen-audit-frontier-chronicle-archive-phase-d-final` ✅
+    - `git diff --check` ✅
+  - 当前结论
+    - V9.1 Phase A-D 已形成完整闭环：读战线、看法旨、查史卷、听会审、选裁记、封史卷、轻量塑形下周普通分线，并把多周裁记沉淀为长期史卷回看和会审风格身份。
+    - 下一轮更高价值方向不再是继续补会审字段，而是进入 V9.2“三周一章”战役经营层，让连续几周裁记形成章目标、救火窗口、章末评语与更强复盘压力。
+
+- 2026-04-29: V9.1《诸界战线：会审归卷》Phase C 开发完成
+  - 本轮策划
+    - 延续 Phase B 的会审裁记闭环，本轮只把已提交裁记用于“普通分线排序”的轻量塑形，不新增第二任务源、不新增 reward/map CTA、不改写 `frontier.resolution` 的只读边界。
+    - 规则收口为：`rebalance_support` 仅在 sampling 且当前 `nextTask.source` 本来就是普通 `lane` 时，把 `frontierResolutionSupportLaneId` 前移；`hold_primary` 和 `seal_dispute` 保持原排序。
+    - 硬边界继续优先：`locking_sheet` 洞府承诺、`debt_pack` 欠卷强目标、ranking / 正卷 / 险卷主验证都不允许被会审偏置覆盖。
+  - 本轮完成
+    - `js/game.js`
+      - `normalizeSeasonBoardSnapshot()` 新增会审裁记普通 lane 偏置：读取 `weekVerdictLedger.current.frontierResolutionChoiceId / frontierResolutionSupportLaneId`，只在无硬目标时前移 support lane。
+      - `nextWeekGoal` 归一化新增身份校验：当旧 `root.nextWeekGoal` 的 `source / sourceId / taskId / taskSourceId / laneId` 不再匹配新 `nextTask` 时，不再复用旧字段，避免 lane 偏置后出现 `nextTask` 与 `nextWeekGoal` 分裂。
+      - `buildSeasonBoardRouteDirective()` 在 `nextTask.source === lane` 时跟随当前 `nextTask.laneId`，让普通排班偏置同步影响下一章路线权重提示；硬目标 source 仍保持 phase 默认。
+    - `tests/sanity_season_board_system_checks.js`
+      - 增加 sampling 普通偏置断言：模拟 `rebalance_support` 后，support lane 前移并同步到 `nextTask / nextWeekGoal / frontier.primaryFrontId`。
+      - 增加 `seal_dispute` 负断言：封存争议不改变普通 lane 排序。
+      - 增加 durable commit 断言：真实提交 `rebalance_support` 后，持久 `frontier_resolution` 会通过 `getSeasonBoardSnapshot()` 推动普通 lane 与 route shift。
+      - 增加 durable hard-gate 与旧镜像身份漂移断言：ranking/正卷主验证不会被 `rebalance_support` 覆盖，旧 `nextWeekGoal.sourceId` 不匹配时会被丢弃。
+      - 增加 lockline / debt 负断言：会审偏置不覆盖 `locking_sheet` settlement route，也不覆盖 `debt_pack` 强目标位。
+    - `docs/designer_next_version_frontier_settlement_planning_v1.md`
+      - 同步 Phase C 已完成，下一刀改为 Phase D：战役史卷多周回看与谱系风格累计。
+    - `game-intro.html`
+      - 当前版本说明同步为会审裁记 Phase C，明确普通排班偏置和硬目标优先边界。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4186 output/browser-meta-screen-audit-frontier-resolution-phase-c-final-r2` ✅
+  - 当前结论
+    - Phase C 已把会审裁记从“封记事实”推进为“可轻量影响普通排班”的玩法结果，同时维持欠卷、锁线承诺、主验证和 `nextWeekGoal` 身份一致性边界。
+    - 下一刀建议进入 Phase D：把多周裁记整理成战役史卷回看与谱系风格累计，不开新奖励账本。
+
+- 2026-04-28: V9.1《诸界战线：会审归卷》Phase B 开发完成
+  - 本轮策划
+    - 按上轮 Phase A 的边界继续推进“会审裁记”可玩闭环：玩家在 Sanctum 可以从 `hold_primary / rebalance_support / seal_dispute` 三种口径中每周提交一次裁记，把只读 `frontier.resolution` 推进成可选择、可封记、可回看的周判事实。
+    - 设计红线保持不变：`frontier.council` 与 `frontier.resolution` 继续不带 `actionType / actionValue / ctaLabel`；reward 页不新增第二 handoff CTA；map 不新增 `data-season-board-frontier-action`；裁记不发资源、不写 `claimedLaneRewards`。
+    - subagent 反向巡检确认持久化入口应是 `seasonVerificationState.records/history` 中的最小 `recordKind: frontier_resolution` 记录，再由 `getSeasonBoardSnapshot()` 合入 `weekVerdictLedger.current`，而不是把 `frontier / council / resolution` 子树落盘。
+  - 本轮完成
+    - `js/game.js`
+      - `normalizeSeasonVerificationRecord()` 新增 `recordKind` 与 `frontierResolution* / chronicleSeal* / councilResolutionLine` 最小字段白名单。
+      - 新增 `getCommittedSeasonBoardFrontierResolution()`，从当前周 `seasonVerificationState.records/history` 读取最新 `frontier_resolution` 事实，并返回 `weekVerdictLedger.current` 可消费的封记字段。
+      - 新增 `commitSeasonBoardFrontierResolution(choiceId)`，支持非法 choice 防御、同周重复提交拒绝、提交后保存与 Sanctum/reward 刷新；提交结果不发资源、不写分线领奖账本。
+      - `getSeasonVerificationSnapshot()` 会把 `frontier_resolution` 记录排除在主/旁验证状选择之外，避免会审裁记顶替结业验证或七日劫数旁验证。
+      - `getSeasonBoardSnapshot()` 会把已提交裁记合入 `weekVerdictLedger.current`，再继续由 `frontier.resolution` 只读投影为已封记状态。
+    - `js/core/collection_hub.js`
+      - Sanctum summary / chip / detail card / guide 新增会审裁记展示位。
+      - Sanctum summary 的会审裁记面板增加独立提交入口；未提交时展示三枚独立按钮，提交后切换为已封记状态。
+      - 新按钮使用 `data-season-board-frontier-resolution-*` 专用钩子，不进入 research / goal action，不复用 `data-season-board-frontier-action`、reward handoff 或 map action 钩子。
+    - `tests/sanity_season_board_system_checks.js`
+      - 增加提交函数合同：非法 choice 拒绝、`rebalance_support` 成功写入最小记录、重复提交返回 `already_submitted`、提交后投影来自 `week_verdict_ledger`。
+      - 增加无资源发放、无 `claimedLaneRewards` 写入、无嵌套 `frontier/decree/chronicle/council/resolution` 落盘断言。
+    - `tests/browser_meta_screen_audit.mjs`
+      - Sanctum 静态 probe 覆盖会审裁记 summary / chip / card / panel / guide / 三选一按钮。
+      - 新增浏览器点击 probe，点击 `rebalance_support` 后断言提交成功、DOM 切为已封记、周判账本携带 `frontierResolutionChoiceId`，并继续保持无 `data-season-board-frontier-action`。
+    - `game-intro.html`
+      - 当前版本说明同步为会审裁记 Phase B 已落地，下一轮重点转向普通分线排班偏置、战役史卷多周回看与谱系风格累计。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `git diff --check` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4184 output/browser-meta-screen-audit-frontier-resolution-phase-b-final-r2` ✅
+  - 当前结论
+    - Phase B 已把会审裁记从 Phase A 的只读投影推进为 Sanctum 每周一次选择/提交/封记闭环，但仍保持任务真源、奖励真源和 map/reward CTA 边界不变。
+    - 下一刀可以进入 Phase C：让已提交裁记轻量影响下周普通分线排序；实现时仍必须让欠卷强目标位、主验证状和既有 `nextWeekGoal` 拥有更高优先级。
+
+- 2026-04-28: V9.1《诸界战线：会审归卷》Phase A 开发完成
+  - 本轮策划
+    - 按上轮策划的分模块方案，本轮只做 Phase A：`seasonBoard.frontier.resolution` 派生投影、跨 payload 镜像和 Node / 浏览器门禁，不提前做 Sanctum 点击裁记交互。
+    - subagent 风险巡检确认接入点应放在 `normalizeSeasonBoardSnapshot() -> normalizeSeasonBoardFrontier()` 链路，`resolution` 只能读取 `settlement / weekVerdictLedger / debtPack / verificationOrders / frontier.council / frontier.chronicle`，不能成为新的任务真源或持久状态机。
+    - 红线继续保持：`frontier.council` 无 `actionType / actionValue / ctaLabel`，`frontier.resolution` 同样无行动字段；reward 仍只有既有 handoff CTA，map 不新增 frontier action，`claimedLaneRewards` 不参与史卷封记。
+  - 本轮完成
+    - `js/game.js`
+      - 新增 `buildSeasonBoardFrontierResolution()` 与 `normalizeSeasonBoardFrontierResolution()`，把会审裁记 Phase A 规范成 `seasonBoard.frontier.resolution` 派生对象。
+      - `resolution` 默认输出未提交态，包含 `suggestedChoiceId / suggestedChoiceLabel / summaryLine / chronicleSealLine / councilResolutionLine`；若 `weekVerdictLedger.current` 未来带有 `frontierResolution* / chronicleSeal* / councilResolutionLine` 字段，则可投影成已封记态。
+      - `normalizeSeasonBoardWeekVerdictLedger()` 补入 `frontierResolutionId / frontierResolutionChoiceId / frontierResolutionLabel / frontierResolutionStance / frontierResolutionSupportLaneId / frontierResolutionSupportLaneLabel / frontierResolutionSummaryLine / chronicleSealStatus / chronicleSealLine / councilResolutionLine / frontierResolutionSubmittedAt` 白名单，避免后续显式封记字段被 normalize 丢弃。
+      - reward 文本 payload 的 `serializeSeasonBoardFrontier()` 补入 `resolution` 白名单；当前不新增 reward UI 行和第二 CTA。
+    - `js/core/expedition_hub.js`
+      - `serializeFrontier()` 与 `cloneSeasonBoardFrontier()` 补入 `resolution` 白名单。
+      - expedition / map chapter 的 `weekVerdictLedger.current` 克隆同步保留 frontier resolution 相关字段，保证后续封记字段能在文本 payload 三端保持一致。
+    - `js/core/collection_hub.js`
+      - 洞府 season board overview model 补入 `frontier.resolution` 只读字段映射，为下一阶段 Sanctum 会审裁记交互预留消费层；本轮不新增按钮。
+    - `tests/sanity_season_board_system_checks.js`
+      - `assertSeasonBoardFrontier()` 增加 `frontier.resolution` 合同断言：存在、只读、绑定当前主战线、镜像 settlement outcome、输出推荐 choice 与封记文案槽、不带 action 字段。
+      - 持久化负断言加入 `resolution`，防止派生投影进入 `seasonVerificationState`。
+      - 新增显式 `weekVerdictLedger.current.frontierResolution*` 夹具，覆盖未来已提交封记态能正确投影为 `submitted === true`。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_heavenly_mandate_system_checks.js` ✅
+    - `node tests/sanity_fate_lineage_system_checks.js` ✅
+    - `git diff --check` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4180 output/browser-meta-screen-audit-frontier-resolution-phase-a` ✅
+  - 当前结论
+    - `frontier.resolution` Phase A 已作为纯派生、只读、跨 payload 镜像稳定的封记预备层落地。
+    - 下一刀可以进入 Phase B：在 Sanctum 增加每周一次的会审裁记提交、防重复、非法 choice 防御和提交后刷新；但仍需保持提交结果写入周裁定上下文/验证历史，而不是把行动字段塞进 `frontier.council`。
+
+- 2026-04-28: 下一版本策划收口为 V9.1《诸界战线：会审归卷》
+  - 本轮策划
+    - 按 `game-design-theory` 的反馈循环和选择压力原则，本轮没有继续横向堆更多说明层，而是把最近上线的 `frontier -> decree -> chronicle -> council` 四层只读反馈链收束为下一版本的可玩闭环：读战线、看法旨、查史卷、听会审、选裁记、封史卷、改下周排班。
+    - 当前系统已经具备 `seasonBoard.lanes / nextTask / nextWeekGoal / settlement / debtPack / verificationOrders / weekVerdictLedger / laneRewards / claimedLaneRewards` 等真源，因此下一版本不能再重复策划“账本从无到有”，也不能把 `frontier.council` 做成第二任务源。
+    - 新版本红线明确为：`frontier.council` 继续无 `actionType / actionValue / ctaLabel`，reward 页不新增第二主 CTA，map 页不新增 frontier action，史卷封记不新增奖励领取账本，会审裁记只能轻量影响普通分线排序，不能覆盖欠卷强目标位和主验证状。
+  - 本轮产物
+    - 新增 `docs/designer_next_version_frontier_settlement_planning_v1.md`，版本暂定名为 `V9.1《诸界战线：会审归卷》`。
+    - 策划文档把下一版本拆成四个模块：诸界会审裁记、战役史卷封记、下周排班偏置、谱系风格记录。
+    - 文档建议首发三种会审裁记：`hold_primary` 继续守主战线、`rebalance_support` 给副线补证、`seal_dispute` 封存争议不改排序。
+    - 字段边界建议采用 `seasonBoard.frontier.resolution` 作为派生投影；真正提交动作通过类似 `commitSeasonBoardFrontierResolution(choiceId)` 的单点函数写入周裁定上下文和 `seasonVerificationState.records/history`，而不是把行动字段写进 `frontier.council`。
+    - 开发拆分收口为 Phase A 到 Phase D：先做 `frontier.resolution` 派生与镜像，再做 Sanctum 会审裁记交互，再做普通分线排班偏置，最后补 browser gate 与版本说明。
+  - 下一步开发建议
+    - 第一刀优先做 Phase A：`build/normalizeSeasonBoardFrontierResolution()`、reward / expedition / map payload 白名单、Node mirror 测试，以及 `frontier.council` 无 action 字段的负断言。
+    - 第二刀再做 Sanctum 交互：每周一次裁记提交、防重复、非法 choiceId 防御、提交后刷新洞府和文本 payload。
+    - 第三刀再让裁记轻量影响普通分线排序；必须保持欠卷强目标位和主验证状优先。
+  - 本轮验证
+    - 本轮为策划文档与进度记录更新，未改运行时代码，未执行 Node / 浏览器门禁。
+
 - 2026-04-27: 诸界会审 M0 上线
   - 本轮策划
     - 按 `game-design-theory` 的反馈循环原则，本轮继续扩展赛季天道盘的“读盘反馈”，目标是让玩家在看完诸界战线、本周法旨和战役史卷后，明确“副线如何处理”，但不新增奖励、不新增第二任务源、不新增第二主 CTA。
