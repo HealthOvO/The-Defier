@@ -567,6 +567,10 @@ function rectObj(rect) {
         JSON.stringify(rewardSeasonBoard.frontier?.chronicle || null) === JSON.stringify(chapterSeasonBoard.frontier?.chronicle || null) &&
         JSON.stringify(rewardSeasonBoard.frontier?.council || null) === JSON.stringify(expeditionSeasonBoard.frontier?.council || null) &&
         JSON.stringify(rewardSeasonBoard.frontier?.council || null) === JSON.stringify(chapterSeasonBoard.frontier?.council || null) &&
+        JSON.stringify(rewardSeasonBoard.chapterArc || null) === JSON.stringify(expeditionSeasonBoard.chapterArc || null) &&
+        JSON.stringify(rewardSeasonBoard.chapterArc || null) === JSON.stringify(chapterSeasonBoard.chapterArc || null) &&
+        rewardSeasonBoard.nextTask?.source !== 'chapterArc' &&
+        rewardSeasonBoard.nextWeekGoal?.source !== 'chapterArc' &&
         JSON.stringify(rewardSeasonBoard.laneRewards || []) === JSON.stringify(expeditionSeasonBoard.laneRewards || []) &&
         JSON.stringify(rewardSeasonBoard.laneRewards || []) === JSON.stringify(chapterSeasonBoard.laneRewards || []) &&
         JSON.stringify(rewardSeasonBoard.laneRewardSummary || null) === JSON.stringify(expeditionSeasonBoard.laneRewardSummary || null) &&
@@ -3239,6 +3243,13 @@ function rectObj(rect) {
       .trim();
     const sanctumSeasonBoardSettlementCardText = (document.querySelector('#sanctum-summary [data-season-board-settlement-card="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const sanctumSeasonBoardVerificationCardText = (document.querySelector('#sanctum-summary [data-season-board-verification-card="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardChapterArc = (document.querySelector('#sanctum-summary [data-season-board-chapter-arc="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardChapterArcChipText = (document.querySelector('#sanctum-summary [data-season-board-chip="chapter-arc"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardChapterArcCard = document.querySelector('#sanctum-summary [data-season-board-chapter-arc-card="true"]');
+    const sanctumSeasonBoardChapterArcCardText = (sanctumSeasonBoardChapterArcCard?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardChapterArcButtonCount = sanctumSeasonBoardChapterArcCard?.querySelectorAll('button').length || 0;
+    const sanctumSeasonBoardChapterArcResearchCount = document.querySelectorAll('#sanctum-research-list [data-season-board-chapter-arc="true"]').length;
+    const sanctumSeasonBoardChapterArcGoalCount = document.querySelectorAll('#sanctum-goal-list [data-season-board-chapter-arc="true"]').length;
     const sanctumSeasonBoardGoalCount = document.querySelectorAll('#sanctum-goal-list [data-season-board-goal="true"]').length;
     const sanctumSeasonBoardLaneCount = document.querySelectorAll('#sanctum-summary [data-season-board-lane="true"]').length;
     const sanctumSeasonBoardTaskCount = document.querySelectorAll('#sanctum-summary [data-season-board-task="true"]').length;
@@ -3346,12 +3357,18 @@ function rectObj(rect) {
         /季押卷/.test(sanctumSeasonBoardSettlementGuide) &&
         /结业验证/.test(sanctumSeasonBoardVerificationGuide) &&
         /季盘阶段|赛季主轴|季盘进度|季押卷|战线/.test(sanctumSeasonBoardChipsText) &&
+        /章程|章节|三周/.test(sanctumSeasonBoardChapterArcChipText) &&
         /法旨/.test(sanctumSeasonBoardChipsText) &&
         /史卷/.test(sanctumSeasonBoardChipsText) &&
         /会审/.test(sanctumSeasonBoardChipsText) &&
         /裁记/.test(sanctumSeasonBoardChipsText) &&
         /季押卷裁定/.test(sanctumSeasonBoardSettlementCardText) &&
         /结业验证状/.test(sanctumSeasonBoardVerificationCardText) &&
+        sanctumSeasonBoardChapterArc.length > 0 &&
+        sanctumSeasonBoardChapterArcCardText.length > 0 &&
+        sanctumSeasonBoardChapterArcButtonCount === 0 &&
+        sanctumSeasonBoardChapterArcResearchCount === 0 &&
+        sanctumSeasonBoardChapterArcGoalCount === 0 &&
         sanctumSeasonBoardGoalCount >= 2 &&
         sanctumSeasonBoardLaneCount >= 3 &&
         sanctumSeasonBoardTaskCount >= 3 &&
@@ -3400,6 +3417,8 @@ function rectObj(rect) {
         Array.isArray(expeditionSeasonBoard.frontier.council.laneOpinions) &&
         expeditionSeasonBoard.frontier.council.laneOpinions.length === 3 &&
         JSON.stringify(expeditionSeasonBoard.frontier || null) === JSON.stringify(chapterSeasonBoard.frontier || null) &&
+        !!expeditionSeasonBoard.chapterArc &&
+        JSON.stringify(expeditionSeasonBoard.chapterArc || null) === JSON.stringify(chapterSeasonBoard.chapterArc || null) &&
         (expeditionSeasonBoard.totalTaskCount || 0) >= 3 &&
         !!expeditionAftereffects &&
         !!chapterAftereffects &&
@@ -3470,6 +3489,12 @@ function rectObj(rect) {
       sanctumSeasonBoardChipsText,
       sanctumSeasonBoardSettlementCardText,
       sanctumSeasonBoardVerificationCardText,
+      sanctumSeasonBoardChapterArc,
+      sanctumSeasonBoardChapterArcChipText,
+      sanctumSeasonBoardChapterArcCardText,
+      sanctumSeasonBoardChapterArcButtonCount,
+      sanctumSeasonBoardChapterArcResearchCount,
+      sanctumSeasonBoardChapterArcGoalCount,
       sanctumSeasonBoardGoalCount,
       sanctumSeasonBoardLaneCount,
       sanctumSeasonBoardTaskCount,
@@ -3808,7 +3833,7 @@ function rectObj(rect) {
         const resolution = board?.frontier?.resolution || null;
         const chronicleArchive = board?.frontier?.chronicleArchive || null;
         const state = game.seasonVerificationState || {};
-        const forbiddenProjectionKeys = new Set(['frontier', 'decree', 'chronicle', 'council', 'resolution', 'chronicleArchive']);
+        const forbiddenProjectionKeys = new Set(['frontier', 'decree', 'chronicle', 'council', 'resolution', 'chronicleArchive', 'chapterArc', 'dominantChoiceId', 'review', 'rescueWindow', 'entries']);
         const projectionLeak = hasNestedKey(state, forbiddenProjectionKeys);
         const frontierActionCount = document.querySelectorAll('[data-season-board-frontier-action="true"]').length;
         const archivePanel = document.querySelector('#sanctum-summary [data-season-board-frontier-chronicle-archive-panel="true"]');

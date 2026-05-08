@@ -294,10 +294,101 @@ function assertSeasonBoardFrontierMirror(payload, label) {
   return rewardFrontier;
 }
 
+function assertSeasonBoardChapterArc(board, label) {
+  const sourceLabel = label || 'season board chapter arc';
+  assert(board?.chapterArc, `${sourceLabel} should expose a chapterArc projection, got ${JSON.stringify(board)}`);
+  assert(
+    board.chapterArc.available === true
+      && board.chapterArc.id
+      && board.chapterArc.chapterLabel
+      && board.chapterArc.arcLabel
+      && board.chapterArc.windowLabel
+      && board.chapterArc.weekSlot
+      && Number.isFinite(Number(board.chapterArc.weeksRemaining))
+      && board.chapterArc.progressText
+      && board.chapterArc.summaryLine
+      && board.chapterArc.statusLine
+      && board.chapterArc.goalLine
+      && board.chapterArc.review
+      && board.chapterArc.rescueWindow
+      && Array.isArray(board.chapterArc.entries),
+    `${sourceLabel} should expose the chapterArc contract fields, got ${JSON.stringify(board.chapterArc)}`
+  );
+  assert(
+    board.chapterArc.entries.length === 3
+      && board.chapterArc.entries.every((entry) => entry.recordId && entry.weekTag && entry.weekLabel && entry.choiceId && entry.choiceLabel && entry.weekSlot),
+    `${sourceLabel} should aggregate three weekly chapterArc entries, got ${JSON.stringify(board.chapterArc.entries)}`
+  );
+  assert(
+    board.chapterArc.review?.statusId
+      && board.chapterArc.review?.summaryLine
+      && board.chapterArc.review?.endingPreviewLine
+      && board.chapterArc.review?.finalCommentLine
+      && board.chapterArc.rescueWindow?.statusId
+      && board.chapterArc.rescueWindow?.reasonLine
+      && board.chapterArc.rescueWindow?.guideLine,
+    `${sourceLabel} should expose review and rescueWindow panels, got ${JSON.stringify(board.chapterArc)}`
+  );
+  assert(
+    !hasNestedKey(board.chapterArc, new Set(['actionType', 'actionValue', 'ctaLabel'])),
+    `${sourceLabel} should stay read-only and not expose action metadata, got ${JSON.stringify(board.chapterArc)}`
+  );
+  if (board.nextTask) {
+    assert(
+      board.nextTask.source !== 'chapterArc' && board.nextTask.source !== 'chapter_arc',
+      `${sourceLabel} nextTask should never derive from chapterArc, got ${JSON.stringify(board.nextTask)}`
+    );
+  }
+  if (board.nextWeekGoal) {
+    assert(
+      board.nextWeekGoal.source !== 'chapterArc' && board.nextWeekGoal.source !== 'chapter_arc',
+      `${sourceLabel} nextWeekGoal should never derive from chapterArc, got ${JSON.stringify(board.nextWeekGoal)}`
+    );
+  }
+  return board.chapterArc;
+}
+
+function assertSeasonBoardChapterArcMirror(payload, label) {
+  const sourceLabel = label || 'season board payload';
+  const rewardChapterArc = payload?.reward?.expedition?.seasonBoard?.chapterArc || null;
+  const expeditionChapterArc = payload?.expedition?.seasonBoard?.chapterArc || null;
+  const chapterChapterArc = payload?.map?.chapter?.seasonBoard?.chapterArc || null;
+  assert(
+    rewardChapterArc && expeditionChapterArc && chapterChapterArc,
+    `${sourceLabel} should expose chapterArc in reward / expedition / map mirrors, got ${JSON.stringify({
+      reward: rewardChapterArc,
+      expedition: expeditionChapterArc,
+      chapter: chapterChapterArc
+    })}`
+  );
+  assert(
+    JSON.stringify(rewardChapterArc) === JSON.stringify(expeditionChapterArc)
+      && JSON.stringify(rewardChapterArc) === JSON.stringify(chapterChapterArc),
+    `${sourceLabel} should mirror chapterArc across reward / expedition / map, got ${JSON.stringify({
+      reward: rewardChapterArc,
+      expedition: expeditionChapterArc,
+      chapter: chapterChapterArc
+    })}`
+  );
+  return rewardChapterArc;
+}
+
 function hasNestedKey(value, keySet) {
   if (!value || typeof value !== 'object') return false;
   if (Array.isArray(value)) return value.some((entry) => hasNestedKey(entry, keySet));
   return Object.entries(value).some(([key, entry]) => keySet.has(key) || hasNestedKey(entry, keySet));
+}
+
+function assertSeasonBoardChapterArcDerivedNotPersisted(game, storage, label) {
+  const sourceLabel = label || 'season board chapter arc persistence';
+  assert(typeof game?.saveGame === 'function', `${sourceLabel} should be able to save game state`);
+  game.saveGame();
+  const saved = JSON.parse(storage.getItem('theDefierSave') || '{}');
+  assert(
+    saved?.seasonVerificationState
+      && !hasNestedKey(saved.seasonVerificationState, new Set(['chapterArc', 'dominantChoiceId', 'review', 'rescueWindow', 'entries'])),
+    `${sourceLabel} should keep chapterArc out of seasonVerificationState, got ${JSON.stringify(saved?.seasonVerificationState)}`
+  );
 }
 
 function assertSeasonBoardFrontierDerivedNotPersisted(game, storage, label) {
@@ -1674,6 +1765,186 @@ function loadFile(ctx, filePath) {
       && locklinePayload?.reward?.expedition?.seasonBoard?.laneRewardSummary?.claimableCount === 0
       && locklinePayload?.reward?.expedition?.seasonBoard?.lanes?.find((lane) => lane.id === 'training')?.reward?.laneId === 'training',
     `lockline reward payload should keep locked lane rewards mirrored and attached to lanes, got ${JSON.stringify(locklinePayload?.reward?.expedition?.seasonBoard)}`
+  );
+  resetStorages();
+  const chapterArcGame = createGame();
+  const chapterArcDate = new Date();
+  const chapterArcWeek1 = new Date(chapterArcDate.getTime());
+  chapterArcWeek1.setUTCDate(chapterArcWeek1.getUTCDate() - 14);
+  const chapterArcWeek2 = new Date(chapterArcDate.getTime());
+  chapterArcWeek2.setUTCDate(chapterArcWeek2.getUTCDate() - 7);
+  const chapterArcSlates = [
+    buildSlate('season_board_chapter_arc_week_1', chapterArcWeek1.getTime(), {
+      chapterIndex: 4,
+      chapterName: '第 4 章·星渡',
+      score: 144,
+      ratingLabel: '首周入档',
+      ratingTone: 'completed'
+    }),
+    buildSlate('season_board_chapter_arc_week_2', chapterArcWeek2.getTime(), {
+      chapterIndex: 5,
+      chapterName: '第 5 章·镜潮',
+      score: 188,
+      ratingLabel: '次周进卷',
+      ratingTone: 'completed'
+    }),
+    buildSlate('season_board_chapter_arc_week_3', chapterArcDate.getTime(), {
+      chapterIndex: 6,
+      chapterName: '第 6 章·星镜归档',
+      score: 256,
+      ratingLabel: '本周定榜',
+      ratingTone: 'selected'
+    })
+  ];
+  chapterArcGame.runSlateArchive = chapterArcGame.normalizeRunSlateArchive(chapterArcSlates);
+  chapterArcGame.persistRunSlateArchive();
+  const chapterArcFocus = chapterArcGame.buildObservatoryTrainingFocusFromSlate(chapterArcSlates[2]);
+  chapterArcGame.setObservatoryTrainingFocus(chapterArcFocus, { silent: true });
+  const chapterArcBaseBoard = chapterArcGame.getSeasonBoardSnapshot({ latestSlate: chapterArcSlates[2] });
+  const chapterArcVerificationState = chapterArcGame.normalizeSeasonVerificationState({
+    ...chapterArcGame.seasonVerificationState,
+    history: [
+      {
+        recordId: 'chapter_arc_frontier_resolution_week_13',
+        recordKind: 'frontier_resolution',
+        weekTag: '2026-W13',
+        weekLabel: '第13周',
+        sourceMode: 'sanctum',
+        frontierResolutionId: 'chapter_arc_frontier_resolution_week_13',
+        frontierResolutionChoiceId: 'hold_primary',
+        frontierResolutionLabel: '守主战线',
+        frontierResolutionStance: 'frontier_loyalist',
+        frontierResolutionSummaryLine: '第13周会审裁记：继续守主战线。',
+        chronicleSealStatus: 'sealed',
+        chronicleSealLine: '战役史卷已封记：守主战线。',
+        councilResolutionLine: '诸界会审裁定：守主战线。',
+        frontierResolutionSubmittedAt: now - 3000,
+        createdAt: now - 3000,
+        updatedAt: now - 3000
+      },
+      {
+        recordId: 'chapter_arc_frontier_resolution_week_14',
+        recordKind: 'frontier_resolution',
+        weekTag: '2026-W14',
+        weekLabel: '第14周',
+        sourceMode: 'sanctum',
+        frontierResolutionId: 'chapter_arc_frontier_resolution_week_14',
+        frontierResolutionChoiceId: 'seal_dispute',
+        frontierResolutionLabel: '封存争议',
+        frontierResolutionStance: 'dispute_archivist',
+        frontierResolutionSummaryLine: '第14周会审裁记：先把争议封入史卷。',
+        chronicleSealStatus: 'sealed',
+        chronicleSealLine: '战役史卷已封记：封存争议。',
+        councilResolutionLine: '诸界会审裁定：封存争议。',
+        frontierResolutionSubmittedAt: now - 2000,
+        createdAt: now - 2000,
+        updatedAt: now - 2000
+      }
+    ]
+  });
+  chapterArcGame.seasonVerificationState = chapterArcVerificationState;
+  const chapterArcBoard = chapterArcGame.normalizeSeasonBoardSnapshot({
+    ...chapterArcBaseBoard,
+    weekTag: '2026-W15',
+    weekLabel: '第15周',
+    chapterArc: {
+      available: true,
+      id: 'stale_manual_chapter_arc',
+      chapterId: 'stale_manual_chapter_arc',
+      chapterLabel: '旧章',
+      arcLabel: '旧三周',
+      windowLabel: '旧窗口',
+      weekTag: '2025-W01',
+      weekLabel: '旧第1周',
+      weekSlot: 1,
+      weeksRemaining: 2,
+      sealedWeeks: 1,
+      targetWeeks: 3,
+      progressText: '1/3 周归卷',
+      countsByChoice: { hold_primary: 1, rebalance_support: 0, seal_dispute: 0 },
+      countsByStance: { frontier_loyalist: 1, support_balancer: 0, dispute_archivist: 0 },
+      dominantChoiceId: 'hold_primary',
+      dominantChoiceLabel: '守主战线',
+      dominantStanceId: 'frontier_loyalist',
+      dominantStanceLabel: '守线派',
+      summaryLine: '旧章节弧线不应覆盖真实派生结果。',
+      statusLine: '旧状态',
+      goalLine: '旧目标',
+      rescueWindow: {
+        available: true,
+        open: true,
+        statusId: 'stale',
+        statusLabel: '旧窗口',
+        reasonLine: '旧救火',
+        guideLine: '旧引导'
+      },
+      review: {
+        available: true,
+        statusId: 'stale',
+        statusLabel: '旧复盘',
+        endingPreviewLine: '旧预览',
+        finalCommentLine: '旧评语',
+        summaryLine: '旧摘要'
+      },
+      entries: [{
+        recordId: 'stale_manual_chapter_arc_entry',
+        weekTag: '2025-W01',
+        weekLabel: '旧第1周',
+        weekSlot: 1,
+        choiceId: 'hold_primary',
+        choiceLabel: '守主战线',
+        stanceId: 'frontier_loyalist',
+        stanceLabel: '守线派',
+        summaryLine: '旧条目',
+        submittedAt: now - 99999
+      }]
+    },
+    weekVerdictLedger: {
+      current: {
+        ...(chapterArcBaseBoard.weekVerdictLedger?.current || {}),
+        weekTag: '2026-W15',
+        weekLabel: '第15周',
+        frontierResolutionId: 'chapter_arc_frontier_resolution_week_15',
+        frontierResolutionChoiceId: 'rebalance_support',
+        frontierResolutionLabel: '副线补证',
+        frontierResolutionStance: 'support_balancer',
+        frontierResolutionSupportLaneId: 'training',
+        frontierResolutionSupportLaneLabel: '采样战线',
+        frontierResolutionSummaryLine: '第15周会审裁记：给采样战线补一份旁证。',
+        chronicleSealStatus: 'sealed',
+        chronicleSealLine: '战役史卷已封记：副线补证。',
+        councilResolutionLine: '诸界会审裁定：副线补证，不抢主验证。',
+        frontierResolutionSubmittedAt: now - 1000
+      }
+    }
+  });
+  const chapterArc = assertSeasonBoardChapterArc(chapterArcBoard, 'chapter arc normalized board');
+  assert(
+    chapterArc.dominantChoiceId === 'rebalance_support'
+      && chapterArc.id !== 'stale_manual_chapter_arc'
+      && chapterArc.entries.some((entry) => entry.weekTag === '2026-W13' && entry.choiceId === 'hold_primary')
+      && chapterArc.entries.some((entry) => entry.weekTag === '2026-W14' && entry.choiceId === 'seal_dispute')
+      && chapterArc.entries.some((entry) => entry.weekTag === '2026-W15' && entry.choiceId === 'rebalance_support'),
+    `chapter arc should preserve dominantChoiceId as read-only metadata, got ${JSON.stringify(chapterArc)}`
+  );
+  chapterArcGame.seasonVerificationState = chapterArcGame.normalizeSeasonVerificationState({
+    ...chapterArcGame.seasonVerificationState,
+    chapterArc: chapterArcBoard.chapterArc
+  });
+  assertSeasonBoardChapterArcDerivedNotPersisted(chapterArcGame, ctx.localStorage, 'chapter arc derived persistence');
+  chapterArcGame.getSeasonBoardSnapshot = () => chapterArcBoard;
+  chapterArcGame.lastExpeditionRewardMeta = {
+    id: 'chapter_arc_reward_meta',
+    chapterName: '第15周章经营验收',
+    seasonBoard: chapterArcBoard
+  };
+  chapterArcGame.currentScreen = 'reward-screen';
+  const chapterArcPayload = JSON.parse(chapterArcGame.renderGameToText());
+  const mirroredChapterArc = assertSeasonBoardChapterArcMirror(chapterArcPayload, 'chapter arc payload');
+  assert(
+    mirroredChapterArc.entries.length === 3
+      && mirroredChapterArc.entries.every((entry) => entry.recordId && entry.choiceId && entry.weekSlot),
+    `chapter arc payload should mirror the three weekly entries intact, got ${JSON.stringify(mirroredChapterArc)}`
   );
   const locklineNextTaskNeedle = locklineBoard.nextTask?.hintLine || locklineBoard.nextTask?.label || '';
   const locklineSanctumData = locklineGame.getSanctumOverviewData();

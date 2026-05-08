@@ -927,6 +927,81 @@
         };
     };
 
+    const serializeSeasonBoardChapterArc = (chapterArc = null) => {
+        const root = chapterArc && typeof chapterArc === 'object' ? chapterArc : null;
+        if (!root) return null;
+        const rescueRoot = root.rescueWindow && typeof root.rescueWindow === 'object' ? root.rescueWindow : null;
+        const reviewRoot = root.review && typeof root.review === 'object' ? root.review : null;
+        return {
+            available: root.available !== false,
+            id: String(root.id || ''),
+            chapterId: String(root.chapterId || ''),
+            chapterLabel: String(root.chapterLabel || ''),
+            arcLabel: String(root.arcLabel || ''),
+            windowLabel: String(root.windowLabel || ''),
+            weekTag: String(root.weekTag || ''),
+            weekLabel: String(root.weekLabel || ''),
+            weekSlot: clampInt(root.weekSlot, 1, 3),
+            weeksRemaining: clampInt(root.weeksRemaining, 0, 3),
+            sealedWeeks: clampInt(root.sealedWeeks, 0, 3),
+            targetWeeks: clampInt(root.targetWeeks, 1, 3),
+            progressText: String(root.progressText || ''),
+            countsByChoice: {
+                hold_primary: clampInt(root.countsByChoice?.hold_primary, 0, 9999),
+                rebalance_support: clampInt(root.countsByChoice?.rebalance_support, 0, 9999),
+                seal_dispute: clampInt(root.countsByChoice?.seal_dispute, 0, 9999)
+            },
+            countsByStance: {
+                frontier_loyalist: clampInt(root.countsByStance?.frontier_loyalist, 0, 9999),
+                support_balancer: clampInt(root.countsByStance?.support_balancer, 0, 9999),
+                dispute_archivist: clampInt(root.countsByStance?.dispute_archivist, 0, 9999)
+            },
+            dominantChoiceId: String(root.dominantChoiceId || ''),
+            dominantChoiceLabel: String(root.dominantChoiceLabel || ''),
+            dominantStanceId: String(root.dominantStanceId || ''),
+            dominantStanceLabel: String(root.dominantStanceLabel || ''),
+            summaryLine: String(root.summaryLine || ''),
+            statusLine: String(root.statusLine || ''),
+            goalLine: String(root.goalLine || ''),
+            rescueWindow: rescueRoot
+                ? {
+                    available: rescueRoot.available !== false,
+                    open: !!rescueRoot.open,
+                    statusId: String(rescueRoot.statusId || ''),
+                    statusLabel: String(rescueRoot.statusLabel || ''),
+                    reasonLine: String(rescueRoot.reasonLine || ''),
+                    guideLine: String(rescueRoot.guideLine || '')
+                }
+                : null,
+            review: reviewRoot
+                ? {
+                    available: reviewRoot.available !== false,
+                    statusId: String(reviewRoot.statusId || ''),
+                    statusLabel: String(reviewRoot.statusLabel || ''),
+                    endingPreviewLine: String(reviewRoot.endingPreviewLine || ''),
+                    finalCommentLine: String(reviewRoot.finalCommentLine || ''),
+                    summaryLine: String(reviewRoot.summaryLine || '')
+                }
+                : null,
+            entries: readArray(root.entries).map((entry) => ({
+                recordId: String(entry?.recordId || ''),
+                weekTag: String(entry?.weekTag || ''),
+                weekLabel: String(entry?.weekLabel || ''),
+                weekSlot: clampInt(entry?.weekSlot, 1, 3),
+                choiceId: String(entry?.choiceId || ''),
+                choiceLabel: String(entry?.choiceLabel || ''),
+                stanceId: String(entry?.stanceId || ''),
+                stanceLabel: String(entry?.stanceLabel || ''),
+                supportLaneId: String(entry?.supportLaneId || ''),
+                supportLaneLabel: String(entry?.supportLaneLabel || ''),
+                summaryLine: String(entry?.summaryLine || ''),
+                chronicleSealLine: String(entry?.chronicleSealLine || ''),
+                councilResolutionLine: String(entry?.councilResolutionLine || ''),
+                submittedAt: clampInt(entry?.submittedAt, 0, 9999999999999)
+            }))
+        };
+    };
+
     const serializeSeasonBoardSnapshot = (board = null) => {
         const source = board && typeof board === 'object' ? board : null;
         if (!source) return null;
@@ -1417,6 +1492,7 @@
                 totalCount: resolveSummaryCount(source.laneRewardSummary?.totalCount, canonicalLaneRewards.length)
             },
             frontier: serializeFrontier(source.frontier),
+            chapterArc: serializeSeasonBoardChapterArc(source.chapterArc),
             nextTask: source.nextTask && typeof source.nextTask === 'object'
                 ? {
                     laneId: String(source.nextTask.laneId || ''),
@@ -5966,6 +6042,7 @@
                             totalCount: payload.expedition.seasonBoard.laneRewardSummary?.totalCount || 0
                         },
                         frontier: cloneSeasonBoardFrontier(payload.expedition.seasonBoard.frontier),
+                        chapterArc: serializeSeasonBoardChapterArc(payload.expedition.seasonBoard.chapterArc),
                         nextTask: payload.expedition.seasonBoard.nextTask
                             ? {
                                 laneId: payload.expedition.seasonBoard.nextTask.laneId || '',

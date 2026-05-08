@@ -1148,6 +1148,81 @@ class Game {
                                     : []
                             };
                         };
+                        const serializeSeasonBoardChapterArc = (chapterArc = null) => {
+                            if (!chapterArc || typeof chapterArc !== 'object') return null;
+                            const rescueWindow = chapterArc.rescueWindow && typeof chapterArc.rescueWindow === 'object'
+                                ? {
+                                    available: chapterArc.rescueWindow.available !== false,
+                                    open: !!chapterArc.rescueWindow.open,
+                                    statusId: chapterArc.rescueWindow.statusId || '',
+                                    statusLabel: chapterArc.rescueWindow.statusLabel || '',
+                                    reasonLine: chapterArc.rescueWindow.reasonLine || '',
+                                    guideLine: chapterArc.rescueWindow.guideLine || ''
+                                }
+                                : null;
+                            const review = chapterArc.review && typeof chapterArc.review === 'object'
+                                ? {
+                                    available: chapterArc.review.available !== false,
+                                    statusId: chapterArc.review.statusId || '',
+                                    statusLabel: chapterArc.review.statusLabel || '',
+                                    endingPreviewLine: chapterArc.review.endingPreviewLine || '',
+                                    finalCommentLine: chapterArc.review.finalCommentLine || '',
+                                    summaryLine: chapterArc.review.summaryLine || ''
+                                }
+                                : null;
+                            return {
+                                available: chapterArc.available !== false,
+                                id: chapterArc.id || '',
+                                chapterId: chapterArc.chapterId || '',
+                                chapterLabel: chapterArc.chapterLabel || '',
+                                arcLabel: chapterArc.arcLabel || '',
+                                windowLabel: chapterArc.windowLabel || '',
+                                weekTag: chapterArc.weekTag || '',
+                                weekLabel: chapterArc.weekLabel || '',
+                                weekSlot: Math.max(1, Math.min(3, Math.floor(Number(chapterArc.weekSlot) || 1))),
+                                weeksRemaining: Math.max(0, Math.min(3, Math.floor(Number(chapterArc.weeksRemaining) || 0))),
+                                sealedWeeks: Math.max(0, Math.min(3, Math.floor(Number(chapterArc.sealedWeeks) || 0))),
+                                targetWeeks: Math.max(1, Math.min(3, Math.floor(Number(chapterArc.targetWeeks) || 3))),
+                                progressText: chapterArc.progressText || '',
+                                countsByChoice: {
+                                    hold_primary: Math.max(0, Math.floor(Number(chapterArc.countsByChoice?.hold_primary) || 0)),
+                                    rebalance_support: Math.max(0, Math.floor(Number(chapterArc.countsByChoice?.rebalance_support) || 0)),
+                                    seal_dispute: Math.max(0, Math.floor(Number(chapterArc.countsByChoice?.seal_dispute) || 0))
+                                },
+                                countsByStance: {
+                                    frontier_loyalist: Math.max(0, Math.floor(Number(chapterArc.countsByStance?.frontier_loyalist) || 0)),
+                                    support_balancer: Math.max(0, Math.floor(Number(chapterArc.countsByStance?.support_balancer) || 0)),
+                                    dispute_archivist: Math.max(0, Math.floor(Number(chapterArc.countsByStance?.dispute_archivist) || 0))
+                                },
+                                dominantChoiceId: chapterArc.dominantChoiceId || '',
+                                dominantChoiceLabel: chapterArc.dominantChoiceLabel || '',
+                                dominantStanceId: chapterArc.dominantStanceId || '',
+                                dominantStanceLabel: chapterArc.dominantStanceLabel || '',
+                                summaryLine: chapterArc.summaryLine || '',
+                                statusLine: chapterArc.statusLine || '',
+                                goalLine: chapterArc.goalLine || '',
+                                rescueWindow,
+                                review,
+                                entries: Array.isArray(chapterArc.entries)
+                                    ? chapterArc.entries.map((entry) => ({
+                                        recordId: entry?.recordId || '',
+                                        weekTag: entry?.weekTag || '',
+                                        weekLabel: entry?.weekLabel || '',
+                                        weekSlot: Math.max(1, Math.min(3, Math.floor(Number(entry?.weekSlot) || 1))),
+                                        choiceId: entry?.choiceId || '',
+                                        choiceLabel: entry?.choiceLabel || '',
+                                        stanceId: entry?.stanceId || '',
+                                        stanceLabel: entry?.stanceLabel || '',
+                                        supportLaneId: entry?.supportLaneId || '',
+                                        supportLaneLabel: entry?.supportLaneLabel || '',
+                                        summaryLine: entry?.summaryLine || '',
+                                        chronicleSealLine: entry?.chronicleSealLine || '',
+                                        councilResolutionLine: entry?.councilResolutionLine || '',
+                                        submittedAt: Math.max(0, Math.floor(Number(entry?.submittedAt) || 0))
+                                    }))
+                                    : []
+                            };
+                        };
                         return {
                             id: expeditionMeta.id || null,
                             chapterName: expeditionMeta.chapterName || '',
@@ -1436,6 +1511,7 @@ class Game {
                                         }
                                         : null,
                                     frontier: serializeSeasonBoardFrontier(expeditionMeta.seasonBoard.frontier),
+                                    chapterArc: serializeSeasonBoardChapterArc(expeditionMeta.seasonBoard.chapterArc),
                                     nextTask: expeditionMeta.seasonBoard.nextTask
                                         ? {
                                             laneId: expeditionMeta.seasonBoard.nextTask.laneId || '',
@@ -21349,6 +21425,337 @@ class Game {
         };
     }
 
+    buildSeasonBoardChapterArc(context = {}) {
+        const sanitize = (value = '', limit = 120) => String(value || '').trim().slice(0, limit);
+        const choiceLabelMap = {
+            hold_primary: '守主战线',
+            rebalance_support: '副线补证',
+            seal_dispute: '封存争议'
+        };
+        const stanceLabelMap = {
+            frontier_loyalist: '守线派',
+            support_balancer: '平衡派',
+            dispute_archivist: '归档派'
+        };
+        const choiceToStance = {
+            hold_primary: 'frontier_loyalist',
+            rebalance_support: 'support_balancer',
+            seal_dispute: 'dispute_archivist'
+        };
+        const parseWeekTag = (value = '') => {
+            const match = String(value || '').trim().match(/^(\d{4})-W(\d{1,2})$/);
+            if (!match) return null;
+            const year = Math.max(1970, Math.floor(Number(match[1]) || 1970));
+            const weekNo = Math.max(1, Math.min(53, Math.floor(Number(match[2]) || 1)));
+            return {
+                year,
+                weekNo,
+                weekIndex: (year * 53) + weekNo
+            };
+        };
+        const currentWeekTag = sanitize(
+            context.weekTag
+            || context.weekVerdictLedger?.current?.weekTag
+            || context.frontier?.weekTag
+            || '',
+            24
+        );
+        const currentWeekLabel = sanitize(
+            context.weekLabel
+            || context.weekVerdictLedger?.current?.weekLabel
+            || context.frontier?.weekLabel
+            || currentWeekTag,
+            32
+        );
+        const currentWeekMeta = parseWeekTag(currentWeekTag);
+        const currentWeekSlot = currentWeekMeta
+            ? ((currentWeekMeta.weekNo - 1) % 3) + 1
+            : 1;
+        const chapterNumber = currentWeekMeta
+            ? Math.max(1, Math.floor((currentWeekMeta.weekNo - 1) / 3) + 1)
+            : 1;
+        const windowStartWeekNo = currentWeekMeta
+            ? Math.max(1, currentWeekMeta.weekNo - currentWeekSlot + 1)
+            : 0;
+        const windowEndWeekNo = currentWeekMeta
+            ? Math.min(53, windowStartWeekNo + 2)
+            : 0;
+        const windowStartIndex = currentWeekMeta
+            ? ((currentWeekMeta.year * 53) + windowStartWeekNo)
+            : 0;
+        const windowEndIndex = currentWeekMeta
+            ? ((currentWeekMeta.year * 53) + windowEndWeekNo)
+            : 0;
+        const normalizeEntry = (record = null, index = 0) => {
+            const root = record && typeof record === 'object' ? record : null;
+            if (!root) return null;
+            const choiceId = sanitize(root.frontierResolutionChoiceId || root.choiceId, 32);
+            if (!Object.prototype.hasOwnProperty.call(choiceLabelMap, choiceId)) return null;
+            const weekTag = sanitize(root.weekTag, 24);
+            const weekMeta = parseWeekTag(weekTag);
+            const stanceId = sanitize(root.frontierResolutionStance || root.stanceId || choiceToStance[choiceId], 48);
+            const effectiveStanceId = stanceLabelMap[stanceId] ? stanceId : choiceToStance[choiceId];
+            return {
+                recordId: sanitize(root.recordId || root.frontierResolutionId || `chapter_arc_entry_${index + 1}`, 96),
+                weekTag,
+                weekLabel: sanitize(root.weekLabel || weekTag || `第 ${index + 1} 周`, 32),
+                weekIndex: Math.max(0, Math.floor(Number(weekMeta?.weekIndex) || 0)),
+                weekSlot: weekMeta ? (((weekMeta.weekNo - 1) % 3) + 1) : Math.min(3, index + 1),
+                choiceId,
+                choiceLabel: sanitize(root.frontierResolutionLabel || root.choiceLabel || choiceLabelMap[choiceId], 32),
+                stanceId: effectiveStanceId,
+                stanceLabel: stanceLabelMap[effectiveStanceId] || '裁记风格',
+                supportLaneId: sanitize(root.frontierResolutionSupportLaneId || root.supportLaneId, 32),
+                supportLaneLabel: sanitize(root.frontierResolutionSupportLaneLabel || root.supportLaneLabel, 24),
+                summaryLine: sanitize(root.frontierResolutionSummaryLine || root.summaryLine, 220),
+                chronicleSealLine: sanitize(root.chronicleSealLine, 220),
+                councilResolutionLine: sanitize(root.councilResolutionLine, 220),
+                submittedAt: Math.max(0, Math.floor(Number(root.frontierResolutionSubmittedAt || root.submittedAt || root.updatedAt || root.createdAt || 0) || 0))
+            };
+        };
+        const currentVerdict = context.weekVerdictLedger?.current && typeof context.weekVerdictLedger.current === 'object'
+            ? context.weekVerdictLedger.current
+            : null;
+        const records = typeof this.getSeasonBoardFrontierResolutionArchiveRecords === 'function'
+            ? this.getSeasonBoardFrontierResolutionArchiveRecords({
+                seasonVerificationState: context.seasonVerificationState
+            })
+            : [];
+        const rawEntries = [
+            ...(currentVerdict?.frontierResolutionChoiceId ? [currentVerdict] : []),
+            ...records
+        ]
+            .map(normalizeEntry)
+            .filter(Boolean)
+            .sort((a, b) => {
+                if (b.weekIndex !== a.weekIndex) return b.weekIndex - a.weekIndex;
+                return b.submittedAt - a.submittedAt;
+            });
+        const seenWeekTags = new Set();
+        const distinctEntries = rawEntries.filter((entry) => {
+            const key = entry.weekTag || entry.recordId;
+            if (!key || seenWeekTags.has(key)) return false;
+            seenWeekTags.add(key);
+            return true;
+        });
+        const windowEntries = currentWeekMeta
+            ? distinctEntries
+                .filter((entry) => entry.weekIndex >= windowStartIndex && entry.weekIndex <= windowEndIndex)
+                .slice(0, 3)
+            : distinctEntries.slice(0, 3);
+        const countsByChoice = { hold_primary: 0, rebalance_support: 0, seal_dispute: 0 };
+        const countsByStance = { frontier_loyalist: 0, support_balancer: 0, dispute_archivist: 0 };
+        const latestAtByChoice = { hold_primary: 0, rebalance_support: 0, seal_dispute: 0 };
+        windowEntries.forEach((entry) => {
+            countsByChoice[entry.choiceId] = (countsByChoice[entry.choiceId] || 0) + 1;
+            countsByStance[entry.stanceId] = (countsByStance[entry.stanceId] || 0) + 1;
+            latestAtByChoice[entry.choiceId] = Math.max(latestAtByChoice[entry.choiceId] || 0, entry.submittedAt);
+        });
+        const dominantChoiceId = Object.keys(countsByChoice)
+            .sort((a, b) => {
+                if ((countsByChoice[b] || 0) !== (countsByChoice[a] || 0)) return (countsByChoice[b] || 0) - (countsByChoice[a] || 0);
+                return (latestAtByChoice[b] || 0) - (latestAtByChoice[a] || 0);
+            })
+            .find((choiceId) => countsByChoice[choiceId] > 0) || '';
+        const dominantStanceId = dominantChoiceId ? choiceToStance[dominantChoiceId] : '';
+        const sealedCount = Math.min(3, windowEntries.length);
+        const weeksRemaining = Math.max(0, 3 - currentWeekSlot);
+        const settlementOutcomeId = sanitize(context.settlement?.outcomeId || currentVerdict?.settlementOutcomeId, 32);
+        const debtStatus = sanitize(context.debtPack?.status || currentVerdict?.debtStatus, 24);
+        const hasDebtPressure = ['open', 'deferred'].includes(debtStatus) || settlementOutcomeId === 'debt_sheet';
+        const hasRiskPressure = settlementOutcomeId === 'risky_sheet';
+        const missingExpectedWeeks = Math.max(0, currentWeekSlot - sealedCount);
+        const rescueOpen = hasDebtPressure || hasRiskPressure || (currentWeekSlot >= 2 && missingExpectedWeeks > 0) || (currentWeekSlot >= 3 && sealedCount < 3);
+        const rescueReasonLine = hasDebtPressure
+            ? (context.debtPack?.summaryLine || '本章仍有欠卷占住强目标位，需要先清账再归章。')
+            : (hasRiskPressure
+                ? (context.settlement?.summaryLine || '本章押卷仍属险卷，需要补一条外场或旁证。')
+                : (rescueOpen
+                    ? `本章当前只封 ${sealedCount}/3 周裁记，章末前建议补齐缺口。`
+                    : '本章裁记节奏稳定，暂不需要额外救火。'));
+        const rescueWindow = {
+            available: true,
+            open: rescueOpen,
+            statusId: hasDebtPressure ? 'debt_rescue' : (hasRiskPressure ? 'risk_rescue' : (rescueOpen ? 'seal_gap' : 'stable')),
+            statusLabel: hasDebtPressure ? '清账救火' : (hasRiskPressure ? '险卷救火' : (rescueOpen ? '补裁记' : '稳态')),
+            reasonLine: sanitize(rescueReasonLine, 220),
+            guideLine: sanitize(
+                rescueOpen
+                    ? '救火窗口只提示章内缺口，真正行动仍沿本周季盘 nextTask 推进。'
+                    : '继续按本周季盘主线推进，章层只做归卷回看。',
+                220
+            )
+        };
+        const chapterClosed = sealedCount >= 3;
+        const dominantChoiceLabel = dominantChoiceId ? choiceLabelMap[dominantChoiceId] : '';
+        const chapterResultId = chapterClosed
+            ? (dominantChoiceId === 'seal_dispute' ? 'archived_dispute' : (dominantChoiceId === 'rebalance_support' ? 'balanced_front' : 'guarded_front'))
+            : (rescueOpen ? 'under_rescue' : 'in_progress');
+        const endingPreviewLine = chapterClosed
+            ? `章末预览：本章最终偏向【${dominantChoiceLabel || '裁记风格'}】，下章可据此复盘主线。`
+            : `章末预览：还剩 ${weeksRemaining} 周窗口，三周裁记齐后会形成本章评语。`;
+        const finalCommentLine = chapterClosed
+            ? (dominantChoiceId === 'rebalance_support'
+                ? '章末评语：本章愿意给副线留下证据，下章普通排班可更重视旁证补样。'
+                : (dominantChoiceId === 'seal_dispute'
+                    ? '章末评语：本章多次选择封存争议，下章宜先回看证据再开新赌注。'
+                    : '章末评语：本章持续守住主战线，下章可以继续把强目标压成稳定成果。'))
+            : (rescueOpen
+                ? '章中评语：章内证据尚薄，先用本周主线补齐缺口。'
+                : '章中评语：三周节奏正常推进，等待更多裁记沉淀。');
+        const chapterLabel = currentWeekMeta
+            ? `第 ${chapterNumber} 章`
+            : '本章';
+        const windowLabel = currentWeekMeta
+            ? `${currentWeekMeta.year} · 第 ${windowStartWeekNo}-${windowEndWeekNo} 周`
+            : '三周窗口';
+        const progressText = `${sealedCount}/3 周归卷`;
+        return {
+            available: true,
+            id: `season_chapter_arc_${currentWeekMeta?.year || 'current'}_${chapterNumber}`,
+            chapterId: `chapter_arc_${currentWeekMeta?.year || 'current'}_${chapterNumber}`,
+            chapterLabel,
+            arcLabel: '三周一章',
+            windowLabel,
+            weekTag: currentWeekTag,
+            weekLabel: currentWeekLabel,
+            weekSlot: currentWeekSlot,
+            weeksRemaining,
+            sealedWeeks: sealedCount,
+            targetWeeks: 3,
+            progressText,
+            countsByChoice,
+            countsByStance,
+            dominantChoiceId,
+            dominantChoiceLabel,
+            dominantStanceId,
+            dominantStanceLabel: dominantStanceId ? stanceLabelMap[dominantStanceId] : '',
+            summaryLine: `${chapterLabel} · ${windowLabel} 正在把连续三周会审裁记收束成章经营摘要。`,
+            statusLine: `当前第 ${currentWeekSlot}/3 周 · ${progressText}${dominantChoiceLabel ? ` · 倾向 ${dominantChoiceLabel}` : ''}`,
+            goalLine: chapterClosed
+                ? '本章三周裁记已齐，章末评语可用于复盘下章主线。'
+                : (currentWeekSlot >= 3
+                    ? '章末周优先补齐本章裁记缺口，再回看本章主线是否成立。'
+                    : '继续沿本周季盘行动推进，等待三周裁记形成章末评语。'),
+            rescueWindow,
+            review: {
+                available: true,
+                statusId: chapterResultId,
+                statusLabel: chapterClosed ? '章末已成' : (rescueOpen ? '章中救火' : '章中推进'),
+                endingPreviewLine: sanitize(endingPreviewLine, 220),
+                finalCommentLine: sanitize(finalCommentLine, 240),
+                summaryLine: sanitize(chapterClosed ? finalCommentLine : endingPreviewLine, 240)
+            },
+            entries: windowEntries.map((entry) => ({
+                recordId: entry.recordId,
+                weekTag: entry.weekTag,
+                weekLabel: entry.weekLabel,
+                weekSlot: entry.weekSlot,
+                choiceId: entry.choiceId,
+                choiceLabel: entry.choiceLabel,
+                stanceId: entry.stanceId,
+                stanceLabel: entry.stanceLabel,
+                supportLaneId: entry.supportLaneId,
+                supportLaneLabel: entry.supportLaneLabel,
+                summaryLine: entry.summaryLine,
+                chronicleSealLine: entry.chronicleSealLine,
+                councilResolutionLine: entry.councilResolutionLine,
+                submittedAt: entry.submittedAt
+            }))
+        };
+    }
+
+    normalizeSeasonBoardChapterArc(source = null, context = {}) {
+        const derived = this.buildSeasonBoardChapterArc(context);
+        const sourceRoot = source && typeof source === 'object' ? source : {};
+        const hasDerivedContext = !!(
+            context.weekTag
+            || context.weekLabel
+            || context.weekVerdictLedger?.current
+            || context.seasonVerificationState
+        );
+        const hasDerivedEntries = Array.isArray(derived?.entries) && derived.entries.length > 0;
+        const root = (derived && (hasDerivedContext || hasDerivedEntries))
+            ? { ...sourceRoot, ...derived }
+            : (source && typeof source === 'object' ? source : derived);
+        if (!root || root.available === false) return null;
+        const sanitize = (value = '', limit = 120) => String(value || '').trim().slice(0, limit);
+        const clampInt = (value = 0, min = 0, max = 9999) => Math.max(min, Math.min(max, Math.floor(Number(value) || 0)));
+        const normalizeCounts = (counts = null) => ({
+            hold_primary: clampInt(counts?.hold_primary, 0, 9999),
+            rebalance_support: clampInt(counts?.rebalance_support, 0, 9999),
+            seal_dispute: clampInt(counts?.seal_dispute, 0, 9999)
+        });
+        const entries = (Array.isArray(root.entries) ? root.entries : [])
+            .filter((entry) => entry && typeof entry === 'object')
+            .slice(0, 3)
+            .map((entry, index) => ({
+                recordId: sanitize(entry.recordId || entry.id || `chapter_arc_entry_${index + 1}`, 96),
+                weekTag: sanitize(entry.weekTag, 24),
+                weekLabel: sanitize(entry.weekLabel || entry.weekTag || `第 ${index + 1} 周`, 32),
+                weekSlot: clampInt(entry.weekSlot || index + 1, 1, 3),
+                choiceId: sanitize(entry.choiceId, 32),
+                choiceLabel: sanitize(entry.choiceLabel, 32),
+                stanceId: sanitize(entry.stanceId, 48),
+                stanceLabel: sanitize(entry.stanceLabel, 32),
+                supportLaneId: sanitize(entry.supportLaneId, 32),
+                supportLaneLabel: sanitize(entry.supportLaneLabel, 24),
+                summaryLine: sanitize(entry.summaryLine, 220),
+                chronicleSealLine: sanitize(entry.chronicleSealLine, 220),
+                councilResolutionLine: sanitize(entry.councilResolutionLine, 220),
+                submittedAt: clampInt(entry.submittedAt, 0, 9999999999999)
+            }));
+        const sealedWeeks = clampInt(root.sealedWeeks ?? entries.length, 0, 3);
+        const targetWeeks = clampInt(root.targetWeeks || 3, 1, 3);
+        const rescueRoot = root.rescueWindow && typeof root.rescueWindow === 'object' ? root.rescueWindow : {};
+        const reviewRoot = root.review && typeof root.review === 'object' ? root.review : {};
+        return {
+            available: true,
+            id: sanitize(root.id || `season_chapter_arc_${context.weekTag || 'current'}`, 96),
+            chapterId: sanitize(root.chapterId || root.id || `chapter_arc_${context.weekTag || 'current'}`, 96),
+            chapterLabel: sanitize(root.chapterLabel || '本章', 32),
+            arcLabel: sanitize(root.arcLabel || '三周一章', 32),
+            windowLabel: sanitize(root.windowLabel || '三周窗口', 48),
+            weekTag: sanitize(root.weekTag || context.weekTag, 24),
+            weekLabel: sanitize(root.weekLabel || context.weekLabel, 32),
+            weekSlot: clampInt(root.weekSlot || 1, 1, 3),
+            weeksRemaining: clampInt(root.weeksRemaining, 0, 3),
+            sealedWeeks,
+            targetWeeks,
+            progressText: sanitize(root.progressText || `${sealedWeeks}/${targetWeeks} 周归卷`, 32),
+            countsByChoice: normalizeCounts(root.countsByChoice),
+            countsByStance: {
+                frontier_loyalist: clampInt(root.countsByStance?.frontier_loyalist, 0, 9999),
+                support_balancer: clampInt(root.countsByStance?.support_balancer, 0, 9999),
+                dispute_archivist: clampInt(root.countsByStance?.dispute_archivist, 0, 9999)
+            },
+            dominantChoiceId: sanitize(root.dominantChoiceId, 32),
+            dominantChoiceLabel: sanitize(root.dominantChoiceLabel, 32),
+            dominantStanceId: sanitize(root.dominantStanceId, 48),
+            dominantStanceLabel: sanitize(root.dominantStanceLabel, 32),
+            summaryLine: sanitize(root.summaryLine, 240),
+            statusLine: sanitize(root.statusLine, 220),
+            goalLine: sanitize(root.goalLine, 220),
+            rescueWindow: {
+                available: rescueRoot.available !== false,
+                open: !!rescueRoot.open,
+                statusId: sanitize(rescueRoot.statusId || (rescueRoot.open ? 'seal_gap' : 'stable'), 32),
+                statusLabel: sanitize(rescueRoot.statusLabel || (rescueRoot.open ? '补裁记' : '稳态'), 32),
+                reasonLine: sanitize(rescueRoot.reasonLine, 220),
+                guideLine: sanitize(rescueRoot.guideLine, 220)
+            },
+            review: {
+                available: reviewRoot.available !== false,
+                statusId: sanitize(reviewRoot.statusId || 'in_progress', 32),
+                statusLabel: sanitize(reviewRoot.statusLabel || '章中推进', 32),
+                endingPreviewLine: sanitize(reviewRoot.endingPreviewLine, 220),
+                finalCommentLine: sanitize(reviewRoot.finalCommentLine, 240),
+                summaryLine: sanitize(reviewRoot.summaryLine || reviewRoot.finalCommentLine || reviewRoot.endingPreviewLine, 240)
+            },
+            entries
+        };
+    }
+
     getSeasonVerificationActionMeta(anchorSection = '', options = {}) {
         const normalizedAnchor = String(anchorSection || '').trim();
         const collectionTargetLabelMap = {
@@ -25582,6 +25989,15 @@ class Game {
             verificationOrders,
             nextTask: nextTaskPayload
         });
+        const chapterArc = this.normalizeSeasonBoardChapterArc(root.chapterArc, {
+            weekTag: String(root.weekTag || '').trim().slice(0, 24),
+            weekLabel: String(root.weekLabel || '').trim().slice(0, 32),
+            settlement,
+            debtPack,
+            weekVerdictLedger,
+            frontier,
+            seasonVerificationState: this.seasonVerificationState
+        });
         return {
             seasonId: String(root.seasonId || 'season_board').trim().slice(0, 64) || 'season_board',
             seasonLabel: String(root.seasonLabel || root.seasonName || '赛季天道盘').trim().slice(0, 64) || '赛季天道盘',
@@ -25617,6 +26033,7 @@ class Game {
             laneRewards,
             laneRewardSummary,
             frontier,
+            chapterArc,
             lanes: lanesWithRewards,
             nextTask: nextTaskPayload,
             nextWeekGoal
