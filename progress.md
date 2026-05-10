@@ -1,5 +1,147 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-05-09: V9.2《三周一章：章目标板》M5 开发完成
+  - 本轮策划
+    - 在 M4 的章末回响之外，继续把 `seasonBoard.chapterArc` 发展成一块更清晰的只读章目标板：当玩家在 reward / expedition / map / Sanctum 看到三周章程时，除了章末评语，还能看到一条统一的 `objective`，用来解释当前章势、当前章目标、焦点战线与后续指引，但仍不引入第二任务源。
+    - 交互边界继续收口为：`chapterArc.objective` 只做解释层和跨页镜像，不暴露 `actionType / actionValue / ctaLabel / taskId`，不成为 `nextTask / nextWeekGoal.source`，也不新增 reward 第二主 CTA 或 map 行动按钮。
+  - 本轮完成
+    - `js/game.js`
+      - 新增并归一化 `seasonBoard.chapterArc.objective`，让章目标在 reward / expedition / map / Sanctum 之间保持同一口径。
+      - `chapterArc.objective` 只作为读侧说明存在，不会改变 CTA 统计、任务源归属或普通排班逻辑。
+    - `js/core/expedition_hub.js`
+      - 补齐 `seasonBoard.chapterArc.objective` 的跨页序列化与快照镜像，避免 reward / expedition / map 之间出现解释层缺字段。
+    - `js/core/collection_hub.js`
+      - 洞府章卡与总览继续优先展示 `objective`，让章目标在 Sanctum 的说明更完整，但仍保持零新增任务入口。
+    - `js/core/map.js`
+      - 地图章节简报改为优先消费 `objective`，让章节状态在地图页与其他页面保持一致。
+    - `tests/sanity_season_board_system_checks.js`
+      - 增加 `objective` 只读投影断言，锁住“它是解释层，不是任务层”的边界。
+    - `tests/browser_meta_screen_audit.mjs` / `tests/browser_run_path_reward_audit.mjs`
+      - 增加 reward / map / Sanctum 的章目标镜像、chip、dataset 与移动端展示检查。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check js/core/map.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node --check tests/browser_run_path_reward_audit.mjs` ✅
+  - 当前结论
+    - V9.2 M5 已把 `chapterArc` 的章目标压成统一的 `objective` 只读解释层，并同步到 reward / expedition / map / Sanctum。
+    - 这层章目标只负责说明当前章势与焦点，不会增加第二任务源、不会新增 map 行动按钮，也不会改变 reward CTA 结构。
+
+- 2026-05-09: V9.2《三周一章：章末回响》M4 开发完成
+  - 本轮策划
+    - 在 M3 的“上章承卷”开局偏置之外，继续把 `seasonBoard.chapterArc` 的章末评语压成更稳定的只读反馈线：当玩家在 reward / expedition / map / Sanctum 看到三周章程时，可以同步看到一条统一的 `feedbackLine`，用来解释当前章节状态、复盘口径与下一步建议，但仍不引入第二任务源。
+    - 交互边界继续收口为：`chapterArc.feedbackLine` 只做解释层和跨页镜像，不暴露 `actionType / actionValue / ctaLabel`，不成为 `nextTask / nextWeekGoal.source`，也不新增 reward 第二主 CTA 或 map 行动按钮。
+  - 本轮完成
+    - `js/game.js`
+      - 新增并归一化 `seasonBoard.chapterArc.feedbackLine`，让章末回响在 reward / expedition / map / Sanctum 之间保持同一口径。
+      - `chapterArc.feedbackLine` 只作为读侧说明存在，不会改变 CTA 统计、任务源归属或普通排班逻辑。
+    - `js/core/expedition_hub.js`
+      - 补齐 `seasonBoard.chapterArc.feedbackLine` 的跨页序列化与快照镜像，避免 reward / expedition / map 之间出现解释层缺字段。
+    - `js/core/collection_hub.js`
+      - 洞府章卡与总览继续优先展示 `feedbackLine`，让章程回响在 Sanctum 的说明更完整，但仍保持零新增任务入口。
+    - `js/core/map.js`
+      - 地图章节简报改为优先消费 `feedbackLine`，让章节状态在地图页与其他页面保持一致。
+    - `tests/sanity_season_board_system_checks.js`
+      - 增加 `feedbackLine` 只读投影断言，锁住“它是解释层，不是任务层”的边界。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check js/core/map.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/browser-meta-screen-audit-v92-m4-feedback-final` ✅
+    - `node tests/browser_run_path_reward_audit.mjs http://127.0.0.1:4173 output/browser-run-path-reward-audit-v92-m4-feedback-final` ✅
+  - 当前结论
+    - V9.2 M4 已把 `chapterArc` 的章末评语继续压成统一的 `feedbackLine` 只读解释层，并同步到 reward / expedition / map / Sanctum。
+    - 这层反馈只负责说明与复盘，不会增加第二任务源、不会新增 map 行动按钮，也不会改变 reward CTA 结构。
+
+- 2026-05-09: V9.2《上章承卷：开局偏置》M3 开发完成
+  - 本轮策划
+    - 在 M2 的三周章程只读投影之外，继续把“上一章的章末评语”收束成开局偏置：当新章首周满足前章三周裁记连续收束时，可以轻量前移普通排班，但仍只做读侧 + 排班偏置，不新增第二任务源。
+    - 交互边界继续收口为：`chapterArc.carryover` 只补读侧文案和 lane 顺序偏置，不暴露 `actionType / actionValue / ctaLabel`，不成为 `nextTask / nextWeekGoal.source`，且在欠卷 / 锁线 / 主验证 / 强目标更强时自动让位。
+  - 本轮完成
+    - `js/game.js`
+      - 为 `chapterArc.carryover` 补齐归一化后的 suppressed 文案，让“上章承卷”在强目标存在时也能保持同一语义口径。
+      - 让普通开局偏置继续只影响 lane 排序，不会压过欠卷、锁线、主验证或明确强目标。
+    - `js/core/expedition_hub.js`
+      - 补齐 `seasonBoard.chapterArc.carryover` 的同构序列化，避免 reward / expedition / map 之间出现镜像缺字段。
+    - `js/core/collection_hub.js`
+      - 让洞府总览的章卡投影保留 `carryover` 只读字段，和 reward / expedition / map 同源。
+    - `tests/sanity_season_board_system_checks.js`
+      - 增加 opening-week carryover 正例，以及 debt strong-target 让位反例，锁住“承卷偏置不抢强目标”的边界。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4173 output/web-meta-screen-audit` ✅
+    - `node tests/browser_run_path_reward_audit.mjs http://127.0.0.1:4173 output/web-run-path-reward-audit` ✅
+  - 当前结论
+    - V9.2 M3 已把“三周一章”的章末评语继续压成“上章承卷”的开局偏置，但仍严格服从债账、锁线和主验证等强目标。
+
+- 2026-05-09: V9.2《三周一章：章程读侧扩展》M2 开发完成
+  - 本轮策划
+    - 在 M1 的洞府章卡跟进入口之外，继续把 `seasonBoard.chapterArc` 只读投影扩到 reward / expedition / map / build snapshot，让三周章程在更多界面里都能被看见，但仍不变成第二套任务源。
+    - 交互边界继续收口为：`chapterArc` 只补读侧文案和数据镜像，不暴露 `actionType / actionValue / ctaLabel`，不成为 `nextTask / nextWeekGoal` 来源，不新增 reward 第二主 CTA，也不新增 map 行动按钮。
+  - 本轮完成
+    - `js/core/collection_hub.js`
+      - 修正 `getBuildSnapshotData()` 的最终生效路径，在 strengths / nextTargets 中补入“三周一章 / 章程跟进”读侧摘要。
+    - `js/core/map.js`
+      - 章节简报新增 `seasonBoard.chapterArc` 的只读卡片、chip 与 dataset 镜像。
+    - `js/game.js`
+      - reward 页的赛季裁定 meta 新增 `chapterArc` 只读展示节点，保持零按钮、零行动入口。
+    - `js/core/expedition_hub.js`
+      - 构筑 / 远征快照补入 chapterArc 摘要，和其他页面共用同一份只读文案。
+    - `tests/browser_meta_screen_audit.mjs`
+      - 增加 reward / map / mobile 的 chapterArc 只读镜像、按钮数量与 dataset 一致性检查。
+    - `tests/browser_run_path_reward_audit.mjs`
+      - 增加 reward 页 chapterArc 节点、chip、按钮数与移动端不溢出检查。
+    - `tests/sanity_season_board_system_checks.js`
+      - 增加 chapterArc build snapshot 断言，锁住“三周一章 / 章程跟进”在实际生效实现中的投影。
+  - 本轮验证
+    - `node --check js/core/collection_hub.js` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4191 output/browser-meta-screen-audit-chapter-arc-v92-m2` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_run_path_reward_audit.mjs http://127.0.0.1:4192 output/web-run-path-reward-audit-v92-m2` ✅
+    - `git diff --check` ✅
+  - 当前结论
+    - V9.2 M2 已把三周章程从洞府章卡继续扩成 reward / expedition / map / 构筑快照的只读可见层，仍保持无第二主 CTA、无行动按钮、无持久化污染。
+    - 下一轮可继续做更细的章节可玩性扩展，例如更完整的章内任务链或更强的跨页反馈。
+
+- 2026-05-08: V9.2《三周一章：章内救火》M1 开发完成
+  - 本轮策划
+    - 延续上一轮 `seasonBoard.chapterArc` 只读三周章程，本轮不新增第二任务源、不把 `chapterArc` 写入 `seasonVerificationState`，只把章卡从“能读章程”推进到“能跟随本周季盘行动救火 / 复盘”。
+    - 交互边界收口为：Sanctum 章卡可以出现一个章层跟进按钮，但按钮只调用既有 `followSeasonBoardTask(nextTask.id)`；`chapterArc` 本体仍不暴露 `actionType / actionValue / ctaLabel`，也不成为 `nextTask / nextWeekGoal.source`。
+    - reward / expedition / map 继续保持同源 payload 镜像与读侧展示，第一刀不新增 reward 第二主 CTA，也不改写分线结题赏或会审裁记账本。
+  - 本轮完成
+    - `js/core/collection_hub.js`
+      - 洞府 `chapterArc` overview model 补全 `rescueWindow.reasonLine / guideLine`、`review.endingPreviewLine / finalCommentLine`、`sealedWeeks / targetWeeks` 等展示字段，避免救火和复盘文案在 Sanctum 被压成空行。
+      - Season board 章卡新增 `data-season-board-chapter-arc-follow` 单入口：根据 `rescueWindow.open` 与章是否封满三周显示“按本周主线救火 / 按本周主线复盘 / 跟进本周主线”。
+      - 跟进入口只读取当前 `seasonBoard.nextTask` 并调用 `game.followSeasonBoardTask(nextTask.id)`，卡内文案明确“章程不另开任务，当前仍跟随本周季盘行动”。
+    - `tests/sanity_season_board_system_checks.js`
+      - 增加 `chapterArc` follow-through 合同：章层跟进必须复用当前 `nextTask`，`lastSeasonBoardTaskFollow / lastSeasonBoardTaskFollowNotice` 的 source 不能是 `chapterArc / chapter_arc`。
+      - 保留既有三周 entry、derived-not-persisted、payload mirror、`nextTask / nextWeekGoal` 非章源断言。
+    - `tests/browser_meta_screen_audit.mjs`
+      - Sanctum 静态 probe 从“章卡 0 按钮”升级为“仅 1 个章层 follow 按钮”，并断言按钮 source 不来自 `chapterArc`，且仍不进入 research / goal action。
+      - 新增真实点击 probe：点击章卡 follow 后，必须写入 `lastSeasonBoardTaskFollow` 与 `lastSeasonBoardTaskFollowNotice`，并且 taskId 等于当前季盘任务，source 仍不是章层。
+    - `game-intro.html`
+      - 当前版本重点同步为 V9.2 M1：三周一章已能在洞府提示章内救火 / 章末复盘，并复用本周季盘任务链。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.js` ✅
+    - `PLAYWRIGHT_EXECUTABLE_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4190 output/browser-meta-screen-audit-chapter-arc-v92` ✅
+  - 当前结论
+    - V9.2 M1 已把三周章程从纯读面推进为轻量可点击的章内救火 / 复盘入口，但仍把行动真源锁在现有 `seasonBoard.nextTask`。
+    - 下一刀可继续让 reward / expedition / map 的读侧更明确地露出当前章、周槽和救火状态，但仍应避免 reward 第二主 CTA 与 `chapterArc` source 化。
+
 - 2026-04-29: V9.1《诸界战线：会审归卷》Phase D 开发完成
   - 本轮策划
     - Phase D 不再继续横向增加季盘说明层，而是把 Phase A-C 已落地的会审裁记、封记事实与普通排班偏置推进为长期回看：玩家连续几周采用“守主战线 / 副线补证 / 封存争议”后，可以在战役史卷中看到累计倾向，并在命盘谱系中沉淀为守线派 / 平衡派 / 归档派。

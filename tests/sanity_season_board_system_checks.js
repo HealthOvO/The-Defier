@@ -309,7 +309,9 @@ function assertSeasonBoardChapterArc(board, label) {
       && board.chapterArc.summaryLine
       && board.chapterArc.statusLine
       && board.chapterArc.goalLine
+      && board.chapterArc.feedbackLine
       && board.chapterArc.review
+      && board.chapterArc.objective
       && board.chapterArc.rescueWindow
       && Array.isArray(board.chapterArc.entries),
     `${sourceLabel} should expose the chapterArc contract fields, got ${JSON.stringify(board.chapterArc)}`
@@ -324,13 +326,26 @@ function assertSeasonBoardChapterArc(board, label) {
       && board.chapterArc.review?.summaryLine
       && board.chapterArc.review?.endingPreviewLine
       && board.chapterArc.review?.finalCommentLine
+      && board.chapterArc.objective?.available === true
+      && board.chapterArc.objective?.id
+      && board.chapterArc.objective?.label
+      && board.chapterArc.objective?.statusId
+      && board.chapterArc.objective?.statusLabel
+      && board.chapterArc.objective?.focusLaneId
+      && board.chapterArc.objective?.focusLaneLabel
+      && board.chapterArc.objective?.summaryLine
+      && board.chapterArc.objective?.statusLine
+      && board.chapterArc.objective?.goalLine
+      && board.chapterArc.objective?.reasonLine
+      && board.chapterArc.objective?.guideLine
+      && board.chapterArc.objective?.shortLine
       && board.chapterArc.rescueWindow?.statusId
       && board.chapterArc.rescueWindow?.reasonLine
       && board.chapterArc.rescueWindow?.guideLine,
-    `${sourceLabel} should expose review and rescueWindow panels, got ${JSON.stringify(board.chapterArc)}`
+    `${sourceLabel} should expose review objective and rescueWindow panels, got ${JSON.stringify(board.chapterArc)}`
   );
   assert(
-    !hasNestedKey(board.chapterArc, new Set(['actionType', 'actionValue', 'ctaLabel'])),
+    !hasNestedKey(board.chapterArc, new Set(['actionType', 'actionValue', 'ctaLabel', 'taskId', 'buttonLabel', 'anchorSection', 'source', 'sourceId'])),
     `${sourceLabel} should stay read-only and not expose action metadata, got ${JSON.stringify(board.chapterArc)}`
   );
   if (board.nextTask) {
@@ -369,6 +384,14 @@ function assertSeasonBoardChapterArcMirror(payload, label) {
       expedition: expeditionChapterArc,
       chapter: chapterChapterArc
     })}`
+  );
+  assert(
+    rewardChapterArc.objective?.available === true
+      && rewardChapterArc.objective?.id
+      && rewardChapterArc.objective?.summaryLine
+      && rewardChapterArc.objective?.goalLine
+      && rewardChapterArc.objective?.focusLaneLabel,
+    `${sourceLabel} should mirror a readable chapterArc objective payload, got ${JSON.stringify(rewardChapterArc)}`
   );
   return rewardChapterArc;
 }
@@ -1240,6 +1263,7 @@ function loadFile(ctx, filePath) {
     `reward / expedition / map payload should mirror week verdict ledger state, got ${JSON.stringify(payload?.reward?.expedition?.seasonBoard)} vs ${JSON.stringify(payload?.expedition?.seasonBoard)} vs ${JSON.stringify(payload?.map?.chapter?.seasonBoard)}`
   );
   assertSeasonBoardFrontierMirror(payload, 'positive reward payload');
+  assertSeasonBoardChapterArcMirror(payload, 'positive reward payload');
   assert(
     JSON.stringify(payload?.reward?.expedition?.seasonBoard?.nextTask || null) === JSON.stringify(payload?.expedition?.seasonBoard?.nextTask || null)
       && JSON.stringify(payload?.reward?.expedition?.seasonBoard?.nextTask || null) === JSON.stringify(payload?.map?.chapter?.seasonBoard?.nextTask || null),
@@ -1342,6 +1366,111 @@ function loadFile(ctx, filePath) {
       nextTask: samplingCommittedSupportBoard?.nextTask,
       nextWeekGoal: samplingCommittedSupportBoard?.nextWeekGoal,
       routeShift: samplingCommittedRouteShift
+    })}`
+  );
+
+  resetStorages();
+  const chapterCarryoverGame = createGame();
+  const chapterCarryoverBaseBoard = chapterCarryoverGame.getSeasonBoardSnapshot();
+  const chapterCarryoverWeekMatch = String(chapterCarryoverBaseBoard.weekTag || '').match(/^(\d{4})-W(\d{1,2})$/);
+  const chapterCarryoverYear = Math.max(2026, Math.floor(Number(chapterCarryoverWeekMatch?.[1]) || 2026));
+  const chapterCarryoverWeekNo = chapterCarryoverWeekMatch
+    ? Math.max(4, Math.floor(Number(chapterCarryoverWeekMatch[2]) || 4) - ((Math.floor(Number(chapterCarryoverWeekMatch[2]) || 4) - 1) % 3))
+    : 19;
+  const formatWeekTag = (year, weekNo) => `${year}-W${String(Math.max(1, Math.min(53, weekNo))).padStart(2, '0')}`;
+  const chapterCarryoverCurrentWeekTag = formatWeekTag(chapterCarryoverYear, chapterCarryoverWeekNo);
+  const chapterCarryoverCurrentWeekLabel = `${chapterCarryoverYear} · 第 ${chapterCarryoverWeekNo} 周`;
+  chapterCarryoverGame.seasonVerificationState = chapterCarryoverGame.normalizeSeasonVerificationState({
+    ...chapterCarryoverGame.seasonVerificationState,
+    records: [],
+    history: [
+      {
+        recordId: 'chapter_carryover_week_1',
+        recordKind: 'frontier_resolution',
+        weekTag: formatWeekTag(chapterCarryoverYear, chapterCarryoverWeekNo - 3),
+        weekLabel: `${chapterCarryoverYear} · 第 ${chapterCarryoverWeekNo - 3} 周`,
+        frontierResolutionChoiceId: 'rebalance_support',
+        frontierResolutionLabel: '副线补证',
+        frontierResolutionStance: 'support_balancer',
+        frontierResolutionSupportLaneId: 'expedition',
+        frontierResolutionSupportLaneLabel: '远征线',
+        frontierResolutionSummaryLine: '上章周裁记：先给远征线补一份旁证。',
+        chronicleSealLine: '战役史卷已封记：副线补证。',
+        councilResolutionLine: '诸界会审裁定：先给远征线补一份旁证。',
+        frontierResolutionSubmittedAt: now - 3000
+      },
+      {
+        recordId: 'chapter_carryover_week_2',
+        recordKind: 'frontier_resolution',
+        weekTag: formatWeekTag(chapterCarryoverYear, chapterCarryoverWeekNo - 2),
+        weekLabel: `${chapterCarryoverYear} · 第 ${chapterCarryoverWeekNo - 2} 周`,
+        frontierResolutionChoiceId: 'rebalance_support',
+        frontierResolutionLabel: '副线补证',
+        frontierResolutionStance: 'support_balancer',
+        frontierResolutionSupportLaneId: 'expedition',
+        frontierResolutionSupportLaneLabel: '远征线',
+        frontierResolutionSummaryLine: '上章周裁记：第二周继续给远征线补证。',
+        chronicleSealLine: '战役史卷已封记：副线补证。',
+        councilResolutionLine: '诸界会审裁定：副线补证延续。',
+        frontierResolutionSubmittedAt: now - 2000
+      },
+      {
+        recordId: 'chapter_carryover_week_3',
+        recordKind: 'frontier_resolution',
+        weekTag: formatWeekTag(chapterCarryoverYear, chapterCarryoverWeekNo - 1),
+        weekLabel: `${chapterCarryoverYear} · 第 ${chapterCarryoverWeekNo - 1} 周`,
+        frontierResolutionChoiceId: 'rebalance_support',
+        frontierResolutionLabel: '副线补证',
+        frontierResolutionStance: 'support_balancer',
+        frontierResolutionSupportLaneId: 'expedition',
+        frontierResolutionSupportLaneLabel: '远征线',
+        frontierResolutionSummaryLine: '上章周裁记：章末继续保留远征补证。',
+        chronicleSealLine: '战役史卷已封记：副线补证。',
+        councilResolutionLine: '诸界会审裁定：章末以副线补证收束。',
+        frontierResolutionSubmittedAt: now - 1000
+      }
+    ]
+  });
+  const chapterCarryoverBoard = chapterCarryoverGame.normalizeSeasonBoardSnapshot({
+    ...chapterCarryoverBaseBoard,
+    weekTag: chapterCarryoverCurrentWeekTag,
+    weekLabel: chapterCarryoverCurrentWeekLabel,
+    weekVerdictLedger: {
+      current: {
+        ...(chapterCarryoverBaseBoard.weekVerdictLedger?.current || {}),
+        weekTag: chapterCarryoverCurrentWeekTag,
+        weekLabel: chapterCarryoverCurrentWeekLabel,
+        frontierResolutionChoiceId: '',
+        frontierResolutionLabel: '',
+        frontierResolutionStance: '',
+        frontierResolutionSupportLaneId: '',
+        frontierResolutionSupportLaneLabel: '',
+        frontierResolutionSummaryLine: '',
+        chronicleSealStatus: '',
+        chronicleSealLine: '',
+        councilResolutionLine: '',
+        frontierResolutionSubmittedAt: 0
+      }
+    }
+  });
+  const chapterCarryoverDirective = chapterCarryoverGame.buildSeasonBoardRouteDirective({
+    board: chapterCarryoverBoard,
+    signals: chapterCarryoverGame.getSeasonBoardSignalSnapshot()
+  });
+  assert(
+    chapterCarryoverBoard?.chapterArc?.carryover?.available === true
+      && chapterCarryoverBoard.chapterArc.carryover.preferredLaneId === 'expedition'
+      && chapterCarryoverBoard.chapterArc.carryover.applied === true
+      && chapterCarryoverBoard.nextTask?.laneId === 'expedition'
+      && chapterCarryoverBoard.nextTask?.source === 'lane'
+      && chapterCarryoverBoard.nextWeekGoal?.laneId === 'expedition'
+      && /上章承卷/.test(String(chapterCarryoverDirective?.summaryLine || ''))
+      && !hasNestedKey(chapterCarryoverBoard.chapterArc.carryover, new Set(['actionType', 'actionValue', 'ctaLabel', 'source', 'sourceId', 'taskSource', 'taskSourceId', 'taskId', 'laneId'])),
+    `chapter-arc carryover should only lightly bias ordinary opening lane order without becoming a new task source, got ${JSON.stringify({
+      chapterArc: chapterCarryoverBoard?.chapterArc,
+      nextTask: chapterCarryoverBoard?.nextTask,
+      nextWeekGoal: chapterCarryoverBoard?.nextWeekGoal,
+      directive: chapterCarryoverDirective
     })}`
   );
 
@@ -1759,6 +1888,7 @@ function loadFile(ctx, filePath) {
     `lockline reward / expedition / map payload should mirror next-week goal state, got ${JSON.stringify(locklinePayload?.reward?.expedition?.seasonBoard)} vs ${JSON.stringify(locklinePayload?.expedition?.seasonBoard)} vs ${JSON.stringify(locklinePayload?.map?.chapter?.seasonBoard)}`
   );
   assertSeasonBoardFrontierMirror(locklinePayload, 'lockline reward payload');
+  assertSeasonBoardChapterArcMirror(locklinePayload, 'lockline reward payload');
   const locklinePayloadLaneRewards = assertSeasonBoardLaneRewardsMirror(locklinePayload, 'lockline reward payload');
   assert(
     locklinePayloadLaneRewards.length === 3
@@ -1922,6 +2052,10 @@ function loadFile(ctx, filePath) {
   assert(
     chapterArc.dominantChoiceId === 'rebalance_support'
       && chapterArc.id !== 'stale_manual_chapter_arc'
+      && /本章收成|本章反馈/.test(String(chapterArc.feedbackLine || ''))
+      && chapterArc.objective?.focusLaneId === 'training'
+      && /章目标/.test(String(chapterArc.objective?.summaryLine || ''))
+      && /真正行动仍沿本周季盘 nextTask 推进/.test(String(chapterArc.objective?.guideLine || ''))
       && chapterArc.entries.some((entry) => entry.weekTag === '2026-W13' && entry.choiceId === 'hold_primary')
       && chapterArc.entries.some((entry) => entry.weekTag === '2026-W14' && entry.choiceId === 'seal_dispute')
       && chapterArc.entries.some((entry) => entry.weekTag === '2026-W15' && entry.choiceId === 'rebalance_support'),
@@ -1933,6 +2067,34 @@ function loadFile(ctx, filePath) {
   });
   assertSeasonBoardChapterArcDerivedNotPersisted(chapterArcGame, ctx.localStorage, 'chapter arc derived persistence');
   chapterArcGame.getSeasonBoardSnapshot = () => chapterArcBoard;
+  const originalChapterArcSwitchCollectionSection = chapterArcGame.switchCollectionSection;
+  let chapterArcFollowSection = '';
+  chapterArcGame.switchCollectionSection = (section) => {
+    chapterArcFollowSection = section;
+    chapterArcGame.currentScreen = 'collection';
+  };
+  assert(
+    chapterArcBoard.nextTask?.id
+      && chapterArcBoard.nextTask.source !== 'chapterArc'
+      && chapterArcBoard.nextTask.source !== 'chapter_arc',
+    `chapter arc board should keep follow-through anchored to nextTask, got ${JSON.stringify(chapterArcBoard.nextTask)}`
+  );
+  assert(
+    chapterArcGame.followSeasonBoardTask(chapterArcBoard.nextTask.id) === true
+      && chapterArcGame.lastSeasonBoardTaskFollow?.taskId === chapterArcBoard.nextTask.id
+      && chapterArcGame.lastSeasonBoardTaskFollow?.source === chapterArcBoard.nextTask.source
+      && chapterArcGame.lastSeasonBoardTaskFollow?.source !== 'chapterArc'
+      && chapterArcGame.lastSeasonBoardTaskFollow?.source !== 'chapter_arc'
+      && chapterArcGame.lastSeasonBoardTaskFollowNotice?.sourceKey === 'task'
+      && chapterArcGame.lastSeasonBoardTaskFollowNotice?.taskId === chapterArcBoard.nextTask.id,
+    `chapter arc follow-through should reuse the current season nextTask instead of becoming a new source, got ${JSON.stringify({
+      section: chapterArcFollowSection,
+      nextTask: chapterArcBoard.nextTask,
+      last: chapterArcGame.lastSeasonBoardTaskFollow,
+      notice: chapterArcGame.lastSeasonBoardTaskFollowNotice
+    })}`
+  );
+  chapterArcGame.switchCollectionSection = originalChapterArcSwitchCollectionSection;
   chapterArcGame.lastExpeditionRewardMeta = {
     id: 'chapter_arc_reward_meta',
     chapterName: '第15周章经营验收',
@@ -1943,8 +2105,23 @@ function loadFile(ctx, filePath) {
   const mirroredChapterArc = assertSeasonBoardChapterArcMirror(chapterArcPayload, 'chapter arc payload');
   assert(
     mirroredChapterArc.entries.length === 3
-      && mirroredChapterArc.entries.every((entry) => entry.recordId && entry.choiceId && entry.weekSlot),
+      && mirroredChapterArc.entries.every((entry) => entry.recordId && entry.choiceId && entry.weekSlot)
+      && mirroredChapterArc.objective?.summaryLine === chapterArc.objective?.summaryLine
+      && mirroredChapterArc.objective?.focusLaneId === chapterArc.objective?.focusLaneId,
     `chapter arc payload should mirror the three weekly entries intact, got ${JSON.stringify(mirroredChapterArc)}`
+  );
+  const chapterArcBuildSnapshot = chapterArcGame.getBuildSnapshotData();
+  assert(
+    Array.isArray(chapterArcBuildSnapshot?.strengths)
+      && chapterArcBuildSnapshot.strengths.some((line) => /三周一章/.test(String(line || '')) && /第 3\/3 周/.test(String(line || '')))
+      && chapterArcBuildSnapshot.strengths.some((line) => /章目标/.test(String(line || '')) && /先清债账|副线补证|守主战线|章末定型|章中推进/.test(String(line || ''))),
+    `chapter arc build snapshot strengths should surface the current chapter arc week slot, got ${JSON.stringify(chapterArcBuildSnapshot?.strengths)}`
+  );
+  assert(
+    Array.isArray(chapterArcBuildSnapshot?.nextTargets)
+      && chapterArcBuildSnapshot.nextTargets.some((line) => /章程跟进/.test(String(line || '')) && /章目标|本章收成|本章反馈/.test(String(line || '')))
+      && chapterArcBuildSnapshot.nextTargets.some((line) => String(line || '').includes(chapterArc.objective?.summaryLine || '') || String(line || '').includes(chapterArc.objective?.goalLine || '')),
+    `chapter arc build snapshot next targets should surface chapter-arc follow-through guidance, got ${JSON.stringify(chapterArcBuildSnapshot?.nextTargets)}`
   );
   const locklineNextTaskNeedle = locklineBoard.nextTask?.hintLine || locklineBoard.nextTask?.label || '';
   const locklineSanctumData = locklineGame.getSanctumOverviewData();
@@ -2282,6 +2459,26 @@ function loadFile(ctx, filePath) {
       && !!debtBoard.debtPack?.occupiedMandateTaskId,
     `ranking debt board should reserve a mandate strong slot for debt clearing, got ${JSON.stringify(debtBoard?.debtPack)}`
   );
+  const repairedDebtBoard = debtGame.normalizeSeasonBoardSnapshot({
+    ...debtBoard,
+    debtPack: {
+      ...debtBoard.debtPack,
+      occupiesStrongSlot: false
+    }
+  });
+  assert(
+    repairedDebtBoard.debtPack?.occupiesStrongSlot
+      && repairedDebtBoard.nextTask?.id === debtBoard.debtPack?.occupiedMandateTaskId
+      && repairedDebtBoard.lanes
+        ?.find((lane) => lane.id === 'verification')
+        ?.tasks
+        ?.some((task) => task.id === debtBoard.debtPack?.occupiedMandateTaskId && task.occupiesStrongSlot),
+    `normalizeSeasonBoardSnapshot should restore the occupied strong slot from live debt status, got ${JSON.stringify({
+      debtPack: repairedDebtBoard?.debtPack,
+      nextTask: repairedDebtBoard?.nextTask,
+      verificationLane: repairedDebtBoard?.lanes?.find((lane) => lane.id === 'verification')
+    })}`
+  );
   assert(
     Array.isArray(debtBoard.verificationOrders)
       && debtBoard.verificationOrders[0]?.label
@@ -2324,6 +2521,107 @@ function loadFile(ctx, filePath) {
       base: debtBoard.nextTask,
       biased: debtSupportBiasedBoard?.nextTask,
       nextWeekGoal: debtSupportBiasedBoard?.nextWeekGoal
+    })}`
+  );
+  const debtCarryoverWeekMatch = String(debtBoard.weekTag || '').match(/^(\d{4})-W(\d{1,2})$/);
+  const debtCarryoverYear = Math.max(2026, Math.floor(Number(debtCarryoverWeekMatch?.[1]) || 2026));
+  const debtCarryoverWeekNo = debtCarryoverWeekMatch
+    ? Math.max(4, Math.floor(Number(debtCarryoverWeekMatch[2]) || 4) - ((Math.floor(Number(debtCarryoverWeekMatch[2]) || 4) - 1) % 3))
+    : 19;
+  const debtCarryoverCurrentWeekTag = formatWeekTag(debtCarryoverYear, debtCarryoverWeekNo);
+  const debtCarryoverCurrentWeekLabel = `${debtCarryoverYear} · 第 ${debtCarryoverWeekNo} 周`;
+  debtGame.seasonVerificationState = debtGame.normalizeSeasonVerificationState({
+    ...debtGame.seasonVerificationState,
+    history: [
+      ...(Array.isArray(debtGame.seasonVerificationState?.history) ? debtGame.seasonVerificationState.history : []).filter((entry) => !/^debt_carryover_week_/.test(String(entry?.recordId || ''))),
+      {
+        recordId: 'debt_carryover_week_1',
+        recordKind: 'frontier_resolution',
+        weekTag: formatWeekTag(debtCarryoverYear, debtCarryoverWeekNo - 3),
+        weekLabel: `${debtCarryoverYear} · 第 ${debtCarryoverWeekNo - 3} 周`,
+        frontierResolutionChoiceId: 'rebalance_support',
+        frontierResolutionLabel: '副线补证',
+        frontierResolutionStance: 'support_balancer',
+        frontierResolutionSupportLaneId: 'expedition',
+        frontierResolutionSupportLaneLabel: '远征线',
+        frontierResolutionSummaryLine: '债账周之前的章末裁记：先给远征线补一份旁证。',
+        chronicleSealLine: '战役史卷已封记：副线补证。',
+        councilResolutionLine: '诸界会审裁定：先给远征线补一份旁证。',
+        frontierResolutionSubmittedAt: now + 30
+      },
+      {
+        recordId: 'debt_carryover_week_2',
+        recordKind: 'frontier_resolution',
+        weekTag: formatWeekTag(debtCarryoverYear, debtCarryoverWeekNo - 2),
+        weekLabel: `${debtCarryoverYear} · 第 ${debtCarryoverWeekNo - 2} 周`,
+        frontierResolutionChoiceId: 'rebalance_support',
+        frontierResolutionLabel: '副线补证',
+        frontierResolutionStance: 'support_balancer',
+        frontierResolutionSupportLaneId: 'expedition',
+        frontierResolutionSupportLaneLabel: '远征线',
+        frontierResolutionSummaryLine: '债账周之前的章末裁记：第二周继续远征补证。',
+        chronicleSealLine: '战役史卷已封记：副线补证。',
+        councilResolutionLine: '诸界会审裁定：副线补证延续。',
+        frontierResolutionSubmittedAt: now + 40
+      },
+      {
+        recordId: 'debt_carryover_week_3',
+        recordKind: 'frontier_resolution',
+        weekTag: formatWeekTag(debtCarryoverYear, debtCarryoverWeekNo - 1),
+        weekLabel: `${debtCarryoverYear} · 第 ${debtCarryoverWeekNo - 1} 周`,
+        frontierResolutionChoiceId: 'rebalance_support',
+        frontierResolutionLabel: '副线补证',
+        frontierResolutionStance: 'support_balancer',
+        frontierResolutionSupportLaneId: 'expedition',
+        frontierResolutionSupportLaneLabel: '远征线',
+        frontierResolutionSummaryLine: '债账周之前的章末裁记：最终仍以远征补证收束。',
+        chronicleSealLine: '战役史卷已封记：副线补证。',
+        councilResolutionLine: '诸界会审裁定：章末以副线补证收束。',
+        frontierResolutionSubmittedAt: now + 50
+      }
+    ]
+  });
+  const debtCarryoverSuppressedBoard = debtGame.normalizeSeasonBoardSnapshot({
+    ...debtBoard,
+    weekTag: debtCarryoverCurrentWeekTag,
+    weekLabel: debtCarryoverCurrentWeekLabel,
+    weekVerdictLedger: {
+      current: {
+        ...(debtBoard.weekVerdictLedger?.current || {}),
+        weekTag: debtCarryoverCurrentWeekTag,
+        weekLabel: debtCarryoverCurrentWeekLabel,
+        frontierResolutionChoiceId: '',
+        frontierResolutionLabel: '',
+        frontierResolutionStance: '',
+        frontierResolutionSupportLaneId: '',
+        frontierResolutionSupportLaneLabel: '',
+        frontierResolutionSummaryLine: '',
+        chronicleSealStatus: '',
+        chronicleSealLine: '',
+        councilResolutionLine: '',
+        frontierResolutionSubmittedAt: 0
+      }
+    }
+  });
+  const debtCarryoverSuppressedDirective = debtGame.buildSeasonBoardRouteDirective({
+    board: debtCarryoverSuppressedBoard,
+    signals: debtGame.getSeasonBoardSignalSnapshot()
+  });
+  assert(
+    debtCarryoverSuppressedBoard?.chapterArc?.carryover?.available === true
+      && debtCarryoverSuppressedBoard.chapterArc.carryover.applied === false
+      && debtCarryoverSuppressedBoard.chapterArc.carryover.statusLabel === '让位强目标'
+      && debtCarryoverSuppressedBoard.nextTask?.source === 'debt_pack'
+      && debtCarryoverSuppressedBoard.nextTask?.laneId === 'verification'
+      && debtCarryoverSuppressedBoard.nextWeekGoal?.source === 'debt_pack'
+      && /暂不生效|让位强目标/.test(String(debtCarryoverSuppressedDirective?.summaryLine || ''))
+      && /暂不生效|强目标/.test(String(debtCarryoverSuppressedDirective?.rewardLine || ''))
+      && !/轻量前移/.test(String(debtCarryoverSuppressedDirective?.summaryLine || '')),
+    `chapter-arc carryover should yield to debt-pack strong routing without contradictory opening-bias wording, got ${JSON.stringify({
+      chapterArc: debtCarryoverSuppressedBoard?.chapterArc,
+      nextTask: debtCarryoverSuppressedBoard?.nextTask,
+      nextWeekGoal: debtCarryoverSuppressedBoard?.nextWeekGoal,
+      directive: debtCarryoverSuppressedDirective
     })}`
   );
   const debtLaneTask = (debtBoard.lanes || [])
@@ -2475,6 +2773,8 @@ function loadFile(ctx, filePath) {
   assert(
     clearedDebtBoard.debtPack?.status === 'cleared'
       && !clearedDebtBoard.debtPack?.occupiesStrongSlot
+      && clearedDebtBoard.debtPack?.deferCount === 0
+      && clearedDebtBoard.weekVerdictLedger?.current?.deferCount === 0
       && /清账|已清/.test(String(
         clearedDebtBoard.debtPack?.progressText
         || clearedDebtBoard.debtPack?.writebackLine
@@ -2597,6 +2897,8 @@ function loadFile(ctx, filePath) {
   assert(
     degradedDebtBoard.debtPack?.status === 'degraded'
       && !degradedDebtBoard.debtPack?.occupiesStrongSlot
+      && degradedDebtBoard.debtPack?.deferCount === 0
+      && degradedDebtBoard.weekVerdictLedger?.current?.deferCount === 0
       && /反证/.test(String(degradedDebtBoard.debtPack?.progressText || degradedDebtBoard.debtPack?.statusLine || '')),
     `explicit primary verification failure should keep a degraded debt record without occupying the strong slot, got ${JSON.stringify(degradedDebtBoard?.debtPack)}`
   );

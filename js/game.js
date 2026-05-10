@@ -1170,6 +1170,41 @@ class Game {
                                     summaryLine: chapterArc.review.summaryLine || ''
                                 }
                                 : null;
+                            const objective = chapterArc.objective && typeof chapterArc.objective === 'object'
+                                ? {
+                                    available: chapterArc.objective.available !== false,
+                                    id: chapterArc.objective.id || '',
+                                    label: chapterArc.objective.label || '',
+                                    statusId: chapterArc.objective.statusId || '',
+                                    statusLabel: chapterArc.objective.statusLabel || '',
+                                    focusLaneId: chapterArc.objective.focusLaneId || '',
+                                    focusLaneLabel: chapterArc.objective.focusLaneLabel || '',
+                                    summaryLine: chapterArc.objective.summaryLine || '',
+                                    statusLine: chapterArc.objective.statusLine || '',
+                                    goalLine: chapterArc.objective.goalLine || '',
+                                    reasonLine: chapterArc.objective.reasonLine || '',
+                                    guideLine: chapterArc.objective.guideLine || '',
+                                    shortLine: chapterArc.objective.shortLine || ''
+                                }
+                                : null;
+                            const carryover = chapterArc.carryover && typeof chapterArc.carryover === 'object'
+                                ? {
+                                    available: chapterArc.carryover.available !== false,
+                                    chapterId: chapterArc.carryover.chapterId || '',
+                                    chapterLabel: chapterArc.carryover.chapterLabel || '',
+                                    resultId: chapterArc.carryover.resultId || '',
+                                    resultLabel: chapterArc.carryover.resultLabel || '',
+                                    dominantChoiceId: chapterArc.carryover.dominantChoiceId || '',
+                                    dominantChoiceLabel: chapterArc.carryover.dominantChoiceLabel || '',
+                                    preferredLaneId: chapterArc.carryover.preferredLaneId || '',
+                                    preferredLaneLabel: chapterArc.carryover.preferredLaneLabel || '',
+                                    openingWeek: !!chapterArc.carryover.openingWeek,
+                                    applied: !!chapterArc.carryover.applied,
+                                    statusLabel: chapterArc.carryover.statusLabel || '',
+                                    summaryLine: chapterArc.carryover.summaryLine || '',
+                                    guideLine: chapterArc.carryover.guideLine || ''
+                                }
+                                : null;
                             return {
                                 available: chapterArc.available !== false,
                                 id: chapterArc.id || '',
@@ -1201,8 +1236,11 @@ class Game {
                                 summaryLine: chapterArc.summaryLine || '',
                                 statusLine: chapterArc.statusLine || '',
                                 goalLine: chapterArc.goalLine || '',
+                                feedbackLine: chapterArc.feedbackLine || '',
                                 rescueWindow,
                                 review,
+                                objective,
+                                carryover,
                                 entries: Array.isArray(chapterArc.entries)
                                     ? chapterArc.entries.map((entry) => ({
                                         recordId: entry?.recordId || '',
@@ -15030,6 +15068,18 @@ class Game {
         const seasonBoardFrontierCouncil = seasonBoardFrontier?.council && typeof seasonBoardFrontier.council === 'object'
             ? seasonBoardFrontier.council
             : null;
+        const seasonBoardChapterArc = seasonBoard?.chapterArc && typeof seasonBoard.chapterArc === 'object'
+            ? seasonBoard.chapterArc
+            : null;
+        const seasonBoardChapterArcRescue = seasonBoardChapterArc?.rescueWindow && typeof seasonBoardChapterArc.rescueWindow === 'object'
+            ? seasonBoardChapterArc.rescueWindow
+            : null;
+        const seasonBoardChapterArcReview = seasonBoardChapterArc?.review && typeof seasonBoardChapterArc.review === 'object'
+            ? seasonBoardChapterArc.review
+            : null;
+        const seasonBoardChapterArcObjective = seasonBoardChapterArc?.objective && typeof seasonBoardChapterArc.objective === 'object'
+            ? seasonBoardChapterArc.objective
+            : null;
         const rawSeasonBoardVerificationOrders = Array.isArray(seasonBoard?.verificationOrders)
             ? seasonBoard.verificationOrders.filter((entry) => entry && typeof entry === 'object')
             : [];
@@ -15272,6 +15322,38 @@ class Game {
                 action: getHandoffAction('sideVerification')
             })
             : '';
+        const seasonBoardChapterArcCard = seasonBoardChapterArc
+            ? buildActionCard({
+                tone: seasonBoardChapterArcRescue?.open ? 'warning' : 'tracking',
+                dataAttrs: {
+                    'data-season-board-chapter-arc-reward': 'true',
+                    'data-season-board-chapter-arc-id': seasonBoardChapterArc.id || '',
+                    'data-season-board-chapter-arc-week-slot': seasonBoardChapterArc.weekSlot || '',
+                    'data-season-board-chapter-arc-open': seasonBoardChapterArcRescue?.open ? 'true' : 'false',
+                    'data-season-board-chapter-arc-objective-id': seasonBoardChapterArcObjective?.id || '',
+                    'data-season-board-chapter-arc-objective-status': seasonBoardChapterArcObjective?.statusId || ''
+                },
+                kicker: `三周一章 · ${seasonBoardChapterArc.arcLabel || seasonBoardChapterArc.chapterLabel || '当前章程'}`,
+                body: seasonBoardChapterArc.summaryLine
+                    || seasonBoardChapterArc.statusLine
+                    || `第 ${seasonBoardChapterArc.weekSlot || 1}/${seasonBoardChapterArc.targetWeeks || 3} 周章程待同步`,
+                detail: [
+                    seasonBoardChapterArcObjective?.summaryLine || '',
+                    seasonBoardChapterArc.feedbackLine || '',
+                    seasonBoardChapterArcRescue?.open
+                        ? (seasonBoardChapterArcRescue.guideLine || seasonBoardChapterArcRescue.reasonLine || seasonBoardChapterArcRescue.statusLabel || '')
+                        : (seasonBoardChapterArcReview?.summaryLine || seasonBoardChapterArcReview?.endingPreviewLine || seasonBoardChapterArc.goalLine || ''),
+                    seasonBoardChapterArc.goalLine || ''
+                ].filter(Boolean).join(' · '),
+                metaLines: [
+                    seasonBoardChapterArc.windowLabel || '',
+                    `第 ${seasonBoardChapterArc.weekSlot || 1}/${seasonBoardChapterArc.targetWeeks || 3} 周`,
+                    seasonBoardChapterArcObjective?.shortLine || '',
+                    seasonBoardChapterArc.progressText ? `归卷 ${seasonBoardChapterArc.progressText}` : '',
+                    seasonBoardChapterArcRescue?.statusLabel || seasonBoardChapterArcReview?.statusLabel || ''
+                ]
+            })
+            : '';
         const chips = [];
         const lineageChips = [];
         const aftereffectChips = [];
@@ -15333,6 +15415,12 @@ class Game {
         if (seasonBoardFrontierCouncil?.title) {
             seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="frontier-council" data-season-board-frontier-council-chip="true">${escape(`会审 · ${seasonBoardFrontierCouncil.laneLabel || seasonBoardFrontier.primaryFrontShortLabel || '主战线'} · ${seasonBoardFrontierCouncil.phaseLabel || '本周'}`)}</span>`);
         }
+        if (seasonBoardChapterArc?.available) {
+            seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="chapter-arc">${escape(`章程 · ${seasonBoardChapterArc.arcLabel || seasonBoardChapterArc.chapterLabel || '当前章程'} · 第 ${seasonBoardChapterArc.weekSlot || 1}/${seasonBoardChapterArc.targetWeeks || 3} 周`)}</span>`);
+        }
+        if (seasonBoardChapterArcObjective?.available) {
+            seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="chapter-arc-objective">${escape(`章目标 · ${seasonBoardChapterArcObjective.statusLabel || seasonBoardChapterArcObjective.label || '经营目标'} · ${seasonBoardChapterArcObjective.focusLaneLabel || '本周主线'}`)}</span>`);
+        }
         if (primarySeasonVerification?.label) {
             seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="verification">${escape(`验证 · ${primarySeasonVerification.label}`)}</span>`);
         }
@@ -15356,6 +15444,7 @@ class Game {
         panel.dataset.seasonBoardFrontierDecree = seasonBoardFrontierDecree?.id || '';
         panel.dataset.seasonBoardFrontierChronicle = seasonBoardFrontierChronicle?.id || '';
         panel.dataset.seasonBoardFrontierCouncil = seasonBoardFrontierCouncil?.id || '';
+        panel.dataset.seasonBoardChapterArc = seasonBoardChapterArc?.id || '';
         panel.innerHTML = `
             <div class="reward-expedition-kicker">观星回响总结</div>
             <div class="reward-expedition-header">
@@ -15388,6 +15477,7 @@ class Game {
                     ${secondaryVerificationLine}
                     ${seasonBoardNextTaskCard}
                     ${seasonBoardLaneRewardCards}
+                    ${seasonBoardChapterArcCard}
                     ${seasonBoardFrontier ? `<div class="reward-expedition-line muted" data-season-board-frontier-reward="true" data-season-board-frontier-id="${escape(seasonBoardFrontier.primaryFrontId || '')}" data-season-board-frontier-pressure="${escape(seasonBoardFrontier.statusId || '')}">${escape(seasonBoardFrontier.summaryLine || seasonBoardFrontier.guideLine || `诸界战线：${seasonBoardFrontier.primaryFrontLabel || '主战线'}`)}</div>` : ''}
                     ${seasonBoardFrontierDecree ? `<div class="reward-expedition-line muted" data-season-board-frontier-decree-reward="true" data-season-board-frontier-decree-id="${escape(seasonBoardFrontierDecree.id || '')}" data-season-board-frontier-decree-lane-id="${escape(seasonBoardFrontierDecree.laneId || '')}" data-season-board-frontier-decree-target="${escape(seasonBoardFrontierDecree.actionTargetLabel || '')}">${escape([seasonBoardFrontierDecree.summaryLine || seasonBoardFrontierDecree.title || '', seasonBoardFrontierDecree.constraintLine || ''].filter(Boolean).join(' · '))}</div>` : ''}
                     ${seasonBoardFrontierChronicle ? `<div class="reward-expedition-line muted" data-season-board-frontier-chronicle-reward="true" data-season-board-frontier-chronicle-id="${escape(seasonBoardFrontierChronicle.id || '')}" data-season-board-frontier-chronicle-lane-id="${escape(seasonBoardFrontierChronicle.laneId || '')}" data-season-board-frontier-chronicle-target="${escape(seasonBoardFrontierChronicle.actionTargetLabel || '')}">${escape([seasonBoardFrontierChronicle.summaryLine || seasonBoardFrontierChronicle.title || '', seasonBoardFrontierChronicle.progressLine || ''].filter(Boolean).join(' · '))}</div>` : ''}
@@ -21229,6 +21319,11 @@ class Game {
             rebalance_support: 'support_balancer',
             seal_dispute: 'dispute_archivist'
         };
+        const laneLabelMap = {
+            training: '训练线',
+            expedition: '远征线',
+            verification: '验算线'
+        };
         const choiceLabelMap = {
             hold_primary: '守主战线',
             rebalance_support: '副线补证',
@@ -21427,6 +21522,11 @@ class Game {
 
     buildSeasonBoardChapterArc(context = {}) {
         const sanitize = (value = '', limit = 120) => String(value || '').trim().slice(0, limit);
+        const laneLabelMap = {
+            training: '训练线',
+            expedition: '远征线',
+            verification: '验算线'
+        };
         const choiceLabelMap = {
             hold_primary: '守主战线',
             rebalance_support: '副线补证',
@@ -21538,26 +21638,58 @@ class Game {
             seenWeekTags.add(key);
             return true;
         });
+        const summarizeEntries = (entries = []) => {
+            const countsByChoice = { hold_primary: 0, rebalance_support: 0, seal_dispute: 0 };
+            const countsByStance = { frontier_loyalist: 0, support_balancer: 0, dispute_archivist: 0 };
+            const latestAtByChoice = { hold_primary: 0, rebalance_support: 0, seal_dispute: 0 };
+            let latestSupportLaneId = '';
+            let latestSupportLaneLabel = '';
+            let latestSupportLaneAt = 0;
+            entries.forEach((entry) => {
+                countsByChoice[entry.choiceId] = (countsByChoice[entry.choiceId] || 0) + 1;
+                countsByStance[entry.stanceId] = (countsByStance[entry.stanceId] || 0) + 1;
+                latestAtByChoice[entry.choiceId] = Math.max(latestAtByChoice[entry.choiceId] || 0, entry.submittedAt);
+                if (
+                    entry.choiceId === 'rebalance_support'
+                    && entry.supportLaneId
+                    && entry.submittedAt >= latestSupportLaneAt
+                ) {
+                    latestSupportLaneAt = entry.submittedAt;
+                    latestSupportLaneId = entry.supportLaneId;
+                    latestSupportLaneLabel = entry.supportLaneLabel || laneLabelMap[entry.supportLaneId] || '';
+                }
+            });
+            const dominantChoiceId = Object.keys(countsByChoice)
+                .sort((a, b) => {
+                    if ((countsByChoice[b] || 0) !== (countsByChoice[a] || 0)) return (countsByChoice[b] || 0) - (countsByChoice[a] || 0);
+                    return (latestAtByChoice[b] || 0) - (latestAtByChoice[a] || 0);
+                })
+                .find((choiceId) => countsByChoice[choiceId] > 0) || '';
+            return {
+                countsByChoice,
+                countsByStance,
+                dominantChoiceId,
+                dominantStanceId: dominantChoiceId ? choiceToStance[dominantChoiceId] : '',
+                latestSupportLaneId,
+                latestSupportLaneLabel
+            };
+        };
         const windowEntries = currentWeekMeta
             ? distinctEntries
                 .filter((entry) => entry.weekIndex >= windowStartIndex && entry.weekIndex <= windowEndIndex)
                 .slice(0, 3)
             : distinctEntries.slice(0, 3);
-        const countsByChoice = { hold_primary: 0, rebalance_support: 0, seal_dispute: 0 };
-        const countsByStance = { frontier_loyalist: 0, support_balancer: 0, dispute_archivist: 0 };
-        const latestAtByChoice = { hold_primary: 0, rebalance_support: 0, seal_dispute: 0 };
-        windowEntries.forEach((entry) => {
-            countsByChoice[entry.choiceId] = (countsByChoice[entry.choiceId] || 0) + 1;
-            countsByStance[entry.stanceId] = (countsByStance[entry.stanceId] || 0) + 1;
-            latestAtByChoice[entry.choiceId] = Math.max(latestAtByChoice[entry.choiceId] || 0, entry.submittedAt);
-        });
-        const dominantChoiceId = Object.keys(countsByChoice)
-            .sort((a, b) => {
-                if ((countsByChoice[b] || 0) !== (countsByChoice[a] || 0)) return (countsByChoice[b] || 0) - (countsByChoice[a] || 0);
-                return (latestAtByChoice[b] || 0) - (latestAtByChoice[a] || 0);
-            })
-            .find((choiceId) => countsByChoice[choiceId] > 0) || '';
-        const dominantStanceId = dominantChoiceId ? choiceToStance[dominantChoiceId] : '';
+        const currentSummary = summarizeEntries(windowEntries);
+        const countsByChoice = currentSummary.countsByChoice;
+        const countsByStance = currentSummary.countsByStance;
+        const dominantChoiceId = currentSummary.dominantChoiceId;
+        const dominantStanceId = currentSummary.dominantStanceId;
+        const previousWindowEntries = currentWeekMeta && currentWeekSlot === 1 && windowStartWeekNo > 3
+            ? distinctEntries
+                .filter((entry) => entry.weekIndex >= (windowStartIndex - 3) && entry.weekIndex < windowStartIndex)
+                .slice(0, 3)
+            : [];
+        const previousSummary = summarizeEntries(previousWindowEntries);
         const sealedCount = Math.min(3, windowEntries.length);
         const weeksRemaining = Math.max(0, 3 - currentWeekSlot);
         const settlementOutcomeId = sanitize(context.settlement?.outcomeId || currentVerdict?.settlementOutcomeId, 32);
@@ -21603,6 +21735,19 @@ class Game {
             : (rescueOpen
                 ? '章中评语：章内证据尚薄，先用本周主线补齐缺口。'
                 : '章中评语：三周节奏正常推进，等待更多裁记沉淀。');
+        const feedbackLine = chapterClosed
+            ? (dominantChoiceId === 'rebalance_support'
+                ? '本章收成：副线证据已被保住，下章开局更适合先沿旁证节奏铺样。'
+                : (dominantChoiceId === 'seal_dispute'
+                    ? '本章收成：争议已被压成封存口径，下章开局宜先稳证据、少开新赌注。'
+                    : '本章收成：主战线已经稳住，下章开局可以继续把强目标压成成果。'))
+            : (hasDebtPressure
+                ? '本章反馈：当前仍被欠卷压力拖住，先清强目标，再谈这一章的收成。'
+                : (hasRiskPressure
+                    ? '本章反馈：当前仍属险卷压强，先补外场或旁证，再判断章末收法。'
+                    : (rescueOpen
+                        ? `本章反馈：第 ${currentWeekSlot}/3 周仍有裁记缺口，先补齐再判断章末收成。`
+                        : `本章反馈：当前章势正在形成，继续沿${dominantChoiceLabel ? `【${dominantChoiceLabel}】` : '本周主线'}累积裁记。`)));
         const chapterLabel = currentWeekMeta
             ? `第 ${chapterNumber} 章`
             : '本章';
@@ -21610,6 +21755,121 @@ class Game {
             ? `${currentWeekMeta.year} · 第 ${windowStartWeekNo}-${windowEndWeekNo} 周`
             : '三周窗口';
         const progressText = `${sealedCount}/3 周归卷`;
+        const carryover = (() => {
+            if (!(currentWeekMeta && currentWeekSlot === 1 && chapterNumber > 1 && previousWindowEntries.length >= 3)) return null;
+            const previousDominantChoiceId = previousSummary.dominantChoiceId;
+            const previousDominantChoiceLabel = previousDominantChoiceId ? choiceLabelMap[previousDominantChoiceId] : '';
+            const resultId = previousDominantChoiceId === 'seal_dispute'
+                ? 'archived_dispute'
+                : (previousDominantChoiceId === 'rebalance_support' ? 'balanced_front' : 'guarded_front');
+            const resultLabel = resultId === 'archived_dispute'
+                ? '封争收束'
+                : (resultId === 'balanced_front' ? '补证收束' : '守线收束');
+            const preferredLaneId = previousDominantChoiceId === 'rebalance_support'
+                ? (previousSummary.latestSupportLaneId || 'expedition')
+                : 'training';
+            const preferredLaneLabel = previousDominantChoiceId === 'rebalance_support'
+                ? (previousSummary.latestSupportLaneLabel || laneLabelMap[preferredLaneId] || '远征线')
+                : (laneLabelMap[preferredLaneId] || '训练线');
+            const previousChapterLabel = `第 ${Math.max(1, chapterNumber - 1)} 章`;
+            const summaryLine = previousDominantChoiceId === 'rebalance_support'
+                ? `上章承卷：${previousChapterLabel} 以【${previousDominantChoiceLabel || '副线补证'}】收束，新章开局会轻量前移【${preferredLaneLabel}】。`
+                : (previousDominantChoiceId === 'seal_dispute'
+                    ? `上章承卷：${previousChapterLabel} 以【${previousDominantChoiceLabel || '封存争议'}】收束，新章开局会先回【${preferredLaneLabel}】补证。`
+                    : `上章承卷：${previousChapterLabel} 以【${previousDominantChoiceLabel || '守主战线'}】收束，新章开局会先稳住【${preferredLaneLabel}】主轴。`);
+            return {
+                available: true,
+                chapterId: `chapter_arc_${currentWeekMeta.year}_${Math.max(1, chapterNumber - 1)}`,
+                chapterLabel: previousChapterLabel,
+                resultId,
+                resultLabel,
+                dominantChoiceId: previousDominantChoiceId,
+                dominantChoiceLabel: previousDominantChoiceLabel,
+                preferredLaneId,
+                preferredLaneLabel,
+                openingWeek: true,
+                applied: false,
+                statusLabel: '待判定',
+                summaryLine: sanitize(summaryLine, 220),
+                guideLine: sanitize('承卷偏置只会轻量影响普通开局排班；若本周出现欠卷、押卷或主验证硬目标，会自动让位。', 220)
+            };
+        })();
+        const objective = (() => {
+            const objectiveLaneId = hasDebtPressure
+                ? 'verification'
+                : (hasRiskPressure
+                    ? (context.nextTask?.laneId || 'verification')
+                    : (rescueOpen
+                        ? (dominantChoiceId === 'rebalance_support'
+                            ? (currentSummary.latestSupportLaneId || context.nextTask?.laneId || 'expedition')
+                            : (dominantChoiceId === 'seal_dispute'
+                                ? (context.nextTask?.laneId || 'training')
+                                : (context.nextTask?.laneId || 'training')))
+                        : (chapterClosed
+                            ? (dominantChoiceId === 'rebalance_support'
+                                ? (currentSummary.latestSupportLaneId || context.nextTask?.laneId || 'expedition')
+                                : (context.nextTask?.laneId || 'training'))
+                            : (context.nextTask?.laneId || 'training'))));
+            const objectiveLaneLabel = laneLabelMap[objectiveLaneId] || '本周主线';
+            const statusId = hasDebtPressure
+                ? 'debt_clear'
+                : (hasRiskPressure
+                    ? 'risk_stabilize'
+                    : (rescueOpen
+                        ? 'chapter_rescue'
+                        : (chapterClosed ? 'chapter_close' : 'chapter_progress')));
+            const statusLabel = hasDebtPressure
+                ? '先清债账'
+                : (hasRiskPressure
+                    ? '先补外场'
+                    : (rescueOpen
+                        ? (dominantChoiceId === 'rebalance_support'
+                            ? '副线补证'
+                            : (dominantChoiceId === 'seal_dispute'
+                                ? '封存争议'
+                                : '守主战线'))
+                        : (chapterClosed ? '章末定型' : '章中推进')));
+            const summaryLine = hasDebtPressure
+                ? `章目标：本章仍被欠卷压住，先把【${objectiveLaneLabel}】补成可结算事实。`
+                : (hasRiskPressure
+                    ? `章目标：本章处在险卷压强里，先让【${objectiveLaneLabel}】补上外场或旁证。`
+                    : (rescueOpen
+                        ? `章目标：本章要先补齐 ${sealedCount}/3 周裁记缺口，当前重心偏向【${objectiveLaneLabel}】。`
+                        : (chapterClosed
+                            ? `章目标：本章已收束为【${dominantChoiceLabel || '裁记风格'}】，下章经营会沿这个口径继续。`
+                            : `章目标：本章正在形成【${dominantChoiceLabel || '当前主线'}】的收束样貌。`)));
+            const goalLine = hasDebtPressure
+                ? '优先清掉欠卷占位，再谈章末收束。'
+                : (hasRiskPressure
+                    ? '先补外场或旁证，再判断章末收法。'
+                    : (rescueOpen
+                        ? `第 ${currentWeekSlot}/3 周仍有裁记缺口，先补齐再判断章末收成。`
+                        : (chapterClosed
+                            ? '三周裁记已齐，接下来只需维持当前章势。'
+                            : '继续沿当前主线补齐章内证据。')));
+            const reasonLine = hasDebtPressure
+                ? (context.debtPack?.summaryLine || '本章仍有欠卷占住强目标位，需要先清账再归章。')
+                : (hasRiskPressure
+                    ? (context.settlement?.summaryLine || '本章押卷仍属险卷，需要补一条外场或旁证。')
+                    : (rescueOpen
+                        ? rescueReasonLine
+                        : (finalCommentLine || endingPreviewLine || '章目标已进入稳定收束阶段。')));
+            return {
+                available: true,
+                id: `season_chapter_arc_objective_${currentWeekMeta?.year || 'current'}_${chapterNumber}`,
+                label: '章目标',
+                statusId,
+                statusLabel,
+                focusLaneId: objectiveLaneId,
+                focusLaneLabel: objectiveLaneLabel,
+                summaryLine: sanitize(summaryLine, 220),
+                statusLine: sanitize(`当前章目标 · ${statusLabel} · ${objectiveLaneLabel}`, 220),
+                goalLine: sanitize(goalLine, 220),
+                reasonLine: sanitize(reasonLine, 220),
+                guideLine: sanitize('章目标只负责解释当前章势，真正行动仍沿本周季盘 nextTask 推进。', 220),
+                shortLine: sanitize(`${statusLabel} · ${objectiveLaneLabel}`, 120)
+            };
+        })();
         return {
             available: true,
             id: `season_chapter_arc_${currentWeekMeta?.year || 'current'}_${chapterNumber}`,
@@ -21637,6 +21897,7 @@ class Game {
                 : (currentWeekSlot >= 3
                     ? '章末周优先补齐本章裁记缺口，再回看本章主线是否成立。'
                     : '继续沿本周季盘行动推进，等待三周裁记形成章末评语。'),
+            feedbackLine: sanitize(feedbackLine, 240),
             rescueWindow,
             review: {
                 available: true,
@@ -21646,6 +21907,8 @@ class Game {
                 finalCommentLine: sanitize(finalCommentLine, 240),
                 summaryLine: sanitize(chapterClosed ? finalCommentLine : endingPreviewLine, 240)
             },
+            objective,
+            carryover,
             entries: windowEntries.map((entry) => ({
                 recordId: entry.recordId,
                 weekTag: entry.weekTag,
@@ -21709,6 +21972,8 @@ class Game {
         const targetWeeks = clampInt(root.targetWeeks || 3, 1, 3);
         const rescueRoot = root.rescueWindow && typeof root.rescueWindow === 'object' ? root.rescueWindow : {};
         const reviewRoot = root.review && typeof root.review === 'object' ? root.review : {};
+        const objectiveRoot = root.objective && typeof root.objective === 'object' ? root.objective : {};
+        const carryoverRoot = root.carryover && typeof root.carryover === 'object' ? root.carryover : null;
         return {
             available: true,
             id: sanitize(root.id || `season_chapter_arc_${context.weekTag || 'current'}`, 96),
@@ -21736,6 +22001,7 @@ class Game {
             summaryLine: sanitize(root.summaryLine, 240),
             statusLine: sanitize(root.statusLine, 220),
             goalLine: sanitize(root.goalLine, 220),
+            feedbackLine: sanitize(root.feedbackLine || reviewRoot.finalCommentLine || reviewRoot.summaryLine || rescueRoot.guideLine || root.goalLine, 240),
             rescueWindow: {
                 available: rescueRoot.available !== false,
                 open: !!rescueRoot.open,
@@ -21743,6 +22009,26 @@ class Game {
                 statusLabel: sanitize(rescueRoot.statusLabel || (rescueRoot.open ? '补裁记' : '稳态'), 32),
                 reasonLine: sanitize(rescueRoot.reasonLine, 220),
                 guideLine: sanitize(rescueRoot.guideLine, 220)
+            },
+            objective: {
+                available: objectiveRoot.available !== false && !!(
+                    objectiveRoot.summaryLine
+                    || objectiveRoot.statusLine
+                    || objectiveRoot.goalLine
+                    || objectiveRoot.reasonLine
+                ),
+                id: sanitize(objectiveRoot.id || `season_chapter_arc_objective_${context.weekTag || 'current'}`, 96),
+                label: sanitize(objectiveRoot.label || '章目标', 32),
+                statusId: sanitize(objectiveRoot.statusId, 32),
+                statusLabel: sanitize(objectiveRoot.statusLabel, 32),
+                focusLaneId: sanitize(objectiveRoot.focusLaneId, 32),
+                focusLaneLabel: sanitize(objectiveRoot.focusLaneLabel, 24),
+                summaryLine: sanitize(objectiveRoot.summaryLine, 240),
+                statusLine: sanitize(objectiveRoot.statusLine, 220),
+                goalLine: sanitize(objectiveRoot.goalLine, 220),
+                reasonLine: sanitize(objectiveRoot.reasonLine, 220),
+                guideLine: sanitize(objectiveRoot.guideLine, 220),
+                shortLine: sanitize(objectiveRoot.shortLine || objectiveRoot.statusLine || objectiveRoot.summaryLine, 120)
             },
             review: {
                 available: reviewRoot.available !== false,
@@ -21752,6 +22038,24 @@ class Game {
                 finalCommentLine: sanitize(reviewRoot.finalCommentLine, 240),
                 summaryLine: sanitize(reviewRoot.summaryLine || reviewRoot.finalCommentLine || reviewRoot.endingPreviewLine, 240)
             },
+            carryover: carryoverRoot
+                ? {
+                    available: carryoverRoot.available !== false,
+                    chapterId: sanitize(carryoverRoot.chapterId, 96),
+                    chapterLabel: sanitize(carryoverRoot.chapterLabel, 32),
+                    resultId: sanitize(carryoverRoot.resultId, 48),
+                    resultLabel: sanitize(carryoverRoot.resultLabel, 32),
+                    dominantChoiceId: sanitize(carryoverRoot.dominantChoiceId, 32),
+                    dominantChoiceLabel: sanitize(carryoverRoot.dominantChoiceLabel, 32),
+                    preferredLaneId: sanitize(carryoverRoot.preferredLaneId, 32),
+                    preferredLaneLabel: sanitize(carryoverRoot.preferredLaneLabel, 24),
+                    openingWeek: !!carryoverRoot.openingWeek,
+                    applied: !!carryoverRoot.applied,
+                    statusLabel: sanitize(carryoverRoot.statusLabel || (carryoverRoot.applied ? '开局偏置' : '待判定'), 32),
+                    summaryLine: sanitize(carryoverRoot.summaryLine, 220),
+                    guideLine: sanitize(carryoverRoot.guideLine, 220)
+                }
+                : null,
             entries
         };
     }
@@ -23511,7 +23815,7 @@ class Game {
             carryIntoWeekTag: String(root.carryIntoWeekTag || '').trim().slice(0, 24),
             occupiedMandateTaskId: String(root.occupiedMandateTaskId || '').trim().slice(0, 64),
             occupationReason: String(root.occupationReason || '').trim().slice(0, 180),
-            occupiesStrongSlot: !!root.occupiesStrongSlot,
+            occupiesStrongSlot: ['open', 'deferred'].includes(status),
             resolvedStatus: String(root.resolvedStatus || '').trim().slice(0, 24),
             writebackLine: String(root.writebackLine || '').trim().slice(0, 220),
             verificationRecordId: String(root.verificationRecordId || '').trim().slice(0, 96),
@@ -25752,6 +26056,19 @@ class Game {
             && String(explicitNextWeekGoal.source || '').trim()
             && String(explicitNextWeekGoal.source || '').trim() !== 'lane'
         );
+        const chapterArcPreview = typeof this.buildSeasonBoardChapterArc === 'function'
+            ? this.buildSeasonBoardChapterArc({
+                weekTag: String(root.weekTag || '').trim().slice(0, 24),
+                weekLabel: String(root.weekLabel || '').trim().slice(0, 32),
+                settlement,
+                debtPack,
+                weekVerdictLedger,
+                seasonVerificationState: this.seasonVerificationState
+            })
+            : null;
+        const chapterArcCarryoverPreview = chapterArcPreview?.carryover && typeof chapterArcPreview.carryover === 'object'
+            ? chapterArcPreview.carryover
+            : null;
         const frontierResolutionChoiceId = String(
             currentVerdict?.frontierResolutionChoiceId
             || currentVerdict?.resolutionChoiceId
@@ -25769,12 +26086,26 @@ class Game {
             && !explicitStrongNextWeekGoal
             && basePrioritizedLaneIds.includes(frontierResolutionSupportLaneId)
             && hasIncompleteLaneTask(frontierResolutionSupportLaneId);
+        const chapterArcCarryoverLaneId = String(chapterArcCarryoverPreview?.preferredLaneId || '').trim();
+        const canApplyChapterArcCarryoverLaneBias = !canApplyFrontierResolutionLaneBias
+            && !!chapterArcCarryoverPreview?.available
+            && !!chapterArcCarryoverPreview?.openingWeek
+            && !hardDebtGate
+            && !hardVerificationGate
+            && !explicitStrongNextWeekGoal
+            && basePrioritizedLaneIds.includes(chapterArcCarryoverLaneId)
+            && hasIncompleteLaneTask(chapterArcCarryoverLaneId);
         const prioritizedLaneIds = canApplyFrontierResolutionLaneBias
             ? [
                 frontierResolutionSupportLaneId,
                 ...basePrioritizedLaneIds.filter((laneId) => laneId !== frontierResolutionSupportLaneId)
             ]
-            : basePrioritizedLaneIds;
+            : (canApplyChapterArcCarryoverLaneBias
+                ? [
+                    chapterArcCarryoverLaneId,
+                    ...basePrioritizedLaneIds.filter((laneId) => laneId !== chapterArcCarryoverLaneId)
+                ]
+                : basePrioritizedLaneIds);
         const prioritizedLanes = [
             ...prioritizedLaneIds
                 .map((laneId) => lanes.find((lane) => lane && lane.id === laneId))
@@ -25998,6 +26329,25 @@ class Game {
             frontier,
             seasonVerificationState: this.seasonVerificationState
         });
+        const chapterArcCarryover = chapterArc?.carryover && typeof chapterArc.carryover === 'object'
+            ? {
+                ...chapterArc.carryover,
+                applied: canApplyChapterArcCarryoverLaneBias,
+                summaryLine: canApplyChapterArcCarryoverLaneBias
+                    ? (chapterArc.carryover.summaryLine || '')
+                    : `上章承卷：${chapterArc.carryover.chapterLabel || '上章'} 的章末评语已保留，但当前周强目标更强，开局偏置暂不生效。`,
+                statusLabel: canApplyChapterArcCarryoverLaneBias ? '开局偏置' : '让位强目标',
+                guideLine: canApplyChapterArcCarryoverLaneBias
+                    ? (chapterArc.carryover.guideLine || '承卷偏置正在轻量影响当前普通开局排班。')
+                    : '上章承卷已保留为章层评语，但当前周目标更强，这道开局偏置暂不生效。'
+            }
+            : null;
+        const chapterArcPayload = chapterArcCarryover
+            ? {
+                ...chapterArc,
+                carryover: chapterArcCarryover
+            }
+            : chapterArc;
         return {
             seasonId: String(root.seasonId || 'season_board').trim().slice(0, 64) || 'season_board',
             seasonLabel: String(root.seasonLabel || root.seasonName || '赛季天道盘').trim().slice(0, 64) || '赛季天道盘',
@@ -26033,7 +26383,7 @@ class Game {
             laneRewards,
             laneRewardSummary,
             frontier,
-            chapterArc,
+            chapterArc: chapterArcPayload,
             lanes: lanesWithRewards,
             nextTask: nextTaskPayload,
             nextWeekGoal
@@ -26055,6 +26405,10 @@ class Game {
             ? String(boardNextTask.laneId || '').trim()
             : '';
         const nextLaneId = boardNextLaneId || defaultLaneId;
+        const chapterArcCarryover = board?.chapterArc?.carryover && typeof board.chapterArc.carryover === 'object'
+            ? board.chapterArc.carryover
+            : null;
+        const chapterArcFeedbackLine = String(board?.chapterArc?.feedbackLine || '').trim();
         const normalizeNodeTypes = (value = null, limit = 4) => {
             if (typeof this.normalizeSanctumAgendaNodeTypes === 'function') {
                 return this.normalizeSanctumAgendaNodeTypes(value, limit);
@@ -26193,6 +26547,32 @@ class Game {
                 weightShift: null,
                 summaryLine: `${agendaFocusLabel} 节点仍由洞府承诺牵引；${directive.label} 只保留阶段提醒，不再额外改写地图权重。`,
                 rewardLine: `当前洞府承诺会继续牵引 ${agendaFocusLabel} 节点；季盘本阶段只保留${directive.label}提醒，不再额外叠加地图偏置。`
+            };
+        }
+        if (chapterArcFeedbackLine) {
+            directive = {
+                ...directive,
+                summaryLine: [
+                    chapterArcFeedbackLine,
+                    directive.summaryLine || ''
+                ].filter(Boolean).join(' '),
+                rewardLine: [
+                    chapterArcFeedbackLine,
+                    directive.rewardLine || ''
+                ].filter(Boolean).join(' ')
+            };
+        }
+        if (chapterArcCarryover?.available) {
+            directive = {
+                ...directive,
+                summaryLine: [
+                    chapterArcCarryover.summaryLine || '',
+                    directive.summaryLine || ''
+                ].filter(Boolean).join(' '),
+                rewardLine: [
+                    chapterArcCarryover.guideLine || '',
+                    directive.rewardLine || ''
+                ].filter(Boolean).join(' ')
             };
         }
         const shift = directive.weightShift && typeof directive.weightShift === 'object'

@@ -335,6 +335,9 @@ async function safeScreenshot(page, outPath) {
     const narrative = document.getElementById('reward-narrative-brief');
     const lines = Array.from(panel?.querySelectorAll('.reward-expedition-line') || []);
     const chips = Array.from(panel?.querySelectorAll('.reward-expedition-chip') || []);
+    const chapterArcNode = panel?.querySelector('[data-season-board-chapter-arc-reward="true"]') || null;
+    const chapterArcChip = panel?.querySelector('[data-season-board-chip="chapter-arc"]') || null;
+    const chapterArcObjectiveChip = panel?.querySelector('[data-season-board-chip="chapter-arc-objective"]') || null;
     const payload = typeof window.render_game_to_text === 'function'
       ? JSON.parse(window.render_game_to_text())
       : null;
@@ -349,6 +352,11 @@ async function safeScreenshot(page, outPath) {
       narrativeText: narrative?.textContent?.replace(/\s+/g, ' ').trim() || '',
       lineTexts: lines.map((entry) => entry.textContent?.replace(/\s+/g, ' ').trim() || ''),
       chipTexts: chips.map((entry) => entry.textContent?.replace(/\s+/g, ' ').trim() || ''),
+      chapterArcText: chapterArcNode?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      chapterArcChipText: chapterArcChip?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      chapterArcObjectiveChipText: chapterArcObjectiveChip?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      chapterArcButtonCount: chapterArcNode?.querySelectorAll('button').length || 0,
+      chapterArcDataset: chapterArcNode ? { ...chapterArcNode.dataset } : null,
       rewardPayload: payload?.reward?.expedition || null,
       latestSlateId: payload?.expedition?.latestSlate?.id || null,
       rewardMetaId: game.lastExpeditionRewardMeta?.id || null
@@ -370,6 +378,32 @@ async function safeScreenshot(page, outPath) {
       && expeditionRewardProbe.narrativeText.length > 0
       && expeditionRewardProbe.lineTexts.length >= 1
       && expeditionRewardProbe.chipTexts.length >= 1
+      && /章程|三周|章节/.test(expeditionRewardProbe.chapterArcChipText || '')
+      && typeof expeditionRewardProbe.chapterArcText === 'string'
+      && expeditionRewardProbe.chapterArcText.length > 0
+      && expeditionRewardProbe.chapterArcButtonCount === 0
+      && !!expeditionRewardProbe.rewardPayload?.seasonBoard?.chapterArc
+      && !!expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective
+      && expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.available !== false
+      && typeof expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.feedbackLine === 'string'
+      && expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.feedbackLine.length > 0
+      && typeof expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.summaryLine === 'string'
+      && expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.summaryLine.length > 0
+      && expeditionRewardProbe.chapterArcText.includes(expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.feedbackLine)
+      && expeditionRewardProbe.chapterArcText.includes(expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.summaryLine)
+      && /章目标/.test(expeditionRewardProbe.chapterArcObjectiveChipText || '')
+      && expeditionRewardProbe.chapterArcObjectiveChipText.includes(
+        expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.statusLabel
+        || expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.label
+        || ''
+      )
+      && expeditionRewardProbe.chapterArcObjectiveChipText.includes(
+        expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.focusLaneLabel
+        || '本周主线'
+      )
+      && expeditionRewardProbe.chapterArcDataset?.seasonBoardChapterArcId === expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.id
+      && expeditionRewardProbe.chapterArcDataset?.seasonBoardChapterArcObjectiveId === expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.id
+      && expeditionRewardProbe.chapterArcDataset?.seasonBoardChapterArcObjectiveStatus === expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.statusId
       && expeditionRewardProbe.rewardPayload?.id === expeditionRewardProbe.rewardMetaId
       && expeditionRewardProbe.rewardPayload?.id === expeditionRewardProbe.latestSlateId
       && typeof expeditionRewardProbe.rewardPayload?.ratingLabel === 'string'
@@ -446,6 +480,8 @@ async function safeScreenshot(page, outPath) {
     const screen = document.getElementById('reward-screen');
     const sideColumn = document.querySelector('.reward-side-column');
     const panel = document.getElementById('reward-expedition-meta');
+    const chapterArcNode = panel?.querySelector('[data-season-board-chapter-arc-reward="true"]') || null;
+    const chapterArcRect = chapterArcNode?.getBoundingClientRect() || null;
     const panelRect = panel?.getBoundingClientRect() || null;
     const sideRect = sideColumn?.getBoundingClientRect() || null;
 
@@ -459,6 +495,8 @@ async function safeScreenshot(page, outPath) {
       sideColumnClientWidth: sideColumn?.clientWidth || 0,
       panelRight: panelRect ? panelRect.right : 0,
       sideRight: sideRect ? sideRect.right : 0,
+      chapterArcRight: chapterArcRect ? chapterArcRect.right : 0,
+      chapterArcText: chapterArcNode?.textContent?.replace(/\s+/g, ' ').trim() || '',
       narrativeVisible: !!document.getElementById('reward-narrative-brief')
         && getComputedStyle(document.getElementById('reward-narrative-brief')).display !== 'none'
     };
@@ -472,7 +510,9 @@ async function safeScreenshot(page, outPath) {
       && expeditionMobileProbe.screenScrollWidth <= expeditionMobileProbe.screenClientWidth + 2
       && expeditionMobileProbe.sideColumnScrollWidth <= expeditionMobileProbe.sideColumnClientWidth + 2
       && expeditionMobileProbe.panelRight <= expeditionMobileProbe.viewportWidth + 2
-      && expeditionMobileProbe.sideRight <= expeditionMobileProbe.viewportWidth + 2,
+      && expeditionMobileProbe.sideRight <= expeditionMobileProbe.viewportWidth + 2
+      && expeditionMobileProbe.chapterArcRight <= expeditionMobileProbe.viewportWidth + 2
+      && /章程|三周|章节/.test(expeditionMobileProbe.chapterArcText || ''),
     JSON.stringify(expeditionMobileProbe || null)
   );
 

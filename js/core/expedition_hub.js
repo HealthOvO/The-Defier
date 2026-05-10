@@ -932,6 +932,8 @@
         if (!root) return null;
         const rescueRoot = root.rescueWindow && typeof root.rescueWindow === 'object' ? root.rescueWindow : null;
         const reviewRoot = root.review && typeof root.review === 'object' ? root.review : null;
+        const objectiveRoot = root.objective && typeof root.objective === 'object' ? root.objective : null;
+        const carryoverRoot = root.carryover && typeof root.carryover === 'object' ? root.carryover : null;
         return {
             available: root.available !== false,
             id: String(root.id || ''),
@@ -963,6 +965,7 @@
             summaryLine: String(root.summaryLine || ''),
             statusLine: String(root.statusLine || ''),
             goalLine: String(root.goalLine || ''),
+            feedbackLine: String(root.feedbackLine || ''),
             rescueWindow: rescueRoot
                 ? {
                     available: rescueRoot.available !== false,
@@ -981,6 +984,41 @@
                     endingPreviewLine: String(reviewRoot.endingPreviewLine || ''),
                     finalCommentLine: String(reviewRoot.finalCommentLine || ''),
                     summaryLine: String(reviewRoot.summaryLine || '')
+                }
+                : null,
+            objective: objectiveRoot
+                ? {
+                    available: objectiveRoot.available !== false,
+                    id: String(objectiveRoot.id || ''),
+                    label: String(objectiveRoot.label || ''),
+                    statusId: String(objectiveRoot.statusId || ''),
+                    statusLabel: String(objectiveRoot.statusLabel || ''),
+                    focusLaneId: String(objectiveRoot.focusLaneId || ''),
+                    focusLaneLabel: String(objectiveRoot.focusLaneLabel || ''),
+                    summaryLine: String(objectiveRoot.summaryLine || ''),
+                    statusLine: String(objectiveRoot.statusLine || ''),
+                    goalLine: String(objectiveRoot.goalLine || ''),
+                    reasonLine: String(objectiveRoot.reasonLine || ''),
+                    guideLine: String(objectiveRoot.guideLine || ''),
+                    shortLine: String(objectiveRoot.shortLine || '')
+                }
+                : null,
+            carryover: carryoverRoot
+                ? {
+                    available: carryoverRoot.available !== false,
+                    chapterId: String(carryoverRoot.chapterId || ''),
+                    chapterLabel: String(carryoverRoot.chapterLabel || ''),
+                    resultId: String(carryoverRoot.resultId || ''),
+                    resultLabel: String(carryoverRoot.resultLabel || ''),
+                    dominantChoiceId: String(carryoverRoot.dominantChoiceId || ''),
+                    dominantChoiceLabel: String(carryoverRoot.dominantChoiceLabel || ''),
+                    preferredLaneId: String(carryoverRoot.preferredLaneId || ''),
+                    preferredLaneLabel: String(carryoverRoot.preferredLaneLabel || ''),
+                    openingWeek: !!carryoverRoot.openingWeek,
+                    applied: !!carryoverRoot.applied,
+                    statusLabel: String(carryoverRoot.statusLabel || ''),
+                    summaryLine: String(carryoverRoot.summaryLine || ''),
+                    guideLine: String(carryoverRoot.guideLine || '')
                 }
                 : null,
             entries: readArray(root.entries).map((entry) => ({
@@ -6337,6 +6375,15 @@
                 snapshot.strengths = Array.isArray(snapshot.strengths) ? snapshot.strengths.slice() : [];
                 snapshot.nextTargets = Array.isArray(snapshot.nextTargets) ? snapshot.nextTargets.slice() : [];
                 snapshot.strengths.unshift(`赛季天道盘当前围绕【${seasonBoard.themeLabel || '本周主轴'}】推进，处于「${seasonBoard.phaseLabel || '采样期'}」。`);
+                if (seasonBoard.chapterArc?.available) {
+                    snapshot.strengths.unshift(`三周一章当前推进到【${seasonBoard.chapterArc.arcLabel || seasonBoard.chapterArc.chapterLabel || '当前章程'}】第 ${seasonBoard.chapterArc.weekSlot || 1}/${seasonBoard.chapterArc.targetWeeks || 3} 周。`);
+                    snapshot.nextTargets.unshift(`章程跟进：${seasonBoard.chapterArc.objective?.summaryLine
+                        || seasonBoard.chapterArc.objective?.goalLine
+                        || seasonBoard.chapterArc.feedbackLine
+                        || (seasonBoard.chapterArc.rescueWindow?.open
+                        ? (seasonBoard.chapterArc.rescueWindow.guideLine || seasonBoard.chapterArc.rescueWindow.reasonLine || seasonBoard.chapterArc.statusLine || '继续跟随当前主线救火。')
+                        : (seasonBoard.chapterArc.review?.summaryLine || seasonBoard.chapterArc.goalLine || seasonBoard.chapterArc.summaryLine || '继续沿当前章程推进。'))}`);
+                }
                 snapshot.nextTargets.unshift(`赛季天道盘：${seasonBoard.guideLine || seasonBoard.statusLine || seasonBoard.summaryLine || '继续补齐本周主轴。'}`);
             }
             if (aftereffects) {
@@ -6395,6 +6442,15 @@
         if (seasonBoard) {
             snapshot.seasonBoard = seasonBoard;
             snapshot.strengths.unshift(`赛季天道盘当前围绕【${seasonBoard.themeLabel || '本周主轴'}】推进，处于「${seasonBoard.phaseLabel || '采样期'}」。`);
+            if (seasonBoard.chapterArc?.available) {
+                snapshot.strengths.unshift(`三周一章当前推进到【${seasonBoard.chapterArc.arcLabel || seasonBoard.chapterArc.chapterLabel || '当前章程'}】第 ${seasonBoard.chapterArc.weekSlot || 1}/${seasonBoard.chapterArc.targetWeeks || 3} 周。`);
+                snapshot.nextTargets.unshift(`章程跟进：${seasonBoard.chapterArc.objective?.summaryLine
+                    || seasonBoard.chapterArc.objective?.goalLine
+                    || seasonBoard.chapterArc.feedbackLine
+                    || (seasonBoard.chapterArc.rescueWindow?.open
+                    ? (seasonBoard.chapterArc.rescueWindow.guideLine || seasonBoard.chapterArc.rescueWindow.reasonLine || seasonBoard.chapterArc.statusLine || '继续跟随当前主线救火。')
+                    : (seasonBoard.chapterArc.review?.summaryLine || seasonBoard.chapterArc.goalLine || seasonBoard.chapterArc.summaryLine || '继续沿当前章程推进。'))}`);
+            }
             if (seasonBoard.crossModeSummary) {
                 snapshot.strengths.push(`赛季验算：${seasonBoard.crossModeSummary}`);
             }

@@ -319,15 +319,21 @@ function rectObj(rect) {
     const rewardSeasonBoardFrontierDecreeText = (document.querySelector('[data-season-board-frontier-decree-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardFrontierChronicleText = (document.querySelector('[data-season-board-frontier-chronicle-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardFrontierCouncilText = (document.querySelector('[data-season-board-frontier-council-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardChapterArcNode = expeditionPanel?.querySelector('[data-season-board-chapter-arc-reward="true"]') || null;
+    const rewardSeasonBoardChapterArcText = nodeText(rewardSeasonBoardChapterArcNode);
     const rewardSeasonBoardNextChipText = (expeditionPanel?.querySelector('[data-season-board-chip="next"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardFrontierChipText = (expeditionPanel?.querySelector('[data-season-board-chip="frontier"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardFrontierDecreeChipText = (expeditionPanel?.querySelector('[data-season-board-chip="frontier-decree"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardFrontierChronicleChipText = (expeditionPanel?.querySelector('[data-season-board-chip="frontier-chronicle"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardFrontierCouncilChipText = (expeditionPanel?.querySelector('[data-season-board-chip="frontier-council"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardChapterArcChipText = (expeditionPanel?.querySelector('[data-season-board-chip="chapter-arc"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardSeasonBoardChapterArcObjectiveChipText = (expeditionPanel?.querySelector('[data-season-board-chip="chapter-arc-objective"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardFrontierNodeCount = expeditionPanel?.querySelectorAll('[data-season-board-frontier-reward="true"]').length || 0;
     const rewardSeasonBoardFrontierDecreeNodeCount = expeditionPanel?.querySelectorAll('[data-season-board-frontier-decree-reward="true"]').length || 0;
     const rewardSeasonBoardFrontierChronicleNodeCount = expeditionPanel?.querySelectorAll('[data-season-board-frontier-chronicle-reward="true"]').length || 0;
     const rewardSeasonBoardFrontierCouncilNodeCount = expeditionPanel?.querySelectorAll('[data-season-board-frontier-council-reward="true"]').length || 0;
+    const rewardSeasonBoardChapterArcNodeCount = expeditionPanel?.querySelectorAll('[data-season-board-chapter-arc-reward="true"]').length || 0;
+    const rewardSeasonBoardChapterArcButtonCount = rewardSeasonBoardChapterArcNode?.querySelectorAll('button').length || 0;
     const rewardSeasonBoardLaneRewardNodes = Array.from(expeditionPanel?.querySelectorAll('[data-season-board-lane-reward="true"]') || []);
     const rewardSeasonBoardLaneRewardButtons = Array.from(expeditionPanel?.querySelectorAll('[data-season-board-lane-reward-claim="true"]') || []);
     const rewardSeasonBoardLaneRewardText = rewardSeasonBoardLaneRewardNodes.map(nodeText).join(' ').trim();
@@ -391,9 +397,11 @@ function rectObj(rect) {
         rewardSeasonBoardFrontierDecreeText.length > 0 &&
         rewardSeasonBoardFrontierChronicleText.length > 0 &&
         rewardSeasonBoardFrontierCouncilText.length > 0 &&
+        rewardSeasonBoardChapterArcText.length > 0 &&
         rewardSeasonBoardLaneRewardText.length > 0 &&
         /后效|状态|生效/.test(rewardAftereffectChipText) &&
-        /阶段|主轴|进度|行动|战线|法旨|史卷|会审/.test(rewardSeasonBoardChipText) &&
+        /阶段|主轴|进度|行动|章程|战线|法旨|史卷|会审/.test(rewardSeasonBoardChipText) &&
+        /章程|三周|章节/.test(rewardSeasonBoardChapterArcChipText) &&
         /战线/.test(rewardSeasonBoardFrontierChipText) &&
         /法旨/.test(rewardSeasonBoardFrontierDecreeChipText) &&
         /史卷/.test(rewardSeasonBoardFrontierChronicleChipText) &&
@@ -412,6 +420,14 @@ function rectObj(rect) {
         !!rewardSeasonBoard.settlement.outcomeLabel &&
         !!rewardSeasonBoard.progress &&
         !!rewardSeasonBoard.progress.progressText &&
+        !!rewardSeasonBoard.chapterArc &&
+        !!rewardSeasonBoard.chapterArc.summaryLine &&
+        !!rewardSeasonBoard.chapterArc.feedbackLine &&
+        !!rewardSeasonBoard.chapterArc.objective &&
+        !!rewardSeasonBoard.chapterArc.objective.summaryLine &&
+        !!rewardSeasonBoard.chapterArc.objective.goalLine &&
+        !!rewardSeasonBoard.chapterArc.objective.focusLaneLabel &&
+        !!rewardSeasonBoard.chapterArc.progressText &&
         !!rewardSeasonBoard.nextTask &&
         rewardSeasonBoard.settlement.outcomeId === 'locking_sheet' &&
         rewardSeasonBoard.nextTask.id === 'season_commitment' &&
@@ -461,6 +477,25 @@ function rectObj(rect) {
         rewardSeasonBoardFrontierDecreeNodeCount === 1 &&
         rewardSeasonBoardFrontierChronicleNodeCount === 1 &&
         rewardSeasonBoardFrontierCouncilNodeCount === 1 &&
+        rewardSeasonBoardChapterArcNodeCount === 1 &&
+        rewardSeasonBoardChapterArcButtonCount === 0 &&
+        rewardSeasonBoardChapterArcNode?.dataset?.seasonBoardChapterArcId === rewardSeasonBoard.chapterArc.id &&
+        rewardSeasonBoardChapterArcNode?.dataset?.seasonBoardChapterArcWeekSlot === String(rewardSeasonBoard.chapterArc.weekSlot || '') &&
+        rewardSeasonBoard.chapterArc.objective.available !== false &&
+        rewardSeasonBoardChapterArcNode?.dataset?.seasonBoardChapterArcObjectiveId === rewardSeasonBoard.chapterArc.objective.id &&
+        rewardSeasonBoardChapterArcNode?.dataset?.seasonBoardChapterArcObjectiveStatus === rewardSeasonBoard.chapterArc.objective.statusId &&
+        rewardSeasonBoardChapterArcText.includes(rewardSeasonBoard.chapterArc.arcLabel || rewardSeasonBoard.chapterArc.chapterLabel || '') &&
+        rewardSeasonBoardChapterArcText.includes(rewardSeasonBoard.chapterArc.summaryLine || '') &&
+        rewardSeasonBoardChapterArcText.includes(rewardSeasonBoard.chapterArc.objective.summaryLine || '') &&
+        rewardSeasonBoardChapterArcText.includes(rewardSeasonBoard.chapterArc.feedbackLine || '') &&
+        (
+          rewardSeasonBoardChapterArcText.includes(rewardSeasonBoard.chapterArc.rescueWindow?.guideLine || '')
+          || rewardSeasonBoardChapterArcText.includes(rewardSeasonBoard.chapterArc.review?.summaryLine || '')
+          || rewardSeasonBoardChapterArcText.includes(rewardSeasonBoard.chapterArc.goalLine || '')
+        ) &&
+        /章目标/.test(rewardSeasonBoardChapterArcObjectiveChipText) &&
+        rewardSeasonBoardChapterArcObjectiveChipText.includes(rewardSeasonBoard.chapterArc.objective.statusLabel || rewardSeasonBoard.chapterArc.objective.label || '') &&
+        rewardSeasonBoardChapterArcObjectiveChipText.includes(rewardSeasonBoard.chapterArc.objective.focusLaneLabel || '本周主线') &&
         rewardSeasonBoardFrontierText.includes(rewardSeasonBoard.frontier.primaryFrontShortLabel || rewardSeasonBoard.frontier.primaryFrontLabel || '') &&
         rewardSeasonBoardFrontierDecreeText.includes(rewardSeasonBoard.frontier.decree.laneLabel || rewardSeasonBoard.frontier.primaryFrontShortLabel || '') &&
         rewardSeasonBoardFrontierChronicleText.includes(rewardSeasonBoard.frontier.chronicle.laneLabel || rewardSeasonBoard.frontier.primaryFrontShortLabel || '') &&
@@ -607,15 +642,20 @@ function rectObj(rect) {
       rewardSeasonBoardFrontierDecreeText,
       rewardSeasonBoardFrontierChronicleText,
       rewardSeasonBoardFrontierCouncilText,
+      rewardSeasonBoardChapterArcText,
       rewardSeasonBoardNextChipText,
       rewardSeasonBoardFrontierChipText,
       rewardSeasonBoardFrontierDecreeChipText,
       rewardSeasonBoardFrontierChronicleChipText,
       rewardSeasonBoardFrontierCouncilChipText,
+      rewardSeasonBoardChapterArcChipText,
+      rewardSeasonBoardChapterArcObjectiveChipText,
       rewardSeasonBoardFrontierNodeCount,
       rewardSeasonBoardFrontierDecreeNodeCount,
       rewardSeasonBoardFrontierChronicleNodeCount,
       rewardSeasonBoardFrontierCouncilNodeCount,
+      rewardSeasonBoardChapterArcNodeCount,
+      rewardSeasonBoardChapterArcButtonCount,
       rewardSeasonBoardLaneRewardText,
       rewardSeasonBoardLaneRewardChipText,
       rewardSeasonBoardLaneRewardClaimableCount,
@@ -644,6 +684,7 @@ function rectObj(rect) {
       rewardPrimaryHandoffText,
       rewardHandoffButtonCount,
       rewardSeasonBoardChipText,
+      rewardSeasonBoardChapterArcDataset: rewardSeasonBoardChapterArcNode ? { ...rewardSeasonBoardChapterArcNode.dataset } : null,
       skipText: skipBtn.textContent || '',
       expectedSkipCost,
     };
@@ -817,9 +858,13 @@ function rectObj(rect) {
     }
     const chapterSeasonBoard = payload?.map?.chapter?.seasonBoard || null;
     const frontier = chapterSeasonBoard?.frontier || null;
+    const chapterArc = chapterSeasonBoard?.chapterArc || null;
     const decree = frontier?.decree || null;
     const chronicle = frontier?.chronicle || null;
     const council = frontier?.council || null;
+    const mapChapterArc = document.querySelector('#map-chapter-brief [data-map-season-board-chapter-arc="true"]');
+    const mapChapterArcChip = document.querySelector('#map-chapter-brief [data-map-season-board-chip="chapter-arc"]');
+    const mapChapterArcObjectiveChip = document.querySelector('#map-chapter-brief [data-map-season-board-chip="chapter-arc-objective"]');
     const mapFrontier = document.querySelector('#map-chapter-brief [data-map-season-board-frontier="true"]');
     const mapFrontierChip = document.querySelector('#map-chapter-brief [data-map-season-board-chip="frontier"]');
     const mapFrontierDecree = document.querySelector('#map-chapter-brief [data-map-season-board-frontier-decree="true"]');
@@ -829,9 +874,18 @@ function rectObj(rect) {
     const mapFrontierCouncil = document.querySelector('#map-chapter-brief [data-map-season-board-frontier-council="true"]');
     const mapFrontierCouncilChip = document.querySelector('#map-chapter-brief [data-map-season-board-chip="frontier-council"]');
     const mapFrontierActionCount = document.querySelectorAll('#map-chapter-brief [data-season-board-frontier-action="true"]').length;
+    const mapChapterArcButtonCount = mapChapterArc?.querySelectorAll('button').length || 0;
     return {
       ok:
         game.currentScreen === 'map-screen' &&
+        !!chapterArc &&
+        !!chapterArc.id &&
+        !!chapterArc.summaryLine &&
+        !!chapterArc.feedbackLine &&
+        !!chapterArc.objective &&
+        !!chapterArc.objective.summaryLine &&
+        !!chapterArc.objective.goalLine &&
+        !!chapterArc.objective.focusLaneLabel &&
         !!frontier &&
         frontier.primaryFrontId &&
         frontier.actionLaneId === frontier.primaryFrontId &&
@@ -850,12 +904,29 @@ function rectObj(rect) {
         council.laneOpinions.length === 3 &&
         !!mapFrontier &&
         !!mapFrontierChip &&
+        !!mapChapterArc &&
+        !!mapChapterArcChip &&
+        !!mapChapterArcObjectiveChip &&
         !!mapFrontierDecree &&
         !!mapFrontierDecreeChip &&
         !!mapFrontierChronicle &&
         !!mapFrontierChronicleChip &&
         !!mapFrontierCouncil &&
         !!mapFrontierCouncilChip &&
+        mapChapterArc.dataset.seasonBoardChapterArcId === chapterArc.id &&
+        mapChapterArc.dataset.seasonBoardChapterArcWeekSlot === String(chapterArc.weekSlot || '') &&
+        chapterArc.objective.available !== false &&
+        mapChapterArc.dataset.seasonBoardChapterArcObjectiveId === chapterArc.objective.id &&
+        mapChapterArc.dataset.seasonBoardChapterArcObjectiveStatus === chapterArc.objective.statusId &&
+        text(mapChapterArc).includes(chapterArc.arcLabel || chapterArc.chapterLabel || '') &&
+        text(mapChapterArc).includes(chapterArc.summaryLine || '') &&
+        text(mapChapterArc).includes(chapterArc.objective.summaryLine || '') &&
+        text(mapChapterArc).includes(chapterArc.feedbackLine || '') &&
+        /章程|三周|章节/.test(text(mapChapterArcChip)) &&
+        /章目标/.test(text(mapChapterArcObjectiveChip)) &&
+        text(mapChapterArcObjectiveChip).includes(chapterArc.objective.statusLabel || chapterArc.objective.label || '') &&
+        text(mapChapterArcObjectiveChip).includes(chapterArc.objective.focusLaneLabel || '本周主线') &&
+        mapChapterArcButtonCount === 0 &&
         mapFrontier.dataset.seasonBoardFrontierId === frontier.primaryFrontId &&
         mapFrontier.dataset.seasonBoardFrontierPressure === frontier.statusId &&
         mapFrontier.dataset.seasonBoardFrontierActionLaneId === frontier.actionLaneId &&
@@ -881,10 +952,15 @@ function rectObj(rect) {
         /诸界会审|会审/.test(text(mapFrontierCouncilChip)) &&
         mapFrontierActionCount === 0,
       currentScreen: game.currentScreen || '',
+      chapterArc,
+      chapterArcObjective: chapterArc?.objective || null,
       frontier,
       decree,
       chronicle,
       council,
+      mapChapterArcText: text(mapChapterArc),
+      mapChapterArcChipText: text(mapChapterArcChip),
+      mapChapterArcObjectiveChipText: text(mapChapterArcObjectiveChip),
       mapFrontierText: text(mapFrontier),
       mapFrontierChipText: text(mapFrontierChip),
       mapFrontierDecreeText: text(mapFrontierDecree),
@@ -897,7 +973,9 @@ function rectObj(rect) {
       mapFrontierDecreeDataset: mapFrontierDecree ? { ...mapFrontierDecree.dataset } : null,
       mapFrontierChronicleDataset: mapFrontierChronicle ? { ...mapFrontierChronicle.dataset } : null,
       mapFrontierCouncilDataset: mapFrontierCouncil ? { ...mapFrontierCouncil.dataset } : null,
-      mapFrontierActionCount
+      mapFrontierActionCount,
+      mapChapterArcDataset: mapChapterArc ? { ...mapChapterArc.dataset } : null,
+      mapChapterArcButtonCount
     };
   });
   add(
@@ -1494,6 +1572,8 @@ function rectObj(rect) {
         rewardSeasonBoard?.settlement?.resolvedStatus === 'verified' &&
         rewardSeasonBoard?.debtPack?.status === 'cleared' &&
         rewardSeasonBoard?.debtPack?.occupiesStrongSlot === false &&
+        rewardSeasonBoard?.debtPack?.deferCount === 0 &&
+        rewardWeekVerdictLedger?.deferCount === 0 &&
         Array.isArray(rewardSeasonBoard?.verificationOrders) &&
         rewardSeasonBoard.verificationOrders.length === 2 &&
         rewardSeasonBoard?.verificationOrders?.[0]?.resultStatus === 'verified' &&
@@ -1795,6 +1875,8 @@ function rectObj(rect) {
         rewardSeasonBoard?.settlement?.resolvedStatus === 'failed' &&
         rewardSeasonBoard?.debtPack?.status === 'degraded' &&
         rewardSeasonBoard?.debtPack?.occupiesStrongSlot === false &&
+        rewardSeasonBoard?.debtPack?.deferCount === 0 &&
+        rewardWeekVerdictLedger?.deferCount === 0 &&
         !!rewardSeasonBoard?.verificationOrders?.[0]?.summaryLine &&
         Array.isArray(rewardSeasonBoard?.verificationOrders) &&
         rewardSeasonBoard.verificationOrders.length === 2 &&
@@ -3245,11 +3327,22 @@ function rectObj(rect) {
     const sanctumSeasonBoardVerificationCardText = (document.querySelector('#sanctum-summary [data-season-board-verification-card="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const sanctumSeasonBoardChapterArc = (document.querySelector('#sanctum-summary [data-season-board-chapter-arc="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const sanctumSeasonBoardChapterArcChipText = (document.querySelector('#sanctum-summary [data-season-board-chip="chapter-arc"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardChapterArcObjectiveTexts = Array.from(document.querySelectorAll('#sanctum-summary [data-season-board-chapter-arc-objective="true"]'))
+      .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    const sanctumSeasonBoardChapterArcObjectiveText = sanctumSeasonBoardChapterArcObjectiveTexts.join(' ').trim();
+    const sanctumSeasonBoardChapterArcObjectiveChipText = (document.querySelector('#sanctum-summary [data-season-board-chip="chapter-arc-objective"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const sanctumSeasonBoardChapterArcCard = document.querySelector('#sanctum-summary [data-season-board-chapter-arc-card="true"]');
     const sanctumSeasonBoardChapterArcCardText = (sanctumSeasonBoardChapterArcCard?.textContent || '').replace(/\s+/g, ' ').trim();
     const sanctumSeasonBoardChapterArcButtonCount = sanctumSeasonBoardChapterArcCard?.querySelectorAll('button').length || 0;
+    const sanctumSeasonBoardChapterArcFollow = sanctumSeasonBoardChapterArcCard?.querySelector('[data-season-board-chapter-arc-follow="true"]') || null;
+    const sanctumSeasonBoardChapterArcFollowCount = sanctumSeasonBoardChapterArcCard?.querySelectorAll('[data-season-board-chapter-arc-follow="true"]').length || 0;
+    const sanctumSeasonBoardChapterArcFollowTaskId = sanctumSeasonBoardChapterArcFollow?.getAttribute('data-season-board-chapter-arc-follow-task-id') || '';
+    const sanctumSeasonBoardChapterArcFollowSource = sanctumSeasonBoardChapterArcFollow?.getAttribute('data-season-board-chapter-arc-follow-source') || '';
+    const sanctumSeasonBoardChapterArcFollowText = (sanctumSeasonBoardChapterArcFollow?.textContent || '').replace(/\s+/g, ' ').trim();
     const sanctumSeasonBoardChapterArcResearchCount = document.querySelectorAll('#sanctum-research-list [data-season-board-chapter-arc="true"]').length;
     const sanctumSeasonBoardChapterArcGoalCount = document.querySelectorAll('#sanctum-goal-list [data-season-board-chapter-arc="true"]').length;
+    const sanctumSeasonBoardChapterArcObjectiveCount = document.querySelectorAll('#sanctum-summary [data-season-board-chapter-arc-objective="true"]').length;
     const sanctumSeasonBoardGoalCount = document.querySelectorAll('#sanctum-goal-list [data-season-board-goal="true"]').length;
     const sanctumSeasonBoardLaneCount = document.querySelectorAll('#sanctum-summary [data-season-board-lane="true"]').length;
     const sanctumSeasonBoardTaskCount = document.querySelectorAll('#sanctum-summary [data-season-board-task="true"]').length;
@@ -3358,6 +3451,7 @@ function rectObj(rect) {
         /结业验证/.test(sanctumSeasonBoardVerificationGuide) &&
         /季盘阶段|赛季主轴|季盘进度|季押卷|战线/.test(sanctumSeasonBoardChipsText) &&
         /章程|章节|三周/.test(sanctumSeasonBoardChapterArcChipText) &&
+        /章目标/.test(sanctumSeasonBoardChipsText) &&
         /法旨/.test(sanctumSeasonBoardChipsText) &&
         /史卷/.test(sanctumSeasonBoardChipsText) &&
         /会审/.test(sanctumSeasonBoardChipsText) &&
@@ -3365,8 +3459,20 @@ function rectObj(rect) {
         /季押卷裁定/.test(sanctumSeasonBoardSettlementCardText) &&
         /结业验证状/.test(sanctumSeasonBoardVerificationCardText) &&
         sanctumSeasonBoardChapterArc.length > 0 &&
+        !!expeditionSeasonBoard.chapterArc?.objective &&
+        expeditionSeasonBoard.chapterArc.objective.available !== false &&
+        sanctumSeasonBoardChapterArcObjectiveCount >= 1 &&
+        sanctumSeasonBoardChapterArcObjectiveText.includes(expeditionSeasonBoard.chapterArc.objective.summaryLine || '') &&
+        /章目标/.test(sanctumSeasonBoardChapterArcObjectiveChipText) &&
+        sanctumSeasonBoardChapterArcObjectiveChipText.includes(expeditionSeasonBoard.chapterArc.objective.statusLabel || expeditionSeasonBoard.chapterArc.objective.label || '') &&
+        sanctumSeasonBoardChapterArcObjectiveChipText.includes(expeditionSeasonBoard.chapterArc.objective.focusLaneLabel || '经营目标') &&
         sanctumSeasonBoardChapterArcCardText.length > 0 &&
-        sanctumSeasonBoardChapterArcButtonCount === 0 &&
+        sanctumSeasonBoardChapterArcCardText.includes(expeditionSeasonBoard.chapterArc.objective.summaryLine || '') &&
+        sanctumSeasonBoardChapterArcFollowCount === 1 &&
+        sanctumSeasonBoardChapterArcButtonCount === sanctumSeasonBoardChapterArcFollowCount &&
+        sanctumSeasonBoardChapterArcFollowTaskId.length > 0 &&
+        !['chapterArc', 'chapter_arc'].includes(sanctumSeasonBoardChapterArcFollowSource) &&
+        /主线|救火|复盘|跟进/.test(sanctumSeasonBoardChapterArcFollowText) &&
         sanctumSeasonBoardChapterArcResearchCount === 0 &&
         sanctumSeasonBoardChapterArcGoalCount === 0 &&
         sanctumSeasonBoardGoalCount >= 2 &&
@@ -3491,8 +3597,15 @@ function rectObj(rect) {
       sanctumSeasonBoardVerificationCardText,
       sanctumSeasonBoardChapterArc,
       sanctumSeasonBoardChapterArcChipText,
+      sanctumSeasonBoardChapterArcObjectiveText,
+      sanctumSeasonBoardChapterArcObjectiveChipText,
       sanctumSeasonBoardChapterArcCardText,
       sanctumSeasonBoardChapterArcButtonCount,
+      sanctumSeasonBoardChapterArcFollowCount,
+      sanctumSeasonBoardChapterArcObjectiveCount,
+      sanctumSeasonBoardChapterArcFollowTaskId,
+      sanctumSeasonBoardChapterArcFollowSource,
+      sanctumSeasonBoardChapterArcFollowText,
       sanctumSeasonBoardChapterArcResearchCount,
       sanctumSeasonBoardChapterArcGoalCount,
       sanctumSeasonBoardGoalCount,
@@ -3614,6 +3727,49 @@ function rectObj(rect) {
     'sanctum side verification research clicks through to seeded weekly challenge hub',
     !!sanctumSideVerificationResearchClickProbe?.ok,
     JSON.stringify(sanctumSideVerificationResearchClickProbe || null)
+  );
+
+  await reopenSanctumCollection();
+  const sanctumChapterArcFollowSelector = '#sanctum-summary [data-season-board-chapter-arc-follow="true"]';
+  const sanctumChapterArcFollowCount = await page.locator(sanctumChapterArcFollowSelector).count();
+  let sanctumChapterArcFollowProbe = {
+    ok: false,
+    reason: 'missing_chapter_arc_follow_button',
+    followCount: sanctumChapterArcFollowCount
+  };
+  if (sanctumChapterArcFollowCount > 0) {
+    await page.click(sanctumChapterArcFollowSelector, { timeout: 5000, force: true });
+    await page.waitForTimeout(250);
+    sanctumChapterArcFollowProbe = await page.evaluate((selector) => {
+      const button = document.querySelector(selector);
+      const taskId = button?.getAttribute('data-season-board-chapter-arc-follow-task-id') || '';
+      const source = button?.getAttribute('data-season-board-chapter-arc-follow-source') || '';
+      const follow = window.game?.lastSeasonBoardTaskFollow || null;
+      const notice = window.game?.lastSeasonBoardTaskFollowNotice || null;
+      const pending = window.game?.pendingSeasonBoardTaskFollowNotice || null;
+      return {
+        ok:
+          !!taskId &&
+          !['chapterArc', 'chapter_arc'].includes(source) &&
+          follow?.taskId === taskId &&
+          !['chapterArc', 'chapter_arc'].includes(follow?.source) &&
+          notice?.sourceKey === 'task' &&
+          notice?.taskId === taskId &&
+          !['chapterArc', 'chapter_arc'].includes(notice?.source) &&
+          (!pending || pending.sourceKey === 'task'),
+        taskId,
+        source,
+        currentScreen: window.game?.currentScreen || '',
+        follow,
+        notice,
+        pending
+      };
+    }, sanctumChapterArcFollowSelector);
+  }
+  add(
+    'sanctum chapter arc follow button reuses the current season nextTask',
+    !!sanctumChapterArcFollowProbe?.ok,
+    JSON.stringify(sanctumChapterArcFollowProbe || null)
   );
 
   const sanctumSeasonVerificationArchiveProbe = await page.evaluate(() => {
