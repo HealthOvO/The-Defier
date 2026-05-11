@@ -1,5 +1,35 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-05-10: V9.2《三周一章：章势压强》M6 开发完成
+  - 本轮策划
+    - 在 M5 的章目标板之外，继续把 `seasonBoard.chapterArc` 发展成一块更稳定的只读章势压强层：当玩家在 reward / expedition / map / Sanctum 看到三周章程时，除了章目标与章末回响，还能同步看到一条统一的 `pressureWindow`，用来解释当前章势节奏、压强状态与章内导引，但仍不引入第二任务源。
+    - 交互边界继续收口为：`chapterArc.pressureWindow` 只做解释层和跨页镜像，不暴露 `actionType / actionValue / ctaLabel / taskId`，不成为 `nextTask / nextWeekGoal.source`，也不新增 reward 第二主 CTA 或 map 行动按钮。
+  - 本轮完成
+    - `js/game.js`
+      - 新增并归一化 `seasonBoard.chapterArc.pressureWindow`，让章势压强在 reward / expedition / map / Sanctum 之间保持同一口径。
+      - `chapterArc.pressureWindow` 只作为读侧说明存在，不会改变 CTA 统计、任务源归属或普通排班逻辑。
+    - `js/core/expedition_hub.js`
+      - 补齐 `seasonBoard.chapterArc.pressureWindow` 的跨页序列化与快照镜像，避免 reward / expedition / map 之间出现解释层缺字段。
+    - `js/core/collection_hub.js`
+      - 洞府章卡与总览新增 `pressureWindow` 的卡片行、dataset 镜像与 `章势` chip，让 Sanctum 能同时解释章势状态、章内导引与当前跟进边界，但仍保持零新增任务入口。
+    - `js/core/map.js`
+      - 地图章节简报补齐 `pressureWindow` 读侧文案，让章节压强在地图页与其他页面保持一致。
+    - `tests/sanity_season_board_system_checks.js`
+      - 增加 `pressureWindow` 只读投影断言，锁住“它是解释层，不是任务层”的边界。
+    - `tests/browser_meta_screen_audit.mjs` / `tests/browser_run_path_reward_audit.mjs`
+      - 增加 reward / map / Sanctum 的章势压强镜像、chip、dataset 与移动端展示检查。
+  - 本轮验证
+    - `node --check js/game.js` ✅
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check js/core/expedition_hub.js` ✅
+    - `node --check js/core/map.js` ✅
+    - `node --check tests/sanity_season_board_system_checks.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node --check tests/browser_run_path_reward_audit.mjs` ✅
+  - 当前结论
+    - V9.2 M6 已把 `chapterArc` 的章内压强压成统一的 `pressureWindow` 只读解释层，并同步到 reward / expedition / map / Sanctum。
+    - 这层章势压强只负责说明当前节奏与导引，不会增加第二任务源、不会新增 map 行动按钮，也不会改变 reward CTA 结构。
+
 - 2026-05-09: V9.2《三周一章：章目标板》M5 开发完成
   - 本轮策划
     - 在 M4 的章末回响之外，继续把 `seasonBoard.chapterArc` 发展成一块更清晰的只读章目标板：当玩家在 reward / expedition / map / Sanctum 看到三周章程时，除了章末评语，还能看到一条统一的 `objective`，用来解释当前章势、当前章目标、焦点战线与后续指引，但仍不引入第二任务源。
@@ -8852,3 +8882,18 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - 当前结论
     - 远征的“课题 -> 答卷 -> 归卷”现在终于在真实奖励页有了主舞台：章节结束时会把评分、偏题诊断、训练建议和关键留痕一起压成观星回响总结卡。
     - 这条结算卡既能承接完整成卷，也能在“还没成卷”的章节给出默认诊断，不再出现只收档案、不做反馈的真空层。
+## 2026-05-11 Mobile Audit Closure
+
+- 变更
+  - 新增 `tests/browser_challenge_mobile_flow_audit.mjs`，单独覆盖挑战移动端 hub / 开局锁定 / 运行横幅 / 回放 / 失败回档链路。
+  - 新增 `tests/browser_reward_meta_mobile_audit.mjs`，单独覆盖奖励页移动端季盘 dense panel、章程块、结题赏按钮与 CTA 可达性。
+  - 新增 `tests/browser_pvp_mobile_result_audit.mjs`，单独覆盖 PVP 移动端结果层内容、布局与回榜单回路。
+  - 新增 `tests/sanity_intro_progress_sync_checks.js`，用文件级 sanity 把 `game-intro.html` 与 `progress.md` 的版本锚点收成固定门禁。
+  - `js/game.js` / `index.html` 将游戏内更新页与首页版本标识同步到 `V9.2`，并补入 `三周一章 / feedbackLine / objective / pressureWindow` 文案锚点，消除 guide modal 的版本漂移。
+
+- 验证
+  - `node tests/browser_challenge_mobile_flow_audit.mjs http://127.0.0.1:4173 output/browser-challenge-mobile-flow-audit` ✅
+  - `node tests/browser_reward_meta_mobile_audit.mjs http://127.0.0.1:4173 output/browser-reward-meta-mobile-audit` ✅
+  - `node tests/browser_pvp_mobile_result_audit.mjs http://127.0.0.1:4173 output/browser-pvp-mobile-result-audit` ✅
+  - `node tests/sanity_intro_progress_sync_checks.js` ✅
+  - `node tests/browser_guide_modal_audit.mjs http://127.0.0.1:4173 output/browser-guide-modal-audit-sync` ✅

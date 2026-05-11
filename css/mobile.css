@@ -7,7 +7,7 @@
 
     /* --- Global Resets & Adjustments --- */
     :root {
-        --card-width-mobile: 100px;
+        --card-width-mobile: 88px;
         --card-height-mobile: 140px;
         --spacing-md: 10px;
         --spacing-lg: 16px;
@@ -975,7 +975,11 @@
     }
 
     #battle-command-panel .battle-tactical-advisor {
-        display: none;
+        display: block;
+        margin-top: 6px;
+        max-height: 34px;
+        opacity: 1;
+        overflow: hidden;
     }
 
     #legacy-mission-tracker {

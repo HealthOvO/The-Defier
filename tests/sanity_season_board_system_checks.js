@@ -326,6 +326,18 @@ function assertSeasonBoardChapterArc(board, label) {
       && board.chapterArc.review?.summaryLine
       && board.chapterArc.review?.endingPreviewLine
       && board.chapterArc.review?.finalCommentLine
+      && board.chapterArc.rescueWindow?.available === true
+      && typeof board.chapterArc.rescueWindow?.open === 'boolean'
+      && board.chapterArc.rescueWindow?.statusId
+      && board.chapterArc.rescueWindow?.statusLabel
+      && board.chapterArc.rescueWindow?.reasonLine
+      && board.chapterArc.rescueWindow?.guideLine
+      && board.chapterArc.pressureWindow?.available === true
+      && typeof board.chapterArc.pressureWindow?.open === 'boolean'
+      && board.chapterArc.pressureWindow?.statusId
+      && board.chapterArc.pressureWindow?.statusLabel
+      && board.chapterArc.pressureWindow?.reasonLine
+      && board.chapterArc.pressureWindow?.guideLine
       && board.chapterArc.objective?.available === true
       && board.chapterArc.objective?.id
       && board.chapterArc.objective?.label
@@ -345,7 +357,7 @@ function assertSeasonBoardChapterArc(board, label) {
     `${sourceLabel} should expose review objective and rescueWindow panels, got ${JSON.stringify(board.chapterArc)}`
   );
   assert(
-    !hasNestedKey(board.chapterArc, new Set(['actionType', 'actionValue', 'ctaLabel', 'taskId', 'buttonLabel', 'anchorSection', 'source', 'sourceId'])),
+    !hasNestedKey(board.chapterArc, new Set(['actionType', 'actionValue', 'ctaLabel', 'taskId', 'buttonLabel', 'anchorSection', 'source', 'sourceId', 'laneId'])),
     `${sourceLabel} should stay read-only and not expose action metadata, got ${JSON.stringify(board.chapterArc)}`
   );
   if (board.nextTask) {
@@ -386,6 +398,15 @@ function assertSeasonBoardChapterArcMirror(payload, label) {
     })}`
   );
   assert(
+    JSON.stringify(rewardChapterArc.pressureWindow || null) === JSON.stringify(expeditionChapterArc.pressureWindow || null)
+      && JSON.stringify(rewardChapterArc.pressureWindow || null) === JSON.stringify(chapterChapterArc.pressureWindow || null),
+    `${sourceLabel} should mirror chapterArc pressureWindow across reward / expedition / map, got ${JSON.stringify({
+      reward: rewardChapterArc.pressureWindow,
+      expedition: expeditionChapterArc.pressureWindow,
+      chapter: chapterChapterArc.pressureWindow
+    })}`
+  );
+  assert(
     rewardChapterArc.objective?.available === true
       && rewardChapterArc.objective?.id
       && rewardChapterArc.objective?.summaryLine
@@ -409,7 +430,7 @@ function assertSeasonBoardChapterArcDerivedNotPersisted(game, storage, label) {
   const saved = JSON.parse(storage.getItem('theDefierSave') || '{}');
   assert(
     saved?.seasonVerificationState
-      && !hasNestedKey(saved.seasonVerificationState, new Set(['chapterArc', 'dominantChoiceId', 'review', 'rescueWindow', 'entries'])),
+      && !hasNestedKey(saved.seasonVerificationState, new Set(['chapterArc', 'dominantChoiceId', 'review', 'rescueWindow', 'pressureWindow', 'entries'])),
     `${sourceLabel} should keep chapterArc out of seasonVerificationState, got ${JSON.stringify(saved?.seasonVerificationState)}`
   );
 }
@@ -3225,6 +3246,151 @@ function loadFile(ctx, filePath) {
   assert(
     /旁验证|旁证|周挑战/.test(String(reinforcedRiskyBoard.settlement?.detailLine || reinforcedRiskyBoard.settlement?.guideLine || '')),
     `explicit side verification success should reinforce the risky board copy, got ${JSON.stringify(reinforcedRiskyBoard?.settlement)}`
+  );
+
+  resetStorages();
+  const endlessCollapsePreserveGame = createGame();
+  const preserveWeekMeta = endlessCollapsePreserveGame.getHeavenlyMandateWeekMeta();
+  localStorage.setItem('theDefierSave', JSON.stringify({ version: 'test-preserve' }));
+  endlessCollapsePreserveGame.sanctumAgendaState = endlessCollapsePreserveGame.normalizeSanctumAgendaState({
+    activeAgenda: null,
+    lastResolved: {
+      agendaId: 'preserve_meta_agenda',
+      name: '镜债回流',
+      sourceRunId: 'preserve_meta_run',
+      boundChapterIndex: 6,
+      selectedContractLabel: '逆压还债',
+      selectedDecisionLabel: '回流清账',
+      contractResolved: false,
+      contractSuccess: false,
+      contractResolutionLine: '上一道镜债锁线尚未彻底清账。',
+      recoveryEligible: true,
+      recoveryLine: '镜债未清，仍需下一轮主验证回写。',
+      recoveryHintLine: '无尽或天道榜主验证通过后才能真正释放本周强目标。',
+      outcome: 'failed',
+      outcomeLabel: '欠卷待清',
+      updatedAt: Date.now()
+    },
+    history: []
+  });
+  endlessCollapsePreserveGame.heavenlyMandateState = endlessCollapsePreserveGame.normalizeHeavenlyMandateState({
+    weekTag: preserveWeekMeta.weekTag,
+    weekLabel: preserveWeekMeta.weekLabel,
+    summaryLine: '欠卷强目标仍待清账。',
+    lanes: [
+      {
+        id: 'verification',
+        label: '验算线',
+        icon: '🏁',
+        tasks: [
+          {
+            id: 'preserve_meta_task',
+            label: '优先清债',
+            progress: 0,
+            target: 1,
+            anchorSection: 'endless',
+            source: 'debtPack',
+            sourceId: 'preserve_meta_debt',
+            occupiesStrongSlot: true
+          }
+        ]
+      }
+    ]
+  });
+  endlessCollapsePreserveGame.seasonVerificationState = endlessCollapsePreserveGame.normalizeSeasonVerificationState({
+    weekTag: preserveWeekMeta.weekTag,
+    weekLabel: preserveWeekMeta.weekLabel,
+    records: [
+      {
+        recordId: 'preserve_meta_primary',
+        weekTag: preserveWeekMeta.weekTag,
+        weekLabel: preserveWeekMeta.weekLabel,
+        role: 'primary',
+        sourceMode: 'endless',
+        sourceModeLabel: '无尽轮回',
+        label: '无尽反证',
+        resultStatus: 'failed',
+        writebackMode: 'degrade',
+        summaryLine: '无尽轮回给出了反证。',
+        detailLine: '这条主轴需要先回收错题。',
+        statusLine: '无尽轮回 · 反证已入账',
+        anchorSection: 'endless',
+        createdAt: Date.now() - 1,
+        updatedAt: Date.now()
+      }
+    ],
+    history: []
+  });
+  endlessCollapsePreserveGame.fateAftereffectState = endlessCollapsePreserveGame.normalizeFateAftereffectState({
+    records: [],
+    history: [],
+    lastResolved: {
+      recordId: 'preserve_meta_aftereffect',
+      icon: '🩸',
+      name: '镜债回流',
+      sourceRunId: 'preserve_meta_run',
+      sourceAgendaId: 'preserve_meta_agenda',
+      sourceLabel: '镜债回流',
+      templateId: 'risk_bias',
+      outcomeId: 'recovery',
+      chapterIndex: 6,
+      chapterName: '第 6 章·星镜归档',
+      durationChapters: 2,
+      summaryLine: '镜债回流：旧债仍未真正清账。',
+      detailLine: '研究债账仍在回流，需要主验证给出真正写回。',
+      createdAt: Date.now()
+    }
+  });
+  const preservedSeasonMetaSnapshot = {
+    sanctumAgendaState: JSON.stringify(endlessCollapsePreserveGame.sanctumAgendaState),
+    heavenlyMandateState: JSON.stringify(endlessCollapsePreserveGame.heavenlyMandateState),
+    seasonVerificationState: JSON.stringify(endlessCollapsePreserveGame.seasonVerificationState),
+    fateAftereffectState: JSON.stringify(endlessCollapsePreserveGame.fateAftereffectState)
+  };
+  endlessCollapsePreserveGame.clearSave({ preserveSeasonMeta: true });
+  assert(
+    JSON.stringify(endlessCollapsePreserveGame.sanctumAgendaState) === preservedSeasonMetaSnapshot.sanctumAgendaState
+      && JSON.stringify(endlessCollapsePreserveGame.heavenlyMandateState) === preservedSeasonMetaSnapshot.heavenlyMandateState
+      && JSON.stringify(endlessCollapsePreserveGame.seasonVerificationState) === preservedSeasonMetaSnapshot.seasonVerificationState
+      && JSON.stringify(endlessCollapsePreserveGame.fateAftereffectState) === preservedSeasonMetaSnapshot.fateAftereffectState,
+    `preserveSeasonMeta clearSave should keep season meta in memory, got ${JSON.stringify({
+      sanctumAgendaState: endlessCollapsePreserveGame.sanctumAgendaState,
+      heavenlyMandateState: endlessCollapsePreserveGame.heavenlyMandateState,
+      seasonVerificationState: endlessCollapsePreserveGame.seasonVerificationState,
+      fateAftereffectState: endlessCollapsePreserveGame.fateAftereffectState
+    })}`
+  );
+
+  resetStorages();
+  const fullClearGame = createGame();
+  localStorage.setItem('theDefierSave', JSON.stringify({ version: 'test-full-clear' }));
+  fullClearGame.seasonVerificationState = endlessCollapsePreserveGame.normalizeSeasonVerificationState({
+    ...endlessCollapsePreserveGame.seasonVerificationState
+  });
+  fullClearGame.heavenlyMandateState = endlessCollapsePreserveGame.normalizeHeavenlyMandateState({
+    ...endlessCollapsePreserveGame.heavenlyMandateState
+  });
+  fullClearGame.fateAftereffectState = endlessCollapsePreserveGame.normalizeFateAftereffectState({
+    ...endlessCollapsePreserveGame.fateAftereffectState
+  });
+  fullClearGame.sanctumAgendaState = endlessCollapsePreserveGame.normalizeSanctumAgendaState({
+    ...endlessCollapsePreserveGame.sanctumAgendaState
+  });
+  fullClearGame.clearSave();
+  assert(
+    Array.isArray(fullClearGame.seasonVerificationState?.records)
+      && fullClearGame.seasonVerificationState.records.length === 0
+      && Array.isArray(fullClearGame.heavenlyMandateState?.lanes)
+      && fullClearGame.heavenlyMandateState.lanes.length === 0
+      && Array.isArray(fullClearGame.fateAftereffectState?.records)
+      && fullClearGame.fateAftereffectState.records.length === 0
+      && fullClearGame.sanctumAgendaState?.lastResolved == null,
+    `default clearSave should still reset season meta, got ${JSON.stringify({
+      sanctumAgendaState: fullClearGame.sanctumAgendaState,
+      heavenlyMandateState: fullClearGame.heavenlyMandateState,
+      seasonVerificationState: fullClearGame.seasonVerificationState,
+      fateAftereffectState: fullClearGame.fateAftereffectState
+    })}`
   );
 
   resetStorages();

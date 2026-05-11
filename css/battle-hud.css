@@ -640,7 +640,7 @@
 
     #battle-screen .battle-command-panel .battle-tactical-advisor:not(.collapsed),
     #battle-screen #battle-command-panel .battle-tactical-advisor:not(.collapsed) {
-        max-height: min(280px, 38vh);
+        max-height: min(240px, 26vh);
         background: linear-gradient(145deg, rgba(9, 24, 52, 0.9), rgba(8, 20, 42, 0.94));
     }
 

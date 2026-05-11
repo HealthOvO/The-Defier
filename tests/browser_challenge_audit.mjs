@@ -57,7 +57,9 @@ function add(name, pass, detail = '') {
   });
   await page.waitForTimeout(250);
 
-  await page.click('button[onclick="game.showChallengeHub(\'daily\')"]', { timeout: 5000, force: true });
+  await page.evaluate(() => {
+    document.querySelector('button[onclick="game.showChallengeHub(\'daily\')"]')?.click();
+  });
   await page.waitForTimeout(350);
 
   const challengeHubProbe = await page.evaluate(() => {
@@ -749,6 +751,242 @@ function add(name, pass, detail = '') {
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(300);
+
+  await page.evaluate(() => {
+    if (window.game && typeof game.showChallengeHub === 'function') game.showChallengeHub('daily');
+  });
+  await page.waitForTimeout(250);
+
+  await page.evaluate(() => {
+    if (window.game && typeof game.beginChallengeStart === 'function') {
+      game.beginChallengeStart('daily');
+    }
+  });
+  await page.waitForTimeout(300);
+
+  const mobileGuestPromptVisible = await page.locator('#generic-confirm-modal.active #generic-cancel-btn').isVisible().catch(() => false);
+  if (mobileGuestPromptVisible) {
+    await page.evaluate(() => {
+      document.getElementById('generic-cancel-btn')?.click();
+    });
+    await page.waitForTimeout(450);
+  }
+
+  const mobileStartSelectionProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    const banner = document.getElementById('challenge-selection-banner');
+    const bannerRect = banner?.getBoundingClientRect() || null;
+    const confirmBtn = document.getElementById('confirm-character-btn');
+    return {
+      mode: payload?.mode || '',
+      pending: payload?.challenge?.pending || null,
+      bannerText: banner?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      bannerRect: bannerRect ? {
+        left: Math.round(bannerRect.left),
+        right: Math.round(bannerRect.right),
+        top: Math.round(bannerRect.top),
+        bottom: Math.round(bannerRect.bottom),
+        width: Math.round(bannerRect.width),
+        height: Math.round(bannerRect.height),
+      } : null,
+      confirmText: confirmBtn?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      confirmRect: confirmBtn ? (() => {
+        const rect = confirmBtn.getBoundingClientRect();
+        return {
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          top: Math.round(rect.top),
+          bottom: Math.round(rect.bottom),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        };
+      })() : null,
+    };
+  });
+  add(
+    'challenge mobile start selection keeps the locked banner and confirm action inside viewport',
+    !!mobileStartSelectionProbe &&
+      mobileStartSelectionProbe.mode === 'character-selection-screen' &&
+      mobileStartSelectionProbe.pending?.mode === 'daily' &&
+      /今日天机|第1章/.test(mobileStartSelectionProbe.bannerText || '') &&
+      /DRI|主轴/.test(mobileStartSelectionProbe.bannerText || '') &&
+      /开局/.test(mobileStartSelectionProbe.confirmText || '') &&
+      !!mobileStartSelectionProbe.bannerRect &&
+      mobileStartSelectionProbe.bannerRect.left >= 0 &&
+      mobileStartSelectionProbe.bannerRect.right <= 390 &&
+      !!mobileStartSelectionProbe.confirmRect &&
+      mobileStartSelectionProbe.confirmRect.left >= 0 &&
+      mobileStartSelectionProbe.confirmRect.right <= 390,
+    JSON.stringify(mobileStartSelectionProbe || null)
+  );
+
+  await page.evaluate(() => {
+    document.getElementById('confirm-character-btn')?.click();
+  });
+  await page.waitForTimeout(900);
+
+  const mobileStartBannerProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    const banner = document.getElementById('challenge-run-banner');
+    const focus = banner?.querySelector('.challenge-run-focus');
+    const bannerRect = banner?.getBoundingClientRect() || null;
+    const focusRect = focus?.getBoundingClientRect() || null;
+    return {
+      mode: payload?.mode || '',
+      activeRun: payload?.challenge?.activeRun || null,
+      bannerText: banner?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      focusText: focus?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      bannerRect: bannerRect ? {
+        left: Math.round(bannerRect.left),
+        right: Math.round(bannerRect.right),
+        top: Math.round(bannerRect.top),
+        bottom: Math.round(bannerRect.bottom),
+        width: Math.round(bannerRect.width),
+        height: Math.round(bannerRect.height),
+      } : null,
+      focusRect: focusRect ? {
+        left: Math.round(focusRect.left),
+        right: Math.round(focusRect.right),
+        top: Math.round(focusRect.top),
+        bottom: Math.round(focusRect.bottom),
+        width: Math.round(focusRect.width),
+        height: Math.round(focusRect.height),
+      } : null,
+    };
+  });
+  add(
+    'challenge mobile active banner keeps daily run summary and danger axis readable after start',
+    !!mobileStartBannerProbe &&
+      mobileStartBannerProbe.mode === 'map-screen' &&
+      mobileStartBannerProbe.activeRun?.mode === 'daily' &&
+      /今日天机|第 3 重|第1章/.test(mobileStartBannerProbe.bannerText || '') &&
+      /DRI/.test(mobileStartBannerProbe.bannerText || '') &&
+      !!mobileStartBannerProbe.bannerRect &&
+      mobileStartBannerProbe.bannerRect.left >= 0 &&
+      mobileStartBannerProbe.bannerRect.right <= 390 &&
+      (!mobileStartBannerProbe.focusRect || (mobileStartBannerProbe.focusRect.left >= 0 && mobileStartBannerProbe.focusRect.right <= 390)),
+    JSON.stringify(mobileStartBannerProbe || null)
+  );
+
+  await safeAuditScreenshot(page, path.join(outDir, 'challenge-mobile-start-banner.png'), 'browser_challenge_audit', { timeout: 9000 });
+
+  await page.evaluate(() => {
+    if (window.game && game.activeChallengeRun && typeof game.finalizeActiveChallengeRun === 'function') {
+      game.finalizeActiveChallengeRun({ completed: true, reason: 'goal_reached' });
+      if (typeof game.showChallengeHub === 'function') game.showChallengeHub('daily');
+    }
+  });
+  await page.waitForTimeout(350);
+
+  await page.evaluate(() => {
+    const btn = document.querySelector('#challenge-hub-records [data-replay-record-id]');
+    if (btn) btn.click();
+  });
+  await page.waitForTimeout(350);
+
+  const mobileReplayGuestPromptVisible = await page.locator('#generic-confirm-modal.active #generic-cancel-btn').isVisible().catch(() => false);
+  if (mobileReplayGuestPromptVisible) {
+    await page.evaluate(() => {
+      document.getElementById('generic-cancel-btn')?.click();
+    });
+    await page.waitForTimeout(450);
+  }
+
+  const mobileReplaySelectionProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    const banner = document.getElementById('challenge-selection-banner');
+    const bannerRect = banner?.getBoundingClientRect() || null;
+    const insightText = banner?.querySelector('.challenge-record-insight')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    const confirmBtn = document.getElementById('confirm-character-btn');
+    return {
+      mode: payload?.mode || '',
+      pending: payload?.challenge?.pending || null,
+      bannerText: banner?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      insightText,
+      confirmText: confirmBtn?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      bannerRect: bannerRect ? {
+        left: Math.round(bannerRect.left),
+        right: Math.round(bannerRect.right),
+        top: Math.round(bannerRect.top),
+        bottom: Math.round(bannerRect.bottom),
+        width: Math.round(bannerRect.width),
+        height: Math.round(bannerRect.height),
+      } : null,
+    };
+  });
+  add(
+    'challenge mobile replay selection keeps the replay-only banner and training focus visible',
+    !!mobileReplaySelectionProbe &&
+      mobileReplaySelectionProbe.mode === 'character-selection-screen' &&
+      mobileReplaySelectionProbe.pending?.replayOnly === true &&
+      /观星回放/.test(mobileReplaySelectionProbe.bannerText || '') &&
+      /回放复刻|回放试错/.test(mobileReplaySelectionProbe.insightText || '') &&
+      /演练目标|稳血收官|高压过线|补件断档/.test(mobileReplaySelectionProbe.insightText || '') &&
+      /回放命盘/.test(mobileReplaySelectionProbe.confirmText || '') &&
+      !!mobileReplaySelectionProbe.bannerRect &&
+      mobileReplaySelectionProbe.bannerRect.left >= 0 &&
+      mobileReplaySelectionProbe.bannerRect.right <= 390,
+    JSON.stringify(mobileReplaySelectionProbe || null)
+  );
+
+  await page.evaluate(() => {
+    document.getElementById('confirm-character-btn')?.click();
+  });
+  await page.waitForTimeout(900);
+
+  const mobileReplayBannerProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    const banner = document.getElementById('challenge-run-banner');
+    const focus = banner?.querySelector('.challenge-run-focus');
+    const bannerRect = banner?.getBoundingClientRect() || null;
+    return {
+      mode: payload?.mode || '',
+      activeRun: payload?.challenge?.activeRun || null,
+      bannerText: banner?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      focusText: focus?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      bannerRect: bannerRect ? {
+        left: Math.round(bannerRect.left),
+        right: Math.round(bannerRect.right),
+        top: Math.round(bannerRect.top),
+        bottom: Math.round(bannerRect.bottom),
+        width: Math.round(bannerRect.width),
+        height: Math.round(bannerRect.height),
+      } : null,
+    };
+  });
+  add(
+    'challenge mobile replay active banner preserves replay-only state and training focus',
+    !!mobileReplayBannerProbe &&
+      mobileReplayBannerProbe.mode === 'map-screen' &&
+      mobileReplayBannerProbe.activeRun?.replayOnly === true &&
+      /^D-/.test(mobileReplayBannerProbe.activeRun?.seedSignature || '') &&
+      /观星回放/.test(mobileReplayBannerProbe.bannerText || '') &&
+      /命盘签/.test(mobileReplayBannerProbe.bannerText || '') &&
+      /不计奖励/.test(mobileReplayBannerProbe.bannerText || '') &&
+      /训练重点/.test(mobileReplayBannerProbe.focusText || '') &&
+      !!mobileReplayBannerProbe.bannerRect &&
+      mobileReplayBannerProbe.bannerRect.left >= 0 &&
+      mobileReplayBannerProbe.bannerRect.right <= 390,
+    JSON.stringify(mobileReplayBannerProbe || null)
+  );
+
+  await safeAuditScreenshot(page, path.join(outDir, 'challenge-mobile-replay-banner.png'), 'browser_challenge_audit', { timeout: 9000 });
+
+  await page.evaluate(() => {
+    if (window.game && game.activeChallengeRun && typeof game.finalizeActiveChallengeRun === 'function') {
+      game.finalizeActiveChallengeRun({ completed: false, reason: 'battle_lost' });
+      if (typeof game.showChallengeHub === 'function') game.showChallengeHub('daily');
+    }
+  });
+  await page.waitForTimeout(350);
 
   const mobileArchiveProbe = await page.evaluate(() => {
     const shell = document.querySelector('.challenge-shell');

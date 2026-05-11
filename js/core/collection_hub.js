@@ -482,6 +482,10 @@
             board?.chapterArc?.rescueWindow,
             'season_chapter_arc_rescue'
         );
+        const chapterArcPressureWindow = normalizeSeasonBoardChapterArcPanel(
+            board?.chapterArc?.pressureWindow,
+            'season_chapter_arc_pressure_window'
+        );
         const chapterArcCarryover = normalizeSeasonBoardChapterArcPanel(
             board?.chapterArc?.carryover,
             'season_chapter_arc_carryover'
@@ -507,6 +511,7 @@
                 ).trim();
                 const statusLine = String(
                     root.statusLine
+                    || chapterArcPressureWindow?.shortLine
                     || chapterArcRescueWindow?.shortLine
                     || chapterArcReview?.shortLine
                     || ''
@@ -519,6 +524,7 @@
                 ).trim();
                 const feedbackLine = String(
                     root.feedbackLine
+                    || chapterArcPressureWindow?.guideLine
                     || chapterArcReview?.shortLine
                     || chapterArcRescueWindow?.shortLine
                     || goalLine
@@ -540,6 +546,7 @@
                     goalLine,
                     feedbackLine,
                     rescueWindow: chapterArcRescueWindow,
+                    pressureWindow: chapterArcPressureWindow,
                     review: chapterArcReview,
                     objective: chapterArcObjective,
                     carryover: chapterArcCarryover,
@@ -560,6 +567,7 @@
                 goalLine: '',
                 feedbackLine: '',
                 rescueWindow: null,
+                pressureWindow: null,
                 review: null,
                 objective: null,
                 carryover: null,
@@ -7509,6 +7517,9 @@
         const seasonChapterArcObjective = seasonChapterArc?.objective && typeof seasonChapterArc.objective === 'object'
             ? seasonChapterArc.objective
             : null;
+        const seasonChapterArcPressureWindow = seasonChapterArc?.pressureWindow && typeof seasonChapterArc.pressureWindow === 'object'
+            ? seasonChapterArc.pressureWindow
+            : null;
         const seasonFrontierResolutionChoiceLabels = {
             hold_primary: '守主战线',
             rebalance_support: '副线补证',
@@ -7569,6 +7580,12 @@
                 seasonChapterArcObjective.summaryLine || '',
                 seasonChapterArcObjective.goalLine || '',
                 seasonChapterArcObjective.reasonLine || ''
+            ].filter(Boolean).join(' · ')
+            : '';
+        const seasonChapterArcPressureLine = seasonChapterArcPressureWindow
+            ? [
+                seasonChapterArcPressureWindow.reasonLine || seasonChapterArcPressureWindow.shortLine || '',
+                seasonChapterArcPressureWindow.guideLine || ''
             ].filter(Boolean).join(' · ')
             : '';
         const heavenlyMandateBoard = Array.isArray(heavenlyMandate.lanes) ? heavenlyMandate.lanes : [];
@@ -7818,6 +7835,7 @@
             `${seasonBoard.available ? `<div class="codex-summary-chip" data-season-board-chip="theme"><strong>${escapeHtml(seasonBoard.themeLabel || '本周主轴')}</strong><span>赛季主轴</span></div>` : ''}`,
             `${seasonBoard.available ? `<div class="codex-summary-chip" data-season-board-chip="status"><strong>${escapeHtml(seasonBoard.progressText || '待同步')}</strong><span>季盘进度</span></div>` : ''}`,
             `${seasonChapterArc?.available ? `<div class="codex-summary-chip" data-season-board-chip="chapter-arc"><strong>${escapeHtml(seasonChapterArc.arcLabel || seasonChapterArc.chapterLabel || '章节弧线')}</strong><span>${escapeHtml(seasonChapterArc.weekSlot || seasonChapterArc.windowLabel || seasonChapterArc.progressText || '本周窗口')}</span></div>` : ''}`,
+            `${seasonChapterArcPressureWindow?.available ? `<div class="codex-summary-chip" data-season-board-chip="chapter-arc-pressure"><strong>${escapeHtml(seasonChapterArcPressureWindow.statusLabel || '章势压强')}</strong><span>${escapeHtml(`章势 · ${seasonChapterArcPressureWindow.shortLine || seasonChapterArcPressureWindow.reasonLine || '待同步'}`)}</span></div>` : ''}`,
             `${seasonChapterArcObjective?.available ? `<div class="codex-summary-chip" data-season-board-chip="chapter-arc-objective"><strong>${escapeHtml(seasonChapterArcObjective.statusLabel || seasonChapterArcObjective.label || '章目标')}</strong><span>${escapeHtml(`章目标 · ${seasonChapterArcObjective.focusLaneLabel || '经营目标'}`)}</span></div>` : ''}`,
             `${seasonFrontier ? `<div class="codex-summary-chip" data-season-board-chip="frontier" data-season-board-frontier-chip="true"><strong>${escapeHtml(seasonFrontier.primaryFrontShortLabel || seasonFrontier.primaryFrontLabel || '主战线')}</strong><span>${escapeHtml(seasonFrontier.pressureLabel || seasonFrontier.statusLabel || '战线态势')}</span></div>` : ''}`,
             `${seasonFrontierDecree ? `<div class="codex-summary-chip" data-season-board-chip="frontier-decree" data-season-board-frontier-decree-chip="true"><strong>${escapeHtml(seasonFrontierDecree.laneLabel || seasonFrontier.primaryFrontShortLabel || '主战线')}</strong><span>${escapeHtml(`法旨 · ${seasonFrontierDecree.toneLabel || '本周'}`)}</span></div>` : ''}`,
@@ -7860,8 +7878,13 @@
                         <p data-season-board-progress-row="true">${escapeHtml(`${seasonBoard.weekLabel || seasonBoard.weekTag || '本周轮转'} · ${seasonBoard.phaseLabel || '采样期'} · ${seasonBoard.progressText || '待同步'}`)}</p>
                         ${seasonBoard.statusLine ? `<p class="collection-muted">${escapeHtml(seasonBoard.statusLine)}</p>` : ''}
                         ${seasonChapterArc?.available ? `
-                            <div data-season-board-chapter-arc-card="true">
+                        <div
+                            data-season-board-chapter-arc-card="true"
+                            data-season-board-chapter-arc-open="${seasonChapterArc?.rescueWindow?.open ? 'true' : 'false'}"
+                            data-season-board-chapter-arc-pressure-open="${seasonChapterArcPressureWindow?.open ? 'true' : 'false'}"
+                            data-season-board-chapter-arc-pressure-status="${escapeHtml(seasonChapterArcPressureWindow?.statusId || '')}">
                                 <p class="collection-muted">${escapeHtml(seasonChapterArc.summaryLine || '章节弧线待同步')}</p>
+                                ${seasonChapterArcPressureLine ? `<p class="collection-muted" data-season-board-chapter-arc-pressure="true">${escapeHtml(seasonChapterArcPressureLine)}</p>` : ''}
                                 ${seasonChapterArcObjective?.available ? `<p class="collection-muted" data-season-board-chapter-arc-objective="true">${escapeHtml(seasonChapterArcObjectiveLine || seasonChapterArcObjective.shortLine || '章目标待同步')}</p>` : ''}
                                 ${seasonChapterArc.feedbackLine ? `<p class="collection-muted" data-season-board-chapter-arc-feedback="true">${escapeHtml(seasonChapterArc.feedbackLine)}</p>` : ''}
                                 ${seasonChapterArc.entries.length > 0 ? `

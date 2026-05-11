@@ -197,6 +197,72 @@ function rectObj(el) {
       if (typeof game.battle.checkBattleEnd === 'function') game.battle.checkBattleEnd();
     });
     await page.waitForTimeout(1100);
+    const resultOverlayProbe = await page.evaluate(() => {
+      const toRect = (el) => {
+        if (!el) return null;
+        const rect = el.getBoundingClientRect();
+        return {
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          top: Math.round(rect.top),
+          bottom: Math.round(rect.bottom),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        };
+      };
+      const overlay = document.getElementById('pvp-result-overlay');
+      const container = document.querySelector('#pvp-result-overlay .pvp-result-container');
+      const title = document.getElementById('pvp-result-title');
+      const score = document.getElementById('pvp-current-score');
+      const delta = document.getElementById('pvp-score-delta');
+      const opponent = document.getElementById('pvp-result-opponent');
+      const review = document.getElementById('pvp-result-review-summary');
+      const reviewCard = document.querySelector('#pvp-result-overlay .pvp-result-review');
+      const reviewChip = document.querySelector('#pvp-result-overlay .pvp-result-review-chip');
+      const reviewRows = Array.from(document.querySelectorAll('#pvp-result-overlay .pvp-result-review-row'));
+      const actionBar = document.querySelector('#pvp-result-overlay .result-actions');
+      const buttons = Array.from(document.querySelectorAll('#pvp-result-overlay .result-actions button'));
+      return {
+        ok: !!overlay
+          && overlay.style.display !== 'none'
+          && !!container
+          && !!title?.textContent?.trim()
+          && !!score?.textContent?.trim()
+          && !!delta?.textContent?.trim()
+          && !!opponent?.textContent?.trim()
+          && !!review?.textContent?.trim()
+          && !!reviewCard
+          && !!reviewChip?.textContent?.trim()
+          && reviewRows.length >= 2
+          && !!actionBar
+          && buttons.length >= 1
+          && (overlay?.scrollHeight || 0) >= (overlay?.clientHeight || 0)
+          && toRect(container)?.left >= 0
+          && toRect(container)?.right <= window.innerWidth + 2
+          && buttons.every((btn) => {
+            const rect = toRect(btn);
+            return rect && rect.left >= 0 && rect.right <= window.innerWidth + 2;
+          }),
+        overlay: toRect(overlay),
+        container: toRect(container),
+        overlayScrollHeight: overlay?.scrollHeight || 0,
+        overlayClientHeight: overlay?.clientHeight || 0,
+        title: title?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        score: score?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        delta: delta?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        opponent: opponent?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        review: review?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        reviewChip: reviewChip?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        reviewRows: reviewRows.map((row) => row.textContent?.replace(/\s+/g, ' ').trim() || ''),
+        buttonTexts: buttons.map((btn) => btn.textContent?.replace(/\s+/g, ' ').trim() || ''),
+      };
+    });
+    add(
+      'pvp mobile result overlay keeps victory content, recap, and actions inside the viewport',
+      !!resultOverlayProbe?.ok,
+      JSON.stringify(resultOverlayProbe || null)
+    );
+    await safeElementScreenshot(page, '#pvp-result-overlay', path.join(outDir, 'pvp-mobile-result-overlay.png'));
     await page.click('#pvp-result-overlay .result-actions .ink-btn-large', { timeout: 5000, force: true }).catch(() => {});
     await page.waitForTimeout(450);
   }

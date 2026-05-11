@@ -257,8 +257,12 @@ function hasPositiveResourceDelta(before, after) {
     await page.waitForTimeout(120);
     const probe = await page.evaluate(() => {
       const panel = document.getElementById('map-expedition-panels');
-      const card = panel?.querySelector('.expedition-observatory-card');
-      const trackedNodes = Array.from(card?.querySelectorAll('.expedition-choice-head, .expedition-chip-row, .expedition-choice-meta, .expedition-observatory-actions, .expedition-answer-goal, .collection-inline-btn') || []);
+      const observatoryCard = panel?.querySelector('.expedition-observatory-card');
+      const denseCards = Array.from(panel?.querySelectorAll('.expedition-overview-card, .expedition-observatory-card, .expedition-signals-card, .expedition-nemesis-card, .expedition-faction-card, .expedition-choice-card') || []);
+      const trackedNodes = [
+        ...denseCards,
+        ...Array.from(panel?.querySelectorAll('.expedition-choice-head, .expedition-chip-row, .expedition-choice-meta, .expedition-observatory-actions, .expedition-answer-goal, .collection-inline-btn') || [])
+      ];
       const overflowingNodes = trackedNodes
         .map((node, index) => ({
           index,
@@ -268,25 +272,35 @@ function hasPositiveResourceDelta(before, after) {
         }))
         .filter((entry) => entry.overflowX > 1);
       return {
-        ok: !!card,
+        ok: !!observatoryCard && denseCards.length >= 6,
         panelOverflowX: panel ? Math.max(0, Math.ceil((panel.scrollWidth || 0) - (panel.clientWidth || 0))) : null,
-        cardOverflowX: card ? Math.max(0, Math.ceil((card.scrollWidth || 0) - (card.clientWidth || 0))) : null,
+        observatoryOverflowX: observatoryCard ? Math.max(0, Math.ceil((observatoryCard.scrollWidth || 0) - (observatoryCard.clientWidth || 0))) : null,
+        denseCardsOverflowX: denseCards.map((node) => Math.max(0, Math.ceil((node.scrollWidth || 0) - (node.clientWidth || 0)))),
+        denseCardCount: denseCards.length,
         overflowingNodes,
-        practiceTopicTitle: card?.querySelector('[data-practice-topic-title]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
-        answerSheetRating: card?.querySelector('[data-answer-sheet-rating]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
-        selectedRecommendedCard: card?.querySelector('[data-selected-recommended-branch="true"] strong')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        practiceTopicTitle: observatoryCard?.querySelector('[data-practice-topic-title]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        answerSheetRating: observatoryCard?.querySelector('[data-answer-sheet-rating]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        selectedRecommendedCard: observatoryCard?.querySelector('[data-selected-recommended-branch="true"] strong')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        signalsText: panel?.querySelector('.expedition-signals-card')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        overviewText: panel?.querySelector('.expedition-overview-card')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        nemesisText: panel?.querySelector('.expedition-nemesis-card')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       };
     });
     add(
-      `observatory panel stays readable on ${viewport.width}px mobile viewport`,
+      `expedition dense panes stay readable on ${viewport.width}px mobile viewport`,
       !!probe &&
         probe.ok &&
         Number(probe.panelOverflowX || 0) <= 1 &&
-        Number(probe.cardOverflowX || 0) <= 1 &&
+        Number(probe.observatoryOverflowX || 0) <= 1 &&
+        probe.denseCardsOverflowX.every((value) => Number(value || 0) <= 1) &&
         probe.overflowingNodes.length === 0 &&
+        probe.denseCardCount >= 6 &&
         !!probe.practiceTopicTitle &&
         !!probe.answerSheetRating &&
-        !!probe.selectedRecommendedCard,
+        !!probe.selectedRecommendedCard &&
+        /最近势力变化|仇敌追猎链路|悬赏冲突提示/.test(probe.signalsText || '') &&
+        /裂界远征/.test(probe.overviewText || '') &&
+        /仇敌|追猎|校验/.test(probe.nemesisText || ''),
       JSON.stringify(probe || null)
     );
     await safeAuditScreenshot(page, path.join(outDir, screenshotName), 'browser_expedition_audit', { timeout: 9000 });

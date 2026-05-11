@@ -2,9 +2,9 @@
 
 ## 0. 文档定位
 
-本文是当前 `seasonBoard.frontier -> decree -> chronicle -> council` 四层反馈链上线后的下一版本策划。
+本文是 `seasonBoard.frontier -> decree -> chronicle -> council` 四层反馈链上线后的阶段性版本策划留档，同时补记后续已落地的 V9.2 只读章程扩展。
 
-当前版本已经解决了“玩家能不能读懂本周季盘”的问题。下一版本不应继续横向增加说明层，而应把这些只读反馈推进为一个可选择、可结算、可回看的长期战线循环。
+当前版本已经解决了“玩家能不能读懂本周季盘”的问题。本文原本聚焦 `frontier settlement` 这一刀；随着 V9.2 M1-M6 已陆续把三周章程扩展到洞府、reward、expedition、map 与 build snapshot，它现在更适合作为“历史策划 + 已落地补记”的参考文档，而不是当前唯一的下一刀主文档。
 
 实施进度补记：
 
@@ -457,11 +457,11 @@ Map 只做章节简报：
 
 ## 11. 推荐下一刀
 
-V9.1 已完成 Phase A-D，V9.2 M1/M2 也已把“三周一章”接到洞府章卡，并补到 reward / expedition / map / build snapshot 的只读投影。随后补上的 V9.2 M3 进一步验证了“上章承卷”只做开局偏置，不会压过欠卷 / 锁线 / 主验证等强目标。下一轮建议继续进入 V9.2 的下一刀：
+V9.1 已完成 Phase A-D，V9.2 M1/M2 也已把“三周一章”接到洞府章卡，并补到 reward / expedition / map / build snapshot 的只读投影。随后补上的 V9.2 M3 进一步验证了“上章承卷”只做开局偏置，不会压过欠卷 / 锁线 / 主验证等强目标；V9.2 M4/M5/M6 则继续把章末回响、章目标与章势压强扩成跨页只读解释层。下一轮建议继续进入 V9.2 的下一刀：
 
 > 把当前“三线季盘 + 会审裁记 + 史卷回看 + 章内救火入口”继续推进为更完整的战役经营层，让连续三周的守线、补证、封存选择形成章目标、章末评语和更明确的补救窗口。
 
-注：其中“章目标”这一刀已在 V9.2 M5 落地为 `seasonBoard.chapterArc.objective`，仍保持只读解释层，不回写任务源。
+注：其中“章目标”这一刀已在 V9.2 M5 落地为 `seasonBoard.chapterArc.objective`，“章势压强”这一刀也已在 V9.2 M6 落地为 `seasonBoard.chapterArc.pressureWindow`，两者都仍保持只读解释层，不回写任务源。
 
 原因：
 

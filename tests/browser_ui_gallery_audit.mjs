@@ -189,14 +189,25 @@ async function boot(page) {
     const shell = document.querySelector('.codex-shell');
     const main = document.querySelector('.codex-main-column');
     const side = document.querySelector('.codex-side-column');
-    if (!shell || !main || !side) return { ok: false, reason: 'missing_collection_nodes' };
+    const activeTab = document.querySelector('#collection [data-collection-tab].active');
+    const tabs = Array.from(document.querySelectorAll('#collection [data-collection-tab]'));
+    const targetSection = ['sanctum', 'builds', 'slates', 'chapters'].find((section) =>
+      tabs.some((tab) => tab.dataset.collectionTab === section)
+    );
+    if (!shell || !main || !side || !activeTab || !targetSection) {
+      return { ok: false, reason: 'missing_collection_nodes' };
+    }
     const rect = shell.getBoundingClientRect();
+    const mainRect = main.getBoundingClientRect();
+    const sideRect = side.getBoundingClientRect();
     return {
       ok:
         rect.left >= 8 &&
         rect.right <= window.innerWidth - 8 &&
         rect.bottom <= window.innerHeight - 8 &&
-        document.documentElement.scrollWidth <= window.innerWidth + 2,
+        document.documentElement.scrollWidth <= window.innerWidth + 2 &&
+        activeTab.dataset.collectionTab === 'laws' &&
+        mainRect.width > sideRect.width * 0.7,
       rect: {
         left: Math.round(rect.left),
         top: Math.round(rect.top),
@@ -204,11 +215,123 @@ async function boot(page) {
         bottom: Math.round(rect.bottom),
         width: Math.round(rect.width),
         height: Math.round(rect.height),
-      }
+      },
+      targetSection,
+      activeSection: activeTab.dataset.collectionTab,
+      tabCount: tabs.length,
+      mainWidth: Math.round(mainRect.width),
+      sideWidth: Math.round(sideRect.width),
     };
   });
   add('law codex sits inside a unified dual-column shell', !!collectionProbe?.ok, JSON.stringify(collectionProbe || null));
   await captureScreenshot(page, '05-law-codex.png');
+
+  if (collectionProbe?.targetSection) {
+    await page.click(`#collection [data-collection-tab='${collectionProbe.targetSection}']`, { force: true });
+    await page.waitForTimeout(250);
+    const collectionSwitchProbe = await page.evaluate((targetSection) => {
+      const shell = document.querySelector('.codex-shell');
+      const activeTab = document.querySelector('#collection [data-collection-tab].active');
+      const activePanel = document.querySelector('#collection [data-collection-panel].active');
+      const title = document.getElementById('collection-title');
+      const subtitle = document.getElementById('collection-subtitle');
+      if (!shell || !activeTab || !activePanel || !title || !subtitle) {
+        return { ok: false, reason: 'missing_collection_switch_nodes', targetSection };
+      }
+      const rect = shell.getBoundingClientRect();
+      return {
+        ok:
+          activeTab.dataset.collectionTab === targetSection &&
+          activePanel.dataset.collectionPanel === targetSection &&
+          title.textContent.trim().length > 6 &&
+          subtitle.textContent.trim().length > 10 &&
+          document.documentElement.scrollWidth <= window.innerWidth + 2 &&
+          rect.left >= 8 &&
+          rect.right <= window.innerWidth - 8,
+        targetSection,
+        activeSection: activeTab.dataset.collectionTab,
+        panelSection: activePanel.dataset.collectionPanel,
+        title: title.textContent.trim(),
+        subtitle: subtitle.textContent.trim().slice(0, 120),
+      };
+    }, collectionProbe.targetSection);
+    add(
+      'collection section switching updates the active tab, panel, and heading copy',
+      !!collectionSwitchProbe?.ok,
+      JSON.stringify(collectionSwitchProbe || null)
+    );
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(250);
+  const mobileCollectionProbe = await page.evaluate(() => {
+    if (!window.game || typeof game.showCollection !== 'function') return { ok: false, reason: 'no_collection_api' };
+    game.showCollection('laws');
+    const tabs = Array.from(document.querySelectorAll('#collection [data-collection-tab]'));
+    const targetTab =
+      tabs.find((tab) => ['builds', 'sanctum', 'slates', 'chapters'].includes(tab.dataset.collectionTab || '')) ||
+      tabs.find((tab) => (tab.dataset.collectionTab || '') !== 'laws');
+    targetTab?.click();
+    const shell = document.querySelector('.codex-shell');
+    const activeTab = document.querySelector('#collection [data-collection-tab].active');
+    const activePanel = document.querySelector('#collection [data-collection-panel].active');
+    const tabRail = tabs[0]?.parentElement || null;
+    if (!shell || !activeTab || !activePanel || !targetTab || !tabRail) {
+      return { ok: false, reason: 'missing_mobile_collection_nodes' };
+    }
+    const rect = shell.getBoundingClientRect();
+    const panelRect = activePanel.getBoundingClientRect();
+    const railRect = tabRail.getBoundingClientRect();
+    return {
+      ok:
+        rect.left >= 0 &&
+        rect.right <= window.innerWidth + 2 &&
+        panelRect.left >= 0 &&
+        panelRect.right <= window.innerWidth + 2 &&
+        railRect.left >= 0 &&
+        railRect.right <= window.innerWidth + 2 &&
+        activeTab.dataset.collectionTab === targetTab.dataset.collectionTab &&
+        activePanel.dataset.collectionPanel === targetTab.dataset.collectionTab &&
+        document.documentElement.scrollWidth <= window.innerWidth + 2,
+      activeSection: activeTab.dataset.collectionTab,
+      targetSection: targetTab.dataset.collectionTab,
+      shellRect: {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      },
+      panelRect: {
+        left: Math.round(panelRect.left),
+        top: Math.round(panelRect.top),
+        right: Math.round(panelRect.right),
+        bottom: Math.round(panelRect.bottom),
+        width: Math.round(panelRect.width),
+        height: Math.round(panelRect.height),
+      },
+      railRect: {
+        left: Math.round(railRect.left),
+        top: Math.round(railRect.top),
+        right: Math.round(railRect.right),
+        bottom: Math.round(railRect.bottom),
+        width: Math.round(railRect.width),
+        height: Math.round(railRect.height),
+      },
+      railScrollWidth: Math.round(tabRail.scrollWidth),
+      railClientWidth: Math.round(tabRail.clientWidth),
+    };
+  });
+  add(
+    'collection stays within the mobile viewport while switching sections',
+    !!mobileCollectionProbe?.ok,
+    JSON.stringify(mobileCollectionProbe || null)
+  );
+  await captureScreenshot(page, '05b-collection-mobile.png');
+
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await page.waitForTimeout(250);
 
   await boot(page);
   const treasureProbe = await page.evaluate(() => {

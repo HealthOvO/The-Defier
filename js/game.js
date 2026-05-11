@@ -1160,6 +1160,17 @@ class Game {
                                     guideLine: chapterArc.rescueWindow.guideLine || ''
                                 }
                                 : null;
+                            const pressureWindow = chapterArc.pressureWindow && typeof chapterArc.pressureWindow === 'object'
+                                ? {
+                                    available: chapterArc.pressureWindow.available !== false,
+                                    open: !!chapterArc.pressureWindow.open,
+                                    statusId: chapterArc.pressureWindow.statusId || '',
+                                    statusLabel: chapterArc.pressureWindow.statusLabel || '',
+                                    reasonLine: chapterArc.pressureWindow.reasonLine || '',
+                                    guideLine: chapterArc.pressureWindow.guideLine || '',
+                                    shortLine: chapterArc.pressureWindow.shortLine || ''
+                                }
+                                : null;
                             const review = chapterArc.review && typeof chapterArc.review === 'object'
                                 ? {
                                     available: chapterArc.review.available !== false,
@@ -1238,6 +1249,7 @@ class Game {
                                 goalLine: chapterArc.goalLine || '',
                                 feedbackLine: chapterArc.feedbackLine || '',
                                 rescueWindow,
+                                pressureWindow,
                                 review,
                                 objective,
                                 carryover,
@@ -10293,9 +10305,11 @@ class Game {
     }
 
     // 清除存档
-    clearSave() {
+    clearSave(options = {}) {
         if (this.automationBootConfig) return;
+        const preserveSeasonMeta = !!(options && options.preserveSeasonMeta);
         localStorage.removeItem('theDefierSave');
+        if (preserveSeasonMeta) return;
         this.sanctumAgendaState = this.createDefaultSanctumAgendaState();
         this.heavenlyMandateState = this.createDefaultHeavenlyMandateState();
         this.seasonVerificationState = this.createDefaultSeasonVerificationState();
@@ -12881,7 +12895,10 @@ class Game {
         }
 
         // 清除旧存档，开始新游戏
-        this.clearSave();
+        this.clearSave({
+            // Endless collapse already wrote a season verdict result; keep the meta for this session.
+            preserveSeasonMeta: this.isEndlessActive()
+        });
         this.startNewGame(this.selectedCharacterId, {
             runDestinyId: this.selectedRunDestinyId || this.resolveDefaultRunDestinyId(this.selectedCharacterId),
             spiritCompanionId: this.selectedSpiritCompanionId || this.resolveDefaultSpiritCompanionId(this.selectedCharacterId),
@@ -15074,6 +15091,9 @@ class Game {
         const seasonBoardChapterArcRescue = seasonBoardChapterArc?.rescueWindow && typeof seasonBoardChapterArc.rescueWindow === 'object'
             ? seasonBoardChapterArc.rescueWindow
             : null;
+        const seasonBoardChapterArcPressureWindow = seasonBoardChapterArc?.pressureWindow && typeof seasonBoardChapterArc.pressureWindow === 'object'
+            ? seasonBoardChapterArc.pressureWindow
+            : null;
         const seasonBoardChapterArcReview = seasonBoardChapterArc?.review && typeof seasonBoardChapterArc.review === 'object'
             ? seasonBoardChapterArc.review
             : null;
@@ -15330,6 +15350,8 @@ class Game {
                     'data-season-board-chapter-arc-id': seasonBoardChapterArc.id || '',
                     'data-season-board-chapter-arc-week-slot': seasonBoardChapterArc.weekSlot || '',
                     'data-season-board-chapter-arc-open': seasonBoardChapterArcRescue?.open ? 'true' : 'false',
+                    'data-season-board-chapter-arc-pressure-open': seasonBoardChapterArcPressureWindow?.open ? 'true' : 'false',
+                    'data-season-board-chapter-arc-pressure-status': seasonBoardChapterArcPressureWindow?.statusId || '',
                     'data-season-board-chapter-arc-objective-id': seasonBoardChapterArcObjective?.id || '',
                     'data-season-board-chapter-arc-objective-status': seasonBoardChapterArcObjective?.statusId || ''
                 },
@@ -15338,6 +15360,7 @@ class Game {
                     || seasonBoardChapterArc.statusLine
                     || `第 ${seasonBoardChapterArc.weekSlot || 1}/${seasonBoardChapterArc.targetWeeks || 3} 周章程待同步`,
                 detail: [
+                    seasonBoardChapterArcPressureWindow?.reasonLine || seasonBoardChapterArcPressureWindow?.shortLine || '',
                     seasonBoardChapterArcObjective?.summaryLine || '',
                     seasonBoardChapterArc.feedbackLine || '',
                     seasonBoardChapterArcRescue?.open
@@ -15348,6 +15371,7 @@ class Game {
                 metaLines: [
                     seasonBoardChapterArc.windowLabel || '',
                     `第 ${seasonBoardChapterArc.weekSlot || 1}/${seasonBoardChapterArc.targetWeeks || 3} 周`,
+                    seasonBoardChapterArcPressureWindow?.shortLine || '',
                     seasonBoardChapterArcObjective?.shortLine || '',
                     seasonBoardChapterArc.progressText ? `归卷 ${seasonBoardChapterArc.progressText}` : '',
                     seasonBoardChapterArcRescue?.statusLabel || seasonBoardChapterArcReview?.statusLabel || ''
@@ -15417,6 +15441,9 @@ class Game {
         }
         if (seasonBoardChapterArc?.available) {
             seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="chapter-arc">${escape(`章程 · ${seasonBoardChapterArc.arcLabel || seasonBoardChapterArc.chapterLabel || '当前章程'} · 第 ${seasonBoardChapterArc.weekSlot || 1}/${seasonBoardChapterArc.targetWeeks || 3} 周`)}</span>`);
+        }
+        if (seasonBoardChapterArcPressureWindow?.available) {
+            seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="chapter-arc-pressure">${escape(`章势 · ${seasonBoardChapterArcPressureWindow.statusLabel || '章势压强'} · ${seasonBoardChapterArcPressureWindow.open ? '需关注' : '稳步推进'}`)}</span>`);
         }
         if (seasonBoardChapterArcObjective?.available) {
             seasonBoardChips.push(`<span class="reward-expedition-chip" data-season-board-chip="chapter-arc-objective">${escape(`章目标 · ${seasonBoardChapterArcObjective.statusLabel || seasonBoardChapterArcObjective.label || '经营目标'} · ${seasonBoardChapterArcObjective.focusLaneLabel || '本周主线'}`)}</span>`);
@@ -17813,7 +17840,9 @@ class Game {
         // this.clearSave(); // 改为仅在选择重新开始或退出时清除？或者保留存档但标记为已死亡
         // 为了支持重修此界，我们暂时保留内存中的数据，但清除硬盘上的进度以防刷新作弊
         // 只有当玩家选择“重修此界”时，才会重新写入存档（扣钱后的）
-        this.clearSave();
+        this.clearSave({
+            preserveSeasonMeta: this.isEndlessActive()
+        });
 
         // 标记玩家已死亡，即使被非法恢复，也会在加载时被拦截
         this.player.currentHp = 0;
@@ -19238,15 +19267,15 @@ class Game {
         // Tab 4: Updates
         const updatesContent = `
             <div class="intro-section">
-                <h3>🌌 当前版本状态（V7.0《命途裂变》开发线）</h3>
+                <h3>🌌 当前版本重点（V9.2）</h3>
                 <p class="intro-text">
-                    当前主线已进入 V7.0 迭代：核心目标是把“命途构筑、章节考试、赛季组织层、长线复盘”彻底打通。
+                    当前主线已进入 V9.2 迭代：核心目标是把“命途构筑、章节考试、赛季组织层、长线复盘”彻底打通。
                     版本强调中盘转轴、章节风险识别、季盘组织与跨模式成长闭环，而不是单纯叠加体量。
                 </p>
             </div>
 
             <div class="intro-section">
-                <h3>✅ V7.0 已开发到位的核心能力</h3>
+                <h3>✅ V9.2 已开发到位的核心能力</h3>
                 <ul class="intro-list">
                     <li><strong>命途主线三阶段</strong>：每局有明确阶段目标、阶段奖励与圆满归档。</li>
                     <li><strong>命途裂变中盘抉择</strong>：中盘可执行极化 / 转修 / 献祭等路线改写，提升局内分叉感。</li>
@@ -19263,10 +19292,13 @@ class Game {
                     <li><strong>无尽轮回 DRI 同轴化</strong>：赛季词条、季签、崩盘账本与偏执层现已统一折算成轮回压强 DRI、主轴与预留建议。</li>
                     <li><strong>PVP 风险画像 + 焦点约战闭环</strong>：榜单推演、对手档案回看、PVP DRI、对策/预留、焦点约战单、定向匹配、镜像演武兜底、赛后复盘卡、段位倍率、连胜奖励、交易日志、称号与法相佩戴现已完整打通。</li>
                 </ul>
+                <p class=\"intro-text\">
+                    同步锚点：三周一章 / feedbackLine / objective / pressureWindow，确保游戏内更新页、游戏介绍页与 progress.md 保持同一套版本口径。
+                </p>
             </div>
 
             <div class="intro-section">
-                <h3>🧭 推荐体验路线（V7.0）</h3>
+                <h3>🧭 推荐体验路线（V9.2）</h3>
                 <ul class="intro-list">
                     <li>先开主线跑完一条命途三阶段，观察章节 DRI 与命途任务的联动节奏。</li>
                     <li>再进无尽轮回对照 DRI 主轴与赛季账本，确认“崩盘维度”并反向优化主线构筑。</li>
@@ -19275,7 +19307,7 @@ class Game {
             </div>
 
             <div class="intro-section">
-                <h3>🛰 下一迭代方向（V7.x）</h3>
+                <h3>🛰 下一迭代方向（V9.x）</h3>
                 <ul class="intro-list">
                     <li><strong>PVP 赛季题面深化</strong>：继续补更细的赛季题面提示、分段标签与跨场对照线索，让 PVP DRI 不只在开战前可读，也能继续承接到赛后复盘。</li>
                     <li><strong>挑战观察站深化</strong>：继续补跨周检索、更长档期聚合与更细历史分层，让观察站从“可检索样本库”继续走向长期打法训练器。</li>
@@ -19326,7 +19358,7 @@ class Game {
             </div>
 
             <div style="text-align: center; margin-top: auto; font-size: 0.8rem; color: rgba(255,255,255,0.2); padding-top: 10px;">
-                v7.0 命途裂变（开发线） | Breaking Fate since 2024
+                v9.2 当前版本 | Breaking Fate since 2024
             </div>
         </div>
         `;
@@ -21719,6 +21751,52 @@ class Game {
             )
         };
         const chapterClosed = sealedCount >= 3;
+        const pressureWindow = {
+            available: true,
+            open: rescueOpen || hasDebtPressure || hasRiskPressure,
+            statusId: hasDebtPressure
+                ? 'debt_pressure'
+                : (hasRiskPressure
+                    ? 'risk_pressure'
+                    : (chapterClosed
+                        ? 'sealed_pressure'
+                        : (rescueOpen ? 'rescue_pressure' : 'steady_pressure'))),
+            statusLabel: hasDebtPressure
+                ? '欠卷压章'
+                : (hasRiskPressure
+                    ? '险卷压章'
+                    : (chapterClosed
+                        ? '章末定型'
+                        : (rescueOpen ? '章内爬压' : '稳态续压'))),
+            reasonLine: sanitize(
+                hasDebtPressure
+                    ? (context.debtPack?.summaryLine || '欠卷仍压住强目标位，先清账再谈章内收束。')
+                    : (hasRiskPressure
+                        ? (context.settlement?.summaryLine || '险卷仍在抬高章势，需要先补外场或旁证。')
+                        : (rescueOpen
+                            ? `章内仍有 ${sealedCount}/3 周裁记缺口，压力正在抬高。`
+                            : (chapterClosed
+                                ? '三周裁记已齐，章势开始收束。'
+                                : '章势正在稳步推进。'))),
+                220
+            ),
+            guideLine: sanitize(
+                rescueOpen || hasDebtPressure || hasRiskPressure
+                    ? '章势只负责读出当前压力，不会改写本周季盘的行动真源。'
+                    : '继续沿本周主线推进，等章势自然收束。',
+                220
+            ),
+            shortLine: sanitize(
+                `${hasDebtPressure
+                    ? '欠卷压章'
+                    : (hasRiskPressure
+                        ? '险卷压章'
+                        : (chapterClosed
+                            ? '章末定型'
+                            : (rescueOpen ? '章内爬压' : '稳态续压')))}${hasDebtPressure || hasRiskPressure || rescueOpen || chapterClosed ? ` · ${Math.max(0, Math.min(100, hasDebtPressure ? 100 : (hasRiskPressure ? 84 : (chapterClosed ? 32 : 68))))}分` : ''}`,
+                120
+            )
+        };
         const dominantChoiceLabel = dominantChoiceId ? choiceLabelMap[dominantChoiceId] : '';
         const chapterResultId = chapterClosed
             ? (dominantChoiceId === 'seal_dispute' ? 'archived_dispute' : (dominantChoiceId === 'rebalance_support' ? 'balanced_front' : 'guarded_front'))
@@ -21899,6 +21977,7 @@ class Game {
                     : '继续沿本周季盘行动推进，等待三周裁记形成章末评语。'),
             feedbackLine: sanitize(feedbackLine, 240),
             rescueWindow,
+            pressureWindow,
             review: {
                 available: true,
                 statusId: chapterResultId,
@@ -21971,6 +22050,7 @@ class Game {
         const sealedWeeks = clampInt(root.sealedWeeks ?? entries.length, 0, 3);
         const targetWeeks = clampInt(root.targetWeeks || 3, 1, 3);
         const rescueRoot = root.rescueWindow && typeof root.rescueWindow === 'object' ? root.rescueWindow : {};
+        const pressureRoot = root.pressureWindow && typeof root.pressureWindow === 'object' ? root.pressureWindow : {};
         const reviewRoot = root.review && typeof root.review === 'object' ? root.review : {};
         const objectiveRoot = root.objective && typeof root.objective === 'object' ? root.objective : {};
         const carryoverRoot = root.carryover && typeof root.carryover === 'object' ? root.carryover : null;
@@ -22009,6 +22089,22 @@ class Game {
                 statusLabel: sanitize(rescueRoot.statusLabel || (rescueRoot.open ? '补裁记' : '稳态'), 32),
                 reasonLine: sanitize(rescueRoot.reasonLine, 220),
                 guideLine: sanitize(rescueRoot.guideLine, 220)
+            },
+            pressureWindow: {
+                available: pressureRoot.available !== false && !!(
+                    pressureRoot.summaryLine
+                    || pressureRoot.statusLine
+                    || pressureRoot.reasonLine
+                    || pressureRoot.guideLine
+                    || pressureRoot.shortLine
+                    || pressureRoot.statusLabel
+                ),
+                open: !!pressureRoot.open,
+                statusId: sanitize(pressureRoot.statusId || (pressureRoot.open ? 'rescue_pressure' : 'steady_pressure'), 32),
+                statusLabel: sanitize(pressureRoot.statusLabel || (pressureRoot.open ? '章内爬压' : '稳态续压'), 32),
+                reasonLine: sanitize(pressureRoot.reasonLine, 220),
+                guideLine: sanitize(pressureRoot.guideLine, 220),
+                shortLine: sanitize(pressureRoot.shortLine || pressureRoot.statusLabel || pressureRoot.reasonLine || pressureRoot.guideLine, 120)
             },
             objective: {
                 available: objectiveRoot.available !== false && !!(

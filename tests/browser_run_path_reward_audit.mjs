@@ -337,6 +337,7 @@ async function safeScreenshot(page, outPath) {
     const chips = Array.from(panel?.querySelectorAll('.reward-expedition-chip') || []);
     const chapterArcNode = panel?.querySelector('[data-season-board-chapter-arc-reward="true"]') || null;
     const chapterArcChip = panel?.querySelector('[data-season-board-chip="chapter-arc"]') || null;
+    const chapterArcPressureChip = panel?.querySelector('[data-season-board-chip="chapter-arc-pressure"]') || null;
     const chapterArcObjectiveChip = panel?.querySelector('[data-season-board-chip="chapter-arc-objective"]') || null;
     const payload = typeof window.render_game_to_text === 'function'
       ? JSON.parse(window.render_game_to_text())
@@ -354,6 +355,7 @@ async function safeScreenshot(page, outPath) {
       chipTexts: chips.map((entry) => entry.textContent?.replace(/\s+/g, ' ').trim() || ''),
       chapterArcText: chapterArcNode?.textContent?.replace(/\s+/g, ' ').trim() || '',
       chapterArcChipText: chapterArcChip?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      chapterArcPressureChipText: chapterArcPressureChip?.textContent?.replace(/\s+/g, ' ').trim() || '',
       chapterArcObjectiveChipText: chapterArcObjectiveChip?.textContent?.replace(/\s+/g, ' ').trim() || '',
       chapterArcButtonCount: chapterArcNode?.querySelectorAll('button').length || 0,
       chapterArcDataset: chapterArcNode ? { ...chapterArcNode.dataset } : null,
@@ -385,12 +387,24 @@ async function safeScreenshot(page, outPath) {
       && !!expeditionRewardProbe.rewardPayload?.seasonBoard?.chapterArc
       && !!expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective
       && expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.available !== false
+      && !!expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.pressureWindow
       && typeof expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.feedbackLine === 'string'
       && expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.feedbackLine.length > 0
       && typeof expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.summaryLine === 'string'
       && expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.summaryLine.length > 0
+      && /章势/.test(expeditionRewardProbe.chapterArcPressureChipText || '')
       && expeditionRewardProbe.chapterArcText.includes(expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.feedbackLine)
       && expeditionRewardProbe.chapterArcText.includes(expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.summaryLine)
+      && expeditionRewardProbe.chapterArcText.includes(
+        expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.pressureWindow.reasonLine
+        || expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.pressureWindow.shortLine
+        || ''
+      )
+      && expeditionRewardProbe.chapterArcText.includes(
+        expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.pressureWindow.shortLine
+        || expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.pressureWindow.statusLabel
+        || ''
+      )
       && /章目标/.test(expeditionRewardProbe.chapterArcObjectiveChipText || '')
       && expeditionRewardProbe.chapterArcObjectiveChipText.includes(
         expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.statusLabel
@@ -402,6 +416,9 @@ async function safeScreenshot(page, outPath) {
         || '本周主线'
       )
       && expeditionRewardProbe.chapterArcDataset?.seasonBoardChapterArcId === expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.id
+      && expeditionRewardProbe.chapterArcDataset?.seasonBoardChapterArcOpen === (expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.rescueWindow?.open ? 'true' : 'false')
+      && expeditionRewardProbe.chapterArcDataset?.seasonBoardChapterArcPressureOpen === (expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.pressureWindow?.open ? 'true' : 'false')
+      && expeditionRewardProbe.chapterArcDataset?.seasonBoardChapterArcPressureStatus === expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.pressureWindow.statusId
       && expeditionRewardProbe.chapterArcDataset?.seasonBoardChapterArcObjectiveId === expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.id
       && expeditionRewardProbe.chapterArcDataset?.seasonBoardChapterArcObjectiveStatus === expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.statusId
       && expeditionRewardProbe.rewardPayload?.id === expeditionRewardProbe.rewardMetaId
@@ -517,6 +534,70 @@ async function safeScreenshot(page, outPath) {
   );
 
   await safeScreenshot(page, path.join(outDir, 'reward-expedition-summary-mobile.png'));
+
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.waitForTimeout(120);
+  const rewardMobileDenseProbe = await page.evaluate(() => {
+    const screen = document.getElementById('reward-screen');
+    const sideColumn = document.querySelector('.reward-side-column');
+    const expeditionPanel = document.getElementById('reward-expedition-meta');
+    const chapterArcNode = expeditionPanel?.querySelector('[data-season-board-chapter-arc-reward="true"]') || null;
+    const chips = Array.from(expeditionPanel?.querySelectorAll('[data-season-board-chip]') || []);
+    const narrative = document.getElementById('reward-narrative-brief');
+    const toRect = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    const screenRect = toRect(screen);
+    const sideRect = toRect(sideColumn);
+    const expeditionRect = toRect(expeditionPanel);
+    const chapterArcRect = toRect(chapterArcNode);
+    return {
+      ok: !!screen && !!sideColumn && !!expeditionPanel && !!narrative,
+      viewportWidth: window.innerWidth,
+      screenScrollWidth: screen?.scrollWidth || 0,
+      screenClientWidth: screen?.clientWidth || 0,
+      sideScrollWidth: sideColumn?.scrollWidth || 0,
+      sideClientWidth: sideColumn?.clientWidth || 0,
+      expeditionScrollWidth: expeditionPanel?.scrollWidth || 0,
+      expeditionClientWidth: expeditionPanel?.clientWidth || 0,
+      screenRight: screenRect?.right || 0,
+      sideRight: sideRect?.right || 0,
+      expeditionRight: expeditionRect?.right || 0,
+      chapterArcRight: chapterArcRect?.right || 0,
+      chipCount: chips.length,
+      titleText: expeditionPanel?.querySelector('.reward-expedition-title')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      narrativeText: narrative?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      chapterArcText: chapterArcNode?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    };
+  });
+
+  add(
+    'mobile reward rail keeps expedition meta and season-board chips compact on narrower viewports',
+    !!rewardMobileDenseProbe?.ok
+      && rewardMobileDenseProbe.screenScrollWidth <= rewardMobileDenseProbe.screenClientWidth + 2
+      && rewardMobileDenseProbe.sideScrollWidth <= rewardMobileDenseProbe.sideClientWidth + 2
+      && rewardMobileDenseProbe.expeditionScrollWidth <= rewardMobileDenseProbe.expeditionClientWidth + 2
+      && rewardMobileDenseProbe.screenRight <= rewardMobileDenseProbe.viewportWidth + 2
+      && rewardMobileDenseProbe.sideRight <= rewardMobileDenseProbe.viewportWidth + 2
+      && rewardMobileDenseProbe.expeditionRight <= rewardMobileDenseProbe.viewportWidth + 2
+      && rewardMobileDenseProbe.chapterArcRight <= rewardMobileDenseProbe.viewportWidth + 2
+      && rewardMobileDenseProbe.chipCount >= 3
+      && rewardMobileDenseProbe.titleText.length > 0
+      && rewardMobileDenseProbe.narrativeText.length > 0
+      && /章程|三周|章节/.test(rewardMobileDenseProbe.chapterArcText || ''),
+    JSON.stringify(rewardMobileDenseProbe || null)
+  );
+
+  await safeScreenshot(page, path.join(outDir, 'reward-expedition-summary-mobile-narrow.png'));
 
   const report = {
     baseUrl,

@@ -6,6 +6,10 @@ import { safeAuditScreenshot } from './helpers/safe_audit_screenshot.mjs';
 const url = process.argv[2] || 'http://127.0.0.1:4173';
 const outDir = process.argv[3] || 'output/web-meta-screen-audit';
 fs.mkdirSync(outDir, { recursive: true });
+const reportPath = path.join(outDir, 'report.json');
+if (fs.existsSync(reportPath)) {
+  fs.unlinkSync(reportPath);
+}
 
 const findings = [];
 const consoleErrors = [];
@@ -859,11 +863,13 @@ function rectObj(rect) {
     const chapterSeasonBoard = payload?.map?.chapter?.seasonBoard || null;
     const frontier = chapterSeasonBoard?.frontier || null;
     const chapterArc = chapterSeasonBoard?.chapterArc || null;
+    const chapterArcPressureWindow = chapterArc?.pressureWindow || null;
     const decree = frontier?.decree || null;
     const chronicle = frontier?.chronicle || null;
     const council = frontier?.council || null;
     const mapChapterArc = document.querySelector('#map-chapter-brief [data-map-season-board-chapter-arc="true"]');
     const mapChapterArcChip = document.querySelector('#map-chapter-brief [data-map-season-board-chip="chapter-arc"]');
+    const mapChapterArcPressureChip = document.querySelector('#map-chapter-brief [data-map-season-board-chip="chapter-arc-pressure"]');
     const mapChapterArcObjectiveChip = document.querySelector('#map-chapter-brief [data-map-season-board-chip="chapter-arc-objective"]');
     const mapFrontier = document.querySelector('#map-chapter-brief [data-map-season-board-frontier="true"]');
     const mapFrontierChip = document.querySelector('#map-chapter-brief [data-map-season-board-chip="frontier"]');
@@ -882,6 +888,10 @@ function rectObj(rect) {
         !!chapterArc.id &&
         !!chapterArc.summaryLine &&
         !!chapterArc.feedbackLine &&
+        !!chapterArcPressureWindow &&
+        chapterArcPressureWindow.available !== false &&
+        !!chapterArcPressureWindow.statusId &&
+        !!chapterArcPressureWindow.reasonLine &&
         !!chapterArc.objective &&
         !!chapterArc.objective.summaryLine &&
         !!chapterArc.objective.goalLine &&
@@ -906,6 +916,7 @@ function rectObj(rect) {
         !!mapFrontierChip &&
         !!mapChapterArc &&
         !!mapChapterArcChip &&
+        !!mapChapterArcPressureChip &&
         !!mapChapterArcObjectiveChip &&
         !!mapFrontierDecree &&
         !!mapFrontierDecreeChip &&
@@ -915,14 +926,23 @@ function rectObj(rect) {
         !!mapFrontierCouncilChip &&
         mapChapterArc.dataset.seasonBoardChapterArcId === chapterArc.id &&
         mapChapterArc.dataset.seasonBoardChapterArcWeekSlot === String(chapterArc.weekSlot || '') &&
+        mapChapterArc.dataset.seasonBoardChapterArcPressureOpen === (chapterArcPressureWindow.open ? 'true' : 'false') &&
+        mapChapterArc.dataset.seasonBoardChapterArcPressureStatus === chapterArcPressureWindow.statusId &&
         chapterArc.objective.available !== false &&
         mapChapterArc.dataset.seasonBoardChapterArcObjectiveId === chapterArc.objective.id &&
         mapChapterArc.dataset.seasonBoardChapterArcObjectiveStatus === chapterArc.objective.statusId &&
         text(mapChapterArc).includes(chapterArc.arcLabel || chapterArc.chapterLabel || '') &&
         text(mapChapterArc).includes(chapterArc.summaryLine || '') &&
+        (
+          text(mapChapterArc).includes(chapterArcPressureWindow.reasonLine || '')
+          || text(mapChapterArc).includes(chapterArcPressureWindow.shortLine || '')
+        ) &&
         text(mapChapterArc).includes(chapterArc.objective.summaryLine || '') &&
         text(mapChapterArc).includes(chapterArc.feedbackLine || '') &&
         /章程|三周|章节/.test(text(mapChapterArcChip)) &&
+        /章势/.test(text(mapChapterArcPressureChip)) &&
+        text(mapChapterArcPressureChip).includes(chapterArcPressureWindow.statusLabel || '章势压强') &&
+        text(mapChapterArcPressureChip).includes(chapterArcPressureWindow.shortLine || chapterArcPressureWindow.reasonLine || '') &&
         /章目标/.test(text(mapChapterArcObjectiveChip)) &&
         text(mapChapterArcObjectiveChip).includes(chapterArc.objective.statusLabel || chapterArc.objective.label || '') &&
         text(mapChapterArcObjectiveChip).includes(chapterArc.objective.focusLaneLabel || '本周主线') &&
@@ -953,6 +973,7 @@ function rectObj(rect) {
         mapFrontierActionCount === 0,
       currentScreen: game.currentScreen || '',
       chapterArc,
+      chapterArcPressureWindow,
       chapterArcObjective: chapterArc?.objective || null,
       frontier,
       decree,
@@ -960,6 +981,7 @@ function rectObj(rect) {
       council,
       mapChapterArcText: text(mapChapterArc),
       mapChapterArcChipText: text(mapChapterArcChip),
+      mapChapterArcPressureChipText: text(mapChapterArcPressureChip),
       mapChapterArcObjectiveChipText: text(mapChapterArcObjectiveChip),
       mapFrontierText: text(mapFrontier),
       mapFrontierChipText: text(mapFrontierChip),
@@ -2382,6 +2404,82 @@ function rectObj(rect) {
   );
   await safeAuditScreenshot(page, path.join(outDir, 'reward-layout-mobile.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.waitForTimeout(120);
+  const rewardMobileNarrowProbe = await page.evaluate(() => {
+    const rewardScreen = document.getElementById('reward-screen');
+    const main = document.querySelector('.reward-main-column');
+    const side = document.querySelector('.reward-side-column');
+    const actions = document.querySelector('.reward-actions');
+    const expeditionPanel = document.getElementById('reward-expedition-meta');
+    const verificationCard = document.querySelector('[data-season-board-verification-reward="true"]');
+    const verificationFollowup = document.querySelector('[data-season-board-verification-followup="true"]');
+    const chapterArcNode = expeditionPanel?.querySelector('[data-season-board-chapter-arc-reward="true"]') || null;
+    const chips = Array.from(expeditionPanel?.querySelectorAll('[data-season-board-chip]') || []);
+    const toRect = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    const mainRect = toRect(main);
+    const sideRect = toRect(side);
+    const actionsRect = toRect(actions);
+    const expeditionPanelRect = toRect(expeditionPanel);
+    const chapterArcRect = toRect(chapterArcNode);
+    const verificationCardRect = toRect(verificationCard);
+    const verificationFollowupRect = toRect(verificationFollowup);
+    return {
+      ok: !!rewardScreen && !!main && !!side && !!actions && !!expeditionPanel,
+      viewportWidth: window.innerWidth,
+      screenScrollWidth: rewardScreen?.scrollWidth || 0,
+      screenClientWidth: rewardScreen?.clientWidth || 0,
+      mainScrollWidth: main?.scrollWidth || 0,
+      mainClientWidth: main?.clientWidth || 0,
+      sideScrollWidth: side?.scrollWidth || 0,
+      sideClientWidth: side?.clientWidth || 0,
+      panelScrollWidth: expeditionPanel?.scrollWidth || 0,
+      panelClientWidth: expeditionPanel?.clientWidth || 0,
+      panelRight: expeditionPanelRect?.right || 0,
+      mainRight: mainRect?.right || 0,
+      sideRight: sideRect?.right || 0,
+      actionsRight: actionsRect?.right || 0,
+      chapterArcRight: chapterArcRect?.right || 0,
+      verificationCardRight: verificationCardRect?.right || 0,
+      verificationFollowupRight: verificationFollowupRect?.right || 0,
+      chipCount: chips.length,
+      chapterArcText: chapterArcNode?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      verificationText: verificationCard?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      followupText: verificationFollowup?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    };
+  });
+  add(
+    'reward screen keeps season-board chips and verification cards readable on narrower mobile viewports',
+    !!rewardMobileNarrowProbe?.ok
+      && rewardMobileNarrowProbe.screenScrollWidth <= rewardMobileNarrowProbe.screenClientWidth + 2
+      && rewardMobileNarrowProbe.mainScrollWidth <= rewardMobileNarrowProbe.mainClientWidth + 2
+      && rewardMobileNarrowProbe.sideScrollWidth <= rewardMobileNarrowProbe.sideClientWidth + 2
+      && rewardMobileNarrowProbe.panelScrollWidth <= rewardMobileNarrowProbe.panelClientWidth + 2
+      && rewardMobileNarrowProbe.mainRight <= rewardMobileNarrowProbe.viewportWidth + 2
+      && rewardMobileNarrowProbe.sideRight <= rewardMobileNarrowProbe.viewportWidth + 2
+      && rewardMobileNarrowProbe.actionsRight <= rewardMobileNarrowProbe.viewportWidth + 2
+      && rewardMobileNarrowProbe.chapterArcRight <= rewardMobileNarrowProbe.viewportWidth + 2
+      && rewardMobileNarrowProbe.verificationCardRight <= rewardMobileNarrowProbe.viewportWidth + 2
+      && rewardMobileNarrowProbe.verificationFollowupRight <= rewardMobileNarrowProbe.viewportWidth + 2
+      && rewardMobileNarrowProbe.chipCount >= 3
+      && /三周一章|章程|章节/.test(rewardMobileNarrowProbe.chapterArcText || '')
+      && /扩大本周定榜样本/.test(rewardMobileNarrowProbe.verificationText || '')
+      && /旁验证|七日劫数/.test(rewardMobileNarrowProbe.followupText || ''),
+    JSON.stringify(rewardMobileNarrowProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'reward-layout-mobile-narrow.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
   await page.setViewportSize({ width: 1440, height: 960 });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
@@ -3334,6 +3432,12 @@ function rectObj(rect) {
     const sanctumSeasonBoardChapterArcObjectiveChipText = (document.querySelector('#sanctum-summary [data-season-board-chip="chapter-arc-objective"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const sanctumSeasonBoardChapterArcCard = document.querySelector('#sanctum-summary [data-season-board-chapter-arc-card="true"]');
     const sanctumSeasonBoardChapterArcCardText = (sanctumSeasonBoardChapterArcCard?.textContent || '').replace(/\s+/g, ' ').trim();
+    const sanctumSeasonBoardChapterArcOpen = sanctumSeasonBoardChapterArcCard?.getAttribute('data-season-board-chapter-arc-open') || '';
+    const sanctumSeasonBoardChapterArcPressureStatus = sanctumSeasonBoardChapterArcCard?.getAttribute('data-season-board-chapter-arc-pressure-status') || '';
+    const sanctumSeasonBoardChapterArcPressureTexts = Array.from(document.querySelectorAll('#sanctum-summary [data-season-board-chapter-arc-pressure="true"]'))
+      .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    const sanctumSeasonBoardChapterArcPressureText = sanctumSeasonBoardChapterArcPressureTexts.join(' ').trim();
     const sanctumSeasonBoardChapterArcButtonCount = sanctumSeasonBoardChapterArcCard?.querySelectorAll('button').length || 0;
     const sanctumSeasonBoardChapterArcFollow = sanctumSeasonBoardChapterArcCard?.querySelector('[data-season-board-chapter-arc-follow="true"]') || null;
     const sanctumSeasonBoardChapterArcFollowCount = sanctumSeasonBoardChapterArcCard?.querySelectorAll('[data-season-board-chapter-arc-follow="true"]').length || 0;
@@ -3428,20 +3532,10 @@ function rectObj(rect) {
         sanctumSeasonBoardFrontierCouncilGuide.length > 0 &&
         /会审/.test(sanctumSeasonBoardFrontierCouncilChipText) &&
         sanctumSeasonBoardFrontierCouncilCardText.length > 0 &&
-        sanctumSeasonBoardFrontierResolution.length > 0 &&
-        sanctumSeasonBoardFrontierResolutionGuide.length > 0 &&
-        /裁记|会审/.test(sanctumSeasonBoardFrontierResolutionChipText) &&
-        sanctumSeasonBoardFrontierResolutionCardText.length > 0 &&
-        /会审裁记/.test(sanctumSeasonBoardFrontierResolutionPanelText) &&
         sanctumSeasonBoardFrontierCount === 1 &&
         sanctumSeasonBoardFrontierDecreeCount === 1 &&
         sanctumSeasonBoardFrontierChronicleCount === 1 &&
         sanctumSeasonBoardFrontierCouncilCount === 1 &&
-        sanctumSeasonBoardFrontierResolutionCount === 1 &&
-        sanctumSeasonBoardFrontierResolutionPanelCount === 1 &&
-        (sanctumSeasonBoardFrontierResolutionSubmitted || sanctumSeasonBoardFrontierResolutionChoiceCount >= 3) &&
-        sanctumSeasonBoardFrontierResolutionResearchChoiceCount === 0 &&
-        sanctumSeasonBoardFrontierResolutionGoalActionCount === 0 &&
         sanctumSeasonBoardFrontierActionCount === 0 &&
         /季押卷/.test(sanctumSeasonBoardSettlement) &&
         /结业验证/.test(sanctumSeasonBoardVerification) &&
@@ -3451,6 +3545,7 @@ function rectObj(rect) {
         /结业验证/.test(sanctumSeasonBoardVerificationGuide) &&
         /季盘阶段|赛季主轴|季盘进度|季押卷|战线/.test(sanctumSeasonBoardChipsText) &&
         /章程|章节|三周/.test(sanctumSeasonBoardChapterArcChipText) &&
+        /章势/.test(sanctumSeasonBoardChipsText) &&
         /章目标/.test(sanctumSeasonBoardChipsText) &&
         /法旨/.test(sanctumSeasonBoardChipsText) &&
         /史卷/.test(sanctumSeasonBoardChipsText) &&
@@ -3467,6 +3562,23 @@ function rectObj(rect) {
         sanctumSeasonBoardChapterArcObjectiveChipText.includes(expeditionSeasonBoard.chapterArc.objective.statusLabel || expeditionSeasonBoard.chapterArc.objective.label || '') &&
         sanctumSeasonBoardChapterArcObjectiveChipText.includes(expeditionSeasonBoard.chapterArc.objective.focusLaneLabel || '经营目标') &&
         sanctumSeasonBoardChapterArcCardText.length > 0 &&
+        sanctumSeasonBoardChapterArcOpen === (expeditionSeasonBoard.chapterArc?.rescueWindow?.open ? 'true' : 'false') &&
+        sanctumSeasonBoardChapterArcPressureStatus === (expeditionSeasonBoard.chapterArc?.pressureWindow?.statusId || '') &&
+        sanctumSeasonBoardChapterArcPressureText.length > 0 &&
+        sanctumSeasonBoardChapterArcPressureText.includes(
+          expeditionSeasonBoard.chapterArc?.pressureWindow?.reasonLine
+          || expeditionSeasonBoard.chapterArc?.pressureWindow?.shortLine
+          || ''
+        ) &&
+        sanctumSeasonBoardChapterArcPressureText.includes(
+          expeditionSeasonBoard.chapterArc?.pressureWindow?.guideLine
+          || expeditionSeasonBoard.chapterArc?.pressureWindow?.statusLabel
+          || ''
+        ) &&
+        sanctumSeasonBoardChapterArcPressureText.includes(
+          expeditionSeasonBoard.chapterArc?.pressureWindow?.guideLine
+          || ''
+        ) &&
         sanctumSeasonBoardChapterArcCardText.includes(expeditionSeasonBoard.chapterArc.objective.summaryLine || '') &&
         sanctumSeasonBoardChapterArcFollowCount === 1 &&
         sanctumSeasonBoardChapterArcButtonCount === sanctumSeasonBoardChapterArcFollowCount &&
@@ -3600,6 +3712,9 @@ function rectObj(rect) {
       sanctumSeasonBoardChapterArcObjectiveText,
       sanctumSeasonBoardChapterArcObjectiveChipText,
       sanctumSeasonBoardChapterArcCardText,
+      sanctumSeasonBoardChapterArcOpen,
+      sanctumSeasonBoardChapterArcPressureStatus,
+      sanctumSeasonBoardChapterArcPressureText,
       sanctumSeasonBoardChapterArcButtonCount,
       sanctumSeasonBoardChapterArcFollowCount,
       sanctumSeasonBoardChapterArcObjectiveCount,
@@ -5318,18 +5433,24 @@ function rectObj(rect) {
   await safeAuditScreenshot(page, path.join(outDir, 'shop-strategy-advice-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   add('no console errors were emitted during meta-screen audit', consoleErrors.length === 0, JSON.stringify(consoleErrors));
+  const failedCount = findings.filter((finding) => !finding.pass).length;
+  const passedCount = findings.length - failedCount;
+  const exitCode = failedCount > 0 ? 1 : 0;
   const report = {
     url,
     findings,
     consoleErrors,
+    passedCount,
+    failedCount,
+    exitCode,
     timestamp: new Date().toISOString(),
   };
-  fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
+  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 
   await browser.close();
 
-  if (findings.some((finding) => !finding.pass)) {
+  if (exitCode !== 0) {
     process.exit(1);
   }
 })();

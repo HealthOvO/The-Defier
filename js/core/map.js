@@ -2419,6 +2419,9 @@ class GameMap {
         const seasonBoardChapterArcRescue = seasonBoardChapterArc?.rescueWindow && typeof seasonBoardChapterArc.rescueWindow === 'object'
             ? seasonBoardChapterArc.rescueWindow
             : null;
+        const seasonBoardChapterArcPressureWindow = seasonBoardChapterArc?.pressureWindow && typeof seasonBoardChapterArc.pressureWindow === 'object'
+            ? seasonBoardChapterArc.pressureWindow
+            : null;
         const seasonBoardChapterArcReview = seasonBoardChapterArc?.review && typeof seasonBoardChapterArc.review === 'object'
             ? seasonBoardChapterArc.review
             : null;
@@ -2460,6 +2463,7 @@ class GameMap {
                 seasonBoardChapterArc.summaryLine
                     ? `${seasonBoardChapterArc.arcLabel || seasonBoardChapterArc.chapterLabel || '当前章程'} · ${seasonBoardChapterArc.summaryLine}`
                     : `三周一章：${seasonBoardChapterArc.arcLabel || seasonBoardChapterArc.chapterLabel || '当前章程'} · 第 ${seasonBoardChapterArc.weekSlot || 1}/${seasonBoardChapterArc.targetWeeks || 3} 周`,
+                seasonBoardChapterArcPressureWindow?.shortLine || seasonBoardChapterArcPressureWindow?.reasonLine || '',
                 seasonBoardChapterArcObjective?.summaryLine || '',
                 seasonBoardChapterArc.feedbackLine
                     || (seasonBoardChapterArcRescue?.open
@@ -2470,6 +2474,9 @@ class GameMap {
             : '';
         const seasonBoardChapterArcChipLine = seasonBoardChapterArc
             ? `三周一章 · 第 ${seasonBoardChapterArc.weekSlot || 1}/${seasonBoardChapterArc.targetWeeks || 3} 周 · ${seasonBoardChapterArcRescue?.statusLabel || seasonBoardChapterArcReview?.statusLabel || seasonBoardChapterArc.windowLabel || '章程'}`
+            : '';
+        const seasonBoardChapterArcPressureChipLine = seasonBoardChapterArcPressureWindow?.available
+            ? `章势 · ${seasonBoardChapterArcPressureWindow.statusLabel || '章势压强'} · ${seasonBoardChapterArcPressureWindow.shortLine || '待同步'}`
             : '';
         const seasonBoardChapterArcObjectiveChipLine = seasonBoardChapterArcObjective?.available
             ? `章目标 · ${seasonBoardChapterArcObjective.statusLabel || seasonBoardChapterArcObjective.label || '经营目标'} · ${seasonBoardChapterArcObjective.focusLaneLabel || '本周主线'}`
@@ -2545,6 +2552,8 @@ class GameMap {
                 data-season-board-chapter-arc-week-slot="${this.escapeMapText(seasonBoardChapterArc.weekSlot || '')}"
                 data-season-board-chapter-arc-status="${this.escapeMapText(seasonBoardChapterArcRescue?.statusId || seasonBoardChapterArcReview?.statusId || '')}"
                 data-season-board-chapter-arc-open="${seasonBoardChapterArcRescue?.open ? 'true' : 'false'}"
+                data-season-board-chapter-arc-pressure-open="${seasonBoardChapterArcPressureWindow?.open ? 'true' : 'false'}"
+                data-season-board-chapter-arc-pressure-status="${this.escapeMapText(seasonBoardChapterArcPressureWindow?.statusId || '')}"
                 data-season-board-chapter-arc-objective-id="${this.escapeMapText(seasonBoardChapterArcObjective?.id || '')}"
                 data-season-board-chapter-arc-objective-status="${this.escapeMapText(seasonBoardChapterArcObjective?.statusId || '')}">
                 <span class="chapter-line-label">章程</span>
@@ -2611,6 +2620,7 @@ class GameMap {
                 ${nemesisForecast ? `<span class="chapter-brief-chip nemesis-forecast ${this.escapeMapText(`tier-${nemesisForecast.pressureTier || 'medium'}`)}">${this.escapeMapText(`追猎预判 · ${nemesisForecast.pressureLabel || '拉扯'} · ${nemesisForecast.windowLabel || '窗口待定'}`)}</span>` : ''}
                 ${frontierRisk ? `<span class="chapter-brief-chip warning">${this.escapeMapText(`前路主险 · ${frontierRisk.label} · DRI ${frontierRisk.index}`)}</span>` : ''}
                 ${seasonBoardChapterArc ? `<span class="chapter-brief-chip warning" data-map-season-board-chip="chapter-arc">${this.escapeMapText(seasonBoardChapterArcChipLine)}</span>` : ''}
+                ${seasonBoardChapterArcPressureChipLine ? `<span class="chapter-brief-chip warning" data-map-season-board-chip="chapter-arc-pressure">${this.escapeMapText(seasonBoardChapterArcPressureChipLine)}</span>` : ''}
                 ${seasonBoardChapterArcObjective?.available ? `<span class="chapter-brief-chip warning" data-map-season-board-chip="chapter-arc-objective">${this.escapeMapText(seasonBoardChapterArcObjectiveChipLine)}</span>` : ''}
                 ${seasonBoardFrontier ? `<span class="chapter-brief-chip warning" data-map-season-board-chip="frontier">${this.escapeMapText(`诸界战线 · ${seasonBoardFrontier.primaryFrontShortLabel || seasonBoardFrontier.primaryFrontLabel || '主战线'} · ${seasonBoardFrontier.pressureLabel || seasonBoardFrontier.statusLabel || '稳态'}`)}</span>` : ''}
                 ${seasonBoardFrontierDecree ? `<span class="chapter-brief-chip warning" data-map-season-board-chip="frontier-decree">${this.escapeMapText(`本周法旨 · ${seasonBoardFrontierDecree.laneLabel || seasonBoardFrontier.primaryFrontShortLabel || '主战线'} · ${seasonBoardFrontierDecree.toneLabel || '本周'}`)}</span>` : ''}

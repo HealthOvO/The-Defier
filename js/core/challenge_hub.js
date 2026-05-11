@@ -4091,9 +4091,9 @@
         return result;
     };
 
-    Game.prototype.clearSave = function () {
+    Game.prototype.clearSave = function (options = {}) {
         const result = typeof originalClearSave === 'function'
-            ? originalClearSave.call(this)
+            ? originalClearSave.call(this, options)
             : undefined;
         this.clearActiveChallengeRun();
         return result;

@@ -731,17 +731,18 @@ body[data-current-screen="battle-screen"] #battle-log {
         max-width: 100%;
         justify-content: flex-start;
         align-items: flex-end;
-        gap: 8px;
-        padding: 0 64px 8px;
+        gap: 4px;
+        padding: 0 4px 8px;
         overflow-x: auto;
         overflow-y: hidden;
-        scroll-padding-inline: 64px;
+        scroll-padding-inline: 8px;
         scroll-snap-type: x proximity;
     }
 
     #battle-screen #hand-cards .card,
     #battle-screen .hand-cards .card {
         flex: 0 0 var(--card-width-mobile);
+        width: var(--card-width-mobile);
         margin-left: 0;
         scroll-snap-align: center;
         transform: none;
@@ -1079,7 +1080,7 @@ body[data-current-screen="battle-screen"] #battle-log {
     #battle-screen .battle-command-panel,
     #battle-screen #battle-command-panel {
         top: max(54px, calc(env(safe-area-inset-top) + 44px));
-        max-height: min(94px, 12dvh);
+        max-height: min(122px, 15dvh);
         padding: 5px 7px;
         border-radius: 11px;
         overflow-y: auto;
@@ -1110,7 +1111,11 @@ body[data-current-screen="battle-screen"] #battle-log {
 
     #battle-screen .battle-command-panel .battle-tactical-advisor,
     #battle-screen #battle-command-panel .battle-tactical-advisor {
-        display: none;
+        display: block;
+        margin-top: 5px;
+        max-height: 34px;
+        opacity: 1;
+        overflow: hidden;
     }
 
     #battle-screen .boss-act-panel,
@@ -1165,6 +1170,24 @@ body[data-current-screen="battle-screen"] #battle-log {
         transform-origin: center bottom;
     }
 
+    #battle-screen .enemy-meta-strip {
+        gap: 2px 3px;
+    }
+
+    #battle-screen .enemy-meta-strip .enemy-role-tag,
+    #battle-screen .enemy-meta-strip .enemy-plan-tag,
+    #battle-screen .enemy-meta-strip .enemy-encounter-tag,
+    #battle-screen .enemy-meta-strip .enemy-encounter-affix,
+    #battle-screen .enemy-meta-strip .enemy-squad-tag,
+    #battle-screen .enemy-meta-strip .enemy-formation-tag,
+    #battle-screen .enemy-meta-strip .enemy-counter-tag,
+    #battle-screen .enemy-meta-strip .enemy-threat-tag {
+        min-height: 14px;
+        padding: 1px 5px;
+        font-size: 0.48rem;
+        letter-spacing: 0.12px;
+    }
+
     #battle-screen .battle-middle {
         top: 28dvh;
         height: 38px;
@@ -1178,8 +1201,9 @@ body[data-current-screen="battle-screen"] #battle-log {
     }
 
     #battle-screen .hand-cards {
-        gap: 7px;
-        padding: 0 58px 6px;
+        gap: 4px;
+        padding: 0 4px 6px;
+        overflow-x: auto;
     }
 
     body[data-current-screen="battle-screen"] #battle-log,

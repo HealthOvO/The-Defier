@@ -6,6 +6,26 @@ const url = process.argv[2] || 'http://127.0.0.1:4173';
 const outDir = process.argv[3] || 'output/web-guide-modal-audit';
 fs.mkdirSync(outDir, { recursive: true });
 
+const progressText = (() => {
+  try {
+    return fs.readFileSync(path.resolve(process.cwd(), 'progress.md'), 'utf8');
+  } catch {
+    return '';
+  }
+})();
+
+const introPageText = (() => {
+  try {
+    return fs.readFileSync(path.resolve(process.cwd(), 'game-intro.html'), 'utf8');
+  } catch {
+    return '';
+  }
+})();
+
+const introProgressSyncAnchors = ['三周一章', 'feedbackLine', 'objective', 'pressureWindow'].filter(
+  (anchor) => progressText.includes(anchor) && introPageText.includes(anchor)
+);
+
 const findings = [];
 const consoleErrors = [];
 
@@ -103,6 +123,33 @@ async function safeScreenshot(page, outPath) {
     };
   });
   add('guide modal tab switching updates the visible panel', !!tabSwitchProbe?.ok, JSON.stringify(tabSwitchProbe || null));
+
+  await page.click("button[data-tab='updates']", { force: true });
+  await page.waitForTimeout(250);
+  const updateProbe = await page.evaluate((expectedAnchors) => {
+    const activePanel = document.querySelector('.intro-tab-panel.active');
+    const activeTab = document.querySelector('.intro-tab-btn.active');
+    const text = (activePanel?.textContent || '').replace(/\s+/g, ' ').trim();
+    const missingAnchors = expectedAnchors.filter((anchor) => !text.includes(anchor));
+    return {
+      ok:
+        !!activePanel &&
+        !!activeTab &&
+        activeTab.textContent.trim() === '更新' &&
+        text.includes('V9.2') &&
+        text.includes('当前版本重点') &&
+        missingAnchors.length === 0,
+      activeTab: activeTab?.textContent?.trim() || '',
+      textSample: text.slice(0, 240),
+      expectedAnchors,
+      missingAnchors,
+    };
+  }, introProgressSyncAnchors);
+  add(
+    'guide modal updates stay aligned with intro/progress version anchors',
+    !!updateProbe?.ok,
+    JSON.stringify(updateProbe || null)
+  );
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(250);

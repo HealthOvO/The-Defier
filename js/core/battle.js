@@ -10099,7 +10099,7 @@ class Battle {
         const compactHud = this.shouldUseCompactBattleHud();
         const viewportHeight = typeof window !== 'undefined' ? Math.max(0, Number(window.innerHeight) || 0) : 0;
         const expandedMaxHeight = compactHud
-            ? Math.min(280, Math.max(120, viewportHeight * 0.38))
+            ? Math.min(240, Math.max(140, viewportHeight * 0.26))
             : Math.min(220, Math.max(120, viewportHeight * 0.28));
         advisor.style.maxHeight = expanded
             ? `${Math.round(expandedMaxHeight)}px`

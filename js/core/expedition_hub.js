@@ -931,6 +931,7 @@
         const root = chapterArc && typeof chapterArc === 'object' ? chapterArc : null;
         if (!root) return null;
         const rescueRoot = root.rescueWindow && typeof root.rescueWindow === 'object' ? root.rescueWindow : null;
+        const pressureRoot = root.pressureWindow && typeof root.pressureWindow === 'object' ? root.pressureWindow : null;
         const reviewRoot = root.review && typeof root.review === 'object' ? root.review : null;
         const objectiveRoot = root.objective && typeof root.objective === 'object' ? root.objective : null;
         const carryoverRoot = root.carryover && typeof root.carryover === 'object' ? root.carryover : null;
@@ -974,6 +975,17 @@
                     statusLabel: String(rescueRoot.statusLabel || ''),
                     reasonLine: String(rescueRoot.reasonLine || ''),
                     guideLine: String(rescueRoot.guideLine || '')
+                }
+                : null,
+            pressureWindow: pressureRoot
+                ? {
+                    available: pressureRoot.available !== false,
+                    open: !!pressureRoot.open,
+                    statusId: String(pressureRoot.statusId || ''),
+                    statusLabel: String(pressureRoot.statusLabel || ''),
+                    reasonLine: String(pressureRoot.reasonLine || ''),
+                    guideLine: String(pressureRoot.guideLine || ''),
+                    shortLine: String(pressureRoot.shortLine || '')
                 }
                 : null,
             review: reviewRoot
@@ -6339,9 +6351,9 @@
         return result;
     };
 
-    Game.prototype.clearSave = function () {
+    Game.prototype.clearSave = function (options = {}) {
         const result = typeof originalClearSave === 'function'
-            ? originalClearSave.call(this)
+            ? originalClearSave.call(this, options)
             : undefined;
         this.expeditionState = null;
         this.persistActiveExpeditionState();
@@ -6377,6 +6389,9 @@
                 snapshot.strengths.unshift(`赛季天道盘当前围绕【${seasonBoard.themeLabel || '本周主轴'}】推进，处于「${seasonBoard.phaseLabel || '采样期'}」。`);
                 if (seasonBoard.chapterArc?.available) {
                     snapshot.strengths.unshift(`三周一章当前推进到【${seasonBoard.chapterArc.arcLabel || seasonBoard.chapterArc.chapterLabel || '当前章程'}】第 ${seasonBoard.chapterArc.weekSlot || 1}/${seasonBoard.chapterArc.targetWeeks || 3} 周。`);
+                    if (seasonBoard.chapterArc.pressureWindow?.available) {
+                        snapshot.strengths.unshift(`章势压强：${seasonBoard.chapterArc.pressureWindow.shortLine || seasonBoard.chapterArc.pressureWindow.statusLabel || '稳态续压'}。`);
+                    }
                     snapshot.nextTargets.unshift(`章程跟进：${seasonBoard.chapterArc.objective?.summaryLine
                         || seasonBoard.chapterArc.objective?.goalLine
                         || seasonBoard.chapterArc.feedbackLine
@@ -6444,6 +6459,9 @@
             snapshot.strengths.unshift(`赛季天道盘当前围绕【${seasonBoard.themeLabel || '本周主轴'}】推进，处于「${seasonBoard.phaseLabel || '采样期'}」。`);
             if (seasonBoard.chapterArc?.available) {
                 snapshot.strengths.unshift(`三周一章当前推进到【${seasonBoard.chapterArc.arcLabel || seasonBoard.chapterArc.chapterLabel || '当前章程'}】第 ${seasonBoard.chapterArc.weekSlot || 1}/${seasonBoard.chapterArc.targetWeeks || 3} 周。`);
+                if (seasonBoard.chapterArc.pressureWindow?.available) {
+                    snapshot.strengths.unshift(`章势压强：${seasonBoard.chapterArc.pressureWindow.shortLine || seasonBoard.chapterArc.pressureWindow.statusLabel || '稳态续压'}。`);
+                }
                 snapshot.nextTargets.unshift(`章程跟进：${seasonBoard.chapterArc.objective?.summaryLine
                     || seasonBoard.chapterArc.objective?.goalLine
                     || seasonBoard.chapterArc.feedbackLine
