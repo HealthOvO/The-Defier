@@ -2395,7 +2395,23 @@ function loadFile(ctx, filePath) {
 
   resetStorages();
   const debtGame = createGame();
-  const debtSlate = buildSlate('season_board_debt_pack', Date.now() - (8 * 24 * 60 * 60 * 1000), {
+  const findWeeksAgoTimestamp = (game, weeksAgo = 1) => {
+    const targetTransitions = Math.max(1, Math.floor(Number(weeksAgo) || 1));
+    let cursor = Date.now();
+    let lastTag = game.getHeavenlyMandateWeekMeta(cursor).weekTag;
+    let transitions = 0;
+    while (transitions < targetTransitions) {
+      cursor -= 24 * 60 * 60 * 1000;
+      const nextTag = game.getHeavenlyMandateWeekMeta(cursor).weekTag;
+      if (nextTag && nextTag !== lastTag) {
+        transitions += 1;
+        lastTag = nextTag;
+      }
+    }
+    return cursor;
+  };
+  const debtOpenedAt = findWeeksAgoTimestamp(debtGame, 1);
+  const debtSlate = buildSlate('season_board_debt_pack', debtOpenedAt, {
     ratingLabel: '留痕待补',
     ratingTone: 'selected',
     score: 202
@@ -2443,7 +2459,8 @@ function loadFile(ctx, filePath) {
       recoveryHintLine: '先去高压环境补一轮镜债验证，再决定要不要继续冲榜。',
       rewardTrackId: 'observatory',
       rewardTrackName: '命盘档案室',
-      rewardTrackIcon: '🔭'
+      rewardTrackIcon: '🔭',
+      updatedAt: debtOpenedAt
     },
     history: [],
     totalCompleted: 0,
@@ -2945,6 +2962,196 @@ function loadFile(ctx, filePath) {
       && degradedDebtBoard.verificationArchive?.latestEntry?.actionType === 'screen'
       && degradedDebtBoard.verificationArchive?.latestEntry?.actionValue === 'pvp-screen',
     `degraded debt writeback should surface a pvp-followup archive entry with mirrored verdict metadata, got ${JSON.stringify(degradedDebtBoard?.verificationArchive)}`
+  );
+
+  resetStorages();
+  const mixedArchiveGame = createGame();
+  const mixedWeekMeta = mixedArchiveGame.getHeavenlyMandateWeekMeta();
+  const mixedArchiveNow = Date.now();
+  mixedArchiveGame.recordSeasonVerificationResult({
+    recordId: `mixed_archive_map_${mixedWeekMeta.weekTag}`,
+    weekTag: mixedWeekMeta.weekTag,
+    weekLabel: mixedWeekMeta.weekLabel,
+    role: 'side',
+    sourceMode: 'map',
+    sourceModeLabel: '山海绘卷',
+    phaseId: 'sampling',
+    phaseLabel: '采样期',
+    resultStatus: 'deferred',
+    writebackMode: 'carry_forward',
+    writebackLine: '地图旁验证延期到下周继续补样。',
+    anchorSection: 'map',
+    priority: 4,
+    createdAt: mixedArchiveNow - 4000,
+    updatedAt: mixedArchiveNow - 4000
+  });
+  mixedArchiveGame.recordSeasonVerificationResult({
+    recordId: `mixed_archive_challenge_${mixedWeekMeta.weekTag}`,
+    weekTag: mixedWeekMeta.weekTag,
+    weekLabel: mixedWeekMeta.weekLabel,
+    role: 'side',
+    sourceMode: 'challenge',
+    sourceModeLabel: '七日劫数',
+    phaseId: 'lockline',
+    phaseLabel: '锁线期',
+    resultStatus: 'verified',
+    writebackMode: 'boost_recommendation',
+    writebackLine: '周挑战旁验证已经补齐。',
+    anchorSection: 'challenge',
+    priority: 2,
+    createdAt: mixedArchiveNow - 3000,
+    updatedAt: mixedArchiveNow - 3000
+  });
+  mixedArchiveGame.recordSeasonVerificationResult({
+    recordId: `mixed_archive_endless_${mixedWeekMeta.weekTag}`,
+    weekTag: mixedWeekMeta.weekTag,
+    weekLabel: mixedWeekMeta.weekLabel,
+    role: 'primary',
+    sourceMode: 'endless',
+    sourceModeLabel: '无尽试炼',
+    phaseId: 'closing',
+    phaseLabel: '收束期',
+    resultStatus: 'failed',
+    writebackMode: 'degrade',
+    writebackLine: '无尽试炼给出反证，本周主轴暂缓冲榜。',
+    anchorSection: 'endless',
+    priority: 3,
+    createdAt: mixedArchiveNow - 2000,
+    updatedAt: mixedArchiveNow - 2000
+  });
+  mixedArchiveGame.recordSeasonVerificationResult({
+    recordId: `mixed_archive_pvp_${mixedWeekMeta.weekTag}`,
+    weekTag: mixedWeekMeta.weekTag,
+    weekLabel: mixedWeekMeta.weekLabel,
+    role: 'primary',
+    sourceMode: 'pvp',
+    sourceModeLabel: '天道榜',
+    phaseId: 'ranking',
+    phaseLabel: '定榜期',
+    resultStatus: 'verified',
+    writebackMode: 'upgrade_verdict',
+    writebackLine: '天道榜主验证通过，本周维持正卷。',
+    anchorSection: 'pvp',
+    priority: 1,
+    createdAt: mixedArchiveNow - 1000,
+    updatedAt: mixedArchiveNow - 1000
+  });
+  const mixedArchiveBoard = mixedArchiveGame.getSeasonBoardSnapshot();
+  const mixedArchiveEntries = mixedArchiveBoard.verificationArchive?.entries || [];
+  assert(
+    mixedArchiveBoard.verificationArchive?.available
+      && mixedArchiveBoard.verificationArchive?.totalRecords === 4
+      && mixedArchiveBoard.verificationArchive?.verifiedCount === 2
+      && mixedArchiveBoard.verificationArchive?.failedCount === 1
+      && mixedArchiveBoard.verificationArchive?.deferredCount === 1
+      && mixedArchiveBoard.verificationArchive?.pendingCount === 0
+      && mixedArchiveBoard.verificationArchive?.latestEntry?.recordId === `mixed_archive_pvp_${mixedWeekMeta.weekTag}`
+      && mixedArchiveEntries[0]?.recordId === `mixed_archive_pvp_${mixedWeekMeta.weekTag}`
+      && mixedArchiveEntries[1]?.recordId === `mixed_archive_endless_${mixedWeekMeta.weekTag}`
+      && mixedArchiveEntries[2]?.recordId === `mixed_archive_challenge_${mixedWeekMeta.weekTag}`
+      && mixedArchiveEntries[3]?.recordId === `mixed_archive_map_${mixedWeekMeta.weekTag}`,
+    `mixed verification archive should expose deterministic counts and recency ordering, got ${JSON.stringify(mixedArchiveBoard?.verificationArchive)}`
+  );
+  assert(
+    mixedArchiveEntries[0]?.actionType === 'screen'
+      && mixedArchiveEntries[0]?.actionValue === 'pvp-screen'
+      && mixedArchiveEntries[1]?.actionType === 'screen'
+      && mixedArchiveEntries[1]?.actionValue === 'map-screen'
+      && mixedArchiveEntries[2]?.actionType === 'challenge'
+      && mixedArchiveEntries[2]?.actionValue === 'weekly'
+      && mixedArchiveEntries[3]?.actionType === 'screen'
+      && mixedArchiveEntries[3]?.actionValue === 'map-screen',
+    `mixed verification archive should preserve anchor-to-action contracts across entries, got ${JSON.stringify(mixedArchiveEntries)}`
+  );
+
+  resetStorages();
+  const delayedDebtGame = createGame();
+  const delayedDebtOpenedAt = findWeeksAgoTimestamp(delayedDebtGame, 2);
+  const delayedDebtSlate = buildSlate('season_board_debt_delayed', delayedDebtOpenedAt, {
+    chapterIndex: debtSlate.chapterIndex,
+    chapterName: debtSlate.chapterName,
+    ratingLabel: '镜债拖延',
+    score: 219
+  });
+  delayedDebtGame.runSlateArchive = delayedDebtGame.normalizeRunSlateArchive([delayedDebtSlate]);
+  delayedDebtGame.persistRunSlateArchive();
+  delayedDebtGame.setObservatoryTrainingFocus(
+    delayedDebtGame.buildObservatoryTrainingFocusFromSlate(delayedDebtSlate),
+    { silent: true }
+  );
+  delayedDebtGame.sanctumAgendaState = delayedDebtGame.normalizeSanctumAgendaState({
+    activeAgenda: null,
+    lastResolved: {
+      agendaId: 'season_board_delayed_debt_agenda',
+      name: '镜债拖延',
+      sourceRunId: delayedDebtSlate.id,
+      sourceLabel: '镜债拖延',
+      boundChapterIndex: delayedDebtSlate.chapterIndex,
+      selectedContractLabel: '延账留尾',
+      selectedContractLine: '先拖后清，把旧债继续带进下周主轴。',
+      selectedDecisionLabel: '延账观望',
+      contractResolved: false,
+      contractSuccess: false,
+      contractResolutionLine: '这笔镜债迟迟没有清掉，继续拖延会把主舞台让回给普通推进。',
+      recoveryEligible: true,
+      recoveryLine: '镜债已经跨周拖延，需要重新评估这条主轴是否还值得继续压。 ',
+      recoveryHintLine: '拖延过久的欠卷会降级为反证，不再无限占用强目标位。',
+      outcome: 'failed',
+      outcomeLabel: '欠卷拖延',
+      updatedAt: delayedDebtOpenedAt
+    },
+    history: []
+  });
+  delayedDebtGame.fateAftereffectState = delayedDebtGame.normalizeFateAftereffectState({
+    records: [],
+    history: [],
+    lastResolved: {
+      recordId: 'season_board_delayed_debt_aftereffect',
+      icon: '🩸',
+      name: '镜债拖延',
+      sourceRunId: delayedDebtSlate.id,
+      sourceAgendaId: 'season_board_delayed_debt_agenda',
+      sourceLabel: '镜债拖延',
+      templateId: 'risk_bias',
+      outcomeId: 'recovery',
+      chapterIndex: delayedDebtSlate.chapterIndex,
+      chapterName: delayedDebtSlate.chapterName,
+      durationChapters: 2,
+      positiveLine: '若能及时清账，主线还能继续维持收束。',
+      negativeLine: '拖延太久会让欠卷退出强目标位，转成长期反证尾账。',
+      summaryLine: '镜债拖延：旧债跨周未清，正在失去对当前主舞台的占用权。',
+      detailLine: '研究债账已经拖过两个周槽，这周会先以反证尾账形态回流。',
+      createdAt: delayedDebtOpenedAt
+    }
+  });
+  const delayedDebtBoard = delayedDebtGame.getSeasonBoardSnapshot({ latestSlate: delayedDebtSlate });
+  assert(
+    delayedDebtBoard.settlement?.outcomeId === 'risky_sheet'
+      && delayedDebtBoard.settlement?.resolvedStatus === 'degraded',
+    `delayed debt should auto-degrade into a risky sheet after multiple carry-over weeks, got ${JSON.stringify(delayedDebtBoard?.settlement)}`
+  );
+  assert(
+    delayedDebtBoard.debtPack?.status === 'degraded'
+      && delayedDebtBoard.debtPack?.occupiesStrongSlot === false
+      && delayedDebtBoard.debtPack?.deferCount >= 2
+      && delayedDebtBoard.debtPack?.carryIntoWeekTag === ''
+      && delayedDebtBoard.weekVerdictLedger?.current?.debtStatus === 'degraded'
+      && delayedDebtBoard.weekVerdictLedger?.current?.deferCount >= 2
+      && /拖延|降级/.test(String(
+        delayedDebtBoard.debtPack?.progressText
+        || delayedDebtBoard.debtPack?.statusLine
+        || delayedDebtBoard.debtPack?.settleWindowText
+        || ''
+      )),
+    `delayed debt should stop occupying the strong slot and surface delay-degrade copy, got ${JSON.stringify(delayedDebtBoard?.debtPack)}`
+  );
+  assert(
+    delayedDebtBoard.nextTask?.source !== 'debt_pack'
+      && delayedDebtBoard.nextWeekGoal?.source !== 'debt_pack',
+    `delay-degraded debt should release next-task ownership back to the regular board flow, got ${JSON.stringify({
+      nextTask: delayedDebtBoard?.nextTask,
+      nextWeekGoal: delayedDebtBoard?.nextWeekGoal
+    })}`
   );
 
   resetStorages();

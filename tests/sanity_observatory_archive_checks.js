@@ -408,7 +408,187 @@ function loadFile(ctx, filePath) {
       && presetAppliedBundle.presetSlots[0]?.active === true,
     `applied observatory preset should restore score-sorted oracle view, got ${JSON.stringify(presetAppliedBundle)}`
   );
+  const seasonVerificationArchiveEntries = [
+    {
+      recordId: 'verification_pvp_primary',
+      sourceMode: 'pvp',
+      sourceModeLabel: '天道榜',
+      phaseId: 'ranking',
+      phaseLabel: '定榜期',
+      settlementOutcomeId: 'positive_sheet',
+      settlementOutcomeLabel: '正卷',
+      resultStatus: 'verified',
+      role: 'primary',
+      roleLabel: '主验证',
+      anchorSection: 'pvp',
+      actionType: 'jump',
+      actionValue: 'pvp',
+      ctaLabel: '回到天道榜',
+      kicker: '本周轮转 · 主验证 · 通过',
+      noteLine: '天道榜主验证已把当前主轴压成正卷。',
+      updatedAt: 400,
+      createdAt: 400
+    },
+    {
+      recordId: 'verification_challenge_side',
+      sourceMode: 'challenge',
+      sourceModeLabel: '七日劫数',
+      phaseId: 'lockline',
+      phaseLabel: '锁线期',
+      settlementOutcomeId: 'locking_sheet',
+      settlementOutcomeLabel: '押卷中',
+      resultStatus: 'verified',
+      role: 'side',
+      roleLabel: '旁验证',
+      anchorSection: 'challenge',
+      actionType: 'jump',
+      actionValue: 'challenge',
+      ctaLabel: '回到周挑战',
+      kicker: '本周轮转 · 旁验证 · 通过',
+      noteLine: '周挑战旁验证补齐了当前样本。',
+      updatedAt: 300,
+      createdAt: 300
+    },
+    {
+      recordId: 'verification_endless_primary',
+      sourceMode: 'endless',
+      sourceModeLabel: '无尽试炼',
+      phaseId: 'closing',
+      phaseLabel: '收束期',
+      settlementOutcomeId: 'risky_sheet',
+      settlementOutcomeLabel: '险卷',
+      debtStatus: 'degraded',
+      resultStatus: 'failed',
+      role: 'primary',
+      roleLabel: '主验证',
+      anchorSection: 'endless',
+      actionType: 'jump',
+      actionValue: 'endless',
+      ctaLabel: '回到无尽试炼',
+      kicker: '本周轮转 · 主验证 · 失利',
+      noteLine: '无尽试炼主验证失手，需补回正卷。',
+      updatedAt: 200,
+      createdAt: 200
+    },
+    {
+      recordId: 'verification_map_side',
+      sourceMode: 'map',
+      sourceModeLabel: '山海绘卷',
+      phaseId: 'sampling',
+      phaseLabel: '采样期',
+      carryIntoNextWeek: true,
+      carryIntoWeekTag: '2026-W21',
+      resultStatus: 'deferred',
+      role: 'side',
+      roleLabel: '旁验证',
+      anchorSection: 'map',
+      actionType: 'jump',
+      actionValue: 'map',
+      ctaLabel: '回到地图',
+      kicker: '本周轮转 · 旁验证 · 延期',
+      noteLine: '地图旁验证延期到下周继续回写。',
+      updatedAt: 100,
+      createdAt: 100
+    }
+  ];
+  game.getSeasonVerificationArchiveSnapshot = function () {
+    return {
+      available: true,
+      totalRecords: seasonVerificationArchiveEntries.length,
+      verifiedCount: 2,
+      failedCount: 1,
+      deferredCount: 1,
+      pendingCount: 0,
+      summaryLine: '最近一笔周判来自天道榜主验证。',
+      detailLine: '把主验证、旁验证与清账回写压成长期周判记录。',
+      progressText: '已归档 4 条',
+      latestEntry: seasonVerificationArchiveEntries[0],
+      entries: seasonVerificationArchiveEntries
+    };
+  };
+  const defaultVerificationFilters = game.getSeasonVerificationArchiveFilterState('weekly');
+  assert(
+    defaultVerificationFilters.sourceMode === 'all'
+      && defaultVerificationFilters.resultStatus === 'all'
+      && defaultVerificationFilters.phaseKey === 'all'
+      && defaultVerificationFilters.trajectoryKey === 'all'
+      && defaultVerificationFilters.role === 'all'
+      && defaultVerificationFilters.sortBy === 'recent',
+    `season verification archive filters should bootstrap to default state, got ${JSON.stringify(defaultVerificationFilters)}`
+  );
+  const defaultVerificationBundle = game.buildSeasonVerificationArchiveFilterBundle(game.getSeasonVerificationArchiveSnapshot(), { tab: 'weekly' });
+  assert(
+    defaultVerificationBundle.matchedCount === 4
+      && defaultVerificationBundle.totalCount === 4
+      && defaultVerificationBundle.verifiedCount === 2
+      && defaultVerificationBundle.failedCount === 1
+      && defaultVerificationBundle.deferredCount === 1
+      && defaultVerificationBundle.pendingCount === 0
+      && defaultVerificationBundle.sourceModeOptions.some((item) => item.value === 'pvp')
+      && defaultVerificationBundle.sourceModeOptions.some((item) => item.value === 'challenge')
+      && defaultVerificationBundle.sourceModeOptions.some((item) => item.value === 'endless')
+      && defaultVerificationBundle.sourceModeOptions.some((item) => item.value === 'map')
+      && defaultVerificationBundle.phaseOptions.some((item) => item.value === 'ranking')
+      && defaultVerificationBundle.phaseOptions.some((item) => item.value === 'lockline')
+      && defaultVerificationBundle.phaseOptions.some((item) => item.value === 'closing')
+      && defaultVerificationBundle.phaseOptions.some((item) => item.value === 'sampling')
+      && defaultVerificationBundle.trajectoryOptions.some((item) => item.value === 'settlement:positive_sheet')
+      && defaultVerificationBundle.trajectoryOptions.some((item) => item.value === 'settlement:locking_sheet')
+      && defaultVerificationBundle.trajectoryOptions.some((item) => item.value === 'debt:degraded')
+      && defaultVerificationBundle.trajectoryOptions.some((item) => item.value === 'carry_forward'),
+    `default season verification archive bundle should expose all sources and counts, got ${JSON.stringify(defaultVerificationBundle)}`
+  );
+  game.setSeasonVerificationArchiveFilter('sourceMode', 'pvp', 'weekly');
+  game.setSeasonVerificationArchiveFilter('resultStatus', 'verified', 'weekly');
+  game.setSeasonVerificationArchiveFilter('phaseKey', 'ranking', 'weekly');
+  game.setSeasonVerificationArchiveFilter('role', 'primary', 'weekly');
+  game.setSeasonVerificationArchiveFilter('sortBy', 'oldest', 'weekly');
+  const filteredVerificationBundle = game.buildSeasonVerificationArchiveFilterBundle(game.getSeasonVerificationArchiveSnapshot(), { tab: 'weekly' });
+  assert(
+    filteredVerificationBundle.state.sourceMode === 'pvp'
+      && filteredVerificationBundle.state.resultStatus === 'verified'
+      && filteredVerificationBundle.state.phaseKey === 'ranking'
+      && filteredVerificationBundle.state.trajectoryKey === 'all'
+      && filteredVerificationBundle.state.role === 'primary'
+      && filteredVerificationBundle.state.sortBy === 'oldest'
+      && filteredVerificationBundle.entries.length === 1
+      && filteredVerificationBundle.entries[0].recordId === 'verification_pvp_primary',
+    `season verification archive filters should isolate a single latest pvp primary verification, got ${JSON.stringify(filteredVerificationBundle)}`
+  );
+  const persistedChallengeHubState = JSON.parse(storage.get('theDefierChallengeHubStateV1') || '{}');
+  assert(
+    persistedChallengeHubState.verificationArchiveFilters?.weekly?.sourceMode === 'pvp'
+      && persistedChallengeHubState.verificationArchiveFilters?.weekly?.resultStatus === 'verified'
+      && persistedChallengeHubState.verificationArchiveFilters?.weekly?.phaseKey === 'ranking'
+      && persistedChallengeHubState.verificationArchiveFilters?.weekly?.trajectoryKey === 'all'
+      && persistedChallengeHubState.verificationArchiveFilters?.weekly?.role === 'primary'
+      && persistedChallengeHubState.verificationArchiveFilters?.weekly?.sortBy === 'oldest',
+    `season verification archive filter state should persist into localStorage, got ${JSON.stringify(persistedChallengeHubState)}`
+  );
+  const reloadedChallengeHubGame = new Game();
+  reloadedChallengeHubGame.getSeasonVerificationArchiveSnapshot = game.getSeasonVerificationArchiveSnapshot;
+  const reloadedVerificationFilters = reloadedChallengeHubGame.getSeasonVerificationArchiveFilterState('weekly');
+  assert(
+    reloadedVerificationFilters.sourceMode === 'pvp'
+      && reloadedVerificationFilters.resultStatus === 'verified'
+      && reloadedVerificationFilters.phaseKey === 'ranking'
+      && reloadedVerificationFilters.trajectoryKey === 'all'
+      && reloadedVerificationFilters.role === 'primary'
+      && reloadedVerificationFilters.sortBy === 'oldest',
+    `reloaded game should restore persisted season verification archive filters, got ${JSON.stringify(reloadedVerificationFilters)}`
+  );
   const payload = game.getChallengeHubPayload();
+  game.resetSeasonVerificationArchiveFilters('weekly');
+  game.setSeasonVerificationArchiveFilter('trajectoryKey', 'carry_forward', 'weekly');
+  const carryForwardVerificationBundle = game.buildSeasonVerificationArchiveFilterBundle(game.getSeasonVerificationArchiveSnapshot(), { tab: 'weekly' });
+  assert(
+    carryForwardVerificationBundle.state.trajectoryKey === 'carry_forward'
+      && carryForwardVerificationBundle.trajectoryLabel === '转入下周'
+      && carryForwardVerificationBundle.entries.length === 1
+      && carryForwardVerificationBundle.entries[0].recordId === 'verification_map_side',
+    `season verification archive trajectory filters should isolate carry-forward records, got ${JSON.stringify(carryForwardVerificationBundle)}`
+  );
+  const carryForwardPayload = game.getChallengeHubPayload();
   assert(payload.archive && payload.archive.totalRecords >= 3, `payload should expose archive summary, got ${JSON.stringify(payload.archive)}`);
   assert(payload.hub && payload.hub.seedSignature === liveHubBundle.seedSignature, `hub payload should expose live seed signature, got ${JSON.stringify(payload.hub)}`);
   assert(payload.archive.selectedGuideId === switchedGuide.id, `payload should expose selected expedition guide, got ${JSON.stringify(payload.archive)}`);
@@ -433,6 +613,63 @@ function loadFile(ctx, filePath) {
       && Array.isArray(payload.archive.presetLabels)
       && /预设 1/.test(payload.archive.presetLabels[0] || ''),
     `archive payload should expose active observatory filter state and counts, got ${JSON.stringify(payload.archive)}`
+  );
+  assert(
+    payload.verificationArchive
+      && payload.verificationArchive.totalRecords === 4
+      && payload.verificationArchive.verifiedCount === 2
+      && payload.verificationArchive.failedCount === 1
+      && payload.verificationArchive.deferredCount === 1
+      && payload.verificationArchive.pendingCount === 0
+      && payload.verificationArchive.filterState?.sourceMode === 'pvp'
+      && payload.verificationArchive.filterState?.resultStatus === 'verified'
+      && payload.verificationArchive.filterState?.phaseKey === 'ranking'
+      && payload.verificationArchive.filterState?.role === 'primary'
+      && payload.verificationArchive.filterState?.sortBy === 'oldest'
+      && payload.verificationArchive.filteredCount === 1
+      && payload.verificationArchive.filteredVerifiedCount === 1
+      && payload.verificationArchive.latestRecordId === 'verification_pvp_primary'
+      && payload.verificationArchive.latestAnchorSection === 'pvp'
+      && payload.verificationArchive.latestActionType === 'jump'
+      && payload.verificationArchive.latestActionValue === 'pvp'
+      && payload.verificationArchive.latestCtaLabel === '回到天道榜'
+      && payload.verificationArchive.phaseLabel === '定榜期'
+      && payload.verificationArchive.filteredPhaseLabel === '定榜期'
+      && payload.verificationArchive.trajectoryLabel === '全部去向'
+      && payload.verificationArchive.filteredTrajectoryLabel === '全部去向'
+      && Array.isArray(payload.verificationArchive.entryAnchors)
+      && payload.verificationArchive.entryAnchors.length === 1
+      && payload.verificationArchive.entryAnchors[0] === 'pvp',
+    `challenge payload should expose filtered season verification archive state and jump contract, got ${JSON.stringify(payload.verificationArchive)}`
+  );
+  assert(
+    carryForwardPayload.verificationArchive
+      && carryForwardPayload.verificationArchive.filterState?.sourceMode === 'all'
+      && carryForwardPayload.verificationArchive.filterState?.resultStatus === 'all'
+      && carryForwardPayload.verificationArchive.filterState?.phaseKey === 'all'
+      && carryForwardPayload.verificationArchive.filterState?.trajectoryKey === 'carry_forward'
+      && carryForwardPayload.verificationArchive.filterState?.role === 'all'
+      && carryForwardPayload.verificationArchive.filterState?.sortBy === 'recent'
+      && carryForwardPayload.verificationArchive.filteredCount === 1
+      && carryForwardPayload.verificationArchive.filteredDeferredCount === 1
+      && carryForwardPayload.verificationArchive.filteredTrajectoryLabel === '转入下周'
+      && carryForwardPayload.verificationArchive.latestRecordId === 'verification_pvp_primary'
+      && carryForwardPayload.verificationArchive.latestAnchorSection === 'pvp'
+      && Array.isArray(carryForwardPayload.verificationArchive.entryAnchors)
+      && carryForwardPayload.verificationArchive.entryAnchors.length === 1
+      && carryForwardPayload.verificationArchive.entryAnchors[0] === 'map',
+    `challenge payload should expose carry-forward trajectory archive filtering, got ${JSON.stringify(carryForwardPayload.verificationArchive)}`
+  );
+  game.resetSeasonVerificationArchiveFilters('weekly');
+  const resetVerificationFilters = game.getSeasonVerificationArchiveFilterState('weekly');
+  assert(
+    resetVerificationFilters.sourceMode === 'all'
+      && resetVerificationFilters.resultStatus === 'all'
+      && resetVerificationFilters.phaseKey === 'all'
+      && resetVerificationFilters.trajectoryKey === 'all'
+      && resetVerificationFilters.role === 'all'
+      && resetVerificationFilters.sortBy === 'recent',
+    `resetSeasonVerificationArchiveFilters should restore defaults, got ${JSON.stringify(resetVerificationFilters)}`
   );
   assert(payload.hub.comparisonCount >= 2, `payload should expose same-theme comparison count, got ${JSON.stringify(payload.hub)}`);
   assert(payload.observatoryGuide && payload.observatoryGuide.featuredTags.length >= 2, `payload should expose observatory guide tags, got ${JSON.stringify(payload.observatoryGuide)}`);

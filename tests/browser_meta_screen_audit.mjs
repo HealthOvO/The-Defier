@@ -1970,6 +1970,180 @@ function rectObj(rect) {
 
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
+  const rewardDelayedDebtProbe = await page.evaluate(() => {
+    if (!window.game) return { ok: false, reason: 'no_game' };
+    game.guestMode = true;
+    game.startNewGame('linFeng');
+    game.startRealm(1, false);
+    if (typeof game.createDefaultSeasonVerificationState === 'function') {
+      game.seasonVerificationState = game.createDefaultSeasonVerificationState();
+    } else if (game.seasonVerificationState && typeof game.seasonVerificationState === 'object') {
+      game.seasonVerificationState.claimedLaneRewards = {};
+    }
+    if (typeof game.player?.setRunPath === 'function') game.player.setRunPath('insight');
+    if (typeof game.player?.setRunDestiny === 'function') game.player.setRunDestiny('rebelScale', 1);
+    const findWeeksAgoTimestamp = (weeksAgo = 1) => {
+      if (typeof game.getHeavenlyMandateWeekMeta !== 'function') return Date.now() - (14 * 24 * 60 * 60 * 1000);
+      const targetTransitions = Math.max(1, Math.floor(Number(weeksAgo) || 1));
+      let cursor = Date.now();
+      let lastTag = game.getHeavenlyMandateWeekMeta(cursor).weekTag;
+      let transitions = 0;
+      while (transitions < targetTransitions) {
+        cursor -= 24 * 60 * 60 * 1000;
+        const nextTag = game.getHeavenlyMandateWeekMeta(cursor).weekTag;
+        if (nextTag && nextTag !== lastTag) {
+          transitions += 1;
+          lastTag = nextTag;
+        }
+      }
+      return cursor;
+    };
+    const openedAt = findWeeksAgoTimestamp(2);
+    const weekMeta = typeof game.getHeavenlyMandateWeekMeta === 'function'
+      ? game.getHeavenlyMandateWeekMeta(openedAt)
+      : null;
+    const delayedSlate = {
+      id: 'reward_delayed_debt_probe',
+      timestamp: openedAt,
+      chapterIndex: 6,
+      chapterName: '第 6 章·镜债拖延',
+      ratingLabel: '镜债拖延',
+      score: 226
+    };
+    if (typeof game.normalizeRunSlateArchive === 'function') {
+      game.runSlateArchive = game.normalizeRunSlateArchive([delayedSlate]);
+    } else {
+      game.runSlateArchive = [delayedSlate];
+    }
+    if (typeof game.persistRunSlateArchive === 'function') game.persistRunSlateArchive();
+    if (typeof game.setObservatoryTrainingFocus === 'function') {
+      game.setObservatoryTrainingFocus(
+        typeof game.buildObservatoryTrainingFocusFromSlate === 'function'
+          ? game.buildObservatoryTrainingFocusFromSlate(delayedSlate)
+          : null,
+        { silent: true }
+      );
+    }
+    game.sanctumAgendaState = typeof game.normalizeSanctumAgendaState === 'function'
+      ? game.normalizeSanctumAgendaState({
+          activeAgenda: null,
+          lastResolved: {
+            agendaId: 'reward_delayed_debt_agenda',
+            name: '镜债拖延',
+            sourceRunId: delayedSlate.id,
+            sourceLabel: '镜债拖延',
+            boundChapterIndex: delayedSlate.chapterIndex,
+            selectedContractLabel: '延账留尾',
+            selectedContractLine: '先拖后清，把旧债继续带进下一轮。',
+            selectedDecisionLabel: '延账观望',
+            contractResolved: false,
+            contractSuccess: false,
+            contractResolutionLine: '这笔镜债拖得太久，已经失去强目标位占用资格。',
+            recoveryEligible: true,
+            recoveryLine: '拖延过久的欠卷会降级成反证尾账。',
+            recoveryHintLine: '反证尾账不再继续占用天命强目标。',
+            outcome: 'failed',
+            outcomeLabel: '欠卷拖延',
+            updatedAt: openedAt,
+            openedWeekTag: weekMeta?.weekTag || ''
+          },
+          history: []
+        })
+      : game.sanctumAgendaState;
+    game.fateAftereffectState = typeof game.normalizeFateAftereffectState === 'function'
+      ? game.normalizeFateAftereffectState({
+          records: [],
+          history: [],
+          lastResolved: {
+            recordId: 'reward_delayed_debt_aftereffect',
+            icon: '🩸',
+            name: '镜债拖延',
+            sourceRunId: delayedSlate.id,
+            sourceAgendaId: 'reward_delayed_debt_agenda',
+            sourceLabel: '镜债拖延',
+            templateId: 'risk_bias',
+            outcomeId: 'recovery',
+            chapterIndex: delayedSlate.chapterIndex,
+            chapterName: delayedSlate.chapterName,
+            durationChapters: 2,
+            summaryLine: '镜债拖延：旧债跨周未清，正从强目标位滑出。',
+            detailLine: '研究债账拖延过久，后续只会留下反证尾账。',
+            createdAt: openedAt
+          }
+        })
+      : game.fateAftereffectState;
+    const endlessState = typeof game.ensureEndlessState === 'function' ? game.ensureEndlessState() : null;
+    const currentWeekMeta = typeof game.getHeavenlyMandateWeekMeta === 'function'
+      ? game.getHeavenlyMandateWeekMeta()
+      : null;
+    if (endlessState) {
+      endlessState.currentCycle = 1;
+      endlessState.seasonWeekTag = currentWeekMeta?.weekTag || endlessState.seasonWeekTag || '';
+      endlessState.seasonCycleClears = 1;
+      endlessState.seasonScore = 144;
+    }
+    if (typeof game.buildRewardExpeditionMeta === 'function') {
+      game.lastExpeditionRewardMeta = game.buildRewardExpeditionMeta(delayedSlate);
+    }
+    game.currentBattleNode = { type: 'elite', id: 990003, completed: false };
+    game.stealAttempted = false;
+    game.lastBattleRewardMeta = {
+      encounter: {
+        themeId: 'theme_reward_delay_probe',
+        themeName: '轮段·镜债拖延',
+        tierStage: 2,
+        goldBonus: 10,
+        ringExpBonus: 6
+      }
+    };
+    game.showRewardScreen(108, true, { stealLaw: null, stealChance: 0 }, 24, { insight: 5, karma: 1 });
+
+    let rewardPayload = {};
+    try {
+      rewardPayload = JSON.parse(typeof window.render_game_to_text === 'function' ? window.render_game_to_text() : '{}');
+    } catch (error) {
+      rewardPayload = {};
+    }
+    const screen = document.getElementById('reward-screen');
+    const rewardSeasonBoard = rewardPayload?.reward?.expedition?.seasonBoard || null;
+    const rewardWeekVerdictLedger = rewardSeasonBoard?.weekVerdictLedger?.current || null;
+    const rewardDebtText = (document.querySelector('[data-season-board-debt-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const rewardActionText = (document.querySelector('[data-season-board-action-reward="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
+    return {
+      ok:
+        !!rewardSeasonBoard &&
+        rewardSeasonBoard?.settlement?.outcomeId === 'risky_sheet' &&
+        rewardSeasonBoard?.settlement?.resolvedStatus === 'degraded' &&
+        rewardSeasonBoard?.debtPack?.status === 'degraded' &&
+        rewardSeasonBoard?.debtPack?.occupiesStrongSlot === false &&
+        rewardSeasonBoard?.debtPack?.deferCount >= 2 &&
+        rewardWeekVerdictLedger?.resolvedStatus === 'degraded' &&
+        rewardWeekVerdictLedger?.deferCount >= 2 &&
+        screen?.dataset?.rewardHeaderOutcome === 'risky_sheet' &&
+        screen?.dataset?.rewardNextActionSource !== 'debtPack' &&
+        /拖延|降级/.test(rewardDebtText) &&
+        rewardActionText.length > 0 &&
+        !!rewardPayload?.expedition?.mandate?.focusTask &&
+        rewardPayload?.expedition?.mandate?.focusTask?.source !== 'seasonDebtPack' &&
+        rewardPayload?.expedition?.mandate?.focusTask?.occupiesStrongSlot === false,
+      rewardHeaderOutcome: screen?.dataset?.rewardHeaderOutcome || '',
+      rewardNextActionSource: screen?.dataset?.rewardNextActionSource || '',
+      rewardDebtText,
+      rewardActionText,
+      rewardSeasonBoard,
+      rewardWeekVerdictLedger,
+      rewardMandateFocusTask: rewardPayload?.expedition?.mandate?.focusTask || null
+    };
+  });
+  add(
+    'reward screen surfaces a delay-degraded debt record without re-occupying the strong slot',
+    !!rewardDelayedDebtProbe?.ok,
+    JSON.stringify(rewardDelayedDebtProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'reward-delayed-debt-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1200);
   const rewardSideVerificationProbe = await page.evaluate(() => {
     if (!window.game) return { ok: false, reason: 'no_game' };
     game.guestMode = true;
@@ -3904,6 +4078,10 @@ function rectObj(rect) {
         role: 'side',
         sourceMode: 'challenge',
         sourceModeLabel: '七日劫数',
+        phaseId: 'lockline',
+        phaseLabel: '锁线期',
+        settlementOutcomeId: 'locking_sheet',
+        settlementOutcomeLabel: '押卷中',
         sourceLabel: '周劫旁证校卷',
         label: '周劫旁证校卷',
         resultStatus: 'verified',
@@ -3928,6 +4106,10 @@ function rectObj(rect) {
         role: 'primary',
         sourceMode: 'pvp',
         sourceModeLabel: '天道榜',
+        phaseId: 'ranking',
+        phaseLabel: '定榜期',
+        settlementOutcomeId: 'positive_sheet',
+        settlementOutcomeLabel: '正卷',
         sourceLabel: '天道榜 · 周判复核',
         label: '天道榜账本验证',
         resultStatus: 'verified',
@@ -3945,6 +4127,63 @@ function rectObj(rect) {
         createdAt: now - 1000,
         updatedAt: now - 1000
       });
+      game.recordSeasonVerificationResult({
+        recordId: `browser_archive_endless_${weekMeta?.weekTag || 'current'}`,
+        weekTag: weekMeta?.weekTag || '',
+        weekLabel: weekMeta?.weekLabel || '',
+        role: 'primary',
+        sourceMode: 'endless',
+        sourceModeLabel: '无尽试炼',
+        phaseId: 'closing',
+        phaseLabel: '收束期',
+        settlementOutcomeId: 'risky_sheet',
+        settlementOutcomeLabel: '险卷',
+        debtStatus: 'degraded',
+        sourceLabel: '无尽试炼 · 主验证',
+        label: '无尽试炼主验证',
+        resultStatus: 'failed',
+        writebackMode: 'degrade_recommendation',
+        writebackLine: '无尽试炼主验证失手，本周推荐会回退到更保守的正卷。',
+        resolvedRunId: 'browser_archive_endless_record',
+        chapterIndex: 7,
+        proofQuality: 'solid',
+        lineageStyle: '长线压测',
+        summaryLine: '无尽试炼主验证失手，周判记录会保留这次失利的回查入口。',
+        detailLine: '这条周判记录会把失败样本留在周判层，方便你回到无尽试炼补卷。',
+        statusLine: '无尽试炼 · 失利',
+        anchorSection: 'endless',
+        priority: 3,
+        createdAt: now - 3000,
+        updatedAt: now - 3000
+      });
+      game.recordSeasonVerificationResult({
+        recordId: `browser_archive_map_${weekMeta?.weekTag || 'current'}`,
+        weekTag: weekMeta?.weekTag || '',
+        weekLabel: weekMeta?.weekLabel || '',
+        role: 'side',
+        sourceMode: 'map',
+        sourceModeLabel: '山海绘卷',
+        phaseId: 'sampling',
+        phaseLabel: '采样期',
+        carryIntoNextWeek: true,
+        carryIntoWeekTag: `${weekMeta?.weekTag || 'current'}-next`,
+        sourceLabel: '山海绘卷 · 旁验证',
+        label: '地图旁验证',
+        resultStatus: 'deferred',
+        writebackMode: 'carry_forward',
+        writebackLine: '地图旁验证延期到下周，周判记录会继续保留这条回写脉络。',
+        resolvedRunId: 'browser_archive_map_record',
+        chapterIndex: 5,
+        proofQuality: 'thin',
+        lineageStyle: '外场补样',
+        summaryLine: '地图旁验证暂时延期，先把回写链挂到长期周判里。',
+        detailLine: '这条周判记录会保留延期状态，方便后续从地图继续补证。',
+        statusLine: '山海绘卷 · 延期',
+        anchorSection: 'map',
+        priority: 4,
+        createdAt: now - 4000,
+        updatedAt: now - 4000
+      });
     }
     game.showCollection('sanctum');
     if (typeof game.initCollection === 'function') game.initCollection();
@@ -3952,6 +4191,8 @@ function rectObj(rect) {
     const archiveStatusText = text(document.querySelector('#sanctum-summary [data-season-board-archive-status="true"]'));
     const archiveEntries = Array.from(document.querySelectorAll('#sanctum-summary [data-season-board-archive-entry="true"]'));
     const archiveAnchors = archiveEntries.map((node) => String(node.getAttribute('data-season-board-archive-anchor') || ''));
+    const archiveCountTags = Array.from(document.querySelectorAll('#sanctum-summary [data-season-board-archive-count]')).map((node) => text(node));
+    const archiveFollowupText = text(document.querySelector('#sanctum-summary [data-season-board-archive-followup="true"]'));
     const archiveResearchButton = document.querySelector('#sanctum-research-list [data-season-board-research-id="season_board_verification_archive"] [data-season-board-research-action="true"]');
     const archiveSummaryText = text(archiveCard);
     const sanctumData = typeof game.getSanctumOverviewData === 'function'
@@ -3965,14 +4206,22 @@ function rectObj(rect) {
         archiveEntries.length >= 2 &&
         archiveAnchors.includes('pvp') &&
         archiveAnchors.includes('challenge') &&
+        archiveCountTags.length >= 5 &&
+        archiveCountTags.some((line) => /通过 2/.test(line)) &&
+        archiveCountTags.some((line) => /失利 1/.test(line)) &&
+        archiveCountTags.some((line) => /延期 1/.test(line)) &&
+        archiveCountTags.some((line) => /转入下周 1/.test(line)) &&
         archiveStatusText.length > 0 &&
+        /周判后续/.test(archiveFollowupText) &&
         /周判记录/.test(archiveSummaryText) &&
         !!archive &&
         archive.totalRecords >= 2 &&
         archive.latestEntry?.anchorSection === 'pvp',
       archiveEntryCount: archiveEntries.length,
       archiveAnchors,
+      archiveCountTags,
       archiveStatusText,
+      archiveFollowupText,
       archiveSummaryText,
       archiveTotal: archive?.totalRecords || 0,
       archiveLatestAnchor: archive?.latestEntry?.anchorSection || ''
@@ -4004,20 +4253,35 @@ function rectObj(rect) {
         const archiveSection = document.querySelector('[data-season-verification-archive="true"]');
         const archiveEntries = Array.from(document.querySelectorAll('[data-season-verification-archive-entry="true"]'));
         const archiveActions = Array.from(document.querySelectorAll('[data-season-verification-archive-action="true"]'));
+        const payload = typeof window.render_game_to_text === 'function'
+          ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive || null
+          : null;
+        const firstEntry = archiveEntries[0] || null;
+        const firstAction = firstEntry?.querySelector('[data-season-verification-archive-action="true"]') || null;
         return {
+          payload,
           ok:
             game.currentScreen === 'challenge-screen' &&
             game.challengeHubState?.tab === 'weekly' &&
             !!archiveSection &&
-            archiveEntries.length >= 2 &&
+            !!payload &&
+            archiveEntries.length >= 4 &&
             archiveActions.length >= 2 &&
+            (firstEntry?.getAttribute('data-season-verification-record-id') || '') === (payload?.latestRecordId || '') &&
+            (firstEntry?.getAttribute('data-season-verification-anchor') || '') === (payload?.latestAnchorSection || '') &&
+            (firstEntry?.getAttribute('data-season-verification-trajectory-key') || '') === (payload?.latestTrajectoryKey || '') &&
+            text(firstAction) === (payload?.latestCtaLabel || '') &&
             /周判记录/.test(text(archiveSection)) &&
-            /天道榜|七日劫数/.test(text(archiveSection)),
+            /天道榜|七日劫数|无尽试炼|山海绘卷/.test(text(archiveSection)),
           currentScreen: game.currentScreen || '',
           challengeTab: game.challengeHubState?.tab || '',
           archiveSectionText: text(archiveSection),
           archiveEntryCount: archiveEntries.length,
           archiveActionCount: archiveActions.length,
+          firstRecordId: firstEntry?.getAttribute('data-season-verification-record-id') || '',
+          firstAnchor: firstEntry?.getAttribute('data-season-verification-anchor') || '',
+          firstTrajectoryKey: firstEntry?.getAttribute('data-season-verification-trajectory-key') || '',
+          firstActionLabel: text(firstAction),
           researchCount: count
         };
       }, { count: seasonVerificationArchiveResearchCount });
@@ -4036,6 +4300,194 @@ function rectObj(rect) {
     JSON.stringify(seasonVerificationArchiveWeeklyProbe || null)
   );
   await safeAuditScreenshot(page, path.join(outDir, 'season-verification-archive-weekly.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
+  let seasonVerificationArchiveSourceFilterProbe = { ok: false, reason: 'source_filter_not_run' };
+  try {
+    await page.selectOption('[data-season-verification-filter="sourceMode"]', 'pvp');
+    await page.waitForFunction(() => {
+      const payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+        : null;
+      return payload?.filterState?.sourceMode === 'pvp' && payload?.filteredCount === 1;
+    }, { timeout: 5000 });
+    seasonVerificationArchiveSourceFilterProbe = await page.evaluate(() => {
+      const payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+        : null;
+      const entries = Array.from(document.querySelectorAll('[data-season-verification-archive-entry="true"]'));
+      return {
+        ok:
+          !!payload
+          && payload.filterState?.sourceMode === 'pvp'
+          && payload.filteredCount === 1
+          && payload.latestAnchorSection === 'pvp'
+          && entries.length === 1
+          && entries[0]?.getAttribute('data-season-verification-anchor') === 'pvp'
+          && entries[0]?.getAttribute('data-season-verification-source-mode') === 'pvp',
+        payload,
+        entryCount: entries.length,
+        anchors: entries.map((node) => node.getAttribute('data-season-verification-anchor') || ''),
+        sourceModes: entries.map((node) => node.getAttribute('data-season-verification-source-mode') || '')
+      };
+    });
+  } catch (error) {
+    seasonVerificationArchiveSourceFilterProbe = {
+      ok: false,
+      reason: 'source_filter_failed',
+      error: error?.message || String(error)
+    };
+  }
+  add(
+    'season verification archive source filter keeps DOM and payload in sync',
+    !!seasonVerificationArchiveSourceFilterProbe?.ok,
+    JSON.stringify(seasonVerificationArchiveSourceFilterProbe || null)
+  );
+
+  let seasonVerificationArchivePhaseFilterProbe = { ok: false, reason: 'phase_filter_not_run' };
+  try {
+    await page.click('[data-reset-season-verification-filters="true"]', { timeout: 5000, force: true });
+    await page.waitForFunction(() => {
+      const payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+        : null;
+      return payload?.filterState?.phaseKey === 'all' && payload?.filteredCount >= 4;
+    }, { timeout: 5000 });
+    await page.selectOption('[data-season-verification-filter="phaseKey"]', 'ranking');
+    await page.waitForFunction(() => {
+      const payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+        : null;
+      return payload?.filterState?.phaseKey === 'ranking' && payload?.filteredCount === 1;
+    }, { timeout: 5000 });
+    seasonVerificationArchivePhaseFilterProbe = await page.evaluate(() => {
+      const payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+        : null;
+      const entries = Array.from(document.querySelectorAll('[data-season-verification-archive-entry="true"]'));
+      return {
+        ok:
+          !!payload
+          && payload.filterState?.phaseKey === 'ranking'
+          && payload.phaseLabel === '定榜期'
+          && payload.filteredCount === 1
+          && entries.length === 1
+          && /定榜期/.test(entries[0]?.textContent || ''),
+        payload,
+        entryCount: entries.length,
+        entryText: entries.map((node) => (node.textContent || '').replace(/\s+/g, ' ').trim())
+      };
+    });
+  } catch (error) {
+    seasonVerificationArchivePhaseFilterProbe = {
+      ok: false,
+      reason: 'phase_filter_failed',
+      error: error?.message || String(error)
+    };
+  }
+  add(
+    'season verification archive phase filter isolates the ranking-week verdict',
+    !!seasonVerificationArchivePhaseFilterProbe?.ok,
+    JSON.stringify(seasonVerificationArchivePhaseFilterProbe || null)
+  );
+
+  let seasonVerificationArchiveFailedFilterProbe = { ok: false, reason: 'failed_filter_not_run' };
+  try {
+    await page.click('[data-reset-season-verification-filters="true"]', { timeout: 5000, force: true });
+    await page.waitForFunction(() => {
+      const payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+        : null;
+      return payload?.filterState?.sourceMode === 'all' && payload?.filteredCount >= 4;
+    }, { timeout: 5000 });
+    await page.selectOption('[data-season-verification-filter="resultStatus"]', 'failed');
+    await page.waitForFunction(() => {
+      const payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+        : null;
+      return payload?.filterState?.resultStatus === 'failed' && payload?.filteredCount === 1;
+    }, { timeout: 5000 });
+    seasonVerificationArchiveFailedFilterProbe = await page.evaluate(() => {
+      const payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+        : null;
+      const entries = Array.from(document.querySelectorAll('[data-season-verification-archive-entry="true"]'));
+      return {
+        ok:
+          !!payload
+          && payload.filterState?.resultStatus === 'failed'
+          && payload.filteredCount === 1
+          && payload.filteredFailedCount === 1
+          && entries.length === 1
+          && entries[0]?.getAttribute('data-season-verification-anchor') === 'endless'
+          && entries[0]?.getAttribute('data-season-verification-result-status') === 'failed',
+        payload,
+        entryCount: entries.length,
+        anchors: entries.map((node) => node.getAttribute('data-season-verification-anchor') || ''),
+        statuses: entries.map((node) => node.getAttribute('data-season-verification-result-status') || '')
+      };
+    });
+  } catch (error) {
+    seasonVerificationArchiveFailedFilterProbe = {
+      ok: false,
+      reason: 'failed_filter_failed',
+      error: error?.message || String(error)
+    };
+  }
+  add(
+    'season verification archive failed filter isolates the endless loss sample',
+    !!seasonVerificationArchiveFailedFilterProbe?.ok,
+    JSON.stringify(seasonVerificationArchiveFailedFilterProbe || null)
+  );
+
+  let seasonVerificationArchiveTrajectoryFilterProbe = { ok: false, reason: 'trajectory_filter_not_run' };
+  try {
+    await page.click('[data-reset-season-verification-filters="true"]', { timeout: 5000, force: true });
+    await page.waitForFunction(() => {
+      const payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+        : null;
+      return payload?.filterState?.trajectoryKey === 'all' && payload?.filteredCount >= 4;
+    }, { timeout: 5000 });
+    await page.selectOption('[data-season-verification-filter="trajectoryKey"]', 'carry_forward');
+    await page.waitForFunction(() => {
+      const payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+        : null;
+      return payload?.filterState?.trajectoryKey === 'carry_forward' && payload?.filteredCount === 1;
+    }, { timeout: 5000 });
+    seasonVerificationArchiveTrajectoryFilterProbe = await page.evaluate(() => {
+      const payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+        : null;
+      const entries = Array.from(document.querySelectorAll('[data-season-verification-archive-entry="true"]'));
+      return {
+        ok:
+          !!payload
+          && payload.filterState?.trajectoryKey === 'carry_forward'
+          && payload.filteredCount === 1
+          && payload.filteredDeferredCount === 1
+          && payload.filteredTrajectoryLabel === '转入下周'
+          && entries.length === 1
+          && entries[0]?.getAttribute('data-season-verification-anchor') === 'map'
+          && entries[0]?.getAttribute('data-season-verification-trajectory-key') === 'carry_forward',
+        payload,
+        entryCount: entries.length,
+        anchors: entries.map((node) => node.getAttribute('data-season-verification-anchor') || ''),
+        trajectoryKeys: entries.map((node) => node.getAttribute('data-season-verification-trajectory-key') || '')
+      };
+    });
+  } catch (error) {
+    seasonVerificationArchiveTrajectoryFilterProbe = {
+      ok: false,
+      reason: 'trajectory_filter_failed',
+      error: error?.message || String(error)
+    };
+  }
+  add(
+    'season verification archive trajectory filter isolates carry-forward map records',
+    !!seasonVerificationArchiveTrajectoryFilterProbe?.ok,
+    JSON.stringify(seasonVerificationArchiveTrajectoryFilterProbe || null)
+  );
 
   await reopenSanctumCollection();
   const seasonVerificationArchivePvpSelector = '#sanctum-summary [data-season-board-archive-entry="true"][data-season-board-archive-anchor="pvp"] [data-season-board-archive-action="true"]';

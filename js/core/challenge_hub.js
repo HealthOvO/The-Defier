@@ -196,11 +196,50 @@
         score_desc: { label: '高分优先' }
     };
 
+    const SEASON_VERIFICATION_ARCHIVE_SOURCE_MODE_META = {
+        all: { label: '全部来源' }
+    };
+
+    const SEASON_VERIFICATION_ARCHIVE_RESULT_META = {
+        all: { label: '全部判定' },
+        verified: { label: '通过' },
+        failed: { label: '失利' },
+        deferred: { label: '延期' },
+        pending: { label: '待验证' }
+    };
+
+    const SEASON_VERIFICATION_ARCHIVE_ROLE_META = {
+        all: { label: '全部角色' },
+        primary: { label: '主验证' },
+        side: { label: '旁验证' }
+    };
+
+    const SEASON_VERIFICATION_ARCHIVE_SORT_META = {
+        recent: { label: '最新归档' },
+        oldest: { label: '最早归档' }
+    };
+
+    const SEASON_VERIFICATION_ARCHIVE_TRAJECTORY_META = {
+        all: { label: '全部去向' },
+        carry_forward: { label: '转入下周' },
+        'debt:cleared': { label: '债账已清' },
+        'debt:degraded': { label: '债账降级' }
+    };
+
     const createChallengeArchiveFilterState = () => ({
         scope: 'mode',
         track: 'playable',
         outcome: 'all',
         themeKey: 'all',
+        sortBy: 'recent'
+    });
+
+    const createSeasonVerificationArchiveFilterState = () => ({
+        sourceMode: 'all',
+        resultStatus: 'all',
+        phaseKey: 'all',
+        trajectoryKey: 'all',
+        role: 'all',
         sortBy: 'recent'
     });
 
@@ -212,6 +251,20 @@
             outcome: ['all', 'completed', 'failed'].includes(source.outcome) ? source.outcome : 'all',
             themeKey: String(source.themeKey || 'all') || 'all',
             sortBy: ['recent', 'score_desc'].includes(source.sortBy) ? source.sortBy : 'recent'
+        };
+    };
+
+    const normalizeSeasonVerificationArchiveFilterState = (rawState = null) => {
+        const source = rawState && typeof rawState === 'object' ? rawState : {};
+        return {
+            sourceMode: String(source.sourceMode || 'all').trim() || 'all',
+            resultStatus: ['all', 'verified', 'failed', 'deferred', 'pending'].includes(source.resultStatus)
+                ? source.resultStatus
+                : 'all',
+            phaseKey: String(source.phaseKey || 'all').trim() || 'all',
+            trajectoryKey: String(source.trajectoryKey || 'all').trim() || 'all',
+            role: ['all', 'primary', 'side'].includes(source.role) ? source.role : 'all',
+            sortBy: ['recent', 'oldest'].includes(source.sortBy) ? source.sortBy : 'recent'
         };
     };
 
@@ -239,6 +292,9 @@
             weekly: createChallengeArchiveFilterState(),
             global: createChallengeArchiveFilterState()
         },
+        verificationArchiveFilters: {
+            weekly: createSeasonVerificationArchiveFilterState()
+        },
         archivePresets: {
             daily: normalizeChallengeArchivePresetSlots(),
             weekly: normalizeChallengeArchivePresetSlots(),
@@ -251,6 +307,9 @@
         const archiveFilters = source.archiveFilters && typeof source.archiveFilters === 'object'
             ? source.archiveFilters
             : {};
+        const verificationArchiveFilters = source.verificationArchiveFilters && typeof source.verificationArchiveFilters === 'object'
+            ? source.verificationArchiveFilters
+            : {};
         const archivePresets = source.archivePresets && typeof source.archivePresets === 'object'
             ? source.archivePresets
             : {};
@@ -260,6 +319,9 @@
                 daily: normalizeChallengeArchiveFilterState(archiveFilters.daily),
                 weekly: normalizeChallengeArchiveFilterState(archiveFilters.weekly),
                 global: normalizeChallengeArchiveFilterState(archiveFilters.global)
+            },
+            verificationArchiveFilters: {
+                weekly: normalizeSeasonVerificationArchiveFilterState(verificationArchiveFilters.weekly)
             },
             archivePresets: {
                 daily: normalizeChallengeArchivePresetSlots(archivePresets.daily),
@@ -272,6 +334,66 @@
     const serializeChallengeArchiveFilterState = (state = null) => JSON.stringify(
         normalizeChallengeArchiveFilterState(state || createChallengeArchiveFilterState())
     );
+
+    const serializeSeasonVerificationArchiveFilterState = (state = null) => JSON.stringify(
+        normalizeSeasonVerificationArchiveFilterState(state || createSeasonVerificationArchiveFilterState())
+    );
+
+    const resolveSeasonVerificationArchiveTrajectoryMeta = (entry = null) => {
+        const source = entry && typeof entry === 'object' ? entry : {};
+        if (source.carryIntoNextWeek || String(source.carryIntoWeekTag || '').trim()) {
+            return {
+                key: 'carry_forward',
+                label: SEASON_VERIFICATION_ARCHIVE_TRAJECTORY_META.carry_forward.label
+            };
+        }
+        const debtStatus = String(source.debtStatus || '').trim();
+        if (debtStatus === 'cleared') {
+            return {
+                key: 'debt:cleared',
+                label: SEASON_VERIFICATION_ARCHIVE_TRAJECTORY_META['debt:cleared'].label
+            };
+        }
+        if (debtStatus === 'degraded') {
+            return {
+                key: 'debt:degraded',
+                label: SEASON_VERIFICATION_ARCHIVE_TRAJECTORY_META['debt:degraded'].label
+            };
+        }
+        if (debtStatus) {
+            return {
+                key: `debt:${debtStatus}`,
+                label: `债账·${debtStatus}`
+            };
+        }
+        const settlementOutcomeId = String(source.settlementOutcomeId || '').trim();
+        const settlementOutcomeLabel = String(source.settlementOutcomeLabel || '').trim();
+        if (settlementOutcomeId || settlementOutcomeLabel) {
+            return {
+                key: `settlement:${settlementOutcomeId || settlementOutcomeLabel}`,
+                label: settlementOutcomeLabel || `结算·${settlementOutcomeId}`
+            };
+        }
+        const writebackMode = String(source.writebackMode || '').trim();
+        const writebackLabelMap = {
+            clear_debt: '清账回写',
+            upgrade_verdict: '正卷回写',
+            boost_recommendation: '旁证强化',
+            degrade: '反证回写',
+            carry_forward: '延账顺延',
+            pending: '待回写'
+        };
+        if (writebackMode) {
+            return {
+                key: `writeback:${writebackMode}`,
+                label: writebackLabelMap[writebackMode] || `回写·${writebackMode}`
+            };
+        }
+        return {
+            key: 'all',
+            label: SEASON_VERIFICATION_ARCHIVE_TRAJECTORY_META.all.label
+        };
+    };
 
     const sortObservatoryArchiveEntries = (entries = [], sortBy = 'recent') => {
         const safeSortBy = ['recent', 'score_desc'].includes(sortBy) ? sortBy : 'recent';
@@ -1455,6 +1577,213 @@
         return { ...next };
     };
 
+    Game.prototype.getSeasonVerificationArchiveFilterState = function (tab = 'weekly') {
+        this.ensureChallengeHubBootState();
+        const safeTab = tab === 'weekly' ? 'weekly' : 'weekly';
+        const next = normalizeSeasonVerificationArchiveFilterState(this.challengeHubState.verificationArchiveFilters?.[safeTab]);
+        this.challengeHubState.verificationArchiveFilters[safeTab] = next;
+        return { ...next };
+    };
+
+    Game.prototype.setSeasonVerificationArchiveFilter = function (key = '', value = '', tab = 'weekly') {
+        this.ensureChallengeHubBootState();
+        const safeTab = tab === 'weekly' ? 'weekly' : 'weekly';
+        if (!['sourceMode', 'resultStatus', 'phaseKey', 'trajectoryKey', 'role', 'sortBy'].includes(key)) {
+            return this.getSeasonVerificationArchiveFilterState(safeTab);
+        }
+        const next = normalizeSeasonVerificationArchiveFilterState({
+            ...this.getSeasonVerificationArchiveFilterState(safeTab),
+            [key]: value
+        });
+        this.challengeHubState.verificationArchiveFilters[safeTab] = next;
+        this.persistChallengeHubState();
+        if (this.currentScreen === 'challenge-screen') {
+            this.initChallengeHub();
+        }
+        return { ...next };
+    };
+
+    Game.prototype.resetSeasonVerificationArchiveFilters = function (tab = 'weekly') {
+        this.ensureChallengeHubBootState();
+        const safeTab = tab === 'weekly' ? 'weekly' : 'weekly';
+        const next = createSeasonVerificationArchiveFilterState();
+        this.challengeHubState.verificationArchiveFilters[safeTab] = next;
+        this.persistChallengeHubState();
+        if (this.currentScreen === 'challenge-screen') {
+            this.initChallengeHub();
+        }
+        return { ...next };
+    };
+
+    Game.prototype.buildSeasonVerificationArchiveFilterBundle = function (archive = null, options = {}) {
+        this.ensureChallengeHubBootState();
+        const safeTab = options.tab === 'weekly' ? 'weekly' : 'weekly';
+        const state = this.getSeasonVerificationArchiveFilterState(safeTab);
+        const sourceArchive = archive && typeof archive === 'object'
+            ? archive
+            : (typeof this.getSeasonVerificationArchiveSnapshot === 'function'
+                ? this.getSeasonVerificationArchiveSnapshot(options)
+                : null);
+        const entries = Array.isArray(sourceArchive?.entries)
+            ? sourceArchive.entries.filter((entry) => entry && typeof entry === 'object')
+            : [];
+        const sourceModeLabels = new Map();
+        const phaseLabels = new Map();
+        const trajectoryLabels = new Map();
+        entries.forEach((entry) => {
+            const sourceMode = String(entry.sourceMode || '').trim();
+            if (!sourceMode || sourceModeLabels.has(sourceMode)) return;
+            const label = String(
+                entry.sourceModeLabel
+                || entry.sourceLabel
+                || SEASON_VERIFICATION_ARCHIVE_SOURCE_MODE_META[sourceMode]?.label
+                || sourceMode
+            ).trim();
+            if (label) {
+                sourceModeLabels.set(sourceMode, label);
+            }
+        });
+        entries.forEach((entry) => {
+            const phaseKey = String(entry.phaseId || '').trim();
+            if (!phaseKey || phaseLabels.has(phaseKey)) return;
+            const label = String(entry.phaseLabel || phaseKey).trim();
+            if (label) {
+                phaseLabels.set(phaseKey, label);
+            }
+        });
+        entries.forEach((entry) => {
+            const trajectoryMeta = resolveSeasonVerificationArchiveTrajectoryMeta(entry);
+            if (!trajectoryMeta.key || trajectoryMeta.key === 'all' || trajectoryLabels.has(trajectoryMeta.key)) return;
+            trajectoryLabels.set(trajectoryMeta.key, trajectoryMeta.label);
+        });
+        const normalizedState = normalizeSeasonVerificationArchiveFilterState({
+            ...state,
+            sourceMode: state.sourceMode !== 'all' && !sourceModeLabels.has(state.sourceMode)
+                ? 'all'
+                : state.sourceMode,
+            phaseKey: state.phaseKey !== 'all' && !phaseLabels.has(state.phaseKey)
+                ? 'all'
+                : state.phaseKey,
+            trajectoryKey: state.trajectoryKey !== 'all' && !trajectoryLabels.has(state.trajectoryKey)
+                ? 'all'
+                : state.trajectoryKey
+        });
+        if (
+            serializeSeasonVerificationArchiveFilterState(normalizedState)
+            !== serializeSeasonVerificationArchiveFilterState(state)
+        ) {
+            this.challengeHubState.verificationArchiveFilters[safeTab] = normalizedState;
+            this.persistChallengeHubState();
+        }
+        const filteredEntries = entries
+            .filter((entry) => normalizedState.sourceMode === 'all' || entry.sourceMode === normalizedState.sourceMode)
+            .filter((entry) => normalizedState.resultStatus === 'all' || entry.resultStatus === normalizedState.resultStatus)
+            .filter((entry) => normalizedState.phaseKey === 'all' || entry.phaseId === normalizedState.phaseKey)
+            .filter((entry) => {
+                if (normalizedState.trajectoryKey === 'all') return true;
+                return resolveSeasonVerificationArchiveTrajectoryMeta(entry).key === normalizedState.trajectoryKey;
+            })
+            .filter((entry) => normalizedState.role === 'all' || entry.role === normalizedState.role)
+            .slice()
+            .sort((a, b) => {
+                const aAt = clampInt(a?.updatedAt || a?.createdAt, 0);
+                const bAt = clampInt(b?.updatedAt || b?.createdAt, 0);
+                if (normalizedState.sortBy === 'oldest') {
+                    return aAt - bAt || clampInt(a?.createdAt, 0) - clampInt(b?.createdAt, 0);
+                }
+                return bAt - aAt || clampInt(b?.createdAt, 0) - clampInt(a?.createdAt, 0);
+            });
+        const buildCountMap = (targetEntries = []) => targetEntries.reduce((acc, entry) => {
+            const resultStatus = ['verified', 'failed', 'deferred', 'pending'].includes(entry?.resultStatus)
+                ? entry.resultStatus
+                : 'pending';
+            acc[resultStatus] += 1;
+            return acc;
+        }, {
+            verified: 0,
+            failed: 0,
+            deferred: 0,
+            pending: 0
+        });
+        const statusCounts = buildCountMap(filteredEntries);
+        const sourceModeOptions = [{ value: 'all', label: SEASON_VERIFICATION_ARCHIVE_SOURCE_MODE_META.all.label }];
+        sourceModeLabels.forEach((label, value) => {
+            sourceModeOptions.push({ value, label });
+        });
+        if (normalizedState.sourceMode !== 'all' && !sourceModeLabels.has(normalizedState.sourceMode)) {
+            sourceModeOptions.push({ value: normalizedState.sourceMode, label: normalizedState.sourceMode });
+        }
+        const phaseOptions = [{ value: 'all', label: '全部阶段' }];
+        phaseLabels.forEach((label, value) => {
+            phaseOptions.push({ value, label });
+        });
+        if (normalizedState.phaseKey !== 'all' && !phaseLabels.has(normalizedState.phaseKey)) {
+            phaseOptions.push({ value: normalizedState.phaseKey, label: normalizedState.phaseKey });
+        }
+        const trajectoryOptions = [{ value: 'all', label: SEASON_VERIFICATION_ARCHIVE_TRAJECTORY_META.all.label }];
+        trajectoryLabels.forEach((label, value) => {
+            trajectoryOptions.push({ value, label });
+        });
+        if (normalizedState.trajectoryKey !== 'all' && !trajectoryLabels.has(normalizedState.trajectoryKey)) {
+            trajectoryOptions.push({ value: normalizedState.trajectoryKey, label: normalizedState.trajectoryKey });
+        }
+        const sourceModeLabel = normalizedState.sourceMode === 'all'
+            ? SEASON_VERIFICATION_ARCHIVE_SOURCE_MODE_META.all.label
+            : (sourceModeOptions.find((item) => item.value === normalizedState.sourceMode)?.label || normalizedState.sourceMode);
+        const resultStatusLabel = SEASON_VERIFICATION_ARCHIVE_RESULT_META[normalizedState.resultStatus]?.label
+            || SEASON_VERIFICATION_ARCHIVE_RESULT_META.all.label;
+        const phaseLabel = normalizedState.phaseKey === 'all'
+            ? '全部阶段'
+            : (phaseOptions.find((item) => item.value === normalizedState.phaseKey)?.label || normalizedState.phaseKey);
+        const trajectoryLabel = normalizedState.trajectoryKey === 'all'
+            ? SEASON_VERIFICATION_ARCHIVE_TRAJECTORY_META.all.label
+            : (trajectoryOptions.find((item) => item.value === normalizedState.trajectoryKey)?.label || normalizedState.trajectoryKey);
+        const roleLabel = SEASON_VERIFICATION_ARCHIVE_ROLE_META[normalizedState.role]?.label
+            || SEASON_VERIFICATION_ARCHIVE_ROLE_META.all.label;
+        const sortLabel = SEASON_VERIFICATION_ARCHIVE_SORT_META[normalizedState.sortBy]?.label
+            || SEASON_VERIFICATION_ARCHIVE_SORT_META.recent.label;
+        const defaultState = createSeasonVerificationArchiveFilterState();
+        const isDefault = serializeSeasonVerificationArchiveFilterState(normalizedState)
+            === serializeSeasonVerificationArchiveFilterState(defaultState);
+        return {
+            state: normalizedState,
+            entries: filteredEntries,
+            sourceModeOptions,
+            resultOptions: ['all', 'verified', 'failed', 'deferred', 'pending'].map((value) => ({
+                value,
+                label: SEASON_VERIFICATION_ARCHIVE_RESULT_META[value]?.label || value
+            })),
+            phaseOptions,
+            trajectoryOptions,
+            roleOptions: ['all', 'primary', 'side'].map((value) => ({
+                value,
+                label: SEASON_VERIFICATION_ARCHIVE_ROLE_META[value]?.label || value
+            })),
+            sortOptions: ['recent', 'oldest'].map((value) => ({
+                value,
+                label: SEASON_VERIFICATION_ARCHIVE_SORT_META[value]?.label || value
+            })),
+            sourceModeLabel,
+            resultStatusLabel,
+            phaseLabel,
+            trajectoryLabel,
+            roleLabel,
+            sortLabel,
+            filterSummary: `${sourceModeLabel} · ${resultStatusLabel} · ${phaseLabel} · ${trajectoryLabel} · ${roleLabel}`,
+            viewSummary: `${sourceModeLabel} · ${resultStatusLabel} · ${phaseLabel} · ${trajectoryLabel} · ${roleLabel} · ${sortLabel}`,
+            matchedCount: filteredEntries.length,
+            totalCount: entries.length,
+            verifiedCount: statusCounts.verified,
+            failedCount: statusCounts.failed,
+            deferredCount: statusCounts.deferred,
+            pendingCount: statusCounts.pending,
+            isDefault,
+            emptyText: isDefault
+                ? '当前轮换还没有更多可复核的周判记录，先去补一张真正落档的主验证或旁验证。'
+                : '当前筛面下没有命中周判记录，试试放宽来源、判定或角色条件。'
+        };
+    };
+
     Game.prototype.buildChallengeArchiveFilterQuery = function (filterState = null, bundle = null, options = {}) {
         this.ensureChallengeHubBootState();
         const safeTab = ['daily', 'weekly', 'global'].includes(bundle?.mode)
@@ -2311,9 +2640,10 @@
         const seasonVerificationArchive = bundle.mode === 'weekly' && typeof this.getSeasonVerificationArchiveSnapshot === 'function'
             ? this.getSeasonVerificationArchiveSnapshot()
             : null;
-        const seasonVerificationArchiveEntries = bundle.mode === 'weekly' && Array.isArray(seasonVerificationArchive?.entries)
-            ? seasonVerificationArchive.entries.filter((entry) => entry && typeof entry === 'object').slice(0, 6)
-            : [];
+        const seasonVerificationArchiveFilters = bundle.mode === 'weekly'
+            ? this.buildSeasonVerificationArchiveFilterBundle(seasonVerificationArchive, { tab: 'weekly' })
+            : null;
+        const seasonVerificationArchiveEntries = seasonVerificationArchiveFilters?.entries || [];
         const trainingFocusViewActive = !!trainingFocus?.themeKey
             && archiveFilters.state.scope === 'all'
             && archiveFilters.state.track === 'playable'
@@ -2500,7 +2830,11 @@
                     <article class="challenge-record-item replayable"
                         data-season-verification-archive-entry="true"
                         data-season-verification-record-id="${escapeHtml(entry.recordId || '')}"
-                        data-season-verification-anchor="${escapeHtml(entry.anchorSection || '')}">
+                        data-season-verification-anchor="${escapeHtml(entry.anchorSection || '')}"
+                        data-season-verification-source-mode="${escapeHtml(entry.sourceMode || '')}"
+                        data-season-verification-result-status="${escapeHtml(entry.resultStatus || '')}"
+                        data-season-verification-trajectory-key="${escapeHtml(resolveSeasonVerificationArchiveTrajectoryMeta(entry).key || 'all')}"
+                        data-season-verification-role="${escapeHtml(entry.role || '')}">
                         <div>
                             <strong>${escapeHtml(entry.kicker || `${entry.weekLabel || entry.weekTag || '本周轮转'} · ${entry.roleLabel || '周判记录'}`)}</strong>
                             <p>${escapeHtml(entry.noteLine || entry.summaryLine || entry.writebackLine || entry.detailLine || '周判记录已归档。')}</p>
@@ -2521,7 +2855,7 @@
                         </div>
                     </article>
                 `).join('')
-                : '<div class="codex-empty-state">当前轮换还没有周判记录，先去补一张真正落档的主验证或旁验证。</div>';
+                : `<div class="codex-empty-state">${escapeHtml(seasonVerificationArchiveFilters?.emptyText || '当前轮换还没有周判记录，先去补一张真正落档的主验证或旁验证。')}</div>`;
             const comparisonMarkup = comparison.entries.length > 0
                 ? comparison.entries.map((entry) => `
                     <article class="challenge-compare-card ${entry.selected ? 'selected' : ''}" data-record-id="${escapeHtml(entry.id)}">
@@ -2576,12 +2910,67 @@
                 ${bundle.mode === 'weekly' ? `
                     <section class="challenge-record-section"
                         data-season-verification-archive="true"
-                        data-season-verification-total="${escapeHtml(String(seasonVerificationArchive?.totalRecords || 0))}">
+                        data-season-verification-total="${escapeHtml(String(seasonVerificationArchive?.totalRecords || 0))}"
+                        data-season-verification-filtered="${escapeHtml(String(seasonVerificationArchiveFilters?.matchedCount || 0))}">
                         <div class="challenge-record-section-head">
                             <strong>周判记录</strong>
-                            <span>${escapeHtml(`${seasonVerificationArchive?.totalRecords || 0} 条归档`)}</span>
+                            <span>${escapeHtml(`${seasonVerificationArchiveFilters?.matchedCount || 0} / ${seasonVerificationArchive?.totalRecords || 0} 条命中`)}</span>
                         </div>
                         <p class="challenge-compare-note">${escapeHtml(seasonVerificationArchive?.summaryLine || '把每周主验证、旁验证与清账回写压成同一层长期周判记录。')}</p>
+                        <div class="challenge-archive-toolbar" data-season-verification-toolbar="true">
+                            <div class="challenge-archive-toolbar-head">
+                                <p class="challenge-compare-note">${escapeHtml(seasonVerificationArchive?.detailLine || '把周挑战、天道榜与地图清账回写压成同一层长期周判记录，按来源、判定与角色快速复核。')}</p>
+                                <button type="button" class="collection-inline-btn secondary"
+                                    data-reset-season-verification-filters="true"
+                                    ${seasonVerificationArchiveFilters?.isDefault ? 'disabled' : ''}
+                                    onclick="game.resetSeasonVerificationArchiveFilters('weekly')">还原周判筛面</button>
+                            </div>
+                            <div class="challenge-archive-filter-grid">
+                                <label class="challenge-archive-filter">
+                                    <span>来源</span>
+                                    <select data-season-verification-filter="sourceMode"
+                                        onchange="game.setSeasonVerificationArchiveFilter('sourceMode', this.value, 'weekly')">${renderArchiveSelectOptions(seasonVerificationArchiveFilters?.sourceModeOptions || [], seasonVerificationArchiveFilters?.state?.sourceMode || 'all')}</select>
+                                </label>
+                                <label class="challenge-archive-filter">
+                                    <span>判定</span>
+                                    <select data-season-verification-filter="resultStatus"
+                                        onchange="game.setSeasonVerificationArchiveFilter('resultStatus', this.value, 'weekly')">${renderArchiveSelectOptions(seasonVerificationArchiveFilters?.resultOptions || [], seasonVerificationArchiveFilters?.state?.resultStatus || 'all')}</select>
+                                </label>
+                                <label class="challenge-archive-filter">
+                                    <span>阶段</span>
+                                    <select data-season-verification-filter="phaseKey"
+                                        onchange="game.setSeasonVerificationArchiveFilter('phaseKey', this.value, 'weekly')">${renderArchiveSelectOptions(seasonVerificationArchiveFilters?.phaseOptions || [], seasonVerificationArchiveFilters?.state?.phaseKey || 'all')}</select>
+                                </label>
+                                <label class="challenge-archive-filter">
+                                    <span>去向</span>
+                                    <select data-season-verification-filter="trajectoryKey"
+                                        onchange="game.setSeasonVerificationArchiveFilter('trajectoryKey', this.value, 'weekly')">${renderArchiveSelectOptions(seasonVerificationArchiveFilters?.trajectoryOptions || [], seasonVerificationArchiveFilters?.state?.trajectoryKey || 'all')}</select>
+                                </label>
+                                <label class="challenge-archive-filter">
+                                    <span>角色</span>
+                                    <select data-season-verification-filter="role"
+                                        onchange="game.setSeasonVerificationArchiveFilter('role', this.value, 'weekly')">${renderArchiveSelectOptions(seasonVerificationArchiveFilters?.roleOptions || [], seasonVerificationArchiveFilters?.state?.role || 'all')}</select>
+                                </label>
+                                <label class="challenge-archive-filter">
+                                    <span>排序</span>
+                                    <select data-season-verification-filter="sortBy"
+                                        onchange="game.setSeasonVerificationArchiveFilter('sortBy', this.value, 'weekly')">${renderArchiveSelectOptions(seasonVerificationArchiveFilters?.sortOptions || [], seasonVerificationArchiveFilters?.state?.sortBy || 'recent')}</select>
+                                </label>
+                            </div>
+                            <div class="challenge-record-tags challenge-archive-summary-tags">
+                                <span class="challenge-tag">来源：${escapeHtml(seasonVerificationArchiveFilters?.sourceModeLabel || '全部来源')}</span>
+                                <span class="challenge-tag">判定：${escapeHtml(seasonVerificationArchiveFilters?.resultStatusLabel || '全部判定')}</span>
+                                <span class="challenge-tag">阶段：${escapeHtml(seasonVerificationArchiveFilters?.phaseLabel || '全部阶段')}</span>
+                                <span class="challenge-tag">去向：${escapeHtml(seasonVerificationArchiveFilters?.trajectoryLabel || '全部去向')}</span>
+                                <span class="challenge-tag">角色：${escapeHtml(seasonVerificationArchiveFilters?.roleLabel || '全部角色')}</span>
+                                <span class="challenge-tag">排序：${escapeHtml(seasonVerificationArchiveFilters?.sortLabel || '最新归档')}</span>
+                                <span class="challenge-tag">命中 ${clampInt(seasonVerificationArchiveFilters?.matchedCount, 0)} 条</span>
+                                <span class="challenge-tag">通过 ${clampInt(seasonVerificationArchiveFilters?.verifiedCount, 0)}</span>
+                                <span class="challenge-tag">失利 ${clampInt(seasonVerificationArchiveFilters?.failedCount, 0)}</span>
+                                <span class="challenge-tag">延期 ${clampInt(seasonVerificationArchiveFilters?.deferredCount, 0)}</span>
+                                <span class="challenge-tag">待验证 ${clampInt(seasonVerificationArchiveFilters?.pendingCount, 0)}</span>
+                            </div>
+                        </div>
                         ${verificationArchiveMarkup}
                     </section>
                 ` : ''}
@@ -3745,6 +4134,13 @@
             })
             : null;
         const archiveFilters = this.buildChallengeArchiveFilterBundle(liveBundle || hubBundle || null);
+        const seasonVerificationArchive = typeof this.getSeasonVerificationArchiveSnapshot === 'function'
+            ? this.getSeasonVerificationArchiveSnapshot()
+            : null;
+        const seasonVerificationArchiveFilters = this.buildSeasonVerificationArchiveFilterBundle(
+            seasonVerificationArchive,
+            { tab: 'weekly' }
+        );
         const activeRunDangerProfile = this.activeChallengeRun
             ? this.buildChallengeDangerProfile(this.activeChallengeRun, this.activeChallengeRun.mode)
             : null;
@@ -3820,6 +4216,60 @@
                 trainingFocusAdvice: trainingFocus?.trainingAdvice || '',
                 trainingFocusThemeLabel: trainingFocus?.themeLabel || ''
             },
+            verificationArchive: seasonVerificationArchive
+                ? {
+                    available: !!seasonVerificationArchive.available,
+                    totalRecords: clampInt(seasonVerificationArchive.totalRecords, 0),
+                    verifiedCount: clampInt(seasonVerificationArchive.verifiedCount, 0),
+                    failedCount: clampInt(seasonVerificationArchive.failedCount, 0),
+                    deferredCount: clampInt(seasonVerificationArchive.deferredCount, 0),
+                    pendingCount: clampInt(seasonVerificationArchive.pendingCount, 0),
+                    summaryLine: seasonVerificationArchive.summaryLine || '',
+                    detailLine: seasonVerificationArchive.detailLine || '',
+                    progressText: seasonVerificationArchive.progressText || '',
+                    filterState: seasonVerificationArchiveFilters.state,
+                    filterSummary: seasonVerificationArchiveFilters.filterSummary,
+                    sourceModeLabel: seasonVerificationArchiveFilters.sourceModeLabel,
+                    resultStatusLabel: seasonVerificationArchiveFilters.resultStatusLabel,
+                    phaseLabel: seasonVerificationArchiveFilters.phaseLabel,
+                    trajectoryLabel: seasonVerificationArchiveFilters.trajectoryLabel,
+                    roleLabel: seasonVerificationArchiveFilters.roleLabel,
+                    sortLabel: seasonVerificationArchiveFilters.sortLabel,
+                    filteredCount: seasonVerificationArchiveFilters.matchedCount,
+                    filteredVerifiedCount: seasonVerificationArchiveFilters.verifiedCount,
+                    filteredFailedCount: seasonVerificationArchiveFilters.failedCount,
+                    filteredDeferredCount: seasonVerificationArchiveFilters.deferredCount,
+                    filteredPendingCount: seasonVerificationArchiveFilters.pendingCount,
+                    totalShownCount: seasonVerificationArchiveFilters.totalCount,
+                    filteredPhaseLabel: seasonVerificationArchiveFilters.phaseLabel,
+                    filteredTrajectoryLabel: seasonVerificationArchiveFilters.trajectoryLabel,
+                    latestRecordId: seasonVerificationArchive.latestEntry?.recordId || '',
+                    latestAnchorSection: seasonVerificationArchive.latestEntry?.anchorSection || '',
+                    latestActionType: seasonVerificationArchive.latestEntry?.actionType || '',
+                    latestActionValue: seasonVerificationArchive.latestEntry?.actionValue || '',
+                    latestCtaLabel: seasonVerificationArchive.latestEntry?.ctaLabel || '',
+                    latestSourceMode: seasonVerificationArchive.latestEntry?.sourceMode || '',
+                    latestResultStatus: seasonVerificationArchive.latestEntry?.resultStatus || '',
+                    latestRole: seasonVerificationArchive.latestEntry?.role || '',
+                    latestTrajectoryKey: resolveSeasonVerificationArchiveTrajectoryMeta(seasonVerificationArchive.latestEntry).key,
+                    latestTrajectoryLabel: resolveSeasonVerificationArchiveTrajectoryMeta(seasonVerificationArchive.latestEntry).label,
+                    entryAnchors: seasonVerificationArchiveFilters.entries.map((entry) => entry.anchorSection || ''),
+                    latestEntry: seasonVerificationArchive.latestEntry
+                        ? {
+                            recordId: seasonVerificationArchive.latestEntry.recordId || '',
+                            sourceMode: seasonVerificationArchive.latestEntry.sourceMode || '',
+                            resultStatus: seasonVerificationArchive.latestEntry.resultStatus || '',
+                            role: seasonVerificationArchive.latestEntry.role || '',
+                            trajectoryKey: resolveSeasonVerificationArchiveTrajectoryMeta(seasonVerificationArchive.latestEntry).key,
+                            trajectoryLabel: resolveSeasonVerificationArchiveTrajectoryMeta(seasonVerificationArchive.latestEntry).label,
+                            anchorSection: seasonVerificationArchive.latestEntry.anchorSection || '',
+                            actionType: seasonVerificationArchive.latestEntry.actionType || '',
+                            actionValue: seasonVerificationArchive.latestEntry.actionValue || '',
+                            ctaLabel: seasonVerificationArchive.latestEntry.ctaLabel || ''
+                        }
+                        : null
+                }
+                : null,
             observatoryGuide: selectedGuide
                 ? {
                     id: selectedGuide.id,

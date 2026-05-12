@@ -21,6 +21,19 @@ function createStorage() {
   };
 }
 
+function resetStorages(localStorage, sessionStorage) {
+  if (localStorage && typeof localStorage.removeItem === 'function') {
+    if (typeof localStorage.clear === 'function') {
+      localStorage.clear();
+    }
+  }
+  if (sessionStorage && typeof sessionStorage.removeItem === 'function') {
+    if (typeof sessionStorage.clear === 'function') {
+      sessionStorage.clear();
+    }
+  }
+}
+
 function loadFile(ctx, filePath) {
   const code = fs.readFileSync(filePath, 'utf8');
   vm.runInContext(code, ctx, { filename: filePath });
@@ -370,8 +383,23 @@ function loadFile(ctx, filePath) {
   const debtGame = createGame();
   ctx.game = debtGame;
   ctx.window.game = debtGame;
-  const debtCurrentWeekTag = debtGame.getHeavenlyMandateWeekMeta().weekTag;
-  const debtSlate = buildSlate('heavenly_mandate_debt_pack', Date.now() - (8 * 24 * 60 * 60 * 1000), {
+  const findWeeksAgoTimestamp = (game, weeksAgo = 1) => {
+    const targetTransitions = Math.max(1, Math.floor(Number(weeksAgo) || 1));
+    let cursor = Date.now();
+    let lastTag = game.getHeavenlyMandateWeekMeta(cursor).weekTag;
+    let transitions = 0;
+    while (transitions < targetTransitions) {
+      cursor -= 24 * 60 * 60 * 1000;
+      const nextTag = game.getHeavenlyMandateWeekMeta(cursor).weekTag;
+      if (nextTag && nextTag !== lastTag) {
+        transitions += 1;
+        lastTag = nextTag;
+      }
+    }
+    return cursor;
+  };
+  const debtOpenedAt = findWeeksAgoTimestamp(debtGame, 1);
+  const debtSlate = buildSlate('heavenly_mandate_debt_pack', debtOpenedAt, {
     chapterName: '第 5 章·镜债旧卷',
     ratingLabel: '留痕待补',
     ratingTone: 'selected',
@@ -418,7 +446,8 @@ function loadFile(ctx, filePath) {
       recoveryHintLine: '先去高压环境补一轮镜债验证，再决定要不要继续冲榜。',
       rewardTrackId: 'observatory',
       rewardTrackName: '命盘档案室',
-      rewardTrackIcon: '🔭'
+      rewardTrackIcon: '🔭',
+      updatedAt: debtOpenedAt
     },
     history: [],
     totalCompleted: 0,
@@ -426,7 +455,7 @@ function loadFile(ctx, filePath) {
   });
   const debtEndlessState = debtGame.ensureEndlessState();
   debtEndlessState.currentCycle = 1;
-  debtEndlessState.seasonWeekTag = debtCurrentWeekTag;
+  debtEndlessState.seasonWeekTag = debtGame.getHeavenlyMandateWeekMeta().weekTag;
   debtEndlessState.seasonCycleClears = 1;
   debtEndlessState.seasonScore = 128;
   const debtMandateSnapshot = debtGame.getHeavenlyMandateExpeditionSnapshot();
@@ -536,6 +565,100 @@ function loadFile(ctx, filePath) {
     releasedSanctumOverview?.heavenlyMandate?.focusTask?.id === releasedMandateSnapshot?.focusTask?.id
       && releasedSanctumOverview?.heavenlyMandate?.focusTask?.source !== 'seasonDebtPack',
     `sanctum heavenly mandate view should also release the debt focus after main verification clears it, got ${JSON.stringify(releasedSanctumOverview?.heavenlyMandate)}`
+  );
+
+  resetStorages(localStorage, sessionStorage);
+  const delayedDebtGame = createGame();
+  const delayedDebtOpenedAt = findWeeksAgoTimestamp(delayedDebtGame, 2);
+  const delayedDebtSlate = buildSlate('heavenly_mandate_delayed_debt', delayedDebtOpenedAt, {
+    chapterIndex: debtSlate.chapterIndex,
+    chapterName: debtSlate.chapterName,
+    ratingLabel: '镜债拖延',
+    score: 208
+  });
+  delayedDebtGame.runSlateArchive = delayedDebtGame.normalizeRunSlateArchive([delayedDebtSlate]);
+  delayedDebtGame.persistRunSlateArchive();
+  delayedDebtGame.setObservatoryTrainingFocus(delayedDebtGame.buildObservatoryTrainingFocusFromSlate(delayedDebtSlate), { silent: true });
+  delayedDebtGame.sanctumAgendaState = delayedDebtGame.normalizeSanctumAgendaState({
+    activeAgenda: null,
+    lastResolved: {
+      agendaId: 'heavenly_mandate_delayed_debt_agenda',
+      name: '镜债拖延',
+      sourceRunId: delayedDebtSlate.id,
+      sourceLabel: '镜债拖延',
+      boundChapterIndex: delayedDebtSlate.chapterIndex,
+      selectedContractLabel: '延账留尾',
+      selectedContractLine: '先拖后清，把旧债继续带进下一轮。',
+      selectedDecisionLabel: '延账观望',
+      contractResolved: false,
+      contractSuccess: false,
+      contractResolutionLine: '这笔镜债拖得太久，已经失去强目标位占用资格。',
+      recoveryEligible: true,
+      recoveryLine: '拖延过久的欠卷会降级成反证尾账。',
+      recoveryHintLine: '反证尾账不再继续占用天命强目标。 ',
+      outcome: 'failed',
+      outcomeLabel: '欠卷拖延',
+      updatedAt: delayedDebtOpenedAt
+    },
+    history: []
+  });
+  delayedDebtGame.fateAftereffectState = delayedDebtGame.normalizeFateAftereffectState({
+    records: [],
+    history: [],
+    lastResolved: {
+      recordId: 'heavenly_mandate_delayed_debt_aftereffect',
+      icon: '🩸',
+      name: '镜债拖延',
+      sourceRunId: delayedDebtSlate.id,
+      sourceAgendaId: 'heavenly_mandate_delayed_debt_agenda',
+      sourceLabel: '镜债拖延',
+      templateId: 'risk_bias',
+      outcomeId: 'recovery',
+      chapterIndex: delayedDebtSlate.chapterIndex,
+      chapterName: delayedDebtSlate.chapterName,
+      durationChapters: 2,
+      summaryLine: '镜债拖延：旧债跨周未清，正从强目标位滑出。',
+      detailLine: '研究债账拖延过久，后续只会留下反证尾账。',
+      createdAt: delayedDebtOpenedAt
+    }
+  });
+  const delayedDebtBoard = delayedDebtGame.getSeasonBoardSnapshot({ latestSlate: delayedDebtSlate });
+  const delayedMandateSnapshot = delayedDebtGame.getHeavenlyMandateExpeditionSnapshot();
+  const delayedSanctumOverview = delayedDebtGame.getSanctumOverviewData();
+  const delayedOccupiedTask = (delayedMandateSnapshot?.lanes || [])
+    .flatMap((lane) => (Array.isArray(lane?.tasks)
+      ? lane.tasks.map((task) => ({ ...task, laneId: lane.id }))
+      : []))
+    .find((task) => task.id === delayedMandateSnapshot?.focusTask?.id) || null;
+  assert(
+    delayedDebtBoard?.settlement?.outcomeId === 'locking_sheet'
+      && delayedDebtBoard?.settlement?.resolvedStatus === 'degraded'
+      && delayedDebtBoard?.weekVerdictLedger?.current?.debtStatus === 'degraded'
+      && delayedDebtBoard?.weekVerdictLedger?.current?.deferCount >= 2
+      && delayedDebtBoard?.weekVerdictLedger?.current?.carryIntoWeekTag === '',
+    `delayed debt should keep settlement and verdict ledger aligned with the degrade state, got ${JSON.stringify({
+      settlement: delayedDebtBoard?.settlement,
+      weekVerdictLedger: delayedDebtBoard?.weekVerdictLedger?.current
+    })}`
+  );
+  assert(
+    delayedDebtBoard?.debtPack?.status === 'degraded'
+      && delayedDebtBoard?.debtPack?.occupiesStrongSlot === false
+      && delayedDebtBoard?.debtPack?.deferCount >= 2
+      && delayedDebtBoard?.debtPack?.carryIntoWeekTag === '',
+    `delayed debt should degrade before heavenly mandate builds its focus task, got ${JSON.stringify(delayedDebtBoard?.debtPack)}`
+  );
+  assert(
+    delayedMandateSnapshot?.focusTask?.source !== 'seasonDebtPack'
+      && delayedMandateSnapshot?.focusTask?.occupiesStrongSlot === false
+      && delayedOccupiedTask?.id === delayedMandateSnapshot?.focusTask?.id
+      && delayedOccupiedTask?.occupiesStrongSlot === false,
+    `delay-degraded debt should release the heavenly mandate strong slot, got ${JSON.stringify({ delayedMandateSnapshot, delayedOccupiedTask })}`
+  );
+  assert(
+    delayedSanctumOverview?.heavenlyMandate?.focusTask?.source !== 'seasonDebtPack'
+      && delayedSanctumOverview?.heavenlyMandate?.focusTask?.occupiesStrongSlot === false,
+    `sanctum heavenly mandate view should also release the delay-degraded debt focus, got ${JSON.stringify(delayedSanctumOverview?.heavenlyMandate)}`
   );
 
   ctx.game = game;

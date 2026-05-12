@@ -24064,11 +24064,15 @@ class Game {
             ) || 0)
         );
         const currentWeekTag = String(safeSignals.weekTag || '').trim();
-        const currentWeekIndex = Math.max(0, Math.floor(Number(safeSignals.weekIndex) || 0));
         const toWeekIndex = (weekTag = '') => {
             const match = String(weekTag || '').trim().match(/^(\d+)-W(\d+)$/);
             return match ? (Math.max(0, Number(match[1])) * 100 + Math.max(0, Number(match[2]))) : 0;
         };
+        const currentWeekIndex = Math.max(
+            0,
+            Math.floor(Number(safeSignals.weekIndex) || 0),
+            toWeekIndex(currentWeekTag)
+        );
         const openedAt = Math.max(
             0,
             Math.floor(Number(
@@ -24106,12 +24110,16 @@ class Game {
             : 0;
         const debtClearedByVerification = hasDebt && primaryVerified && primaryWritebackMode === 'clear_debt';
         const debtDegradedByVerification = hasDebt && primaryFailed;
+        const debtDegradedByDelay = hasDebt && !debtClearedByVerification && !debtDegradedByVerification && weekDelta >= 2;
+        const debtDelayCount = debtDegradedByDelay ? Math.max(2, weekDelta) : 0;
         const debtStatus = hasDebt
             ? (debtClearedByVerification
                 ? 'cleared'
                 : (debtDegradedByVerification
                     ? 'degraded'
-                    : (weekDelta > 0 ? 'deferred' : 'open')))
+                    : (debtDegradedByDelay
+                        ? 'degraded'
+                        : (weekDelta > 0 ? 'deferred' : 'open'))))
             : '';
         const debtOccupiesStrongSlot = ['open', 'deferred'].includes(debtStatus);
         const occupiedMandateTaskId = debtOccupiesStrongSlot
@@ -24119,34 +24127,42 @@ class Game {
             : '';
         const occupationReason = debtStatus === 'deferred'
             ? `旧周欠卷已带入 ${currentWeekTag || safeSignals.weekLabel || '本周'}，强目标先让位给清账。`
+            : (debtDegradedByDelay
+                ? `这笔欠卷已拖延 ${debtDelayCount} 周，当前降级为反证，不再继续占据强目标。`
             : (debtStatus === 'open'
                 ? '本周刚形成欠卷，强目标先切到清账。'
                 : (debtStatus === 'cleared'
                     ? '主验证已清账，强目标重新释放给赛季推进。'
-                    : '主验证给出反证，欠卷改记为反例，不再继续占据强目标。'));
+                    : '主验证给出反证，欠卷改记为反例，不再继续占据强目标。')));
         const debtProgressText = debtStatus === 'deferred'
             ? `已拖延 ${Math.max(1, weekDelta)} 周`
+            : (debtDegradedByDelay
+                ? `拖延 ${debtDelayCount} 周后降级`
             : (debtStatus === 'cleared'
                 ? '已清账'
                 : (debtStatus === 'degraded'
                     ? '反证已入账'
                     : (primaryAftereffect?.remainingChapters > 0
                         ? `清账窗口 ${Math.max(1, Math.floor(Number(primaryAftereffect.remainingChapters) || 1))} 章`
-                        : '本周内优先清账')));
+                        : '本周内优先清账'))));
         const debtStatusLine = debtStatus === 'deferred'
             ? `欠卷已拖延 ${Math.max(1, weekDelta)} 周`
+            : (debtDegradedByDelay
+                ? `欠卷已拖延 ${debtDelayCount} 周，现转为反证`
             : (debtStatus === 'cleared'
                 ? (primaryVerification?.statusLine || '欠卷已清账')
                 : (debtStatus === 'degraded'
                     ? (primaryVerification?.statusLine || '欠卷已转为反证')
-                    : (primaryAftereffect?.statusLine || '欠卷待清账')));
+                    : (primaryAftereffect?.statusLine || '欠卷待清账'))));
         const debtGuideLine = debtStatus === 'deferred'
             ? `这笔欠卷已带入 ${safeSignals.weekLabel || currentWeekTag || '本周'}，先清账，再决定这一周是否继续冲定榜验证。`
+            : (debtDegradedByDelay
+                ? `这笔欠卷已经拖延 ${debtDelayCount} 周，当前先按反证收束主轴，再决定是否重新建立高压验证。`
             : (debtStatus === 'cleared'
                 ? (primaryVerification?.writebackLine || '主验证已经完成清账，可以回到定榜推进。')
                 : (debtStatus === 'degraded'
                     ? (primaryVerification?.writebackLine || '这笔欠卷已经转成反证，先修正主轴再继续扩线。')
-                    : '先处理上一道承诺留下的欠卷，再决定这一周是否值得继续冲定榜验证。'));
+                    : '先处理上一道承诺留下的欠卷，再决定这一周是否值得继续冲定榜验证。')));
 
         let outcomeId = 'sampling_sheet';
         if (safePhase.id === 'lockline') {
@@ -24154,9 +24170,9 @@ class Game {
         } else if (safePhase.id === 'ranking') {
             if (primaryVerified) {
                 outcomeId = 'positive_sheet';
-            } else if (hasDebt && !debtClearedByVerification && !debtDegradedByVerification) {
+            } else if (hasDebt && !debtClearedByVerification && !debtDegradedByVerification && !debtDegradedByDelay) {
                 outcomeId = 'debt_sheet';
-            } else if (primaryFailed) {
+            } else if (primaryFailed || debtDegradedByDelay) {
                 outcomeId = 'risky_sheet';
             } else {
                 outcomeId = hasCrossVerification
@@ -24216,7 +24232,9 @@ class Game {
                 : '本周押卷已结成「正卷」，这条主轴已经通过至少一条高压验证。',
             risky_sheet: primaryFailed
                 ? '主验证给出了反证，本周押卷暂降为「险卷」，需要重新校准主轴。'
-                : '本周押卷已结成「险卷」，路线已成形，但还需要外场验证决定能否真正定榜。',
+                : (debtDegradedByDelay
+                    ? `这笔欠卷已连续拖延 ${debtDelayCount} 周，当前从强目标位降为「险卷」反证，需要先收紧主轴再继续推进。`
+                    : '本周押卷已结成「险卷」，路线已成形，但还需要外场验证决定能否真正定榜。'),
             debt_sheet: sideVerified
                 ? '旁验证已经补上，但上一道承诺留下的欠卷仍待主验证清账。'
                 : '本周押卷暂结成「欠卷」，上一道承诺留下了待清的研究债账。'
@@ -24238,12 +24256,16 @@ class Game {
                 !primaryVerified && pvpMatches > 0 ? `天道榜已留 ${pvpMatches} 场账本` : ''
             ].filter(Boolean).slice(0, 2).join('｜'),
             risky_sheet: [
-                primaryFailed ? (primaryVerification?.summaryLine || '') : '',
-                !primaryFailed && sideVerified ? (sideVerification?.summaryLine || sideWritebackLine || '') : '',
-                primaryFailed
-                    ? (primaryVerification?.detailLine || primaryWritebackLine || '')
-                    : (lastAgenda?.contractResolutionLine || ''),
-                primaryFailed
+                debtDegradedByDelay ? (primaryAftereffect?.detailLine || '') : (primaryFailed ? (primaryVerification?.summaryLine || '') : ''),
+                debtDegradedByDelay
+                    ? `延账 ${debtDelayCount} 周后已从强目标位降级，不再继续占用本周主舞台。`
+                    : (!primaryFailed && sideVerified ? (sideVerification?.summaryLine || sideWritebackLine || '') : ''),
+                debtDegradedByDelay
+                    ? (lastAgenda?.recoveryHintLine || lastAgenda?.contractResolutionLine || '')
+                    : (primaryFailed
+                        ? (primaryVerification?.detailLine || primaryWritebackLine || '')
+                        : (lastAgenda?.contractResolutionLine || '')),
+                debtDegradedByDelay || primaryFailed
                     ? ''
                     : '当前主轴还缺最后一轮高压验算，适合继续补无尽或天道榜样本。'
             ].filter(Boolean).slice(0, 2).join('｜'),
@@ -24263,7 +24285,9 @@ class Game {
                 : `无尽 ${endlessClears}/1 · 天道榜 ${Math.min(pvpMatches, 2)}/2`,
             risky_sheet: primaryFailed
                 ? '反证已入账'
-                : `待补外场验证 ${hasCrossVerification ? 0 : 1} 条`,
+                : (debtDegradedByDelay
+                    ? `拖延 ${debtDelayCount} 周后降级`
+                    : `待补外场验证 ${hasCrossVerification ? 0 : 1} 条`),
             debt_sheet: primaryAftereffect?.remainingChapters > 0
                 ? `清账窗口 ${Math.max(1, Math.floor(Number(primaryAftereffect.remainingChapters) || 1))} 章`
                 : '本周内优先清账'
@@ -24280,9 +24304,11 @@ class Game {
                     : '主轴已经成形，但还没留下真正的高压验证样本。'),
             risky_sheet: primaryFailed
                 ? '先根据反证收紧路线，再决定是补旁证、换验证入口，还是重新建立主验证。'
-                : (sideVerified
-                    ? '旁验证已经补齐，但仍需把这条险卷送去无尽或天道榜做真正的主验证。'
-                    : '先把当前险卷送去无尽或天道榜做一次高压验证，再用七日劫数补一张挑战旁证。'),
+                : (debtDegradedByDelay
+                    ? `这笔欠卷已经拖延 ${debtDelayCount} 周，当前先按反证收束主轴，再决定是否重新建立高压验证。`
+                    : (sideVerified
+                        ? '旁验证已经补齐，但仍需把这条险卷送去无尽或天道榜做真正的主验证。'
+                        : '先把当前险卷送去无尽或天道榜做一次高压验证，再用七日劫数补一张挑战旁证。')),
             debt_sheet: sideVerified
                 ? '旁验证已经给出补强，但仍需主验证真正清账后才能释放本周定榜节奏。'
                 : '先处理上一道承诺留下的欠卷，再决定这一周是否值得继续冲定榜验证。'
@@ -24303,13 +24329,15 @@ class Game {
                     primaryVerification?.sourceModeLabel || '',
                     proofQualityLabel
                 ].filter(Boolean).join(' · ')
+                : (debtDegradedByDelay
+                    ? `延账 ${debtDelayCount} 周 · 已降级`
                 : (sideVerified
                     ? [
                         '旁验证已补',
                         sideVerification?.sourceModeLabel || '',
                         '险卷待主验证'
                     ].filter(Boolean).join(' · ')
-                    : '险卷待做外场定榜验证'),
+                    : '险卷待做外场定榜验证')),
             debt_sheet: sideVerified
                 ? [
                     '旁验证已补',
@@ -24336,7 +24364,7 @@ class Game {
             settlementSource: primaryVerification ? 'season_verification' : (sourceRunId ? 'run_slate' : (lastAgenda ? 'agenda' : 'derived')),
             resolutionTier: primaryVerified
                 ? (debtClearedByVerification ? 'recovered' : 'confirmed')
-                : (primaryFailed
+                : (primaryFailed || debtDegradedByDelay
                     ? 'degraded'
                     : (outcomeId === 'risky_sheet'
                         ? 'provisional'
@@ -24366,7 +24394,7 @@ class Game {
                 summaryLine: debtStatus === 'cleared'
                     ? `研究债账已清：${String(primaryVerification?.summaryLine || primaryWritebackLine || lastAgenda?.recoveryLine || '这笔欠卷已经完成清账。').trim()}`
                     : (debtStatus === 'degraded'
-                        ? `研究债账转为反证：${String(primaryVerification?.summaryLine || primaryWritebackLine || lastAgenda?.reasonLine || '这笔欠卷已经转成反证。').trim()}`
+                        ? `${debtDegradedByDelay ? '研究债账拖延降级' : '研究债账转为反证'}：${String(primaryVerification?.summaryLine || primaryWritebackLine || lastAgenda?.reasonLine || '这笔欠卷已经转成反证。').trim()}`
                         : (primaryAftereffect?.summaryLine
                             ? `研究债账：${String(primaryAftereffect.summaryLine || '').trim()}`
                             : `研究债账：${String(lastAgenda?.recoveryLine || lastAgenda?.reasonLine || '上一道押卷承诺仍待清账。').trim()}`)),
@@ -24385,7 +24413,7 @@ class Game {
                     : (debtStatus === 'cleared'
                         ? '本周已清'
                         : (debtStatus === 'degraded'
-                            ? '反证归档'
+                            ? (debtDegradedByDelay ? `拖延 ${debtDelayCount} 周后降级` : '反证归档')
                             : (primaryAftereffect?.remainingChapters > 0
                                 ? `剩余 ${Math.max(1, Math.floor(Number(primaryAftereffect.remainingChapters) || 1))} 章`
                                 : '本周内清账'))),
@@ -24398,7 +24426,7 @@ class Game {
                     || (safeSignals.endlessSeason ? 'endless' : (safeSignals.pvpSeason ? 'pvp' : 'sanctum'))
                 ).trim(),
                 status: debtStatus,
-                deferCount: debtStatus === 'deferred' ? weekDelta : 0,
+                deferCount: debtStatus === 'deferred' ? weekDelta : (debtDegradedByDelay ? debtDelayCount : 0),
                 openedWeekTag,
                 carryIntoWeekTag: debtStatus === 'deferred' ? currentWeekTag : '',
                 occupiedMandateTaskId,

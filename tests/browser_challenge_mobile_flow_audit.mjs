@@ -426,6 +426,268 @@ function rectObject(rect) {
   );
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-mobile-archive.png'), 'browser_challenge_mobile_flow_audit', { timeout: 9000 });
 
+  await page.evaluate(() => {
+    if (typeof game.recordSeasonVerificationResult === 'function') {
+      const weekMeta = typeof game.getHeavenlyMandateWeekMeta === 'function'
+        ? game.getHeavenlyMandateWeekMeta()
+        : { weekTag: 'mobile', weekLabel: '本周轮转' };
+      const now = Date.now();
+      game.recordSeasonVerificationResult({
+        recordId: `mobile_weekly_pvp_${weekMeta?.weekTag || 'mobile'}`,
+        weekTag: weekMeta?.weekTag || '',
+        weekLabel: weekMeta?.weekLabel || '',
+        role: 'primary',
+        sourceMode: 'pvp',
+        sourceModeLabel: '天道榜',
+        phaseId: 'ranking',
+        phaseLabel: '定榜期',
+        settlementOutcomeId: 'positive_sheet',
+        settlementOutcomeLabel: '正卷',
+        sourceLabel: '天道榜 · 主验证',
+        label: '天道榜主验证',
+        resultStatus: 'verified',
+        writebackMode: 'upgrade_verdict',
+        writebackLine: '天道榜主验证已入档。',
+        resolvedRunId: 'mobile_weekly_pvp_record',
+        chapterIndex: 6,
+        proofQuality: 'solid',
+        lineageStyle: '镜战压强',
+        summaryLine: '天道榜主验证已经落入周判记录。',
+        detailLine: '这条周判记录会作为 weekly archive 的最新样本。',
+        statusLine: '天道榜 · 通过',
+        anchorSection: 'pvp',
+        priority: 1,
+        createdAt: now - 1000,
+        updatedAt: now - 1000
+      });
+      game.recordSeasonVerificationResult({
+        recordId: `mobile_weekly_challenge_${weekMeta?.weekTag || 'mobile'}`,
+        weekTag: weekMeta?.weekTag || '',
+        weekLabel: weekMeta?.weekLabel || '',
+        role: 'side',
+        sourceMode: 'challenge',
+        sourceModeLabel: '七日劫数',
+        phaseId: 'lockline',
+        phaseLabel: '锁线期',
+        settlementOutcomeId: 'locking_sheet',
+        settlementOutcomeLabel: '押卷中',
+        sourceLabel: '七日劫数 · 旁验证',
+        label: '周挑战旁验证',
+        resultStatus: 'verified',
+        writebackMode: 'boost_recommendation',
+        writebackLine: '周挑战旁验证补齐样本。',
+        resolvedRunId: 'mobile_weekly_challenge_record',
+        chapterIndex: 6,
+        proofQuality: 'thin',
+        lineageStyle: '旁证补样',
+        summaryLine: '周挑战旁验证已入档。',
+        detailLine: '这条周判记录可直接回到周挑战复核。',
+        statusLine: '七日劫数 · 通过',
+        anchorSection: 'challenge',
+        priority: 2,
+        createdAt: now - 2000,
+        updatedAt: now - 2000
+      });
+      game.recordSeasonVerificationResult({
+        recordId: `mobile_weekly_endless_${weekMeta?.weekTag || 'mobile'}`,
+        weekTag: weekMeta?.weekTag || '',
+        weekLabel: weekMeta?.weekLabel || '',
+        role: 'primary',
+        sourceMode: 'endless',
+        sourceModeLabel: '无尽试炼',
+        phaseId: 'closing',
+        phaseLabel: '收束期',
+        settlementOutcomeId: 'risky_sheet',
+        settlementOutcomeLabel: '险卷',
+        debtStatus: 'degraded',
+        sourceLabel: '无尽试炼 · 主验证',
+        label: '无尽试炼主验证',
+        resultStatus: 'failed',
+        writebackMode: 'degrade_recommendation',
+        writebackLine: '无尽试炼主验证失利。',
+        resolvedRunId: 'mobile_weekly_endless_record',
+        chapterIndex: 7,
+        proofQuality: 'solid',
+        lineageStyle: '长线压测',
+        summaryLine: '无尽试炼主验证失利。',
+        detailLine: '这条周判记录将用于回看失利样本。',
+        statusLine: '无尽试炼 · 失利',
+        anchorSection: 'endless',
+        priority: 3,
+        createdAt: now - 3000,
+        updatedAt: now - 3000
+      });
+      game.recordSeasonVerificationResult({
+        recordId: `mobile_weekly_map_${weekMeta?.weekTag || 'mobile'}`,
+        weekTag: weekMeta?.weekTag || '',
+        weekLabel: weekMeta?.weekLabel || '',
+        role: 'side',
+        sourceMode: 'map',
+        sourceModeLabel: '山海绘卷',
+        phaseId: 'sampling',
+        phaseLabel: '采样期',
+        carryIntoNextWeek: true,
+        carryIntoWeekTag: `${weekMeta?.weekTag || 'mobile'}-next`,
+        sourceLabel: '山海绘卷 · 旁验证',
+        label: '地图旁验证',
+        resultStatus: 'deferred',
+        writebackMode: 'carry_forward',
+        writebackLine: '地图旁验证延期到下周继续回写。',
+        resolvedRunId: 'mobile_weekly_map_record',
+        chapterIndex: 5,
+        proofQuality: 'thin',
+        lineageStyle: '外场补样',
+        summaryLine: '地图旁验证延期入档。',
+        detailLine: '这条周判记录会保留到下周继续补证。',
+        statusLine: '山海绘卷 · 延期',
+        anchorSection: 'map',
+        priority: 4,
+        createdAt: now - 4000,
+        updatedAt: now - 4000
+      });
+    }
+    game.showChallengeHub?.('weekly');
+  });
+  await page.waitForTimeout(450);
+
+  const weeklyVerificationProbe = await page.evaluate(() => {
+    const rectObject = (rect) => {
+      if (!rect) return null;
+      return {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+      : null;
+    const section = document.querySelector('[data-season-verification-archive="true"]');
+    const toolbar = document.querySelector('[data-season-verification-toolbar="true"]');
+    const sourceSelect = document.querySelector('[data-season-verification-filter="sourceMode"]');
+    const resultSelect = document.querySelector('[data-season-verification-filter="resultStatus"]');
+    const phaseSelect = document.querySelector('[data-season-verification-filter="phaseKey"]');
+    const trajectorySelect = document.querySelector('[data-season-verification-filter="trajectoryKey"]');
+    const roleSelect = document.querySelector('[data-season-verification-filter="role"]');
+    const sortSelect = document.querySelector('[data-season-verification-filter="sortBy"]');
+    const entries = Array.from(document.querySelectorAll('[data-season-verification-archive-entry="true"]'));
+    return {
+      payload,
+      sectionRect: rectObject(section?.getBoundingClientRect() || null),
+      toolbarRect: rectObject(toolbar?.getBoundingClientRect() || null),
+      selectRects: [sourceSelect, resultSelect, phaseSelect, trajectorySelect, roleSelect, sortSelect].map((node) => rectObject(node?.getBoundingClientRect() || null)),
+      entryRects: entries.map((node) => rectObject(node.getBoundingClientRect() || null)),
+      entryAnchors: entries.map((node) => node.getAttribute('data-season-verification-anchor') || ''),
+      entryStatuses: entries.map((node) => node.getAttribute('data-season-verification-result-status') || ''),
+      entryTrajectoryKeys: entries.map((node) => node.getAttribute('data-season-verification-trajectory-key') || ''),
+      entryRoles: entries.map((node) => node.getAttribute('data-season-verification-role') || ''),
+      docScrollWidth: Math.round(document.documentElement?.scrollWidth || 0),
+      totalRecordsText: section?.getAttribute('data-season-verification-total') || '',
+      filteredRecordsText: section?.getAttribute('data-season-verification-filtered') || '',
+      titleText: section?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    };
+  });
+  add(
+    'challenge mobile weekly verification archive keeps filter toolbar and entries inside the viewport',
+    !!weeklyVerificationProbe
+      && weeklyVerificationProbe.payload?.filterState?.sourceMode === 'all'
+      && weeklyVerificationProbe.payload?.filterState?.trajectoryKey === 'all'
+      && weeklyVerificationProbe.payload?.filteredCount === 4
+      && weeklyVerificationProbe.payload?.latestAnchorSection === 'pvp'
+      && weeklyVerificationProbe.payload?.latestActionValue === 'pvp-screen'
+      && weeklyVerificationProbe.sectionRect
+      && weeklyVerificationProbe.sectionRect.left >= 0
+      && weeklyVerificationProbe.sectionRect.right <= 390
+      && weeklyVerificationProbe.toolbarRect
+      && weeklyVerificationProbe.toolbarRect.left >= 0
+      && weeklyVerificationProbe.toolbarRect.right <= 390
+      && weeklyVerificationProbe.selectRects.length === 6
+      && weeklyVerificationProbe.selectRects.every((rect) => rect && rect.left >= 0 && rect.right <= 390)
+      && weeklyVerificationProbe.entryRects.length >= 4
+      && weeklyVerificationProbe.entryRects.every((rect) => rect && rect.left >= 0 && rect.right <= 390)
+      && weeklyVerificationProbe.entryTrajectoryKeys.includes('carry_forward')
+      && weeklyVerificationProbe.docScrollWidth <= 398
+      && /周判记录|天道榜|七日劫数|无尽试炼|山海绘卷/.test(weeklyVerificationProbe.titleText || ''),
+    JSON.stringify(weeklyVerificationProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'challenge-mobile-weekly-verification-archive.png'), 'browser_challenge_mobile_flow_audit', { timeout: 9000 });
+
+  await page.selectOption('[data-season-verification-filter="phaseKey"]', 'ranking');
+  await page.waitForFunction(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+      : null;
+    return payload?.filterState?.phaseKey === 'ranking' && payload?.filteredCount === 1;
+  }, { timeout: 5000 });
+  const weeklyPhaseFilterProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+      : null;
+    const entries = Array.from(document.querySelectorAll('[data-season-verification-archive-entry="true"]'));
+    return {
+      ok:
+        !!payload
+        && payload.filterState?.phaseKey === 'ranking'
+        && payload.phaseLabel === '定榜期'
+        && payload.filteredCount === 1
+        && entries.length === 1
+        && entries[0]?.getAttribute('data-season-verification-anchor') === 'pvp'
+        && entries[0]?.getAttribute('data-season-verification-result-status') === 'verified',
+      payload,
+      entryCount: entries.length,
+      entryText: entries.map((node) => (node.textContent || '').replace(/\s+/g, ' ').trim())
+    };
+  });
+  add(
+    'challenge mobile weekly phase filter narrows to the ranking verdict',
+    !!weeklyPhaseFilterProbe?.ok,
+    JSON.stringify(weeklyPhaseFilterProbe || null)
+  );
+
+  await page.click('[data-reset-season-verification-filters="true"]', { timeout: 5000, force: true });
+  await page.waitForFunction(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+      : null;
+    return payload?.filterState?.trajectoryKey === 'all' && payload?.filteredCount === 4;
+  }, { timeout: 5000 });
+  await page.selectOption('[data-season-verification-filter="trajectoryKey"]', 'carry_forward');
+  await page.waitForFunction(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+      : null;
+    return payload?.filterState?.trajectoryKey === 'carry_forward' && payload?.filteredCount === 1;
+  }, { timeout: 5000 });
+  const weeklyTrajectoryFilterProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
+      : null;
+    const entries = Array.from(document.querySelectorAll('[data-season-verification-archive-entry="true"]'));
+    return {
+      ok:
+        !!payload
+        && payload.filterState?.trajectoryKey === 'carry_forward'
+        && payload.filteredCount === 1
+        && payload.filteredDeferredCount === 1
+        && payload.filteredTrajectoryLabel === '转入下周'
+        && entries.length === 1
+        && entries[0]?.getAttribute('data-season-verification-anchor') === 'map'
+        && entries[0]?.getAttribute('data-season-verification-trajectory-key') === 'carry_forward',
+      payload,
+      entryCount: entries.length,
+      anchors: entries.map((node) => node.getAttribute('data-season-verification-anchor') || ''),
+      trajectoryKeys: entries.map((node) => node.getAttribute('data-season-verification-trajectory-key') || '')
+    };
+  });
+  add(
+    'challenge mobile weekly trajectory filter narrows to the carry-forward map verdict',
+    !!weeklyTrajectoryFilterProbe?.ok,
+    JSON.stringify(weeklyTrajectoryFilterProbe || null)
+  );
+
   add('no console errors were emitted during challenge mobile flow audit', consoleErrors.length === 0, JSON.stringify(consoleErrors));
 
   const report = { url, findings, consoleErrors };

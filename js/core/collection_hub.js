@@ -5299,6 +5299,28 @@
         };
     };
 
+    const describeSeasonVerificationArchiveFollowup = (entry = null) => {
+        const root = entry && typeof entry === 'object' ? entry : null;
+        if (!root) return '';
+        let trajectoryLabel = '';
+        if (root.carryIntoNextWeek || root.carryIntoWeekTag) {
+            trajectoryLabel = '转入下周';
+        } else if (root.debtStatus === 'cleared') {
+            trajectoryLabel = '债账已清';
+        } else if (root.debtStatus === 'degraded') {
+            trajectoryLabel = '债账降级';
+        } else if (root.settlementOutcomeLabel) {
+            trajectoryLabel = root.settlementOutcomeLabel;
+        } else if (root.writebackLabel) {
+            trajectoryLabel = root.writebackLabel;
+        } else if (root.resultLabel) {
+            trajectoryLabel = root.resultLabel;
+        }
+        const actionLabel = String(root.ctaLabel || '').trim() || '沿此复核';
+        const sourceLabel = String(root.sourceModeLabel || root.roleLabel || '当前周判').trim() || '当前周判';
+        return `周判后续：${trajectoryLabel || '继续复核'} · 建议先${actionLabel}，处理【${sourceLabel}】这一条回写。`;
+    };
+
     Game.prototype.getSanctumOverviewData = function () {
         const progress = this.getCollectionProgressSnapshot();
         const buildSnapshot = this.getBuildSnapshotData();
@@ -7550,9 +7572,10 @@
         const seasonVerificationArchive = seasonBoard.verificationArchive && typeof seasonBoard.verificationArchive === 'object'
             ? seasonBoard.verificationArchive
             : null;
-        const seasonVerificationArchiveEntries = Array.isArray(seasonVerificationArchive?.entries)
-            ? seasonVerificationArchive.entries.filter((entry) => entry && typeof entry === 'object').slice(0, 3)
+        const seasonVerificationArchiveAllEntries = Array.isArray(seasonVerificationArchive?.entries)
+            ? seasonVerificationArchive.entries.filter((entry) => entry && typeof entry === 'object')
             : [];
+        const seasonVerificationArchiveEntries = seasonVerificationArchiveAllEntries.slice(0, 3);
         const seasonVerificationArchiveLatest = seasonVerificationArchive?.latestEntry && typeof seasonVerificationArchive.latestEntry === 'object'
             ? seasonVerificationArchive.latestEntry
             : (seasonVerificationArchiveEntries[0] || null);
@@ -8024,6 +8047,14 @@
                             <span class="detail-mini-label">${escapeHtml('🗂️ 周判记录')}</span>
                             <strong>${escapeHtml(seasonVerificationArchiveLatest?.weekLabel || seasonBoard.weekLabel || '本周轮转')}</strong>
                             <p data-season-board-archive-status="true">${escapeHtml(seasonVerificationArchive.summaryLine || '周判记录会把每周主验证与旁验证压成长期归档。')}</p>
+                            <div class="collection-card-tags" data-season-board-archive-summary-tags="true">
+                                <span class="collection-tag" data-season-board-archive-count="verified">${escapeHtml(`通过 ${seasonVerificationArchive.verifiedCount || 0}`)}</span>
+                                <span class="collection-tag" data-season-board-archive-count="failed">${escapeHtml(`失利 ${seasonVerificationArchive.failedCount || 0}`)}</span>
+                                <span class="collection-tag" data-season-board-archive-count="deferred">${escapeHtml(`延期 ${seasonVerificationArchive.deferredCount || 0}`)}</span>
+                                <span class="collection-tag" data-season-board-archive-count="pending">${escapeHtml(`待验证 ${seasonVerificationArchive.pendingCount || 0}`)}</span>
+                                <span class="collection-tag" data-season-board-archive-count="carry">${escapeHtml(`转入下周 ${seasonVerificationArchiveAllEntries.filter((entry) => entry.carryIntoNextWeek || entry.carryIntoWeekTag).length}`)}</span>
+                            </div>
+                            ${seasonVerificationArchiveLatest ? `<p class="collection-muted" data-season-board-archive-followup="true">${escapeHtml(describeSeasonVerificationArchiveFollowup(seasonVerificationArchiveLatest))}</p>` : ''}
                             <ul class="collection-detail-list compact">
                                 ${seasonVerificationArchiveEntries.length > 0
                 ? seasonVerificationArchiveEntries.map((entry) => `
