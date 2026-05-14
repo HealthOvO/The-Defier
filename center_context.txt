@@ -1,0 +1,809 @@
+370-    left: 0;
+371-    width: 100%;
+372-    height: 100%;
+373-    display: flex;
+374-    align-items: center;
+375:    justify-content: center;
+--
+419-}
+420-
+421-/* Utilities Bar */
+422-.menu-utilities {
+423-    display: flex;
+424:    justify-content: center;
+--
+443-    font-size: 1.1rem;
+444-    cursor: pointer;
+445-    transition: all var(--transition-normal);
+446-    display: flex;
+447-    align-items: center;
+448:    justify-content: center;
+--
+486-
+487-
+488-.menu-btn {
+489-    display: flex;
+490-    align-items: center;
+491:    justify-content: center;
+--
+586-    overflow: auto;
+587-}
+588-
+589-.character-avatar {
+590-    display: flex;
+591:    justify-content: center;
+--
+626-
+627-.avatar-inner {
+628-    width: 150px;
+629-    height: 150px;
+630-    display: flex;
+631:    justify-content: center;
+--
+886-.law-icon-wrapper {
+887-    margin-top: 30px;
+888-    width: 70px;
+889-    height: 70px;
+890-    display: flex;
+891:    justify-content: center;
+--
+961-    border: 4px solid rgba(164, 22, 26, 0.7);
+962-    border-radius: 50%;
+963-    width: 120px;
+964-    height: 120px;
+965-    display: flex;
+966:    justify-content: center;
+--
+1055-}
+1056-
+1057-.resonance-info {
+1058-    display: flex;
+1059-    flex-direction: column;
+1060:    justify-content: center;
+--
+1275-}
+1276-
+1277-.player-status-bar {
+1278-    display: flex;
+1279-    gap: var(--spacing-lg);
+1280:    justify-content: center;
+--
+1359-
+1360-.map-node {
+1361-    width: 60px;
+1362-    height: 60px;
+1363-    display: flex;
+1364:    justify-content: center;
+--
+1528-    position: relative;
+1529-    width: 100%;
+1530-    height: 120px;
+1531-    /* Fixed height per row */
+1532-    display: flex;
+1533:    justify-content: center;
+--
+1543-    height: 64px;
+1544-    border-radius: 50%;
+1545-    background: #1a1a1a;
+1546-    border: 2px solid #555;
+1547-    display: flex;
+1548:    justify-content: center;
+--
+1878-}
+1879-
+1880-.map-footer {
+1881-    display: flex;
+1882-    gap: var(--spacing-md);
+1883:    justify-content: center;
+--
+2388-
+2389-/* Battle Treasures Bar - Centered at Top */
+2390-.treasures-bar.battle-pos {
+2391-    grid-area: treasures;
+2392-    display: flex;
+2393:    justify-content: center;
+--
+2403-    grid-area: enemies;
+2404-    display: flex;
+2405-    justify-content: flex-start;
+2406-    /* Align closer to center? User said Right. */
+2407-    /* Let's align center of the right column */
+2408:    justify-content: center;
+--
+2449-/* 敌人头像 - 带光环效果 */
+2450-.enemy-avatar {
+2451-    width: 100px;
+2452-    height: 100px;
+2453-    display: flex;
+2454:    justify-content: center;
+--
+2546-    right: -15px;
+2547-    z-index: 32;
+2548-    width: 42px;
+2549-    height: 42px;
+2550-    display: flex;
+2551:    justify-content: center;
+--
+2756-}
+2757-
+2758-.enemy-threat-tags {
+2759-    display: flex;
+2760-    flex-wrap: wrap;
+2761:    justify-content: center;
+--
+2998-/* Battle Middle (Log) */
+2999-.battle-middle {
+3000-    grid-area: log;
+3001-    height: 100%;
+3002-    display: flex;
+3003:    justify-content: center;
+--
+3111-.buff-list {
+3112-    display: flex;
+3113-    gap: 4px;
+3114-    margin-top: 5px;
+3115-    flex-wrap: wrap;
+3116:    justify-content: center;
+3117-}
+3118-
+3119-.buff-icon {
+3120-    display: flex;
+3121-    align-items: center;
+3122:    justify-content: center;
+--
+3137-/* Player Area */
+3138-/* Player Area - The Console */
+3139-.player-area {
+3140-    grid-area: player;
+3141-    display: flex;
+3142:    justify-content: center;
+--
+3175-
+3176-.player-avatar {
+3177-    width: 80px;
+3178-    height: 80px;
+3179-    display: flex;
+3180:    justify-content: center;
+--
+3196-    width: 100%;
+3197-    height: 100%;
+3198-    border-radius: 50%;
+3199-    overflow: hidden;
+3200-    display: flex;
+3201:    justify-content: center;
+--
+3417-
+3418-.energy-orbs {
+3419-    display: flex;
+3420-    gap: 8px;
+3421-    flex-wrap: wrap;
+3422:    justify-content: center;
+--
+3428-.energy-orb {
+3429-    width: 32px;
+3430-    height: 32px;
+3431-    display: flex;
+3432-    align-items: center;
+3433:    justify-content: center;
+--
+3480-    display: flex;
+3481-    align-items: flex-start;
+3482-    /* Cards hang from top of area? No, sit on bottom */
+3483-    align-items: flex-end;
+3484-
+3485:    justify-content: center;
+--
+3577-.discard-pile {
+3578-    width: 75px;
+3579-    height: 105px;
+3580-    display: flex;
+3581-    flex-direction: column;
+3582:    justify-content: center;
+--
+3933-    top: -10px;
+3934-    left: -10px;
+3935-    width: 36px;
+3936-    height: 36px;
+3937-    display: flex;
+3938:    justify-content: center;
+--
+4008-}
+4009-
+4010-.card-header {
+4011-    display: flex;
+4012-    align-items: flex-start;
+4013:    justify-content: center;
+--
+4057-    letter-spacing: 1px;
+4058-    margin-top: auto;
+4059-    min-height: 14px;
+4060-    display: flex;
+4061-    align-items: center;
+4062:    justify-content: center;
+--
+4065-.card-image,
+4066-.card-art {
+4067-    flex: 0 0 40px;
+4068-    min-height: 40px;
+4069-    display: flex;
+4070:    justify-content: center;
+--
+4827-.reward-run-path-crest {
+4828-    position: relative;
+4829-    z-index: 1;
+4830-    display: inline-flex;
+4831-    align-items: center;
+4832:    justify-content: center;
+--
+5066-    top: var(--spacing-md);
+5067-    right: var(--spacing-md);
+5068-    width: 32px;
+5069-    height: 32px;
+5070-    display: flex;
+5071:    justify-content: center;
+--
+5281-}
+5282-
+5283-.loaded-laws-list {
+5284-    display: flex;
+5285-    gap: var(--spacing-md);
+5286:    justify-content: center;
+--
+5290-.law-slot {
+5291-    width: 80px;
+5292-    height: 80px;
+5293-    display: flex;
+5294-    flex-direction: column;
+5295:    justify-content: center;
+--
+5469-        grid-template-columns: 1fr;
+5470-        text-align: center;
+5471-    }
+5472-
+5473-    .character-stats {
+5474:        justify-content: center;
+--
+5680-
+5681-    /* 奖励卡牌优化 */
+5682-    .reward-cards {
+5683-        flex-wrap: wrap;
+5684-        gap: var(--spacing-sm);
+5685:        justify-content: center;
+--
+6513-    font-size: 2rem;
+6514-    width: 50px;
+6515-    height: 50px;
+6516-    display: flex;
+6517-    align-items: center;
+6518:    justify-content: center;
+--
+6636-    width: 74px;
+6637-    height: 74px;
+6638-    margin: 0 auto var(--spacing-sm);
+6639-    display: inline-flex;
+6640-    align-items: center;
+6641:    justify-content: center;
+--
+6926-        align-items: stretch;
+6927-    }
+6928-
+6929-    .reward-expedition-badge,
+6930-    .reward-expedition-score {
+6931:        justify-content: center;
+--
+6957-        font-size: 0.62rem;
+6958-    }
+6959-
+6960-    .reward-run-path-badge,
+6961-    .reward-run-path-status {
+6962:        justify-content: center;
+--
+7326-    margin: 0 auto 10px;
+7327-    position: relative;
+7328-    border-radius: 50%;
+7329-    display: flex;
+7330-    align-items: center;
+7331:    justify-content: center;
+--
+7499-    height: 320px;
+7500-    border-radius: 50%;
+7501-    border: 2px dashed rgba(255, 215, 0, 0.25);
+7502-    display: flex;
+7503-    align-items: center;
+7504:    justify-content: center;
+--
+7517-        0 0 30px var(--accent-purple),
+7518-        inset -10px -10px 20px rgba(0, 0, 0, 0.5),
+7519-        inset 10px 10px 20px rgba(255, 255, 255, 0.1);
+7520-    display: flex;
+7521-    align-items: center;
+7522:    justify-content: center;
+--
+7536-    background: linear-gradient(135deg, rgba(20, 10, 30, 0.95), rgba(10, 5, 15, 1));
+7537-    border: 3px solid rgba(255, 255, 255, 0.2);
+7538-    border-radius: 50%;
+7539-    display: flex;
+7540-    align-items: center;
+7541:    justify-content: center;
+--
+7829-.character-cards-wrapper {
+7830-    display: grid;
+7831-    /* Force 4 columns for single row */
+7832-    grid-template-columns: repeat(4, 1fr);
+7833-    gap: 20px;
+7834:    justify-content: center;
+--
+7961-    width: 46px;
+7962-    height: 46px;
+7963-    border-radius: 14px;
+7964-    display: inline-flex;
+7965-    align-items: center;
+7966:    justify-content: center;
+--
+8101-/* 顶部头像区 */
+8102-.char-header {
+8103-    height: 180px;
+8104-    display: flex;
+8105-    align-items: center;
+8106:    justify-content: center;
+--
+8131-    height: 110px;
+8132-    border: 2px solid rgba(255, 255, 255, 0.15);
+8133-    border-radius: 50%;
+8134-    display: flex;
+8135-    align-items: center;
+8136:    justify-content: center;
+--
+8210-.char-identity-strip,
+8211-.char-keyword-strip {
+8212-    width: 100%;
+8213-    display: flex;
+8214-    flex-wrap: wrap;
+8215:    justify-content: center;
+--
+8218-
+8219-.char-identity-pill,
+8220-.char-keyword-chip {
+8221-    display: inline-flex;
+8222-    align-items: center;
+8223:    justify-content: center;
+--
+8302-}
+8303-
+8304-/* 属性预览 */
+8305-.char-stats-preview {
+8306-    display: flex;
+8307:    justify-content: center;
+--
+8335-
+8336-
+8337-.character-selection-footer {
+8338-    padding: 20px;
+8339-    display: flex;
+8340:    justify-content: center;
+8341-}
+8342-
+8343-
+8344-.menu-utilities {
+8345-    display: flex;
+8346:    justify-content: center;
+--
+8354-    border-radius: 50%;
+8355-    width: 50px;
+8356-    height: 50px;
+8357-    display: flex;
+8358-    align-items: center;
+8359:    justify-content: center;
+--
+8444-    }
+8445-
+8446-    /* 敌人区域 */
+8447-    .enemy-container {
+8448-        gap: 10px;
+8449:        justify-content: center;
+--
+8565-    border-radius: 20px;
+8566-    align-items: center;
+8567-    min-height: 40px;
+8568-    flex-wrap: wrap;
+8569-    /* Fix overflow */
+8570:    justify-content: center;
+--
+8592-    height: 36px;
+8593-    background: rgba(20, 20, 30, 0.8);
+8594-    border: 1px solid var(--border-color);
+8595-    border-radius: 50%;
+8596-    display: flex;
+8597:    justify-content: center;
+--
+8697-}
+8698-
+8699-.evolution-options-container {
+8700-    display: flex;
+8701-    flex-wrap: wrap;
+8702:    justify-content: center;
+--
+8991-    height: 80px;
+8992-    background: radial-gradient(circle at 30% 30%, #2d3436 0%, #000000 100%);
+8993-    border-radius: 50%;
+8994-    margin-right: 25px;
+8995-    display: flex;
+8996:    justify-content: center;
+--
+9008-    z-index: 5;
+9009-    width: 100%;
+9010-    height: 100%;
+9011-    display: flex;
+9012-    align-items: center;
+9013:    justify-content: center;
+--
+9337-    position: relative;
+9338-    width: 28px;
+9339-    height: 28px;
+9340-    display: flex;
+9341-    align-items: center;
+9342:    justify-content: center;
+--
+9426-
+9427-.candy-orbs {
+9428-    display: flex;
+9429-    gap: 8px;
+9430-    flex-wrap: wrap;
+9431:    justify-content: center;
+--
+9517-.slot-content {
+9518-    flex: 1;
+9519-    display: flex;
+9520-    flex-direction: column;
+9521-    align-items: center;
+9522:    justify-content: center;
+--
+9531-    border-radius: 50%;
+9532-    background: rgba(0, 0, 0, 0.3);
+9533-    border: 1px solid rgba(255, 255, 255, 0.1);
+9534-    display: flex;
+9535-    align-items: center;
+9536:    justify-content: center;
+--
+9728-.treasure-slot {
+9729-    min-height: 120px;
+9730-    display: flex;
+9731-    flex-direction: column;
+9732-    align-items: center;
+9733:    justify-content: center;
+--
+9857-
+9858-.inventory-item {
+9859-    display: flex;
+9860-    flex-direction: column;
+9861-    align-items: center;
+9862:    justify-content: center;
+--
+10102-        text-align: center;
+10103-        width: 100%;
+10104-    }
+10105-
+10106-    .character-stats {
+10107:        justify-content: center;
+--
+10515-
+10516-.realm-preview-placeholder {
+10517-    flex: 1;
+10518-    display: flex;
+10519-    flex-direction: column;
+10520:    justify-content: center;
+--
+10579-    /* Smaller icon */
+10580-    width: 60px;
+10581-    height: 60px;
+10582-    display: flex;
+10583-    align-items: center;
+10584:    justify-content: center;
+--
+10797-    background: #111;
+10798-    border: 1px solid #333;
+10799-    border-radius: 4px;
+10800-    display: flex;
+10801-    align-items: center;
+10802:    justify-content: center;
+--
+10850-
+10851-.ink-scroll-container {
+10852-    width: 100%;
+10853-    height: calc(100% - 70px);
+10854-    display: flex;
+10855:    justify-content: center;
+--
+10931-.char-avatar-ink-wrapper {
+10932-    position: relative;
+10933-    width: 280px;
+10934-    height: 400px;
+10935-    display: flex;
+10936:    justify-content: center;
+--
+10958-    height: 220px;
+10959-    border-radius: 50%;
+10960-    background: linear-gradient(135deg, #2d1b4e 0%, #000 100%);
+10961-    border: 3px solid var(--accent-gold-dark);
+10962-    display: flex;
+10963:    justify-content: center;
+--
+10996-    width: 100px;
+10997-    height: 100px;
+10998-    border: 4px double #d32f2f;
+10999-    color: #d32f2f;
+11000-    display: flex;
+11001:    justify-content: center;
+--
+11194-.ring-visual-mini {
+11195-    position: relative;
+11196-    width: 60px;
+11197-    height: 60px;
+11198-    display: flex;
+11199:    justify-content: center;
+--
+11248-        border-right: none;
+11249-        border-bottom: 1px solid rgba(255, 215, 0, 0.1);
+11250-        padding-bottom: 30px;
+11251-        padding-right: 0;
+11252-        flex-direction: row;
+11253:        justify-content: center;
+--
+11376-    border: 1px solid #3c4a45;
+11377-    border-radius: var(--radius-sm);
+11378-    display: flex;
+11379-    flex-direction: column;
+11380-    align-items: center;
+11381:    justify-content: center;
+--
+11546-}
+11547-
+11548-.shelf-stats-header {
+11549-    display: flex;
+11550-    gap: 40px;
+11551:    justify-content: center;
+--
+11600-
+11601-/* Shelf Slot Item */
+11602-.shelf-slot {
+11603-    position: relative;
+11604-    display: flex;
+11605:    justify-content: center;
+--
+11696-
+11697-/* Stats Header - Ink Scroll Style */
+11698-.compendium-stats-wrapper {
+11699-    flex: 0 0 auto;
+11700-    display: flex;
+11701:    justify-content: center;
+--
+11800-    width: 100%;
+11801-    height: 100%;
+11802-    display: flex;
+11803-    flex-direction: column;
+11804-    align-items: center;
+11805:    justify-content: center;
+--
+11836-}
+11837-
+11838-.compendium-mini-badge {
+11839-    display: inline-flex;
+11840-    align-items: center;
+11841:    justify-content: center;
+--
+11977-.treasure-visual-col {
+11978-    flex: 0 0 40%;
+11979-    background: linear-gradient(135deg, #111 0%, #222 100%);
+11980-    display: flex;
+11981-    align-items: center;
+11982:    justify-content: center;
+--
+11988-.treasure-visual-bg {
+11989-    width: 100%;
+11990-    height: 100%;
+11991-    display: flex;
+11992-    align-items: center;
+11993:    justify-content: center;
+--
+12220-}
+12221-
+12222-/* Progress Section */
+12223-.achievements-header-stats {
+12224-    display: flex;
+12225:    justify-content: center;
+--
+12369-/* Icon */
+12370-.achievement-icon-wrapper {
+12371-    width: 56px;
+12372-    height: 56px;
+12373-    display: flex;
+12374:    justify-content: center;
+--
+12580-    font-family: var(--font-body);
+12581-}
+12582-
+12583-.intro-tabs {
+12584-    display: flex;
+12585:    justify-content: center;
+--
+12791-}
+12792-
+12793-/* Specific Element Styling */
+12794-.element-cycle-container {
+12795-    display: flex;
+12796:    justify-content: center;
+--
+12900-    border-radius: 50%;
+12901-    cursor: pointer;
+12902-    z-index: 100;
+12903-    transition: all 0.3s ease;
+12904-    display: flex;
+12905:    justify-content: center;
+--
+12920-    width: 100%;
+12921-    height: 100%;
+12922-    perspective: 1200px;
+12923-    /* Reduced perspective complexity */
+12924-    display: flex;
+12925:    justify-content: center;
+--
+13008-    border-radius: 50%;
+13009-    transform-style: preserve-3d;
+13010-    cursor: pointer;
+13011-    transition: all 0.3s ease;
+13012-    display: flex;
+13013:    justify-content: center;
+--
+13357-    height: 45px;
+13358-    background: #000;
+13359-    border: 1px solid #444;
+13360-    border-radius: 4px;
+13361-    display: flex;
+13362:    justify-content: center;
+--
+13453-    height: 80px;
+13454-    background: #222;
+13455-    border: 1px solid #444;
+13456-    border-radius: 6px;
+13457-    display: flex;
+13458:    justify-content: center;
+--
+13470-
+13471-.ring-ui-footer {
+13472-    grid-column: 1 / -1;
+13473-    grid-row: 2;
+13474-    display: flex;
+13475:    justify-content: center;
+--
+13593-    margin-top: -25px;
+13594-    background: rgba(10, 10, 15, 0.9);
+13595-    border: 2px solid var(--accent-gold);
+13596-    border-radius: 50%;
+13597-    display: flex;
+13598:    justify-content: center;
+--
+13860-
+13861-.law-icon-box {
+13862-    width: 45px;
+13863-    height: 45px;
+13864-    display: flex;
+13865:    justify-content: center;
+--
+13875-
+13876-.law-info {
+13877-    flex: 1;
+13878-    display: flex;
+13879-    flex-direction: column;
+13880:    justify-content: center;
+--
+13898-    width: 24px;
+13899-    height: 24px;
+13900-    border: 2px solid #444;
+13901-    border-radius: 4px;
+13902-    display: flex;
+13903:    justify-content: center;
+--
+14197-        font-size: 1.6rem;
+14198-    }
+14199-
+14200-    .character-stats {
+14201-        order: 2;
+14202:        justify-content: center;
+--
+14266-    }
+14267-
+14268-    /* Enemy Area */
+14269-    .enemy-container {
+14270-        flex-wrap: wrap;
+14271:        justify-content: center;
+--
+14836-.char-avatar:has(.char-avatar-img) {
+14837-    width: 120px;
+14838-    height: 120px;
+14839-    font-size: 0;
+14840-    display: flex;
+14841:    justify-content: center;
+--
+15182-    .inheritance-summary {
+15183-        grid-template-columns: 1fr;
+15184-    }
+15185-
+15186-    .inheritance-actions {
+15187:        justify-content: center;
+--
+15440-    width: 18px;
+15441-    height: 18px;
+15442-    border-radius: 7px;
+15443-    display: inline-flex;
+15444-    align-items: center;
+15445:    justify-content: center;
+--
+15645-    color: rgba(214, 233, 255, 0.95);
+15646-    font-size: 0.82rem;
+15647-    line-height: 1;
+15648-    display: inline-flex;
+15649-    align-items: center;
+15650:    justify-content: center;
+--
+15899-    width: 34px;
+15900-    height: 34px;
+15901-    border-radius: 12px;
+15902-    display: inline-flex;
+15903-    align-items: center;
+15904:    justify-content: center;
+--
+16826-    font-weight: 700;
+16827-    color: rgba(255, 236, 210, 0.96);
+16828-}
+16829-
+16830-.map-endless-panel .endless-danger-chip.idle {
+16831:    justify-content: center;
+--
+17367-        gap: 6px;
+17368-    }
+17369-
+17370-    .preview-endless-directive-btn {
+17371-        width: 100%;
+17372:        justify-content: center;
+--
+17385-        align-items: stretch;
+17386-    }
+17387-
+17388-    .map-run-path-flash-badge,
+17389-    .map-run-path-flash-status {
+17390:        justify-content: center;
+--
+17500-}
+17501-
+17502-.boss-act-chip-index {
+17503-    display: inline-flex;
+17504-    align-items: center;
+17505:    justify-content: center;
+--
+18273-    position: fixed;
+18274-    inset: 0;
+18275-    z-index: 1400;
+18276-    display: none;
+18277-    align-items: center;
+18278:    justify-content: center;
+--
+19744-}
+19745-
+19746-.challenge-focus-icon {
+19747-    display: inline-flex;
+19748-    align-items: center;
+19749:    justify-content: center;
+--
+19813-.challenge-tag,
+19814-.challenge-lock-pill,
+19815-.challenge-run-chip {
+19816-    display: inline-flex;
+19817-    align-items: center;
+19818:    justify-content: center;
+--
+19968-}
+19969-
+19970-.challenge-section-icon {
+19971-    display: inline-flex;
+19972-    align-items: center;
+19973:    justify-content: center;

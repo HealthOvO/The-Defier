@@ -736,7 +736,6 @@ body[data-current-screen="battle-screen"] #battle-log {
         overflow-x: auto;
         overflow-y: hidden;
         scroll-padding-inline: 8px;
-        scroll-snap-type: x proximity;
     }
 
     #battle-screen #hand-cards .card,
@@ -840,7 +839,7 @@ body[data-current-screen="battle-screen"] #battle-log {
 
     #game-over-screen .game-over-container {
         max-height: none;
-        margin: auto;
+        margin: 0 auto;
     }
 
     #game-over-screen .game-over-buttons {
@@ -886,7 +885,7 @@ body[data-current-screen="battle-screen"] #battle-log {
 
     #game-over-screen .game-over-container {
         max-height: none;
-        margin: auto;
+        margin: 0 auto;
     }
 
     #game-over-screen .game-over-buttons {
@@ -1964,32 +1963,25 @@ body[data-current-screen="battle-screen"] #battle-log {
     }
 
     #ring-modal.active {
-        align-items: stretch;
-        justify-content: stretch;
-        overflow: hidden;
-    }
-
-    #ring-modal .modal-content {
-        width: calc(100vw - 20px);
-        height: calc(100dvh - 20px);
-        max-width: calc(100vw - 20px);
-        max-height: calc(100dvh - 20px);
-        margin: 10px auto;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        overflow-y: auto;
     }
 
     #ring-modal .ring-scene-container {
-        height: 100dvh;
-        min-height: 0;
+        width: calc(100vw - 20px);
+        max-width: calc(100vw - 20px);
+        height: auto;
+        min-height: calc(100dvh - 40px);
+        margin: 0 auto;
         display: flex;
         flex-direction: column;
         overflow-x: hidden;
-        overflow-y: auto;
+        overflow-y: visible;
         perspective: none;
         gap: 12px;
         padding: 16px 10px 16px;
+        flex-shrink: 0;
     }
 
     #ring-modal .ring-scene {

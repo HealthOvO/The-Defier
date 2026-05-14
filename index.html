@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Defier - 逆命者</title>
     <meta name="description" content="一款基于东方仙侠的卡牌Roguelike游戏，逆天改命，盗取法则，成为真正的逆命者！">
-    <link rel="icon" type="image/png" href="assets/images/logo.png">
+    <link rel="icon" type="image/png" href="assets/images/logo.webp">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/design-system.css">
     <link rel="stylesheet" href="css/animations.css">
@@ -31,7 +31,7 @@
 
         <div class="menu-content">
             <div class="game-logo">
-                <img src="assets/images/logo.png" alt="逆命者 - The Defier" class="logo-img">
+                <img src="assets/images/logo.webp" alt="逆命者 - The Defier" class="logo-img">
             </div>
 
             <div class="game-description">
@@ -2031,10 +2031,9 @@
     <!-- 战斗日志 -->
     <div id="battle-log" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <!-- 加载脚本 -->
-    <!-- Bmob SDK -->
-    <script src="js/libs/bmob.min.js"></script>
+    <!-- 加载脚本 (保留传统引入方式以免破坏全局作用域) -->
     <script src="js/config/bmob.config.local.js?v=7.0.0"></script>
+    <script src="js/services/backend-client.js?v=7.0.0"></script>
     <script src="js/services/authService.js?v=7.0.0"></script>
     <script src="js/core/elo-calculator.js?v=7.0.0"></script>
     <script src="js/services/pvp-service.js?v=7.0.0"></script>

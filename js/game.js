@@ -9454,18 +9454,18 @@ class Game {
         if (realm === 1) bgImage = 'assets/images/realms/realm_bg_1.webp';
         else if (realm === 2) bgImage = 'assets/images/realms/realm_bg_2.webp';
         else if (realm === 3) bgImage = 'assets/images/realms/realm_bg_3.webp';
-        else if (realm === 7) bgImage = 'assets/images/bg_realm_7.png';
-        else if (realm === 8) bgImage = 'assets/images/bg_realm_8.png';
-        else if (realm === 9) bgImage = 'assets/images/bg_realm_9.png';
-        else if (realm === 10) bgImage = 'assets/images/bg_realm_10.png';
-        else if (realm === 11) bgImage = 'assets/images/bg_realm_11.png';
-        else if (realm === 12) bgImage = 'assets/images/bg_realm_12.png';
-        else if (realm === 13) bgImage = 'assets/images/bg_realm_13.png';
-        else if (realm === 14) bgImage = 'assets/images/bg_realm_14.png';
-        else if (realm === 15) bgImage = 'assets/images/bg_realm_15.png';
-        else if (realm === 16) bgImage = 'assets/images/bg_realm_16.png';
-        else if (realm === 17) bgImage = 'assets/images/bg_realm_17.png';
-        else if (realm === 18) bgImage = 'assets/images/bg_realm_18.png';
+        else if (realm === 7) bgImage = 'assets/images/bg_realm_7.webp';
+        else if (realm === 8) bgImage = 'assets/images/bg_realm_8.webp';
+        else if (realm === 9) bgImage = 'assets/images/bg_realm_9.webp';
+        else if (realm === 10) bgImage = 'assets/images/bg_realm_10.webp';
+        else if (realm === 11) bgImage = 'assets/images/bg_realm_11.webp';
+        else if (realm === 12) bgImage = 'assets/images/bg_realm_12.webp';
+        else if (realm === 13) bgImage = 'assets/images/bg_realm_13.webp';
+        else if (realm === 14) bgImage = 'assets/images/bg_realm_14.webp';
+        else if (realm === 15) bgImage = 'assets/images/bg_realm_15.webp';
+        else if (realm === 16) bgImage = 'assets/images/bg_realm_16.webp';
+        else if (realm === 17) bgImage = 'assets/images/bg_realm_17.webp';
+        else if (realm === 18) bgImage = 'assets/images/bg_realm_18.webp';
 
         const existing = document.getElementById('dynamic-bg');
         if (existing) existing.remove();
@@ -11873,21 +11873,21 @@ class Game {
             1: { icon: '🛖', color: '#B0BEC5', bg: 'linear-gradient(135deg, #263238 0%, #102027 100%)', bgImage: 'assets/images/realms/realm_bg_1.webp' }, // Mortal Dust
             2: { icon: '🌬️', color: '#81D4FA', bg: 'linear-gradient(135deg, #01579B 0%, #002f6c 100%)', bgImage: 'assets/images/realms/realm_bg_2.webp' }, // Qi Flow
             3: { icon: '🧱', color: '#BCAAA4', bg: 'linear-gradient(135deg, #4E342E 0%, #261a17 100%)', bgImage: 'assets/images/realms/realm_bg_3.webp' }, // Foundation
-            4: { icon: '🌕', color: '#FFD54F', bg: 'linear-gradient(135deg, #FF6F00 0%, #8f3e00 100%)', bgImage: 'assets/images/realms/realm-4-bg.png' }, // Golden Core
-            5: { icon: '👶', color: '#FFAB91', bg: 'linear-gradient(135deg, #BF360C 0%, #5f1a05 100%)', bgImage: 'assets/images/realms/realm-5-bg.png' }, // Nascent Soul
-            6: { icon: '🧘', color: '#CE93D8', bg: 'linear-gradient(135deg, #4A148C 0%, #220542 100%)', bgImage: 'assets/images/realms/realm-6-bg.png' }, // Divine Spirit
-            7: { icon: '🔗', color: '#80CBC4', bg: 'linear-gradient(135deg, #004D40 0%, #00251f 100%)', bgImage: 'assets/images/bg_realm_7.png' }, // Integration
-            8: { icon: '🚤', color: '#FFE082', bg: 'linear-gradient(135deg, #FF8F00 0%, #8f5000 100%)', bgImage: 'assets/images/bg_realm_8.png' }, // Great Vehicle
-            9: { icon: '☁️', color: '#B3E5FC', bg: 'linear-gradient(135deg, #0277BD 0%, #003c5f 100%)', bgImage: 'assets/images/bg_realm_9.png' }, // Ascension
-            10: { icon: '⛰️', color: '#A5D6A7', bg: 'linear-gradient(135deg, #1B5E20 0%, #0a290d 100%)', bgImage: 'assets/images/bg_realm_10.png' }, // Earthly Immortal
-            11: { icon: '🕊️', color: '#F48FB1', bg: 'linear-gradient(135deg, #880E4F 0%, #440727 100%)', bgImage: 'assets/images/bg_realm_11.png' }, // Heavenly Peace
-            12: { icon: '✨', color: '#FFF59D', bg: 'linear-gradient(135deg, #F9A825 0%, #7e520b 100%)', bgImage: 'assets/images/bg_realm_12.png' }, // Golden Immortal
-            13: { icon: '🌌', color: '#9575CD', bg: 'linear-gradient(135deg, #311B92 0%, #150a42 100%)', bgImage: 'assets/images/bg_realm_13.png' }, // Great Luo
-            14: { icon: '🌀', color: '#90A4AE', bg: 'linear-gradient(135deg, #263238 0%, #0f1619 100%)', bgImage: 'assets/images/bg_realm_14.png' }, // Chaos Origin
-            15: { icon: '👑', color: '#EF9A9A', bg: 'linear-gradient(135deg, #B71C1C 0%, #520909 100%)', bgImage: 'assets/images/bg_realm_15.png' }, // Supreme
-            16: { icon: '☯️', color: '#E0E0E0', bg: 'linear-gradient(135deg, #212121 0%, #000000 100%)', bgImage: 'assets/images/bg_realm_16.png' }, // Taiyi
-            17: { icon: '🌳', color: '#C5E1A5', bg: 'linear-gradient(135deg, #33691E 0%, #163009 100%)', bgImage: 'assets/images/bg_realm_17.png' }, // Bodhi
-            18: { icon: '🌑', color: '#757575', bg: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)', bgImage: 'assets/images/bg_realm_18.png' }  // Chaos Void
+            4: { icon: '🌕', color: '#FFD54F', bg: 'linear-gradient(135deg, #FF6F00 0%, #8f3e00 100%)', bgImage: 'assets/images/realms/realm-4-bg.webp' }, // Golden Core
+            5: { icon: '👶', color: '#FFAB91', bg: 'linear-gradient(135deg, #BF360C 0%, #5f1a05 100%)', bgImage: 'assets/images/realms/realm-5-bg.webp' }, // Nascent Soul
+            6: { icon: '🧘', color: '#CE93D8', bg: 'linear-gradient(135deg, #4A148C 0%, #220542 100%)', bgImage: 'assets/images/realms/realm-6-bg.webp' }, // Divine Spirit
+            7: { icon: '🔗', color: '#80CBC4', bg: 'linear-gradient(135deg, #004D40 0%, #00251f 100%)', bgImage: 'assets/images/bg_realm_7.webp' }, // Integration
+            8: { icon: '🚤', color: '#FFE082', bg: 'linear-gradient(135deg, #FF8F00 0%, #8f5000 100%)', bgImage: 'assets/images/bg_realm_8.webp' }, // Great Vehicle
+            9: { icon: '☁️', color: '#B3E5FC', bg: 'linear-gradient(135deg, #0277BD 0%, #003c5f 100%)', bgImage: 'assets/images/bg_realm_9.webp' }, // Ascension
+            10: { icon: '⛰️', color: '#A5D6A7', bg: 'linear-gradient(135deg, #1B5E20 0%, #0a290d 100%)', bgImage: 'assets/images/bg_realm_10.webp' }, // Earthly Immortal
+            11: { icon: '🕊️', color: '#F48FB1', bg: 'linear-gradient(135deg, #880E4F 0%, #440727 100%)', bgImage: 'assets/images/bg_realm_11.webp' }, // Heavenly Peace
+            12: { icon: '✨', color: '#FFF59D', bg: 'linear-gradient(135deg, #F9A825 0%, #7e520b 100%)', bgImage: 'assets/images/bg_realm_12.webp' }, // Golden Immortal
+            13: { icon: '🌌', color: '#9575CD', bg: 'linear-gradient(135deg, #311B92 0%, #150a42 100%)', bgImage: 'assets/images/bg_realm_13.webp' }, // Great Luo
+            14: { icon: '🌀', color: '#90A4AE', bg: 'linear-gradient(135deg, #263238 0%, #0f1619 100%)', bgImage: 'assets/images/bg_realm_14.webp' }, // Chaos Origin
+            15: { icon: '👑', color: '#EF9A9A', bg: 'linear-gradient(135deg, #B71C1C 0%, #520909 100%)', bgImage: 'assets/images/bg_realm_15.webp' }, // Supreme
+            16: { icon: '☯️', color: '#E0E0E0', bg: 'linear-gradient(135deg, #212121 0%, #000000 100%)', bgImage: 'assets/images/bg_realm_16.webp' }, // Taiyi
+            17: { icon: '🌳', color: '#C5E1A5', bg: 'linear-gradient(135deg, #33691E 0%, #163009 100%)', bgImage: 'assets/images/bg_realm_17.webp' }, // Bodhi
+            18: { icon: '🌑', color: '#757575', bg: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)', bgImage: 'assets/images/bg_realm_18.webp' }  // Chaos Void
         };
 
         // 生成18重天卡片

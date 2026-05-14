@@ -4,6 +4,7 @@
   "description": "",
   "main": "verify_strength.js",
   "directories": {
+    "doc": "docs",
     "test": "tests"
   },
   "scripts": {
@@ -22,12 +23,20 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "bugs": {
     "url": "https://github.com/HealthOvO/The-Defier/issues"
   },
   "homepage": "https://github.com/HealthOvO/The-Defier#readme",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "csv-parser": "^3.2.1",
+    "hydrogen-js-sdk": "^2.7.3",
     "playwright": "^1.58.2"
+  },
+  "devDependencies": {
+    "rollup-plugin-visualizer": "^7.0.1",
+    "terser": "^5.47.1",
+    "vite": "^8.0.12"
   }
 }

@@ -8,6 +8,7 @@ function assert(cond, msg) {
 
 (async function run() {
   const code = fs.readFileSync(path.resolve(__dirname, '../js/services/authService.js'), 'utf8');
+  const backendCode = fs.readFileSync(path.resolve(__dirname, '../js/services/backend-client.js'), 'utf8');
 
   let initArgs = null;
   const store = new Map();
@@ -35,6 +36,7 @@ function assert(cond, msg) {
   ctx.window = ctx;
   ctx.global = ctx;
 
+  vm.runInContext(backendCode, ctx, { filename: 'backend-client.js' });
   vm.runInContext(code, ctx, { filename: 'authService.js' });
   const AuthService = vm.runInContext('AuthService', ctx);
 

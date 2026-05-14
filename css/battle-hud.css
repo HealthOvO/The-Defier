@@ -17,7 +17,7 @@
     left: var(--hud-gutter-desktop);
     transform: none;
     width: clamp(264px, 20vw, 312px);
-    max-height: min(410px, calc(100vh - 430px));
+    max-height: clamp(150px, calc(100vh - 430px), 410px);
     padding: 7px 8px;
     border-radius: var(--hud-panel-radius);
     border-color: var(--hud-panel-border);
@@ -503,7 +503,7 @@
     #battle-screen .battle-command-panel,
     #battle-screen #battle-command-panel {
         width: clamp(252px, 24vw, 296px);
-        max-height: min(392px, calc(100vh - 396px));
+        max-height: clamp(150px, calc(100vh - 396px), 392px);
     }
 
     #battle-screen .boss-act-panel,
@@ -728,8 +728,8 @@
         margin: 0;
         padding: 7px 8px;
         border-radius: 14px;
-        max-height: 104px;
-        overflow: hidden;
+        max-height: 160px;
+        overflow-y: auto;
         z-index: var(--z-battle-boss-panel);
     }
 
