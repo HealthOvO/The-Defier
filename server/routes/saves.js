@@ -1,6 +1,7 @@
 const express = require('express');
 const { db } = require('../db/database');
 const { authenticate } = require('../middleware/auth');
+const { verifySignature } = require('../utils/hmac');
 
 const router = express.Router();
 
@@ -10,11 +11,23 @@ const router = express.Router();
 
 // POST /saves - 上传/覆盖存档
 router.post('/', authenticate, (req, res) => {
-    const { slotIndex, saveData, saveTime } = req.body;
+    const { slotIndex, saveData, saveTime, signature, salt } = req.body;
     const userId = req.user.id;
 
     if (slotIndex === undefined || !saveData) {
         return res.status(400).json({ success: false, message: '参数不完整' });
+    }
+
+    const dataStr = typeof saveData === 'string' ? saveData : JSON.stringify(saveData);
+
+    // 防篡改签名校验
+    if (signature && salt) {
+        if (!verifySignature(dataStr, salt, signature)) {
+            return res.status(403).json({ success: false, message: '存档数据被篡改，拒绝保存' });
+        }
+    } else {
+        // 出于过渡兼容性考虑，暂不强制要求签名，但可以记录警告日志
+        console.warn(`[Anti-Cheat] User ${userId} uploaded save without HMAC signature.`);
     }
 
     const sIndex = Number(slotIndex);

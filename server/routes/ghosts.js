@@ -1,6 +1,7 @@
 const express = require('express');
 const { db } = require('../db/database');
 const { authenticate } = require('../middleware/auth');
+const { validateGhostData } = require('../utils/ghostValidator');
 
 const router = express.Router();
 
@@ -15,6 +16,14 @@ router.post('/current', authenticate, (req, res) => {
     }
 
     const nRealm = Math.max(1, Number(realm) || 1);
+
+    // 防作弊校验
+    const validation = validateGhostData(nRealm, ghostData);
+    if (!validation.valid) {
+        console.warn(`[Anti-Cheat] Ghost rejected for User ${userId}: ${validation.reason}`);
+        return res.status(403).json({ success: false, message: `幽灵数据异常，拒绝上传: ${validation.reason}` });
+    }
+
     const dataStr = typeof ghostData === 'string' ? ghostData : JSON.stringify(ghostData);
     const now = Date.now();
 

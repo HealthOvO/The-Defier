@@ -3,7 +3,7 @@
  * 所有敌人的定义
  */
 
-const ENEMIES = {
+export const ENEMIES = {
     // ==================== 第一重·凡尘界 ====================
     bandit: {
         id: 'bandit',
@@ -1762,7 +1762,7 @@ const V6_ENEMY_PACK = {
     }
 };
 
-const ENEMY_ECOLOGY_TEMPLATES = {
+export const ENEMY_ECOLOGY_TEMPLATES = {
     1: {
         chapterIndex: 1,
         formation: {
@@ -1903,7 +1903,7 @@ const ENEMY_ECOLOGY_TEMPLATES = {
     }
 };
 
-const CHAPTER_ELITE_COMBOS = {
+export const CHAPTER_ELITE_COMBOS = {
     1: {
         chapterIndex: 1,
         name: '问罪猎杀',

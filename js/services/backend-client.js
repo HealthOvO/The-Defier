@@ -273,14 +273,45 @@
             try {
                 const payload = this.cloneData(gameData);
                 const saveTime = Number.isFinite(payload && payload.timestamp) ? payload.timestamp : Date.now();
+                const dataStr = JSON.stringify(payload);
+                
+                // HMAC 签名生成 (Client-side)
+                // Note: In production, the salt and crypto logic should be heavily obfuscated
+                const salt = Date.now().toString(36) + Math.random().toString(36).substr(2);
+                const signature = await this.generateSignature(dataStr, salt);
+
                 await this.requestServer(this.getServerConfig().savePathPrefix, {
                     method: 'POST',
-                    data: { slotIndex: slot, saveData: payload, saveTime }
+                    data: { slotIndex: slot, saveData: payload, saveTime, signature, salt }
                 });
                 return { success: true, saveTime };
             } catch (error) {
                 return { success: false, error, message: error.message || '云存档保存失败' };
             }
+        },
+
+        async generateSignature(dataStr, salt) {
+            // Using a simple Web Crypto API fallback for HMAC SHA-256
+            const SECRET_KEY = 'the_defier_secret_key_2026';
+            if (typeof crypto !== 'undefined' && crypto.subtle) {
+                try {
+                    const encoder = new TextEncoder();
+                    const key = await crypto.subtle.importKey(
+                        'raw', encoder.encode(SECRET_KEY),
+                        { name: 'HMAC', hash: 'SHA-256' },
+                        false, ['sign']
+                    );
+                    const signatureBuffer = await crypto.subtle.sign(
+                        'HMAC', key, encoder.encode(dataStr + salt)
+                    );
+                    const hashArray = Array.from(new Uint8Array(signatureBuffer));
+                    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                } catch(e) {
+                    console.warn('Crypto subtle not available, skipping strict signature generation');
+                    return '';
+                }
+            }
+            return '';
         },
 
         async getCloudData() {

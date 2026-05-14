@@ -3,7 +3,7 @@
  * 所有游戏卡牌的定义
  */
 
-const CARDS = {
+export const CARDS = {
     // ==================== 基础攻击牌 ====================
     strike: {
         id: 'strike',

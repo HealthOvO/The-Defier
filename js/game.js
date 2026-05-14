@@ -9507,83 +9507,10 @@ class Game {
     // 保存游戏
     // 保存游戏
     saveGame() {
-        if (this.automationBootConfig) {
-            return false;
+        if (!this.saveManager) {
+            this.saveManager = new SaveManager(this);
         }
-        try {
-            const pvpEconomySnapshot = (typeof PVPService !== 'undefined'
-                && PVPService
-                && typeof PVPService.getEconomySnapshot === 'function')
-                ? PVPService.getEconomySnapshot()
-                : null;
-            const gameState = {
-                version: '5.1.0',
-                player: this.player.getState(),
-                map: {
-                    nodes: this.map.nodes,
-                    currentNodeIndex: this.map.currentNodeIndex,
-                    completedNodes: this.map.completedNodes
-                },
-                unlockedRealms: this.unlockedRealms || [1],
-                currentScreen: this.currentScreen,
-                saveSlot: this.currentSaveSlot, // Persist the slot ID
-                combatMeta: {
-                    stance: this.player.stance || 'neutral',
-                    ruleVersion: 'combat-v2',
-                    battleUIUpdates: (this.performanceStats && this.performanceStats.battleUIUpdates) || 0
-                },
-                pvpMeta: {
-                    ruleVersion: 'pvp-v2',
-                    lastKnownDivision: (typeof PVPService !== 'undefined' && PVPService.currentRankData) ? PVPService.currentRankData.division : null,
-                    economy: pvpEconomySnapshot
-                },
-                legacyProgress: this.legacyProgress,
-                featureFlags: { ...this.featureFlags },
-                endlessMeta: this.ensureEndlessState(),
-                encounterMeta: this.ensureEncounterState(),
-                sanctumAgendaState: typeof this.getSanctumAgendaSaveState === 'function'
-                    ? this.getSanctumAgendaSaveState()
-                    : this.createDefaultSanctumAgendaState(),
-                heavenlyMandateState: typeof this.getHeavenlyMandateSaveState === 'function'
-                    ? this.getHeavenlyMandateSaveState()
-                    : this.createDefaultHeavenlyMandateState(),
-                seasonVerificationState: typeof this.getSeasonVerificationSaveState === 'function'
-                    ? this.getSeasonVerificationSaveState()
-                    : this.createDefaultSeasonVerificationState(),
-                fateAftereffectState: typeof this.getFateAftereffectSaveState === 'function'
-                    ? this.getFateAftereffectSaveState()
-                    : this.createDefaultFateAftereffectState(),
-                chapterEventLedger: this.getChapterEventLedgerSaveState(),
-                schemaMigratedAt: Date.now(),
-                timestamp: Date.now()
-            };
-            localStorage.setItem('theDefierSave', JSON.stringify(gameState));
-            console.log('游戏已保存 (本地)');
-
-            // 如果已登录，且知道当前的存档槽位，自动同步到云端
-            // 防止 unset slot 默认为 0 覆盖了 Slot 1
-            const targetSlot = this.currentSaveSlot;
-            if (AuthService.isLoggedIn() && targetSlot !== null && targetSlot !== undefined) {
-                AuthService.saveCloudData(gameState, targetSlot).then(res => {
-                    if (res.success) {
-                        console.log(`游戏已同步 (云端 Slot ${targetSlot})`);
-                        // Update cache
-                        this.cachedSlots[targetSlot] = gameState;
-                        Utils.showBattleLog('游戏进度已保存到云端');
-                    } else {
-                        console.warn('云端同步失败', res);
-                        Utils.showBattleLog('云端同步失败，仅保存本地');
-                    }
-                }).catch(err => {
-                    console.error('Cloud save error:', err);
-                });
-            } else {
-                // Local only warning if not logged in? No, silent is fine.
-            }
-        } catch (e) {
-            console.error('Save Game Error:', e);
-            Utils.showBattleLog('严重错误：存档失败！请检查存储空间');
-        }
+        this.saveManager.saveGame();
     }
 
     migrateSaveData(rawSave) {

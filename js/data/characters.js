@@ -3,7 +3,7 @@
  * 定义可选角色的属性、初始卡组和特性
  */
 
-const CHARACTERS = {
+export const CHARACTERS = {
     linFeng: {
         id: 'linFeng',
         name: '林风',

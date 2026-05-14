@@ -8,7 +8,7 @@
  * - 神话法宝最多携带1个
  */
 
-const TREASURES = {
+export const TREASURES = {
     // ==================== 五行法宝 ====================
 
 
