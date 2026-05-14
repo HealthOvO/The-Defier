@@ -2027,138 +2027,28 @@ class Game {
     }
 
     renderRunDestinySelection(characterId) {
-        const host = document.getElementById('run-destiny-selection');
-        const summary = document.getElementById('run-destiny-summary');
-        if (!host) return;
-
-        const charId = typeof characterId === 'string' ? characterId : this.selectedCharacterId;
-        if (!charId) {
-            host.innerHTML = '<div class="run-destiny-empty">先选定一位角色，再感应这一局的命格。</div>';
-            if (summary) summary.textContent = '命格会决定这一轮的开局气质、资源节奏与战斗风格。';
-            return;
-        }
-
-        const draftIds = this.draftRunDestiniesForCharacter(charId);
-        if (!draftIds.includes(this.selectedRunDestinyId)) {
-            this.selectedRunDestinyId = draftIds[0] || null;
-        }
-
-        host.innerHTML = draftIds.map((destinyId) => {
-            const meta = this.getRunDestinyMetaById(destinyId, 1);
-            if (!meta) return '';
-            const selectedClass = destinyId === this.selectedRunDestinyId ? 'selected' : '';
-            const effectTags = [];
-            const effects = meta.effects || {};
-            if (Number(effects.firstTurnDraw) > 0) effectTags.push(`首回合抽牌 +${Math.floor(Number(effects.firstTurnDraw) || 0)}`);
-            if (Number(effects.firstTurnEnergy) > 0) effectTags.push(`首回合灵力 +${Math.floor(Number(effects.firstTurnEnergy) || 0)}`);
-            if (Number(effects.openingBlock) > 0) effectTags.push(`开场护盾 +${Math.floor(Number(effects.openingBlock) || 0)}`);
-            if (Number(effects.firstAttackBonusPerBattle) > 0) effectTags.push(`首击增伤 +${Math.floor(Number(effects.firstAttackBonusPerBattle) || 0)}`);
-            if (Number(effects.firstSkillDrawPerTurn) > 0) effectTags.push(`首个技能抽牌 +${Math.floor(Number(effects.firstSkillDrawPerTurn) || 0)}`);
-            if (Number(effects.overhealToBlockRatio) > 0) effectTags.push(`溢疗转盾 x${Number(effects.overhealToBlockRatio).toFixed(1)}`);
-
-            return `
-                <button type="button"
-                        class="run-destiny-card ${selectedClass}"
-                        data-destiny-id="${meta.id}"
-                        onclick="game.selectRunDestiny('${meta.id}')">
-                    <div class="run-destiny-head">
-                        <span class="run-destiny-icon">${meta.icon}</span>
-                        <div class="run-destiny-title-group">
-                            <span class="run-destiny-name">${meta.name}</span>
-                            <span class="run-destiny-tier">${meta.category} · ${meta.tierLabel}</span>
-                        </div>
-                    </div>
-                    <div class="run-destiny-desc">${meta.description}</div>
-                    <div class="run-destiny-summary">${meta.summary}</div>
-                    <div class="run-destiny-tags">
-                        ${(effectTags.slice(0, 3)).map((tag) => `<span class="run-destiny-tag">${tag}</span>`).join('')}
-                    </div>
-                </button>
-            `;
-        }).join('');
-
-        const selectedMeta = this.getRunDestinyMetaById(this.selectedRunDestinyId, 1);
-        if (summary) {
-            summary.textContent = selectedMeta
-                ? `已感应命格「${selectedMeta.name}」：${selectedMeta.playstyle || selectedMeta.summary || selectedMeta.description}`
-                : '命格会决定这一轮的开局气质、资源节奏与战斗风格。';
-        }
+        if (!this.characterSelectView) this.characterSelectView = new CharacterSelectView(this);
+        return this.characterSelectView.renderRunDestinySelection(characterId);
     }
 
     renderSpiritCompanionSelection(characterId) {
-        const host = document.getElementById('spirit-companion-selection');
-        const summary = document.getElementById('spirit-companion-summary');
-        if (!host) return;
-
-        const charId = typeof characterId === 'string' ? characterId : this.selectedCharacterId;
-        if (!charId) {
-            host.innerHTML = '<div class="run-destiny-empty">先选定一位角色，再决定与你同行的灵契。</div>';
-            if (summary) summary.textContent = '灵契提供常驻被动与蓄能主动，会补足这局的关键短板。';
-            return;
-        }
-
-        const draftIds = this.draftSpiritCompanionsForCharacter(charId);
-        if (!draftIds.includes(this.selectedSpiritCompanionId)) {
-            this.selectedSpiritCompanionId = draftIds[0] || null;
-        }
-
-        host.innerHTML = draftIds.map((spiritId) => {
-            const meta = this.getSpiritCompanionMetaById(spiritId, 1);
-            if (!meta) return '';
-            const selectedClass = spiritId === this.selectedSpiritCompanionId ? 'selected' : '';
-            const tags = [];
-            if (meta.passiveLabel) tags.push(`被动·${meta.passiveLabel}`);
-            if (meta.activeLabel) tags.push(`主动·${meta.activeLabel}`);
-            tags.push(`蓄能 ${meta.chargeMax}`);
-            return `
-                <button type="button"
-                        class="run-destiny-card run-spirit-card ${selectedClass}"
-                        data-spirit-id="${meta.id}"
-                        onclick="game.selectSpiritCompanion('${meta.id}')">
-                    <div class="run-destiny-head">
-                        <span class="run-destiny-icon">${meta.icon}</span>
-                        <div class="run-destiny-title-group">
-                            <span class="run-destiny-name">${meta.name}</span>
-                            <span class="run-destiny-tier">${meta.title || `${meta.category} · ${meta.tierLabel}`}</span>
-                        </div>
-                    </div>
-                    <div class="run-destiny-desc">${meta.description}</div>
-                    <div class="run-destiny-summary">${meta.passiveDesc}<br>${meta.activeDesc}</div>
-                    <div class="run-destiny-tags">
-                        ${tags.map((tag) => `<span class="run-destiny-tag">${tag}</span>`).join('')}
-                    </div>
-                </button>
-            `;
-        }).join('');
-
-        const selectedMeta = this.getSpiritCompanionMetaById(this.selectedSpiritCompanionId, 1);
-        if (summary) {
-            summary.textContent = selectedMeta
-                ? `已契合灵契「${selectedMeta.name}」：${selectedMeta.playstyle || selectedMeta.summary || selectedMeta.description}`
-                : '灵契提供常驻被动与蓄能主动，会补足这局的关键短板。';
-        }
+        if (!this.characterSelectView) this.characterSelectView = new CharacterSelectView(this);
+        return this.characterSelectView.renderSpiritCompanionSelection(characterId);
     }
 
     updateCharacterSelectionConfirmState() {
-        const confirmBtn = document.getElementById('confirm-character-btn');
-        if (!confirmBtn) return;
-        confirmBtn.disabled = !this.selectedCharacterId || !this.selectedRunDestinyId || !this.selectedSpiritCompanionId || !this.selectedRunPathId;
+        if (!this.characterSelectView) this.characterSelectView = new CharacterSelectView(this);
+        return this.characterSelectView.updateCharacterSelectionConfirmState();
     }
 
     selectRunDestiny(destinyId) {
-        const meta = this.getRunDestinyMetaById(destinyId, 1);
-        if (!meta) return;
-        this.selectedRunDestinyId = destinyId;
-        this.renderRunDestinySelection(this.selectedCharacterId);
-        this.updateCharacterSelectionConfirmState();
+        if (!this.characterSelectView) this.characterSelectView = new CharacterSelectView(this);
+        return this.characterSelectView.selectRunDestiny(destinyId);
     }
 
     selectSpiritCompanion(spiritId) {
-        const meta = this.getSpiritCompanionMetaById(spiritId, 1);
-        if (!meta) return;
-        this.selectedSpiritCompanionId = spiritId;
-        this.renderSpiritCompanionSelection(this.selectedCharacterId);
-        this.updateCharacterSelectionConfirmState();
+        if (!this.characterSelectView) this.characterSelectView = new CharacterSelectView(this);
+        return this.characterSelectView.selectSpiritCompanion(spiritId);
     }
 
     getRunPathCatalog() {
@@ -2331,62 +2221,13 @@ class Game {
     }
 
     renderRunPathSelection(characterId) {
-        const host = document.getElementById('run-path-selection');
-        const summary = document.getElementById('run-path-summary');
-        if (!host) return;
-
-        const charId = typeof characterId === 'string' ? characterId : this.selectedCharacterId;
-        if (!charId) {
-            host.innerHTML = '<div class="run-destiny-empty">先选定一位角色，再决定这一轮的命途主线。</div>';
-            if (summary) summary.textContent = '命途会给这一轮提供清晰的阶段目标、路线倾向与战斗被动。';
-            return;
-        }
-
-        const draftIds = this.draftRunPathsForCharacter(charId);
-        if (!draftIds.includes(this.selectedRunPathId)) {
-            this.selectedRunPathId = draftIds[0] || null;
-        }
-
-        host.innerHTML = draftIds.map((pathId) => {
-            const meta = this.getRunPathMetaById(pathId);
-            if (!meta) return '';
-            const selectedClass = pathId === this.selectedRunPathId ? 'selected' : '';
-            const phaseTags = meta.phases.slice(0, 3).map((phase) => `${phase.label}·${phase.title}`);
-            return `
-                <button type="button"
-                        class="run-destiny-card run-path-card ${selectedClass}"
-                        data-run-path-id="${meta.id}"
-                        onclick="game.selectRunPath('${meta.id}')">
-                    <div class="run-destiny-head">
-                        <span class="run-destiny-icon">${meta.icon}</span>
-                        <div class="run-destiny-title-group">
-                            <span class="run-destiny-name">${meta.name}</span>
-                            <span class="run-destiny-tier">${meta.category} · ${meta.routeHint || '命途主线'}</span>
-                        </div>
-                    </div>
-                    <div class="run-destiny-desc">${meta.description}</div>
-                    <div class="run-destiny-summary">${meta.playstyle}</div>
-                    <div class="run-destiny-tags">
-                        ${phaseTags.map((tag) => `<span class="run-destiny-tag">${tag}</span>`).join('')}
-                    </div>
-                </button>
-            `;
-        }).join('');
-
-        const selectedMeta = this.getRunPathMetaById(this.selectedRunPathId);
-        if (summary) {
-            summary.textContent = selectedMeta
-                ? `已选命途「${selectedMeta.name}」：${selectedMeta.playstyle || selectedMeta.description}`
-                : '命途会给这一轮提供清晰的阶段目标、路线倾向与战斗被动。';
-        }
+        if (!this.characterSelectView) this.characterSelectView = new CharacterSelectView(this);
+        return this.characterSelectView.renderRunPathSelection(characterId);
     }
 
     selectRunPath(pathId) {
-        const meta = this.getRunPathMetaById(pathId);
-        if (!meta) return;
-        this.selectedRunPathId = pathId;
-        this.renderRunPathSelection(this.selectedCharacterId);
-        this.updateCharacterSelectionConfirmState();
+        if (!this.characterSelectView) this.characterSelectView = new CharacterSelectView(this);
+        return this.characterSelectView.selectRunPath(pathId);
     }
 
     getRunPathTrackerState() {
@@ -3221,52 +3062,8 @@ class Game {
     }
 
     showStrategicCardDraftModal(config = {}) {
-        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
-        const cards = Array.isArray(config.cards) ? config.cards.filter(Boolean).slice(0, 3) : [];
-        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl || cards.length === 0) return false;
-
-        titleEl.textContent = config.title || '残响抉择';
-        iconEl.textContent = config.icon || '🃏';
-        descEl.innerHTML = config.description || '从这些残章中选择一项回应。';
-        choicesEl.innerHTML = '';
-
-        cards.forEach((card) => {
-            const rarityKey = String(card.rarity || 'common').toLowerCase();
-            const rarityLabel = this.getCardRarityLabel(rarityKey);
-            const btn = document.createElement('button');
-            btn.className = 'event-choice';
-            btn.innerHTML = `
-                <div class="choice-title">
-                    <span class="choice-name">${card.icon || '🃏'} ${card.name}</span>
-                    <span class="choice-rarity rarity-${rarityKey}">【${rarityLabel}】</span>
-                </div>
-                <div class="choice-effect">${card.description || '获得这张卡牌。'}</div>
-            `;
-            btn.onclick = () => {
-                if (typeof config.onSelect === 'function') {
-                    config.onSelect(card);
-                }
-            };
-            choicesEl.appendChild(btn);
-        });
-
-        const leaveBtn = document.createElement('button');
-        leaveBtn.className = 'event-choice';
-        leaveBtn.innerHTML = `
-            <div>${config.leaveText || '🚶 暂且作罢'}</div>
-            <div class="choice-effect">${config.leaveDesc || '保持当前命途，返回上一层抉择。'}</div>
-        `;
-        leaveBtn.onclick = () => {
-            if (typeof config.onCancel === 'function') {
-                config.onCancel();
-                return;
-            }
-            this.closeModal();
-        };
-        choicesEl.appendChild(leaveBtn);
-
-        this.activateModal(modal);
-        return true;
+        if (!this.strategicView) this.strategicView = new StrategicView(this);
+        return this.strategicView.showStrategicCardDraftModal(config);
     }
 
     getStrategicRouteForecasts() {
@@ -3467,640 +3264,33 @@ class Game {
     }
 
     showObservatoryNode(node) {
-        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
-        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
-            const forecast = this.applyStrategicRouteForecast('utility');
-            const gained = this.grantStrategicCurrencies({ insight: 1 }, '观星推演');
-            this.finishStrategicNode(
-                node,
-                '星轨已锁定',
-                `第 ${this.player.realm + 1} 重将偏向 ${forecast?.label || '机缘补给线'}。\n天机 +${gained.insight || 0}。`,
-                forecast?.icon || '🔭'
-            );
-            return;
-        }
-
-        const nextRealm = Math.min(18, Math.max(1, (this.player?.realm || 1) + 1));
-        const nextRealmName = typeof this.getDisplayRealmName === 'function'
-            ? this.getDisplayRealmName(nextRealm)
-            : (this.map && typeof this.map.getRealmName === 'function' ? this.map.getRealmName(nextRealm) : `第 ${nextRealm} 重`);
-        const env = this.map && typeof this.map.getRealmEnvironment === 'function'
-            ? this.map.getRealmEnvironment(nextRealm)
-            : { name: '未知天象', desc: '天机仍被迷雾遮蔽。' };
-        const bossInfo = typeof this.getRealmBossInfo === 'function'
-            ? this.getRealmBossInfo(nextRealm)
-            : null;
-        const pending = this.getPendingRouteRumorProfile(nextRealm);
-        const pendingText = pending && pending.label
-            ? `<br><span style="color:#8ecbff;">当前已锁定：${pending.label}</span>`
-            : '';
-
-        titleEl.textContent = '观星台';
-        iconEl.textContent = '🔭';
-        descEl.innerHTML = `
-            <strong>${nextRealmName}</strong><br>
-            天象：${env.name} · ${env.desc}<br>
-            ${bossInfo && bossInfo.bossName ? `Boss 倾向：${bossInfo.bossName}${bossInfo.mechDesc ? ` · ${bossInfo.mechDesc}` : ''}` : 'Boss 倾向仍未完全显形。'}
-            ${pendingText}
-        `;
-        choicesEl.innerHTML = '';
-
-        const appendChoice = (icon, text, result, handler) => {
-            const btn = document.createElement('button');
-            btn.className = 'event-choice';
-            btn.innerHTML = `
-                <div>${icon} ${text}</div>
-                <div class="choice-effect">${result}</div>
-            `;
-            btn.onclick = handler;
-            choicesEl.appendChild(btn);
-        };
-
-        appendChoice('🗺️', '锁定福缘星轨', '偏向商路、观星、营地与平稳事件。', () => {
-            const forecast = this.applyStrategicRouteForecast('utility');
-            const gained = this.grantStrategicCurrencies({ insight: 1 }, '观星推演');
-            this.closeModal();
-            this.finishStrategicNode(
-                node,
-                '福缘星轨已定',
-                `第 ${this.player.realm + 1} 重路线趋向：${forecast.label}。\n${forecast.desc}\n天机 +${gained.insight || 0}。`,
-                forecast.icon || '🗺️'
-            );
-        });
-        appendChoice('⚔️', '锁定锋芒星轨', '偏向试炼、精英、锻炉与禁术节点。', () => {
-            const forecast = this.applyStrategicRouteForecast('assault');
-            const gained = this.grantStrategicCurrencies({ insight: 1 }, '观星推演');
-            this.closeModal();
-            this.finishStrategicNode(
-                node,
-                '锋芒星轨已定',
-                `第 ${this.player.realm + 1} 重路线趋向：${forecast.label}。\n${forecast.desc}\n天机 +${gained.insight || 0}。`,
-                forecast.icon || '⚔️'
-            );
-        });
-        appendChoice('✨', '校准星图战利', '锁定 1 次高稀有奖励，并获取 1 点天机。', () => {
-            const rumors = this.ensureShopRumors();
-            rumors.rewardRareCharges += 1;
-            rumors.rewardRareBonus = Math.max(Number(rumors.rewardRareBonus) || 0, 0.25);
-            if (nextRealm >= 5) {
-                rumors.treasureCharges += 1;
-                rumors.treasureChanceBonus = Math.max(Number(rumors.treasureChanceBonus) || 0, 0.16);
-            }
-            const gained = this.grantStrategicCurrencies({ insight: 1 }, '星图校准');
-            this.closeModal();
-            this.finishStrategicNode(
-                node,
-                '星图校准完成',
-                `天机 +${gained.insight || 0}。\n未来 1 次战后卡牌奖励将更偏向稀有/史诗。${nextRealm >= 5 ? '\n并额外锁定 1 次宝踪风声。' : ''}`,
-                '🔭'
-            );
-        });
-
-        const leaveBtn = document.createElement('button');
-        leaveBtn.className = 'event-choice';
-        leaveBtn.innerHTML = `
-            <div>🚶 收拢星图</div>
-            <div class="choice-effect">不再改写星轨，直接离开观星台。</div>
-        `;
-        leaveBtn.onclick = () => {
-            this.closeModal();
-            if (this.map && typeof this.map.completeNode === 'function') {
-                this.map.completeNode(node);
-            }
-            this.autoSave();
-        };
-        choicesEl.appendChild(leaveBtn);
-
-        this.activateModal(modal);
+        if (!this.strategicView) this.strategicView = new StrategicView(this);
+        return this.strategicView.showObservatoryNode(node);
     }
 
     showForbiddenAltarNode(node) {
-        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
-        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
-            const gained = this.grantStrategicCurrencies({ karma: 1 }, '禁坛残响');
-            this.finishStrategicNode(node, '禁坛回响', `业果 +${gained.karma || 0}。`, '🩸');
-            return;
-        }
-
-        const player = this.player;
-        const bloodCost = 6;
-        const vowHpCost = Math.max(8, Math.floor((player.maxHp || 1) * 0.14));
-        const vowDraft = this.draftRunVowChoices(this.player.realm);
-        const activeVows = this.player && typeof this.player.getRunVowMetas === 'function'
-            ? this.player.getRunVowMetas()
-            : [];
-        const vowSummary = activeVows.length > 0
-            ? activeVows.map((item) => `${item.icon || '✧'} ${item.name} ${item.tierLabel}`).join(' / ')
-            : '尚未立誓';
-
-        titleEl.textContent = '禁术坛';
-        iconEl.textContent = '🩸';
-        descEl.innerHTML = `
-            祭坛下的血纹正在回应你。<br>
-            当前生命：${player.currentHp}/${player.maxHp} ｜ 业果：${this.getStrategicCurrencyAmount('karma')}<br>
-            <span style="color:rgba(255,235,198,0.82)">当前誓约：${vowSummary}</span>
-        `;
-        choicesEl.innerHTML = '';
-
-        const appendChoice = (icon, text, result, handler, disabled = false) => {
-            const btn = document.createElement('button');
-            btn.className = 'event-choice';
-            if (disabled) {
-                btn.classList.add('disabled');
-                btn.style.opacity = '0.5';
-                btn.style.cursor = 'not-allowed';
-            }
-            btn.innerHTML = `
-                <div>${icon} ${text}</div>
-                <div class="choice-effect">${result}</div>
-            `;
-            if (!disabled) btn.onclick = handler;
-            choicesEl.appendChild(btn);
-        };
-
-        appendChoice(
-            '📜',
-            `血契夺卷（最大生命 -${bloodCost}）`,
-            '从 3 张稀有/史诗卡中选择 1 张，并获得 1 点业果。',
-            () => {
-                const cards = this.draftStrategicCards({
-                    count: 3,
-                    rarityPool: ['rare', 'rare', 'epic'],
-                    preferArchetype: true
-                });
-                if (cards.length === 0) {
-                    Utils.showBattleLog('禁术卷轴暂未显化，祭仪中断。');
-                    return;
-                }
-                this.showStrategicCardDraftModal({
-                    title: '血契夺卷',
-                    icon: '📜',
-                    description: `祭出 ${bloodCost} 点生命上限，从以下残卷中选取一张。`,
-                    cards,
-                    leaveText: '🚶 返回祭坛',
-                    leaveDesc: '保留血量，回到禁术坛主选单。',
-                    onCancel: () => this.showForbiddenAltarNode(node),
-                    onSelect: (card) => {
-                        this.closeModal();
-                        player.maxHp = Math.max(16, player.maxHp - bloodCost);
-                        player.currentHp = Math.min(player.currentHp, player.maxHp);
-                        player.addCardToDeck(card);
-                        const gained = this.grantStrategicCurrencies({ karma: 1 }, '禁术血契');
-                        this.finishStrategicNode(
-                            node,
-                            '禁术血契完成',
-                            `获得卡牌：${card.name}\n最大生命降至 ${player.maxHp}。${gained.karma > 0 ? `\n业果 +${gained.karma}。` : ''}`,
-                            '🩸'
-                        );
-                    }
-                });
-            },
-            player.maxHp <= 18
-        );
-        appendChoice(
-            '⛓️',
-            `裂誓献祭（失去 ${vowHpCost} 生命）`,
-            '立下或升阶一条誓约，并获得 1 点业果。',
-            () => this.showForbiddenAltarVowDraft(node, vowHpCost, vowDraft),
-            player.currentHp <= vowHpCost + 1 || !Array.isArray(vowDraft) || vowDraft.length === 0
-        );
-        appendChoice('🗿', '灾像供契', '向牌组加入【心魔·疑心】，换取一件法宝与 1 点业果。', () => {
-            const curseCard = typeof cloneCardTemplate === 'function'
-                ? cloneCardTemplate('demonDoubt')
-                : null;
-            if (curseCard) {
-                player.addCardToDeck(curseCard);
-            }
-            const treasure = typeof this.getWeightedRandomTreasure === 'function'
-                ? this.getWeightedRandomTreasure()
-                : null;
-            if (treasure) {
-                player.addTreasure(treasure.id);
-            }
-            const gained = this.grantStrategicCurrencies({ karma: 1 }, '灾像供契');
-            this.closeModal();
-            this.finishStrategicNode(
-                node,
-                '灾像供契完成',
-                `${curseCard ? '牌组加入【心魔·疑心】。' : '祭坛记录了你的灾像。'}${treasure ? `\n获得法宝：${treasure.name}。` : ''}${gained.karma > 0 ? `\n业果 +${gained.karma}。` : ''}`,
-                '🗿'
-            );
-        });
-
-        const leaveBtn = document.createElement('button');
-        leaveBtn.className = 'event-choice';
-        leaveBtn.innerHTML = `
-            <div>🚶 压下邪念</div>
-            <div class="choice-effect">不与祭坛继续交易，直接离开。</div>
-        `;
-        leaveBtn.onclick = () => {
-            this.closeModal();
-            if (this.map && typeof this.map.completeNode === 'function') {
-                this.map.completeNode(node);
-            }
-            this.autoSave();
-        };
-        choicesEl.appendChild(leaveBtn);
-
-        this.activateModal(modal);
+        if (!this.strategicView) this.strategicView = new StrategicView(this);
+        return this.strategicView.showForbiddenAltarNode(node);
     }
 
     showForbiddenAltarVowDraft(node, hpCost, draftIds = null) {
-        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
-        const picks = Array.isArray(draftIds) && draftIds.length > 0
-            ? draftIds.slice(0, 3)
-            : this.draftRunVowChoices(this.player.realm);
-        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl || picks.length === 0) {
-            this.showForbiddenAltarNode(node);
-            return;
-        }
-
-        const activeMetas = this.player && typeof this.player.getRunVowMetas === 'function'
-            ? this.player.getRunVowMetas()
-            : [];
-        const buildEffectTags = (effects = {}) => {
-            const tags = [];
-            if (Number(effects.firstTurnDraw) > 0) tags.push(`首回合抽牌 +${Math.floor(Number(effects.firstTurnDraw) || 0)}`);
-            if (Number(effects.firstTurnEnergy) > 0) tags.push(`首回合灵力 +${Math.floor(Number(effects.firstTurnEnergy) || 0)}`);
-            if (Number(effects.openingBlock) > 0) tags.push(`开场护盾 +${Math.floor(Number(effects.openingBlock) || 0)}`);
-            if (Number(effects.firstAttackBonusPerBattle) > 0) tags.push(`首击增伤 +${Math.floor(Number(effects.firstAttackBonusPerBattle) || 0)}`);
-            if (Number(effects.onKillHeal) > 0) tags.push(`击杀回复 ${Math.floor(Number(effects.onKillHeal) || 0)}`);
-            if (Number(effects.blockGainMultiplier) > 0) tags.push(`护盾效率 +${Math.round(Number(effects.blockGainMultiplier) * 100)}%`);
-            if (Number(effects.rewardRareChance) > 0) tags.push('高稀有奖励倾向提升');
-            if (Number(effects.commandCostDiscount) > 0) tags.push(`指令消耗 -${Math.floor(Number(effects.commandCostDiscount) || 0)}`);
-            if (Number(effects.maxHpPenalty) > 0) tags.push(`生命上限 -${Math.floor(Number(effects.maxHpPenalty) || 0)}`);
-            if (Number(effects.battleStartHpLoss) > 0) tags.push(`每战开场失血 ${Math.floor(Number(effects.battleStartHpLoss) || 0)}`);
-            if (Number(effects.maxHandSizeOffset) < 0) tags.push(`手牌上限 ${Math.floor(Number(effects.maxHandSizeOffset) || 0)}`);
-            if (Number(effects.shopPriceMul) > 1) tags.push(`商店涨价 ${Math.round((Number(effects.shopPriceMul) - 1) * 100)}%`);
-            return tags.slice(0, 4);
-        };
-
-        titleEl.textContent = '禁坛裂誓';
-        iconEl.textContent = '⛓️';
-        descEl.innerHTML = `以 ${hpCost} 点生命为代价，撕开一条誓纹。`;
-        choicesEl.innerHTML = '';
-
-        picks.forEach((vowId) => {
-            const currentMeta = activeMetas.find((meta) => meta.id === vowId) || null;
-            const nextTier = currentMeta ? Math.min(currentMeta.maxTier, currentMeta.tier + 1) : 1;
-            const meta = this.getRunVowMetaById(vowId, nextTier);
-            if (!meta) return;
-            const modeLabel = currentMeta
-                ? `升阶 · ${currentMeta.tierLabel} → ${meta.tierLabel}`
-                : `立誓 · ${meta.tierLabel}`;
-            const tags = buildEffectTags(meta.effects || {});
-            const btn = document.createElement('button');
-            btn.className = 'event-choice run-vow-choice';
-            btn.innerHTML = `
-                <div class="choice-title">
-                    <span class="choice-name">${meta.icon || '✧'} ${meta.name}</span>
-                    <span class="choice-rarity">${modeLabel}</span>
-                </div>
-                <div class="choice-effect">${meta.summary || meta.description}</div>
-                <div class="choice-effect" style="color:#f1c89d;">赌注：${meta.risk || '誓约会改变后续资源与战斗节奏。'}</div>
-                <div class="choice-effect" style="color:#b9d7ff;">路线：${meta.routeHint || '偏向高风险收益节点。'}</div>
-                <div class="choice-effect">${tags.map((tag) => `· ${tag}`).join('<br>')}</div>
-            `;
-            btn.onclick = () => {
-                this.player.currentHp = Math.max(1, this.player.currentHp - hpCost);
-                const gained = this.grantStrategicCurrencies({ karma: 1 }, '血祭立誓');
-                const applied = this.applyRunVowSelection(vowId);
-                this.closeModal();
-                if (applied && applied.meta) {
-                    this.finishStrategicNode(
-                        node,
-                        '禁坛立誓完成',
-                        `${applied.meta.icon || '✧'} ${applied.meta.name}\n${applied.meta.summary}\n失去 ${hpCost} 生命。${gained.karma > 0 ? `\n业果 +${gained.karma}。` : ''}`,
-                        applied.meta.icon || '⛓️'
-                    );
-                    return;
-                }
-                this.finishStrategicNode(
-                    node,
-                    '血祭回响',
-                    `失去 ${hpCost} 生命，却只留下残缺誓纹。${gained.karma > 0 ? `\n业果 +${gained.karma}。` : ''}`,
-                    '🩸'
-                );
-            };
-            choicesEl.appendChild(btn);
-        });
-
-        const leaveBtn = document.createElement('button');
-        leaveBtn.className = 'event-choice';
-        leaveBtn.innerHTML = `
-            <div>🚶 暂缓血祭</div>
-            <div class="choice-effect">回到禁术坛主选单。</div>
-        `;
-        leaveBtn.onclick = () => this.showForbiddenAltarNode(node);
-        choicesEl.appendChild(leaveBtn);
-
-        this.activateModal(modal);
+        if (!this.strategicView) this.strategicView = new StrategicView(this);
+        return this.strategicView.showForbiddenAltarVowDraft(node, hpCost, draftIds);
     }
 
     showMemoryRiftNode(node) {
-        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
-        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
-            const gained = this.grantStrategicCurrencies({ insight: 1 }, '裂隙回响');
-            this.finishStrategicNode(node, '裂隙回响', `天机 +${gained.insight || 0}。`, '🪞');
-            return;
-        }
-
-        const destinyMeta = this.player && typeof this.player.getRunDestinyMeta === 'function'
-            ? this.player.getRunDestinyMeta()
-            : null;
-        const destinyText = destinyMeta
-            ? `${destinyMeta.icon || '✦'} ${destinyMeta.name} ${destinyMeta.tierLabel}`
-            : '暂无命格响应';
-        const realmText = this.map && typeof this.map.getRealmName === 'function'
-            ? this.map.getRealmName(this.player.realm)
-            : `第 ${this.player.realm} 重`;
-
-        titleEl.textContent = '记忆裂隙';
-        iconEl.textContent = '🪞';
-        descEl.innerHTML = `
-            裂隙映出 <strong>${realmText}</strong> 的旧影。<br>
-            当前命格：${destinyText}
-        `;
-        choicesEl.innerHTML = '';
-
-        const appendChoice = (icon, text, result, handler) => {
-            const btn = document.createElement('button');
-            btn.className = 'event-choice';
-            btn.innerHTML = `
-                <div>${icon} ${text}</div>
-                <div class="choice-effect">${result}</div>
-            `;
-            btn.onclick = handler;
-            choicesEl.appendChild(btn);
-        };
-
-        appendChoice('✦', '追忆命格', '优先提升当前命格阶位；若已满阶，则转化为天机与感悟。', () => {
-            this.closeModal();
-            const advanced = this.advanceRunDestinyTier('记忆回响');
-            if (advanced && advanced.upgraded && advanced.meta) {
-                const exp = this.grantFateRingExp(24, '裂隙参悟');
-                this.finishStrategicNode(
-                    node,
-                    '命格回响',
-                    `${advanced.meta.icon || '✦'} ${advanced.meta.name} 提升至 ${advanced.meta.tierLabel}。\n命环经验 +${exp}。`,
-                    advanced.meta.icon || '🪞'
-                );
-                return;
-            }
-            const gained = this.grantStrategicCurrencies({ insight: 1 }, '裂隙残响');
-            const exp = this.grantFateRingExp(30, '裂隙残响');
-            this.finishStrategicNode(
-                node,
-                '残响回收',
-                `当前命格已抵达上限，转化为天机与感悟。\n天机 +${gained.insight || 0}。\n命环经验 +${exp}。`,
-                '🪞'
-            );
-        });
-        appendChoice('📚', '撕取残章', '从 3 张构筑相关卡中选择 1 张，并获得 1 点天机。', () => {
-            const cards = this.draftStrategicCards({
-                count: 3,
-                rarityPool: ['uncommon', 'rare', 'rare'],
-                preferArchetype: true
-            });
-            if (cards.length === 0) {
-                Utils.showBattleLog('裂隙残章尚未显化。');
-                return;
-            }
-            this.showStrategicCardDraftModal({
-                title: '撕取残章',
-                icon: '📚',
-                description: '从这些残章中抽取一页，写入当前构筑。',
-                cards,
-                leaveText: '🚶 返回裂隙',
-                leaveDesc: '放弃这轮残章，回到裂隙主选单。',
-                onCancel: () => this.showMemoryRiftNode(node),
-                onSelect: (card) => {
-                    this.closeModal();
-                    this.player.addCardToDeck(card);
-                    const gained = this.grantStrategicCurrencies({ insight: 1 }, '残章采撷');
-                    const exp = this.grantFateRingExp(12, '残章采撷');
-                    this.finishStrategicNode(
-                        node,
-                        '残章融入构筑',
-                        `获得卡牌：${card.name}\n天机 +${gained.insight || 0}。\n命环经验 +${exp}。`,
-                        '📚'
-                    );
-                }
-            });
-        });
-        appendChoice('🧭', '逆写路标', '锁定“裂隙回响线”，并让下一场战斗的命环收益更高。', () => {
-            const forecast = this.applyStrategicRouteForecast('rift');
-            if (this.player && typeof this.player.grantAdventureBuff === 'function') {
-                this.player.grantAdventureBuff('ringExpBoostBattles', 1);
-            }
-            const gained = this.grantStrategicCurrencies({ insight: 1 }, '裂隙定标');
-            this.closeModal();
-            this.finishStrategicNode(
-                node,
-                '裂隙路标已改写',
-                `第 ${this.player.realm + 1} 重路线趋向：${forecast.label}。\n${forecast.desc}\n天机 +${gained.insight || 0}。\n接下来 1 场战斗命环经验收益提升。`,
-                forecast.icon || '🪞'
-            );
-        });
-
-        const leaveBtn = document.createElement('button');
-        leaveBtn.className = 'event-choice';
-        leaveBtn.innerHTML = `
-            <div>🚶 合拢裂隙</div>
-            <div class="choice-effect">不再追问旧影，直接离开。</div>
-        `;
-        leaveBtn.onclick = () => {
-            this.closeModal();
-            if (this.map && typeof this.map.completeNode === 'function') {
-                this.map.completeNode(node);
-            }
-            this.autoSave();
-        };
-        choicesEl.appendChild(leaveBtn);
-
-        this.activateModal(modal);
+        if (!this.strategicView) this.strategicView = new StrategicView(this);
+        return this.strategicView.showMemoryRiftNode(node);
     }
 
     showSpiritGrottoDraft(node, draftIds = null) {
-        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
-        const picks = Array.isArray(draftIds) && draftIds.length > 0
-            ? draftIds.slice(0, 3)
-            : this.draftSpiritCompanionsForCharacter(this.player?.characterId || 'linFeng');
-        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl || picks.length === 0) {
-            this.showSpiritGrottoNode(node);
-            return;
-        }
-
-        const currentMeta = this.player && typeof this.player.getSpiritCompanionMeta === 'function'
-            ? this.player.getSpiritCompanionMeta()
-            : null;
-
-        titleEl.textContent = '灵契换契';
-        iconEl.textContent = '🪷';
-        descEl.innerHTML = '从显化的灵契中重新立契，或借旧契回响直接升阶。';
-        choicesEl.innerHTML = '';
-
-        picks.forEach((spiritId) => {
-            const meta = this.getSpiritCompanionMetaById(spiritId, 1);
-            if (!meta) return;
-            const isCurrent = currentMeta && currentMeta.id === meta.id;
-            const canUpgradeCurrent = !!(isCurrent && Number(currentMeta.tier) < Number(currentMeta.maxTier || currentMeta.tier || 1));
-            const modeLabel = canUpgradeCurrent
-                ? `维持契约 · 升至 ${this.getSpiritCompanionMetaById(meta.id, Math.min(meta.maxTier, 2))?.tierLabel || '下一阶'}`
-                : (isCurrent ? '当前同行灵契' : '改契同行');
-            const btn = document.createElement('button');
-            btn.className = 'event-choice';
-            btn.innerHTML = `
-                <div class="choice-title">
-                    <span class="choice-name">${meta.icon || '✦'} ${meta.name}</span>
-                    <span class="choice-rarity">${modeLabel}</span>
-                </div>
-                <div class="choice-effect">${meta.summary || meta.description}</div>
-                <div class="choice-effect" style="color:#b9d7ff;">被动：${meta.passiveDesc}</div>
-                <div class="choice-effect" style="color:#f1c89d;">主动：${meta.activeDesc}</div>
-            `;
-            btn.onclick = () => {
-                const gained = this.grantStrategicCurrencies({ insight: 1 }, '灵契换契');
-                let resultMeta = null;
-                if (canUpgradeCurrent) {
-                    const advanced = this.advanceSpiritCompanionTier('灵契回响');
-                    resultMeta = advanced && advanced.meta ? advanced.meta : null;
-                } else if (typeof this.player?.setSpiritCompanion === 'function') {
-                    resultMeta = this.player.setSpiritCompanion(meta.id, 1);
-                }
-                this.closeModal();
-                this.finishStrategicNode(
-                    node,
-                    '灵契回响成形',
-                    `${resultMeta ? `${resultMeta.icon || '✦'} ${resultMeta.name} · ${resultMeta.tierLabel}` : '灵契回响短暂闪烁。'}\n${resultMeta?.summary || resultMeta?.description || '同行灵契已重整。'}${gained.insight > 0 ? `\n天机 +${gained.insight}。` : ''}`,
-                    resultMeta?.icon || '🪷'
-                );
-            };
-            choicesEl.appendChild(btn);
-        });
-
-        const leaveBtn = document.createElement('button');
-        leaveBtn.className = 'event-choice';
-        leaveBtn.innerHTML = `
-            <div>🚶 返回灵契窟</div>
-            <div class="choice-effect">先不换契，回到主选单。</div>
-        `;
-        leaveBtn.onclick = () => this.showSpiritGrottoNode(node);
-        choicesEl.appendChild(leaveBtn);
-
-        this.activateModal(modal);
+        if (!this.strategicView) this.strategicView = new StrategicView(this);
+        return this.strategicView.showSpiritGrottoDraft(node, draftIds);
     }
 
     showSpiritGrottoNode(node) {
-        const { modal, titleEl, iconEl, descEl, choicesEl } = this.getEventModalRefs();
-        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
-            const gained = this.grantStrategicCurrencies({ insight: 1 }, '灵契残响');
-            this.finishStrategicNode(node, '灵契残响', `天机 +${gained.insight || 0}。`, '🪷');
-            return;
-        }
-
-        const spiritMeta = this.player && typeof this.player.getSpiritCompanionMeta === 'function'
-            ? this.player.getSpiritCompanionMeta()
-            : null;
-        const spiritText = spiritMeta
-            ? `${spiritMeta.icon || '✦'} ${spiritMeta.name} ${spiritMeta.tierLabel}`
-            : '尚未结契';
-        const draftIds = this.draftSpiritCompanionsForCharacter(this.player?.characterId || 'linFeng');
-
-        titleEl.textContent = '灵契窟';
-        iconEl.textContent = '🪷';
-        descEl.innerHTML = `
-            灵窟中的气脉正回应你的同行之灵。<br>
-            当前灵契：${spiritText}
-        `;
-        choicesEl.innerHTML = '';
-
-        const appendChoice = (icon, text, result, handler, disabled = false) => {
-            const btn = document.createElement('button');
-            btn.className = 'event-choice';
-            if (disabled) {
-                btn.classList.add('disabled');
-                btn.style.opacity = '0.5';
-                btn.style.cursor = 'not-allowed';
-            }
-            btn.innerHTML = `
-                <div>${icon} ${text}</div>
-                <div class="choice-effect">${result}</div>
-            `;
-            if (!disabled) btn.onclick = handler;
-            choicesEl.appendChild(btn);
-        };
-
-        appendChoice(
-            '🫧',
-            '契引新灵',
-            '从 3 个灵契回响中选择 1 个同行；若维持旧契，则可直接升阶。',
-            () => this.showSpiritGrottoDraft(node, draftIds),
-            !Array.isArray(draftIds) || draftIds.length === 0
-        );
-
-        const canAdvance = !!(spiritMeta && Number(spiritMeta.tier) < Number(spiritMeta.maxTier || spiritMeta.tier || 1));
-        appendChoice(
-            '⬆️',
-            '灵契升阶',
-            canAdvance
-                ? '提升当前灵契阶位，并获得命环经验。'
-                : '当前灵契已满阶，将转化为天机与灵脉感悟。',
-            () => {
-                const advanced = this.advanceSpiritCompanionTier('灵契共鸣');
-                const gained = this.grantStrategicCurrencies({ insight: 1 }, '灵契共鸣');
-                const exp = this.grantFateRingExp(canAdvance ? 16 : 24, '灵契参悟');
-                this.closeModal();
-                if (advanced && advanced.upgraded && advanced.meta) {
-                    this.finishStrategicNode(
-                        node,
-                        '灵契升阶完成',
-                        `${advanced.meta.icon || '✦'} ${advanced.meta.name} 提升至 ${advanced.meta.tierLabel}。\n命环经验 +${exp}。${gained.insight > 0 ? `\n天机 +${gained.insight}。` : ''}`,
-                        advanced.meta.icon || '🪷'
-                    );
-                    return;
-                }
-                this.finishStrategicNode(
-                    node,
-                    '灵契感悟回流',
-                    `当前灵契已满阶，感悟转化为命环经验与天机。\n命环经验 +${exp}。${gained.insight > 0 ? `\n天机 +${gained.insight}。` : ''}`,
-                    '🪷'
-                );
-            },
-            !spiritMeta
-        );
-
-        appendChoice('📖', '追索灵痕', '获得 1 点天机，并让接下来 1 场战斗的命环经验额外提升。', () => {
-            if (this.player && typeof this.player.grantAdventureBuff === 'function') {
-                this.player.grantAdventureBuff('ringExpBoostBattles', 1);
-            }
-            const gained = this.grantStrategicCurrencies({ insight: 1 }, '灵痕追索');
-            const exp = this.grantFateRingExp(12, '灵痕追索');
-            this.closeModal();
-            this.finishStrategicNode(
-                node,
-                '灵痕已铭刻',
-                `天机 +${gained.insight || 0}。\n命环经验 +${exp}。\n接下来 1 场战斗命环经验收益提升。`,
-                '📖'
-            );
-        });
-
-        const leaveBtn = document.createElement('button');
-        leaveBtn.className = 'event-choice';
-        leaveBtn.innerHTML = `
-            <div>🚶 收束灵潮</div>
-            <div class="choice-effect">保持当前同行灵契，直接离开灵契窟。</div>
-        `;
-        leaveBtn.onclick = () => {
-            this.closeModal();
-            if (this.map && typeof this.map.completeNode === 'function') {
-                this.map.completeNode(node);
-            }
-            this.autoSave();
-        };
-        choicesEl.appendChild(leaveBtn);
-
-        this.activateModal(modal);
+        if (!this.strategicView) this.strategicView = new StrategicView(this);
+        return this.strategicView.showSpiritGrottoNode(node);
     }
 
     loadGuideState() {
@@ -5841,50 +5031,9 @@ class Game {
     }
 
     showEndlessParanoiaSelection(cycleOverride = null, onDone = null) {
-        const choices = this.getEndlessParanoiaChoices();
-        if (!choices || choices.length === 0) {
-            if (typeof onDone === 'function') onDone();
-            return;
-        }
-
-        const modal = document.getElementById('event-modal');
-        const titleEl = document.getElementById('event-title');
-        const iconEl = document.getElementById('event-icon');
-        const descEl = document.getElementById('event-desc');
-        const choicesEl = document.getElementById('event-choices');
-        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
-            this.applyEndlessParanoiaChoice(choices[0], cycleOverride);
-            if (typeof onDone === 'function') onDone();
-            return;
-        }
-
-        titleEl.textContent = '轮回偏执';
-        iconEl.textContent = '🜂';
-        descEl.innerHTML = '大轮回正在重写规则。你必须接纳一条负面法则，并领取一份超规格补偿。';
-        choicesEl.innerHTML = '';
-
-        choices.forEach((choice) => {
-            const btn = document.createElement('button');
-            btn.className = 'event-choice endless-paranoia-choice';
-            btn.innerHTML = `
-                <div><span style="color:#ff9d7a;">【负】${choice.burden.name}</span> + <span style="color:#9de7ff;">【偿】${choice.boon.name}</span></div>
-                <div class="choice-effect">${choice.burden.desc}<br>${choice.boon.desc}</div>
-            `;
-            btn.onclick = () => {
-                const applied = this.applyEndlessParanoiaChoice(choice, cycleOverride);
-                modal.classList.remove('active');
-                if (applied) {
-                    Utils.showBattleLog(`轮回偏执：接纳【${applied.burden.name}】并获得【${applied.boon.name}】`);
-                    if (applied.immediate && applied.immediate.detail) {
-                        Utils.showBattleLog(`轮回补偿：${applied.immediate.detail}`);
-                    }
-                }
-                if (typeof onDone === 'function') onDone(applied);
-            };
-            choicesEl.appendChild(btn);
-        });
-
-        modal.classList.add('active');    }
+        if (!this.strategicView) this.strategicView = new StrategicView(this);
+        return this.strategicView.showEndlessParanoiaSelection(cycleOverride, onDone);
+    }
 
 
     getEndlessPhaseProfile(cycleOverride = null) {
@@ -8101,50 +7250,8 @@ class Game {
     }
 
     showEndlessBoonSelection(onDone = null) {
-        const choices = this.getEndlessBoonChoices();
-        if (!choices || choices.length === 0) {
-            if (typeof onDone === 'function') onDone();
-            return;
-        }
-
-        const modal = document.getElementById('event-modal');
-        const titleEl = document.getElementById('event-title');
-        const iconEl = document.getElementById('event-icon');
-        const descEl = document.getElementById('event-desc');
-        const choicesEl = document.getElementById('event-choices');
-        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
-            this.applyEndlessBoon(choices[0].id);
-            if (typeof onDone === 'function') onDone();
-            return;
-        }
-
-        titleEl.textContent = '无尽赐福';
-        iconEl.textContent = '♾️';
-        descEl.innerHTML = '你突破了本轮天劫，命环共鸣为你显化三道赐福。<br>请选择其一并继续前进。';
-        choicesEl.innerHTML = '';
-
-        choices.forEach((boon) => {
-            const btn = document.createElement('button');
-            btn.className = 'event-choice';
-            const rarityTag = boon.rarity === 'rare'
-                ? '<span style="color:#ffb866;">【稀有】</span> '
-                : '';
-            btn.innerHTML = `
-                <div>${rarityTag}${boon.name}</div>
-                <div class="choice-effect">${boon.desc}</div>
-            `;
-            btn.onclick = () => {
-                const applied = this.applyEndlessBoon(boon.id);
-                modal.classList.remove('active');
-                if (applied) {
-                    Utils.showBattleLog(`无尽赐福已生效：${applied.name}`);
-                }
-                if (typeof onDone === 'function') onDone();
-            };
-            choicesEl.appendChild(btn);
-        });
-
-        modal.classList.add('active');
+        if (!this.strategicView) this.strategicView = new StrategicView(this);
+        return this.strategicView.showEndlessBoonSelection(onDone);
     }
 
     applyEndlessPreBattleBonuses() {
@@ -9070,7 +8177,8 @@ class Game {
     }
 
     showLegacyScreen() {
-        this.showScreen('inheritance-screen');
+        if (!this.systemView) this.systemView = new SystemView(this);
+        return this.systemView.showLegacyScreen();
     }
 
     initInheritanceScreen() {
@@ -9212,19 +8320,8 @@ class Game {
     }
 
     showFirstBattleGuide() {
-        if (!this.guideState || this.guideState.firstBattleGuideSeen) return;
-        this.markGuideSeen('firstBattleGuideSeen');
-
-        const tips = [
-            '新手提示：先看敌方意图，再决定是进攻还是防御。',
-            '新手提示：打完牌后，点击“结束回合”推进战斗。',
-            '新手提示：按 L 可以打开战斗记录，复盘每次触发。'
-        ];
-        tips.forEach((msg, idx) => {
-            setTimeout(() => {
-                Utils.showBattleLog(msg, { category: 'system', duration: 2800 });
-            }, idx * 1700);
-        });
+        if (!this.systemView) this.systemView = new SystemView(this);
+        return this.systemView.showFirstBattleGuide();
     }
 
     // 继续游戏
@@ -11005,30 +10102,8 @@ class Game {
 
     // 渲染法宝
     renderTreasures(containerId = 'map-treasures') {
-        const container = document.getElementById(containerId);
-        if (!container) return;
-
-        container.innerHTML = '';
-
-        if (this.player.treasures) {
-            this.player.treasures.forEach(t => {
-                const el = document.createElement('div');
-                el.className = `treasure-item rarity-${t.rarity || 'common'}`;
-                el.innerHTML = t.icon || '📦';
-
-                // 获取动态描述
-                const desc = (t.getDesc && this.player) ? t.getDesc(this.player) : t.description;
-
-                el.title = `${t.name}\n${desc}`;
-
-                // 点击查看详情
-                el.addEventListener('click', () => {
-                    this.showAlertModal(desc, t.name);
-                });
-
-                container.appendChild(el);
-            });
-        }
+        if (!this.hudView) this.hudView = new HUDView(this);
+        return this.hudView.renderTreasures(containerId);
     }
 
     // 初始化关卡选择界面 (Refactored for Ink & Gold UI)
@@ -11680,120 +10755,8 @@ class Game {
     }
 
     showScreen(screenId) {
-        console.log(`[Debug] showScreen called for: ${screenId}`);
-        document.querySelectorAll('.screen').forEach(screen => {
-            screen.classList.remove('active');
-        });
-
-        const screen = document.getElementById(screenId);
-        if (screen) {
-
-            // Safety: Ensure screen is visible before running logic that might crash
-            screen.classList.add('active');
-            this.currentScreen = screenId;
-            if (document.body) {
-                document.body.dataset.currentScreen = screenId;
-            }
-            this.dismissBattleOverlaysForScreen(screenId);
-            this.resetScreenAmbientState(screenId);
-            this.resetScreenScrollPosition(screen);
-            console.log(`[Debug] Screen ${screenId} set to active class.`);
-
-            if (screenId === 'map-screen') {
-                const resetMapScroll = () => {
-                    const mapSurface = screen.querySelector('.map-screen-v3');
-                    if (mapSurface) {
-                        mapSurface.scrollTop = 0;
-                        mapSurface.scrollLeft = 0;
-                        if (typeof mapSurface.scrollTo === 'function') {
-                            mapSurface.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-                        }
-                    }
-                };
-                setTimeout(resetMapScroll, 0);
-                setTimeout(resetMapScroll, 220);
-            }
-
-            // Use Try-Catch to prevent logical errors from blocking UI rendering (Black Screen Fix)
-            try {
-                // Particle Control
-                if (typeof particles !== 'undefined') {
-                    if (screenId === 'main-menu') {
-                        particles.startMainMenuParticles();
-                        this.tryShowMainMenuGuide();
-                    } else {
-                        particles.stopMainMenuParticles();
-                    }
-                }
-
-                // 特殊处理
-                if (screenId === 'map-screen') {
-                    console.log('[Debug] Initializing map-screen logic');
-                    if (this.map) {
-                        console.log('[Debug] Calling this.map.render()');
-                        this.map.render();
-                    } else {
-                        console.error('[Debug] this.map is undefined!');
-                    }
-                    console.log('[Debug] Calling updatePlayerDisplay()');
-                    this.updatePlayerDisplay();
-                    this.refreshLegacyMissionTrackers();
-
-                    // DEBUG: Check DOM state after render
-                    setTimeout(() => {
-                        const mapScreen = document.getElementById('map-screen');
-                        if (mapScreen) {
-                            const style = window.getComputedStyle(mapScreen);
-                            console.log(`[Debug] #map-screen style: display=${style.display}, visibility=${style.visibility}, opacity=${style.opacity}, height=${style.height}, width=${style.width}, z-index=${style.zIndex}`);
-                            console.log(`[Debug] #map-screen Parent: <${mapScreen.parentNode.tagName} id="${mapScreen.parentNode.id}" class="${mapScreen.parentNode.className}">`);
-                            console.log(`[Debug] #map-screen innerHTML length: ${mapScreen.innerHTML.length}`);
-
-                            // Audit body children for overlays
-                            console.log('[Debug] Auditing Body Children for Overlays:');
-                            Array.from(document.body.children).forEach(child => {
-                                const s = window.getComputedStyle(child);
-                                if (s.display !== 'none' && s.visibility !== 'hidden' && parseFloat(s.opacity) > 0) {
-                                    console.log(`[Debug] Visible Child: <${child.tagName} id="${child.id}" class="${child.className}"> Z=${s.zIndex} Pos=${s.position} Rect=${child.getBoundingClientRect().height}x${child.getBoundingClientRect().width}`);
-                                }
-                            });
-                        }
-                    }, 500); // Delayed check
-
-                } else if (screenId === 'battle-screen') {
-                    console.log('[Debug] Initializing battle-screen logic');
-                    this.updatePlayerDisplay();
-                    this.refreshLegacyMissionTrackers();
-                    if (!this.guideState.battleLogHintSeen) {
-                        this.markGuideSeen('battleLogHintSeen');
-                        setTimeout(() => {
-                            Utils.showBattleLog('提示：按 L 可查看战斗记录面板。', {
-                                category: 'system',
-                                duration: 2600
-                            });
-                        }, 350);
-                    }
-                } else if (screenId === 'collection') {
-                    this.initCollection();
-                } else if (screenId === 'achievements-screen') {
-                    this.initAchievements();
-                } else if (screenId === 'inheritance-screen') {
-                    this.initInheritanceScreen();
-                } else if (screenId === 'character-select') {
-                    this.updateCharacterInfo();
-                } else if (screenId === 'realm-select-screen') {
-                    this.initRealmSelect();
-                }
-                console.log(`[Debug] showScreen logic for ${screenId} completed successfully.`);
-            } catch (e) {
-                console.error(`Error initializing screen ${screenId}:`, e);
-                // Try to show error safely
-                if (typeof Utils !== 'undefined' && Utils.showBattleLog) {
-                    Utils.showBattleLog('界面加载异常: ' + e.message);
-                }
-            }
-        } else {
-            console.error(`[Debug] Screen element #${screenId} NOT FOUND in DOM!`);
-        }
+        if (!this.systemView) this.systemView = new SystemView(this);
+        return this.systemView.showScreen(screenId);
     }
 
     // 更新角色信息界面
@@ -11873,209 +10836,20 @@ class Game {
 
     // 显示角色选择界面
     showCharacterSelection() {
-        this.selectedCharacterId = null;
-        this.selectedRunDestinyId = null;
-        this.selectedSpiritCompanionId = null;
-        this.selectedRunPathId = null;
-        const container = document.getElementById('character-selection-container');
-        if (container) {
-            container.innerHTML = '';
-
-            // 剧情背景
-            const introDiv = document.createElement('div');
-            introDiv.className = 'story-intro';
-
-            introDiv.innerHTML = `
-                <p><strong>背景设定：</strong></p>
-                <p>“命环”，乃天道为万物众生设下的枷锁，意在限制潜力，维持统治。</p>
-                <p>然而天道亦有善恶，善念留下一线生机，即为“逆命者”。</p>
-                <p>恶念化身天道之主，对此大为震怒，封印善念，并派遣“天罚者”猎杀逆命之人。</p>
-                <p>如今，你作为新的逆命者觉醒，需在天罚者的追猎下不断突破命环，最终斩杀恶道，解放众生。</p>
-            `;
-            container.appendChild(introDiv);
-
-            const cardsContainer = document.createElement('div');
-            cardsContainer.className = 'character-cards-wrapper';
-
-
-            for (const charId in CHARACTERS) {
-                const char = CHARACTERS[charId];
-                const identityProfile = this.getCharacterIdentityProfile(charId);
-
-                // Check if character is locked
-                let locked = false;
-                let lockReason = '';
-                // Simple unlock logic (example)
-                if (charId !== 'linFeng' && charId !== 'xiangYe' && charId !== 'yanHan' && charId !== 'wuYu') {
-                    // locked = true; // Default lock logic if needed
-                }
-
-                const card = document.createElement('div');
-                card.className = `character-card ${locked ? 'locked' : ''}`;
-                card.dataset.id = charId;
-
-                // Image handling
-                let avatarHtml = '';
-                if (char.image) {
-                    avatarHtml = `<img src="${char.image}" class="char-avatar-img" alt="${char.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-                                  <span class="char-avatar-emoji" style="display:none">${char.avatar}</span>`;
-                } else if (char.portrait) {
-                    avatarHtml = `<img src="${char.portrait}" class="char-avatar-img" alt="${char.name}">`;
-                } else if (char.avatar && (char.avatar.includes('/') || char.avatar.includes('.'))) {
-                    avatarHtml = `<img src="${char.avatar}" class="char-avatar-img" alt="${char.name}">`;
-                } else {
-                    avatarHtml = `<span class="char-avatar-emoji">${char.avatar}</span>`;
-                }
-
-                card.innerHTML = `
-                    <div class="selected-mark">✔</div>
-                    <div class="card-inner">
-                        <div class="char-header">
-                            <div class="char-ink-bg">✦</div>
-                            <div class="char-avatar-wrapper">
-                                ${avatarHtml}
-                            </div>
-                        </div>
-                        <div class="char-body">
-                            <div class="char-name">${char.name}</div>
-                            <div class="char-title">${char.title}</div>
-                            <div class="char-desc">${char.description}</div>
-                            <div class="char-identity-strip">
-                                <span class="char-identity-pill primary">${identityProfile?.unlockLabel || '已解锁'}</span>
-                                <span class="char-identity-pill">${identityProfile?.recommendedDestinyText || '待推演'}</span>
-                                <span class="char-identity-pill">${identityProfile?.recommendedSpiritText || '待追索'}</span>
-                            </div>
-                            <div class="char-keyword-strip">
-                                ${(identityProfile?.keywords || []).map((keyword) => `<span class="char-keyword-chip">${keyword}</span>`).join('')}
-                            </div>
-                            <div class="char-story-panel">
-                                <div class="char-story-line"><strong>剧情简介：</strong>${identityProfile?.synopsis || char.description}</div>
-                                <div class="char-story-line"><strong>推荐玩法：</strong>${identityProfile?.identityHook || '围绕角色专属节奏推进本局。'}</div>
-                                <div class="char-story-line"><strong>角色专线：</strong>${identityProfile?.exclusiveLine?.summary || '更多专属内容等待追索。'}</div>
-                                <div class="char-story-line muted"><strong>解锁进度：</strong>${identityProfile?.unlockHint || (locked ? lockReason : '已满足出阵条件。')}</div>
-                            </div>
-                            
-                            <div class="char-relic-info">
-                                <div class="relic-name"><span>🔮</span> ${char.relic.name}</div>
-                                <div class="relic-desc">${char.relic.desc}</div>
-                            </div>
-                            
-                            <div class="char-stats-preview">
-                                <div class="stat-item">
-                                    <span class="stat-value">${char.stats.maxHp}</span>
-                                    <span class="stat-label">HP</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-value">${char.stats.energy}</span>
-                                    <span class="stat-label">灵力</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-value">${char.stats.draw || 5}</span>
-                                    <span class="stat-label">抽牌</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-
-                if (!locked) {
-                    card.addEventListener('click', () => {
-                        this.selectCharacter(charId);
-                    });
-                }
-
-                cardsContainer.appendChild(card);
-            }
-            container.appendChild(cardsContainer);
-
-            const destinySection = document.createElement('section');
-            destinySection.className = 'run-destiny-section';
-            destinySection.innerHTML = `
-                <div class="run-destiny-header">
-                    <div>
-                        <span class="run-destiny-kicker">开局命格</span>
-                        <h3>命轮初启 · 三选其一</h3>
-                    </div>
-                    <p id="run-destiny-summary">命格会决定这一轮的开局气质、资源节奏与战斗风格。</p>
-                </div>
-                <div class="run-destiny-grid" id="run-destiny-selection">
-                    <div class="run-destiny-empty">先选定一位角色，再感应这一局的命格。</div>
-                </div>
-            `;
-            container.appendChild(destinySection);
-
-            const spiritSection = document.createElement('section');
-            spiritSection.className = 'run-destiny-section run-spirit-section';
-            spiritSection.innerHTML = `
-                <div class="run-destiny-header">
-                    <div>
-                        <span class="run-destiny-kicker">同行灵契</span>
-                        <h3>护道灵契 · 三选其一</h3>
-                    </div>
-                    <p id="spirit-companion-summary">灵契提供常驻被动与蓄能主动，会补足这局的关键短板。</p>
-                </div>
-                <div class="run-destiny-grid" id="spirit-companion-selection">
-                    <div class="run-destiny-empty">先选定一位角色，再决定与你同行的灵契。</div>
-                </div>
-            `;
-            container.appendChild(spiritSection);
-
-            const runPathSection = document.createElement('section');
-            runPathSection.className = 'run-destiny-section run-path-section';
-            runPathSection.innerHTML = `
-                <div class="run-destiny-header">
-                    <div>
-                        <span class="run-destiny-kicker">本轮命途</span>
-                        <h3>命途主线 · 三择其一</h3>
-                    </div>
-                    <p id="run-path-summary">命途会给这一轮提供清晰的阶段目标、路线倾向与战斗被动。</p>
-                </div>
-                <div class="run-destiny-grid" id="run-path-selection">
-                    <div class="run-destiny-empty">先选定一位角色，再决定这一轮的命途主线。</div>
-                </div>
-            `;
-            container.appendChild(runPathSection);
-        }
-
-        this.updateCharacterSelectionConfirmState();
-
-        this.showScreen('character-selection-screen');
+        if (!this.characterSelectView) this.characterSelectView = new CharacterSelectView(this);
+        return this.characterSelectView.showCharacterSelection();
     }
 
     // 选择角色
     selectCharacter(charId) {
-        this.selectedCharacterId = charId;
-        const cards = document.querySelectorAll('.character-card');
-        cards.forEach(c => {
-            if (c.dataset.id === charId) c.classList.add('selected');
-            else c.classList.remove('selected');
-        });
-        this.renderRunDestinySelection(charId);
-        this.renderSpiritCompanionSelection(charId);
-        this.renderRunPathSelection(charId);
-        this.updateCharacterSelectionConfirmState();
+        if (!this.characterSelectView) this.characterSelectView = new CharacterSelectView(this);
+        return this.characterSelectView.selectCharacter(charId);
     }
 
     // 确认选择
     confirmCharacterSelection() {
-        if (!this.selectedCharacterId) return;
-
-        // 云功能可用时才强制登录
-        if (this.shouldForceCloudLogin()) {
-            this.showLoginModal();
-            return;
-        }
-
-        // 清除旧存档，开始新游戏
-        this.clearSave({
-            // Endless collapse already wrote a season verdict result; keep the meta for this session.
-            preserveSeasonMeta: this.isEndlessActive()
-        });
-        this.startNewGame(this.selectedCharacterId, {
-            runDestinyId: this.selectedRunDestinyId || this.resolveDefaultRunDestinyId(this.selectedCharacterId),
-            spiritCompanionId: this.selectedSpiritCompanionId || this.resolveDefaultSpiritCompanionId(this.selectedCharacterId),
-            runPathId: this.selectedRunPathId || this.resolveDefaultRunPathId(this.selectedCharacterId)
-        });
+        if (!this.characterSelectView) this.characterSelectView = new CharacterSelectView(this);
+        return this.characterSelectView.confirmCharacterSelection();
     }
 
     // 开始新游戏
@@ -12169,132 +10943,14 @@ class Game {
 
     // 显示角色详情（主菜单）
     showPlayerInfo() {
-        // 优先显示当前玩家对象的角色，没有则默认为林风
-        const charId = (this.player && this.player.characterId) ? this.player.characterId : 'linFeng';
-
-        const char = CHARACTERS[charId];
-        if (!char) return;
-
-        // 更新界面
-        const avatarEl = document.getElementById('info-char-avatar');
-        const nameEl = document.getElementById('info-char-name');
-        const titleEl = document.getElementById('info-char-title');
-        const descEl = document.getElementById('info-char-desc');
-        const hpEl = document.getElementById('char-hp');
-        const energyEl = document.getElementById('char-energy');
-        const cosmetic = this.getEquippedCosmeticsProfile();
-        const equippedTitle = cosmetic && cosmetic.title ? cosmetic.title.name : null;
-        const equippedSkin = cosmetic && cosmetic.skin ? cosmetic.skin : null;
-
-        if (avatarEl) {
-            avatarEl.textContent = equippedSkin ? (equippedSkin.icon || '👘') : char.avatar;
-            avatarEl.classList.toggle('pvp-skin-avatar', !!equippedSkin);
-        }
-        if (nameEl) nameEl.textContent = `${char.name} · ${char.title}`;
-        if (titleEl) {
-            if (equippedTitle) {
-                const titleName = String(equippedTitle).replace(/^称号·/, '');
-                titleEl.textContent = `称号·${titleName}`;
-            } else {
-                titleEl.textContent = '逆命印记';
-            }
-            titleEl.className = 'imprint-badge';
-        }
-        if (descEl) descEl.textContent = char.description;
-        if (hpEl) hpEl.textContent = char.stats.maxHp;
-        if (energyEl) energyEl.textContent = char.stats.energy;
-
-        this.showScreen('character-select');
+        if (!this.hudView) this.hudView = new HUDView(this);
+        return this.hudView.showPlayerInfo();
     }
 
     // 更新界面上的玩家显示（名字、头像等）
     updatePlayerDisplay() {
-        if (!this.player) return;
-
-        const charId = this.player.characterId || 'linFeng';
-        // Add Fallback for missing character data
-        const char = (typeof CHARACTERS !== 'undefined' && CHARACTERS[charId]) ? CHARACTERS[charId] : { name: '未知修士' };
-        const cosmetic = this.getEquippedCosmeticsProfile();
-        const equippedSkin = cosmetic && cosmetic.skin ? cosmetic.skin : null;
-
-        const battleNameEl = document.getElementById('player-name-display');
-        if (battleNameEl) {
-            battleNameEl.textContent = char.name;
-        }
-
-        // Update Avatar (Image or Emoji)
-        const faceEl = document.getElementById('player-face-display');
-        if (faceEl) {
-            // Reset styles
-            faceEl.style.backgroundImage = '';
-            faceEl.textContent = '';
-            faceEl.className = 'player-face-visual';
-            faceEl.removeAttribute('title');
-
-            // Resolve Image Path: Check .image, .portrait (WuYu), or .avatar (Yan Han if path)
-            const imagePath = char.image || char.portrait || (char.avatar && char.avatar.includes('/') ? char.avatar : null);
-
-            if (imagePath) {
-                faceEl.style.backgroundImage = `url('${imagePath}')`;
-                faceEl.classList.add('is-image');
-                if (equippedSkin) {
-                    faceEl.classList.add('skin-equipped');
-                    faceEl.title = `已激活法相：${equippedSkin.name || '未知法相'}`;
-                }
-            } else {
-                faceEl.textContent = equippedSkin ? (equippedSkin.icon || '👘') : (char.avatar || '👤');
-                if (equippedSkin) {
-                    faceEl.classList.add('skin-equipped');
-                    faceEl.title = `已激活法相：${equippedSkin.name || '未知法相'}`;
-                }
-            }
-
-            const avatarWrap = faceEl.closest('.player-avatar');
-            if (avatarWrap) {
-                avatarWrap.classList.toggle('skin-equipped', !!equippedSkin);
-                let badge = avatarWrap.querySelector('.player-skin-badge');
-                if (equippedSkin) {
-                    if (!badge) {
-                        badge = document.createElement('div');
-                        badge.className = 'player-skin-badge';
-                        avatarWrap.appendChild(badge);
-                    }
-                    const skinName = String(equippedSkin.name || '法相').replace(/^法相·/, '');
-                    badge.textContent = `${equippedSkin.icon || '👘'} ${skinName}`;
-                } else if (badge) {
-                    badge.remove();
-                }
-            }
-        }
-
-        // 更新属性显示
-        const strengthEl = document.getElementById('char-strength');
-        // 检查永久Buff中的力量
-        let strength = 0;
-        if (this.player.permaBuffs && this.player.permaBuffs.strength) {
-            strength = this.player.permaBuffs.strength;
-        }
-        // 如果在战斗中，加上临时Buff
-        if (this.player.buffs && this.player.buffs.strength) {
-            strength = this.player.buffs.strength; // buffs usually formatted as total value? check addBuff
-            // addBuff accumulates: this.buffs[type] += value
-            // Since prepareBattle calls addBuff for permBuffs, this.buffs.strength ALREADY includes permBuffs during battle.
-            // But checking this.player.buffs.strength is safer if we are in battle.
-            // If NOT in battle, use permBuffs.
-        }
-
-        // Better logic:
-        let displayStrength = 0;
-        if (this.battle && !this.battle.battleEnded && this.player.buffs.strength) {
-            displayStrength = this.player.buffs.strength;
-        } else if (this.player.permaBuffs && this.player.permaBuffs.strength) {
-            displayStrength = this.player.permaBuffs.strength;
-        }
-
-        if (strengthEl) {
-            strengthEl.textContent = displayStrength > 0 ? displayStrength : '-';
-            strengthEl.parentElement.style.display = displayStrength > 0 ? 'flex' : 'none';
-        }
+        if (!this.hudView) this.hudView = new HUDView(this);
+        return this.hudView.updatePlayerDisplay();
     }
 
     prepareEnemyForEndlessBattle(enemy, modifiers) {
@@ -12774,23 +11430,8 @@ class Game {
 
     // 显示连击
     showCombo() {
-        if (this.comboCount < 2) return;
-
-        const display = document.getElementById('combo-display');
-        const countEl = document.getElementById('combo-count');
-        const bonusEl = document.getElementById('combo-bonus');
-
-        if (display && countEl && bonusEl) {
-            countEl.textContent = this.comboCount;
-            const bonus = Math.floor(this.getComboBonus() * 100);
-            bonusEl.textContent = `伤害+${bonus}%`;
-
-            // 设置等级
-            display.className = 'combo-display show';
-            if (this.comboCount >= 4) display.classList.add('level-4');
-            else if (this.comboCount >= 3) display.classList.add('level-3');
-            else display.classList.add('level-2');
-        }
+        if (!this.hudView) this.hudView = new HUDView(this);
+        return this.hudView.showCombo();
     }
 
     // 隐藏连击
@@ -13078,55 +11719,8 @@ class Game {
     }
 
     renderPVPResultReview(review = null) {
-        const panel = document.getElementById('pvp-result-review');
-        const kicker = document.getElementById('pvp-result-review-kicker');
-        const title = document.getElementById('pvp-result-review-title');
-        const subtitle = document.getElementById('pvp-result-review-subtitle');
-        const chip = document.getElementById('pvp-result-review-chip');
-        const summary = document.getElementById('pvp-result-review-summary');
-        const focusLabel = document.getElementById('pvp-result-review-focus-label');
-        const focusValue = document.getElementById('pvp-result-review-focus-value');
-        const nextLabel = document.getElementById('pvp-result-review-next-label');
-        const nextValue = document.getElementById('pvp-result-review-next-value');
-        const foot = document.getElementById('pvp-result-review-foot');
-        if (!panel || !kicker || !title || !subtitle || !chip || !summary || !focusLabel || !focusValue || !nextLabel || !nextValue || !foot) {
-            this.pvpResultReview = review && typeof review === 'object' ? review : null;
-            return;
-        }
-
-        const safeReview = review && typeof review === 'object'
-            ? review
-            : {
-                outcomeId: '',
-                kicker: '赛后复盘',
-                title: '本局题面会在这里回看',
-                subtitle: 'DRI、主轴与对手画像会同步写入复盘卡。',
-                chipText: 'DRI 0 · 可控',
-                chipTierId: 'controlled',
-                summary: '当你完成一场 PVP，对局复盘会总结这把到底是越压破局，还是哪里读题失拍。',
-                focusTitle: '判词',
-                focusText: '系统会结合这场的风险主轴给出一句更具体的复盘提示。',
-                nextTitle: '下一把',
-                nextText: '这里会告诉你下一把应该优先保留什么资源与节拍。',
-                economyLine: '对局结束后会同步展示道韵变化与天道币收益。',
-                dangerLine: '',
-                dangerProfile: null,
-                tags: []
-            };
-
-        panel.dataset.tier = safeReview.chipTierId || 'controlled';
-        kicker.textContent = safeReview.kicker || '赛后复盘';
-        title.textContent = safeReview.title || '本局题面会在这里回看';
-        subtitle.textContent = safeReview.subtitle || '';
-        chip.textContent = safeReview.chipText || 'DRI 0 · 可控';
-        chip.className = `pvp-result-review-chip tier-${safeReview.chipTierId || 'controlled'}`;
-        summary.textContent = safeReview.summary || '';
-        focusLabel.textContent = safeReview.focusTitle || '判词';
-        focusValue.textContent = safeReview.focusText || '';
-        nextLabel.textContent = safeReview.nextTitle || '下一把';
-        nextValue.textContent = safeReview.nextText || '';
-        foot.textContent = safeReview.economyLine || safeReview.dangerLine || '';
-        this.pvpResultReview = safeReview;
+        if (!this.pvpResultView) this.pvpResultView = new PVPResultView(this);
+        return this.pvpResultView.renderPVPResultReview(review);
     }
 
     async handlePVPVictory() {
@@ -14750,19 +13344,8 @@ class Game {
 
     // 显示胜利界面
     showVictoryScreen() {
-        document.getElementById('game-over-title').textContent = '逆天成功！';
-        document.getElementById('game-over-title').classList.add('victory');
-        document.getElementById('game-over-text').textContent = '你打破了命运的枷锁，成为了真正的逆命者！';
-
-        document.getElementById('stat-floor').textContent = this.map.getRealmName(this.player.realm);
-        document.getElementById('stat-enemies').textContent = this.player.enemiesDefeated;
-        document.getElementById('stat-laws').textContent = this.player.collectedLaws.length;
-        const legacyStat = document.getElementById('stat-legacy');
-        if (legacyStat) {
-            legacyStat.textContent = `+${this.lastLegacyGain || 0}（库存 ${this.legacyProgress.essence}）`;
-        }
-
-        this.showScreen('game-over-screen');
+        if (!this.systemView) this.systemView = new SystemView(this);
+        return this.systemView.showVictoryScreen();
     }
 
     // 显示牌组
@@ -14783,34 +13366,8 @@ class Game {
 
     // 渲染法宝栏
     renderTreasures() {
-        if (!this.player || !this.player.treasures) return;
-
-        const containers = [
-            document.getElementById('map-treasures'),
-            document.getElementById('battle-treasures'),
-            document.getElementById('treasures-container') // 顶部栏 (如有)
-        ];
-
-        // 构建 HTML
-        const html = this.player.treasures.map(treasure => {
-            const rarityClass = treasure.rarity || 'common';
-            return `
-                <div class="treasure-icon ${rarityClass}">
-                    ${treasure.icon}
-                    <div class="treasure-tooltip">
-                        <h4>${treasure.name}</h4>
-                        <p>${treasure.description}</p>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        // 更新所有容器
-        containers.forEach(container => {
-            if (container) {
-                container.innerHTML = html;
-            }
-        });
+        if (!this.hudView) this.hudView = new HUDView(this);
+        return this.hudView.renderTreasures();
     }
 
     // 调试模式开关
@@ -14915,68 +13472,8 @@ class Game {
 
     // 作弊：怪物选择器
     showCheatMonsterSelector() {
-        const modalId = 'cheat-monster-selector';
-        let modal = document.getElementById(modalId);
-
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.id = modalId;
-            modal.style.cssText = `
-                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                background: rgba(0,0,0,0.85); z-index: 10000; display: flex;
-                flex-direction: column; padding: 20px; overflow-y: auto;
-                color: #fff; font-family: sans-serif;
-            `;
-            document.body.appendChild(modal);
-        }
-
-        modal.innerHTML = `
-            <div style="display:flex; justify-content:space-between; margin-bottom:20px; border-bottom:1px solid #444; padding-bottom:10px;">
-                <h2 style="margin:0; color:gold;">⚔️ 试炼场 (Debug)</h2>
-                <button onclick="document.getElementById('${modalId}').style.display='none'" style="padding:5px 15px;">关闭</button>
-            </div>
-            <div id="cheat-realm-list" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:15px;"></div>
-        `;
-
-        const list = modal.querySelector('#cheat-realm-list');
-
-        // 遍历所有境界 (1-14)
-        for (let r = 1; r <= 14; r++) {
-            const realmData = REALM_ENVIRONMENTS[r] || { name: `第${r}重天` };
-            const card = document.createElement('div');
-            card.style.cssText = `
-                background: #222; border: 1px solid #555; padding: 10px; border-radius: 4px;
-            `;
-
-            // 添加两个通用测试按钮
-            const btnStyle = "display:block; width:100%; margin:5px 0; padding:8px; background:#333; color:#eee; border:none; cursor:pointer; text-align:left;";
-
-            card.innerHTML = `<h3 style="margin-top:0; color:#ddd;">${r}. ${realmData.name}</h3>`;
-
-            // 1. 生成普通测试怪
-            const normalBtn = document.createElement('button');
-            normalBtn.style.cssText = btnStyle;
-            normalBtn.textContent = "👊 生成随机小怪 (Random)";
-            normalBtn.onclick = () => {
-                this.startDebugBattle(r, 'normal');
-                modal.style.display = 'none';
-            };
-            card.appendChild(normalBtn);
-
-            // 2. 生成 Boss
-            const bossBtn = document.createElement('button');
-            bossBtn.style.cssText = btnStyle;
-            bossBtn.textContent = "💀 生成 Boss";
-            bossBtn.onclick = () => {
-                this.startDebugBattle(r, 'boss');
-                modal.style.display = 'none';
-            };
-            card.appendChild(bossBtn);
-
-            list.appendChild(card);
-        }
-
-        modal.style.display = 'flex';
+        if (!this.systemView) this.systemView = new SystemView(this);
+        return this.systemView.showCheatMonsterSelector();
     }
 
     startDebugBattle(realm, type) {
@@ -15057,131 +13554,8 @@ class Game {
     }
 
     showFateRing() {
-        const modal = document.getElementById('ring-modal');
-        const ring = this.player.fateRing;
-        const ringSystem = document.getElementById('ring-system-3d');
-
-        // Data Initialization
-        if (!ring.slots || ring.slots.length === 0) {
-            if (ring.initSlots) ring.initSlots();
-        }
-        if (!ring.unlockedPaths) ring.unlockedPaths = ['awakened'];
-        if (!ring.path) ring.path = 'awakened';
-
-        // --- Render 3D Scene (Initialize Only Once) ---
-        if (ringSystem.children.length === 0) {
-            ringSystem.innerHTML = ''; // Clear comments/whitespace
-            // 1. Add Decorative Rings with Ink & Gold Styles
-            const layers = ['core', 'inner', 'middle', 'outer'];
-            layers.forEach(layer => {
-                const el = document.createElement('div');
-                el.className = `fate-ring-layer ring-layer-${layer}`;
-                // Add runes
-                if (layer !== 'core') {
-                    for (let i = 0; i < 8; i++) {
-                        const rune = document.createElement('div');
-                        rune.className = 'ring-rune';
-                        rune.innerText = this.getRandomRune();
-                        rune.style.transform = `rotate(${i * 45}deg) translateY(-${(layer === 'inner' ? 120 : (layer === 'middle' ? 200 : 280))}px)`;
-                        el.appendChild(rune);
-                    }
-                }
-                ringSystem.appendChild(el);
-            });
-
-            // 2. Add Slots (3D Positioned)
-            const radius = 220;
-            const slotsCount = ring.slots.length;
-
-            ring.slots.forEach((slot, index) => {
-                const angleDeg = (index / slotsCount) * 360 - 90;
-                const angleRad = angleDeg * (Math.PI / 180);
-                const x = Math.cos(angleRad) * radius;
-                const y = Math.sin(angleRad) * radius;
-
-                const slotEl = document.createElement('div');
-                slotEl.className = `ring-slot-3d`;
-                slotEl.id = `ring-slot-${index}`; // Add ID for easier updates
-
-                // Drag & Drop Attributes
-                slotEl.classList.add('droppable');
-                slotEl.setAttribute('data-slot-index', index);
-
-                slotEl.style.transform = `translate(${x}px, ${y}px)`;
-
-                // Content Placeholder
-                slotEl.innerHTML = '';
-
-                // Force high z-index interaction
-                slotEl.style.zIndex = '2000';
-
-                // Click Interaction
-                slotEl.onclick = (e) => this.handleSlotClick(index, e);
-
-                ringSystem.appendChild(slotEl);
-            });
-
-            // Bind Drag Events (Removed)
-        }
-
-        // --- Update Dynamic Content ---
-        this.updateUIState(ring);
-
-        // --- Render 2D UI Overlay ---
-
-        // 1. Basic Info
-        document.getElementById('modal-ring-name').innerText = ring.name;
-        document.getElementById('modal-ring-level').innerText = `等级 ${ring.level}`;
-
-        // EXP (Polished)
-        const nextLevelExp = FATE_RING.levels[ring.level + 1]?.exp || 9999;
-        const expPercent = Math.min(100, (ring.exp / nextLevelExp) * 100);
-        const isMax = ring.level >= 10;
-
-        const expBar = document.getElementById('modal-ring-exp-bar');
-        expBar.style.width = `${expPercent}%`;
-        if (isMax) expBar.classList.add('max');
-        else expBar.classList.remove('max');
-
-        const expText = document.getElementById('modal-ring-exp-text');
-        expText.innerHTML = isMax ? '<span class="value max">MAX</span>' : `<span class="value">${ring.exp}</span> / ${nextLevelExp}`;
-
-        // 2. Bonus Info
-        const statsList = document.getElementById('modal-ring-stats');
-        statsList.innerHTML = '';
-        const bonus = ring.getStatsBonus();
-        if (bonus.maxHp) statsList.innerHTML += this.createStatRow('生命上限', `+${bonus.maxHp}`, '❤️');
-        if (bonus.energy) statsList.innerHTML += this.createStatRow('基础灵力', `+${bonus.energy}`, '⚡');
-        if (bonus.draw) statsList.innerHTML += this.createStatRow('每回合抽牌', `+${bonus.draw}`, '🎴');
-
-        // Character Specifics
-        document.getElementById('modal-ring-path').innerHTML = this.renderCurrentPathInfo(ring) + this.renderCharacterSpecifics(ring);
-
-        // 3. Right Panel (Tabbed Refactor)
-        const rightPanel = document.querySelector('.ring-ui-panel.right');
-        // Check if structure exists, if not recreate (safe to overwrite)
-        rightPanel.innerHTML = `
-            <div class="panel-tabs">
-                <div class="tab active" onclick="game.switchRingTab(this, 'library')">法则库 (${this.player.collectedLaws.length})</div>
-                <div class="tab" onclick="game.switchRingTab(this, 'resonance')">法则共鸣</div>
-            </div>
-            <div class="panel-content-area">
-                <div id="tab-content-library" class="tab-content active">
-                     ${this.renderLawLibrary(ring)}
-                </div>
-                <div id="tab-content-resonance" class="tab-content">
-                     ${this.renderResonances(ring)}
-                </div>
-            </div>
-            <div class="ring-ui-footer" id="ring-ui-footer">
-                <p class="instruction-text">点击空槽位，再选择法则库中的法则进行装配</p>
-            </div>
-        `;
-
-        // Bind Events (Library needs re-binding on update, Drag only on init - handled above)
-        this.bindLibraryEvents();
-
-        modal.classList.add('active');
+        if (!this.fateRingView) this.fateRingView = new FateRingView(this);
+        return this.fateRingView.showFateRing();
     }
 
     // Optimized UI Updater (Full State Refresh without Re-render)
@@ -15374,179 +13748,34 @@ class Game {
 
     // 渲染当前路径信息
     renderCurrentPathInfo(ring) {
-        if (!ring.path) return '';
-
-        const path = FATE_RING.paths[ring.path];
-        if (!path) return ''; // Guard against invalid path keys (e.g. 'undefined' string)
-        return `
-            <div class="ring-path-info">
-                <div style="font-weight: bold; color: var(--accent-purple); margin-bottom: 5px;">
-                    ${path.icon || '✨'} ${path.name}
-                </div>
-                <div style="font-size: 0.8rem; line-height: 1.4;">
-                    ${path.description}
-                </div>
-                ${this.renderEvolveButton(ring)}
-            </div>
-        `;
+        if (!this.fateRingView) this.fateRingView = new FateRingView(this);
+        return this.fateRingView.renderCurrentPathInfo(ring);
     }
 
     // 渲染角色专属面板
     renderCharacterSpecifics(ring) {
-        if (ring.type === 'karma' && ring.getKarmaStatus) {
-            const status = ring.getKarmaStatus();
-            const meritPercent = (status.merit / status.max) * 100;
-            const sinPercent = (status.sin / status.max) * 100;
-            return `
-                <div class="ring-specifics-panel" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-                    <h4 style="color: var(--accent-gold); margin: 0 0 10px 0;">功德金轮</h4>
-                    
-                    <div style="margin-bottom: 8px;">
-                        <div style="font-size: 0.8rem; display: flex; justify-content: space-between;">
-                            <span>功德 (防御)</span>
-                            <span>${status.merit}/${status.max}</span>
-                        </div>
-                        <div style="background: rgba(0,0,0,0.3); height: 6px; border-radius: 3px; overflow: hidden;">
-                            <div style="width: ${meritPercent}%; background: #ffd700; height: 100%;"></div>
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <div style="font-size: 0.8rem; display: flex; justify-content: space-between;">
-                            <span>业力 (攻击)</span>
-                            <span>${status.sin}/${status.max}</span>
-                        </div>
-                        <div style="background: rgba(0,0,0,0.3); height: 6px; border-radius: 3px; overflow: hidden;">
-                            <div style="width: ${sinPercent}%; background: #ff4d4d; height: 100%;"></div>
-                        </div>
-                    </div>
-                    <div style="font-size: 0.7rem; color: #888; margin-top: 5px;">
-                        满值触发【金刚法相】或【明王之怒】
-                    </div>
-                </div>
-            `;
-        }
-
-        if (ring.type === 'analysis' && ring.analyzedTypes) {
-            return `
-                <div class="ring-specifics-panel" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-                    <h4 style="color: var(--accent-blue); margin: 0 0 10px 0;">真理解析</h4>
-                    <div style="font-size: 0.8rem; color: #ddd;">
-                        已解析物种: <span style="color: var(--accent-gold);">${ring.analyzedTypes.length}</span>
-                    </div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px;">
-                        ${ring.analyzedTypes.map(t => `<span style="background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 2px; font-size: 0.7rem;">${t}</span>`).join('')}
-                    </div>
-                    ${ring.tacticalConfig && ring.tacticalConfig.damageVsType ? `
-                        <div style="margin-top: 8px; font-size: 0.8rem; color: var(--accent-green);">
-                            当前针对: <strong>${ring.tacticalConfig.damageVsType}</strong>
-                            <br>(伤害 +${(ring.tacticalConfig.damageBonus * 100).toFixed(0)}%)
-                        </div>
-                    ` : '<div style="margin-top: 5px; font-size: 0.7rem; color: #666;">暂无针对目标</div>'}
-                </div>
-            `;
-        }
-
-        if (ring.type === 'sealed') {
-            // 简单的状态提示
-            const unlockedCount = ring.slots.filter(s => s.unlocked).length;
-            return `
-                <div class="ring-specifics-panel" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-                    <h4 style="color: var(--accent-purple); margin: 0 0 5px 0;">逆生咒印</h4>
-                    <div style="font-size: 0.8rem;">
-                        解封进度: <span style="color: ${unlockedCount > 1 ? 'var(--accent-red)' : '#888'}">${unlockedCount}/12</span>
-                    </div>
-                    <div style="font-size: 0.7rem; color: #888; margin-top: 5px;">
-                        点击锁定槽位以解除封印（需付出代价）
-                    </div>
-                </div>
-             `;
-        }
-
-        return '';
+        if (!this.fateRingView) this.fateRingView = new FateRingView(this);
+        return this.fateRingView.renderCharacterSpecifics(ring);
     }
 
     // 渲染进化按钮（如果有）
     renderEvolveButton(ring) {
-        const available = getAvailablePaths(ring);
-        if (available.length > 0 && ring.level > 0) {
-            return `
-                <button onclick="game.showEvolveOptions()" 
-                    style="width: 100%; margin-top: 10px; padding: 5px; background: rgba(255,215,0,0.2); border: 1px solid var(--accent-gold); color: var(--accent-gold); border-radius: 4px; cursor: pointer;">
-                    🌟 命环进化
-                </button>
-            `;
-        }
-        return '';
+        if (!this.fateRingView) this.fateRingView = new FateRingView(this);
+        return this.fateRingView.renderEvolveButton(ring);
     }
 
 
 
     // 渲染法则库列表 (Redesigned)
     renderLawLibrary(ring) {
-        if (this.player.collectedLaws.length === 0) {
-            return '<div style="padding: 20px; text-align: center; color: #666;">暂无法则</div>';
-        }
-
-        return `
-            <div class="library-list-container">
-            ${this.player.collectedLaws.map(law => {
-            const isEquipped = ring.getSocketedLaws().includes(law.id);
-            return `
-                    <div class="law-item-row ${isEquipped ? 'equipped' : ''}" data-id="${law.id}">
-                        <div class="law-icon-box">${law.icon}</div>
-                        <div class="law-info">
-                            <div class="law-name">${law.name}</div>
-                            <div class="law-desc-mini">${(typeof getLawPassiveDescription === 'function' ? getLawPassiveDescription(law) : '') || law.description || '效果未知'}</div>
-                        </div>
-                        <div class="law-status-icon"></div>
-                    </div>
-                `;
-        }).join('')}
-            </div>
-        `;
+        if (!this.fateRingView) this.fateRingView = new FateRingView(this);
+        return this.fateRingView.renderLawLibrary(ring);
     }
 
     // 渲染法则共鸣 (Redesigned)
     renderResonances(ring) {
-        if (!typeof LAW_RESONANCES === 'object') return '';
-
-        let activeResonances = [];
-        let html = '';
-
-        html += `<div class="section-label">共鸣检测</div>`;
-
-        for (const key in LAW_RESONANCES) {
-            const resonance = LAW_RESONANCES[key];
-            const equippedLaws = ring.getSocketedLaws();
-            const hasAllLaws = resonance.laws.every(lawId => equippedLaws.includes(lawId));
-
-            // Calculate progress
-            const matchCount = resonance.laws.filter(lawId => equippedLaws.includes(lawId)).length;
-            const totalCount = resonance.laws.length;
-            const progress = (matchCount / totalCount) * 100;
-
-            if (matchCount > 0) { // Only show relevant ones
-                html += `
-                    <div class="resonance-card ${hasAllLaws ? 'active' : ''}" data-resonance-id="${resonance.id}">
-                        <div class="resonance-header">
-                            <span class="resonance-name">${resonance.name}</span>
-                            <span style="font-size:0.8rem; color:${hasAllLaws ? 'var(--accent-gold)' : '#666'}">${matchCount}/${totalCount}</span>
-                        </div>
-                        <div style="font-size:0.8rem; color:#ccc; margin-bottom:5px;">${resonance.description}</div>
-                        <div class="resonance-bar">
-                            <div class="resonance-progress" style="width: ${progress}%"></div>
-                        </div>
-                    </div>
-                `;
-            }
-        }
-
-        if (html === `<div class="section-label">共鸣检测</div>`) {
-            return `<div class="section-label">共鸣检测</div><div style="text-align:center; color:#666; font-size:0.8rem; padding:10px;">暂无共鸣迹象</div>`;
-        }
-
-        return html;
+        if (!this.fateRingView) this.fateRingView = new FateRingView(this);
+        return this.fateRingView.renderResonances(ring);
     }
 
     // 绑定命环界面事件
@@ -15632,31 +13861,8 @@ class Game {
 
     // 显示进化选项（为了复用之前的逻辑，这里把之前的 showFateRing 里的进化部分提出来）
     showEvolveOptions() {
-        const modal = document.getElementById('ring-modal'); // 复用同一个modal，或者创建一个临时的覆盖层
-        // 这里简单起见，我们直接在模态框里替换内容显示进化选项，或者弹出一个 alert/confirm 风格的选择
-
-        const ring = this.player.fateRing;
-        const availablePaths = getAvailablePaths(ring);
-
-        if (availablePaths.length === 0) return;
-
-        const slotsContainer = document.querySelector('.fate-ring-body');
-        slotsContainer.innerHTML = `
-            <div class="evolution-view">
-                <h2 class="evolution-title">选择进化路径</h2>
-                <div class="evolution-options-container">
-                    ${availablePaths.map(path => `
-                        <div class="evolution-path-card" onclick="game.evolveFateRing('${path.id}')">
-                            <div class="path-icon">${path.icon}</div>
-                            <h3 class="path-name">${path.name}</h3>
-                            <p class="path-desc">${path.description}</p>
-                            <div class="path-select-hint">点击选择</div>
-                        </div>
-                    `).join('')}
-                </div>
-                <button class="evolution-back-btn" onclick="game.showFateRing()">返回</button>
-            </div>
-         `;
+        if (!this.fateRingView) this.fateRingView = new FateRingView(this);
+        return this.fateRingView.showEvolveOptions();
     }
 
 
@@ -15740,259 +13946,8 @@ class Game {
     }
 
     showGameIntro() {
-        const modal = document.getElementById('settings-modal');
-        // 确保模态框存在
-        if (!modal) {
-            console.error('Settings modal not found!');
-            return;
-        }
-
-        const settingsContainer = document.getElementById('settings-options');
-        if (!settingsContainer) return;
-
-        // Content for specific tabs
-        // Tab 1: Overview
-        const overviewContent = `
-            <div class="intro-section">
-                <h3><span style="font-size:1.5rem; margin-right:10px;">☯</span> 游戏定位</h3>
-                <p class="intro-text">
-                    《逆命者 The Defier》是一款东方仙侠题材的卡牌 Roguelike。你将在随机地图中构筑卡组、收集法宝、推进命环成长，
-                    在不断变化的战斗与事件中完成“逆天改命”。
-                </p>
-                <ul class="intro-list">
-                    <li><strong>主线挑战</strong>：闯过 18 层天域，击败镇守强敌。</li>
-                    <li><strong>长线玩法</strong>：无尽轮回高压成长，挑战更高轮次。</li>
-                    <li><strong>对抗玩法</strong>：PVP 天道榜，镜像对战、风险画像与赛季奖励并行。</li>
-                </ul>
-            </div>
-
-            <div class="intro-section">
-                <h3>🚀 30秒上手</h3>
-                <ul class="intro-list">
-                    <li>点击「新的轮回」进入选角，游客模式可直接开局。</li>
-                    <li>进入战斗后先看敌方意图，再决定攻防节奏。</li>
-                    <li>优先围绕 1-2 套核心机制构筑，不要平均拿牌。</li>
-                    <li>打完牌后点击「结束回合」，逐步滚起资源优势。</li>
-                </ul>
-            </div>
-
-            <div class="intro-section">
-                <h3>👥 可选角色（6位）</h3>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                    <div class="char-highlight" style="border-color: var(--accent-gold);">
-                        <strong style="color: var(--accent-gold);">🤺 林风 · 逆命者</strong>
-                        <p style="font-size: 0.85rem; margin-top: 6px;">命环成长收益高，后期上限强。</p>
-                    </div>
-                    <div class="char-highlight" style="border-color: var(--accent-green);">
-                        <strong style="color: var(--accent-green);">🌿 香叶 · 被诅咒的医者</strong>
-                        <p style="font-size: 0.85rem; margin-top: 6px;">治疗与持续压制并存，续航稳定。</p>
-                    </div>
-                    <div class="char-highlight" style="border-color: var(--accent-red);">
-                        <strong style="color: var(--accent-red);">📿 无欲 · 苦行僧</strong>
-                        <p style="font-size: 0.85rem; margin-top: 6px;">功德/业力双资源，攻守切换明显。</p>
-                    </div>
-                    <div class="char-highlight" style="border-color: #2196F3;">
-                        <strong style="color: #2196F3;">📚 严寒 · 命环学者</strong>
-                        <p style="font-size: 0.85rem; margin-top: 6px;">解析与技能联动，节奏控制强。</p>
-                    </div>
-                    <div class="char-highlight" style="border-color: #8aa4ff;">
-                        <strong style="color: #8aa4ff;">🌠 墨尘 · 星律巡使</strong>
-                        <p style="font-size: 0.85rem; margin-top: 6px;">围绕命环节奏与标记链条展开。</p>
-                    </div>
-                    <div class="char-highlight" style="border-color: #4ecdc4;">
-                        <strong style="color: #4ecdc4;">🪬 宁玄 · 灵器行者</strong>
-                        <p style="font-size: 0.85rem; margin-top: 6px;">法宝与攻防同频，回合质量高。</p>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        // Tab 2: Mechanics
-        const mechanicsContent = `
-            <div class="intro-section">
-                <h3>⚔️ 战斗资源与回合节奏</h3>
-                <ul class="intro-list">
-                    <li><strong>灵力</strong>：决定当回合可打出的卡牌总费用。</li>
-                    <li><strong>奶糖</strong>：用于特定卡牌与无尽指令交易，属于关键节奏资源。</li>
-                    <li><strong>战场指令</strong>：中后期核心资源，可在关键回合完成“稳压/破阵/斩杀”反转。</li>
-                    <li><strong>敌方意图</strong>：先看意图再出牌，能显著降低无效损失。</li>
-                </ul>
-            </div>
-
-            <div class="intro-section">
-                <h3>⭕ 命环系统与路径</h3>
-                <ul class="intro-list">
-                    <li>命环升级可提升基础属性并解锁更多法则槽位。</li>
-                    <li>不同路径决定你的战斗身份与长期收益。</li>
-                    <li>命环、法则、法宝、构筑流派会形成联动增益。</li>
-                </ul>
-            </div>
-
-            <div class="intro-section">
-                <h3>🌌 五行法则与共鸣</h3>
-                <p class="intro-text">金→木→土→水→火→金。属性克制是前中期最稳定的增伤来源之一。</p>
-                <ul class="intro-list">
-                    <li><strong>克制</strong>：伤害显著提高。</li>
-                    <li><strong>被克</strong>：伤害明显衰减。</li>
-                    <li><strong>法则共鸣</strong>：同系法则与套装协同可触发额外效果。</li>
-                </ul>
-            </div>
-
-            <div class="intro-section">
-                <h3>♾️ 无尽与 🏆 PVP</h3>
-                <ul class="intro-list">
-                    <li><strong>无尽轮回</strong>：压力、赛季、季签与偏执会汇总成 DRI 主轴与对策，强调读题后的稳压与爆发平衡。</li>
-                    <li><strong>天道榜（PVP）</strong>：榜单推演、焦点约战、定向匹配、镜像演武兜底、实战与赛后复盘会同步展示 PVP DRI、主轴、对策与预留，并联动段位奖励、商店外观与经济循环。</li>
-                    <li><strong>传承系统</strong>：局外成长可强化下一轮开局强度与构筑容错。</li>
-                </ul>
-            </div>
-        `;
-
-        // Tab 3: Controls & Tips
-        const controlsContent = `
-            <div class="intro-section">
-                <h3>🎮 操作指南</h3>
-                <ul class="intro-list">
-                    <li><strong>出牌</strong>：拖拽卡牌到敌人或目标区域。</li>
-                    <li><strong>结束回合</strong>：点击右侧按钮推进回合。</li>
-                    <li><strong>目标切换</strong>：优先处理高威胁意图目标。</li>
-                    <li><strong>详情查看</strong>：悬停卡牌/图标查看完整说明。</li>
-                </ul>
-            </div>
-
-            <div class="intro-section">
-                <h3>⌨️ 常用快捷键</h3>
-                <ul class="intro-list">
-                    <li><strong>L</strong>：打开/关闭战斗日志面板。</li>
-                    <li><strong>F</strong>：切换全屏模式。</li>
-                    <li><strong>Esc</strong>：退出全屏或关闭当前弹窗。</li>
-                </ul>
-            </div>
-
-            <div class="intro-section">
-                <h3>💾 存档与同步</h3>
-                <ul class="intro-list">
-                    <li><strong>本地存档</strong>：自动保存，离线可玩。</li>
-                    <li><strong>云存档</strong>：登录后可跨设备同步。</li>
-                    <li><strong>冲突处理</strong>：系统会在冲突时提示保留版本。</li>
-                </ul>
-            </div>
-
-            <div class="intro-section">
-                <h3>💡 实战建议</h3>
-                <ul class="intro-list">
-                    <li><strong>先保命后爆发</strong>：面对高威胁回合优先防守与净化。</li>
-                    <li><strong>集中构筑</strong>：围绕单一核心机制拿牌，避免功能分散。</li>
-                    <li><strong>关注资源峰值</strong>：灵力、奶糖、指令槽留给关键回合。</li>
-                </ul>
-            </div>
-        `;
-
-        // Tab 4: Updates
-        const updatesContent = `
-            <div class="intro-section">
-                <h3>🌌 当前版本重点（V9.2）</h3>
-                <p class="intro-text">
-                    当前主线已进入 V9.2 迭代：核心目标是把“命途构筑、章节考试、赛季组织层、长线复盘”彻底打通。
-                    版本强调中盘转轴、章节风险识别、季盘组织与跨模式成长闭环，而不是单纯叠加体量。
-                </p>
-            </div>
-
-            <div class="intro-section">
-                <h3>✅ V9.2 已开发到位的核心能力</h3>
-                <ul class="intro-list">
-                    <li><strong>命途主线三阶段</strong>：每局有明确阶段目标、阶段奖励与圆满归档。</li>
-                    <li><strong>命途裂变中盘抉择</strong>：中盘可执行极化 / 转修 / 献祭等路线改写，提升局内分叉感。</li>
-                    <li><strong>章节世界规则考试化</strong>：章节天象、地脉、主宰提示与路线建议形成统一语义。</li>
-                    <li><strong>赛季天道盘组织层</strong>：精选命盘、章节归卷、洞府承诺、界痕后效、无尽轮回与 PVP 天道榜现会统一整理成训练线 / 远征线 / 验算线三条季盘任务，并同步出现在奖励页、构筑快照、洞府总览与文本 payload；奖励页会按押卷中 / 正卷 / 险卷 / 欠卷分支直接露出赛季裁定、债账 / 验证 / 下一步行动卡，锁线期会优先强调当前承诺动作，定榜后的正卷 / 险卷还会额外露出可点击的“七日劫数”旁验证状，同时保留路线引导与地图轻偏置；主验证通过会直接清债或把押卷升成正卷，主验证失败会把旧债改记成反证/险卷，而周挑战旁验证只负责补强推荐与复盘，不会替代主验证本身。</li>
-                    <li><strong>DRI 风险指数面板</strong>：章节简报、挑战观察站与无尽轮回现已共享风险指数、主导维度与对策提示，读题语言更统一。</li>
-                    <li><strong>挑战试炼压强 DRI</strong>：观察站挑战页、锁定开局横幅与地图运行横幅现已同步展示试炼压强、主轴维度与应对提示。</li>
-                    <li><strong>挑战观察站深化</strong>：观察站留痕现会自动生成复刻重点 / 失手剖面、训练标签、演练目标与同主题对比轴，并提供跨赛道历史留痕筛面、训练预设与样本排序，可按窗口 / 样本层 / 结果 / 主题检索旧样本并快速切回常用训练视角。</li>
-                            <li><strong>观星共鸣 / 路线合卷 / 洞府议程</strong>：挑战观察站给出的精选命盘现会冻结成章节观星线索，并展开“修行课题 -> 章节答卷状态 -> 章节观星回响”的作答链路，持续驱动命盘共鸣、路线合卷、开战触发加成、训练标签与样本路径，也支持按推荐路线一键锁线；章节归卷后，奖励页会生成观星回响总结卡，洞府里的归卷书架会长期保存章节答卷、评分与训练建议，并支持把当前主练立成“洞府议程 / 命盘研究”，消耗天机 / 业果换取章节节点偏置、章中研究处置、锁线契约 bonus、失败后的残卷回收与章末结题奖励。</li>
-                    <li><strong>仇敌追猎链路预判</strong>：地图总览、章节风险卡与远征态势会同步给出追猎历史、下一次高压窗口与建议对策。</li>
-                    <li><strong>地图节点工程化 2.0</strong>：观星 / 禁术 / 裂隙 / 灵契线路会形成跨章工程主轴，持续改写后续地图结构。</li>
-                    <li><strong>工程事件联动 2.1</strong>：观星 / 裂隙主轴会继续偏置章节事件池，并为命中事件追加货位、折价、命环、天机等强化。</li>
-                    <li><strong>工程追猎联动 2.2</strong>：跨章工程主轴现已同步影响悬赏冲突、路线分歧、远征态势、章节总览桥接与仇敌追猎窗口。</li>
-                    <li><strong>无尽轮回 DRI 同轴化</strong>：赛季词条、季签、崩盘账本与偏执层现已统一折算成轮回压强 DRI、主轴与预留建议。</li>
-                    <li><strong>PVP 风险画像 + 焦点约战闭环</strong>：榜单推演、对手档案回看、PVP DRI、对策/预留、焦点约战单、定向匹配、镜像演武兜底、赛后复盘卡、段位倍率、连胜奖励、交易日志、称号与法相佩戴现已完整打通。</li>
-                </ul>
-                <p class=\"intro-text\">
-                    同步锚点：三周一章 / feedbackLine / objective / pressureWindow，确保游戏内更新页、游戏介绍页与 progress.md 保持同一套版本口径。
-                </p>
-            </div>
-
-            <div class="intro-section">
-                <h3>🧭 推荐体验路线（V9.2）</h3>
-                <ul class="intro-list">
-                    <li>先开主线跑完一条命途三阶段，观察章节 DRI 与命途任务的联动节奏。</li>
-                    <li>再进无尽轮回对照 DRI 主轴与赛季账本，确认“崩盘维度”并反向优化主线构筑。</li>
-                    <li>最后进入天道榜，对照 PVP DRI、主轴与对策微调构筑，再利用赛季倍率与商店经济把强势套路沉淀成长期竞争力。</li>
-                </ul>
-            </div>
-
-            <div class="intro-section">
-                <h3>🛰 下一迭代方向（V9.x）</h3>
-                <ul class="intro-list">
-                    <li><strong>PVP 赛季题面深化</strong>：继续补更细的赛季题面提示、分段标签与跨场对照线索，让 PVP DRI 不只在开战前可读，也能继续承接到赛后复盘。</li>
-                    <li><strong>挑战观察站深化</strong>：继续补跨周检索、更长档期聚合与更细历史分层，让观察站从“可检索样本库”继续走向长期打法训练器。</li>
-                    <li><strong>洞府议程深化</strong>：继续补更多议程分支与更重的契约代价，让“归卷 -> 立项 -> 章中处置 -> 锁线契约 -> 残卷回收 / 结题 -> 压成工程”的循环继续长出更强的策略分叉。</li>
-                    <li><strong>赛季天道盘深化</strong>：继续补更完整的采样 / 锁线 / 定榜阶段包装、更多季盘 lane 奖励与跨周收口规则，让季盘在现有“赛季裁定 + 债账 / 验证 / 下一步行动卡 + 路线引导 + 地图轻偏置”基础上继续成长为真正的赛季外场规划板。</li>
-                </ul>
-            </div>
-
-            <div class="intro-section">
-                <h3>👨‍💻 项目与反馈</h3>
-                <p class="intro-text">
-                    Designed & Developed by <strong>HealthOvO</strong> Team.
-                </p>
-                <p class="intro-text" style="font-size: 0.9rem;">
-                    若你遇到问题，或想反馈某个流派 / 章节 / Boss 的体验，欢迎在仓库提交 issue / discussion。
-                </p>
-                <div style="margin-top:20px; text-align:center;">
-                    <a href="https://github.com/HealthOvO/The-Defier" target="_blank" style="color:var(--accent-cyan); text-decoration:none; border-bottom:1px dashed var(--accent-cyan);">GitHub Repository</a>
-                </div>
-            </div>
-        `;
-
-
-        this.introTabContent = {
-            overview: overviewContent,
-            mechanics: mechanicsContent,
-            controls: controlsContent,
-            updates: updatesContent
-        };
-        settingsContainer.innerHTML = `
-        <div class="game-intro-container">
-            <div class="intro-header">
-                <h2>📖 逆命者指南</h2>
-                <div class="subtitle">The Defier's Handbook</div>
-            </div>
-
-            <nav class="intro-tabs">
-                <button class="intro-tab-btn active" data-tab="overview" onclick="game.switchIntroTab('overview')">综述</button>
-                <button class="intro-tab-btn" data-tab="mechanics" onclick="game.switchIntroTab('mechanics')">机制</button>
-                <button class="intro-tab-btn" data-tab="controls" onclick="game.switchIntroTab('controls')">操作</button>
-                <button class="intro-tab-btn" data-tab="updates" onclick="game.switchIntroTab('updates')">更新</button>
-            </nav>
-
-            <div class="intro-content-area">
-                <div id="intro-tab-content" class="intro-tab-panel active" data-active-tab="overview">
-                    ${overviewContent}
-                </div>
-            </div>
-
-            <div style="text-align: center; margin-top: auto; font-size: 0.8rem; color: rgba(255,255,255,0.2); padding-top: 10px;">
-                v9.2 当前版本 | Breaking Fate since 2024
-            </div>
-        </div>
-        `;
-
-        modal.classList.add('active');
-        if (typeof requestAnimationFrame === 'function') {
-            requestAnimationFrame(() => this.switchIntroTab('overview'));
-        } else {
-            this.switchIntroTab('overview');
-        }
+        if (!this.systemView) this.systemView = new SystemView(this);
+        return this.systemView.showGameIntro();
     }
 
     // 卡牌使用效果
@@ -16515,23 +14470,8 @@ class Game {
 
     // 显示技能确认弹窗
     showSkillConfirmModal() {
-        const modal = document.getElementById('skill-confirm-modal');
-        const titleEl = document.getElementById('skill-confirm-title');
-        const iconEl = document.getElementById('skill-confirm-icon');
-        const descEl = document.getElementById('skill-confirm-desc');
-
-        if (this.player.activeSkill) {
-            titleEl.textContent = `${this.player.activeSkill.name} `;
-            iconEl.textContent = this.player.activeSkill.icon || '⚡';
-
-            if (this.player.activeSkill.getDescription) {
-                descEl.textContent = this.player.activeSkill.getDescription(this.player.skillLevel);
-            } else {
-                descEl.textContent = this.player.activeSkill.description;
-            }
-        }
-
-        modal.classList.add('active');
+        if (!this.systemView) this.systemView = new SystemView(this);
+        return this.systemView.showSkillConfirmModal();
     }
 
     // 确认释放技能
@@ -16574,109 +14514,14 @@ class Game {
 
     // 显示通用确认弹窗
     showConfirmModal(message, onConfirm, onCancel = null) {
-        let modal = document.getElementById('generic-confirm-modal');
-
-        // 动态创建模态框
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.id = 'generic-confirm-modal';
-            modal.className = 'modal';
-            modal.style.zIndex = '10000'; // 确保在最上层
-            modal.innerHTML = `
-                <div class="modal-content" style="text-align: center; max-width: 400px; padding: 30px;">
-                    <h3 id="generic-confirm-title" style="color: var(--accent-gold); margin-bottom: 20px;">提示</h3>
-                    <p id="generic-confirm-message" style="color: #ccc; margin-bottom: 30px; line-height: 1.6; font-size: 1.1rem; white-space: pre-line;"></p>
-                    <div style="display: flex; justify-content: center; gap: 20px;">
-                        <button id="generic-confirm-btn" class="menu-btn primary small">确定</button>
-                        <button id="generic-cancel-btn" class="menu-btn small">取消</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-
-            // 绑定通用关闭
-            const closeBtn = document.createElement('button');
-            closeBtn.className = 'modal-close';
-            closeBtn.innerHTML = '×';
-            closeBtn.onclick = () => modal.classList.remove('active');
-            const modalContent = modal.querySelector('.modal-content');
-            if (!modalContent) return;
-            modalContent.appendChild(closeBtn);
-        }
-
-        // 更新内容
-        const msgEl = document.getElementById('generic-confirm-message');
-        const confirmBtn = document.getElementById('generic-confirm-btn');
-        const cancelBtn = document.getElementById('generic-cancel-btn');
-
-        if (msgEl) msgEl.textContent = message;
-
-        // 绑定事件 (使用 onclick 覆盖之前的绑定，防止多次触发)
-        if (confirmBtn) {
-            confirmBtn.onclick = () => {
-                modal.classList.remove('active');
-                if (typeof onConfirm === 'function') onConfirm();
-            };
-        }
-
-        if (cancelBtn) {
-            cancelBtn.onclick = () => {
-                modal.classList.remove('active');
-                if (typeof onCancel === 'function') onCancel();
-            };
-        }
-
-        // 显示
-        modal.classList.add('active');
+        if (!this.systemView) this.systemView = new SystemView(this);
+        return this.systemView.showConfirmModal(message, onConfirm, onCancel);
     }
 
     // 显示通用提示弹窗 (Alert)
     showAlertModal(message, title = '提示', onOk = null) {
-        let modal = document.getElementById('generic-alert-modal');
-
-        // 动态创建模态框
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.id = 'generic-alert-modal';
-            modal.className = 'modal';
-            modal.style.zIndex = '10001'; // 比Confirm更高
-            modal.innerHTML = `
-                <div class="modal-content" style="text-align: center; max-width: 400px; padding: 30px;">
-                    <h3 id="generic-alert-title" style="color: var(--accent-gold); margin-bottom: 20px;">提示</h3>
-                    <p id="generic-alert-message" style="color: #ccc; margin-bottom: 30px; line-height: 1.6; font-size: 1.1rem; white-space: pre-line;"></p>
-                    <div style="display: flex; justify-content: center;">
-                        <button id="generic-alert-btn" class="menu-btn primary small" style="min-width: 100px;">确定</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-
-            // 绑定通用关闭
-            const closeBtn = document.createElement('button');
-            closeBtn.className = 'modal-close';
-            closeBtn.innerHTML = '×';
-            closeBtn.onclick = () => modal.classList.remove('active');
-            const modalContent = modal.querySelector('.modal-content');
-            if (!modalContent) return;
-            modalContent.appendChild(closeBtn);
-        }
-
-        // 更新内容
-        const msgEl = document.getElementById('generic-alert-message');
-        const titleEl = document.getElementById('generic-alert-title');
-        if (msgEl) msgEl.innerHTML = message.replace(/\n/g, '<br>');
-        if (titleEl) titleEl.textContent = title;
-
-        // 按钮事件
-        const okBtn = document.getElementById('generic-alert-btn');
-        if (okBtn) {
-            okBtn.onclick = () => {
-                if (onOk) onOk();
-                modal.classList.remove('active');
-            };
-        }
-
-        modal.classList.add('active');
+        if (!this.systemView) this.systemView = new SystemView(this);
+        return this.systemView.showAlertModal(message, title, onOk);
     }
 
     // 获取卡牌基础价格
@@ -26300,56 +24145,8 @@ class Game {
 
     // 显示命环进化选择
     showEvolutionSelection(targetTier) {
-        const modal = document.getElementById('event-modal');
-        const titleEl = document.getElementById('event-title');
-        const iconEl = document.getElementById('event-icon');
-        const descEl = document.getElementById('event-desc');
-        const choicesEl = document.getElementById('event-choices');
-        if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) return;
-
-        titleEl.textContent = '命环进化';
-        iconEl.textContent = '🧬';
-        descEl.textContent = '你的命环因力量满盈而震颤，显化出数条进化的可能...';
-        choicesEl.innerHTML = '';
-
-        // 筛选可用路径
-        const availablePaths = Object.values(FATE_RING.paths).filter(path =>
-            path.tier === targetTier &&
-            (!path.requires || path.requires.includes(this.player.fateRing.path))
-        );
-
-        // 如果是 Tier 3 (逆天之环)，特殊处理 requiresAny
-        if (targetTier === 3) {
-            const ultimatePath = FATE_RING.paths['defiance'];
-            if (ultimatePath) availablePaths.push(ultimatePath);
-        }
-
-        availablePaths.forEach(path => {
-            const btn = document.createElement('button');
-            btn.className = 'event-choice';
-            btn.innerHTML = `
-    <div class="choice-icon">${path.icon || '✨'}</div>
-        <div class="choice-content">
-            <div class="choice-text">进化：${path.name}</div>
-            <div class="choice-result">${path.description}</div>
-        </div>
-`;
-
-            btn.onclick = () => {
-                this.player.evolveFateRing(path.id);
-                Utils.showBattleLog(`命环进化为：${path.name} `);
-                modal.classList.remove('active');
-
-                // 刷新UI
-                if (document.getElementById('ring-modal').classList.contains('active')) {
-                    this.showFateRing();
-                }
-            };
-
-            choicesEl.appendChild(btn);
-        });
-
-        modal.classList.add('active');
+        if (!this.fateRingView) this.fateRingView = new FateRingView(this);
+        return this.fateRingView.showEvolutionSelection(targetTier);
     }
 
     // 应用服务效果
@@ -27179,553 +24976,86 @@ ${treasure ? `获得法宝：${treasure.name}
 
     // 显示营地选项
     showCampfire(node) {
-        this.campfireNode = node;
-
-        // 使用事件弹窗显示营地选项
-        const modal = document.getElementById('event-modal');
-        const iconEl = document.getElementById('event-icon');
-        const titleEl = document.getElementById('event-title');
-        const descEl = document.getElementById('event-desc');
-        const choicesEl = document.getElementById('event-choices');
-        if (!modal || !iconEl || !titleEl || !descEl || !choicesEl) return;
-        iconEl.textContent = '🏕️';
-        titleEl.textContent = '野外营地';
-        descEl.textContent = '你找到了一个安全的休息地点，可以在这里恢复精力或磨练技艺...';
-        choicesEl.innerHTML = '';
-
-        // 选项1: 休息恢复HP
-        const healAmount = Math.floor(this.player.maxHp * 0.2);
-        const restBtn = document.createElement('button');
-        restBtn.className = 'event-choice';
-        restBtn.innerHTML = `
-            <div>💤 休息(恢复 ${healAmount} HP)</div>
-            <div class="choice-effect">当前HP: ${this.player.currentHp}/${this.player.maxHp}</div>
-        `;
-        restBtn.onclick = () => this.campfireRest();
-        choicesEl.appendChild(restBtn);
-
-        // 选项2: 升级卡牌
-        const upgradableCount = this.player.deck.filter(c => canUpgradeCard(c)).length;
-        const upgradeBtn = document.createElement('button');
-        upgradeBtn.className = 'event-choice';
-        upgradeBtn.innerHTML = `
-            <div>⬆️ 升级卡牌</div>
-            <div class="choice-effect">可升级: ${upgradableCount} 张</div>
-        `;
-        if (upgradableCount > 0) {
-            upgradeBtn.onclick = () => this.showCampfireUpgrade();
-        } else {
-            upgradeBtn.classList.add('disabled');
-            upgradeBtn.style.opacity = '0.5';
-            upgradeBtn.style.cursor = 'not-allowed';
-        }
-        choicesEl.appendChild(upgradeBtn);
-
-        // 选项3: 战术演练（未来两战首回合额外抽牌）
-        const drillBtn = document.createElement('button');
-        drillBtn.className = 'event-choice';
-        drillBtn.innerHTML = `
-            <div>📘 战术演练</div>
-            <div class="choice-effect">接下来 2 场战斗：首回合额外抽 1 张牌，并获得命环经验</div>
-        `;
-        drillBtn.onclick = () => this.campfireDrill();
-        choicesEl.appendChild(drillBtn);
-
-        // 选项4: 布设结界（未来两战开场护盾）
-        const wardBtn = document.createElement('button');
-        wardBtn.className = 'event-choice';
-        wardBtn.innerHTML = `
-            <div>🧿 布设结界</div>
-            <div class="choice-effect">接下来 2 场战斗：开场获得 10 护盾</div>
-        `;
-        wardBtn.onclick = () => this.campfireWard();
-        choicesEl.appendChild(wardBtn);
-
-        const bountyBtn = document.createElement('button');
-        bountyBtn.className = 'event-choice';
-        bountyBtn.innerHTML = `
-            <div>📜 悬赏部署</div>
-            <div class="choice-effect">接下来 2 场战斗：胜利额外获得灵石</div>
-        `;
-        bountyBtn.onclick = () => this.campfireBounty();
-        choicesEl.appendChild(bountyBtn);
-
-        const pulseBtn = document.createElement('button');
-        pulseBtn.className = 'event-choice';
-        pulseBtn.innerHTML = `
-            <div>⚡ 灵息调和</div>
-            <div class="choice-effect">接下来 2 场战斗：首回合灵力 +1</div>
-        `;
-        pulseBtn.onclick = () => this.campfirePulse();
-        choicesEl.appendChild(pulseBtn);
-
-        const medicBtn = document.createElement('button');
-        medicBtn.className = 'event-choice';
-        medicBtn.innerHTML = `
-            <div>🩹 战地整备</div>
-            <div class="choice-effect">接下来 2 场战斗：胜利后恢复生命</div>
-        `;
-        medicBtn.onclick = () => this.campfireMedic();
-        choicesEl.appendChild(medicBtn);
-
-        const insightCostHp = Math.max(6, Math.floor(this.player.maxHp * 0.1));
-        const insightBtn = document.createElement('button');
-        insightBtn.className = 'event-choice';
-        insightBtn.innerHTML = `
-            <div>🕯️ 逆炼冥想（-${insightCostHp} HP）</div>
-            <div class="choice-effect">接下来 3 场战斗：命环经验额外 +30%</div>
-        `;
-        if (this.player.currentHp > insightCostHp + 1) {
-            insightBtn.onclick = () => this.campfireInsight(insightCostHp);
-        } else {
-            insightBtn.classList.add('disabled');
-            insightBtn.style.opacity = '0.5';
-            insightBtn.style.cursor = 'not-allowed';
-        }
-        choicesEl.appendChild(insightBtn);
-
-        // 选项5: 移除卡牌（如果牌组足够大）
-        if (this.player.deck.length > 5) {
-            const removeBtn = document.createElement('button');
-            removeBtn.className = 'event-choice';
-            removeBtn.innerHTML = `
-                <div>🗑️ 净化(移除一张牌)</div>
-                <div class="choice-effect">精简牌组，提升效率</div>
-            `;
-            removeBtn.onclick = () => this.showCampfireRemove();
-            choicesEl.appendChild(removeBtn);
-        }
-
-        modal.classList.add('active');
+        if (!this.campfireView) this.campfireView = new CampfireView(this);
+        return this.campfireView.showCampfire(node);
     }
 
     // 营地休息
     campfireRest() {
-        const healAmount = Math.max(1, Math.floor(this.player.maxHp * 0.2 * this.getEndlessHealingMultiplier()));
-        this.player.heal(healAmount);
-        Utils.showBattleLog(`休息恢复 ${healAmount} 点生命！`);
-
-        this.closeModal();
-        this.completeCampfire();
+        if (!this.campfireView) this.campfireView = new CampfireView(this);
+        return this.campfireView.campfireRest();
     }
 
     campfireDrill() {
-        if (typeof this.player.grantAdventureBuff === 'function') {
-            this.player.grantAdventureBuff('firstTurnDrawBoostBattles', 2);
-        }
-        this.player.fateRing.exp += 20;
-        this.player.checkFateRingLevelUp();
-        Utils.showBattleLog('营地演练完成：接下来 2 场战斗首回合额外抽牌，命环经验 +20');
-        this.closeModal();
-        this.completeCampfire();
+        if (!this.campfireView) this.campfireView = new CampfireView(this);
+        return this.campfireView.campfireDrill();
     }
 
     campfireWard() {
-        if (typeof this.player.grantAdventureBuff === 'function') {
-            this.player.grantAdventureBuff('openingBlockBoostBattles', 2);
-        }
-        Utils.showBattleLog('营地结界生效：接下来 2 场战斗开场护盾 +10');
-        this.closeModal();
-        this.completeCampfire();
+        if (!this.campfireView) this.campfireView = new CampfireView(this);
+        return this.campfireView.campfireWard();
     }
 
     campfireBounty() {
-        if (typeof this.player.grantAdventureBuff === 'function') {
-            this.player.grantAdventureBuff('victoryGoldBoostBattles', 2);
-        }
-        this.player.fateRing.exp += 12;
-        this.player.checkFateRingLevelUp();
-        Utils.showBattleLog('悬赏部署完成：接下来 2 场战斗胜利额外灵石，命环经验 +12');
-        this.closeModal();
-        this.completeCampfire();
+        if (!this.campfireView) this.campfireView = new CampfireView(this);
+        return this.campfireView.campfireBounty();
     }
 
     campfirePulse() {
-        if (typeof this.player.grantAdventureBuff === 'function') {
-            this.player.grantAdventureBuff('firstTurnEnergyBoostBattles', 2);
-        }
-        Utils.showBattleLog('灵息调和完成：接下来 2 场战斗首回合灵力 +1');
-        this.closeModal();
-        this.completeCampfire();
+        if (!this.campfireView) this.campfireView = new CampfireView(this);
+        return this.campfireView.campfirePulse();
     }
 
     campfireMedic() {
-        if (typeof this.player.grantAdventureBuff === 'function') {
-            this.player.grantAdventureBuff('victoryHealBoostBattles', 2);
-        }
-        this.player.fateRing.exp += 10;
-        this.player.checkFateRingLevelUp();
-        Utils.showBattleLog('战地整备完成：接下来 2 场战斗胜利后恢复生命，命环经验 +10');
-        this.closeModal();
-        this.completeCampfire();
+        if (!this.campfireView) this.campfireView = new CampfireView(this);
+        return this.campfireView.campfireMedic();
     }
 
     campfireInsight(costHp = 8) {
-        const hpCost = Math.max(1, Math.floor(Number(costHp) || 8));
-        this.player.currentHp = Math.max(1, this.player.currentHp - hpCost);
-        if (typeof this.player.grantAdventureBuff === 'function') {
-            this.player.grantAdventureBuff('ringExpBoostBattles', 3);
-        }
-        Utils.showBattleLog(`逆炼冥想成功：失去 ${hpCost} 生命，接下来 3 场战斗命环经验额外提升`);
-        this.closeModal();
-        this.completeCampfire();
+        if (!this.campfireView) this.campfireView = new CampfireView(this);
+        return this.campfireView.campfireInsight(costHp);
     }
 
     // 显示升级卡牌界面 (Refactored: Ink & Gold Edition)
     showCampfireUpgrade() {
-        this.closeModal();
-
-        const modal = document.getElementById('deck-modal');
-        // Add specific class for styling override (no scroll on parent)
-        modal.classList.add('upgrade-mode');
-
-        // Ensure we remove this class when modal closes (simple patch: override the close button or handle in general close)
-        // For now, let's attach a one-time listener to the close button to remove the class
-        const closeBtn = modal.querySelector('.close-btn');
-        if (closeBtn) {
-            closeBtn.onclick = () => {
-                modal.classList.remove('upgrade-mode');
-                this.closeModal();
-            };
-        }
-        const container = document.getElementById('deck-view-cards');
-
-        // Reset Modal State
-        container.innerHTML = '';
-        container.style.display = 'block'; // Reset flex styles from previous usage
-
-        // --- 1. Main Layout Container ---
-        const layout = document.createElement('div');
-        layout.className = 'upgrade-modal-layout';
-
-        // --- 2. Left: Card Grid ---
-        const cardGrid = document.createElement('div');
-        cardGrid.className = 'upgrade-card-grid';
-
-        // --- 3. Right: Preview Panel ---
-        const previewPanel = document.createElement('div');
-        previewPanel.className = 'upgrade-preview-panel';
-        previewPanel.innerHTML = `
-            <div class="preview-title">悟道演练</div>
-            <div class="preview-placeholder" id="ug-preview-placeholder">
-                <span style="font-size:3rem; display:block; margin-bottom:20px; opacity:0.3">👆</span>
-                点击左侧卡牌<br>推演进阶效果
-            </div>
-            
-            <div id="ug-preview-content" style="display:none; width:100%; flex-direction:column; align-items:center;">
-                <div class="preview-card-container" id="ug-preview-card"></div>
-                
-                <div class="preview-diff-box" id="ug-diff-box">
-                    <!-- Dynamic Rows -->
-                </div>
-
-                <button class="confirm-upgrade-btn" id="ug-confirm-btn" disabled>
-                    <span class="btn-text">注灵进阶</span>
-                </button>
-            </div>
-        `;
-
-        layout.appendChild(cardGrid);
-        layout.appendChild(previewPanel);
-        container.appendChild(layout);
-
-        // --- 4. Logic & Interaction ---
-        const placeholder = previewPanel.querySelector('#ug-preview-placeholder');
-        const contentArea = previewPanel.querySelector('#ug-preview-content');
-        const cardContainer = previewPanel.querySelector('#ug-preview-card');
-        const diffBox = previewPanel.querySelector('#ug-diff-box');
-        const confirmBtn = previewPanel.querySelector('#ug-confirm-btn');
-
-        let selectedIndex = -1;
-        let selectedCard = null;
-
-        // Render Cards
-        this.player.deck.forEach((card, index) => {
-            if (!canUpgradeCard(card)) return; // Only show upgradable
-
-            // Create standard card
-            const cardEl = Utils.createCardElement(card, index);
-
-            // Interaction
-            cardEl.addEventListener('click', () => {
-                // Audio
-                if (typeof audioManager !== 'undefined') audioManager.playSFX('click');
-
-                // Highlight Selection
-                cardGrid.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
-                cardEl.classList.add('selected');
-
-                selectedIndex = index;
-                selectedCard = card;
-
-                // Show Preview
-                this.updateUpgradePreview(card, placeholder, contentArea, cardContainer, diffBox, confirmBtn);
-            });
-
-            cardGrid.appendChild(cardEl);
-        });
-
-        // Bind Confirm
-        confirmBtn.onclick = () => {
-            if (selectedIndex === -1) return;
-
-            // Audio
-            if (typeof audioManager !== 'undefined') audioManager.playSFX('powerup'); // Or 'upgrade'
-
-            // Visual Effect
-            const overlay = document.createElement('div');
-            overlay.className = 'upgrade-flash-overlay';
-            container.appendChild(overlay);
-
-            // Execute Logic
-            setTimeout(() => {
-                const upgradedCard = upgradeCard(selectedCard);
-                // Replace in deck (must handle reference carefully or splice)
-                // Assuming deck is array of objects
-                this.player.deck[selectedIndex] = upgradedCard;
-
-                this.closeModal();
-                this.completeCampfire();
-            }, 500);
-        };
-
-        modal.classList.add('active');
-
-        // Update Title (Optional override)
-        const title = modal.querySelector('h2');
-        if (title) title.textContent = '🔥 营地 | 悟道进阶';
+        if (!this.campfireView) this.campfireView = new CampfireView(this);
+        return this.campfireView.showCampfireUpgrade();
     }
 
     // Helper: Update Preview Panel
     updateUpgradePreview(card, placeholder, contentArea, cardContainer, diffBox, confirmBtn) {
-        placeholder.style.display = 'none';
-        contentArea.style.display = 'flex';
-        confirmBtn.disabled = false;
-
-        // Generate Upgraded Version
-        const upgraded = upgradeCard(card);
-
-        // 1. Render Card Visual
-        cardContainer.innerHTML = '';
-        const upgradedEl = Utils.createCardElement(upgraded, 999);
-        // Remove hover effects on preview card to keep it static
-        upgradedEl.style.transform = 'none';
-        upgradedEl.style.pointerEvents = 'none';
-        cardContainer.appendChild(upgradedEl);
-
-        // 2. Diff Logic
-        let diffHtml = '';
-
-        // Name Diff (if changed)
-        if (card.name !== upgraded.name) {
-            diffHtml += `
-                <div class="diff-row">
-                    <span class="diff-label">名讳</span>
-                    <div>
-                        <span class="diff-val-old">${card.name}</span>
-                        <span class="diff-val-new"> ➤ ${upgraded.name}</span>
-                    </div>
-                </div>`;
-        }
-
-        // Damage Diff
-        if (card.damage !== upgraded.damage && upgraded.damage) {
-            diffHtml += `
-                <div class="diff-row">
-                    <span class="diff-label">威力</span>
-                    <div>
-                        <span class="diff-val-old">${card.damage || 0}</span>
-                        <span class="diff-val-new"> ➤ ${upgraded.damage}</span>
-                    </div>
-                </div>`;
-        }
-
-        // Block Diff
-        if (card.block !== upgraded.block && upgraded.block) {
-            diffHtml += `
-                <div class="diff-row">
-                    <span class="diff-label">护盾</span>
-                    <div>
-                        <span class="diff-val-old">${card.block || 0}</span>
-                        <span class="diff-val-new"> ➤ ${upgraded.block}</span>
-                    </div>
-                </div>`;
-        }
-
-        // Cost Diff
-        if (card.cost !== upgraded.cost) {
-            diffHtml += `
-                <div class="diff-row">
-                    <span class="diff-label">消耗</span>
-                    <div>
-                        <span class="diff-val-old">${card.cost}</span>
-                        <span class="diff-val-new"> ➤ ${upgraded.cost}</span>
-                    </div>
-                </div>`;
-        }
-
-        // Description Diff (Always show as summary)
-        diffHtml += `
-            <div class="diff-row" style="flex-direction:column; border:none; margin-top:5px;">
-                <span class="diff-label" style="margin-bottom:2px;">效果演变</span>
-                <span class="diff-val-new" style="font-size:0.85rem; line-height:1.4">${upgraded.description}</span>
-            </div>
-        `;
-
-        diffBox.innerHTML = diffHtml;
+        if (!this.campfireView) this.campfireView = new CampfireView(this);
+        return this.campfireView.updateUpgradePreview(card, placeholder, contentArea, cardContainer, diffBox, confirmBtn);
     }
 
 
     // 升级选中的卡牌
     campfireUpgradeCard(index) {
-        const card = this.player.deck[index];
-        if (!canUpgradeCard(card)) return;
-
-        const upgraded = upgradeCard(card);
-        this.player.deck[index] = upgraded;
-
-        Utils.showBattleLog(`${card.name} 升级为 ${upgraded.name}！`);
-
-        this.closeModal();
-        this.completeCampfire();
+        if (!this.campfireView) this.campfireView = new CampfireView(this);
+        return this.campfireView.campfireUpgradeCard(index);
     }
 
     // 显示移除卡牌界面（营地版 - Ink & Gold Refactor）
     showCampfireRemove() {
-        this.closeModal();
-
-        const modal = document.getElementById('purification-modal');
-        const grid = document.getElementById('purification-grid');
-        const costDisplay = document.getElementById('purification-cost-display');
-        const confirmBtn = document.getElementById('purification-confirm-btn');
-
-        if (!modal || !grid) {
-            console.error('Purification UI elements missing!');
-            return;
-        }
-
-        // Reset State
-        grid.innerHTML = '';
-        modal.classList.add('active');
-
-        // Campfire specific adjustments
-        costDisplay.innerHTML = '<span style="color: var(--accent-green); font-size: 1.1em;">✨ 净化心灵</span>';
-
-        confirmBtn.disabled = true;
-        confirmBtn.onclick = null; // Clear listeners
-
-        let selectedIndex = -1;
-
-        // Render Cards
-        this.player.deck.forEach((card, index) => {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'purification-card-wrapper';
-
-            // Create standard card element
-            const cardEl = Utils.createCardElement(card, index);
-            wrapper.appendChild(cardEl);
-
-            // Delete Intent Overlay (Visual)
-            const overlay = document.createElement('div');
-            overlay.className = 'delete-intent-overlay';
-            overlay.innerHTML = '<span class="delete-icon">🔥</span>';
-            wrapper.appendChild(overlay);
-
-            // Selection Logic
-            wrapper.addEventListener('click', () => {
-                // Deselect others
-                document.querySelectorAll('.purification-card-wrapper').forEach(el => el.classList.remove('selected'));
-
-                if (selectedIndex === index) {
-                    // Deselect
-                    selectedIndex = -1;
-                    confirmBtn.disabled = true;
-                    confirmBtn.textContent = '选择移除对象';
-                } else {
-                    // Select
-                    selectedIndex = index;
-                    wrapper.classList.add('selected');
-                    confirmBtn.disabled = false;
-                    confirmBtn.textContent = `确认焚毁 (Burn)`;
-
-                    if (typeof audioManager !== 'undefined') audioManager.playSFX('click');
-                }
-            });
-
-            grid.appendChild(wrapper);
-        });
-
-        // Confirm Action
-        confirmBtn.onclick = () => {
-            if (selectedIndex === -1) return;
-
-            const cardName = this.player.deck[selectedIndex].name;
-            const targetWrapper = grid.children[selectedIndex];
-
-            // Visual Burn Effect
-            const burn = document.createElement('div');
-            burn.className = 'card-burn-effect';
-            targetWrapper.appendChild(burn);
-
-            if (typeof audioManager !== 'undefined') audioManager.playSFX('fire');
-
-            // Delay actual removal
-            setTimeout(() => {
-                this.campfireRemoveCard(selectedIndex);
-
-                // Close UI manually here since campfireRemoveCard might need to handle logic differently if we didn't pass params
-                // Actually campfireRemoveCard calls closeModal/completeCampfire, so we are good.
-            }, 800);
-        };
+        if (!this.campfireView) this.campfireView = new CampfireView(this);
+        return this.campfireView.showCampfireRemove();
     }
 
     // 移除选中的卡牌（营地版 - 逻辑处理）
     campfireRemoveCard(index) {
-        const card = this.player.deck[index];
-        this.player.deck.splice(index, 1);
-
-        // Removed tracking count logic if specific to shop, or keep it if global? 
-        // Let's increment global remove count just in case
-        this.player.removeCount = (this.player.removeCount || 0) + 1;
-
-        Utils.showBattleLog(`【${card.name}】已化为灰烬...`);
-        this.closeModal();
-        this.completeCampfire();
+        if (!this.campfireView) this.campfireView = new CampfireView(this);
+        return this.campfireView.campfireRemoveCard(index);
     }
 
     // 完成营地
     completeCampfire() {
-        if (this.campfireNode) {
-            this.map.completeNode(this.campfireNode);
-            this.campfireNode = null;
-        }
-        this.autoSave();
-        this.showScreen('map-screen');
+        if (!this.campfireView) this.campfireView = new CampfireView(this);
+        return this.campfireView.completeCampfire();
     }
     // --- Auth System ---
     showLoginModal() {
-        if (
-            typeof AuthService !== 'undefined' &&
-            AuthService.isCloudEnabled &&
-            !AuthService.isCloudEnabled()
-        ) {
-            const modalMsg = document.getElementById('auth-message');
-            if (modalMsg) modalMsg.innerText = '云存档未配置，当前仅可离线游玩';
-            Utils.showBattleLog('云存档未配置，已切换为离线模式');
-            return;
-        }
-
-        const modal = document.getElementById('auth-modal');
-        if (modal) {
-            modal.classList.add('active');
-            // Clear inputs
-            const u = document.getElementById('auth-username');
-            const p = document.getElementById('auth-password');
-            const m = document.getElementById('auth-message');
-            if (u) u.value = '';
-            if (p) p.value = '';
-            if (m) m.innerText = '';
-        }
+        if (!this.systemView) this.systemView = new SystemView(this);
+        return this.systemView.showLoginModal();
     }
 
     async handleLogin() {
@@ -27861,113 +25191,8 @@ ${treasure ? `获得法宝：${treasure.name}
 
     // 显示存档位选择模态框 (Spirit Tablet Style)
     renderSaveSlots(slots) {
-        const modal = document.getElementById('save-slots-modal');
-        const container = document.getElementById('slots-container');
-        if (!modal || !container) return;
-
-        container.innerHTML = '';
-
-        slots.forEach((slotData, index) => {
-            const slotEl = document.createElement('div');
-            const isEmpty = !slotData;
-            slotEl.className = `save-slot ${isEmpty ? 'empty' : ''}`;
-
-            const slotName = `命 牌 · ${['一', '二', '三', '四'][index] || (index + 1)}`;
-
-            let contentHtml = '';
-            if (isEmpty) {
-                contentHtml = `
-                    <div class="slot-visual" style="border-color: #555; opacity: 0.5;">?</div>
-                    <div class="slot-empty-text">虚位以待</div>
-                `;
-            } else {
-                let date = new Date(slotData.timestamp).toLocaleDateString();
-                let dateLabel = "更新";
-                if (slotData.player && slotData.player.registerTime) {
-                    date = new Date(slotData.player.registerTime).toLocaleDateString();
-                    dateLabel = "注册";
-                }
-                const realm = (slotData.player && slotData.player.realm) ? slotData.player.realm : 1;
-                const hp = (slotData.player && slotData.player.currentHp) ? slotData.player.currentHp : '?';
-                const roleId = (slotData.player && slotData.player.characterId);
-
-                let roleName = '未知角色';
-                let roleIcon = '👤';
-                if (roleId && typeof CHARACTERS !== 'undefined' && CHARACTERS[roleId]) {
-                    const c = CHARACTERS[roleId];
-                    roleName = c.name;
-                    // Resolve Image Path: Check .image, .portrait, or .avatar (if path)
-                    const imagePath = c.image || c.portrait || (c.avatar && c.avatar.includes('/') ? c.avatar : null);
-
-                    if (imagePath) {
-                        // Use image
-                        roleIcon = ''; // Clear text icon
-                        // We'll handle image via style in the HTML construction loop below
-                    } else {
-                        roleIcon = c.avatar || '👤';
-                    }
-
-                    // Store for use below
-                    slotData._tempImage = imagePath;
-                }
-
-                let maxRealm = 1;
-                if (slotData.unlockedRealms && Array.isArray(slotData.unlockedRealms)) {
-                    maxRealm = Math.max(...slotData.unlockedRealms);
-                } else if (slotData.player && slotData.player.realm) {
-                    maxRealm = slotData.player.realm;
-                }
-
-                let realmDisplay = `第${maxRealm}重天`;
-                if (maxRealm > 18) {
-                    realmDisplay = `<span style="color:var(--accent-gold); font-weight:bold;">已通关</span>`;
-                }
-
-                contentHtml = `
-                    <div class="slot-visual ${slotData._tempImage ? 'is-image' : ''}" 
-                         style="${slotData._tempImage ? `background-image: url('${slotData._tempImage}');` : ''}">
-                        ${slotData._tempImage ? '' : roleIcon}
-                    </div>
-                
-                    <div class="slot-info-primary">${roleName} <span style="font-size:0.8em; opacity:0.7">| ${realmDisplay}</span></div>
-                    <div class="slot-info-secondary">❤️ ${hp}  📅 ${dateLabel}: ${date}</div>
-                `;
-            }
-
-            const actionsHtml = isEmpty ?
-                `<button class="talisman-btn small" onclick="game.selectSlot(${index}, 'new')">
-                    <div class="talisman-paper"></div>
-                    <div class="talisman-content">
-                        <span class="btn-text">开启轮回</span>
-                    </div>
-                </button>` :
-                `<button class="talisman-btn small primary" onclick="game.selectSlot(${index}, 'load')">
-                    <div class="talisman-paper"></div>
-                    <div class="talisman-content">
-                        <span class="btn-text">继续</span>
-                    </div>
-                </button>
-                <button class="talisman-btn small" onclick="game.selectSlot(${index}, 'overwrite')" style="margin-top:5px; transform:scale(0.9);">
-                    <div class="talisman-paper" style="border-color:var(--accent-red);"></div>
-                    <div class="talisman-content">
-                        <span class="btn-text" style="color:var(--accent-red);">覆盖</span>
-                    </div>
-                </button>`;
-
-            slotEl.innerHTML = `
-                <div class="slot-header">${slotName}</div>
-                <div class="slot-content">
-                    ${contentHtml}
-                </div>
-                <div class="slot-actions">
-                    ${actionsHtml}
-                </div>
-            `;
-
-            container.appendChild(slotEl);
-        });
-
-        modal.classList.add('active');
+        if (!this.systemView) this.systemView = new SystemView(this);
+        return this.systemView.renderSaveSlots(slots);
     }
 
     // 选择存档位操作
@@ -28150,33 +25375,8 @@ ${treasure ? `获得法宝：${treasure.name}
 
     // 显示存档冲突弹窗
     showSaveConflictModal(localData, cloudData, cloudTime) {
-        const modal = document.getElementById('save-conflict-modal');
-        if (!modal) return;
-
-        // Populate Info
-        const localInfo = document.getElementById('local-save-info');
-        const cloudInfo = document.getElementById('cloud-save-info');
-
-        const formatInfo = (data, time) => {
-            if (!data) return '无数据';
-            const date = time ? new Date(time).toLocaleString() : (data.timestamp ? new Date(data.timestamp).toLocaleString() : '未知时间');
-            const realm = (data.player && data.player.realm) ? data.player.realm : '?';
-            const hp = (data.player && data.player.currentHp) ? data.player.currentHp : '?';
-            const gold = (data.player && data.player.gold) ? data.player.gold : '?';
-            return `
-                    <div style="margin-bottom:4px">📅 ${date}</div>
-                <div style="margin-bottom:4px">🏔️ 第 ${realm} 重天</div>
-                <div>❤️ ${hp} | 💰 ${gold}</div>
-                `;
-        };
-
-        if (localInfo) localInfo.innerHTML = formatInfo(localData, localData ? localData.timestamp : null);
-        if (cloudInfo) cloudInfo.innerHTML = formatInfo(cloudData, cloudTime);
-
-        // Store temp data
-        this.tempCloudData = cloudData;
-
-        modal.classList.add('active');
+        if (!this.systemView) this.systemView = new SystemView(this);
+        return this.systemView.showSaveConflictModal(localData, cloudData, cloudTime);
     }
 
     // 解决存档冲突
