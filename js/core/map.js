@@ -1224,246 +1224,25 @@ class GameMap {
 
     // 渲染地图 (V3 - Ascension Style + Flexbox Fix)
     render() {
-        console.log('[Debug] Map.render called');
-        const container = document.getElementById('map-screen');
-        if (!container) {
-            console.error('[Debug] #map-screen container missing!');
-            return;
+        if (!this.mapView) {
+            this.mapView = new MapView(this.game, this);
         }
-
-        const currentRealm = this.game.player.realm;
-        const mapKey = (this.game && typeof this.game.getMapCacheKey === 'function')
-            ? this.game.getMapCacheKey(currentRealm)
-            : String(currentRealm);
-        const nodeLayoutSignature = this.getNodeLayoutSignature();
-        const existingMap = container.querySelector('.map-screen-v3');
-
-        // Smart Render Check: If map exists and the node layout is unchanged, update in-place.
-        if (
-            existingMap
-            && existingMap.dataset.mapKey === mapKey
-            && existingMap.dataset.nodeSignature === nodeLayoutSignature
-        ) {
-            console.log('[Debug] Updating existing map in-place');
-            this.updateMapState();
-            return;
-        }
-
-        console.log('[Debug] Full map rebuild for realm:', currentRealm);
-
-        container.innerHTML = `
-            <div class="map-screen-v3" data-realm="${currentRealm}" data-map-key="${mapKey}" data-node-signature="${nodeLayoutSignature}">
-                <div class="map-bg-layer map-bg-stars"></div>
-                <div class="map-bg-layer map-bg-mist"></div>
-                
-                <div class="map-v3-header">
-                    <button class="back-btn" onclick="game.showScreen('realm-select-screen')">← 返回关卡</button>
-                    <div class="map-header-right">
-                        <div class="player-status-bar">
-                            <div class="status-item hp">
-                                <span class="icon">❤️</span>
-                                <span id="map-hp">${this.game.player.currentHp}/${this.game.player.maxHp}</span>
-                            </div>
-                            <div class="status-item gold">
-                                <span class="icon">💰</span>
-                                <span id="map-gold">${this.game.player.gold}</span>
-                            </div>
-                            <div class="status-item floor">
-                                <span class="icon">🏔️</span>
-                                <span id="map-floor">${this.getRealmName(this.game.player.realm)}</span>
-                            </div>
-                        </div>
-                        <div id="map-situation-overview" class="map-situation-overview" style="display:none;"></div>
-                        <div id="map-chapter-risk-card" class="map-chapter-risk-card" style="display:none;"></div>
-                        <div id="map-chapter-brief" class="map-chapter-brief" style="display:none;"></div>
-                        <div id="map-adventure-buffs" class="map-adventure-buffs" style="display:none;"></div>
-                        <div id="map-route-hints" class="map-route-hints" style="display:none;"></div>
-                        <div id="map-endless-panel" class="map-endless-panel" style="display:none;"></div>
-                        <div id="map-legacy-mission" class="map-legacy-mission" style="display:none;">
-                            <div class="mission-title">传承试炼</div>
-                            <div class="mission-desc">暂无进行中的试炼</div>
-                            <div class="mission-track">
-                                <div class="mission-fill"></div>
-                            </div>
-                            <div class="mission-progress">0/0</div>
-                        </div>
-                        <div id="map-run-path-mission" class="map-legacy-mission" style="display:none;">
-                            <div class="mission-title">命途主线</div>
-                            <div class="mission-desc">暂无进行中的命途</div>
-                            <div class="mission-track">
-                                <div class="mission-fill"></div>
-                            </div>
-                            <div class="mission-progress">0/0</div>
-                        </div>
-                        <div id="map-run-path-flash" class="map-run-path-flash" style="display:none;"></div>
-                    </div>
-                </div>
-
-                <div class="map-scroll-container" id="map-scroll-container">
-                    <div class="map-content-wrapper" id="map-content-wrapper">
-                        <!-- SVG Layer -->
-                        <svg class="map-connections-svg" id="map-svg-layer"></svg>
-                    </div>
-                </div>
-
-                <div class="map-footer">
-                    <button class="menu-btn small" onclick="game.showDeck()">查看牌组</button>
-                    <button class="menu-btn small" onclick="game.showTreasureBag()">法宝囊</button>
-                    <button class="menu-btn small" onclick="game.showFateRing()">命环</button>
-                </div>
-            </div>
-        `;
-
-        this.renderV3Nodes();
-        this.updateStatusBar();
-        this.updateLegacyMissionTracker();
-
-        // Initial Auto-scroll (Only on full rebuild)
-        setTimeout(() => {
-            // Find the highest row index that has potential activity
-            let targetRowIndex = 0;
-
-            // Search from top down
-            for (let r = this.nodes.length - 1; r >= 0; r--) {
-                const row = this.nodes[r];
-                const hasActive = row.some(n => n.accessible && !n.completed);
-                if (hasActive) {
-                    targetRowIndex = r;
-                    break;
-                }
-                const hasCompleted = row.some(n => n.completed);
-                if (hasCompleted && targetRowIndex === 0) {
-                    targetRowIndex = r;
-                }
-            }
-
-            // Target element in that row
-            const targetRowEl = document.querySelector(`.node-row-v3[data-row-index="${targetRowIndex}"]`);
-            const scrollContainer = document.getElementById('map-scroll-container');
-            if (targetRowEl) {
-                // Keep map positioning inside the map pane only. scrollIntoView can move
-                // the whole map surface on mobile, which leaves the page visually cut off.
-                if (scrollContainer) {
-                    const targetTop = targetRowEl.offsetTop - ((scrollContainer.clientHeight - targetRowEl.offsetHeight) / 2);
-                    scrollContainer.scrollTo({
-                        top: Math.max(0, targetTop),
-                        left: 0,
-                        behavior: 'auto',
-                    });
-                }
-            } else {
-                if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
-            }
-        }, 150);
+        this.mapView.render();
     }
 
     // 更新地图状态 (In-Place Update)
     updateMapState() {
-        this.updateStatusBar();
-        this.updateLegacyMissionTracker();
-        this.updateEndlessPanel();
-        this.updateRouteHintPanel();
-        const chapter = this.game && typeof this.game.getChapterDisplaySnapshot === 'function'
-            ? this.game.getChapterDisplaySnapshot(this.game.player?.realm || 1)
-            : null;
-
-        // Update Node Classes
-        this.nodes.forEach(row => {
-            row.forEach(node => {
-                const el = document.querySelector(`.map-node-v3[data-node-id="${node.id}"]`);
-                if (el) {
-                    const riskProfile = this.resolveNodeRiskProfile(node, chapter);
-                    node.riskProfile = riskProfile;
-                    el.dataset.riskTier = riskProfile?.tierId || 'none';
-                    const tooltipEl = el.querySelector('.node-tooltip');
-                    if (tooltipEl) tooltipEl.innerHTML = this.buildNodeTooltipHtml(node, chapter);
-                    const existingBadge = el.querySelector('.node-risk-badge');
-                    const shouldShowBadge = !!(riskProfile && ['high', 'extreme'].includes(riskProfile.tierId) && node.accessible && !node.completed);
-                    if (existingBadge) existingBadge.remove();
-                    if (shouldShowBadge) {
-                        const badge = document.createElement('div');
-                        badge.className = `node-risk-badge tier-${riskProfile.tierId}`;
-                        badge.textContent = `DRI ${riskProfile.index}`;
-                        el.appendChild(badge);
-                    }
-                    // Reset State Classes
-                    el.classList.remove('completed', 'locked', 'current', 'accessible');
-
-                    // Apply New State
-                    if (node.completed) el.classList.add('completed');
-                    else if (!node.accessible) el.classList.add('locked');
-                    else {
-                        el.classList.add('current');
-                        // Ensure listener is still valid (it should be, we didn't replace element)
-                        // But if we wanted to be safe we could re-add, but that risks duplication.
-                        // Assuming click listener persists on DOM element.
-                    }
-                }
-            });
-        });
-
-        // Re-draw connections to reflect state changes
-        this.drawConnections();
+        if (!this.mapView) {
+            this.mapView = new MapView(this.game, this);
+        }
+        this.mapView.updateMapState();
     }
 
     renderV3Nodes() {
-        const wrapper = document.getElementById('map-content-wrapper');
-        const svgLayer = document.getElementById('map-svg-layer');
-        if (!wrapper || !svgLayer) return;
-        const chapter = this.game && typeof this.game.getChapterDisplaySnapshot === 'function'
-            ? this.game.getChapterDisplaySnapshot(this.game.player?.realm || 1)
-            : null;
-
-        // V3 Flexbox Layout System (Centered & Robust)
-        this.nodes.forEach((rowNodes, rowIndex) => {
-            const rowEl = document.createElement('div');
-            rowEl.className = 'node-row-v3';
-            rowEl.dataset.rowIndex = rowIndex;
-            // Flex layout handles positioning automatically via justify-content: center
-
-            rowNodes.forEach((node, i) => {
-                const nodeEl = document.createElement('div');
-                const riskProfile = this.resolveNodeRiskProfile(node, chapter);
-                node.riskProfile = riskProfile;
-                nodeEl.className = `map-node-v3 ${node.type}`;
-                nodeEl.dataset.nodeId = node.id;
-                nodeEl.dataset.riskTier = riskProfile?.tierId || 'none';
-
-                nodeEl.innerHTML = `
-                    <div class="node-icon">${node.icon}</div>
-                    ${node.polluted ? '<div class="pollution-mark">☠️</div>' : ''}
-                    ${riskProfile && ['high', 'extreme'].includes(riskProfile.tierId) && node.accessible && !node.completed ? `<div class="node-risk-badge tier-${riskProfile.tierId}">DRI ${riskProfile.index}</div>` : ''}
-                    <div class="node-tooltip">${this.buildNodeTooltipHtml(node, chapter)}</div>
-                `;
-
-                nodeEl.addEventListener('click', () => this.onNodeClick(node));
-
-                if (node.completed) nodeEl.classList.add('completed');
-                else if (!node.accessible) nodeEl.classList.add('locked');
-                else {
-                    nodeEl.classList.add('current');
-                }
-
-                // Just append, no manual positioning
-                rowEl.appendChild(nodeEl);
-            });
-
-            wrapper.appendChild(rowEl);
-        });
-
-        // Draw Lines after DOM update and potential reflow
-        // Use timeout to ensure geometry is final
-        setTimeout(() => this.drawConnections(), 50);
-        // Also redraw on resize
-        if (!this._resizeObserver) {
-            this._resizeObserver = new ResizeObserver(() => {
-                // Throttle drawing
-                if (this._resizeTimeout) clearTimeout(this._resizeTimeout);
-                this._resizeTimeout = setTimeout(() => this.drawConnections(), 100);
-            });
+        if (!this.mapView) {
+            this.mapView = new MapView(this.game, this);
         }
-        this._resizeObserver.disconnect();
-        this._resizeObserver.observe(wrapper);
+        this.mapView.renderV3Nodes();
     }
 
     drawConnections() {
