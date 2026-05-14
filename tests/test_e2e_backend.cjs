@@ -68,10 +68,10 @@ const runE2E = async () => {
     const testPass = 'pwd123';
 
     const regRes = await AuthService.register(testUser, testPass);
-    console.log('2. 注册:', regRes.success ? '成功' : '失败');
+    console.log('2. 注册:', regRes.success ? '成功' : '失败', regRes.message || '');
 
     const loginRes = await AuthService.login(testUser, testPass);
-    console.log('3. 登录:', loginRes.success ? '成功' : '失败');
+    console.log('3. 登录:', loginRes.success ? '成功' : '失败', loginRes.message || '');
 
     const saveRes = await AuthService.saveCloudData({ level: 10, hp: 100 }, 0);
     console.log('4. 上传存档:', saveRes.success ? '成功' : '失败');
@@ -79,11 +79,11 @@ const runE2E = async () => {
     const getRes = await AuthService.getCloudData();
     console.log('5. 读取存档:', getRes.success && getRes.slots[0] && getRes.slots[0].level === 10 ? '成功' : '失败', getRes);
 
-    const ghostRes = await AuthService.uploadGhostData({ characterId: 'Hero', currentHp: 500 }, 3);
-    console.log('6. 上传残影:', ghostRes.success ? '成功' : '失败');
+    const ghostRes = await AuthService.uploadGhostData({ characterId: 'Hero', currentHp: 500, maxHp: 1000, deck: [] }, 3);
+    console.log('6. 上传残影:', ghostRes.success ? '成功' : '失败', ghostRes.message || '');
 
     const fetchGhostRes = await AuthService.fetchRandomGhost(3);
-    console.log('7. 随机拉取残影:', fetchGhostRes.success ? '成功' : '失败');
+    console.log('7. 随机拉取残影:', fetchGhostRes.success ? '成功' : '失败', fetchGhostRes.message || '');
 
     console.log('--- E2E 测试结束 ---');
 };

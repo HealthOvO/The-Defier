@@ -50,6 +50,20 @@ function validateGhostData(realm, ghostData) {
         return { valid: false, reason: 'Deck contains invalid card formats' };
     }
 
+    // 5. Treasures Validation
+    if (ghostData.treasures) {
+        if (!Array.isArray(ghostData.treasures)) {
+            return { valid: false, reason: 'Treasures must be an array' };
+        }
+        if (ghostData.treasures.length > 50) {
+            return { valid: false, reason: 'Too many treasures (exceeds 50)' };
+        }
+        const invalidTreasures = ghostData.treasures.filter(t => typeof t !== 'object' || !t.id);
+        if (invalidTreasures.length > 0) {
+            return { valid: false, reason: 'Treasures contain invalid formats' };
+        }
+    }
+
     return { valid: true };
 }
 

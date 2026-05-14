@@ -14,11 +14,11 @@ app.use(cors()); // 允许跨域，方便前端直接调用
 app.use(express.json()); // 解析 JSON body
 
 // Routes
-app.use('/auth', authRoutes);
-app.use('/saves', savesRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/saves', savesRoutes);
 // 因为迁移文档中定义的获取/保存全局数据前缀为 /user
-app.use('/user', savesRoutes); 
-app.use('/ghosts', ghostsRoutes);
+app.use('/api/user', savesRoutes); 
+app.use('/api/ghosts', ghostsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

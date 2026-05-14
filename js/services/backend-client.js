@@ -405,11 +405,18 @@
             if (!user) return { success: false, message: '未登录' };
 
             try {
+                const ghostData = this.buildGhostPayload(player);
+                const dataStr = JSON.stringify(ghostData);
+                const salt = Date.now().toString(36) + Math.random().toString(36).substr(2);
+                const signature = await this.generateSignature(dataStr, salt);
+
                 await this.requestServer(`${this.getServerConfig().ghostPathPrefix}/current`, {
                     method: 'POST',
                     data: {
                         realm: Math.max(1, Math.floor(Number(realm) || 1)),
-                        ghostData: this.buildGhostPayload(player)
+                        ghostData,
+                        salt,
+                        signature
                     }
                 });
                 return { success: true };

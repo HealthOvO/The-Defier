@@ -2,12 +2,13 @@ const express = require('express');
 const { db } = require('../db/database');
 const { authenticate } = require('../middleware/auth');
 const { validateGhostData } = require('../utils/ghostValidator');
+const { verifySignature } = require('../utils/hmac');
 
 const router = express.Router();
 
 // POST /ghosts/current - 上传玩家残影数据
 router.post('/current', authenticate, (req, res) => {
-    const { realm, ghostData } = req.body;
+    const { realm, ghostData, signature, salt } = req.body;
     const userId = req.user.id;
     const userName = req.user.username;
 
@@ -16,15 +17,24 @@ router.post('/current', authenticate, (req, res) => {
     }
 
     const nRealm = Math.max(1, Number(realm) || 1);
+    const dataStr = typeof ghostData === 'string' ? ghostData : JSON.stringify(ghostData);
+
+    // HMAC 防篡改签名校验
+    if (signature && salt) {
+        if (!verifySignature(dataStr, salt, signature)) {
+            return res.status(403).json({ success: false, message: '幽灵数据被篡改，拒绝上传' });
+        }
+    } else {
+        console.warn(`[Anti-Cheat] User ${userId} uploaded ghost data without HMAC signature.`);
+    }
 
     // 防作弊校验
-    const validation = validateGhostData(nRealm, ghostData);
+    const validation = validateGhostData(nRealm, typeof ghostData === 'string' ? JSON.parse(ghostData) : ghostData);
     if (!validation.valid) {
         console.warn(`[Anti-Cheat] Ghost rejected for User ${userId}: ${validation.reason}`);
         return res.status(403).json({ success: false, message: `幽灵数据异常，拒绝上传: ${validation.reason}` });
     }
 
-    const dataStr = typeof ghostData === 'string' ? ghostData : JSON.stringify(ghostData);
     const now = Date.now();
 
     // 先查询该用户是否已有残影，如果有则更新，没有则插入

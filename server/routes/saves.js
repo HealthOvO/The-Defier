@@ -36,7 +36,6 @@ router.post('/', authenticate, (req, res) => {
     }
 
     const sTime = Number(saveTime) || Date.now();
-    const dataStr = typeof saveData === 'string' ? saveData : JSON.stringify(saveData);
 
     db.run(
         `INSERT INTO game_saves (user_id, slot_index, save_data, save_time) 
