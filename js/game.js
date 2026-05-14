@@ -2455,100 +2455,8 @@ class Game {
     }
 
     getStrategicRouteForecasts() {
-        return {
-            utility: {
-                id: 'utility',
-                icon: '🗺️',
-                label: '机缘补给线',
-                desc: '下一重天更容易遇见商路、观星与修整节点，适合稳定转向。',
-                shift: {
-                    event: 0.05,
-                    shop: 0.04,
-                    rest: 0.02,
-                    observatory: 0.03,
-                    memory_rift: 0.02,
-                    enemy: -0.08,
-                    elite: -0.03,
-                    forbidden_altar: -0.01
-                }
-            },
-            assault: {
-                id: 'assault',
-                icon: '⚔️',
-                label: '试炼锋路',
-                desc: '下一重天更偏向试炼、精英、锻炉与禁术节点，适合冒险爆发。',
-                shift: {
-                    trial: 0.06,
-                    elite: 0.03,
-                    forge: 0.025,
-                    forbidden_altar: 0.025,
-                    enemy: -0.05,
-                    rest: -0.02,
-                    shop: -0.02,
-                    observatory: -0.01
-                }
-            },
-            rift: {
-                id: 'rift',
-                icon: '🪞',
-                label: '裂隙回响线',
-                desc: '下一重天更容易出现记忆裂隙、观星台与事件节点，适合改写构筑。',
-                shift: {
-                    memory_rift: 0.06,
-                    observatory: 0.04,
-                    event: 0.04,
-                    enemy: -0.06,
-                    elite: -0.03,
-                    shop: -0.02,
-                    rest: -0.01
-                }
-            },
-            runPathShatter: {
-                id: 'runPathShatter',
-                icon: '⚔️',
-                label: '裂锋推进线',
-                desc: '下一重天更偏向精英、试炼、锻炉与禁术节点，适合继续抢节奏。',
-                shift: {
-                    elite: 0.05,
-                    trial: 0.055,
-                    forge: 0.03,
-                    forbidden_altar: 0.025,
-                    enemy: -0.05,
-                    rest: -0.025,
-                    shop: -0.02
-                }
-            },
-            runPathBulwark: {
-                id: 'runPathBulwark',
-                icon: '🛡️',
-                label: '镇御修整线',
-                desc: '下一重天更偏向营地、锻炉、商店与精英节点，适合稳步补强。',
-                shift: {
-                    rest: 0.05,
-                    forge: 0.04,
-                    shop: 0.03,
-                    elite: 0.02,
-                    event: -0.03,
-                    enemy: -0.04,
-                    forbidden_altar: -0.01
-                }
-            },
-            runPathInsight: {
-                id: 'runPathInsight',
-                icon: '🔮',
-                label: '窥盘裂隙线',
-                desc: '下一重天更偏向事件、观星台、记忆裂隙与灵契节点，适合继续扩信息。',
-                shift: {
-                    event: 0.05,
-                    observatory: 0.05,
-                    memory_rift: 0.045,
-                    spirit_grotto: 0.03,
-                    enemy: -0.05,
-                    elite: -0.03,
-                    shop: -0.01
-                }
-            }
-        };
+        if (!this.shopManager) this.shopManager = new ShopManager(this);
+        return this.shopManager.getStrategicRouteForecasts();
     }
 
     getStrategicRouteForecast(forecastId = 'utility') {
@@ -5081,86 +4989,8 @@ class Game {
     }
 
     showLawDetail(law, isCollected = false) {
-        const modal = document.getElementById('law-detail-modal');
-        if (!modal || !law) return;
-        const iconEl = document.getElementById('law-detail-icon');
-        const captionEl = document.getElementById('law-detail-caption');
-        const nameEl = document.getElementById('law-detail-name');
-        const rarityEl = document.getElementById('law-detail-rarity');
-        const descEl = document.getElementById('law-detail-desc');
-        const passiveEl = document.getElementById('law-detail-passive');
-        const linksEl = document.getElementById('law-detail-links');
-        const sourceEl = document.getElementById('law-detail-source');
-        const chipsEl = document.getElementById('law-detail-chips');
-        const noteEl = document.getElementById('law-detail-note');
-        const headerEl = document.getElementById('law-detail-header');
-        const stageEl = document.getElementById('law-detail-stage');
-        const readinessEl = document.getElementById('law-detail-readiness');
-        if (!iconEl || !nameEl || !headerEl || !chipsEl) return;
-
-        const rarity = law.rarity || 'rare';
-        const passiveText = typeof getLawPassiveDescription === 'function' ? getLawPassiveDescription(law) : (law.description || '未知效果');
-        const relatedResonances = this.getLawRelatedResonances(law);
-        const readinessList = this.getLawResonanceAvailability(law);
-        const unlockCards = Array.isArray(law.unlockCards) ? law.unlockCards.filter(Boolean) : [];
-        const activeResonanceCount = readinessList.filter((entry) => entry.state === 'active').length;
-        const readyResonanceCount = readinessList.filter((entry) => entry.state === 'ready').length;
-
-        headerEl.className = 'detail-header';
-        headerEl.classList.add(`rarity-${rarity}`);
-        stageEl.classList.toggle('locked', !isCollected);
-        iconEl.textContent = isCollected ? (law.icon || '📜') : '❔';
-        nameEl.textContent = isCollected ? law.name : '未解法则';
-        rarityEl.textContent = this.getLawRarityText(rarity);
-        captionEl.textContent = isCollected ? `${this.getLawElementLabel(law.element)}属性残响已被识别` : '法则仍被迷雾遮蔽，需要先在战斗中盗取';
-        descEl.innerHTML = isCollected ? law.description : '你只能感知到一缕残响。完成战斗并触发法则盗取，才能彻底辨识它的结构。';
-        passiveEl.textContent = isCollected ? passiveText : '尚未掌握，无法完整解析其被动结构。';
-        sourceEl.textContent = this.getLawSource(law);
-        chipsEl.innerHTML = [
-            `<span class="detail-status-chip ${isCollected ? 'owned' : 'locked'}">${isCollected ? '已掌握' : '未掌握'}</span>`,
-            `<span class="detail-status-chip">${this.getLawElementLabel(law.element)}属性</span>`,
-            `<span class="detail-status-chip rarity-chip rarity-${rarity}">${this.getLawRarityText(rarity)}</span>`
-        ].join('');
-        if (activeResonanceCount > 0) {
-            noteEl.textContent = '当前命环已点亮相关共鸣，可直接围绕主区被动与解锁内容继续构筑。';
-        } else if (readyResonanceCount > 0) {
-            noteEl.textContent = '你已收齐相关组件，只差把法则装入命环；可优先调整命环再看牌组联动。';
-        } else {
-            noteEl.textContent = isCollected
-                ? '先看右侧状态与元素，再回到主区确认被动和可解锁内容。'
-                : '当前更重要的是获取路径，掌握后再决定是否围绕它补共鸣。';
-        }
-
-        const relatedText = [];
-        if (relatedResonances.length > 0) {
-            relatedText.push(`关联共鸣：${relatedResonances.map((res) => res.name).join(' ｜ ')}`);
-        }
-        if (unlockCards.length > 0) {
-            relatedText.push(`解锁卡牌：${unlockCards.join(' ｜ ')}`);
-        }
-        if (relatedText.length === 0) {
-            relatedText.push(isCollected ? '当前未记录到额外共鸣或解锁卡牌。' : '掌握后可查看它能点亮的共鸣与卡牌。');
-        }
-        linksEl.innerHTML = relatedText.map((line) => `<p>${line}</p>`).join('');
-        if (readinessEl) {
-            readinessEl.innerHTML = readinessList.length > 0
-                ? readinessList.map((entry) => {
-                    const actions = this.getLawReadinessActions(entry);
-                    return `
-                    <div class="law-readiness-item ${entry.state}">
-                        <div class="law-readiness-title-row">
-                            <strong>${entry.resonance.name}</strong>
-                            <span class="law-readiness-chip ${entry.state}">${entry.label}</span>
-                        </div>
-                        <div class="law-readiness-desc">${entry.detail}</div>
-                        ${actions.length > 0 ? `<div class="law-readiness-actions">${actions.map((action) => `<button type="button" class="law-readiness-btn" onclick="game.handleLawReadinessAction('${action.type}', '${action.resonanceId || ''}', '${action.lawId || ''}')">${action.label}</button>`).join('')}</div>` : ''}
-                    </div>
-                `;
-                }).join('')
-                : '<div class="law-readiness-empty">暂无登记在册的关联共鸣，可先关注其被动与解锁卡牌。</div>';
-        }
-        modal.classList.add('active');
-        if (typeof audioManager !== 'undefined') audioManager.playSFX('click');
+        if (!this.shopManager) this.shopManager = new ShopManager(this);
+        return this.shopManager.showLawDetail(law, isCollected);
     }
 
 
@@ -7553,261 +7383,43 @@ class Game {
     }
 
     getStrategicEngineeringCatalog() {
-        return {
-            observatory: {
-                id: 'observatory',
-                nodeType: 'observatory',
-                icon: '🔭',
-                name: '观星工程',
-                nodeLabel: '观星台',
-                tierLabels: ['未成形', 'I阶', 'II阶', 'III阶'],
-                thresholds: [1, 2, 4],
-                effectByTier: [
-                    '尚未形成稳定观测网。',
-                    '下重更偏向观星与事件，先把情报线立起来。',
-                    '观星、事件与裂隙联动抬升，常规战斗略降。',
-                    '形成跨章观测网，功能节点更稳定，追路更可控。'
-                ],
-                shiftByTier: [
-                    {},
-                    { observatory: 0.018, event: 0.014, enemy: -0.01 },
-                    { observatory: 0.026, event: 0.02, memory_rift: 0.014, enemy: -0.016, elite: -0.004 },
-                    { observatory: 0.032, event: 0.022, memory_rift: 0.02, shop: 0.006, enemy: -0.02, elite: -0.006 }
-                ],
-                reward: {
-                    insight: 1
-                }
-            },
-            spirit_grotto: {
-                id: 'spirit_grotto',
-                nodeType: 'spirit_grotto',
-                icon: '🪷',
-                name: '灵契工程',
-                nodeLabel: '灵契窟',
-                tierLabels: ['未成形', 'I阶', 'II阶', 'III阶'],
-                thresholds: [1, 2, 4],
-                effectByTier: [
-                    '尚未形成稳定护道链。',
-                    '下重更偏向灵契与修整节点，先把护道线接起来。',
-                    '灵契、营地与观星协同补强，推进更稳。',
-                    '护道网络成形，恢复与补强节点会更连续。'
-                ],
-                shiftByTier: [
-                    {},
-                    { spirit_grotto: 0.018, rest: 0.012, observatory: 0.008 },
-                    { spirit_grotto: 0.026, rest: 0.016, observatory: 0.012, shop: 0.006, enemy: -0.01 },
-                    { spirit_grotto: 0.03, rest: 0.02, observatory: 0.014, shop: 0.01, enemy: -0.014, forbidden_altar: -0.006 }
-                ],
-                reward: {
-                    buffId: 'firstTurnDrawBoostBattles',
-                    buffAmount: 1,
-                    buffLabel: '首回合抽牌增益'
-                }
-            },
-            forbidden_altar: {
-                id: 'forbidden_altar',
-                nodeType: 'forbidden_altar',
-                icon: '🩸',
-                name: '禁术工程',
-                nodeLabel: '禁术坛',
-                tierLabels: ['未成形', 'I阶', 'II阶', 'III阶'],
-                thresholds: [1, 2, 4],
-                effectByTier: [
-                    '尚未形成禁术推进链。',
-                    '下重更偏向禁术与试炼节点，收益与代价会同步放大。',
-                    '禁术、试炼与锻炉形成加速链，路线更偏冒险爆发。',
-                    '血契链路成形，高压节点更集中，适合搏命滚雪球。'
-                ],
-                shiftByTier: [
-                    {},
-                    { forbidden_altar: 0.018, trial: 0.012, rest: -0.008 },
-                    { forbidden_altar: 0.024, trial: 0.018, elite: 0.01, forge: 0.008, rest: -0.012, shop: -0.006 },
-                    { forbidden_altar: 0.03, trial: 0.022, elite: 0.014, forge: 0.012, enemy: -0.01, rest: -0.016, shop: -0.008 }
-                ],
-                reward: {
-                    karma: 1
-                }
-            },
-            memory_rift: {
-                id: 'memory_rift',
-                nodeType: 'memory_rift',
-                icon: '🪞',
-                name: '裂隙工程',
-                nodeLabel: '记忆裂隙',
-                tierLabels: ['未成形', 'I阶', 'II阶', 'III阶'],
-                thresholds: [1, 2, 4],
-                effectByTier: [
-                    '尚未形成稳定裂隙回响。',
-                    '下重更偏向裂隙与事件节点，先把改写构筑的窗口拉出来。',
-                    '裂隙、事件与观星联动抬升，构筑改写会更连续。',
-                    '裂隙回响网成形，信息线与构筑线会同步加速。'
-                ],
-                shiftByTier: [
-                    {},
-                    { memory_rift: 0.018, event: 0.012, observatory: 0.008 },
-                    { memory_rift: 0.026, event: 0.018, observatory: 0.012, spirit_grotto: 0.006, enemy: -0.01 },
-                    { memory_rift: 0.032, event: 0.02, observatory: 0.016, spirit_grotto: 0.01, enemy: -0.014, elite: -0.004 }
-                ],
-                reward: {
-                    ringExp: 18
-                }
-            }
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getStrategicEngineeringCatalog();
     }
 
     createDefaultStrategicEngineeringState() {
-        const catalog = this.getStrategicEngineeringCatalog();
-        const tracks = {};
-        Object.keys(catalog).forEach((id) => {
-            tracks[id] = {
-                progress: 0,
-                tier: 0,
-                lastRealm: 0
-            };
-        });
-        return {
-            version: 1,
-            lastAdvancedTrackId: '',
-            history: [],
-            tracks
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.createDefaultStrategicEngineeringState();
     }
 
     resolveStrategicEngineeringTier(progress = 0, thresholds = []) {
-        const normalizedProgress = Math.max(0, Math.floor(Number(progress) || 0));
-        const marks = Array.isArray(thresholds) ? thresholds : [];
-        let tier = 0;
-        marks.forEach((threshold, index) => {
-            if (normalizedProgress >= Math.max(1, Math.floor(Number(threshold) || 0))) {
-                tier = index + 1;
-            }
-        });
-        return tier;
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.resolveStrategicEngineeringTier(progress, thresholds);
     }
 
     normalizeStrategicEngineering(source = null) {
-        const catalog = this.getStrategicEngineeringCatalog();
-        const defaults = this.createDefaultStrategicEngineeringState();
-        const root = source && typeof source === 'object' ? source : {};
-        const tracksSource = root.tracks && typeof root.tracks === 'object' ? root.tracks : {};
-        const history = Array.isArray(root.history)
-            ? root.history.filter((entry) => typeof entry === 'string' && entry.trim()).slice(-8)
-            : [];
-        const normalized = {
-            version: Math.max(1, Math.floor(Number(root.version) || defaults.version)),
-            lastAdvancedTrackId: typeof root.lastAdvancedTrackId === 'string' && catalog[root.lastAdvancedTrackId]
-                ? root.lastAdvancedTrackId
-                : '',
-            history,
-            tracks: {}
-        };
-
-        Object.keys(catalog).forEach((id) => {
-            const entry = tracksSource[id] && typeof tracksSource[id] === 'object' ? tracksSource[id] : {};
-            const progress = Math.max(0, Math.floor(Number(entry.progress) || 0));
-            const tier = this.resolveStrategicEngineeringTier(progress, catalog[id].thresholds);
-            normalized.tracks[id] = {
-                progress,
-                tier,
-                lastRealm: Number.isFinite(Number(entry.lastRealm)) ? Math.max(0, Math.floor(Number(entry.lastRealm))) : 0
-            };
-        });
-
-        return normalized;
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.normalizeStrategicEngineering(source);
     }
 
     ensureStrategicEngineeringState() {
-        if (!this.player) {
-            return this.createDefaultStrategicEngineeringState();
-        }
-        this.player.strategicEngineering = this.normalizeStrategicEngineering(this.player.strategicEngineering);
-        return this.player.strategicEngineering;
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.ensureStrategicEngineeringState();
     }
 
     getStrategicEngineeringTrackSnapshot(trackId = '', sourceState = null) {
-        const catalog = this.getStrategicEngineeringCatalog();
-        const meta = catalog[trackId];
-        if (!meta) return null;
-
-        const state = sourceState && typeof sourceState === 'object'
-            ? this.normalizeStrategicEngineering(sourceState)
-            : this.ensureStrategicEngineeringState();
-        const trackState = state.tracks && state.tracks[trackId] ? state.tracks[trackId] : { progress: 0, tier: 0, lastRealm: 0 };
-        const progress = Math.max(0, Math.floor(Number(trackState.progress) || 0));
-        const tier = this.resolveStrategicEngineeringTier(progress, meta.thresholds);
-        const maxTier = Array.isArray(meta.thresholds) ? meta.thresholds.length : 0;
-        const nextTarget = tier < maxTier ? meta.thresholds[tier] : null;
-        const remaining = nextTarget == null ? 0 : Math.max(0, Math.floor(Number(nextTarget) || 0) - progress);
-        const tierLabels = Array.isArray(meta.tierLabels) ? meta.tierLabels : [];
-        const effectByTier = Array.isArray(meta.effectByTier) ? meta.effectByTier : [];
-        const shiftByTier = Array.isArray(meta.shiftByTier) ? meta.shiftByTier : [];
-        const weightShift = shiftByTier[Math.min(tier, Math.max(0, shiftByTier.length - 1))] || {};
-
-        return {
-            ...meta,
-            trackId,
-            progress,
-            tier,
-            maxTier,
-            lastRealm: Math.max(0, Math.floor(Number(trackState.lastRealm) || 0)),
-            tierLabel: tierLabels[tier] || `T${tier}`,
-            nextTierLabel: nextTarget == null ? '封顶' : (tierLabels[tier + 1] || `T${tier + 1}`),
-            nextTarget,
-            remaining,
-            active: progress > 0,
-            effectSummary: effectByTier[tier] || effectByTier[0] || '暂无额外变化。',
-            nextEffectSummary: nextTarget == null ? '当前已达到最高阶。' : (effectByTier[tier + 1] || '下一阶效果待推演。'),
-            weightShift: { ...weightShift }
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getStrategicEngineeringTrackSnapshot(trackId, sourceState);
     }
 
     getStrategicEngineeringSnapshot() {
-        const state = this.ensureStrategicEngineeringState();
-        const allTracks = Object.keys(this.getStrategicEngineeringCatalog())
-            .map((id) => this.getStrategicEngineeringTrackSnapshot(id, state))
-            .filter(Boolean)
-            .sort((a, b) => {
-                if (b.tier !== a.tier) return b.tier - a.tier;
-                if (b.progress !== a.progress) return b.progress - a.progress;
-                return String(a.trackId || '').localeCompare(String(b.trackId || ''));
-            });
-
-        const activeTracks = allTracks.filter((entry) => entry.active);
-        const focusTrack = activeTracks.find((entry) => entry.trackId === state.lastAdvancedTrackId)
-            || activeTracks[0]
-            || null;
-        const sideTracks = focusTrack
-            ? activeTracks.filter((entry) => entry.trackId !== focusTrack.trackId).slice(0, 2)
-            : [];
-        const summary = focusTrack
-            ? `${focusTrack.icon} ${focusTrack.name} ${focusTrack.tierLabel} · ${focusTrack.effectSummary}${focusTrack.nextTarget != null ? ` · 距${focusTrack.nextTierLabel}还需 ${focusTrack.remaining} 次${focusTrack.nodeLabel}` : ' · 已达当前最高工事阶'}`
-            : '尚未形成跨章工程，优先在观星、禁术、裂隙或灵契节点里选出一条主轴。';
-        const posture = focusTrack
-            ? `主轴 ${focusTrack.name} ${focusTrack.tierLabel}${sideTracks.length > 0 ? ` · 副轴 ${sideTracks.map((entry) => `${entry.name} ${entry.tierLabel}`).join(' / ')}` : ''}`
-            : '当前还没有明确的跨章工程主轴。';
-
-        return {
-            focusTrack,
-            activeTracks,
-            allTracks,
-            lastAdvancedTrackId: state.lastAdvancedTrackId || '',
-            history: Array.isArray(state.history) ? state.history.slice() : [],
-            summary,
-            posture
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getStrategicEngineeringSnapshot();
     }
 
     getStrategicEngineeringWeightShift() {
-        const snapshot = this.getStrategicEngineeringSnapshot();
-        const merged = {};
-        snapshot.activeTracks.forEach((track) => {
-            Object.keys(track.weightShift || {}).forEach((key) => {
-                const delta = Number(track.weightShift[key]);
-                if (!Number.isFinite(delta)) return;
-                merged[key] = (merged[key] || 0) + delta;
-            });
-        });
-        return merged;
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getStrategicEngineeringWeightShift();
     }
 
     getStrategicEngineeringEventBiasProfile() {
@@ -7816,206 +7428,48 @@ class Game {
     }
 
     createDefaultHeavenlyMandateState() {
-        return {
-            version: 1,
-            weekTag: '',
-            weekLabel: '',
-            themeId: '',
-            themeLabel: '',
-            themeIcon: '',
-            themeKicker: '',
-            summaryLine: '',
-            lanes: [],
-            completedTaskCount: 0,
-            totalTaskCount: 0,
-            history: [],
-            lastSyncedAt: 0
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.createDefaultHeavenlyMandateState();
     }
 
     normalizeHeavenlyMandateTask(source = null, index = 0, laneId = 'expedition') {
-        const root = source && typeof source === 'object' ? source : {};
-        const safeTarget = Math.max(1, Math.floor(Number(root.target) || 1));
-        const rawProgress = Math.max(0, Math.floor(Number(root.progress) || 0));
-        const completed = !!root.completed || rawProgress >= safeTarget;
-        const progress = Math.min(Math.max(rawProgress, completed ? safeTarget : 0), safeTarget);
-        const fallbackId = `${laneId}_task_${index + 1}`;
-        const fallbackLabel = `敕令任务 ${index + 1}`;
-        const progressText = String(root.progressText || `${progress}/${safeTarget}`).trim().slice(0, 80)
-            || `${progress}/${safeTarget}`;
-        const anchorSection = String(root.anchorSection || root.section || '').trim().slice(0, 24);
-        const actionMeta = typeof this.getSeasonVerificationActionMeta === 'function'
-            ? this.getSeasonVerificationActionMeta(anchorSection || '', { fallbackSection: 'sanctum' })
-            : {
-                actionType: 'collection',
-                actionValue: anchorSection || 'sanctum',
-                ctaLabel: '前往推进'
-            };
-        const fallbackCtaLabel = actionMeta.ctaLabel === '沿此复核'
-            ? (completed ? '沿此复核' : '前往推进')
-            : (actionMeta.ctaLabel || (completed ? '沿此复核' : '前往推进'));
-        return {
-            id: String(root.id || fallbackId).trim().slice(0, 64) || fallbackId,
-            label: String(root.label || fallbackLabel).trim().slice(0, 80) || fallbackLabel,
-            icon: String(root.icon || '✦').trim().slice(0, 4) || '✦',
-            progress,
-            target: safeTarget,
-            completed,
-            progressText,
-            hintLine: String(root.hintLine || root.noteLine || '').trim().slice(0, 220),
-            statusLine: String(root.statusLine || '').trim().slice(0, 180),
-            anchorSection,
-            actionType: String(root.actionType || actionMeta.actionType || '').trim().slice(0, 24)
-                || actionMeta.actionType,
-            actionValue: String(root.actionValue || actionMeta.actionValue || '').trim().slice(0, 40)
-                || actionMeta.actionValue,
-            ctaLabel: String(root.ctaLabel || fallbackCtaLabel).trim().slice(0, 24)
-                || fallbackCtaLabel,
-            source: String(root.source || root.sourceType || '').trim().slice(0, 40),
-            sourceId: String(root.sourceId || '').trim().slice(0, 96),
-            isPlaceholder: !!root.isPlaceholder,
-            occupiesStrongSlot: !!root.occupiesStrongSlot
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.normalizeHeavenlyMandateTask(source, index, laneId);
     }
 
     normalizeHeavenlyMandateFocusTask(source = null) {
-        const root = source && typeof source === 'object' ? source : null;
-        if (!root) return null;
-        const baseTask = this.normalizeHeavenlyMandateTask(root, 0, 'focus');
-        if (!baseTask) return null;
-        const next = {
-            ...baseTask,
-            progressText: String(root.progressText || baseTask.progressText || '').trim().slice(0, 80)
-                || baseTask.progressText,
-            actionType: String(root.actionType || baseTask.actionType || '').trim().slice(0, 24)
-                || baseTask.actionType,
-            actionValue: String(root.actionValue || baseTask.actionValue || '').trim().slice(0, 40)
-                || baseTask.actionValue,
-            ctaLabel: String(root.ctaLabel || baseTask.ctaLabel || '').trim().slice(0, 24)
-                || baseTask.ctaLabel,
-            source: String(root.source || root.sourceType || '').trim().slice(0, 40),
-            sourceId: String(root.sourceId || '').trim().slice(0, 96),
-            isPlaceholder: !!root.isPlaceholder,
-            occupiesStrongSlot: !!root.occupiesStrongSlot
-        };
-        return Object.values(next).some((value) => value !== '' && value !== 0 && value !== false)
-            ? next
-            : null;
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.normalizeHeavenlyMandateFocusTask(source);
     }
 
     buildHeavenlyMandateDebtFocusTask(debtPack = null) {
-        const safeDebtPack = debtPack && typeof debtPack === 'object' ? debtPack : null;
-        if (!safeDebtPack || !safeDebtPack.occupiesStrongSlot) return null;
-        return this.normalizeHeavenlyMandateFocusTask({
-            id: safeDebtPack.occupiedMandateTaskId || `season_debt_focus_${safeDebtPack.id || 'current'}`,
-            label: safeDebtPack.status === 'deferred' ? '优先清掉跨周欠卷' : '优先清掉本周欠卷',
-            icon: '📚',
-            progress: 0,
-            target: 1,
-            progressText: safeDebtPack.status === 'deferred'
-                ? `已拖延 ${Math.max(1, Math.floor(Number(safeDebtPack.deferCount) || 1))} 周`
-                : (safeDebtPack.progressText || safeDebtPack.settleWindowText || '本周内优先清账'),
-            completed: false,
-            hintLine: safeDebtPack.guideLine || safeDebtPack.detailLine || safeDebtPack.summaryLine || '先清账，再继续本周的定榜节奏。',
-            statusLine: [
-                safeDebtPack.statusLine || '',
-                safeDebtPack.status === 'deferred' && safeDebtPack.carryIntoWeekTag
-                    ? `已带入 ${safeDebtPack.carryIntoWeekTag}`
-                    : ''
-            ].filter(Boolean).join(' · '),
-            anchorSection: safeDebtPack.recommendedAnchorSection || 'sanctum',
-            source: 'seasonDebtPack',
-            sourceId: safeDebtPack.id || '',
-            isPlaceholder: false,
-            occupiesStrongSlot: true
-        });
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.buildHeavenlyMandateDebtFocusTask(debtPack);
     }
 
     normalizeHeavenlyMandateLane(source = null, index = 0) {
-        const root = source && typeof source === 'object' ? source : {};
-        const laneId = String(root.id || `lane_${index + 1}`).trim().slice(0, 32) || `lane_${index + 1}`;
-        const tasks = Array.isArray(root.tasks)
-            ? root.tasks
-                .map((task, taskIndex) => this.normalizeHeavenlyMandateTask(task, taskIndex, laneId))
-                .slice(0, 4)
-            : [];
-        return {
-            id: laneId,
-            label: String(root.label || `玩法线 ${index + 1}`).trim().slice(0, 32) || `玩法线 ${index + 1}`,
-            icon: String(root.icon || '✦').trim().slice(0, 4) || '✦',
-            summaryLine: String(root.summaryLine || root.noteLine || '').trim().slice(0, 200),
-            completedCount: tasks.filter((task) => task.completed).length,
-            totalCount: tasks.length,
-            tasks
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.normalizeHeavenlyMandateLane(source, index);
     }
 
     normalizeHeavenlyMandateHistoryEntry(source = null, index = 0) {
-        const root = source && typeof source === 'object' ? source : {};
-        const fallbackWeekTag = `week_${index + 1}`;
-        const completedTaskCount = Math.max(0, Math.floor(Number(root.completedTaskCount) || 0));
-        const totalTaskCount = Math.max(completedTaskCount, Math.floor(Number(root.totalTaskCount) || 0));
-        return {
-            weekTag: String(root.weekTag || fallbackWeekTag).trim().slice(0, 24) || fallbackWeekTag,
-            weekLabel: String(root.weekLabel || '').trim().slice(0, 32),
-            themeId: String(root.themeId || '').trim().slice(0, 32),
-            themeLabel: String(root.themeLabel || '').trim().slice(0, 48),
-            summaryLine: String(root.summaryLine || '').trim().slice(0, 180),
-            completedTaskCount,
-            totalTaskCount,
-            completed: !!root.completed || (totalTaskCount > 0 && completedTaskCount >= totalTaskCount),
-            at: Math.max(0, Math.floor(Number(root.at ?? root.lastSyncedAt) || 0))
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.normalizeHeavenlyMandateHistoryEntry(source, index);
     }
 
     normalizeHeavenlyMandateState(source = null) {
-        const defaults = this.createDefaultHeavenlyMandateState();
-        const root = source && typeof source === 'object' ? source : {};
-        const lanes = Array.isArray(root.lanes)
-            ? root.lanes
-                .map((lane, index) => this.normalizeHeavenlyMandateLane(lane, index))
-                .slice(0, 3)
-            : [];
-        const completedTaskCount = lanes.reduce((sum, lane) => sum + lane.completedCount, 0);
-        const totalTaskCount = lanes.reduce((sum, lane) => sum + lane.totalCount, 0);
-        const history = Array.isArray(root.history)
-            ? root.history
-                .map((entry, index) => this.normalizeHeavenlyMandateHistoryEntry(entry, index))
-                .filter((entry) => entry.weekTag)
-                .slice(0, 6)
-            : [];
-        return {
-            version: Math.max(1, Math.floor(Number(root.version) || defaults.version)),
-            weekTag: String(root.weekTag || '').trim().slice(0, 24),
-            weekLabel: String(root.weekLabel || '').trim().slice(0, 32),
-            themeId: String(root.themeId || '').trim().slice(0, 32),
-            themeLabel: String(root.themeLabel || '').trim().slice(0, 48),
-            themeIcon: String(root.themeIcon || '').trim().slice(0, 4),
-            themeKicker: String(root.themeKicker || '').trim().slice(0, 24),
-            summaryLine: String(root.summaryLine || '').trim().slice(0, 220),
-            lanes,
-            completedTaskCount: Math.max(completedTaskCount, Math.floor(Number(root.completedTaskCount) || 0)),
-            totalTaskCount: Math.max(totalTaskCount, Math.floor(Number(root.totalTaskCount) || 0)),
-            history,
-            lastSyncedAt: Math.max(0, Math.floor(Number(root.lastSyncedAt) || 0))
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.normalizeHeavenlyMandateState(source);
     }
 
     ensureHeavenlyMandateState() {
-        this.heavenlyMandateState = this.normalizeHeavenlyMandateState(this.heavenlyMandateState);
-        return this.heavenlyMandateState;
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.ensureHeavenlyMandateState();
     }
 
     createDefaultSeasonVerificationState() {
-        return {
-            version: 1,
-            weekTag: '',
-            weekLabel: '',
-            records: [],
-            history: [],
-            lastResolved: null,
-            claimedLaneRewards: {}
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.createDefaultSeasonVerificationState();
     }
 
     normalizeSeasonBoardClaimedLaneRewards(source = null) {
@@ -8024,492 +7478,33 @@ class Game {
     }
 
     normalizeSeasonVerificationRecord(source = null, index = 0) {
-        const root = source && typeof source === 'object' ? source : {};
-        const sanitizeText = (value = '', limit = 180) => String(value || '').trim().slice(0, limit);
-        const role = ['primary', 'side'].includes(String(root.role || '').trim())
-            ? String(root.role || '').trim()
-            : (index === 0 ? 'primary' : 'side');
-        const sourceMode = ['pvp', 'endless', 'challenge', 'sanctum', 'hybrid', 'manual'].includes(String(root.sourceMode || '').trim())
-            ? String(root.sourceMode || '').trim()
-            : (
-                ['pvp', 'endless', 'challenge', 'sanctum'].includes(String(root.anchorSection || '').trim())
-                    ? String(root.anchorSection || '').trim()
-                    : (role === 'side' ? 'challenge' : 'manual')
-            );
-        const resultStatus = ['verified', 'failed', 'deferred', 'pending'].includes(String(root.resultStatus || '').trim())
-            ? String(root.resultStatus || '').trim()
-            : 'pending';
-        const writebackMode = ['clear_debt', 'upgrade_verdict', 'boost_recommendation', 'degrade', 'carry_forward', 'pending'].includes(String(root.writebackMode || '').trim())
-            ? String(root.writebackMode || '').trim()
-            : (
-                role === 'side'
-                    ? 'boost_recommendation'
-                    : (resultStatus === 'failed' ? 'degrade' : 'upgrade_verdict')
-            );
-        const proofQuality = ['thin', 'solid', 'decisive'].includes(String(root.proofQuality || '').trim())
-            ? String(root.proofQuality || '').trim()
-            : (resultStatus === 'verified' ? (role === 'primary' ? 'solid' : 'thin') : '');
-        const sourceModeLabelMap = {
-            pvp: '天道榜',
-            endless: '无尽轮回',
-            challenge: '七日劫数',
-            sanctum: '洞府锁线',
-            hybrid: '跨模验算',
-            manual: role === 'side' ? '旁验证' : '主验证'
-        };
-        const proofQualityLabelMap = {
-            thin: '薄证',
-            solid: '实证',
-            decisive: '铁证'
-        };
-        const resultStatusLabelMap = {
-            verified: '通过',
-            failed: '失利',
-            deferred: '延期',
-            pending: '待验证'
-        };
-        const sourceModeLabel = sanitizeText(root.sourceModeLabel || sourceModeLabelMap[sourceMode] || '验证', 32)
-            || (sourceModeLabelMap[sourceMode] || '验证');
-        const anchorSection = sanitizeText(
-            root.anchorSection
-            || (
-                sourceMode === 'pvp'
-                    ? 'pvp'
-                    : (sourceMode === 'endless'
-                        ? 'endless'
-                        : (sourceMode === 'challenge'
-                            ? 'challenge'
-                            : 'sanctum'))
-            ),
-            24
-        );
-        const weekTag = sanitizeText(root.weekTag || root.seasonWeekTag || '', 24);
-        const weekLabel = sanitizeText(root.weekLabel || '', 32);
-        const createdAt = Math.max(
-            0,
-            Math.floor(Number(root.createdAt || root.updatedAt || root.resolvedAt || Date.now()) || 0)
-        );
-        const updatedAt = Math.max(
-            createdAt,
-            Math.floor(Number(root.updatedAt || root.resolvedAt || root.createdAt || createdAt) || 0)
-        );
-        const fallbackId = sanitizeText(
-            root.recordId
-            || root.id
-            || `season_verification_${weekTag || 'current'}_${role}_${sourceMode}_${index + 1}`,
-            96
-        ) || `season_verification_${role}_${index + 1}`;
-        const record = {
-            recordId: fallbackId,
-            recordKind: sanitizeText(root.recordKind || (root.frontierResolutionChoiceId || root.frontierResolutionId ? 'frontier_resolution' : ''), 40),
-            weekTag,
-            weekLabel,
-            role,
-            sourceMode,
-            sourceModeLabel,
-            sourceLabel: sanitizeText(root.sourceLabel || root.sourceName || '', 64),
-            label: sanitizeText(root.label || '', 64),
-            resultStatus,
-            writebackMode,
-            phaseId: sanitizeText(root.phaseId || '', 32),
-            phaseLabel: sanitizeText(root.phaseLabel || '', 24),
-            settlementId: sanitizeText(root.settlementId || '', 96),
-            settlementOutcomeId: sanitizeText(root.settlementOutcomeId || '', 32),
-            settlementOutcomeLabel: sanitizeText(root.settlementOutcomeLabel || '', 24),
-            settlementSource: sanitizeText(root.settlementSource || '', 24),
-            ledgerId: sanitizeText(root.ledgerId || root.weekVerdictLedgerId || '', 96),
-            debtPackId: sanitizeText(root.debtPackId || '', 96),
-            debtStatus: sanitizeText(root.debtStatus || '', 24),
-            deferCount: Math.max(0, Math.floor(Number(root.deferCount) || 0)),
-            carryIntoWeekTag: sanitizeText(root.carryIntoWeekTag || '', 24),
-            writebackLine: sanitizeText(root.writebackLine || '', 220),
-            resolvedRunId: sanitizeText(root.resolvedRunId || root.sourceRunId || '', 80),
-            chapterIndex: Math.max(0, Math.floor(Number(root.chapterIndex ?? root.boundChapterIndex) || 0)),
-            proofQuality,
-            lineageStyle: sanitizeText(root.lineageStyle || '', 48),
-            summaryLine: sanitizeText(root.summaryLine || '', 220),
-            detailLine: sanitizeText(root.detailLine || root.hintLine || '', 240),
-            statusLine: sanitizeText(root.statusLine || '', 160),
-            anchorSection,
-            priority: Math.max(1, Math.min(9, Math.floor(Number(root.priority) || (role === 'primary' ? 1 : 2)))),
-            frontierResolutionId: sanitizeText(root.frontierResolutionId || '', 96),
-            frontierResolutionChoiceId: sanitizeText(root.frontierResolutionChoiceId || root.resolutionChoiceId || root.choiceId || '', 32),
-            frontierResolutionLabel: sanitizeText(root.frontierResolutionLabel || root.choiceLabel || '', 32),
-            frontierResolutionStance: sanitizeText(root.frontierResolutionStance || '', 48),
-            frontierResolutionSupportLaneId: sanitizeText(root.frontierResolutionSupportLaneId || root.supportLaneId || '', 32),
-            frontierResolutionSupportLaneLabel: sanitizeText(root.frontierResolutionSupportLaneLabel || root.supportLaneLabel || '', 24),
-            frontierResolutionSummaryLine: sanitizeText(root.frontierResolutionSummaryLine || '', 220),
-            chronicleSealStatus: sanitizeText(root.chronicleSealStatus || '', 24),
-            chronicleSealLine: sanitizeText(root.chronicleSealLine || '', 220),
-            councilResolutionLine: sanitizeText(root.councilResolutionLine || '', 220),
-            frontierResolutionSubmittedAt: Math.max(0, Math.floor(Number(root.frontierResolutionSubmittedAt || root.resolutionSubmittedAt || 0) || 0)),
-            carryIntoNextWeek: !!root.carryIntoNextWeek,
-            createdAt,
-            updatedAt
-        };
-
-        const defaultLabel = (() => {
-            if (record.label) return record.label;
-            if (record.sourceMode === 'challenge') return '七日劫数旁证';
-            if (record.sourceMode === 'endless') return record.resultStatus === 'failed' ? '无尽反证' : '无尽高压验证';
-            if (record.sourceMode === 'pvp') return record.resultStatus === 'failed' ? '天道榜反证' : '天道榜账本验证';
-            return role === 'side' ? '赛季旁验证' : '赛季主验证';
-        })();
-        record.label = sanitizeText(defaultLabel, 64) || defaultLabel;
-
-        if (!record.summaryLine) {
-            if (record.resultStatus === 'verified') {
-                record.summaryLine = record.role === 'primary'
-                    ? `${record.sourceModeLabel}已给本周主轴留下${proofQualityLabelMap[record.proofQuality] || '有效'}证明。`
-                    : `${record.sourceModeLabel}补上了一张不同节奏的旁验证。`;
-            } else if (record.resultStatus === 'failed') {
-                record.summaryLine = `${record.sourceModeLabel}给出了反证，这条主轴暂时不能直接定榜。`;
-            } else if (record.resultStatus === 'deferred') {
-                record.summaryLine = `${record.sourceModeLabel}尚未形成有效回写，本周先保留为待复核样本。`;
-            } else {
-                record.summaryLine = `${record.sourceModeLabel}验证状已挂起，等待真正落地后再回写季盘。`;
-            }
-        }
-
-        if (!record.writebackLine) {
-            if (record.writebackMode === 'clear_debt') {
-                record.writebackLine = '主验证已清掉欠卷，天命强目标会重新释放给定榜推进。';
-            } else if (record.writebackMode === 'upgrade_verdict') {
-                record.writebackLine = '主验证通过，本周押卷可以从险卷升级为正卷。';
-            } else if (record.writebackMode === 'boost_recommendation') {
-                record.writebackLine = '旁验证已补上第二份证明，季盘推荐会更偏向当前主修。';
-            } else if (record.writebackMode === 'degrade') {
-                record.writebackLine = '主验证给出反证，本周押卷会转入反证/险卷处理。';
-            } else if (record.writebackMode === 'carry_forward') {
-                record.writebackLine = '这条验证仍未完成，会继续带入后续周转。';
-            }
-        }
-
-        if (!record.detailLine) {
-            record.detailLine = [
-                record.sourceLabel ? `样本：${record.sourceLabel}` : '',
-                record.writebackLine || '',
-                record.lineageStyle ? `谱系偏向：${record.lineageStyle}` : ''
-            ].filter(Boolean).slice(0, 2).join('｜');
-        }
-
-        if (!record.statusLine) {
-            record.statusLine = [
-                role === 'primary' ? '主验证' : '旁验证',
-                record.sourceModeLabel,
-                resultStatusLabelMap[record.resultStatus] || '待验证',
-                proofQualityLabelMap[record.proofQuality] || ''
-            ].filter(Boolean).join(' · ');
-        }
-
-        return record;
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.normalizeSeasonVerificationRecord(source, index);
     }
 
     normalizeSeasonVerificationState(source = null) {
-        const defaults = this.createDefaultSeasonVerificationState();
-        const root = source && typeof source === 'object' ? source : {};
-        const normalizeList = (value, limit = 8) => {
-            const seen = new Set();
-            return (Array.isArray(value) ? value : [])
-                .map((entry, index) => this.normalizeSeasonVerificationRecord(entry, index))
-                .filter((entry) => {
-                    if (!entry.recordId || seen.has(entry.recordId)) return false;
-                    seen.add(entry.recordId);
-                    return true;
-                })
-                .sort((a, b) => {
-                    if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
-                    return b.createdAt - a.createdAt;
-                })
-                .slice(0, limit);
-        };
-        const records = normalizeList(root.records, 6);
-        const history = normalizeList(
-            [
-                ...(Array.isArray(root.history) ? root.history : []),
-                ...(Array.isArray(root.records) ? root.records : [])
-            ],
-            18
-        );
-        const lastResolved = root.lastResolved && typeof root.lastResolved === 'object'
-            ? this.normalizeSeasonVerificationRecord(root.lastResolved)
-            : (history[0] || null);
-        const claimedLaneRewards = typeof this.normalizeSeasonBoardClaimedLaneRewards === 'function'
-            ? this.normalizeSeasonBoardClaimedLaneRewards(root.claimedLaneRewards)
-            : {};
-        return {
-            version: Math.max(1, Math.floor(Number(root.version) || defaults.version)),
-            weekTag: String(root.weekTag || '').trim().slice(0, 24),
-            weekLabel: String(root.weekLabel || '').trim().slice(0, 32),
-            records,
-            history,
-            lastResolved: lastResolved && lastResolved.recordId ? lastResolved : null,
-            claimedLaneRewards
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.normalizeSeasonVerificationState(source);
     }
 
     ensureSeasonVerificationState(options = {}) {
-        const state = this.normalizeSeasonVerificationState(this.seasonVerificationState);
-        const weekMeta = (options.weekTag || options.weekLabel)
-            ? {
-                weekTag: String(options.weekTag || '').trim(),
-                weekLabel: String(options.weekLabel || '').trim()
-            }
-            : (typeof this.getHeavenlyMandateWeekMeta === 'function'
-                ? this.getHeavenlyMandateWeekMeta(options.dateOverride || null)
-                : null);
-        const targetWeekTag = String(weekMeta?.weekTag || state.weekTag || '').trim();
-        const targetWeekLabel = String(weekMeta?.weekLabel || state.weekLabel || '').trim();
-        let records = Array.isArray(state.records) ? state.records.slice() : [];
-        let history = Array.isArray(state.history) ? state.history.slice() : [];
-
-        if (targetWeekTag) {
-            const carryRecords = [];
-            const nextRecords = [];
-            records.forEach((entry) => {
-                if (entry && entry.weekTag && entry.weekTag !== targetWeekTag) {
-                    carryRecords.push(entry);
-                } else if (entry) {
-                    nextRecords.push(entry);
-                }
-            });
-            carryRecords.forEach((entry) => {
-                const exists = history.findIndex((item) => item.recordId === entry.recordId);
-                if (exists >= 0) history.splice(exists, 1);
-                history.unshift(entry);
-            });
-            history = history.slice(0, 18);
-            records = nextRecords.slice(0, 6);
-        }
-
-        this.seasonVerificationState = this.normalizeSeasonVerificationState({
-            ...state,
-            weekTag: targetWeekTag || state.weekTag,
-            weekLabel: targetWeekLabel || state.weekLabel,
-            records,
-            history
-        });
-        return this.seasonVerificationState;
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.ensureSeasonVerificationState(options);
     }
 
     getSeasonVerificationSaveState() {
-        return this.ensureSeasonVerificationState();
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getSeasonVerificationSaveState();
     }
 
     recordSeasonVerificationResult(source = null) {
-        const root = source && typeof source === 'object' ? source : null;
-        if (!root) return null;
-        const effectiveAt = Math.max(
-            0,
-            Math.floor(Number(root.updatedAt || root.createdAt || root.resolvedAt || Date.now()) || 0)
-        );
-        const weekMeta = (root.weekTag || root.weekLabel)
-            ? {
-                weekTag: String(root.weekTag || '').trim(),
-                weekLabel: String(root.weekLabel || '').trim()
-            }
-            : (typeof this.getHeavenlyMandateWeekMeta === 'function'
-                ? this.getHeavenlyMandateWeekMeta(effectiveAt || null)
-                : null);
-        const state = this.ensureSeasonVerificationState({
-            weekTag: weekMeta?.weekTag || '',
-            weekLabel: weekMeta?.weekLabel || '',
-            dateOverride: effectiveAt || null
-        });
-        const boardContext = root.seasonBoard && typeof root.seasonBoard === 'object'
-            ? root.seasonBoard
-            : (typeof this.getSeasonBoardSnapshot === 'function'
-                ? this.getSeasonBoardSnapshot()
-                : null);
-        const boardSettlement = boardContext?.settlement && typeof boardContext.settlement === 'object'
-            ? boardContext.settlement
-            : null;
-        const boardDebtPack = boardContext?.debtPack && typeof boardContext.debtPack === 'object'
-            ? boardContext.debtPack
-            : null;
-        const boardWeekVerdict = boardContext?.weekVerdictLedger?.current && typeof boardContext.weekVerdictLedger.current === 'object'
-            ? boardContext.weekVerdictLedger.current
-            : null;
-        const record = this.normalizeSeasonVerificationRecord({
-            ...root,
-            weekTag: String(root.weekTag || weekMeta?.weekTag || state.weekTag || '').trim(),
-            weekLabel: String(root.weekLabel || weekMeta?.weekLabel || state.weekLabel || boardContext?.weekLabel || '').trim(),
-            phaseId: String(root.phaseId || boardContext?.phaseId || boardWeekVerdict?.phaseId || '').trim(),
-            phaseLabel: String(root.phaseLabel || boardContext?.phaseLabel || boardWeekVerdict?.phaseLabel || '').trim(),
-            settlementId: String(root.settlementId || boardSettlement?.id || boardWeekVerdict?.settlementId || '').trim(),
-            settlementOutcomeId: String(root.settlementOutcomeId || boardSettlement?.outcomeId || boardWeekVerdict?.settlementOutcomeId || '').trim(),
-            settlementOutcomeLabel: String(root.settlementOutcomeLabel || boardSettlement?.outcomeLabel || boardWeekVerdict?.settlementOutcomeLabel || '').trim(),
-            settlementSource: String(root.settlementSource || boardSettlement?.settlementSource || boardWeekVerdict?.settlementSource || '').trim(),
-            ledgerId: String(root.ledgerId || boardWeekVerdict?.ledgerId || '').trim(),
-            debtPackId: String(root.debtPackId || boardDebtPack?.id || boardWeekVerdict?.debtPackId || '').trim(),
-            debtStatus: String(root.debtStatus || boardDebtPack?.status || boardWeekVerdict?.debtStatus || '').trim(),
-            deferCount: Math.max(
-                0,
-                Math.floor(Number(
-                    root.deferCount
-                    ?? boardDebtPack?.deferCount
-                    ?? boardWeekVerdict?.deferCount
-                    ?? 0
-                ) || 0)
-            ),
-            carryIntoWeekTag: String(root.carryIntoWeekTag || boardDebtPack?.carryIntoWeekTag || boardWeekVerdict?.carryIntoWeekTag || '').trim(),
-            carryIntoNextWeek: root.carryIntoNextWeek !== undefined
-                ? !!root.carryIntoNextWeek
-                : (!!boardDebtPack?.carryIntoWeekTag || !!boardWeekVerdict?.carryIntoNextWeek),
-            updatedAt: effectiveAt || Date.now(),
-            createdAt: Math.max(0, Math.floor(Number(root.createdAt || effectiveAt || Date.now()) || 0))
-        });
-        if (!record.recordId) return null;
-
-        let records = Array.isArray(state.records) ? state.records.slice() : [];
-        const existingIndex = records.findIndex((entry) => (
-            entry.recordId === record.recordId
-            || (
-                entry.weekTag === record.weekTag
-                && entry.role === record.role
-                && entry.sourceMode === record.sourceMode
-            )
-        ));
-        if (existingIndex >= 0) records.splice(existingIndex, 1);
-        records.unshift(record);
-        records = records
-            .sort((a, b) => {
-                if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
-                return b.createdAt - a.createdAt;
-            })
-            .slice(0, 6);
-
-        let history = Array.isArray(state.history) ? state.history.slice() : [];
-        const historyIndex = history.findIndex((entry) => entry.recordId === record.recordId);
-        if (historyIndex >= 0) history.splice(historyIndex, 1);
-        history.unshift(record);
-        history = history.slice(0, 18);
-
-        const nextState = this.normalizeSeasonVerificationState({
-            ...state,
-            weekTag: record.weekTag || state.weekTag,
-            weekLabel: record.weekLabel || state.weekLabel,
-            records,
-            history,
-            lastResolved: ['verified', 'failed', 'deferred'].includes(record.resultStatus)
-                ? record
-                : state.lastResolved
-        });
-        this.seasonVerificationState = nextState;
-
-        const resolvedBoardContext = root.seasonBoardAfter && typeof root.seasonBoardAfter === 'object'
-            ? root.seasonBoardAfter
-            : (typeof this.getSeasonBoardSnapshot === 'function'
-                ? this.getSeasonBoardSnapshot()
-                : null);
-        const resolvedSettlement = resolvedBoardContext?.settlement && typeof resolvedBoardContext.settlement === 'object'
-            ? resolvedBoardContext.settlement
-            : null;
-        const resolvedDebtPack = resolvedBoardContext?.debtPack && typeof resolvedBoardContext.debtPack === 'object'
-            ? resolvedBoardContext.debtPack
-            : null;
-        const resolvedWeekVerdict = resolvedBoardContext?.weekVerdictLedger?.current && typeof resolvedBoardContext.weekVerdictLedger.current === 'object'
-            ? resolvedBoardContext.weekVerdictLedger.current
-            : null;
-        const enrichedRecord = this.normalizeSeasonVerificationRecord({
-            ...record,
-            phaseId: String(root.phaseId || resolvedBoardContext?.phaseId || record.phaseId || resolvedWeekVerdict?.phaseId || '').trim(),
-            phaseLabel: String(root.phaseLabel || resolvedBoardContext?.phaseLabel || record.phaseLabel || resolvedWeekVerdict?.phaseLabel || '').trim(),
-            settlementId: String(root.settlementId || resolvedSettlement?.id || record.settlementId || resolvedWeekVerdict?.settlementId || '').trim(),
-            settlementOutcomeId: String(root.settlementOutcomeId || resolvedSettlement?.outcomeId || record.settlementOutcomeId || resolvedWeekVerdict?.settlementOutcomeId || '').trim(),
-            settlementOutcomeLabel: String(root.settlementOutcomeLabel || resolvedSettlement?.outcomeLabel || record.settlementOutcomeLabel || resolvedWeekVerdict?.settlementOutcomeLabel || '').trim(),
-            settlementSource: String(root.settlementSource || resolvedSettlement?.settlementSource || record.settlementSource || resolvedWeekVerdict?.settlementSource || '').trim(),
-            ledgerId: String(root.ledgerId || resolvedWeekVerdict?.ledgerId || record.ledgerId || '').trim(),
-            debtPackId: String(root.debtPackId || resolvedDebtPack?.id || record.debtPackId || resolvedWeekVerdict?.debtPackId || '').trim(),
-            debtStatus: String(root.debtStatus || resolvedDebtPack?.status || record.debtStatus || resolvedWeekVerdict?.debtStatus || '').trim(),
-            deferCount: Math.max(
-                0,
-                Math.floor(Number(
-                    root.deferCount
-                    ?? resolvedDebtPack?.deferCount
-                    ?? record.deferCount
-                    ?? resolvedWeekVerdict?.deferCount
-                    ?? 0
-                ) || 0)
-            ),
-            carryIntoWeekTag: String(root.carryIntoWeekTag || resolvedDebtPack?.carryIntoWeekTag || record.carryIntoWeekTag || resolvedWeekVerdict?.carryIntoWeekTag || '').trim(),
-            carryIntoNextWeek: root.carryIntoNextWeek !== undefined
-                ? !!root.carryIntoNextWeek
-                : (!!record.carryIntoNextWeek || !!resolvedDebtPack?.carryIntoWeekTag || !!resolvedWeekVerdict?.carryIntoNextWeek)
-        });
-        const rewriteList = (sourceList = []) => sourceList.map((entry) => (
-            entry && entry.recordId === enrichedRecord.recordId
-                ? enrichedRecord
-                : entry
-        ));
-        this.seasonVerificationState = this.normalizeSeasonVerificationState({
-            ...nextState,
-            records: rewriteList(nextState.records),
-            history: rewriteList(nextState.history),
-            lastResolved: nextState.lastResolved?.recordId === enrichedRecord.recordId
-                ? enrichedRecord
-                : nextState.lastResolved
-        });
-        return enrichedRecord;
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.recordSeasonVerificationResult(source);
     }
 
     getSeasonVerificationSnapshot(options = {}) {
-        const weekMeta = (options.weekTag || options.weekLabel)
-            ? {
-                weekTag: String(options.weekTag || '').trim(),
-                weekLabel: String(options.weekLabel || '').trim()
-            }
-            : (typeof this.getHeavenlyMandateWeekMeta === 'function'
-                ? this.getHeavenlyMandateWeekMeta(options.dateOverride || null)
-                : null);
-        const state = this.ensureSeasonVerificationState({
-            weekTag: weekMeta?.weekTag || '',
-            weekLabel: weekMeta?.weekLabel || '',
-            dateOverride: options.dateOverride || null
-        });
-        const weekTag = String(weekMeta?.weekTag || state.weekTag || '').trim();
-        const weekLabel = String(weekMeta?.weekLabel || state.weekLabel || '').trim();
-        const currentRecords = (Array.isArray(state.records) ? state.records : [])
-            .filter((entry) => !weekTag || !entry.weekTag || entry.weekTag === weekTag)
-            .sort((a, b) => {
-                if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
-                return b.createdAt - a.createdAt;
-            });
-        const isFrontierResolutionRecord = (entry) => (
-            String(entry?.recordKind || '').trim() === 'frontier_resolution'
-            || !!entry?.frontierResolutionChoiceId
-            || !!entry?.frontierResolutionId
-        );
-        const verificationRecords = currentRecords.filter((entry) => !isFrontierResolutionRecord(entry));
-        const verificationHistory = (Array.isArray(state.history) ? state.history : [])
-            .filter((entry) => !isFrontierResolutionRecord(entry));
-        const selectLatestRoleRecord = (role) => verificationRecords.find((entry) => entry.role === role) || null;
-        const primary = selectLatestRoleRecord('primary');
-        const side = selectLatestRoleRecord('side');
-        const verifiedCount = verificationRecords.filter((entry) => entry.resultStatus === 'verified').length;
-        const failedCount = verificationRecords.filter((entry) => entry.resultStatus === 'failed').length;
-        const pendingCount = verificationRecords.filter((entry) => ['pending', 'deferred'].includes(entry.resultStatus)).length;
-        const lastResolved = state.lastResolved && typeof state.lastResolved === 'object'
-            ? this.normalizeSeasonVerificationRecord(state.lastResolved)
-            : null;
-        const effectiveLastResolved = lastResolved && lastResolved.recordId && !isFrontierResolutionRecord(lastResolved)
-            ? lastResolved
-            : (verificationRecords[0] || null);
-        return {
-            version: state.version,
-            available: verificationRecords.length > 0 || verificationHistory.length > 0,
-            weekTag,
-            weekLabel,
-            recordCount: verificationRecords.length,
-            verifiedCount,
-            failedCount,
-            pendingCount,
-            primary,
-            side,
-            records: verificationRecords.slice(0, 4),
-            history: verificationHistory.slice(0, 6),
-            lastResolved: effectiveLastResolved
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getSeasonVerificationSnapshot(options);
     }
 
     getCommittedSeasonBoardFrontierResolution(options = {}) {
@@ -8543,374 +7538,38 @@ class Game {
     }
 
     getSeasonVerificationActionMeta(anchorSection = '', options = {}) {
-        const normalizedAnchor = String(anchorSection || '').trim();
-        const collectionTargetLabelMap = {
-            laws: '法则图鉴',
-            spirits: '灵契图鉴',
-            chapters: '章节档案',
-            enemies: '敌影档案',
-            bosses: 'Boss 档案',
-            builds: '构筑快照',
-            slates: '归卷书架',
-            sanctum: '洞府'
-        };
-        const collectionAction = (value, ctaLabel) => ({
-            actionType: 'collection',
-            actionValue: String(value || 'sanctum').trim() || 'sanctum',
-            ctaLabel,
-            targetLabel: collectionTargetLabelMap[String(value || '').trim()] || '当前主线'
-        });
-        switch (normalizedAnchor) {
-            case 'challenge':
-                return {
-                    actionType: 'challenge',
-                    actionValue: 'weekly',
-                    ctaLabel: '前往周挑战',
-                    targetLabel: '周挑战'
-                };
-            case 'pvp':
-                return {
-                    actionType: 'screen',
-                    actionValue: 'pvp-screen',
-                    ctaLabel: '前往天道榜',
-                    targetLabel: '天道榜'
-                };
-            case 'endless':
-                return {
-                    actionType: 'screen',
-                    actionValue: 'map-screen',
-                    ctaLabel: '重返无尽',
-                    targetLabel: '无尽轮回'
-                };
-            case 'map':
-                return {
-                    actionType: 'screen',
-                    actionValue: 'map-screen',
-                    ctaLabel: '返回地图',
-                    targetLabel: '地图'
-                };
-            case 'builds':
-                return collectionAction('builds', '查看谱系');
-            case 'slates':
-                return collectionAction('slates', '查看归卷');
-            case 'chapters':
-                return collectionAction('chapters', '查看章节');
-            case 'sanctum':
-                return collectionAction('sanctum', '回看洞府');
-            default:
-                return collectionAction(normalizedAnchor || 'sanctum', '沿此复核');
-        }
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getSeasonVerificationActionMeta(anchorSection, options);
     }
 
     normalizeSeasonVerificationArchiveEntry(source = null, index = 0) {
-        const root = source && typeof source === 'object' ? source : {};
-        const resultStatus = String(root.resultStatus || '').trim();
-        const actionMeta = this.getSeasonVerificationActionMeta(
-            root.anchorSection || root.actionValue || '',
-            root
-        );
-        const role = ['primary', 'side'].includes(String(root.role || '').trim())
-            ? String(root.role || '').trim()
-            : (index === 0 ? 'primary' : 'side');
-        const roleLabelMap = {
-            primary: '主验证',
-            side: '旁验证'
-        };
-        const resultLabelMap = {
-            verified: '通过',
-            failed: '失利',
-            deferred: '延期',
-            pending: '待验证'
-        };
-        const writebackLabelMap = {
-            clear_debt: '清账回写',
-            upgrade_verdict: '正卷回写',
-            boost_recommendation: '旁证强化',
-            degrade: '反证回写',
-            carry_forward: '延账顺延',
-            pending: '待回写'
-        };
-        return {
-            recordId: String(root.recordId || root.id || `season_verification_archive_${index + 1}`).trim().slice(0, 96) || `season_verification_archive_${index + 1}`,
-            weekTag: String(root.weekTag || '').trim().slice(0, 24),
-            weekLabel: String(root.weekLabel || '').trim().slice(0, 32),
-            role,
-            roleLabel: String(root.roleLabel || roleLabelMap[role] || '验证').trim().slice(0, 16) || '验证',
-            sourceMode: String(root.sourceMode || '').trim().slice(0, 24),
-            sourceModeLabel: String(root.sourceModeLabel || root.sourceLabel || '').trim().slice(0, 40),
-            resultStatus,
-            resultLabel: String(root.resultLabel || resultLabelMap[resultStatus] || '待验证').trim().slice(0, 16) || '待验证',
-            writebackMode: String(root.writebackMode || '').trim().slice(0, 32),
-            writebackLabel: String(root.writebackLabel || writebackLabelMap[String(root.writebackMode || '').trim()] || '').trim().slice(0, 20),
-            phaseId: String(root.phaseId || '').trim().slice(0, 32),
-            phaseLabel: String(root.phaseLabel || '').trim().slice(0, 24),
-            settlementId: String(root.settlementId || '').trim().slice(0, 96),
-            settlementOutcomeId: String(root.settlementOutcomeId || '').trim().slice(0, 32),
-            settlementOutcomeLabel: String(root.settlementOutcomeLabel || '').trim().slice(0, 24),
-            settlementSource: String(root.settlementSource || '').trim().slice(0, 24),
-            ledgerId: String(root.ledgerId || '').trim().slice(0, 96),
-            debtPackId: String(root.debtPackId || '').trim().slice(0, 96),
-            debtStatus: String(root.debtStatus || '').trim().slice(0, 24),
-            deferCount: Math.max(0, Math.floor(Number(root.deferCount) || 0)),
-            carryIntoWeekTag: String(root.carryIntoWeekTag || '').trim().slice(0, 24),
-            carryIntoNextWeek: !!root.carryIntoNextWeek,
-            summaryLine: String(root.summaryLine || '').trim().slice(0, 220),
-            detailLine: String(root.detailLine || '').trim().slice(0, 240),
-            writebackLine: String(root.writebackLine || '').trim().slice(0, 220),
-            statusLine: String(root.statusLine || '').trim().slice(0, 160),
-            noteLine: String(root.noteLine || '').trim().slice(0, 260),
-            kicker: String(root.kicker || '').trim().slice(0, 120),
-            tagLine: String(root.tagLine || '').trim().slice(0, 120),
-            lineageStyle: String(root.lineageStyle || '').trim().slice(0, 48),
-            chapterIndex: Math.max(0, Math.floor(Number(root.chapterIndex) || 0)),
-            anchorSection: String(root.anchorSection || '').trim().slice(0, 24),
-            actionType: actionMeta.actionType,
-            actionValue: actionMeta.actionValue,
-            ctaLabel: String(root.ctaLabel || actionMeta.ctaLabel || '沿此复核').trim().slice(0, 24) || '沿此复核',
-            createdAt: Math.max(0, Math.floor(Number(root.createdAt) || 0)),
-            updatedAt: Math.max(
-                Math.floor(Number(root.createdAt) || 0),
-                Math.floor(Number(root.updatedAt || root.createdAt) || 0)
-            )
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.normalizeSeasonVerificationArchiveEntry(source, index);
     }
 
     normalizeSeasonVerificationArchiveSnapshot(source = null) {
-        const root = source && typeof source === 'object' ? source : {};
-        const entries = (Array.isArray(root.entries) ? root.entries : [])
-            .map((entry, index) => this.normalizeSeasonVerificationArchiveEntry(entry, index))
-            .filter((entry) => !!entry.recordId)
-            .sort((a, b) => {
-                if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
-                return b.createdAt - a.createdAt;
-            })
-            .slice(0, 8);
-        const statusCounts = entries.reduce((acc, entry) => {
-            const key = ['verified', 'failed', 'deferred', 'pending'].includes(entry.resultStatus)
-                ? entry.resultStatus
-                : 'pending';
-            acc[key] += 1;
-            return acc;
-        }, {
-            verified: 0,
-            failed: 0,
-            deferred: 0,
-            pending: 0
-        });
-        const latestEntry = entries[0] || null;
-        return {
-            available: !!root.available || entries.length > 0 || !!latestEntry,
-            weekTag: String(root.weekTag || latestEntry?.weekTag || '').trim().slice(0, 24),
-            weekLabel: String(root.weekLabel || latestEntry?.weekLabel || '').trim().slice(0, 32),
-            totalRecords: Math.max(entries.length, Math.floor(Number(root.totalRecords) || 0)),
-            verifiedCount: Math.max(statusCounts.verified, Math.floor(Number(root.verifiedCount) || 0)),
-            failedCount: Math.max(statusCounts.failed, Math.floor(Number(root.failedCount) || 0)),
-            deferredCount: Math.max(statusCounts.deferred, Math.floor(Number(root.deferredCount) || 0)),
-            pendingCount: Math.max(statusCounts.pending, Math.floor(Number(root.pendingCount) || 0)),
-            summaryLine: String(root.summaryLine || '').trim().slice(0, 220),
-            detailLine: String(root.detailLine || '').trim().slice(0, 240),
-            progressText: String(root.progressText || '').trim().slice(0, 48),
-            latestEntry,
-            entries
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.normalizeSeasonVerificationArchiveSnapshot(source);
     }
 
     buildSeasonVerificationArchiveSnapshot(options = {}) {
-        const seasonVerification = options.seasonVerification && typeof options.seasonVerification === 'object'
-            ? options.seasonVerification
-            : this.getSeasonVerificationSnapshot(options);
-        const phase = options.phase && typeof options.phase === 'object'
-            ? options.phase
-            : null;
-        const settlement = options.settlement && typeof options.settlement === 'object'
-            ? options.settlement
-            : null;
-        const debtPack = options.debtPack && typeof options.debtPack === 'object'
-            ? options.debtPack
-            : null;
-        const weekVerdictCurrent = options.weekVerdictLedger?.current && typeof options.weekVerdictLedger.current === 'object'
-            ? options.weekVerdictLedger.current
-            : null;
-        const currentWeekTag = String(options.weekTag || seasonVerification?.weekTag || weekVerdictCurrent?.weekTag || '').trim();
-        const currentWeekLabel = String(options.weekLabel || seasonVerification?.weekLabel || weekVerdictCurrent?.weekLabel || '').trim();
-        const resultLabelMap = {
-            verified: '通过',
-            failed: '失利',
-            deferred: '延期',
-            pending: '待验证'
-        };
-        const isFrontierResolutionRecord = (entry) => (
-            String(entry?.recordKind || '').trim() === 'frontier_resolution'
-            || !!entry?.frontierResolutionChoiceId
-            || !!entry?.frontierResolutionId
-        );
-        const source = Array.isArray(seasonVerification?.history) ? seasonVerification.history : [];
-        const entries = source
-            .filter((rawEntry) => !isFrontierResolutionRecord(rawEntry))
-            .map((rawEntry, index) => {
-            const record = this.normalizeSeasonVerificationRecord(rawEntry, index);
-            const matchesCurrentWeek = !!currentWeekTag && String(record.weekTag || '').trim() === currentWeekTag;
-            const effectivePhaseId = String(record.phaseId || (matchesCurrentWeek ? phase?.id : '') || '').trim();
-            const effectivePhaseLabel = String(record.phaseLabel || (matchesCurrentWeek ? phase?.label : '') || '').trim();
-            const effectiveSettlementId = String(record.settlementId || (matchesCurrentWeek ? settlement?.id : '') || '').trim();
-            const effectiveSettlementOutcomeId = String(
-                record.settlementOutcomeId
-                || (matchesCurrentWeek ? settlement?.outcomeId : '')
-                || (matchesCurrentWeek ? weekVerdictCurrent?.settlementOutcomeId : '')
-                || ''
-            ).trim();
-            const effectiveSettlementOutcomeLabel = String(
-                record.settlementOutcomeLabel
-                || (matchesCurrentWeek ? settlement?.outcomeLabel : '')
-                || (matchesCurrentWeek ? weekVerdictCurrent?.settlementOutcomeLabel : '')
-                || ''
-            ).trim();
-            const effectiveSettlementSource = String(
-                record.settlementSource
-                || (matchesCurrentWeek ? settlement?.settlementSource : '')
-                || (matchesCurrentWeek ? weekVerdictCurrent?.settlementSource : '')
-                || ''
-            ).trim();
-            const effectiveLedgerId = String(record.ledgerId || (matchesCurrentWeek ? weekVerdictCurrent?.ledgerId : '') || '').trim();
-            const effectiveDebtPackId = String(record.debtPackId || (matchesCurrentWeek ? debtPack?.id : '') || '').trim();
-            const effectiveDebtStatus = String(
-                record.debtStatus
-                || (matchesCurrentWeek ? debtPack?.status : '')
-                || (matchesCurrentWeek ? weekVerdictCurrent?.debtStatus : '')
-                || ''
-            ).trim();
-            const effectiveDeferCount = Math.max(
-                Math.floor(Number(record.deferCount) || 0),
-                matchesCurrentWeek ? Math.floor(Number(debtPack?.deferCount || weekVerdictCurrent?.deferCount) || 0) : 0
-            );
-            const effectiveCarryIntoWeekTag = String(
-                record.carryIntoWeekTag
-                || (matchesCurrentWeek ? debtPack?.carryIntoWeekTag : '')
-                || (matchesCurrentWeek ? weekVerdictCurrent?.carryIntoWeekTag : '')
-                || ''
-            ).trim();
-            const kicker = [
-                record.weekLabel || record.weekTag || currentWeekLabel || '本周轮转',
-                effectivePhaseLabel || '',
-                record.role === 'primary' ? '主验证' : '旁验证',
-                effectiveSettlementOutcomeLabel || resultLabelMap[record.resultStatus] || ''
-            ].filter(Boolean).slice(0, 3).join(' · ');
-            const noteLine = [
-                record.summaryLine || '',
-                record.writebackLine || record.detailLine || '',
-                effectiveCarryIntoWeekTag ? `转入 ${effectiveCarryIntoWeekTag}` : '',
-                effectiveDeferCount > 0 ? `拖延 ${effectiveDeferCount} 周` : ''
-            ].filter(Boolean).slice(0, 2).join('｜');
-            const tagLine = [
-                record.sourceModeLabel || '',
-                effectivePhaseLabel || '',
-                record.lineageStyle || ''
-            ].filter(Boolean).slice(0, 3).join(' · ');
-            return this.normalizeSeasonVerificationArchiveEntry({
-                ...record,
-                weekTag: record.weekTag || currentWeekTag,
-                weekLabel: record.weekLabel || currentWeekLabel,
-                phaseId: effectivePhaseId,
-                phaseLabel: effectivePhaseLabel,
-                settlementId: effectiveSettlementId,
-                settlementOutcomeId: effectiveSettlementOutcomeId,
-                settlementOutcomeLabel: effectiveSettlementOutcomeLabel,
-                settlementSource: effectiveSettlementSource,
-                ledgerId: effectiveLedgerId,
-                debtPackId: effectiveDebtPackId,
-                debtStatus: effectiveDebtStatus,
-                deferCount: effectiveDeferCount,
-                carryIntoWeekTag: effectiveCarryIntoWeekTag,
-                kicker,
-                noteLine,
-                tagLine
-            }, index);
-        }).filter((entry) => !!entry.recordId);
-        const latestEntry = entries[0] || null;
-        const verifiedCount = entries.filter((entry) => entry.resultStatus === 'verified').length;
-        const failedCount = entries.filter((entry) => entry.resultStatus === 'failed').length;
-        const deferredCount = entries.filter((entry) => entry.resultStatus === 'deferred').length;
-        const pendingCount = entries.filter((entry) => entry.resultStatus === 'pending').length;
-        const summaryLine = latestEntry
-            ? `最近一笔周判来自【${latestEntry.sourceModeLabel || latestEntry.roleLabel}】，当前记为${latestEntry.resultLabel}${latestEntry.settlementOutcomeLabel ? ` · ${latestEntry.settlementOutcomeLabel}` : ''}。`
-            : '周判记录会把每周主验证、旁验证与清账回写压成长期归档。';
-        const detailLine = latestEntry
-            ? (latestEntry.noteLine || latestEntry.detailLine || latestEntry.writebackLine || latestEntry.statusLine || '')
-            : '先打出 1 条真正落档的主验证或旁验证，周判记录才会开始累计。';
-        const progressText = entries.length > 0
-            ? `已归档 ${entries.length} 条`
-            : '等待首条周判';
-        return this.normalizeSeasonVerificationArchiveSnapshot({
-            available: entries.length > 0 || (
-                Array.isArray(seasonVerification?.records)
-                && seasonVerification.records.some((entry) => !isFrontierResolutionRecord(entry))
-            ),
-            weekTag: currentWeekTag,
-            weekLabel: currentWeekLabel,
-            totalRecords: entries.length,
-            verifiedCount,
-            failedCount,
-            deferredCount,
-            pendingCount,
-            summaryLine,
-            detailLine,
-            progressText,
-            latestEntry,
-            entries
-        });
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.buildSeasonVerificationArchiveSnapshot(options);
     }
 
     getSeasonVerificationArchiveSnapshot(options = {}) {
-        const seasonBoard = this.getSeasonBoardSnapshot(options);
-        return this.normalizeSeasonVerificationArchiveSnapshot(seasonBoard?.verificationArchive);
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getSeasonVerificationArchiveSnapshot(options);
     }
 
     jumpToSeasonVerificationAnchor(anchorSection = '', options = {}) {
-        const normalizedAnchor = String(anchorSection || '').trim();
-        if (normalizedAnchor === 'challenge') {
-            this.showChallengeHub('weekly');
-            return true;
-        }
-        if (normalizedAnchor === 'pvp') {
-            this.showScreen('pvp-screen');
-            if (typeof PVPScene !== 'undefined' && PVPScene) {
-                if (typeof PVPScene.onShow === 'function') {
-                    PVPScene.onShow();
-                } else if (typeof PVPScene.loadRankings === 'function') {
-                    PVPScene.loadRankings();
-                }
-            }
-            return true;
-        }
-        if (normalizedAnchor === 'endless') {
-            if (typeof this.isEndlessActive === 'function' && this.isEndlessActive()) {
-                this.showScreen('map-screen');
-            } else if (typeof this.startEndlessMode === 'function') {
-                this.startEndlessMode();
-            } else {
-                this.showScreen('map-screen');
-            }
-            return true;
-        }
-        if (normalizedAnchor === 'map') {
-            this.showScreen('map-screen');
-            return true;
-        }
-        this.switchCollectionSection(normalizedAnchor || String(options.fallbackSection || 'sanctum').trim() || 'sanctum');
-        return true;
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.jumpToSeasonVerificationAnchor(anchorSection, options);
     }
 
     followSeasonVerificationRecord(recordId = '') {
-        const archive = this.getSeasonVerificationArchiveSnapshot();
-        const targetRecordId = String(recordId || '').trim();
-        const entry = archive.entries.find((item) => item.recordId === targetRecordId)
-            || archive.latestEntry
-            || null;
-        if (!entry) return false;
-        return this.jumpToSeasonVerificationAnchor(entry.anchorSection || '', {
-            fallbackSection: 'sanctum',
-            recordId: entry.recordId
-        });
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.followSeasonVerificationRecord(recordId);
     }
 
     followSeasonBoardTask(taskId = '') {
@@ -8919,240 +7578,48 @@ class Game {
     }
 
     jumpToHeavenlyMandateAnchor(anchorSection = '', options = {}) {
-        return this.jumpToSeasonVerificationAnchor(anchorSection, {
-            fallbackSection: String(options.fallbackSection || 'sanctum').trim() || 'sanctum',
-            taskId: String(options.taskId || '').trim()
-        });
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.jumpToHeavenlyMandateAnchor(anchorSection, options);
     }
 
     followHeavenlyMandateTask(taskId = '') {
-        const mandate = typeof this.getHeavenlyMandateExpeditionSnapshot === 'function'
-            ? this.getHeavenlyMandateExpeditionSnapshot()
-            : null;
-        if (!mandate || typeof mandate !== 'object') return false;
-        const tasks = [];
-        if (mandate.focusTask && typeof mandate.focusTask === 'object') {
-            tasks.push(mandate.focusTask);
-        }
-        if (Array.isArray(mandate.lanes)) {
-            mandate.lanes.forEach((lane) => {
-                if (!Array.isArray(lane?.tasks)) return;
-                lane.tasks.forEach((task) => {
-                    if (task && typeof task === 'object') tasks.push(task);
-                });
-            });
-        }
-        const targetTaskId = String(taskId || '').trim();
-        const targetTask = tasks.find((entry) => entry.id === targetTaskId)
-            || (mandate.focusTask && typeof mandate.focusTask === 'object' ? mandate.focusTask : null)
-            || tasks.find((entry) => !entry.completed)
-            || tasks[0]
-            || null;
-        if (!targetTask) return false;
-        return this.jumpToHeavenlyMandateAnchor(
-            targetTask.anchorSection || targetTask.actionValue || '',
-            {
-                fallbackSection: 'sanctum',
-                taskId: targetTask.id || ''
-            }
-        );
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.followHeavenlyMandateTask(taskId);
     }
 
     createDefaultFateAftereffectState() {
-        return {
-            version: 1,
-            records: [],
-            history: [],
-            lastResolved: null
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.createDefaultFateAftereffectState();
     }
 
     normalizeFateAftereffectRecord(source = null, index = 0) {
-        const root = source && typeof source === 'object' ? source : {};
-        const sanitizeText = (value = '', limit = 180) => String(value || '').trim().slice(0, limit);
-        const templateId = ['route_bias', 'risk_bias', 'archive_bias'].includes(String(root.templateId || '').trim())
-            ? String(root.templateId || '').trim()
-            : 'route_bias';
-        const outcomeId = ['contract_success', 'contract_miss', 'recovery', 'stabilized'].includes(String(root.outcomeId || '').trim())
-            ? String(root.outcomeId || '').trim()
-            : 'stabilized';
-        const templateLabelMap = {
-            route_bias: '路线偏置',
-            risk_bias: '敌情偏置',
-            archive_bias: '归卷偏置'
-        };
-        const templateIconMap = {
-            route_bias: '🧭',
-            risk_bias: '🩸',
-            archive_bias: '🪞'
-        };
-        const outcomeLabelMap = {
-            contract_success: '契约兑现',
-            contract_miss: '契约未兑现',
-            recovery: '残卷回收',
-            stabilized: '界痕留痕'
-        };
-        const fallbackId = `aftereffect_${index + 1}`;
-        const record = {
-            recordId: sanitizeText(root.recordId || root.id || fallbackId, 80) || fallbackId,
-            icon: sanitizeText(root.icon || templateIconMap[templateId] || '🧭', 8) || '🧭',
-            name: sanitizeText(root.name || '', 60),
-            sourceRunId: sanitizeText(root.sourceRunId || '', 80),
-            sourceAgendaId: sanitizeText(root.sourceAgendaId || root.agendaId || '', 40),
-            sourceLabel: sanitizeText(root.sourceLabel || '', 80),
-            sourceLine: sanitizeText(root.sourceLine || '', 180),
-            sourceContractLabel: sanitizeText(root.sourceContractLabel || root.selectedContractLabel || '', 60),
-            sourceDecisionLabel: sanitizeText(root.sourceDecisionLabel || root.selectedDecisionLabel || '', 60),
-            templateId,
-            templateLabel: sanitizeText(root.templateLabel || templateLabelMap[templateId], 40) || templateLabelMap[templateId],
-            outcomeId,
-            outcomeLabel: sanitizeText(root.outcomeLabel || outcomeLabelMap[outcomeId], 40) || outcomeLabelMap[outcomeId],
-            chapterIndex: Math.max(0, Math.floor(Number(root.chapterIndex ?? root.boundChapterIndex) || 0)),
-            chapterName: sanitizeText(root.chapterName || root.boundChapterName || '', 60),
-            durationChapters: Math.max(1, Math.min(3, Math.floor(Number(root.durationChapters || root.duration || 1)))),
-            positiveLine: sanitizeText(root.positiveLine || '', 180),
-            negativeLine: sanitizeText(root.negativeLine || '', 180),
-            summaryLine: sanitizeText(root.summaryLine || '', 200),
-            detailLine: sanitizeText(root.detailLine || '', 220),
-            statusHintLine: sanitizeText(root.statusHintLine || '', 160),
-            weightShift: this.sanitizeSanctumAgendaWeightShift(root.weightShift),
-            createdAt: Math.max(0, Math.floor(Number(root.createdAt || root.updatedAt || 0) || 0))
-        };
-        if (!record.name) {
-            record.name = `${record.templateLabel} · ${record.outcomeLabel}`;
-        }
-        if (!record.sourceLine) {
-            record.sourceLine = [
-                record.sourceLabel,
-                record.sourceContractLabel ? `契约「${record.sourceContractLabel}」` : '',
-                !record.sourceContractLabel && record.sourceDecisionLabel ? `处置「${record.sourceDecisionLabel}」` : '',
-                record.chapterName
-            ].filter(Boolean).join(' · ');
-        }
-        if (!record.summaryLine) {
-            record.summaryLine = `${record.name}：${record.positiveLine || '已留下跨章后效。'}`;
-        }
-        if (!record.detailLine) {
-            record.detailLine = [
-                record.positiveLine ? `正向：${record.positiveLine}` : '',
-                record.negativeLine ? `代价：${record.negativeLine}` : ''
-            ].filter(Boolean).join('｜');
-        }
-        return record;
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.normalizeFateAftereffectRecord(source, index);
     }
 
     normalizeFateAftereffectState(source = null) {
-        const defaults = this.createDefaultFateAftereffectState();
-        const root = source && typeof source === 'object' ? source : {};
-        const records = Array.isArray(root.records)
-            ? root.records
-                .map((entry, index) => this.normalizeFateAftereffectRecord(entry, index))
-                .filter((entry) => entry.recordId)
-                .slice(-6)
-            : [];
-        const history = Array.isArray(root.history)
-            ? root.history
-                .map((entry, index) => this.normalizeFateAftereffectRecord(entry, index))
-                .filter((entry) => entry.recordId)
-                .slice(-10)
-            : [];
-        const lastResolved = root.lastResolved && typeof root.lastResolved === 'object'
-            ? this.normalizeFateAftereffectRecord(root.lastResolved)
-            : null;
-        return {
-            version: Math.max(1, Math.floor(Number(root.version) || defaults.version)),
-            records,
-            history,
-            lastResolved: lastResolved && lastResolved.recordId ? lastResolved : null
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.normalizeFateAftereffectState(source);
     }
 
     ensureFateAftereffectState(options = {}) {
-        const pruneExpired = !!options.pruneExpired;
-        const state = this.normalizeFateAftereffectState(this.fateAftereffectState);
-        if (pruneExpired && Array.isArray(state.records) && state.records.length > 0) {
-            const currentChapterIndex = this.getFateAftereffectCurrentChapterIndex(options);
-            if (currentChapterIndex > 0) {
-                const activeRecords = [];
-                const expiredMap = new Map(
-                    (Array.isArray(state.history) ? state.history : [])
-                        .map((entry) => {
-                            const normalized = this.normalizeFateAftereffectRecord(entry);
-                            return [normalized.recordId, normalized];
-                        })
-                );
-                state.records.forEach((entry) => {
-                    const runtime = this.getFateAftereffectRuntimeRecord(entry, { currentChapterIndex });
-                    if (runtime?.isExpired) {
-                        expiredMap.set(runtime.recordId, this.normalizeFateAftereffectRecord(runtime));
-                    } else if (runtime) {
-                        activeRecords.push(this.normalizeFateAftereffectRecord(runtime));
-                    }
-                });
-                state.records = activeRecords.slice(-6);
-                state.history = Array.from(expiredMap.values()).slice(-10);
-            }
-        }
-        this.fateAftereffectState = state;
-        return state;
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.ensureFateAftereffectState(options);
     }
 
     getFateAftereffectSaveState() {
-        return this.ensureFateAftereffectState({ pruneExpired: true });
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getFateAftereffectSaveState();
     }
 
     getFateAftereffectCurrentChapterIndex(context = {}) {
-        const direct = Math.max(0, Math.floor(Number(context.currentChapterIndex) || 0));
-        if (direct > 0) return direct;
-        const expeditionState = context.expeditionState && typeof context.expeditionState === 'object'
-            ? context.expeditionState
-            : (typeof this.getExpeditionState === 'function' ? this.getExpeditionState() : null);
-        const expeditionChapter = Math.max(0, Math.floor(Number(expeditionState?.chapterIndex) || 0));
-        if (expeditionChapter > 0) return expeditionChapter;
-        const playerChapter = Math.max(0, Math.floor(Number(this.player?.realm) || 0));
-        const latestSlate = context.latestSlate && typeof context.latestSlate === 'object'
-            ? context.latestSlate
-            : (typeof this.getLatestRunSlate === 'function' ? this.getLatestRunSlate() : null);
-        const slateChapter = Math.max(0, Math.floor(Number(latestSlate?.chapterIndex) || 0));
-        if (slateChapter > 0 || playerChapter > 0) return Math.max(slateChapter, playerChapter);
-        return 0;
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getFateAftereffectCurrentChapterIndex(context);
     }
 
     getFateAftereffectRuntimeRecord(source = null, context = {}) {
-        const record = this.normalizeFateAftereffectRecord(source);
-        if (!record.recordId) return null;
-        const currentChapterIndex = this.getFateAftereffectCurrentChapterIndex(context);
-        const activationChapterIndex = Math.max(1, record.chapterIndex + 1);
-        let status = 'pending';
-        let statusLabel = '待生效';
-        let remainingChapters = record.durationChapters;
-        if (currentChapterIndex >= activationChapterIndex) {
-            const chaptersElapsed = currentChapterIndex - activationChapterIndex;
-            remainingChapters = Math.max(0, record.durationChapters - chaptersElapsed);
-            if (remainingChapters <= 0) {
-                status = 'expired';
-                statusLabel = '已收口';
-            } else {
-                status = 'active';
-                statusLabel = '生效中';
-            }
-        }
-        const statusLine = status === 'pending'
-            ? `第 ${activationChapterIndex} 章起生效 · 持续 ${record.durationChapters} 章`
-            : (status === 'active'
-                ? `当前生效 · 剩余 ${remainingChapters} 章`
-                : '已完成跨章收口');
-        return {
-            ...record,
-            currentChapterIndex,
-            activationChapterIndex,
-            remainingChapters,
-            status,
-            statusLabel,
-            statusLine,
-            appliesNow: status === 'active',
-            isExpired: status === 'expired'
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getFateAftereffectRuntimeRecord(source, context);
     }
 
     createFateAftereffectFromSanctumAgenda(resolved = null, context = {}) {
@@ -9161,647 +7628,48 @@ class Game {
     }
 
     getFateAftereffectSnapshot(context = {}) {
-        const currentChapterIndex = this.getFateAftereffectCurrentChapterIndex(context);
-        const state = this.ensureFateAftereffectState({
-            pruneExpired: true,
-            currentChapterIndex
-        });
-        const records = Array.isArray(state.records)
-            ? state.records
-                .map((entry) => this.getFateAftereffectRuntimeRecord(entry, { currentChapterIndex }))
-                .filter(Boolean)
-                .sort((a, b) => {
-                    const order = { active: 0, pending: 1, expired: 2 };
-                    const delta = (order[a.status] ?? 9) - (order[b.status] ?? 9);
-                    return delta !== 0 ? delta : ((b.createdAt || 0) - (a.createdAt || 0));
-                })
-            : [];
-        const history = Array.isArray(state.history)
-            ? state.history
-                .map((entry) => this.getFateAftereffectRuntimeRecord(entry, { currentChapterIndex }))
-                .filter(Boolean)
-                .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-            : [];
-        const latestRunId = String(context.latestRunId || '').trim();
-        const visibleRecords = latestRunId
-            ? records.filter((entry) => entry.sourceRunId === latestRunId)
-            : records;
-        const historyRecords = latestRunId
-            ? history.filter((entry) => entry.sourceRunId === latestRunId)
-            : history;
-        const runtimeLastResolved = state.lastResolved
-            ? this.getFateAftereffectRuntimeRecord(state.lastResolved, { currentChapterIndex })
-            : null;
-        const lastResolved = latestRunId
-            ? ((runtimeLastResolved && runtimeLastResolved.sourceRunId === latestRunId)
-                ? runtimeLastResolved
-                : (historyRecords[0] || null))
-            : runtimeLastResolved;
-        const selectedRecords = visibleRecords.length > 0
-            ? visibleRecords
-            : (historyRecords.length > 0 ? historyRecords : records);
-        const primary = selectedRecords[0] || lastResolved || history[0] || null;
-        if (!primary) return null;
-        const activeCount = records.filter((entry) => entry.status === 'active').length;
-        const pendingCount = records.filter((entry) => entry.status === 'pending').length;
-        const guideLine = primary.status === 'active'
-            ? `当前后效【${primary.name}】仍在生效，优先利用「${primary.positiveLine || '正向收益'}」，并提防「${primary.negativeLine || '负向代价'}」。`
-            : (primary.status === 'pending'
-                ? `后效【${primary.name}】会从第 ${primary.activationChapterIndex} 章开始生效，持续 ${primary.durationChapters} 章。`
-                : `最近一条后效【${primary.name}】已经收口。`);
-        return {
-            available: true,
-            title: '界痕抉择',
-            icon: primary.icon || '🧭',
-            actionValue: 'sanctum',
-            currentChapterIndex,
-            activeCount,
-            pendingCount,
-            recordCount: records.length,
-            summaryLine: primary.summaryLine || `${primary.name}：${primary.positiveLine || '已留下后效。'}`,
-            detailLine: primary.detailLine || primary.sourceLine || '',
-            guideLine,
-            currentStatusLine: primary.statusLine || '',
-            primary,
-            lastResolved,
-            records: selectedRecords.slice(0, 3)
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getFateAftereffectSnapshot(context);
     }
 
     getFateAftereffectWeightShift() {
-        const snapshot = this.getFateAftereffectSnapshot();
-        if (!snapshot || !Array.isArray(snapshot.records) || snapshot.records.length <= 0) return null;
-        const activeShifts = snapshot.records
-            .filter((entry) => entry.appliesNow)
-            .map((entry) => entry.weightShift)
-            .filter((entry) => entry && typeof entry === 'object');
-        if (activeShifts.length <= 0) return null;
-        return this.mergeSanctumAgendaWeightShifts(...activeShifts);
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getFateAftereffectWeightShift();
     }
 
     getHeavenlyMandateWeekMeta(dateOverride = null) {
-        const toDate = (value) => {
-            if (value instanceof Date) return new Date(value.getTime());
-            const candidate = value === null || value === undefined ? new Date() : new Date(value);
-            if (Number.isFinite(candidate.getTime())) return candidate;
-            return new Date();
-        };
-        const dateRef = toDate(dateOverride);
-        const endlessMeta = typeof this.getEndlessWeekMeta === 'function'
-            ? this.getEndlessWeekMeta(dateRef)
-            : null;
-        const challengeWeekTag = typeof this.getChallengeRotationKey === 'function'
-            ? String(this.getChallengeRotationKey('weekly', dateRef) || '').trim()
-            : '';
-        const fallbackWeekTag = String(endlessMeta?.weekTag || '').trim();
-        const weekTag = challengeWeekTag || fallbackWeekTag;
-        const weekMatch = weekTag.match(/^(\d+)-W(\d+)$/);
-        return {
-            year: weekMatch ? Number(weekMatch[1]) : Math.max(1970, Math.floor(Number(endlessMeta?.year) || dateRef.getUTCFullYear())),
-            weekNo: weekMatch ? Number(weekMatch[2]) : Math.max(1, Math.floor(Number(endlessMeta?.weekNo) || 1)),
-            weekTag: weekTag || '1970-W01',
-            weekIndex: Math.max(0, Math.floor(Number(endlessMeta?.weekIndex) || 0)),
-            weekLabel: weekMatch ? `${weekMatch[1]} · 第 ${Number(weekMatch[2])} 周` : '本周',
-            endlessWeekTag: fallbackWeekTag,
-            challengeWeekTag,
-            dateRef
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getHeavenlyMandateWeekMeta(dateOverride);
     }
 
     getHeavenlyMandateSignalSnapshot(options = {}) {
-        const weekMeta = this.getHeavenlyMandateWeekMeta(options.dateOverride || null);
-        const latestSlate = typeof this.getLatestRunSlate === 'function'
-            ? this.getLatestRunSlate()
-            : null;
-        const validWeekTags = new Set(
-            [
-                String(weekMeta.weekTag || '').trim(),
-                String(weekMeta.endlessWeekTag || '').trim(),
-                String(weekMeta.challengeWeekTag || '').trim()
-            ].filter(Boolean)
-        );
-        const latestSlateAt = Math.max(
-            0,
-            Math.floor(Number(
-                latestSlate?.timestamp
-                ?? latestSlate?.completedAt
-                ?? latestSlate?.at
-                ?? latestSlate?.createdAt
-                ?? 0
-            ) || 0)
-        );
-        const latestSlateWeekMeta = latestSlateAt > 0
-            ? this.getHeavenlyMandateWeekMeta(latestSlateAt)
-            : null;
-        const latestSlateWeekTag = String(latestSlateWeekMeta?.weekTag || '').trim();
-        const weeklyLatestSlate = latestSlate && latestSlateWeekTag
-            ? (validWeekTags.size > 0 ? (validWeekTags.has(latestSlateWeekTag) ? latestSlate : null) : latestSlate)
-            : null;
-        const expeditionState = typeof this.getExpeditionState === 'function'
-            ? this.getExpeditionState()
-            : null;
-        const answerSheet = expeditionState && typeof this.getExpeditionAnswerSheet === 'function'
-            ? this.getExpeditionAnswerSheet(expeditionState)
-            : null;
-        const trainingFocus = typeof this.getObservatoryTrainingFocus === 'function'
-            ? this.getObservatoryTrainingFocus()
-            : null;
-        const selectedGuide = typeof this.getSelectedObservatoryExpeditionGuide === 'function'
-            ? this.getSelectedObservatoryExpeditionGuide({ silentSync: true })
-            : null;
-        const weeklyBundle = typeof this.buildChallengeBundle === 'function'
-            ? this.buildChallengeBundle('weekly', weekMeta.dateRef)
-            : null;
-        const weeklyArchiveEntries = typeof this.getObservatoryArchiveEntries === 'function'
-            ? this.getObservatoryArchiveEntries({
-                mode: 'weekly',
-                rotationKey: weekMeta.challengeWeekTag || weekMeta.weekTag,
-                limit: 12
-            })
-            : [];
-        const agendaSnapshot = typeof this.getSanctumAgendaExpeditionSnapshot === 'function'
-            ? this.getSanctumAgendaExpeditionSnapshot({ latestRunId: String((weeklyLatestSlate || latestSlate)?.id || '') })
-            : null;
-        const endlessState = typeof this.ensureEndlessState === 'function'
-            ? this.ensureEndlessState()
-            : (this.endlessState && typeof this.endlessState === 'object' ? this.endlessState : null);
-        const endlessSeason = typeof this.getEndlessSeasonProfile === 'function'
-            ? this.getEndlessSeasonProfile(
-                endlessState && typeof endlessState === 'object' ? endlessState.currentCycle : null,
-                weekMeta.dateRef
-            )
-            : null;
-        let pvpSeason = null;
-        let pvpHistory = [];
-        if (
-            typeof PVPService !== 'undefined'
-            && PVPService
-            && typeof PVPService.getCurrentSeasonMeta === 'function'
-        ) {
-            try {
-                pvpSeason = PVPService.getCurrentSeasonMeta();
-            } catch (error) {
-                pvpSeason = null;
-            }
-        }
-        if (
-            typeof PVPService !== 'undefined'
-            && PVPService
-            && typeof PVPService.getRecentMatchHistory === 'function'
-        ) {
-            try {
-                pvpHistory = PVPService.getRecentMatchHistory(24) || [];
-            } catch (error) {
-                pvpHistory = [];
-            }
-        }
-        const pvpSeasonId = String(pvpSeason?.id || '').trim();
-        const pvpSeasonMatches = Array.isArray(pvpHistory)
-            ? pvpHistory.filter((entry) => {
-                if (!entry || typeof entry !== 'object') return false;
-                if (!pvpSeasonId) return true;
-                return !entry.seasonId || entry.seasonId === pvpSeasonId;
-            })
-            : [];
-        const currentEndlessWeekTag = String(endlessState?.seasonWeekTag || '').trim();
-        const endlessMatchesWeek = validWeekTags.size > 0
-            ? validWeekTags.has(currentEndlessWeekTag)
-            : currentEndlessWeekTag.length > 0;
-        return {
-            weekTag: weekMeta.weekTag,
-            weekLabel: weekMeta.weekLabel,
-            weekIndex: weekMeta.weekIndex,
-            latestSlate: weeklyLatestSlate,
-            latestSlateWeekTag,
-            answerSheet,
-            trainingFocus,
-            selectedGuide,
-            weeklyBundle,
-            weeklyScore: Math.max(0, Math.floor(Number(weeklyBundle?.progress?.totalScore) || 0)),
-            weeklyArchiveCount: Array.isArray(weeklyArchiveEntries) ? weeklyArchiveEntries.length : 0,
-            agendaSnapshot,
-            activeAgenda: agendaSnapshot?.active || null,
-            lastAgenda: agendaSnapshot?.lastResolved || null,
-            endlessSeason,
-            endlessClears: endlessMatchesWeek ? Math.max(0, Math.floor(Number(endlessState?.seasonCycleClears) || 0)) : 0,
-            endlessScore: endlessMatchesWeek ? Math.max(0, Math.floor(Number(endlessState?.seasonScore) || 0)) : 0,
-            pvpSeason,
-            pvpSeasonName: String(pvpSeason?.name || '').trim(),
-            pvpSeasonMatchCount: pvpSeasonMatches.length,
-            pvpRecentOpponentName: String(pvpSeasonMatches[0]?.opponentName || '').trim()
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getHeavenlyMandateSignalSnapshot(options);
     }
 
     getHeavenlyMandateThemeMeta(snapshot = null) {
-        const source = snapshot && typeof snapshot === 'object' ? snapshot : {};
-        const catalog = {
-            star_reading: {
-                id: 'star_reading',
-                label: '观星校卷',
-                icon: '🔭',
-                kicker: '本周天道敕令',
-                summaryLine: '先读题，再把样本压成能兑现的主卷。'
-            },
-            seal_commitment: {
-                id: 'seal_commitment',
-                label: '押卷锁线',
-                icon: '📜',
-                kicker: '本周天道敕令',
-                summaryLine: '围绕洞府承诺推进章节，要求本周真正见到结题推进。'
-            },
-            mirror_trial: {
-                id: 'mirror_trial',
-                label: '镜战验算',
-                icon: '⚔️',
-                kicker: '本周天道敕令',
-                summaryLine: '把本周主练送去周挑战、无尽与天道榜做交叉验证。'
-            }
-        };
-        const fallbackOrder = ['star_reading', 'seal_commitment', 'mirror_trial'];
-        let themeId = fallbackOrder[Math.max(0, Math.floor(Number(source.weekIndex) || 0)) % fallbackOrder.length];
-        if ((source.pvpSeasonMatchCount || 0) > 0 || (source.endlessClears || 0) > 0) {
-            themeId = 'mirror_trial';
-        } else if (source.activeAgenda || source.latestSlate) {
-            themeId = 'seal_commitment';
-        }
-        const theme = catalog[themeId] || catalog.star_reading;
-        let summaryLine = theme.summaryLine;
-        if (themeId === 'star_reading' && source.selectedGuide?.title) {
-            summaryLine = `本周先围绕【${source.selectedGuide.title}】校卷，再把训练建议写回远征。`;
-        } else if (themeId === 'seal_commitment' && source.activeAgenda?.name) {
-            summaryLine = `本周核心是把【${source.activeAgenda.name}】推进成卷，再把洞府承诺带去章节结算。`;
-        } else if (themeId === 'mirror_trial' && source.pvpSeasonName) {
-            summaryLine = `本周主练要拿去【${source.pvpSeasonName}】与无尽轮回做交叉验算，确认打法不是只在单章成立。`;
-        }
-        return {
-            ...theme,
-            summaryLine
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getHeavenlyMandateThemeMeta(snapshot);
     }
 
     buildHeavenlyMandateBoard(options = {}) {
-        const signals = this.getHeavenlyMandateSignalSnapshot(options);
-        const theme = this.getHeavenlyMandateThemeMeta(signals);
-        const activeAgenda = signals.activeAgenda;
-        const lastAgenda = signals.lastAgenda;
-        const latestSlate = signals.latestSlate;
-        const selectedGuide = signals.selectedGuide;
-        const trainingFocus = signals.trainingFocus;
-        const weeklyBundle = signals.weeklyBundle;
-        const weeklyScoreTarget = theme.id === 'mirror_trial' ? 620 : 360;
-        const expeditionLane = {
-            id: 'expedition',
-            label: '远征线',
-            icon: '🧭',
-            summaryLine: activeAgenda
-                ? `当前正围绕【${activeAgenda.name}】压卷，章节内要继续沿 ${activeAgenda.focusNodeLine || '主轴'} 推进。`
-                : (latestSlate
-                    ? `本周已有一张章节答卷入档，下一步要把归卷样本继续压成洞府承诺。`
-                    : '先打一章远征留下本周第一张命盘答卷，再决定洞府押注。'),
-            tasks: [
-                {
-                    id: 'weekly_run_slate',
-                    label: latestSlate ? '本周答卷已入档' : '留下本周第一张答卷',
-                    icon: '🧭',
-                    progress: latestSlate ? 1 : 0,
-                    target: 1,
-                    hintLine: latestSlate
-                        ? `最新归卷：${latestSlate.chapterName || '章节'} · ${latestSlate.endingName || '已收卷'}${latestSlate.score ? ` · 评分 ${latestSlate.score}` : ''}`
-                        : '推进任意一章裂界远征，先把本周主练压成第一张命盘答卷。',
-                    statusLine: latestSlate?.ratingLabel || '',
-                    anchorSection: 'slates'
-                },
-                {
-                    id: 'weekly_sanctum_commitment',
-                    label: activeAgenda
-                        ? `推进 ${activeAgenda.name}`
-                        : (lastAgenda ? `复核 ${lastAgenda.name}` : '立下一道洞府承诺'),
-                    icon: '📜',
-                    progress: activeAgenda
-                        ? Math.max(0, Math.floor(Number(activeAgenda.progress) || 0))
-                        : (lastAgenda?.outcome === 'success' ? 1 : 0),
-                    target: activeAgenda
-                        ? Math.max(1, Math.floor(Number(activeAgenda.target) || 1))
-                        : 1,
-                    hintLine: activeAgenda
-                        ? (activeAgenda.phaseLine || activeAgenda.focusNodeLine || activeAgenda.summaryLine || '本轮承诺正在推进。')
-                        : (lastAgenda
-                            ? (lastAgenda.recoveryLine || lastAgenda.grantedLine || lastAgenda.reasonLine || '上一道洞府承诺已经留下结果。')
-                            : '从归卷书架挑一份样本，立为本周要兑现的洞府承诺。'),
-                    statusLine: activeAgenda?.phaseLabel || lastAgenda?.outcomeLabel || '',
-                    anchorSection: 'sanctum'
-                }
-            ]
-        };
-        const trainingLane = {
-            id: 'training',
-            label: '训练线',
-            icon: '🔭',
-            summaryLine: selectedGuide?.title
-                ? `当前主练线索已锁定为【${selectedGuide.title}】，接下来要把它推成真正可复用的周训练样本。`
-                : (trainingFocus?.trainingAdvice
-                    ? `当前已有主练建议，但还没有明确精选命盘，最好补一份更稳定的观星线索。`
-                    : '本周先在观星台锁定一份可复用主练，再去冲七日劫数。'),
-            tasks: [
-                {
-                    id: 'weekly_training_focus',
-                    label: (selectedGuide || trainingFocus) ? '主练线索已锁定' : '锁定本周主练线索',
-                    icon: '🔭',
-                    progress: (selectedGuide || trainingFocus) ? 1 : 0,
-                    target: 1,
-                    hintLine: selectedGuide
-                        ? `当前精选命盘：${selectedGuide.title} · ${selectedGuide.themeLabel || '观星样本'}`
-                        : (trainingFocus
-                            ? `当前主练：${trainingFocus.chapterName || '最近归卷'} · ${trainingFocus.trainingAdvice || trainingFocus.sourceTitle || '已给出训练建议'}`
-                            : '去观星台筛一份精选命盘，或先完成一轮周挑战补出主练建议。'),
-                    statusLine: selectedGuide?.themeLabel || trainingFocus?.themeLabel || '',
-                    anchorSection: 'chapters'
-                },
-                {
-                    id: 'weekly_challenge_score',
-                    label: `七日劫数累计 ${weeklyScoreTarget} 分`,
-                    icon: '🜁',
-                    progress: Math.min(Math.max(0, Math.floor(Number(signals.weeklyScore) || 0)), weeklyScoreTarget),
-                    target: weeklyScoreTarget,
-                    hintLine: weeklyBundle
-                        ? `${weeklyBundle.rule?.name || '本周轮换'} · 当前 ${Math.max(0, Math.floor(Number(signals.weeklyScore) || 0))} 分${signals.weeklyArchiveCount > 0 ? ` · 已归档 ${signals.weeklyArchiveCount} 份样本` : ''}`
-                        : '本周还没有周挑战记录，先去观星台跑一局七日劫数。',
-                    statusLine: weeklyBundle?.rotationLabel || signals.weekLabel || '',
-                    anchorSection: 'challenge'
-                }
-            ]
-        };
-        const versusLane = {
-            id: 'versus',
-            label: '对抗线',
-            icon: '⚔️',
-            summaryLine: (signals.endlessClears || 0) > 0 || (signals.pvpSeasonMatchCount || 0) > 0
-                ? '本周已经开始做跨模式验算，继续把主练送进高压场验证稳定性。'
-                : '用无尽与天道榜验证这周主练不是只在单章里成立的幻觉。',
-            tasks: [
-                {
-                    id: 'weekly_endless_clear',
-                    label: '无尽轮回通关 1 轮',
-                    icon: '∞',
-                    progress: Math.min(Math.max(0, Math.floor(Number(signals.endlessClears) || 0)), 1),
-                    target: 1,
-                    hintLine: signals.endlessSeason
-                        ? `${signals.endlessSeason.name || '当前赛季'} · 已清 ${Math.max(0, Math.floor(Number(signals.endlessClears) || 0))} 轮 / 赛季积分 ${Math.max(0, Math.floor(Number(signals.endlessScore) || 0))}`
-                        : '进入无尽轮回后，会开始记录本周赛季推进与压强验证结果。',
-                    statusLine: signals.endlessSeason?.directiveName || '',
-                    anchorSection: 'endless'
-                },
-                {
-                    id: 'weekly_pvp_ledger',
-                    label: '天道榜留下 2 场账本',
-                    icon: '⚔️',
-                    progress: Math.min(Math.max(0, Math.floor(Number(signals.pvpSeasonMatchCount) || 0)), 2),
-                    target: 2,
-                    hintLine: signals.pvpSeasonName
-                        ? `${signals.pvpSeasonName} · 已记 ${Math.max(0, Math.floor(Number(signals.pvpSeasonMatchCount) || 0))} 场${signals.pvpRecentOpponentName ? ` · 最近对手 ${signals.pvpRecentOpponentName}` : ''}`
-                        : 'PVP 账本会记录本季真实对局，至少打一场先建立首条样本。',
-                    statusLine: signals.pvpSeasonName || '',
-                    anchorSection: 'pvp'
-                }
-            ]
-        };
-        const rawLanes = [expeditionLane, trainingLane, versusLane];
-        const seasonSignals = typeof this.getSeasonBoardSignalSnapshot === 'function'
-            ? this.getSeasonBoardSignalSnapshot({
-                ...options,
-                latestSlate
-            })
-            : null;
-        const seasonPhase = seasonSignals && typeof this.getSeasonBoardPhaseMeta === 'function'
-            ? this.getSeasonBoardPhaseMeta(seasonSignals)
-            : null;
-        const seasonSettlementState = seasonSignals && typeof this.buildSeasonBoardSettlementState === 'function'
-            ? this.buildSeasonBoardSettlementState(seasonSignals, seasonPhase)
-            : null;
-        const mandateDebtPack = seasonSettlementState?.debtPack && typeof seasonSettlementState.debtPack === 'object'
-            ? seasonSettlementState.debtPack
-            : null;
-        const debtFocusTask = typeof this.buildHeavenlyMandateDebtFocusTask === 'function'
-            ? this.buildHeavenlyMandateDebtFocusTask(mandateDebtPack)
-            : null;
-        if (debtFocusTask) {
-            const laneIdByAnchorSection = {
-                slates: 'expedition',
-                sanctum: 'expedition',
-                chapters: 'training',
-                challenge: 'training',
-                endless: 'versus',
-                pvp: 'versus'
-            };
-            const targetLaneId = laneIdByAnchorSection[debtFocusTask.anchorSection] || 'versus';
-            const laneIndex = rawLanes.findIndex((lane) => lane.id === targetLaneId);
-            if (laneIndex >= 0) {
-                const targetLane = rawLanes[laneIndex];
-                const nextTasks = Array.isArray(targetLane.tasks) ? targetLane.tasks.slice() : [];
-                let replaceIndex = nextTasks.findIndex((task) => (
-                    String(task?.anchorSection || '').trim() === debtFocusTask.anchorSection
-                ));
-                if (replaceIndex < 0) {
-                    replaceIndex = nextTasks.findIndex((task) => !task?.completed);
-                }
-                if (replaceIndex < 0) replaceIndex = 0;
-                const nextTask = {
-                    ...(nextTasks[replaceIndex] || {}),
-                    ...debtFocusTask,
-                    id: debtFocusTask.id,
-                    label: debtFocusTask.label,
-                    icon: debtFocusTask.icon,
-                    progress: debtFocusTask.progress,
-                    target: debtFocusTask.target,
-                    completed: debtFocusTask.completed,
-                    progressText: debtFocusTask.progressText,
-                    hintLine: debtFocusTask.hintLine,
-                    statusLine: debtFocusTask.statusLine,
-                    anchorSection: debtFocusTask.anchorSection,
-                    source: debtFocusTask.source,
-                    sourceId: debtFocusTask.sourceId,
-                    isPlaceholder: debtFocusTask.isPlaceholder,
-                    occupiesStrongSlot: debtFocusTask.occupiesStrongSlot
-                };
-                if (nextTasks.length <= 0) {
-                    nextTasks.push(nextTask);
-                } else {
-                    nextTasks[replaceIndex] = nextTask;
-                }
-                rawLanes[laneIndex] = {
-                    ...targetLane,
-                    summaryLine: [
-                        mandateDebtPack?.status === 'deferred'
-                            ? '旧周欠卷已挤入本周强目标位，先清账再谈其他高压推进。'
-                            : '本周欠卷已经占住一个强目标位，主验证优先级被提前。',
-                        targetLane.summaryLine
-                    ].filter(Boolean).slice(0, 2).join('｜'),
-                    tasks: nextTasks
-                };
-            }
-        }
-        const lanes = rawLanes
-            .map((lane, index) => this.normalizeHeavenlyMandateLane(lane, index));
-        const completedTaskCount = lanes.reduce((sum, lane) => sum + lane.completedCount, 0);
-        const totalTaskCount = lanes.reduce((sum, lane) => sum + lane.totalCount, 0);
-        return {
-            version: 1,
-            weekTag: signals.weekTag,
-            weekLabel: signals.weekLabel,
-            themeId: theme.id,
-            themeLabel: theme.label,
-            themeIcon: theme.icon,
-            themeKicker: theme.kicker,
-            summaryLine: theme.summaryLine,
-            lanes,
-            completedTaskCount,
-            totalTaskCount
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.buildHeavenlyMandateBoard(options);
     }
 
     syncHeavenlyMandateState(options = {}) {
-        const state = this.ensureHeavenlyMandateState();
-        const board = this.buildHeavenlyMandateBoard(options);
-        let history = Array.isArray(state.history) ? state.history.slice() : [];
-        if (state.weekTag && state.weekTag !== board.weekTag && state.totalTaskCount > 0) {
-            const previousEntry = this.normalizeHeavenlyMandateHistoryEntry({
-                weekTag: state.weekTag,
-                weekLabel: state.weekLabel,
-                themeId: state.themeId,
-                themeLabel: state.themeLabel,
-                summaryLine: state.summaryLine,
-                completedTaskCount: state.completedTaskCount,
-                totalTaskCount: state.totalTaskCount,
-                completed: state.completedTaskCount >= state.totalTaskCount && state.totalTaskCount > 0,
-                at: state.lastSyncedAt || Date.now()
-            });
-            history = [previousEntry, ...history.filter((entry) => entry.weekTag !== previousEntry.weekTag)].slice(0, 6);
-        }
-        this.heavenlyMandateState = this.normalizeHeavenlyMandateState({
-            ...state,
-            ...board,
-            history,
-            lastSyncedAt: Date.now()
-        });
-        return this.heavenlyMandateState;
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.syncHeavenlyMandateState(options);
     }
 
     getHeavenlyMandateSaveState() {
-        return this.syncHeavenlyMandateState();
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getHeavenlyMandateSaveState();
     }
 
     getHeavenlyMandateExpeditionSnapshot(options = {}) {
-        const state = this.syncHeavenlyMandateState(options);
-        if (!state.weekTag || state.lanes.length <= 0) return null;
-        const seasonBoard = typeof this.getSeasonBoardSnapshot === 'function'
-            ? this.getSeasonBoardSnapshot(options.latestSlate ? { latestSlate: options.latestSlate } : {})
-            : null;
-        const debtPack = seasonBoard?.debtPack && typeof seasonBoard.debtPack === 'object'
-            ? seasonBoard.debtPack
-            : null;
-        const laneTasks = state.lanes
-            .flatMap((lane) => Array.isArray(lane?.tasks) ? lane.tasks : [])
-            .filter((task) => task && typeof task === 'object');
-        const occupiedLaneTask = debtPack?.occupiesStrongSlot && debtPack?.occupiedMandateTaskId
-            ? laneTasks.find((task) => task.id === debtPack.occupiedMandateTaskId) || null
-            : null;
-        const defaultFocusTask = laneTasks.find((task) => !task.completed) || null;
-        const focusTask = debtPack?.occupiesStrongSlot
-            ? this.normalizeHeavenlyMandateFocusTask(
-                occupiedLaneTask
-                    ? {
-                        ...occupiedLaneTask,
-                        source: 'seasonDebtPack',
-                        sourceId: debtPack.id || '',
-                        isPlaceholder: false,
-                        occupiesStrongSlot: true
-                    }
-                    : (typeof this.buildHeavenlyMandateDebtFocusTask === 'function'
-                        ? this.buildHeavenlyMandateDebtFocusTask(debtPack)
-                        : null)
-            )
-            : this.normalizeHeavenlyMandateFocusTask(
-                defaultFocusTask
-                    ? {
-                        ...defaultFocusTask,
-                        source: defaultFocusTask.source || 'heavenlyMandateTask',
-                        sourceId: defaultFocusTask.sourceId || defaultFocusTask.id || '',
-                        isPlaceholder: !!defaultFocusTask.isPlaceholder,
-                        occupiesStrongSlot: !!defaultFocusTask.occupiesStrongSlot
-                    }
-                    : null
-            );
-        const actionMeta = focusTask && typeof focusTask === 'object'
-            ? {
-                actionType: focusTask.actionType || 'collection',
-                actionValue: focusTask.actionValue || 'sanctum',
-                ctaLabel: focusTask.ctaLabel || '前往推进'
-            }
-            : (typeof this.getSeasonVerificationActionMeta === 'function'
-                ? this.getSeasonVerificationActionMeta('sanctum')
-                : {
-                    actionType: 'collection',
-                    actionValue: 'sanctum',
-                    ctaLabel: '回看洞府'
-                });
-        return {
-            weekTag: state.weekTag,
-            weekLabel: state.weekLabel,
-            themeId: state.themeId,
-            themeLabel: state.themeLabel,
-            themeIcon: state.themeIcon,
-            themeKicker: state.themeKicker,
-            summaryLine: state.summaryLine,
-            completedTaskCount: state.completedTaskCount,
-            totalTaskCount: state.totalTaskCount,
-            actionType: actionMeta.actionType,
-            actionValue: actionMeta.actionValue,
-            ctaLabel: actionMeta.ctaLabel,
-            focusTask,
-            nextTask: focusTask
-                ? {
-                    ...focusTask
-                }
-                : null,
-            lanes: state.lanes.map((lane) => ({
-                id: lane.id,
-                label: lane.label,
-                icon: lane.icon,
-                summaryLine: lane.summaryLine,
-                completedCount: lane.completedCount,
-                totalCount: lane.totalCount,
-                tasks: lane.tasks.map((task) => ({
-                    id: task.id,
-                    label: task.label,
-                    icon: task.icon,
-                    progress: task.progress,
-                    target: task.target,
-                    progressText: task.progressText,
-                    completed: task.completed,
-                    hintLine: task.hintLine,
-                    statusLine: task.statusLine,
-                    anchorSection: task.anchorSection,
-                    actionType: task.actionType || '',
-                    actionValue: task.actionValue || '',
-                    ctaLabel: task.ctaLabel || '',
-                    source: task.source || '',
-                    sourceId: task.sourceId || '',
-                    isPlaceholder: !!task.isPlaceholder,
-                    occupiesStrongSlot: !!task.occupiesStrongSlot
-                }))
-            })),
-            history: state.history.map((entry) => ({
-                weekTag: entry.weekTag,
-                weekLabel: entry.weekLabel,
-                themeId: entry.themeId,
-                themeLabel: entry.themeLabel,
-                summaryLine: entry.summaryLine,
-                completedTaskCount: entry.completedTaskCount,
-                totalTaskCount: entry.totalTaskCount,
-                completed: entry.completed,
-                at: entry.at
-            }))
-        };
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.getHeavenlyMandateExpeditionSnapshot(options);
     }
 
     getSeasonBoardSignalSnapshot(options = {}) {
@@ -10105,36 +7973,8 @@ class Game {
     }
 
     applyStrategicEngineeringMilestoneReward(track = null) {
-        if (!track || !track.reward || !this.player) return '';
-        const reward = track.reward;
-        const details = [];
-
-        const insight = Math.max(0, Math.floor(Number(reward.insight) || 0));
-        if (insight > 0) {
-            this.player.heavenlyInsight = this.getStrategicCurrencyAmount('insight') + insight;
-            details.push(`天机 +${insight}`);
-        }
-
-        const karma = Math.max(0, Math.floor(Number(reward.karma) || 0));
-        if (karma > 0) {
-            this.player.karma = this.getStrategicCurrencyAmount('karma') + karma;
-            details.push(`业果 +${karma}`);
-        }
-
-        const ringExp = Math.max(0, Math.floor(Number(reward.ringExp) || 0));
-        if (ringExp > 0) {
-            const gained = this.grantFateRingExp(ringExp);
-            if (gained > 0) details.push(`命环经验 +${gained}`);
-        }
-
-        if (reward.buffId && this.player && typeof this.player.grantAdventureBuff === 'function') {
-            const buffAmount = Math.max(1, Math.floor(Number(reward.buffAmount) || 1));
-            if (this.player.grantAdventureBuff(reward.buffId, buffAmount)) {
-                details.push(`${reward.buffLabel || '战术增益'} +${buffAmount} 场`);
-            }
-        }
-
-        return details.join('，');
+        if (!this.metaProgressionManager) this.metaProgressionManager = new MetaProgressionManager(this);
+        return this.metaProgressionManager.applyStrategicEngineeringMilestoneReward(track);
     }
 
     recordStrategicNodeEngineering(nodeType = '', context = {}) {
@@ -10550,415 +8390,8 @@ class Game {
 
     // 应用服务效果
     applyServiceEffect(service) {
-        // 法宝购买逻辑
-        if (service.type === 'treasure') {
-            if (this.player.addTreasure(service.id)) {
-                Utils.showBattleLog(`获得法宝：${service.name} `);
-                return true;
-            }
-            return false;
-        }
-
-        if (service && service.runPathExclusive) {
-            const handled = this.applyRunPathShopServiceEffect(service);
-            if (handled !== null) return handled;
-        }
-
-        switch (service.id) {
-            case 'heal':
-                if (this.player.currentHp >= this.player.maxHp) {
-                    Utils.showBattleLog('生命值已满！');
-                    this.showRewardModal('状态完美', '你的生命值已满，无需治疗。\n保持最佳状态去战斗吧！', '💪');
-                    return false;
-                }
-                const healAmount = Math.max(1, Math.floor(this.player.maxHp * 0.3 * this.getEndlessHealingMultiplier()));
-                this.player.heal(healAmount);
-                Utils.showBattleLog(`恢复了 ${healAmount} 点生命`);
-
-                // 增强反馈
-                this.showRewardModal('治疗成功', `生命值恢复了 ${healAmount} 点！\n当前状态极佳。`, '💖');
-                return true;
-
-            case 'remove':
-                this.showRemoveCard(service);
-                return 'deferred';
-
-            case 'exp':
-                this.player.fateRing.exp += 50;
-                this.player.checkFateRingLevelUp();
-                Utils.showBattleLog('命环经验 +50');
-                this.showRewardModal('命环充能', `命环经验 + 50！\n距离下一级更近了。`, '⬆️');
-                return true;
-
-            case 'tacticalPlan':
-                if (typeof this.player.grantAdventureBuff === 'function') {
-                    this.player.grantAdventureBuff('firstTurnDrawBoostBattles', 2);
-                }
-                Utils.showBattleLog('获得行旅增益：接下来 2 场战斗首回合额外抽牌');
-                this.showRewardModal('战术推演完成', '接下来 2 场战斗：\n首回合额外抽 1 张牌。', '📘');
-                return true;
-
-            case 'wardSigil':
-                if (typeof this.player.grantAdventureBuff === 'function') {
-                    this.player.grantAdventureBuff('openingBlockBoostBattles', 2);
-                }
-                Utils.showBattleLog('获得行旅增益：接下来 2 场战斗开场护盾 +10');
-                this.showRewardModal('护阵符生效', '接下来 2 场战斗：\n开场获得 10 护盾。', '🧿');
-                return true;
-
-            case 'bountyContract':
-                if (typeof this.player.grantAdventureBuff === 'function') {
-                    this.player.grantAdventureBuff('victoryGoldBoostBattles', 2);
-                }
-                Utils.showBattleLog('获得行旅增益：接下来 2 场战斗胜利额外灵石');
-                this.showRewardModal('悬赏契约签订', '接下来 2 场战斗：\n胜利额外获得灵石。', '📜');
-                return true;
-
-            case 'scoutPack':
-                this.showShopCardDraft(service);
-                return 'deferred';
-
-            case 'campRation': {
-                const healAmount = Math.max(8, Math.floor(this.player.maxHp * 0.18 * this.getEndlessHealingMultiplier()));
-                this.player.heal(healAmount);
-                if (typeof this.player.grantAdventureBuff === 'function') {
-                    this.player.grantAdventureBuff('openingBlockBoostBattles', 1);
-                }
-                Utils.showBattleLog(`行军口粮：恢复 ${healAmount} 生命，并获得 1 层开场护盾增益`);
-                this.showRewardModal('补给完成', `恢复 ${healAmount} 生命。\n接下来 1 场战斗开场获得护盾。`, '🥣');
-                return true;
-            }
-
-            case 'fateLedger':
-                this.player.fateRing.exp += 45;
-                this.player.checkFateRingLevelUp();
-                if (typeof this.player.grantAdventureBuff === 'function') {
-                    this.player.grantAdventureBuff('victoryGoldBoostBattles', 1);
-                }
-                Utils.showBattleLog('命轨账簿：命环经验 +45，并获得 1 层悬赏增益');
-                this.showRewardModal('账簿校准', '命环经验 +45。\n接下来 1 场战斗胜利额外获得灵石。', '📚');
-                return true;
-
-            case 'pulseCatalyst':
-                if (typeof this.player.grantAdventureBuff === 'function') {
-                    this.player.grantAdventureBuff('firstTurnEnergyBoostBattles', 2);
-                }
-                Utils.showBattleLog('灵息催化剂：接下来 2 场战斗首回合灵力 +1');
-                this.showRewardModal('灵息回路稳定', '接下来 2 场战斗：\n首回合灵力 +1。', '⚡');
-                return true;
-
-            case 'insightIncense':
-                if (typeof this.player.grantAdventureBuff === 'function') {
-                    this.player.grantAdventureBuff('ringExpBoostBattles', 2);
-                }
-                Utils.showBattleLog('悟境香：接下来 2 场战斗命环经验额外提升');
-                this.showRewardModal('悟境加持', '接下来 2 场战斗：\n命环经验额外 +30%。', '🕯️');
-                return true;
-
-            case 'fieldMedic':
-                if (typeof this.player.grantAdventureBuff === 'function') {
-                    this.player.grantAdventureBuff('victoryHealBoostBattles', 2);
-                }
-                Utils.showBattleLog('战地医师签约完成：接下来 2 场战斗胜利后恢复生命');
-                this.showRewardModal('医护协议生效', '接下来 2 场战斗：\n胜利后恢复生命。', '🩹');
-                return true;
-
-            case 'forbiddenDraft':
-                if (this.player.maxHp <= 18) {
-                    Utils.showBattleLog('根基过于虚弱，无法继续签订血契。');
-                    return false;
-                }
-                this.showShopForbiddenDraft(service);
-                return 'deferred';
-
-            case 'soulMortgage': {
-                const beforeHp = this.player.currentHp;
-                const hpCap = Math.max(1, Math.floor(this.player.maxHp * 0.7));
-                this.player.currentHp = Math.max(1, Math.min(this.player.currentHp, hpCap));
-                if (typeof this.player.grantAdventureBuff === 'function') {
-                    this.player.grantAdventureBuff('firstTurnEnergyBoostBattles', 3);
-                    this.player.grantAdventureBuff('ringExpBoostBattles', 3);
-                    this.player.grantAdventureBuff('victoryGoldBoostBattles', 2);
-                }
-                const payout = 90 + Math.max(0, this.player.realm || 1) * 12;
-                this.player.gold += payout;
-                Utils.showBattleLog(`蚀寿抵押：生命 ${beforeHp}→${this.player.currentHp}，灵石 +${payout}`);
-                this.showRewardModal(
-                    '蚀寿抵押完成',
-                    `当前生命压至 ${this.player.currentHp}。
-接下来 3 场战斗：首回合灵力 +1、命环经验提升。
-额外获得 ${payout} 灵石。`,
-                    '⛓️'
-                );
-                return true;
-            }
-
-            case 'doomIdol': {
-                const curseCard = typeof cloneCardTemplate === 'function'
-                    ? cloneCardTemplate('demonDoubt')
-                    : (typeof CARDS !== 'undefined' && CARDS.demonDoubt ? JSON.parse(JSON.stringify(CARDS.demonDoubt)) : null);
-                if (curseCard) {
-                    this.player.addCardToDeck(curseCard);
-                }
-                const treasure = this.getWeightedRandomTreasure ? this.getWeightedRandomTreasure() : null;
-                if (treasure && treasure.id) {
-                    this.player.addTreasure(treasure.id);
-                }
-                this.player.gold += 80;
-                Utils.showBattleLog(`灾像供契：牌组混入【心魔·疑心】${treasure ? `，并获得法宝【${treasure.name}】` : ''}`);
-                this.showRewardModal(
-                    '灾像供契完成',
-                    `牌组加入【心魔·疑心】。
-${treasure ? `获得法宝：${treasure.name}
-` : ''}额外获得 80 灵石。`,
-                    '🗿'
-                );
-                return true;
-            }
-
-            case 'rumorRareDraft': {
-                const rumors = this.ensureShopRumors();
-                rumors.rewardRareCharges += 2;
-                rumors.rewardRareBonus = Math.max(Number(rumors.rewardRareBonus) || 0, 0.3);
-                this.pushShopRumorHistory('稀曜签：未来两次卡牌奖励稀有化');
-                Utils.showBattleLog('传闻锁定：接下来 2 次战后奖励更偏向稀有/史诗');
-                this.showRewardModal('稀曜签锁定', '未来 2 次战后卡牌奖励将显著偏向稀有/史诗。', '📎');
-                return true;
-            }
-
-            case 'rumorTreasureTrail': {
-                const rumors = this.ensureShopRumors();
-                rumors.treasureCharges += 2;
-                rumors.treasureChanceBonus = Math.max(Number(rumors.treasureChanceBonus) || 0, 0.22);
-                this.pushShopRumorHistory('宝踪风声：精英/Boss 战利强化');
-                Utils.showBattleLog('传闻锁定：接下来 2 次精英/Boss 战更易掉落法宝');
-                this.showRewardModal('宝踪风声锁定', '接下来 2 次精英/Boss 结算将提升法宝掉落率。', '🏺');
-                return true;
-            }
-
-            case 'rumorUtilityRoute':
-            {
-                const forecast = this.applyStrategicRouteForecast('utility');
-                Utils.showBattleLog(`传闻锁定：第 ${this.player.realm + 1} 重更偏向${forecast.label}。`);
-                this.showRewardModal('商路星引生效', `第 ${this.player.realm + 1} 重地图将更偏向${forecast.label}。`, forecast.icon || '🗺️');
-                return true;
-            }
-
-            case 'rumorTrialRoute':
-            {
-                const forecast = this.applyStrategicRouteForecast('assault');
-                Utils.showBattleLog(`传闻锁定：第 ${this.player.realm + 1} 重更偏向${forecast.label}。`);
-                this.showRewardModal('锋路谶语生效', `第 ${this.player.realm + 1} 重地图将更偏向${forecast.label}。`, forecast.icon || '⚔️');
-                return true;
-            }
-
-            case 'endlessStabilizer': {
-                if (!this.isEndlessActive()) {
-                    Utils.showBattleLog('当前并非无尽轮回，无法执行轮回稳压。');
-                    return false;
-                }
-                const state = this.ensureEndlessState();
-                const before = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
-                state.pressure = Math.max(0, before - 2);
-                const healAmount = Math.max(8, Math.floor(this.player.maxHp * 0.14));
-                this.player.heal(healAmount);
-                if (typeof this.player.grantAdventureBuff === 'function') {
-                    this.player.grantAdventureBuff('openingBlockBoostBattles', 1);
-                }
-                Utils.showBattleLog(`轮回稳压完成：压力 ${before}→${state.pressure}，恢复 ${healAmount} 生命`);
-                this.showRewardModal(
-                    '轮回稳压完成',
-                    `轮回压力：${before} → ${state.pressure}\n恢复 ${healAmount} 生命，并获得 1 层开场护盾增益。`,
-                    '🧯'
-                );
-                return true;
-            }
-
-            case 'endlessOverclock': {
-                if (!this.isEndlessActive()) {
-                    Utils.showBattleLog('当前并非无尽轮回，无法执行轮回过载。');
-                    return false;
-                }
-                const state = this.ensureEndlessState();
-                const beforePressure = Math.max(0, Math.min(9, Math.floor(Number(state.pressure) || 0)));
-                state.pressure = Math.max(0, Math.min(9, beforePressure + 2));
-
-                const rarePool = this.getEndlessBoonPool().filter((boon) => boon && boon.rarity === 'rare');
-                let applied = null;
-                if (rarePool.length > 0) {
-                    const pick = rarePool[Math.floor(Math.random() * rarePool.length)];
-                    applied = pick ? this.applyEndlessBoon(pick.id) : null;
-                }
-                if (!applied) {
-                    const fallback = this.getEndlessBoonChoices();
-                    const pick = Array.isArray(fallback) ? fallback[0] : null;
-                    applied = pick ? this.applyEndlessBoon(pick.id) : null;
-                }
-
-                const overclockGold = Math.max(60, 80 + beforePressure * 12);
-                this.player.gold += overclockGold;
-                Utils.showBattleLog(
-                    `轮回过载启动：压力 ${beforePressure}→${state.pressure}，额外灵石 +${overclockGold}` +
-                    `${applied ? `，获得赐福【${applied.name}】` : ''}`
-                );
-                this.showRewardModal(
-                    '轮回过载完成',
-                    `轮回压力：${beforePressure} → ${state.pressure}\n` +
-                    `额外获得灵石：${overclockGold}\n` +
-                    `${applied ? `赐福：${applied.name}\n${applied.desc}` : '赐福接入失败（已记录）。'}`,
-                    '🔥'
-                );
-                return true;
-            }
-
-            case 'endlessRefit': {
-                if (!this.isEndlessActive()) {
-                    Utils.showBattleLog('当前并非无尽轮回，无法执行相位校准。');
-                    return false;
-                }
-                const state = this.ensureEndlessState();
-                if (!Array.isArray(state.activeMutators)) state.activeMutators = [];
-                const beforeIds = state.activeMutators.slice();
-                if (state.activeMutators.length > 0) state.activeMutators.pop();
-                const mutator = this.rollNextEndlessMutator();
-                if (mutator) {
-                    const mutatorMap = new Map(this.getEndlessMutatorPool().map((item) => [item.id, item]));
-                    const beforeNames = beforeIds
-                        .map((id) => mutatorMap.get(id))
-                        .filter((item) => !!item)
-                        .map((item) => item.name);
-                    const afterNames = (state.activeMutators || [])
-                        .map((id) => mutatorMap.get(id))
-                        .filter((item) => !!item)
-                        .map((item) => item.name);
-                    Utils.showBattleLog(`相位校准完成：新词缀【${mutator.name}】已接入。`);
-                    this.showRewardModal(
-                        '相位校准完成',
-                        `重配前：${beforeNames.length > 0 ? beforeNames.join('、') : '无'}\n` +
-                        `重配后：${afterNames.length > 0 ? afterNames.join('、') : '无'}\n` +
-                        `新接入词缀：${mutator.name}\n${mutator.desc}`,
-                        '🧬'
-                    );
-                    return true;
-                }
-                Utils.showBattleLog('相位校准失败：未生成新词缀。');
-                return false;
-            }
-
-            case 'endlessBlessing': {
-                if (!this.isEndlessActive()) {
-                    Utils.showBattleLog('当前并非无尽轮回，无法执行轮回祷告。');
-                    return false;
-                }
-                this.showShopEndlessBlessingSelection(service);
-                return 'deferred';
-            }
-
-            case 'law':
-                if (service.data) {
-                    this.player.collectLaw(service.data);
-                    Utils.showBattleLog(`习得法则：${service.data.name} `);
-                    this.showRewardModal('习得法则', `你领悟了新的法则：\n【${service.data.name}】`, '📜');
-                    return true;
-                }
-                return false;
-
-            case 'maxHp':
-                this.player.addPermaBuff('maxHp', 5);
-                this.player.currentHp += 5;
-                Utils.showBattleLog('最大生命 +5');
-                this.showRewardModal('体质增强', `最大生命值上限 + 5！`, '💊');
-                return true;
-
-            case 'strength':
-                this.player.addPermBuff('strength', 1);
-                Utils.showBattleLog('永久力量 +1');
-                this.showRewardModal('力量觉醒', `永久力量 + 1！\n你的攻击将更加致命。`, '💪');
-                return true;
-
-            case 'refresh':
-                // 刷新卡牌
-                this.shopItems = this.generateShopCards(5);
-                Utils.showBattleLog('商店货物已刷新');
-                this.showRewardModal('进货完成', `商店货物已刷新！\n快来看看有什么新宝贝。`, '🔄');
-                return 'repeatable';
-
-            case 'gamble':
-                const roll = Math.random();
-                let rewardText = '';
-                let rewardIcon = '🎁';
-                let rewardTitle = '盲盒开启';
-
-                if (roll < 0.5) { // 50% 亏本/保本
-                    const goldBack = Utils.random(10, 30);
-                    this.player.gold += goldBack;
-                    Utils.showBattleLog(`盲盒：获得 ${goldBack} 灵石（亏了...）`);
-                    rewardIcon = '💸';
-                    rewardTitle = '运气平平';
-                    rewardText = `你打开盲盒，里面只有一些碎银子...\n获得 ${goldBack} 灵石。`;
-                } else if (roll < 0.85) { // 35% 获得随机卡牌
-                    const randCard = getRandomCard(this.player.realm > 2 ? 'uncommon' : 'common');
-                    this.player.addCardToDeck(randCard);
-                    Utils.showBattleLog(`盲盒：获得卡牌【${randCard.name}】！`);
-                    rewardIcon = '🎴';
-                    rewardTitle = '获得卡牌';
-                    rewardText = `你获得了一张卡牌：\n【${randCard.name}】`;
-                } else if (roll < 0.98) { // 13% 小奖 (稀有卡或大量金币)
-                    if (Math.random() < 0.5) {
-                        const rareCard = getRandomCard('rare');
-                        this.player.addCardToDeck(rareCard);
-                        Utils.showBattleLog(`盲盒：大奖！获得稀有卡牌【${rareCard.name}】！`);
-                        rewardIcon = '🌟';
-                        rewardTitle = '稀有大奖！';
-                        rewardText = `运气爆棚！你获得了一张稀有卡牌：\n【${rareCard.name}】`;
-                    } else {
-                        const bigGold = Utils.random(80, 150);
-                        this.player.gold += bigGold;
-                        Utils.showBattleLog(`盲盒：手气不错！获得 ${bigGold} 灵石！`);
-                        rewardIcon = '💰';
-                        rewardTitle = '发财了！';
-                        rewardText = `盒子底部铺满了闪闪发光的灵石！\n获得 ${bigGold} 灵石！`;
-                    }
-                } else { // 2% 传说/法宝奖
-                    const jackpot = Math.random();
-                    if (jackpot < 0.5) {
-                        const legCard = getRandomCard('legendary');
-                        this.player.addCardToDeck(legCard);
-                        Utils.showBattleLog(`盲盒：传说大奖！！获得【${legCard.name}】！`);
-                        rewardIcon = '👑';
-                        rewardTitle = '传说降世！';
-                        rewardText = `金光乍现！你获得了传说卡牌：\n【${legCard.name}】`;
-                    } else {
-                        // 尝试给法宝
-                        const treasureKeys = Object.keys(TREASURES);
-                        const unowned = treasureKeys.filter(k => !this.player.hasTreasure(k));
-                        if (unowned.length > 0) {
-                            const tid = unowned[Math.floor(Math.random() * unowned.length)];
-                            this.player.addTreasure(tid);
-                            Utils.showBattleLog(`盲盒：鸿运当头！获得法宝【${TREASURES[tid].name}】！`);
-                            rewardIcon = '🏺';
-                            rewardTitle = '法宝现世！';
-                            rewardText = `极其罕见！你获得了法宝：\n【${TREASURES[tid].name}】`;
-                        } else {
-                            this.player.gold += 300;
-                            Utils.showBattleLog(`盲盒：传说大奖！获得 300 灵石！`);
-                            rewardIcon = '💎';
-                            rewardTitle = '巨额财富';
-                            rewardText = `虽然没有法宝，但这里有一大笔钱！\n获得 300 灵石！`;
-                        }
-                    }
-                }
-
-                this.showRewardModal(rewardTitle, rewardText, rewardIcon);
-
-                // 盲盒涨价逻辑
-                service.price = Math.floor(service.price * 1.5);
-                service.name = '神秘盲盒 (涨价了)';
-                return 'repeatable';
-
-            default:
-                return false;
-        }
+        if (!this.shopManager) this.shopManager = new ShopManager(this);
+        return this.shopManager.applyServiceEffect(service);
     }
 
     applyRunPathShopServiceEffect(service) {
