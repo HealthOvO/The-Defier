@@ -6,7 +6,7 @@ const { verifySignature } = require('../utils/hmac');
 
 const router = express.Router();
 
-// POST /ghosts/current - 上传玩家残影数据
+// POST /api/ghosts/current - 上传玩家残影数据
 router.post('/current', authenticate, (req, res) => {
     const { realm, ghostData, signature, salt } = req.body;
     const userId = req.user.id;
@@ -63,7 +63,7 @@ router.post('/current', authenticate, (req, res) => {
     });
 });
 
-// GET /ghosts/random?realm=3 - 随机拉取当前层数附近的残影
+// GET /api/ghosts/random?realm=3 - 随机拉取当前层数附近的残影
 // 不强制要求鉴权，但如果有鉴权信息，可以排除自己
 router.get('/random', (req, res) => {
     const realm = Math.max(1, Number(req.query.realm) || 1);

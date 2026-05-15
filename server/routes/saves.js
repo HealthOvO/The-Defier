@@ -9,7 +9,7 @@ const router = express.Router();
 // 云存档模块
 // ----------------------
 
-// POST /saves - 上传/覆盖存档
+// POST /api/saves - 上传/覆盖存档
 router.post('/', authenticate, (req, res) => {
     const { slotIndex, saveData, saveTime, signature, salt } = req.body;
     const userId = req.user.id;
@@ -53,7 +53,7 @@ router.post('/', authenticate, (req, res) => {
     );
 });
 
-// GET /saves - 拉取所有槽位存档
+// GET /api/saves - 拉取所有槽位存档
 router.get('/', authenticate, (req, res) => {
     const userId = req.user.id;
 
@@ -81,7 +81,7 @@ router.get('/', authenticate, (req, res) => {
 // 全局数据模块
 // ----------------------
 
-// POST /user/global - 保存全局数据
+// POST /api/user/global - 保存全局数据
 router.post('/global', authenticate, (req, res) => {
     const { globalData } = req.body;
     const userId = req.user.id;
@@ -102,7 +102,7 @@ router.post('/global', authenticate, (req, res) => {
     );
 });
 
-// GET /user/global - 读取全局数据
+// GET /api/user/global - 读取全局数据
 router.get('/global', authenticate, (req, res) => {
     const userId = req.user.id;
 

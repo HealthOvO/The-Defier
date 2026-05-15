@@ -20,12 +20,22 @@ export const BackendClient = {
     const rootConfig = this.getRootConfig();
     let config = null;
     if (rootConfig && rootConfig.server && typeof rootConfig.server === 'object') {
-      config = rootConfig.server;
+      config = {
+        ...rootConfig.server
+      };
     }
-    if (!config && typeof localStorage !== 'undefined') {
+    if (typeof localStorage !== 'undefined') {
       try {
         const raw = localStorage.getItem('theDefierServerConfig');
-        if (raw) config = JSON.parse(raw);
+        if (raw) {
+          const localConfig = JSON.parse(raw);
+          if (localConfig && typeof localConfig === 'object') {
+            config = {
+              ...(config || {}),
+              ...localConfig
+            };
+          }
+        }
       } catch (error) {
         console.warn('Invalid theDefierServerConfig in localStorage');
       }
@@ -35,10 +45,10 @@ export const BackendClient = {
     if (!baseUrl) return null;
     return {
       baseUrl,
-      authPathPrefix: typeof config.authPathPrefix === 'string' ? config.authPathPrefix.trim() : '/auth',
-      savePathPrefix: typeof config.savePathPrefix === 'string' ? config.savePathPrefix.trim() : '/saves',
-      userPathPrefix: typeof config.userPathPrefix === 'string' ? config.userPathPrefix.trim() : '/user',
-      ghostPathPrefix: typeof config.ghostPathPrefix === 'string' ? config.ghostPathPrefix.trim() : '/ghosts'
+      authPathPrefix: typeof config.authPathPrefix === 'string' ? config.authPathPrefix.trim() : '/api/auth',
+      savePathPrefix: typeof config.savePathPrefix === 'string' ? config.savePathPrefix.trim() : '/api/saves',
+      userPathPrefix: typeof config.userPathPrefix === 'string' ? config.userPathPrefix.trim() : '/api/user',
+      ghostPathPrefix: typeof config.ghostPathPrefix === 'string' ? config.ghostPathPrefix.trim() : '/api/ghosts'
     };
   },
   cloneData(data) {

@@ -34,12 +34,12 @@ const startServer = async () => {
         app.listen(PORT, () => {
             console.log(`Server is running on http://127.0.0.1:${PORT}`);
             console.log(`API endpoints ready:`);
-            console.log(`- POST /auth/register`);
-            console.log(`- POST /auth/login`);
-            console.log(`- GET/POST /saves`);
-            console.log(`- GET/POST /user/global`);
-            console.log(`- POST /ghosts/current`);
-            console.log(`- GET /ghosts/random`);
+            console.log(`- POST /api/auth/register`);
+            console.log(`- POST /api/auth/login`);
+            console.log(`- GET/POST /api/saves`);
+            console.log(`- GET/POST /api/user/global`);
+            console.log(`- POST /api/ghosts/current`);
+            console.log(`- GET /api/ghosts/random`);
         });
     } catch (err) {
         console.error('Failed to start server:', err);

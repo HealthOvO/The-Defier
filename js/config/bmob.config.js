@@ -1,8 +1,13 @@
 /**
  * Runtime config defaults.
  *
- * Keep deploy-safe defaults here. For private/local overrides, create
- * `js/config/bmob.config.local.js`; local config files are ignored by Git.
+ * Keep deploy-safe defaults here. Do not commit private credentials or
+ * environment-specific server URLs.
+ *
+ * For local development, either:
+ * - set localStorage.theDefierServerConfig at runtime; or
+ * - copy `bmob.config.example.js` outside version control and inject it in
+ *   your own deployment shell before the app bundle.
  */
 (function () {
     if (typeof window === 'undefined') return;

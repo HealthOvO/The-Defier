@@ -7,7 +7,7 @@ const { generateToken } = require('../middleware/auth');
 const router = express.Router();
 const SALT_ROUNDS = 10;
 
-// POST /auth/register
+// POST /api/auth/register
 router.post('/register', async (req, res) => {
     const { username, password } = req.body;
 
@@ -45,7 +45,7 @@ router.post('/register', async (req, res) => {
     }
 });
 
-// POST /auth/login
+// POST /api/auth/login
 router.post('/login', (req, res) => {
     const { username, password } = req.body;
 

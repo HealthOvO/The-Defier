@@ -5,10 +5,11 @@ const { chromium } = require('playwright');
     const browser = await chromium.launch();
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const page = await context.newPage();
+    const targetUrl = process.env.SCREENSHOT_URL || 'http://127.0.0.1:4173';
     
     try {
-        console.log('访问 https://080305.xyz ...');
-        await page.goto('https://080305.xyz', { waitUntil: 'networkidle', timeout: 30000 });
+        console.log(`访问 ${targetUrl} ...`);
+        await page.goto(targetUrl, { waitUntil: 'networkidle', timeout: 30000 });
         
         // 等待几秒钟让可能存在的动画/加载完成
         await page.waitForTimeout(2000);

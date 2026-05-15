@@ -67,13 +67,15 @@ vm.runInContext(authServiceCode, ctx);
 
 const runE2E = async () => {
     const AuthService = vm.runInContext('AuthService', ctx);
+    const assertStep = (condition, message, detail = '') => {
+        if (!condition) {
+            throw new Error(`${message}${detail ? `: ${detail}` : ''}`);
+        }
+    };
     console.log('--- 开始 E2E 测试 (前端服务层 -> Node API) ---');
     
     AuthService.init();
-    if (!AuthService.isInitialized) {
-        console.error('初始化失败:', AuthService.initError);
-        process.exit(1);
-    }
+    assertStep(AuthService.isInitialized, '初始化失败', AuthService.initError);
     console.log('1. 初始化成功，模式:', vm.runInContext('BackendClient.provider', ctx));
 
     const testUser = 'e2e_user_' + Date.now();
@@ -81,23 +83,40 @@ const runE2E = async () => {
 
     const regRes = await AuthService.register(testUser, testPass);
     console.log('2. 注册:', regRes.success ? '成功' : '失败', regRes.message || '');
+    assertStep(regRes.success, '注册失败', regRes.message || JSON.stringify(regRes));
 
     const loginRes = await AuthService.login(testUser, testPass);
     console.log('3. 登录:', loginRes.success ? '成功' : '失败', loginRes.message || '');
+    assertStep(loginRes.success, '登录失败', loginRes.message || JSON.stringify(loginRes));
 
     const saveRes = await AuthService.saveCloudData({ level: 10, hp: 100 }, 0);
     console.log('4. 上传存档:', saveRes.success ? '成功' : '失败');
+    assertStep(saveRes.success, '上传存档失败', saveRes.message || JSON.stringify(saveRes));
 
     const getRes = await AuthService.getCloudData();
     console.log('5. 读取存档:', getRes.success && getRes.slots[0] && getRes.slots[0].level === 10 ? '成功' : '失败', getRes);
+    assertStep(getRes.success && getRes.slots[0] && getRes.slots[0].level === 10, '读取存档失败', JSON.stringify(getRes));
 
     const ghostRes = await AuthService.uploadGhostData({ name: 'Hero', hp: 500, maxHp: 1000, deck: [{ id: 'audit_strike' }] }, 3);
     console.log('6. 上传残影:', ghostRes.success ? '成功' : '失败', ghostRes.message || '');
+    assertStep(ghostRes.success, '上传残影失败', ghostRes.message || JSON.stringify(ghostRes));
+
+    const opponentUser = `${testUser}_opponent`;
+    const opponentRegRes = await AuthService.register(opponentUser, testPass);
+    assertStep(opponentRegRes.success, '注册对手用户失败', opponentRegRes.message || JSON.stringify(opponentRegRes));
+    const opponentLoginRes = await AuthService.login(opponentUser, testPass);
+    assertStep(opponentLoginRes.success, '登录对手用户失败', opponentLoginRes.message || JSON.stringify(opponentLoginRes));
+    const opponentGhostRes = await AuthService.uploadGhostData({ name: 'Rival', hp: 520, maxHp: 1000, deck: [{ id: 'audit_guard' }] }, 3);
+    assertStep(opponentGhostRes.success, '上传对手残影失败', opponentGhostRes.message || JSON.stringify(opponentGhostRes));
 
     const fetchGhostRes = await AuthService.fetchRandomGhost(3);
     console.log('7. 随机拉取残影:', fetchGhostRes.success ? '成功' : '失败', fetchGhostRes.message || '');
+    assertStep(fetchGhostRes.success, '随机拉取残影失败', fetchGhostRes.message || JSON.stringify(fetchGhostRes));
 
     console.log('--- E2E 测试结束 ---');
 };
 
-runE2E().catch(console.error);
+runE2E().catch((error) => {
+    console.error(error);
+    process.exit(1);
+});

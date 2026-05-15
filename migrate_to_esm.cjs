@@ -14,7 +14,7 @@ function walkDir(dir) {
         const fullPath = path.join(dir, file);
         if (fs.statSync(fullPath).isDirectory()) {
             walkDir(fullPath);
-        } else if (fullPath.endsWith('.js') && !fullPath.endsWith('bmob.config.local.js')) {
+        } else if (fullPath.endsWith('.js') && !/bmob\.config(\.example)?\.js$/.test(fullPath)) {
             allFiles.push(fullPath);
         }
     }
