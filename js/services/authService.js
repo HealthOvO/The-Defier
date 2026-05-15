@@ -39,7 +39,8 @@ export const AuthService = {
       this.currentUser = BackendClient.getCurrentUser();
       console.log(`AuthService Initialized [Provider: ${BackendClient.provider}]. Current User:`, this.currentUser);
     } else {
-      console.error('BackendClient initialization failed:', result.message);
+      const log = result.message === '服务器配置缺失' ? console.warn : console.error;
+      log('BackendClient initialization failed:', result.message);
       this.initError = result.message;
       this.isInitialized = false;
       this.currentUser = null;

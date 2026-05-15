@@ -1,6 +1,6 @@
 // Entry point for Vite
 import './js/libs/bmob.min.js';
-import './js/config/bmob.config.local.js';
+import './js/config/bmob.config.js';
 import './js/services/backend-client.js';
 import './js/services/authService.js';
 import './js/core/elo-calculator.js';

@@ -14,7 +14,7 @@ fs.readFileSync = function(p, enc) {
 const path = require('path');
 const vm = require('vm');
 
-const configCode = fs.readFileSync(path.resolve(__dirname, '../js/config/bmob.config.local.js'), 'utf8');
+const configCode = fs.readFileSync(path.resolve(__dirname, '../js/config/bmob.config.js'), 'utf8');
 const backendClientCode = fs.readFileSync(path.resolve(__dirname, '../js/services/backend-client.js'), 'utf8');
 const authServiceCode = fs.readFileSync(path.resolve(__dirname, '../js/services/authService.js'), 'utf8');
 

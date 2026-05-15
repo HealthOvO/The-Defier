@@ -4,3 +4,13 @@ tmp/
 output/
 .site/
 .DS_Store
+dist/
+test-results/
+*.bak
+*.sqlite
+*.sqlite-*
+log/
+*.log
+out*.json
+stats.html
+js/config/*.local.js

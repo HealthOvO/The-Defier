@@ -1,4 +1,4 @@
-import './config/bmob.config.local.js';
+import './config/bmob.config.js';
 import './services/backend-client.js';
 import './services/authService.js';
 import './core/elo-calculator.js';
