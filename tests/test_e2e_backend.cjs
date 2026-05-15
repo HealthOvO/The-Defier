@@ -1,4 +1,16 @@
 const fs = require('fs');
+
+const originalReadFileSync = fs.readFileSync;
+fs.readFileSync = function(p, enc) {
+    let c = originalReadFileSync(p, enc);
+    if (enc === 'utf8' && p.endsWith('.js')) {
+        c = c.replace(/^export\s+(const|let|var|class|function|default)/gm, '$1');
+        c = c.replace(/^export\s+\{.*?\};?/gm, '');
+        c = c.replace(/^import\s+.*?;/gm, '');
+    }
+    return c;
+};
+
 const path = require('path');
 const vm = require('vm');
 
@@ -62,7 +74,7 @@ const runE2E = async () => {
         console.error('初始化失败:', AuthService.initError);
         process.exit(1);
     }
-    console.log('1. 初始化成功，模式:', ctx.BackendClient.provider);
+    console.log('1. 初始化成功，模式:', vm.runInContext('BackendClient.provider', ctx));
 
     const testUser = 'e2e_user_' + Date.now();
     const testPass = 'pwd123';
@@ -79,7 +91,7 @@ const runE2E = async () => {
     const getRes = await AuthService.getCloudData();
     console.log('5. 读取存档:', getRes.success && getRes.slots[0] && getRes.slots[0].level === 10 ? '成功' : '失败', getRes);
 
-    const ghostRes = await AuthService.uploadGhostData({ characterId: 'Hero', currentHp: 500, maxHp: 1000, deck: [] }, 3);
+    const ghostRes = await AuthService.uploadGhostData({ name: 'Hero', hp: 500, maxHp: 1000, deck: [{ id: 'audit_strike' }] }, 3);
     console.log('6. 上传残影:', ghostRes.success ? '成功' : '失败', ghostRes.message || '');
 
     const fetchGhostRes = await AuthService.fetchRandomGhost(3);

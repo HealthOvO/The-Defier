@@ -1495,6 +1495,9 @@ body[data-current-screen="battle-screen"] #battle-log {
 
 #event-modal .event-choices {
     padding-bottom: 4px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
 }
 
 #event-modal .event-choice {

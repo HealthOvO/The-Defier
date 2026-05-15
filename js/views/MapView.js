@@ -4,46 +4,36 @@
  */
 
 export class MapView {
-    constructor(gameInstance, mapInstance) {
-        this.game = gameInstance;
-        this.map = mapInstance;
+  constructor(gameInstance, mapInstance) {
+    this.game = gameInstance;
+    this.map = mapInstance;
+  }
+  render() {
+    console.log('[Debug] MapView.render called');
+    const container = document.getElementById('map-screen');
+    if (!container) {
+      console.error('[Debug] #map-screen container missing!');
+      return;
     }
+    const currentRealm = this.game.player.realm;
+    const mapKey = this.game && typeof this.game.getMapCacheKey === 'function' ? this.game.getMapCacheKey(currentRealm) : String(currentRealm);
+    const nodeLayoutSignature = this.map.getNodeLayoutSignature();
+    const existingMap = container.querySelector('.map-screen-v3');
 
-    render() {
-        console.log('[Debug] MapView.render called');
-        const container = document.getElementById('map-screen');
-        if (!container) {
-            console.error('[Debug] #map-screen container missing!');
-            return;
-        }
-
-        const currentRealm = this.game.player.realm;
-        const mapKey = (this.game && typeof this.game.getMapCacheKey === 'function')
-            ? this.game.getMapCacheKey(currentRealm)
-            : String(currentRealm);
-        const nodeLayoutSignature = this.map.getNodeLayoutSignature();
-        const existingMap = container.querySelector('.map-screen-v3');
-
-        // Smart Render Check: If map exists and the node layout is unchanged, update in-place.
-        if (
-            existingMap
-            && existingMap.dataset.mapKey === mapKey
-            && existingMap.dataset.nodeSignature === nodeLayoutSignature
-        ) {
-            console.log('[Debug] Updating existing map in-place');
-            this.map.updateMapState();
-            return;
-        }
-
-        console.log('[Debug] Full map rebuild for realm:', currentRealm);
-
-        container.innerHTML = `
+    // Smart Render Check: If map exists and the node layout is unchanged, update in-place.
+    if (existingMap && existingMap.dataset.mapKey === mapKey && existingMap.dataset.nodeSignature === nodeLayoutSignature) {
+      console.log('[Debug] Updating existing map in-place');
+      this.map.updateMapState();
+      return;
+    }
+    console.log('[Debug] Full map rebuild for realm:', currentRealm);
+    container.innerHTML = `
             <div class="map-screen-v3" data-realm="${currentRealm}" data-map-key="${mapKey}" data-node-signature="${nodeLayoutSignature}">
                 <div class="map-bg-layer map-bg-stars"></div>
                 <div class="map-bg-layer map-bg-mist"></div>
                 
                 <div class="map-v3-header">
-                    <button class="back-btn" onclick="game.showScreen('realm-select-screen')">← 返回关卡</button>
+                    <button class="back-btn" type="button" data-map-action="show-screen" data-screen-id="realm-select-screen">← 返回关卡</button>
                     <div class="map-header-right">
                         <div class="player-status-bar">
                             <div class="status-item hp">
@@ -93,102 +83,123 @@ export class MapView {
                 </div>
 
                 <div class="map-footer">
-                    <button class="menu-btn small" onclick="game.showDeck()">查看牌组</button>
-                    <button class="menu-btn small" onclick="game.showTreasureBag()">法宝囊</button>
-                    <button class="menu-btn small" onclick="game.showFateRing()">命环</button>
+                    <button class="menu-btn small" type="button" data-map-action="show-deck">查看牌组</button>
+                    <button class="menu-btn small" type="button" data-map-action="show-treasure-bag">法宝囊</button>
+                    <button class="menu-btn small" type="button" data-map-action="show-fate-ring">命环</button>
                 </div>
             </div>
         `;
+    this.bindMapDelegates(container);
+    this.renderV3Nodes();
+    this.map.updateStatusBar();
 
-        this.renderV3Nodes();
-        this.map.updateStatusBar();
-        this.map.updateEndlessPanel();
-        this.map.updateLegacyMissionPanel();
-        this.map.updateRunPathMissionPanel();
-        this.map.updateRunPathFlashPanel();
-        this.map.updateAdventureBuffsPanel();
-        this.map.updateRouteHintsPanel();
-        const chapter = this.game && typeof this.game.getChapterDisplaySnapshot === 'function'
-            ? this.game.getChapterDisplaySnapshot(this.game.player?.realm || 1)
-            : null;
-        this.map.updateChapterBriefPanel(chapter);
-        this.map.updateChapterRiskCard(chapter);
-        this.map.updateMapSituationOverviewPanel(chapter);
+    // Auto-scroll to current row
+    setTimeout(() => {
+      const wrapper = document.getElementById('map-scroll-container');
+      const currentRow = document.querySelector('.node-row-v3:has(.map-node-v3.current)');
+      if (wrapper && currentRow) {
+        const scrollPos = currentRow.offsetTop - wrapper.clientHeight / 2 + currentRow.clientHeight / 2;
+        wrapper.scrollTo({
+          top: Math.max(0, scrollPos),
+          behavior: 'smooth'
+        });
+      }
+    }, 100);
+  }
+  updateMapState() {
+    this.map.updateStatusBar();
+    this.map.nodes.forEach(row => {
+      row.forEach(node => {
+        const el = document.querySelector(`.map-node-v3[data-node-id="${node.id}"]`);
+        if (el) {
+          el.classList.remove('completed', 'locked', 'current', 'accessible');
+          if (node.completed) el.classList.add('completed');
+          else if (!node.accessible) el.classList.add('locked');
+          else el.classList.add('current');
+        }
+      });
+    });
+    this.map.drawConnections();
+  }
+  bindMapDelegates(container) {
+    if (!container || container.__mapDelegatesBound) return;
+    container.addEventListener('click', event => {
+      const target = event.target;
+      if (!target || typeof target.closest !== 'function') return;
+      const actionBtn = target.closest('[data-map-action]');
+      if (!actionBtn || actionBtn.disabled || !container.contains(actionBtn)) return;
+      const action = String(actionBtn.dataset.mapAction || '');
+      if (action === 'show-screen') {
+        const screenId = String(actionBtn.dataset.screenId || '');
+        if (screenId) {
+          this.game.showScreen(screenId);
+        }
+        return;
+      }
+      if (action === 'show-deck') {
+        this.game.showDeck();
+        return;
+      }
+      if (action === 'show-treasure-bag') {
+        this.game.showTreasureBag();
+        return;
+      }
+      if (action === 'show-fate-ring') {
+        this.game.showFateRing();
+      }
+    });
+    container.__mapDelegatesBound = true;
+  }
 
-        // Auto-scroll to current row
-        setTimeout(() => {
-            const wrapper = document.getElementById('map-scroll-container');
-            const currentRow = document.querySelector('.node-row-v3:has(.map-node-v3.current)');
-            if (wrapper && currentRow) {
-                const scrollPos = currentRow.offsetTop - (wrapper.clientHeight / 2) + (currentRow.clientHeight / 2);
-                wrapper.scrollTo({
-                    top: Math.max(0, scrollPos),
-                    behavior: 'smooth'
-                });
-            }
-        }, 100);
-    }
+  renderV3Nodes() {
+    const wrapper = document.getElementById('map-content-wrapper');
+    const svgLayer = document.getElementById('map-svg-layer');
+    if (!wrapper || !svgLayer) return;
+    const chapter = this.game && typeof this.game.getChapterDisplaySnapshot === 'function' ? this.game.getChapterDisplaySnapshot(this.game.player?.realm || 1) : null;
 
-    renderV3Nodes() {
-        const wrapper = document.getElementById('map-content-wrapper');
-        const svgLayer = document.getElementById('map-svg-layer');
-        if (!wrapper || !svgLayer) return;
-        const chapter = this.game && typeof this.game.getChapterDisplaySnapshot === 'function'
-            ? this.game.getChapterDisplaySnapshot(this.game.player?.realm || 1)
-            : null;
+    // V3 Flexbox Layout System (Centered & Robust)
+    this.map.nodes.forEach((rowNodes, rowIndex) => {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'node-row-v3';
+      rowEl.dataset.rowIndex = rowIndex;
+      // Flex layout handles positioning automatically via justify-content: center
 
-        // V3 Flexbox Layout System (Centered & Robust)
-        this.map.nodes.forEach((rowNodes, rowIndex) => {
-            const rowEl = document.createElement('div');
-            rowEl.className = 'node-row-v3';
-            rowEl.dataset.rowIndex = rowIndex;
-            // Flex layout handles positioning automatically via justify-content: center
-
-            rowNodes.forEach((node, i) => {
-                const nodeEl = document.createElement('div');
-                const riskProfile = this.map.resolveNodeRiskProfile(node, chapter);
-                node.riskProfile = riskProfile;
-                nodeEl.className = `map-node-v3 ${node.type}`;
-                nodeEl.dataset.nodeId = node.id;
-                nodeEl.dataset.riskTier = riskProfile?.tierId || 'none';
-
-                nodeEl.innerHTML = `
+      rowNodes.forEach((node, i) => {
+        const nodeEl = document.createElement('div');
+        const riskProfile = this.map.resolveNodeRiskProfile(node, chapter);
+        node.riskProfile = riskProfile;
+        nodeEl.className = `map-node-v3 ${node.type}`;
+        nodeEl.dataset.nodeId = node.id;
+        nodeEl.dataset.riskTier = riskProfile?.tierId || 'none';
+        nodeEl.innerHTML = `
                     <div class="node-icon">${node.icon}</div>
                     ${node.polluted ? '<div class="pollution-mark">☠️</div>' : ''}
                     ${riskProfile && ['high', 'extreme'].includes(riskProfile.tierId) && node.accessible && !node.completed ? `<div class="node-risk-badge tier-${riskProfile.tierId}">DRI ${riskProfile.index}</div>` : ''}
                     <div class="node-tooltip">${this.map.buildNodeTooltipHtml(node, chapter)}</div>
                 `;
-
-                nodeEl.addEventListener('click', () => this.map.onNodeClick(node));
-
-                if (node.completed) nodeEl.classList.add('completed');
-                else if (!node.accessible) nodeEl.classList.add('locked');
-                else {
-                    nodeEl.classList.add('current');
-                }
-
-                // Just append, no manual positioning
-                rowEl.appendChild(nodeEl);
-            });
-
-            wrapper.appendChild(rowEl);
-        });
-
-        // Draw Lines after DOM update and potential reflow
-        // Use timeout to ensure geometry is final
-        setTimeout(() => this.map.drawConnections(), 50);
-        // Also redraw on resize
-        if (!this.map._resizeObserver) {
-            this.map._resizeObserver = new ResizeObserver(() => {
-                // Throttle drawing
-                if (this.map._resizeTimeout) clearTimeout(this.map._resizeTimeout);
-                this.map._resizeTimeout = setTimeout(() => this.map.drawConnections(), 50);
-            });
-            this.map._resizeObserver.observe(wrapper);
+        nodeEl.addEventListener('click', () => this.map.onNodeClick(node));
+        if (node.completed) nodeEl.classList.add('completed');else if (!node.accessible) nodeEl.classList.add('locked');else {
+          nodeEl.classList.add('current');
         }
-    }
-}
 
-if (typeof window !== 'undefined') {
-    window.MapView = MapView;
+        // Just append, no manual positioning
+        rowEl.appendChild(nodeEl);
+      });
+      wrapper.appendChild(rowEl);
+    });
+
+    // Draw Lines after DOM update and potential reflow
+    // Use timeout to ensure geometry is final
+    setTimeout(() => this.map.drawConnections(), 50);
+    // Also redraw on resize
+    if (!this.map._resizeObserver) {
+      this.map._resizeObserver = new ResizeObserver(() => {
+        // Throttle drawing
+        if (this.map._resizeTimeout) clearTimeout(this.map._resizeTimeout);
+        this.map._resizeTimeout = setTimeout(() => this.map.drawConnections(), 50);
+      });
+      this.map._resizeObserver.observe(wrapper);
+    }
+  }
 }
+if (typeof window !== 'undefined') {}

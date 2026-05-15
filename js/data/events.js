@@ -1,4358 +1,4643 @@
+import { inferDeckArchetype } from "./cards.js";
 /**
  * The Defier 2.0 - 事件数据
  */
-
-const EVENTS = {
-    // ==================== 觉醒事件 ====================
-    ancientJade: {
-        id: 'ancientJade',
-        name: '神秘古玉',
-        icon: '🟢',
-        description: '你在废墟中发现一枚温润的古玉，当你触碰它时，体内的残缺印记开始滚烫...',
-        choices: [
-            {
-                text: '融合古玉',
-                icon: '✨',
-                result: '觉醒逆命之环，修复残缺印记',
-                resultType: 'positive',
-                effects: [
-                    { type: 'awakenRing' }
-                ]
-            }
-        ]
+const getRuntimeGame = () => {
+  if (typeof globalThis === 'undefined') return null;
+  return globalThis.game || globalThis.window?.game || null;
+};
+export const EVENTS = {
+  // ==================== 觉醒事件 ====================
+  ancientJade: {
+    id: 'ancientJade',
+    name: '神秘古玉',
+    icon: '🟢',
+    description: '你在废墟中发现一枚温润的古玉，当你触碰它时，体内的残缺印记开始滚烫...',
+    choices: [{
+      text: '融合古玉',
+      icon: '✨',
+      result: '觉醒逆命之环，修复残缺印记',
+      resultType: 'positive',
+      effects: [{
+        type: 'awakenRing'
+      }]
+    }]
+  },
+  // ==================== 宝箱事件 ====================
+  mysteryChest: {
+    id: 'mysteryChest',
+    name: '神秘宝箱',
+    icon: '📦',
+    description: '你在路边发现了一个散发着微光的宝箱...',
+    choices: [{
+      text: '打开宝箱',
+      icon: '🔓',
+      result: '可能获得丰厚奖励',
+      resultType: 'positive',
+      effects: [{
+        type: 'random',
+        options: [{
+          type: 'gold',
+          value: 50,
+          chance: 0.5
+        }, {
+          type: 'card',
+          rarity: 'rare',
+          chance: 0.3
+        }, {
+          type: 'damage',
+          value: 10,
+          chance: 0.2
+        }]
+      }]
+    }, {
+      text: '谨慎离开',
+      icon: '🚶',
+      result: '无事发生',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  // ==================== 商人事件 ====================
+  mysteriousMerchant: {
+    id: 'mysteriousMerchant',
+    name: '神秘商人',
+    icon: '🎭',
+    speaker: {
+      icon: '🎭',
+      dialogue: '"逆命者...我这里有些稀罕物件，不知道你是否愿意用些许生命来交换？"'
     },
-
-    // ==================== 宝箱事件 ====================
-    mysteryChest: {
-        id: 'mysteryChest',
-        name: '神秘宝箱',
-        icon: '📦',
-        description: '你在路边发现了一个散发着微光的宝箱...',
-        choices: [
-            {
-                text: '打开宝箱',
-                icon: '🔓',
-                result: '可能获得丰厚奖励',
-                resultType: 'positive',
-                effects: [
-                    {
-                        type: 'random', options: [
-                            { type: 'gold', value: 50, chance: 0.5 },
-                            { type: 'card', rarity: 'rare', chance: 0.3 },
-                            { type: 'damage', value: 10, chance: 0.2 }
-                        ]
-                    }
-                ]
-            },
-            {
-                text: '谨慎离开',
-                icon: '🚶',
-                result: '无事发生',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
+    choices: [{
+      text: '购买【时间静止】',
+      icon: '⏱️',
+      result: '-20 HP，获得传说法则牌',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 25
+      },
+      effects: [{
+        type: 'damage',
+        value: 20
+      }, {
+        type: 'card',
+        cardId: 'timeStop'
+      }]
+    }, {
+      text: '购买【治愈药水】',
+      icon: '🧪',
+      result: '-30 灵石，恢复30 HP',
+      resultType: 'positive',
+      condition: {
+        type: 'gold',
+        min: 30
+      },
+      effects: [{
+        type: 'gold',
+        value: -30
+      }, {
+        type: 'heal',
+        value: 30
+      }]
+    }, {
+      text: '购买随机稀有卡',
+      icon: '🎴',
+      result: '-50 灵石',
+      resultType: 'neutral',
+      condition: {
+        type: 'gold',
+        min: 50
+      },
+      effects: [{
+        type: 'gold',
+        value: -50
+      }, {
+        type: 'card',
+        rarity: 'rare'
+      }]
+    }, {
+      text: '婉拒离开',
+      icon: '👋',
+      result: '商人神秘地消失了',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  // ==================== 修士事件 ====================
+  injuredCultivator: {
+    id: 'injuredCultivator',
+    name: '受伤的修士',
+    icon: '👤',
+    speaker: {
+      icon: '🧙',
+      dialogue: '"道友...能否施以援手？我可以传授一门剑法作为报答..."'
     },
-
-    // ==================== 商人事件 ====================
-    mysteriousMerchant: {
-        id: 'mysteriousMerchant',
-        name: '神秘商人',
-        icon: '🎭',
-        speaker: {
-            icon: '🎭',
-            dialogue: '"逆命者...我这里有些稀罕物件，不知道你是否愿意用些许生命来交换？"'
-        },
-        choices: [
-            {
-                text: '购买【时间静止】',
-                icon: '⏱️',
-                result: '-20 HP，获得传说法则牌',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 25 },
-                effects: [
-                    { type: 'damage', value: 20 },
-                    { type: 'card', cardId: 'timeStop' }
-                ]
-            },
-            {
-                text: '购买【治愈药水】',
-                icon: '🧪',
-                result: '-30 灵石，恢复30 HP',
-                resultType: 'positive',
-                condition: { type: 'gold', min: 30 },
-                effects: [
-                    { type: 'gold', value: -30 },
-                    { type: 'heal', value: 30 }
-                ]
-            },
-            {
-                text: '购买随机稀有卡',
-                icon: '🎴',
-                result: '-50 灵石',
-                resultType: 'neutral',
-                condition: { type: 'gold', min: 50 },
-                effects: [
-                    { type: 'gold', value: -50 },
-                    { type: 'card', rarity: 'rare' }
-                ]
-            },
-            {
-                text: '婉拒离开',
-                icon: '👋',
-                result: '商人神秘地消失了',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
+    choices: [{
+      text: '给他50灵石',
+      icon: '💰',
+      result: '获得一张稀有卡牌',
+      resultType: 'positive',
+      condition: {
+        type: 'gold',
+        min: 50
+      },
+      effects: [{
+        type: 'gold',
+        value: -50
+      }, {
+        type: 'card',
+        cardId: 'swordIntent'
+      }]
+    }, {
+      text: '分享治疗术',
+      icon: '💚',
+      result: '-10 HP，提升命环经验',
+      resultType: 'neutral',
+      condition: {
+        type: 'hp',
+        min: 15
+      },
+      effects: [{
+        type: 'damage',
+        value: 10
+      }, {
+        type: 'ringExp',
+        value: 40
+      }]
+    }, {
+      text: '趁机抢夺',
+      icon: '⚔️',
+      result: '进入战斗',
+      resultType: 'negative',
+      effects: [{
+        type: 'battle',
+        enemyId: 'swordDisciple'
+      }]
+    }, {
+      text: '无视他',
+      icon: '🚶',
+      result: '无事发生',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  // ==================== 祭坛事件 ====================
+  ancientAltar: {
+    id: 'ancientAltar',
+    name: '古老祭坛',
+    icon: '⛩️',
+    description: '一座古老的祭坛散发着神秘的光芒，似乎在等待某种献祭...',
+    choices: [{
+      text: '献祭生命',
+      icon: '❤️',
+      result: '-15 HP，命环经验+60',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 20
+      },
+      effects: [{
+        type: 'damage',
+        value: 15
+      }, {
+        type: 'ringExp',
+        value: 60
+      }]
+    }, {
+      text: '献祭灵石',
+      icon: '💰',
+      result: '-100 灵石，获得随机法则',
+      resultType: 'neutral',
+      condition: {
+        type: 'gold',
+        min: 100
+      },
+      effects: [{
+        type: 'gold',
+        value: -100
+      }, {
+        type: 'law',
+        random: true
+      }]
+    }, {
+      text: '强化卡牌',
+      icon: '⚡',
+      result: '选择一张卡牌进行升级',
+      resultType: 'positive',
+      condition: {
+        type: 'deckSize',
+        min: 6
+      },
+      effects: [{
+        type: 'upgradeCard'
+      }]
+    }, {
+      text: '离开祭坛',
+      icon: '🚶',
+      result: '祭坛的光芒渐渐暗淡',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  // ==================== 灵脉事件 ====================
+  spiritVein: {
+    id: 'spiritVein',
+    name: '灵脉宝地',
+    icon: '💎',
+    description: '你发现了一处灵气充沛的灵脉，可以在此修炼或采集资源...',
+    choices: [{
+      text: '静心修炼',
+      icon: '🧘',
+      result: '恢复25 HP',
+      resultType: 'positive',
+      effects: [{
+        type: 'heal',
+        value: 25
+      }]
+    }, {
+      text: '采集灵石',
+      icon: '⛏️',
+      result: '获得 40-80 灵石',
+      resultType: 'positive',
+      effects: [{
+        type: 'randomGold',
+        min: 40,
+        max: 80
+      }]
+    }, {
+      text: '感悟法则',
+      icon: '✨',
+      result: '命环经验+30，可能领悟新法则',
+      resultType: 'positive',
+      effects: [{
+        type: 'ringExp',
+        value: 30
+      }, {
+        type: 'random',
+        options: [{
+          type: 'law',
+          random: true,
+          chance: 0.2
+        }, {
+          type: 'nothing',
+          chance: 0.8
+        }]
+      }]
+    }]
+  },
+  // ==================== 命运抉择 ====================
+  fateChoice: {
+    id: 'fateChoice',
+    name: '命运抉择',
+    icon: '⚖️',
+    description: '两条道路摆在你面前，代表着不同的命运走向...',
+    choices: [{
+      text: '力量之路',
+      icon: '💪',
+      result: '攻击力永久+2，最大HP-5',
+      resultType: 'neutral',
+      effects: [{
+        type: 'permaBuff',
+        stat: 'strength',
+        value: 2
+      }, {
+        type: 'maxHp',
+        value: -5
+      }]
+    }, {
+      text: '防御之路',
+      icon: '🛡️',
+      result: '最大HP+10，每回合起始灵力-1',
+      resultType: 'neutral',
+      effects: [{
+        type: 'maxHp',
+        value: 10
+      }, {
+        type: 'permaBuff',
+        stat: 'energy',
+        value: -1
+      }]
+    }, {
+      text: '平衡之路',
+      icon: '☯️',
+      result: '无变化，但获得一张稀有牌',
+      resultType: 'positive',
+      effects: [{
+        type: 'card',
+        rarity: 'rare'
+      }]
+    }]
+  },
+  // ==================== 试炼之地 ====================
+  trialGround: {
+    id: 'trialGround',
+    name: '试炼之地',
+    icon: '🏛️',
+    description: '一座古老的试炼场，完成挑战可获得丰厚奖励...',
+    choices: [{
+      text: '接受速杀试炼',
+      icon: '⚡',
+      result: '3回合内击败敌人获得双倍奖励',
+      resultType: 'neutral',
+      effects: [{
+        type: 'trial',
+        trialType: 'speedKill',
+        rounds: 3,
+        rewardMultiplier: 2
+      }]
+    }, {
+      text: '接受无伤试炼',
+      icon: '💯',
+      result: '不受伤击败敌人获得稀有法则',
+      resultType: 'neutral',
+      effects: [{
+        type: 'trial',
+        trialType: 'noDamage',
+        reward: 'law'
+      }]
+    }, {
+      text: '放弃试炼',
+      icon: '🚶',
+      result: '离开试炼场',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  // ==================== 神秘石碑 ====================
+  mysteryStele: {
+    id: 'mysteryStele',
+    name: '神秘石碑',
+    icon: '🗿',
+    speaker: {
+      icon: '🗿',
+      dialogue: '"吾乃上古修士遗灵...你可选择接受吾之馈赠，但需付出相应代价..."'
     },
-
-    // ==================== 修士事件 ====================
-    injuredCultivator: {
-        id: 'injuredCultivator',
-        name: '受伤的修士',
-        icon: '👤',
-        speaker: {
-            icon: '🧙',
-            dialogue: '"道友...能否施以援手？我可以传授一门剑法作为报答..."'
-        },
-        choices: [
-            {
-                text: '给他50灵石',
-                icon: '💰',
-                result: '获得一张稀有卡牌',
-                resultType: 'positive',
-                condition: { type: 'gold', min: 50 },
-                effects: [
-                    { type: 'gold', value: -50 },
-                    { type: 'card', cardId: 'swordIntent' }
-                ]
-            },
-            {
-                text: '分享治疗术',
-                icon: '💚',
-                result: '-10 HP，提升命环经验',
-                resultType: 'neutral',
-                condition: { type: 'hp', min: 15 },
-                effects: [
-                    { type: 'damage', value: 10 },
-                    { type: 'ringExp', value: 40 }
-                ]
-            },
-            {
-                text: '趁机抢夺',
-                icon: '⚔️',
-                result: '进入战斗',
-                resultType: 'negative',
-                effects: [
-                    { type: 'battle', enemyId: 'swordDisciple' }
-                ]
-            },
-            {
-                text: '无视他',
-                icon: '🚶',
-                result: '无事发生',
-                resultType: 'neutral',
-                effects: []
-            }
+    choices: [{
+      text: '接受力量馈赠',
+      icon: '⚔️',
+      result: '获得3张攻击牌，移除2张防御牌',
+      resultType: 'neutral',
+      effects: [{
+        type: 'card',
+        cardId: 'heavyStrike'
+      }, {
+        type: 'card',
+        cardId: 'doubleStrike'
+      }, {
+        type: 'card',
+        cardId: 'ragingBlow'
+      }, {
+        type: 'removeCardType',
+        cardType: 'defense',
+        count: 2
+      }]
+    }, {
+      text: '接受知识馈赠',
+      icon: '📖',
+      result: '命环升级，但失去一半灵石',
+      resultType: 'neutral',
+      effects: [{
+        type: 'ringExp',
+        value: 100
+      }, {
+        type: 'gold',
+        percent: -50
+      }]
+    }, {
+      text: '拒绝馈赠',
+      icon: '✋',
+      result: '石碑裂开，获得少量灵石',
+      resultType: 'positive',
+      effects: [{
+        type: 'gold',
+        value: 25
+      }]
+    }]
+  },
+  // ==================== 3.0新增事件 ====================
+  celestialGamble: {
+    id: 'celestialGamble',
+    name: '天机赌局',
+    icon: '🎲',
+    description: '一位神秘的虚影邀请你参与一场关于运气的赌局...',
+    choices: [{
+      text: '小赌怡情 (10% HP)',
+      icon: '💉',
+      result: '50% 获得 100 灵石',
+      resultType: 'neutral',
+      effects: [{
+        type: 'random',
+        options: [{
+          type: 'gold',
+          value: 100,
+          chance: 0.5
+        }, {
+          type: 'damage',
+          value: 8,
+          chance: 0.5
+        } // 约10%HP
         ]
-    },
-
-    // ==================== 祭坛事件 ====================
-    ancientAltar: {
-        id: 'ancientAltar',
-        name: '古老祭坛',
-        icon: '⛩️',
-        description: '一座古老的祭坛散发着神秘的光芒，似乎在等待某种献祭...',
-        choices: [
-            {
-                text: '献祭生命',
-                icon: '❤️',
-                result: '-15 HP，命环经验+60',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 20 },
-                effects: [
-                    { type: 'damage', value: 15 },
-                    { type: 'ringExp', value: 60 }
-                ]
-            },
-            {
-                text: '献祭灵石',
-                icon: '💰',
-                result: '-100 灵石，获得随机法则',
-                resultType: 'neutral',
-                condition: { type: 'gold', min: 100 },
-                effects: [
-                    { type: 'gold', value: -100 },
-                    { type: 'law', random: true }
-                ]
-            },
-            {
-                text: '强化卡牌',
-                icon: '⚡',
-                result: '选择一张卡牌进行升级',
-                resultType: 'positive',
-                condition: { type: 'deckSize', min: 6 },
-                effects: [
-                    { type: 'upgradeCard' }
-                ]
-            },
-            {
-                text: '离开祭坛',
-                icon: '🚶',
-                result: '祭坛的光芒渐渐暗淡',
-                resultType: 'neutral',
-                effects: []
-            }
+      }]
+    }, {
+      text: '豪赌一把 (30% HP)',
+      icon: '🩸',
+      result: '40% 获得随机法宝',
+      resultType: 'negative',
+      effects: [{
+        type: 'random',
+        options: [{
+          type: 'treasure',
+          random: true,
+          chance: 0.4
+        }, {
+          type: 'damage',
+          value: 24,
+          chance: 0.6
+        } // 约30%HP
         ]
-    },
-
-    // ==================== 灵脉事件 ====================
-    spiritVein: {
-        id: 'spiritVein',
-        name: '灵脉宝地',
-        icon: '💎',
-        description: '你发现了一处灵气充沛的灵脉，可以在此修炼或采集资源...',
-        choices: [
-            {
-                text: '静心修炼',
-                icon: '🧘',
-                result: '恢复25 HP',
-                resultType: 'positive',
-                effects: [
-                    { type: 'heal', value: 25 }
-                ]
-            },
-            {
-                text: '采集灵石',
-                icon: '⛏️',
-                result: '获得 40-80 灵石',
-                resultType: 'positive',
-                effects: [
-                    { type: 'randomGold', min: 40, max: 80 }
-                ]
-            },
-            {
-                text: '感悟法则',
-                icon: '✨',
-                result: '命环经验+30，可能领悟新法则',
-                resultType: 'positive',
-                effects: [
-                    { type: 'ringExp', value: 30 },
-                    {
-                        type: 'random', options: [
-                            { type: 'law', random: true, chance: 0.2 },
-                            { type: 'nothing', chance: 0.8 }
-                        ]
-                    }
-                ]
-            }
-        ]
-    },
-
-    // ==================== 命运抉择 ====================
-    fateChoice: {
-        id: 'fateChoice',
-        name: '命运抉择',
-        icon: '⚖️',
-        description: '两条道路摆在你面前，代表着不同的命运走向...',
-        choices: [
-            {
-                text: '力量之路',
-                icon: '💪',
-                result: '攻击力永久+2，最大HP-5',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'permaBuff', stat: 'strength', value: 2 },
-                    { type: 'maxHp', value: -5 }
-                ]
-            },
-            {
-                text: '防御之路',
-                icon: '🛡️',
-                result: '最大HP+10，每回合起始灵力-1',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'maxHp', value: 10 },
-                    { type: 'permaBuff', stat: 'energy', value: -1 }
-                ]
-            },
-            {
-                text: '平衡之路',
-                icon: '☯️',
-                result: '无变化，但获得一张稀有牌',
-                resultType: 'positive',
-                effects: [
-                    { type: 'card', rarity: 'rare' }
-                ]
-            }
-        ]
-    },
-
-    // ==================== 试炼之地 ====================
-    trialGround: {
-        id: 'trialGround',
-        name: '试炼之地',
-        icon: '🏛️',
-        description: '一座古老的试炼场，完成挑战可获得丰厚奖励...',
-        choices: [
-            {
-                text: '接受速杀试炼',
-                icon: '⚡',
-                result: '3回合内击败敌人获得双倍奖励',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'trial', trialType: 'speedKill', rounds: 3, rewardMultiplier: 2 }
-                ]
-            },
-            {
-                text: '接受无伤试炼',
-                icon: '💯',
-                result: '不受伤击败敌人获得稀有法则',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'trial', trialType: 'noDamage', reward: 'law' }
-                ]
-            },
-            {
-                text: '放弃试炼',
-                icon: '🚶',
-                result: '离开试炼场',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    // ==================== 神秘石碑 ====================
-    mysteryStele: {
-        id: 'mysteryStele',
-        name: '神秘石碑',
-        icon: '🗿',
-        speaker: {
-            icon: '🗿',
-            dialogue: '"吾乃上古修士遗灵...你可选择接受吾之馈赠，但需付出相应代价..."'
-        },
-        choices: [
-            {
-                text: '接受力量馈赠',
-                icon: '⚔️',
-                result: '获得3张攻击牌，移除2张防御牌',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'card', cardId: 'heavyStrike' },
-                    { type: 'card', cardId: 'doubleStrike' },
-                    { type: 'card', cardId: 'ragingBlow' },
-                    { type: 'removeCardType', cardType: 'defense', count: 2 }
-                ]
-            },
-            {
-                text: '接受知识馈赠',
-                icon: '📖',
-                result: '命环升级，但失去一半灵石',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'ringExp', value: 100 },
-                    { type: 'gold', percent: -50 }
-                ]
-            },
-            {
-                text: '拒绝馈赠',
-                icon: '✋',
-                result: '石碑裂开，获得少量灵石',
-                resultType: 'positive',
-                effects: [
-                    { type: 'gold', value: 25 }
-                ]
-            }
-        ]
-    },
-
-    // ==================== 3.0新增事件 ====================
-    celestialGamble: {
-        id: 'celestialGamble',
-        name: '天机赌局',
-        icon: '🎲',
-        description: '一位神秘的虚影邀请你参与一场关于运气的赌局...',
-        choices: [
-            {
-                text: '小赌怡情 (10% HP)',
-                icon: '💉',
-                result: '50% 获得 100 灵石',
-                resultType: 'neutral',
-                effects: [
-                    {
-                        type: 'random', options: [
-                            { type: 'gold', value: 100, chance: 0.5 },
-                            { type: 'damage', value: 8, chance: 0.5 } // 约10%HP
-                        ]
-                    }
-                ]
-            },
-            {
-                text: '豪赌一把 (30% HP)',
-                icon: '🩸',
-                result: '40% 获得随机法宝',
-                resultType: 'negative',
-                effects: [
-                    {
-                        type: 'random', options: [
-                            { type: 'treasure', random: true, chance: 0.4 },
-                            { type: 'damage', value: 24, chance: 0.6 } // 约30%HP
-                        ]
-                    }
-                ]
-            },
-            {
-                text: '拒绝赌博',
-                icon: '👋',
-                result: '离开',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    voidRift: {
-        id: 'voidRift',
-        name: '虚空裂隙',
-        icon: '🌀',
-        description: '空间撕裂，连接着充满危险与机遇的虚空位面...',
-        choices: [
-            {
-                text: '深入探索',
-                icon: '👁️',
-                result: '受到伤害，获得强力卡牌',
-                resultType: 'negative',
-                effects: [
-                    { type: 'damage', value: 15 },
-                    { type: 'card', rarity: 'epic' }
-                ]
-            },
-            {
-                text: '封印裂隙',
-                icon: '🔒',
-                result: '命环经验 +50',
-                resultType: 'positive',
-                effects: [
-                    { type: 'ringExp', value: 50 },
-                    { type: 'heal', value: 10 }
-                ]
-            }
-        ]
-    },
-
-    runPathInsightAstrolabe: {
-        id: 'runPathInsightAstrolabe',
-        name: '问真观星台',
-        icon: '🔮',
-        summary: '命途事件 · 让命盘样本直接改写当前主线。',
-        summaryLabel: '命途事件',
-        presentationTone: 'mystic',
-        atmosphere: '星盘没有直接给你奖励，而是逼你决定要不要把这条命途提前写进这一局的节奏里。',
-        description: '半面星盘仍在推演未来，台边还留着一册未誊完的样本簿。你可以校正命盘，也可以只带走旁注。',
-        choices: [
-            {
-                text: '校正命盘',
-                icon: '🪞',
-                result: '天机 +1，命环经验提升，并推进当前命途',
-                resultType: 'positive',
-                effects: [
-                    { type: 'heavenlyInsight', value: 1 },
-                    { type: 'ringExp', value: 30 },
-                    { type: 'runPathProgress', amount: 1 }
-                ]
-            },
-            {
-                text: '誊录旁注',
-                icon: '📓',
-                result: '打开一间只卖调序样本的小铺',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'openTemporaryShop', offerCount: 2, priceMultiplier: 0.88, forceRelief: false }
-                ]
-            },
-            {
-                text: '让星盘自行沉寂',
-                icon: '🚶',
-                result: '保持当前路线',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    runPathInsightPolarizeAtlas: {
-        id: 'runPathInsightPolarizeAtlas',
-        name: '穷观校盘室',
-        icon: '🪐',
-        summary: '裂变事件 · 极化后，命盘会要求你把每一步都写成确定答案。',
-        summaryLabel: '裂变事件',
-        presentationTone: 'mystic',
-        atmosphere: '校盘室里只剩一条路：继续把不确定性剥离，直到每一拍都可复刻。',
-        description: '一排推演盘悬在半空，盘边标着“穷观：先拿到完整答案，再考虑收益上限”。',
-        choices: [
-            {
-                text: '穷观校盘',
-                icon: '🪞',
-                result: '天机 +2，命环经验提升，并推进当前命途',
-                resultType: 'positive',
-                effects: [
-                    { type: 'heavenlyInsight', value: 2 },
-                    { type: 'ringExp', value: 30 },
-                    { type: 'runPathProgress', amount: 1 }
-                ]
-            },
-            {
-                text: '誊录推演稿',
-                icon: '📘',
-                result: '开启一间偏调序补件的临时商铺',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'openTemporaryShop', offerCount: 2, priceMultiplier: 0.86, forceRelief: false }
-                ]
-            },
-            {
-                text: '封存盘册',
-                icon: '🚶',
-                result: '先保持当前路线',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    runPathInsightPivotGambit: {
-        id: 'runPathInsightPivotGambit',
-        name: '借势落子局',
-        icon: '♟️',
-        summary: '裂变事件 · 转修后，读题不再只是防错，而是要兑现成主动得分。',
-        summaryLabel: '裂变事件',
-        presentationTone: 'mystic',
-        atmosphere: '棋盘已经替你看清窗口，问题只剩一个：你敢不敢现在就落子。',
-        description: '案上残局只剩三手，旁注写着“先手不是优势，敢落手才是优势”。',
-        choices: [
-            {
-                text: '借势落子',
-                icon: '🎯',
-                result: '获得灵石、首轮调度优势，并推进当前命途',
-                resultType: 'positive',
-                effects: [
-                    { type: 'gold', value: 62 },
-                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 },
-                    { type: 'runPathProgress', amount: 1 }
-                ]
-            },
-            {
-                text: '先记手数',
-                icon: '🧾',
-                result: '命环经验 +28，天机 +1',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'ringExp', value: 28 },
-                    { type: 'heavenlyInsight', value: 1 }
-                ]
-            },
-            {
-                text: '暂不下注',
-                icon: '🚶',
-                result: '离开棋局',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    runPathInsightSacrificeOracle: {
-        id: 'runPathInsightSacrificeOracle',
-        name: '盲算祀台',
-        icon: '🕯️',
-        summary: '裂变事件 · 献祭后，额外情报会和额外风险一起到来。',
-        summaryLabel: '裂变事件',
-        presentationTone: 'danger',
-        atmosphere: '祀台不会白给答案，它只会把“可见未来”换成“更薄容错”。',
-        description: '烛火映出三条命盘裂缝，任何一条都能给你答案，但每条都要先付代价。',
-        choices: [
-            {
-                text: '盲算换题',
-                icon: '☄️',
-                result: '失去生命，获得高阶信息与稀有补件，并推进当前命途',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 16 },
-                effects: [
-                    { type: 'damage', value: 8 },
-                    { type: 'heavenlyInsight', value: 2 },
-                    { type: 'card', rarity: 'rare' },
-                    { type: 'runPathProgress', amount: 1 }
-                ]
-            },
-            {
-                text: '留半卷天机',
-                icon: '📜',
-                result: '命环经验 +36，灵石 +45',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'ringExp', value: 36 },
-                    { type: 'gold', value: 45 }
-                ]
-            },
-            {
-                text: '吹灭烛火',
-                icon: '🚶',
-                result: '不改当前节奏',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    ancientLibrary: {
-        id: 'ancientLibrary',
-        name: '上古书库',
-        icon: '📚',
-        description: '这里收藏着无数失传的典籍，知识就是力量...',
-        choices: [
-            {
-                text: '研读禁术',
-                icon: '📖',
-                result: '获得一张随机法则牌',
-                resultType: 'positive',
-                effects: [
-                    { type: 'card', rarity: 'legendary' }
-                ]
-            },
-            {
-                text: '整理古籍',
-                icon: '🧹',
-                result: '升级一张牌，命环经验+30',
-                resultType: 'positive',
-                effects: [
-                    { type: 'upgradeCard' },
-                    { type: 'ringExp', value: 30 }
-                ]
-            }
-        ]
-    },
-
-    wanderingSmith: {
-        id: 'wanderingSmith',
-        name: '云游铁匠',
-        icon: '🔨',
-        description: '一位背着巨大铁砧的铁匠正在休息，他似乎可以强化万物...',
-        choices: [
-            {
-                text: '强化卡牌',
-                icon: '⚡',
-                result: '升级一张卡牌',
-                resultType: 'positive',
-                effects: [
-                    { type: 'upgradeCard' }
-                ]
-            },
-            {
-                text: '打造法宝',
-                icon: '🏺',
-                result: '花费150灵石购买随机法宝',
-                resultType: 'neutral',
-                condition: { type: 'gold', min: 150 },
-                effects: [
-                    { type: 'gold', value: -150 },
-                    { type: 'treasure', random: true }
-                ]
-            },
-            {
-                text: '离开',
-                icon: '👋',
-                result: '无事发生',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    bloodMoonRitual: {
-        id: 'bloodMoonRitual',
-        name: '血月祭仪',
-        icon: '🌕',
-        description: '祭台涌动暗红灵潮，你能感到战意与危险并存。',
-        choices: [
-            {
-                text: '以血换力',
-                icon: '🩸',
-                result: '失去生命，永久力量提升',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 18 },
-                effects: [
-                    { type: 'damage', value: 12 },
-                    { type: 'permaBuff', stat: 'strength', value: 1 }
-                ]
-            },
-            {
-                text: '稳守心神',
-                icon: '🛡️',
-                result: '获得护身之力',
-                resultType: 'positive',
-                effects: [
-                    { type: 'maxHp', value: 6 },
-                    { type: 'heal', value: 8 }
-                ]
-            }
-        ]
-    },
-
-    swordTomb: {
-        id: 'swordTomb',
-        name: '万剑冢',
-        icon: '🗡️',
-        description: '遍地断剑在低鸣，你可以继承其中一缕剑魂。',
-        choices: [
-            {
-                text: '择杀伐剑魂',
-                icon: '⚔️',
-                result: '获得攻击牌',
-                resultType: 'positive',
-                effects: [
-                    { type: 'card', cardId: 'bloodlettingSlash' },
-                    { type: 'card', cardId: 'punctureMark' }
-                ]
-            },
-            {
-                text: '择守御剑魂',
-                icon: '🛡️',
-                result: '获得防御与回复',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'card', cardId: 'guardedRiposte' },
-                    { type: 'heal', value: 12 }
-                ]
-            }
-        ]
-    },
-
-    spiritAuction: {
-        id: 'spiritAuction',
-        name: '灵市暗拍',
-        icon: '🏮',
-        description: '蒙面拍卖师低声询价，稀有宝物稍纵即逝。',
-        choices: [
-            {
-                text: '竞拍秘宝',
-                icon: '💰',
-                result: '花费120灵石，获得随机法宝',
-                resultType: 'neutral',
-                condition: { type: 'gold', min: 120 },
-                effects: [
-                    { type: 'gold', value: -120 },
-                    { type: 'treasure', random: true }
-                ]
-            },
-            {
-                text: '竞拍秘籍',
-                icon: '📜',
-                result: '花费80灵石，获得稀有卡',
-                resultType: 'neutral',
-                condition: { type: 'gold', min: 80 },
-                effects: [
-                    { type: 'gold', value: -80 },
-                    { type: 'card', rarity: 'rare' }
-                ]
-            }
-        ]
-    },
-
-    fallenFormation: {
-        id: 'fallenFormation',
-        name: '残阵遗痕',
-        icon: '🧿',
-        description: '古阵崩坏，仍残留可供利用的法阵节点。',
-        choices: [
-            {
-                text: '重组阵纹',
-                icon: '✨',
-                result: '命环经验提升并恢复生命',
-                resultType: 'positive',
-                effects: [
-                    { type: 'ringExp', value: 45 },
-                    { type: 'heal', value: 10 }
-                ]
-            },
-            {
-                text: '强行突破',
-                icon: '💥',
-                result: '进入高风险试炼',
-                resultType: 'negative',
-                effects: [
-                    { type: 'trial', trialType: 'speedKill', rounds: 4, rewardMultiplier: 1.6 }
-                ]
-            }
-        ]
-    },
-
-    destinyMirror: {
-        id: 'destinyMirror',
-        name: '宿命镜',
-        icon: '🪞',
-        description: '镜中映出多个可能的你，每个都通向不同代价。',
-        choices: [
-            {
-                text: '映照过去',
-                icon: '🧠',
-                result: '移除 1 张防御牌，换取 1 张稀有牌',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'removeCardType', cardType: 'defense', count: 1 },
-                    { type: 'card', rarity: 'rare' }
-                ]
-            },
-            {
-                text: '映照未来',
-                icon: '🔮',
-                result: '命环经验+70，但失去生命',
-                resultType: 'negative',
-                effects: [
-                    { type: 'damage', value: 10 },
-                    { type: 'ringExp', value: 70 }
-                ]
-            }
-        ]
-    },
-
-    wanderingOracle: {
-        id: 'wanderingOracle',
-        name: '行脚卜者',
-        icon: '🧙',
-        description: '卜者愿以天机交换你的抉择。',
-        choices: [
-            {
-                text: '求战运',
-                icon: '⚔️',
-                result: '永久力量+1，最大生命-5',
-                resultType: 'negative',
-                effects: [
-                    { type: 'permaBuff', stat: 'strength', value: 1 },
-                    { type: 'maxHp', value: -5 }
-                ]
-            },
-            {
-                text: '求生运',
-                icon: '🌿',
-                result: '最大生命+8，灵力上限-1',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'maxHp', value: 8 },
-                    { type: 'permaBuff', stat: 'energy', value: -1 }
-                ]
-            }
-        ]
-    },
-
-    demonContract: {
-        id: 'demonContract',
-        name: '魔契残页',
-        icon: '📕',
-        description: '契约承诺你力量，但也索取回报。',
-        choices: [
-            {
-                text: '签订契约',
-                icon: '✒️',
-                result: '获得强力牌与诅咒',
-                resultType: 'negative',
-                effects: [
-                    { type: 'card', cardId: 'executionDoctrine' },
-                    { type: 'damage', value: 8 }
-                ]
-            },
-            {
-                text: '焚毁残页',
-                icon: '🔥',
-                result: '获得灵石',
-                resultType: 'positive',
-                effects: [
-                    { type: 'gold', value: 90 }
-                ]
-            }
-        ]
-    },
-
-    starObservation: {
-        id: 'starObservation',
-        name: '观星台',
-        icon: '🔭',
-        description: '星轨悄然偏转，你有机会重塑牌组节奏。',
-        choices: [
-            {
-                text: '推演星轨',
-                icon: '🌠',
-                result: '升级一张牌并抽象出新思路',
-                resultType: 'positive',
-                effects: [
-                    { type: 'upgradeCard' },
-                    { type: 'ringExp', value: 25 }
-                ]
-            },
-            {
-                text: '凝视深空',
-                icon: '🕳️',
-                result: '获得传奇卡，但受到伤害',
-                resultType: 'negative',
-                effects: [
-                    { type: 'card', rarity: 'legendary' },
-                    { type: 'damage', value: 12 }
-                ]
-            }
-        ]
-    },
-
-    brokenPavilion: {
-        id: 'brokenPavilion',
-        name: '断碑古亭',
-        icon: '🏯',
-        description: '古亭残破，但余下的石刻仍可传道。',
-        choices: [
-            {
-                text: '参悟石刻',
-                icon: '📜',
-                result: '随机法则或命环经验',
-                resultType: 'neutral',
-                effects: [
-                    {
-                        type: 'random', options: [
-                            { type: 'law', random: true, chance: 0.45 },
-                            { type: 'ringExp', value: 60, chance: 0.55 }
-                        ]
-                    }
-                ]
-            },
-            {
-                text: '搜刮残砖',
-                icon: '🪙',
-                result: '获得灵石',
-                resultType: 'positive',
-                effects: [
-                    { type: 'randomGold', min: 40, max: 110 }
-                ]
-            }
-        ]
-    },
-
-    bloodForgeCovenant: {
-        id: 'bloodForgeCovenant',
-        name: '血炉盟约',
-        icon: '🜂',
-        description: '炉火映出你摇摆不定的影子：要么以血喂刃，要么以资换稳。',
-        choices: [
-            {
-                text: '以血喂刃',
-                icon: '🩸',
-                result: '失去生命，获得血蚀核心卡',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 20 },
-                effects: [
-                    { type: 'damage', value: 12 },
-                    { type: 'card', cardId: 'scarletJudgement' },
-                    { type: 'card', cardId: 'serratedRitual' }
-                ]
-            },
-            {
-                text: '以资换稳',
-                icon: '💰',
-                result: '消耗灵石，升级一张牌',
-                resultType: 'neutral',
-                condition: { type: 'gold', min: 80 },
-                effects: [
-                    { type: 'gold', value: -80 },
-                    { type: 'upgradeCard' }
-                ]
-            },
-            {
-                text: '不立盟约',
-                icon: '🚶',
-                result: '你离开了血炉',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    runPathShatterBounty: {
-        id: 'runPathShatterBounty',
-        name: '断脉悬金榜',
-        icon: '⚔️',
-        summary: '命途事件 · 用血线和赏金把破命流往前推。',
-        summaryLabel: '命途事件',
-        presentationTone: 'danger',
-        atmosphere: '榜文不问你稳不稳，只问你敢不敢把这条命途推得更激进。',
-        description: '残墙上钉着一份追杀号令，注脚写着一句旧话：先抢前两拍，再谈活路。你要签吗？',
-        choices: [
-            {
-                text: '签下追杀号令',
-                icon: '🩸',
-                result: '失去生命，获得悬赏资源，并推进当前命途',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 16 },
-                effects: [
-                    { type: 'damage', value: 10 },
-                    { type: 'gold', value: 80 },
-                    { type: 'adventureBuff', buffId: 'victoryGoldBoostBattles', charges: 1 },
-                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 1 },
-                    { type: 'runPathProgress', amount: 1 }
-                ]
-            },
-            {
-                text: '拆读旧战录',
-                icon: '📜',
-                result: '获得爆发整备，但不提前追线',
-                resultType: 'positive',
-                effects: [
-                    { type: 'ringExp', value: 30 },
-                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 1 }
-                ]
-            },
-            {
-                text: '撕掉榜文',
-                icon: '🚶',
-                result: '你不接这笔单子',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    runPathShatterPolarizeEdict: {
-        id: 'runPathShatterPolarizeEdict',
-        name: '极锋讨令',
-        icon: '🩸',
-        summary: '裂变事件 · 极化后，榜文只认“抢拍兑现”，不认“保底留手”。',
-        summaryLabel: '裂变事件',
-        presentationTone: 'danger',
-        atmosphere: '极锋讨令把收益写在最前两拍，也把失误的代价抬到了同样高度。',
-        description: '一份加急缉令压在刀鞘下：只要你敢先出手，赏银立刻到账；若你犹豫，机会就归别人。',
-        choices: [
-            {
-                text: '立刻签令',
-                icon: '🗡️',
-                result: '失去生命，获得悬赏资源，并推进当前命途',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 16 },
-                effects: [
-                    { type: 'damage', value: 12 },
-                    { type: 'gold', value: 95 },
-                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 1 },
-                    { type: 'runPathProgress', amount: 1 }
-                ]
-            },
-            {
-                text: '先读旧案',
-                icon: '📜',
-                result: '命环经验 +26，并获得一层悬赏增益',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'ringExp', value: 26 },
-                    { type: 'adventureBuff', buffId: 'victoryGoldBoostBattles', charges: 1 }
-                ]
-            },
-            {
-                text: '折回营地',
-                icon: '🚶',
-                result: '不接这份追令',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    runPathShatterPivotLedger: {
-        id: 'runPathShatterPivotLedger',
-        name: '转修悬账簿',
-        icon: '🗡️',
-        summary: '裂变事件 · 转修后，破命流开始把“爆发”拆成“稳手 + 收头”的双段题。',
-        summaryLabel: '裂变事件',
-        presentationTone: 'danger',
-        atmosphere: '账簿里每一笔都在问你：这一刀是为了现在的伤害，还是为了下一拍的必杀。',
-        description: '悬账簿记录着一百种失手案例，旁注写着“收头前先稳手，破命也要会控节拍”。',
-        choices: [
-            {
-                text: '按簿转修',
-                icon: '📘',
-                result: '提升调度收益，并推进当前命途',
-                resultType: 'positive',
-                effects: [
-                    { type: 'ringExp', value: 32 },
-                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 },
-                    { type: 'runPathProgress', amount: 1 }
-                ]
-            },
-            {
-                text: '先补军需',
-                icon: '🛒',
-                result: '开启一间偏中盘补件的临时商铺',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'openTemporaryShop', offerCount: 2, priceMultiplier: 0.9, forceRelief: false }
-                ]
-            },
-            {
-                text: '不改打法',
-                icon: '🚶',
-                result: '保持现状',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    runPathShatterSacrificePyre: {
-        id: 'runPathShatterSacrificePyre',
-        name: '祭火剜脉坛',
-        icon: '🔥',
-        summary: '裂变事件 · 献祭后，收益上限更高，但每次下注都要先交血线。',
-        summaryLabel: '裂变事件',
-        presentationTone: 'danger',
-        atmosphere: '剜脉坛不会问你稳不稳，它只看你愿不愿为下一拍极限收官付出即时代价。',
-        description: '祭坛火焰吞掉誓纸后，留下三句话：要强，就要薄；要快，就要狠；要活，就要算。',
-        choices: [
-            {
-                text: '祭火压线',
-                icon: '☄️',
-                result: '失去生命，获得稀有补件与天机，并推进当前命途',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 18 },
-                effects: [
-                    { type: 'damage', value: 14 },
-                    { type: 'heavenlyInsight', value: 1 },
-                    { type: 'card', rarity: 'rare' },
-                    { type: 'runPathProgress', amount: 1 }
-                ]
-            },
-            {
-                text: '收灰留种',
-                icon: '🪙',
-                result: '灵石 +70，命环经验 +26',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'gold', value: 70 },
-                    { type: 'ringExp', value: 26 }
-                ]
-            },
-            {
-                text: '熄火离场',
-                icon: '🚶',
-                result: '暂不下注',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    mirrorNeedleDojo: {
-        id: 'mirrorNeedleDojo',
-        name: '镜针道场',
-        icon: '🪞',
-        description: '道场主张“先识破绽，再谈胜负”。',
-        choices: [
-            {
-                text: '研习破势',
-                icon: '🎯',
-                result: '获得破绽流核心卡',
-                resultType: 'positive',
-                effects: [
-                    { type: 'card', cardId: 'weakpointSurvey' },
-                    { type: 'card', cardId: 'focusBreak' }
-                ]
-            },
-            {
-                text: '盲冲试招',
-                icon: '⚔️',
-                result: '进入战斗，胜者得传承',
-                resultType: 'negative',
-                effects: [
-                    { type: 'battle', enemyId: 'swordDisciple' }
-                ]
-            }
-        ]
-    },
-
-    shatteredCompass: {
-        id: 'shatteredCompass',
-        name: '碎命罗盘',
-        icon: '🧭',
-        description: '罗盘裂成两半，一半指向伤害，一半指向掌控。',
-        choices: [
-            {
-                text: '偏向血路',
-                icon: '🩸',
-                result: '生命上限下降，力量提升，获得流血牌',
-                resultType: 'negative',
-                effects: [
-                    { type: 'maxHp', value: -6 },
-                    { type: 'permaBuff', stat: 'strength', value: 1 },
-                    { type: 'card', cardId: 'arteryRupture' }
-                ]
-            },
-            {
-                text: '偏向心眼',
-                icon: '🧠',
-                result: '失去生命，抽牌能力提升，获得破绽牌',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'damage', value: 6 },
-                    { type: 'permaBuff', stat: 'draw', value: 1 },
-                    { type: 'card', cardId: 'razorFocus' }
-                ]
-            },
-            {
-                text: '修复罗盘',
-                icon: '🔧',
-                result: '命环经验提升',
-                resultType: 'positive',
-                effects: [
-                    { type: 'ringExp', value: 55 }
-                ]
-            }
-        ]
-    },
-
-    debtboundAnvil: {
-        id: 'debtboundAnvil',
-        name: '负债神砧',
-        icon: '⚒️',
-        description: '神砧只认代价：你可以用灵石买确定性，也可以用生命赌稀有收益。',
-        choices: [
-            {
-                text: '支付灵石锻造',
-                icon: '💰',
-                result: '消耗灵石，升级并获得一张稀有卡',
-                resultType: 'positive',
-                condition: { type: 'gold', min: 120 },
-                effects: [
-                    { type: 'gold', value: -120 },
-                    { type: 'upgradeCard' },
-                    { type: 'card', rarity: 'rare' }
-                ]
-            },
-            {
-                text: '以命抵债',
-                icon: '☠️',
-                result: '失去生命，获得随机稀有卡',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 24 },
-                effects: [
-                    { type: 'damage', value: 16 },
-                    { type: 'card', rarity: 'rare' }
-                ]
-            }
-        ]
-    },
-
-    voidBookkeeper: {
-        id: 'voidBookkeeper',
-        name: '虚空账房',
-        icon: '📚',
-        description: '账房先生递来一卷黑册，声称“代价必须记账，但节奏可提前兑现”。',
-        choices: [
-            {
-                text: '签收账册',
-                icon: '✍️',
-                result: '获得弃牌流核心卡组',
-                resultType: 'positive',
-                effects: [
-                    { type: 'card', cardId: 'voidLedger' },
-                    { type: 'card', cardId: 'recklessMulligan' }
-                ]
-            },
-            {
-                text: '借款提速',
-                icon: '💰',
-                result: '损失生命，获得灵石与核心进攻牌',
-                resultType: 'neutral',
-                condition: { type: 'hp', min: 18 },
-                effects: [
-                    { type: 'damage', value: 8 },
-                    { type: 'gold', value: 80 },
-                    { type: 'card', cardId: 'echoingCut' }
-                ]
-            }
-        ]
-    },
-
-    ashLedgerTrial: {
-        id: 'ashLedgerTrial',
-        name: '灰契账页',
-        icon: '📄',
-        description: '账页会在战前预支收益，但要求你在之后偿还手牌质量。',
-        choices: [
-            {
-                text: '立即兑现',
-                icon: '🔥',
-                result: '升级一张牌并获得稀有弃牌牌',
-                resultType: 'positive',
-                effects: [
-                    { type: 'upgradeCard' },
-                    { type: 'card', cardId: 'oblivionSpiral' }
-                ]
-            },
-            {
-                text: '稳妥签注',
-                icon: '🧮',
-                result: '获得两张过牌工具并提升命环经验',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'card', cardId: 'recirculation' },
-                    { type: 'card', cardId: 'debtCollection' },
-                    { type: 'ringExp', value: 35 }
-                ]
-            }
-        ]
-    },
-
-    convergenceRitual: {
-        id: 'convergenceRitual',
-        name: '收束仪式',
-        icon: '🕳️',
-        description: '你可以把分散的资源压成一次终局爆发，代价是立刻失去安全边际。',
-        choices: [
-            {
-                text: '进行收束',
-                icon: '⚔️',
-                result: '获得终局卡并损失生命',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 24 },
-                effects: [
-                    { type: 'damage', value: 14 },
-                    { type: 'card', cardId: 'finalConvergence' }
-                ]
-            },
-            {
-                text: '拆解仪式',
-                icon: '🛠️',
-                result: '获得灵石、经验和弃牌流中坚牌',
-                resultType: 'positive',
-                effects: [
-                    { type: 'gold', value: 90 },
-                    { type: 'ringExp', value: 45 },
-                    { type: 'card', cardId: 'calculatedRuin' }
-                ]
-            }
-        ]
-    },
-    oathscarShrine: {
-        id: 'oathscarShrine',
-        name: '契痕祠',
-        icon: '🩸',
-        description: '古祠里的誓纹不断渗血，仿佛在提醒你：每一道契痕都能换来一次越界爆发。',
-        choices: [
-            {
-                text: '在誓纹上刻名',
-                icon: '✒️',
-                result: '获得咒契起手组件',
-                resultType: 'positive',
-                effects: [
-                    { type: 'card', cardId: 'oathscarCut' },
-                    { type: 'card', cardId: 'hexbrandSigil' }
-                ]
-            },
-            {
-                text: '以血换约',
-                icon: '🫀',
-                result: '损失生命，获得核心力量牌',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 22 },
-                effects: [
-                    { type: 'damage', value: 10 },
-                    { type: 'card', cardId: 'bloodpriceMandate' }
-                ]
-            }
-        ]
-    },
-
-    griefWritArchive: {
-        id: 'griefWritArchive',
-        name: '悲契札库',
-        icon: '📚',
-        description: '守库人说，真正的咒契不靠蛮勇，而靠“预支痛苦、结算未来”。',
-        choices: [
-            {
-                text: '抄录账页',
-                icon: '📜',
-                result: '升级一张牌并获得悲契账簿',
-                resultType: 'positive',
-                effects: [
-                    { type: 'upgradeCard' },
-                    { type: 'card', cardId: 'griefLedger' }
-                ]
-            },
-            {
-                text: '借走旧咒',
-                icon: '🕯️',
-                result: '获得中轴牌与灵石',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'gold', value: 85 },
-                    { type: 'card', cardId: 'pactRite' }
-                ]
-            }
-        ]
-    },
-
-    blackbannerExecution: {
-        id: 'blackbannerExecution',
-        name: '黑幡行刑台',
-        icon: '⚑',
-        description: '刑台早已空无一人，但黑幡仍在风中低语：“命要先抵押，裁决才会降临。”',
-        choices: [
-            {
-                text: '接下裁决',
-                icon: '⚔️',
-                result: '损失生命，获得终结牌',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 26 },
-                effects: [
-                    { type: 'damage', value: 12 },
-                    { type: 'card', cardId: 'doomsentVerdict' }
-                ]
-            },
-            {
-                text: '收殓残契',
-                icon: '🕳️',
-                result: '获得魂押并提升命环经验',
-                resultType: 'positive',
-                effects: [
-                    { type: 'card', cardId: 'soulCollateral' },
-                    { type: 'ringExp', value: 50 }
-                ]
-            }
-        ]
-    },
-
-    ghostFurnace: {
-        id: 'ghostFurnace',
-        name: '灵火残炉',
-        icon: '🔥',
-        description: '残炉中仍有灵火未灭，只要投入新的魂芯，就能唤醒沉睡的锻阵傀影。',
-        choices: [
-            {
-                text: '续燃炉火',
-                icon: '🪆',
-                result: '获得灵傀起手组件',
-                resultType: 'positive',
-                effects: [
-                    { type: 'card', cardId: 'emberPuppetScript' },
-                    { type: 'card', cardId: 'spareSoulCore' }
-                ]
-            },
-            {
-                text: '捡走护炉甲片',
-                icon: '🛡️',
-                result: '恢复生命并获得防守构件牌',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'heal', value: 10 },
-                    { type: 'card', cardId: 'relayHarness' }
-                ]
-            }
-        ]
-    },
-
-    marionetteArmory: {
-        id: 'marionetteArmory',
-        name: '傀兵军械库',
-        icon: '🧰',
-        description: '军械库里整齐摆放着可替换的傀芯和护板，每一件都像是为下一场战斗预制好的答案。',
-        choices: [
-            {
-                text: '整备武装',
-                icon: '🔧',
-                result: '升级一张牌并获得阵列过载',
-                resultType: 'positive',
-                effects: [
-                    { type: 'upgradeCard' },
-                    { type: 'card', cardId: 'arrayOverclock' }
-                ]
-            },
-            {
-                text: '搬走防具',
-                icon: '🏗️',
-                result: '获得两张站场牌',
-                resultType: 'positive',
-                effects: [
-                    { type: 'card', cardId: 'guardianGimbal' },
-                    { type: 'card', cardId: 'foundryBulwark' }
-                ]
-            }
-        ]
-    },
-
-    ancestralFoundry: {
-        id: 'ancestralFoundry',
-        name: '祖炉总控',
-        icon: '🏭',
-        description: '总控台仍记录着古代锻阵的全套流程，只要你敢启动，它会把战场直接改造成兵工域。',
-        choices: [
-            {
-                text: '启动祖炉',
-                icon: '⚙️',
-                result: '获得祖机开炉',
-                resultType: 'positive',
-                effects: [
-                    { type: 'card', cardId: 'ancestralMachina' },
-                    { type: 'ringExp', value: 45 }
-                ]
-            },
-            {
-                text: '继承军令',
-                icon: '👑',
-                result: '获得大锻命令与灵石',
-                resultType: 'positive',
-                effects: [
-                    { type: 'gold', value: 95 },
-                    { type: 'card', cardId: 'grandForgeMandate' }
-                ]
-            }
-        ]
-    },
-    convergenceRelay: {
-        id: 'convergenceRelay',
-        name: '汇流中继台',
-        icon: '🌀',
-        description: '中继台仍在输出不稳定的灵流，你可以校准命环，也可以强行并轨。',
-        choices: [
-            {
-                text: '校准命环',
-                icon: '🧭',
-                result: '命环经验提升，并获得首回合灵力增益',
-                resultType: 'positive',
-                effects: [
-                    { type: 'ringExp', value: 48 },
-                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 1 }
-                ]
-            },
-            {
-                text: '强制并轨',
-                icon: '⚡',
-                result: '失去少量生命，获得汇流核心卡',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 16 },
-                effects: [
-                    { type: 'damage', value: 8 },
-                    { type: 'card', cardId: 'ringInfusion' }
-                ]
-            }
-        ]
-    },
-    harmonicAnvil: {
-        id: 'harmonicAnvil',
-        name: '谐振灵砧',
-        icon: '⚒️',
-        description: '灵砧会放大命环共鸣，你可以走稳态锻造，或赌一次高压熔接。',
-        choices: [
-            {
-                text: '稳态锻环',
-                icon: '🛡️',
-                result: '升级一张牌并获得护势卡',
-                resultType: 'positive',
-                effects: [
-                    { type: 'upgradeCard' },
-                    { type: 'card', cardId: 'echoWard' }
-                ]
-            },
-            {
-                text: '高压熔接',
-                icon: '🔥',
-                result: '失去生命并获得两张汇流卡',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 20 },
-                effects: [
-                    { type: 'damage', value: 10 },
-                    { type: 'card', cardId: 'artifactBolt' },
-                    { type: 'card', cardId: 'ringInfusion' }
-                ]
-            }
-        ]
-    },
-    artifactConfluxBazaar: {
-        id: 'artifactConfluxBazaar',
-        name: '灵器汇流集',
+      }]
+    }, {
+      text: '拒绝赌博',
+      icon: '👋',
+      result: '离开',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  voidRift: {
+    id: 'voidRift',
+    name: '虚空裂隙',
+    icon: '🌀',
+    description: '空间撕裂，连接着充满危险与机遇的虚空位面...',
+    choices: [{
+      text: '深入探索',
+      icon: '👁️',
+      result: '受到伤害，获得强力卡牌',
+      resultType: 'negative',
+      effects: [{
+        type: 'damage',
+        value: 15
+      }, {
+        type: 'card',
+        rarity: 'epic'
+      }]
+    }, {
+      text: '封印裂隙',
+      icon: '🔒',
+      result: '命环经验 +50',
+      resultType: 'positive',
+      effects: [{
+        type: 'ringExp',
+        value: 50
+      }, {
+        type: 'heal',
+        value: 10
+      }]
+    }]
+  },
+  runPathInsightAstrolabe: {
+    id: 'runPathInsightAstrolabe',
+    name: '问真观星台',
+    icon: '🔮',
+    summary: '命途事件 · 让命盘样本直接改写当前主线。',
+    summaryLabel: '命途事件',
+    presentationTone: 'mystic',
+    atmosphere: '星盘没有直接给你奖励，而是逼你决定要不要把这条命途提前写进这一局的节奏里。',
+    description: '半面星盘仍在推演未来，台边还留着一册未誊完的样本簿。你可以校正命盘，也可以只带走旁注。',
+    choices: [{
+      text: '校正命盘',
+      icon: '🪞',
+      result: '天机 +1，命环经验提升，并推进当前命途',
+      resultType: 'positive',
+      effects: [{
+        type: 'heavenlyInsight',
+        value: 1
+      }, {
+        type: 'ringExp',
+        value: 30
+      }, {
+        type: 'runPathProgress',
+        amount: 1
+      }]
+    }, {
+      text: '誊录旁注',
+      icon: '📓',
+      result: '打开一间只卖调序样本的小铺',
+      resultType: 'neutral',
+      effects: [{
+        type: 'openTemporaryShop',
+        offerCount: 2,
+        priceMultiplier: 0.88,
+        forceRelief: false
+      }]
+    }, {
+      text: '让星盘自行沉寂',
+      icon: '🚶',
+      result: '保持当前路线',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  runPathInsightPolarizeAtlas: {
+    id: 'runPathInsightPolarizeAtlas',
+    name: '穷观校盘室',
+    icon: '🪐',
+    summary: '裂变事件 · 极化后，命盘会要求你把每一步都写成确定答案。',
+    summaryLabel: '裂变事件',
+    presentationTone: 'mystic',
+    atmosphere: '校盘室里只剩一条路：继续把不确定性剥离，直到每一拍都可复刻。',
+    description: '一排推演盘悬在半空，盘边标着“穷观：先拿到完整答案，再考虑收益上限”。',
+    choices: [{
+      text: '穷观校盘',
+      icon: '🪞',
+      result: '天机 +2，命环经验提升，并推进当前命途',
+      resultType: 'positive',
+      effects: [{
+        type: 'heavenlyInsight',
+        value: 2
+      }, {
+        type: 'ringExp',
+        value: 30
+      }, {
+        type: 'runPathProgress',
+        amount: 1
+      }]
+    }, {
+      text: '誊录推演稿',
+      icon: '📘',
+      result: '开启一间偏调序补件的临时商铺',
+      resultType: 'neutral',
+      effects: [{
+        type: 'openTemporaryShop',
+        offerCount: 2,
+        priceMultiplier: 0.86,
+        forceRelief: false
+      }]
+    }, {
+      text: '封存盘册',
+      icon: '🚶',
+      result: '先保持当前路线',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  runPathInsightPivotGambit: {
+    id: 'runPathInsightPivotGambit',
+    name: '借势落子局',
+    icon: '♟️',
+    summary: '裂变事件 · 转修后，读题不再只是防错，而是要兑现成主动得分。',
+    summaryLabel: '裂变事件',
+    presentationTone: 'mystic',
+    atmosphere: '棋盘已经替你看清窗口，问题只剩一个：你敢不敢现在就落子。',
+    description: '案上残局只剩三手，旁注写着“先手不是优势，敢落手才是优势”。',
+    choices: [{
+      text: '借势落子',
+      icon: '🎯',
+      result: '获得灵石、首轮调度优势，并推进当前命途',
+      resultType: 'positive',
+      effects: [{
+        type: 'gold',
+        value: 62
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnDrawBoostBattles',
+        charges: 1
+      }, {
+        type: 'runPathProgress',
+        amount: 1
+      }]
+    }, {
+      text: '先记手数',
+      icon: '🧾',
+      result: '命环经验 +28，天机 +1',
+      resultType: 'neutral',
+      effects: [{
+        type: 'ringExp',
+        value: 28
+      }, {
+        type: 'heavenlyInsight',
+        value: 1
+      }]
+    }, {
+      text: '暂不下注',
+      icon: '🚶',
+      result: '离开棋局',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  runPathInsightSacrificeOracle: {
+    id: 'runPathInsightSacrificeOracle',
+    name: '盲算祀台',
+    icon: '🕯️',
+    summary: '裂变事件 · 献祭后，额外情报会和额外风险一起到来。',
+    summaryLabel: '裂变事件',
+    presentationTone: 'danger',
+    atmosphere: '祀台不会白给答案，它只会把“可见未来”换成“更薄容错”。',
+    description: '烛火映出三条命盘裂缝，任何一条都能给你答案，但每条都要先付代价。',
+    choices: [{
+      text: '盲算换题',
+      icon: '☄️',
+      result: '失去生命，获得高阶信息与稀有补件，并推进当前命途',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 16
+      },
+      effects: [{
+        type: 'damage',
+        value: 8
+      }, {
+        type: 'heavenlyInsight',
+        value: 2
+      }, {
+        type: 'card',
+        rarity: 'rare'
+      }, {
+        type: 'runPathProgress',
+        amount: 1
+      }]
+    }, {
+      text: '留半卷天机',
+      icon: '📜',
+      result: '命环经验 +36，灵石 +45',
+      resultType: 'neutral',
+      effects: [{
+        type: 'ringExp',
+        value: 36
+      }, {
+        type: 'gold',
+        value: 45
+      }]
+    }, {
+      text: '吹灭烛火',
+      icon: '🚶',
+      result: '不改当前节奏',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  ancientLibrary: {
+    id: 'ancientLibrary',
+    name: '上古书库',
+    icon: '📚',
+    description: '这里收藏着无数失传的典籍，知识就是力量...',
+    choices: [{
+      text: '研读禁术',
+      icon: '📖',
+      result: '获得一张随机法则牌',
+      resultType: 'positive',
+      effects: [{
+        type: 'card',
+        rarity: 'legendary'
+      }]
+    }, {
+      text: '整理古籍',
+      icon: '🧹',
+      result: '升级一张牌，命环经验+30',
+      resultType: 'positive',
+      effects: [{
+        type: 'upgradeCard'
+      }, {
+        type: 'ringExp',
+        value: 30
+      }]
+    }]
+  },
+  wanderingSmith: {
+    id: 'wanderingSmith',
+    name: '云游铁匠',
+    icon: '🔨',
+    description: '一位背着巨大铁砧的铁匠正在休息，他似乎可以强化万物...',
+    choices: [{
+      text: '强化卡牌',
+      icon: '⚡',
+      result: '升级一张卡牌',
+      resultType: 'positive',
+      effects: [{
+        type: 'upgradeCard'
+      }]
+    }, {
+      text: '打造法宝',
+      icon: '🏺',
+      result: '花费150灵石购买随机法宝',
+      resultType: 'neutral',
+      condition: {
+        type: 'gold',
+        min: 150
+      },
+      effects: [{
+        type: 'gold',
+        value: -150
+      }, {
+        type: 'treasure',
+        random: true
+      }]
+    }, {
+      text: '离开',
+      icon: '👋',
+      result: '无事发生',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  bloodMoonRitual: {
+    id: 'bloodMoonRitual',
+    name: '血月祭仪',
+    icon: '🌕',
+    description: '祭台涌动暗红灵潮，你能感到战意与危险并存。',
+    choices: [{
+      text: '以血换力',
+      icon: '🩸',
+      result: '失去生命，永久力量提升',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 18
+      },
+      effects: [{
+        type: 'damage',
+        value: 12
+      }, {
+        type: 'permaBuff',
+        stat: 'strength',
+        value: 1
+      }]
+    }, {
+      text: '稳守心神',
+      icon: '🛡️',
+      result: '获得护身之力',
+      resultType: 'positive',
+      effects: [{
+        type: 'maxHp',
+        value: 6
+      }, {
+        type: 'heal',
+        value: 8
+      }]
+    }]
+  },
+  swordTomb: {
+    id: 'swordTomb',
+    name: '万剑冢',
+    icon: '🗡️',
+    description: '遍地断剑在低鸣，你可以继承其中一缕剑魂。',
+    choices: [{
+      text: '择杀伐剑魂',
+      icon: '⚔️',
+      result: '获得攻击牌',
+      resultType: 'positive',
+      effects: [{
+        type: 'card',
+        cardId: 'bloodlettingSlash'
+      }, {
+        type: 'card',
+        cardId: 'punctureMark'
+      }]
+    }, {
+      text: '择守御剑魂',
+      icon: '🛡️',
+      result: '获得防御与回复',
+      resultType: 'neutral',
+      effects: [{
+        type: 'card',
+        cardId: 'guardedRiposte'
+      }, {
+        type: 'heal',
+        value: 12
+      }]
+    }]
+  },
+  spiritAuction: {
+    id: 'spiritAuction',
+    name: '灵市暗拍',
+    icon: '🏮',
+    description: '蒙面拍卖师低声询价，稀有宝物稍纵即逝。',
+    choices: [{
+      text: '竞拍秘宝',
+      icon: '💰',
+      result: '花费120灵石，获得随机法宝',
+      resultType: 'neutral',
+      condition: {
+        type: 'gold',
+        min: 120
+      },
+      effects: [{
+        type: 'gold',
+        value: -120
+      }, {
+        type: 'treasure',
+        random: true
+      }]
+    }, {
+      text: '竞拍秘籍',
+      icon: '📜',
+      result: '花费80灵石，获得稀有卡',
+      resultType: 'neutral',
+      condition: {
+        type: 'gold',
+        min: 80
+      },
+      effects: [{
+        type: 'gold',
+        value: -80
+      }, {
+        type: 'card',
+        rarity: 'rare'
+      }]
+    }]
+  },
+  fallenFormation: {
+    id: 'fallenFormation',
+    name: '残阵遗痕',
+    icon: '🧿',
+    description: '古阵崩坏，仍残留可供利用的法阵节点。',
+    choices: [{
+      text: '重组阵纹',
+      icon: '✨',
+      result: '命环经验提升并恢复生命',
+      resultType: 'positive',
+      effects: [{
+        type: 'ringExp',
+        value: 45
+      }, {
+        type: 'heal',
+        value: 10
+      }]
+    }, {
+      text: '强行突破',
+      icon: '💥',
+      result: '进入高风险试炼',
+      resultType: 'negative',
+      effects: [{
+        type: 'trial',
+        trialType: 'speedKill',
+        rounds: 4,
+        rewardMultiplier: 1.6
+      }]
+    }]
+  },
+  destinyMirror: {
+    id: 'destinyMirror',
+    name: '宿命镜',
+    icon: '🪞',
+    description: '镜中映出多个可能的你，每个都通向不同代价。',
+    choices: [{
+      text: '映照过去',
+      icon: '🧠',
+      result: '移除 1 张防御牌，换取 1 张稀有牌',
+      resultType: 'neutral',
+      effects: [{
+        type: 'removeCardType',
+        cardType: 'defense',
+        count: 1
+      }, {
+        type: 'card',
+        rarity: 'rare'
+      }]
+    }, {
+      text: '映照未来',
+      icon: '🔮',
+      result: '命环经验+70，但失去生命',
+      resultType: 'negative',
+      effects: [{
+        type: 'damage',
+        value: 10
+      }, {
+        type: 'ringExp',
+        value: 70
+      }]
+    }]
+  },
+  wanderingOracle: {
+    id: 'wanderingOracle',
+    name: '行脚卜者',
+    icon: '🧙',
+    description: '卜者愿以天机交换你的抉择。',
+    choices: [{
+      text: '求战运',
+      icon: '⚔️',
+      result: '永久力量+1，最大生命-5',
+      resultType: 'negative',
+      effects: [{
+        type: 'permaBuff',
+        stat: 'strength',
+        value: 1
+      }, {
+        type: 'maxHp',
+        value: -5
+      }]
+    }, {
+      text: '求生运',
+      icon: '🌿',
+      result: '最大生命+8，灵力上限-1',
+      resultType: 'neutral',
+      effects: [{
+        type: 'maxHp',
+        value: 8
+      }, {
+        type: 'permaBuff',
+        stat: 'energy',
+        value: -1
+      }]
+    }]
+  },
+  demonContract: {
+    id: 'demonContract',
+    name: '魔契残页',
+    icon: '📕',
+    description: '契约承诺你力量，但也索取回报。',
+    choices: [{
+      text: '签订契约',
+      icon: '✒️',
+      result: '获得强力牌与诅咒',
+      resultType: 'negative',
+      effects: [{
+        type: 'card',
+        cardId: 'executionDoctrine'
+      }, {
+        type: 'damage',
+        value: 8
+      }]
+    }, {
+      text: '焚毁残页',
+      icon: '🔥',
+      result: '获得灵石',
+      resultType: 'positive',
+      effects: [{
+        type: 'gold',
+        value: 90
+      }]
+    }]
+  },
+  starObservation: {
+    id: 'starObservation',
+    name: '观星台',
+    icon: '🔭',
+    description: '星轨悄然偏转，你有机会重塑牌组节奏。',
+    choices: [{
+      text: '推演星轨',
+      icon: '🌠',
+      result: '升级一张牌并抽象出新思路',
+      resultType: 'positive',
+      effects: [{
+        type: 'upgradeCard'
+      }, {
+        type: 'ringExp',
+        value: 25
+      }]
+    }, {
+      text: '凝视深空',
+      icon: '🕳️',
+      result: '获得传奇卡，但受到伤害',
+      resultType: 'negative',
+      effects: [{
+        type: 'card',
+        rarity: 'legendary'
+      }, {
+        type: 'damage',
+        value: 12
+      }]
+    }]
+  },
+  brokenPavilion: {
+    id: 'brokenPavilion',
+    name: '断碑古亭',
+    icon: '🏯',
+    description: '古亭残破，但余下的石刻仍可传道。',
+    choices: [{
+      text: '参悟石刻',
+      icon: '📜',
+      result: '随机法则或命环经验',
+      resultType: 'neutral',
+      effects: [{
+        type: 'random',
+        options: [{
+          type: 'law',
+          random: true,
+          chance: 0.45
+        }, {
+          type: 'ringExp',
+          value: 60,
+          chance: 0.55
+        }]
+      }]
+    }, {
+      text: '搜刮残砖',
+      icon: '🪙',
+      result: '获得灵石',
+      resultType: 'positive',
+      effects: [{
+        type: 'randomGold',
+        min: 40,
+        max: 110
+      }]
+    }]
+  },
+  bloodForgeCovenant: {
+    id: 'bloodForgeCovenant',
+    name: '血炉盟约',
+    icon: '🜂',
+    description: '炉火映出你摇摆不定的影子：要么以血喂刃，要么以资换稳。',
+    choices: [{
+      text: '以血喂刃',
+      icon: '🩸',
+      result: '失去生命，获得血蚀核心卡',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 20
+      },
+      effects: [{
+        type: 'damage',
+        value: 12
+      }, {
+        type: 'card',
+        cardId: 'scarletJudgement'
+      }, {
+        type: 'card',
+        cardId: 'serratedRitual'
+      }]
+    }, {
+      text: '以资换稳',
+      icon: '💰',
+      result: '消耗灵石，升级一张牌',
+      resultType: 'neutral',
+      condition: {
+        type: 'gold',
+        min: 80
+      },
+      effects: [{
+        type: 'gold',
+        value: -80
+      }, {
+        type: 'upgradeCard'
+      }]
+    }, {
+      text: '不立盟约',
+      icon: '🚶',
+      result: '你离开了血炉',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  runPathShatterBounty: {
+    id: 'runPathShatterBounty',
+    name: '断脉悬金榜',
+    icon: '⚔️',
+    summary: '命途事件 · 用血线和赏金把破命流往前推。',
+    summaryLabel: '命途事件',
+    presentationTone: 'danger',
+    atmosphere: '榜文不问你稳不稳，只问你敢不敢把这条命途推得更激进。',
+    description: '残墙上钉着一份追杀号令，注脚写着一句旧话：先抢前两拍，再谈活路。你要签吗？',
+    choices: [{
+      text: '签下追杀号令',
+      icon: '🩸',
+      result: '失去生命，获得悬赏资源，并推进当前命途',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 16
+      },
+      effects: [{
+        type: 'damage',
+        value: 10
+      }, {
+        type: 'gold',
+        value: 80
+      }, {
+        type: 'adventureBuff',
+        buffId: 'victoryGoldBoostBattles',
+        charges: 1
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnEnergyBoostBattles',
+        charges: 1
+      }, {
+        type: 'runPathProgress',
+        amount: 1
+      }]
+    }, {
+      text: '拆读旧战录',
+      icon: '📜',
+      result: '获得爆发整备，但不提前追线',
+      resultType: 'positive',
+      effects: [{
+        type: 'ringExp',
+        value: 30
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnEnergyBoostBattles',
+        charges: 1
+      }]
+    }, {
+      text: '撕掉榜文',
+      icon: '🚶',
+      result: '你不接这笔单子',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  runPathShatterPolarizeEdict: {
+    id: 'runPathShatterPolarizeEdict',
+    name: '极锋讨令',
+    icon: '🩸',
+    summary: '裂变事件 · 极化后，榜文只认“抢拍兑现”，不认“保底留手”。',
+    summaryLabel: '裂变事件',
+    presentationTone: 'danger',
+    atmosphere: '极锋讨令把收益写在最前两拍，也把失误的代价抬到了同样高度。',
+    description: '一份加急缉令压在刀鞘下：只要你敢先出手，赏银立刻到账；若你犹豫，机会就归别人。',
+    choices: [{
+      text: '立刻签令',
+      icon: '🗡️',
+      result: '失去生命，获得悬赏资源，并推进当前命途',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 16
+      },
+      effects: [{
+        type: 'damage',
+        value: 12
+      }, {
+        type: 'gold',
+        value: 95
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnEnergyBoostBattles',
+        charges: 1
+      }, {
+        type: 'runPathProgress',
+        amount: 1
+      }]
+    }, {
+      text: '先读旧案',
+      icon: '📜',
+      result: '命环经验 +26，并获得一层悬赏增益',
+      resultType: 'neutral',
+      effects: [{
+        type: 'ringExp',
+        value: 26
+      }, {
+        type: 'adventureBuff',
+        buffId: 'victoryGoldBoostBattles',
+        charges: 1
+      }]
+    }, {
+      text: '折回营地',
+      icon: '🚶',
+      result: '不接这份追令',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  runPathShatterPivotLedger: {
+    id: 'runPathShatterPivotLedger',
+    name: '转修悬账簿',
+    icon: '🗡️',
+    summary: '裂变事件 · 转修后，破命流开始把“爆发”拆成“稳手 + 收头”的双段题。',
+    summaryLabel: '裂变事件',
+    presentationTone: 'danger',
+    atmosphere: '账簿里每一笔都在问你：这一刀是为了现在的伤害，还是为了下一拍的必杀。',
+    description: '悬账簿记录着一百种失手案例，旁注写着“收头前先稳手，破命也要会控节拍”。',
+    choices: [{
+      text: '按簿转修',
+      icon: '📘',
+      result: '提升调度收益，并推进当前命途',
+      resultType: 'positive',
+      effects: [{
+        type: 'ringExp',
+        value: 32
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnDrawBoostBattles',
+        charges: 1
+      }, {
+        type: 'runPathProgress',
+        amount: 1
+      }]
+    }, {
+      text: '先补军需',
+      icon: '🛒',
+      result: '开启一间偏中盘补件的临时商铺',
+      resultType: 'neutral',
+      effects: [{
+        type: 'openTemporaryShop',
+        offerCount: 2,
+        priceMultiplier: 0.9,
+        forceRelief: false
+      }]
+    }, {
+      text: '不改打法',
+      icon: '🚶',
+      result: '保持现状',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  runPathShatterSacrificePyre: {
+    id: 'runPathShatterSacrificePyre',
+    name: '祭火剜脉坛',
+    icon: '🔥',
+    summary: '裂变事件 · 献祭后，收益上限更高，但每次下注都要先交血线。',
+    summaryLabel: '裂变事件',
+    presentationTone: 'danger',
+    atmosphere: '剜脉坛不会问你稳不稳，它只看你愿不愿为下一拍极限收官付出即时代价。',
+    description: '祭坛火焰吞掉誓纸后，留下三句话：要强，就要薄；要快，就要狠；要活，就要算。',
+    choices: [{
+      text: '祭火压线',
+      icon: '☄️',
+      result: '失去生命，获得稀有补件与天机，并推进当前命途',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 18
+      },
+      effects: [{
+        type: 'damage',
+        value: 14
+      }, {
+        type: 'heavenlyInsight',
+        value: 1
+      }, {
+        type: 'card',
+        rarity: 'rare'
+      }, {
+        type: 'runPathProgress',
+        amount: 1
+      }]
+    }, {
+      text: '收灰留种',
+      icon: '🪙',
+      result: '灵石 +70，命环经验 +26',
+      resultType: 'neutral',
+      effects: [{
+        type: 'gold',
+        value: 70
+      }, {
+        type: 'ringExp',
+        value: 26
+      }]
+    }, {
+      text: '熄火离场',
+      icon: '🚶',
+      result: '暂不下注',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  mirrorNeedleDojo: {
+    id: 'mirrorNeedleDojo',
+    name: '镜针道场',
+    icon: '🪞',
+    description: '道场主张“先识破绽，再谈胜负”。',
+    choices: [{
+      text: '研习破势',
+      icon: '🎯',
+      result: '获得破绽流核心卡',
+      resultType: 'positive',
+      effects: [{
+        type: 'card',
+        cardId: 'weakpointSurvey'
+      }, {
+        type: 'card',
+        cardId: 'focusBreak'
+      }]
+    }, {
+      text: '盲冲试招',
+      icon: '⚔️',
+      result: '进入战斗，胜者得传承',
+      resultType: 'negative',
+      effects: [{
+        type: 'battle',
+        enemyId: 'swordDisciple'
+      }]
+    }]
+  },
+  shatteredCompass: {
+    id: 'shatteredCompass',
+    name: '碎命罗盘',
+    icon: '🧭',
+    description: '罗盘裂成两半，一半指向伤害，一半指向掌控。',
+    choices: [{
+      text: '偏向血路',
+      icon: '🩸',
+      result: '生命上限下降，力量提升，获得流血牌',
+      resultType: 'negative',
+      effects: [{
+        type: 'maxHp',
+        value: -6
+      }, {
+        type: 'permaBuff',
+        stat: 'strength',
+        value: 1
+      }, {
+        type: 'card',
+        cardId: 'arteryRupture'
+      }]
+    }, {
+      text: '偏向心眼',
+      icon: '🧠',
+      result: '失去生命，抽牌能力提升，获得破绽牌',
+      resultType: 'neutral',
+      effects: [{
+        type: 'damage',
+        value: 6
+      }, {
+        type: 'permaBuff',
+        stat: 'draw',
+        value: 1
+      }, {
+        type: 'card',
+        cardId: 'razorFocus'
+      }]
+    }, {
+      text: '修复罗盘',
+      icon: '🔧',
+      result: '命环经验提升',
+      resultType: 'positive',
+      effects: [{
+        type: 'ringExp',
+        value: 55
+      }]
+    }]
+  },
+  debtboundAnvil: {
+    id: 'debtboundAnvil',
+    name: '负债神砧',
+    icon: '⚒️',
+    description: '神砧只认代价：你可以用灵石买确定性，也可以用生命赌稀有收益。',
+    choices: [{
+      text: '支付灵石锻造',
+      icon: '💰',
+      result: '消耗灵石，升级并获得一张稀有卡',
+      resultType: 'positive',
+      condition: {
+        type: 'gold',
+        min: 120
+      },
+      effects: [{
+        type: 'gold',
+        value: -120
+      }, {
+        type: 'upgradeCard'
+      }, {
+        type: 'card',
+        rarity: 'rare'
+      }]
+    }, {
+      text: '以命抵债',
+      icon: '☠️',
+      result: '失去生命，获得随机稀有卡',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 24
+      },
+      effects: [{
+        type: 'damage',
+        value: 16
+      }, {
+        type: 'card',
+        rarity: 'rare'
+      }]
+    }]
+  },
+  voidBookkeeper: {
+    id: 'voidBookkeeper',
+    name: '虚空账房',
+    icon: '📚',
+    description: '账房先生递来一卷黑册，声称“代价必须记账，但节奏可提前兑现”。',
+    choices: [{
+      text: '签收账册',
+      icon: '✍️',
+      result: '获得弃牌流核心卡组',
+      resultType: 'positive',
+      effects: [{
+        type: 'card',
+        cardId: 'voidLedger'
+      }, {
+        type: 'card',
+        cardId: 'recklessMulligan'
+      }]
+    }, {
+      text: '借款提速',
+      icon: '💰',
+      result: '损失生命，获得灵石与核心进攻牌',
+      resultType: 'neutral',
+      condition: {
+        type: 'hp',
+        min: 18
+      },
+      effects: [{
+        type: 'damage',
+        value: 8
+      }, {
+        type: 'gold',
+        value: 80
+      }, {
+        type: 'card',
+        cardId: 'echoingCut'
+      }]
+    }]
+  },
+  ashLedgerTrial: {
+    id: 'ashLedgerTrial',
+    name: '灰契账页',
+    icon: '📄',
+    description: '账页会在战前预支收益，但要求你在之后偿还手牌质量。',
+    choices: [{
+      text: '立即兑现',
+      icon: '🔥',
+      result: '升级一张牌并获得稀有弃牌牌',
+      resultType: 'positive',
+      effects: [{
+        type: 'upgradeCard'
+      }, {
+        type: 'card',
+        cardId: 'oblivionSpiral'
+      }]
+    }, {
+      text: '稳妥签注',
+      icon: '🧮',
+      result: '获得两张过牌工具并提升命环经验',
+      resultType: 'neutral',
+      effects: [{
+        type: 'card',
+        cardId: 'recirculation'
+      }, {
+        type: 'card',
+        cardId: 'debtCollection'
+      }, {
+        type: 'ringExp',
+        value: 35
+      }]
+    }]
+  },
+  convergenceRitual: {
+    id: 'convergenceRitual',
+    name: '收束仪式',
+    icon: '🕳️',
+    description: '你可以把分散的资源压成一次终局爆发，代价是立刻失去安全边际。',
+    choices: [{
+      text: '进行收束',
+      icon: '⚔️',
+      result: '获得终局卡并损失生命',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 24
+      },
+      effects: [{
+        type: 'damage',
+        value: 14
+      }, {
+        type: 'card',
+        cardId: 'finalConvergence'
+      }]
+    }, {
+      text: '拆解仪式',
+      icon: '🛠️',
+      result: '获得灵石、经验和弃牌流中坚牌',
+      resultType: 'positive',
+      effects: [{
+        type: 'gold',
+        value: 90
+      }, {
+        type: 'ringExp',
+        value: 45
+      }, {
+        type: 'card',
+        cardId: 'calculatedRuin'
+      }]
+    }]
+  },
+  oathscarShrine: {
+    id: 'oathscarShrine',
+    name: '契痕祠',
+    icon: '🩸',
+    description: '古祠里的誓纹不断渗血，仿佛在提醒你：每一道契痕都能换来一次越界爆发。',
+    choices: [{
+      text: '在誓纹上刻名',
+      icon: '✒️',
+      result: '获得咒契起手组件',
+      resultType: 'positive',
+      effects: [{
+        type: 'card',
+        cardId: 'oathscarCut'
+      }, {
+        type: 'card',
+        cardId: 'hexbrandSigil'
+      }]
+    }, {
+      text: '以血换约',
+      icon: '🫀',
+      result: '损失生命，获得核心力量牌',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 22
+      },
+      effects: [{
+        type: 'damage',
+        value: 10
+      }, {
+        type: 'card',
+        cardId: 'bloodpriceMandate'
+      }]
+    }]
+  },
+  griefWritArchive: {
+    id: 'griefWritArchive',
+    name: '悲契札库',
+    icon: '📚',
+    description: '守库人说，真正的咒契不靠蛮勇，而靠“预支痛苦、结算未来”。',
+    choices: [{
+      text: '抄录账页',
+      icon: '📜',
+      result: '升级一张牌并获得悲契账簿',
+      resultType: 'positive',
+      effects: [{
+        type: 'upgradeCard'
+      }, {
+        type: 'card',
+        cardId: 'griefLedger'
+      }]
+    }, {
+      text: '借走旧咒',
+      icon: '🕯️',
+      result: '获得中轴牌与灵石',
+      resultType: 'neutral',
+      effects: [{
+        type: 'gold',
+        value: 85
+      }, {
+        type: 'card',
+        cardId: 'pactRite'
+      }]
+    }]
+  },
+  blackbannerExecution: {
+    id: 'blackbannerExecution',
+    name: '黑幡行刑台',
+    icon: '⚑',
+    description: '刑台早已空无一人，但黑幡仍在风中低语：“命要先抵押，裁决才会降临。”',
+    choices: [{
+      text: '接下裁决',
+      icon: '⚔️',
+      result: '损失生命，获得终结牌',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 26
+      },
+      effects: [{
+        type: 'damage',
+        value: 12
+      }, {
+        type: 'card',
+        cardId: 'doomsentVerdict'
+      }]
+    }, {
+      text: '收殓残契',
+      icon: '🕳️',
+      result: '获得魂押并提升命环经验',
+      resultType: 'positive',
+      effects: [{
+        type: 'card',
+        cardId: 'soulCollateral'
+      }, {
+        type: 'ringExp',
+        value: 50
+      }]
+    }]
+  },
+  ghostFurnace: {
+    id: 'ghostFurnace',
+    name: '灵火残炉',
+    icon: '🔥',
+    description: '残炉中仍有灵火未灭，只要投入新的魂芯，就能唤醒沉睡的锻阵傀影。',
+    choices: [{
+      text: '续燃炉火',
+      icon: '🪆',
+      result: '获得灵傀起手组件',
+      resultType: 'positive',
+      effects: [{
+        type: 'card',
+        cardId: 'emberPuppetScript'
+      }, {
+        type: 'card',
+        cardId: 'spareSoulCore'
+      }]
+    }, {
+      text: '捡走护炉甲片',
+      icon: '🛡️',
+      result: '恢复生命并获得防守构件牌',
+      resultType: 'neutral',
+      effects: [{
+        type: 'heal',
+        value: 10
+      }, {
+        type: 'card',
+        cardId: 'relayHarness'
+      }]
+    }]
+  },
+  marionetteArmory: {
+    id: 'marionetteArmory',
+    name: '傀兵军械库',
+    icon: '🧰',
+    description: '军械库里整齐摆放着可替换的傀芯和护板，每一件都像是为下一场战斗预制好的答案。',
+    choices: [{
+      text: '整备武装',
+      icon: '🔧',
+      result: '升级一张牌并获得阵列过载',
+      resultType: 'positive',
+      effects: [{
+        type: 'upgradeCard'
+      }, {
+        type: 'card',
+        cardId: 'arrayOverclock'
+      }]
+    }, {
+      text: '搬走防具',
+      icon: '🏗️',
+      result: '获得两张站场牌',
+      resultType: 'positive',
+      effects: [{
+        type: 'card',
+        cardId: 'guardianGimbal'
+      }, {
+        type: 'card',
+        cardId: 'foundryBulwark'
+      }]
+    }]
+  },
+  ancestralFoundry: {
+    id: 'ancestralFoundry',
+    name: '祖炉总控',
+    icon: '🏭',
+    description: '总控台仍记录着古代锻阵的全套流程，只要你敢启动，它会把战场直接改造成兵工域。',
+    choices: [{
+      text: '启动祖炉',
+      icon: '⚙️',
+      result: '获得祖机开炉',
+      resultType: 'positive',
+      effects: [{
+        type: 'card',
+        cardId: 'ancestralMachina'
+      }, {
+        type: 'ringExp',
+        value: 45
+      }]
+    }, {
+      text: '继承军令',
+      icon: '👑',
+      result: '获得大锻命令与灵石',
+      resultType: 'positive',
+      effects: [{
+        type: 'gold',
+        value: 95
+      }, {
+        type: 'card',
+        cardId: 'grandForgeMandate'
+      }]
+    }]
+  },
+  convergenceRelay: {
+    id: 'convergenceRelay',
+    name: '汇流中继台',
+    icon: '🌀',
+    description: '中继台仍在输出不稳定的灵流，你可以校准命环，也可以强行并轨。',
+    choices: [{
+      text: '校准命环',
+      icon: '🧭',
+      result: '命环经验提升，并获得首回合灵力增益',
+      resultType: 'positive',
+      effects: [{
+        type: 'ringExp',
+        value: 48
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnEnergyBoostBattles',
+        charges: 1
+      }]
+    }, {
+      text: '强制并轨',
+      icon: '⚡',
+      result: '失去少量生命，获得汇流核心卡',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 16
+      },
+      effects: [{
+        type: 'damage',
+        value: 8
+      }, {
+        type: 'card',
+        cardId: 'ringInfusion'
+      }]
+    }]
+  },
+  harmonicAnvil: {
+    id: 'harmonicAnvil',
+    name: '谐振灵砧',
+    icon: '⚒️',
+    description: '灵砧会放大命环共鸣，你可以走稳态锻造，或赌一次高压熔接。',
+    choices: [{
+      text: '稳态锻环',
+      icon: '🛡️',
+      result: '升级一张牌并获得护势卡',
+      resultType: 'positive',
+      effects: [{
+        type: 'upgradeCard'
+      }, {
+        type: 'card',
+        cardId: 'echoWard'
+      }]
+    }, {
+      text: '高压熔接',
+      icon: '🔥',
+      result: '失去生命并获得两张汇流卡',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 20
+      },
+      effects: [{
+        type: 'damage',
+        value: 10
+      }, {
+        type: 'card',
+        cardId: 'artifactBolt'
+      }, {
+        type: 'card',
+        cardId: 'ringInfusion'
+      }]
+    }]
+  },
+  artifactConfluxBazaar: {
+    id: 'artifactConfluxBazaar',
+    name: '灵器汇流集',
+    icon: '🛒',
+    description: '巡天器商只在命轨重叠处停留片刻，你可以快速换装，或领补贴继续前进。',
+    choices: [{
+      text: '进入汇流集',
+      icon: '🧰',
+      result: '开启汇流临时商会',
+      resultType: 'positive',
+      effects: [{
+        type: 'openTemporaryShop',
+        title: '汇流器商',
         icon: '🛒',
-        description: '巡天器商只在命轨重叠处停留片刻，你可以快速换装，或领补贴继续前进。',
-        choices: [
-            {
-                text: '进入汇流集',
-                icon: '🧰',
-                result: '开启汇流临时商会',
-                resultType: 'positive',
-                effects: [
-                    {
-                        type: 'openTemporaryShop',
-                        title: '汇流器商',
-                        icon: '🛒',
-                        desc: '器商优先提供与命环、法宝联动的补给。',
-                        offerCount: 4
-                    }
-                ]
-            },
-            {
-                text: '领取路费',
-                icon: '🪙',
-                result: '获得灵石与命环经验',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'gold', value: 40 },
-                    { type: 'ringExp', value: 20 }
-                ]
-            }
-        ]
-    },
-
-    shieldRelayBeacon: {
-        id: 'shieldRelayBeacon',
-        name: '护阵中继站',
-        icon: '📡',
-        description: '一座半损的中继阵仍在输送护阵灵流，你可以接管它，或拆解它。',
-        choices: [
-            {
-                text: '拆解阵芯',
-                icon: '⚙️',
-                result: '获得灵石，但受到反震伤害',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'gold', value: 90 },
-                    { type: 'damage', value: 8 }
-                ]
-            },
-            {
-                text: '接入护流',
-                icon: '🛡️',
-                result: '恢复生命并获得守御工具牌',
-                resultType: 'positive',
-                effects: [
-                    { type: 'heal', value: 10 },
-                    { type: 'card', cardId: 'mirrorWall' }
-                ]
-            }
-        ]
-    },
-
-    runPathBulwarkSanctuary: {
-        id: 'runPathBulwarkSanctuary',
-        name: '镇脉壁垒库',
-        icon: '🛡️',
-        summary: '命途事件 · 把守势样本直接沉到这轮路线里。',
-        summaryLabel: '命途事件',
-        presentationTone: 'fortified',
-        atmosphere: '壁垒阵眼里剩下的灵流不够所有方案同时成立，你只能选一种“稳到最后”的办法。',
-        description: '守军撤离前把护流、军需和战录都锁进了壁垒阵眼。你可以接管护流，也可以拆开军需另做打算。',
-        choices: [
-            {
-                text: '接管护流',
-                icon: '🧿',
-                result: '恢复生命，强化防线，并推进当前命途',
-                resultType: 'positive',
-                effects: [
-                    { type: 'heal', value: 12 },
-                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 1 },
-                    { type: 'adventureBuff', buffId: 'victoryHealBoostBattles', charges: 1 },
-                    { type: 'runPathProgress', amount: 1 }
-                ]
-            },
-            {
-                text: '拆分军需',
-                icon: '📦',
-                result: '获得资源，但这次不强行追命途',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'gold', value: 78 },
-                    { type: 'ringExp', value: 24 }
-                ]
-            },
-            {
-                text: '原样封存',
-                icon: '🚶',
-                result: '保留阵眼，直接离开',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    runPathBulwarkPolarizeBastion: {
-        id: 'runPathBulwarkPolarizeBastion',
-        name: '固命垒心',
-        icon: '🧿',
-        summary: '裂变事件 · 极化后，镇命流会优先把最危险回合压成可承受回合。',
-        summaryLabel: '裂变事件',
-        presentationTone: 'fortified',
-        atmosphere: '垒心法阵只给一种答案：先活下来，剩下的一切都能慢慢拿回来。',
-        description: '一座旧垒心仍在运转，阵盘上刻着“稳线优先，收益随后”。',
-        choices: [
-            {
-                text: '重启垒心',
-                icon: '🛡️',
-                result: '恢复生命、强化开场防线，并推进当前命途',
-                resultType: 'positive',
-                effects: [
-                    { type: 'heal', value: 16 },
-                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 2 },
-                    { type: 'runPathProgress', amount: 1 }
-                ]
-            },
-            {
-                text: '抄录护阵图',
-                icon: '📘',
-                result: '命环经验 +28，天机 +1',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'ringExp', value: 28 },
-                    { type: 'heavenlyInsight', value: 1 }
-                ]
-            },
-            {
-                text: '封阵离开',
-                icon: '🚶',
-                result: '保持当前节奏',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    runPathBulwarkPivotDrill: {
-        id: 'runPathBulwarkPivotDrill',
-        name: '镜守转阵演武',
-        icon: '🪞',
-        summary: '裂变事件 · 转修后，镇命流要把“守住”继续转成“能反打”。',
-        summaryLabel: '裂变事件',
-        presentationTone: 'fortified',
-        atmosphere: '演武册反复强调同一句话：厚度不是目的，厚度只是换拍的工具。',
-        description: '转阵演武场上摆着两套脚本，一套稳手，一套反打；你必须现在选主轴。',
-        choices: [
-            {
-                text: '镜守操演',
-                icon: '🎯',
-                result: '获得守转攻行旅增益，并推进当前命途',
-                resultType: 'positive',
-                effects: [
-                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 1 },
-                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 },
-                    { type: 'runPathProgress', amount: 1 }
-                ]
-            },
-            {
-                text: '先做整备',
-                icon: '📦',
-                result: '灵石 +68，并获得一张稀有卡',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'gold', value: 68 },
-                    { type: 'card', rarity: 'rare' }
-                ]
-            },
-            {
-                text: '暂缓演武',
-                icon: '🚶',
-                result: '离开演武场',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    runPathBulwarkSacrificeAnvil: {
-        id: 'runPathBulwarkSacrificeAnvil',
-        name: '断甲反压砧',
-        icon: '⚒️',
-        summary: '裂变事件 · 献祭后，镇命流会用更薄容错换更强反击窗口。',
-        summaryLabel: '裂变事件',
-        presentationTone: 'danger',
-        atmosphere: '反压砧上的铭文写得很直白：要反打，就先接受这轮不再无损。',
-        description: '砧面残留着前代守军的誓印，“该守时守死，该出手时一击定线”。',
-        choices: [
-            {
-                text: '断甲换势',
-                icon: '🧱',
-                result: '失去生命，获得转攻增益，并推进当前命途',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 18 },
-                effects: [
-                    { type: 'damage', value: 10 },
-                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 1 },
-                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 },
-                    { type: 'runPathProgress', amount: 1 }
-                ]
-            },
-            {
-                text: '稳线回仓',
-                icon: '🧺',
-                result: '恢复生命并获得少量灵石',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'heal', value: 10 },
-                    { type: 'gold', value: 40 }
-                ]
-            },
-            {
-                text: '回避重压',
-                icon: '🚶',
-                result: '不改当前路线',
-                resultType: 'neutral',
-                effects: []
-            }
-        ]
-    },
-
-    ironCitadelPact: {
-        id: 'ironCitadelPact',
-        name: '玄铁城契',
-        icon: '🏰',
-        description: '残存守军要求你立下护城誓约，代价是立即承担灵压反噬。',
-        choices: [
-            {
-                text: '签下守契',
-                icon: '✍️',
-                result: '失去生命，获得玄甲核心卡',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 20 },
-                effects: [
-                    { type: 'damage', value: 10 },
-                    { type: 'card', cardId: 'citadelOath' },
-                    { type: 'card', cardId: 'ironBreath' }
-                ]
-            },
-            {
-                text: '稳态改造',
-                icon: '🔧',
-                result: '获得守势牌并提升命环经验',
-                resultType: 'positive',
-                effects: [
-                    { type: 'card', cardId: 'guardianMantra' },
-                    { type: 'ringExp', value: 40 }
-                ]
-            }
-        ]
-    },
-
-    aegisTribunal: {
-        id: 'aegisTribunal',
-        name: '玄甲审庭',
-        icon: '⚖️',
-        description: '审庭要求你在“以财稳局”与“以身换势”之间作出裁断。',
-        choices: [
-            {
-                text: '缴纳裁断费',
-                icon: '💰',
-                result: '消耗灵石，获得两张反制牌',
-                resultType: 'neutral',
-                condition: { type: 'gold', min: 100 },
-                effects: [
-                    { type: 'gold', value: -100 },
-                    { type: 'card', cardId: 'counterEdict' },
-                    { type: 'card', cardId: 'shieldTax' }
-                ]
-            },
-            {
-                text: '承受重压',
-                icon: '🧱',
-                result: '失去生命，获得玄甲裁断',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 18 },
-                effects: [
-                    { type: 'damage', value: 12 },
-                    { type: 'card', cardId: 'aegisJudgement' }
-                ]
-            }
-        ]
-    },
-
-    caravanQuartermaster: {
-        id: 'caravanQuartermaster',
-        name: '行旅军需官',
-        icon: '🚚',
-        description: '一支前线车队正在补给，军需官愿用折扣价向你出售战术资源。',
-        choices: [
-            {
-                text: '采购战术图册',
-                icon: '📘',
-                result: '消耗灵石，强化首回合手牌节奏',
-                resultType: 'positive',
-                condition: { type: 'gold', min: 70 },
-                effects: [
-                    { type: 'gold', value: -70 },
-                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 2 }
-                ]
-            },
-            {
-                text: '采购护阵符',
-                icon: '🧿',
-                result: '消耗灵石，强化开场防御',
-                resultType: 'positive',
-                condition: { type: 'gold', min: 90 },
-                effects: [
-                    { type: 'gold', value: -90 },
-                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 2 }
-                ]
-            },
-            {
-                text: '帮忙搬运物资',
-                icon: '🪙',
-                result: '获得少量灵石',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'gold', value: 35 }
-                ]
-            }
-        ]
-    },
-
-    nightWatchCamp: {
-        id: 'nightWatchCamp',
-        name: '夜巡营火',
-        icon: '🔥',
-        description: '守夜者邀请你共巡一晚：若能坚持，明日战斗会更从容。',
-        choices: [
-            {
-                text: '同巡并演练',
-                icon: '🛡️',
-                result: '失去少量生命，获得双重行旅增益',
-                resultType: 'neutral',
-                condition: { type: 'hp', min: 18 },
-                effects: [
-                    { type: 'damage', value: 8 },
-                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 1 },
-                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 }
-                ]
-            },
-            {
-                text: '静坐调息',
-                icon: '🧘',
-                result: '恢复生命并获得命环经验',
-                resultType: 'positive',
-                effects: [
-                    { type: 'heal', value: 14 },
-                    { type: 'ringExp', value: 25 }
-                ]
-            }
-        ]
-    },
-
-    frontierContractBoard: {
-        id: 'frontierContractBoard',
-        name: '前线悬赏榜',
-        icon: '📜',
-        description: '榜上贴满猎杀与护送委托，签约后你的战果将更值钱。',
-        choices: [
-            {
-                text: '签订悬赏契',
-                icon: '✒️',
-                result: '接下来战斗胜利将获得额外灵石',
-                resultType: 'positive',
-                effects: [
-                    { type: 'adventureBuff', buffId: 'victoryGoldBoostBattles', charges: 2 }
-                ]
-            },
-            {
-                text: '谨慎旁观',
-                icon: '👀',
-                result: '获得少量灵石与命环经验',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'gold', value: 20 },
-                    { type: 'ringExp', value: 15 }
-                ]
-            }
-        ]
-    },
-
-    floatingMarketRift: {
-        id: 'floatingMarketRift',
-        name: '裂隙浮市',
+        desc: '器商优先提供与命环、法宝联动的补给。',
+        offerCount: 4
+      }]
+    }, {
+      text: '领取路费',
+      icon: '🪙',
+      result: '获得灵石与命环经验',
+      resultType: 'neutral',
+      effects: [{
+        type: 'gold',
+        value: 40
+      }, {
+        type: 'ringExp',
+        value: 20
+      }]
+    }]
+  },
+  shieldRelayBeacon: {
+    id: 'shieldRelayBeacon',
+    name: '护阵中继站',
+    icon: '📡',
+    description: '一座半损的中继阵仍在输送护阵灵流，你可以接管它，或拆解它。',
+    choices: [{
+      text: '拆解阵芯',
+      icon: '⚙️',
+      result: '获得灵石，但受到反震伤害',
+      resultType: 'neutral',
+      effects: [{
+        type: 'gold',
+        value: 90
+      }, {
+        type: 'damage',
+        value: 8
+      }]
+    }, {
+      text: '接入护流',
+      icon: '🛡️',
+      result: '恢复生命并获得守御工具牌',
+      resultType: 'positive',
+      effects: [{
+        type: 'heal',
+        value: 10
+      }, {
+        type: 'card',
+        cardId: 'mirrorWall'
+      }]
+    }]
+  },
+  runPathBulwarkSanctuary: {
+    id: 'runPathBulwarkSanctuary',
+    name: '镇脉壁垒库',
+    icon: '🛡️',
+    summary: '命途事件 · 把守势样本直接沉到这轮路线里。',
+    summaryLabel: '命途事件',
+    presentationTone: 'fortified',
+    atmosphere: '壁垒阵眼里剩下的灵流不够所有方案同时成立，你只能选一种“稳到最后”的办法。',
+    description: '守军撤离前把护流、军需和战录都锁进了壁垒阵眼。你可以接管护流，也可以拆开军需另做打算。',
+    choices: [{
+      text: '接管护流',
+      icon: '🧿',
+      result: '恢复生命，强化防线，并推进当前命途',
+      resultType: 'positive',
+      effects: [{
+        type: 'heal',
+        value: 12
+      }, {
+        type: 'adventureBuff',
+        buffId: 'openingBlockBoostBattles',
+        charges: 1
+      }, {
+        type: 'adventureBuff',
+        buffId: 'victoryHealBoostBattles',
+        charges: 1
+      }, {
+        type: 'runPathProgress',
+        amount: 1
+      }]
+    }, {
+      text: '拆分军需',
+      icon: '📦',
+      result: '获得资源，但这次不强行追命途',
+      resultType: 'neutral',
+      effects: [{
+        type: 'gold',
+        value: 78
+      }, {
+        type: 'ringExp',
+        value: 24
+      }]
+    }, {
+      text: '原样封存',
+      icon: '🚶',
+      result: '保留阵眼，直接离开',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  runPathBulwarkPolarizeBastion: {
+    id: 'runPathBulwarkPolarizeBastion',
+    name: '固命垒心',
+    icon: '🧿',
+    summary: '裂变事件 · 极化后，镇命流会优先把最危险回合压成可承受回合。',
+    summaryLabel: '裂变事件',
+    presentationTone: 'fortified',
+    atmosphere: '垒心法阵只给一种答案：先活下来，剩下的一切都能慢慢拿回来。',
+    description: '一座旧垒心仍在运转，阵盘上刻着“稳线优先，收益随后”。',
+    choices: [{
+      text: '重启垒心',
+      icon: '🛡️',
+      result: '恢复生命、强化开场防线，并推进当前命途',
+      resultType: 'positive',
+      effects: [{
+        type: 'heal',
+        value: 16
+      }, {
+        type: 'adventureBuff',
+        buffId: 'openingBlockBoostBattles',
+        charges: 2
+      }, {
+        type: 'runPathProgress',
+        amount: 1
+      }]
+    }, {
+      text: '抄录护阵图',
+      icon: '📘',
+      result: '命环经验 +28，天机 +1',
+      resultType: 'neutral',
+      effects: [{
+        type: 'ringExp',
+        value: 28
+      }, {
+        type: 'heavenlyInsight',
+        value: 1
+      }]
+    }, {
+      text: '封阵离开',
+      icon: '🚶',
+      result: '保持当前节奏',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  runPathBulwarkPivotDrill: {
+    id: 'runPathBulwarkPivotDrill',
+    name: '镜守转阵演武',
+    icon: '🪞',
+    summary: '裂变事件 · 转修后，镇命流要把“守住”继续转成“能反打”。',
+    summaryLabel: '裂变事件',
+    presentationTone: 'fortified',
+    atmosphere: '演武册反复强调同一句话：厚度不是目的，厚度只是换拍的工具。',
+    description: '转阵演武场上摆着两套脚本，一套稳手，一套反打；你必须现在选主轴。',
+    choices: [{
+      text: '镜守操演',
+      icon: '🎯',
+      result: '获得守转攻行旅增益，并推进当前命途',
+      resultType: 'positive',
+      effects: [{
+        type: 'adventureBuff',
+        buffId: 'openingBlockBoostBattles',
+        charges: 1
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnDrawBoostBattles',
+        charges: 1
+      }, {
+        type: 'runPathProgress',
+        amount: 1
+      }]
+    }, {
+      text: '先做整备',
+      icon: '📦',
+      result: '灵石 +68，并获得一张稀有卡',
+      resultType: 'neutral',
+      effects: [{
+        type: 'gold',
+        value: 68
+      }, {
+        type: 'card',
+        rarity: 'rare'
+      }]
+    }, {
+      text: '暂缓演武',
+      icon: '🚶',
+      result: '离开演武场',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  runPathBulwarkSacrificeAnvil: {
+    id: 'runPathBulwarkSacrificeAnvil',
+    name: '断甲反压砧',
+    icon: '⚒️',
+    summary: '裂变事件 · 献祭后，镇命流会用更薄容错换更强反击窗口。',
+    summaryLabel: '裂变事件',
+    presentationTone: 'danger',
+    atmosphere: '反压砧上的铭文写得很直白：要反打，就先接受这轮不再无损。',
+    description: '砧面残留着前代守军的誓印，“该守时守死，该出手时一击定线”。',
+    choices: [{
+      text: '断甲换势',
+      icon: '🧱',
+      result: '失去生命，获得转攻增益，并推进当前命途',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 18
+      },
+      effects: [{
+        type: 'damage',
+        value: 10
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnEnergyBoostBattles',
+        charges: 1
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnDrawBoostBattles',
+        charges: 1
+      }, {
+        type: 'runPathProgress',
+        amount: 1
+      }]
+    }, {
+      text: '稳线回仓',
+      icon: '🧺',
+      result: '恢复生命并获得少量灵石',
+      resultType: 'neutral',
+      effects: [{
+        type: 'heal',
+        value: 10
+      }, {
+        type: 'gold',
+        value: 40
+      }]
+    }, {
+      text: '回避重压',
+      icon: '🚶',
+      result: '不改当前路线',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
+  ironCitadelPact: {
+    id: 'ironCitadelPact',
+    name: '玄铁城契',
+    icon: '🏰',
+    description: '残存守军要求你立下护城誓约，代价是立即承担灵压反噬。',
+    choices: [{
+      text: '签下守契',
+      icon: '✍️',
+      result: '失去生命，获得玄甲核心卡',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 20
+      },
+      effects: [{
+        type: 'damage',
+        value: 10
+      }, {
+        type: 'card',
+        cardId: 'citadelOath'
+      }, {
+        type: 'card',
+        cardId: 'ironBreath'
+      }]
+    }, {
+      text: '稳态改造',
+      icon: '🔧',
+      result: '获得守势牌并提升命环经验',
+      resultType: 'positive',
+      effects: [{
+        type: 'card',
+        cardId: 'guardianMantra'
+      }, {
+        type: 'ringExp',
+        value: 40
+      }]
+    }]
+  },
+  aegisTribunal: {
+    id: 'aegisTribunal',
+    name: '玄甲审庭',
+    icon: '⚖️',
+    description: '审庭要求你在“以财稳局”与“以身换势”之间作出裁断。',
+    choices: [{
+      text: '缴纳裁断费',
+      icon: '💰',
+      result: '消耗灵石，获得两张反制牌',
+      resultType: 'neutral',
+      condition: {
+        type: 'gold',
+        min: 100
+      },
+      effects: [{
+        type: 'gold',
+        value: -100
+      }, {
+        type: 'card',
+        cardId: 'counterEdict'
+      }, {
+        type: 'card',
+        cardId: 'shieldTax'
+      }]
+    }, {
+      text: '承受重压',
+      icon: '🧱',
+      result: '失去生命，获得玄甲裁断',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 18
+      },
+      effects: [{
+        type: 'damage',
+        value: 12
+      }, {
+        type: 'card',
+        cardId: 'aegisJudgement'
+      }]
+    }]
+  },
+  caravanQuartermaster: {
+    id: 'caravanQuartermaster',
+    name: '行旅军需官',
+    icon: '🚚',
+    description: '一支前线车队正在补给，军需官愿用折扣价向你出售战术资源。',
+    choices: [{
+      text: '采购战术图册',
+      icon: '📘',
+      result: '消耗灵石，强化首回合手牌节奏',
+      resultType: 'positive',
+      condition: {
+        type: 'gold',
+        min: 70
+      },
+      effects: [{
+        type: 'gold',
+        value: -70
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnDrawBoostBattles',
+        charges: 2
+      }]
+    }, {
+      text: '采购护阵符',
+      icon: '🧿',
+      result: '消耗灵石，强化开场防御',
+      resultType: 'positive',
+      condition: {
+        type: 'gold',
+        min: 90
+      },
+      effects: [{
+        type: 'gold',
+        value: -90
+      }, {
+        type: 'adventureBuff',
+        buffId: 'openingBlockBoostBattles',
+        charges: 2
+      }]
+    }, {
+      text: '帮忙搬运物资',
+      icon: '🪙',
+      result: '获得少量灵石',
+      resultType: 'neutral',
+      effects: [{
+        type: 'gold',
+        value: 35
+      }]
+    }]
+  },
+  nightWatchCamp: {
+    id: 'nightWatchCamp',
+    name: '夜巡营火',
+    icon: '🔥',
+    description: '守夜者邀请你共巡一晚：若能坚持，明日战斗会更从容。',
+    choices: [{
+      text: '同巡并演练',
+      icon: '🛡️',
+      result: '失去少量生命，获得双重行旅增益',
+      resultType: 'neutral',
+      condition: {
+        type: 'hp',
+        min: 18
+      },
+      effects: [{
+        type: 'damage',
+        value: 8
+      }, {
+        type: 'adventureBuff',
+        buffId: 'openingBlockBoostBattles',
+        charges: 1
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnDrawBoostBattles',
+        charges: 1
+      }]
+    }, {
+      text: '静坐调息',
+      icon: '🧘',
+      result: '恢复生命并获得命环经验',
+      resultType: 'positive',
+      effects: [{
+        type: 'heal',
+        value: 14
+      }, {
+        type: 'ringExp',
+        value: 25
+      }]
+    }]
+  },
+  frontierContractBoard: {
+    id: 'frontierContractBoard',
+    name: '前线悬赏榜',
+    icon: '📜',
+    description: '榜上贴满猎杀与护送委托，签约后你的战果将更值钱。',
+    choices: [{
+      text: '签订悬赏契',
+      icon: '✒️',
+      result: '接下来战斗胜利将获得额外灵石',
+      resultType: 'positive',
+      effects: [{
+        type: 'adventureBuff',
+        buffId: 'victoryGoldBoostBattles',
+        charges: 2
+      }]
+    }, {
+      text: '谨慎旁观',
+      icon: '👀',
+      result: '获得少量灵石与命环经验',
+      resultType: 'neutral',
+      effects: [{
+        type: 'gold',
+        value: 20
+      }, {
+        type: 'ringExp',
+        value: 15
+      }]
+    }]
+  },
+  floatingMarketRift: {
+    id: 'floatingMarketRift',
+    name: '裂隙浮市',
+    icon: '🛒',
+    description: '你在空间褶皱中遇到一位行商，对方只停留片刻。',
+    choices: [{
+      text: '进入浮市',
+      icon: '🧭',
+      result: '开启临时商会，可购买一件短期军需',
+      resultType: 'positive',
+      effects: [{
+        type: 'openTemporaryShop',
+        title: '裂隙行商',
         icon: '🛒',
-        description: '你在空间褶皱中遇到一位行商，对方只停留片刻。',
-        choices: [
-            {
-                text: '进入浮市',
-                icon: '🧭',
-                result: '开启临时商会，可购买一件短期军需',
-                resultType: 'positive',
-                effects: [
-                    {
-                        type: 'openTemporaryShop',
-                        title: '裂隙行商',
-                        icon: '🛒',
-                        desc: '行商摊位只维持几息，选一件最适合当前路线的军需。',
-                        offerCount: 3
-                    }
-                ]
-            },
-            {
-                text: '掠过不入',
-                icon: '🚶',
-                result: '获得少量灵石',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'gold', value: 28 }
-                ]
-            }
-        ]
-    },
-
-    emberCampSignal: {
-        id: 'emberCampSignal',
-        name: '余烬营讯',
-        icon: '🏕️',
-        description: '远处营火传来集结信号，你可以加入驻扎修整。',
-        choices: [
-            {
-                text: '响应营讯',
-                icon: '🔥',
-                result: '进入营地决策',
-                resultType: 'positive',
-                effects: [
-                    { type: 'openCampfire' }
-                ]
-            },
-            {
-                text: '保持行进',
-                icon: '🗺️',
-                result: '获得少量命环经验',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'ringExp', value: 18 }
-                ]
-            }
-        ]
-    },
-
-    leylineConfluence: {
-        id: 'leylineConfluence',
-        name: '灵脉会流',
-        icon: '🌊',
-        description: '两条灵脉在此汇聚，你可以借势稳固战术回路。',
-        choices: [
-            {
-                text: '同步灵息',
-                icon: '⚡',
-                result: '消耗灵石，换取首回合灵力强化',
-                resultType: 'positive',
-                condition: { type: 'gold', min: 70 },
-                effects: [
-                    { type: 'gold', value: -70 },
-                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 2 }
-                ]
-            },
-            {
-                text: '逆脉淬心',
-                icon: '🕯️',
-                result: '失去少量生命，换取经验倍率增益',
-                resultType: 'neutral',
-                condition: { type: 'hp', min: 16 },
-                effects: [
-                    { type: 'damage', value: 8 },
-                    { type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: 2 }
-                ]
-            }
-        ]
-    },
-
-    astralSupplyDepot: {
-        id: 'astralSupplyDepot',
-        name: '星港补给站',
+        desc: '行商摊位只维持几息，选一件最适合当前路线的军需。',
+        offerCount: 3
+      }]
+    }, {
+      text: '掠过不入',
+      icon: '🚶',
+      result: '获得少量灵石',
+      resultType: 'neutral',
+      effects: [{
+        type: 'gold',
+        value: 28
+      }]
+    }]
+  },
+  emberCampSignal: {
+    id: 'emberCampSignal',
+    name: '余烬营讯',
+    icon: '🏕️',
+    description: '远处营火传来集结信号，你可以加入驻扎修整。',
+    choices: [{
+      text: '响应营讯',
+      icon: '🔥',
+      result: '进入营地决策',
+      resultType: 'positive',
+      effects: [{
+        type: 'openCampfire'
+      }]
+    }, {
+      text: '保持行进',
+      icon: '🗺️',
+      result: '获得少量命环经验',
+      resultType: 'neutral',
+      effects: [{
+        type: 'ringExp',
+        value: 18
+      }]
+    }]
+  },
+  leylineConfluence: {
+    id: 'leylineConfluence',
+    name: '灵脉会流',
+    icon: '🌊',
+    description: '两条灵脉在此汇聚，你可以借势稳固战术回路。',
+    choices: [{
+      text: '同步灵息',
+      icon: '⚡',
+      result: '消耗灵石，换取首回合灵力强化',
+      resultType: 'positive',
+      condition: {
+        type: 'gold',
+        min: 70
+      },
+      effects: [{
+        type: 'gold',
+        value: -70
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnEnergyBoostBattles',
+        charges: 2
+      }]
+    }, {
+      text: '逆脉淬心',
+      icon: '🕯️',
+      result: '失去少量生命，换取经验倍率增益',
+      resultType: 'neutral',
+      condition: {
+        type: 'hp',
+        min: 16
+      },
+      effects: [{
+        type: 'damage',
+        value: 8
+      }, {
+        type: 'adventureBuff',
+        buffId: 'ringExpBoostBattles',
+        charges: 2
+      }]
+    }]
+  },
+  astralSupplyDepot: {
+    id: 'astralSupplyDepot',
+    name: '星港补给站',
+    icon: '🛰️',
+    description: '巡天商队开放限时补给窗口，你可趁机采购高价值军需。',
+    choices: [{
+      text: '进入补给站',
+      icon: '🧭',
+      result: '开启高档临时商会',
+      resultType: 'positive',
+      effects: [{
+        type: 'openTemporaryShop',
+        title: '星港补给站',
         icon: '🛰️',
-        description: '巡天商队开放限时补给窗口，你可趁机采购高价值军需。',
-        choices: [
-            {
-                text: '进入补给站',
-                icon: '🧭',
-                result: '开启高档临时商会',
-                resultType: 'positive',
-                effects: [
-                    {
-                        type: 'openTemporaryShop',
-                        title: '星港补给站',
-                        icon: '🛰️',
-                        desc: '高阶军需窗口已开启，可从 4 个补给位中选择其一。',
-                        offerCount: 4
-                    }
-                ]
-            },
-            {
-                text: '领取通行补贴',
-                icon: '🪙',
-                result: '获得灵石与命环经验',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'gold', value: 35 },
-                    { type: 'ringExp', value: 20 }
-                ]
-            }
-        ]
-    },
-
-    medicRelayPost: {
-        id: 'medicRelayPost',
-        name: '战地医护中继站',
-        icon: '🩺',
-        description: '前线医疗队正在补给，愿与有经验的修士签订短期救护协约。',
-        choices: [
-            {
-                text: '捐赠灵石换取支援',
-                icon: '🪙',
-                result: '消耗灵石，获得战后医护增益',
-                resultType: 'positive',
-                condition: { type: 'gold', min: 65 },
-                effects: [
-                    { type: 'gold', value: -65 },
-                    { type: 'adventureBuff', buffId: 'victoryHealBoostBattles', charges: 2 }
-                ]
-            },
-            {
-                text: '协助急救值守',
-                icon: '🩹',
-                result: '损耗少量生命，获得命环经验与医护增益',
-                resultType: 'neutral',
-                condition: { type: 'hp', min: 16 },
-                effects: [
-                    { type: 'damage', value: 6 },
-                    { type: 'ringExp', value: 24 },
-                    { type: 'adventureBuff', buffId: 'victoryHealBoostBattles', charges: 1 }
-                ]
-            }
-        ]
-    },
-
-    starlitFieldHospital: {
-        id: 'starlitFieldHospital',
-        name: '星辉野战医院',
-        icon: '🏥',
-        description: '星辉结界覆盖了整片营区，医官们正在筛选护卫契约。',
-        choices: [
-            {
-                text: '签订医护护卫契',
-                icon: '📄',
-                result: '获得战后治疗与开场防线增益',
-                resultType: 'positive',
-                effects: [
-                    { type: 'adventureBuff', buffId: 'victoryHealBoostBattles', charges: 3 },
-                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 1 }
-                ]
-            },
-            {
-                text: '接受付费疗程',
-                icon: '💊',
-                result: '消耗灵石，快速恢复生命',
-                resultType: 'neutral',
-                condition: { type: 'gold', min: 40 },
-                effects: [
-                    { type: 'gold', value: -40 },
-                    { type: 'heal', value: 24 }
-                ]
-            }
-        ]
-    },
-
-    riftAidConvoy: {
-        id: 'riftAidConvoy',
-        name: '裂隙救援车队',
+        desc: '高阶军需窗口已开启，可从 4 个补给位中选择其一。',
+        offerCount: 4
+      }]
+    }, {
+      text: '领取通行补贴',
+      icon: '🪙',
+      result: '获得灵石与命环经验',
+      resultType: 'neutral',
+      effects: [{
+        type: 'gold',
+        value: 35
+      }, {
+        type: 'ringExp',
+        value: 20
+      }]
+    }]
+  },
+  medicRelayPost: {
+    id: 'medicRelayPost',
+    name: '战地医护中继站',
+    icon: '🩺',
+    description: '前线医疗队正在补给，愿与有经验的修士签订短期救护协约。',
+    choices: [{
+      text: '捐赠灵石换取支援',
+      icon: '🪙',
+      result: '消耗灵石，获得战后医护增益',
+      resultType: 'positive',
+      condition: {
+        type: 'gold',
+        min: 65
+      },
+      effects: [{
+        type: 'gold',
+        value: -65
+      }, {
+        type: 'adventureBuff',
+        buffId: 'victoryHealBoostBattles',
+        charges: 2
+      }]
+    }, {
+      text: '协助急救值守',
+      icon: '🩹',
+      result: '损耗少量生命，获得命环经验与医护增益',
+      resultType: 'neutral',
+      condition: {
+        type: 'hp',
+        min: 16
+      },
+      effects: [{
+        type: 'damage',
+        value: 6
+      }, {
+        type: 'ringExp',
+        value: 24
+      }, {
+        type: 'adventureBuff',
+        buffId: 'victoryHealBoostBattles',
+        charges: 1
+      }]
+    }]
+  },
+  starlitFieldHospital: {
+    id: 'starlitFieldHospital',
+    name: '星辉野战医院',
+    icon: '🏥',
+    description: '星辉结界覆盖了整片营区，医官们正在筛选护卫契约。',
+    choices: [{
+      text: '签订医护护卫契',
+      icon: '📄',
+      result: '获得战后治疗与开场防线增益',
+      resultType: 'positive',
+      effects: [{
+        type: 'adventureBuff',
+        buffId: 'victoryHealBoostBattles',
+        charges: 3
+      }, {
+        type: 'adventureBuff',
+        buffId: 'openingBlockBoostBattles',
+        charges: 1
+      }]
+    }, {
+      text: '接受付费疗程',
+      icon: '💊',
+      result: '消耗灵石，快速恢复生命',
+      resultType: 'neutral',
+      condition: {
+        type: 'gold',
+        min: 40
+      },
+      effects: [{
+        type: 'gold',
+        value: -40
+      }, {
+        type: 'heal',
+        value: 24
+      }]
+    }]
+  },
+  riftAidConvoy: {
+    id: 'riftAidConvoy',
+    name: '裂隙救援车队',
+    icon: '🚑',
+    description: '一支穿梭裂隙的救援车队短暂停靠，他们愿出售应急补给。',
+    choices: [{
+      text: '进入救援补给点',
+      icon: '🧰',
+      result: '开启应急临时商会（保证出现低价补给）',
+      resultType: 'positive',
+      effects: [{
+        type: 'openTemporaryShop',
+        title: '救援补给点',
         icon: '🚑',
-        description: '一支穿梭裂隙的救援车队短暂停靠，他们愿出售应急补给。',
-        choices: [
-            {
-                text: '进入救援补给点',
-                icon: '🧰',
-                result: '开启应急临时商会（保证出现低价补给）',
-                resultType: 'positive',
-                effects: [
-                    {
-                        type: 'openTemporaryShop',
-                        title: '救援补给点',
-                        icon: '🚑',
-                        desc: '救援车队优先供应伤员，至少会出现一件低价应急补给。',
-                        offerCount: 3,
-                        forceRelief: true
-                    }
-                ]
-            },
-            {
-                text: '协助转运伤员',
-                icon: '🩹',
-                result: '恢复生命并获得少量灵石',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'heal', value: 12 },
-                    { type: 'gold', value: 20 }
-                ]
-            }
-        ]
-    },
-
-    endlessChronicleBroker: {
-        id: 'endlessChronicleBroker',
-        name: '轮回纪要商',
-        icon: '📓',
-        description: '一名记述无尽轮回的商贩愿意出售“过往失败换来的经验”。',
-        choices: [
-            {
-                text: '购入战历',
-                icon: '💰',
-                result: '消耗灵石，获得经验与开局节奏增益',
-                resultType: 'positive',
-                condition: { type: 'gold', min: 110 },
-                effects: [
-                    { type: 'gold', value: -110 },
-                    { type: 'ringExp', value: 70 },
-                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 },
-                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 1 }
-                ]
-            },
-            {
-                text: '以血换卷',
-                icon: '🩸',
-                result: '失去生命，换取更高经验与随机稀有卡',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 18 },
-                effects: [
-                    { type: 'damage', value: 10 },
-                    { type: 'ringExp', value: 95 },
-                    { type: 'card', rarity: 'rare' }
-                ]
-            }
-        ]
-    },
-
-    endlessStormSanctum: {
-        id: 'endlessStormSanctum',
-        name: '风暴静室',
-        icon: '🌪️',
-        description: '静室中心封着一团风暴核心，你可以平稳吸收，也可强行引爆。',
-        choices: [
-            {
-                text: '平稳导流',
-                icon: '🧘',
-                result: '恢复生命并获得防线增益',
-                resultType: 'positive',
-                effects: [
-                    { type: 'heal', value: 16 },
-                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 2 }
-                ]
-            },
-            {
-                text: '强引风暴',
-                icon: '⚡',
-                result: '进入高压试炼，回报显著提高',
-                resultType: 'negative',
-                effects: [
-                    { type: 'trial', trialType: 'speedKill', rounds: 4, rewardMultiplier: 2.1 }
-                ]
-            }
-        ]
-    },
-
-    endlessMutatorWorkshop: {
-        id: 'endlessMutatorWorkshop',
-        name: '异变工坊',
+        desc: '救援车队优先供应伤员，至少会出现一件低价应急补给。',
+        offerCount: 3,
+        forceRelief: true
+      }]
+    }, {
+      text: '协助转运伤员',
+      icon: '🩹',
+      result: '恢复生命并获得少量灵石',
+      resultType: 'neutral',
+      effects: [{
+        type: 'heal',
+        value: 12
+      }, {
+        type: 'gold',
+        value: 20
+      }]
+    }]
+  },
+  endlessChronicleBroker: {
+    id: 'endlessChronicleBroker',
+    name: '轮回纪要商',
+    icon: '📓',
+    description: '一名记述无尽轮回的商贩愿意出售“过往失败换来的经验”。',
+    choices: [{
+      text: '购入战历',
+      icon: '💰',
+      result: '消耗灵石，获得经验与开局节奏增益',
+      resultType: 'positive',
+      condition: {
+        type: 'gold',
+        min: 110
+      },
+      effects: [{
+        type: 'gold',
+        value: -110
+      }, {
+        type: 'ringExp',
+        value: 70
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnDrawBoostBattles',
+        charges: 1
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnEnergyBoostBattles',
+        charges: 1
+      }]
+    }, {
+      text: '以血换卷',
+      icon: '🩸',
+      result: '失去生命，换取更高经验与随机稀有卡',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 18
+      },
+      effects: [{
+        type: 'damage',
+        value: 10
+      }, {
+        type: 'ringExp',
+        value: 95
+      }, {
+        type: 'card',
+        rarity: 'rare'
+      }]
+    }]
+  },
+  endlessStormSanctum: {
+    id: 'endlessStormSanctum',
+    name: '风暴静室',
+    icon: '🌪️',
+    description: '静室中心封着一团风暴核心，你可以平稳吸收，也可强行引爆。',
+    choices: [{
+      text: '平稳导流',
+      icon: '🧘',
+      result: '恢复生命并获得防线增益',
+      resultType: 'positive',
+      effects: [{
+        type: 'heal',
+        value: 16
+      }, {
+        type: 'adventureBuff',
+        buffId: 'openingBlockBoostBattles',
+        charges: 2
+      }]
+    }, {
+      text: '强引风暴',
+      icon: '⚡',
+      result: '进入高压试炼，回报显著提高',
+      resultType: 'negative',
+      effects: [{
+        type: 'trial',
+        trialType: 'speedKill',
+        rounds: 4,
+        rewardMultiplier: 2.1
+      }]
+    }]
+  },
+  endlessMutatorWorkshop: {
+    id: 'endlessMutatorWorkshop',
+    name: '异变工坊',
+    icon: '🧪',
+    description: '工坊匠师可以重配无尽军需，你需要为代价签字。',
+    choices: [{
+      text: '重配补给',
+      icon: '🛒',
+      result: '开启轮回补给窗口',
+      resultType: 'positive',
+      effects: [{
+        type: 'openTemporaryShop',
+        title: '轮回补给库',
         icon: '🧪',
-        description: '工坊匠师可以重配无尽军需，你需要为代价签字。',
-        choices: [
-            {
-                text: '重配补给',
-                icon: '🛒',
-                result: '开启轮回补给窗口',
-                resultType: 'positive',
-                effects: [
-                    {
-                        type: 'openTemporaryShop',
-                        title: '轮回补给库',
-                        icon: '🧪',
-                        desc: '工坊提供针对无尽作战的特殊补给。',
-                        offerCount: 4,
-                        forceRelief: true
-                    }
-                ]
-            },
-            {
-                text: '拆售部件',
-                icon: '💸',
-                result: '立即获得灵石与战后悬赏增益',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'gold', value: 70 },
-                    { type: 'adventureBuff', buffId: 'victoryGoldBoostBattles', charges: 1 }
-                ]
-            }
-        ]
-    },
-
-    endlessMemoryVault: {
-        id: 'endlessMemoryVault',
-        name: '记忆封库',
-        icon: '🗄️',
-        description: '封库里堆满你上百次失败后的残留结晶，它们能被转化为力量。',
-        choices: [
-            {
-                text: '提取结晶',
-                icon: '🔮',
-                result: '命环经验提升，并获得战后医护增益',
-                resultType: 'positive',
-                effects: [
-                    { type: 'ringExp', value: 80 },
-                    { type: 'adventureBuff', buffId: 'victoryHealBoostBattles', charges: 2 }
-                ]
-            },
-            {
-                text: '高压压缩',
-                icon: '🗜️',
-                result: '失去生命，换取史诗级构筑资源',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 20 },
-                effects: [
-                    { type: 'damage', value: 12 },
-                    { type: 'card', rarity: 'epic' },
-                    { type: 'ringExp', value: 45 }
-                ]
-            }
-        ]
-    },
-
-    endlessPressureValve: {
-        id: 'endlessPressureValve',
-        name: '稳压阀井',
-        icon: '♨️',
-        description: '阀井发出尖锐嗡鸣，你可以泄压求稳，也可继续加压换取收益。',
-        choices: [
-            {
-                text: '紧急泄压',
-                icon: '🧯',
-                result: '降低轮回压力并恢复生命',
-                resultType: 'positive',
-                effects: [
-                    { type: 'endlessPressure', value: -2 },
-                    { type: 'heal', value: 14 }
-                ]
-            },
-            {
-                text: '超载运行',
-                icon: '🔥',
-                result: '提高轮回压力，换取灵石与经验',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'endlessPressure', value: 2 },
-                    { type: 'gold', value: 85 },
-                    { type: 'ringExp', value: 45 }
-                ]
-            }
-        ]
-    },
-
-    endlessFaultLine: {
-        id: 'endlessFaultLine',
-        name: '断层军需带',
+        desc: '工坊提供针对无尽作战的特殊补给。',
+        offerCount: 4,
+        forceRelief: true
+      }]
+    }, {
+      text: '拆售部件',
+      icon: '💸',
+      result: '立即获得灵石与战后悬赏增益',
+      resultType: 'neutral',
+      effects: [{
+        type: 'gold',
+        value: 70
+      }, {
+        type: 'adventureBuff',
+        buffId: 'victoryGoldBoostBattles',
+        charges: 1
+      }]
+    }]
+  },
+  endlessMemoryVault: {
+    id: 'endlessMemoryVault',
+    name: '记忆封库',
+    icon: '🗄️',
+    description: '封库里堆满你上百次失败后的残留结晶，它们能被转化为力量。',
+    choices: [{
+      text: '提取结晶',
+      icon: '🔮',
+      result: '命环经验提升，并获得战后医护增益',
+      resultType: 'positive',
+      effects: [{
+        type: 'ringExp',
+        value: 80
+      }, {
+        type: 'adventureBuff',
+        buffId: 'victoryHealBoostBattles',
+        charges: 2
+      }]
+    }, {
+      text: '高压压缩',
+      icon: '🗜️',
+      result: '失去生命，换取史诗级构筑资源',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 20
+      },
+      effects: [{
+        type: 'damage',
+        value: 12
+      }, {
+        type: 'card',
+        rarity: 'epic'
+      }, {
+        type: 'ringExp',
+        value: 45
+      }]
+    }]
+  },
+  endlessPressureValve: {
+    id: 'endlessPressureValve',
+    name: '稳压阀井',
+    icon: '♨️',
+    description: '阀井发出尖锐嗡鸣，你可以泄压求稳，也可继续加压换取收益。',
+    choices: [{
+      text: '紧急泄压',
+      icon: '🧯',
+      result: '降低轮回压力并恢复生命',
+      resultType: 'positive',
+      effects: [{
+        type: 'endlessPressure',
+        value: -2
+      }, {
+        type: 'heal',
+        value: 14
+      }]
+    }, {
+      text: '超载运行',
+      icon: '🔥',
+      result: '提高轮回压力，换取灵石与经验',
+      resultType: 'neutral',
+      effects: [{
+        type: 'endlessPressure',
+        value: 2
+      }, {
+        type: 'gold',
+        value: 85
+      }, {
+        type: 'ringExp',
+        value: 45
+      }]
+    }]
+  },
+  endlessFaultLine: {
+    id: 'endlessFaultLine',
+    name: '断层军需带',
+    icon: '🧰',
+    description: '补给断层边缘出现临时军需站，你可以选择坚守或清压换补给。',
+    choices: [{
+      text: '固守防线',
+      icon: '🛡️',
+      result: '获得防线增益并略微降压',
+      resultType: 'positive',
+      effects: [{
+        type: 'adventureBuff',
+        buffId: 'openingBlockBoostBattles',
+        charges: 2
+      }, {
+        type: 'endlessPressure',
+        value: -1
+      }]
+    }, {
+      text: '清压换补给',
+      icon: '🛒',
+      result: '降低压力，开启救援货架',
+      resultType: 'neutral',
+      effects: [{
+        type: 'endlessPressure',
+        value: -1
+      }, {
+        type: 'openTemporaryShop',
+        title: '断层军需带',
         icon: '🧰',
-        description: '补给断层边缘出现临时军需站，你可以选择坚守或清压换补给。',
-        choices: [
-            {
-                text: '固守防线',
-                icon: '🛡️',
-                result: '获得防线增益并略微降压',
-                resultType: 'positive',
-                effects: [
-                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 2 },
-                    { type: 'endlessPressure', value: -1 }
-                ]
-            },
-            {
-                text: '清压换补给',
-                icon: '🛒',
-                result: '降低压力，开启救援货架',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'endlessPressure', value: -1 },
-                    {
-                        type: 'openTemporaryShop',
-                        title: '断层军需带',
-                        icon: '🧰',
-                        desc: '军需官要求先降压再领补给。',
-                        offerCount: 4,
-                        forceRelief: true
-                    }
-                ]
-            }
-        ]
-    },
-
-    endlessOverclockAltar: {
-        id: 'endlessOverclockAltar',
-        name: '过载祭坛',
-        icon: '🔥',
-        description: '祭坛将压力转化为短时爆发力，你可以强行超频，也可以回路降温。',
-        choices: [
-            {
-                text: '强行超频',
-                icon: '⚡',
-                result: '提升压力，换取灵石与首回合爆发',
-                resultType: 'negative',
-                effects: [
-                    { type: 'endlessPressure', value: 2 },
-                    { type: 'gold', value: 90 },
-                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 2 }
-                ]
-            },
-            {
-                text: '回路降温',
-                icon: '🧊',
-                result: '降低压力并恢复状态',
-                resultType: 'positive',
-                effects: [
-                    { type: 'endlessPressure', value: -2 },
-                    { type: 'heal', value: 12 },
-                    { type: 'ringExp', value: 36 }
-                ]
-            }
-        ]
-    },
-
-    thunderConductTrial: {
-        id: 'thunderConductTrial',
-        name: '导雷试场',
-        icon: '⚡',
-        description: '一处废弃导雷塔仍在运转，你可以借其校准“破窗连击”节奏。',
-        choices: [
-            {
-                text: '引雷入体',
-                icon: '🌩️',
-                result: '承受雷灼，获得雷策核心卡',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 12 },
-                effects: [
-                    { type: 'damage', value: 8 },
-                    { type: 'card', cardId: 'lightningProbe' },
-                    { type: 'ringExp', value: 16 }
-                ]
-            },
-            {
-                text: '标定破窗',
-                icon: '🎯',
-                result: '强化易伤窗口并获得破绽工具',
-                resultType: 'positive',
-                effects: [
-                    { type: 'card', cardId: 'chainArc' },
-                    { type: 'ringExp', value: 24 },
-                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 1 }
-                ]
-            }
-        ]
-    },
-
-    stormchaserCamp: {
-        id: 'stormchaserCamp',
-        name: '逐雷营站',
-        icon: '⛺',
-        description: '营站记录了大量“雷策”战斗笔记，补给官愿意为你调整作战节奏。',
-        choices: [
-            {
-                text: '校准回路',
-                icon: '🔋',
-                result: '获得首回合节奏增益',
-                resultType: 'positive',
-                effects: [
-                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 2 },
-                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 }
-                ]
-            },
-            {
-                text: '稳态回路',
-                icon: '🧊',
-                result: '恢复生命并降低轮回压力',
-                resultType: 'neutral',
-                effects: [
-                    { type: 'heal', value: 12 },
-                    { type: 'endlessPressure', value: -1 }
-                ]
-            }
-        ]
-    },
-
-    fulgurMarket: {
-        id: 'fulgurMarket',
-        name: '霆光黑市',
-        icon: '🏮',
-        description: '黑市商人专卖“高压战术”，价格昂贵但成效直接。',
-        choices: [
-            {
-                text: '购买回路蓝图',
-                icon: '📜',
-                result: '消耗灵石，获得雷策进阶卡',
-                resultType: 'neutral',
-                condition: { type: 'gold', min: 90 },
-                effects: [
-                    { type: 'gold', value: -90 },
-                    { type: 'card', cardId: 'exposedCircuit' }
-                ]
-            },
-            {
-                text: '出售战报',
-                icon: '🧾',
-                result: '获得灵石，但状态受损',
-                resultType: 'negative',
-                effects: [
-                    { type: 'gold', value: 75 },
-                    { type: 'damage', value: 6 }
-                ]
-            }
-        ]
-    },
-
-    overclockSigil: {
-        id: 'overclockSigil',
-        name: '超频铭印',
-        icon: '🛠️',
-        description: '铭印会把压力直接转化为战力，你可以冒险超频，或选择保守调谐。',
-        choices: [
-            {
-                text: '冒险超频',
-                icon: '🔥',
-                result: '压力提升，换取命环成长与稀有雷策卡',
-                resultType: 'negative',
-                effects: [
-                    { type: 'endlessPressure', value: 1 },
-                    { type: 'ringExp', value: 50 },
-                    { type: 'card', cardId: 'skybreakerArray' }
-                ]
-            },
-            {
-                text: '保守调谐',
-                icon: '🛡️',
-                result: '恢复状态并获得稳态防线',
-                resultType: 'positive',
-                effects: [
-                    { type: 'heal', value: 14 },
-                    { type: 'card', cardId: 'stormWard' },
-                    { type: 'endlessPressure', value: -1 }
-                ]
-            }
-        ]
-    },
-
-    herbalPactShrine: {
-        id: 'herbalPactShrine',
-        name: '回生药坛',
-        icon: '🌿',
-        description: '药坛守望者提出交易：以代价换取更强续航手段。',
-        choices: [
-            {
-                text: '草契疗护',
-                icon: '💚',
-                result: '大量恢复并获得回生基础卡',
-                resultType: 'positive',
-                effects: [
-                    { type: 'heal', value: 18 },
-                    { type: 'card', cardId: 'mendThread' }
-                ]
-            },
-            {
-                text: '燃脉急救',
-                icon: '🩸',
-                result: '损失生命，换取攻击性回生卡与灵石',
-                resultType: 'neutral',
-                condition: { type: 'hp', min: 14 },
-                effects: [
-                    { type: 'damage', value: 8 },
-                    { type: 'card', cardId: 'transfuseStrike' },
-                    { type: 'gold', value: 45 }
-                ]
-            }
-        ]
-    },
-
-    lifestringClinic: {
-        id: 'lifestringClinic',
-        name: '续命医铺',
-        icon: '🏥',
-        description: '医铺可提供快速修整，但你需要在灵石与生命风险之间权衡。',
-        choices: [
-            {
-                text: '付费续命',
-                icon: '💰',
-                result: '消耗灵石，恢复大量生命并点燃营火',
-                resultType: 'positive',
-                condition: { type: 'gold', min: 80 },
-                effects: [
-                    { type: 'gold', value: -80 },
-                    { type: 'heal', value: 30 },
-                    { type: 'openCampfire' }
-                ]
-            },
-            {
-                text: '以术换术',
-                icon: '🧪',
-                result: '承受痛楚，换取回生进阶卡与命环经验',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 16 },
-                effects: [
-                    { type: 'damage', value: 10 },
-                    { type: 'card', cardId: 'lifelinkWeave' },
-                    { type: 'ringExp', value: 24 }
-                ]
-            }
-        ]
-    },
-
-    bloodloomGarden: {
-        id: 'bloodloomGarden',
-        name: '血华药圃',
-        icon: '🌺',
-        description: '药圃中的血华可炼成进攻药剂，也可调制长线恢复方案。',
-        choices: [
-            {
-                text: '炼制战剂',
-                icon: '⚗️',
-                result: '失去生命并获得进攻成长',
-                resultType: 'negative',
-                condition: { type: 'hp', min: 12 },
-                effects: [
-                    { type: 'damage', value: 8 },
-                    { type: 'card', cardId: 'bloodBloom' },
-                    { type: 'permaBuff', stat: 'strength', value: 1 }
-                ]
-            },
-            {
-                text: '调和药浴',
-                icon: '🛁',
-                result: '恢复生命并获得战后恢复增益',
-                resultType: 'positive',
-                effects: [
-                    { type: 'heal', value: 16 },
-                    { type: 'adventureBuff', buffId: 'victoryHealBoostBattles', charges: 2 }
-                ]
-            }
-        ]
-    },
-
-    hospiceRelay: {
-        id: 'hospiceRelay',
-        name: '护生转运站',
-        icon: '🚑',
-        description: '转运站在高压路线上提供临时补给与护送服务。',
-        choices: [
-            {
-                text: '设立医站',
-                icon: '🛒',
-                result: '开启临时补给并稳定压力',
-                resultType: 'neutral',
-                effects: [
-                    {
-                        type: 'openTemporaryShop',
-                        title: '护生补给架',
-                        icon: '🧰',
-                        desc: '补给医师提供续航向临时交易。',
-                        offerCount: 4,
-                        forceRelief: true
-                    },
-                    { type: 'endlessPressure', value: -1 }
-                ]
-            },
-            {
-                text: '护送伤员',
-                icon: '🕊️',
-                result: '恢复生命并获得护势增益',
-                resultType: 'positive',
-                effects: [
-                    { type: 'heal', value: 20 },
-                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 2 }
-                ]
-            }
-        ]
-    },
-
-    hiddenSpring: {
-        id: 'hiddenSpring',
-        name: '隐泉',
-        icon: '💧',
-        description: '泉眼灵气温润，短暂停驻可恢复状态。',
-        choices: [
-            {
-                text: '静养',
-                icon: '🧘',
-                result: '恢复生命并清除一层压力',
-                resultType: 'positive',
-                effects: [
-                    { type: 'heal', value: 20 },
-                    { type: 'gold', value: 20 }
-                ]
-            },
-            {
-                text: '提炼灵液',
-                icon: '🧪',
-                result: '消耗生命，提升抽牌',
-                resultType: 'neutral',
-                condition: { type: 'hp', min: 20 },
-                effects: [
-                    { type: 'damage', value: 10 },
-                    { type: 'permaBuff', stat: 'draw', value: 1 }
-                ]
-            }
-        ]
-    }
+        desc: '军需官要求先降压再领补给。',
+        offerCount: 4,
+        forceRelief: true
+      }]
+    }]
+  },
+  endlessOverclockAltar: {
+    id: 'endlessOverclockAltar',
+    name: '过载祭坛',
+    icon: '🔥',
+    description: '祭坛将压力转化为短时爆发力，你可以强行超频，也可以回路降温。',
+    choices: [{
+      text: '强行超频',
+      icon: '⚡',
+      result: '提升压力，换取灵石与首回合爆发',
+      resultType: 'negative',
+      effects: [{
+        type: 'endlessPressure',
+        value: 2
+      }, {
+        type: 'gold',
+        value: 90
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnEnergyBoostBattles',
+        charges: 2
+      }]
+    }, {
+      text: '回路降温',
+      icon: '🧊',
+      result: '降低压力并恢复状态',
+      resultType: 'positive',
+      effects: [{
+        type: 'endlessPressure',
+        value: -2
+      }, {
+        type: 'heal',
+        value: 12
+      }, {
+        type: 'ringExp',
+        value: 36
+      }]
+    }]
+  },
+  thunderConductTrial: {
+    id: 'thunderConductTrial',
+    name: '导雷试场',
+    icon: '⚡',
+    description: '一处废弃导雷塔仍在运转，你可以借其校准“破窗连击”节奏。',
+    choices: [{
+      text: '引雷入体',
+      icon: '🌩️',
+      result: '承受雷灼，获得雷策核心卡',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 12
+      },
+      effects: [{
+        type: 'damage',
+        value: 8
+      }, {
+        type: 'card',
+        cardId: 'lightningProbe'
+      }, {
+        type: 'ringExp',
+        value: 16
+      }]
+    }, {
+      text: '标定破窗',
+      icon: '🎯',
+      result: '强化易伤窗口并获得破绽工具',
+      resultType: 'positive',
+      effects: [{
+        type: 'card',
+        cardId: 'chainArc'
+      }, {
+        type: 'ringExp',
+        value: 24
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnEnergyBoostBattles',
+        charges: 1
+      }]
+    }]
+  },
+  stormchaserCamp: {
+    id: 'stormchaserCamp',
+    name: '逐雷营站',
+    icon: '⛺',
+    description: '营站记录了大量“雷策”战斗笔记，补给官愿意为你调整作战节奏。',
+    choices: [{
+      text: '校准回路',
+      icon: '🔋',
+      result: '获得首回合节奏增益',
+      resultType: 'positive',
+      effects: [{
+        type: 'adventureBuff',
+        buffId: 'firstTurnEnergyBoostBattles',
+        charges: 2
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnDrawBoostBattles',
+        charges: 1
+      }]
+    }, {
+      text: '稳态回路',
+      icon: '🧊',
+      result: '恢复生命并降低轮回压力',
+      resultType: 'neutral',
+      effects: [{
+        type: 'heal',
+        value: 12
+      }, {
+        type: 'endlessPressure',
+        value: -1
+      }]
+    }]
+  },
+  fulgurMarket: {
+    id: 'fulgurMarket',
+    name: '霆光黑市',
+    icon: '🏮',
+    description: '黑市商人专卖“高压战术”，价格昂贵但成效直接。',
+    choices: [{
+      text: '购买回路蓝图',
+      icon: '📜',
+      result: '消耗灵石，获得雷策进阶卡',
+      resultType: 'neutral',
+      condition: {
+        type: 'gold',
+        min: 90
+      },
+      effects: [{
+        type: 'gold',
+        value: -90
+      }, {
+        type: 'card',
+        cardId: 'exposedCircuit'
+      }]
+    }, {
+      text: '出售战报',
+      icon: '🧾',
+      result: '获得灵石，但状态受损',
+      resultType: 'negative',
+      effects: [{
+        type: 'gold',
+        value: 75
+      }, {
+        type: 'damage',
+        value: 6
+      }]
+    }]
+  },
+  overclockSigil: {
+    id: 'overclockSigil',
+    name: '超频铭印',
+    icon: '🛠️',
+    description: '铭印会把压力直接转化为战力，你可以冒险超频，或选择保守调谐。',
+    choices: [{
+      text: '冒险超频',
+      icon: '🔥',
+      result: '压力提升，换取命环成长与稀有雷策卡',
+      resultType: 'negative',
+      effects: [{
+        type: 'endlessPressure',
+        value: 1
+      }, {
+        type: 'ringExp',
+        value: 50
+      }, {
+        type: 'card',
+        cardId: 'skybreakerArray'
+      }]
+    }, {
+      text: '保守调谐',
+      icon: '🛡️',
+      result: '恢复状态并获得稳态防线',
+      resultType: 'positive',
+      effects: [{
+        type: 'heal',
+        value: 14
+      }, {
+        type: 'card',
+        cardId: 'stormWard'
+      }, {
+        type: 'endlessPressure',
+        value: -1
+      }]
+    }]
+  },
+  herbalPactShrine: {
+    id: 'herbalPactShrine',
+    name: '回生药坛',
+    icon: '🌿',
+    description: '药坛守望者提出交易：以代价换取更强续航手段。',
+    choices: [{
+      text: '草契疗护',
+      icon: '💚',
+      result: '大量恢复并获得回生基础卡',
+      resultType: 'positive',
+      effects: [{
+        type: 'heal',
+        value: 18
+      }, {
+        type: 'card',
+        cardId: 'mendThread'
+      }]
+    }, {
+      text: '燃脉急救',
+      icon: '🩸',
+      result: '损失生命，换取攻击性回生卡与灵石',
+      resultType: 'neutral',
+      condition: {
+        type: 'hp',
+        min: 14
+      },
+      effects: [{
+        type: 'damage',
+        value: 8
+      }, {
+        type: 'card',
+        cardId: 'transfuseStrike'
+      }, {
+        type: 'gold',
+        value: 45
+      }]
+    }]
+  },
+  lifestringClinic: {
+    id: 'lifestringClinic',
+    name: '续命医铺',
+    icon: '🏥',
+    description: '医铺可提供快速修整，但你需要在灵石与生命风险之间权衡。',
+    choices: [{
+      text: '付费续命',
+      icon: '💰',
+      result: '消耗灵石，恢复大量生命并点燃营火',
+      resultType: 'positive',
+      condition: {
+        type: 'gold',
+        min: 80
+      },
+      effects: [{
+        type: 'gold',
+        value: -80
+      }, {
+        type: 'heal',
+        value: 30
+      }, {
+        type: 'openCampfire'
+      }]
+    }, {
+      text: '以术换术',
+      icon: '🧪',
+      result: '承受痛楚，换取回生进阶卡与命环经验',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 16
+      },
+      effects: [{
+        type: 'damage',
+        value: 10
+      }, {
+        type: 'card',
+        cardId: 'lifelinkWeave'
+      }, {
+        type: 'ringExp',
+        value: 24
+      }]
+    }]
+  },
+  bloodloomGarden: {
+    id: 'bloodloomGarden',
+    name: '血华药圃',
+    icon: '🌺',
+    description: '药圃中的血华可炼成进攻药剂，也可调制长线恢复方案。',
+    choices: [{
+      text: '炼制战剂',
+      icon: '⚗️',
+      result: '失去生命并获得进攻成长',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 12
+      },
+      effects: [{
+        type: 'damage',
+        value: 8
+      }, {
+        type: 'card',
+        cardId: 'bloodBloom'
+      }, {
+        type: 'permaBuff',
+        stat: 'strength',
+        value: 1
+      }]
+    }, {
+      text: '调和药浴',
+      icon: '🛁',
+      result: '恢复生命并获得战后恢复增益',
+      resultType: 'positive',
+      effects: [{
+        type: 'heal',
+        value: 16
+      }, {
+        type: 'adventureBuff',
+        buffId: 'victoryHealBoostBattles',
+        charges: 2
+      }]
+    }]
+  },
+  hospiceRelay: {
+    id: 'hospiceRelay',
+    name: '护生转运站',
+    icon: '🚑',
+    description: '转运站在高压路线上提供临时补给与护送服务。',
+    choices: [{
+      text: '设立医站',
+      icon: '🛒',
+      result: '开启临时补给并稳定压力',
+      resultType: 'neutral',
+      effects: [{
+        type: 'openTemporaryShop',
+        title: '护生补给架',
+        icon: '🧰',
+        desc: '补给医师提供续航向临时交易。',
+        offerCount: 4,
+        forceRelief: true
+      }, {
+        type: 'endlessPressure',
+        value: -1
+      }]
+    }, {
+      text: '护送伤员',
+      icon: '🕊️',
+      result: '恢复生命并获得护势增益',
+      resultType: 'positive',
+      effects: [{
+        type: 'heal',
+        value: 20
+      }, {
+        type: 'adventureBuff',
+        buffId: 'openingBlockBoostBattles',
+        charges: 2
+      }]
+    }]
+  },
+  hiddenSpring: {
+    id: 'hiddenSpring',
+    name: '隐泉',
+    icon: '💧',
+    description: '泉眼灵气温润，短暂停驻可恢复状态。',
+    choices: [{
+      text: '静养',
+      icon: '🧘',
+      result: '恢复生命并清除一层压力',
+      resultType: 'positive',
+      effects: [{
+        type: 'heal',
+        value: 20
+      }, {
+        type: 'gold',
+        value: 20
+      }]
+    }, {
+      text: '提炼灵液',
+      icon: '🧪',
+      result: '消耗生命，提升抽牌',
+      resultType: 'neutral',
+      condition: {
+        type: 'hp',
+        min: 20
+      },
+      effects: [{
+        type: 'damage',
+        value: 10
+      }, {
+        type: 'permaBuff',
+        stat: 'draw',
+        value: 1
+      }]
+    }]
+  }
 };
-
-const CHAPTER_EVENT_COMPOSER_CLUSTERS = {
-    1: {
-        id: 'ember_frontier',
-        name: '灰炬边线',
-        icon: '🔥',
-        tone: 'danger',
-        atmosphere: [
-            '边线烽火时明时灭，任何一次补给决策都会改写下一章的敌我态势。',
-            '补给火堆旁的名单仍在翻页，命盘要求你立刻给出取舍。'
-        ],
-        triggerTemplates: [
-            {
-                id: 'ember_supply',
-                title: '灰炬补给堆',
-                description: '半毁的补给车仍可拆解。你能立刻获利，也能把这批资源送往后方营线。',
-                tags: ['补给', '边线']
-            },
-            {
-                id: 'frontier_toll',
-                title: '边线过桥税',
-                description: '破桥只允许一次通行。你可以加价优先通行，也可以让出先机换取后续通行权。',
-                tags: ['通行', '桥头']
-            }
-        ],
-        shortGainRewardTemplates: [
-            {
-                text: '优先截留物资',
-                icon: '💰',
-                resultType: 'positive',
-                result: '立即获得灵石与生命恢复',
-                effects: [
-                    { type: 'gold', value: 68 },
-                    { type: 'heal', value: 8 }
-                ],
-                tags: ['快利', '截留'],
-                immediateText: '你先把可见收益收入囊中。'
-            },
-            {
-                text: '抢占桥头税道',
-                icon: '⚔️',
-                resultType: 'positive',
-                result: '立即获得灵石与命环经验',
-                effects: [
-                    { type: 'gold', value: 52 },
-                    { type: 'ringExp', value: 18 }
-                ],
-                tags: ['抢先', '税道'],
-                immediateText: '你快速拿到通行收益。'
-            }
-        ],
-        shortLossCostTemplates: [
-            {
-                text: '护送后方营线',
-                icon: '🛡️',
-                resultType: 'neutral',
-                result: '短期损失灵石，换取命环成长与战后收益',
-                condition: { type: 'gold', min: 36 },
-                effects: [
-                    { type: 'gold', value: -36 },
-                    { type: 'ringExp', value: 28 },
-                    { type: 'adventureBuff', buffId: 'victoryGoldBoostBattles', charges: 1 }
-                ],
-                tags: ['护送', '投资'],
-                immediateText: '你先承担成本，当前资源被压缩。'
-            },
-            {
-                text: '让渡桥头先机',
-                icon: '🧾',
-                resultType: 'neutral',
-                result: '短期收益降低，换取后续稳定',
-                effects: [
-                    { type: 'ringExp', value: 34 },
-                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 1 }
-                ],
-                tags: ['让渡', '稳态'],
-                immediateText: '你放弃眼前优势，短期节奏变慢。'
-            }
-        ],
-        longTermLossTemplates: [
-            {
-                longTermText: '命盘记下了补给透支，后续章节更容易出现高压交易与资源追债。',
-                echoText: '你曾透支边线补给，债务回响仍在。',
-                tags: ['补给债务', '高压交易']
-            },
-            {
-                longTermText: '桥头税道被写成掠夺路径，后续事件会提高冲突代价。',
-                echoText: '桥头掠夺引发了更高的冲突成本。',
-                tags: ['桥头掠夺', '冲突升级']
-            }
-        ],
-        longTermGainTemplates: [
-            {
-                longTermText: '命盘记录了护送契约，后续章节更容易出现盟援与补给回馈。',
-                echoText: '你留下的护送名册正在带来盟援。',
-                tags: ['盟援契约', '补给回馈']
-            },
-            {
-                longTermText: '让渡先机被记为守序信誉，后续章节更容易触发稳定收益分支。',
-                echoText: '守序信誉正在为你打开稳定路线。',
-                tags: ['守序信誉', '稳态分支']
-            }
-        ]
-    },
-    2: {
-        id: 'forge_caravan',
-        name: '熔痕商队',
-        icon: '⚒️',
-        tone: 'chapter',
-        atmosphere: [
-            '熔渣还未冷却，商队账册却先一步要求你签下条款。',
-            '锻炉与账房并列，任何折价都会在下一章兑现代价。'
-        ],
-        triggerTemplates: [
-            {
-                id: 'molten_ledger',
-                title: '熔痕账亭',
-                description: '账亭愿给你即时折价，但会把未来维护成本转嫁给你。',
-                tags: ['账亭', '锻炉']
-            },
-            {
-                id: 'caravan_refit',
-                title: '商队改装点',
-                description: '你可以优先改装当前装备，或把资源投入长期护送协议。',
-                tags: ['商队', '改装']
-            }
-        ],
-        shortGainRewardTemplates: [
-            {
-                text: '签下即时折价',
-                icon: '🏷️',
-                resultType: 'positive',
-                result: '立刻获得灵石与卡牌补件',
-                effects: [
-                    { type: 'gold', value: 56 },
-                    { type: 'card', rarity: 'uncommon' }
-                ],
-                tags: ['折价', '补件'],
-                immediateText: '你拿到当前最直接的战备收益。'
-            },
-            {
-                text: '先做快修改装',
-                icon: '🔧',
-                resultType: 'positive',
-                result: '立刻获得升级与少量灵石',
-                effects: [
-                    { type: 'upgradeCard' },
-                    { type: 'gold', value: 24 }
-                ],
-                tags: ['快修', '改装'],
-                immediateText: '你把资源用于眼前战力强化。'
-            }
-        ],
-        shortLossCostTemplates: [
-            {
-                text: '签长期护送单',
-                icon: '📜',
-                resultType: 'neutral',
-                result: '短期损失生命，换取长期稳定回报',
-                condition: { type: 'hp', min: 18 },
-                effects: [
-                    { type: 'damage', value: 9 },
-                    { type: 'ringExp', value: 32 },
-                    { type: 'adventureBuff', buffId: 'victoryHealBoostBattles', charges: 1 }
-                ],
-                tags: ['护送单', '维护'],
-                immediateText: '你先承受护送成本，当前容错下降。'
-            },
-            {
-                text: '投入熔渣回收',
-                icon: '🧱',
-                resultType: 'neutral',
-                result: '短期支付灵石，换取后续缓冲',
-                condition: { type: 'gold', min: 42 },
-                effects: [
-                    { type: 'gold', value: -42 },
-                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 1 },
-                    { type: 'ringExp', value: 24 }
-                ],
-                tags: ['回收', '缓冲'],
-                immediateText: '你先投入成本，立即收益偏低。'
-            }
-        ],
-        longTermLossTemplates: [
-            {
-                longTermText: '折价条款会在后续章节触发维护追缴，交易风险上升。',
-                echoText: '折价账单尚未结清，维护追缴正在逼近。',
-                tags: ['维护追缴', '交易风险']
-            },
-            {
-                longTermText: '快修改装被命盘标记为过载路径，后续事件更容易出现额外代价。',
-                echoText: '快修留下的过载裂痕开始反噬。',
-                tags: ['过载改装', '额外代价']
-            }
-        ],
-        longTermGainTemplates: [
-            {
-                longTermText: '护送协议写入命盘，后续章节更容易获得医疗与补给分支。',
-                echoText: '护送协议正在持续回馈你的路线。',
-                tags: ['护送协议', '医疗补给']
-            },
-            {
-                longTermText: '回收投入形成稳态储备，后续章节更容易出现防线收益。',
-                echoText: '稳态储备正在提升你的防线韧性。',
-                tags: ['稳态储备', '防线收益']
-            }
-        ]
-    },
-    3: {
-        id: 'astral_archive',
-        name: '星册档案',
-        icon: '📚',
-        tone: 'mystic',
-        atmosphere: [
-            '观测厅把未来拆成账页，每一页都要求你先付一笔定金。',
-            '星册只承认被记录的选择，未记录的收益将被视作噪音。'
-        ],
-        triggerTemplates: [
-            {
-                id: 'astral_registry',
-                title: '星册登记台',
-                description: '登记台可为你提供即刻信息红利，也可为后续章节保留长期推演权。',
-                tags: ['观测', '登记']
-            },
-            {
-                id: 'echo_index',
-                title: '回响索引室',
-                description: '索引室允许你先拿走结果，也允许你先承担校对成本。',
-                tags: ['索引', '校对']
-            }
-        ],
-        shortGainRewardTemplates: [
-            {
-                text: '提取现成结论',
-                icon: '🔮',
-                resultType: 'positive',
-                result: '立即获得天机与灵石',
-                effects: [
-                    { type: 'heavenlyInsight', value: 2 },
-                    { type: 'gold', value: 38 }
-                ],
-                tags: ['速读', '现成结论'],
-                immediateText: '你直接拿走了可见答案。'
-            },
-            {
-                text: '挪用观测预算',
-                icon: '🧮',
-                resultType: 'positive',
-                result: '立即获得命环经验与卡牌',
-                effects: [
-                    { type: 'ringExp', value: 32 },
-                    { type: 'card', rarity: 'rare' }
-                ],
-                tags: ['预算挪用', '速得'],
-                immediateText: '你把未来预算转成当前战力。'
-            }
-        ],
-        shortLossCostTemplates: [
-            {
-                text: '先做长期校对',
-                icon: '🖋️',
-                resultType: 'neutral',
-                result: '短期消耗灵石，换取后续稳定情报',
-                condition: { type: 'gold', min: 48 },
-                effects: [
-                    { type: 'gold', value: -48 },
-                    { type: 'heavenlyInsight', value: 1 },
-                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 }
-                ],
-                tags: ['校对', '情报'],
-                immediateText: '你先投入预算，短期变现能力下降。'
-            },
-            {
-                text: '承担盲算误差',
-                icon: '🕯️',
-                resultType: 'neutral',
-                result: '短期失去生命，换取深层推演',
-                condition: { type: 'hp', min: 16 },
-                effects: [
-                    { type: 'damage', value: 8 },
-                    { type: 'heavenlyInsight', value: 2 },
-                    { type: 'ringExp', value: 18 }
-                ],
-                tags: ['盲算', '推演'],
-                immediateText: '你先承担误差，当前容错更薄。'
-            }
-        ],
-        longTermLossTemplates: [
-            {
-                longTermText: '速读结果会触发信息赤字，后续章节更容易出现认知税。',
-                echoText: '信息赤字被记入星册，认知税正在靠近。',
-                tags: ['信息赤字', '认知税']
-            },
-            {
-                longTermText: '预算挪用会削弱后续推演质量，事件不确定性提高。',
-                echoText: '被挪用的预算正在让后续推演失真。',
-                tags: ['推演失真', '不确定性']
-            }
-        ],
-        longTermGainTemplates: [
-            {
-                longTermText: '校对档案会在后续章节提供命盘指引，更容易触发稳健分支。',
-                echoText: '你留下的校对记录正在引导稳健路径。',
-                tags: ['校对档案', '稳健分支']
-            },
-            {
-                longTermText: '盲算样本被纳入命盘，后续章节更容易出现高价值情报回响。',
-                echoText: '盲算样本正在兑现高价值情报。',
-                tags: ['盲算样本', '情报回响']
-            }
-        ]
-    },
-    4: {
-        id: 'mirror_verdict',
-        name: '镜渊裁断',
-        icon: '🪞',
-        tone: 'chapter',
-        atmosphere: [
-            '镜渊会复制你最短线的欲望，也会放大它在后续章节的代价。',
-            '裁断庭里每份快利都对应一条追偿款。'
-        ],
-        triggerTemplates: [
-            {
-                id: 'mirror_court',
-                title: '镜渊裁断庭',
-                description: '你可立刻兑付镜渊红利，或先承担镜渊审计成本换取后续豁免。',
-                tags: ['镜渊', '裁断']
-            },
-            {
-                id: 'echo_trial',
-                title: '回声审计台',
-                description: '审计台允许你先拿分，也允许你先付账把后续利率压低。',
-                tags: ['审计', '回声']
-            }
-        ],
-        shortGainRewardTemplates: [
-            {
-                text: '先领镜渊红利',
-                icon: '💎',
-                resultType: 'positive',
-                result: '立即获得灵石与稀有卡',
-                effects: [
-                    { type: 'gold', value: 62 },
-                    { type: 'card', rarity: 'rare' }
-                ],
-                tags: ['镜渊红利', '快兑'],
-                immediateText: '你把镜渊红利直接兑现成当前强度。'
-            },
-            {
-                text: '跳过审计直接结算',
-                icon: '⚡',
-                resultType: 'positive',
-                result: '立即获得命环经验与生命恢复',
-                effects: [
-                    { type: 'ringExp', value: 26 },
-                    { type: 'heal', value: 10 }
-                ],
-                tags: ['跳审', '结算'],
-                immediateText: '你获得了即刻收益，但留下了后续问责。'
-            }
-        ],
-        shortLossCostTemplates: [
-            {
-                text: '先付审计税',
-                icon: '📉',
-                resultType: 'neutral',
-                result: '短期支付灵石，换取后续缓冲',
-                condition: { type: 'gold', min: 50 },
-                effects: [
-                    { type: 'gold', value: -50 },
-                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 1 },
-                    { type: 'ringExp', value: 20 }
-                ],
-                tags: ['审计税', '缓冲'],
-                immediateText: '你先承担现金流压力。'
-            },
-            {
-                text: '承担回声校验',
-                icon: '🩹',
-                resultType: 'neutral',
-                result: '短期失去生命，换取后续稳定增益',
-                condition: { type: 'hp', min: 16 },
-                effects: [
-                    { type: 'damage', value: 9 },
-                    { type: 'adventureBuff', buffId: 'victoryHealBoostBattles', charges: 1 },
-                    { type: 'heavenlyInsight', value: 1 }
-                ],
-                tags: ['回声校验', '稳定'],
-                immediateText: '你先吃下校验代价，短期风险上升。'
-            }
-        ],
-        longTermLossTemplates: [
-            {
-                longTermText: '快兑红利会触发镜渊追偿，后续章节更容易出现高额代价分支。',
-                echoText: '镜渊追偿正在追踪你的快兑记录。',
-                tags: ['镜渊追偿', '高额代价']
-            },
-            {
-                longTermText: '跳审结算会增加后续事件波动，稳定分支出现率下降。',
-                echoText: '跳审记录正在放大后续事件波动。',
-                tags: ['跳审记录', '波动上升']
-            }
-        ],
-        longTermGainTemplates: [
-            {
-                longTermText: '审计税入账后，后续章节更容易触发减压事件。',
-                echoText: '你预付的审计税正在降低后续利率。',
-                tags: ['预付审计', '减压事件']
-            },
-            {
-                longTermText: '回声校验通过后，后续章节更容易获得稳定补给。',
-                echoText: '回声校验正在给你返还稳定补给。',
-                tags: ['回声通过', '稳定补给']
-            }
-        ]
-    },
-    5: {
-        id: 'oathscar_blackflag',
-        name: '誓痕黑旗',
-        icon: '⛓️',
-        tone: 'danger',
-        atmosphere: [
-            '黑旗只认代价，短线红利越大，命盘追缴越快。',
-            '誓痕印记会把每次贪利都记成可追索债务。'
-        ],
-        triggerTemplates: [
-            {
-                id: 'blackflag_board',
-                title: '黑旗委托榜',
-                description: '你可以接高额快单，也可以承担先期亏损换取长期护航。',
-                tags: ['黑旗', '委托']
-            },
-            {
-                id: 'oathscar_altar',
-                title: '誓痕契坛',
-                description: '契坛可立即放大奖励，也可先缴誓税来换取后续豁免。',
-                tags: ['誓痕', '契坛']
-            }
-        ],
-        shortGainRewardTemplates: [
-            {
-                text: '接高额快单',
-                icon: '🪙',
-                resultType: 'positive',
-                result: '立即获得大量灵石',
-                effects: [
-                    { type: 'gold', value: 78 }
-                ],
-                tags: ['快单', '高额'],
-                immediateText: '你拿到了最直接的高额收益。'
-            },
-            {
-                text: '立刻放大奖励',
-                icon: '🩸',
-                resultType: 'positive',
-                result: '立即获得卡牌与命环经验',
-                effects: [
-                    { type: 'card', rarity: 'rare' },
-                    { type: 'ringExp', value: 24 }
-                ],
-                tags: ['放大', '速增'],
-                immediateText: '你把契坛红利压缩到当前回合。'
-            }
-        ],
-        shortLossCostTemplates: [
-            {
-                text: '先缴誓税',
-                icon: '📎',
-                resultType: 'neutral',
-                result: '短期支付灵石，换取后续补给',
-                condition: { type: 'gold', min: 55 },
-                effects: [
-                    { type: 'gold', value: -55 },
-                    { type: 'adventureBuff', buffId: 'victoryGoldBoostBattles', charges: 1 },
-                    { type: 'adventureBuff', buffId: 'victoryHealBoostBattles', charges: 1 }
-                ],
-                tags: ['誓税', '补给'],
-                immediateText: '你先承受现金流压力。'
-            },
-            {
-                text: '承担护航亏损',
-                icon: '🚩',
-                resultType: 'neutral',
-                result: '短期失去生命，换取后续稳定',
-                condition: { type: 'hp', min: 18 },
-                effects: [
-                    { type: 'damage', value: 10 },
-                    { type: 'heavenlyInsight', value: 1 },
-                    { type: 'adventureBuff', buffId: 'openingBlockBoostBattles', charges: 1 }
-                ],
-                tags: ['护航', '先亏'],
-                immediateText: '你先吞下亏损，当前风险偏高。'
-            }
-        ],
-        longTermLossTemplates: [
-            {
-                longTermText: '高额快单会累积誓痕追偿，后续章节更容易触发惩罚分支。',
-                echoText: '誓痕追偿正在根据快单记录加码。',
-                tags: ['誓痕追偿', '惩罚分支']
-            },
-            {
-                longTermText: '强行放大奖励会推高后续风险阈值，代价事件出现率上升。',
-                echoText: '被放大的奖励正在反向抬高风险阈值。',
-                tags: ['风险阈值', '代价上升']
-            }
-        ],
-        longTermGainTemplates: [
-            {
-                longTermText: '誓税提前结清后，后续章节更容易触发减负与护航回馈。',
-                echoText: '提前结清誓税正在换来减负回馈。',
-                tags: ['誓税结清', '减负回馈']
-            },
-            {
-                longTermText: '护航亏损被记为信誉，后续章节更容易出现协防援助。',
-                echoText: '你的护航信誉正在带来协防援助。',
-                tags: ['护航信誉', '协防援助']
-            }
-        ]
-    },
-    6: {
-        id: 'final_convergence',
-        name: '终局合流',
-        icon: '🌌',
-        tone: 'mystic',
-        atmosphere: [
-            '终局命盘把每一次短线贪利都折算成最终审判参数。',
-            '合流庭的记录会在最后数个节点里直接改写风险权重。'
-        ],
-        triggerTemplates: [
-            {
-                id: 'final_registry',
-                title: '终局登记庭',
-                description: '你可提前兑现终局红利，也可先承担审判准备成本。',
-                tags: ['终局', '登记']
-            },
-            {
-                id: 'convergence_lens',
-                title: '合流观测镜',
-                description: '观测镜允许你先拿结果，也允许你先付代价换取后续容错。',
-                tags: ['合流', '观测镜']
-            }
-        ],
-        shortGainRewardTemplates: [
-            {
-                text: '提前兑现终局红利',
-                icon: '✨',
-                resultType: 'positive',
-                result: '立即获得天机、灵石与命环经验',
-                effects: [
-                    { type: 'heavenlyInsight', value: 2 },
-                    { type: 'gold', value: 46 },
-                    { type: 'ringExp', value: 24 }
-                ],
-                tags: ['提前兑现', '终局红利'],
-                immediateText: '你把最终红利前置为当下收益。'
-            },
-            {
-                text: '强提观测结果',
-                icon: '📡',
-                resultType: 'positive',
-                result: '立即获得稀有卡与回复',
-                effects: [
-                    { type: 'card', rarity: 'rare' },
-                    { type: 'heal', value: 10 }
-                ],
-                tags: ['强提', '观测结果'],
-                immediateText: '你直接提取了终局观测成果。'
-            }
-        ],
-        shortLossCostTemplates: [
-            {
-                text: '先做审判准备',
-                icon: '🧱',
-                resultType: 'neutral',
-                result: '短期损失灵石，换取后续容错与增益',
-                condition: { type: 'gold', min: 58 },
-                effects: [
-                    { type: 'gold', value: -58 },
-                    { type: 'adventureBuff', buffId: 'firstTurnEnergyBoostBattles', charges: 1 },
-                    { type: 'adventureBuff', buffId: 'firstTurnDrawBoostBattles', charges: 1 }
-                ],
-                tags: ['审判准备', '容错'],
-                immediateText: '你先压缩经济，换取终局缓冲。'
-            },
-            {
-                text: '承受观测反噬',
-                icon: '🌀',
-                resultType: 'neutral',
-                result: '短期失去生命，换取后续稳定信息',
-                condition: { type: 'hp', min: 18 },
-                effects: [
-                    { type: 'damage', value: 11 },
-                    { type: 'heavenlyInsight', value: 2 },
-                    { type: 'ringExp', value: 16 }
-                ],
-                tags: ['反噬', '稳定信息'],
-                immediateText: '你先承受反噬，短期容错明显下降。'
-            }
-        ],
-        longTermLossTemplates: [
-            {
-                longTermText: '提前兑现会抬升终局审判压力，后续章节更容易触发高压节点。',
-                echoText: '终局审判已读取你的提前兑现记录。',
-                tags: ['终局压力', '高压节点']
-            },
-            {
-                longTermText: '强提结果会削弱后续容错，终盘代价权重上升。',
-                echoText: '强提观测结果正在推高终盘代价。',
-                tags: ['终盘代价', '容错下降']
-            }
-        ],
-        longTermGainTemplates: [
-            {
-                longTermText: '审判准备会在终局节点释放减压回报，后续容错提高。',
-                echoText: '你预留的审判准备正在降低终局压力。',
-                tags: ['审判准备', '终局减压']
-            },
-            {
-                longTermText: '反噬样本被命盘纳入稳定校准，后续事件更容易出现可控分支。',
-                echoText: '反噬样本正在换来可控分支。',
-                tags: ['稳定校准', '可控分支']
-            }
-        ]
-    }
+export const CHAPTER_EVENT_COMPOSER_CLUSTERS = {
+  1: {
+    id: 'ember_frontier',
+    name: '灰炬边线',
+    icon: '🔥',
+    tone: 'danger',
+    atmosphere: ['边线烽火时明时灭，任何一次补给决策都会改写下一章的敌我态势。', '补给火堆旁的名单仍在翻页，命盘要求你立刻给出取舍。'],
+    triggerTemplates: [{
+      id: 'ember_supply',
+      title: '灰炬补给堆',
+      description: '半毁的补给车仍可拆解。你能立刻获利，也能把这批资源送往后方营线。',
+      tags: ['补给', '边线']
+    }, {
+      id: 'frontier_toll',
+      title: '边线过桥税',
+      description: '破桥只允许一次通行。你可以加价优先通行，也可以让出先机换取后续通行权。',
+      tags: ['通行', '桥头']
+    }],
+    shortGainRewardTemplates: [{
+      text: '优先截留物资',
+      icon: '💰',
+      resultType: 'positive',
+      result: '立即获得灵石与生命恢复',
+      effects: [{
+        type: 'gold',
+        value: 68
+      }, {
+        type: 'heal',
+        value: 8
+      }],
+      tags: ['快利', '截留'],
+      immediateText: '你先把可见收益收入囊中。'
+    }, {
+      text: '抢占桥头税道',
+      icon: '⚔️',
+      resultType: 'positive',
+      result: '立即获得灵石与命环经验',
+      effects: [{
+        type: 'gold',
+        value: 52
+      }, {
+        type: 'ringExp',
+        value: 18
+      }],
+      tags: ['抢先', '税道'],
+      immediateText: '你快速拿到通行收益。'
+    }],
+    shortLossCostTemplates: [{
+      text: '护送后方营线',
+      icon: '🛡️',
+      resultType: 'neutral',
+      result: '短期损失灵石，换取命环成长与战后收益',
+      condition: {
+        type: 'gold',
+        min: 36
+      },
+      effects: [{
+        type: 'gold',
+        value: -36
+      }, {
+        type: 'ringExp',
+        value: 28
+      }, {
+        type: 'adventureBuff',
+        buffId: 'victoryGoldBoostBattles',
+        charges: 1
+      }],
+      tags: ['护送', '投资'],
+      immediateText: '你先承担成本，当前资源被压缩。'
+    }, {
+      text: '让渡桥头先机',
+      icon: '🧾',
+      resultType: 'neutral',
+      result: '短期收益降低，换取后续稳定',
+      effects: [{
+        type: 'ringExp',
+        value: 34
+      }, {
+        type: 'adventureBuff',
+        buffId: 'openingBlockBoostBattles',
+        charges: 1
+      }],
+      tags: ['让渡', '稳态'],
+      immediateText: '你放弃眼前优势，短期节奏变慢。'
+    }],
+    longTermLossTemplates: [{
+      longTermText: '命盘记下了补给透支，后续章节更容易出现高压交易与资源追债。',
+      echoText: '你曾透支边线补给，债务回响仍在。',
+      tags: ['补给债务', '高压交易']
+    }, {
+      longTermText: '桥头税道被写成掠夺路径，后续事件会提高冲突代价。',
+      echoText: '桥头掠夺引发了更高的冲突成本。',
+      tags: ['桥头掠夺', '冲突升级']
+    }],
+    longTermGainTemplates: [{
+      longTermText: '命盘记录了护送契约，后续章节更容易出现盟援与补给回馈。',
+      echoText: '你留下的护送名册正在带来盟援。',
+      tags: ['盟援契约', '补给回馈']
+    }, {
+      longTermText: '让渡先机被记为守序信誉，后续章节更容易触发稳定收益分支。',
+      echoText: '守序信誉正在为你打开稳定路线。',
+      tags: ['守序信誉', '稳态分支']
+    }]
+  },
+  2: {
+    id: 'forge_caravan',
+    name: '熔痕商队',
+    icon: '⚒️',
+    tone: 'chapter',
+    atmosphere: ['熔渣还未冷却，商队账册却先一步要求你签下条款。', '锻炉与账房并列，任何折价都会在下一章兑现代价。'],
+    triggerTemplates: [{
+      id: 'molten_ledger',
+      title: '熔痕账亭',
+      description: '账亭愿给你即时折价，但会把未来维护成本转嫁给你。',
+      tags: ['账亭', '锻炉']
+    }, {
+      id: 'caravan_refit',
+      title: '商队改装点',
+      description: '你可以优先改装当前装备，或把资源投入长期护送协议。',
+      tags: ['商队', '改装']
+    }],
+    shortGainRewardTemplates: [{
+      text: '签下即时折价',
+      icon: '🏷️',
+      resultType: 'positive',
+      result: '立刻获得灵石与卡牌补件',
+      effects: [{
+        type: 'gold',
+        value: 56
+      }, {
+        type: 'card',
+        rarity: 'uncommon'
+      }],
+      tags: ['折价', '补件'],
+      immediateText: '你拿到当前最直接的战备收益。'
+    }, {
+      text: '先做快修改装',
+      icon: '🔧',
+      resultType: 'positive',
+      result: '立刻获得升级与少量灵石',
+      effects: [{
+        type: 'upgradeCard'
+      }, {
+        type: 'gold',
+        value: 24
+      }],
+      tags: ['快修', '改装'],
+      immediateText: '你把资源用于眼前战力强化。'
+    }],
+    shortLossCostTemplates: [{
+      text: '签长期护送单',
+      icon: '📜',
+      resultType: 'neutral',
+      result: '短期损失生命，换取长期稳定回报',
+      condition: {
+        type: 'hp',
+        min: 18
+      },
+      effects: [{
+        type: 'damage',
+        value: 9
+      }, {
+        type: 'ringExp',
+        value: 32
+      }, {
+        type: 'adventureBuff',
+        buffId: 'victoryHealBoostBattles',
+        charges: 1
+      }],
+      tags: ['护送单', '维护'],
+      immediateText: '你先承受护送成本，当前容错下降。'
+    }, {
+      text: '投入熔渣回收',
+      icon: '🧱',
+      resultType: 'neutral',
+      result: '短期支付灵石，换取后续缓冲',
+      condition: {
+        type: 'gold',
+        min: 42
+      },
+      effects: [{
+        type: 'gold',
+        value: -42
+      }, {
+        type: 'adventureBuff',
+        buffId: 'openingBlockBoostBattles',
+        charges: 1
+      }, {
+        type: 'ringExp',
+        value: 24
+      }],
+      tags: ['回收', '缓冲'],
+      immediateText: '你先投入成本，立即收益偏低。'
+    }],
+    longTermLossTemplates: [{
+      longTermText: '折价条款会在后续章节触发维护追缴，交易风险上升。',
+      echoText: '折价账单尚未结清，维护追缴正在逼近。',
+      tags: ['维护追缴', '交易风险']
+    }, {
+      longTermText: '快修改装被命盘标记为过载路径，后续事件更容易出现额外代价。',
+      echoText: '快修留下的过载裂痕开始反噬。',
+      tags: ['过载改装', '额外代价']
+    }],
+    longTermGainTemplates: [{
+      longTermText: '护送协议写入命盘，后续章节更容易获得医疗与补给分支。',
+      echoText: '护送协议正在持续回馈你的路线。',
+      tags: ['护送协议', '医疗补给']
+    }, {
+      longTermText: '回收投入形成稳态储备，后续章节更容易出现防线收益。',
+      echoText: '稳态储备正在提升你的防线韧性。',
+      tags: ['稳态储备', '防线收益']
+    }]
+  },
+  3: {
+    id: 'astral_archive',
+    name: '星册档案',
+    icon: '📚',
+    tone: 'mystic',
+    atmosphere: ['观测厅把未来拆成账页，每一页都要求你先付一笔定金。', '星册只承认被记录的选择，未记录的收益将被视作噪音。'],
+    triggerTemplates: [{
+      id: 'astral_registry',
+      title: '星册登记台',
+      description: '登记台可为你提供即刻信息红利，也可为后续章节保留长期推演权。',
+      tags: ['观测', '登记']
+    }, {
+      id: 'echo_index',
+      title: '回响索引室',
+      description: '索引室允许你先拿走结果，也允许你先承担校对成本。',
+      tags: ['索引', '校对']
+    }],
+    shortGainRewardTemplates: [{
+      text: '提取现成结论',
+      icon: '🔮',
+      resultType: 'positive',
+      result: '立即获得天机与灵石',
+      effects: [{
+        type: 'heavenlyInsight',
+        value: 2
+      }, {
+        type: 'gold',
+        value: 38
+      }],
+      tags: ['速读', '现成结论'],
+      immediateText: '你直接拿走了可见答案。'
+    }, {
+      text: '挪用观测预算',
+      icon: '🧮',
+      resultType: 'positive',
+      result: '立即获得命环经验与卡牌',
+      effects: [{
+        type: 'ringExp',
+        value: 32
+      }, {
+        type: 'card',
+        rarity: 'rare'
+      }],
+      tags: ['预算挪用', '速得'],
+      immediateText: '你把未来预算转成当前战力。'
+    }],
+    shortLossCostTemplates: [{
+      text: '先做长期校对',
+      icon: '🖋️',
+      resultType: 'neutral',
+      result: '短期消耗灵石，换取后续稳定情报',
+      condition: {
+        type: 'gold',
+        min: 48
+      },
+      effects: [{
+        type: 'gold',
+        value: -48
+      }, {
+        type: 'heavenlyInsight',
+        value: 1
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnDrawBoostBattles',
+        charges: 1
+      }],
+      tags: ['校对', '情报'],
+      immediateText: '你先投入预算，短期变现能力下降。'
+    }, {
+      text: '承担盲算误差',
+      icon: '🕯️',
+      resultType: 'neutral',
+      result: '短期失去生命，换取深层推演',
+      condition: {
+        type: 'hp',
+        min: 16
+      },
+      effects: [{
+        type: 'damage',
+        value: 8
+      }, {
+        type: 'heavenlyInsight',
+        value: 2
+      }, {
+        type: 'ringExp',
+        value: 18
+      }],
+      tags: ['盲算', '推演'],
+      immediateText: '你先承担误差，当前容错更薄。'
+    }],
+    longTermLossTemplates: [{
+      longTermText: '速读结果会触发信息赤字，后续章节更容易出现认知税。',
+      echoText: '信息赤字被记入星册，认知税正在靠近。',
+      tags: ['信息赤字', '认知税']
+    }, {
+      longTermText: '预算挪用会削弱后续推演质量，事件不确定性提高。',
+      echoText: '被挪用的预算正在让后续推演失真。',
+      tags: ['推演失真', '不确定性']
+    }],
+    longTermGainTemplates: [{
+      longTermText: '校对档案会在后续章节提供命盘指引，更容易触发稳健分支。',
+      echoText: '你留下的校对记录正在引导稳健路径。',
+      tags: ['校对档案', '稳健分支']
+    }, {
+      longTermText: '盲算样本被纳入命盘，后续章节更容易出现高价值情报回响。',
+      echoText: '盲算样本正在兑现高价值情报。',
+      tags: ['盲算样本', '情报回响']
+    }]
+  },
+  4: {
+    id: 'mirror_verdict',
+    name: '镜渊裁断',
+    icon: '🪞',
+    tone: 'chapter',
+    atmosphere: ['镜渊会复制你最短线的欲望，也会放大它在后续章节的代价。', '裁断庭里每份快利都对应一条追偿款。'],
+    triggerTemplates: [{
+      id: 'mirror_court',
+      title: '镜渊裁断庭',
+      description: '你可立刻兑付镜渊红利，或先承担镜渊审计成本换取后续豁免。',
+      tags: ['镜渊', '裁断']
+    }, {
+      id: 'echo_trial',
+      title: '回声审计台',
+      description: '审计台允许你先拿分，也允许你先付账把后续利率压低。',
+      tags: ['审计', '回声']
+    }],
+    shortGainRewardTemplates: [{
+      text: '先领镜渊红利',
+      icon: '💎',
+      resultType: 'positive',
+      result: '立即获得灵石与稀有卡',
+      effects: [{
+        type: 'gold',
+        value: 62
+      }, {
+        type: 'card',
+        rarity: 'rare'
+      }],
+      tags: ['镜渊红利', '快兑'],
+      immediateText: '你把镜渊红利直接兑现成当前强度。'
+    }, {
+      text: '跳过审计直接结算',
+      icon: '⚡',
+      resultType: 'positive',
+      result: '立即获得命环经验与生命恢复',
+      effects: [{
+        type: 'ringExp',
+        value: 26
+      }, {
+        type: 'heal',
+        value: 10
+      }],
+      tags: ['跳审', '结算'],
+      immediateText: '你获得了即刻收益，但留下了后续问责。'
+    }],
+    shortLossCostTemplates: [{
+      text: '先付审计税',
+      icon: '📉',
+      resultType: 'neutral',
+      result: '短期支付灵石，换取后续缓冲',
+      condition: {
+        type: 'gold',
+        min: 50
+      },
+      effects: [{
+        type: 'gold',
+        value: -50
+      }, {
+        type: 'adventureBuff',
+        buffId: 'openingBlockBoostBattles',
+        charges: 1
+      }, {
+        type: 'ringExp',
+        value: 20
+      }],
+      tags: ['审计税', '缓冲'],
+      immediateText: '你先承担现金流压力。'
+    }, {
+      text: '承担回声校验',
+      icon: '🩹',
+      resultType: 'neutral',
+      result: '短期失去生命，换取后续稳定增益',
+      condition: {
+        type: 'hp',
+        min: 16
+      },
+      effects: [{
+        type: 'damage',
+        value: 9
+      }, {
+        type: 'adventureBuff',
+        buffId: 'victoryHealBoostBattles',
+        charges: 1
+      }, {
+        type: 'heavenlyInsight',
+        value: 1
+      }],
+      tags: ['回声校验', '稳定'],
+      immediateText: '你先吃下校验代价，短期风险上升。'
+    }],
+    longTermLossTemplates: [{
+      longTermText: '快兑红利会触发镜渊追偿，后续章节更容易出现高额代价分支。',
+      echoText: '镜渊追偿正在追踪你的快兑记录。',
+      tags: ['镜渊追偿', '高额代价']
+    }, {
+      longTermText: '跳审结算会增加后续事件波动，稳定分支出现率下降。',
+      echoText: '跳审记录正在放大后续事件波动。',
+      tags: ['跳审记录', '波动上升']
+    }],
+    longTermGainTemplates: [{
+      longTermText: '审计税入账后，后续章节更容易触发减压事件。',
+      echoText: '你预付的审计税正在降低后续利率。',
+      tags: ['预付审计', '减压事件']
+    }, {
+      longTermText: '回声校验通过后，后续章节更容易获得稳定补给。',
+      echoText: '回声校验正在给你返还稳定补给。',
+      tags: ['回声通过', '稳定补给']
+    }]
+  },
+  5: {
+    id: 'oathscar_blackflag',
+    name: '誓痕黑旗',
+    icon: '⛓️',
+    tone: 'danger',
+    atmosphere: ['黑旗只认代价，短线红利越大，命盘追缴越快。', '誓痕印记会把每次贪利都记成可追索债务。'],
+    triggerTemplates: [{
+      id: 'blackflag_board',
+      title: '黑旗委托榜',
+      description: '你可以接高额快单，也可以承担先期亏损换取长期护航。',
+      tags: ['黑旗', '委托']
+    }, {
+      id: 'oathscar_altar',
+      title: '誓痕契坛',
+      description: '契坛可立即放大奖励，也可先缴誓税来换取后续豁免。',
+      tags: ['誓痕', '契坛']
+    }],
+    shortGainRewardTemplates: [{
+      text: '接高额快单',
+      icon: '🪙',
+      resultType: 'positive',
+      result: '立即获得大量灵石',
+      effects: [{
+        type: 'gold',
+        value: 78
+      }],
+      tags: ['快单', '高额'],
+      immediateText: '你拿到了最直接的高额收益。'
+    }, {
+      text: '立刻放大奖励',
+      icon: '🩸',
+      resultType: 'positive',
+      result: '立即获得卡牌与命环经验',
+      effects: [{
+        type: 'card',
+        rarity: 'rare'
+      }, {
+        type: 'ringExp',
+        value: 24
+      }],
+      tags: ['放大', '速增'],
+      immediateText: '你把契坛红利压缩到当前回合。'
+    }],
+    shortLossCostTemplates: [{
+      text: '先缴誓税',
+      icon: '📎',
+      resultType: 'neutral',
+      result: '短期支付灵石，换取后续补给',
+      condition: {
+        type: 'gold',
+        min: 55
+      },
+      effects: [{
+        type: 'gold',
+        value: -55
+      }, {
+        type: 'adventureBuff',
+        buffId: 'victoryGoldBoostBattles',
+        charges: 1
+      }, {
+        type: 'adventureBuff',
+        buffId: 'victoryHealBoostBattles',
+        charges: 1
+      }],
+      tags: ['誓税', '补给'],
+      immediateText: '你先承受现金流压力。'
+    }, {
+      text: '承担护航亏损',
+      icon: '🚩',
+      resultType: 'neutral',
+      result: '短期失去生命，换取后续稳定',
+      condition: {
+        type: 'hp',
+        min: 18
+      },
+      effects: [{
+        type: 'damage',
+        value: 10
+      }, {
+        type: 'heavenlyInsight',
+        value: 1
+      }, {
+        type: 'adventureBuff',
+        buffId: 'openingBlockBoostBattles',
+        charges: 1
+      }],
+      tags: ['护航', '先亏'],
+      immediateText: '你先吞下亏损，当前风险偏高。'
+    }],
+    longTermLossTemplates: [{
+      longTermText: '高额快单会累积誓痕追偿，后续章节更容易触发惩罚分支。',
+      echoText: '誓痕追偿正在根据快单记录加码。',
+      tags: ['誓痕追偿', '惩罚分支']
+    }, {
+      longTermText: '强行放大奖励会推高后续风险阈值，代价事件出现率上升。',
+      echoText: '被放大的奖励正在反向抬高风险阈值。',
+      tags: ['风险阈值', '代价上升']
+    }],
+    longTermGainTemplates: [{
+      longTermText: '誓税提前结清后，后续章节更容易触发减负与护航回馈。',
+      echoText: '提前结清誓税正在换来减负回馈。',
+      tags: ['誓税结清', '减负回馈']
+    }, {
+      longTermText: '护航亏损被记为信誉，后续章节更容易出现协防援助。',
+      echoText: '你的护航信誉正在带来协防援助。',
+      tags: ['护航信誉', '协防援助']
+    }]
+  },
+  6: {
+    id: 'final_convergence',
+    name: '终局合流',
+    icon: '🌌',
+    tone: 'mystic',
+    atmosphere: ['终局命盘把每一次短线贪利都折算成最终审判参数。', '合流庭的记录会在最后数个节点里直接改写风险权重。'],
+    triggerTemplates: [{
+      id: 'final_registry',
+      title: '终局登记庭',
+      description: '你可提前兑现终局红利，也可先承担审判准备成本。',
+      tags: ['终局', '登记']
+    }, {
+      id: 'convergence_lens',
+      title: '合流观测镜',
+      description: '观测镜允许你先拿结果，也允许你先付代价换取后续容错。',
+      tags: ['合流', '观测镜']
+    }],
+    shortGainRewardTemplates: [{
+      text: '提前兑现终局红利',
+      icon: '✨',
+      resultType: 'positive',
+      result: '立即获得天机、灵石与命环经验',
+      effects: [{
+        type: 'heavenlyInsight',
+        value: 2
+      }, {
+        type: 'gold',
+        value: 46
+      }, {
+        type: 'ringExp',
+        value: 24
+      }],
+      tags: ['提前兑现', '终局红利'],
+      immediateText: '你把最终红利前置为当下收益。'
+    }, {
+      text: '强提观测结果',
+      icon: '📡',
+      resultType: 'positive',
+      result: '立即获得稀有卡与回复',
+      effects: [{
+        type: 'card',
+        rarity: 'rare'
+      }, {
+        type: 'heal',
+        value: 10
+      }],
+      tags: ['强提', '观测结果'],
+      immediateText: '你直接提取了终局观测成果。'
+    }],
+    shortLossCostTemplates: [{
+      text: '先做审判准备',
+      icon: '🧱',
+      resultType: 'neutral',
+      result: '短期损失灵石，换取后续容错与增益',
+      condition: {
+        type: 'gold',
+        min: 58
+      },
+      effects: [{
+        type: 'gold',
+        value: -58
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnEnergyBoostBattles',
+        charges: 1
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnDrawBoostBattles',
+        charges: 1
+      }],
+      tags: ['审判准备', '容错'],
+      immediateText: '你先压缩经济，换取终局缓冲。'
+    }, {
+      text: '承受观测反噬',
+      icon: '🌀',
+      resultType: 'neutral',
+      result: '短期失去生命，换取后续稳定信息',
+      condition: {
+        type: 'hp',
+        min: 18
+      },
+      effects: [{
+        type: 'damage',
+        value: 11
+      }, {
+        type: 'heavenlyInsight',
+        value: 2
+      }, {
+        type: 'ringExp',
+        value: 16
+      }],
+      tags: ['反噬', '稳定信息'],
+      immediateText: '你先承受反噬，短期容错明显下降。'
+    }],
+    longTermLossTemplates: [{
+      longTermText: '提前兑现会抬升终局审判压力，后续章节更容易触发高压节点。',
+      echoText: '终局审判已读取你的提前兑现记录。',
+      tags: ['终局压力', '高压节点']
+    }, {
+      longTermText: '强提结果会削弱后续容错，终盘代价权重上升。',
+      echoText: '强提观测结果正在推高终盘代价。',
+      tags: ['终盘代价', '容错下降']
+    }],
+    longTermGainTemplates: [{
+      longTermText: '审判准备会在终局节点释放减压回报，后续容错提高。',
+      echoText: '你预留的审判准备正在降低终局压力。',
+      tags: ['审判准备', '终局减压']
+    }, {
+      longTermText: '反噬样本被命盘纳入稳定校准，后续事件更容易出现可控分支。',
+      echoText: '反噬样本正在换来可控分支。',
+      tags: ['稳定校准', '可控分支']
+    }]
+  }
 };
-
-function cloneEventTemplateData(value) {
-    if (value == null) return value;
-    try {
-        return JSON.parse(JSON.stringify(value));
-    } catch (error) {
-        return value;
+export function cloneEventTemplateData(value) {
+  if (value == null) return value;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (error) {
+    return value;
+  }
+}
+export function pickEventTemplate(list = []) {
+  if (!Array.isArray(list) || list.length === 0) return null;
+  return list[Math.floor(Math.random() * list.length)] || null;
+}
+export function normalizeChapterEventComposerContext(rawContext = null) {
+  if (!rawContext || typeof rawContext !== 'object') return null;
+  const chapterIndex = Math.max(1, Math.min(6, Math.floor(Number(rawContext.chapterIndex) || 1)));
+  const priorEntries = Array.isArray(rawContext.priorEntries) ? rawContext.priorEntries.filter(entry => entry && typeof entry === 'object').map(entry => ({
+    id: String(entry.id || ''),
+    chapterIndex: Math.max(1, Math.floor(Number(entry.chapterIndex) || 1)),
+    echoText: String(entry.echoText || entry.longTermText || ''),
+    longTermText: String(entry.longTermText || ''),
+    choiceText: String(entry.choiceText || ''),
+    tags: Array.isArray(entry.tags) ? Array.from(new Set(entry.tags.map(tag => String(tag || '').trim()).filter(Boolean))).slice(0, 6) : []
+  })) : [];
+  const recentTags = Array.isArray(rawContext.recentTags) ? Array.from(new Set(rawContext.recentTags.map(tag => String(tag || '').trim()).filter(Boolean))).slice(0, 8) : [];
+  const composeChance = Math.max(0.18, Math.min(0.72, Number(rawContext.composeChance) || 0.26 + chapterIndex * 0.03));
+  return {
+    chapterIndex,
+    chapterName: String(rawContext.chapterName || `第${chapterIndex}章`),
+    priorEntries,
+    recentTags,
+    composeChance
+  };
+}
+export function getChapterEventComposerContext() {
+  const runtimeGame = getRuntimeGame();
+  if (!runtimeGame) return null;
+  if (typeof runtimeGame.getChapterEventComposerContext !== 'function') return null;
+  try {
+    const rawContext = runtimeGame.getChapterEventComposerContext();
+    return normalizeChapterEventComposerContext(rawContext);
+  } catch (error) {
+    return null;
+  }
+}
+export function resolveChapterComposerRecallEntry(context = null) {
+  if (!context || !Array.isArray(context.priorEntries) || context.priorEntries.length === 0) return null;
+  const filtered = context.priorEntries.filter(entry => entry.chapterIndex < context.chapterIndex);
+  if (filtered.length === 0) return null;
+  return filtered[Math.floor(Math.random() * filtered.length)] || null;
+}
+export function buildChapterComposerChoice(baseChoice = {}, trigger = {}, arcType = 'neutral', longTermTemplate = null, recallEntry = null) {
+  const immediateText = String(baseChoice.immediateText || baseChoice.result || '').trim();
+  const longTermText = String(longTermTemplate?.longTermText || '').trim();
+  const echoText = String(longTermTemplate?.echoText || longTermText || '').trim();
+  const mergedTags = Array.from(new Set([...(Array.isArray(trigger.tags) ? trigger.tags : []), ...(Array.isArray(baseChoice.tags) ? baseChoice.tags : []), ...(Array.isArray(longTermTemplate?.tags) ? longTermTemplate.tags : []), ...(Array.isArray(recallEntry?.tags) ? recallEntry.tags.slice(0, 2) : [])].map(tag => String(tag || '').trim()).filter(Boolean)));
+  return {
+    text: String(baseChoice.text || '做出选择'),
+    icon: String(baseChoice.icon || '▶'),
+    resultType: String(baseChoice.resultType || 'neutral'),
+    result: `${String(baseChoice.result || '命盘发生变化。')} ${longTermText ? `（后果：${longTermText}）` : ''}`.trim(),
+    condition: baseChoice.condition ? cloneEventTemplateData(baseChoice.condition) : undefined,
+    effects: Array.isArray(baseChoice.effects) ? cloneEventTemplateData(baseChoice.effects) : [],
+    fateLedger: {
+      arcType,
+      immediateText,
+      longTermText,
+      echoText,
+      tags: mergedTags
     }
+  };
 }
-
-function pickEventTemplate(list = []) {
-    if (!Array.isArray(list) || list.length === 0) return null;
-    return list[Math.floor(Math.random() * list.length)] || null;
+export function getComposedChapterEvent(rawContext = null) {
+  const context = normalizeChapterEventComposerContext(rawContext || getChapterEventComposerContext());
+  if (!context) return null;
+  const cluster = CHAPTER_EVENT_COMPOSER_CLUSTERS[context.chapterIndex];
+  if (!cluster) return null;
+  const trigger = pickEventTemplate(cluster.triggerTemplates);
+  const shortGainBase = pickEventTemplate(cluster.shortGainRewardTemplates);
+  const shortLossBase = pickEventTemplate(cluster.shortLossCostTemplates);
+  const longLoss = pickEventTemplate(cluster.longTermLossTemplates);
+  const longGain = pickEventTemplate(cluster.longTermGainTemplates);
+  if (!trigger || !shortGainBase || !shortLossBase || !longLoss || !longGain) return null;
+  const recallEntry = resolveChapterComposerRecallEntry(context);
+  const recallText = recallEntry ? String(recallEntry.echoText || recallEntry.longTermText || recallEntry.choiceText || '').trim() : '';
+  const recallTags = Array.isArray(recallEntry?.tags) ? recallEntry.tags.slice(0, 3) : [];
+  const summaryTags = Array.from(new Set([...(Array.isArray(trigger.tags) ? trigger.tags : []), ...recallTags]));
+  const choices = [buildChapterComposerChoice(shortGainBase, trigger, 'short_gain_long_loss', longLoss, recallEntry), buildChapterComposerChoice(shortLossBase, trigger, 'short_loss_long_gain', longGain, recallEntry), {
+    text: '暂不改写命盘',
+    icon: '🚶',
+    resultType: 'neutral',
+    result: '你保持当前路线，仅记录观测结果。',
+    effects: [],
+    fateLedger: {
+      arcType: 'defer',
+      immediateText: '你暂缓执行新的命盘条目。',
+      longTermText: '该抉择未追加代价，仅保留观测记录。',
+      echoText: '你选择了观望，命盘暂时平稳。',
+      tags: Array.from(new Set([...(Array.isArray(trigger.tags) ? trigger.tags : []), '观望']))
+    }
+  }];
+  const eventIdSuffix = Math.floor(Math.random() * 0xFFFFFF).toString(36);
+  return {
+    id: `chapterComposer_${cluster.id}_${trigger.id}_${eventIdSuffix}`,
+    name: `${cluster.icon} ${trigger.title}`,
+    icon: cluster.icon,
+    summaryLabel: '章节命盘',
+    summary: `章节事件簇 · ${cluster.name}${summaryTags.length > 0 ? ` · ${summaryTags.join('/')}` : ''}`,
+    presentationTone: String(cluster.tone || 'chapter'),
+    atmosphere: pickEventTemplate(cluster.atmosphere) || '命盘回响正在逼近，当前抉择会被写入后续章节。',
+    description: `${trigger.description}${recallText ? `\n前章回响：${recallText}` : ''}`,
+    isComposedChapterEvent: true,
+    composerMeta: {
+      chapterIndex: context.chapterIndex,
+      chapterName: context.chapterName,
+      themeId: cluster.id,
+      themeName: cluster.name,
+      triggerId: trigger.id,
+      triggerTags: Array.isArray(trigger.tags) ? trigger.tags.slice() : [],
+      recallEntryId: recallEntry?.id || null,
+      recallText,
+      recallTags
+    },
+    choices
+  };
+} // 事件池 - 按类型分类
+export const EVENT_POOL = {
+  common: ['mysteryChest', 'spiritVein', 'wanderingSmith', 'hiddenSpring', 'brokenPavilion', 'mirrorNeedleDojo', 'voidBookkeeper', 'shieldRelayBeacon', 'nightWatchCamp', 'emberCampSignal', 'leylineConfluence', 'medicRelayPost', 'riftAidConvoy', 'stormchaserCamp', 'herbalPactShrine', 'oathscarShrine', 'ghostFurnace'],
+  uncommon: ['injuredCultivator', 'mysteryStele', 'celestialGamble', 'bloodMoonRitual', 'swordTomb', 'wanderingOracle', 'bloodForgeCovenant', 'shatteredCompass', 'ashLedgerTrial', 'ironCitadelPact', 'caravanQuartermaster', 'floatingMarketRift', 'astralSupplyDepot', 'starlitFieldHospital', 'convergenceRelay', 'harmonicAnvil', 'thunderConductTrial', 'fulgurMarket', 'lifestringClinic', 'bloodloomGarden', 'griefWritArchive', 'marionetteArmory'],
+  rare: ['mysteriousMerchant', 'ancientAltar', 'fateChoice', 'ancientLibrary', 'voidRift', 'spiritAuction', 'fallenFormation', 'destinyMirror', 'demonContract', 'starObservation', 'debtboundAnvil', 'convergenceRitual', 'aegisTribunal', 'frontierContractBoard', 'artifactConfluxBazaar', 'overclockSigil', 'hospiceRelay', 'blackbannerExecution', 'ancestralFoundry'],
+  special: ['trialGround']
+};
+export const ENDLESS_EVENT_POOL = {
+  common: ['endlessChronicleBroker', 'endlessMutatorWorkshop', 'endlessStormSanctum', 'endlessPressureValve', 'endlessOverclockAltar'],
+  rare: ['endlessMemoryVault', 'endlessFaultLine', 'floatingMarketRift', 'astralSupplyDepot', 'riftAidConvoy']
+};
+export const ENDLESS_MUTATOR_EVENT_BIAS = {
+  war_market: ['floatingMarketRift', 'endlessMutatorWorkshop', 'caravanQuartermaster'],
+  void_tax: ['endlessChronicleBroker', 'endlessMemoryVault', 'endlessPressureValve', 'riftAidConvoy'],
+  trial_inferno: ['endlessStormSanctum', 'trialGround', 'leylineConfluence', 'endlessOverclockAltar'],
+  ashen_camp: ['emberCampSignal', 'starlitFieldHospital', 'medicRelayPost', 'endlessFaultLine'],
+  iron_wall: ['shieldRelayBeacon', 'nightWatchCamp', 'aegisTribunal'],
+  berserker_tide: ['bloodForgeCovenant', 'ashLedgerTrial', 'frontierContractBoard', 'endlessPressureValve', 'endlessOverclockAltar']
+};
+export const ARCHETYPE_EVENT_POOLS = {
+  hemorrhage: ['bloodForgeCovenant', 'shatteredCompass', 'debtboundAnvil'],
+  precision: ['mirrorNeedleDojo', 'shatteredCompass', 'bloodForgeCovenant', 'caravanQuartermaster', 'floatingMarketRift', 'astralSupplyDepot'],
+  entropy: ['voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard', 'floatingMarketRift', 'astralSupplyDepot'],
+  stormcraft: ['thunderConductTrial', 'stormchaserCamp', 'fulgurMarket', 'overclockSigil', 'convergenceRelay', 'harmonicAnvil'],
+  vitalweave: ['herbalPactShrine', 'lifestringClinic', 'bloodloomGarden', 'hospiceRelay', 'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy'],
+  bulwark: ['shieldRelayBeacon', 'ironCitadelPact', 'aegisTribunal', 'nightWatchCamp', 'emberCampSignal', 'leylineConfluence', 'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy'],
+  mirrorweave: ['mirrorNeedleDojo', 'shatteredCompass', 'convergenceRelay', 'floatingMarketRift', 'astralSupplyDepot', 'harmonicAnvil'],
+  cursebound: ['oathscarShrine', 'griefWritArchive', 'blackbannerExecution', 'voidBookkeeper', 'ashLedgerTrial', 'frontierContractBoard'],
+  oathbound: ['oathscarShrine', 'griefWritArchive', 'blackbannerExecution', 'debtboundAnvil', 'frontierContractBoard', 'ashLedgerTrial'],
+  soulforge: ['ghostFurnace', 'marionetteArmory', 'ancestralFoundry', 'harmonicAnvil', 'artifactConfluxBazaar', 'shieldRelayBeacon']
+};
+export const FATE_PATH_EVENT_POOLS = {
+  convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar'],
+  resonance: ['stormchaserCamp', 'thunderConductTrial', 'fulgurMarket'],
+  wisdom: ['lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary'],
+  destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden']
+};
+export const STRATEGIC_ENGINEERING_EVENT_POOLS = {
+  observatory: ['starObservation', 'artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil', 'astralSupplyDepot', 'floatingMarketRift'],
+  memory_rift: ['floatingMarketRift', 'astralSupplyDepot', 'voidRift', 'voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard', 'artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil']
+};
+export const STRATEGIC_ENGINEERING_EVENT_BIAS_CHANCE = {
+  observatory: [0, 0.24, 0.34, 0.44],
+  memory_rift: [0, 0.22, 0.32, 0.42]
+};
+export const STRATEGIC_ENGINEERING_EVENT_FEEDBACK = {
+  observatory: ['', '观测回路刚接入这处异象，天机与命环校准收益开始抬升。', '观测网已经锁定此地灵流，观测、校准与货单筛选都会更稳。', '跨章观测网压住了灵流波动，本次事件会稳定吐出高价值观测结果。'],
+  memory_rift: ['', '裂隙回响开始渗入此地，构筑改写与裂隙补给窗口正在放大。', '裂隙工程已经与当前路线并轨，改写构筑与裂隙补给收益进一步抬升。', '深层裂隙回响已成网，本次事件会更偏向高压改写与重配收益。']
+};
+export function getTierScaledValue(values = [], tier = 0, fallback = 0) {
+  if (!Array.isArray(values) || values.length === 0) return fallback;
+  const index = Math.max(0, Math.min(values.length - 1, Math.floor(Number(tier) || 0)));
+  const value = Number(values[index]);
+  return Number.isFinite(value) ? value : fallback;
 }
-
-function normalizeChapterEventComposerContext(rawContext = null) {
-    if (!rawContext || typeof rawContext !== 'object') return null;
-    const chapterIndex = Math.max(1, Math.min(6, Math.floor(Number(rawContext.chapterIndex) || 1)));
-    const priorEntries = Array.isArray(rawContext.priorEntries)
-        ? rawContext.priorEntries
-            .filter((entry) => entry && typeof entry === 'object')
-            .map((entry) => ({
-                id: String(entry.id || ''),
-                chapterIndex: Math.max(1, Math.floor(Number(entry.chapterIndex) || 1)),
-                echoText: String(entry.echoText || entry.longTermText || ''),
-                longTermText: String(entry.longTermText || ''),
-                choiceText: String(entry.choiceText || ''),
-                tags: Array.isArray(entry.tags)
-                    ? Array.from(new Set(entry.tags.map((tag) => String(tag || '').trim()).filter(Boolean))).slice(0, 6)
-                    : []
-            }))
-        : [];
-    const recentTags = Array.isArray(rawContext.recentTags)
-        ? Array.from(new Set(rawContext.recentTags.map((tag) => String(tag || '').trim()).filter(Boolean))).slice(0, 8)
-        : [];
-    const composeChance = Math.max(0.18, Math.min(0.72, Number(rawContext.composeChance) || (0.26 + chapterIndex * 0.03)));
+export function getTierScaledEntry(values = [], tier = 0, fallback = null) {
+  if (!Array.isArray(values) || values.length === 0) return fallback;
+  const index = Math.max(0, Math.min(values.length - 1, Math.floor(Number(tier) || 0)));
+  return values[index] == null ? fallback : values[index];
+}
+export function cloneEventTemplate(eventId = '') {
+  return EVENTS[eventId] ? JSON.parse(JSON.stringify(EVENTS[eventId])) : null;
+}
+export function mergeEventSummary(base = '', extra = '') {
+  const parts = [base, extra].map(value => String(value || '').trim()).filter(Boolean);
+  return parts.join(' · ');
+}
+export function appendEventDescription(event, extra = '') {
+  if (!event || !extra) return;
+  const base = String(event.description || '').trim();
+  event.description = base ? `${base} ${extra}` : String(extra).trim();
+}
+export function appendChoiceResult(choice, extra = '') {
+  if (!choice || !extra) return;
+  const base = String(choice.result || '').trim();
+  choice.result = base ? `${base}｜${extra}` : String(extra).trim();
+}
+export function addChoiceEffects(choice, effects = [], options = {}) {
+  if (!choice || !Array.isArray(effects) || effects.length === 0) return;
+  const clonedEffects = effects.filter(effect => effect && typeof effect === 'object').map(effect => JSON.parse(JSON.stringify(effect)));
+  if (!Array.isArray(choice.effects)) {
+    choice.effects = [];
+  }
+  if (options.prepend) {
+    choice.effects = [...clonedEffects, ...choice.effects];
+    return;
+  }
+  choice.effects.push(...clonedEffects);
+}
+export function getEventChoice(event, index = 0) {
+  return Array.isArray(event?.choices) ? event.choices[index] || null : null;
+}
+export function getStrategicEngineeringEventContext() {
+  const runtimeGame = getRuntimeGame();
+  let biasProfile = null;
+  try {
+    biasProfile = runtimeGame?.getStrategicEngineeringEventBiasProfile?.() || null;
+  } catch (e) {
+    biasProfile = null;
+  }
+  if (biasProfile && typeof biasProfile === 'object' && typeof biasProfile.trackId === 'string' && Array.isArray(biasProfile.eventIds) && biasProfile.eventIds.length > 0) {
     return {
-        chapterIndex,
-        chapterName: String(rawContext.chapterName || `第${chapterIndex}章`),
-        priorEntries,
-        recentTags,
-        composeChance
+      trackId: String(biasProfile.trackId || ''),
+      tier: Math.max(0, Math.min(3, Math.floor(Number(biasProfile.tier) || 0))),
+      tierLabel: String(biasProfile.tierLabel || ''),
+      name: String(biasProfile.name || biasProfile.trackId || ''),
+      icon: String(biasProfile.icon || ''),
+      summary: String(biasProfile.summary || ''),
+      effectSummary: String(biasProfile.signal || ''),
+      rewardSummary: '',
+      eventPool: biasProfile.eventIds.filter(eventId => !!EVENTS[eventId]),
+      isFocusTrack: true,
+      biasChance: Math.max(0, Math.min(0.75, Number(biasProfile.biasChance) || 0))
     };
-}
-
-function getChapterEventComposerContext() {
-    if (typeof window === 'undefined' || !window.game) return null;
-    if (typeof window.game.getChapterEventComposerContext !== 'function') return null;
-    try {
-        const rawContext = window.game.getChapterEventComposerContext();
-        return normalizeChapterEventComposerContext(rawContext);
-    } catch (error) {
-        return null;
-    }
-}
-
-function resolveChapterComposerRecallEntry(context = null) {
-    if (!context || !Array.isArray(context.priorEntries) || context.priorEntries.length === 0) return null;
-    const filtered = context.priorEntries.filter((entry) => entry.chapterIndex < context.chapterIndex);
-    if (filtered.length === 0) return null;
-    return filtered[Math.floor(Math.random() * filtered.length)] || null;
-}
-
-function buildChapterComposerChoice(baseChoice = {}, trigger = {}, arcType = 'neutral', longTermTemplate = null, recallEntry = null) {
-    const immediateText = String(baseChoice.immediateText || baseChoice.result || '').trim();
-    const longTermText = String(longTermTemplate?.longTermText || '').trim();
-    const echoText = String(longTermTemplate?.echoText || longTermText || '').trim();
-    const mergedTags = Array.from(new Set([
-        ...(Array.isArray(trigger.tags) ? trigger.tags : []),
-        ...(Array.isArray(baseChoice.tags) ? baseChoice.tags : []),
-        ...(Array.isArray(longTermTemplate?.tags) ? longTermTemplate.tags : []),
-        ...(Array.isArray(recallEntry?.tags) ? recallEntry.tags.slice(0, 2) : [])
-    ].map((tag) => String(tag || '').trim()).filter(Boolean)));
-    return {
-        text: String(baseChoice.text || '做出选择'),
-        icon: String(baseChoice.icon || '▶'),
-        resultType: String(baseChoice.resultType || 'neutral'),
-        result: `${String(baseChoice.result || '命盘发生变化。')} ${longTermText ? `（后果：${longTermText}）` : ''}`.trim(),
-        condition: baseChoice.condition ? cloneEventTemplateData(baseChoice.condition) : undefined,
-        effects: Array.isArray(baseChoice.effects) ? cloneEventTemplateData(baseChoice.effects) : [],
-        fateLedger: {
-            arcType,
-            immediateText,
-            longTermText,
-            echoText,
-            tags: mergedTags
-        }
-    };
-}
-
-function getComposedChapterEvent(rawContext = null) {
-    const context = normalizeChapterEventComposerContext(rawContext || getChapterEventComposerContext());
-    if (!context) return null;
-    const cluster = CHAPTER_EVENT_COMPOSER_CLUSTERS[context.chapterIndex];
-    if (!cluster) return null;
-
-    const trigger = pickEventTemplate(cluster.triggerTemplates);
-    const shortGainBase = pickEventTemplate(cluster.shortGainRewardTemplates);
-    const shortLossBase = pickEventTemplate(cluster.shortLossCostTemplates);
-    const longLoss = pickEventTemplate(cluster.longTermLossTemplates);
-    const longGain = pickEventTemplate(cluster.longTermGainTemplates);
-    if (!trigger || !shortGainBase || !shortLossBase || !longLoss || !longGain) return null;
-
-    const recallEntry = resolveChapterComposerRecallEntry(context);
-    const recallText = recallEntry
-        ? String(recallEntry.echoText || recallEntry.longTermText || recallEntry.choiceText || '').trim()
-        : '';
-    const recallTags = Array.isArray(recallEntry?.tags) ? recallEntry.tags.slice(0, 3) : [];
-    const summaryTags = Array.from(new Set([
-        ...(Array.isArray(trigger.tags) ? trigger.tags : []),
-        ...recallTags
-    ]));
-
-    const choices = [
-        buildChapterComposerChoice(shortGainBase, trigger, 'short_gain_long_loss', longLoss, recallEntry),
-        buildChapterComposerChoice(shortLossBase, trigger, 'short_loss_long_gain', longGain, recallEntry),
-        {
-            text: '暂不改写命盘',
-            icon: '🚶',
-            resultType: 'neutral',
-            result: '你保持当前路线，仅记录观测结果。',
-            effects: [],
-            fateLedger: {
-                arcType: 'defer',
-                immediateText: '你暂缓执行新的命盘条目。',
-                longTermText: '该抉择未追加代价，仅保留观测记录。',
-                echoText: '你选择了观望，命盘暂时平稳。',
-                tags: Array.from(new Set([...(Array.isArray(trigger.tags) ? trigger.tags : []), '观望']))
-            }
-        }
-    ];
-
-    const eventIdSuffix = Math.floor(Math.random() * 0xFFFFFF).toString(36);
-    return {
-        id: `chapterComposer_${cluster.id}_${trigger.id}_${eventIdSuffix}`,
-        name: `${cluster.icon} ${trigger.title}`,
-        icon: cluster.icon,
-        summaryLabel: '章节命盘',
-        summary: `章节事件簇 · ${cluster.name}${summaryTags.length > 0 ? ` · ${summaryTags.join('/')}` : ''}`,
-        presentationTone: String(cluster.tone || 'chapter'),
-        atmosphere: pickEventTemplate(cluster.atmosphere) || '命盘回响正在逼近，当前抉择会被写入后续章节。',
-        description: `${trigger.description}${recallText ? `\n前章回响：${recallText}` : ''}`,
-        isComposedChapterEvent: true,
-        composerMeta: {
-            chapterIndex: context.chapterIndex,
-            chapterName: context.chapterName,
-            themeId: cluster.id,
-            themeName: cluster.name,
-            triggerId: trigger.id,
-            triggerTags: Array.isArray(trigger.tags) ? trigger.tags.slice() : [],
-            recallEntryId: recallEntry?.id || null,
-            recallText,
-            recallTags
-        },
-        choices
-    };
-}
-
-// 事件池 - 按类型分类
-const EVENT_POOL = {
-    common: ['mysteryChest', 'spiritVein', 'wanderingSmith', 'hiddenSpring', 'brokenPavilion', 'mirrorNeedleDojo', 'voidBookkeeper', 'shieldRelayBeacon', 'nightWatchCamp', 'emberCampSignal', 'leylineConfluence', 'medicRelayPost', 'riftAidConvoy', 'stormchaserCamp', 'herbalPactShrine', 'oathscarShrine', 'ghostFurnace'],
-    uncommon: ['injuredCultivator', 'mysteryStele', 'celestialGamble', 'bloodMoonRitual', 'swordTomb', 'wanderingOracle', 'bloodForgeCovenant', 'shatteredCompass', 'ashLedgerTrial', 'ironCitadelPact', 'caravanQuartermaster', 'floatingMarketRift', 'astralSupplyDepot', 'starlitFieldHospital', 'convergenceRelay', 'harmonicAnvil', 'thunderConductTrial', 'fulgurMarket', 'lifestringClinic', 'bloodloomGarden', 'griefWritArchive', 'marionetteArmory'],
-    rare: ['mysteriousMerchant', 'ancientAltar', 'fateChoice', 'ancientLibrary', 'voidRift', 'spiritAuction', 'fallenFormation', 'destinyMirror', 'demonContract', 'starObservation', 'debtboundAnvil', 'convergenceRitual', 'aegisTribunal', 'frontierContractBoard', 'artifactConfluxBazaar', 'overclockSigil', 'hospiceRelay', 'blackbannerExecution', 'ancestralFoundry'],
-    special: ['trialGround']
-};
-
-const ENDLESS_EVENT_POOL = {
-    common: ['endlessChronicleBroker', 'endlessMutatorWorkshop', 'endlessStormSanctum', 'endlessPressureValve', 'endlessOverclockAltar'],
-    rare: ['endlessMemoryVault', 'endlessFaultLine', 'floatingMarketRift', 'astralSupplyDepot', 'riftAidConvoy']
-};
-
-const ENDLESS_MUTATOR_EVENT_BIAS = {
-    war_market: ['floatingMarketRift', 'endlessMutatorWorkshop', 'caravanQuartermaster'],
-    void_tax: ['endlessChronicleBroker', 'endlessMemoryVault', 'endlessPressureValve', 'riftAidConvoy'],
-    trial_inferno: ['endlessStormSanctum', 'trialGround', 'leylineConfluence', 'endlessOverclockAltar'],
-    ashen_camp: ['emberCampSignal', 'starlitFieldHospital', 'medicRelayPost', 'endlessFaultLine'],
-    iron_wall: ['shieldRelayBeacon', 'nightWatchCamp', 'aegisTribunal'],
-    berserker_tide: ['bloodForgeCovenant', 'ashLedgerTrial', 'frontierContractBoard', 'endlessPressureValve', 'endlessOverclockAltar']
-};
-
-const ARCHETYPE_EVENT_POOLS = {
-    hemorrhage: ['bloodForgeCovenant', 'shatteredCompass', 'debtboundAnvil'],
-    precision: ['mirrorNeedleDojo', 'shatteredCompass', 'bloodForgeCovenant', 'caravanQuartermaster', 'floatingMarketRift', 'astralSupplyDepot'],
-    entropy: ['voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard', 'floatingMarketRift', 'astralSupplyDepot'],
-    stormcraft: ['thunderConductTrial', 'stormchaserCamp', 'fulgurMarket', 'overclockSigil', 'convergenceRelay', 'harmonicAnvil'],
-    vitalweave: ['herbalPactShrine', 'lifestringClinic', 'bloodloomGarden', 'hospiceRelay', 'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy'],
-    bulwark: ['shieldRelayBeacon', 'ironCitadelPact', 'aegisTribunal', 'nightWatchCamp', 'emberCampSignal', 'leylineConfluence', 'medicRelayPost', 'starlitFieldHospital', 'riftAidConvoy'],
-    mirrorweave: ['mirrorNeedleDojo', 'shatteredCompass', 'convergenceRelay', 'floatingMarketRift', 'astralSupplyDepot', 'harmonicAnvil'],
-    cursebound: ['oathscarShrine', 'griefWritArchive', 'blackbannerExecution', 'voidBookkeeper', 'ashLedgerTrial', 'frontierContractBoard'],
-    oathbound: ['oathscarShrine', 'griefWritArchive', 'blackbannerExecution', 'debtboundAnvil', 'frontierContractBoard', 'ashLedgerTrial'],
-    soulforge: ['ghostFurnace', 'marionetteArmory', 'ancestralFoundry', 'harmonicAnvil', 'artifactConfluxBazaar', 'shieldRelayBeacon']
-};
-
-const FATE_PATH_EVENT_POOLS = {
-    convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar'],
-    resonance: ['stormchaserCamp', 'thunderConductTrial', 'fulgurMarket'],
-    wisdom: ['lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary'],
-    destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden']
-};
-
-const STRATEGIC_ENGINEERING_EVENT_POOLS = {
-    observatory: ['starObservation', 'artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil', 'astralSupplyDepot', 'floatingMarketRift'],
-    memory_rift: ['floatingMarketRift', 'astralSupplyDepot', 'voidRift', 'voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard', 'artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil']
-};
-
-const STRATEGIC_ENGINEERING_EVENT_BIAS_CHANCE = {
-    observatory: [0, 0.24, 0.34, 0.44],
-    memory_rift: [0, 0.22, 0.32, 0.42]
-};
-
-const STRATEGIC_ENGINEERING_EVENT_FEEDBACK = {
-    observatory: [
-        '',
-        '观测回路刚接入这处异象，天机与命环校准收益开始抬升。',
-        '观测网已经锁定此地灵流，观测、校准与货单筛选都会更稳。',
-        '跨章观测网压住了灵流波动，本次事件会稳定吐出高价值观测结果。'
-    ],
-    memory_rift: [
-        '',
-        '裂隙回响开始渗入此地，构筑改写与裂隙补给窗口正在放大。',
-        '裂隙工程已经与当前路线并轨，改写构筑与裂隙补给收益进一步抬升。',
-        '深层裂隙回响已成网，本次事件会更偏向高压改写与重配收益。'
-    ]
-};
-
-function getTierScaledValue(values = [], tier = 0, fallback = 0) {
-    if (!Array.isArray(values) || values.length === 0) return fallback;
-    const index = Math.max(0, Math.min(values.length - 1, Math.floor(Number(tier) || 0)));
-    const value = Number(values[index]);
-    return Number.isFinite(value) ? value : fallback;
-}
-
-function getTierScaledEntry(values = [], tier = 0, fallback = null) {
-    if (!Array.isArray(values) || values.length === 0) return fallback;
-    const index = Math.max(0, Math.min(values.length - 1, Math.floor(Number(tier) || 0)));
-    return values[index] == null ? fallback : values[index];
-}
-
-function cloneEventTemplate(eventId = '') {
-    return EVENTS[eventId] ? JSON.parse(JSON.stringify(EVENTS[eventId])) : null;
-}
-
-function mergeEventSummary(base = '', extra = '') {
-    const parts = [base, extra]
-        .map((value) => String(value || '').trim())
-        .filter(Boolean);
-    return parts.join(' · ');
-}
-
-function appendEventDescription(event, extra = '') {
-    if (!event || !extra) return;
-    const base = String(event.description || '').trim();
-    event.description = base ? `${base} ${extra}` : String(extra).trim();
-}
-
-function appendChoiceResult(choice, extra = '') {
-    if (!choice || !extra) return;
-    const base = String(choice.result || '').trim();
-    choice.result = base ? `${base}｜${extra}` : String(extra).trim();
-}
-
-function addChoiceEffects(choice, effects = [], options = {}) {
-    if (!choice || !Array.isArray(effects) || effects.length === 0) return;
-    const clonedEffects = effects
-        .filter((effect) => effect && typeof effect === 'object')
-        .map((effect) => JSON.parse(JSON.stringify(effect)));
-    if (!Array.isArray(choice.effects)) {
-        choice.effects = [];
-    }
-    if (options.prepend) {
-        choice.effects = [...clonedEffects, ...choice.effects];
-        return;
-    }
-    choice.effects.push(...clonedEffects);
-}
-
-function getEventChoice(event, index = 0) {
-    return Array.isArray(event?.choices) ? (event.choices[index] || null) : null;
-}
-
-function getStrategicEngineeringEventContext() {
-    let biasProfile = null;
-    try {
-        biasProfile = window?.game?.getStrategicEngineeringEventBiasProfile?.() || null;
-    } catch (e) {
-        biasProfile = null;
-    }
-    if (
-        biasProfile
-        && typeof biasProfile === 'object'
-        && typeof biasProfile.trackId === 'string'
-        && Array.isArray(biasProfile.eventIds)
-        && biasProfile.eventIds.length > 0
-    ) {
-        return {
-            trackId: String(biasProfile.trackId || ''),
-            tier: Math.max(0, Math.min(3, Math.floor(Number(biasProfile.tier) || 0))),
-            tierLabel: String(biasProfile.tierLabel || ''),
-            name: String(biasProfile.name || biasProfile.trackId || ''),
-            icon: String(biasProfile.icon || ''),
-            summary: String(biasProfile.summary || ''),
-            effectSummary: String(biasProfile.signal || ''),
-            rewardSummary: '',
-            eventPool: biasProfile.eventIds.filter((eventId) => !!EVENTS[eventId]),
-            isFocusTrack: true,
-            biasChance: Math.max(0, Math.min(0.75, Number(biasProfile.biasChance) || 0))
-        };
-    }
-
-    let snapshot = null;
-    try {
-        snapshot = window?.game?.getStrategicEngineeringSnapshot?.() || null;
-    } catch (e) {
-        snapshot = null;
-    }
-    if (!snapshot || typeof snapshot !== 'object') return null;
-
-    const focusTrack = snapshot.focusTrack && typeof snapshot.focusTrack === 'object'
-        ? snapshot.focusTrack
-        : null;
-    const activeTracks = Array.isArray(snapshot.activeTracks)
-        ? snapshot.activeTracks.filter((track) => track && typeof track === 'object')
-        : [];
-    const candidates = [];
-    if (focusTrack) candidates.push({ ...focusTrack, isFocusTrack: true });
-    activeTracks.forEach((track) => {
-        if (candidates.some((entry) => entry.trackId === track.trackId)) return;
-        candidates.push({ ...track, isFocusTrack: false });
+  }
+  let snapshot = null;
+  try {
+    snapshot = runtimeGame?.getStrategicEngineeringSnapshot?.() || null;
+  } catch (e) {
+    snapshot = null;
+  }
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  const focusTrack = snapshot.focusTrack && typeof snapshot.focusTrack === 'object' ? snapshot.focusTrack : null;
+  const activeTracks = Array.isArray(snapshot.activeTracks) ? snapshot.activeTracks.filter(track => track && typeof track === 'object') : [];
+  const candidates = [];
+  if (focusTrack) candidates.push({
+    ...focusTrack,
+    isFocusTrack: true
+  });
+  activeTracks.forEach(track => {
+    if (candidates.some(entry => entry.trackId === track.trackId)) return;
+    candidates.push({
+      ...track,
+      isFocusTrack: false
     });
-
-    const selectedTrack = candidates.find((track) => {
-        const trackId = String(track?.trackId || '');
-        return !!STRATEGIC_ENGINEERING_EVENT_POOLS[trackId] && Math.max(0, Math.floor(Number(track?.tier) || 0)) > 0;
-    });
-    if (!selectedTrack) return null;
-
-    const trackId = String(selectedTrack.trackId || '');
-    const tier = Math.max(0, Math.min(3, Math.floor(Number(selectedTrack.tier) || 0)));
-    const eventPool = (STRATEGIC_ENGINEERING_EVENT_POOLS[trackId] || []).filter((eventId) => !!EVENTS[eventId]);
-    if (eventPool.length === 0) return null;
-
-    return {
-        trackId,
-        tier,
-        tierLabel: String(selectedTrack.tierLabel || `T${tier}`),
-        name: String(selectedTrack.name || trackId),
-        icon: String(selectedTrack.icon || ''),
-        summary: String(snapshot.summary || ''),
-        effectSummary: String(selectedTrack.effectSummary || ''),
-        rewardSummary: '',
-        eventPool,
-        isFocusTrack: selectedTrack.isFocusTrack !== false,
-        biasChance: Math.max(0, Math.min(0.75, getTierScaledValue(STRATEGIC_ENGINEERING_EVENT_BIAS_CHANCE[trackId], tier, 0)))
-    };
+  });
+  const selectedTrack = candidates.find(track => {
+    const trackId = String(track?.trackId || '');
+    return !!STRATEGIC_ENGINEERING_EVENT_POOLS[trackId] && Math.max(0, Math.floor(Number(track?.tier) || 0)) > 0;
+  });
+  if (!selectedTrack) return null;
+  const trackId = String(selectedTrack.trackId || '');
+  const tier = Math.max(0, Math.min(3, Math.floor(Number(selectedTrack.tier) || 0)));
+  const eventPool = (STRATEGIC_ENGINEERING_EVENT_POOLS[trackId] || []).filter(eventId => !!EVENTS[eventId]);
+  if (eventPool.length === 0) return null;
+  return {
+    trackId,
+    tier,
+    tierLabel: String(selectedTrack.tierLabel || `T${tier}`),
+    name: String(selectedTrack.name || trackId),
+    icon: String(selectedTrack.icon || ''),
+    summary: String(snapshot.summary || ''),
+    effectSummary: String(selectedTrack.effectSummary || ''),
+    rewardSummary: '',
+    eventPool,
+    isFocusTrack: selectedTrack.isFocusTrack !== false,
+    biasChance: Math.max(0, Math.min(0.75, getTierScaledValue(STRATEGIC_ENGINEERING_EVENT_BIAS_CHANCE[trackId], tier, 0)))
+  };
 }
-
-function getStrategicEngineeringBoostSummary(context = null) {
-    if (!context) return '';
-    if (context.effectSummary) return String(context.effectSummary).trim();
-    const feedback = getTierScaledEntry(STRATEGIC_ENGINEERING_EVENT_FEEDBACK[context.trackId], context.tier, '');
-    if (feedback) return feedback;
-    return `${context.icon || ''}${context.name || '工程联动'} ${context.tierLabel || ''}`.trim();
+export function getStrategicEngineeringBoostSummary(context = null) {
+  if (!context) return '';
+  if (context.effectSummary) return String(context.effectSummary).trim();
+  const feedback = getTierScaledEntry(STRATEGIC_ENGINEERING_EVENT_FEEDBACK[context.trackId], context.tier, '');
+  if (feedback) return feedback;
+  return `${context.icon || ''}${context.name || '工程联动'} ${context.tierLabel || ''}`.trim();
 }
-
-function markStrategicEngineeringEventMeta(event, context = null, options = {}) {
-    if (!event || !context) return;
-    const summary = getStrategicEngineeringBoostSummary(context);
-    const rewardSummary = String(context.rewardSummary || '').trim();
-    event.engineeringEventMeta = {
-        trackId: context.trackId,
-        name: context.name,
-        icon: context.icon,
-        tier: context.tier,
-        tierLabel: context.tierLabel,
-        summary,
-        rewardSummary,
-        effectSummary: context.effectSummary || '',
-        source: String(options.source || 'runtime'),
-        selectedByEngineeringBias: options.source === 'engineering-bias',
-        biasChance: context.biasChance,
-        isFocusTrack: context.isFocusTrack !== false
-    };
-    event.engineeringResonance = {
-        trackId: context.trackId,
-        name: context.name,
-        icon: context.icon,
-        tier: context.tier,
-        tierLabel: context.tierLabel,
-        biasSource: options.source === 'engineering-bias' ? 'focus' : 'runtime',
-        signal: summary,
-        rewardSummary
-    };
-    event.summary = mergeEventSummary(event.summary, `工程联动：${summary}`);
-    appendEventDescription(event, `工程联动：${context.icon || ''}${context.name || '工程联动'} ${context.tierLabel || ''}正在改写此地回报。`.trim());
+export function markStrategicEngineeringEventMeta(event, context = null, options = {}) {
+  if (!event || !context) return;
+  const summary = getStrategicEngineeringBoostSummary(context);
+  const rewardSummary = String(context.rewardSummary || '').trim();
+  event.engineeringEventMeta = {
+    trackId: context.trackId,
+    name: context.name,
+    icon: context.icon,
+    tier: context.tier,
+    tierLabel: context.tierLabel,
+    summary,
+    rewardSummary,
+    effectSummary: context.effectSummary || '',
+    source: String(options.source || 'runtime'),
+    selectedByEngineeringBias: options.source === 'engineering-bias',
+    biasChance: context.biasChance,
+    isFocusTrack: context.isFocusTrack !== false
+  };
+  event.engineeringResonance = {
+    trackId: context.trackId,
+    name: context.name,
+    icon: context.icon,
+    tier: context.tier,
+    tierLabel: context.tierLabel,
+    biasSource: options.source === 'engineering-bias' ? 'focus' : 'runtime',
+    signal: summary,
+    rewardSummary
+  };
+  event.summary = mergeEventSummary(event.summary, `工程联动：${summary}`);
+  appendEventDescription(event, `工程联动：${context.icon || ''}${context.name || '工程联动'} ${context.tierLabel || ''}正在改写此地回报。`.trim());
 }
-
-function applyObservatoryEngineeringAugment(event, context = null) {
-    const tier = Math.max(0, Math.floor(Number(context?.tier) || 0));
-    const insightBonus = getTierScaledValue([0, 1, 1, 2], tier, 0);
-    const shopDiscount = getTierScaledValue([1, 0.96, 0.92, 0.88], tier, 1);
-    const safeRingBonus = getTierScaledValue([0, 10, 16, 24], tier, 0);
-    const riskyRingBonus = getTierScaledValue([0, 6, 10, 14], tier, 0);
-    const goldBonus = getTierScaledValue([0, 8, 12, 18], tier, 0);
-
-    switch (event?.id) {
-        case 'starObservation': {
-            const deduceStars = getEventChoice(event, 0);
-            const stareAbyss = getEventChoice(event, 1);
-            addChoiceEffects(deduceStars, [
-                ...(safeRingBonus > 0 ? [{ type: 'ringExp', value: Math.max(8, Math.floor(safeRingBonus * 0.75)) }] : []),
-                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
-            ]);
-            appendChoiceResult(
-                deduceStars,
-                `观测网补录星轨：命环经验 +${Math.max(8, Math.floor(safeRingBonus * 0.75))}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
-            );
-            addChoiceEffects(stareAbyss, [
-                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
-                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
-            ]);
-            appendChoiceResult(
-                stareAbyss,
-                `深空残样被观测网回收：命环经验 +${riskyRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
-            );
-            break;
+export function applyObservatoryEngineeringAugment(event, context = null) {
+  const tier = Math.max(0, Math.floor(Number(context?.tier) || 0));
+  const insightBonus = getTierScaledValue([0, 1, 1, 2], tier, 0);
+  const shopDiscount = getTierScaledValue([1, 0.96, 0.92, 0.88], tier, 1);
+  const safeRingBonus = getTierScaledValue([0, 10, 16, 24], tier, 0);
+  const riskyRingBonus = getTierScaledValue([0, 6, 10, 14], tier, 0);
+  const goldBonus = getTierScaledValue([0, 8, 12, 18], tier, 0);
+  switch (event?.id) {
+    case 'starObservation':
+      {
+        const deduceStars = getEventChoice(event, 0);
+        const stareAbyss = getEventChoice(event, 1);
+        addChoiceEffects(deduceStars, [...(safeRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: Math.max(8, Math.floor(safeRingBonus * 0.75))
+        }] : []), ...(insightBonus > 0 ? [{
+          type: 'heavenlyInsight',
+          value: insightBonus
+        }] : [])]);
+        appendChoiceResult(deduceStars, `观测网补录星轨：命环经验 +${Math.max(8, Math.floor(safeRingBonus * 0.75))}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`);
+        addChoiceEffects(stareAbyss, [...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : []), ...(insightBonus > 0 ? [{
+          type: 'heavenlyInsight',
+          value: insightBonus
+        }] : [])]);
+        appendChoiceResult(stareAbyss, `深空残样被观测网回收：命环经验 +${riskyRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`);
+        break;
+      }
+    case 'artifactConfluxBazaar':
+      {
+        const enterMarket = getEventChoice(event, 0);
+        const stipend = getEventChoice(event, 1);
+        const shopEffect = Array.isArray(enterMarket?.effects) ? enterMarket.effects.find(effect => effect && effect.type === 'openTemporaryShop') : null;
+        if (shopEffect) {
+          shopEffect.offerCount = Math.max(3, Math.min(5, Math.floor(Number(shopEffect.offerCount) || 4) + 1));
+          shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier)) ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount) : shopDiscount;
         }
-        case 'artifactConfluxBazaar': {
-            const enterMarket = getEventChoice(event, 0);
-            const stipend = getEventChoice(event, 1);
-            const shopEffect = Array.isArray(enterMarket?.effects)
-                ? enterMarket.effects.find((effect) => effect && effect.type === 'openTemporaryShop')
-                : null;
-            if (shopEffect) {
-                shopEffect.offerCount = Math.max(3, Math.min(5, Math.floor(Number(shopEffect.offerCount) || 4) + 1));
-                shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier))
-                    ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount)
-                    : shopDiscount;
-            }
-            appendChoiceResult(
-                enterMarket,
-                `观测网校准货单：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`
-            );
-            const bonusEffects = [];
-            if (safeRingBonus > 0) bonusEffects.push({ type: 'ringExp', value: Math.max(6, Math.floor(safeRingBonus * 0.75)) });
-            if (insightBonus > 0) bonusEffects.push({ type: 'heavenlyInsight', value: insightBonus });
-            addChoiceEffects(stipend, bonusEffects);
-            appendChoiceResult(
-                stipend,
-                `观测回路追加命环校准 ${Math.max(6, Math.floor(safeRingBonus * 0.75))}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
-            );
-            break;
+        appendChoiceResult(enterMarket, `观测网校准货单：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`);
+        const bonusEffects = [];
+        if (safeRingBonus > 0) bonusEffects.push({
+          type: 'ringExp',
+          value: Math.max(6, Math.floor(safeRingBonus * 0.75))
+        });
+        if (insightBonus > 0) bonusEffects.push({
+          type: 'heavenlyInsight',
+          value: insightBonus
+        });
+        addChoiceEffects(stipend, bonusEffects);
+        appendChoiceResult(stipend, `观测回路追加命环校准 ${Math.max(6, Math.floor(safeRingBonus * 0.75))}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`);
+        break;
+      }
+    case 'convergenceRelay':
+      {
+        const calibrate = getEventChoice(event, 0);
+        const overload = getEventChoice(event, 1);
+        addChoiceEffects(calibrate, [...(safeRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: safeRingBonus
+        }] : []), ...(insightBonus > 0 ? [{
+          type: 'heavenlyInsight',
+          value: insightBonus
+        }] : [])]);
+        appendChoiceResult(calibrate, `观测回路同步校准：命环经验 +${safeRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`);
+        addChoiceEffects(overload, [...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : []), ...(insightBonus > 0 ? [{
+          type: 'heavenlyInsight',
+          value: insightBonus
+        }] : [])]);
+        appendChoiceResult(overload, `高压观测带回参数：命环经验 +${riskyRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`);
+        break;
+      }
+    case 'harmonicAnvil':
+      {
+        const stableForge = getEventChoice(event, 0);
+        const overloadForge = getEventChoice(event, 1);
+        addChoiceEffects(stableForge, [...(safeRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: Math.max(8, Math.floor(safeRingBonus * 0.85))
+        }] : []), ...(insightBonus > 0 ? [{
+          type: 'heavenlyInsight',
+          value: insightBonus
+        }] : [])], {
+          prepend: true
+        });
+        appendChoiceResult(stableForge, `观星锻环回传观测值：命环经验 +${Math.max(8, Math.floor(safeRingBonus * 0.85))}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`);
+        addChoiceEffects(overloadForge, [...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : []), ...(insightBonus > 0 ? [{
+          type: 'heavenlyInsight',
+          value: insightBonus
+        }] : [])]);
+        appendChoiceResult(overloadForge, `高压熔接留下观测残样：命环经验 +${riskyRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`);
+        break;
+      }
+    case 'astralSupplyDepot':
+      {
+        const enterDepot = getEventChoice(event, 0);
+        const stipend = getEventChoice(event, 1);
+        const shopEffect = Array.isArray(enterDepot?.effects) ? enterDepot.effects.find(effect => effect && effect.type === 'openTemporaryShop') : null;
+        if (shopEffect) {
+          shopEffect.offerCount = Math.max(4, Math.min(6, Math.floor(Number(shopEffect.offerCount) || 4) + 1));
+          shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier)) ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount) : shopDiscount;
         }
-        case 'convergenceRelay': {
-            const calibrate = getEventChoice(event, 0);
-            const overload = getEventChoice(event, 1);
-            addChoiceEffects(calibrate, [
-                ...(safeRingBonus > 0 ? [{ type: 'ringExp', value: safeRingBonus }] : []),
-                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
-            ]);
-            appendChoiceResult(
-                calibrate,
-                `观测回路同步校准：命环经验 +${safeRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
-            );
-            addChoiceEffects(overload, [
-                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
-                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
-            ]);
-            appendChoiceResult(
-                overload,
-                `高压观测带回参数：命环经验 +${riskyRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
-            );
-            break;
+        appendChoiceResult(enterDepot, `观测网先行筛单：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`);
+        addChoiceEffects(stipend, [...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: goldBonus
+        }] : []), ...(safeRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: Math.max(8, Math.floor(safeRingBonus * 0.72))
+        }] : []), ...(insightBonus > 0 ? [{
+          type: 'heavenlyInsight',
+          value: insightBonus
+        }] : [])]);
+        appendChoiceResult(stipend, `观测货单追加补贴：灵石 +${goldBonus}，命环经验 +${Math.max(8, Math.floor(safeRingBonus * 0.72))}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`);
+        break;
+      }
+    case 'floatingMarketRift':
+      {
+        const enterMarket = getEventChoice(event, 0);
+        const passBy = getEventChoice(event, 1);
+        const shopEffect = Array.isArray(enterMarket?.effects) ? enterMarket.effects.find(effect => effect && effect.type === 'openTemporaryShop') : null;
+        if (shopEffect) {
+          shopEffect.offerCount = Math.max(3, Math.min(5, Math.floor(Number(shopEffect.offerCount) || 3) + 1));
+          shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier)) ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount) : shopDiscount;
         }
-        case 'harmonicAnvil': {
-            const stableForge = getEventChoice(event, 0);
-            const overloadForge = getEventChoice(event, 1);
-            addChoiceEffects(stableForge, [
-                ...(safeRingBonus > 0 ? [{ type: 'ringExp', value: Math.max(8, Math.floor(safeRingBonus * 0.85)) }] : []),
-                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
-            ], { prepend: true });
-            appendChoiceResult(
-                stableForge,
-                `观星锻环回传观测值：命环经验 +${Math.max(8, Math.floor(safeRingBonus * 0.85))}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
-            );
-            addChoiceEffects(overloadForge, [
-                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
-                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
-            ]);
-            appendChoiceResult(
-                overloadForge,
-                `高压熔接留下观测残样：命环经验 +${riskyRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
-            );
-            break;
-        }
-        case 'astralSupplyDepot': {
-            const enterDepot = getEventChoice(event, 0);
-            const stipend = getEventChoice(event, 1);
-            const shopEffect = Array.isArray(enterDepot?.effects)
-                ? enterDepot.effects.find((effect) => effect && effect.type === 'openTemporaryShop')
-                : null;
-            if (shopEffect) {
-                shopEffect.offerCount = Math.max(4, Math.min(6, Math.floor(Number(shopEffect.offerCount) || 4) + 1));
-                shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier))
-                    ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount)
-                    : shopDiscount;
-            }
-            appendChoiceResult(
-                enterDepot,
-                `观测网先行筛单：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`
-            );
-            addChoiceEffects(stipend, [
-                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : []),
-                ...(safeRingBonus > 0 ? [{ type: 'ringExp', value: Math.max(8, Math.floor(safeRingBonus * 0.72)) }] : []),
-                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
-            ]);
-            appendChoiceResult(
-                stipend,
-                `观测货单追加补贴：灵石 +${goldBonus}，命环经验 +${Math.max(8, Math.floor(safeRingBonus * 0.72))}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
-            );
-            break;
-        }
-        case 'floatingMarketRift': {
-            const enterMarket = getEventChoice(event, 0);
-            const passBy = getEventChoice(event, 1);
-            const shopEffect = Array.isArray(enterMarket?.effects)
-                ? enterMarket.effects.find((effect) => effect && effect.type === 'openTemporaryShop')
-                : null;
-            if (shopEffect) {
-                shopEffect.offerCount = Math.max(3, Math.min(5, Math.floor(Number(shopEffect.offerCount) || 3) + 1));
-                shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier))
-                    ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount)
-                    : shopDiscount;
-            }
-            appendChoiceResult(
-                enterMarket,
-                `观测网提前标记货单：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`
-            );
-            addChoiceEffects(passBy, [
-                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : []),
-                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
-                ...(insightBonus > 0 ? [{ type: 'heavenlyInsight', value: insightBonus }] : [])
-            ]);
-            appendChoiceResult(
-                passBy,
-                `观测残样兑换：灵石 +${goldBonus}，命环经验 +${riskyRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`
-            );
-            break;
-        }
-        default:
-            break;
-    }
+        appendChoiceResult(enterMarket, `观测网提前标记货单：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`);
+        addChoiceEffects(passBy, [...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: goldBonus
+        }] : []), ...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : []), ...(insightBonus > 0 ? [{
+          type: 'heavenlyInsight',
+          value: insightBonus
+        }] : [])]);
+        appendChoiceResult(passBy, `观测残样兑换：灵石 +${goldBonus}，命环经验 +${riskyRingBonus}${insightBonus > 0 ? `，天机 +${insightBonus}` : ''}`);
+        break;
+      }
+    default:
+      break;
+  }
 }
-
-function applyMemoryRiftEngineeringAugment(event, context = null) {
-    const tier = Math.max(0, Math.floor(Number(context?.tier) || 0));
-    const ringBonus = getTierScaledValue([0, 12, 18, 26], tier, 0);
-    const riskyRingBonus = getTierScaledValue([0, 8, 12, 18], tier, 0);
-    const goldBonus = getTierScaledValue([0, 10, 16, 24], tier, 0);
-    const shopDiscount = getTierScaledValue([1, 0.95, 0.9, 0.86], tier, 1);
-    const expBuffCharges = getTierScaledValue([0, 1, 1, 2], tier, 0);
-
-    switch (event?.id) {
-        case 'floatingMarketRift': {
-            const enterMarket = getEventChoice(event, 0);
-            const passBy = getEventChoice(event, 1);
-            const shopEffect = Array.isArray(enterMarket?.effects)
-                ? enterMarket.effects.find((effect) => effect && effect.type === 'openTemporaryShop')
-                : null;
-            if (shopEffect) {
-                shopEffect.offerCount = Math.max(3, Math.min(5, Math.floor(Number(shopEffect.offerCount) || 3) + 1));
-                shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier))
-                    ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount)
-                    : shopDiscount;
-            }
-            appendChoiceResult(
-                enterMarket,
-                `裂隙回响扩张货位：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`
-            );
-            addChoiceEffects(passBy, [
-                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : []),
-                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : [])
-            ]);
-            appendChoiceResult(
-                passBy,
-                `裂隙残章回收：额外灵石 +${goldBonus}，命环经验 +${riskyRingBonus}`
-            );
-            break;
+export function applyMemoryRiftEngineeringAugment(event, context = null) {
+  const tier = Math.max(0, Math.floor(Number(context?.tier) || 0));
+  const ringBonus = getTierScaledValue([0, 12, 18, 26], tier, 0);
+  const riskyRingBonus = getTierScaledValue([0, 8, 12, 18], tier, 0);
+  const goldBonus = getTierScaledValue([0, 10, 16, 24], tier, 0);
+  const shopDiscount = getTierScaledValue([1, 0.95, 0.9, 0.86], tier, 1);
+  const expBuffCharges = getTierScaledValue([0, 1, 1, 2], tier, 0);
+  switch (event?.id) {
+    case 'floatingMarketRift':
+      {
+        const enterMarket = getEventChoice(event, 0);
+        const passBy = getEventChoice(event, 1);
+        const shopEffect = Array.isArray(enterMarket?.effects) ? enterMarket.effects.find(effect => effect && effect.type === 'openTemporaryShop') : null;
+        if (shopEffect) {
+          shopEffect.offerCount = Math.max(3, Math.min(5, Math.floor(Number(shopEffect.offerCount) || 3) + 1));
+          shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier)) ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount) : shopDiscount;
         }
-        case 'astralSupplyDepot': {
-            const enterDepot = getEventChoice(event, 0);
-            const stipend = getEventChoice(event, 1);
-            const shopEffect = Array.isArray(enterDepot?.effects)
-                ? enterDepot.effects.find((effect) => effect && effect.type === 'openTemporaryShop')
-                : null;
-            if (shopEffect) {
-                shopEffect.offerCount = Math.max(4, Math.min(6, Math.floor(Number(shopEffect.offerCount) || 4) + 1));
-                shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier))
-                    ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount)
-                    : shopDiscount;
-            }
-            appendChoiceResult(
-                enterDepot,
-                `裂隙回响先做重配：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`
-            );
-            addChoiceEffects(stipend, [
-                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : []),
-                ...(ringBonus > 0 ? [{ type: 'ringExp', value: ringBonus }] : [])
-            ]);
-            appendChoiceResult(
-                stipend,
-                `裂隙补贴回收：灵石 +${goldBonus}，命环经验 +${ringBonus}`
-            );
-            break;
+        appendChoiceResult(enterMarket, `裂隙回响扩张货位：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`);
+        addChoiceEffects(passBy, [...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: goldBonus
+        }] : []), ...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : [])]);
+        appendChoiceResult(passBy, `裂隙残章回收：额外灵石 +${goldBonus}，命环经验 +${riskyRingBonus}`);
+        break;
+      }
+    case 'astralSupplyDepot':
+      {
+        const enterDepot = getEventChoice(event, 0);
+        const stipend = getEventChoice(event, 1);
+        const shopEffect = Array.isArray(enterDepot?.effects) ? enterDepot.effects.find(effect => effect && effect.type === 'openTemporaryShop') : null;
+        if (shopEffect) {
+          shopEffect.offerCount = Math.max(4, Math.min(6, Math.floor(Number(shopEffect.offerCount) || 4) + 1));
+          shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier)) ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount) : shopDiscount;
         }
-        case 'voidRift': {
-            const delve = getEventChoice(event, 0);
-            const seal = getEventChoice(event, 1);
-            addChoiceEffects(delve, [
-                ...(goldBonus > 0 ? [{ type: 'gold', value: Math.max(8, Math.floor(goldBonus * 0.75)) }] : []),
-                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : [])
-            ]);
-            appendChoiceResult(
-                delve,
-                `裂隙样本被强制回收：灵石 +${Math.max(8, Math.floor(goldBonus * 0.75))}，命环经验 +${riskyRingBonus}`
-            );
-            addChoiceEffects(seal, [
-                ...(ringBonus > 0 ? [{ type: 'ringExp', value: ringBonus }] : []),
-                ...(expBuffCharges > 0 ? [{ type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: expBuffCharges }] : [])
-            ]);
-            appendChoiceResult(
-                seal,
-                `裂隙封印额外回灌：命环经验 +${ringBonus}${expBuffCharges > 0 ? `，命环经验增益 ${expBuffCharges} 场` : ''}`
-            );
-            break;
+        appendChoiceResult(enterDepot, `裂隙回响先做重配：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`);
+        addChoiceEffects(stipend, [...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: goldBonus
+        }] : []), ...(ringBonus > 0 ? [{
+          type: 'ringExp',
+          value: ringBonus
+        }] : [])]);
+        appendChoiceResult(stipend, `裂隙补贴回收：灵石 +${goldBonus}，命环经验 +${ringBonus}`);
+        break;
+      }
+    case 'voidRift':
+      {
+        const delve = getEventChoice(event, 0);
+        const seal = getEventChoice(event, 1);
+        addChoiceEffects(delve, [...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: Math.max(8, Math.floor(goldBonus * 0.75))
+        }] : []), ...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : [])]);
+        appendChoiceResult(delve, `裂隙样本被强制回收：灵石 +${Math.max(8, Math.floor(goldBonus * 0.75))}，命环经验 +${riskyRingBonus}`);
+        addChoiceEffects(seal, [...(ringBonus > 0 ? [{
+          type: 'ringExp',
+          value: ringBonus
+        }] : []), ...(expBuffCharges > 0 ? [{
+          type: 'adventureBuff',
+          buffId: 'ringExpBoostBattles',
+          charges: expBuffCharges
+        }] : [])]);
+        appendChoiceResult(seal, `裂隙封印额外回灌：命环经验 +${ringBonus}${expBuffCharges > 0 ? `，命环经验增益 ${expBuffCharges} 场` : ''}`);
+        break;
+      }
+    case 'voidBookkeeper':
+      {
+        const signLedger = getEventChoice(event, 0);
+        const borrowTempo = getEventChoice(event, 1);
+        addChoiceEffects(signLedger, [...(ringBonus > 0 ? [{
+          type: 'ringExp',
+          value: Math.max(8, Math.floor(ringBonus * 0.72))
+        }] : []), ...(expBuffCharges > 0 ? [{
+          type: 'adventureBuff',
+          buffId: 'ringExpBoostBattles',
+          charges: 1
+        }] : [])]);
+        appendChoiceResult(signLedger, `裂隙账目留下残章：命环经验 +${Math.max(8, Math.floor(ringBonus * 0.72))}${expBuffCharges > 0 ? '，额外获得 1 层命环经验增益' : ''}`);
+        addChoiceEffects(borrowTempo, [...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: goldBonus
+        }] : []), ...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : [])]);
+        appendChoiceResult(borrowTempo, `裂隙账页兑现溢价：灵石 +${goldBonus}，命环经验 +${riskyRingBonus}`);
+        break;
+      }
+    case 'ashLedgerTrial':
+      {
+        const cashOut = getEventChoice(event, 0);
+        const steadyNote = getEventChoice(event, 1);
+        addChoiceEffects(cashOut, [...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : []), ...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: Math.max(8, Math.floor(goldBonus * 0.75))
+        }] : [])]);
+        appendChoiceResult(cashOut, `裂隙页边注追加：命环经验 +${riskyRingBonus}，灵石 +${Math.max(8, Math.floor(goldBonus * 0.75))}`);
+        addChoiceEffects(steadyNote, [...(ringBonus > 0 ? [{
+          type: 'ringExp',
+          value: Math.max(12, Math.floor(ringBonus * 0.75))
+        }] : []), ...(expBuffCharges > 0 ? [{
+          type: 'adventureBuff',
+          buffId: 'ringExpBoostBattles',
+          charges: expBuffCharges
+        }] : [])]);
+        appendChoiceResult(steadyNote, `裂隙校对补偿：额外命环经验 +${Math.max(12, Math.floor(ringBonus * 0.75))}${expBuffCharges > 0 ? `，命环经验增益 ${expBuffCharges} 场` : ''}`);
+        break;
+      }
+    case 'convergenceRitual':
+      {
+        const converge = getEventChoice(event, 0);
+        const dismantle = getEventChoice(event, 1);
+        addChoiceEffects(converge, [...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : []), ...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: Math.max(6, Math.floor(goldBonus * 0.6))
+        }] : [])]);
+        appendChoiceResult(converge, `裂隙压缩残响：命环经验 +${riskyRingBonus}，灵石 +${Math.max(6, Math.floor(goldBonus * 0.6))}`);
+        addChoiceEffects(dismantle, [...(ringBonus > 0 ? [{
+          type: 'ringExp',
+          value: Math.max(12, Math.floor(ringBonus * 0.7))
+        }] : []), ...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: goldBonus
+        }] : [])]);
+        appendChoiceResult(dismantle, `裂隙拆解回收：额外命环经验 +${Math.max(12, Math.floor(ringBonus * 0.7))}，灵石 +${goldBonus}`);
+        break;
+      }
+    case 'frontierContractBoard':
+      {
+        const signContract = getEventChoice(event, 0);
+        const observe = getEventChoice(event, 1);
+        addChoiceEffects(signContract, [...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: Math.max(8, Math.floor(goldBonus * 0.75))
+        }] : []), ...(expBuffCharges > 0 ? [{
+          type: 'adventureBuff',
+          buffId: 'ringExpBoostBattles',
+          charges: 1
+        }] : [])]);
+        appendChoiceResult(signContract, `裂隙情报返利：额外灵石 +${Math.max(8, Math.floor(goldBonus * 0.75))}${expBuffCharges > 0 ? '，并获得 1 层命环经验增益' : ''}`);
+        addChoiceEffects(observe, [...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: goldBonus
+        }] : []), ...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : [])]);
+        appendChoiceResult(observe, `裂隙旁观记录：额外灵石 +${goldBonus}，命环经验 +${riskyRingBonus}`);
+        break;
+      }
+    case 'artifactConfluxBazaar':
+      {
+        const enterMarket = getEventChoice(event, 0);
+        const stipend = getEventChoice(event, 1);
+        const shopEffect = Array.isArray(enterMarket?.effects) ? enterMarket.effects.find(effect => effect && effect.type === 'openTemporaryShop') : null;
+        if (shopEffect) {
+          shopEffect.offerCount = Math.max(3, Math.min(5, Math.floor(Number(shopEffect.offerCount) || 4) + 1));
+          shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier)) ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount) : shopDiscount;
         }
-        case 'voidBookkeeper': {
-            const signLedger = getEventChoice(event, 0);
-            const borrowTempo = getEventChoice(event, 1);
-            addChoiceEffects(signLedger, [
-                ...(ringBonus > 0 ? [{ type: 'ringExp', value: Math.max(8, Math.floor(ringBonus * 0.72)) }] : []),
-                ...(expBuffCharges > 0 ? [{ type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: 1 }] : [])
-            ]);
-            appendChoiceResult(
-                signLedger,
-                `裂隙账目留下残章：命环经验 +${Math.max(8, Math.floor(ringBonus * 0.72))}${expBuffCharges > 0 ? '，额外获得 1 层命环经验增益' : ''}`
-            );
-            addChoiceEffects(borrowTempo, [
-                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : []),
-                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : [])
-            ]);
-            appendChoiceResult(
-                borrowTempo,
-                `裂隙账页兑现溢价：灵石 +${goldBonus}，命环经验 +${riskyRingBonus}`
-            );
-            break;
-        }
-        case 'ashLedgerTrial': {
-            const cashOut = getEventChoice(event, 0);
-            const steadyNote = getEventChoice(event, 1);
-            addChoiceEffects(cashOut, [
-                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
-                ...(goldBonus > 0 ? [{ type: 'gold', value: Math.max(8, Math.floor(goldBonus * 0.75)) }] : [])
-            ]);
-            appendChoiceResult(
-                cashOut,
-                `裂隙页边注追加：命环经验 +${riskyRingBonus}，灵石 +${Math.max(8, Math.floor(goldBonus * 0.75))}`
-            );
-            addChoiceEffects(steadyNote, [
-                ...(ringBonus > 0 ? [{ type: 'ringExp', value: Math.max(12, Math.floor(ringBonus * 0.75)) }] : []),
-                ...(expBuffCharges > 0 ? [{ type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: expBuffCharges }] : [])
-            ]);
-            appendChoiceResult(
-                steadyNote,
-                `裂隙校对补偿：额外命环经验 +${Math.max(12, Math.floor(ringBonus * 0.75))}${expBuffCharges > 0 ? `，命环经验增益 ${expBuffCharges} 场` : ''}`
-            );
-            break;
-        }
-        case 'convergenceRitual': {
-            const converge = getEventChoice(event, 0);
-            const dismantle = getEventChoice(event, 1);
-            addChoiceEffects(converge, [
-                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
-                ...(goldBonus > 0 ? [{ type: 'gold', value: Math.max(6, Math.floor(goldBonus * 0.6)) }] : [])
-            ]);
-            appendChoiceResult(
-                converge,
-                `裂隙压缩残响：命环经验 +${riskyRingBonus}，灵石 +${Math.max(6, Math.floor(goldBonus * 0.6))}`
-            );
-            addChoiceEffects(dismantle, [
-                ...(ringBonus > 0 ? [{ type: 'ringExp', value: Math.max(12, Math.floor(ringBonus * 0.7)) }] : []),
-                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : [])
-            ]);
-            appendChoiceResult(
-                dismantle,
-                `裂隙拆解回收：额外命环经验 +${Math.max(12, Math.floor(ringBonus * 0.7))}，灵石 +${goldBonus}`
-            );
-            break;
-        }
-        case 'frontierContractBoard': {
-            const signContract = getEventChoice(event, 0);
-            const observe = getEventChoice(event, 1);
-            addChoiceEffects(signContract, [
-                ...(goldBonus > 0 ? [{ type: 'gold', value: Math.max(8, Math.floor(goldBonus * 0.75)) }] : []),
-                ...(expBuffCharges > 0 ? [{ type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: 1 }] : [])
-            ]);
-            appendChoiceResult(
-                signContract,
-                `裂隙情报返利：额外灵石 +${Math.max(8, Math.floor(goldBonus * 0.75))}${expBuffCharges > 0 ? '，并获得 1 层命环经验增益' : ''}`
-            );
-            addChoiceEffects(observe, [
-                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : []),
-                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : [])
-            ]);
-            appendChoiceResult(
-                observe,
-                `裂隙旁观记录：额外灵石 +${goldBonus}，命环经验 +${riskyRingBonus}`
-            );
-            break;
-        }
-        case 'artifactConfluxBazaar': {
-            const enterMarket = getEventChoice(event, 0);
-            const stipend = getEventChoice(event, 1);
-            const shopEffect = Array.isArray(enterMarket?.effects)
-                ? enterMarket.effects.find((effect) => effect && effect.type === 'openTemporaryShop')
-                : null;
-            if (shopEffect) {
-                shopEffect.offerCount = Math.max(3, Math.min(5, Math.floor(Number(shopEffect.offerCount) || 4) + 1));
-                shopEffect.priceMultiplier = Number.isFinite(Number(shopEffect.priceMultiplier))
-                    ? Math.min(Number(shopEffect.priceMultiplier), shopDiscount)
-                    : shopDiscount;
-            }
-            appendChoiceResult(
-                enterMarket,
-                `裂隙回响重排货单：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`
-            );
-            addChoiceEffects(stipend, [
-                ...(goldBonus > 0 ? [{ type: 'gold', value: goldBonus }] : []),
-                ...(ringBonus > 0 ? [{ type: 'ringExp', value: Math.max(8, Math.floor(ringBonus * 0.78)) }] : [])
-            ]);
-            appendChoiceResult(
-                stipend,
-                `裂隙回收补贴：额外灵石 +${goldBonus}，命环经验 +${Math.max(8, Math.floor(ringBonus * 0.78))}`
-            );
-            break;
-        }
-        case 'convergenceRelay': {
-            const calibrate = getEventChoice(event, 0);
-            const overload = getEventChoice(event, 1);
-            addChoiceEffects(calibrate, [
-                ...(ringBonus > 0 ? [{ type: 'ringExp', value: ringBonus }] : []),
-                ...(expBuffCharges > 0 ? [{ type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: expBuffCharges }] : [])
-            ]);
-            appendChoiceResult(
-                calibrate,
-                `裂隙回响并轨：命环经验 +${ringBonus}${expBuffCharges > 0 ? `，命环经验增益 ${expBuffCharges} 场` : ''}`
-            );
-            addChoiceEffects(overload, [
-                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
-                ...(goldBonus > 0 ? [{ type: 'gold', value: Math.max(8, Math.floor(goldBonus * 0.75)) }] : [])
-            ]);
-            appendChoiceResult(
-                overload,
-                `高压裂隙回灌：命环经验 +${riskyRingBonus}，灵石 +${Math.max(8, Math.floor(goldBonus * 0.75))}`
-            );
-            break;
-        }
-        case 'harmonicAnvil': {
-            const stableForge = getEventChoice(event, 0);
-            const overloadForge = getEventChoice(event, 1);
-            addChoiceEffects(stableForge, [
-                ...(ringBonus > 0 ? [{ type: 'ringExp', value: Math.max(10, Math.floor(ringBonus * 0.85)) }] : []),
-                ...(expBuffCharges > 0 ? [{ type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: expBuffCharges }] : [])
-            ], { prepend: true });
-            appendChoiceResult(
-                stableForge,
-                `裂隙锻环写回：命环经验 +${Math.max(10, Math.floor(ringBonus * 0.85))}${expBuffCharges > 0 ? `，命环经验增益 ${expBuffCharges} 场` : ''}`
-            );
-            addChoiceEffects(overloadForge, [
-                ...(riskyRingBonus > 0 ? [{ type: 'ringExp', value: riskyRingBonus }] : []),
-                ...(expBuffCharges > 0 ? [{ type: 'adventureBuff', buffId: 'ringExpBoostBattles', charges: 1 }] : [])
-            ]);
-            appendChoiceResult(
-                overloadForge,
-                `裂隙熔接回响：命环经验 +${riskyRingBonus}${expBuffCharges > 0 ? '，额外获得 1 层命环经验增益' : ''}`
-            );
-            break;
-        }
-        default:
-            break;
-    }
+        appendChoiceResult(enterMarket, `裂隙回响重排货单：额外货位 +1，折价 ${Math.round((1 - shopDiscount) * 100)}%`);
+        addChoiceEffects(stipend, [...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: goldBonus
+        }] : []), ...(ringBonus > 0 ? [{
+          type: 'ringExp',
+          value: Math.max(8, Math.floor(ringBonus * 0.78))
+        }] : [])]);
+        appendChoiceResult(stipend, `裂隙回收补贴：额外灵石 +${goldBonus}，命环经验 +${Math.max(8, Math.floor(ringBonus * 0.78))}`);
+        break;
+      }
+    case 'convergenceRelay':
+      {
+        const calibrate = getEventChoice(event, 0);
+        const overload = getEventChoice(event, 1);
+        addChoiceEffects(calibrate, [...(ringBonus > 0 ? [{
+          type: 'ringExp',
+          value: ringBonus
+        }] : []), ...(expBuffCharges > 0 ? [{
+          type: 'adventureBuff',
+          buffId: 'ringExpBoostBattles',
+          charges: expBuffCharges
+        }] : [])]);
+        appendChoiceResult(calibrate, `裂隙回响并轨：命环经验 +${ringBonus}${expBuffCharges > 0 ? `，命环经验增益 ${expBuffCharges} 场` : ''}`);
+        addChoiceEffects(overload, [...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : []), ...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: Math.max(8, Math.floor(goldBonus * 0.75))
+        }] : [])]);
+        appendChoiceResult(overload, `高压裂隙回灌：命环经验 +${riskyRingBonus}，灵石 +${Math.max(8, Math.floor(goldBonus * 0.75))}`);
+        break;
+      }
+    case 'harmonicAnvil':
+      {
+        const stableForge = getEventChoice(event, 0);
+        const overloadForge = getEventChoice(event, 1);
+        addChoiceEffects(stableForge, [...(ringBonus > 0 ? [{
+          type: 'ringExp',
+          value: Math.max(10, Math.floor(ringBonus * 0.85))
+        }] : []), ...(expBuffCharges > 0 ? [{
+          type: 'adventureBuff',
+          buffId: 'ringExpBoostBattles',
+          charges: expBuffCharges
+        }] : [])], {
+          prepend: true
+        });
+        appendChoiceResult(stableForge, `裂隙锻环写回：命环经验 +${Math.max(10, Math.floor(ringBonus * 0.85))}${expBuffCharges > 0 ? `，命环经验增益 ${expBuffCharges} 场` : ''}`);
+        addChoiceEffects(overloadForge, [...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : []), ...(expBuffCharges > 0 ? [{
+          type: 'adventureBuff',
+          buffId: 'ringExpBoostBattles',
+          charges: 1
+        }] : [])]);
+        appendChoiceResult(overloadForge, `裂隙熔接回响：命环经验 +${riskyRingBonus}${expBuffCharges > 0 ? '，额外获得 1 层命环经验增益' : ''}`);
+        break;
+      }
+    default:
+      break;
+  }
 }
-
-function applyStrategicEngineeringEventAugment(event, context = null, options = {}) {
-    if (!event || !context) return event;
-    if (event.engineeringEventMeta && event.engineeringEventMeta.trackId === context.trackId) {
-        return event;
-    }
-    markStrategicEngineeringEventMeta(event, context, options);
-    if (context.trackId === 'observatory') {
-        applyObservatoryEngineeringAugment(event, context);
-    } else if (context.trackId === 'memory_rift') {
-        applyMemoryRiftEngineeringAugment(event, context);
-    }
+export function applyStrategicEngineeringEventAugment(event, context = null, options = {}) {
+  if (!event || !context) return event;
+  if (event.engineeringEventMeta && event.engineeringEventMeta.trackId === context.trackId) {
     return event;
+  }
+  markStrategicEngineeringEventMeta(event, context, options);
+  if (context.trackId === 'observatory') {
+    applyObservatoryEngineeringAugment(event, context);
+  } else if (context.trackId === 'memory_rift') {
+    applyMemoryRiftEngineeringAugment(event, context);
+  }
+  return event;
 }
-
-function finalizeRuntimeEvent(event, options = {}) {
-    if (!event || typeof event !== 'object') return null;
-    const engineeringContext = options.engineeringContext === undefined
-        ? getStrategicEngineeringEventContext()
-        : options.engineeringContext;
-    if (
-        engineeringContext
-        && Array.isArray(engineeringContext.eventPool)
-        && engineeringContext.eventPool.includes(event.id)
-    ) {
-        return applyStrategicEngineeringEventAugment(event, engineeringContext, options);
-    }
-    return event;
+export function finalizeRuntimeEvent(event, options = {}) {
+  if (!event || typeof event !== 'object') return null;
+  const engineeringContext = options.engineeringContext === undefined ? getStrategicEngineeringEventContext() : options.engineeringContext;
+  if (engineeringContext && Array.isArray(engineeringContext.eventPool) && engineeringContext.eventPool.includes(event.id)) {
+    return applyStrategicEngineeringEventAugment(event, engineeringContext, options);
+  }
+  return event;
 }
+export function canUseDebugEventHooks() {
+  if (typeof window === 'undefined') return false;
+  const runtimeGame = getRuntimeGame();
+  if (typeof window !== 'undefined' && typeof window.__ALLOW_DEBUG_EVENT_HOOKS__ !== 'undefined' && window.__ALLOW_DEBUG_EVENT_HOOKS__ === true) return true;
+  const host = window.location && window.location.hostname;
+  const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  const isGameDebugMode = !!(runtimeGame && runtimeGame.debugMode);
+  return isLocalHost || isGameDebugMode;
+} // 获取随机事件
+export function getRandomEvent() {
+  const engineeringContext = getStrategicEngineeringEventContext();
+  const runtimeGame = getRuntimeGame();
 
-function canUseDebugEventHooks() {
-    if (typeof window === 'undefined') return false;
-    if (window.__ALLOW_DEBUG_EVENT_HOOKS__ === true) return true;
-    const host = window.location && window.location.hostname;
-    const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
-    const isGameDebugMode = !!(window.game && window.game.debugMode);
-    return isLocalHost || isGameDebugMode;
-}
-
-// 获取随机事件
-function getRandomEvent() {
-    const engineeringContext = getStrategicEngineeringEventContext();
-
-    // Test hook: allow deterministic event replay in browser audits
-    if (canUseDebugEventHooks()) {
-        if (Array.isArray(window.__debugEventQueue) && window.__debugEventQueue.length > 0) {
-            const forcedId = window.__debugEventQueue.shift();
-            if (forcedId && EVENTS[forcedId]) {
-                return finalizeRuntimeEvent(cloneEventTemplate(forcedId), {
-                    engineeringContext,
-                    source: 'debug-forced'
-                });
-            }
-        }
-        if (window.__debugEventId && EVENTS[window.__debugEventId]) {
-            return finalizeRuntimeEvent(cloneEventTemplate(window.__debugEventId), {
-                engineeringContext,
-                source: 'debug-single'
-            });
-        }
-    }
-
-    let endlessActive = false;
-    let endlessCycle = 0;
-    let endlessMutators = [];
-    try {
-        endlessActive = !!(window && window.game && typeof window.game.isEndlessActive === 'function' && window.game.isEndlessActive());
-        const endlessState = window?.game?.ensureEndlessState?.() || {};
-        endlessCycle = Math.max(0, Math.floor(Number(endlessState.currentCycle) || 0));
-        endlessMutators = Array.isArray(endlessState.activeMutators)
-            ? endlessState.activeMutators.filter((id) => typeof id === 'string')
-            : [];
-    } catch (e) {
-        endlessActive = false;
-        endlessCycle = 0;
-        endlessMutators = [];
-    }
-    if (endlessActive) {
-        if (endlessMutators.length > 0 && Math.random() < 0.38) {
-            const biasPool = [];
-            endlessMutators.forEach((mutatorId) => {
-                const mapped = ENDLESS_MUTATOR_EVENT_BIAS[mutatorId];
-                if (!Array.isArray(mapped)) return;
-                mapped.forEach((eventId) => {
-                    if (EVENTS[eventId]) biasPool.push(eventId);
-                });
-            });
-            if (biasPool.length > 0) {
-                const uniquePool = Array.from(new Set(biasPool));
-                const forcedId = uniquePool[Math.floor(Math.random() * uniquePool.length)];
-                if (forcedId && EVENTS[forcedId]) {
-                    return finalizeRuntimeEvent(cloneEventTemplate(forcedId), {
-                        engineeringContext,
-                        source: 'endless-mutator'
-                    });
-                }
-            }
-        }
-        const endlessRoll = Math.random();
-        if (endlessRoll < 0.42) {
-            const rareRate = Math.min(0.42, 0.18 + endlessCycle * 0.015);
-            const chooseRare = Math.random() < rareRate;
-            const endlessPool = chooseRare ? ENDLESS_EVENT_POOL.rare : ENDLESS_EVENT_POOL.common;
-            if (Array.isArray(endlessPool) && endlessPool.length > 0) {
-                const endlessEventId = endlessPool[Math.floor(Math.random() * endlessPool.length)];
-                if (EVENTS[endlessEventId]) {
-                    return finalizeRuntimeEvent(cloneEventTemplate(endlessEventId), {
-                        engineeringContext,
-                        source: 'endless-pool'
-                    });
-                }
-            }
-        }
-    }
-
-    const chapterComposerContext = getChapterEventComposerContext();
-    if (chapterComposerContext && Math.random() < chapterComposerContext.composeChance) {
-        const composedEvent = getComposedChapterEvent(chapterComposerContext);
-        if (composedEvent) {
-            return finalizeRuntimeEvent(composedEvent, {
-                engineeringContext,
-                source: 'chapter-composer'
-            });
-        }
-    }
-
-    // 牌组成型后，事件投放向对应流派轻度偏置，提升构筑连贯性
-    // 命环路径偏置：使路径玩法在地图层面有更明显的持续反馈
-    let preferredPath = null;
-    let pathDoctrineTier = 0;
-    try {
-        preferredPath = window?.game?.player?.fateRing?.path || null;
-        const doctrineProfile = window?.game?.player?.getPathDoctrineProfile?.() || null;
-        if (doctrineProfile && typeof doctrineProfile === 'object') {
-            if (!preferredPath && typeof doctrineProfile.path === 'string') {
-                preferredPath = doctrineProfile.path;
-            }
-            if (doctrineProfile.path === preferredPath) {
-                pathDoctrineTier = Math.max(0, Math.floor(Number(doctrineProfile.tier) || 0));
-            }
-        }
-    } catch (e) {
-        preferredPath = null;
-        pathDoctrineTier = 0;
-    }
-    const pathPool = preferredPath && FATE_PATH_EVENT_POOLS[preferredPath]
-        ? FATE_PATH_EVENT_POOLS[preferredPath].filter(id => !!EVENTS[id])
-        : [];
-    const pathBiasChance = Math.min(
-        0.62,
-        0.28 + pathDoctrineTier * 0.07 + (preferredPath === 'wisdom' ? pathDoctrineTier * 0.02 : 0)
-    );
-    if (pathPool.length > 0 && Math.random() < pathBiasChance) {
-        const pathEventId = pathPool[Math.floor(Math.random() * pathPool.length)];
-        return finalizeRuntimeEvent(cloneEventTemplate(pathEventId), {
-            engineeringContext,
-            source: 'fate-path-bias'
+  // Test hook: allow deterministic event replay in browser audits
+  if (canUseDebugEventHooks()) {
+    if (typeof window !== 'undefined' && Array.isArray(window.__debugEventQueue) && window.__debugEventQueue.length > 0) {
+      const forcedId = window.__debugEventQueue.shift();
+      if (forcedId && EVENTS[forcedId]) {
+        return finalizeRuntimeEvent(cloneEventTemplate(forcedId), {
+          engineeringContext,
+          source: 'debug-forced'
         });
+      }
     }
-
-    let activeRunPathMeta = null;
-    let activeRunPathProgress = null;
-    try {
-        activeRunPathMeta = window?.game?.player?.getRunPathMeta?.() || null;
-        activeRunPathProgress = activeRunPathMeta?.progress || null;
-    } catch (e) {
-        activeRunPathMeta = null;
-        activeRunPathProgress = null;
-    }
-    const runPathPool = Array.isArray(activeRunPathMeta?.eventPool)
-        ? activeRunPathMeta.eventPool.filter((id) => !!EVENTS[id])
-        : [];
-    const runPathMutationPool = Array.isArray(activeRunPathMeta?.mutationEventPool)
-        ? activeRunPathMeta.mutationEventPool.filter((id) => !!EVENTS[id])
-        : [];
-    const runPathPhaseIndex = Math.max(0, Math.floor(Number(activeRunPathMeta?.phaseIndex) || 0));
-    const runPathCompletedPhases = Array.isArray(activeRunPathProgress?.completedPhases)
-        ? activeRunPathProgress.completedPhases.length
-        : 0;
-    const runPathMutationBiasChance = Math.min(
-        0.72,
-        0.4 + runPathPhaseIndex * 0.05 + runPathCompletedPhases * 0.04 + (activeRunPathProgress?.completed ? 0.05 : 0)
-    );
-    if (runPathMutationPool.length > 0 && Math.random() < runPathMutationBiasChance) {
-        const runPathMutationEventId = runPathMutationPool[Math.floor(Math.random() * runPathMutationPool.length)];
-        return finalizeRuntimeEvent(cloneEventTemplate(runPathMutationEventId), {
-            engineeringContext,
-            source: 'run-path-mutation-bias'
-        });
-    }
-    const runPathBiasChance = Math.min(
-        0.58,
-        0.3 + runPathPhaseIndex * 0.08 + runPathCompletedPhases * 0.03 + (activeRunPathProgress?.completed ? 0.04 : 0) + (runPathMutationPool.length > 0 ? 0.04 : 0)
-    );
-    if (runPathPool.length > 0 && Math.random() < runPathBiasChance) {
-        const runPathEventId = runPathPool[Math.floor(Math.random() * runPathPool.length)];
-        return finalizeRuntimeEvent(cloneEventTemplate(runPathEventId), {
-            engineeringContext,
-            source: 'run-path-bias'
-        });
-    }
-
-    if (engineeringContext && engineeringContext.eventPool.length > 0 && Math.random() < engineeringContext.biasChance) {
-        const engineeringEventId = engineeringContext.eventPool[Math.floor(Math.random() * engineeringContext.eventPool.length)];
-        return finalizeRuntimeEvent(cloneEventTemplate(engineeringEventId), {
-            engineeringContext,
-            source: 'engineering-bias'
-        });
-    }
-
-    // 牌组成型后，事件投放向对应流派轻度偏置，提升构筑连贯性
-    let preferredArchetype = null;
-    try {
-        const deck = window && window.game && window.game.player ? window.game.player.deck : null;
-        if (Array.isArray(deck) && deck.length > 0 && typeof inferDeckArchetype === 'function') {
-            preferredArchetype = inferDeckArchetype(deck);
-        }
-    } catch (e) {
-        preferredArchetype = null;
-    }
-    const archetypePool = preferredArchetype && ARCHETYPE_EVENT_POOLS[preferredArchetype]
-        ? ARCHETYPE_EVENT_POOLS[preferredArchetype].filter(id => !!EVENTS[id])
-        : [];
-    const archetypeBiasBoost = (preferredPath === 'wisdom' && pathDoctrineTier > 0)
-        ? pathDoctrineTier * 0.05
-        : 0;
-    if (archetypePool.length > 0 && Math.random() < Math.min(0.6, 0.35 + archetypeBiasBoost)) {
-        const boostedId = archetypePool[Math.floor(Math.random() * archetypePool.length)];
-        return finalizeRuntimeEvent(cloneEventTemplate(boostedId), {
-            engineeringContext,
-            source: 'archetype-bias'
-        });
-    }
-
-    const roll = Math.random();
-    let pool;
-
-    if (roll < 0.4) pool = EVENT_POOL.common;
-    else if (roll < 0.7) pool = EVENT_POOL.uncommon;
-    else if (roll < 0.95) pool = EVENT_POOL.rare;
-    else pool = EVENT_POOL.special;
-
-    const eventId = pool[Math.floor(Math.random() * pool.length)];
-    // 中文注释：深拷贝事件，防止事件流程在运行时改写全局模板（尤其 choices/effects 数组）
-    return finalizeRuntimeEvent(cloneEventTemplate(eventId), {
+    if (typeof window !== 'undefined' && window.__debugEventId && EVENTS[window.__debugEventId]) {
+      return finalizeRuntimeEvent(cloneEventTemplate(window.__debugEventId), {
         engineeringContext,
-        source: 'base-pool'
+        source: 'debug-single'
+      });
+    }
+  }
+  let endlessActive = false;
+  let endlessCycle = 0;
+  let endlessMutators = [];
+  try {
+    endlessActive = !!(runtimeGame && typeof runtimeGame.isEndlessActive === 'function' && runtimeGame.isEndlessActive());
+    const endlessState = runtimeGame?.ensureEndlessState?.() || {};
+    endlessCycle = Math.max(0, Math.floor(Number(endlessState.currentCycle) || 0));
+    endlessMutators = Array.isArray(endlessState.activeMutators) ? endlessState.activeMutators.filter(id => typeof id === 'string') : [];
+  } catch (e) {
+    endlessActive = false;
+    endlessCycle = 0;
+    endlessMutators = [];
+  }
+  if (endlessActive) {
+    if (endlessMutators.length > 0 && Math.random() < 0.38) {
+      const biasPool = [];
+      endlessMutators.forEach(mutatorId => {
+        const mapped = ENDLESS_MUTATOR_EVENT_BIAS[mutatorId];
+        if (!Array.isArray(mapped)) return;
+        mapped.forEach(eventId => {
+          if (EVENTS[eventId]) biasPool.push(eventId);
+        });
+      });
+      if (biasPool.length > 0) {
+        const uniquePool = Array.from(new Set(biasPool));
+        const forcedId = uniquePool[Math.floor(Math.random() * uniquePool.length)];
+        if (forcedId && EVENTS[forcedId]) {
+          return finalizeRuntimeEvent(cloneEventTemplate(forcedId), {
+            engineeringContext,
+            source: 'endless-mutator'
+          });
+        }
+      }
+    }
+    const endlessRoll = Math.random();
+    if (endlessRoll < 0.42) {
+      const rareRate = Math.min(0.42, 0.18 + endlessCycle * 0.015);
+      const chooseRare = Math.random() < rareRate;
+      const endlessPool = chooseRare ? ENDLESS_EVENT_POOL.rare : ENDLESS_EVENT_POOL.common;
+      if (Array.isArray(endlessPool) && endlessPool.length > 0) {
+        const endlessEventId = endlessPool[Math.floor(Math.random() * endlessPool.length)];
+        if (EVENTS[endlessEventId]) {
+          return finalizeRuntimeEvent(cloneEventTemplate(endlessEventId), {
+            engineeringContext,
+            source: 'endless-pool'
+          });
+        }
+      }
+    }
+  }
+  const chapterComposerContext = getChapterEventComposerContext();
+  if (chapterComposerContext && Math.random() < chapterComposerContext.composeChance) {
+    const composedEvent = getComposedChapterEvent(chapterComposerContext);
+    if (composedEvent) {
+      return finalizeRuntimeEvent(composedEvent, {
+        engineeringContext,
+        source: 'chapter-composer'
+      });
+    }
+  }
+
+  // 牌组成型后，事件投放向对应流派轻度偏置，提升构筑连贯性
+  // 命环路径偏置：使路径玩法在地图层面有更明显的持续反馈
+  let preferredPath = null;
+  let pathDoctrineTier = 0;
+  try {
+    preferredPath = runtimeGame?.player?.fateRing?.path || null;
+    const doctrineProfile = runtimeGame?.player?.getPathDoctrineProfile?.() || null;
+    if (doctrineProfile && typeof doctrineProfile === 'object') {
+      if (!preferredPath && typeof doctrineProfile.path === 'string') {
+        preferredPath = doctrineProfile.path;
+      }
+      if (doctrineProfile.path === preferredPath) {
+        pathDoctrineTier = Math.max(0, Math.floor(Number(doctrineProfile.tier) || 0));
+      }
+    }
+  } catch (e) {
+    preferredPath = null;
+    pathDoctrineTier = 0;
+  }
+  const pathPool = preferredPath && FATE_PATH_EVENT_POOLS[preferredPath] ? FATE_PATH_EVENT_POOLS[preferredPath].filter(id => !!EVENTS[id]) : [];
+  const pathBiasChance = Math.min(0.62, 0.28 + pathDoctrineTier * 0.07 + (preferredPath === 'wisdom' ? pathDoctrineTier * 0.02 : 0));
+  if (pathPool.length > 0 && Math.random() < pathBiasChance) {
+    const pathEventId = pathPool[Math.floor(Math.random() * pathPool.length)];
+    return finalizeRuntimeEvent(cloneEventTemplate(pathEventId), {
+      engineeringContext,
+      source: 'fate-path-bias'
     });
+  }
+  let activeRunPathMeta = null;
+  let activeRunPathProgress = null;
+  try {
+    activeRunPathMeta = runtimeGame?.player?.getRunPathMeta?.() || null;
+    activeRunPathProgress = activeRunPathMeta?.progress || null;
+  } catch (e) {
+    activeRunPathMeta = null;
+    activeRunPathProgress = null;
+  }
+  const runPathPool = Array.isArray(activeRunPathMeta?.eventPool) ? activeRunPathMeta.eventPool.filter(id => !!EVENTS[id]) : [];
+  const runPathMutationPool = Array.isArray(activeRunPathMeta?.mutationEventPool) ? activeRunPathMeta.mutationEventPool.filter(id => !!EVENTS[id]) : [];
+  const runPathPhaseIndex = Math.max(0, Math.floor(Number(activeRunPathMeta?.phaseIndex) || 0));
+  const runPathCompletedPhases = Array.isArray(activeRunPathProgress?.completedPhases) ? activeRunPathProgress.completedPhases.length : 0;
+  const runPathMutationBiasChance = Math.min(0.72, 0.4 + runPathPhaseIndex * 0.05 + runPathCompletedPhases * 0.04 + (activeRunPathProgress?.completed ? 0.05 : 0));
+  if (runPathMutationPool.length > 0 && Math.random() < runPathMutationBiasChance) {
+    const runPathMutationEventId = runPathMutationPool[Math.floor(Math.random() * runPathMutationPool.length)];
+    return finalizeRuntimeEvent(cloneEventTemplate(runPathMutationEventId), {
+      engineeringContext,
+      source: 'run-path-mutation-bias'
+    });
+  }
+  const runPathBiasChance = Math.min(0.58, 0.3 + runPathPhaseIndex * 0.08 + runPathCompletedPhases * 0.03 + (activeRunPathProgress?.completed ? 0.04 : 0) + (runPathMutationPool.length > 0 ? 0.04 : 0));
+  if (runPathPool.length > 0 && Math.random() < runPathBiasChance) {
+    const runPathEventId = runPathPool[Math.floor(Math.random() * runPathPool.length)];
+    return finalizeRuntimeEvent(cloneEventTemplate(runPathEventId), {
+      engineeringContext,
+      source: 'run-path-bias'
+    });
+  }
+  if (engineeringContext && engineeringContext.eventPool.length > 0 && Math.random() < engineeringContext.biasChance) {
+    const engineeringEventId = engineeringContext.eventPool[Math.floor(Math.random() * engineeringContext.eventPool.length)];
+    return finalizeRuntimeEvent(cloneEventTemplate(engineeringEventId), {
+      engineeringContext,
+      source: 'engineering-bias'
+    });
+  }
+
+  // 牌组成型后，事件投放向对应流派轻度偏置，提升构筑连贯性
+  let preferredArchetype = null;
+  try {
+    const deck = runtimeGame?.player?.deck || null;
+    if (Array.isArray(deck) && deck.length > 0 && typeof inferDeckArchetype === 'function') {
+      preferredArchetype = inferDeckArchetype(deck);
+    }
+  } catch (e) {
+    preferredArchetype = null;
+  }
+  const archetypePool = preferredArchetype && ARCHETYPE_EVENT_POOLS[preferredArchetype] ? ARCHETYPE_EVENT_POOLS[preferredArchetype].filter(id => !!EVENTS[id]) : [];
+  const archetypeBiasBoost = preferredPath === 'wisdom' && pathDoctrineTier > 0 ? pathDoctrineTier * 0.05 : 0;
+  if (archetypePool.length > 0 && Math.random() < Math.min(0.6, 0.35 + archetypeBiasBoost)) {
+    const boostedId = archetypePool[Math.floor(Math.random() * archetypePool.length)];
+    return finalizeRuntimeEvent(cloneEventTemplate(boostedId), {
+      engineeringContext,
+      source: 'archetype-bias'
+    });
+  }
+  const roll = Math.random();
+  let pool;
+  if (roll < 0.4) pool = EVENT_POOL.common;else if (roll < 0.7) pool = EVENT_POOL.uncommon;else if (roll < 0.95) pool = EVENT_POOL.rare;else pool = EVENT_POOL.special;
+  const eventId = pool[Math.floor(Math.random() * pool.length)];
+  // 中文注释：深拷贝事件，防止事件流程在运行时改写全局模板（尤其 choices/effects 数组）
+  return finalizeRuntimeEvent(cloneEventTemplate(eventId), {
+    engineeringContext,
+    source: 'base-pool'
+  });
+}
+if (typeof window !== 'undefined') {
+  window.EVENTS = EVENTS;
+  window.getRandomEvent = getRandomEvent;
 }

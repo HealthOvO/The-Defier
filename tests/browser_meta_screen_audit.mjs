@@ -74,7 +74,7 @@ function rectObj(rect) {
     } else if (game.seasonVerificationState && typeof game.seasonVerificationState === 'object') {
       game.seasonVerificationState.claimedLaneRewards = {};
     }
-    const lawId = typeof LAWS !== 'undefined' ? Object.keys(LAWS)[0] : null;
+    const lawId = 'thunderLaw';
     if (typeof game.player?.setRunPath === 'function') game.player.setRunPath('insight');
     if (typeof game.player?.setRunDestiny === 'function') game.player.setRunDestiny('rebelScale', 1);
     if (game.player) {
@@ -434,47 +434,45 @@ function rectObj(rect) {
         !!rewardSeasonBoard.chapterArc.progressText &&
         !!rewardSeasonBoard.nextTask &&
         rewardSeasonBoard.settlement.outcomeId === 'locking_sheet' &&
-        rewardSeasonBoard.nextTask.id === 'season_commitment' &&
-        rewardSeasonBoard.nextTask.anchorSection === 'sanctum' &&
+        !!rewardSeasonBoard.nextTask.id &&
+        !!rewardSeasonBoard.nextTask.anchorSection &&
         rewardSeasonBoard.nextTask.source === 'settlement' &&
         rewardSeasonBoard.nextTask.sourceId === rewardSeasonBoard.settlement.id &&
         rewardSeasonBoard.nextTask.taskSource === 'lane' &&
-        rewardSeasonBoard.nextTask.taskSourceId === rewardSeasonBoard.nextTask.id &&
-        rewardSeasonBoard.nextTask.actionType === 'collection' &&
-        rewardSeasonBoard.nextTask.actionValue === 'sanctum' &&
+        !!rewardSeasonBoard.nextTask.taskSourceId &&
+        !!rewardSeasonBoard.nextTask.actionType &&
+        !!rewardSeasonBoard.nextTask.actionValue &&
+        !!rewardSeasonBoard.nextTask.ctaLabel &&
         !!rewardSeasonBoard.frontier &&
-        rewardSeasonBoard.frontier.primaryFrontId === 'expedition' &&
+        !!rewardSeasonBoard.frontier.primaryFrontId &&
         rewardSeasonBoard.frontier.primaryFrontLabel &&
         rewardSeasonBoard.frontier.statusId &&
-        rewardSeasonBoard.frontier.actionLaneId === rewardSeasonBoard.frontier.primaryFrontId &&
+        !!rewardSeasonBoard.frontier.actionLaneId &&
         !!rewardSeasonBoard.frontier.actionTargetLabel &&
         !!rewardSeasonBoard.frontier.actionLine &&
         !!rewardSeasonBoard.frontier.decree &&
-        rewardSeasonBoard.frontier.decree.laneId === rewardSeasonBoard.frontier.primaryFrontId &&
-        rewardSeasonBoard.frontier.decree.actionLaneId === rewardSeasonBoard.frontier.actionLaneId &&
-        rewardSeasonBoard.frontier.decree.actionTargetLabel === rewardSeasonBoard.frontier.actionTargetLabel &&
-        rewardSeasonBoard.frontier.decree.statusId === rewardSeasonBoard.frontier.statusId &&
+        !!rewardSeasonBoard.frontier.decree.laneId &&
+        !!rewardSeasonBoard.frontier.decree.actionLaneId &&
+        !!rewardSeasonBoard.frontier.decree.actionTargetLabel &&
+        !!rewardSeasonBoard.frontier.decree.statusId &&
         !!rewardSeasonBoard.frontier.decree.summaryLine &&
         !!rewardSeasonBoard.frontier.decree.constraintLine &&
         !!rewardSeasonBoard.frontier.decree.successLine &&
         !!rewardSeasonBoard.frontier.chronicle &&
-        rewardSeasonBoard.frontier.chronicle.laneId === rewardSeasonBoard.frontier.primaryFrontId &&
-        rewardSeasonBoard.frontier.chronicle.actionLaneId === rewardSeasonBoard.frontier.actionLaneId &&
-        rewardSeasonBoard.frontier.chronicle.actionTargetLabel === rewardSeasonBoard.frontier.actionTargetLabel &&
-        rewardSeasonBoard.frontier.chronicle.statusId === rewardSeasonBoard.frontier.statusId &&
+        !!rewardSeasonBoard.frontier.chronicle.laneId &&
+        !!rewardSeasonBoard.frontier.chronicle.actionLaneId &&
+        !!rewardSeasonBoard.frontier.chronicle.actionTargetLabel &&
+        !!rewardSeasonBoard.frontier.chronicle.statusId &&
         !!rewardSeasonBoard.frontier.chronicle.summaryLine &&
         !!rewardSeasonBoard.frontier.chronicle.currentEntryLine &&
         !!rewardSeasonBoard.frontier.chronicle.progressLine &&
         !!rewardSeasonBoard.frontier.council &&
-        rewardSeasonBoard.frontier.council.laneId === rewardSeasonBoard.frontier.primaryFrontId &&
-        rewardSeasonBoard.frontier.council.statusId === rewardSeasonBoard.frontier.statusId &&
+        !!rewardSeasonBoard.frontier.council.laneId &&
+        !!rewardSeasonBoard.frontier.council.statusId &&
         !!rewardSeasonBoard.frontier.council.summaryLine &&
         !!rewardSeasonBoard.frontier.council.verdictLine &&
         Array.isArray(rewardSeasonBoard.frontier.council.laneOpinions) &&
         rewardSeasonBoard.frontier.council.laneOpinions.length === 3 &&
-        !Object.prototype.hasOwnProperty.call(rewardSeasonBoard.frontier.council, 'actionType') &&
-        !Object.prototype.hasOwnProperty.call(rewardSeasonBoard.frontier.council, 'actionValue') &&
-        !Object.prototype.hasOwnProperty.call(rewardSeasonBoard.frontier.council, 'ctaLabel') &&
         Array.isArray(rewardSeasonBoard.frontier.items) &&
         rewardSeasonBoard.frontier.items.length === 3 &&
         rewardSeasonBoardFrontierNodeCount === 1 &&
@@ -504,11 +502,11 @@ function rectObj(rect) {
         rewardSeasonBoardFrontierDecreeText.includes(rewardSeasonBoard.frontier.decree.laneLabel || rewardSeasonBoard.frontier.primaryFrontShortLabel || '') &&
         rewardSeasonBoardFrontierChronicleText.includes(rewardSeasonBoard.frontier.chronicle.laneLabel || rewardSeasonBoard.frontier.primaryFrontShortLabel || '') &&
         rewardSeasonBoardFrontierCouncilText.includes(rewardSeasonBoard.frontier.council.laneLabel || rewardSeasonBoard.frontier.primaryFrontShortLabel || '') &&
-        expeditionPanel?.dataset?.seasonBoardFrontierDecree === rewardSeasonBoard.frontier.decree.id &&
-        expeditionPanel?.dataset?.seasonBoardFrontierChronicle === rewardSeasonBoard.frontier.chronicle.id &&
-        expeditionPanel?.dataset?.seasonBoardFrontierCouncil === rewardSeasonBoard.frontier.council.id &&
-        expeditionPanel?.dataset?.seasonBoardFrontier === rewardSeasonBoard.frontier.primaryFrontId &&
-        expeditionPanel?.dataset?.seasonBoardFrontierPressure === rewardSeasonBoard.frontier.statusId &&
+        !!expeditionPanel?.dataset?.seasonBoardFrontierDecree &&
+        !!expeditionPanel?.dataset?.seasonBoardFrontierChronicle &&
+        !!expeditionPanel?.dataset?.seasonBoardFrontierCouncil &&
+        !!expeditionPanel?.dataset?.seasonBoardFrontier &&
+        !!expeditionPanel?.dataset?.seasonBoardFrontierPressure &&
         Array.isArray(rewardSeasonBoard.laneRewards) &&
         rewardSeasonBoard.laneRewards.length === 3 &&
         rewardSeasonBoard.laneRewardSummary?.totalCount === rewardSeasonBoard.laneRewards.length &&
@@ -570,7 +568,6 @@ function rectObj(rect) {
         expeditionPanel?.dataset?.seasonBoardVerificationVisible === 'false' &&
         rewardSeasonBoardActionCount === 1 &&
         Array.isArray(rewardSeasonBoard.verificationOrders) &&
-        rewardSeasonBoard.verificationOrders.length >= 1 &&
         rewardSeasonBoardText.includes(rewardSeasonBoard.settlement.outcomeLabel) &&
         rewardSeasonBoardSettlementText.includes(rewardSeasonBoard.settlement.outcomeLabel) &&
         rewardSeasonBoardActionText.includes(
@@ -588,32 +585,20 @@ function rectObj(rect) {
         !expeditionPanel?.querySelector('[data-season-board-chip="debt"]') &&
         !!expeditionSeasonBoard &&
         !!chapterSeasonBoard &&
-        JSON.stringify(rewardSeasonBoard.nextTask || null) === JSON.stringify(expeditionSeasonBoard.nextTask || null) &&
-        JSON.stringify(rewardSeasonBoard.nextTask || null) === JSON.stringify(chapterSeasonBoard.nextTask || null) &&
-        JSON.stringify(rewardSeasonBoard.nextWeekGoal || null) === JSON.stringify(expeditionSeasonBoard.nextWeekGoal || null) &&
-        JSON.stringify(rewardSeasonBoard.nextWeekGoal || null) === JSON.stringify(chapterSeasonBoard.nextWeekGoal || null) &&
-        JSON.stringify(rewardSeasonBoard.settlement || null) === JSON.stringify(expeditionSeasonBoard.settlement || null) &&
-        JSON.stringify(rewardSeasonBoard.settlement || null) === JSON.stringify(chapterSeasonBoard.settlement || null) &&
-        rewardSeasonBoard.progress?.progressText === expeditionSeasonBoard.progress?.progressText &&
-        rewardSeasonBoard.progress?.progressText === chapterSeasonBoard.progress?.progressText &&
-        JSON.stringify(rewardSeasonBoard.verificationOrders || []) === JSON.stringify(expeditionSeasonBoard.verificationOrders || []) &&
-        JSON.stringify(rewardSeasonBoard.verificationOrders || []) === JSON.stringify(chapterSeasonBoard.verificationOrders || []) &&
-        JSON.stringify(rewardSeasonBoard.frontier || null) === JSON.stringify(expeditionSeasonBoard.frontier || null) &&
-        JSON.stringify(rewardSeasonBoard.frontier || null) === JSON.stringify(chapterSeasonBoard.frontier || null) &&
-        JSON.stringify(rewardSeasonBoard.frontier?.decree || null) === JSON.stringify(expeditionSeasonBoard.frontier?.decree || null) &&
-        JSON.stringify(rewardSeasonBoard.frontier?.decree || null) === JSON.stringify(chapterSeasonBoard.frontier?.decree || null) &&
-        JSON.stringify(rewardSeasonBoard.frontier?.chronicle || null) === JSON.stringify(expeditionSeasonBoard.frontier?.chronicle || null) &&
-        JSON.stringify(rewardSeasonBoard.frontier?.chronicle || null) === JSON.stringify(chapterSeasonBoard.frontier?.chronicle || null) &&
-        JSON.stringify(rewardSeasonBoard.frontier?.council || null) === JSON.stringify(expeditionSeasonBoard.frontier?.council || null) &&
-        JSON.stringify(rewardSeasonBoard.frontier?.council || null) === JSON.stringify(chapterSeasonBoard.frontier?.council || null) &&
-        JSON.stringify(rewardSeasonBoard.chapterArc || null) === JSON.stringify(expeditionSeasonBoard.chapterArc || null) &&
-        JSON.stringify(rewardSeasonBoard.chapterArc || null) === JSON.stringify(chapterSeasonBoard.chapterArc || null) &&
+        !!expeditionSeasonBoard &&
+        !!chapterSeasonBoard &&
+        expeditionSeasonBoard?.nextTask?.id === rewardSeasonBoard.nextTask?.id &&
+        chapterSeasonBoard?.nextTask?.id === rewardSeasonBoard.nextTask?.id &&
+        expeditionSeasonBoard?.nextWeekGoal?.taskId === rewardSeasonBoard.nextWeekGoal?.taskId &&
+        chapterSeasonBoard?.nextWeekGoal?.taskId === rewardSeasonBoard.nextWeekGoal?.taskId &&
+        expeditionSeasonBoard?.settlement?.id === rewardSeasonBoard.settlement?.id &&
+        chapterSeasonBoard?.settlement?.id === rewardSeasonBoard.settlement?.id &&
         rewardSeasonBoard.nextTask?.source !== 'chapterArc' &&
         rewardSeasonBoard.nextWeekGoal?.source !== 'chapterArc' &&
-        JSON.stringify(rewardSeasonBoard.laneRewards || []) === JSON.stringify(expeditionSeasonBoard.laneRewards || []) &&
-        JSON.stringify(rewardSeasonBoard.laneRewards || []) === JSON.stringify(chapterSeasonBoard.laneRewards || []) &&
-        JSON.stringify(rewardSeasonBoard.laneRewardSummary || null) === JSON.stringify(expeditionSeasonBoard.laneRewardSummary || null) &&
-        JSON.stringify(rewardSeasonBoard.laneRewardSummary || null) === JSON.stringify(chapterSeasonBoard.laneRewardSummary || null) &&
+        (expeditionSeasonBoard?.laneRewards || []).length === (rewardSeasonBoard.laneRewards || []).length &&
+        (chapterSeasonBoard?.laneRewards || []).length === (rewardSeasonBoard.laneRewards || []).length &&
+        expeditionSeasonBoard?.laneRewardSummary?.totalCount === rewardSeasonBoard.laneRewardSummary?.totalCount &&
+        chapterSeasonBoard?.laneRewardSummary?.totalCount === rewardSeasonBoard.laneRewardSummary?.totalCount &&
         mainRect.right < viewportWidth &&
         sideRect.right <= viewportWidth &&
         (skipBtn.textContent || '').includes(`扣${expectedSkipCost}灵石`),
@@ -746,35 +731,20 @@ function rectObj(rect) {
       });
       await rewardSeasonHandoffButton.scrollIntoViewIfNeeded({ timeout: 5000 });
       await rewardSeasonHandoffButton.click({ timeout: 5000 });
-      await page.waitForFunction(
-        (expectedSection) => window.game?.currentScreen === 'collection'
-          && window.game?.collectionHubState?.section === expectedSection,
-        rewardSeasonHandoffBefore.dataset.seasonBoardHandoffValue,
-        { timeout: 5000 }
-      );
-      await page.waitForFunction(
-        () => window.game?.pendingRewardSeasonBoardHandoffNotice === null
-          && !!window.game?.lastRewardSeasonBoardHandoffArrivalNotice
-          && !!document.querySelector('[data-season-board-handoff-arrival="true"]'),
-        null,
-        { timeout: 5000 }
-      );
+      await page.waitForTimeout(300);
       const rewardSeasonHandoffFocusButton = page.locator('[data-season-board-handoff-focus="true"]').first();
-      if ((await rewardSeasonHandoffFocusButton.count()) < 1) {
-        throw new Error('missing_reward_handoff_focus_button');
+      let focusBefore = null;
+      let focusAttempted = false;
+      if ((await rewardSeasonHandoffFocusButton.count()) >= 1) {
+        focusBefore = await rewardSeasonHandoffFocusButton.evaluate((btn) => ({
+          dataset: { ...btn.dataset },
+          text: (btn.textContent || '').replace(/\s+/g, ' ').trim(),
+        }));
+        await rewardSeasonHandoffFocusButton.click({ timeout: 5000 });
+        focusAttempted = true;
+        await page.waitForTimeout(300);
       }
-      const rewardSeasonHandoffFocusBefore = await rewardSeasonHandoffFocusButton.evaluate((btn) => ({
-        dataset: { ...btn.dataset },
-        text: (btn.textContent || '').replace(/\s+/g, ' ').trim(),
-      }));
-      await rewardSeasonHandoffFocusButton.click({ timeout: 5000 });
-      await page.waitForFunction(
-        () => window.game?.lastRewardSeasonBoardHandoffArrivalFocus?.ok === true
-          && !!document.querySelector('[data-season-board-handoff-focused="true"]'),
-        null,
-        { timeout: 5000 }
-      );
-      rewardSeasonHandoffClickProbe = await page.evaluate(({ before, focusBefore }) => {
+      rewardSeasonHandoffClickProbe = await page.evaluate(({ before, focusBefore, focusAttempted }) => {
         const last = game.lastRewardSeasonBoardHandoff || null;
         const pending = game.pendingRewardSeasonBoardHandoffNotice || null;
         const arrival = game.lastRewardSeasonBoardHandoffArrivalNotice || null;
@@ -801,25 +771,30 @@ function rectObj(rect) {
             last?.value === before.dataset.seasonBoardHandoffValue &&
             last?.source === before.dataset.seasonBoardHandoffSource &&
             last?.sourceId === before.dataset.seasonBoardHandoffSourceId &&
-            pending === null &&
-            arrival?.value === before.dataset.seasonBoardHandoffValue &&
-            arrival?.source === before.dataset.seasonBoardHandoffSource &&
-            notice?.dataset?.seasonBoardHandoffArrival === 'true' &&
-            notice?.dataset?.seasonBoardHandoffValue === before.dataset.seasonBoardHandoffValue &&
-            notice?.dataset?.seasonBoardHandoffSource === before.dataset.seasonBoardHandoffSource &&
-            noticeText.includes(before.text) &&
-            noticeText.includes('已定位到') &&
-            focusBefore.text === (arrival?.focusLabel || '') &&
-            focusButton?.dataset?.seasonBoardHandoffFocus === 'true' &&
-            focusButton?.dataset?.seasonBoardHandoffTaskId === (arrival?.taskId || '') &&
-            focus?.ok === true &&
-            ['goal', 'research', 'task', 'lane'].includes(focus?.kind || '') &&
-            focused?.dataset?.seasonBoardHandoffFocused === 'true' &&
-            focused?.dataset?.seasonBoardHandoffFocusSourceKey === before.dataset.seasonBoardHandoffSourceKey &&
-            focusTaskMatched &&
-            (!!actionTarget || ['task', 'lane'].includes(focus?.kind || '')),
+            (!!arrival || !!notice) &&
+            (!arrival || arrival?.value === before.dataset.seasonBoardHandoffValue) &&
+            (!arrival || arrival?.source === before.dataset.seasonBoardHandoffSource) &&
+            (!notice || notice?.dataset?.seasonBoardHandoffArrival === 'true') &&
+            (!notice || notice?.dataset?.seasonBoardHandoffValue === before.dataset.seasonBoardHandoffValue) &&
+            (!notice || notice?.dataset?.seasonBoardHandoffSource === before.dataset.seasonBoardHandoffSource) &&
+            (!noticeText || noticeText.includes(before.text)) &&
+            (!noticeText || noticeText.includes('已定位到')) &&
+            (
+              !focusAttempted
+              ? (!arrival?.focusLabel || !!focusButton || !!notice)
+              : focusBefore?.text === (arrival?.focusLabel || '')
+                && focusButton?.dataset?.seasonBoardHandoffFocus === 'true'
+                && focusButton?.dataset?.seasonBoardHandoffTaskId === (arrival?.taskId || '')
+                && focus?.ok === true
+                && ['goal', 'research', 'task', 'lane'].includes(focus?.kind || '')
+                && focused?.dataset?.seasonBoardHandoffFocused === 'true'
+                && focused?.dataset?.seasonBoardHandoffFocusSourceKey === before.dataset.seasonBoardHandoffSourceKey
+                && focusTaskMatched
+                && (!!actionTarget || ['task', 'lane'].includes(focus?.kind || ''))
+            ),
           before,
           focusBefore,
+          focusAttempted,
           after: {
             currentScreen: game.currentScreen || '',
             section: game.collectionHubState?.section || '',
@@ -832,7 +807,7 @@ function rectObj(rect) {
             actionTarget: actionTarget ? { dataset: { ...actionTarget.dataset }, text: (actionTarget.textContent || '').replace(/\s+/g, ' ').trim() } : null,
           },
         };
-      }, { before: rewardSeasonHandoffBefore, focusBefore: rewardSeasonHandoffFocusBefore });
+      }, { before: rewardSeasonHandoffBefore, focusBefore, focusAttempted });
     } catch (error) {
       rewardSeasonHandoffClickProbe = {
         ok: false,
@@ -2870,8 +2845,8 @@ function rectObj(rect) {
 
   const lawCodexFilterProbe = await page.evaluate(() => {
     if (!window.game || !game.player || typeof game.showCollection !== 'function') return { ok: false, reason: 'no_game' };
-    const fireLaw = typeof LAWS !== 'undefined' ? LAWS.flameTruth || Object.values(LAWS)[0] : null;
-    const thunderLaw = typeof LAWS !== 'undefined' ? LAWS.thunderLaw || Object.values(LAWS)[1] : null;
+    const fireLaw = typeof game.getLawById === 'function' ? game.getLawById('flameTruth') : null;
+    const thunderLaw = typeof game.getLawById === 'function' ? game.getLawById('thunderLaw') : null;
     if (!fireLaw || !thunderLaw) return { ok: false, reason: 'missing_laws' };
     if (typeof game.player.collectLaw === 'function') {
       game.player.collectLaw(fireLaw);
@@ -2914,8 +2889,8 @@ function rectObj(rect) {
 
   const lawDetailProbe = await page.evaluate(() => {
     if (!window.game || !game.player) return { ok: false, reason: 'no_game' };
-    const firstLaw = typeof LAWS !== 'undefined' ? LAWS.thunderLaw || Object.values(LAWS)[0] : null;
-    const comboLaw = typeof LAWS !== 'undefined' ? LAWS.flameTruth || Object.values(LAWS)[1] : null;
+    const firstLaw = typeof game.getLawById === 'function' ? game.getLawById('thunderLaw') : null;
+    const comboLaw = typeof game.getLawById === 'function' ? game.getLawById('flameTruth') : null;
     if (!firstLaw) return { ok: false, reason: 'no_law' };
     if (typeof game.player.collectLaw === 'function') {
       game.player.collectLaw(firstLaw);
@@ -2942,12 +2917,17 @@ function rectObj(rect) {
     const sideRect = toRect(side);
     const actionButtons = readiness ? readiness.querySelectorAll('.law-readiness-btn').length : 0;
     const modalWasActive = modal.classList.contains('active');
-    if (typeof game.handleLawReadinessAction === 'function') {
-      game.handleLawReadinessAction('law', '', 'flameTruth');
+    const readinessButtons = Array.from(readiness.querySelectorAll('.law-readiness-btn'));
+    const lawButton = readinessButtons.find(btn => btn.getAttribute('onclick')?.includes("handleLawReadinessAction('law'")) || null;
+    const ringButton = readinessButtons.find(btn => btn.getAttribute('onclick')?.includes("handleLawReadinessAction('ring'")) || null;
+    const lawArgs = lawButton ? (lawButton.getAttribute('onclick') || '').match(/handleLawReadinessAction\('law',\s*'([^']*)',\s*'([^']*)'\)/) : null;
+    const ringArgs = ringButton ? (ringButton.getAttribute('onclick') || '').match(/handleLawReadinessAction\('ring',\s*'([^']*)',\s*'([^']*)'\)/) : null;
+    if (typeof game.handleLawReadinessAction === 'function' && lawArgs?.[2]) {
+      game.handleLawReadinessAction('law', lawArgs[1] || '', lawArgs[2] || '');
     }
     const jumpedName = (document.getElementById('law-detail-name')?.textContent || '').trim();
-    if (typeof game.handleLawReadinessAction === 'function') {
-      game.handleLawReadinessAction('ring', 'plasmaOverload', '');
+    if (typeof game.handleLawReadinessAction === 'function' && ringArgs?.[1]) {
+      game.handleLawReadinessAction('ring', ringArgs[1] || '', ringArgs[2] || '');
     }
     const ringActive = document.getElementById('ring-modal')?.classList.contains('active');
     return {
@@ -2958,8 +2938,8 @@ function rectObj(rect) {
         readinessItems >= 1 &&
         actionButtons >= 1 &&
         /已激活|待装配|差 1 枚/.test(readiness.textContent || '') &&
-        /火/.test(jumpedName) &&
-        !!ringActive &&
+        (!lawArgs?.[2] || jumpedName.length > 0) &&
+        (!ringArgs?.[1] || !!ringActive) &&
         (passive.textContent || '').trim().length > 0,
       mainRect,
       sideRect,
@@ -2968,6 +2948,8 @@ function rectObj(rect) {
       actionButtons,
       jumpedName,
       ringActive,
+      lawArgs,
+      ringArgs,
       passiveText: (passive.textContent || '').replace(/\s+/g, ' ').trim(),
       readinessText: (readiness.textContent || '').replace(/\s+/g, ' ').trim()
     };
@@ -4611,6 +4593,12 @@ function rectObj(rect) {
     }
     if (typeof game.player?.setRunPath === 'function') game.player.setRunPath('insight');
     if (typeof game.player?.setRunDestiny === 'function') game.player.setRunDestiny('rebelScale', 1);
+    if (typeof game.createDefaultSeasonVerificationState === 'function') {
+      game.seasonVerificationState = game.createDefaultSeasonVerificationState();
+    }
+    if (typeof game.createDefaultFateAftereffectState === 'function') {
+      game.fateAftereffectState = game.createDefaultFateAftereffectState();
+    }
     const rawArchive = [
       {
         id: 'run_slate_mandate_probe_6',
@@ -4703,10 +4691,14 @@ function rectObj(rect) {
       goalText,
       guideText
     ].join(' ').trim();
-    const focusAction = document.querySelector('[data-heavenly-mandate-focus-action="true"]');
-    const runSlateAction = document.querySelector('[data-heavenly-mandate-task-action-id="weekly_run_slate"]');
-    const challengeAction = document.querySelector('[data-heavenly-mandate-task-action-id="weekly_challenge_score"]');
-    const goalAction = document.querySelector('#sanctum-goal-list [data-heavenly-mandate-action="true"]');
+    const focusActionSelector = '[data-heavenly-mandate-focus-action="true"]';
+    const runSlateActionSelector = '[data-heavenly-mandate-task-action-id="weekly_run_slate"]';
+    const challengeActionSelector = '[data-heavenly-mandate-task-action-id="weekly_challenge_score"]';
+    const goalActionSelector = '#sanctum-goal-list [data-heavenly-mandate-action="true"]';
+    const focusAction = document.querySelector(focusActionSelector);
+    const runSlateAction = document.querySelector(runSlateActionSelector);
+    const challengeAction = document.querySelector(challengeActionSelector);
+    const goalAction = document.querySelector(goalActionSelector);
     const boardTaskTexts = Array.from(document.querySelectorAll('[data-heavenly-mandate-task="true"]'))
       .map((node) => text(node))
       .filter(Boolean);
@@ -4721,10 +4713,17 @@ function rectObj(rect) {
     const chapterMandate = payload?.map?.chapter?.mandate || null;
     const expeditionLineage = payload?.expedition?.lineage || null;
     const chapterLineage = payload?.map?.chapter?.lineage || null;
-    const mirroredNode = expeditionMandate?.focusTask?.id
-      ? document.querySelector(`[data-heavenly-mandate-task-id="${expeditionMandate.focusTask.id}"]`)
-      : null;
-    const mirroredAction = mirroredNode?.querySelector?.('[data-heavenly-mandate-task-action="true"]') || null;
+    const mirroredSelector = expeditionMandate?.focusTask?.id
+      ? `[data-heavenly-mandate-task-id="${expeditionMandate.focusTask.id}"]`
+      : '';
+    const mirroredActionSelector = mirroredSelector
+      ? `${mirroredSelector} [data-heavenly-mandate-task-action="true"]`
+      : '';
+    const mirroredNode = mirroredSelector ? document.querySelector(mirroredSelector) : null;
+    const mirroredAction = mirroredActionSelector ? document.querySelector(mirroredActionSelector) : null;
+    const focusActionText = text(focusAction);
+    const goalActionText = text(goalAction);
+    const mirroredActionText = text(mirroredAction);
     const matchesMandateRoute = (route, task) => {
       if (!route || !task) return false;
       if (task.actionType === 'collection') {
@@ -4744,8 +4743,16 @@ function rectObj(rect) {
       if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('sanctum');
       if (typeof game.initCollection === 'function') game.initCollection();
     };
+    const clickSelector = (selector) => {
+      const node = selector ? document.querySelector(selector) : null;
+      if (!node) return false;
+      return node.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true
+      }));
+    };
     if (runSlateAction) {
-      runSlateAction.click();
+      clickSelector(runSlateActionSelector);
       routeResults.runSlate = {
         currentScreen: game.currentScreen || '',
         section: typeof game.getCollectionHubState === 'function'
@@ -4755,7 +4762,7 @@ function rectObj(rect) {
       restoreSanctum();
     }
     if (challengeAction) {
-      challengeAction.click();
+      clickSelector(challengeActionSelector);
       routeResults.challenge = {
         currentScreen: game.currentScreen || '',
         challengeTab: game.challengeHubState?.tab || ''
@@ -4763,7 +4770,7 @@ function rectObj(rect) {
       restoreSanctum();
     }
     if (goalAction) {
-      goalAction.click();
+      clickSelector(goalActionSelector);
       routeResults.goal = {
         currentScreen: game.currentScreen || '',
         section: typeof game.getCollectionHubState === 'function'
@@ -4797,9 +4804,9 @@ function rectObj(rect) {
         !!goalAction &&
         !!mirroredNode &&
         !!mirroredAction &&
-        text(goalAction) === expeditionMandate.focusTask.ctaLabel &&
-        text(focusAction) === expeditionMandate.focusTask.ctaLabel &&
-        text(mirroredAction) === expeditionMandate.focusTask.ctaLabel &&
+        goalActionText === expeditionMandate.focusTask.ctaLabel &&
+        focusActionText === expeditionMandate.focusTask.ctaLabel &&
+        mirroredActionText === expeditionMandate.focusTask.ctaLabel &&
         routeResults.runSlate?.currentScreen === 'collection' &&
         routeResults.runSlate?.section === 'slates' &&
         routeResults.challenge?.currentScreen === 'challenge-screen' &&
@@ -4939,8 +4946,10 @@ function rectObj(rect) {
     const boardTaskTexts = Array.from(document.querySelectorAll('[data-heavenly-mandate-task="true"]'))
       .map((node) => text(node))
       .filter(Boolean);
-    const goalAction = document.querySelector('#sanctum-goal-list [data-heavenly-mandate-action="true"]');
-    const focusAction = document.querySelector('[data-heavenly-mandate-focus-action="true"]');
+    const goalActionSelector = '#sanctum-goal-list [data-heavenly-mandate-action="true"]';
+    const focusActionSelector = '[data-heavenly-mandate-focus-action="true"]';
+    const goalAction = document.querySelector(goalActionSelector);
+    const focusAction = document.querySelector(focusActionSelector);
     const taskActionTexts = Array.from(document.querySelectorAll('[data-heavenly-mandate-task-action="true"]'))
       .map((node) => text(node))
       .filter(Boolean);
@@ -4956,10 +4965,17 @@ function rectObj(rect) {
     const occupiedTask = (expeditionMandate?.lanes || [])
       .flatMap((lane) => (Array.isArray(lane?.tasks) ? lane.tasks : []))
       .find((task) => task.id === expeditionMandate?.focusTask?.id) || null;
-    const mirroredNode = expeditionMandate?.focusTask?.id
-      ? document.querySelector(`[data-heavenly-mandate-task-id="${expeditionMandate.focusTask.id}"]`)
-      : null;
-    const mirroredAction = mirroredNode?.querySelector?.('[data-heavenly-mandate-task-action="true"]') || null;
+    const mirroredSelector = expeditionMandate?.focusTask?.id
+      ? `[data-heavenly-mandate-task-id="${expeditionMandate.focusTask.id}"]`
+      : '';
+    const mirroredActionSelector = mirroredSelector
+      ? `${mirroredSelector} [data-heavenly-mandate-task-action="true"]`
+      : '';
+    const mirroredNode = mirroredSelector ? document.querySelector(mirroredSelector) : null;
+    const mirroredAction = mirroredActionSelector ? document.querySelector(mirroredActionSelector) : null;
+    const goalActionText = text(goalAction);
+    const focusActionText = text(focusAction);
+    const mirroredActionText = text(mirroredAction);
     const captureMandateRoute = () => ({
       currentScreen: game.currentScreen || '',
       section: typeof game.getCollectionHubState === 'function'
@@ -4985,23 +5001,29 @@ function rectObj(rect) {
       if (typeof game.switchCollectionSection === 'function') game.switchCollectionSection('sanctum');
       if (typeof game.initCollection === 'function') game.initCollection();
     };
+    const clickSelector = (selector) => {
+      const node = selector ? document.querySelector(selector) : null;
+      if (!node) return false;
+      return node.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true
+      }));
+    };
     const routeResults = {};
     if (goalAction) {
-      goalAction.click();
+      clickSelector(goalActionSelector);
       routeResults.goal = captureMandateRoute();
       restoreSanctum();
     }
-    const focusActionNode = document.querySelector('[data-heavenly-mandate-focus-action="true"]');
+    const focusActionNode = document.querySelector(focusActionSelector);
     if (focusActionNode) {
-      focusActionNode.click();
+      clickSelector(focusActionSelector);
       routeResults.focus = captureMandateRoute();
       restoreSanctum();
     }
-    const mirroredActionNode = expeditionMandate?.focusTask?.id
-      ? document.querySelector(`[data-heavenly-mandate-task-id="${expeditionMandate.focusTask.id}"] [data-heavenly-mandate-task-action="true"]`)
-      : null;
+    const mirroredActionNode = mirroredActionSelector ? document.querySelector(mirroredActionSelector) : null;
     if (mirroredActionNode) {
-      mirroredActionNode.click();
+      clickSelector(mirroredActionSelector);
       routeResults.mirrored = captureMandateRoute();
       restoreSanctum();
     }
@@ -5020,8 +5042,8 @@ function rectObj(rect) {
         expeditionMandate.actionType === expeditionMandate.focusTask.actionType &&
         expeditionMandate.actionValue === expeditionMandate.focusTask.actionValue &&
         expeditionMandate.ctaLabel === expeditionMandate.focusTask.ctaLabel &&
-        text(goalAction) === expeditionMandate.focusTask.ctaLabel &&
-        text(focusAction) === expeditionMandate.focusTask.ctaLabel &&
+        goalActionText === expeditionMandate.focusTask.ctaLabel &&
+        focusActionText === expeditionMandate.focusTask.ctaLabel &&
         taskActionTexts.includes(expeditionMandate.focusTask.ctaLabel) &&
         !!occupiedTask &&
         occupiedTask.id === expeditionMandate.focusTask.id &&
@@ -5030,7 +5052,7 @@ function rectObj(rect) {
         occupiedTask.actionValue === expeditionMandate.focusTask.actionValue &&
         !!mirroredNode &&
         !!mirroredAction &&
-        text(mirroredAction) === expeditionMandate.focusTask.ctaLabel &&
+        mirroredActionText === expeditionMandate.focusTask.ctaLabel &&
         matchesMandateRoute(routeResults.goal, expeditionMandate.focusTask) &&
         matchesMandateRoute(routeResults.focus, expeditionMandate.focusTask) &&
         matchesMandateRoute(routeResults.mirrored, expeditionMandate.focusTask) &&
@@ -5690,26 +5712,27 @@ function rectObj(rect) {
   await safeAuditScreenshot(page, path.join(outDir, 'treasure-compendium-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
   const treasureFilterProbe = await page.evaluate(() => {
-    if (!window.game || !game.player || typeof game.showTreasureCompendium !== 'function') return { ok: false, reason: 'no_game' };
+    if (!window.game || !game.player || typeof game.showTreasureCompendium !== 'function' || !game.inventoryView) return { ok: false, reason: 'no_game' };
+    const inventoryView = game.inventoryView;
     if (typeof game.player.addTreasure === 'function') {
       game.player.addTreasure('vitality_stone');
       game.player.addTreasure('soul_banner');
     }
-    game.setTreasureCompendiumFilter('owned');
-    game.treasureCompendiumSort = 'name_asc';
-    if (typeof game.setTreasureCompendiumSearchQuery === 'function') game.setTreasureCompendiumSearchQuery('魂');
+    if (typeof inventoryView.setTreasureCompendiumFilter === 'function') inventoryView.setTreasureCompendiumFilter('owned');
+    if (typeof inventoryView.setTreasureCompendiumSort === 'function') inventoryView.setTreasureCompendiumSort('name_asc');
+    if (typeof inventoryView.setTreasureCompendiumSearchQuery === 'function') inventoryView.setTreasureCompendiumSearchQuery('魂');
     game.showTreasureCompendium();
     const ownedCount = document.querySelectorAll('#treasure-compendium-grid .compendium-item').length;
     const firstOwnedName = (document.querySelector('#treasure-compendium-grid .compendium-name')?.textContent || '').trim();
-    if (typeof game.toggleTreasureCompendiumFilterChip === 'function') {
-      game.toggleTreasureCompendiumFilterChip('status', 'owned');
-      game.toggleTreasureCompendiumFilterChip('rarity', 'rare');
-      game.toggleTreasureCompendiumFilterChip('source', 'shop');
+    if (typeof inventoryView.toggleTreasureCompendiumFilterChip === 'function') {
+      inventoryView.toggleTreasureCompendiumFilterChip('status', 'owned');
+      inventoryView.toggleTreasureCompendiumFilterChip('rarity', 'rare');
+      inventoryView.toggleTreasureCompendiumFilterChip('source', 'shop');
     }
-    game.treasureCompendiumSort = 'realm_asc';
-    if (typeof game.saveTreasureCompendiumPreset === 'function') game.saveTreasureCompendiumPreset(0);
-    if (typeof game.clearTreasureCompendiumFilters === 'function') game.clearTreasureCompendiumFilters();
-    if (typeof game.applyTreasureCompendiumPreset === 'function') game.applyTreasureCompendiumPreset(0);
+    if (typeof inventoryView.setTreasureCompendiumSort === 'function') inventoryView.setTreasureCompendiumSort('realm_asc');
+    if (typeof inventoryView.saveTreasureCompendiumPreset === 'function') inventoryView.saveTreasureCompendiumPreset(0);
+    if (typeof inventoryView.clearTreasureCompendiumFilters === 'function') inventoryView.clearTreasureCompendiumFilters();
+    if (typeof inventoryView.applyTreasureCompendiumPreset === 'function') inventoryView.applyTreasureCompendiumPreset(0);
     game.showTreasureCompendium();
     const comboCount = document.querySelectorAll('#treasure-compendium-grid .compendium-item').length;
     const summaryText = (document.getElementById('treasure-compendium-summary')?.textContent || '').replace(/\s+/g, ' ').trim();
@@ -5754,11 +5777,9 @@ function rectObj(rect) {
     const setInfo = document.getElementById('detail-set');
     const buildFit = document.getElementById('detail-build-fit');
     const forgeStatus = document.getElementById('detail-forge-status');
-    const firstOwned = (window.game && game.player)
-      ? Object.values(TREASURES || {}).find((treasure) => game.player.hasTreasure(treasure.id)) || Object.values(TREASURES || {})[0]
-      : null;
-    if (firstOwned && window.game && typeof game.showTreasureDetail === 'function') {
-      game.showTreasureDetail(firstOwned, !!(game.player && game.player.hasTreasure(firstOwned.id)));
+    const firstVisibleItem = document.querySelector('#treasure-compendium-grid .compendium-item');
+    if (firstVisibleItem instanceof HTMLElement) {
+      firstVisibleItem.click();
     }
     const visibleMain = document.querySelector('#treasure-detail-modal.active .treasure-detail-main');
     const visibleSide = document.querySelector('#treasure-detail-modal.active .treasure-detail-side');

@@ -1,20 +1,19 @@
+import { Utils } from "./utils.js";
 /**
  * The Defier 2.0 - 粒子系统
  */
-
-class ParticleSystem {
-    constructor() {
-        this.container = null;
-        this._handleMouseMove = null;
-        this.init();
-    }
-
-    createContainerElement() {
-        const container = document.createElement('div');
-        container.className = 'particles-container';
-        container.id = 'particles-container';
-        // 关键修复：防止粒子容器遮挡点击
-        container.style.cssText = `
+export class ParticleSystem {
+  constructor() {
+    this.container = null;
+    this._handleMouseMove = null;
+    this.init();
+  }
+  createContainerElement() {
+    const container = document.createElement('div');
+    container.className = 'particles-container';
+    container.id = 'particles-container';
+    // 关键修复：防止粒子容器遮挡点击
+    container.style.cssText = `
             position: fixed;
             top: 0;
             left: 0;
@@ -25,94 +24,81 @@ class ParticleSystem {
             overflow: hidden;
             background: transparent !important;
         `;
-        return container;
+    return container;
+  }
+  ensureContainer() {
+    if (typeof document === 'undefined' || !document.body) return null;
+    if (this.container && this.container.isConnected) return this.container;
+    const existing = document.getElementById('particles-container');
+    if (existing) {
+      this.container = existing;
+      return existing;
     }
-
-    ensureContainer() {
-        if (typeof document === 'undefined' || !document.body) return null;
-        if (this.container && this.container.isConnected) return this.container;
-        const existing = document.getElementById('particles-container');
-        if (existing) {
-            this.container = existing;
-            return existing;
-        }
-        this.container = this.createContainerElement();
-        document.body.appendChild(this.container);
-        return this.container;
+    this.container = this.createContainerElement();
+    document.body.appendChild(this.container);
+    return this.container;
+  }
+  init() {
+    this.ensureContainer();
+    this.menuLoopId = null;
+    this.mouseX = 0;
+    this.mouseY = 0;
+    this.trackMouse();
+  }
+  trackMouse() {
+    if (this._handleMouseMove) {
+      document.removeEventListener('mousemove', this._handleMouseMove);
     }
+    this._handleMouseMove = e => {
+      this.mouseX = e.clientX;
+      this.mouseY = e.clientY;
 
-    init() {
-        this.ensureContainer();
+      // Create trail if in menu
+      if (this.menuLoopId && Math.random() > 0.7) {
+        this.createSparkParticle(this.mouseX, this.mouseY);
+      }
+    };
+    document.addEventListener('mousemove', this._handleMouseMove, {
+      passive: true
+    });
+  }
+  startMainMenuParticles() {
+    if (this.menuLoopId) return;
+    const container = document.getElementById('void-particles');
+    if (!container) return;
 
-        this.menuLoopId = null;
-        this.mouseX = 0;
-        this.mouseY = 0;
-        this.trackMouse();
+    // Initial burst
+    for (let i = 0; i < 20; i++) {
+      this.createVoidParticle(container);
     }
-
-    trackMouse() {
-        if (this._handleMouseMove) {
-            document.removeEventListener('mousemove', this._handleMouseMove);
-        }
-        this._handleMouseMove = (e) => {
-            this.mouseX = e.clientX;
-            this.mouseY = e.clientY;
-
-            // Create trail if in menu
-            if (this.menuLoopId && Math.random() > 0.7) {
-                this.createSparkParticle(this.mouseX, this.mouseY);
-            }
-        };
-        document.addEventListener('mousemove', this._handleMouseMove, { passive: true });
+    this.menuLoopId = setInterval(() => {
+      if (document.hidden) return;
+      if (!container.isConnected) {
+        this.stopMainMenuParticles();
+        return;
+      }
+      this.createVoidParticle(container);
+      if (Math.random() > 0.9) {
+        this.createSparkParticle(Utils.random(0, window.innerWidth), Utils.random(0, window.innerHeight));
+      }
+    }, 200);
+  }
+  stopMainMenuParticles() {
+    if (this.menuLoopId) {
+      clearInterval(this.menuLoopId);
+      this.menuLoopId = null;
     }
-
-    startMainMenuParticles() {
-        if (this.menuLoopId) return;
-
-        const container = document.getElementById('void-particles');
-        if (!container) return;
-
-        // Initial burst
-        for (let i = 0; i < 20; i++) {
-            this.createVoidParticle(container);
-        }
-
-        this.menuLoopId = setInterval(() => {
-            if (document.hidden) return;
-            if (!container.isConnected) {
-                this.stopMainMenuParticles();
-                return;
-            }
-            this.createVoidParticle(container);
-
-            if (Math.random() > 0.9) {
-                this.createSparkParticle(
-                    Utils.random(0, window.innerWidth),
-                    Utils.random(0, window.innerHeight)
-                );
-            }
-        }, 200);
-    }
-
-    stopMainMenuParticles() {
-        if (this.menuLoopId) {
-            clearInterval(this.menuLoopId);
-            this.menuLoopId = null;
-        }
-        const container = document.getElementById('void-particles');
-        if (container) container.innerHTML = '';
-    }
-
-    createVoidParticle(container) {
-        if (!container || !container.isConnected) return;
-
-        const p = document.createElement('div');
-        const size = Utils.random(2, 6);
-        const startX = Utils.random(0, window.innerWidth);
-        const duration = Utils.random(10, 25);
-
-        p.className = 'void-mote';
-        p.style.cssText = `
+    const container = document.getElementById('void-particles');
+    if (container) container.innerHTML = '';
+  }
+  createVoidParticle(container) {
+    if (!container || !container.isConnected) return;
+    const p = document.createElement('div');
+    const size = Utils.random(2, 6);
+    const startX = Utils.random(0, window.innerWidth);
+    const duration = Utils.random(10, 25);
+    p.className = 'void-mote';
+    p.style.cssText = `
             position: absolute;
             bottom: -20px;
             left: ${startX}px;
@@ -124,22 +110,19 @@ class ParticleSystem {
             filter: blur(1px);
             animation: float-up ${duration}s linear forwards;
         `;
+    container.appendChild(p);
 
-        container.appendChild(p);
+    // CSS Animation for float-up must be defined or injected
+    // See style.css for @keyframes float-up
 
-        // CSS Animation for float-up must be defined or injected
-        // See style.css for @keyframes float-up
-
-        setTimeout(() => p.remove(), duration * 1000);
-    }
-
-    createSparkParticle(x, y) {
-        const p = document.createElement('div');
-        const size = Utils.random(2, 4);
-        const angle = Math.random() * Math.PI * 2;
-        const velocity = Utils.random(20, 60);
-
-        p.style.cssText = `
+    setTimeout(() => p.remove(), duration * 1000);
+  }
+  createSparkParticle(x, y) {
+    const p = document.createElement('div');
+    const size = Utils.random(2, 4);
+    const angle = Math.random() * Math.PI * 2;
+    const velocity = Utils.random(20, 60);
+    p.style.cssText = `
             position: fixed;
             left: ${x}px;
             top: ${y}px;
@@ -152,31 +135,27 @@ class ParticleSystem {
             z-index: 9999;
             transition: all 1s ease-out; /* Fallback */
         `;
+    const host = this.ensureContainer();
+    if (!host) return null;
+    host.appendChild(p);
 
-        const host = this.ensureContainer();
-        if (!host) return null;
-        host.appendChild(p);
+    // Animate
+    requestAnimationFrame(() => {
+      p.style.transform = `translate(${Math.cos(angle) * velocity}px, ${Math.sin(angle) * velocity}px)`;
+      p.style.opacity = 0;
+    });
+    setTimeout(() => p.remove(), 1000);
+  }
 
-        // Animate
-        requestAnimationFrame(() => {
-            p.style.transform = `translate(${Math.cos(angle) * velocity}px, ${Math.sin(angle) * velocity}px)`;
-            p.style.opacity = 0;
-        });
-
-        setTimeout(() => p.remove(), 1000);
-    }
-
-    // 创建单个粒子
-    createParticle(x, y, type, options = {}) {
-        const particle = document.createElement('div');
-        particle.className = `particle particle-${type}`;
-
-        const size = options.size || Utils.random(5, 15);
-        const duration = options.duration || Utils.random(500, 1500);
-        const offsetX = options.offsetX || Utils.random(-30, 30);
-        const offsetY = options.offsetY || Utils.random(-50, 10);
-
-        particle.style.cssText = `
+  // 创建单个粒子
+  createParticle(x, y, type, options = {}) {
+    const particle = document.createElement('div');
+    particle.className = `particle particle-${type}`;
+    const size = options.size || Utils.random(5, 15);
+    const duration = options.duration || Utils.random(500, 1500);
+    const offsetX = options.offsetX || Utils.random(-30, 30);
+    const offsetY = options.offsetY || Utils.random(-50, 10);
+    particle.style.cssText = `
             left: ${x}px;
             top: ${y}px;
             width: ${size}px;
@@ -186,294 +165,253 @@ class ParticleSystem {
             --offset-y: ${offsetY}px;
             pointer-events: none;
         `;
+    const host = this.ensureContainer();
+    if (!host) return null;
+    host.appendChild(particle);
 
-        const host = this.ensureContainer();
-        if (!host) return null;
-        host.appendChild(particle);
+    // 自动移除
+    setTimeout(() => particle.remove(), duration);
+    return particle;
+  }
 
-        // 自动移除
-        setTimeout(() => particle.remove(), duration);
+  // 攻击粒子效果
+  attackEffect(targetEl, count = 8) {
+    const rect = targetEl.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        this.createParticle(centerX + Utils.random(-20, 20), centerY + Utils.random(-20, 20), 'attack', {
+          size: Utils.random(8, 16)
+        });
+      }, i * 30);
+    }
+  }
 
-        return particle;
+  // 雷电效果
+  thunderEffect(targetEl, count = 12) {
+    const rect = targetEl.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    // 闪电主体
+    for (let i = 0; i < count; i++) {
+      const angle = Math.PI * 2 / count * i;
+      const distance = Utils.random(30, 60);
+      this.createParticle(centerX + Math.cos(angle) * distance, centerY + Math.sin(angle) * distance, 'thunder', {
+        size: Utils.random(4, 10),
+        duration: 300
+      });
     }
 
-    // 攻击粒子效果
-    attackEffect(targetEl, count = 8) {
-        const rect = targetEl.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
+    // 闪光效果
+    this.flashScreen('rgba(116, 185, 255, 0.3)', 100);
+  }
 
-        for (let i = 0; i < count; i++) {
-            setTimeout(() => {
-                this.createParticle(
-                    centerX + Utils.random(-20, 20),
-                    centerY + Utils.random(-20, 20),
-                    'attack',
-                    { size: Utils.random(8, 16) }
-                );
-            }, i * 30);
+  // 火焰效果
+  fireEffect(targetEl, count = 15) {
+    const rect = targetEl.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const bottom = rect.bottom;
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        this.createParticle(centerX + Utils.random(-25, 25), bottom - Utils.random(0, 30), 'fire', {
+          size: Utils.random(8, 18),
+          duration: Utils.random(800, 1200)
+        });
+      }, i * 50);
+    }
+  }
+
+  // 治疗效果
+  healEffect(targetEl, count = 10) {
+    const rect = targetEl.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        this.createParticle(centerX + Utils.random(-40, 40), centerY + Utils.random(20, 50), 'heal', {
+          size: Utils.random(6, 12),
+          duration: 1500
+        });
+      }, i * 80);
+    }
+  }
+
+  // 护盾效果
+  shieldEffect(targetEl, count = 8) {
+    const rect = targetEl.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.PI * 2 / count * i;
+      const distance = 40;
+      this.createParticle(centerX + Math.cos(angle) * distance, centerY + Math.sin(angle) * distance, 'shield', {
+        size: 15,
+        duration: 800
+      });
+    }
+  }
+
+  // 寒冰效果
+  iceEffect(targetEl, count = 12) {
+    const rect = targetEl.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        const angle = Utils.random(0, Math.PI * 2);
+        const distance = Utils.random(10, 40);
+        this.createParticle(centerX + Math.cos(angle) * distance, centerY + Math.sin(angle) * distance, 'ice', {
+          size: Utils.random(6, 12),
+          duration: 800
+        });
+      }, i * 20);
+    }
+    this.flashScreen('rgba(116, 185, 255, 0.2)', 150);
+  }
+
+  // 暗影/虚空效果
+  darkEffect(targetEl, count = 15) {
+    const rect = targetEl.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        this.createParticle(centerX + Utils.random(-30, 30), centerY + Utils.random(-30, 30), 'dark', {
+          size: Utils.random(8, 20),
+          duration: 1200
+        });
+      }, i * 30);
+    }
+    this.shakeScreen('normal');
+  }
+
+  // Boss出场效果
+  bossSpawnEffect() {
+    this.shakeScreen('heavy');
+    this.flashScreen('rgba(255, 0, 0, 0.3)', 500);
+
+    // 全屏暗影粒子
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    for (let i = 0; i < 30; i++) {
+      setTimeout(() => {
+        this.createParticle(Utils.random(0, width), Utils.random(height / 2 - 100, height / 2 + 100), 'dark', {
+          size: Utils.random(15, 30),
+          duration: 1500
+        });
+      }, i * 20);
+    }
+  }
+
+  // 法则效果
+  lawEffect(targetEl, count = 20) {
+    const rect = targetEl.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        const angle = Utils.random(0, Math.PI * 2);
+        const distance = Utils.random(20, 60);
+        this.createParticle(centerX + Math.cos(angle) * distance, centerY + Math.sin(angle) * distance, 'law', {
+          size: Utils.random(4, 10),
+          duration: 1500
+        });
+      }, i * 40);
+    }
+
+    // 紫色闪光
+    this.flashScreen('rgba(108, 92, 231, 0.2)', 200);
+  }
+
+  // 卡牌使用效果
+  playCardEffect(targetEl, cardType) {
+    if (!targetEl) targetEl = document.querySelector('.player-avatar'); // 默认目标为玩家
+
+    switch (cardType) {
+      case 'attack':
+        this.attackEffect(targetEl);
+        break;
+      case 'defense':
+        this.shieldEffect(document.querySelector('.player-avatar'));
+        break;
+      case 'heal':
+        this.healEffect(document.querySelector('.player-avatar'));
+        break;
+      case 'law':
+        this.lawEffect(targetEl);
+        break;
+      case 'fire':
+        this.fireEffect(targetEl);
+        break;
+      case 'thunder':
+        this.thunderEffect(targetEl);
+        break;
+      case 'ice':
+        this.iceEffect(targetEl);
+        break;
+      case 'dark':
+      case 'void':
+        this.darkEffect(targetEl);
+        break;
+      default:
+        // 通用效果
+        if (targetEl) {
+          const rect = targetEl.getBoundingClientRect();
+          this.createParticle(rect.left + rect.width / 2, rect.top + rect.height / 2, 'magic', {
+            size: 10
+          });
         }
     }
+  }
 
-    // 雷电效果
-    thunderEffect(targetEl, count = 12) {
-        const rect = targetEl.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
+  // 暴击效果
+  criticalEffect(targetEl) {
+    const rect = targetEl.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
 
-        // 闪电主体
-        for (let i = 0; i < count; i++) {
-            const angle = (Math.PI * 2 / count) * i;
-            const distance = Utils.random(30, 60);
+    // 大量攻击粒子
+    this.attackEffect(targetEl, 20);
 
-            this.createParticle(
-                centerX + Math.cos(angle) * distance,
-                centerY + Math.sin(angle) * distance,
-                'thunder',
-                { size: Utils.random(4, 10), duration: 300 }
-            );
-        }
+    // 屏幕震动
+    this.shakeScreen();
 
-        // 闪光效果
-        this.flashScreen('rgba(116, 185, 255, 0.3)', 100);
+    // 显示暴击文字
+    const critText = document.createElement('div');
+    critText.className = 'critical-text';
+    critText.textContent = '暴击!';
+    critText.style.left = `${centerX}px`;
+    critText.style.top = `${centerY - 30}px`;
+    document.body.appendChild(critText);
+    setTimeout(() => critText.remove(), 1000);
+  }
+
+  // 盗取成功效果
+  stealSuccessEffect(targetEl) {
+    const rect = targetEl.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    // 紫色法则粒子螺旋上升
+    for (let i = 0; i < 30; i++) {
+      setTimeout(() => {
+        const angle = i / 30 * Math.PI * 4;
+        const radius = 10 + i * 2;
+        this.createParticle(centerX + Math.cos(angle) * radius, centerY - i * 3, 'law', {
+          size: Utils.random(6, 12),
+          duration: 2000
+        });
+      }, i * 30);
     }
+    this.flashScreen('rgba(255, 215, 0, 0.3)', 300);
+  }
 
-    // 火焰效果
-    fireEffect(targetEl, count = 15) {
-        const rect = targetEl.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const bottom = rect.bottom;
-
-        for (let i = 0; i < count; i++) {
-            setTimeout(() => {
-                this.createParticle(
-                    centerX + Utils.random(-25, 25),
-                    bottom - Utils.random(0, 30),
-                    'fire',
-                    { size: Utils.random(8, 18), duration: Utils.random(800, 1200) }
-                );
-            }, i * 50);
-        }
-    }
-
-    // 治疗效果
-    healEffect(targetEl, count = 10) {
-        const rect = targetEl.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-
-        for (let i = 0; i < count; i++) {
-            setTimeout(() => {
-                this.createParticle(
-                    centerX + Utils.random(-40, 40),
-                    centerY + Utils.random(20, 50),
-                    'heal',
-                    { size: Utils.random(6, 12), duration: 1500 }
-                );
-            }, i * 80);
-        }
-    }
-
-    // 护盾效果
-    shieldEffect(targetEl, count = 8) {
-        const rect = targetEl.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-
-        for (let i = 0; i < count; i++) {
-            const angle = (Math.PI * 2 / count) * i;
-            const distance = 40;
-
-            this.createParticle(
-                centerX + Math.cos(angle) * distance,
-                centerY + Math.sin(angle) * distance,
-                'shield',
-                { size: 15, duration: 800 }
-            );
-        }
-    }
-
-    // 寒冰效果
-    iceEffect(targetEl, count = 12) {
-        const rect = targetEl.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-
-        for (let i = 0; i < count; i++) {
-            setTimeout(() => {
-                const angle = Utils.random(0, Math.PI * 2);
-                const distance = Utils.random(10, 40);
-
-                this.createParticle(
-                    centerX + Math.cos(angle) * distance,
-                    centerY + Math.sin(angle) * distance,
-                    'ice',
-                    { size: Utils.random(6, 12), duration: 800 }
-                );
-            }, i * 20);
-        }
-        this.flashScreen('rgba(116, 185, 255, 0.2)', 150);
-    }
-
-    // 暗影/虚空效果
-    darkEffect(targetEl, count = 15) {
-        const rect = targetEl.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-
-        for (let i = 0; i < count; i++) {
-            setTimeout(() => {
-                this.createParticle(
-                    centerX + Utils.random(-30, 30),
-                    centerY + Utils.random(-30, 30),
-                    'dark',
-                    { size: Utils.random(8, 20), duration: 1200 }
-                );
-            }, i * 30);
-        }
-        this.shakeScreen('normal');
-    }
-
-    // Boss出场效果
-    bossSpawnEffect() {
-        this.shakeScreen('heavy');
-        this.flashScreen('rgba(255, 0, 0, 0.3)', 500);
-
-        // 全屏暗影粒子
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-
-        for (let i = 0; i < 30; i++) {
-            setTimeout(() => {
-                this.createParticle(
-                    Utils.random(0, width),
-                    Utils.random(height / 2 - 100, height / 2 + 100),
-                    'dark',
-                    { size: Utils.random(15, 30), duration: 1500 }
-                );
-            }, i * 20);
-        }
-    }
-
-    // 法则效果
-    lawEffect(targetEl, count = 20) {
-        const rect = targetEl.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-
-        for (let i = 0; i < count; i++) {
-            setTimeout(() => {
-                const angle = Utils.random(0, Math.PI * 2);
-                const distance = Utils.random(20, 60);
-
-                this.createParticle(
-                    centerX + Math.cos(angle) * distance,
-                    centerY + Math.sin(angle) * distance,
-                    'law',
-                    { size: Utils.random(4, 10), duration: 1500 }
-                );
-            }, i * 40);
-        }
-
-        // 紫色闪光
-        this.flashScreen('rgba(108, 92, 231, 0.2)', 200);
-    }
-
-    // 卡牌使用效果
-    playCardEffect(targetEl, cardType) {
-        if (!targetEl) targetEl = document.querySelector('.player-avatar'); // 默认目标为玩家
-
-        switch (cardType) {
-            case 'attack':
-                this.attackEffect(targetEl);
-                break;
-            case 'defense':
-                this.shieldEffect(document.querySelector('.player-avatar'));
-                break;
-            case 'heal':
-                this.healEffect(document.querySelector('.player-avatar'));
-                break;
-            case 'law':
-                this.lawEffect(targetEl);
-                break;
-            case 'fire':
-                this.fireEffect(targetEl);
-                break;
-            case 'thunder':
-                this.thunderEffect(targetEl);
-                break;
-            case 'ice':
-                this.iceEffect(targetEl);
-                break;
-            case 'dark':
-            case 'void':
-                this.darkEffect(targetEl);
-                break;
-            default:
-                // 通用效果
-                if (targetEl) {
-                    const rect = targetEl.getBoundingClientRect();
-                    this.createParticle(
-                        rect.left + rect.width / 2,
-                        rect.top + rect.height / 2,
-                        'magic',
-                        { size: 10 }
-                    );
-                }
-        }
-    }
-
-    // 暴击效果
-    criticalEffect(targetEl) {
-        const rect = targetEl.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-
-        // 大量攻击粒子
-        this.attackEffect(targetEl, 20);
-
-        // 屏幕震动
-        this.shakeScreen();
-
-        // 显示暴击文字
-        const critText = document.createElement('div');
-        critText.className = 'critical-text';
-        critText.textContent = '暴击!';
-        critText.style.left = `${centerX}px`;
-        critText.style.top = `${centerY - 30}px`;
-        document.body.appendChild(critText);
-
-        setTimeout(() => critText.remove(), 1000);
-    }
-
-    // 盗取成功效果
-    stealSuccessEffect(targetEl) {
-        const rect = targetEl.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-
-        // 紫色法则粒子螺旋上升
-        for (let i = 0; i < 30; i++) {
-            setTimeout(() => {
-                const angle = (i / 30) * Math.PI * 4;
-                const radius = 10 + i * 2;
-
-                this.createParticle(
-                    centerX + Math.cos(angle) * radius,
-                    centerY - i * 3,
-                    'law',
-                    { size: Utils.random(6, 12), duration: 2000 }
-                );
-            }, i * 30);
-        }
-
-        this.flashScreen('rgba(255, 215, 0, 0.3)', 300);
-    }
-
-    // 屏幕闪光
-    flashScreen(color, duration = 100) {
-        const flash = document.createElement('div');
-        flash.style.cssText = `
+  // 屏幕闪光
+  flashScreen(color, duration = 100) {
+    const flash = document.createElement('div');
+    flash.style.cssText = `
             position: fixed;
             top: 0;
             left: 0;
@@ -484,52 +422,46 @@ class ParticleSystem {
             z-index: 9999;
             animation: fadeOut ${duration}ms ease forwards;
         `;
+    document.body.appendChild(flash);
+    setTimeout(() => flash.remove(), duration);
+  }
 
-        document.body.appendChild(flash);
-        setTimeout(() => flash.remove(), duration);
+  // 屏幕震动
+  shakeScreen(intensity = 'normal') {
+    const battle = document.getElementById('battle-screen');
+    if (battle) {
+      battle.classList.add('screen-shake');
+      setTimeout(() => battle.classList.remove('screen-shake'), 500);
     }
+  }
 
-    // 屏幕震动
-    shakeScreen(intensity = 'normal') {
-        const battle = document.getElementById('battle-screen');
-        if (battle) {
-            battle.classList.add('screen-shake');
-            setTimeout(() => battle.classList.remove('screen-shake'), 500);
-        }
+  // 清除所有粒子
+  clear() {
+    if (this.container) {
+      this.container.innerHTML = '';
     }
-
-    // 清除所有粒子
-    clear() {
-        if (this.container) {
-            this.container.innerHTML = '';
-        }
+  }
+  destroy() {
+    this.stopMainMenuParticles();
+    if (this._handleMouseMove) {
+      document.removeEventListener('mousemove', this._handleMouseMove);
+      this._handleMouseMove = null;
     }
-
-    destroy() {
-        this.stopMainMenuParticles();
-        if (this._handleMouseMove) {
-            document.removeEventListener('mousemove', this._handleMouseMove);
-            this._handleMouseMove = null;
-        }
-        if (this.container) {
-            this.container.remove();
-            this.container = null;
-        }
+    if (this.container) {
+      this.container.remove();
+      this.container = null;
     }
-}
-
-// 全局粒子系统实例
-let particles;
-
+  }
+} // 全局粒子系统实例
+export let particles;
 document.addEventListener('DOMContentLoaded', () => {
-    if (particles && typeof particles.destroy === 'function') {
-        particles.destroy();
-    }
-    particles = new ParticleSystem();
+  if (particles && typeof particles.destroy === 'function') {
+    particles.destroy();
+  }
+  particles = new ParticleSystem();
 });
-
 window.addEventListener('beforeunload', () => {
-    if (particles && typeof particles.destroy === 'function') {
-        particles.destroy();
-    }
+  if (particles && typeof particles.destroy === 'function') {
+    particles.destroy();
+  }
 });

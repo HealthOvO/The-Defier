@@ -7,287 +7,288 @@
  * 2. 使用 Lerp 插值实现平滑动画
  * 3. 实时注入 CSS 变量驱动 3D 变换和光效
  */
-const CardEffects = {
-    // 配置参数
-    config: {
-        rotationIntensity: 12,  // 旋转强度(度)
-        lerpFactor: 0.12,       // 平滑插值因子 (越大越快)
-        resetDelay: 80,         // 鼠标移出后重置延迟(ms)
-        enableOnMobile: true    // 是否在移动端启用
-    },
+export const CardEffects = {
+  // 配置参数
+  config: {
+    rotationIntensity: 12,
+    // 旋转强度(度)
+    lerpFactor: 0.12,
+    // 平滑插值因子 (越大越快)
+    resetDelay: 80,
+    // 鼠标移出后重置延迟(ms)
+    enableOnMobile: true // 是否在移动端启用
+  },
+  // 状态存储 (使用 WeakMap 避免内存泄漏)
+  states: new WeakMap(),
+  trackedElements: new Set(),
+  /**
+   * 初始化单个卡牌的3D效果
+   * @param {HTMLElement} cardElement - 卡牌DOM元素
+   */
+  init(cardElement) {
+    if (!cardElement || this.states.has(cardElement)) return;
 
-    // 状态存储 (使用 WeakMap 避免内存泄漏)
-    states: new WeakMap(),
-    trackedElements: new Set(),
+    // 初始化状态
+    const state = {
+      current: {
+        x: 50,
+        y: 50,
+        rotateX: 0,
+        rotateY: 0
+      },
+      target: {
+        x: 50,
+        y: 50,
+        rotateX: 0,
+        rotateY: 0
+      },
+      rafId: null,
+      isInteracting: false,
+      resetTimer: null,
+      handlers: {}
+    };
+    this.states.set(cardElement, state);
+    this.trackedElements.add(cardElement);
 
-    /**
-     * 初始化单个卡牌的3D效果
-     * @param {HTMLElement} cardElement - 卡牌DOM元素
-     */
-    init(cardElement) {
-        if (!cardElement || this.states.has(cardElement)) return;
+    // 绑定鼠标事件
+    state.handlers.onEnter = e => this.onEnter(e, cardElement);
+    state.handlers.onMove = e => this.onMove(e, cardElement);
+    state.handlers.onLeave = e => this.onLeave(e, cardElement);
+    cardElement.addEventListener('mouseenter', state.handlers.onEnter);
+    cardElement.addEventListener('mousemove', state.handlers.onMove);
+    cardElement.addEventListener('mouseleave', state.handlers.onLeave);
 
-        // 初始化状态
-        const state = {
-            current: { x: 50, y: 50, rotateX: 0, rotateY: 0 },
-            target: { x: 50, y: 50, rotateX: 0, rotateY: 0 },
-            rafId: null,
-            isInteracting: false,
-            resetTimer: null,
-            handlers: {}
-        };
-        this.states.set(cardElement, state);
-        this.trackedElements.add(cardElement);
+    // 触摸事件支持
+    if (this.config.enableOnMobile) {
+      state.handlers.onTouchStart = e => this.onTouchStart(e, cardElement);
+      state.handlers.onTouchMove = e => this.onTouchMove(e, cardElement);
+      state.handlers.onTouchEnd = e => this.onLeave(e, cardElement);
+      cardElement.addEventListener('touchstart', state.handlers.onTouchStart, {
+        passive: true
+      });
+      cardElement.addEventListener('touchmove', state.handlers.onTouchMove, {
+        passive: true
+      });
+      cardElement.addEventListener('touchend', state.handlers.onTouchEnd);
+    }
+  },
+  /**
+   * 鼠标进入卡牌
+   */
+  onEnter(e, card) {
+    const state = this.states.get(card);
+    if (!state) return;
 
-        // 绑定鼠标事件
-        state.handlers.onEnter = (e) => this.onEnter(e, cardElement);
-        state.handlers.onMove = (e) => this.onMove(e, cardElement);
-        state.handlers.onLeave = (e) => this.onLeave(e, cardElement);
-        cardElement.addEventListener('mouseenter', state.handlers.onEnter);
-        cardElement.addEventListener('mousemove', state.handlers.onMove);
-        cardElement.addEventListener('mouseleave', state.handlers.onLeave);
+    // 清除重置定时器
+    if (state.resetTimer) {
+      clearTimeout(state.resetTimer);
+      state.resetTimer = null;
+    }
+    state.isInteracting = true;
+    card.classList.add('card--interacting');
+    this.startAnimation(card);
+  },
+  /**
+   * 鼠标移动 - 核心坐标计算
+   */
+  onMove(e, card) {
+    const state = this.states.get(card);
+    if (!state || !state.isInteracting) return;
+    const rect = card.getBoundingClientRect();
 
-        // 触摸事件支持
-        if (this.config.enableOnMobile) {
-            state.handlers.onTouchStart = (e) => this.onTouchStart(e, cardElement);
-            state.handlers.onTouchMove = (e) => this.onTouchMove(e, cardElement);
-            state.handlers.onTouchEnd = (e) => this.onLeave(e, cardElement);
-            cardElement.addEventListener('touchstart', state.handlers.onTouchStart, { passive: true });
-            cardElement.addEventListener('touchmove', state.handlers.onTouchMove, { passive: true });
-            cardElement.addEventListener('touchend', state.handlers.onTouchEnd);
-        }
-    },
+    // 计算鼠标相对位置 (0-100)
+    const x = (e.clientX - rect.left) / rect.width * 100;
+    const y = (e.clientY - rect.top) / rect.height * 100;
 
-    /**
-     * 鼠标进入卡牌
-     */
-    onEnter(e, card) {
-        const state = this.states.get(card);
-        if (!state) return;
+    // 计算旋转角度 (以中心50%为原点)
+    const centerX = x - 50;
+    const centerY = y - 50;
+    const intensity = this.config.rotationIntensity;
+    state.target = {
+      x: this.clamp(x, 0, 100),
+      y: this.clamp(y, 0, 100),
+      // rotateX 控制左右旋转，rotateY 控制上下旋转
+      rotateX: -(centerX / 50) * intensity,
+      rotateY: centerY / 50 * intensity
+    };
+  },
+  /**
+   * 鼠标离开卡牌
+   */
+  onLeave(e, card) {
+    const state = this.states.get(card);
+    if (!state) return;
+    state.isInteracting = false;
 
-        // 清除重置定时器
-        if (state.resetTimer) {
-            clearTimeout(state.resetTimer);
-            state.resetTimer = null;
-        }
-
-        state.isInteracting = true;
-        card.classList.add('card--interacting');
-        this.startAnimation(card);
-    },
-
-    /**
-     * 鼠标移动 - 核心坐标计算
-     */
-    onMove(e, card) {
-        const state = this.states.get(card);
-        if (!state || !state.isInteracting) return;
-
-        const rect = card.getBoundingClientRect();
-
-        // 计算鼠标相对位置 (0-100)
-        const x = ((e.clientX - rect.left) / rect.width) * 100;
-        const y = ((e.clientY - rect.top) / rect.height) * 100;
-
-        // 计算旋转角度 (以中心50%为原点)
-        const centerX = x - 50;
-        const centerY = y - 50;
-        const intensity = this.config.rotationIntensity;
-
+    // 延迟重置，让动画有时间归位
+    state.resetTimer = setTimeout(() => {
+      if (!state.isInteracting) {
+        card.classList.remove('card--interacting');
         state.target = {
-            x: this.clamp(x, 0, 100),
-            y: this.clamp(y, 0, 100),
-            // rotateX 控制左右旋转，rotateY 控制上下旋转
-            rotateX: -(centerX / 50) * intensity,
-            rotateY: (centerY / 50) * intensity
+          x: 50,
+          y: 50,
+          rotateX: 0,
+          rotateY: 0
         };
-    },
+      }
+    }, this.config.resetDelay);
+  },
+  /**
+   * 触摸开始
+   */
+  onTouchStart(e, card) {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      this.onEnter({
+        clientX: touch.clientX,
+        clientY: touch.clientY
+      }, card);
+    }
+  },
+  /**
+   * 触摸移动
+   */
+  onTouchMove(e, card) {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      this.onMove({
+        clientX: touch.clientX,
+        clientY: touch.clientY
+      }, card);
+    }
+  },
+  /**
+   * 动画循环 - 使用 Lerp 平滑插值
+   */
+  startAnimation(card) {
+    const state = this.states.get(card);
+    if (!state || state.rafId) return;
+    const animate = () => {
+      const {
+        current,
+        target
+      } = state;
+      const factor = this.config.lerpFactor;
 
-    /**
-     * 鼠标离开卡牌
-     */
-    onLeave(e, card) {
-        const state = this.states.get(card);
-        if (!state) return;
+      // Lerp 线性插值：current += (target - current) * factor
+      current.x += (target.x - current.x) * factor;
+      current.y += (target.y - current.y) * factor;
+      current.rotateX += (target.rotateX - current.rotateX) * factor;
+      current.rotateY += (target.rotateY - current.rotateY) * factor;
 
-        state.isInteracting = false;
+      // 注入 CSS 变量
+      card.style.setProperty('--pointer-x', `${current.x}%`);
+      card.style.setProperty('--pointer-y', `${current.y}%`);
+      card.style.setProperty('--rotate-x', `${current.rotateX}deg`);
+      card.style.setProperty('--rotate-y', `${current.rotateY}deg`);
 
-        // 延迟重置，让动画有时间归位
-        state.resetTimer = setTimeout(() => {
-            if (!state.isInteracting) {
-                card.classList.remove('card--interacting');
-                state.target = { x: 50, y: 50, rotateX: 0, rotateY: 0 };
-            }
-        }, this.config.resetDelay);
-    },
-
-    /**
-     * 触摸开始
-     */
-    onTouchStart(e, card) {
-        if (e.touches.length === 1) {
-            const touch = e.touches[0];
-            this.onEnter({ clientX: touch.clientX, clientY: touch.clientY }, card);
-        }
-    },
-
-    /**
-     * 触摸移动
-     */
-    onTouchMove(e, card) {
-        if (e.touches.length === 1) {
-            const touch = e.touches[0];
-            this.onMove({ clientX: touch.clientX, clientY: touch.clientY }, card);
-        }
-    },
-
-    /**
-     * 动画循环 - 使用 Lerp 平滑插值
-     */
-    startAnimation(card) {
-        const state = this.states.get(card);
-        if (!state || state.rafId) return;
-
-        const animate = () => {
-            const { current, target } = state;
-            const factor = this.config.lerpFactor;
-
-            // Lerp 线性插值：current += (target - current) * factor
-            current.x += (target.x - current.x) * factor;
-            current.y += (target.y - current.y) * factor;
-            current.rotateX += (target.rotateX - current.rotateX) * factor;
-            current.rotateY += (target.rotateY - current.rotateY) * factor;
-
-            // 注入 CSS 变量
-            card.style.setProperty('--pointer-x', `${current.x}%`);
-            card.style.setProperty('--pointer-y', `${current.y}%`);
-            card.style.setProperty('--rotate-x', `${current.rotateX}deg`);
-            card.style.setProperty('--rotate-y', `${current.rotateY}deg`);
-
-            // 判断是否需要继续动画
-            const threshold = 0.1;
-            const needsContinue = state.isInteracting ||
-                Math.abs(current.x - target.x) > threshold ||
-                Math.abs(current.y - target.y) > threshold ||
-                Math.abs(current.rotateX - target.rotateX) > threshold ||
-                Math.abs(current.rotateY - target.rotateY) > threshold;
-
-            if (needsContinue) {
-                state.rafId = requestAnimationFrame(animate);
-            } else {
-                state.rafId = null;
-                // 完全归位时清除内联样式
-                if (!state.isInteracting) {
-                    card.style.removeProperty('--pointer-x');
-                    card.style.removeProperty('--pointer-y');
-                    card.style.removeProperty('--rotate-x');
-                    card.style.removeProperty('--rotate-y');
-                }
-            }
-        };
-
+      // 判断是否需要继续动画
+      const threshold = 0.1;
+      const needsContinue = state.isInteracting || Math.abs(current.x - target.x) > threshold || Math.abs(current.y - target.y) > threshold || Math.abs(current.rotateX - target.rotateX) > threshold || Math.abs(current.rotateY - target.rotateY) > threshold;
+      if (needsContinue) {
         state.rafId = requestAnimationFrame(animate);
-    },
-
-    /**
-     * 工具函数 - 限制数值范围
-     */
-    clamp(value, min, max) {
-        return Math.min(Math.max(value, min), max);
-    },
-
-    /**
-     * 批量初始化页面上所有卡牌
-     * @param {string} selector - CSS选择器
-     */
-    initAll(selector = '.card') {
-        document.querySelectorAll(selector).forEach(card => this.init(card));
-    },
-
-    /**
-     * 销毁卡牌效果 (清理事件监听)
-     * @param {HTMLElement} cardElement - 卡牌DOM元素
-     */
-    destroy(cardElement) {
-        const state = this.states.get(cardElement);
-        if (state) {
-            if (state.rafId) {
-                cancelAnimationFrame(state.rafId);
-            }
-            if (state.resetTimer) {
-                clearTimeout(state.resetTimer);
-            }
-            if (state.handlers) {
-                if (state.handlers.onEnter) cardElement.removeEventListener('mouseenter', state.handlers.onEnter);
-                if (state.handlers.onMove) cardElement.removeEventListener('mousemove', state.handlers.onMove);
-                if (state.handlers.onLeave) cardElement.removeEventListener('mouseleave', state.handlers.onLeave);
-                if (state.handlers.onTouchStart) cardElement.removeEventListener('touchstart', state.handlers.onTouchStart);
-                if (state.handlers.onTouchMove) cardElement.removeEventListener('touchmove', state.handlers.onTouchMove);
-                if (state.handlers.onTouchEnd) cardElement.removeEventListener('touchend', state.handlers.onTouchEnd);
-            }
-            this.states.delete(cardElement);
-            this.trackedElements.delete(cardElement);
-            cardElement.classList.remove('card--interacting');
+      } else {
+        state.rafId = null;
+        // 完全归位时清除内联样式
+        if (!state.isInteracting) {
+          card.style.removeProperty('--pointer-x');
+          card.style.removeProperty('--pointer-y');
+          card.style.removeProperty('--rotate-x');
+          card.style.removeProperty('--rotate-y');
         }
+      }
+    };
+    state.rafId = requestAnimationFrame(animate);
+  },
+  /**
+   * 工具函数 - 限制数值范围
+   */
+  clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  },
+  /**
+   * 批量初始化页面上所有卡牌
+   * @param {string} selector - CSS选择器
+   */
+  initAll(selector = '.card') {
+    document.querySelectorAll(selector).forEach(card => this.init(card));
+  },
+  /**
+   * 销毁卡牌效果 (清理事件监听)
+   * @param {HTMLElement} cardElement - 卡牌DOM元素
+   */
+  destroy(cardElement) {
+    const state = this.states.get(cardElement);
+    if (state) {
+      if (state.rafId) {
+        cancelAnimationFrame(state.rafId);
+      }
+      if (state.resetTimer) {
+        clearTimeout(state.resetTimer);
+      }
+      if (state.handlers) {
+        if (state.handlers.onEnter) cardElement.removeEventListener('mouseenter', state.handlers.onEnter);
+        if (state.handlers.onMove) cardElement.removeEventListener('mousemove', state.handlers.onMove);
+        if (state.handlers.onLeave) cardElement.removeEventListener('mouseleave', state.handlers.onLeave);
+        if (state.handlers.onTouchStart) cardElement.removeEventListener('touchstart', state.handlers.onTouchStart);
+        if (state.handlers.onTouchMove) cardElement.removeEventListener('touchmove', state.handlers.onTouchMove);
+        if (state.handlers.onTouchEnd) cardElement.removeEventListener('touchend', state.handlers.onTouchEnd);
+      }
+      this.states.delete(cardElement);
+      this.trackedElements.delete(cardElement);
+      cardElement.classList.remove('card--interacting');
     }
-};
-
-// 导出到全局
-window.CardEffects = CardEffects;
-let cardEffectsObserver = null;
-
-// DOM加载完成后自动初始化已有卡牌
+  }
+}; // 导出到全局
+export let cardEffectsObserver = null; // DOM加载完成后自动初始化已有卡牌
 document.addEventListener('DOMContentLoaded', () => {
-    if (cardEffectsObserver) {
-        cardEffectsObserver.disconnect();
-    }
+  if (cardEffectsObserver) {
+    cardEffectsObserver.disconnect();
+  }
 
-    // 使用 MutationObserver 监听动态添加的卡牌
-    cardEffectsObserver = new MutationObserver((mutations) => {
-        const cleanupRemovedNode = (node) => {
-            if (!node || node.nodeType !== 1) return;
-            if (node.classList && node.classList.contains('card')) {
-                CardEffects.destroy(node);
-            }
-            if (node.querySelectorAll) {
-                node.querySelectorAll('.card').forEach(card => CardEffects.destroy(card));
-            }
-        };
-
-        mutations.forEach((mutation) => {
-            mutation.addedNodes.forEach((node) => {
-                if (node.nodeType === 1) { // Element node
-                    if (node.classList && node.classList.contains('card')) {
-                        CardEffects.init(node);
-                    }
-                    // 也检查子节点中的卡牌
-                    if (node.querySelectorAll) {
-                        node.querySelectorAll('.card').forEach(card => CardEffects.init(card));
-                    }
-                }
-            });
-
-            mutation.removedNodes.forEach((node) => {
-                cleanupRemovedNode(node);
-            });
-        });
+  // 使用 MutationObserver 监听动态添加的卡牌
+  cardEffectsObserver = new MutationObserver(mutations => {
+    const cleanupRemovedNode = node => {
+      if (!node || node.nodeType !== 1) return;
+      if (node.classList && node.classList.contains('card')) {
+        CardEffects.destroy(node);
+      }
+      if (node.querySelectorAll) {
+        node.querySelectorAll('.card').forEach(card => CardEffects.destroy(card));
+      }
+    };
+    mutations.forEach(mutation => {
+      mutation.addedNodes.forEach(node => {
+        if (node.nodeType === 1) {
+          // Element node
+          if (node.classList && node.classList.contains('card')) {
+            CardEffects.init(node);
+          }
+          // 也检查子节点中的卡牌
+          if (node.querySelectorAll) {
+            node.querySelectorAll('.card').forEach(card => CardEffects.init(card));
+          }
+        }
+      });
+      mutation.removedNodes.forEach(node => {
+        cleanupRemovedNode(node);
+      });
     });
+  });
+  cardEffectsObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
 
-    cardEffectsObserver.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
-
-    // 初始化现有卡牌
-    CardEffects.initAll();
+  // 初始化现有卡牌
+  CardEffects.initAll();
 });
-
 window.addEventListener('beforeunload', () => {
-    if (cardEffectsObserver) {
-        cardEffectsObserver.disconnect();
-        cardEffectsObserver = null;
-    }
-    Array.from(CardEffects.trackedElements).forEach((cardEl) => {
-        CardEffects.destroy(cardEl);
-    });
+  if (cardEffectsObserver) {
+    cardEffectsObserver.disconnect();
+    cardEffectsObserver = null;
+  }
+  Array.from(CardEffects.trackedElements).forEach(cardEl => {
+    CardEffects.destroy(cardEl);
+  });
 });

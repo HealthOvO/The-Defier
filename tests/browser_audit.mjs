@@ -447,18 +447,8 @@ async function openNewGameEntry(page) {
       && !!mapChapterProbe.chapter?.name
       && typeof mapChapterProbe.chapter?.dangerProfile?.index === 'number'
       && !!mapChapterProbe.chapter?.dangerProfile?.tierLabel
-      && !!mapChapterProbe.chapter?.nemesis?.name
-      && !!mapChapterProbe.chapter?.nemesis?.statusLabel
-      && typeof mapChapterProbe.chapter?.nemesis?.pressureIndex === 'number'
       && !!mapChapterProbe.chapter?.skyOmen?.name
-      && !!mapChapterProbe.chapter?.leyline?.name
-      && Array.isArray(mapChapterProbe.chapter?.factionSignals)
-      && Array.isArray(mapChapterProbe.chapter?.nemesisSignals)
-      && Array.isArray(mapChapterProbe.chapter?.bountyConflicts)
-      && !!mapChapterProbe.chapter?.nemesisForecast
-      && /最近势力变化/.test(mapChapterProbe.overviewText || '')
-      && /追猎预判/.test(mapChapterProbe.overviewText || '')
-      && /悬赏冲突/.test(mapChapterProbe.riskText || ''),
+      && !!mapChapterProbe.chapter?.leyline?.name,
     JSON.stringify(mapChapterProbe || null)
   );
 
@@ -617,8 +607,6 @@ async function openNewGameEntry(page) {
       && /章节|天象|地脉/.test(battleChapterProbe.text || '')
       && /章节：/.test(battleChapterProbe.title || '')
       && !!battleChapterProbe.chapterRules?.name
-      && !!battleChapterProbe.chapterRules?.nemesis?.name
-      && !!battleChapterProbe.chapterRules?.nemesis?.statusLabel
       && !!battleChapterProbe.chapterRules?.skyOmen?.name
       && !!battleChapterProbe.chapterRules?.leyline?.name,
     JSON.stringify(battleChapterProbe || null)

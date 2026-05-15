@@ -1,0 +1,81 @@
+const fs = require('fs');
+
+const originalReadFileSync = fs.readFileSync;
+fs.readFileSync = function(p, enc) {
+    let c = originalReadFileSync(p, enc);
+    if (enc === 'utf8' && p.endsWith('.js')) {
+        c = c.replace(/^export\s+(const|let|var|class|function|default)/gm, '$1');
+        c = c.replace(/^export\s+\{.*?\};?/gm, '');
+        c = c.replace(/^import\s+.*?;/gm, '');
+    }
+    return c;
+};
+
+const path = require('path');
+const vm = require('vm');
+
+function assert(cond, msg) {
+  if (!cond) throw new Error(msg);
+}
+
+(function run() {
+  const code = fs.readFileSync(path.resolve(__dirname, '../js/managers/EventManager.js'), 'utf8') + '\n' + fs.readFileSync(path.resolve(__dirname, '../js/managers/MetaProgressionManager.js'), 'utf8') + '\n' + fs.readFileSync(path.resolve(__dirname, '../js/managers/EndlessManager.js'), 'utf8') + '\n' + fs.readFileSync(path.resolve(__dirname, '../js/managers/RunManager.js'), 'utf8') + '\n' + fs.readFileSync(path.resolve(__dirname, '../js/managers/SeasonBoardManager.js'), 'utf8') + '\n' + fs.readFileSync(path.resolve(__dirname, '../js/managers/SanctumAgendaManager.js'), 'utf8') + '\n' + fs.readFileSync(path.resolve(__dirname, '../js/managers/ShopManager.js'), 'utf8') + '\n' + fs.readFileSync(path.resolve(__dirname, '../js/managers/SaveManager.js'), 'utf8') + '\n' + fs.readFileSync(path.resolve(__dirname, '../js/core/player.js'), 'utf8') + '\n' + fs.readFileSync(path.resolve(__dirname, '../js/core/map.js'), 'utf8') + '\n' + fs.readFileSync(path.resolve(__dirname, '../js/core/events.js'), 'utf8') + '\n' + fs.readFileSync(path.resolve(__dirname, '../js/core/achievements.js'), 'utf8') + '\n' + fs.readFileSync(path.resolve(__dirname, '../js/core/fateRing.js'), 'utf8') + '\n' + fs.readFileSync(path.resolve(__dirname, '../js/game.js'), 'utf8');
+  const ctx = vm.createContext({
+    console,
+    window: {},
+    document: {
+      addEventListener: () => {},
+      querySelectorAll: () => [],
+      getElementById: () => null
+    },
+    localStorage: {
+      getItem: () => null,
+      setItem: () => {}
+    },
+    sessionStorage: {
+      getItem: () => null,
+      setItem: () => {}
+    },
+    setTimeout: () => 0,
+    clearTimeout: () => {}
+  });
+  ctx.window = ctx;
+  ctx.global = ctx;
+
+  vm.runInContext(code, ctx, { filename: 'game.js' });
+  const Game = vm.runInContext('Game', ctx);
+
+  const legacySave = {
+    version: '5.0.0',
+    player: {
+      stance: 'neutral',
+      currentHp: 20,
+      deck: [{ id: 'strike' }]
+    },
+    map: { nodes: [], currentNodeIndex: -1, completedNodes: [] },
+    unlockedRealms: [1],
+    currentScreen: 'map-screen'
+  };
+
+  const migrated = Game.prototype.migrateSaveData.call({
+    featureFlags: {
+      combatDepthV2: true,
+      pvpRuleSyncV2: true,
+      mapNodeTrialForge: true,
+      endlessModeV1: true
+    }
+  }, legacySave);
+
+  assert(migrated.version === '5.1.0', 'legacy save should migrate to 5.1.0');
+  assert(migrated.combatMeta && migrated.combatMeta.ruleVersion === 'combat-v2', 'combatMeta should be attached');
+  assert(migrated.pvpMeta && migrated.pvpMeta.ruleVersion === 'pvp-v2', 'pvpMeta should be attached');
+  assert(migrated.featureFlags && migrated.featureFlags.combatDepthV2 === true, 'featureFlags should be attached');
+  assert(migrated.featureFlags && migrated.featureFlags.endlessModeV1 === true, 'endless flag should be attached');
+  assert(migrated.endlessMeta && typeof migrated.endlessMeta === 'object', 'endless meta should be attached');
+  assert(Number(migrated.endlessMeta.pressure) === 0, 'endless pressure should default to 0 in migrated saves');
+  assert(migrated.sanctumAgendaState && typeof migrated.sanctumAgendaState === 'object', 'sanctum agenda state should be attached');
+  assert(migrated.sanctumAgendaState.activeAgenda === null, 'migrated sanctum agenda should default to no active agenda');
+  assert(typeof migrated.schemaMigratedAt === 'number', 'schemaMigratedAt should be timestamp');
+
+  console.log('Save migration sanity checks passed.');
+})();

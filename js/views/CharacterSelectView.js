@@ -1,258 +1,258 @@
+import { escapeAttr, escapeHtml } from "../core/safe-html.js";
+import { CHARACTERS } from "../data/index.js";
 export class CharacterSelectView {
-    constructor(gameInstance) {
-        this.game = gameInstance;
+  constructor(gameInstance) {
+    this.game = gameInstance;
+  }
+  bindCharacterSelectionEvents(container) {
+    if (!container || container.dataset.selectionBound === 'true') return;
+    container.addEventListener('click', event => {
+      const destinyCard = event.target.closest('[data-run-destiny-id]');
+      if (destinyCard && container.contains(destinyCard)) {
+        this.selectRunDestiny(destinyCard.dataset.runDestinyId || '');
+        return;
+      }
+      const spiritCard = event.target.closest('[data-spirit-id]');
+      if (spiritCard && container.contains(spiritCard)) {
+        this.selectSpiritCompanion(spiritCard.dataset.spiritId || '');
+        return;
+      }
+      const runPathCard = event.target.closest('[data-run-path-id]');
+      if (runPathCard && container.contains(runPathCard)) {
+        this.selectRunPath(runPathCard.dataset.runPathId || '');
+        return;
+      }
+      const characterCard = event.target.closest('.character-card[data-id]');
+      if (!characterCard || !container.contains(characterCard) || characterCard.classList.contains('locked')) return;
+      this.selectCharacter(characterCard.dataset.id || '');
+    });
+    container.addEventListener('error', event => {
+      const target = event.target;
+      if (typeof HTMLImageElement === 'undefined' || !(target instanceof HTMLImageElement) || !target.classList.contains('char-avatar-img')) return;
+      target.style.display = 'none';
+      const fallback = target.nextElementSibling;
+      if (fallback && fallback.classList.contains('char-avatar-emoji')) {
+        fallback.style.display = 'flex';
+      }
+    }, true);
+    container.dataset.selectionBound = 'true';
+  }
+  renderRunDestinySelection(characterId) {
+    const host = document.getElementById('run-destiny-selection');
+    const summary = document.getElementById('run-destiny-summary');
+    if (!host) return;
+    const charId = typeof characterId === 'string' ? characterId : this.game.selectedCharacterId;
+    if (!charId) {
+      host.innerHTML = '<div class="run-destiny-empty">先选定一位角色，再感应这一局的命格。</div>';
+      if (summary) summary.textContent = '命格会决定这一轮的开局气质、资源节奏与战斗风格。';
+      return;
     }
-
-    renderRunDestinySelection(characterId) {
-        const host = document.getElementById('run-destiny-selection');
-        const summary = document.getElementById('run-destiny-summary');
-        if (!host) return;
-
-        const charId = typeof characterId === 'string' ? characterId : this.game.selectedCharacterId;
-        if (!charId) {
-            host.innerHTML = '<div class="run-destiny-empty">先选定一位角色，再感应这一局的命格。</div>';
-            if (summary) summary.textContent = '命格会决定这一轮的开局气质、资源节奏与战斗风格。';
-            return;
-        }
-
-        const draftIds = this.game.draftRunDestiniesForCharacter(charId);
-        if (!draftIds.includes(this.game.selectedRunDestinyId)) {
-            this.game.selectedRunDestinyId = draftIds[0] || null;
-        }
-
-        host.innerHTML = draftIds.map((destinyId) => {
-            const meta = this.game.getRunDestinyMetaById(destinyId, 1);
-            if (!meta) return '';
-            const selectedClass = destinyId === this.game.selectedRunDestinyId ? 'selected' : '';
-            const effectTags = [];
-            const effects = meta.effects || {};
-            if (Number(effects.firstTurnDraw) > 0) effectTags.push(`首回合抽牌 +${Math.floor(Number(effects.firstTurnDraw) || 0)}`);
-            if (Number(effects.firstTurnEnergy) > 0) effectTags.push(`首回合灵力 +${Math.floor(Number(effects.firstTurnEnergy) || 0)}`);
-            if (Number(effects.openingBlock) > 0) effectTags.push(`开场护盾 +${Math.floor(Number(effects.openingBlock) || 0)}`);
-            if (Number(effects.firstAttackBonusPerBattle) > 0) effectTags.push(`首击增伤 +${Math.floor(Number(effects.firstAttackBonusPerBattle) || 0)}`);
-            if (Number(effects.firstSkillDrawPerTurn) > 0) effectTags.push(`首个技能抽牌 +${Math.floor(Number(effects.firstSkillDrawPerTurn) || 0)}`);
-            if (Number(effects.overhealToBlockRatio) > 0) effectTags.push(`溢疗转盾 x${Number(effects.overhealToBlockRatio).toFixed(1)}`);
-
-            return `
+    const draftIds = this.game.draftRunDestiniesForCharacter(charId);
+    if (!draftIds.includes(this.game.selectedRunDestinyId)) {
+      this.game.selectedRunDestinyId = draftIds[0] || null;
+    }
+    host.innerHTML = draftIds.map(destinyId => {
+      const meta = this.game.getRunDestinyMetaById(destinyId, 1);
+      if (!meta) return '';
+      const selectedClass = destinyId === this.game.selectedRunDestinyId ? 'selected' : '';
+      const effectTags = [];
+      const effects = meta.effects || {};
+      if (Number(effects.firstTurnDraw) > 0) effectTags.push(`首回合抽牌 +${Math.floor(Number(effects.firstTurnDraw) || 0)}`);
+      if (Number(effects.firstTurnEnergy) > 0) effectTags.push(`首回合灵力 +${Math.floor(Number(effects.firstTurnEnergy) || 0)}`);
+      if (Number(effects.openingBlock) > 0) effectTags.push(`开场护盾 +${Math.floor(Number(effects.openingBlock) || 0)}`);
+      if (Number(effects.firstAttackBonusPerBattle) > 0) effectTags.push(`首击增伤 +${Math.floor(Number(effects.firstAttackBonusPerBattle) || 0)}`);
+      if (Number(effects.firstSkillDrawPerTurn) > 0) effectTags.push(`首个技能抽牌 +${Math.floor(Number(effects.firstSkillDrawPerTurn) || 0)}`);
+      if (Number(effects.overhealToBlockRatio) > 0) effectTags.push(`溢疗转盾 x${Number(effects.overhealToBlockRatio).toFixed(1)}`);
+      return `
                 <button type="button"
                         class="run-destiny-card ${selectedClass}"
-                        data-destiny-id="${meta.id}"
-                        onclick="game.selectRunDestiny('${meta.id}')">
+                        data-run-destiny-id="${escapeAttr(meta.id)}"
+                        data-destiny-id="${escapeAttr(meta.id)}">
                     <div class="run-destiny-head">
-                        <span class="run-destiny-icon">${meta.icon}</span>
+                        <span class="run-destiny-icon">${escapeHtml(meta.icon)}</span>
                         <div class="run-destiny-title-group">
-                            <span class="run-destiny-name">${meta.name}</span>
-                            <span class="run-destiny-tier">${meta.category} · ${meta.tierLabel}</span>
+                            <span class="run-destiny-name">${escapeHtml(meta.name)}</span>
+                            <span class="run-destiny-tier">${escapeHtml(meta.category)} · ${escapeHtml(meta.tierLabel)}</span>
                         </div>
                     </div>
-                    <div class="run-destiny-desc">${meta.description}</div>
-                    <div class="run-destiny-summary">${meta.summary}</div>
+                    <div class="run-destiny-desc">${escapeHtml(meta.description)}</div>
+                    <div class="run-destiny-summary">${escapeHtml(meta.summary)}</div>
                     <div class="run-destiny-tags">
-                        ${(effectTags.slice(0, 3)).map((tag) => `<span class="run-destiny-tag">${tag}</span>`).join('')}
+                        ${effectTags.slice(0, 3).map(tag => `<span class="run-destiny-tag">${escapeHtml(tag)}</span>`).join('')}
                     </div>
                 </button>
             `;
-        }).join('');
-
-        const selectedMeta = this.game.getRunDestinyMetaById(this.game.selectedRunDestinyId, 1);
-        if (summary) {
-            summary.textContent = selectedMeta
-                ? `已感应命格「${selectedMeta.name}」：${selectedMeta.playstyle || selectedMeta.summary || selectedMeta.description}`
-                : '命格会决定这一轮的开局气质、资源节奏与战斗风格。';
-        }
+    }).join('');
+    const selectedMeta = this.game.getRunDestinyMetaById(this.game.selectedRunDestinyId, 1);
+    if (summary) {
+      summary.textContent = selectedMeta ? `已感应命格「${selectedMeta.name}」：${selectedMeta.playstyle || selectedMeta.summary || selectedMeta.description}` : '命格会决定这一轮的开局气质、资源节奏与战斗风格。';
     }
-
-    renderSpiritCompanionSelection(characterId) {
-        const host = document.getElementById('spirit-companion-selection');
-        const summary = document.getElementById('spirit-companion-summary');
-        if (!host) return;
-
-        const charId = typeof characterId === 'string' ? characterId : this.game.selectedCharacterId;
-        if (!charId) {
-            host.innerHTML = '<div class="run-destiny-empty">先选定一位角色，再决定与你同行的灵契。</div>';
-            if (summary) summary.textContent = '灵契提供常驻被动与蓄能主动，会补足这局的关键短板。';
-            return;
-        }
-
-        const draftIds = this.game.draftSpiritCompanionsForCharacter(charId);
-        if (!draftIds.includes(this.game.selectedSpiritCompanionId)) {
-            this.game.selectedSpiritCompanionId = draftIds[0] || null;
-        }
-
-        host.innerHTML = draftIds.map((spiritId) => {
-            const meta = this.game.getSpiritCompanionMetaById(spiritId, 1);
-            if (!meta) return '';
-            const selectedClass = spiritId === this.game.selectedSpiritCompanionId ? 'selected' : '';
-            const tags = [];
-            if (meta.passiveLabel) tags.push(`被动·${meta.passiveLabel}`);
-            if (meta.activeLabel) tags.push(`主动·${meta.activeLabel}`);
-            tags.push(`蓄能 ${meta.chargeMax}`);
-            return `
+  }
+  renderSpiritCompanionSelection(characterId) {
+    const host = document.getElementById('spirit-companion-selection');
+    const summary = document.getElementById('spirit-companion-summary');
+    if (!host) return;
+    const charId = typeof characterId === 'string' ? characterId : this.game.selectedCharacterId;
+    if (!charId) {
+      host.innerHTML = '<div class="run-destiny-empty">先选定一位角色，再决定与你同行的灵契。</div>';
+      if (summary) summary.textContent = '灵契提供常驻被动与蓄能主动，会补足这局的关键短板。';
+      return;
+    }
+    const draftIds = this.game.draftSpiritCompanionsForCharacter(charId);
+    if (!draftIds.includes(this.game.selectedSpiritCompanionId)) {
+      this.game.selectedSpiritCompanionId = draftIds[0] || null;
+    }
+    host.innerHTML = draftIds.map(spiritId => {
+      const meta = this.game.getSpiritCompanionMetaById(spiritId, 1);
+      if (!meta) return '';
+      const selectedClass = spiritId === this.game.selectedSpiritCompanionId ? 'selected' : '';
+      const tags = [];
+      if (meta.passiveLabel) tags.push(`被动·${meta.passiveLabel}`);
+      if (meta.activeLabel) tags.push(`主动·${meta.activeLabel}`);
+      tags.push(`蓄能 ${meta.chargeMax}`);
+      return `
                 <button type="button"
                         class="run-destiny-card run-spirit-card ${selectedClass}"
-                        data-spirit-id="${meta.id}"
-                        onclick="game.selectSpiritCompanion('${meta.id}')">
+                        data-spirit-id="${escapeAttr(meta.id)}">
                     <div class="run-destiny-head">
-                        <span class="run-destiny-icon">${meta.icon}</span>
+                        <span class="run-destiny-icon">${escapeHtml(meta.icon)}</span>
                         <div class="run-destiny-title-group">
-                            <span class="run-destiny-name">${meta.name}</span>
-                            <span class="run-destiny-tier">${meta.title || `${meta.category} · ${meta.tierLabel}`}</span>
+                            <span class="run-destiny-name">${escapeHtml(meta.name)}</span>
+                            <span class="run-destiny-tier">${escapeHtml(meta.title || `${meta.category} · ${meta.tierLabel}`)}</span>
                         </div>
                     </div>
-                    <div class="run-destiny-desc">${meta.description}</div>
-                    <div class="run-destiny-summary">${meta.passiveDesc}<br>${meta.activeDesc}</div>
+                    <div class="run-destiny-desc">${escapeHtml(meta.description)}</div>
+                    <div class="run-destiny-summary">${escapeHtml(meta.passiveDesc)}<br>${escapeHtml(meta.activeDesc)}</div>
                     <div class="run-destiny-tags">
-                        ${tags.map((tag) => `<span class="run-destiny-tag">${tag}</span>`).join('')}
+                        ${tags.map(tag => `<span class="run-destiny-tag">${escapeHtml(tag)}</span>`).join('')}
                     </div>
                 </button>
             `;
-        }).join('');
-
-        const selectedMeta = this.game.getSpiritCompanionMetaById(this.game.selectedSpiritCompanionId, 1);
-        if (summary) {
-            summary.textContent = selectedMeta
-                ? `已契合灵契「${selectedMeta.name}」：${selectedMeta.playstyle || selectedMeta.summary || selectedMeta.description}`
-                : '灵契提供常驻被动与蓄能主动，会补足这局的关键短板。';
-        }
+    }).join('');
+    const selectedMeta = this.game.getSpiritCompanionMetaById(this.game.selectedSpiritCompanionId, 1);
+    if (summary) {
+      summary.textContent = selectedMeta ? `已契合灵契「${selectedMeta.name}」：${selectedMeta.playstyle || selectedMeta.summary || selectedMeta.description}` : '灵契提供常驻被动与蓄能主动，会补足这局的关键短板。';
     }
-
-    updateCharacterSelectionConfirmState() {
-        const confirmBtn = document.getElementById('confirm-character-btn');
-        if (!confirmBtn) return;
-        confirmBtn.disabled = !this.game.selectedCharacterId || !this.game.selectedRunDestinyId || !this.game.selectedSpiritCompanionId || !this.game.selectedRunPathId;
+  }
+  updateCharacterSelectionConfirmState() {
+    const confirmBtn = document.getElementById('confirm-character-btn');
+    if (!confirmBtn) return;
+    confirmBtn.disabled = !this.game.selectedCharacterId || !this.game.selectedRunDestinyId || !this.game.selectedSpiritCompanionId || !this.game.selectedRunPathId;
+  }
+  selectRunDestiny(destinyId) {
+    const meta = this.game.getRunDestinyMetaById(destinyId, 1);
+    if (!meta) return;
+    this.game.selectedRunDestinyId = destinyId;
+    this.renderRunDestinySelection(this.game.selectedCharacterId);
+    this.updateCharacterSelectionConfirmState();
+  }
+  selectSpiritCompanion(spiritId) {
+    const meta = this.game.getSpiritCompanionMetaById(spiritId, 1);
+    if (!meta) return;
+    this.game.selectedSpiritCompanionId = spiritId;
+    this.renderSpiritCompanionSelection(this.game.selectedCharacterId);
+    this.updateCharacterSelectionConfirmState();
+  }
+  renderRunPathSelection(characterId) {
+    const host = document.getElementById('run-path-selection');
+    const summary = document.getElementById('run-path-summary');
+    if (!host) return;
+    const charId = typeof characterId === 'string' ? characterId : this.game.selectedCharacterId;
+    if (!charId) {
+      host.innerHTML = '<div class="run-destiny-empty">先选定一位角色，再决定这一轮的命途主线。</div>';
+      if (summary) summary.textContent = '命途会给这一轮提供清晰的阶段目标、路线倾向与战斗被动。';
+      return;
     }
-
-    selectRunDestiny(destinyId) {
-        const meta = this.game.getRunDestinyMetaById(destinyId, 1);
-        if (!meta) return;
-        this.game.selectedRunDestinyId = destinyId;
-        this.renderRunDestinySelection(this.game.selectedCharacterId);
-        this.updateCharacterSelectionConfirmState();
+    const draftIds = this.game.draftRunPathsForCharacter(charId);
+    if (!draftIds.includes(this.game.selectedRunPathId)) {
+      this.game.selectedRunPathId = draftIds[0] || null;
     }
-
-    selectSpiritCompanion(spiritId) {
-        const meta = this.game.getSpiritCompanionMetaById(spiritId, 1);
-        if (!meta) return;
-        this.game.selectedSpiritCompanionId = spiritId;
-        this.renderSpiritCompanionSelection(this.game.selectedCharacterId);
-        this.updateCharacterSelectionConfirmState();
-    }
-
-    renderRunPathSelection(characterId) {
-        const host = document.getElementById('run-path-selection');
-        const summary = document.getElementById('run-path-summary');
-        if (!host) return;
-
-        const charId = typeof characterId === 'string' ? characterId : this.game.selectedCharacterId;
-        if (!charId) {
-            host.innerHTML = '<div class="run-destiny-empty">先选定一位角色，再决定这一轮的命途主线。</div>';
-            if (summary) summary.textContent = '命途会给这一轮提供清晰的阶段目标、路线倾向与战斗被动。';
-            return;
-        }
-
-        const draftIds = this.game.draftRunPathsForCharacter(charId);
-        if (!draftIds.includes(this.game.selectedRunPathId)) {
-            this.game.selectedRunPathId = draftIds[0] || null;
-        }
-
-        host.innerHTML = draftIds.map((pathId) => {
-            const meta = this.game.getRunPathMetaById(pathId);
-            if (!meta) return '';
-            const selectedClass = pathId === this.game.selectedRunPathId ? 'selected' : '';
-            const phaseTags = meta.phases.slice(0, 3).map((phase) => `${phase.label}·${phase.title}`);
-            return `
+    host.innerHTML = draftIds.map(pathId => {
+      const meta = this.game.getRunPathMetaById(pathId);
+      if (!meta) return '';
+      const selectedClass = pathId === this.game.selectedRunPathId ? 'selected' : '';
+      const phaseTags = meta.phases.slice(0, 3).map(phase => `${phase.label}·${phase.title}`);
+      return `
                 <button type="button"
                         class="run-destiny-card run-path-card ${selectedClass}"
-                        data-run-path-id="${meta.id}"
-                        onclick="game.selectRunPath('${meta.id}')">
+                        data-run-path-id="${escapeAttr(meta.id)}">
                     <div class="run-destiny-head">
-                        <span class="run-destiny-icon">${meta.icon}</span>
+                        <span class="run-destiny-icon">${escapeHtml(meta.icon)}</span>
                         <div class="run-destiny-title-group">
-                            <span class="run-destiny-name">${meta.name}</span>
-                            <span class="run-destiny-tier">${meta.category} · ${meta.routeHint || '命途主线'}</span>
+                            <span class="run-destiny-name">${escapeHtml(meta.name)}</span>
+                            <span class="run-destiny-tier">${escapeHtml(meta.category)} · ${escapeHtml(meta.routeHint || '命途主线')}</span>
                         </div>
                     </div>
-                    <div class="run-destiny-desc">${meta.description}</div>
-                    <div class="run-destiny-summary">${meta.playstyle}</div>
+                    <div class="run-destiny-desc">${escapeHtml(meta.description)}</div>
+                    <div class="run-destiny-summary">${escapeHtml(meta.playstyle)}</div>
                     <div class="run-destiny-tags">
-                        ${phaseTags.map((tag) => `<span class="run-destiny-tag">${tag}</span>`).join('')}
+                        ${phaseTags.map(tag => `<span class="run-destiny-tag">${escapeHtml(tag)}</span>`).join('')}
                     </div>
                 </button>
             `;
-        }).join('');
-
-        const selectedMeta = this.game.getRunPathMetaById(this.game.selectedRunPathId);
-        if (summary) {
-            summary.textContent = selectedMeta
-                ? `已选命途「${selectedMeta.name}」：${selectedMeta.playstyle || selectedMeta.description}`
-                : '命途会给这一轮提供清晰的阶段目标、路线倾向与战斗被动。';
-        }
+    }).join('');
+    const selectedMeta = this.game.getRunPathMetaById(this.game.selectedRunPathId);
+    if (summary) {
+      summary.textContent = selectedMeta ? `已选命途「${selectedMeta.name}」：${selectedMeta.playstyle || selectedMeta.description}` : '命途会给这一轮提供清晰的阶段目标、路线倾向与战斗被动。';
     }
+  }
+  selectRunPath(pathId) {
+    const meta = this.game.getRunPathMetaById(pathId);
+    if (!meta) return;
+    this.game.selectedRunPathId = pathId;
+    this.renderRunPathSelection(this.game.selectedCharacterId);
+    this.updateCharacterSelectionConfirmState();
+  }
+  showCharacterSelection() {
+    this.game.selectedCharacterId = null;
+    this.game.selectedRunDestinyId = null;
+    this.game.selectedSpiritCompanionId = null;
+    this.game.selectedRunPathId = null;
+    const container = document.getElementById('character-selection-container');
+    if (container) {
+      container.innerHTML = '';
 
-    selectRunPath(pathId) {
-        const meta = this.game.getRunPathMetaById(pathId);
-        if (!meta) return;
-        this.game.selectedRunPathId = pathId;
-        this.renderRunPathSelection(this.game.selectedCharacterId);
-        this.updateCharacterSelectionConfirmState();
-    }
-
-    showCharacterSelection() {
-        this.game.selectedCharacterId = null;
-        this.game.selectedRunDestinyId = null;
-        this.game.selectedSpiritCompanionId = null;
-        this.game.selectedRunPathId = null;
-        const container = document.getElementById('character-selection-container');
-        if (container) {
-            container.innerHTML = '';
-
-            // 剧情背景
-            const introDiv = document.createElement('div');
-            introDiv.className = 'story-intro';
-
-            introDiv.innerHTML = `
+      // 剧情背景
+      const introDiv = document.createElement('div');
+      introDiv.className = 'story-intro';
+      introDiv.innerHTML = `
                 <p><strong>背景设定：</strong></p>
                 <p>“命环”，乃天道为万物众生设下的枷锁，意在限制潜力，维持统治。</p>
                 <p>然而天道亦有善恶，善念留下一线生机，即为“逆命者”。</p>
                 <p>恶念化身天道之主，对此大为震怒，封印善念，并派遣“天罚者”猎杀逆命之人。</p>
                 <p>如今，你作为新的逆命者觉醒，需在天罚者的追猎下不断突破命环，最终斩杀恶道，解放众生。</p>
             `;
-            container.appendChild(introDiv);
+      container.appendChild(introDiv);
+      const cardsContainer = document.createElement('div');
+      cardsContainer.className = 'character-cards-wrapper';
+      for (const charId in CHARACTERS) {
+        const char = CHARACTERS[charId];
+        const identityProfile = this.game.getCharacterIdentityProfile(charId);
 
-            const cardsContainer = document.createElement('div');
-            cardsContainer.className = 'character-cards-wrapper';
+        // Check if character is locked
+        let locked = false;
+        let lockReason = '';
+        // Simple unlock logic (example)
+        if (charId !== 'linFeng' && charId !== 'xiangYe' && charId !== 'yanHan' && charId !== 'wuYu') {
+          // locked = true; // Default lock logic if needed
+        }
+        const card = document.createElement('div');
+        card.className = `character-card ${locked ? 'locked' : ''}`;
+        card.dataset.id = charId;
 
-
-            for (const charId in CHARACTERS) {
-                const char = CHARACTERS[charId];
-                const identityProfile = this.game.getCharacterIdentityProfile(charId);
-
-                // Check if character is locked
-                let locked = false;
-                let lockReason = '';
-                // Simple unlock logic (example)
-                if (charId !== 'linFeng' && charId !== 'xiangYe' && charId !== 'yanHan' && charId !== 'wuYu') {
-                    // locked = true; // Default lock logic if needed
-                }
-
-                const card = document.createElement('div');
-                card.className = `character-card ${locked ? 'locked' : ''}`;
-                card.dataset.id = charId;
-
-                // Image handling
-                let avatarHtml = '';
-                if (char.image) {
-                    avatarHtml = `<img src="${char.image}" class="char-avatar-img" alt="${char.name}" onerror="this.game.style.display='none';this.game.nextElementSibling.style.display='flex'">
-                                  <span class="char-avatar-emoji" style="display:none">${char.avatar}</span>`;
-                } else if (char.portrait) {
-                    avatarHtml = `<img src="${char.portrait}" class="char-avatar-img" alt="${char.name}">`;
-                } else if (char.avatar && (char.avatar.includes('/') || char.avatar.includes('.'))) {
-                    avatarHtml = `<img src="${char.avatar}" class="char-avatar-img" alt="${char.name}">`;
-                } else {
-                    avatarHtml = `<span class="char-avatar-emoji">${char.avatar}</span>`;
-                }
-
-                card.innerHTML = `
+        // Image handling
+        let avatarHtml = '';
+        if (char.image) {
+          avatarHtml = `<img src="${escapeAttr(char.image)}" class="char-avatar-img" alt="${escapeAttr(char.name)}" data-fallback-emoji="true">
+                                  <span class="char-avatar-emoji" style="display:none">${escapeHtml(char.avatar || '')}</span>`;
+        } else if (char.portrait) {
+          avatarHtml = `<img src="${escapeAttr(char.portrait)}" class="char-avatar-img" alt="${escapeAttr(char.name)}">`;
+        } else if (char.avatar && (char.avatar.includes('/') || char.avatar.includes('.'))) {
+          avatarHtml = `<img src="${escapeAttr(char.avatar)}" class="char-avatar-img" alt="${escapeAttr(char.name)}">`;
+        } else {
+          avatarHtml = `<span class="char-avatar-emoji">${escapeHtml(char.avatar)}</span>`;
+        }
+        card.innerHTML = `
                     <div class="selected-mark">✔</div>
                     <div class="card-inner">
                         <div class="char-header">
@@ -262,60 +262,52 @@ export class CharacterSelectView {
                             </div>
                         </div>
                         <div class="char-body">
-                            <div class="char-name">${char.name}</div>
-                            <div class="char-title">${char.title}</div>
-                            <div class="char-desc">${char.description}</div>
+                            <div class="char-name">${escapeHtml(char.name)}</div>
+                            <div class="char-title">${escapeHtml(char.title)}</div>
+                            <div class="char-desc">${escapeHtml(char.description)}</div>
                             <div class="char-identity-strip">
-                                <span class="char-identity-pill primary">${identityProfile?.unlockLabel || '已解锁'}</span>
-                                <span class="char-identity-pill">${identityProfile?.recommendedDestinyText || '待推演'}</span>
-                                <span class="char-identity-pill">${identityProfile?.recommendedSpiritText || '待追索'}</span>
+                                <span class="char-identity-pill primary">${escapeHtml(identityProfile?.unlockLabel || '已解锁')}</span>
+                                <span class="char-identity-pill">${escapeHtml(identityProfile?.recommendedDestinyText || '待推演')}</span>
+                                <span class="char-identity-pill">${escapeHtml(identityProfile?.recommendedSpiritText || '待追索')}</span>
                             </div>
                             <div class="char-keyword-strip">
-                                ${(identityProfile?.keywords || []).map((keyword) => `<span class="char-keyword-chip">${keyword}</span>`).join('')}
+                                ${(identityProfile?.keywords || []).map(keyword => `<span class="char-keyword-chip">${escapeHtml(keyword)}</span>`).join('')}
                             </div>
                             <div class="char-story-panel">
-                                <div class="char-story-line"><strong>剧情简介：</strong>${identityProfile?.synopsis || char.description}</div>
-                                <div class="char-story-line"><strong>推荐玩法：</strong>${identityProfile?.identityHook || '围绕角色专属节奏推进本局。'}</div>
-                                <div class="char-story-line"><strong>角色专线：</strong>${identityProfile?.exclusiveLine?.summary || '更多专属内容等待追索。'}</div>
-                                <div class="char-story-line muted"><strong>解锁进度：</strong>${identityProfile?.unlockHint || (locked ? lockReason : '已满足出阵条件。')}</div>
+                                <div class="char-story-line"><strong>剧情简介：</strong>${escapeHtml(identityProfile?.synopsis || char.description)}</div>
+                                <div class="char-story-line"><strong>推荐玩法：</strong>${escapeHtml(identityProfile?.identityHook || '围绕角色专属节奏推进本局。')}</div>
+                                <div class="char-story-line"><strong>角色专线：</strong>${escapeHtml(identityProfile?.exclusiveLine?.summary || '更多专属内容等待追索。')}</div>
+                                <div class="char-story-line muted"><strong>解锁进度：</strong>${escapeHtml(identityProfile?.unlockHint || (locked ? lockReason : '已满足出阵条件。'))}</div>
                             </div>
                             
                             <div class="char-relic-info">
-                                <div class="relic-name"><span>🔮</span> ${char.relic.name}</div>
-                                <div class="relic-desc">${char.relic.desc}</div>
+                                <div class="relic-name"><span>🔮</span> ${escapeHtml(char.relic.name)}</div>
+                                <div class="relic-desc">${escapeHtml(char.relic.desc)}</div>
                             </div>
                             
                             <div class="char-stats-preview">
                                 <div class="stat-item">
-                                    <span class="stat-value">${char.stats.maxHp}</span>
+                                    <span class="stat-value">${escapeHtml(char.stats.maxHp)}</span>
                                     <span class="stat-label">HP</span>
                                 </div>
                                 <div class="stat-item">
-                                    <span class="stat-value">${char.stats.energy}</span>
+                                    <span class="stat-value">${escapeHtml(char.stats.energy)}</span>
                                     <span class="stat-label">灵力</span>
                                 </div>
                                 <div class="stat-item">
-                                    <span class="stat-value">${char.stats.draw || 5}</span>
+                                    <span class="stat-value">${escapeHtml(char.stats.draw || 5)}</span>
                                     <span class="stat-label">抽牌</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 `;
-
-                if (!locked) {
-                    card.addEventListener('click', () => {
-                        this.selectCharacter(charId);
-                    });
-                }
-
-                cardsContainer.appendChild(card);
-            }
-            container.appendChild(cardsContainer);
-
-            const destinySection = document.createElement('section');
-            destinySection.className = 'run-destiny-section';
-            destinySection.innerHTML = `
+        cardsContainer.appendChild(card);
+      }
+      container.appendChild(cardsContainer);
+      const destinySection = document.createElement('section');
+      destinySection.className = 'run-destiny-section';
+      destinySection.innerHTML = `
                 <div class="run-destiny-header">
                     <div>
                         <span class="run-destiny-kicker">开局命格</span>
@@ -327,11 +319,10 @@ export class CharacterSelectView {
                     <div class="run-destiny-empty">先选定一位角色，再感应这一局的命格。</div>
                 </div>
             `;
-            container.appendChild(destinySection);
-
-            const spiritSection = document.createElement('section');
-            spiritSection.className = 'run-destiny-section run-spirit-section';
-            spiritSection.innerHTML = `
+      container.appendChild(destinySection);
+      const spiritSection = document.createElement('section');
+      spiritSection.className = 'run-destiny-section run-spirit-section';
+      spiritSection.innerHTML = `
                 <div class="run-destiny-header">
                     <div>
                         <span class="run-destiny-kicker">同行灵契</span>
@@ -343,11 +334,10 @@ export class CharacterSelectView {
                     <div class="run-destiny-empty">先选定一位角色，再决定与你同行的灵契。</div>
                 </div>
             `;
-            container.appendChild(spiritSection);
-
-            const runPathSection = document.createElement('section');
-            runPathSection.className = 'run-destiny-section run-path-section';
-            runPathSection.innerHTML = `
+      container.appendChild(spiritSection);
+      const runPathSection = document.createElement('section');
+      runPathSection.className = 'run-destiny-section run-path-section';
+      runPathSection.innerHTML = `
                 <div class="run-destiny-header">
                     <div>
                         <span class="run-destiny-kicker">本轮命途</span>
@@ -359,51 +349,42 @@ export class CharacterSelectView {
                     <div class="run-destiny-empty">先选定一位角色，再决定这一轮的命途主线。</div>
                 </div>
             `;
-            container.appendChild(runPathSection);
-        }
+      container.appendChild(runPathSection);
+    }
+    this.bindCharacterSelectionEvents(container);
+    this.updateCharacterSelectionConfirmState();
+    this.game.showScreen('character-selection-screen');
+  }
+  selectCharacter(charId) {
+    this.game.selectedCharacterId = charId;
+    const cards = document.querySelectorAll('.character-card');
+    cards.forEach(c => {
+      if (c.dataset.id === charId) c.classList.add('selected');else c.classList.remove('selected');
+    });
+    this.renderRunDestinySelection(charId);
+    this.renderSpiritCompanionSelection(charId);
+    this.renderRunPathSelection(charId);
+    this.updateCharacterSelectionConfirmState();
+  }
+  confirmCharacterSelection() {
+    if (!this.game.selectedCharacterId) return;
 
-        this.updateCharacterSelectionConfirmState();
-
-        this.game.showScreen('character-selection-screen');
+    // 云功能可用时才强制登录
+    if (this.game.shouldForceCloudLogin()) {
+      this.game.showLoginModal();
+      return;
     }
 
-    selectCharacter(charId) {
-        this.game.selectedCharacterId = charId;
-        const cards = document.querySelectorAll('.character-card');
-        cards.forEach(c => {
-            if (c.dataset.id === charId) c.classList.add('selected');
-            else c.classList.remove('selected');
-        });
-        this.renderRunDestinySelection(charId);
-        this.renderSpiritCompanionSelection(charId);
-        this.renderRunPathSelection(charId);
-        this.updateCharacterSelectionConfirmState();
-    }
-
-    confirmCharacterSelection() {
-        if (!this.game.selectedCharacterId) return;
-
-        // 云功能可用时才强制登录
-        if (this.game.shouldForceCloudLogin()) {
-            this.game.showLoginModal();
-            return;
-        }
-
-        // 清除旧存档，开始新游戏
-        this.game.clearSave({
-            // Endless collapse already wrote a season verdict result; keep the meta for this session.
-            preserveSeasonMeta: this.game.isEndlessActive()
-        });
-        this.game.startNewGame(this.game.selectedCharacterId, {
-            runDestinyId: this.game.selectedRunDestinyId || this.game.resolveDefaultRunDestinyId(this.game.selectedCharacterId),
-            spiritCompanionId: this.game.selectedSpiritCompanionId || this.game.resolveDefaultSpiritCompanionId(this.game.selectedCharacterId),
-            runPathId: this.game.selectedRunPathId || this.game.resolveDefaultRunPathId(this.game.selectedCharacterId)
-        });
-    }
-
-
+    // 清除旧存档，开始新游戏
+    this.game.clearSave({
+      // Endless collapse already wrote a season verdict result; keep the meta for this session.
+      preserveSeasonMeta: this.game.isEndlessActive()
+    });
+    this.game.startNewGame(this.game.selectedCharacterId, {
+      runDestinyId: this.game.selectedRunDestinyId || this.game.resolveDefaultRunDestinyId(this.game.selectedCharacterId),
+      spiritCompanionId: this.game.selectedSpiritCompanionId || this.game.resolveDefaultSpiritCompanionId(this.game.selectedCharacterId),
+      runPathId: this.game.selectedRunPathId || this.game.resolveDefaultRunPathId(this.game.selectedCharacterId)
+    });
+  }
 }
-
-if (typeof window !== 'undefined') {
-    window.CharacterSelectView = CharacterSelectView;
-}
+if (typeof window !== 'undefined') {}

@@ -42,8 +42,6 @@ import './js/core/player.js';
 import './js/scenes/pvp-scene.js';
 import './js/game.js';
 import './js/core/collection_hub.js';
-import './js/core/challenge_hub.js';
-import './js/core/expedition_hub.js';
 
 // Also import styles so Vite can bundle them
 import './css/style.css';
@@ -57,3 +55,5 @@ import './css/pvp.css';
 import './css/events.css';
 import './css/purification.css';
 import './css/layout-fixes.css';
+
+import './js/core/expedition_hub.js';

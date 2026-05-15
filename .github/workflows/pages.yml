@@ -23,11 +23,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Pages artifact
+        run: npm run build:pages
+
+      - name: Run node checks
+        run: npm run test:node
+
+      - name: Start Pages preview server
+        run: |
+          nohup python3 -m http.server 4173 --bind 127.0.0.1 --directory .site > /tmp/the-defier-preview.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/the-defier-preview.log
+          exit 1
+
+      - name: Run browser release checks
+        run: npm run test:browser:release
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
-
-      - name: Prepare static artifact
-        run: bash scripts/prepare-pages.sh .site
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

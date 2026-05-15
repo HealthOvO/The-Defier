@@ -4,4592 +4,5945 @@
  */
 
 export const CARDS = {
-    // ==================== 基础攻击牌 ====================
+  // ==================== 基础攻击牌 ====================
+  strike: {
+    id: 'strike',
+    name: '斩击',
+    type: 'attack',
+    cost: 1,
+    icon: '⚔️',
+    description: '造成 6 点伤害',
+    rarity: 'basic',
+    effects: [{
+      type: 'damage',
+      value: 6,
+      target: 'enemy'
+    }]
+  },
+  heavyStrike: {
+    id: 'heavyStrike',
+    name: '重斩',
+    type: 'attack',
+    cost: 2,
+    icon: '🗡️',
+    description: '造成 12 点伤害',
+    rarity: 'common',
+    effects: [{
+      type: 'damage',
+      value: 12,
+      target: 'enemy'
+    }]
+  },
+  quickSlash: {
+    id: 'quickSlash',
+    name: '疾斩',
+    type: 'attack',
+    cost: 1,
+    icon: '💨',
+    description: '造成 4 点伤害',
+    rarity: 'common',
+    effects: [{
+      type: 'damage',
+      value: 4,
+      target: 'enemy'
+    }]
+  },
+  doubleStrike: {
+    id: 'doubleStrike',
+    name: '双重斩击',
+    type: 'attack',
+    cost: 1,
+    icon: '⚔️',
+    description: '造成 4 点伤害两次',
+    rarity: 'common',
+    effects: [{
+      type: 'damage',
+      value: 4,
+      target: 'enemy'
+    }, {
+      type: 'damage',
+      value: 4,
+      target: 'enemy'
+    }]
+  },
+  ragingBlow: {
+    id: 'ragingBlow',
+    name: '狂暴一击',
+    type: 'attack',
+    cost: 3,
+    icon: '💥',
+    description: '造成 20 点伤害',
+    rarity: 'uncommon',
+    element: 'fire',
+    effects: [{
+      type: 'damage',
+      value: 20,
+      target: 'enemy'
+    }]
+  },
+  // ==================== 基础防御牌 ====================
+  defend: {
+    id: 'defend',
+    name: '防御',
+    type: 'defense',
+    cost: 1,
+    icon: '🛡️',
+    description: '获得 5 点护盾',
+    rarity: 'basic',
+    effects: [{
+      type: 'block',
+      value: 5,
+      target: 'self'
+    }]
+  },
+  ironWill: {
+    id: 'ironWill',
+    name: '铁壁',
+    type: 'defense',
+    cost: 2,
+    icon: '🏰',
+    description: '获得 12 点护盾',
+    rarity: 'common',
+    effects: [{
+      type: 'block',
+      value: 12,
+      target: 'self'
+    }]
+  },
+  shieldBash: {
+    id: 'shieldBash',
+    name: '盾击',
+    type: 'attack',
+    cost: 1,
+    icon: '🛡️',
+    description: '造成 4 点伤害，获得 4 点护盾',
+    rarity: 'common',
+    effects: [{
+      type: 'damage',
+      value: 4,
+      target: 'enemy'
+    }, {
+      type: 'block',
+      value: 4,
+      target: 'self'
+    }]
+  },
+  counterStance: {
+    id: 'counterStance',
+    name: '反击架势',
+    type: 'defense',
+    cost: 1,
+    icon: '⚡',
+    description: '获得 3 点护盾，下次受到攻击时反弹 5 点伤害',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'block',
+      value: 3,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'thorns',
+      value: 5,
+      target: 'self'
+    }]
+  },
+  // ==================== 技能牌 ====================
+  spiritBoost: {
+    id: 'spiritBoost',
+    name: '灵力激涌',
+    type: 'energy',
+    cost: 0,
+    icon: '✨',
+    description: '获得 2 点灵力',
+    rarity: 'common',
+    effects: [{
+      type: 'energy',
+      value: 2,
+      target: 'self'
+    }]
+  },
+  meditation: {
+    id: 'meditation',
+    name: '冥想',
+    type: 'energy',
+    cost: 0,
+    consumeCandy: true,
+    icon: '🧘',
+    description: '消耗1奶糖。抽 2 张牌',
+    rarity: 'common',
+    effects: [{
+      type: 'draw',
+      value: 2,
+      target: 'self'
+    }]
+  },
+  heartDemon: {
+    id: 'heartDemon',
+    name: '心魔',
+    type: 'status',
+    cost: 0,
+    unplayable: true,
+    retain: true,
+    // 不会被自然丢弃
+    occupiesDrawSlot: true,
+    // 占据抽牌位
+    icon: '👿',
+    description: '无法打出。保留在手中。占据抽卡位。回合结束时，受到 Max(10%当前生命, 10) 点真实伤害。效果可叠加。',
+    rarity: 'special',
+    effects: [{
+      type: 'selfDamage',
+      value: 0.1,
+      isPercent: true,
+      trigger: 'endTurn',
+      minValue: 10
+    }]
+  },
+  innerPeace: {
+    id: 'innerPeace',
+    name: '内心平和',
+    type: 'defense',
+    cost: 1,
+    icon: '☯️',
+    description: '获得 4 点护盾，回复 3 点生命',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'block',
+      value: 4,
+      target: 'self'
+    }, {
+      type: 'heal',
+      value: 3,
+      target: 'self'
+    }]
+  },
+  battleCry: {
+    id: 'battleCry',
+    name: '战吼',
+    type: 'attack',
+    cost: 1,
+    icon: '📢',
+    description: '造成 5 点伤害，本回合攻击力+2',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'damage',
+      value: 5,
+      target: 'enemy'
+    }, {
+      type: 'buff',
+      buffType: 'strength',
+      value: 2,
+      target: 'self'
+    }]
+  },
+  // ==================== 战斗深度扩展：流血/破绽/架势 ====================
+  bloodlettingSlash: {
+    id: 'bloodlettingSlash',
+    name: '裂脉斩',
+    type: 'attack',
+    cost: 1,
+    icon: '🩸',
+    description: '造成 6 点伤害并施加 2 层流血',
+    rarity: 'common',
+    keywords: ['bleed'],
+    comboTag: 'bleed',
+    synergyGroup: 'hemorrhage',
+    effects: [{
+      type: 'damage',
+      value: 6,
+      target: 'enemy'
+    }, {
+      type: 'applyBleed',
+      value: 2,
+      target: 'enemy'
+    }]
+  },
+  punctureMark: {
+    id: 'punctureMark',
+    name: '破绽刺',
+    type: 'attack',
+    cost: 1,
+    icon: '🎯',
+    description: '造成 4 点伤害并施加 4 层破绽',
+    rarity: 'common',
+    keywords: ['mark'],
+    comboTag: 'mark',
+    synergyGroup: 'precision',
+    effects: [{
+      type: 'damage',
+      value: 4,
+      target: 'enemy'
+    }, {
+      type: 'applyMark',
+      value: 4,
+      target: 'enemy'
+    }]
+  },
+  tacticalExpose: {
+    id: 'tacticalExpose',
+    name: '战术破析',
+    type: 'skill',
+    cost: 1,
+    icon: '🧭',
+    description: '施加 6 层破绽并抽 1 张牌',
+    rarity: 'uncommon',
+    keywords: ['mark'],
+    comboTag: 'mark',
+    synergyGroup: 'precision',
+    effects: [{
+      type: 'applyMark',
+      value: 6,
+      target: 'enemy'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  crimsonCascade: {
+    id: 'crimsonCascade',
+    name: '赤瀑连断',
+    type: 'attack',
+    cost: 2,
+    icon: '🌊',
+    description: '造成 9 点伤害并施加 3 层流血',
+    rarity: 'uncommon',
+    keywords: ['bleed'],
+    comboTag: 'bleed',
+    synergyGroup: 'hemorrhage',
+    effects: [{
+      type: 'damage',
+      value: 9,
+      target: 'enemy'
+    }, {
+      type: 'applyBleed',
+      value: 3,
+      target: 'enemy'
+    }]
+  },
+  hunterSeal: {
+    id: 'hunterSeal',
+    name: '猎印',
+    type: 'skill',
+    cost: 0,
+    icon: '🪶',
+    description: '施加 3 层破绽，获得 1 点灵力',
+    rarity: 'common',
+    keywords: ['mark', 'tempo'],
+    comboTag: 'mark',
+    synergyGroup: 'precision',
+    effects: [{
+      type: 'applyMark',
+      value: 3,
+      target: 'enemy'
+    }, {
+      type: 'energy',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  stanceAggressive: {
+    id: 'stanceAggressive',
+    name: '攻势架势',
+    type: 'power',
+    cost: 1,
+    icon: '🔥',
+    description: '切换到攻势：造成伤害提高，承伤增加',
+    rarity: 'uncommon',
+    keywords: ['stance'],
+    comboTag: 'stance',
+    synergyGroup: 'stance',
+    effects: [{
+      type: 'setStance',
+      stance: 'aggressive',
+      target: 'self'
+    }]
+  },
+  stanceDefensive: {
+    id: 'stanceDefensive',
+    name: '守势架势',
+    type: 'power',
+    cost: 1,
+    icon: '🛡️',
+    description: '切换到守势：承伤降低，输出略降',
+    rarity: 'uncommon',
+    keywords: ['stance'],
+    comboTag: 'stance',
+    synergyGroup: 'stance',
+    effects: [{
+      type: 'setStance',
+      stance: 'defensive',
+      target: 'self'
+    }]
+  },
+  stanceFlow: {
+    id: 'stanceFlow',
+    name: '归一心流',
+    type: 'skill',
+    cost: 0,
+    icon: '☯️',
+    description: '切回中和架势并抽 1 张牌',
+    rarity: 'common',
+    keywords: ['stance'],
+    comboTag: 'stance',
+    synergyGroup: 'stance',
+    effects: [{
+      type: 'setStance',
+      stance: 'neutral',
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  guardedRiposte: {
+    id: 'guardedRiposte',
+    name: '守中反击',
+    type: 'defense',
+    cost: 1,
+    icon: '🗡️',
+    description: '获得 8 护盾并施加 2 层破绽',
+    rarity: 'common',
+    keywords: ['stance', 'mark'],
+    comboTag: 'stance',
+    synergyGroup: 'stance',
+    effects: [{
+      type: 'block',
+      value: 8,
+      target: 'self'
+    }, {
+      type: 'applyMark',
+      value: 2,
+      target: 'enemy'
+    }]
+  },
+  sunderingNeedle: {
+    id: 'sunderingNeedle',
+    name: '裂界针',
+    type: 'attack',
+    cost: 2,
+    icon: '🪡',
+    description: '造成 10 点穿透伤害并施加 2 层流血',
+    rarity: 'rare',
+    keywords: ['bleed', 'penetrate'],
+    comboTag: 'bleed',
+    synergyGroup: 'hemorrhage',
+    effects: [{
+      type: 'penetrate',
+      value: 10,
+      target: 'enemy'
+    }, {
+      type: 'applyBleed',
+      value: 2,
+      target: 'enemy'
+    }]
+  },
+  hemorrhageRain: {
+    id: 'hemorrhageRain',
+    name: '血雨',
+    type: 'attack',
+    cost: 2,
+    icon: '🌧️',
+    description: '对全体造成 5 点伤害，并施加 1 层流血',
+    rarity: 'rare',
+    keywords: ['bleed', 'aoe'],
+    comboTag: 'bleed',
+    synergyGroup: 'hemorrhage',
+    effects: [{
+      type: 'damageAll',
+      value: 5,
+      target: 'allEnemies'
+    }, {
+      type: 'applyBleed',
+      value: 1,
+      target: 'enemy'
+    }]
+  },
+  executionDoctrine: {
+    id: 'executionDoctrine',
+    name: '斩决要义',
+    type: 'attack',
+    cost: 2,
+    icon: '📜',
+    description: '造成 8 点伤害；若目标有破绽，额外造成 8 点伤害',
+    rarity: 'rare',
+    keywords: ['mark', 'burst'],
+    comboTag: 'mark',
+    synergyGroup: 'precision',
+    effects: [{
+      type: 'damage',
+      value: 8,
+      target: 'enemy'
+    }, {
+      type: 'conditionalDamage',
+      value: 8,
+      condition: 'marked',
+      target: 'enemy'
+    }]
+  },
+  serratedRitual: {
+    id: 'serratedRitual',
+    name: '锯刃仪式',
+    type: 'attack',
+    cost: 1,
+    icon: '🩸',
+    description: '造成 5 点伤害，施加 2 层流血，自身受到 1 点伤害',
+    rarity: 'common',
+    keywords: ['bleed'],
+    comboTag: 'bleed',
+    synergyGroup: 'hemorrhage',
+    effects: [{
+      type: 'damage',
+      value: 5,
+      target: 'enemy'
+    }, {
+      type: 'applyBleed',
+      value: 2,
+      target: 'enemy'
+    }, {
+      type: 'selfDamage',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  coagulatedGuard: {
+    id: 'coagulatedGuard',
+    name: '凝血守式',
+    type: 'defense',
+    cost: 1,
+    icon: '🛡️',
+    description: '获得 6 点护盾，并施加 1 层流血',
+    rarity: 'common',
+    keywords: ['bleed', 'stance'],
+    comboTag: 'bleed',
+    synergyGroup: 'hemorrhage',
+    effects: [{
+      type: 'block',
+      value: 6,
+      target: 'self'
+    }, {
+      type: 'applyBleed',
+      value: 1,
+      target: 'enemy'
+    }]
+  },
+  bloodDebt: {
+    id: 'bloodDebt',
+    name: '血债引燃',
+    type: 'skill',
+    cost: 0,
+    icon: '🧪',
+    description: '失去 3 点生命，获得 2 点灵力并抽 1 张牌',
+    rarity: 'uncommon',
+    keywords: ['bleed', 'tempo'],
+    comboTag: 'bleed',
+    synergyGroup: 'hemorrhage',
+    effects: [{
+      type: 'selfDamage',
+      value: 3,
+      target: 'self'
+    }, {
+      type: 'energy',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  arteryRupture: {
+    id: 'arteryRupture',
+    name: '断脉贯刺',
+    type: 'attack',
+    cost: 2,
+    icon: '🗡️',
+    description: '造成 8 点穿透伤害并施加 4 层流血',
+    rarity: 'uncommon',
+    keywords: ['bleed', 'penetrate'],
+    comboTag: 'bleed',
+    synergyGroup: 'hemorrhage',
+    effects: [{
+      type: 'penetrate',
+      value: 8,
+      target: 'enemy'
+    }, {
+      type: 'applyBleed',
+      value: 4,
+      target: 'enemy'
+    }]
+  },
+  scarletJudgement: {
+    id: 'scarletJudgement',
+    name: '赤裁',
+    type: 'attack',
+    cost: 2,
+    icon: '⚰️',
+    description: '造成 7 点伤害并施加 2 层流血；对半血以下目标造成 10 点处决伤害',
+    rarity: 'rare',
+    keywords: ['bleed', 'burst'],
+    comboTag: 'bleed',
+    synergyGroup: 'hemorrhage',
+    effects: [{
+      type: 'damage',
+      value: 7,
+      target: 'enemy'
+    }, {
+      type: 'applyBleed',
+      value: 2,
+      target: 'enemy'
+    }, {
+      type: 'executeDamage',
+      value: 10,
+      threshold: 0.5,
+      target: 'enemy'
+    }]
+  },
+  bloodTideOath: {
+    id: 'bloodTideOath',
+    name: '血潮誓约',
+    type: 'attack',
+    cost: 3,
+    icon: '🌊',
+    description: '对全体造成 6 点伤害，抽 1 张牌，自身受到 4 点伤害',
+    rarity: 'rare',
+    keywords: ['bleed', 'aoe'],
+    comboTag: 'bleed',
+    synergyGroup: 'hemorrhage',
+    effects: [{
+      type: 'damageAll',
+      value: 6,
+      target: 'allEnemies'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'selfDamage',
+      value: 4,
+      target: 'self'
+    }]
+  },
+  weakpointSurvey: {
+    id: 'weakpointSurvey',
+    name: '弱点勘测',
+    type: 'skill',
+    cost: 0,
+    icon: '🧭',
+    description: '施加 2 层破绽并抽 1 张牌',
+    rarity: 'common',
+    keywords: ['mark', 'tempo'],
+    comboTag: 'mark',
+    synergyGroup: 'precision',
+    effects: [{
+      type: 'applyMark',
+      value: 2,
+      target: 'enemy'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  duetFeint: {
+    id: 'duetFeint',
+    name: '双式佯攻',
+    type: 'attack',
+    cost: 1,
+    icon: '🪶',
+    description: '造成 5 点伤害并施加 2 层破绽',
+    rarity: 'common',
+    keywords: ['mark'],
+    comboTag: 'mark',
+    synergyGroup: 'precision',
+    effects: [{
+      type: 'damage',
+      value: 5,
+      target: 'enemy'
+    }, {
+      type: 'applyMark',
+      value: 2,
+      target: 'enemy'
+    }]
+  },
+  poisedCounter: {
+    id: 'poisedCounter',
+    name: '定式反制',
+    type: 'defense',
+    cost: 1,
+    icon: '⚖️',
+    description: '获得 7 点护盾并施加 2 层破绽',
+    rarity: 'common',
+    keywords: ['mark', 'stance'],
+    comboTag: 'mark',
+    synergyGroup: 'precision',
+    effects: [{
+      type: 'block',
+      value: 7,
+      target: 'self'
+    }, {
+      type: 'applyMark',
+      value: 2,
+      target: 'enemy'
+    }]
+  },
+  razorFocus: {
+    id: 'razorFocus',
+    name: '锋念凝聚',
+    type: 'skill',
+    cost: 1,
+    icon: '🎯',
+    description: '施加 5 层破绽并获得 1 点灵力',
+    rarity: 'uncommon',
+    keywords: ['mark'],
+    comboTag: 'mark',
+    synergyGroup: 'precision',
+    effects: [{
+      type: 'applyMark',
+      value: 5,
+      target: 'enemy'
+    }, {
+      type: 'energy',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  stancePivot: {
+    id: 'stancePivot',
+    name: '转势',
+    type: 'skill',
+    cost: 0,
+    icon: '☯️',
+    description: '切回中和架势，施加 2 层破绽并抽 1 张牌',
+    rarity: 'uncommon',
+    keywords: ['mark', 'stance'],
+    comboTag: 'stance',
+    synergyGroup: 'precision',
+    effects: [{
+      type: 'setStance',
+      stance: 'neutral',
+      target: 'self'
+    }, {
+      type: 'applyMark',
+      value: 2,
+      target: 'enemy'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  focusBreak: {
+    id: 'focusBreak',
+    name: '断念',
+    type: 'attack',
+    cost: 1,
+    icon: '⚔️',
+    description: '造成 6 点伤害；若目标有破绽，额外造成 6 点伤害',
+    rarity: 'uncommon',
+    keywords: ['mark', 'burst'],
+    comboTag: 'mark',
+    synergyGroup: 'precision',
+    effects: [{
+      type: 'damage',
+      value: 6,
+      target: 'enemy'
+    }, {
+      type: 'conditionalDamage',
+      value: 6,
+      condition: 'marked',
+      target: 'enemy'
+    }]
+  },
+  verdictNeedle: {
+    id: 'verdictNeedle',
+    name: '裁决针',
+    type: 'attack',
+    cost: 2,
+    icon: '🪡',
+    description: '造成 10 点穿透伤害；若目标有破绽，额外造成 7 点伤害',
+    rarity: 'rare',
+    keywords: ['mark', 'penetrate'],
+    comboTag: 'mark',
+    synergyGroup: 'precision',
+    effects: [{
+      type: 'penetrate',
+      value: 10,
+      target: 'enemy'
+    }, {
+      type: 'conditionalDamage',
+      value: 7,
+      condition: 'marked',
+      target: 'enemy'
+    }]
+  },
+  recklessMulligan: {
+    id: 'recklessMulligan',
+    name: '孤注换手',
+    type: 'skill',
+    cost: 0,
+    icon: '🎴',
+    description: '丢弃所有手牌，抽 2+弃牌数 张牌',
+    rarity: 'common',
+    keywords: ['discard', 'tempo'],
+    comboTag: 'discard',
+    synergyGroup: 'entropy',
+    effects: [{
+      type: 'discardHand',
+      target: 'self'
+    }, {
+      type: 'drawCalculated',
+      base: 2,
+      perDiscard: 1,
+      target: 'self'
+    }]
+  },
+  echoingCut: {
+    id: 'echoingCut',
+    name: '回响斩',
+    type: 'attack',
+    cost: 1,
+    icon: '🗡️',
+    description: '造成 6 点伤害，随机弃 1 张牌并抽 1 张牌',
+    rarity: 'common',
+    keywords: ['discard', 'echo', 'mirror'],
+    comboTag: 'discard',
+    synergyGroup: 'entropy',
+    effects: [{
+      type: 'damage',
+      value: 6,
+      target: 'enemy'
+    }, {
+      type: 'discardRandom',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  voidLedger: {
+    id: 'voidLedger',
+    name: '虚账',
+    type: 'skill',
+    cost: 1,
+    icon: '📒',
+    description: '抽 2 张牌，然后随机弃 1 张牌',
+    rarity: 'common',
+    keywords: ['discard'],
+    comboTag: 'discard',
+    synergyGroup: 'entropy',
+    effects: [{
+      type: 'draw',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'discardRandom',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  entropyGuard: {
+    id: 'entropyGuard',
+    name: '熵障',
+    type: 'defense',
+    cost: 1,
+    icon: '🧿',
+    description: '获得 9 点护盾，随机弃 1 张牌并获得 1 点灵力',
+    rarity: 'common',
+    keywords: ['discard'],
+    comboTag: 'discard',
+    synergyGroup: 'entropy',
+    effects: [{
+      type: 'block',
+      value: 9,
+      target: 'self'
+    }, {
+      type: 'discardRandom',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'energy',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  debtCollection: {
+    id: 'debtCollection',
+    name: '索偿',
+    type: 'skill',
+    cost: 0,
+    icon: '🩸',
+    description: '自身受到 2 点伤害，抽 2 张牌并获得 1 点灵力',
+    rarity: 'uncommon',
+    keywords: ['discard', 'tempo'],
+    comboTag: 'discard',
+    synergyGroup: 'entropy',
+    effects: [{
+      type: 'selfDamage',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'energy',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  recirculation: {
+    id: 'recirculation',
+    name: '再循环',
+    type: 'skill',
+    cost: 1,
+    icon: '🔁',
+    description: '重抽当前手牌（丢弃并抽取等量卡牌）',
+    rarity: 'uncommon',
+    keywords: ['discard'],
+    comboTag: 'discard',
+    synergyGroup: 'entropy',
+    effects: [{
+      type: 'mulligan',
+      target: 'self'
+    }]
+  },
+  calculatedRuin: {
+    id: 'calculatedRuin',
+    name: '筹算崩解',
+    type: 'attack',
+    cost: 2,
+    icon: '📉',
+    description: '每张手牌造成 2 点伤害，随后随机弃 1 张牌',
+    rarity: 'uncommon',
+    keywords: ['discard', 'burst'],
+    comboTag: 'discard',
+    synergyGroup: 'entropy',
+    effects: [{
+      type: 'damagePerCard',
+      value: 2,
+      target: 'enemy'
+    }, {
+      type: 'discardRandom',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  oblivionSpiral: {
+    id: 'oblivionSpiral',
+    name: '湮旋',
+    type: 'skill',
+    cost: 2,
+    icon: '🌀',
+    description: '丢弃所有手牌，抽 1+弃牌数 张牌，并对全体造成 7 点伤害',
+    rarity: 'rare',
+    keywords: ['discard', 'aoe'],
+    comboTag: 'discard',
+    synergyGroup: 'entropy',
+    effects: [{
+      type: 'discardHand',
+      target: 'self'
+    }, {
+      type: 'drawCalculated',
+      base: 1,
+      perDiscard: 1,
+      target: 'self'
+    }, {
+      type: 'damageAll',
+      value: 7,
+      target: 'allEnemies'
+    }]
+  },
+  finalConvergence: {
+    id: 'finalConvergence',
+    name: '终局收束',
+    type: 'attack',
+    cost: 3,
+    icon: '🕳️',
+    description: '消耗所有灵力，每点灵力造成 7 点伤害，然后随机弃 1 张牌',
+    rarity: 'rare',
+    keywords: ['discard', 'burst'],
+    comboTag: 'discard',
+    synergyGroup: 'entropy',
+    effects: [{
+      type: 'consumeAllEnergy',
+      damagePerEnergy: 7,
+      target: 'enemy'
+    }, {
+      type: 'discardRandom',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  lightningProbe: {
+    id: 'lightningProbe',
+    name: '雷策试探',
+    type: 'attack',
+    cost: 1,
+    icon: '⚡',
+    description: '造成 5 点伤害，并施加 1 层易伤',
+    rarity: 'common',
+    keywords: ['storm', 'vulnerable'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'damage',
+      value: 5,
+      target: 'enemy'
+    }, {
+      type: 'debuff',
+      buffType: 'vulnerable',
+      value: 1,
+      target: 'enemy'
+    }]
+  },
+  chainArc: {
+    id: 'chainArc',
+    name: '链弧斩',
+    type: 'attack',
+    cost: 1,
+    icon: '🔗',
+    description: '造成 4 点伤害，并施加 2 层破绽',
+    rarity: 'common',
+    keywords: ['storm', 'mark'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'damage',
+      value: 4,
+      target: 'enemy'
+    }, {
+      type: 'applyMark',
+      value: 2,
+      target: 'enemy'
+    }]
+  },
+  stormDraft: {
+    id: 'stormDraft',
+    name: '雷图推演',
+    type: 'skill',
+    cost: 0,
+    icon: '🗺️',
+    description: '抽 1 张牌，并施加 1 层易伤',
+    rarity: 'common',
+    keywords: ['storm', 'tempo'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'debuff',
+      buffType: 'vulnerable',
+      value: 1,
+      target: 'enemy'
+    }]
+  },
+  ionReserve: {
+    id: 'ionReserve',
+    name: '离子蓄势',
+    type: 'skill',
+    cost: 1,
+    icon: '🔋',
+    description: '获得 1 点灵力，并施加 1 层破绽',
+    rarity: 'common',
+    keywords: ['storm', 'mark'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'energy',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'applyMark',
+      value: 1,
+      target: 'enemy'
+    }]
+  },
+  surgeStep: {
+    id: 'surgeStep',
+    name: '疾电步',
+    type: 'skill',
+    cost: 1,
+    icon: '🌀',
+    description: '获得 6 点护盾，并抽 1 张牌',
+    rarity: 'common',
+    keywords: ['storm', 'guard'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'block',
+      value: 6,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  forkedNeedle: {
+    id: 'forkedNeedle',
+    name: '分岔雷针',
+    type: 'attack',
+    cost: 1,
+    icon: '🪡',
+    description: '连续造成 3 点伤害 2 次',
+    rarity: 'common',
+    keywords: ['storm', 'chain'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'damage',
+      value: 3,
+      target: 'enemy'
+    }, {
+      type: 'damage',
+      value: 3,
+      target: 'enemy'
+    }]
+  },
+  pressureSpark: {
+    id: 'pressureSpark',
+    name: '压电火花',
+    type: 'attack',
+    cost: 0,
+    icon: '✨',
+    description: '造成 4 点伤害；若目标有破绽，额外造成 4 点伤害',
+    rarity: 'common',
+    keywords: ['storm', 'mark'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'damage',
+      value: 4,
+      target: 'enemy'
+    }, {
+      type: 'conditionalDamage',
+      value: 4,
+      condition: 'marked',
+      target: 'enemy'
+    }]
+  },
+  thunderLattice: {
+    id: 'thunderLattice',
+    name: '雷网矩阵',
+    type: 'skill',
+    cost: 1,
+    icon: '🕸️',
+    description: '施加 4 层破绽并抽 1 张牌',
+    rarity: 'uncommon',
+    keywords: ['storm', 'mark'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'applyMark',
+      value: 4,
+      target: 'enemy'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  exposedCircuit: {
+    id: 'exposedCircuit',
+    name: '裸露回路',
+    type: 'attack',
+    cost: 1,
+    icon: '🧨',
+    description: '造成 8 点伤害；若目标有破绽，额外造成 5 点伤害',
+    rarity: 'uncommon',
+    keywords: ['storm', 'mark', 'burst'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'damage',
+      value: 8,
+      target: 'enemy'
+    }, {
+      type: 'conditionalDamage',
+      value: 5,
+      condition: 'marked',
+      target: 'enemy'
+    }]
+  },
+  flashRelay: {
+    id: 'flashRelay',
+    name: '闪继回路',
+    type: 'skill',
+    cost: 1,
+    icon: '📡',
+    description: '抽 2 张牌，并施加 1 层易伤',
+    rarity: 'uncommon',
+    keywords: ['storm', 'tempo'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'draw',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'debuff',
+      buffType: 'vulnerable',
+      value: 1,
+      target: 'enemy'
+    }]
+  },
+  stormWard: {
+    id: 'stormWard',
+    name: '雷障',
+    type: 'defense',
+    cost: 1,
+    icon: '🛡️',
+    description: '获得 8 点护盾，并施加 1 层虚弱',
+    rarity: 'uncommon',
+    keywords: ['storm', 'guard'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'block',
+      value: 8,
+      target: 'self'
+    }, {
+      type: 'debuff',
+      buffType: 'weak',
+      value: 1,
+      target: 'enemy'
+    }]
+  },
+  cascadeVolt: {
+    id: 'cascadeVolt',
+    name: '级联伏特',
+    type: 'attack',
+    cost: 2,
+    icon: '⚙️',
+    description: '对全体造成 6 点伤害并抽 1 张牌',
+    rarity: 'uncommon',
+    keywords: ['storm', 'aoe'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'damageAll',
+      value: 6,
+      target: 'allEnemies'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  skybreakerArray: {
+    id: 'skybreakerArray',
+    name: '裂穹雷列',
+    type: 'attack',
+    cost: 2,
+    icon: '🌩️',
+    description: '造成 10 点伤害并施加 3 层破绽',
+    rarity: 'rare',
+    keywords: ['storm', 'mark', 'burst'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'damage',
+      value: 10,
+      target: 'enemy'
+    }, {
+      type: 'applyMark',
+      value: 3,
+      target: 'enemy'
+    }]
+  },
+  resonanceTempest: {
+    id: 'resonanceTempest',
+    name: '共振风暴',
+    type: 'power',
+    cost: 2,
+    icon: '🌪️',
+    description: '获得 1 点力量，抽 1 张牌并对全体造成 4 点伤害',
+    rarity: 'rare',
+    keywords: ['storm', 'aoe'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'buff',
+      buffType: 'strength',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'damageAll',
+      value: 4,
+      target: 'allEnemies'
+    }]
+  },
+  executionThunder: {
+    id: 'executionThunder',
+    name: '断庭雷裁',
+    type: 'attack',
+    cost: 3,
+    icon: '⚖️',
+    description: '若目标生命低于 40%，造成 14 点斩杀伤害',
+    rarity: 'rare',
+    keywords: ['storm', 'execute'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'executeDamage',
+      value: 14,
+      threshold: 0.4,
+      target: 'enemy'
+    }]
+  },
+  mendThread: {
+    id: 'mendThread',
+    name: '续命丝',
+    type: 'skill',
+    cost: 1,
+    icon: '🧵',
+    description: '恢复 5 点生命，并获得 4 点护盾',
+    rarity: 'common',
+    keywords: ['vital', 'heal'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'heal',
+      value: 5,
+      target: 'self'
+    }, {
+      type: 'block',
+      value: 4,
+      target: 'self'
+    }]
+  },
+  pulseBandage: {
+    id: 'pulseBandage',
+    name: '脉冲绷带',
+    type: 'skill',
+    cost: 0,
+    icon: '🩹',
+    description: '恢复 3 点生命，并施加 1 层破绽',
+    rarity: 'common',
+    keywords: ['vital', 'heal', 'mark'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'heal',
+      value: 3,
+      target: 'self'
+    }, {
+      type: 'applyMark',
+      value: 1,
+      target: 'enemy'
+    }]
+  },
+  transfuseStrike: {
+    id: 'transfuseStrike',
+    name: '输生斩',
+    type: 'attack',
+    cost: 1,
+    icon: '🩸',
+    description: '失去 2 点生命，造成 8 点伤害并恢复 2 点生命',
+    rarity: 'common',
+    keywords: ['vital', 'heal', 'bleed'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'selfDamage',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'damage',
+      value: 8,
+      target: 'enemy'
+    }, {
+      type: 'heal',
+      value: 2,
+      target: 'self'
+    }]
+  },
+  wardingHerb: {
+    id: 'wardingHerb',
+    name: '护脉草',
+    type: 'defense',
+    cost: 1,
+    icon: '🌿',
+    description: '获得 7 点护盾并恢复 2 点生命',
+    rarity: 'common',
+    keywords: ['vital', 'guard'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'block',
+      value: 7,
+      target: 'self'
+    }, {
+      type: 'heal',
+      value: 2,
+      target: 'self'
+    }]
+  },
+  renewalChord: {
+    id: 'renewalChord',
+    name: '回生律',
+    type: 'skill',
+    cost: 1,
+    icon: '🎵',
+    description: '恢复 4 点生命并抽 1 张牌',
+    rarity: 'common',
+    keywords: ['vital', 'heal', 'tempo'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'heal',
+      value: 4,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  bloodBloom: {
+    id: 'bloodBloom',
+    name: '血华',
+    type: 'attack',
+    cost: 1,
+    icon: '🌺',
+    description: '失去 3 点生命，造成 9 点伤害',
+    rarity: 'common',
+    keywords: ['vital', 'bleed'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'selfDamage',
+      value: 3,
+      target: 'self'
+    }, {
+      type: 'damage',
+      value: 9,
+      target: 'enemy'
+    }]
+  },
+  mercyNeedle: {
+    id: 'mercyNeedle',
+    name: '慈脉针',
+    type: 'attack',
+    cost: 0,
+    icon: '🪡',
+    description: '造成 4 点伤害并恢复 2 点生命',
+    rarity: 'common',
+    keywords: ['vital', 'heal'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'damage',
+      value: 4,
+      target: 'enemy'
+    }, {
+      type: 'heal',
+      value: 2,
+      target: 'self'
+    }]
+  },
+  lifelinkWeave: {
+    id: 'lifelinkWeave',
+    name: '生链织构',
+    type: 'skill',
+    cost: 1,
+    icon: '🧶',
+    description: '恢复 6 点生命，并获得下回合 4 点护盾',
+    rarity: 'uncommon',
+    keywords: ['vital', 'heal', 'guard'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'heal',
+      value: 6,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'nextTurnBlock',
+      value: 4,
+      target: 'self'
+    }]
+  },
+  hospiceEdict: {
+    id: 'hospiceEdict',
+    name: '护生敕令',
+    type: 'skill',
+    cost: 1,
+    icon: '📜',
+    description: '恢复 5 点生命，并施加 2 层虚弱',
+    rarity: 'uncommon',
+    keywords: ['vital', 'heal', 'control'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'heal',
+      value: 5,
+      target: 'self'
+    }, {
+      type: 'debuff',
+      buffType: 'weak',
+      value: 2,
+      target: 'enemy'
+    }]
+  },
+  rebirthSpiral: {
+    id: 'rebirthSpiral',
+    name: '回生螺旋',
+    type: 'attack',
+    cost: 2,
+    icon: '🌀',
+    description: '造成 7 点伤害并恢复 7 点生命',
+    rarity: 'uncommon',
+    keywords: ['vital', 'heal', 'burst'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'damage',
+      value: 7,
+      target: 'enemy'
+    }, {
+      type: 'heal',
+      value: 7,
+      target: 'self'
+    }]
+  },
+  thornedRemedy: {
+    id: 'thornedRemedy',
+    name: '刺脉疗法',
+    type: 'attack',
+    cost: 1,
+    icon: '🌵',
+    description: '恢复 4 点生命，并对全体造成 4 点伤害',
+    rarity: 'uncommon',
+    keywords: ['vital', 'heal', 'aoe'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'heal',
+      value: 4,
+      target: 'self'
+    }, {
+      type: 'damageAll',
+      value: 4,
+      target: 'allEnemies'
+    }]
+  },
+  vitalPivot: {
+    id: 'vitalPivot',
+    name: '生息转枢',
+    type: 'skill',
+    cost: 1,
+    icon: '🔄',
+    description: '恢复 3 点生命，获得 1 点灵力并施加 2 层破绽',
+    rarity: 'uncommon',
+    keywords: ['vital', 'heal', 'mark'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'heal',
+      value: 3,
+      target: 'self'
+    }, {
+      type: 'energy',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'applyMark',
+      value: 2,
+      target: 'enemy'
+    }]
+  },
+  soulSuture: {
+    id: 'soulSuture',
+    name: '魂缝',
+    type: 'power',
+    cost: 2,
+    icon: '🪢',
+    description: '恢复 8 点生命，获得 1 层护盾留存并抽 1 张牌',
+    rarity: 'rare',
+    keywords: ['vital', 'heal', 'retain'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'heal',
+      value: 8,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'retainBlock',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  reversalPulse: {
+    id: 'reversalPulse',
+    name: '逆脉冲',
+    type: 'attack',
+    cost: 2,
+    icon: '💢',
+    description: '失去 4 点生命，造成 12 点伤害并恢复 6 点生命',
+    rarity: 'rare',
+    keywords: ['vital', 'heal', 'burst'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'selfDamage',
+      value: 4,
+      target: 'self'
+    }, {
+      type: 'damage',
+      value: 12,
+      target: 'enemy'
+    }, {
+      type: 'heal',
+      value: 6,
+      target: 'self'
+    }]
+  },
+  phoenixReprieve: {
+    id: 'phoenixReprieve',
+    name: '回生凤返',
+    type: 'skill',
+    cost: 3,
+    icon: '🕊️',
+    description: '恢复 15 点生命，并对全体造成 10 点伤害',
+    rarity: 'rare',
+    keywords: ['vital', 'heal', 'aoe'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'heal',
+      value: 15,
+      target: 'self'
+    }, {
+      type: 'damageAll',
+      value: 10,
+      target: 'allEnemies'
+    }]
+  },
+  ironBreath: {
+    id: 'ironBreath',
+    name: '铁息守律',
+    type: 'defense',
+    cost: 1,
+    icon: '🛡️',
+    description: '获得 9 点护盾并净化 1 层负面效果',
+    rarity: 'common',
+    keywords: ['guard', 'cleanse'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'block',
+      value: 9,
+      target: 'self'
+    }, {
+      type: 'cleanse',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  mirrorWall: {
+    id: 'mirrorWall',
+    name: '镜壁折锋',
+    type: 'skill',
+    cost: 1,
+    icon: '🪞',
+    description: '获得 6 点护盾并获得 1 层护盾留存',
+    rarity: 'common',
+    keywords: ['guard', 'retain', 'mirror', 'delay'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'block',
+      value: 6,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'retainBlock',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  reboundingShell: {
+    id: 'reboundingShell',
+    name: '回壳击',
+    type: 'attack',
+    cost: 1,
+    icon: '🐢',
+    description: '造成 5 点伤害并获得 6 点护盾',
+    rarity: 'common',
+    keywords: ['guard', 'tempo'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'damage',
+      value: 5,
+      target: 'enemy'
+    }, {
+      type: 'block',
+      value: 6,
+      target: 'self'
+    }]
+  },
+  bastionStudy: {
+    id: 'bastionStudy',
+    name: '垒势演算',
+    type: 'skill',
+    cost: 0,
+    icon: '📐',
+    description: '抽 1 张牌并获得 4 点护盾',
+    rarity: 'common',
+    keywords: ['guard', 'tempo'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'block',
+      value: 4,
+      target: 'self'
+    }]
+  },
+  wardingSweep: {
+    id: 'wardingSweep',
+    name: '镇界横扫',
+    type: 'attack',
+    cost: 1,
+    icon: '🧱',
+    description: '对全体造成 4 点伤害并获得 4 点护盾',
+    rarity: 'common',
+    keywords: ['guard', 'aoe'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'damageAll',
+      value: 4,
+      target: 'allEnemies'
+    }, {
+      type: 'block',
+      value: 4,
+      target: 'self'
+    }]
+  },
+  resolveAnchor: {
+    id: 'resolveAnchor',
+    name: '定心锚',
+    type: 'skill',
+    cost: 1,
+    icon: '⚓',
+    description: '下回合开始时获得 7 点护盾并抽 1 张牌',
+    rarity: 'uncommon',
+    keywords: ['guard', 'setup'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'buff',
+      buffType: 'nextTurnBlock',
+      value: 7,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  guardianMantra: {
+    id: 'guardianMantra',
+    name: '守愿咒',
+    type: 'defense',
+    cost: 1,
+    icon: '📿',
+    description: '获得 10 点护盾并获得 1 层护盾留存',
+    rarity: 'uncommon',
+    keywords: ['guard', 'retain'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'block',
+      value: 10,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'retainBlock',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  shieldTax: {
+    id: 'shieldTax',
+    name: '护势征敛',
+    type: 'skill',
+    cost: 1,
+    icon: '🧾',
+    description: '获得等于已损失生命 30% 的护盾并抽 1 张牌',
+    rarity: 'uncommon',
+    keywords: ['guard', 'recover'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'blockFromLostHp',
+      percent: 0.3,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  bastionCrash: {
+    id: 'bastionCrash',
+    name: '垒势崩落',
+    type: 'attack',
+    cost: 1,
+    icon: '💥',
+    description: '消耗至多 12 点护盾，每点护盾造成 1 点伤害，并抽 1 张牌',
+    rarity: 'uncommon',
+    keywords: ['guard', 'burst'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'blockBurst',
+      ratio: 1,
+      maxConsume: 12,
+      minDamage: 4,
+      target: 'enemy'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  counterEdict: {
+    id: 'counterEdict',
+    name: '反制敕令',
+    type: 'attack',
+    cost: 2,
+    icon: '📜',
+    description: '移除敌人所有护盾并造成 8 点伤害',
+    rarity: 'uncommon',
+    keywords: ['guard', 'counter'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'removeBlock',
+      target: 'enemy'
+    }, {
+      type: 'damage',
+      value: 8,
+      target: 'enemy'
+    }]
+  },
+  citadelOath: {
+    id: 'citadelOath',
+    name: '天阙誓垒',
+    type: 'power',
+    cost: 2,
+    icon: '🏯',
+    description: '获得 8 点护盾、2 点荆棘与 2 层护盾留存',
+    rarity: 'rare',
+    keywords: ['guard', 'retain'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'block',
+      value: 8,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'thorns',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'retainBlock',
+      value: 2,
+      target: 'self'
+    }]
+  },
+  fortressEdict: {
+    id: 'fortressEdict',
+    name: '镇垒断罪',
+    type: 'attack',
+    cost: 2,
+    icon: '⚖️',
+    description: '消耗全部护盾，每点护盾造成 1.3 点伤害，并施加 2 层虚弱',
+    rarity: 'rare',
+    keywords: ['guard', 'burst'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'blockBurst',
+      ratio: 1.3,
+      minDamage: 8,
+      target: 'enemy'
+    }, {
+      type: 'debuff',
+      buffType: 'weak',
+      value: 2,
+      target: 'enemy'
+    }]
+  },
+  aegisJudgement: {
+    id: 'aegisJudgement',
+    name: '玄甲裁断',
+    type: 'attack',
+    cost: 2,
+    icon: '⚔️',
+    description: '造成 10 点伤害并获得 8 点护盾',
+    rarity: 'rare',
+    keywords: ['guard', 'burst'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'damage',
+      value: 10,
+      target: 'enemy'
+    }, {
+      type: 'block',
+      value: 8,
+      target: 'self'
+    }]
+  },
+  // ==================== 补全卡牌 ====================
+  healingTouch: {
+    id: 'healingTouch',
+    name: '治愈之触',
+    type: 'skill',
+    cost: 1,
+    icon: '💚',
+    description: '回复 6 点生命，移除 1 个负面效果',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'heal',
+      value: 6,
+      target: 'self'
+    }, {
+      type: 'cleanse',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  bloodBlessing: {
+    id: 'bloodBlessing',
+    name: '鲜血祝福',
+    type: 'power',
+    cost: 2,
+    icon: '🩸',
+    description: '消耗 5 点生命，获得 2 点力量',
+    rarity: 'rare',
+    effects: [{
+      type: 'selfDamage',
+      value: 5,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'strength',
+      value: 2,
+      target: 'self'
+    }]
+  },
+  poisonThorn: {
+    id: 'poisonThorn',
+    name: '毒刺',
+    type: 'attack',
+    cost: 1,
+    icon: '🌵',
+    description: '造成 4 点伤害，施加 2 层中毒',
+    rarity: 'common',
+    effects: [{
+      type: 'damage',
+      value: 4,
+      target: 'enemy'
+    }, {
+      type: 'debuff',
+      buffType: 'poison',
+      value: 2,
+      target: 'enemy'
+    }],
+    element: 'wood'
+  },
+  natureGrowth: {
+    id: 'natureGrowth',
+    name: '自然生长',
+    type: 'power',
+    cost: 1,
+    icon: '🌱',
+    description: '每回合结束时，获得 3 点护盾',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'buff',
+      buffType: 'regenBlock',
+      value: 3,
+      target: 'self'
+    }]
+  },
+  // ==================== 法则牌（紫色） ====================
+  thunderLaw: {
+    id: 'thunderLaw',
+    name: '雷法残章',
+    type: 'law',
+    cost: 2,
+    icon: '⚡',
+    description: '造成 8 点伤害，使敌人下回合受到的伤害+3',
+    rarity: 'rare',
+    lawType: 'thunder',
+    effects: [{
+      type: 'damage',
+      value: 8,
+      target: 'enemy'
+    }, {
+      type: 'debuff',
+      buffType: 'vulnerable',
+      value: 3,
+      target: 'enemy'
+    }]
+  },
+  swordIntent: {
+    id: 'swordIntent',
+    name: '剑意碎片',
+    type: 'law',
+    cost: 1,
+    icon: '🗡️',
+    description: '造成 7 点穿透伤害（无视护盾）',
+    rarity: 'rare',
+    lawType: 'sword',
+    element: 'metal',
+    effects: [{
+      type: 'penetrate',
+      value: 7,
+      target: 'enemy'
+    }]
+  },
+  flameTruth: {
+    id: 'flameTruth',
+    name: '火焰真意',
+    type: 'law',
+    cost: 2,
+    icon: '🔥',
+    description: '造成 6 点伤害，使敌人获得 3 层灼烧',
+    rarity: 'rare',
+    lawType: 'fire',
+    element: 'fire',
+    effects: [{
+      type: 'damage',
+      value: 6,
+      target: 'enemy'
+    }, {
+      type: 'debuff',
+      buffType: 'burn',
+      value: 3,
+      target: 'enemy'
+    }]
+  },
+  spaceRift: {
+    id: 'spaceRift',
+    name: '空间裂隙',
+    type: 'law',
+    cost: 1,
+    icon: '🌀',
+    description: '获得 50% 闪避率（持续1回合）',
+    rarity: 'rare',
+    lawType: 'space',
+    effects: [{
+      type: 'buff',
+      buffType: 'dodgeChance',
+      value: 0.5,
+      target: 'self',
+      duration: 1
+    }]
+  },
+  timeStop: {
+    id: 'timeStop',
+    name: '时间静止',
+    type: 'law',
+    cost: 3,
+    icon: '⏱️',
+    description: '敌人跳过下一回合',
+    rarity: 'legendary',
+    lawType: 'time',
+    effects: [{
+      type: 'debuff',
+      buffType: 'stun',
+      value: 1,
+      target: 'enemy'
+    }]
+  },
+  voidEmbrace: {
+    id: 'voidEmbrace',
+    name: '虚空拥抱',
+    type: 'law',
+    cost: 2,
+    icon: '🕳️',
+    description: '造成敌人已损失生命值10%的伤害',
+    rarity: 'legendary',
+    lawType: 'void',
+    effects: [{
+      type: 'execute',
+      value: 0.10,
+      target: 'enemy'
+    }]
+  },
+  // ==================== 机缘牌（金色） ====================
+  luckyStrike: {
+    id: 'luckyStrike',
+    name: '天降机缘',
+    type: 'chance',
+    cost: 1,
+    icon: '🌟',
+    description: '随机造成 5-15 点伤害',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'randomDamage',
+      minValue: 5,
+      maxValue: 15,
+      target: 'enemy'
+    }]
+  },
+  fortuneWheel: {
+    id: 'fortuneWheel',
+    name: '命运之轮',
+    type: 'chance',
+    cost: 1,
+    consumeCandy: true,
+    icon: '🎰',
+    description: '消耗1奶糖。随机获得 1-3 张临时卡牌',
+    rarity: 'rare',
+    effects: [{
+      type: 'randomCards',
+      minValue: 1,
+      maxValue: 3,
+      target: 'self'
+    }]
+  },
+  miracleHeal: {
+    id: 'miracleHeal',
+    name: '奇迹治愈',
+    type: 'chance',
+    cost: 2,
+    icon: '💖',
+    description: '回复 15 点生命',
+    rarity: 'rare',
+    effects: [{
+      type: 'heal',
+      value: 15,
+      target: 'self'
+    }]
+  },
+  // ==================== 角色专属卡牌 (追加) ====================
+  // --- 林风 (Lin Feng) ---
+  defianceStrike: {
+    id: 'defianceStrike',
+    name: '逆命一击',
+    type: 'attack',
+    character: 'linFeng',
+    cost: 1,
+    icon: '🗡️',
+    description: '造成 8 点伤害。若生命值低于50%，伤害翻倍',
+    rarity: 'common',
+    effects: [{
+      type: 'damage',
+      value: 8,
+      target: 'enemy'
+    }, {
+      type: 'conditionalDamage',
+      condition: 'lowHp',
+      threshold: 0.5,
+      multiplier: 2,
+      target: 'enemy'
+    }]
+  },
+  fusionBlast: {
+    id: 'fusionBlast',
+    name: '融合爆发',
+    type: 'skill',
+    character: 'linFeng',
+    cost: 1,
+    icon: '🌌',
+    description: '消耗所有手牌，抽取消耗数量+1张牌',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'discardHand',
+      target: 'self'
+    }, {
+      type: 'drawCalculated',
+      base: 1,
+      perDiscard: 1,
+      target: 'self'
+    }]
+  },
+  lawbreaker: {
+    id: 'lawbreaker',
+    name: '破法者',
+    type: 'power',
+    character: 'linFeng',
+    cost: 2,
+    icon: '🛡️',
+    description: '每打出一张攻击牌，获得 2 点护盾',
+    rarity: 'rare',
+    effects: [{
+      type: 'buff',
+      buffType: 'blockOnAttack',
+      value: 2,
+      target: 'self'
+    }]
+  },
+  // --- 香叶 (Xiang Ye) ---
+  bloodSeal: {
+    id: 'bloodSeal',
+    name: '血之封印',
+    type: 'skill',
+    character: 'xiangYe',
+    cost: 1,
+    icon: '🩸',
+    description: '流失 5 点生命，获得 20 点护盾',
+    rarity: 'common',
+    effects: [{
+      type: 'selfDamage',
+      value: 5,
+      target: 'self'
+    }, {
+      type: 'block',
+      value: 20,
+      target: 'self'
+    }]
+  },
+  vitalityBloom: {
+    id: 'vitalityBloom',
+    name: '生命绽放',
+    type: 'power',
+    character: 'xiangYe',
+    cost: 2,
+    icon: '🌸',
+    description: '回合开始时，回复 3 点生命',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'buff',
+      buffType: 'regen',
+      value: 3,
+      target: 'self'
+    }]
+  },
+  unchain: {
+    id: 'unchain',
+    name: '解脱',
+    type: 'attack',
+    character: 'xiangYe',
+    cost: 2,
+    icon: '🔗',
+    description: '造成 15 点伤害。若仍有封印槽位，额外造成 10 点伤害',
+    rarity: 'common',
+    effects: [{
+      type: 'damage',
+      value: 15,
+      target: 'enemy'
+    }, {
+      type: 'conditionalDamage',
+      condition: 'sealed',
+      bonusDamage: 10,
+      target: 'enemy'
+    }]
+  },
+  // --- 无欲 (Wu Yu) ---
+  karmaStrike: {
+    id: 'karmaStrike',
+    name: '业力击',
+    type: 'attack',
+    character: 'wuYu',
+    cost: 1,
+    icon: '🕉️',
+    description: '造成 6 点伤害。增加 5 点业力',
+    rarity: 'common',
+    effects: [{
+      type: 'damage',
+      value: 6,
+      target: 'enemy'
+    }, {
+      type: 'gainSin',
+      value: 5,
+      target: 'self'
+    }]
+  },
+  goldenBellSkill: {
+    id: 'goldenBellSkill',
+    name: '金钟罩',
+    type: 'skill',
+    character: 'wuYu',
+    cost: 1,
+    icon: '🔔',
+    description: '获得 12 点护盾。增加 5 点功德',
+    rarity: 'common',
+    effects: [{
+      type: 'block',
+      value: 12,
+      target: 'self'
+    }, {
+      type: 'gainMerit',
+      value: 5,
+      target: 'self'
+    }]
+  },
+  asceticism: {
+    id: 'asceticism',
+    name: '苦行',
+    type: 'power',
+    character: 'wuYu',
+    cost: 1,
+    icon: '🙏',
+    description: '回合结束时若有保留手牌，获得保留数x2点功德',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'buff',
+      buffType: 'meritOnRetain',
+      value: 2,
+      target: 'self'
+    }]
+  },
+  // --- 严寒 (Yan Han) ---
+  probe: {
+    id: 'probe',
+    name: '试探',
+    type: 'attack',
+    character: 'yanHan',
+    cost: 0,
+    consumeCandy: true,
+    icon: '🔍',
+    description: '消耗1奶糖。造成 4 点伤害。抽 1 张牌',
+    rarity: 'common',
+    effects: [{
+      type: 'damage',
+      value: 4,
+      target: 'enemy'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  analyzeWeakness: {
+    id: 'analyzeWeakness',
+    name: '弱点分析',
+    type: 'skill',
+    character: 'yanHan',
+    cost: 1,
+    icon: '📊',
+    description: '给予所有敌人 2 层易伤',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'debuff',
+      buffType: 'vulnerable',
+      value: 2,
+      target: 'allEnemies'
+    }]
+  },
+  tacticalAdvantage: {
+    id: 'tacticalAdvantage',
+    name: '战术优势',
+    type: 'power',
+    character: 'yanHan',
+    cost: 2,
+    icon: '📈',
+    description: '攻击带有易伤的敌人时，回复 1 点灵力(每回合限2次)',
+    rarity: 'rare',
+    effects: [{
+      type: 'buff',
+      buffType: 'energyOnVulnerable',
+      value: 1,
+      limit: 2,
+      target: 'self'
+    }]
+  },
+  // ==================== 2.0新增卡牌 ====================
+
+  // 攻击牌
+  sweepingStrike: {
+    id: 'sweepingStrike',
+    name: '横扫千军',
+    type: 'attack',
+    cost: 2,
+    icon: '🌪️',
+    description: '对所有敌人造成 8 点伤害',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'damageAll',
+      value: 8,
+      target: 'allEnemies'
+    }]
+  },
+  armorBreaker: {
+    id: 'armorBreaker',
+    name: '破甲一击',
+    type: 'attack',
+    cost: 1,
+    icon: '🔨',
+    description: '造成 5 点伤害，移除敌人护盾',
+    rarity: 'common',
+    effects: [{
+      type: 'removeBlock',
+      target: 'enemy'
+    }, {
+      type: 'damage',
+      value: 5,
+      target: 'enemy'
+    }]
+  },
+  tripleSlash: {
+    id: 'tripleSlash',
+    name: '致命连击',
+    type: 'attack',
+    cost: 1,
+    icon: '⚡',
+    description: '造成 3 点伤害三次',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'damage',
+      value: 3,
+      target: 'enemy'
+    }, {
+      type: 'damage',
+      value: 3,
+      target: 'enemy'
+    }, {
+      type: 'damage',
+      value: 3,
+      target: 'enemy'
+    }]
+  },
+  earthShatter: {
+    id: 'earthShatter',
+    name: '天崩地裂',
+    type: 'attack',
+    cost: 3,
+    icon: '🌋',
+    description: '造成 25 点伤害，自身受 5 点伤害（生命≤5不可用）',
+    rarity: 'rare',
+    condition: {
+      type: 'hp',
+      min: 6
+    },
+    effects: [{
+      type: 'damage',
+      value: 25,
+      target: 'enemy'
+    }, {
+      type: 'selfDamage',
+      value: 5,
+      target: 'self'
+    }]
+  },
+  swordBreaker: {
+    id: 'swordBreaker',
+    name: '一剑破万法',
+    type: 'attack',
+    cost: 2,
+    icon: '✨',
+    description: '造成 15 点穿透伤害',
+    rarity: 'rare',
+    effects: [{
+      type: 'penetrate',
+      value: 15,
+      target: 'enemy'
+    }]
+  },
+  bloodSlash: {
+    id: 'bloodSlash',
+    name: '血刃斩',
+    type: 'attack',
+    cost: 1,
+    icon: '🩸',
+    description: '造成 8 点伤害，回复造成伤害的30%生命',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'lifeSteal',
+      value: 0.3,
+      target: 'self'
+    }, {
+      type: 'damage',
+      value: 8,
+      target: 'enemy'
+    }]
+  },
+  finishingBlow: {
+    id: 'finishingBlow',
+    name: '终结一击',
+    type: 'attack',
+    cost: 2,
+    icon: '💀',
+    description: '造成 10 点伤害，对生命低于30%的敌人造成双倍',
+    rarity: 'rare',
+    effects: [{
+      type: 'executeDamage',
+      value: 10,
+      threshold: 0.3,
+      target: 'enemy'
+    }]
+  },
+  // 防御牌
+  goldenBell: {
+    id: 'goldenBell',
+    name: '金钟罩',
+    type: 'defense',
+    cost: 2,
+    icon: '🔔',
+    description: '获得 15 点护盾',
+    rarity: 'common',
+    effects: [{
+      type: 'block',
+      value: 15,
+      target: 'self'
+    }]
+  },
+  offenseDefense: {
+    id: 'offenseDefense',
+    name: '以攻代守',
+    type: 'defense',
+    cost: 1,
+    icon: '⚔️',
+    description: '获得等于你力量值x3的护盾（最少5）',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'blockFromStrength',
+      multiplier: 3,
+      minimum: 5,
+      target: 'self'
+    }]
+  },
+  halfDamage: {
+    id: 'halfDamage',
+    name: '天地同寿',
+    type: 'defense',
+    cost: 2,
+    icon: '☯️',
+    description: '本回合受到的伤害减少30%（升级后50%）',
+    rarity: 'rare',
+    effects: [{
+      type: 'buff',
+      buffType: 'damageReduction',
+      value: 30,
+      target: 'self'
+    }]
+  },
+  turtleShell: {
+    id: 'turtleShell',
+    name: '乌龟壳',
+    type: 'defense',
+    cost: 0,
+    consumeCandy: true,
+    icon: '🐢',
+    description: '消耗1奶糖。获得 3 点护盾，抽 1 张牌',
+    rarity: 'common',
+    effects: [{
+      type: 'block',
+      value: 3,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  ironSkin: {
+    id: 'ironSkin',
+    name: '铁布衫',
+    type: 'defense',
+    cost: 1,
+    icon: '🦾',
+    description: '获得 6 点护盾，下回合开始时再获得 4 点',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'block',
+      value: 6,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'nextTurnBlock',
+      value: 4,
+      target: 'self'
+    }]
+  },
+  // 法则牌
+  thunderStorm: {
+    id: 'thunderStorm',
+    name: '劫雷轰顶',
+    type: 'law',
+    cost: 2,
+    icon: '🌩️',
+    description: '造成 10 点伤害，使敌人获得 2 层麻痹',
+    rarity: 'rare',
+    lawType: 'thunder',
+    effects: [{
+      type: 'damage',
+      value: 10,
+      target: 'enemy'
+    }, {
+      type: 'debuff',
+      buffType: 'paralysis',
+      value: 2,
+      target: 'enemy'
+    }]
+  },
+  inferno: {
+    id: 'inferno',
+    name: '业火焚天',
+    type: 'law',
+    cost: 3,
+    icon: '🔥',
+    description: '造成 8 点伤害3次，每次+1灼烧',
+    rarity: 'epic',
+    lawType: 'fire',
+    element: 'fire',
+    effects: [{
+      type: 'damage',
+      value: 8,
+      target: 'enemy'
+    }, {
+      type: 'debuff',
+      buffType: 'burn',
+      value: 1,
+      target: 'enemy'
+    }, {
+      type: 'damage',
+      value: 8,
+      target: 'enemy'
+    }, {
+      type: 'debuff',
+      buffType: 'burn',
+      value: 1,
+      target: 'enemy'
+    }, {
+      type: 'damage',
+      value: 8,
+      target: 'enemy'
+    }, {
+      type: 'debuff',
+      buffType: 'burn',
+      value: 1,
+      target: 'enemy'
+    }],
+    descriptionTemplate: '造成 {e0} 点伤害3次，每次+{e1}灼烧'
+  },
+  voidWalk: {
+    id: 'voidWalk',
+    name: '穿梭虚空',
+    type: 'law',
+    cost: 1,
+    icon: '🌀',
+    description: '获得 1 层闪避',
+    rarity: 'rare',
+    lawType: 'space',
+    effects: [{
+      type: 'buff',
+      buffType: 'dodge',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  timeRewind: {
+    id: 'timeRewind',
+    name: '时光倒流',
+    type: 'law',
+    cost: 4,
+    icon: '⏪',
+    description: '将轮回洗回识海',
+    rarity: 'epic',
+    lawType: 'time',
+    effects: [{
+      type: 'reshuffleDiscard',
+      target: 'self'
+    }]
+  },
+  karmaKill: {
+    id: 'karmaKill',
+    name: '因果律杀',
+    type: 'law',
+    cost: 3,
+    icon: '☠️',
+    description: '必定命中，造成敌人最大生命15%的伤害',
+    rarity: 'legendary',
+    lawType: 'karma',
+    effects: [{
+      type: 'percentDamage',
+      value: 0.15,
+      target: 'enemy'
+    }]
+  },
+  iceFreeze: {
+    id: 'iceFreeze',
+    name: '冰封万里',
+    type: 'law',
+    cost: 2,
+    icon: '❄️',
+    description: '造成 7 点伤害，使敌人下回合伤害-3',
+    rarity: 'rare',
+    lawType: 'ice',
+    effects: [{
+      type: 'damage',
+      value: 7,
+      target: 'enemy'
+    }, {
+      type: 'debuff',
+      buffType: 'weak',
+      value: 3,
+      target: 'enemy'
+    }]
+  },
+  // 机缘牌
+  desperateSurvival: {
+    id: 'desperateSurvival',
+    name: '绝处逢生',
+    type: 'chance',
+    cost: 1,
+    icon: '🆘',
+    description: '若生命低于20%，抽3张牌+3灵力',
+    rarity: 'rare',
+    effects: [{
+      type: 'conditionalDraw',
+      condition: 'lowHp',
+      threshold: 0.2,
+      drawValue: 3,
+      energyValue: 3
+    }]
+  },
+  windfall: {
+    id: 'windfall',
+    name: '天降横财',
+    type: 'chance',
+    cost: 1,
+    icon: '💰',
+    description: '战斗结束后获得 25-100 灵石',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'bonusGold',
+      min: 25,
+      max: 100
+    }]
+  },
+  enlightenment: {
+    id: 'enlightenment',
+    name: '顿悟',
+    type: 'chance',
+    cost: 2,
+    icon: '💡',
+    description: '命环经验+50',
+    rarity: 'rare',
+    effects: [{
+      type: 'ringExp',
+      value: 50
+    }]
+  },
+  reversal: {
+    id: 'reversal',
+    name: '逆转乾坤',
+    type: 'chance',
+    cost: 4,
+    icon: '🔄',
+    description: '与敌人交换当前生命值百分比',
+    rarity: 'legendary',
+    effects: [{
+      type: 'swapHpPercent',
+      target: 'enemy'
+    }]
+  },
+  // 技能牌
+  concentration: {
+    id: 'concentration',
+    name: '聚气',
+    type: 'energy',
+    cost: 1,
+    icon: '🎯',
+    description: '下一张攻击牌伤害+5',
+    rarity: 'common',
+    effects: [{
+      type: 'buff',
+      buffType: 'nextAttackBonus',
+      value: 5,
+      target: 'self'
+    }]
+  },
+  doubleEdge: {
+    id: 'doubleEdge',
+    name: '双刃',
+    type: 'attack',
+    cost: 1,
+    icon: '🔪',
+    description: '造成 10 点伤害，获得 1 层易伤',
+    rarity: 'common',
+    effects: [{
+      type: 'damage',
+      value: 10,
+      target: 'enemy'
+    }, {
+      type: 'debuff',
+      buffType: 'vulnerable',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  powerUp: {
+    id: 'powerUp',
+    name: '蓄力',
+    type: 'energy',
+    cost: 1,
+    icon: '💪',
+    description: '获得 2 点力量（永久）',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'buff',
+      buffType: 'strength',
+      value: 2,
+      target: 'self',
+      permanent: true
+    }]
+  },
+  allIn: {
+    id: 'allIn',
+    name: '破釜沉舟',
+    type: 'attack',
+    cost: 1,
+    icon: '🎲',
+    description: '消耗所有灵力，每点灵力造成 6 点伤害',
+    rarity: 'rare',
+    effects: [{
+      type: 'consumeAllEnergy',
+      damagePerEnergy: 6,
+      target: 'enemy'
+    }]
+  },
+  chaosControl: {
+    id: 'chaosControl',
+    name: '混沌支配',
+    type: 'law',
+    cost: 2,
+    icon: '🌀',
+    description: '造成 5 点伤害，使敌人眩晕1回合',
+    rarity: 'legendary',
+    lawType: 'chaos',
+    effects: [{
+      type: 'damage',
+      value: 5,
+      target: 'enemy'
+    }, {
+      type: 'debuff',
+      buffType: 'stun',
+      value: 1,
+      target: 'enemy'
+    }]
+  },
+  // ==================== 多角色专属卡牌 ====================
+  // ===== 林风（逆命者）- 突破与进化主题 =====
+  defiantWill: {
+    id: 'defiantWill',
+    name: '逆天意志',
+    type: 'attack',
+    cost: 1,
+    icon: '💫',
+    description: '造成 8 点伤害，若命环≥2级，再造成 8 点伤害',
+    rarity: 'uncommon',
+    character: 'linFeng',
+    effects: [{
+      type: 'damage',
+      value: 8,
+      target: 'enemy'
+    }, {
+      type: 'conditionalDamage',
+      condition: 'fateRingLevel',
+      minLevel: 2,
+      bonusDamage: 8,
+      target: 'enemy'
+    }]
+  },
+  ringResonance: {
+    id: 'ringResonance',
+    name: '命环共振',
+    type: 'attack',
+    cost: 2,
+    icon: '🔮',
+    description: '根据装载法则数量+4伤害，抽1张牌',
+    rarity: 'rare',
+    character: 'linFeng',
+    effects: [{
+      type: 'damagePerLaw',
+      baseDamage: 4,
+      damagePerLaw: 4,
+      target: 'enemy'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  breakthrough: {
+    id: 'breakthrough',
+    name: '突破极限',
+    type: 'attack',
+    cost: 3,
+    icon: '⚡',
+    description: '造成 25 点伤害，命环经验+30',
+    rarity: 'rare',
+    character: 'linFeng',
+    effects: [{
+      type: 'damage',
+      value: 25,
+      target: 'enemy'
+    }, {
+      type: 'ringExp',
+      value: 30
+    }]
+  },
+  // ===== 香叶（治愈法则）- 增益与治疗主题 =====
+
+  healingTouch: {
+    id: 'healingTouch',
+    name: '治愈之触',
+    type: 'skill',
+    cost: 1,
+    icon: '💚',
+    description: '回复 8 点生命，净化 1 层负面效果',
+    rarity: 'uncommon',
+    character: 'xiangYe',
+    effects: [{
+      type: 'heal',
+      value: 8,
+      target: 'self'
+    }, {
+      type: 'cleanse',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  bloodBlessing: {
+    id: 'bloodBlessing',
+    name: '血之祝福',
+    type: 'skill',
+    cost: 2,
+    icon: '🩸',
+    description: '回复 15 点生命，使敌人虚弱 2 回合',
+    rarity: 'rare',
+    character: 'xiangYe',
+    effects: [{
+      type: 'heal',
+      value: 15,
+      target: 'self'
+    }, {
+      type: 'debuff',
+      buffType: 'weak',
+      value: 2,
+      target: 'enemy'
+    }]
+  },
+  lifeSurge: {
+    id: 'lifeSurge',
+    name: '生命涌动',
+    type: 'defense',
+    cost: 1,
+    icon: '💖',
+    description: '获得等于已损失生命50%的护盾',
+    rarity: 'rare',
+    character: 'xiangYe',
+    effects: [{
+      type: 'blockFromLostHp',
+      percent: 0.5,
+      target: 'self'
+    }]
+  },
+  // ===== 无欲（佛门）- 反击与控制主题 =====
+
+  vajraGlare: {
+    id: 'vajraGlare',
+    name: '金刚怒目',
+    type: 'attack',
+    cost: 1,
+    icon: '😡',
+    description: '造成 5 点伤害，获得 3 点荆棘持续 2 回合',
+    rarity: 'uncommon',
+    character: 'wuYu',
+    effects: [{
+      type: 'damage',
+      value: 5,
+      target: 'enemy'
+    }, {
+      type: 'buff',
+      buffType: 'thorns',
+      value: 3,
+      target: 'self',
+      duration: 2
+    }]
+  },
+  zenMeditation: {
+    id: 'zenMeditation',
+    name: '禅定',
+    type: 'defense',
+    cost: 2,
+    icon: '🧘',
+    description: '获得 15 点护盾，下次被攻击时反弹等量伤害',
+    rarity: 'rare',
+    character: 'wuYu',
+    effects: [{
+      type: 'block',
+      value: 15,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'reflect',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  salvation: {
+    id: 'salvation',
+    name: '普渡众生',
+    type: 'law',
+    cost: 3,
+    icon: '☸️',
+    description: '对所有敌人造成 12 点伤害并眩晕 1 回合',
+    rarity: 'epic',
+    character: 'wuYu',
+    effects: [{
+      type: 'damageAll',
+      value: 12,
+      target: 'allEnemies'
+    }, {
+      type: 'debuffAll',
+      buffType: 'stun',
+      value: 1,
+      target: 'allEnemies'
+    }]
+  },
+  // ===== 严寒（学者）- 分析与削弱主题 =====
+
+  ringAnalysis: {
+    id: 'ringAnalysis',
+    name: '命环解析',
+    type: 'skill',
+    cost: 1,
+    icon: '📊',
+    description: '敌人易伤 2 层，命环经验+15',
+    rarity: 'uncommon',
+    character: 'yanHan',
+    effects: [{
+      type: 'debuff',
+      buffType: 'vulnerable',
+      value: 2,
+      target: 'enemy'
+    }, {
+      type: 'ringExp',
+      value: 15
+    }]
+  },
+  lawInsight: {
+    id: 'lawInsight',
+    name: '法则窥探',
+    type: 'skill',
+    cost: 2,
+    icon: '👁️',
+    description: '抽 2 张牌，本战法则盗取率+10%',
+    rarity: 'rare',
+    character: 'yanHan',
+    effects: [{
+      type: 'draw',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'stealBonus',
+      value: 0.1,
+      target: 'self'
+    }]
+  },
+  timeStasis: {
+    id: 'timeStasis',
+    name: '时间凝滞',
+    type: 'law',
+    cost: 3,
+    icon: '⏳',
+    description: '敌人下次攻击伤害-50%，你额外行动1次',
+    rarity: 'epic',
+    character: 'yanHan',
+    effects: [{
+      type: 'debuff',
+      buffType: 'damageReduction',
+      value: 50,
+      target: 'enemy'
+    }, {
+      type: 'buff',
+      buffType: 'extraTurn',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  // ===== 墨尘（星律）- 标记与命环节奏主题 =====
+  starNeedle: {
+    id: 'starNeedle',
+    name: '星痕针',
+    type: 'attack',
+    character: 'moChen',
+    cost: 1,
+    icon: '🌠',
+    description: '造成 7 点伤害，并施加 2 层破绽。',
+    rarity: 'common',
+    effects: [{
+      type: 'damage',
+      value: 7,
+      target: 'enemy'
+    }, {
+      type: 'applyMark',
+      value: 2,
+      target: 'enemy'
+    }]
+  },
+  omenBarrier: {
+    id: 'omenBarrier',
+    name: '星兆护幕',
+    type: 'defense',
+    character: 'moChen',
+    cost: 1,
+    icon: '🛡️',
+    description: '获得 9 点护盾，抽 1 张牌。',
+    rarity: 'uncommon',
+    effects: [{
+      type: 'block',
+      value: 9,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  ringCatalyst: {
+    id: 'ringCatalyst',
+    name: '命环催化',
+    type: 'skill',
+    character: 'moChen',
+    cost: 1,
+    icon: '🔭',
+    description: '命环经验 +20，并获得 1 点力量。',
+    rarity: 'rare',
+    effects: [{
+      type: 'ringExp',
+      value: 20
+    }, {
+      type: 'buff',
+      buffType: 'strength',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  artifactBolt: {
+    id: 'artifactBolt',
+    name: '灵器矢',
+    type: 'attack',
+    character: 'ningXuan',
+    cost: 1,
+    icon: '🪬',
+    description: '造成 6 点伤害，获得 3 点护盾。',
+    rarity: 'common',
+    keywords: ['guard'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'damage',
+      value: 6,
+      target: 'enemy'
+    }, {
+      type: 'block',
+      value: 3,
+      target: 'self'
+    }]
+  },
+  echoWard: {
+    id: 'echoWard',
+    name: '回响障壁',
+    type: 'defense',
+    character: 'ningXuan',
+    cost: 1,
+    icon: '🧱',
+    description: '获得 10 点护盾并抽 1 张牌。',
+    rarity: 'uncommon',
+    keywords: ['guard', 'echo', 'mirror'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'block',
+      value: 10,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  ringInfusion: {
+    id: 'ringInfusion',
+    name: '命环灌注',
+    type: 'skill',
+    character: 'ningXuan',
+    cost: 1,
+    icon: '⚗️',
+    description: '命环经验 +16，获得 1 点灵力。',
+    rarity: 'rare',
+    effects: [{
+      type: 'ringExp',
+      value: 16
+    }, {
+      type: 'energy',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  mirrorTrace: {
+    id: 'mirrorTrace',
+    name: '镜迹演算',
+    type: 'skill',
+    cost: 1,
+    icon: '🪞',
+    description: '获得 6 点护盾并抽 1 张牌。',
+    rarity: 'common',
+    keywords: ['mirror', 'echo', 'tempo'],
+    comboTag: 'echo',
+    synergyGroup: 'mirrorweave',
+    effects: [{
+      type: 'block',
+      value: 6,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  delayPrism: {
+    id: 'delayPrism',
+    name: '滞光棱镜',
+    type: 'skill',
+    cost: 1,
+    icon: '🔷',
+    description: '下回合开始时获得 7 点护盾并抽 1 张牌。',
+    rarity: 'common',
+    keywords: ['mirror', 'delay', 'setup'],
+    comboTag: 'echo',
+    synergyGroup: 'mirrorweave',
+    effects: [{
+      type: 'buff',
+      buffType: 'nextTurnBlock',
+      value: 7,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  reverberantEdge: {
+    id: 'reverberantEdge',
+    name: '镜渊回锋',
+    type: 'attack',
+    cost: 1,
+    icon: '🗡️',
+    description: '造成 7 点伤害，并以 60% 强度回响上一张已打出的牌。',
+    rarity: 'common',
+    keywords: ['mirror', 'echo'],
+    comboTag: 'echo',
+    synergyGroup: 'mirrorweave',
+    effects: [{
+      type: 'damage',
+      value: 7,
+      target: 'enemy'
+    }, {
+      type: 'echoLastPlayedCard',
+      value: 0.6,
+      repeatCount: 1,
+      target: 'self'
+    }]
+  },
+  mirroredRecital: {
+    id: 'mirroredRecital',
+    name: '双镜咏诵',
+    type: 'skill',
+    cost: 1,
+    icon: '🎼',
+    description: '抽 1 张牌，并以 65% 强度回响上一张已打出的牌。',
+    rarity: 'uncommon',
+    keywords: ['mirror', 'echo', 'tempo'],
+    comboTag: 'echo',
+    synergyGroup: 'mirrorweave',
+    effects: [{
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'echoLastPlayedCard',
+      value: 0.65,
+      repeatCount: 1,
+      target: 'self'
+    }]
+  },
+  echoVault: {
+    id: 'echoVault',
+    name: '回响封存',
+    type: 'defense',
+    cost: 1,
+    icon: '🏛️',
+    description: '获得 9 点护盾与 1 层护盾留存，并以 45% 强度回响上一张已打出的牌。',
+    rarity: 'uncommon',
+    keywords: ['mirror', 'echo', 'delay', 'guard'],
+    comboTag: 'echo',
+    synergyGroup: 'mirrorweave',
+    effects: [{
+      type: 'block',
+      value: 9,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'retainBlock',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'echoLastPlayedCard',
+      value: 0.45,
+      repeatCount: 1,
+      target: 'self'
+    }]
+  },
+  abyssalReflection: {
+    id: 'abyssalReflection',
+    name: '渊镜复奏',
+    type: 'power',
+    cost: 2,
+    icon: '🌌',
+    description: '抽 1 张牌，并以 70% 强度回响上一张已打出的牌 2 次。',
+    rarity: 'rare',
+    keywords: ['mirror', 'echo', 'delay', 'burst'],
+    comboTag: 'echo',
+    synergyGroup: 'mirrorweave',
+    effects: [{
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'echoLastPlayedCard',
+      value: 0.7,
+      repeatCount: 2,
+      target: 'self'
+    }]
+  },
+  oathbrandCut: {
+    id: 'oathbrandCut',
+    name: '誓印裁击',
+    type: 'attack',
+    cost: 1,
+    icon: '⚔️',
+    description: '造成 8 点伤害并获得 1 层誓债。',
+    rarity: 'common',
+    keywords: ['oath', 'debt', 'penance'],
+    comboTag: 'oath',
+    synergyGroup: 'oathbound',
+    effects: [{
+      type: 'damage',
+      value: 8,
+      target: 'enemy'
+    }, {
+      type: 'buff',
+      buffType: 'oathDebt',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  debtorVow: {
+    id: 'debtorVow',
+    name: '负誓',
+    type: 'skill',
+    cost: 0,
+    icon: '📜',
+    description: '自身受到 2 点伤害，抽 1 张牌并获得 1 层誓债。',
+    rarity: 'common',
+    keywords: ['oath', 'debt', 'selfharm'],
+    comboTag: 'oath',
+    synergyGroup: 'oathbound',
+    effects: [{
+      type: 'selfDamage',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'oathDebt',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  penanceWall: {
+    id: 'penanceWall',
+    name: '偿罪壁',
+    type: 'defense',
+    cost: 1,
+    icon: '🛡️',
+    description: '获得 9 点护盾并获得 1 层誓债。',
+    rarity: 'common',
+    keywords: ['oath', 'debt', 'penance', 'guard'],
+    comboTag: 'oath',
+    synergyGroup: 'oathbound',
+    effects: [{
+      type: 'block',
+      value: 9,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'oathDebt',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  debtTribunal: {
+    id: 'debtTribunal',
+    name: '债契审决',
+    type: 'skill',
+    cost: 1,
+    icon: '⚖️',
+    description: '清算全部誓债，每层造成 4 点伤害并抽 1 张牌。',
+    rarity: 'uncommon',
+    keywords: ['oath', 'debt', 'penance'],
+    comboTag: 'oath',
+    synergyGroup: 'oathbound',
+    effects: [{
+      type: 'consumeOathDebt',
+      value: 4,
+      target: 'enemy'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  bloodOathLedger: {
+    id: 'bloodOathLedger',
+    name: '血誓账簿',
+    type: 'power',
+    cost: 1,
+    icon: '🩸',
+    description: '获得 2 层誓债、1 点灵力并抽 1 张牌。',
+    rarity: 'uncommon',
+    keywords: ['oath', 'debt', 'tempo'],
+    comboTag: 'oath',
+    synergyGroup: 'oathbound',
+    effects: [{
+      type: 'buff',
+      buffType: 'oathDebt',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'energy',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  sentenceOfPenance: {
+    id: 'sentenceOfPenance',
+    name: '偿誓终判',
+    type: 'attack',
+    cost: 2,
+    icon: '⛓️',
+    description: '造成 8 点伤害，并清算全部誓债，每层额外造成 6 点伤害。',
+    rarity: 'rare',
+    keywords: ['oath', 'debt', 'penance', 'burst'],
+    comboTag: 'oath',
+    synergyGroup: 'oathbound',
+    effects: [{
+      type: 'damage',
+      value: 8,
+      target: 'enemy'
+    }, {
+      type: 'consumeOathDebt',
+      value: 6,
+      target: 'enemy'
+    }]
+  },
+  matrixGuardProtocol: {
+    id: 'matrixGuardProtocol',
+    name: '命环矩阵·守式',
+    type: 'defense',
+    cost: 1,
+    icon: '🧩',
+    description: '获得 11 点护盾，净化 1 层减益，并为命环共振注入守势信号。',
+    rarity: 'uncommon',
+    keywords: ['guard', 'cleanse', 'matrix'],
+    comboTag: 'guard',
+    synergyGroup: 'bulwark',
+    effects: [{
+      type: 'block',
+      value: 11,
+      target: 'self'
+    }, {
+      type: 'cleanse',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'matrixGuardSignal',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  matrixShatterVector: {
+    id: 'matrixShatterVector',
+    name: '命环矩阵·破式',
+    type: 'attack',
+    cost: 1,
+    icon: '🪓',
+    description: '移除目标所有护盾并造成 10 点伤害，并为命环共振注入破阵信号。',
+    rarity: 'uncommon',
+    keywords: ['penetrate', 'burst', 'matrix'],
+    comboTag: 'storm',
+    synergyGroup: 'stormcraft',
+    effects: [{
+      type: 'removeBlock',
+      target: 'enemy'
+    }, {
+      type: 'damage',
+      value: 10,
+      target: 'enemy'
+    }, {
+      type: 'buff',
+      buffType: 'matrixBreakSignal',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  matrixPurgeLoop: {
+    id: 'matrixPurgeLoop',
+    name: '命环矩阵·净式',
+    type: 'skill',
+    cost: 1,
+    icon: '🫧',
+    description: '净化 2 层减益并抽 1 张牌，并为命环共振注入净域信号。',
+    rarity: 'rare',
+    keywords: ['cleanse', 'tempo', 'matrix'],
+    comboTag: 'vital',
+    synergyGroup: 'vitalweave',
+    effects: [{
+      type: 'cleanse',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'matrixCleanseSignal',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  // 初始牌组 (Duplicates removed)
+
+  quickDraw: {
+    id: 'quickDraw',
+    name: '快抽',
+    type: 'energy',
+    cost: 0,
+    consumeCandy: true,
+    icon: '⚡',
+    description: '消耗1奶糖。抽 2 张牌',
+    rarity: 'common',
+    effects: [{
+      type: 'draw',
+      value: 2,
+      target: 'self'
+    }]
+  },
+  // ==================== 多角色专属卡牌 ====================
+
+  // --- 香叶 (Xiang Ye) ---
+  poisonTouch: {
+    id: 'poisonTouch',
+    name: '毒手',
+    type: 'skill',
+    character: 'xiangYe',
+    cost: 1,
+    icon: '☠️',
+    description: '使敌人中毒 2 层',
+    rarity: 'common',
+    effects: [{
+      type: 'debuff',
+      buffType: 'poison',
+      value: 2,
+      target: 'enemy'
+    }, {
+      type: 'damage',
+      value: 3,
+      target: 'enemy'
+    }]
+  },
+  minorHeal: {
+    id: 'minorHeal',
+    name: '小回春术',
+    type: 'skill',
+    character: 'xiangYe',
+    cost: 1,
+    icon: '🌿',
+    description: '回复 5 点生命',
+    rarity: 'common',
+    effects: [{
+      type: 'heal',
+      value: 5,
+      target: 'self'
+    }]
+  },
+  // --- 无欲 (Wu Yu) ---
+  monkStrike: {
+    id: 'monkStrike',
+    name: '罗汉拳',
+    type: 'attack',
+    character: 'wuYu',
+    cost: 1,
+    icon: '👊',
+    description: '造成 6 点伤害，获得 4 点护盾',
+    rarity: 'common',
+    effects: [{
+      type: 'damage',
+      value: 6,
+      target: 'enemy'
+    }, {
+      type: 'block',
+      value: 4,
+      target: 'self'
+    }]
+  },
+  // --- 严寒 (Yan Han) ---
+  analysis: {
+    id: 'analysis',
+    name: '弱点分析',
+    type: 'skill',
+    character: 'yanHan',
+    cost: 0,
+    consumeCandy: true,
+    icon: '🧐',
+    description: '消耗1奶糖。抽 1 张牌，使敌人获得 1 层易伤',
+    rarity: 'common',
+    effects: [{
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'debuff',
+      buffType: 'vulnerable',
+      value: 1,
+      target: 'enemy'
+    }]
+  },
+  demonDoubt: {
+    id: 'demonDoubt',
+    name: '心魔·疑心',
+    type: 'status',
+    cost: -1,
+    // Unplayable
+    icon: '❔',
+    description: '无法打出。保留。占据抽牌位 (在手中时下回合少抽一张)。回合结束：受到 2 点伤害。',
+    rarity: 'special',
+    unplayable: true,
+    retain: true,
+    occupiesDrawSlot: true,
+    effects: [{
+      type: 'selfDamage',
+      value: 2,
+      trigger: 'turnEnd'
+    }]
+  },
+  demonFear: {
+    id: 'demonFear',
+    name: '心魔·恐惧',
+    type: 'status',
+    cost: -1,
+    icon: '😱',
+    description: '无法打出。保留。占据抽牌位 (在手中时下回合少抽一张)。回合结束：随机丢弃 1 张手牌。',
+    rarity: 'special',
+    unplayable: true,
+    retain: true,
+    occupiesDrawSlot: true,
+    effects: [{
+      type: 'discardRandom',
+      value: 1,
+      trigger: 'turnEnd'
+    }]
+  },
+  demonDespair: {
+    id: 'demonDespair',
+    name: '心魔·绝望',
+    type: 'status',
+    cost: -1,
+    icon: '🌑',
+    description: '无法打出。保留。占据抽牌位 (在手中时下回合少抽一张)。回合结束：失去 1 点灵力。',
+    rarity: 'special',
+    unplayable: true,
+    retain: true,
+    occupiesDrawSlot: true,
+    effects: [{
+      type: 'energyLoss',
+      value: 1,
+      trigger: 'turnEnd'
+    }]
+  },
+  cursedScar: {
+    id: 'cursedScar',
+    name: '契咒灼痕',
+    type: 'status',
+    cost: -1,
+    icon: '🩸',
+    description: '无法打出。保留。占据抽牌位。回合结束：受到 2 点伤害。',
+    rarity: 'special',
+    unplayable: true,
+    retain: true,
+    occupiesDrawSlot: true,
+    keywords: ['curse'],
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'selfDamage',
+      value: 2,
+      trigger: 'turnEnd'
+    }]
+  },
+  covenantDebt: {
+    id: 'covenantDebt',
+    name: '契债回响',
+    type: 'status',
+    cost: -1,
+    icon: '📜',
+    description: '无法打出。保留。占据抽牌位。回合结束：随机弃 1 张其他手牌。',
+    rarity: 'special',
+    unplayable: true,
+    retain: true,
+    occupiesDrawSlot: true,
+    keywords: ['curse'],
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'discardRandom',
+      value: 1,
+      trigger: 'turnEnd'
+    }]
+  },
+  emberServitor: {
+    id: 'emberServitor',
+    name: '炽傀侍灵',
+    type: 'attack',
+    cost: 0,
+    icon: '🪆',
+    description: '造成 4 点伤害并获得 2 点护盾。',
+    rarity: 'special',
+    keywords: ['forge', 'construct'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'damage',
+      value: 4,
+      target: 'enemy'
+    }, {
+      type: 'block',
+      value: 2,
+      target: 'self'
+    }]
+  },
+  wardConstruct: {
+    id: 'wardConstruct',
+    name: '护炉灵构',
+    type: 'defense',
+    cost: 0,
+    icon: '🛡️',
+    description: '获得 6 点护盾。',
+    rarity: 'special',
+    keywords: ['forge', 'construct', 'guard'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'block',
+      value: 6,
+      target: 'self'
+    }]
+  },
+  forgeArray: {
+    id: 'forgeArray',
+    name: '熔阵齐发',
+    type: 'attack',
+    cost: 1,
+    icon: '⚙️',
+    description: '对全体造成 6 点伤害。',
+    rarity: 'special',
+    keywords: ['forge', 'array', 'aoe'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'damageAll',
+      value: 6,
+      target: 'allEnemies'
+    }]
+  },
+  oathscarCut: {
+    id: 'oathscarCut',
+    name: '契痕斩',
+    type: 'attack',
+    cost: 1,
+    icon: '🗡️',
+    description: '自身受到 2 点伤害，造成 9 点伤害。',
+    rarity: 'common',
+    keywords: ['curse', 'selfharm', 'oath', 'debt'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'selfDamage',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'damage',
+      value: 9,
+      target: 'enemy'
+    }]
+  },
+  hexbrandSigil: {
+    id: 'hexbrandSigil',
+    name: '烙契印',
+    type: 'skill',
+    cost: 1,
+    icon: '🪬',
+    description: '抽 2 张牌，并向弃牌堆置入 1 张契咒灼痕。',
+    rarity: 'common',
+    keywords: ['curse', 'tempo'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'draw',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'addStatus',
+      cardId: 'cursedScar',
+      count: 1,
+      zone: 'discard'
+    }]
+  },
+  blacktidePact: {
+    id: 'blacktidePact',
+    name: '黑潮契约',
+    type: 'skill',
+    cost: 0,
+    icon: '🌑',
+    description: '自身受到 3 点伤害，获得 1 点灵力并抽 1 张牌。',
+    rarity: 'common',
+    keywords: ['curse', 'selfharm', 'tempo', 'oath', 'debt'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'selfDamage',
+      value: 3,
+      target: 'self'
+    }, {
+      type: 'energy',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  covenantWard: {
+    id: 'covenantWard',
+    name: '契护',
+    type: 'defense',
+    cost: 1,
+    icon: '🕯️',
+    description: '获得 8 点护盾，并向弃牌堆置入 1 张契债回响。',
+    rarity: 'common',
+    keywords: ['curse', 'guard', 'oath', 'penance'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'block',
+      value: 8,
+      target: 'self'
+    }, {
+      type: 'addStatus',
+      cardId: 'covenantDebt',
+      count: 1,
+      zone: 'discard'
+    }]
+  },
+  doomwhisperNeedle: {
+    id: 'doomwhisperNeedle',
+    name: '祸语针',
+    type: 'attack',
+    cost: 1,
+    icon: '🪡',
+    description: '造成 6 点伤害，施加 1 层虚弱，并向弃牌堆置入 1 张契咒灼痕。',
+    rarity: 'common',
+    keywords: ['curse', 'control'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'damage',
+      value: 6,
+      target: 'enemy'
+    }, {
+      type: 'debuff',
+      buffType: 'weak',
+      value: 1,
+      target: 'enemy'
+    }, {
+      type: 'addStatus',
+      cardId: 'cursedScar',
+      count: 1,
+      zone: 'discard'
+    }]
+  },
+  scarredDivination: {
+    id: 'scarredDivination',
+    name: '伤契占卜',
+    type: 'skill',
+    cost: 1,
+    icon: '🔮',
+    description: '抽 1 张牌；若生命低于 60%，再抽 2 张牌并获得 1 点灵力。随后向弃牌堆置入 1 张契咒灼痕。',
+    rarity: 'common',
+    keywords: ['curse', 'tempo', 'selfharm'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'conditionalDraw',
+      condition: 'lowHp',
+      threshold: 0.6,
+      drawValue: 2,
+      energyValue: 1,
+      target: 'self'
+    }, {
+      type: 'addStatus',
+      cardId: 'cursedScar',
+      count: 1,
+      zone: 'discard'
+    }]
+  },
+  bloodpriceMandate: {
+    id: 'bloodpriceMandate',
+    name: '血价敕令',
+    type: 'power',
+    cost: 1,
+    icon: '📕',
+    description: '自身受到 4 点伤害，获得 2 点力量。',
+    rarity: 'uncommon',
+    keywords: ['curse', 'selfharm', 'burst', 'oath', 'debt'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'selfDamage',
+      value: 4,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'strength',
+      value: 2,
+      target: 'self'
+    }]
+  },
+  griefLedger: {
+    id: 'griefLedger',
+    name: '悲契账簿',
+    type: 'skill',
+    cost: 1,
+    icon: '📚',
+    description: '抽 2 张牌，获得 1 点灵力，并向手牌置入 1 张契债回响。',
+    rarity: 'uncommon',
+    keywords: ['curse', 'tempo', 'oath', 'debt'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'draw',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'energy',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'addStatus',
+      cardId: 'covenantDebt',
+      count: 1,
+      zone: 'hand'
+    }]
+  },
+  morbidAbsolution: {
+    id: 'morbidAbsolution',
+    name: '厄赦',
+    type: 'attack',
+    cost: 2,
+    icon: '⚖️',
+    description: '造成 8 点伤害；若生命低于 60%，额外造成 8 点伤害。',
+    rarity: 'uncommon',
+    keywords: ['curse', 'burst'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'damage',
+      value: 8,
+      target: 'enemy'
+    }, {
+      type: 'conditionalDamage',
+      value: 8,
+      condition: 'lowHp',
+      threshold: 0.6,
+      target: 'enemy'
+    }]
+  },
+  chainedVigil: {
+    id: 'chainedVigil',
+    name: '缚夜戒备',
+    type: 'defense',
+    cost: 1,
+    icon: '⛓️',
+    description: '获得 10 点护盾，并获得 1 层护盾留存。',
+    rarity: 'uncommon',
+    keywords: ['curse', 'guard', 'retain', 'oath', 'penance'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'block',
+      value: 10,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'retainBlock',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  omenOfRuin: {
+    id: 'omenOfRuin',
+    name: '殃兆',
+    type: 'attack',
+    cost: 2,
+    icon: '🌘',
+    description: '自身受到 2 点伤害，对全体造成 6 点伤害。',
+    rarity: 'uncommon',
+    keywords: ['curse', 'aoe', 'selfharm'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'selfDamage',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'damageAll',
+      value: 6,
+      target: 'allEnemies'
+    }]
+  },
+  pactRite: {
+    id: 'pactRite',
+    name: '契礼',
+    type: 'skill',
+    cost: 1,
+    icon: '🕯️',
+    description: '抽 1 张牌，并向弃牌堆置入 2 张契咒灼痕。',
+    rarity: 'uncommon',
+    keywords: ['curse', 'setup'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'addStatus',
+      cardId: 'cursedScar',
+      count: 2,
+      zone: 'discard'
+    }]
+  },
+  sacramentOfAsh: {
+    id: 'sacramentOfAsh',
+    name: '灰烬圣约',
+    type: 'power',
+    cost: 2,
+    icon: '🔥',
+    description: '自身受到 4 点伤害，抽 1 张牌并获得 2 点力量。',
+    rarity: 'rare',
+    keywords: ['curse', 'selfharm', 'burst'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'selfDamage',
+      value: 4,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'strength',
+      value: 2,
+      target: 'self'
+    }]
+  },
+  soulCollateral: {
+    id: 'soulCollateral',
+    name: '魂押',
+    type: 'skill',
+    cost: 2,
+    icon: '🕳️',
+    description: '抽 3 张牌，并向弃牌堆置入 2 张契债回响。',
+    rarity: 'rare',
+    keywords: ['curse', 'tempo'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'draw',
+      value: 3,
+      target: 'self'
+    }, {
+      type: 'addStatus',
+      cardId: 'covenantDebt',
+      count: 2,
+      zone: 'discard'
+    }]
+  },
+  doomsentVerdict: {
+    id: 'doomsentVerdict',
+    name: '终契裁决',
+    type: 'attack',
+    cost: 3,
+    icon: '☠️',
+    description: '造成 14 点伤害；若生命低于 50%，额外造成 10 点伤害。随后向弃牌堆置入 1 张契咒灼痕。',
+    rarity: 'rare',
+    keywords: ['curse', 'burst', 'execute'],
+    comboTag: 'curse',
+    synergyGroup: 'cursebound',
+    effects: [{
+      type: 'damage',
+      value: 14,
+      target: 'enemy'
+    }, {
+      type: 'conditionalDamage',
+      value: 10,
+      condition: 'lowHp',
+      threshold: 0.5,
+      target: 'enemy'
+    }, {
+      type: 'addStatus',
+      cardId: 'cursedScar',
+      count: 1,
+      zone: 'discard'
+    }]
+  },
+  emberPuppetScript: {
+    id: 'emberPuppetScript',
+    name: '炽傀谱',
+    type: 'skill',
+    cost: 1,
+    icon: '📘',
+    description: '向手牌生成 1 张炽傀侍灵，并抽 1 张牌。',
+    rarity: 'common',
+    keywords: ['forge', 'construct', 'tempo'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'createCard',
+      cardId: 'emberServitor',
+      count: 1,
+      zone: 'hand',
+      temporary: true
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  spareSoulCore: {
+    id: 'spareSoulCore',
+    name: '备用魂芯',
+    type: 'skill',
+    cost: 0,
+    icon: '💠',
+    description: '向手牌生成 1 张护炉灵构。',
+    rarity: 'common',
+    keywords: ['forge', 'construct'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'createCard',
+      cardId: 'wardConstruct',
+      count: 1,
+      zone: 'hand',
+      temporary: true
+    }]
+  },
+  relayHarness: {
+    id: 'relayHarness',
+    name: '中继束具',
+    type: 'defense',
+    cost: 1,
+    icon: '🪢',
+    description: '获得 7 点护盾，并向弃牌堆生成 1 张炽傀侍灵。',
+    rarity: 'common',
+    keywords: ['forge', 'construct', 'guard'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'block',
+      value: 7,
+      target: 'self'
+    }, {
+      type: 'createCard',
+      cardId: 'emberServitor',
+      count: 1,
+      zone: 'discard',
+      temporary: true
+    }]
+  },
+  forgeVolley: {
+    id: 'forgeVolley',
+    name: '熔炉齐射',
+    type: 'attack',
+    cost: 1,
+    icon: '🔥',
+    description: '造成 6 点伤害，并向弃牌堆生成 1 张护炉灵构。',
+    rarity: 'common',
+    keywords: ['forge', 'construct'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'damage',
+      value: 6,
+      target: 'enemy'
+    }, {
+      type: 'createCard',
+      cardId: 'wardConstruct',
+      count: 1,
+      zone: 'discard',
+      temporary: true
+    }]
+  },
+  matrixKiln: {
+    id: 'matrixKiln',
+    name: '矩阵炉心',
+    type: 'skill',
+    cost: 1,
+    icon: '⚗️',
+    description: '向手牌生成 1 张炽傀侍灵，并向弃牌堆生成 1 张护炉灵构。',
+    rarity: 'common',
+    keywords: ['forge', 'construct', 'setup'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'createCard',
+      cardId: 'emberServitor',
+      count: 1,
+      zone: 'hand',
+      temporary: true
+    }, {
+      type: 'createCard',
+      cardId: 'wardConstruct',
+      count: 1,
+      zone: 'discard',
+      temporary: true
+    }]
+  },
+  socketedAegis: {
+    id: 'socketedAegis',
+    name: '嵌魂壁',
+    type: 'defense',
+    cost: 1,
+    icon: '🧱',
+    description: '获得 6 点护盾，并获得 1 层护盾留存。',
+    rarity: 'common',
+    keywords: ['forge', 'guard', 'retain'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'block',
+      value: 6,
+      target: 'self'
+    }, {
+      type: 'buff',
+      buffType: 'retainBlock',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  spiritAnvil: {
+    id: 'spiritAnvil',
+    name: '灵锻砧',
+    type: 'power',
+    cost: 1,
+    icon: '🔨',
+    description: '向手牌生成 1 张炽傀侍灵，并获得 1 点力量。',
+    rarity: 'uncommon',
+    keywords: ['forge', 'construct', 'burst'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'createCard',
+      cardId: 'emberServitor',
+      count: 1,
+      zone: 'hand',
+      temporary: true
+    }, {
+      type: 'buff',
+      buffType: 'strength',
+      value: 1,
+      target: 'self'
+    }]
+  },
+  arrayOverclock: {
+    id: 'arrayOverclock',
+    name: '阵列过载',
+    type: 'attack',
+    cost: 1,
+    icon: '⚡',
+    description: '造成 7 点伤害，并向弃牌堆生成 1 张熔阵齐发。',
+    rarity: 'uncommon',
+    keywords: ['forge', 'array', 'burst'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'damage',
+      value: 7,
+      target: 'enemy'
+    }, {
+      type: 'createCard',
+      cardId: 'forgeArray',
+      count: 1,
+      zone: 'discard',
+      temporary: true
+    }]
+  },
+  guardianGimbal: {
+    id: 'guardianGimbal',
+    name: '守机云台',
+    type: 'defense',
+    cost: 1,
+    icon: '🛰️',
+    description: '获得 10 点护盾，并向手牌生成 1 张护炉灵构。',
+    rarity: 'uncommon',
+    keywords: ['forge', 'construct', 'guard'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'block',
+      value: 10,
+      target: 'self'
+    }, {
+      type: 'createCard',
+      cardId: 'wardConstruct',
+      count: 1,
+      zone: 'hand',
+      temporary: true
+    }]
+  },
+  soulcaseLattice: {
+    id: 'soulcaseLattice',
+    name: '魂匣格架',
+    type: 'skill',
+    cost: 1,
+    icon: '🧰',
+    description: '抽 2 张牌，并向手牌生成 1 张炽傀侍灵。',
+    rarity: 'uncommon',
+    keywords: ['forge', 'construct', 'tempo'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'draw',
+      value: 2,
+      target: 'self'
+    }, {
+      type: 'createCard',
+      cardId: 'emberServitor',
+      count: 1,
+      zone: 'hand',
+      temporary: true
+    }]
+  },
+  effigyBarrage: {
+    id: 'effigyBarrage',
+    name: '傀焰攒射',
+    type: 'attack',
+    cost: 2,
+    icon: '🎇',
+    description: '对全体造成 4 点伤害，并向手牌生成 1 张炽傀侍灵。',
+    rarity: 'uncommon',
+    keywords: ['forge', 'construct', 'aoe'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'damageAll',
+      value: 4,
+      target: 'allEnemies'
+    }, {
+      type: 'createCard',
+      cardId: 'emberServitor',
+      count: 1,
+      zone: 'hand',
+      temporary: true
+    }]
+  },
+  foundryBulwark: {
+    id: 'foundryBulwark',
+    name: '炉心壁垒',
+    type: 'defense',
+    cost: 1,
+    icon: '🏗️',
+    description: '获得 8 点护盾，抽 1 张牌，并向弃牌堆生成 1 张护炉灵构。',
+    rarity: 'uncommon',
+    keywords: ['forge', 'guard', 'tempo'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'block',
+      value: 8,
+      target: 'self'
+    }, {
+      type: 'draw',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'createCard',
+      cardId: 'wardConstruct',
+      count: 1,
+      zone: 'discard',
+      temporary: true
+    }]
+  },
+  grandForgeMandate: {
+    id: 'grandForgeMandate',
+    name: '大锻命令',
+    type: 'power',
+    cost: 2,
+    icon: '👑',
+    description: '获得 6 点护盾，并向手牌各生成 1 张炽傀侍灵与护炉灵构。',
+    rarity: 'rare',
+    keywords: ['forge', 'construct', 'guard'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'block',
+      value: 6,
+      target: 'self'
+    }, {
+      type: 'createCard',
+      cardId: 'emberServitor',
+      count: 1,
+      zone: 'hand',
+      temporary: true
+    }, {
+      type: 'createCard',
+      cardId: 'wardConstruct',
+      count: 1,
+      zone: 'hand',
+      temporary: true
+    }]
+  },
+  ancestralMachina: {
+    id: 'ancestralMachina',
+    name: '祖机开炉',
+    type: 'attack',
+    cost: 2,
+    icon: '🏭',
+    description: '对全体造成 7 点伤害，并向手牌生成 1 张熔阵齐发。',
+    rarity: 'rare',
+    keywords: ['forge', 'array', 'aoe'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'damageAll',
+      value: 7,
+      target: 'allEnemies'
+    }, {
+      type: 'createCard',
+      cardId: 'forgeArray',
+      count: 1,
+      zone: 'hand',
+      temporary: true
+    }]
+  },
+  throneOfCinders: {
+    id: 'throneOfCinders',
+    name: '余烬王座',
+    type: 'power',
+    cost: 3,
+    icon: '🔥',
+    description: '获得 1 点力量，并向手牌生成 2 张炽傀侍灵。',
+    rarity: 'rare',
+    keywords: ['forge', 'construct', 'burst'],
+    comboTag: 'forge',
+    synergyGroup: 'soulforge',
+    effects: [{
+      type: 'buff',
+      buffType: 'strength',
+      value: 1,
+      target: 'self'
+    }, {
+      type: 'createCard',
+      cardId: 'emberServitor',
+      count: 2,
+      zone: 'hand',
+      temporary: true
+    }]
+  }
+};
+export const STARTER_DECK = ['strike', 'strike', 'strike', 'strike', 'strike', 'defend', 'defend', 'defend', 'defend', 'spiritBoost']; // 卡牌池 - 按稀有度分类（2.0扩展版）
+export const CARD_POOL = {
+  common: ['heavyStrike', 'quickSlash', 'doubleStrike', 'ironWill', 'shieldBash', 'spiritBoost', 'meditation', 'armorBreaker', 'goldenBell', 'turtleShell', 'concentration', 'doubleEdge', 'quickDraw', 'bloodlettingSlash', 'punctureMark', 'hunterSeal', 'stanceFlow', 'guardedRiposte', 'serratedRitual', 'coagulatedGuard', 'weakpointSurvey', 'duetFeint', 'poisedCounter', 'recklessMulligan', 'echoingCut', 'voidLedger', 'entropyGuard', 'mirrorTrace', 'delayPrism', 'reverberantEdge', 'lightningProbe', 'chainArc', 'stormDraft', 'ionReserve', 'surgeStep', 'forkedNeedle', 'pressureSpark', 'mendThread', 'pulseBandage', 'transfuseStrike', 'wardingHerb', 'renewalChord', 'bloodBloom', 'mercyNeedle', 'ironBreath', 'mirrorWall', 'reboundingShell', 'bastionStudy', 'wardingSweep', 'oathscarCut', 'hexbrandSigil', 'blacktidePact', 'covenantWard', 'doomwhisperNeedle', 'scarredDivination', 'oathbrandCut', 'debtorVow', 'penanceWall', 'emberPuppetScript', 'spareSoulCore', 'relayHarness', 'forgeVolley', 'matrixKiln', 'socketedAegis', 'poisonTouch', 'minorHeal', 'monkStrike', 'analysis',
+  // 角色专属
+  'defianceStrike', 'bloodSeal', 'unchain', 'karmaStrike', 'probe', 'starNeedle', 'artifactBolt'],
+  uncommon: ['ragingBlow', 'counterStance', 'innerPeace', 'battleCry', 'luckyStrike', 'sweepingStrike', 'tripleSlash', 'bloodSlash', 'offenseDefense', 'ironSkin', 'windfall', 'powerUp', 'tacticalExpose', 'crimsonCascade', 'stanceAggressive', 'stanceDefensive', 'bloodDebt', 'arteryRupture', 'razorFocus', 'stancePivot', 'focusBreak', 'debtCollection', 'recirculation', 'calculatedRuin', 'mirroredRecital', 'echoVault', 'thunderLattice', 'exposedCircuit', 'flashRelay', 'stormWard', 'cascadeVolt', 'lifelinkWeave', 'hospiceEdict', 'rebirthSpiral', 'thornedRemedy', 'vitalPivot', 'resolveAnchor', 'guardianMantra', 'shieldTax', 'bastionCrash', 'counterEdict', 'bloodpriceMandate', 'griefLedger', 'morbidAbsolution', 'chainedVigil', 'omenOfRuin', 'pactRite', 'debtTribunal', 'bloodOathLedger', 'spiritAnvil', 'arrayOverclock', 'guardianGimbal', 'soulcaseLattice', 'effigyBarrage', 'foundryBulwark', 'matrixGuardProtocol', 'matrixShatterVector',
+  // 新增角色卡牌
+  'defiantWill', 'healingTouch', 'vajraGlare', 'ringAnalysis',
+  // 角色专属
+  'fusionBlast', 'vitalityBloom', 'asceticism', 'analyzeWeakness', 'omenBarrier', 'echoWard'],
+  rare: ['thunderLaw', 'swordIntent', 'flameTruth', 'spaceRift', 'fortuneWheel', 'miracleHeal', 'earthShatter', 'swordBreaker', 'finishingBlow', 'halfDamage', 'thunderStorm', 'voidWalk', 'iceFreeze', 'desperateSurvival', 'enlightenment', 'allIn', 'sunderingNeedle', 'hemorrhageRain', 'executionDoctrine', 'scarletJudgement', 'bloodTideOath', 'verdictNeedle', 'oblivionSpiral', 'finalConvergence', 'abyssalReflection', 'sentenceOfPenance', 'skybreakerArray', 'resonanceTempest', 'executionThunder', 'soulSuture', 'reversalPulse', 'phoenixReprieve', 'citadelOath', 'fortressEdict', 'aegisJudgement', 'sacramentOfAsh', 'soulCollateral', 'doomsentVerdict', 'grandForgeMandate', 'ancestralMachina', 'throneOfCinders', 'matrixPurgeLoop',
+  // 新增角色卡牌
+  'ringResonance', 'breakthrough', 'bloodBlessing', 'lifeSurge', 'zenMeditation', 'lawInsight',
+  // 角色专属
+  'lawbreaker', 'tacticalAdvantage', 'ringCatalyst', 'ringInfusion'],
+  epic: ['inferno', 'timeRewind', 'salvation', 'timeStasis'],
+  legendary: ['timeStop', 'voidEmbrace', 'karmaKill', 'reversal', 'chaosControl']
+}; // 构筑流派模板：用于内容投放和奖励偏置
+export const ARCHETYPE_PACKS = {
+  hemorrhage: {
+    id: 'hemorrhage',
+    name: '血蚀连斩',
+    description: '以流血层数和斩杀节奏滚雪球，容忍以血换伤的打法。',
+    cards: ['bloodlettingSlash', 'crimsonCascade', 'sunderingNeedle', 'hemorrhageRain', 'serratedRitual', 'coagulatedGuard', 'bloodDebt', 'arteryRupture', 'scarletJudgement', 'bloodTideOath', 'bloodSlash', 'bloodBlessing', 'finishingBlow', 'ragingBlow', 'earthShatter']
+  },
+  precision: {
+    id: 'precision',
+    name: '破绽心眼',
+    description: '围绕破绽叠层与架势切换形成稳定爆发窗口。',
+    cards: ['punctureMark', 'tacticalExpose', 'hunterSeal', 'executionDoctrine', 'weakpointSurvey', 'duetFeint', 'poisedCounter', 'razorFocus', 'focusBreak', 'verdictNeedle', 'guardedRiposte', 'stanceAggressive', 'stanceDefensive', 'stanceFlow', 'stancePivot']
+  },
+  entropy: {
+    id: 'entropy',
+    name: '虚账收束',
+    description: '通过弃牌换节奏，将牌差与伤害转化为爆发终局。',
+    cards: ['recklessMulligan', 'echoingCut', 'voidLedger', 'entropyGuard', 'debtCollection', 'recirculation', 'calculatedRuin', 'oblivionSpiral', 'finalConvergence', 'quickDraw', 'concentration', 'windfall', 'analysis', 'desperateSurvival', 'fortuneWheel']
+  },
+  stormcraft: {
+    id: 'stormcraft',
+    name: '雷策连锁',
+    description: '围绕易伤窗口、多段打击与破绽连锁组织雷策爆发。',
+    cards: ['lightningProbe', 'chainArc', 'stormDraft', 'ionReserve', 'surgeStep', 'forkedNeedle', 'pressureSpark', 'thunderLattice', 'exposedCircuit', 'flashRelay', 'stormWard', 'cascadeVolt', 'skybreakerArray', 'resonanceTempest', 'executionThunder', 'punctureMark', 'tacticalExpose', 'duetFeint', 'verdictNeedle', 'matrixShatterVector']
+  },
+  vitalweave: {
+    id: 'vitalweave',
+    name: '回生织脉',
+    description: '将治疗、护盾与反击节奏串联，形成续航转爆发的回生循环。',
+    cards: ['mendThread', 'pulseBandage', 'transfuseStrike', 'wardingHerb', 'renewalChord', 'bloodBloom', 'mercyNeedle', 'lifelinkWeave', 'hospiceEdict', 'rebirthSpiral', 'thornedRemedy', 'vitalPivot', 'soulSuture', 'reversalPulse', 'phoenixReprieve', 'minorHeal', 'healingTouch', 'guardedRiposte', 'coagulatedGuard', 'matrixPurgeLoop']
+  },
+  bulwark: {
+    id: 'bulwark',
+    name: '玄甲反击',
+    description: '围绕护盾滚动、护盾留存与稳定反击构建持久压制。',
+    cards: ['ironBreath', 'mirrorWall', 'reboundingShell', 'bastionStudy', 'wardingSweep', 'resolveAnchor', 'guardianMantra', 'shieldTax', 'bastionCrash', 'counterEdict', 'citadelOath', 'fortressEdict', 'aegisJudgement', 'defend', 'ironWill', 'turtleShell', 'counterStance', 'artifactBolt', 'echoWard', 'matrixGuardProtocol']
+  },
+  mirrorweave: {
+    id: 'mirrorweave',
+    name: '镜渊流',
+    description: '以回响与延迟资源滚动节奏，通过镜映上一张牌打出连携回合。',
+    cards: ['mirrorTrace', 'delayPrism', 'reverberantEdge', 'mirroredRecital', 'echoVault', 'abyssalReflection', 'echoingCut', 'mirrorWall', 'echoWard', 'voidLedger', 'reboundingShell', 'bastionStudy', 'fortuneWheel', 'resonanceTempest', 'matrixPurgeLoop']
+  },
+  cursebound: {
+    id: 'cursebound',
+    name: '咒契裁断',
+    description: '以自损与咒牌铺垫节奏，在压血区间完成延迟清算与爆发收束。',
+    cards: ['oathscarCut', 'hexbrandSigil', 'blacktidePact', 'covenantWard', 'doomwhisperNeedle', 'scarredDivination', 'bloodpriceMandate', 'griefLedger', 'morbidAbsolution', 'chainedVigil', 'omenOfRuin', 'pactRite', 'sacramentOfAsh', 'soulCollateral', 'doomsentVerdict']
+  },
+  oathbound: {
+    id: 'oathbound',
+    name: '誓罚流',
+    description: '通过累积誓债换取短线效率，再在关键回合集中清算形成终局爆发。',
+    cards: ['oathbrandCut', 'debtorVow', 'penanceWall', 'debtTribunal', 'bloodOathLedger', 'sentenceOfPenance', 'oathscarCut', 'blacktidePact', 'covenantWard', 'griefLedger', 'bloodpriceMandate', 'chainedVigil', 'morbidAbsolution', 'soulCollateral', 'doomsentVerdict']
+  },
+  soulforge: {
+    id: 'soulforge',
+    name: '灵傀锻阵',
+    description: '通过生成构件与阵件维持手牌密度，在站场积累后转为持续火力与护阵压制。',
+    cards: ['emberPuppetScript', 'spareSoulCore', 'relayHarness', 'forgeVolley', 'matrixKiln', 'socketedAegis', 'spiritAnvil', 'arrayOverclock', 'guardianGimbal', 'soulcaseLattice', 'effigyBarrage', 'foundryBulwark', 'grandForgeMandate', 'ancestralMachina', 'throneOfCinders']
+  }
+};
+export function getArchetypePack(archetypeId) {
+  if (!archetypeId || !ARCHETYPE_PACKS[archetypeId]) return null;
+  return JSON.parse(JSON.stringify(ARCHETYPE_PACKS[archetypeId]));
+}
+export function inferDeckArchetype(deck = []) {
+  if (!Array.isArray(deck) || deck.length === 0) return null;
+  const scores = {
+    hemorrhage: 0,
+    precision: 0,
+    entropy: 0,
+    stormcraft: 0,
+    vitalweave: 0,
+    bulwark: 0,
+    cursebound: 0,
+    soulforge: 0,
+    mirrorweave: 0,
+    oathbound: 0
+  };
+  const hemorrhageSet = new Set(ARCHETYPE_PACKS.hemorrhage.cards);
+  const precisionSet = new Set(ARCHETYPE_PACKS.precision.cards);
+  const entropySet = new Set(ARCHETYPE_PACKS.entropy.cards);
+  const stormcraftSet = new Set(ARCHETYPE_PACKS.stormcraft.cards);
+  const vitalweaveSet = new Set(ARCHETYPE_PACKS.vitalweave.cards);
+  const bulwarkSet = new Set(ARCHETYPE_PACKS.bulwark.cards);
+  const curseboundSet = new Set(ARCHETYPE_PACKS.cursebound.cards);
+  const soulforgeSet = new Set(ARCHETYPE_PACKS.soulforge.cards);
+  const mirrorweaveSet = new Set(ARCHETYPE_PACKS.mirrorweave.cards);
+  const oathboundSet = new Set(ARCHETYPE_PACKS.oathbound.cards);
+  deck.forEach(card => {
+    if (!card) return;
+    const cardId = card.id;
+    const synergy = card.synergyGroup;
+    const keywords = Array.isArray(card.keywords) ? card.keywords : [];
+    if (synergy === 'hemorrhage' || keywords.includes('bleed') || cardId && hemorrhageSet.has(cardId)) {
+      scores.hemorrhage += 1;
+    }
+    if (synergy === 'precision' || synergy === 'stance' || keywords.includes('mark') || keywords.includes('stance') || cardId && precisionSet.has(cardId)) {
+      scores.precision += 1;
+    }
+    if (synergy === 'entropy' || keywords.includes('discard') || keywords.includes('mulligan') || cardId && entropySet.has(cardId)) {
+      scores.entropy += 1;
+    }
+    if (synergy === 'stormcraft' || keywords.includes('storm') || keywords.includes('vulnerable') || keywords.includes('chain') || cardId && stormcraftSet.has(cardId)) {
+      scores.stormcraft += 1;
+    }
+    if (synergy === 'vitalweave' || keywords.includes('vital') || keywords.includes('heal') || keywords.includes('sustain') || cardId && vitalweaveSet.has(cardId)) {
+      scores.vitalweave += 1;
+    }
+    if (synergy === 'bulwark' || keywords.includes('guard') || keywords.includes('retain') || cardId && bulwarkSet.has(cardId)) {
+      scores.bulwark += 1;
+    }
+    if (synergy === 'cursebound' || keywords.includes('curse') || keywords.includes('selfharm') || keywords.includes('contract') || cardId && curseboundSet.has(cardId)) {
+      scores.cursebound += 1;
+    }
+    if (synergy === 'soulforge' || keywords.includes('forge') || keywords.includes('construct') || keywords.includes('array') || cardId && soulforgeSet.has(cardId)) {
+      scores.soulforge += 1;
+    }
+    if (synergy === 'mirrorweave' || keywords.includes('mirror') || keywords.includes('echo') || keywords.includes('delay') || cardId && mirrorweaveSet.has(cardId)) {
+      scores.mirrorweave += 1;
+    }
+    if (synergy === 'oathbound' || keywords.includes('oath') || keywords.includes('debt') || keywords.includes('penance') || cardId && oathboundSet.has(cardId)) {
+      scores.oathbound += 1;
+    }
+  });
+  let preferred = null;
+  let bestScore = 0;
+  Object.keys(scores).forEach(key => {
+    if (scores[key] > bestScore) {
+      bestScore = scores[key];
+      preferred = key;
+    }
+  });
+  return bestScore >= 5 ? preferred : null;
+}
+export function getRandomArchetypeCard(archetypeId, rarity = null, characterId = null) {
+  const pack = ARCHETYPE_PACKS[archetypeId];
+  if (!pack || !Array.isArray(pack.cards)) return null;
+  let candidates = pack.cards.filter(cardId => !!CARDS[cardId]);
+  if (rarity) {
+    candidates = candidates.filter(cardId => CARDS[cardId].rarity === rarity);
+  }
+  candidates = filterPoolByCharacter(candidates, characterId);
+  if (candidates.length === 0) return null;
+  const cardId = candidates[Math.floor(Math.random() * candidates.length)];
+  return cloneCardTemplate(cardId);
+}
+export function filterPoolByCharacter(pool, characterId) {
+  return pool.filter(id => {
+    const card = CARDS[id];
+    if (!card) return false;
+    if (!card.character) return true;
+    return card.character === characterId;
+  });
+}
+export function rollRandomRarity() {
+  const roll = Math.random();
+  if (roll < 0.55) return 'common';
+  if (roll < 0.80) return 'uncommon';
+  if (roll < 0.95) return 'rare';
+  return 'legendary';
+}
+export function cloneCardTemplate(cardId) {
+  const source = CARDS[cardId];
+  if (!source) return null;
+  try {
+    // 深拷贝模板，避免运行时修改污染静态配置
+    return JSON.parse(JSON.stringify(source));
+  } catch (e) {
+    console.warn('cloneCardTemplate fallback to shallow copy:', cardId, e);
+    return {
+      ...source
+    };
+  }
+} // 获取随机卡牌
+export function getRandomCard(rarity = null, characterId = null) {
+  const selectedRarity = rarity || rollRandomRarity();
+  if (CARD_POOL[selectedRarity]) {
+    let pool = filterPoolByCharacter(CARD_POOL[selectedRarity], characterId);
+    if (pool.length === 0) {
+      // Fallback if filtering removes all
+      pool = CARD_POOL[selectedRarity];
+    }
+    const cardId = pool[Math.floor(Math.random() * pool.length)];
+    // 中文注释：必须深拷贝，避免运行时改费用/标记时污染原始卡牌模板
+    return JSON.parse(JSON.stringify(CARDS[cardId]));
+  }
+
+  // Fallback
+  return JSON.parse(JSON.stringify(CARDS['strike']));
+} // 获取奖励卡牌选择
+export function getRewardCards(count = 3, characterId = null, deck = []) {
+  const cards = [];
+  const seen = new Set();
+  const preferredArchetype = inferDeckArchetype(deck);
+  for (let i = 0; i < count; i++) {
+    let picked = null;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const favorArchetype = preferredArchetype && Math.random() < 0.55;
+      const candidate = favorArchetype ? getRandomArchetypeCard(preferredArchetype, null, characterId) : getRandomCard(null, characterId);
+      if (!candidate) continue;
+      if (seen.has(candidate.id) && attempt < 7) continue;
+      picked = candidate;
+      break;
+    }
+    if (!picked) picked = getRandomCard(null, characterId);
+    if (picked) {
+      cards.push(picked);
+      seen.add(picked.id);
+    }
+  }
+  return cards;
+} // ==================== 卡牌升级系统 ====================
+// 升级规则配置
+export const UPGRADE_RULES = {
+  // 默认规则：伤害+3，护盾+3，费用-1（最低0）
+  default: {
+    damage: 3,
+    block: 3,
+    heal: 3,
+    costReduction: 0 // 部分卡牌减费
+  },
+  // 特殊卡牌的升级规则
+  special: {
     strike: {
-        id: 'strike',
-        name: '斩击',
-        type: 'attack',
-        cost: 1,
-        icon: '⚔️',
-        description: '造成 6 点伤害',
-        rarity: 'basic',
-        effects: [
-            { type: 'damage', value: 6, target: 'enemy' }
-        ]
+      damage: 3
     },
-
-    heavyStrike: {
-        id: 'heavyStrike',
-        name: '重斩',
-        type: 'attack',
-        cost: 2,
-        icon: '🗡️',
-        description: '造成 12 点伤害',
-        rarity: 'common',
-        effects: [
-            { type: 'damage', value: 12, target: 'enemy' }
-        ]
-    },
-
-    quickSlash: {
-        id: 'quickSlash',
-        name: '疾斩',
-        type: 'attack',
-        cost: 1,
-        icon: '💨',
-        description: '造成 4 点伤害',
-        rarity: 'common',
-        effects: [
-            { type: 'damage', value: 4, target: 'enemy' }
-        ]
-    },
-
-    doubleStrike: {
-        id: 'doubleStrike',
-        name: '双重斩击',
-        type: 'attack',
-        cost: 1,
-        icon: '⚔️',
-        description: '造成 4 点伤害两次',
-        rarity: 'common',
-        effects: [
-            { type: 'damage', value: 4, target: 'enemy' },
-            { type: 'damage', value: 4, target: 'enemy' }
-        ]
-    },
-
-    ragingBlow: {
-        id: 'ragingBlow',
-        name: '狂暴一击',
-        type: 'attack',
-        cost: 3,
-        icon: '💥',
-        description: '造成 20 点伤害',
-        rarity: 'uncommon',
-        element: 'fire',
-        effects: [
-            { type: 'damage', value: 20, target: 'enemy' }
-        ]
-    },
-
-    // ==================== 基础防御牌 ====================
+    // 6 -> 9
     defend: {
-        id: 'defend',
-        name: '防御',
-        type: 'defense',
-        cost: 1,
-        icon: '🛡️',
-        description: '获得 5 点护盾',
-        rarity: 'basic',
-        effects: [
-            { type: 'block', value: 5, target: 'self' }
-        ]
+      block: 3
     },
-
+    // 5 -> 8
+    heavyStrike: {
+      damage: 4
+    },
+    // 12 -> 16
+    quickSlash: {
+      damage: 2
+    },
+    // 4 -> 6
+    doubleStrike: {
+      damage: 2
+    },
+    // 4x2 -> 6x2
+    ragingBlow: {
+      damage: 5
+    },
+    // 20 -> 25
     ironWill: {
-        id: 'ironWill',
-        name: '铁壁',
-        type: 'defense',
-        cost: 2,
-        icon: '🏰',
-        description: '获得 12 点护盾',
-        rarity: 'common',
-        effects: [
-            { type: 'block', value: 12, target: 'self' }
-        ]
+      block: 4
     },
-
-    shieldBash: {
-        id: 'shieldBash',
-        name: '盾击',
-        type: 'attack',
-        cost: 1,
-        icon: '🛡️',
-        description: '造成 4 点伤害，获得 4 点护盾',
-        rarity: 'common',
-        effects: [
-            { type: 'damage', value: 4, target: 'enemy' },
-            { type: 'block', value: 4, target: 'self' }
-        ]
-    },
-
-    counterStance: {
-        id: 'counterStance',
-        name: '反击架势',
-        type: 'defense',
-        cost: 1,
-        icon: '⚡',
-        description: '获得 3 点护盾，下次受到攻击时反弹 5 点伤害',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'block', value: 3, target: 'self' },
-            { type: 'buff', buffType: 'thorns', value: 5, target: 'self' }
-        ]
-    },
-
-    // ==================== 技能牌 ====================
-    spiritBoost: {
-        id: 'spiritBoost',
-        name: '灵力激涌',
-        type: 'energy',
-        cost: 0,
-        icon: '✨',
-        description: '获得 2 点灵力',
-        rarity: 'common',
-        effects: [
-            { type: 'energy', value: 2, target: 'self' }
-        ]
-    },
-
+    // 12 -> 16
     meditation: {
-        id: 'meditation',
-        name: '冥想',
-        type: 'energy',
-        cost: 0,
-        consumeCandy: true,
-        icon: '🧘',
-        description: '消耗1奶糖。抽 2 张牌',
-        rarity: 'common',
-        effects: [
-            { type: 'draw', value: 2, target: 'self' }
-        ]
+      draw: 1
     },
-
-    heartDemon: {
-        id: 'heartDemon',
-        name: '心魔',
-        type: 'status',
-        cost: 0,
-        unplayable: true,
-        retain: true, // 不会被自然丢弃
-        occupiesDrawSlot: true, // 占据抽牌位
-        icon: '👿',
-        description: '无法打出。保留在手中。占据抽卡位。回合结束时，受到 Max(10%当前生命, 10) 点真实伤害。效果可叠加。',
-        rarity: 'special',
-        effects: [
-            { type: 'selfDamage', value: 0.1, isPercent: true, trigger: 'endTurn', minValue: 10 }
-        ]
+    // 抽2 -> 抽3
+    spiritBoost: {
+      energy: 1
     },
-
+    // +2灵力 -> +3灵力
     innerPeace: {
-        id: 'innerPeace',
-        name: '内心平和',
-        type: 'defense',
-        cost: 1,
-        icon: '☯️',
-        description: '获得 4 点护盾，回复 3 点生命',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'block', value: 4, target: 'self' },
-            { type: 'heal', value: 3, target: 'self' }
-        ]
+      block: 2,
+      heal: 2
     },
-
-    battleCry: {
-        id: 'battleCry',
-        name: '战吼',
-        type: 'attack',
-        cost: 1,
-        icon: '📢',
-        description: '造成 5 点伤害，本回合攻击力+2',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'damage', value: 5, target: 'enemy' },
-            { type: 'buff', buffType: 'strength', value: 2, target: 'self' }
-        ]
-    },
-
-    // ==================== 战斗深度扩展：流血/破绽/架势 ====================
-    bloodlettingSlash: {
-        id: 'bloodlettingSlash',
-        name: '裂脉斩',
-        type: 'attack',
-        cost: 1,
-        icon: '🩸',
-        description: '造成 6 点伤害并施加 2 层流血',
-        rarity: 'common',
-        keywords: ['bleed'],
-        comboTag: 'bleed',
-        synergyGroup: 'hemorrhage',
-        effects: [
-            { type: 'damage', value: 6, target: 'enemy' },
-            { type: 'applyBleed', value: 2, target: 'enemy' }
-        ]
-    },
-
-    punctureMark: {
-        id: 'punctureMark',
-        name: '破绽刺',
-        type: 'attack',
-        cost: 1,
-        icon: '🎯',
-        description: '造成 4 点伤害并施加 4 层破绽',
-        rarity: 'common',
-        keywords: ['mark'],
-        comboTag: 'mark',
-        synergyGroup: 'precision',
-        effects: [
-            { type: 'damage', value: 4, target: 'enemy' },
-            { type: 'applyMark', value: 4, target: 'enemy' }
-        ]
-    },
-
-    tacticalExpose: {
-        id: 'tacticalExpose',
-        name: '战术破析',
-        type: 'skill',
-        cost: 1,
-        icon: '🧭',
-        description: '施加 6 层破绽并抽 1 张牌',
-        rarity: 'uncommon',
-        keywords: ['mark'],
-        comboTag: 'mark',
-        synergyGroup: 'precision',
-        effects: [
-            { type: 'applyMark', value: 6, target: 'enemy' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    crimsonCascade: {
-        id: 'crimsonCascade',
-        name: '赤瀑连断',
-        type: 'attack',
-        cost: 2,
-        icon: '🌊',
-        description: '造成 9 点伤害并施加 3 层流血',
-        rarity: 'uncommon',
-        keywords: ['bleed'],
-        comboTag: 'bleed',
-        synergyGroup: 'hemorrhage',
-        effects: [
-            { type: 'damage', value: 9, target: 'enemy' },
-            { type: 'applyBleed', value: 3, target: 'enemy' }
-        ]
-    },
-
-    hunterSeal: {
-        id: 'hunterSeal',
-        name: '猎印',
-        type: 'skill',
-        cost: 0,
-        icon: '🪶',
-        description: '施加 3 层破绽，获得 1 点灵力',
-        rarity: 'common',
-        keywords: ['mark', 'tempo'],
-        comboTag: 'mark',
-        synergyGroup: 'precision',
-        effects: [
-            { type: 'applyMark', value: 3, target: 'enemy' },
-            { type: 'energy', value: 1, target: 'self' }
-        ]
-    },
-
-    stanceAggressive: {
-        id: 'stanceAggressive',
-        name: '攻势架势',
-        type: 'power',
-        cost: 1,
-        icon: '🔥',
-        description: '切换到攻势：造成伤害提高，承伤增加',
-        rarity: 'uncommon',
-        keywords: ['stance'],
-        comboTag: 'stance',
-        synergyGroup: 'stance',
-        effects: [
-            { type: 'setStance', stance: 'aggressive', target: 'self' }
-        ]
-    },
-
-    stanceDefensive: {
-        id: 'stanceDefensive',
-        name: '守势架势',
-        type: 'power',
-        cost: 1,
-        icon: '🛡️',
-        description: '切换到守势：承伤降低，输出略降',
-        rarity: 'uncommon',
-        keywords: ['stance'],
-        comboTag: 'stance',
-        synergyGroup: 'stance',
-        effects: [
-            { type: 'setStance', stance: 'defensive', target: 'self' }
-        ]
-    },
-
-    stanceFlow: {
-        id: 'stanceFlow',
-        name: '归一心流',
-        type: 'skill',
-        cost: 0,
-        icon: '☯️',
-        description: '切回中和架势并抽 1 张牌',
-        rarity: 'common',
-        keywords: ['stance'],
-        comboTag: 'stance',
-        synergyGroup: 'stance',
-        effects: [
-            { type: 'setStance', stance: 'neutral', target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    guardedRiposte: {
-        id: 'guardedRiposte',
-        name: '守中反击',
-        type: 'defense',
-        cost: 1,
-        icon: '🗡️',
-        description: '获得 8 护盾并施加 2 层破绽',
-        rarity: 'common',
-        keywords: ['stance', 'mark'],
-        comboTag: 'stance',
-        synergyGroup: 'stance',
-        effects: [
-            { type: 'block', value: 8, target: 'self' },
-            { type: 'applyMark', value: 2, target: 'enemy' }
-        ]
-    },
-
-    sunderingNeedle: {
-        id: 'sunderingNeedle',
-        name: '裂界针',
-        type: 'attack',
-        cost: 2,
-        icon: '🪡',
-        description: '造成 10 点穿透伤害并施加 2 层流血',
-        rarity: 'rare',
-        keywords: ['bleed', 'penetrate'],
-        comboTag: 'bleed',
-        synergyGroup: 'hemorrhage',
-        effects: [
-            { type: 'penetrate', value: 10, target: 'enemy' },
-            { type: 'applyBleed', value: 2, target: 'enemy' }
-        ]
-    },
-
-    hemorrhageRain: {
-        id: 'hemorrhageRain',
-        name: '血雨',
-        type: 'attack',
-        cost: 2,
-        icon: '🌧️',
-        description: '对全体造成 5 点伤害，并施加 1 层流血',
-        rarity: 'rare',
-        keywords: ['bleed', 'aoe'],
-        comboTag: 'bleed',
-        synergyGroup: 'hemorrhage',
-        effects: [
-            { type: 'damageAll', value: 5, target: 'allEnemies' },
-            { type: 'applyBleed', value: 1, target: 'enemy' }
-        ]
-    },
-
-    executionDoctrine: {
-        id: 'executionDoctrine',
-        name: '斩决要义',
-        type: 'attack',
-        cost: 2,
-        icon: '📜',
-        description: '造成 8 点伤害；若目标有破绽，额外造成 8 点伤害',
-        rarity: 'rare',
-        keywords: ['mark', 'burst'],
-        comboTag: 'mark',
-        synergyGroup: 'precision',
-        effects: [
-            { type: 'damage', value: 8, target: 'enemy' },
-            { type: 'conditionalDamage', value: 8, condition: 'marked', target: 'enemy' }
-        ]
-    },
-
-    serratedRitual: {
-        id: 'serratedRitual',
-        name: '锯刃仪式',
-        type: 'attack',
-        cost: 1,
-        icon: '🩸',
-        description: '造成 5 点伤害，施加 2 层流血，自身受到 1 点伤害',
-        rarity: 'common',
-        keywords: ['bleed'],
-        comboTag: 'bleed',
-        synergyGroup: 'hemorrhage',
-        effects: [
-            { type: 'damage', value: 5, target: 'enemy' },
-            { type: 'applyBleed', value: 2, target: 'enemy' },
-            { type: 'selfDamage', value: 1, target: 'self' }
-        ]
-    },
-
-    coagulatedGuard: {
-        id: 'coagulatedGuard',
-        name: '凝血守式',
-        type: 'defense',
-        cost: 1,
-        icon: '🛡️',
-        description: '获得 6 点护盾，并施加 1 层流血',
-        rarity: 'common',
-        keywords: ['bleed', 'stance'],
-        comboTag: 'bleed',
-        synergyGroup: 'hemorrhage',
-        effects: [
-            { type: 'block', value: 6, target: 'self' },
-            { type: 'applyBleed', value: 1, target: 'enemy' }
-        ]
-    },
-
-    bloodDebt: {
-        id: 'bloodDebt',
-        name: '血债引燃',
-        type: 'skill',
-        cost: 0,
-        icon: '🧪',
-        description: '失去 3 点生命，获得 2 点灵力并抽 1 张牌',
-        rarity: 'uncommon',
-        keywords: ['bleed', 'tempo'],
-        comboTag: 'bleed',
-        synergyGroup: 'hemorrhage',
-        effects: [
-            { type: 'selfDamage', value: 3, target: 'self' },
-            { type: 'energy', value: 2, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    arteryRupture: {
-        id: 'arteryRupture',
-        name: '断脉贯刺',
-        type: 'attack',
-        cost: 2,
-        icon: '🗡️',
-        description: '造成 8 点穿透伤害并施加 4 层流血',
-        rarity: 'uncommon',
-        keywords: ['bleed', 'penetrate'],
-        comboTag: 'bleed',
-        synergyGroup: 'hemorrhage',
-        effects: [
-            { type: 'penetrate', value: 8, target: 'enemy' },
-            { type: 'applyBleed', value: 4, target: 'enemy' }
-        ]
-    },
-
-    scarletJudgement: {
-        id: 'scarletJudgement',
-        name: '赤裁',
-        type: 'attack',
-        cost: 2,
-        icon: '⚰️',
-        description: '造成 7 点伤害并施加 2 层流血；对半血以下目标造成 10 点处决伤害',
-        rarity: 'rare',
-        keywords: ['bleed', 'burst'],
-        comboTag: 'bleed',
-        synergyGroup: 'hemorrhage',
-        effects: [
-            { type: 'damage', value: 7, target: 'enemy' },
-            { type: 'applyBleed', value: 2, target: 'enemy' },
-            { type: 'executeDamage', value: 10, threshold: 0.5, target: 'enemy' }
-        ]
-    },
-
-    bloodTideOath: {
-        id: 'bloodTideOath',
-        name: '血潮誓约',
-        type: 'attack',
-        cost: 3,
-        icon: '🌊',
-        description: '对全体造成 6 点伤害，抽 1 张牌，自身受到 4 点伤害',
-        rarity: 'rare',
-        keywords: ['bleed', 'aoe'],
-        comboTag: 'bleed',
-        synergyGroup: 'hemorrhage',
-        effects: [
-            { type: 'damageAll', value: 6, target: 'allEnemies' },
-            { type: 'draw', value: 1, target: 'self' },
-            { type: 'selfDamage', value: 4, target: 'self' }
-        ]
-    },
-
-    weakpointSurvey: {
-        id: 'weakpointSurvey',
-        name: '弱点勘测',
-        type: 'skill',
-        cost: 0,
-        icon: '🧭',
-        description: '施加 2 层破绽并抽 1 张牌',
-        rarity: 'common',
-        keywords: ['mark', 'tempo'],
-        comboTag: 'mark',
-        synergyGroup: 'precision',
-        effects: [
-            { type: 'applyMark', value: 2, target: 'enemy' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    duetFeint: {
-        id: 'duetFeint',
-        name: '双式佯攻',
-        type: 'attack',
-        cost: 1,
-        icon: '🪶',
-        description: '造成 5 点伤害并施加 2 层破绽',
-        rarity: 'common',
-        keywords: ['mark'],
-        comboTag: 'mark',
-        synergyGroup: 'precision',
-        effects: [
-            { type: 'damage', value: 5, target: 'enemy' },
-            { type: 'applyMark', value: 2, target: 'enemy' }
-        ]
-    },
-
-    poisedCounter: {
-        id: 'poisedCounter',
-        name: '定式反制',
-        type: 'defense',
-        cost: 1,
-        icon: '⚖️',
-        description: '获得 7 点护盾并施加 2 层破绽',
-        rarity: 'common',
-        keywords: ['mark', 'stance'],
-        comboTag: 'mark',
-        synergyGroup: 'precision',
-        effects: [
-            { type: 'block', value: 7, target: 'self' },
-            { type: 'applyMark', value: 2, target: 'enemy' }
-        ]
-    },
-
-    razorFocus: {
-        id: 'razorFocus',
-        name: '锋念凝聚',
-        type: 'skill',
-        cost: 1,
-        icon: '🎯',
-        description: '施加 5 层破绽并获得 1 点灵力',
-        rarity: 'uncommon',
-        keywords: ['mark'],
-        comboTag: 'mark',
-        synergyGroup: 'precision',
-        effects: [
-            { type: 'applyMark', value: 5, target: 'enemy' },
-            { type: 'energy', value: 1, target: 'self' }
-        ]
-    },
-
-    stancePivot: {
-        id: 'stancePivot',
-        name: '转势',
-        type: 'skill',
-        cost: 0,
-        icon: '☯️',
-        description: '切回中和架势，施加 2 层破绽并抽 1 张牌',
-        rarity: 'uncommon',
-        keywords: ['mark', 'stance'],
-        comboTag: 'stance',
-        synergyGroup: 'precision',
-        effects: [
-            { type: 'setStance', stance: 'neutral', target: 'self' },
-            { type: 'applyMark', value: 2, target: 'enemy' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    focusBreak: {
-        id: 'focusBreak',
-        name: '断念',
-        type: 'attack',
-        cost: 1,
-        icon: '⚔️',
-        description: '造成 6 点伤害；若目标有破绽，额外造成 6 点伤害',
-        rarity: 'uncommon',
-        keywords: ['mark', 'burst'],
-        comboTag: 'mark',
-        synergyGroup: 'precision',
-        effects: [
-            { type: 'damage', value: 6, target: 'enemy' },
-            { type: 'conditionalDamage', value: 6, condition: 'marked', target: 'enemy' }
-        ]
-    },
-
-    verdictNeedle: {
-        id: 'verdictNeedle',
-        name: '裁决针',
-        type: 'attack',
-        cost: 2,
-        icon: '🪡',
-        description: '造成 10 点穿透伤害；若目标有破绽，额外造成 7 点伤害',
-        rarity: 'rare',
-        keywords: ['mark', 'penetrate'],
-        comboTag: 'mark',
-        synergyGroup: 'precision',
-        effects: [
-            { type: 'penetrate', value: 10, target: 'enemy' },
-            { type: 'conditionalDamage', value: 7, condition: 'marked', target: 'enemy' }
-        ]
-    },
-
-    recklessMulligan: {
-        id: 'recklessMulligan',
-        name: '孤注换手',
-        type: 'skill',
-        cost: 0,
-        icon: '🎴',
-        description: '丢弃所有手牌，抽 2+弃牌数 张牌',
-        rarity: 'common',
-        keywords: ['discard', 'tempo'],
-        comboTag: 'discard',
-        synergyGroup: 'entropy',
-        effects: [
-            { type: 'discardHand', target: 'self' },
-            { type: 'drawCalculated', base: 2, perDiscard: 1, target: 'self' }
-        ]
-    },
-
-    echoingCut: {
-        id: 'echoingCut',
-        name: '回响斩',
-        type: 'attack',
-        cost: 1,
-        icon: '🗡️',
-        description: '造成 6 点伤害，随机弃 1 张牌并抽 1 张牌',
-        rarity: 'common',
-        keywords: ['discard', 'echo', 'mirror'],
-        comboTag: 'discard',
-        synergyGroup: 'entropy',
-        effects: [
-            { type: 'damage', value: 6, target: 'enemy' },
-            { type: 'discardRandom', value: 1, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    voidLedger: {
-        id: 'voidLedger',
-        name: '虚账',
-        type: 'skill',
-        cost: 1,
-        icon: '📒',
-        description: '抽 2 张牌，然后随机弃 1 张牌',
-        rarity: 'common',
-        keywords: ['discard'],
-        comboTag: 'discard',
-        synergyGroup: 'entropy',
-        effects: [
-            { type: 'draw', value: 2, target: 'self' },
-            { type: 'discardRandom', value: 1, target: 'self' }
-        ]
-    },
-
-    entropyGuard: {
-        id: 'entropyGuard',
-        name: '熵障',
-        type: 'defense',
-        cost: 1,
-        icon: '🧿',
-        description: '获得 9 点护盾，随机弃 1 张牌并获得 1 点灵力',
-        rarity: 'common',
-        keywords: ['discard'],
-        comboTag: 'discard',
-        synergyGroup: 'entropy',
-        effects: [
-            { type: 'block', value: 9, target: 'self' },
-            { type: 'discardRandom', value: 1, target: 'self' },
-            { type: 'energy', value: 1, target: 'self' }
-        ]
-    },
-
-    debtCollection: {
-        id: 'debtCollection',
-        name: '索偿',
-        type: 'skill',
-        cost: 0,
-        icon: '🩸',
-        description: '自身受到 2 点伤害，抽 2 张牌并获得 1 点灵力',
-        rarity: 'uncommon',
-        keywords: ['discard', 'tempo'],
-        comboTag: 'discard',
-        synergyGroup: 'entropy',
-        effects: [
-            { type: 'selfDamage', value: 2, target: 'self' },
-            { type: 'draw', value: 2, target: 'self' },
-            { type: 'energy', value: 1, target: 'self' }
-        ]
-    },
-
-    recirculation: {
-        id: 'recirculation',
-        name: '再循环',
-        type: 'skill',
-        cost: 1,
-        icon: '🔁',
-        description: '重抽当前手牌（丢弃并抽取等量卡牌）',
-        rarity: 'uncommon',
-        keywords: ['discard'],
-        comboTag: 'discard',
-        synergyGroup: 'entropy',
-        effects: [
-            { type: 'mulligan', target: 'self' }
-        ]
-    },
-
-    calculatedRuin: {
-        id: 'calculatedRuin',
-        name: '筹算崩解',
-        type: 'attack',
-        cost: 2,
-        icon: '📉',
-        description: '每张手牌造成 2 点伤害，随后随机弃 1 张牌',
-        rarity: 'uncommon',
-        keywords: ['discard', 'burst'],
-        comboTag: 'discard',
-        synergyGroup: 'entropy',
-        effects: [
-            { type: 'damagePerCard', value: 2, target: 'enemy' },
-            { type: 'discardRandom', value: 1, target: 'self' }
-        ]
-    },
-
-    oblivionSpiral: {
-        id: 'oblivionSpiral',
-        name: '湮旋',
-        type: 'skill',
-        cost: 2,
-        icon: '🌀',
-        description: '丢弃所有手牌，抽 1+弃牌数 张牌，并对全体造成 7 点伤害',
-        rarity: 'rare',
-        keywords: ['discard', 'aoe'],
-        comboTag: 'discard',
-        synergyGroup: 'entropy',
-        effects: [
-            { type: 'discardHand', target: 'self' },
-            { type: 'drawCalculated', base: 1, perDiscard: 1, target: 'self' },
-            { type: 'damageAll', value: 7, target: 'allEnemies' }
-        ]
-    },
-
-    finalConvergence: {
-        id: 'finalConvergence',
-        name: '终局收束',
-        type: 'attack',
-        cost: 3,
-        icon: '🕳️',
-        description: '消耗所有灵力，每点灵力造成 7 点伤害，然后随机弃 1 张牌',
-        rarity: 'rare',
-        keywords: ['discard', 'burst'],
-        comboTag: 'discard',
-        synergyGroup: 'entropy',
-        effects: [
-            { type: 'consumeAllEnergy', damagePerEnergy: 7, target: 'enemy' },
-            { type: 'discardRandom', value: 1, target: 'self' }
-        ]
-    },
-
-    lightningProbe: {
-        id: 'lightningProbe',
-        name: '雷策试探',
-        type: 'attack',
-        cost: 1,
-        icon: '⚡',
-        description: '造成 5 点伤害，并施加 1 层易伤',
-        rarity: 'common',
-        keywords: ['storm', 'vulnerable'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'damage', value: 5, target: 'enemy' },
-            { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'enemy' }
-        ]
-    },
-
-    chainArc: {
-        id: 'chainArc',
-        name: '链弧斩',
-        type: 'attack',
-        cost: 1,
-        icon: '🔗',
-        description: '造成 4 点伤害，并施加 2 层破绽',
-        rarity: 'common',
-        keywords: ['storm', 'mark'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'damage', value: 4, target: 'enemy' },
-            { type: 'applyMark', value: 2, target: 'enemy' }
-        ]
-    },
-
-    stormDraft: {
-        id: 'stormDraft',
-        name: '雷图推演',
-        type: 'skill',
-        cost: 0,
-        icon: '🗺️',
-        description: '抽 1 张牌，并施加 1 层易伤',
-        rarity: 'common',
-        keywords: ['storm', 'tempo'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'draw', value: 1, target: 'self' },
-            { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'enemy' }
-        ]
-    },
-
-    ionReserve: {
-        id: 'ionReserve',
-        name: '离子蓄势',
-        type: 'skill',
-        cost: 1,
-        icon: '🔋',
-        description: '获得 1 点灵力，并施加 1 层破绽',
-        rarity: 'common',
-        keywords: ['storm', 'mark'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'energy', value: 1, target: 'self' },
-            { type: 'applyMark', value: 1, target: 'enemy' }
-        ]
-    },
-
-    surgeStep: {
-        id: 'surgeStep',
-        name: '疾电步',
-        type: 'skill',
-        cost: 1,
-        icon: '🌀',
-        description: '获得 6 点护盾，并抽 1 张牌',
-        rarity: 'common',
-        keywords: ['storm', 'guard'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'block', value: 6, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    forkedNeedle: {
-        id: 'forkedNeedle',
-        name: '分岔雷针',
-        type: 'attack',
-        cost: 1,
-        icon: '🪡',
-        description: '连续造成 3 点伤害 2 次',
-        rarity: 'common',
-        keywords: ['storm', 'chain'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'damage', value: 3, target: 'enemy' },
-            { type: 'damage', value: 3, target: 'enemy' }
-        ]
-    },
-
-    pressureSpark: {
-        id: 'pressureSpark',
-        name: '压电火花',
-        type: 'attack',
-        cost: 0,
-        icon: '✨',
-        description: '造成 4 点伤害；若目标有破绽，额外造成 4 点伤害',
-        rarity: 'common',
-        keywords: ['storm', 'mark'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'damage', value: 4, target: 'enemy' },
-            { type: 'conditionalDamage', value: 4, condition: 'marked', target: 'enemy' }
-        ]
-    },
-
-    thunderLattice: {
-        id: 'thunderLattice',
-        name: '雷网矩阵',
-        type: 'skill',
-        cost: 1,
-        icon: '🕸️',
-        description: '施加 4 层破绽并抽 1 张牌',
-        rarity: 'uncommon',
-        keywords: ['storm', 'mark'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'applyMark', value: 4, target: 'enemy' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    exposedCircuit: {
-        id: 'exposedCircuit',
-        name: '裸露回路',
-        type: 'attack',
-        cost: 1,
-        icon: '🧨',
-        description: '造成 8 点伤害；若目标有破绽，额外造成 5 点伤害',
-        rarity: 'uncommon',
-        keywords: ['storm', 'mark', 'burst'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'damage', value: 8, target: 'enemy' },
-            { type: 'conditionalDamage', value: 5, condition: 'marked', target: 'enemy' }
-        ]
-    },
-
-    flashRelay: {
-        id: 'flashRelay',
-        name: '闪继回路',
-        type: 'skill',
-        cost: 1,
-        icon: '📡',
-        description: '抽 2 张牌，并施加 1 层易伤',
-        rarity: 'uncommon',
-        keywords: ['storm', 'tempo'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'draw', value: 2, target: 'self' },
-            { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'enemy' }
-        ]
-    },
-
-    stormWard: {
-        id: 'stormWard',
-        name: '雷障',
-        type: 'defense',
-        cost: 1,
-        icon: '🛡️',
-        description: '获得 8 点护盾，并施加 1 层虚弱',
-        rarity: 'uncommon',
-        keywords: ['storm', 'guard'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'block', value: 8, target: 'self' },
-            { type: 'debuff', buffType: 'weak', value: 1, target: 'enemy' }
-        ]
-    },
-
-    cascadeVolt: {
-        id: 'cascadeVolt',
-        name: '级联伏特',
-        type: 'attack',
-        cost: 2,
-        icon: '⚙️',
-        description: '对全体造成 6 点伤害并抽 1 张牌',
-        rarity: 'uncommon',
-        keywords: ['storm', 'aoe'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'damageAll', value: 6, target: 'allEnemies' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    skybreakerArray: {
-        id: 'skybreakerArray',
-        name: '裂穹雷列',
-        type: 'attack',
-        cost: 2,
-        icon: '🌩️',
-        description: '造成 10 点伤害并施加 3 层破绽',
-        rarity: 'rare',
-        keywords: ['storm', 'mark', 'burst'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'damage', value: 10, target: 'enemy' },
-            { type: 'applyMark', value: 3, target: 'enemy' }
-        ]
-    },
-
-    resonanceTempest: {
-        id: 'resonanceTempest',
-        name: '共振风暴',
-        type: 'power',
-        cost: 2,
-        icon: '🌪️',
-        description: '获得 1 点力量，抽 1 张牌并对全体造成 4 点伤害',
-        rarity: 'rare',
-        keywords: ['storm', 'aoe'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'buff', buffType: 'strength', value: 1, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' },
-            { type: 'damageAll', value: 4, target: 'allEnemies' }
-        ]
-    },
-
-    executionThunder: {
-        id: 'executionThunder',
-        name: '断庭雷裁',
-        type: 'attack',
-        cost: 3,
-        icon: '⚖️',
-        description: '若目标生命低于 40%，造成 14 点斩杀伤害',
-        rarity: 'rare',
-        keywords: ['storm', 'execute'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'executeDamage', value: 14, threshold: 0.4, target: 'enemy' }
-        ]
-    },
-
-    mendThread: {
-        id: 'mendThread',
-        name: '续命丝',
-        type: 'skill',
-        cost: 1,
-        icon: '🧵',
-        description: '恢复 5 点生命，并获得 4 点护盾',
-        rarity: 'common',
-        keywords: ['vital', 'heal'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'heal', value: 5, target: 'self' },
-            { type: 'block', value: 4, target: 'self' }
-        ]
-    },
-
-    pulseBandage: {
-        id: 'pulseBandage',
-        name: '脉冲绷带',
-        type: 'skill',
-        cost: 0,
-        icon: '🩹',
-        description: '恢复 3 点生命，并施加 1 层破绽',
-        rarity: 'common',
-        keywords: ['vital', 'heal', 'mark'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'heal', value: 3, target: 'self' },
-            { type: 'applyMark', value: 1, target: 'enemy' }
-        ]
-    },
-
-    transfuseStrike: {
-        id: 'transfuseStrike',
-        name: '输生斩',
-        type: 'attack',
-        cost: 1,
-        icon: '🩸',
-        description: '失去 2 点生命，造成 8 点伤害并恢复 2 点生命',
-        rarity: 'common',
-        keywords: ['vital', 'heal', 'bleed'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'selfDamage', value: 2, target: 'self' },
-            { type: 'damage', value: 8, target: 'enemy' },
-            { type: 'heal', value: 2, target: 'self' }
-        ]
-    },
-
-    wardingHerb: {
-        id: 'wardingHerb',
-        name: '护脉草',
-        type: 'defense',
-        cost: 1,
-        icon: '🌿',
-        description: '获得 7 点护盾并恢复 2 点生命',
-        rarity: 'common',
-        keywords: ['vital', 'guard'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'block', value: 7, target: 'self' },
-            { type: 'heal', value: 2, target: 'self' }
-        ]
-    },
-
-    renewalChord: {
-        id: 'renewalChord',
-        name: '回生律',
-        type: 'skill',
-        cost: 1,
-        icon: '🎵',
-        description: '恢复 4 点生命并抽 1 张牌',
-        rarity: 'common',
-        keywords: ['vital', 'heal', 'tempo'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'heal', value: 4, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    bloodBloom: {
-        id: 'bloodBloom',
-        name: '血华',
-        type: 'attack',
-        cost: 1,
-        icon: '🌺',
-        description: '失去 3 点生命，造成 9 点伤害',
-        rarity: 'common',
-        keywords: ['vital', 'bleed'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'selfDamage', value: 3, target: 'self' },
-            { type: 'damage', value: 9, target: 'enemy' }
-        ]
-    },
-
-    mercyNeedle: {
-        id: 'mercyNeedle',
-        name: '慈脉针',
-        type: 'attack',
-        cost: 0,
-        icon: '🪡',
-        description: '造成 4 点伤害并恢复 2 点生命',
-        rarity: 'common',
-        keywords: ['vital', 'heal'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'damage', value: 4, target: 'enemy' },
-            { type: 'heal', value: 2, target: 'self' }
-        ]
-    },
-
-    lifelinkWeave: {
-        id: 'lifelinkWeave',
-        name: '生链织构',
-        type: 'skill',
-        cost: 1,
-        icon: '🧶',
-        description: '恢复 6 点生命，并获得下回合 4 点护盾',
-        rarity: 'uncommon',
-        keywords: ['vital', 'heal', 'guard'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'heal', value: 6, target: 'self' },
-            { type: 'buff', buffType: 'nextTurnBlock', value: 4, target: 'self' }
-        ]
-    },
-
-    hospiceEdict: {
-        id: 'hospiceEdict',
-        name: '护生敕令',
-        type: 'skill',
-        cost: 1,
-        icon: '📜',
-        description: '恢复 5 点生命，并施加 2 层虚弱',
-        rarity: 'uncommon',
-        keywords: ['vital', 'heal', 'control'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'heal', value: 5, target: 'self' },
-            { type: 'debuff', buffType: 'weak', value: 2, target: 'enemy' }
-        ]
-    },
-
-    rebirthSpiral: {
-        id: 'rebirthSpiral',
-        name: '回生螺旋',
-        type: 'attack',
-        cost: 2,
-        icon: '🌀',
-        description: '造成 7 点伤害并恢复 7 点生命',
-        rarity: 'uncommon',
-        keywords: ['vital', 'heal', 'burst'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'damage', value: 7, target: 'enemy' },
-            { type: 'heal', value: 7, target: 'self' }
-        ]
-    },
-
-    thornedRemedy: {
-        id: 'thornedRemedy',
-        name: '刺脉疗法',
-        type: 'attack',
-        cost: 1,
-        icon: '🌵',
-        description: '恢复 4 点生命，并对全体造成 4 点伤害',
-        rarity: 'uncommon',
-        keywords: ['vital', 'heal', 'aoe'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'heal', value: 4, target: 'self' },
-            { type: 'damageAll', value: 4, target: 'allEnemies' }
-        ]
-    },
-
-    vitalPivot: {
-        id: 'vitalPivot',
-        name: '生息转枢',
-        type: 'skill',
-        cost: 1,
-        icon: '🔄',
-        description: '恢复 3 点生命，获得 1 点灵力并施加 2 层破绽',
-        rarity: 'uncommon',
-        keywords: ['vital', 'heal', 'mark'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'heal', value: 3, target: 'self' },
-            { type: 'energy', value: 1, target: 'self' },
-            { type: 'applyMark', value: 2, target: 'enemy' }
-        ]
-    },
-
-    soulSuture: {
-        id: 'soulSuture',
-        name: '魂缝',
-        type: 'power',
-        cost: 2,
-        icon: '🪢',
-        description: '恢复 8 点生命，获得 1 层护盾留存并抽 1 张牌',
-        rarity: 'rare',
-        keywords: ['vital', 'heal', 'retain'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'heal', value: 8, target: 'self' },
-            { type: 'buff', buffType: 'retainBlock', value: 1, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    reversalPulse: {
-        id: 'reversalPulse',
-        name: '逆脉冲',
-        type: 'attack',
-        cost: 2,
-        icon: '💢',
-        description: '失去 4 点生命，造成 12 点伤害并恢复 6 点生命',
-        rarity: 'rare',
-        keywords: ['vital', 'heal', 'burst'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'selfDamage', value: 4, target: 'self' },
-            { type: 'damage', value: 12, target: 'enemy' },
-            { type: 'heal', value: 6, target: 'self' }
-        ]
-    },
-
-    phoenixReprieve: {
-        id: 'phoenixReprieve',
-        name: '回生凤返',
-        type: 'skill',
-        cost: 3,
-        icon: '🕊️',
-        description: '恢复 15 点生命，并对全体造成 10 点伤害',
-        rarity: 'rare',
-        keywords: ['vital', 'heal', 'aoe'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'heal', value: 15, target: 'self' },
-            { type: 'damageAll', value: 10, target: 'allEnemies' }
-        ]
-    },
-
-    ironBreath: {
-        id: 'ironBreath',
-        name: '铁息守律',
-        type: 'defense',
-        cost: 1,
-        icon: '🛡️',
-        description: '获得 9 点护盾并净化 1 层负面效果',
-        rarity: 'common',
-        keywords: ['guard', 'cleanse'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'block', value: 9, target: 'self' },
-            { type: 'cleanse', value: 1, target: 'self' }
-        ]
-    },
-
-    mirrorWall: {
-        id: 'mirrorWall',
-        name: '镜壁折锋',
-        type: 'skill',
-        cost: 1,
-        icon: '🪞',
-        description: '获得 6 点护盾并获得 1 层护盾留存',
-        rarity: 'common',
-        keywords: ['guard', 'retain', 'mirror', 'delay'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'block', value: 6, target: 'self' },
-            { type: 'buff', buffType: 'retainBlock', value: 1, target: 'self' }
-        ]
-    },
-
-    reboundingShell: {
-        id: 'reboundingShell',
-        name: '回壳击',
-        type: 'attack',
-        cost: 1,
-        icon: '🐢',
-        description: '造成 5 点伤害并获得 6 点护盾',
-        rarity: 'common',
-        keywords: ['guard', 'tempo'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'damage', value: 5, target: 'enemy' },
-            { type: 'block', value: 6, target: 'self' }
-        ]
-    },
-
-    bastionStudy: {
-        id: 'bastionStudy',
-        name: '垒势演算',
-        type: 'skill',
-        cost: 0,
-        icon: '📐',
-        description: '抽 1 张牌并获得 4 点护盾',
-        rarity: 'common',
-        keywords: ['guard', 'tempo'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'draw', value: 1, target: 'self' },
-            { type: 'block', value: 4, target: 'self' }
-        ]
-    },
-
-    wardingSweep: {
-        id: 'wardingSweep',
-        name: '镇界横扫',
-        type: 'attack',
-        cost: 1,
-        icon: '🧱',
-        description: '对全体造成 4 点伤害并获得 4 点护盾',
-        rarity: 'common',
-        keywords: ['guard', 'aoe'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'damageAll', value: 4, target: 'allEnemies' },
-            { type: 'block', value: 4, target: 'self' }
-        ]
-    },
-
-    resolveAnchor: {
-        id: 'resolveAnchor',
-        name: '定心锚',
-        type: 'skill',
-        cost: 1,
-        icon: '⚓',
-        description: '下回合开始时获得 7 点护盾并抽 1 张牌',
-        rarity: 'uncommon',
-        keywords: ['guard', 'setup'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'buff', buffType: 'nextTurnBlock', value: 7, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    guardianMantra: {
-        id: 'guardianMantra',
-        name: '守愿咒',
-        type: 'defense',
-        cost: 1,
-        icon: '📿',
-        description: '获得 10 点护盾并获得 1 层护盾留存',
-        rarity: 'uncommon',
-        keywords: ['guard', 'retain'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'block', value: 10, target: 'self' },
-            { type: 'buff', buffType: 'retainBlock', value: 1, target: 'self' }
-        ]
-    },
-
-    shieldTax: {
-        id: 'shieldTax',
-        name: '护势征敛',
-        type: 'skill',
-        cost: 1,
-        icon: '🧾',
-        description: '获得等于已损失生命 30% 的护盾并抽 1 张牌',
-        rarity: 'uncommon',
-        keywords: ['guard', 'recover'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'blockFromLostHp', percent: 0.3, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    bastionCrash: {
-        id: 'bastionCrash',
-        name: '垒势崩落',
-        type: 'attack',
-        cost: 1,
-        icon: '💥',
-        description: '消耗至多 12 点护盾，每点护盾造成 1 点伤害，并抽 1 张牌',
-        rarity: 'uncommon',
-        keywords: ['guard', 'burst'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'blockBurst', ratio: 1, maxConsume: 12, minDamage: 4, target: 'enemy' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    counterEdict: {
-        id: 'counterEdict',
-        name: '反制敕令',
-        type: 'attack',
-        cost: 2,
-        icon: '📜',
-        description: '移除敌人所有护盾并造成 8 点伤害',
-        rarity: 'uncommon',
-        keywords: ['guard', 'counter'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'removeBlock', target: 'enemy' },
-            { type: 'damage', value: 8, target: 'enemy' }
-        ]
-    },
-
-    citadelOath: {
-        id: 'citadelOath',
-        name: '天阙誓垒',
-        type: 'power',
-        cost: 2,
-        icon: '🏯',
-        description: '获得 8 点护盾、2 点荆棘与 2 层护盾留存',
-        rarity: 'rare',
-        keywords: ['guard', 'retain'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'block', value: 8, target: 'self' },
-            { type: 'buff', buffType: 'thorns', value: 2, target: 'self' },
-            { type: 'buff', buffType: 'retainBlock', value: 2, target: 'self' }
-        ]
-    },
-
-    fortressEdict: {
-        id: 'fortressEdict',
-        name: '镇垒断罪',
-        type: 'attack',
-        cost: 2,
-        icon: '⚖️',
-        description: '消耗全部护盾，每点护盾造成 1.3 点伤害，并施加 2 层虚弱',
-        rarity: 'rare',
-        keywords: ['guard', 'burst'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'blockBurst', ratio: 1.3, minDamage: 8, target: 'enemy' },
-            { type: 'debuff', buffType: 'weak', value: 2, target: 'enemy' }
-        ]
-    },
-
-    aegisJudgement: {
-        id: 'aegisJudgement',
-        name: '玄甲裁断',
-        type: 'attack',
-        cost: 2,
-        icon: '⚔️',
-        description: '造成 10 点伤害并获得 8 点护盾',
-        rarity: 'rare',
-        keywords: ['guard', 'burst'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'damage', value: 10, target: 'enemy' },
-            { type: 'block', value: 8, target: 'self' }
-        ]
-    },
-
-    // ==================== 补全卡牌 ====================
-    healingTouch: {
-        id: 'healingTouch',
-        name: '治愈之触',
-        type: 'skill',
-        cost: 1,
-        icon: '💚',
-        description: '回复 6 点生命，移除 1 个负面效果',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'heal', value: 6, target: 'self' },
-            { type: 'cleanse', value: 1, target: 'self' }
-        ]
-    },
-
-    bloodBlessing: {
-        id: 'bloodBlessing',
-        name: '鲜血祝福',
-        type: 'power',
-        cost: 2,
-        icon: '🩸',
-        description: '消耗 5 点生命，获得 2 点力量',
-        rarity: 'rare',
-        effects: [
-            { type: 'selfDamage', value: 5, target: 'self' },
-            { type: 'buff', buffType: 'strength', value: 2, target: 'self' }
-        ]
-    },
-
-    poisonThorn: {
-        id: 'poisonThorn',
-        name: '毒刺',
-        type: 'attack',
-        cost: 1,
-        icon: '🌵',
-        description: '造成 4 点伤害，施加 2 层中毒',
-        rarity: 'common',
-        effects: [
-            { type: 'damage', value: 4, target: 'enemy' },
-            { type: 'debuff', buffType: 'poison', value: 2, target: 'enemy' }
-        ],
-        element: 'wood'
-    },
-
-    natureGrowth: {
-        id: 'natureGrowth',
-        name: '自然生长',
-        type: 'power',
-        cost: 1,
-        icon: '🌱',
-        description: '每回合结束时，获得 3 点护盾',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'buff', buffType: 'regenBlock', value: 3, target: 'self' }
-        ]
-    },
-
-    // ==================== 法则牌（紫色） ====================
     thunderLaw: {
-        id: 'thunderLaw',
-        name: '雷法残章',
-        type: 'law',
-        cost: 2,
-        icon: '⚡',
-        description: '造成 8 点伤害，使敌人下回合受到的伤害+3',
-        rarity: 'rare',
-        lawType: 'thunder',
-        effects: [
-            { type: 'damage', value: 8, target: 'enemy' },
-            { type: 'debuff', buffType: 'vulnerable', value: 3, target: 'enemy' }
-        ]
+      damage: 4
     },
-
     swordIntent: {
-        id: 'swordIntent',
-        name: '剑意碎片',
-        type: 'law',
-        cost: 1,
-        icon: '🗡️',
-        description: '造成 7 点穿透伤害（无视护盾）',
-        rarity: 'rare',
-        lawType: 'sword',
-        element: 'metal',
-        effects: [
-            { type: 'penetrate', value: 7, target: 'enemy' }
-        ]
+      damage: 4
     },
-
     flameTruth: {
-        id: 'flameTruth',
-        name: '火焰真意',
-        type: 'law',
-        cost: 2,
-        icon: '🔥',
-        description: '造成 6 点伤害，使敌人获得 3 层灼烧',
-        rarity: 'rare',
-        lawType: 'fire',
-        element: 'fire',
-        effects: [
-            { type: 'damage', value: 6, target: 'enemy' },
-            { type: 'debuff', buffType: 'burn', value: 3, target: 'enemy' }
-        ]
+      damage: 3,
+      burn: 1
     },
-
-    spaceRift: {
-        id: 'spaceRift',
-        name: '空间裂隙',
-        type: 'law',
-        cost: 1,
-        icon: '🌀',
-        description: '获得 50% 闪避率（持续1回合）',
-        rarity: 'rare',
-        lawType: 'space',
-        effects: [
-            { type: 'buff', buffType: 'dodgeChance', value: 0.5, target: 'self', duration: 1 }
-        ]
-    },
-
     timeStop: {
-        id: 'timeStop',
-        name: '时间静止',
-        type: 'law',
-        cost: 3,
-        icon: '⏱️',
-        description: '敌人跳过下一回合',
-        rarity: 'legendary',
-        lawType: 'time',
-        effects: [
-            { type: 'debuff', buffType: 'stun', value: 1, target: 'enemy' }
-        ]
+      costReduction: 1
     },
-
+    // 3费 -> 2费
     voidEmbrace: {
-        id: 'voidEmbrace',
-        name: '虚空拥抱',
-        type: 'law',
-        cost: 2,
-        icon: '🕳️',
-        description: '造成敌人已损失生命值10%的伤害',
-        rarity: 'legendary',
-        lawType: 'void',
-        effects: [
-            { type: 'execute', value: 0.10, target: 'enemy' }
-        ]
+      multiplier: 0.2
     },
+    // 30% -> 50%
 
-    // ==================== 机缘牌（金色） ====================
+    // 新增/补全的升级规则
+    shieldBash: {
+      damage: 2,
+      block: 2
+    },
+    // 4/4 -> 6/6
+    counterStance: {
+      block: 3,
+      thorns: 3
+    },
+    // 3/5 -> 6/8
+    battleCry: {
+      damage: 3,
+      strength: 1
+    },
+    // 5/2 -> 8/3
+    spaceRift: {
+      dodge: -1,
+      dodgeChance: 0.25
+    },
+    // 50% -> 75%
     luckyStrike: {
-        id: 'luckyStrike',
-        name: '天降机缘',
-        type: 'chance',
-        cost: 1,
-        icon: '🌟',
-        description: '随机造成 5-15 点伤害',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'randomDamage', minValue: 5, maxValue: 15, target: 'enemy' }
-        ]
+      minDamage: 3,
+      maxDamage: 5
     },
-
+    // 5-15 -> 8-20
     fortuneWheel: {
-        id: 'fortuneWheel',
-        name: '命运之轮',
-        type: 'chance',
-        cost: 1,
-        consumeCandy: true,
-        icon: '🎰',
-        description: '消耗1奶糖。随机获得 1-3 张临时卡牌',
-        rarity: 'rare',
-        effects: [
-            { type: 'randomCards', minValue: 1, maxValue: 3, target: 'self' }
-        ]
+      minCards: 1,
+      maxCards: 1
     },
-
+    // 1-3 -> 2-4
     miracleHeal: {
-        id: 'miracleHeal',
-        name: '奇迹治愈',
-        type: 'chance',
-        cost: 2,
-        icon: '💖',
-        description: '回复 15 点生命',
-        rarity: 'rare',
-        effects: [
-            { type: 'heal', value: 15, target: 'self' }
-        ]
+      heal: 5
     },
+    // 15 -> 20
 
-    // ==================== 角色专属卡牌 (追加) ====================
-    // --- 林风 (Lin Feng) ---
-    defianceStrike: {
-        id: 'defianceStrike',
-        name: '逆命一击',
-        type: 'attack',
-        character: 'linFeng',
-        cost: 1,
-        icon: '🗡️',
-        description: '造成 8 点伤害。若生命值低于50%，伤害翻倍',
-        rarity: 'common',
-        effects: [
-            { type: 'damage', value: 8, target: 'enemy' },
-            { type: 'conditionalDamage', condition: 'lowHp', threshold: 0.5, multiplier: 2, target: 'enemy' }
-        ]
-    },
-    fusionBlast: {
-        id: 'fusionBlast',
-        name: '融合爆发',
-        type: 'skill',
-        character: 'linFeng',
-        cost: 1,
-        icon: '🌌',
-        description: '消耗所有手牌，抽取消耗数量+1张牌',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'discardHand', target: 'self' },
-            { type: 'drawCalculated', base: 1, perDiscard: 1, target: 'self' }
-        ]
-    },
-    lawbreaker: {
-        id: 'lawbreaker',
-        name: '破法者',
-        type: 'power',
-        character: 'linFeng',
-        cost: 2,
-        icon: '🛡️',
-        description: '每打出一张攻击牌，获得 2 点护盾',
-        rarity: 'rare',
-        effects: [
-            { type: 'buff', buffType: 'blockOnAttack', value: 2, target: 'self' }
-        ]
-    },
-
-    // --- 香叶 (Xiang Ye) ---
-    bloodSeal: {
-        id: 'bloodSeal',
-        name: '血之封印',
-        type: 'skill',
-        character: 'xiangYe',
-        cost: 1,
-        icon: '🩸',
-        description: '流失 5 点生命，获得 20 点护盾',
-        rarity: 'common',
-        effects: [
-            { type: 'selfDamage', value: 5, target: 'self' },
-            { type: 'block', value: 20, target: 'self' }
-        ]
-    },
-    vitalityBloom: {
-        id: 'vitalityBloom',
-        name: '生命绽放',
-        type: 'power',
-        character: 'xiangYe',
-        cost: 2,
-        icon: '🌸',
-        description: '回合开始时，回复 3 点生命',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'buff', buffType: 'regen', value: 3, target: 'self' }
-        ]
-    },
-    unchain: {
-        id: 'unchain',
-        name: '解脱',
-        type: 'attack',
-        character: 'xiangYe',
-        cost: 2,
-        icon: '🔗',
-        description: '造成 15 点伤害。若仍有封印槽位，额外造成 10 点伤害',
-        rarity: 'common',
-        effects: [
-            { type: 'damage', value: 15, target: 'enemy' },
-            { type: 'conditionalDamage', condition: 'sealed', bonusDamage: 10, target: 'enemy' }
-        ]
-    },
-
-    // --- 无欲 (Wu Yu) ---
-    karmaStrike: {
-        id: 'karmaStrike',
-        name: '业力击',
-        type: 'attack',
-        character: 'wuYu',
-        cost: 1,
-        icon: '🕉️',
-        description: '造成 6 点伤害。增加 5 点业力',
-        rarity: 'common',
-        effects: [
-            { type: 'damage', value: 6, target: 'enemy' },
-            { type: 'gainSin', value: 5, target: 'self' }
-        ]
-    },
-    goldenBellSkill: {
-        id: 'goldenBellSkill',
-        name: '金钟罩',
-        type: 'skill',
-        character: 'wuYu',
-        cost: 1,
-        icon: '🔔',
-        description: '获得 12 点护盾。增加 5 点功德',
-        rarity: 'common',
-        effects: [
-            { type: 'block', value: 12, target: 'self' },
-            { type: 'gainMerit', value: 5, target: 'self' }
-        ]
-    },
-    asceticism: {
-        id: 'asceticism',
-        name: '苦行',
-        type: 'power',
-        character: 'wuYu',
-        cost: 1,
-        icon: '🙏',
-        description: '回合结束时若有保留手牌，获得保留数x2点功德',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'buff', buffType: 'meritOnRetain', value: 2, target: 'self' }
-        ]
-    },
-
-    // --- 严寒 (Yan Han) ---
-    probe: {
-        id: 'probe',
-        name: '试探',
-        type: 'attack',
-        character: 'yanHan',
-        cost: 0,
-        consumeCandy: true,
-        icon: '🔍',
-        description: '消耗1奶糖。造成 4 点伤害。抽 1 张牌',
-        rarity: 'common',
-        effects: [
-            { type: 'damage', value: 4, target: 'enemy' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-    analyzeWeakness: {
-        id: 'analyzeWeakness',
-        name: '弱点分析',
-        type: 'skill',
-        character: 'yanHan',
-        cost: 1,
-        icon: '📊',
-        description: '给予所有敌人 2 层易伤',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'debuff', buffType: 'vulnerable', value: 2, target: 'allEnemies' }
-        ]
-    },
-    tacticalAdvantage: {
-        id: 'tacticalAdvantage',
-        name: '战术优势',
-        type: 'power',
-        character: 'yanHan',
-        cost: 2,
-        icon: '📈',
-        description: '攻击带有易伤的敌人时，回复 1 点灵力(每回合限2次)',
-        rarity: 'rare',
-        effects: [
-            { type: 'buff', buffType: 'energyOnVulnerable', value: 1, limit: 2, target: 'self' }
-        ]
-    },
-
-    // ==================== 2.0新增卡牌 ====================
-
-    // 攻击牌
     sweepingStrike: {
-        id: 'sweepingStrike',
-        name: '横扫千军',
-        type: 'attack',
-        cost: 2,
-        icon: '🌪️',
-        description: '对所有敌人造成 8 点伤害',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'damageAll', value: 8, target: 'allEnemies' }
-        ]
+      damage: 5
     },
-
+    // 8 -> 13
     armorBreaker: {
-        id: 'armorBreaker',
-        name: '破甲一击',
-        type: 'attack',
-        cost: 1,
-        icon: '🔨',
-        description: '造成 5 点伤害，移除敌人护盾',
-        rarity: 'common',
-        effects: [
-            { type: 'removeBlock', target: 'enemy' },
-            { type: 'damage', value: 5, target: 'enemy' }
-        ]
+      damage: 5
     },
-
+    // 5 -> 10
     tripleSlash: {
-        id: 'tripleSlash',
-        name: '致命连击',
-        type: 'attack',
-        cost: 1,
-        icon: '⚡',
-        description: '造成 3 点伤害三次',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'damage', value: 3, target: 'enemy' },
-            { type: 'damage', value: 3, target: 'enemy' },
-            { type: 'damage', value: 3, target: 'enemy' }
-        ]
+      damage: 2
     },
-
+    // 3x3 -> 5x3
     earthShatter: {
-        id: 'earthShatter',
-        name: '天崩地裂',
-        type: 'attack',
-        cost: 3,
-        icon: '🌋',
-        description: '造成 25 点伤害，自身受 5 点伤害（生命≤5不可用）',
-        rarity: 'rare',
-        condition: { type: 'hp', min: 6 },
-        effects: [
-            { type: 'damage', value: 25, target: 'enemy' },
-            { type: 'selfDamage', value: 5, target: 'self' }
-        ]
+      damage: 15
     },
-
+    // 25 -> 40
     swordBreaker: {
-        id: 'swordBreaker',
-        name: '一剑破万法',
-        type: 'attack',
-        cost: 2,
-        icon: '✨',
-        description: '造成 15 点穿透伤害',
-        rarity: 'rare',
-        effects: [
-            { type: 'penetrate', value: 15, target: 'enemy' }
-        ]
+      damage: 10
     },
-
+    // 15 -> 25
     bloodSlash: {
-        id: 'bloodSlash',
-        name: '血刃斩',
-        type: 'attack',
-        cost: 1,
-        icon: '🩸',
-        description: '造成 8 点伤害，回复造成伤害的30%生命',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'lifeSteal', value: 0.3, target: 'self' },
-            { type: 'damage', value: 8, target: 'enemy' }
-        ]
+      damage: 6
     },
-
+    // 8 -> 14
     finishingBlow: {
-        id: 'finishingBlow',
-        name: '终结一击',
-        type: 'attack',
-        cost: 2,
-        icon: '💀',
-        description: '造成 10 点伤害，对生命低于30%的敌人造成双倍',
-        rarity: 'rare',
-        effects: [
-            { type: 'executeDamage', value: 10, threshold: 0.3, target: 'enemy' }
-        ]
+      damage: 4
     },
+    // 10 -> 14
 
-    // 防御牌
     goldenBell: {
-        id: 'goldenBell',
-        name: '金钟罩',
-        type: 'defense',
-        cost: 2,
-        icon: '🔔',
-        description: '获得 15 点护盾',
-        rarity: 'common',
-        effects: [
-            { type: 'block', value: 15, target: 'self' }
-        ]
+      block: 5
     },
-
+    // 15 -> 20
     offenseDefense: {
-        id: 'offenseDefense',
-        name: '以攻代守',
-        type: 'defense',
-        cost: 1,
-        icon: '⚔️',
-        description: '获得等于你力量值x3的护盾（最少5）',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'blockFromStrength', multiplier: 3, minimum: 5, target: 'self' }
-        ]
+      multiplier: 1
     },
-
+    // x3 -> x4
     halfDamage: {
-        id: 'halfDamage',
-        name: '天地同寿',
-        type: 'defense',
-        cost: 2,
-        icon: '☯️',
-        description: '本回合受到的伤害减少30%（升级后50%）',
-        rarity: 'rare',
-        effects: [
-            { type: 'buff', buffType: 'damageReduction', value: 30, target: 'self' }
-        ]
+      damageReduction: 25
     },
-
+    // 50% -> 75%
     turtleShell: {
-        id: 'turtleShell',
-        name: '乌龟壳',
-        type: 'defense',
-        cost: 0,
-        consumeCandy: true,
-        icon: '🐢',
-        description: '消耗1奶糖。获得 3 点护盾，抽 1 张牌',
-        rarity: 'common',
-        effects: [
-            { type: 'block', value: 3, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
+      block: 2,
+      draw: 1
     },
-
+    // 3/1 -> 5/2
     ironSkin: {
-        id: 'ironSkin',
-        name: '铁布衫',
-        type: 'defense',
-        cost: 1,
-        icon: '🦾',
-        description: '获得 6 点护盾，下回合开始时再获得 4 点',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'block', value: 6, target: 'self' },
-            { type: 'buff', buffType: 'nextTurnBlock', value: 4, target: 'self' }
-        ]
+      block: 3,
+      nextBlock: 3
     },
+    // 6/4 -> 9/7
 
-    // 法则牌
     thunderStorm: {
-        id: 'thunderStorm',
-        name: '劫雷轰顶',
-        type: 'law',
-        cost: 2,
-        icon: '🌩️',
-        description: '造成 10 点伤害，使敌人获得 2 层麻痹',
-        rarity: 'rare',
-        lawType: 'thunder',
-        effects: [
-            { type: 'damage', value: 10, target: 'enemy' },
-            { type: 'debuff', buffType: 'paralysis', value: 2, target: 'enemy' }
-        ]
+      damage: 4,
+      paralysis: 1
     },
-
+    // 10/2 -> 14/3
     inferno: {
-        id: 'inferno',
-        name: '业火焚天',
-        type: 'law',
-        cost: 3,
-        icon: '🔥',
-        description: '造成 8 点伤害3次，每次+1灼烧',
-        rarity: 'epic',
-        lawType: 'fire',
-        element: 'fire',
-        effects: [
-            { type: 'damage', value: 8, target: 'enemy' },
-            { type: 'debuff', buffType: 'burn', value: 1, target: 'enemy' },
-            { type: 'damage', value: 8, target: 'enemy' },
-            { type: 'debuff', buffType: 'burn', value: 1, target: 'enemy' },
-            { type: 'damage', value: 8, target: 'enemy' },
-            { type: 'debuff', buffType: 'burn', value: 1, target: 'enemy' }
-        ],
-        descriptionTemplate: '造成 {e0} 点伤害3次，每次+{e1}灼烧'
+      damage: 2
     },
-
+    // 8x3 -> 10x3
     voidWalk: {
-        id: 'voidWalk',
-        name: '穿梭虚空',
-        type: 'law',
-        cost: 1,
-        icon: '🌀',
-        description: '获得 1 层闪避',
-        rarity: 'rare',
-        lawType: 'space',
-        effects: [
-            { type: 'buff', buffType: 'dodge', value: 1, target: 'self' }
-        ]
+      dodge: 1
     },
-
+    // 2 -> 3
     timeRewind: {
-        id: 'timeRewind',
-        name: '时光倒流',
-        type: 'law',
-        cost: 4,
-        icon: '⏪',
-        description: '将轮回洗回识海',
-        rarity: 'epic',
-        lawType: 'time',
-        effects: [
-            { type: 'reshuffleDiscard', target: 'self' }
-        ]
+      costReduction: 1
     },
-
+    // 4费 -> 3费
     karmaKill: {
-        id: 'karmaKill',
-        name: '因果律杀',
-        type: 'law',
-        cost: 3,
-        icon: '☠️',
-        description: '必定命中，造成敌人最大生命15%的伤害',
-        rarity: 'legendary',
-        lawType: 'karma',
-        effects: [
-            { type: 'percentDamage', value: 0.15, target: 'enemy' }
-        ]
+      percent: 0.15
     },
-
+    // 30% -> 45%
     iceFreeze: {
-        id: 'iceFreeze',
-        name: '冰封万里',
-        type: 'law',
-        cost: 2,
-        icon: '❄️',
-        description: '造成 7 点伤害，使敌人下回合伤害-3',
-        rarity: 'rare',
-        lawType: 'ice',
-        effects: [
-            { type: 'damage', value: 7, target: 'enemy' },
-            { type: 'debuff', buffType: 'weak', value: 3, target: 'enemy' }
-        ]
+      damage: 3,
+      weak: 1
     },
+    // 7/3 -> 10/4
 
-    // 机缘牌
     desperateSurvival: {
-        id: 'desperateSurvival',
-        name: '绝处逢生',
-        type: 'chance',
-        cost: 1,
-        icon: '🆘',
-        description: '若生命低于20%，抽3张牌+3灵力',
-        rarity: 'rare',
-        effects: [
-            { type: 'conditionalDraw', condition: 'lowHp', threshold: 0.2, drawValue: 3, energyValue: 3 }
-        ]
+      draw: 1,
+      energy: 1
     },
-
+    // 3/3 -> 4/4
     windfall: {
-        id: 'windfall',
-        name: '天降横财',
-        type: 'chance',
-        cost: 1,
-        icon: '💰',
-        description: '战斗结束后获得 25-100 灵石',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'bonusGold', min: 25, max: 100 }
-        ]
+      minGold: 10,
+      maxGold: 25
     },
-
+    // 25-100 -> 35-125
     enlightenment: {
-        id: 'enlightenment',
-        name: '顿悟',
-        type: 'chance',
-        cost: 2,
-        icon: '💡',
-        description: '命环经验+50',
-        rarity: 'rare',
-        effects: [
-            { type: 'ringExp', value: 50 }
-        ]
+      exp: 25
     },
-
+    // 50 -> 75
     reversal: {
-        id: 'reversal',
-        name: '逆转乾坤',
-        type: 'chance',
-        cost: 4,
-        icon: '🔄',
-        description: '与敌人交换当前生命值百分比',
-        rarity: 'legendary',
-        effects: [
-            { type: 'swapHpPercent', target: 'enemy' }
-        ]
+      costReduction: 1
     },
+    // 3费 -> 2费
 
-    // 技能牌
     concentration: {
-        id: 'concentration',
-        name: '聚气',
-        type: 'energy',
-        cost: 1,
-        icon: '🎯',
-        description: '下一张攻击牌伤害+5',
-        rarity: 'common',
-        effects: [
-            { type: 'buff', buffType: 'nextAttackBonus', value: 5, target: 'self' }
-        ]
+      bonus: 3
     },
-
+    // +5 -> +8
     doubleEdge: {
-        id: 'doubleEdge',
-        name: '双刃',
-        type: 'attack',
-        cost: 1,
-        icon: '🔪',
-        description: '造成 10 点伤害，获得 1 层易伤',
-        rarity: 'common',
-        effects: [
-            { type: 'damage', value: 10, target: 'enemy' },
-            { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'self' }
-        ]
+      damage: 5
     },
-
+    // 10 -> 15
     powerUp: {
-        id: 'powerUp',
-        name: '蓄力',
-        type: 'energy',
-        cost: 1,
-        icon: '💪',
-        description: '获得 2 点力量（永久）',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'buff', buffType: 'strength', value: 2, target: 'self', permanent: true }
-        ]
+      strength: 1
     },
-
-
-
+    // 2 -> 3
+    quickDraw: {
+      draw: 1
+    },
+    // 1 -> 2
     allIn: {
-        id: 'allIn',
-        name: '破釜沉舟',
-        type: 'attack',
-        cost: 1,
-        icon: '🎲',
-        description: '消耗所有灵力，每点灵力造成 6 点伤害',
-        rarity: 'rare',
-        effects: [
-            { type: 'consumeAllEnergy', damagePerEnergy: 6, target: 'enemy' }
-        ]
+      damagePerEnergy: 2
     },
-
+    // 6 -> 8
     chaosControl: {
-        id: 'chaosControl',
-        name: '混沌支配',
-        type: 'law',
-        cost: 2,
-        icon: '🌀',
-        description: '造成 5 点伤害，使敌人眩晕1回合',
-        rarity: 'legendary',
-        lawType: 'chaos',
-        effects: [
-            { type: 'damage', value: 5, target: 'enemy' },
-            { type: 'debuff', buffType: 'stun', value: 1, target: 'enemy' }
-        ]
+      damage: 3,
+      stun: 1
     },
+    // 5/1 -> 8/2 (眩晕回合还是1，伤害加点)
 
-    // ==================== 多角色专属卡牌 ====================
-    // ===== 林风（逆命者）- 突破与进化主题 =====
+    poisonTouch: {
+      damage: 2,
+      poison: 2
+    },
+    // 3/2 -> 5/4
+    minorHeal: {
+      heal: 3
+    },
+    // 5 -> 8
+    monkStrike: {
+      damage: 3,
+      block: 2
+    },
+    // 6/4 -> 9/6
+    analysis: {
+      draw: 1
+    },
+    // 1 -> 2
+
+    // ==================== 新增角色卡牌升级规则 ====================
+    // 林风
     defiantWill: {
-        id: 'defiantWill',
-        name: '逆天意志',
-        type: 'attack',
-        cost: 1,
-        icon: '💫',
-        description: '造成 8 点伤害，若命环≥2级，再造成 8 点伤害',
-        rarity: 'uncommon',
-        character: 'linFeng',
-        effects: [
-            { type: 'damage', value: 8, target: 'enemy' },
-            { type: 'conditionalDamage', condition: 'fateRingLevel', minLevel: 2, bonusDamage: 8, target: 'enemy' }
-        ]
+      damage: 2,
+      bonusDamage: 2
     },
+    // 8/8 -> 10/10
     ringResonance: {
-        id: 'ringResonance',
-        name: '命环共振',
-        type: 'attack',
-        cost: 2,
-        icon: '🔮',
-        description: '根据装载法则数量+4伤害，抽1张牌',
-        rarity: 'rare',
-        character: 'linFeng',
-        effects: [
-            { type: 'damagePerLaw', baseDamage: 4, damagePerLaw: 4, target: 'enemy' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
+      baseDamage: 2,
+      damagePerLaw: 1
     },
+    // 4+4/法则 -> 6+5/法则
     breakthrough: {
-        id: 'breakthrough',
-        name: '突破极限',
-        type: 'attack',
-        cost: 3,
-        icon: '⚡',
-        description: '造成 25 点伤害，命环经验+30',
-        rarity: 'rare',
-        character: 'linFeng',
-        effects: [
-            { type: 'damage', value: 25, target: 'enemy' },
-            { type: 'ringExp', value: 30 }
-        ]
+      damage: 5,
+      exp: 20
     },
+    // 25/30 -> 30/50
 
-    // ===== 香叶（治愈法则）- 增益与治疗主题 =====
-
-
+    // 香叶
     healingTouch: {
-        id: 'healingTouch',
-        name: '治愈之触',
-        type: 'skill',
-        cost: 1,
-        icon: '💚',
-        description: '回复 8 点生命，净化 1 层负面效果',
-        rarity: 'uncommon',
-        character: 'xiangYe',
-        effects: [
-            { type: 'heal', value: 8, target: 'self' },
-            { type: 'cleanse', value: 1, target: 'self' }
-        ]
+      heal: 4,
+      cleanse: 1
     },
+    // 8/1 -> 12/2
     bloodBlessing: {
-        id: 'bloodBlessing',
-        name: '血之祝福',
-        type: 'skill',
-        cost: 2,
-        icon: '🩸',
-        description: '回复 15 点生命，使敌人虚弱 2 回合',
-        rarity: 'rare',
-        character: 'xiangYe',
-        effects: [
-            { type: 'heal', value: 15, target: 'self' },
-            { type: 'debuff', buffType: 'weak', value: 2, target: 'enemy' }
-        ]
+      heal: 5,
+      weak: 1
     },
+    // 15/2 -> 20/3
     lifeSurge: {
-        id: 'lifeSurge',
-        name: '生命涌动',
-        type: 'defense',
-        cost: 1,
-        icon: '💖',
-        description: '获得等于已损失生命50%的护盾',
-        rarity: 'rare',
-        character: 'xiangYe',
-        effects: [
-            { type: 'blockFromLostHp', percent: 0.5, target: 'self' }
-        ]
+      percent: 0.25
     },
+    // 50% -> 75%
 
-    // ===== 无欲（佛门）- 反击与控制主题 =====
-
+    // 无欲
     vajraGlare: {
-        id: 'vajraGlare',
-        name: '金刚怒目',
-        type: 'attack',
-        cost: 1,
-        icon: '😡',
-        description: '造成 5 点伤害，获得 3 点荆棘持续 2 回合',
-        rarity: 'uncommon',
-        character: 'wuYu',
-        effects: [
-            { type: 'damage', value: 5, target: 'enemy' },
-            { type: 'buff', buffType: 'thorns', value: 3, target: 'self', duration: 2 }
-        ]
+      damage: 3,
+      thorns: 2
     },
+    // 5/3 -> 8/5
     zenMeditation: {
-        id: 'zenMeditation',
-        name: '禅定',
-        type: 'defense',
-        cost: 2,
-        icon: '🧘',
-        description: '获得 15 点护盾，下次被攻击时反弹等量伤害',
-        rarity: 'rare',
-        character: 'wuYu',
-        effects: [
-            { type: 'block', value: 15, target: 'self' },
-            { type: 'buff', buffType: 'reflect', value: 1, target: 'self' }
-        ]
+      block: 5
     },
+    // 15 -> 20
     salvation: {
-        id: 'salvation',
-        name: '普渡众生',
-        type: 'law',
-        cost: 3,
-        icon: '☸️',
-        description: '对所有敌人造成 12 点伤害并眩晕 1 回合',
-        rarity: 'epic',
-        character: 'wuYu',
-        effects: [
-            { type: 'damageAll', value: 12, target: 'allEnemies' },
-            { type: 'debuffAll', buffType: 'stun', value: 1, target: 'allEnemies' }
-        ]
+      damage: 3
     },
+    // 12 -> 15
 
-    // ===== 严寒（学者）- 分析与削弱主题 =====
-
+    // 严寒
     ringAnalysis: {
-        id: 'ringAnalysis',
-        name: '命环解析',
-        type: 'skill',
-        cost: 1,
-        icon: '📊',
-        description: '敌人易伤 2 层，命环经验+15',
-        rarity: 'uncommon',
-        character: 'yanHan',
-        effects: [
-            { type: 'debuff', buffType: 'vulnerable', value: 2, target: 'enemy' },
-            { type: 'ringExp', value: 15 }
-        ]
+      vulnerable: 1,
+      exp: 10
     },
+    // 2/15 -> 3/25
     lawInsight: {
-        id: 'lawInsight',
-        name: '法则窥探',
-        type: 'skill',
-        cost: 2,
-        icon: '👁️',
-        description: '抽 2 张牌，本战法则盗取率+10%',
-        rarity: 'rare',
-        character: 'yanHan',
-        effects: [
-            { type: 'draw', value: 2, target: 'self' },
-            { type: 'buff', buffType: 'stealBonus', value: 0.1, target: 'self' }
-        ]
+      draw: 1,
+      stealBonus: 0.05
     },
+    // 2/10% -> 3/15%
     timeStasis: {
-        id: 'timeStasis',
-        name: '时间凝滞',
-        type: 'law',
-        cost: 3,
-        icon: '⏳',
-        description: '敌人下次攻击伤害-50%，你额外行动1次',
-        rarity: 'epic',
-        character: 'yanHan',
-        effects: [
-            { type: 'debuff', buffType: 'damageReduction', value: 50, target: 'enemy' },
-            { type: 'buff', buffType: 'extraTurn', value: 1, target: 'self' }
-        ]
+      damageReduction: 25
     },
-
-    // ===== 墨尘（星律）- 标记与命环节奏主题 =====
+    // 50% -> 75%
+    // 墨尘
     starNeedle: {
-        id: 'starNeedle',
-        name: '星痕针',
-        type: 'attack',
-        character: 'moChen',
-        cost: 1,
-        icon: '🌠',
-        description: '造成 7 点伤害，并施加 2 层破绽。',
-        rarity: 'common',
-        effects: [
-            { type: 'damage', value: 7, target: 'enemy' },
-            { type: 'applyMark', value: 2, target: 'enemy' }
-        ]
+      damage: 2,
+      mark: 1
     },
+    // 7+2mark -> 9+3mark
     omenBarrier: {
-        id: 'omenBarrier',
-        name: '星兆护幕',
-        type: 'defense',
-        character: 'moChen',
-        cost: 1,
-        icon: '🛡️',
-        description: '获得 9 点护盾，抽 1 张牌。',
-        rarity: 'uncommon',
-        effects: [
-            { type: 'block', value: 9, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
+      block: 3,
+      draw: 1
     },
+    // 9/1 -> 12/2
     ringCatalyst: {
-        id: 'ringCatalyst',
-        name: '命环催化',
-        type: 'skill',
-        character: 'moChen',
-        cost: 1,
-        icon: '🔭',
-        description: '命环经验 +20，并获得 1 点力量。',
-        rarity: 'rare',
-        effects: [
-            { type: 'ringExp', value: 20 },
-            { type: 'buff', buffType: 'strength', value: 1, target: 'self' }
-        ]
+      exp: 15,
+      strength: 1
     },
+    // 20exp+1力量 -> 35exp+2力量
+    // 宁玄
     artifactBolt: {
-        id: 'artifactBolt',
-        name: '灵器矢',
-        type: 'attack',
-        character: 'ningXuan',
-        cost: 1,
-        icon: '🪬',
-        description: '造成 6 点伤害，获得 3 点护盾。',
-        rarity: 'common',
-        keywords: ['guard'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'damage', value: 6, target: 'enemy' },
-            { type: 'block', value: 3, target: 'self' }
-        ]
+      damage: 2,
+      block: 2
     },
+    // 6/3 -> 8/5
     echoWard: {
-        id: 'echoWard',
-        name: '回响障壁',
-        type: 'defense',
-        character: 'ningXuan',
-        cost: 1,
-        icon: '🧱',
-        description: '获得 10 点护盾并抽 1 张牌。',
-        rarity: 'uncommon',
-        keywords: ['guard', 'echo', 'mirror'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'block', value: 10, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
+      block: 3,
+      draw: 1
     },
+    // 10/1 -> 13/2
     ringInfusion: {
-        id: 'ringInfusion',
-        name: '命环灌注',
-        type: 'skill',
-        character: 'ningXuan',
-        cost: 1,
-        icon: '⚗️',
-        description: '命环经验 +16，获得 1 点灵力。',
-        rarity: 'rare',
-        effects: [
-            { type: 'ringExp', value: 16 },
-            { type: 'energy', value: 1, target: 'self' }
-        ]
+      exp: 14,
+      energy: 1
     },
+    // 16exp+1灵力 -> 30exp+2灵力
+
+    // 新增卡牌升级
+    soulHarvest: {
+      damage: 5,
+      maxHp: 1
+    },
+    // 12/2 -> 17/3
+    fateTwist: {
+      costReduction: 1
+    },
+    // 1 -> 0
+    divineShield: {
+      multiplier: 3
+    },
+    // 5 -> 8
+    stormFury: {
+      damage: 2
+    },
+    // 4 -> 6
+
+    // 修正：虚空拥抱升级不加百分比，改为减费
+    // 修正：虚空拥抱升级 +10% (10% -> 20%)
+    voidEmbrace: {
+      multiplier: 0.10
+    },
+    karmaKill: {
+      percent: 0.1
+    },
+    // 15% -> 25%
+
+    // 修复：融合爆发升级
+    fusionBlast: {
+      draw: 1
+    },
+    // 战斗深度扩展卡
+    bloodlettingSlash: {
+      damage: 2,
+      bleed: 1
+    },
+    punctureMark: {
+      damage: 2,
+      mark: 2
+    },
+    tacticalExpose: {
+      mark: 2,
+      draw: 1
+    },
+    crimsonCascade: {
+      damage: 3,
+      bleed: 1
+    },
+    hunterSeal: {
+      mark: 2
+    },
+    guardedRiposte: {
+      block: 2,
+      mark: 1
+    },
+    sunderingNeedle: {
+      damage: 3,
+      bleed: 1
+    },
+    hemorrhageRain: {
+      damage: 2,
+      bleed: 1
+    },
+    executionDoctrine: {
+      damage: 3
+    },
+    serratedRitual: {
+      damage: 2,
+      bleed: 1
+    },
+    coagulatedGuard: {
+      block: 2,
+      bleed: 1
+    },
+    bloodDebt: {
+      energy: 1,
+      draw: 1
+    },
+    arteryRupture: {
+      damage: 3,
+      bleed: 1
+    },
+    scarletJudgement: {
+      damage: 3,
+      bleed: 1
+    },
+    bloodTideOath: {
+      damage: 2,
+      draw: 1
+    },
+    weakpointSurvey: {
+      mark: 1,
+      draw: 1
+    },
+    duetFeint: {
+      damage: 2,
+      mark: 1
+    },
+    poisedCounter: {
+      block: 2,
+      mark: 1
+    },
+    razorFocus: {
+      mark: 2,
+      energy: 1
+    },
+    stancePivot: {
+      mark: 1,
+      draw: 1
+    },
+    focusBreak: {
+      damage: 2
+    },
+    verdictNeedle: {
+      damage: 3,
+      mark: 1
+    },
+    // 虚账收束流派
+    recklessMulligan: {
+      draw: 1
+    },
+    echoingCut: {
+      damage: 2
+    },
+    voidLedger: {
+      draw: 1
+    },
+    entropyGuard: {
+      block: 2,
+      energy: 1
+    },
+    debtCollection: {
+      draw: 1
+    },
+    recirculation: {
+      costReduction: 1
+    },
+    calculatedRuin: {
+      damage: 1
+    },
+    oblivionSpiral: {
+      draw: 1,
+      damage: 2
+    },
+    finalConvergence: {
+      damagePerEnergy: 2
+    },
+    // 雷策连锁流派
+    lightningProbe: {
+      damage: 2,
+      vulnerable: 1
+    },
+    chainArc: {
+      damage: 2,
+      mark: 1
+    },
+    stormDraft: {
+      draw: 1,
+      vulnerable: 1
+    },
+    ionReserve: {
+      energy: 1,
+      mark: 1
+    },
+    surgeStep: {
+      block: 2,
+      draw: 1
+    },
+    forkedNeedle: {
+      damage: 1
+    },
+    pressureSpark: {
+      damage: 2
+    },
+    thunderLattice: {
+      mark: 2,
+      draw: 1
+    },
+    exposedCircuit: {
+      damage: 2
+    },
+    flashRelay: {
+      draw: 1,
+      vulnerable: 1
+    },
+    stormWard: {
+      block: 2,
+      weak: 1
+    },
+    cascadeVolt: {
+      damage: 2,
+      draw: 1
+    },
+    skybreakerArray: {
+      damage: 3,
+      mark: 1
+    },
+    resonanceTempest: {
+      damage: 1,
+      strength: 1
+    },
+    executionThunder: {
+      damage: 4
+    },
+    // 回生织脉流派
+    mendThread: {
+      heal: 2,
+      block: 2
+    },
+    pulseBandage: {
+      heal: 2,
+      mark: 1
+    },
+    transfuseStrike: {
+      damage: 2,
+      heal: 2
+    },
+    wardingHerb: {
+      block: 2,
+      heal: 1
+    },
+    renewalChord: {
+      heal: 2,
+      draw: 1
+    },
+    bloodBloom: {
+      damage: 3
+    },
+    mercyNeedle: {
+      damage: 2,
+      heal: 1
+    },
+    lifelinkWeave: {
+      heal: 2,
+      nextBlock: 2
+    },
+    hospiceEdict: {
+      heal: 2,
+      weak: 1
+    },
+    rebirthSpiral: {
+      damage: 2,
+      heal: 2
+    },
+    thornedRemedy: {
+      heal: 2,
+      damage: 2
+    },
+    vitalPivot: {
+      heal: 2,
+      energy: 1,
+      mark: 1
+    },
+    soulSuture: {
+      heal: 3,
+      draw: 1,
+      retainBlock: 1
+    },
+    reversalPulse: {
+      damage: 3,
+      heal: 2
+    },
+    phoenixReprieve: {
+      heal: 4,
+      damage: 3
+    },
+    // 玄甲反击流派
+    ironBreath: {
+      block: 2,
+      cleanse: 1
+    },
+    mirrorWall: {
+      block: 2,
+      retainBlock: 1
+    },
+    reboundingShell: {
+      damage: 2,
+      block: 2
+    },
+    bastionStudy: {
+      draw: 1,
+      block: 2
+    },
+    wardingSweep: {
+      damage: 2,
+      block: 2
+    },
+    resolveAnchor: {
+      draw: 1,
+      nextBlock: 2
+    },
+    guardianMantra: {
+      block: 3,
+      retainBlock: 1
+    },
+    shieldTax: {
+      percent: 0.1,
+      draw: 1
+    },
+    bastionCrash: {
+      ratio: 0.25,
+      maxConsume: 4,
+      minDamage: 2,
+      draw: 1
+    },
+    counterEdict: {
+      damage: 3
+    },
+    citadelOath: {
+      block: 2,
+      thorns: 2,
+      retainBlock: 1
+    },
+    fortressEdict: {
+      ratio: 0.25,
+      minDamage: 4,
+      weak: 1
+    },
+    aegisJudgement: {
+      damage: 4,
+      block: 2
+    },
+    // 咒契裁断流派
+    oathscarCut: {
+      damage: 2
+    },
+    hexbrandSigil: {
+      draw: 1
+    },
+    blacktidePact: {
+      draw: 1
+    },
+    covenantWard: {
+      block: 2
+    },
+    doomwhisperNeedle: {
+      damage: 2,
+      weak: 1
+    },
+    scarredDivination: {
+      draw: 1
+    },
+    bloodpriceMandate: {
+      strength: 1
+    },
+    griefLedger: {
+      draw: 1
+    },
+    morbidAbsolution: {
+      damage: 3
+    },
+    chainedVigil: {
+      block: 3,
+      retainBlock: 1
+    },
+    omenOfRuin: {
+      damage: 2
+    },
+    pactRite: {
+      draw: 1,
+      count: 1
+    },
+    sacramentOfAsh: {
+      draw: 1,
+      strength: 1
+    },
+    soulCollateral: {
+      draw: 1
+    },
+    doomsentVerdict: {
+      damage: 4
+    },
+    // 灵傀锻阵流派
+    emberPuppetScript: {
+      draw: 1
+    },
+    spareSoulCore: {
+      count: 1
+    },
+    relayHarness: {
+      block: 2
+    },
+    forgeVolley: {
+      damage: 2
+    },
+    matrixKiln: {
+      costReduction: 1
+    },
+    socketedAegis: {
+      block: 2,
+      retainBlock: 1
+    },
+    spiritAnvil: {
+      strength: 1
+    },
+    arrayOverclock: {
+      damage: 2
+    },
+    guardianGimbal: {
+      block: 3
+    },
+    soulcaseLattice: {
+      draw: 1
+    },
+    effigyBarrage: {
+      damage: 2
+    },
+    foundryBulwark: {
+      block: 2,
+      draw: 1
+    },
+    grandForgeMandate: {
+      block: 2
+    },
+    ancestralMachina: {
+      damage: 2
+    },
+    throneOfCinders: {
+      strength: 1
+    },
+    // 镜渊流 / 誓罚流
     mirrorTrace: {
-        id: 'mirrorTrace',
-        name: '镜迹演算',
-        type: 'skill',
-        cost: 1,
-        icon: '🪞',
-        description: '获得 6 点护盾并抽 1 张牌。',
-        rarity: 'common',
-        keywords: ['mirror', 'echo', 'tempo'],
-        comboTag: 'echo',
-        synergyGroup: 'mirrorweave',
-        effects: [
-            { type: 'block', value: 6, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
+      block: 2,
+      draw: 1
     },
     delayPrism: {
-        id: 'delayPrism',
-        name: '滞光棱镜',
-        type: 'skill',
-        cost: 1,
-        icon: '🔷',
-        description: '下回合开始时获得 7 点护盾并抽 1 张牌。',
-        rarity: 'common',
-        keywords: ['mirror', 'delay', 'setup'],
-        comboTag: 'echo',
-        synergyGroup: 'mirrorweave',
-        effects: [
-            { type: 'buff', buffType: 'nextTurnBlock', value: 7, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
+      nextBlock: 2,
+      draw: 1
     },
     reverberantEdge: {
-        id: 'reverberantEdge',
-        name: '镜渊回锋',
-        type: 'attack',
-        cost: 1,
-        icon: '🗡️',
-        description: '造成 7 点伤害，并以 60% 强度回响上一张已打出的牌。',
-        rarity: 'common',
-        keywords: ['mirror', 'echo'],
-        comboTag: 'echo',
-        synergyGroup: 'mirrorweave',
-        effects: [
-            { type: 'damage', value: 7, target: 'enemy' },
-            { type: 'echoLastPlayedCard', value: 0.6, repeatCount: 1, target: 'self' }
-        ]
+      damage: 2,
+      echoScale: 0.15
     },
     mirroredRecital: {
-        id: 'mirroredRecital',
-        name: '双镜咏诵',
-        type: 'skill',
-        cost: 1,
-        icon: '🎼',
-        description: '抽 1 张牌，并以 65% 强度回响上一张已打出的牌。',
-        rarity: 'uncommon',
-        keywords: ['mirror', 'echo', 'tempo'],
-        comboTag: 'echo',
-        synergyGroup: 'mirrorweave',
-        effects: [
-            { type: 'draw', value: 1, target: 'self' },
-            { type: 'echoLastPlayedCard', value: 0.65, repeatCount: 1, target: 'self' }
-        ]
+      draw: 1,
+      echoScale: 0.1
     },
     echoVault: {
-        id: 'echoVault',
-        name: '回响封存',
-        type: 'defense',
-        cost: 1,
-        icon: '🏛️',
-        description: '获得 9 点护盾与 1 层护盾留存，并以 45% 强度回响上一张已打出的牌。',
-        rarity: 'uncommon',
-        keywords: ['mirror', 'echo', 'delay', 'guard'],
-        comboTag: 'echo',
-        synergyGroup: 'mirrorweave',
-        effects: [
-            { type: 'block', value: 9, target: 'self' },
-            { type: 'buff', buffType: 'retainBlock', value: 1, target: 'self' },
-            { type: 'echoLastPlayedCard', value: 0.45, repeatCount: 1, target: 'self' }
-        ]
+      block: 2,
+      retainBlock: 1,
+      echoScale: 0.1
     },
     abyssalReflection: {
-        id: 'abyssalReflection',
-        name: '渊镜复奏',
-        type: 'power',
-        cost: 2,
-        icon: '🌌',
-        description: '抽 1 张牌，并以 70% 强度回响上一张已打出的牌 2 次。',
-        rarity: 'rare',
-        keywords: ['mirror', 'echo', 'delay', 'burst'],
-        comboTag: 'echo',
-        synergyGroup: 'mirrorweave',
-        effects: [
-            { type: 'draw', value: 1, target: 'self' },
-            { type: 'echoLastPlayedCard', value: 0.7, repeatCount: 2, target: 'self' }
-        ]
+      draw: 1,
+      echoScale: 0.1,
+      repeatCount: 1
     },
     oathbrandCut: {
-        id: 'oathbrandCut',
-        name: '誓印裁击',
-        type: 'attack',
-        cost: 1,
-        icon: '⚔️',
-        description: '造成 8 点伤害并获得 1 层誓债。',
-        rarity: 'common',
-        keywords: ['oath', 'debt', 'penance'],
-        comboTag: 'oath',
-        synergyGroup: 'oathbound',
-        effects: [
-            { type: 'damage', value: 8, target: 'enemy' },
-            { type: 'buff', buffType: 'oathDebt', value: 1, target: 'self' }
-        ]
+      damage: 2,
+      oathDebt: 1
     },
     debtorVow: {
-        id: 'debtorVow',
-        name: '负誓',
-        type: 'skill',
-        cost: 0,
-        icon: '📜',
-        description: '自身受到 2 点伤害，抽 1 张牌并获得 1 层誓债。',
-        rarity: 'common',
-        keywords: ['oath', 'debt', 'selfharm'],
-        comboTag: 'oath',
-        synergyGroup: 'oathbound',
-        effects: [
-            { type: 'selfDamage', value: 2, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' },
-            { type: 'buff', buffType: 'oathDebt', value: 1, target: 'self' }
-        ]
+      selfDamage: -1,
+      draw: 1,
+      oathDebt: 1
     },
     penanceWall: {
-        id: 'penanceWall',
-        name: '偿罪壁',
-        type: 'defense',
-        cost: 1,
-        icon: '🛡️',
-        description: '获得 9 点护盾并获得 1 层誓债。',
-        rarity: 'common',
-        keywords: ['oath', 'debt', 'penance', 'guard'],
-        comboTag: 'oath',
-        synergyGroup: 'oathbound',
-        effects: [
-            { type: 'block', value: 9, target: 'self' },
-            { type: 'buff', buffType: 'oathDebt', value: 1, target: 'self' }
-        ]
+      block: 2,
+      oathDebt: 1
     },
     debtTribunal: {
-        id: 'debtTribunal',
-        name: '债契审决',
-        type: 'skill',
-        cost: 1,
-        icon: '⚖️',
-        description: '清算全部誓债，每层造成 4 点伤害并抽 1 张牌。',
-        rarity: 'uncommon',
-        keywords: ['oath', 'debt', 'penance'],
-        comboTag: 'oath',
-        synergyGroup: 'oathbound',
-        effects: [
-            { type: 'consumeOathDebt', value: 4, target: 'enemy' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
+      consumeOathDebt: 1,
+      draw: 1
     },
     bloodOathLedger: {
-        id: 'bloodOathLedger',
-        name: '血誓账簿',
-        type: 'power',
-        cost: 1,
-        icon: '🩸',
-        description: '获得 2 层誓债、1 点灵力并抽 1 张牌。',
-        rarity: 'uncommon',
-        keywords: ['oath', 'debt', 'tempo'],
-        comboTag: 'oath',
-        synergyGroup: 'oathbound',
-        effects: [
-            { type: 'buff', buffType: 'oathDebt', value: 2, target: 'self' },
-            { type: 'energy', value: 1, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
+      oathDebt: 1,
+      energy: 1
     },
     sentenceOfPenance: {
-        id: 'sentenceOfPenance',
-        name: '偿誓终判',
-        type: 'attack',
-        cost: 2,
-        icon: '⛓️',
-        description: '造成 8 点伤害，并清算全部誓债，每层额外造成 6 点伤害。',
-        rarity: 'rare',
-        keywords: ['oath', 'debt', 'penance', 'burst'],
-        comboTag: 'oath',
-        synergyGroup: 'oathbound',
-        effects: [
-            { type: 'damage', value: 8, target: 'enemy' },
-            { type: 'consumeOathDebt', value: 6, target: 'enemy' }
-        ]
-    },
-    matrixGuardProtocol: {
-        id: 'matrixGuardProtocol',
-        name: '命环矩阵·守式',
-        type: 'defense',
-        cost: 1,
-        icon: '🧩',
-        description: '获得 11 点护盾，净化 1 层减益，并为命环共振注入守势信号。',
-        rarity: 'uncommon',
-        keywords: ['guard', 'cleanse', 'matrix'],
-        comboTag: 'guard',
-        synergyGroup: 'bulwark',
-        effects: [
-            { type: 'block', value: 11, target: 'self' },
-            { type: 'cleanse', value: 1, target: 'self' },
-            { type: 'buff', buffType: 'matrixGuardSignal', value: 1, target: 'self' }
-        ]
-    },
-    matrixShatterVector: {
-        id: 'matrixShatterVector',
-        name: '命环矩阵·破式',
-        type: 'attack',
-        cost: 1,
-        icon: '🪓',
-        description: '移除目标所有护盾并造成 10 点伤害，并为命环共振注入破阵信号。',
-        rarity: 'uncommon',
-        keywords: ['penetrate', 'burst', 'matrix'],
-        comboTag: 'storm',
-        synergyGroup: 'stormcraft',
-        effects: [
-            { type: 'removeBlock', target: 'enemy' },
-            { type: 'damage', value: 10, target: 'enemy' },
-            { type: 'buff', buffType: 'matrixBreakSignal', value: 1, target: 'self' }
-        ]
-    },
-    matrixPurgeLoop: {
-        id: 'matrixPurgeLoop',
-        name: '命环矩阵·净式',
-        type: 'skill',
-        cost: 1,
-        icon: '🫧',
-        description: '净化 2 层减益并抽 1 张牌，并为命环共振注入净域信号。',
-        rarity: 'rare',
-        keywords: ['cleanse', 'tempo', 'matrix'],
-        comboTag: 'vital',
-        synergyGroup: 'vitalweave',
-        effects: [
-            { type: 'cleanse', value: 2, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' },
-            { type: 'buff', buffType: 'matrixCleanseSignal', value: 1, target: 'self' }
-        ]
-    },
-
-
-
-    // 初始牌组 (Duplicates removed)
-
-    quickDraw: {
-        id: 'quickDraw',
-        name: '快抽',
-        type: 'energy',
-        cost: 0,
-        consumeCandy: true,
-        icon: '⚡',
-        description: '消耗1奶糖。抽 2 张牌',
-        rarity: 'common',
-        effects: [
-            { type: 'draw', value: 2, target: 'self' }
-        ]
-    },
-
-
-    // ==================== 多角色专属卡牌 ====================
-
-    // --- 香叶 (Xiang Ye) ---
-    poisonTouch: {
-        id: 'poisonTouch',
-        name: '毒手',
-        type: 'skill',
-        character: 'xiangYe',
-        cost: 1,
-        icon: '☠️',
-        description: '使敌人中毒 2 层',
-        rarity: 'common',
-        effects: [
-            { type: 'debuff', buffType: 'poison', value: 2, target: 'enemy' },
-            { type: 'damage', value: 3, target: 'enemy' }
-        ]
-    },
-    minorHeal: {
-        id: 'minorHeal',
-        name: '小回春术',
-        type: 'skill',
-        character: 'xiangYe',
-        cost: 1,
-        icon: '🌿',
-        description: '回复 5 点生命',
-        rarity: 'common',
-        effects: [
-            { type: 'heal', value: 5, target: 'self' }
-        ]
-    },
-
-    // --- 无欲 (Wu Yu) ---
-    monkStrike: {
-        id: 'monkStrike',
-        name: '罗汉拳',
-        type: 'attack',
-        character: 'wuYu',
-        cost: 1,
-        icon: '👊',
-        description: '造成 6 点伤害，获得 4 点护盾',
-        rarity: 'common',
-        effects: [
-            { type: 'damage', value: 6, target: 'enemy' },
-            { type: 'block', value: 4, target: 'self' }
-        ]
-    },
-
-    // --- 严寒 (Yan Han) ---
-    analysis: {
-        id: 'analysis',
-        name: '弱点分析',
-        type: 'skill',
-        character: 'yanHan',
-        cost: 0,
-        consumeCandy: true,
-        icon: '🧐',
-        description: '消耗1奶糖。抽 1 张牌，使敌人获得 1 层易伤',
-        rarity: 'common',
-        effects: [
-            { type: 'draw', value: 1, target: 'self' },
-            { type: 'debuff', buffType: 'vulnerable', value: 1, target: 'enemy' }
-        ]
-    },
-
-    demonDoubt: {
-        id: 'demonDoubt',
-        name: '心魔·疑心',
-        type: 'status',
-        cost: -1, // Unplayable
-        icon: '❔',
-        description: '无法打出。保留。占据抽牌位 (在手中时下回合少抽一张)。回合结束：受到 2 点伤害。',
-        rarity: 'special',
-        unplayable: true,
-        retain: true,
-        occupiesDrawSlot: true,
-        effects: [
-            { type: 'selfDamage', value: 2, trigger: 'turnEnd' }
-        ]
-    },
-    demonFear: {
-        id: 'demonFear',
-        name: '心魔·恐惧',
-        type: 'status',
-        cost: -1,
-        icon: '😱',
-        description: '无法打出。保留。占据抽牌位 (在手中时下回合少抽一张)。回合结束：随机丢弃 1 张手牌。',
-        rarity: 'special',
-        unplayable: true,
-        retain: true,
-        occupiesDrawSlot: true,
-        effects: [
-            { type: 'discardRandom', value: 1, trigger: 'turnEnd' }
-        ]
-    },
-    demonDespair: {
-        id: 'demonDespair',
-        name: '心魔·绝望',
-        type: 'status',
-        cost: -1,
-        icon: '🌑',
-        description: '无法打出。保留。占据抽牌位 (在手中时下回合少抽一张)。回合结束：失去 1 点灵力。',
-        rarity: 'special',
-        unplayable: true,
-        retain: true,
-        occupiesDrawSlot: true,
-        effects: [
-            { type: 'energyLoss', value: 1, trigger: 'turnEnd' }
-        ]
-    },
-
-    cursedScar: {
-        id: 'cursedScar',
-        name: '契咒灼痕',
-        type: 'status',
-        cost: -1,
-        icon: '🩸',
-        description: '无法打出。保留。占据抽牌位。回合结束：受到 2 点伤害。',
-        rarity: 'special',
-        unplayable: true,
-        retain: true,
-        occupiesDrawSlot: true,
-        keywords: ['curse'],
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'selfDamage', value: 2, trigger: 'turnEnd' }
-        ]
-    },
-
-    covenantDebt: {
-        id: 'covenantDebt',
-        name: '契债回响',
-        type: 'status',
-        cost: -1,
-        icon: '📜',
-        description: '无法打出。保留。占据抽牌位。回合结束：随机弃 1 张其他手牌。',
-        rarity: 'special',
-        unplayable: true,
-        retain: true,
-        occupiesDrawSlot: true,
-        keywords: ['curse'],
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'discardRandom', value: 1, trigger: 'turnEnd' }
-        ]
-    },
-
-    emberServitor: {
-        id: 'emberServitor',
-        name: '炽傀侍灵',
-        type: 'attack',
-        cost: 0,
-        icon: '🪆',
-        description: '造成 4 点伤害并获得 2 点护盾。',
-        rarity: 'special',
-        keywords: ['forge', 'construct'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'damage', value: 4, target: 'enemy' },
-            { type: 'block', value: 2, target: 'self' }
-        ]
-    },
-
-    wardConstruct: {
-        id: 'wardConstruct',
-        name: '护炉灵构',
-        type: 'defense',
-        cost: 0,
-        icon: '🛡️',
-        description: '获得 6 点护盾。',
-        rarity: 'special',
-        keywords: ['forge', 'construct', 'guard'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'block', value: 6, target: 'self' }
-        ]
-    },
-
-    forgeArray: {
-        id: 'forgeArray',
-        name: '熔阵齐发',
-        type: 'attack',
-        cost: 1,
-        icon: '⚙️',
-        description: '对全体造成 6 点伤害。',
-        rarity: 'special',
-        keywords: ['forge', 'array', 'aoe'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'damageAll', value: 6, target: 'allEnemies' }
-        ]
-    },
-
-    oathscarCut: {
-        id: 'oathscarCut',
-        name: '契痕斩',
-        type: 'attack',
-        cost: 1,
-        icon: '🗡️',
-        description: '自身受到 2 点伤害，造成 9 点伤害。',
-        rarity: 'common',
-        keywords: ['curse', 'selfharm', 'oath', 'debt'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'selfDamage', value: 2, target: 'self' },
-            { type: 'damage', value: 9, target: 'enemy' }
-        ]
-    },
-
-    hexbrandSigil: {
-        id: 'hexbrandSigil',
-        name: '烙契印',
-        type: 'skill',
-        cost: 1,
-        icon: '🪬',
-        description: '抽 2 张牌，并向弃牌堆置入 1 张契咒灼痕。',
-        rarity: 'common',
-        keywords: ['curse', 'tempo'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'draw', value: 2, target: 'self' },
-            { type: 'addStatus', cardId: 'cursedScar', count: 1, zone: 'discard' }
-        ]
-    },
-
-    blacktidePact: {
-        id: 'blacktidePact',
-        name: '黑潮契约',
-        type: 'skill',
-        cost: 0,
-        icon: '🌑',
-        description: '自身受到 3 点伤害，获得 1 点灵力并抽 1 张牌。',
-        rarity: 'common',
-        keywords: ['curse', 'selfharm', 'tempo', 'oath', 'debt'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'selfDamage', value: 3, target: 'self' },
-            { type: 'energy', value: 1, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    covenantWard: {
-        id: 'covenantWard',
-        name: '契护',
-        type: 'defense',
-        cost: 1,
-        icon: '🕯️',
-        description: '获得 8 点护盾，并向弃牌堆置入 1 张契债回响。',
-        rarity: 'common',
-        keywords: ['curse', 'guard', 'oath', 'penance'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'block', value: 8, target: 'self' },
-            { type: 'addStatus', cardId: 'covenantDebt', count: 1, zone: 'discard' }
-        ]
-    },
-
-    doomwhisperNeedle: {
-        id: 'doomwhisperNeedle',
-        name: '祸语针',
-        type: 'attack',
-        cost: 1,
-        icon: '🪡',
-        description: '造成 6 点伤害，施加 1 层虚弱，并向弃牌堆置入 1 张契咒灼痕。',
-        rarity: 'common',
-        keywords: ['curse', 'control'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'damage', value: 6, target: 'enemy' },
-            { type: 'debuff', buffType: 'weak', value: 1, target: 'enemy' },
-            { type: 'addStatus', cardId: 'cursedScar', count: 1, zone: 'discard' }
-        ]
-    },
-
-    scarredDivination: {
-        id: 'scarredDivination',
-        name: '伤契占卜',
-        type: 'skill',
-        cost: 1,
-        icon: '🔮',
-        description: '抽 1 张牌；若生命低于 60%，再抽 2 张牌并获得 1 点灵力。随后向弃牌堆置入 1 张契咒灼痕。',
-        rarity: 'common',
-        keywords: ['curse', 'tempo', 'selfharm'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'draw', value: 1, target: 'self' },
-            { type: 'conditionalDraw', condition: 'lowHp', threshold: 0.6, drawValue: 2, energyValue: 1, target: 'self' },
-            { type: 'addStatus', cardId: 'cursedScar', count: 1, zone: 'discard' }
-        ]
-    },
-
-    bloodpriceMandate: {
-        id: 'bloodpriceMandate',
-        name: '血价敕令',
-        type: 'power',
-        cost: 1,
-        icon: '📕',
-        description: '自身受到 4 点伤害，获得 2 点力量。',
-        rarity: 'uncommon',
-        keywords: ['curse', 'selfharm', 'burst', 'oath', 'debt'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'selfDamage', value: 4, target: 'self' },
-            { type: 'buff', buffType: 'strength', value: 2, target: 'self' }
-        ]
-    },
-
-    griefLedger: {
-        id: 'griefLedger',
-        name: '悲契账簿',
-        type: 'skill',
-        cost: 1,
-        icon: '📚',
-        description: '抽 2 张牌，获得 1 点灵力，并向手牌置入 1 张契债回响。',
-        rarity: 'uncommon',
-        keywords: ['curse', 'tempo', 'oath', 'debt'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'draw', value: 2, target: 'self' },
-            { type: 'energy', value: 1, target: 'self' },
-            { type: 'addStatus', cardId: 'covenantDebt', count: 1, zone: 'hand' }
-        ]
-    },
-
-    morbidAbsolution: {
-        id: 'morbidAbsolution',
-        name: '厄赦',
-        type: 'attack',
-        cost: 2,
-        icon: '⚖️',
-        description: '造成 8 点伤害；若生命低于 60%，额外造成 8 点伤害。',
-        rarity: 'uncommon',
-        keywords: ['curse', 'burst'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'damage', value: 8, target: 'enemy' },
-            { type: 'conditionalDamage', value: 8, condition: 'lowHp', threshold: 0.6, target: 'enemy' }
-        ]
-    },
-
-    chainedVigil: {
-        id: 'chainedVigil',
-        name: '缚夜戒备',
-        type: 'defense',
-        cost: 1,
-        icon: '⛓️',
-        description: '获得 10 点护盾，并获得 1 层护盾留存。',
-        rarity: 'uncommon',
-        keywords: ['curse', 'guard', 'retain', 'oath', 'penance'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'block', value: 10, target: 'self' },
-            { type: 'buff', buffType: 'retainBlock', value: 1, target: 'self' }
-        ]
-    },
-
-    omenOfRuin: {
-        id: 'omenOfRuin',
-        name: '殃兆',
-        type: 'attack',
-        cost: 2,
-        icon: '🌘',
-        description: '自身受到 2 点伤害，对全体造成 6 点伤害。',
-        rarity: 'uncommon',
-        keywords: ['curse', 'aoe', 'selfharm'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'selfDamage', value: 2, target: 'self' },
-            { type: 'damageAll', value: 6, target: 'allEnemies' }
-        ]
-    },
-
-    pactRite: {
-        id: 'pactRite',
-        name: '契礼',
-        type: 'skill',
-        cost: 1,
-        icon: '🕯️',
-        description: '抽 1 张牌，并向弃牌堆置入 2 张契咒灼痕。',
-        rarity: 'uncommon',
-        keywords: ['curse', 'setup'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'draw', value: 1, target: 'self' },
-            { type: 'addStatus', cardId: 'cursedScar', count: 2, zone: 'discard' }
-        ]
-    },
-
-    sacramentOfAsh: {
-        id: 'sacramentOfAsh',
-        name: '灰烬圣约',
-        type: 'power',
-        cost: 2,
-        icon: '🔥',
-        description: '自身受到 4 点伤害，抽 1 张牌并获得 2 点力量。',
-        rarity: 'rare',
-        keywords: ['curse', 'selfharm', 'burst'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'selfDamage', value: 4, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' },
-            { type: 'buff', buffType: 'strength', value: 2, target: 'self' }
-        ]
-    },
-
-    soulCollateral: {
-        id: 'soulCollateral',
-        name: '魂押',
-        type: 'skill',
-        cost: 2,
-        icon: '🕳️',
-        description: '抽 3 张牌，并向弃牌堆置入 2 张契债回响。',
-        rarity: 'rare',
-        keywords: ['curse', 'tempo'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'draw', value: 3, target: 'self' },
-            { type: 'addStatus', cardId: 'covenantDebt', count: 2, zone: 'discard' }
-        ]
-    },
-
-    doomsentVerdict: {
-        id: 'doomsentVerdict',
-        name: '终契裁决',
-        type: 'attack',
-        cost: 3,
-        icon: '☠️',
-        description: '造成 14 点伤害；若生命低于 50%，额外造成 10 点伤害。随后向弃牌堆置入 1 张契咒灼痕。',
-        rarity: 'rare',
-        keywords: ['curse', 'burst', 'execute'],
-        comboTag: 'curse',
-        synergyGroup: 'cursebound',
-        effects: [
-            { type: 'damage', value: 14, target: 'enemy' },
-            { type: 'conditionalDamage', value: 10, condition: 'lowHp', threshold: 0.5, target: 'enemy' },
-            { type: 'addStatus', cardId: 'cursedScar', count: 1, zone: 'discard' }
-        ]
-    },
-
-    emberPuppetScript: {
-        id: 'emberPuppetScript',
-        name: '炽傀谱',
-        type: 'skill',
-        cost: 1,
-        icon: '📘',
-        description: '向手牌生成 1 张炽傀侍灵，并抽 1 张牌。',
-        rarity: 'common',
-        keywords: ['forge', 'construct', 'tempo'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'createCard', cardId: 'emberServitor', count: 1, zone: 'hand', temporary: true },
-            { type: 'draw', value: 1, target: 'self' }
-        ]
-    },
-
-    spareSoulCore: {
-        id: 'spareSoulCore',
-        name: '备用魂芯',
-        type: 'skill',
-        cost: 0,
-        icon: '💠',
-        description: '向手牌生成 1 张护炉灵构。',
-        rarity: 'common',
-        keywords: ['forge', 'construct'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'createCard', cardId: 'wardConstruct', count: 1, zone: 'hand', temporary: true }
-        ]
-    },
-
-    relayHarness: {
-        id: 'relayHarness',
-        name: '中继束具',
-        type: 'defense',
-        cost: 1,
-        icon: '🪢',
-        description: '获得 7 点护盾，并向弃牌堆生成 1 张炽傀侍灵。',
-        rarity: 'common',
-        keywords: ['forge', 'construct', 'guard'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'block', value: 7, target: 'self' },
-            { type: 'createCard', cardId: 'emberServitor', count: 1, zone: 'discard', temporary: true }
-        ]
-    },
-
-    forgeVolley: {
-        id: 'forgeVolley',
-        name: '熔炉齐射',
-        type: 'attack',
-        cost: 1,
-        icon: '🔥',
-        description: '造成 6 点伤害，并向弃牌堆生成 1 张护炉灵构。',
-        rarity: 'common',
-        keywords: ['forge', 'construct'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'damage', value: 6, target: 'enemy' },
-            { type: 'createCard', cardId: 'wardConstruct', count: 1, zone: 'discard', temporary: true }
-        ]
-    },
-
-    matrixKiln: {
-        id: 'matrixKiln',
-        name: '矩阵炉心',
-        type: 'skill',
-        cost: 1,
-        icon: '⚗️',
-        description: '向手牌生成 1 张炽傀侍灵，并向弃牌堆生成 1 张护炉灵构。',
-        rarity: 'common',
-        keywords: ['forge', 'construct', 'setup'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'createCard', cardId: 'emberServitor', count: 1, zone: 'hand', temporary: true },
-            { type: 'createCard', cardId: 'wardConstruct', count: 1, zone: 'discard', temporary: true }
-        ]
-    },
-
-    socketedAegis: {
-        id: 'socketedAegis',
-        name: '嵌魂壁',
-        type: 'defense',
-        cost: 1,
-        icon: '🧱',
-        description: '获得 6 点护盾，并获得 1 层护盾留存。',
-        rarity: 'common',
-        keywords: ['forge', 'guard', 'retain'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'block', value: 6, target: 'self' },
-            { type: 'buff', buffType: 'retainBlock', value: 1, target: 'self' }
-        ]
-    },
-
-    spiritAnvil: {
-        id: 'spiritAnvil',
-        name: '灵锻砧',
-        type: 'power',
-        cost: 1,
-        icon: '🔨',
-        description: '向手牌生成 1 张炽傀侍灵，并获得 1 点力量。',
-        rarity: 'uncommon',
-        keywords: ['forge', 'construct', 'burst'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'createCard', cardId: 'emberServitor', count: 1, zone: 'hand', temporary: true },
-            { type: 'buff', buffType: 'strength', value: 1, target: 'self' }
-        ]
-    },
-
-    arrayOverclock: {
-        id: 'arrayOverclock',
-        name: '阵列过载',
-        type: 'attack',
-        cost: 1,
-        icon: '⚡',
-        description: '造成 7 点伤害，并向弃牌堆生成 1 张熔阵齐发。',
-        rarity: 'uncommon',
-        keywords: ['forge', 'array', 'burst'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'damage', value: 7, target: 'enemy' },
-            { type: 'createCard', cardId: 'forgeArray', count: 1, zone: 'discard', temporary: true }
-        ]
-    },
-
-    guardianGimbal: {
-        id: 'guardianGimbal',
-        name: '守机云台',
-        type: 'defense',
-        cost: 1,
-        icon: '🛰️',
-        description: '获得 10 点护盾，并向手牌生成 1 张护炉灵构。',
-        rarity: 'uncommon',
-        keywords: ['forge', 'construct', 'guard'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'block', value: 10, target: 'self' },
-            { type: 'createCard', cardId: 'wardConstruct', count: 1, zone: 'hand', temporary: true }
-        ]
-    },
-
-    soulcaseLattice: {
-        id: 'soulcaseLattice',
-        name: '魂匣格架',
-        type: 'skill',
-        cost: 1,
-        icon: '🧰',
-        description: '抽 2 张牌，并向手牌生成 1 张炽傀侍灵。',
-        rarity: 'uncommon',
-        keywords: ['forge', 'construct', 'tempo'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'draw', value: 2, target: 'self' },
-            { type: 'createCard', cardId: 'emberServitor', count: 1, zone: 'hand', temporary: true }
-        ]
-    },
-
-    effigyBarrage: {
-        id: 'effigyBarrage',
-        name: '傀焰攒射',
-        type: 'attack',
-        cost: 2,
-        icon: '🎇',
-        description: '对全体造成 4 点伤害，并向手牌生成 1 张炽傀侍灵。',
-        rarity: 'uncommon',
-        keywords: ['forge', 'construct', 'aoe'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'damageAll', value: 4, target: 'allEnemies' },
-            { type: 'createCard', cardId: 'emberServitor', count: 1, zone: 'hand', temporary: true }
-        ]
-    },
-
-    foundryBulwark: {
-        id: 'foundryBulwark',
-        name: '炉心壁垒',
-        type: 'defense',
-        cost: 1,
-        icon: '🏗️',
-        description: '获得 8 点护盾，抽 1 张牌，并向弃牌堆生成 1 张护炉灵构。',
-        rarity: 'uncommon',
-        keywords: ['forge', 'guard', 'tempo'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'block', value: 8, target: 'self' },
-            { type: 'draw', value: 1, target: 'self' },
-            { type: 'createCard', cardId: 'wardConstruct', count: 1, zone: 'discard', temporary: true }
-        ]
-    },
-
-    grandForgeMandate: {
-        id: 'grandForgeMandate',
-        name: '大锻命令',
-        type: 'power',
-        cost: 2,
-        icon: '👑',
-        description: '获得 6 点护盾，并向手牌各生成 1 张炽傀侍灵与护炉灵构。',
-        rarity: 'rare',
-        keywords: ['forge', 'construct', 'guard'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'block', value: 6, target: 'self' },
-            { type: 'createCard', cardId: 'emberServitor', count: 1, zone: 'hand', temporary: true },
-            { type: 'createCard', cardId: 'wardConstruct', count: 1, zone: 'hand', temporary: true }
-        ]
-    },
-
-    ancestralMachina: {
-        id: 'ancestralMachina',
-        name: '祖机开炉',
-        type: 'attack',
-        cost: 2,
-        icon: '🏭',
-        description: '对全体造成 7 点伤害，并向手牌生成 1 张熔阵齐发。',
-        rarity: 'rare',
-        keywords: ['forge', 'array', 'aoe'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'damageAll', value: 7, target: 'allEnemies' },
-            { type: 'createCard', cardId: 'forgeArray', count: 1, zone: 'hand', temporary: true }
-        ]
-    },
-
-    throneOfCinders: {
-        id: 'throneOfCinders',
-        name: '余烬王座',
-        type: 'power',
-        cost: 3,
-        icon: '🔥',
-        description: '获得 1 点力量，并向手牌生成 2 张炽傀侍灵。',
-        rarity: 'rare',
-        keywords: ['forge', 'construct', 'burst'],
-        comboTag: 'forge',
-        synergyGroup: 'soulforge',
-        effects: [
-            { type: 'buff', buffType: 'strength', value: 1, target: 'self' },
-            { type: 'createCard', cardId: 'emberServitor', count: 2, zone: 'hand', temporary: true }
-        ]
+      damage: 3,
+      consumeOathDebt: 1
     }
+  }
 };
-
-const STARTER_DECK = [
-    'strike', 'strike', 'strike', 'strike', 'strike',
-    'defend', 'defend', 'defend', 'defend',
-    'spiritBoost'
-];
-
-// 卡牌池 - 按稀有度分类（2.0扩展版）
-const CARD_POOL = {
-    common: [
-        'heavyStrike', 'quickSlash', 'doubleStrike', 'ironWill', 'shieldBash',
-        'spiritBoost', 'meditation', 'armorBreaker', 'goldenBell', 'turtleShell',
-        'concentration', 'doubleEdge', 'quickDraw',
-        'bloodlettingSlash', 'punctureMark', 'hunterSeal', 'stanceFlow', 'guardedRiposte',
-        'serratedRitual', 'coagulatedGuard', 'weakpointSurvey', 'duetFeint', 'poisedCounter',
-        'recklessMulligan', 'echoingCut', 'voidLedger', 'entropyGuard',
-        'mirrorTrace', 'delayPrism', 'reverberantEdge',
-        'lightningProbe', 'chainArc', 'stormDraft', 'ionReserve', 'surgeStep',
-        'forkedNeedle', 'pressureSpark',
-        'mendThread', 'pulseBandage', 'transfuseStrike', 'wardingHerb', 'renewalChord',
-        'bloodBloom', 'mercyNeedle',
-        'ironBreath', 'mirrorWall', 'reboundingShell', 'bastionStudy', 'wardingSweep',
-        'oathscarCut', 'hexbrandSigil', 'blacktidePact', 'covenantWard', 'doomwhisperNeedle', 'scarredDivination',
-        'oathbrandCut', 'debtorVow', 'penanceWall',
-        'emberPuppetScript', 'spareSoulCore', 'relayHarness', 'forgeVolley', 'matrixKiln', 'socketedAegis',
-        'poisonTouch', 'minorHeal', 'monkStrike', 'analysis',
-        // 角色专属
-        'defianceStrike', 'bloodSeal', 'unchain', 'karmaStrike', 'probe', 'starNeedle', 'artifactBolt'
-    ],
-    uncommon: [
-        'ragingBlow', 'counterStance', 'innerPeace', 'battleCry', 'luckyStrike',
-        'sweepingStrike', 'tripleSlash', 'bloodSlash', 'offenseDefense', 'ironSkin',
-        'windfall', 'powerUp',
-        'tacticalExpose', 'crimsonCascade', 'stanceAggressive', 'stanceDefensive',
-        'bloodDebt', 'arteryRupture', 'razorFocus', 'stancePivot', 'focusBreak',
-        'debtCollection', 'recirculation', 'calculatedRuin',
-        'mirroredRecital', 'echoVault',
-        'thunderLattice', 'exposedCircuit', 'flashRelay', 'stormWard', 'cascadeVolt',
-        'lifelinkWeave', 'hospiceEdict', 'rebirthSpiral', 'thornedRemedy', 'vitalPivot',
-        'resolveAnchor', 'guardianMantra', 'shieldTax', 'bastionCrash', 'counterEdict',
-        'bloodpriceMandate', 'griefLedger', 'morbidAbsolution', 'chainedVigil', 'omenOfRuin', 'pactRite',
-        'debtTribunal', 'bloodOathLedger',
-        'spiritAnvil', 'arrayOverclock', 'guardianGimbal', 'soulcaseLattice', 'effigyBarrage', 'foundryBulwark',
-        'matrixGuardProtocol', 'matrixShatterVector',
-        // 新增角色卡牌
-        'defiantWill', 'healingTouch', 'vajraGlare', 'ringAnalysis',
-        // 角色专属
-        'fusionBlast', 'vitalityBloom', 'asceticism', 'analyzeWeakness', 'omenBarrier', 'echoWard'
-    ],
-    rare: [
-        'thunderLaw', 'swordIntent', 'flameTruth', 'spaceRift', 'fortuneWheel',
-        'miracleHeal', 'earthShatter', 'swordBreaker', 'finishingBlow', 'halfDamage',
-        'thunderStorm', 'voidWalk', 'iceFreeze', 'desperateSurvival', 'enlightenment',
-        'allIn', 'sunderingNeedle', 'hemorrhageRain', 'executionDoctrine',
-        'scarletJudgement', 'bloodTideOath', 'verdictNeedle', 'oblivionSpiral', 'finalConvergence',
-        'abyssalReflection', 'sentenceOfPenance',
-        'skybreakerArray', 'resonanceTempest', 'executionThunder',
-        'soulSuture', 'reversalPulse', 'phoenixReprieve',
-        'citadelOath', 'fortressEdict', 'aegisJudgement',
-        'sacramentOfAsh', 'soulCollateral', 'doomsentVerdict',
-        'grandForgeMandate', 'ancestralMachina', 'throneOfCinders',
-        'matrixPurgeLoop',
-        // 新增角色卡牌
-        'ringResonance', 'breakthrough', 'bloodBlessing', 'lifeSurge', 'zenMeditation', 'lawInsight',
-        // 角色专属
-        'lawbreaker', 'tacticalAdvantage', 'ringCatalyst', 'ringInfusion'
-    ],
-    epic: ['inferno', 'timeRewind', 'salvation', 'timeStasis'],
-    legendary: ['timeStop', 'voidEmbrace', 'karmaKill', 'reversal', 'chaosControl']
-};
-
-// 构筑流派模板：用于内容投放和奖励偏置
-const ARCHETYPE_PACKS = {
-    hemorrhage: {
-        id: 'hemorrhage',
-        name: '血蚀连斩',
-        description: '以流血层数和斩杀节奏滚雪球，容忍以血换伤的打法。',
-        cards: [
-            'bloodlettingSlash', 'crimsonCascade', 'sunderingNeedle', 'hemorrhageRain',
-            'serratedRitual', 'coagulatedGuard', 'bloodDebt', 'arteryRupture',
-            'scarletJudgement', 'bloodTideOath', 'bloodSlash', 'bloodBlessing',
-            'finishingBlow', 'ragingBlow', 'earthShatter'
-        ]
-    },
-    precision: {
-        id: 'precision',
-        name: '破绽心眼',
-        description: '围绕破绽叠层与架势切换形成稳定爆发窗口。',
-        cards: [
-            'punctureMark', 'tacticalExpose', 'hunterSeal', 'executionDoctrine',
-            'weakpointSurvey', 'duetFeint', 'poisedCounter', 'razorFocus',
-            'focusBreak', 'verdictNeedle', 'guardedRiposte', 'stanceAggressive',
-            'stanceDefensive', 'stanceFlow', 'stancePivot'
-        ]
-    },
-    entropy: {
-        id: 'entropy',
-        name: '虚账收束',
-        description: '通过弃牌换节奏，将牌差与伤害转化为爆发终局。',
-        cards: [
-            'recklessMulligan', 'echoingCut', 'voidLedger', 'entropyGuard',
-            'debtCollection', 'recirculation', 'calculatedRuin', 'oblivionSpiral',
-            'finalConvergence', 'quickDraw', 'concentration', 'windfall',
-            'analysis', 'desperateSurvival', 'fortuneWheel'
-        ]
-    },
-    stormcraft: {
-        id: 'stormcraft',
-        name: '雷策连锁',
-        description: '围绕易伤窗口、多段打击与破绽连锁组织雷策爆发。',
-        cards: [
-            'lightningProbe', 'chainArc', 'stormDraft', 'ionReserve', 'surgeStep',
-            'forkedNeedle', 'pressureSpark', 'thunderLattice', 'exposedCircuit', 'flashRelay',
-            'stormWard', 'cascadeVolt', 'skybreakerArray', 'resonanceTempest', 'executionThunder',
-            'punctureMark', 'tacticalExpose', 'duetFeint', 'verdictNeedle', 'matrixShatterVector'
-        ]
-    },
-    vitalweave: {
-        id: 'vitalweave',
-        name: '回生织脉',
-        description: '将治疗、护盾与反击节奏串联，形成续航转爆发的回生循环。',
-        cards: [
-            'mendThread', 'pulseBandage', 'transfuseStrike', 'wardingHerb', 'renewalChord',
-            'bloodBloom', 'mercyNeedle', 'lifelinkWeave', 'hospiceEdict', 'rebirthSpiral',
-            'thornedRemedy', 'vitalPivot', 'soulSuture', 'reversalPulse', 'phoenixReprieve',
-            'minorHeal', 'healingTouch', 'guardedRiposte', 'coagulatedGuard', 'matrixPurgeLoop'
-        ]
-    },
-    bulwark: {
-        id: 'bulwark',
-        name: '玄甲反击',
-        description: '围绕护盾滚动、护盾留存与稳定反击构建持久压制。',
-        cards: [
-            'ironBreath', 'mirrorWall', 'reboundingShell', 'bastionStudy',
-            'wardingSweep', 'resolveAnchor', 'guardianMantra', 'shieldTax',
-            'bastionCrash', 'counterEdict', 'citadelOath', 'fortressEdict', 'aegisJudgement', 'defend',
-            'ironWill', 'turtleShell', 'counterStance', 'artifactBolt', 'echoWard', 'matrixGuardProtocol'
-        ]
-    },
-    mirrorweave: {
-        id: 'mirrorweave',
-        name: '镜渊流',
-        description: '以回响与延迟资源滚动节奏，通过镜映上一张牌打出连携回合。',
-        cards: [
-            'mirrorTrace', 'delayPrism', 'reverberantEdge', 'mirroredRecital', 'echoVault',
-            'abyssalReflection', 'echoingCut', 'mirrorWall', 'echoWard', 'voidLedger',
-            'reboundingShell', 'bastionStudy', 'fortuneWheel', 'resonanceTempest', 'matrixPurgeLoop'
-        ]
-    },
-    cursebound: {
-        id: 'cursebound',
-        name: '咒契裁断',
-        description: '以自损与咒牌铺垫节奏，在压血区间完成延迟清算与爆发收束。',
-        cards: [
-            'oathscarCut', 'hexbrandSigil', 'blacktidePact', 'covenantWard', 'doomwhisperNeedle',
-            'scarredDivination', 'bloodpriceMandate', 'griefLedger', 'morbidAbsolution', 'chainedVigil',
-            'omenOfRuin', 'pactRite', 'sacramentOfAsh', 'soulCollateral', 'doomsentVerdict'
-        ]
-    },
-    oathbound: {
-        id: 'oathbound',
-        name: '誓罚流',
-        description: '通过累积誓债换取短线效率，再在关键回合集中清算形成终局爆发。',
-        cards: [
-            'oathbrandCut', 'debtorVow', 'penanceWall', 'debtTribunal', 'bloodOathLedger',
-            'sentenceOfPenance', 'oathscarCut', 'blacktidePact', 'covenantWard', 'griefLedger',
-            'bloodpriceMandate', 'chainedVigil', 'morbidAbsolution', 'soulCollateral', 'doomsentVerdict'
-        ]
-    },
-    soulforge: {
-        id: 'soulforge',
-        name: '灵傀锻阵',
-        description: '通过生成构件与阵件维持手牌密度，在站场积累后转为持续火力与护阵压制。',
-        cards: [
-            'emberPuppetScript', 'spareSoulCore', 'relayHarness', 'forgeVolley', 'matrixKiln',
-            'socketedAegis', 'spiritAnvil', 'arrayOverclock', 'guardianGimbal', 'soulcaseLattice',
-            'effigyBarrage', 'foundryBulwark', 'grandForgeMandate', 'ancestralMachina', 'throneOfCinders'
-        ]
-    }
-};
-
-function getArchetypePack(archetypeId) {
-    if (!archetypeId || !ARCHETYPE_PACKS[archetypeId]) return null;
-    return JSON.parse(JSON.stringify(ARCHETYPE_PACKS[archetypeId]));
-}
-
-function inferDeckArchetype(deck = []) {
-    if (!Array.isArray(deck) || deck.length === 0) return null;
-
-    const scores = {
-        hemorrhage: 0,
-        precision: 0,
-        entropy: 0,
-        stormcraft: 0,
-        vitalweave: 0,
-        bulwark: 0,
-        cursebound: 0,
-        soulforge: 0,
-        mirrorweave: 0,
-        oathbound: 0
-    };
-    const hemorrhageSet = new Set(ARCHETYPE_PACKS.hemorrhage.cards);
-    const precisionSet = new Set(ARCHETYPE_PACKS.precision.cards);
-    const entropySet = new Set(ARCHETYPE_PACKS.entropy.cards);
-    const stormcraftSet = new Set(ARCHETYPE_PACKS.stormcraft.cards);
-    const vitalweaveSet = new Set(ARCHETYPE_PACKS.vitalweave.cards);
-    const bulwarkSet = new Set(ARCHETYPE_PACKS.bulwark.cards);
-    const curseboundSet = new Set(ARCHETYPE_PACKS.cursebound.cards);
-    const soulforgeSet = new Set(ARCHETYPE_PACKS.soulforge.cards);
-    const mirrorweaveSet = new Set(ARCHETYPE_PACKS.mirrorweave.cards);
-    const oathboundSet = new Set(ARCHETYPE_PACKS.oathbound.cards);
-
-    deck.forEach(card => {
-        if (!card) return;
-        const cardId = card.id;
-        const synergy = card.synergyGroup;
-        const keywords = Array.isArray(card.keywords) ? card.keywords : [];
-
-        if (
-            synergy === 'hemorrhage' ||
-            keywords.includes('bleed') ||
-            (cardId && hemorrhageSet.has(cardId))
-        ) {
-            scores.hemorrhage += 1;
-        }
-
-        if (
-            synergy === 'precision' ||
-            synergy === 'stance' ||
-            keywords.includes('mark') ||
-            keywords.includes('stance') ||
-            (cardId && precisionSet.has(cardId))
-        ) {
-            scores.precision += 1;
-        }
-
-        if (
-            synergy === 'entropy' ||
-            keywords.includes('discard') ||
-            keywords.includes('mulligan') ||
-            (cardId && entropySet.has(cardId))
-        ) {
-            scores.entropy += 1;
-        }
-
-        if (
-            synergy === 'stormcraft' ||
-            keywords.includes('storm') ||
-            keywords.includes('vulnerable') ||
-            keywords.includes('chain') ||
-            (cardId && stormcraftSet.has(cardId))
-        ) {
-            scores.stormcraft += 1;
-        }
-
-        if (
-            synergy === 'vitalweave' ||
-            keywords.includes('vital') ||
-            keywords.includes('heal') ||
-            keywords.includes('sustain') ||
-            (cardId && vitalweaveSet.has(cardId))
-        ) {
-            scores.vitalweave += 1;
-        }
-
-        if (
-            synergy === 'bulwark' ||
-            keywords.includes('guard') ||
-            keywords.includes('retain') ||
-            (cardId && bulwarkSet.has(cardId))
-        ) {
-            scores.bulwark += 1;
-        }
-
-        if (
-            synergy === 'cursebound' ||
-            keywords.includes('curse') ||
-            keywords.includes('selfharm') ||
-            keywords.includes('contract') ||
-            (cardId && curseboundSet.has(cardId))
-        ) {
-            scores.cursebound += 1;
-        }
-
-        if (
-            synergy === 'soulforge' ||
-            keywords.includes('forge') ||
-            keywords.includes('construct') ||
-            keywords.includes('array') ||
-            (cardId && soulforgeSet.has(cardId))
-        ) {
-            scores.soulforge += 1;
-        }
-        if (
-            synergy === 'mirrorweave' ||
-            keywords.includes('mirror') ||
-            keywords.includes('echo') ||
-            keywords.includes('delay') ||
-            (cardId && mirrorweaveSet.has(cardId))
-        ) {
-            scores.mirrorweave += 1;
-        }
-        if (
-            synergy === 'oathbound' ||
-            keywords.includes('oath') ||
-            keywords.includes('debt') ||
-            keywords.includes('penance') ||
-            (cardId && oathboundSet.has(cardId))
-        ) {
-            scores.oathbound += 1;
-        }
-    });
-
-    let preferred = null;
-    let bestScore = 0;
-    Object.keys(scores).forEach(key => {
-        if (scores[key] > bestScore) {
-            bestScore = scores[key];
-            preferred = key;
-        }
-    });
-    return bestScore >= 5 ? preferred : null;
-}
-
-function getRandomArchetypeCard(archetypeId, rarity = null, characterId = null) {
-    const pack = ARCHETYPE_PACKS[archetypeId];
-    if (!pack || !Array.isArray(pack.cards)) return null;
-
-    let candidates = pack.cards.filter(cardId => !!CARDS[cardId]);
-
-    if (rarity) {
-        candidates = candidates.filter(cardId => CARDS[cardId].rarity === rarity);
-    }
-
-    candidates = filterPoolByCharacter(candidates, characterId);
-    if (candidates.length === 0) return null;
-
-    const cardId = candidates[Math.floor(Math.random() * candidates.length)];
-    return cloneCardTemplate(cardId);
-}
-
-function filterPoolByCharacter(pool, characterId) {
-    return pool.filter(id => {
-        const card = CARDS[id];
-        if (!card) return false;
-        if (!card.character) return true;
-        return card.character === characterId;
-    });
-}
-
-function rollRandomRarity() {
-    const roll = Math.random();
-    if (roll < 0.55) return 'common';
-    if (roll < 0.80) return 'uncommon';
-    if (roll < 0.95) return 'rare';
-    return 'legendary';
-}
-
-function cloneCardTemplate(cardId) {
-    const source = CARDS[cardId];
-    if (!source) return null;
-    try {
-        // 深拷贝模板，避免运行时修改污染静态配置
-        return JSON.parse(JSON.stringify(source));
-    } catch (e) {
-        console.warn('cloneCardTemplate fallback to shallow copy:', cardId, e);
-        return { ...source };
-    }
-}
-
-// 获取随机卡牌
-function getRandomCard(rarity = null, characterId = null) {
-    const selectedRarity = rarity || rollRandomRarity();
-
-    if (CARD_POOL[selectedRarity]) {
-        let pool = filterPoolByCharacter(CARD_POOL[selectedRarity], characterId);
-
-        if (pool.length === 0) {
-            // Fallback if filtering removes all
-            pool = CARD_POOL[selectedRarity];
-        }
-
-        const cardId = pool[Math.floor(Math.random() * pool.length)];
-        // 中文注释：必须深拷贝，避免运行时改费用/标记时污染原始卡牌模板
-        return JSON.parse(JSON.stringify(CARDS[cardId]));
-    }
-
-    // Fallback
-    return JSON.parse(JSON.stringify(CARDS['strike']));
-}
-
-// 获取奖励卡牌选择
-function getRewardCards(count = 3, characterId = null, deck = []) {
-    const cards = [];
-    const seen = new Set();
-    const preferredArchetype = inferDeckArchetype(deck);
-
-    for (let i = 0; i < count; i++) {
-        let picked = null;
-        for (let attempt = 0; attempt < 8; attempt++) {
-            const favorArchetype = preferredArchetype && Math.random() < 0.55;
-            const candidate = favorArchetype
-                ? getRandomArchetypeCard(preferredArchetype, null, characterId)
-                : getRandomCard(null, characterId);
-            if (!candidate) continue;
-            if (seen.has(candidate.id) && attempt < 7) continue;
-            picked = candidate;
-            break;
-        }
-
-        if (!picked) picked = getRandomCard(null, characterId);
-        if (picked) {
-            cards.push(picked);
-            seen.add(picked.id);
-        }
-    }
-
-    return cards;
-}
-
-// ==================== 卡牌升级系统 ====================
-
-// 升级规则配置
-const UPGRADE_RULES = {
-    // 默认规则：伤害+3，护盾+3，费用-1（最低0）
-    default: {
-        damage: 3,
-        block: 3,
-        heal: 3,
-        costReduction: 0  // 部分卡牌减费
-    },
-    // 特殊卡牌的升级规则
-    special: {
-        strike: { damage: 3 },          // 6 -> 9
-        defend: { block: 3 },           // 5 -> 8
-        heavyStrike: { damage: 4 },     // 12 -> 16
-        quickSlash: { damage: 2 },      // 4 -> 6
-        doubleStrike: { damage: 2 },    // 4x2 -> 6x2
-        ragingBlow: { damage: 5 },      // 20 -> 25
-        ironWill: { block: 4 },         // 12 -> 16
-        meditation: { draw: 1 },        // 抽2 -> 抽3
-        spiritBoost: { energy: 1 },     // +2灵力 -> +3灵力
-        innerPeace: { block: 2, heal: 2 },
-        thunderLaw: { damage: 4 },
-        swordIntent: { damage: 4 },
-        flameTruth: { damage: 3, burn: 1 },
-        timeStop: { costReduction: 1 }, // 3费 -> 2费
-        voidEmbrace: { multiplier: 0.2 },  // 30% -> 50%
-
-        // 新增/补全的升级规则
-        shieldBash: { damage: 2, block: 2 }, // 4/4 -> 6/6
-        counterStance: { block: 3, thorns: 3 }, // 3/5 -> 6/8
-        battleCry: { damage: 3, strength: 1 }, // 5/2 -> 8/3
-        spaceRift: { dodge: -1, dodgeChance: 0.25 }, // 50% -> 75%
-        luckyStrike: { minDamage: 3, maxDamage: 5 }, // 5-15 -> 8-20
-        fortuneWheel: { minCards: 1, maxCards: 1 }, // 1-3 -> 2-4
-        miracleHeal: { heal: 5 }, // 15 -> 20
-
-        sweepingStrike: { damage: 5 }, // 8 -> 13
-        armorBreaker: { damage: 5 }, // 5 -> 10
-        tripleSlash: { damage: 2 }, // 3x3 -> 5x3
-        earthShatter: { damage: 15 }, // 25 -> 40
-        swordBreaker: { damage: 10 }, // 15 -> 25
-        bloodSlash: { damage: 6 }, // 8 -> 14
-        finishingBlow: { damage: 4 }, // 10 -> 14
-
-        goldenBell: { block: 5 }, // 15 -> 20
-        offenseDefense: { multiplier: 1 }, // x3 -> x4
-        halfDamage: { damageReduction: 25 }, // 50% -> 75%
-        turtleShell: { block: 2, draw: 1 }, // 3/1 -> 5/2
-        ironSkin: { block: 3, nextBlock: 3 }, // 6/4 -> 9/7
-
-        thunderStorm: { damage: 4, paralysis: 1 }, // 10/2 -> 14/3
-        inferno: { damage: 2 }, // 8x3 -> 10x3
-        voidWalk: { dodge: 1 }, // 2 -> 3
-        timeRewind: { costReduction: 1 }, // 4费 -> 3费
-        karmaKill: { percent: 0.15 }, // 30% -> 45%
-        iceFreeze: { damage: 3, weak: 1 }, // 7/3 -> 10/4
-
-        desperateSurvival: { draw: 1, energy: 1 }, // 3/3 -> 4/4
-        windfall: { minGold: 10, maxGold: 25 }, // 25-100 -> 35-125
-        enlightenment: { exp: 25 }, // 50 -> 75
-        reversal: { costReduction: 1 }, // 3费 -> 2费
-
-        concentration: { bonus: 3 }, // +5 -> +8
-        doubleEdge: { damage: 5 }, // 10 -> 15
-        powerUp: { strength: 1 }, // 2 -> 3
-        quickDraw: { draw: 1 }, // 1 -> 2
-        allIn: { damagePerEnergy: 2 }, // 6 -> 8
-        chaosControl: { damage: 3, stun: 1 }, // 5/1 -> 8/2 (眩晕回合还是1，伤害加点)
-
-        poisonTouch: { damage: 2, poison: 2 }, // 3/2 -> 5/4
-        minorHeal: { heal: 3 }, // 5 -> 8
-        monkStrike: { damage: 3, block: 2 }, // 6/4 -> 9/6
-        analysis: { draw: 1 }, // 1 -> 2
-
-        // ==================== 新增角色卡牌升级规则 ====================
-        // 林风
-        defiantWill: { damage: 2, bonusDamage: 2 }, // 8/8 -> 10/10
-        ringResonance: { baseDamage: 2, damagePerLaw: 1 }, // 4+4/法则 -> 6+5/法则
-        breakthrough: { damage: 5, exp: 20 }, // 25/30 -> 30/50
-
-        // 香叶
-        healingTouch: { heal: 4, cleanse: 1 }, // 8/1 -> 12/2
-        bloodBlessing: { heal: 5, weak: 1 }, // 15/2 -> 20/3
-        lifeSurge: { percent: 0.25 }, // 50% -> 75%
-
-        // 无欲
-        vajraGlare: { damage: 3, thorns: 2 }, // 5/3 -> 8/5
-        zenMeditation: { block: 5 }, // 15 -> 20
-        salvation: { damage: 3 }, // 12 -> 15
-
-        // 严寒
-        ringAnalysis: { vulnerable: 1, exp: 10 }, // 2/15 -> 3/25
-        lawInsight: { draw: 1, stealBonus: 0.05 }, // 2/10% -> 3/15%
-        timeStasis: { damageReduction: 25 },  // 50% -> 75%
-        // 墨尘
-        starNeedle: { damage: 2, mark: 1 }, // 7+2mark -> 9+3mark
-        omenBarrier: { block: 3, draw: 1 }, // 9/1 -> 12/2
-        ringCatalyst: { exp: 15, strength: 1 }, // 20exp+1力量 -> 35exp+2力量
-        // 宁玄
-        artifactBolt: { damage: 2, block: 2 }, // 6/3 -> 8/5
-        echoWard: { block: 3, draw: 1 }, // 10/1 -> 13/2
-        ringInfusion: { exp: 14, energy: 1 }, // 16exp+1灵力 -> 30exp+2灵力
-
-        // 新增卡牌升级
-        soulHarvest: { damage: 5, maxHp: 1 }, // 12/2 -> 17/3
-        fateTwist: { costReduction: 1 }, // 1 -> 0
-        divineShield: { multiplier: 3 }, // 5 -> 8
-        stormFury: { damage: 2 }, // 4 -> 6
-
-        // 修正：虚空拥抱升级不加百分比，改为减费
-        // 修正：虚空拥抱升级 +10% (10% -> 20%)
-        voidEmbrace: { multiplier: 0.10 },
-        karmaKill: { percent: 0.1 }, // 15% -> 25%
-
-        // 修复：融合爆发升级
-        fusionBlast: { draw: 1 },
-
-        // 战斗深度扩展卡
-        bloodlettingSlash: { damage: 2, bleed: 1 },
-        punctureMark: { damage: 2, mark: 2 },
-        tacticalExpose: { mark: 2, draw: 1 },
-        crimsonCascade: { damage: 3, bleed: 1 },
-        hunterSeal: { mark: 2 },
-        guardedRiposte: { block: 2, mark: 1 },
-        sunderingNeedle: { damage: 3, bleed: 1 },
-        hemorrhageRain: { damage: 2, bleed: 1 },
-        executionDoctrine: { damage: 3 },
-        serratedRitual: { damage: 2, bleed: 1 },
-        coagulatedGuard: { block: 2, bleed: 1 },
-        bloodDebt: { energy: 1, draw: 1 },
-        arteryRupture: { damage: 3, bleed: 1 },
-        scarletJudgement: { damage: 3, bleed: 1 },
-        bloodTideOath: { damage: 2, draw: 1 },
-        weakpointSurvey: { mark: 1, draw: 1 },
-        duetFeint: { damage: 2, mark: 1 },
-        poisedCounter: { block: 2, mark: 1 },
-        razorFocus: { mark: 2, energy: 1 },
-        stancePivot: { mark: 1, draw: 1 },
-        focusBreak: { damage: 2 },
-        verdictNeedle: { damage: 3, mark: 1 },
-
-        // 虚账收束流派
-        recklessMulligan: { draw: 1 },
-        echoingCut: { damage: 2 },
-        voidLedger: { draw: 1 },
-        entropyGuard: { block: 2, energy: 1 },
-        debtCollection: { draw: 1 },
-        recirculation: { costReduction: 1 },
-        calculatedRuin: { damage: 1 },
-        oblivionSpiral: { draw: 1, damage: 2 },
-        finalConvergence: { damagePerEnergy: 2 },
-
-        // 雷策连锁流派
-        lightningProbe: { damage: 2, vulnerable: 1 },
-        chainArc: { damage: 2, mark: 1 },
-        stormDraft: { draw: 1, vulnerable: 1 },
-        ionReserve: { energy: 1, mark: 1 },
-        surgeStep: { block: 2, draw: 1 },
-        forkedNeedle: { damage: 1 },
-        pressureSpark: { damage: 2 },
-        thunderLattice: { mark: 2, draw: 1 },
-        exposedCircuit: { damage: 2 },
-        flashRelay: { draw: 1, vulnerable: 1 },
-        stormWard: { block: 2, weak: 1 },
-        cascadeVolt: { damage: 2, draw: 1 },
-        skybreakerArray: { damage: 3, mark: 1 },
-        resonanceTempest: { damage: 1, strength: 1 },
-        executionThunder: { damage: 4 },
-
-        // 回生织脉流派
-        mendThread: { heal: 2, block: 2 },
-        pulseBandage: { heal: 2, mark: 1 },
-        transfuseStrike: { damage: 2, heal: 2 },
-        wardingHerb: { block: 2, heal: 1 },
-        renewalChord: { heal: 2, draw: 1 },
-        bloodBloom: { damage: 3 },
-        mercyNeedle: { damage: 2, heal: 1 },
-        lifelinkWeave: { heal: 2, nextBlock: 2 },
-        hospiceEdict: { heal: 2, weak: 1 },
-        rebirthSpiral: { damage: 2, heal: 2 },
-        thornedRemedy: { heal: 2, damage: 2 },
-        vitalPivot: { heal: 2, energy: 1, mark: 1 },
-        soulSuture: { heal: 3, draw: 1, retainBlock: 1 },
-        reversalPulse: { damage: 3, heal: 2 },
-        phoenixReprieve: { heal: 4, damage: 3 },
-
-        // 玄甲反击流派
-        ironBreath: { block: 2, cleanse: 1 },
-        mirrorWall: { block: 2, retainBlock: 1 },
-        reboundingShell: { damage: 2, block: 2 },
-        bastionStudy: { draw: 1, block: 2 },
-        wardingSweep: { damage: 2, block: 2 },
-        resolveAnchor: { draw: 1, nextBlock: 2 },
-        guardianMantra: { block: 3, retainBlock: 1 },
-        shieldTax: { percent: 0.1, draw: 1 },
-        bastionCrash: { ratio: 0.25, maxConsume: 4, minDamage: 2, draw: 1 },
-        counterEdict: { damage: 3 },
-        citadelOath: { block: 2, thorns: 2, retainBlock: 1 },
-        fortressEdict: { ratio: 0.25, minDamage: 4, weak: 1 },
-        aegisJudgement: { damage: 4, block: 2 },
-
-        // 咒契裁断流派
-        oathscarCut: { damage: 2 },
-        hexbrandSigil: { draw: 1 },
-        blacktidePact: { draw: 1 },
-        covenantWard: { block: 2 },
-        doomwhisperNeedle: { damage: 2, weak: 1 },
-        scarredDivination: { draw: 1 },
-        bloodpriceMandate: { strength: 1 },
-        griefLedger: { draw: 1 },
-        morbidAbsolution: { damage: 3 },
-        chainedVigil: { block: 3, retainBlock: 1 },
-        omenOfRuin: { damage: 2 },
-        pactRite: { draw: 1, count: 1 },
-        sacramentOfAsh: { draw: 1, strength: 1 },
-        soulCollateral: { draw: 1 },
-        doomsentVerdict: { damage: 4 },
-
-        // 灵傀锻阵流派
-        emberPuppetScript: { draw: 1 },
-        spareSoulCore: { count: 1 },
-        relayHarness: { block: 2 },
-        forgeVolley: { damage: 2 },
-        matrixKiln: { costReduction: 1 },
-        socketedAegis: { block: 2, retainBlock: 1 },
-        spiritAnvil: { strength: 1 },
-        arrayOverclock: { damage: 2 },
-        guardianGimbal: { block: 3 },
-        soulcaseLattice: { draw: 1 },
-        effigyBarrage: { damage: 2 },
-        foundryBulwark: { block: 2, draw: 1 },
-        grandForgeMandate: { block: 2 },
-        ancestralMachina: { damage: 2 },
-        throneOfCinders: { strength: 1 }
-        ,
-        // 镜渊流 / 誓罚流
-        mirrorTrace: { block: 2, draw: 1 },
-        delayPrism: { nextBlock: 2, draw: 1 },
-        reverberantEdge: { damage: 2, echoScale: 0.15 },
-        mirroredRecital: { draw: 1, echoScale: 0.1 },
-        echoVault: { block: 2, retainBlock: 1, echoScale: 0.1 },
-        abyssalReflection: { draw: 1, echoScale: 0.1, repeatCount: 1 },
-        oathbrandCut: { damage: 2, oathDebt: 1 },
-        debtorVow: { selfDamage: -1, draw: 1, oathDebt: 1 },
-        penanceWall: { block: 2, oathDebt: 1 },
-        debtTribunal: { consumeOathDebt: 1, draw: 1 },
-        bloodOathLedger: { oathDebt: 1, energy: 1 },
-        sentenceOfPenance: { damage: 3, consumeOathDebt: 1 }
-    }
-};
-
 /**
  * 升级卡牌
  * @param {Object} card - 要升级的卡牌
  * @returns {Object} - 升级后的卡牌副本
  */
-function upgradeCard(card) {
-    if (!card || card.upgraded) return card;
+export function upgradeCard(card) {
+  if (!card || card.upgraded) return card;
 
-    // 创建卡牌副本
-    const upgradedCard = JSON.parse(JSON.stringify(card));
-    upgradedCard.upgraded = true;
-    upgradedCard.name = card.name + '+';
+  // 创建卡牌副本
+  const upgradedCard = JSON.parse(JSON.stringify(card));
+  upgradedCard.upgraded = true;
+  upgradedCard.name = card.name + '+';
 
-    // 获取升级规则
-    const specialRule = UPGRADE_RULES.special[card.id];
-    const defaultRule = UPGRADE_RULES.default;
+  // 获取升级规则
+  const specialRule = UPGRADE_RULES.special[card.id];
+  const defaultRule = UPGRADE_RULES.default;
 
-    // 升级效果
-    for (let i = 0; i < upgradedCard.effects.length; i++) {
-        const effect = upgradedCard.effects[i];
+  // 升级效果
+  for (let i = 0; i < upgradedCard.effects.length; i++) {
+    const effect = upgradedCard.effects[i];
+    if (specialRule) {
+      // 应用特殊规则
+      if (effect.type === 'damage' && specialRule.damage) {
+        effect.value += specialRule.damage;
+      }
+      if (effect.type === 'block' && specialRule.block) {
+        effect.value += specialRule.block;
+      }
+      if (effect.type === 'heal' && specialRule.heal) {
+        effect.value += specialRule.heal;
+      }
+      if (effect.type === 'selfDamage' && specialRule.selfDamage) {
+        effect.value = Math.max(0, effect.value + specialRule.selfDamage);
+      }
+      if (effect.type === 'draw' && specialRule.draw) {
+        effect.value += specialRule.draw;
+      }
+      if (effect.type === 'cleanse' && specialRule.cleanse) {
+        effect.value += specialRule.cleanse;
+      }
+      if (effect.type === 'drawCalculated' && specialRule.draw) {
+        effect.base = (effect.base || 0) + specialRule.draw;
+      }
+      if (effect.type === 'energy' && specialRule.energy) {
+        effect.value += specialRule.energy;
+      }
+      if (effect.type === 'debuff' && effect.buffType === 'burn' && specialRule.burn) {
+        effect.value += specialRule.burn;
+      }
+      if (effect.type === 'debuff' && effect.buffType === 'poison' && specialRule.poison) {
+        effect.value += specialRule.poison;
+      }
+      if (effect.type === 'debuff' && effect.buffType === 'vulnerable' && specialRule.vulnerable) {
+        effect.value += specialRule.vulnerable;
+      }
+      if (effect.type === 'debuff' && effect.buffType === 'weak' && specialRule.weak) {
+        effect.value += specialRule.weak;
+      }
+      if (effect.type === 'debuff' && effect.buffType === 'paralysis' && specialRule.paralysis) {
+        effect.value += specialRule.paralysis;
+      }
+      if (effect.type === 'applyBleed' && specialRule.bleed) {
+        effect.value += specialRule.bleed;
+      }
+      if (effect.type === 'applyMark' && specialRule.mark) {
+        effect.value += specialRule.mark;
+      }
+      if (effect.type === 'buff' && effect.buffType === 'thorns' && specialRule.thorns) {
+        effect.value += specialRule.thorns;
+      }
+      if (effect.type === 'buff' && effect.buffType === 'strength' && specialRule.strength) {
+        effect.value += specialRule.strength;
+      }
+      if (effect.type === 'buff' && effect.buffType === 'dodge' && specialRule.dodge) {
+        effect.value += specialRule.dodge;
+      }
+      if (effect.type === 'buff' && effect.buffType === 'dodgeChance' && specialRule.dodgeChance) {
+        effect.value += specialRule.dodgeChance;
+      }
+      if (effect.type === 'buff' && effect.buffType === 'nextAttackBonus' && specialRule.bonus) {
+        effect.value += specialRule.bonus;
+      }
+      if (effect.type === 'buff' && effect.buffType === 'nextTurnBlock' && specialRule.nextBlock) {
+        effect.value += specialRule.nextBlock;
+      }
+      if (effect.type === 'buff' && effect.buffType === 'retainBlock' && specialRule.retainBlock) {
+        effect.value += specialRule.retainBlock;
+      }
+      if (effect.type === 'buff' && effect.buffType === 'oathDebt' && specialRule.oathDebt) {
+        effect.value += specialRule.oathDebt;
+      }
+      if (effect.type === 'buff' && effect.buffType === 'damageReduction' && specialRule.damageReduction) {
+        effect.value += specialRule.damageReduction;
+      }
+      if (effect.type === 'randomDamage') {
+        if (specialRule.minDamage) effect.minValue += specialRule.minDamage;
+        if (specialRule.maxDamage) effect.maxValue += specialRule.maxDamage;
+      }
+      if (effect.type === 'randomCards') {
+        if (specialRule.minCards) effect.minValue += specialRule.minCards;
+        if (specialRule.maxCards) effect.maxValue += specialRule.maxCards;
+      }
+      if (effect.type === 'damageAll' && specialRule.damage) {
+        effect.value += specialRule.damage;
+      }
+      if (effect.type === 'penetrate' && specialRule.damage) {
+        effect.value += specialRule.damage;
+      }
+      if (effect.type === 'executeDamage' && specialRule.damage) {
+        effect.value += specialRule.damage;
+      }
+      if (effect.type === 'blockFromStrength' && specialRule.multiplier) {
+        effect.multiplier += specialRule.multiplier;
+      }
+      if (effect.type === 'percentDamage' && specialRule.percent) {
+        effect.value += specialRule.percent;
+      }
+      if (effect.type === 'conditionalDraw') {
+        if (specialRule.draw) effect.drawValue += specialRule.draw;
+        if (specialRule.energy) effect.energyValue += specialRule.energy;
+      }
+      if (effect.type === 'bonusGold') {
+        if (specialRule.minGold) effect.min += specialRule.minGold;
+        if (specialRule.maxGold) effect.max += specialRule.maxGold;
+      }
+      if (effect.type === 'ringExp' && specialRule.exp) {
+        effect.value += specialRule.exp;
+      }
+      if (effect.type === 'consumeAllEnergy' && specialRule.damagePerEnergy) {
+        effect.damagePerEnergy += specialRule.damagePerEnergy;
+      }
+      if ((effect.type === 'createCard' || effect.type === 'addStatus') && specialRule.count) {
+        effect.count = Math.max(1, Number(effect.count) || 1) + specialRule.count;
+      }
+      if (effect.type === 'execute' && specialRule.multiplier) {
+        effect.value = (effect.value || 1) + specialRule.multiplier;
+      }
+      if (effect.type === 'echoLastPlayedCard') {
+        if (specialRule.echoScale) effect.value = (Number(effect.value) || 0) + specialRule.echoScale;
+        if (specialRule.repeatCount) effect.repeatCount = Math.max(1, Number(effect.repeatCount) || 1) + specialRule.repeatCount;
+      }
+      if (effect.type === 'consumeOathDebt' && specialRule.consumeOathDebt) {
+        effect.value += specialRule.consumeOathDebt;
+      }
 
-        if (specialRule) {
-            // 应用特殊规则
-            if (effect.type === 'damage' && specialRule.damage) {
-                effect.value += specialRule.damage;
-            }
-            if (effect.type === 'block' && specialRule.block) {
-                effect.value += specialRule.block;
-            }
-            if (effect.type === 'heal' && specialRule.heal) {
-                effect.value += specialRule.heal;
-            }
-            if (effect.type === 'selfDamage' && specialRule.selfDamage) {
-                effect.value = Math.max(0, effect.value + specialRule.selfDamage);
-            }
-            if (effect.type === 'draw' && specialRule.draw) {
-                effect.value += specialRule.draw;
-            }
-            if (effect.type === 'cleanse' && specialRule.cleanse) {
-                effect.value += specialRule.cleanse;
-            }
-            if (effect.type === 'drawCalculated' && specialRule.draw) {
-                effect.base = (effect.base || 0) + specialRule.draw;
-            }
-            if (effect.type === 'energy' && specialRule.energy) {
-                effect.value += specialRule.energy;
-            }
-            if (effect.type === 'debuff' && effect.buffType === 'burn' && specialRule.burn) {
-                effect.value += specialRule.burn;
-            }
-            if (effect.type === 'debuff' && effect.buffType === 'poison' && specialRule.poison) {
-                effect.value += specialRule.poison;
-            }
-            if (effect.type === 'debuff' && effect.buffType === 'vulnerable' && specialRule.vulnerable) {
-                effect.value += specialRule.vulnerable;
-            }
-            if (effect.type === 'debuff' && effect.buffType === 'weak' && specialRule.weak) {
-                effect.value += specialRule.weak;
-            }
-            if (effect.type === 'debuff' && effect.buffType === 'paralysis' && specialRule.paralysis) {
-                effect.value += specialRule.paralysis;
-            }
-            if (effect.type === 'applyBleed' && specialRule.bleed) {
-                effect.value += specialRule.bleed;
-            }
-            if (effect.type === 'applyMark' && specialRule.mark) {
-                effect.value += specialRule.mark;
-            }
-            if (effect.type === 'buff' && effect.buffType === 'thorns' && specialRule.thorns) {
-                effect.value += specialRule.thorns;
-            }
-
-            if (effect.type === 'buff' && effect.buffType === 'strength' && specialRule.strength) {
-                effect.value += specialRule.strength;
-            }
-            if (effect.type === 'buff' && effect.buffType === 'dodge' && specialRule.dodge) {
-                effect.value += specialRule.dodge;
-            }
-            if (effect.type === 'buff' && effect.buffType === 'dodgeChance' && specialRule.dodgeChance) {
-                effect.value += specialRule.dodgeChance;
-            }
-            if (effect.type === 'buff' && effect.buffType === 'nextAttackBonus' && specialRule.bonus) {
-                effect.value += specialRule.bonus;
-            }
-            if (effect.type === 'buff' && effect.buffType === 'nextTurnBlock' && specialRule.nextBlock) {
-                effect.value += specialRule.nextBlock;
-            }
-            if (effect.type === 'buff' && effect.buffType === 'retainBlock' && specialRule.retainBlock) {
-                effect.value += specialRule.retainBlock;
-            }
-            if (effect.type === 'buff' && effect.buffType === 'oathDebt' && specialRule.oathDebt) {
-                effect.value += specialRule.oathDebt;
-            }
-            if (effect.type === 'buff' && effect.buffType === 'damageReduction' && specialRule.damageReduction) {
-                effect.value += specialRule.damageReduction;
-            }
-            if (effect.type === 'randomDamage') {
-                if (specialRule.minDamage) effect.minValue += specialRule.minDamage;
-                if (specialRule.maxDamage) effect.maxValue += specialRule.maxDamage;
-            }
-            if (effect.type === 'randomCards') {
-                if (specialRule.minCards) effect.minValue += specialRule.minCards;
-                if (specialRule.maxCards) effect.maxValue += specialRule.maxCards;
-            }
-            if (effect.type === 'damageAll' && specialRule.damage) {
-                effect.value += specialRule.damage;
-            }
-            if (effect.type === 'penetrate' && specialRule.damage) {
-                effect.value += specialRule.damage;
-            }
-            if (effect.type === 'executeDamage' && specialRule.damage) {
-                effect.value += specialRule.damage;
-            }
-            if (effect.type === 'blockFromStrength' && specialRule.multiplier) {
-                effect.multiplier += specialRule.multiplier;
-            }
-            if (effect.type === 'percentDamage' && specialRule.percent) {
-                effect.value += specialRule.percent;
-            }
-            if (effect.type === 'conditionalDraw') {
-                if (specialRule.draw) effect.drawValue += specialRule.draw;
-                if (specialRule.energy) effect.energyValue += specialRule.energy;
-            }
-            if (effect.type === 'bonusGold') {
-                if (specialRule.minGold) effect.min += specialRule.minGold;
-                if (specialRule.maxGold) effect.max += specialRule.maxGold;
-            }
-            if (effect.type === 'ringExp' && specialRule.exp) {
-                effect.value += specialRule.exp;
-            }
-            if (effect.type === 'consumeAllEnergy' && specialRule.damagePerEnergy) {
-                effect.damagePerEnergy += specialRule.damagePerEnergy;
-            }
-            if ((effect.type === 'createCard' || effect.type === 'addStatus') && specialRule.count) {
-                effect.count = Math.max(1, Number(effect.count) || 1) + specialRule.count;
-            }
-
-            if (effect.type === 'execute' && specialRule.multiplier) {
-                effect.value = (effect.value || 1) + specialRule.multiplier;
-            }
-            if (effect.type === 'echoLastPlayedCard') {
-                if (specialRule.echoScale) effect.value = (Number(effect.value) || 0) + specialRule.echoScale;
-                if (specialRule.repeatCount) effect.repeatCount = Math.max(1, Number(effect.repeatCount) || 1) + specialRule.repeatCount;
-            }
-            if (effect.type === 'consumeOathDebt' && specialRule.consumeOathDebt) {
-                effect.value += specialRule.consumeOathDebt;
-            }
-
-            // Fix for missing upgrade handlers
-            if (effect.type === 'damagePerLaw') {
-                if (specialRule.baseDamage) effect.baseDamage += specialRule.baseDamage;
-                if (specialRule.damagePerLaw) effect.damagePerLaw += specialRule.damagePerLaw;
-            }
-            if (effect.type === 'conditionalDamage' && specialRule.bonusDamage) {
-                effect.bonusDamage += specialRule.bonusDamage;
-            }
-            if (effect.type === 'conditionalDamage' && specialRule.damage) {
-                effect.value += specialRule.damage;
-            }
-            if (effect.type === 'blockFromLostHp' && specialRule.percent) {
-                effect.percent += specialRule.percent;
-            }
-            if (effect.type === 'blockBurst') {
-                if (specialRule.ratio) effect.ratio += specialRule.ratio;
-                if (specialRule.maxConsume) effect.maxConsume = (effect.maxConsume || 0) + specialRule.maxConsume;
-                if (specialRule.minDamage) effect.minDamage = (effect.minDamage || 0) + specialRule.minDamage;
-            }
-            if (effect.type === 'buff' && effect.buffType === 'stealBonus' && specialRule.stealBonus) {
-                effect.value += specialRule.stealBonus;
-            }
-        } else {
-            // 应用默认规则
-            if (effect.type === 'damage') {
-                effect.value += defaultRule.damage;
-            }
-            if (effect.type === 'block') {
-                effect.value += defaultRule.block;
-            }
-            if (effect.type === 'heal') {
-                effect.value += defaultRule.heal;
-            }
-        }
+      // Fix for missing upgrade handlers
+      if (effect.type === 'damagePerLaw') {
+        if (specialRule.baseDamage) effect.baseDamage += specialRule.baseDamage;
+        if (specialRule.damagePerLaw) effect.damagePerLaw += specialRule.damagePerLaw;
+      }
+      if (effect.type === 'conditionalDamage' && specialRule.bonusDamage) {
+        effect.bonusDamage += specialRule.bonusDamage;
+      }
+      if (effect.type === 'conditionalDamage' && specialRule.damage) {
+        effect.value += specialRule.damage;
+      }
+      if (effect.type === 'blockFromLostHp' && specialRule.percent) {
+        effect.percent += specialRule.percent;
+      }
+      if (effect.type === 'blockBurst') {
+        if (specialRule.ratio) effect.ratio += specialRule.ratio;
+        if (specialRule.maxConsume) effect.maxConsume = (effect.maxConsume || 0) + specialRule.maxConsume;
+        if (specialRule.minDamage) effect.minDamage = (effect.minDamage || 0) + specialRule.minDamage;
+      }
+      if (effect.type === 'buff' && effect.buffType === 'stealBonus' && specialRule.stealBonus) {
+        effect.value += specialRule.stealBonus;
+      }
+    } else {
+      // 应用默认规则
+      if (effect.type === 'damage') {
+        effect.value += defaultRule.damage;
+      }
+      if (effect.type === 'block') {
+        effect.value += defaultRule.block;
+      }
+      if (effect.type === 'heal') {
+        effect.value += defaultRule.heal;
+      }
     }
+  }
 
-    // 费用减少（如果有特殊规则）
-    if (specialRule && specialRule.costReduction) {
-        upgradedCard.cost = Math.max(0, upgradedCard.cost - specialRule.costReduction);
-    }
+  // 费用减少（如果有特殊规则）
+  if (specialRule && specialRule.costReduction) {
+    upgradedCard.cost = Math.max(0, upgradedCard.cost - specialRule.costReduction);
+  }
 
-    // 更新描述
-    upgradedCard.description = generateUpgradedDescription(upgradedCard);
-
-    return upgradedCard;
+  // 更新描述
+  upgradedCard.description = generateUpgradedDescription(upgradedCard);
+  return upgradedCard;
 }
-
 /**
  * 生成升级后的描述
  */
-function generateUpgradedDescription(card) {
-    if (card.descriptionTemplate) {
-        return card.descriptionTemplate.replace(/{e(\d+)}/g, (match, index) => {
-            const i = parseInt(index);
-            return card.effects[i] ? card.effects[i].value : '?';
-        });
-    }
-
-    let desc = '';
-    for (const effect of card.effects) {
-        switch (effect.type) {
-            case 'damage':
-                desc += `造成 ${effect.value} 点伤害。`;
-                break;
-            case 'block':
-                desc += `获得 ${effect.value} 点护盾。`;
-                break;
-            case 'heal':
-                desc += `回复 ${effect.value} 点生命。`;
-                break;
-            case 'draw':
-                desc += `抽 ${effect.value} 张牌。`;
-                break;
-            case 'energy':
-                desc += `获得 ${effect.value} 点灵力。`;
-                break;
-            case 'penetrate':
-                desc += `造成 ${effect.value} 点穿透伤害。`;
-                break;
-            case 'damageAll':
-                desc += `对所有敌人造成 ${effect.value} 点伤害。`;
-                break;
-            case 'randomDamage':
-                desc += `随机造成 ${effect.minValue}-${effect.maxValue} 点伤害。`;
-                break;
-            case 'randomCards':
-                desc += `随机获得 ${effect.minValue}-${effect.maxValue} 张临时卡牌。`;
-                break;
-            case 'execute':
-                desc += `造成敌人已损失生命${Math.floor(effect.value * 100)}%的伤害。`;
-                break;
-            case 'percentDamage':
-                desc += `造成敌人最大生命${Math.floor(effect.value * 100)}%的伤害。`;
-                break;
-            case 'selfDamage':
-                desc += `自身受到 ${effect.value} 点伤害。`;
-                break;
-            case 'lifeSteal':
-                desc += `回复造成伤害的${Math.floor(effect.value * 100)}%生命。`;
-                break;
-            case 'removeBlock':
-                desc += `移除敌人所有护盾。`;
-                break;
-            case 'reshuffleDiscard':
-                desc += `将轮回洗回识海。`;
-                break;
-            case 'swapHpPercent':
-                desc += `与敌人交换当前生命值百分比。`;
-                break;
-            case 'blockFromStrength':
-                desc += `获得等于你力量值x${effect.multiplier}的护盾（最少${effect.minimum}）。`;
-                break;
-            case 'blockBurst': {
-                const ratio = Number(effect.ratio) || 1;
-                const maxConsume = Number(effect.maxConsume) || 0;
-                const minDamage = Number(effect.minDamage) || 0;
-                const ratioText = Number.isInteger(ratio) ? `${ratio}` : ratio.toFixed(2).replace(/\.?0+$/, '');
-                if (maxConsume > 0) {
-                    desc += `消耗至多 ${maxConsume} 点护盾，每点护盾造成 ${ratioText} 点伤害`;
-                } else {
-                    desc += `消耗全部护盾，每点护盾造成 ${ratioText} 点伤害`;
-                }
-                if (minDamage > 0) {
-                    desc += `（至少 ${minDamage} 点）`;
-                }
-                desc += `。`;
-                break;
-            }
-            case 'executeDamage':
-                desc += `造成 ${effect.value} 点伤害，对生命低于${Math.floor((effect.threshold || 0.3) * 100)}%的敌人造成双倍。`;
-                break;
-            case 'consumeAllEnergy':
-                desc += `消耗所有灵力，每点灵力造成 ${effect.damagePerEnergy} 点伤害。`;
-                break;
-            case 'conditionalDraw':
-                if (effect.condition === 'lowHp') {
-                    desc += `若生命低于${Math.floor(effect.threshold * 100)}%，抽${effect.drawValue}张牌+${effect.energyValue}灵力。`;
-                }
-                break;
-            case 'bonusGold':
-                desc += `战斗结束后获得 ${effect.min}-${effect.max} 灵石。`;
-                break;
-            case 'ringExp':
-                desc += `命环经验+${effect.value}。`;
-                break;
-            case 'gainSin':
-                desc += `增加 ${effect.value} 点业力。`;
-                break;
-            case 'gainMerit':
-                desc += `增加 ${effect.value} 点功德。`;
-                break;
-            case 'discardHand':
-                desc += `丢弃所有手牌。`;
-                break;
-            case 'drawCalculated':
-                desc += `抽 ${effect.base}+弃牌数x${effect.perDiscard} 张牌。`;
-                break;
-            case 'discardRandom':
-                desc += `随机弃 ${effect.value || 1} 张手牌。`;
-                break;
-            case 'addStatus': {
-                const count = Math.max(1, Number(effect.count) || 1);
-                const cardName = CARDS[effect.cardId] ? CARDS[effect.cardId].name : '状态牌';
-                const zone = effect.zone === 'hand' ? '手牌' : (effect.zone === 'draw' ? '牌库顶' : '弃牌堆');
-                desc += `向${zone}置入 ${count} 张${cardName}。`;
-                break;
-            }
-            case 'createCard': {
-                const count = Math.max(1, Number(effect.count) || 1);
-                const cardName = CARDS[effect.cardId] ? CARDS[effect.cardId].name : '构件';
-                const zone = effect.zone === 'discard' ? '弃牌堆' : (effect.zone === 'draw' ? '牌库顶' : '手牌');
-                desc += `向${zone}生成 ${count} 张${cardName}${effect.temporary ? '（临时）' : ''}。`;
-                break;
-            }
-            case 'mulligan':
-                desc += `丢弃当前手牌并抽取等量卡牌。`;
-                break;
-            case 'cleanse':
-                desc += `移除 ${effect.value} 个负面状态。`;
-                break;
-            case 'debuff':
-                if (effect.buffType === 'burn') desc += `使敌人获得 ${effect.value} 层灼烧。`;
-                else if (effect.buffType === 'poison') desc += `给予 ${effect.value} 层中毒。`;
-                else if (effect.buffType === 'vulnerable') desc += `使敌人获得 ${effect.value} 层易伤。`;
-                else if (effect.buffType === 'weak') desc += `使敌人获得 ${effect.value} 层虚弱。`;
-                else if (effect.buffType === 'paralysis') desc += `使敌人获得 ${effect.value} 层麻痹。`;
-                else if (effect.buffType === 'stun') desc += `敌人跳过下一回合。`;
-                break;
-            case 'buff':
-                if (effect.buffType === 'strength') desc += `获得 ${effect.value} 点力量${effect.permanent ? '(永久)' : ''}。`;
-                else if (effect.buffType === 'thorns') desc += `获得 ${effect.value} 点荆棘。`;
-                else if (effect.buffType === 'dodge') desc += `获得 ${effect.value} 层闪避。`;
-                else if (effect.buffType === 'dodgeChance') desc += `获得 ${Math.floor(effect.value * 100)}% 闪避率。`;
-                else if (effect.buffType === 'nextTurnBlock') desc += `下回合开始时获得 ${effect.value} 点护盾。`;
-                else if (effect.buffType === 'retainBlock') desc += `回合结束保留护盾 ${effect.value} 次。`;
-                else if (effect.buffType === 'damageReduction') desc += `本回合受到的伤害减少${effect.value}%。`;
-                else if (effect.buffType === 'nextAttackBonus') desc += `下一张攻击牌伤害+${effect.value}。`;
-                else if (effect.buffType === 'stealBonus') desc += `本战法则盗取率+${Math.floor(effect.value * 100)}%。`;
-                else if (effect.buffType === 'reflect') desc += `下次被攻击时反弹等量伤害。`;
-                else if (effect.buffType === 'extraTurn') desc += `你额外行动 ${effect.value} 次。`;
-                else if (effect.buffType === 'blockOnAttack') desc += `每打出攻击牌获得 ${effect.value} 点护盾。`;
-                else if (effect.buffType === 'regen') desc += `回合开始时回复 ${effect.value} 点生命。`;
-                else if (effect.buffType === 'meritOnRetain') desc += `回合结束每保留一张牌获得 ${effect.value} 点功德。`;
-                else if (effect.buffType === 'energyOnVulnerable') desc += `攻击易伤敌人回复 ${effect.value} 点灵力。`;
-                else if (effect.buffType === 'oathDebt') desc += `获得 ${effect.value} 层誓债。`;
-                break;
-            case 'damagePerLaw':
-                desc += `根据装载法则数量+${effect.baseDamage}伤害（当前+${effect.damagePerLaw}/个）。`;
-                break;
-            case 'conditionalDamage':
-                if (effect.condition === 'lowHp') {
-                    desc += `若生命低于${Math.floor(effect.threshold * 100)}%，伤害翻倍。`;
-                } else if (effect.condition === 'marked') {
-                    desc += `若目标有破绽，额外造成 ${effect.value} 点伤害。`;
-                } else if (effect.condition === 'sealed') {
-                    desc += `若有被封印的命环槽，额外造成 ${effect.bonusDamage} 点伤害。`;
-                } else {
-                    desc += `若命环≥${effect.minLevel}级，再造成 ${effect.bonusDamage} 点伤害。`;
-                }
-                break;
-            case 'applyBleed':
-                desc += `施加 ${effect.value} 层流血。`;
-                break;
-            case 'applyMark':
-                desc += `施加 ${effect.value} 层破绽。`;
-                break;
-            case 'setStance': {
-                const stanceText = effect.stance === 'aggressive' ? '攻势' : (effect.stance === 'defensive' ? '守势' : '中和');
-                desc += `切换到${stanceText}架势。`;
-                break;
-            }
-            case 'blockFromLostHp':
-                desc += `获得等于已损失生命${Math.floor(effect.percent * 100)}%的护盾。`;
-                break;
-            case 'echoLastPlayedCard': {
-                const ratio = Math.max(0, Number(effect.value) || 0);
-                const count = Math.max(1, Number(effect.repeatCount) || 1);
-                desc += `以 ${Math.floor(ratio * 100)}% 强度回响上一张已打出的牌`;
-                if (count > 1) desc += ` ${count} 次`;
-                desc += `。`;
-                break;
-            }
-            case 'consumeOathDebt':
-                desc += `清算全部誓债，每层造成 ${effect.value} 点伤害。`;
-                break;
+export function generateUpgradedDescription(card) {
+  if (card.descriptionTemplate) {
+    return card.descriptionTemplate.replace(/{e(\d+)}/g, (match, index) => {
+      const i = parseInt(index);
+      return card.effects[i] ? card.effects[i].value : '?';
+    });
+  }
+  let desc = '';
+  for (const effect of card.effects) {
+    switch (effect.type) {
+      case 'damage':
+        desc += `造成 ${effect.value} 点伤害。`;
+        break;
+      case 'block':
+        desc += `获得 ${effect.value} 点护盾。`;
+        break;
+      case 'heal':
+        desc += `回复 ${effect.value} 点生命。`;
+        break;
+      case 'draw':
+        desc += `抽 ${effect.value} 张牌。`;
+        break;
+      case 'energy':
+        desc += `获得 ${effect.value} 点灵力。`;
+        break;
+      case 'penetrate':
+        desc += `造成 ${effect.value} 点穿透伤害。`;
+        break;
+      case 'damageAll':
+        desc += `对所有敌人造成 ${effect.value} 点伤害。`;
+        break;
+      case 'randomDamage':
+        desc += `随机造成 ${effect.minValue}-${effect.maxValue} 点伤害。`;
+        break;
+      case 'randomCards':
+        desc += `随机获得 ${effect.minValue}-${effect.maxValue} 张临时卡牌。`;
+        break;
+      case 'execute':
+        desc += `造成敌人已损失生命${Math.floor(effect.value * 100)}%的伤害。`;
+        break;
+      case 'percentDamage':
+        desc += `造成敌人最大生命${Math.floor(effect.value * 100)}%的伤害。`;
+        break;
+      case 'selfDamage':
+        desc += `自身受到 ${effect.value} 点伤害。`;
+        break;
+      case 'lifeSteal':
+        desc += `回复造成伤害的${Math.floor(effect.value * 100)}%生命。`;
+        break;
+      case 'removeBlock':
+        desc += `移除敌人所有护盾。`;
+        break;
+      case 'reshuffleDiscard':
+        desc += `将轮回洗回识海。`;
+        break;
+      case 'swapHpPercent':
+        desc += `与敌人交换当前生命值百分比。`;
+        break;
+      case 'blockFromStrength':
+        desc += `获得等于你力量值x${effect.multiplier}的护盾（最少${effect.minimum}）。`;
+        break;
+      case 'blockBurst':
+        {
+          const ratio = Number(effect.ratio) || 1;
+          const maxConsume = Number(effect.maxConsume) || 0;
+          const minDamage = Number(effect.minDamage) || 0;
+          const ratioText = Number.isInteger(ratio) ? `${ratio}` : ratio.toFixed(2).replace(/\.?0+$/, '');
+          if (maxConsume > 0) {
+            desc += `消耗至多 ${maxConsume} 点护盾，每点护盾造成 ${ratioText} 点伤害`;
+          } else {
+            desc += `消耗全部护盾，每点护盾造成 ${ratioText} 点伤害`;
+          }
+          if (minDamage > 0) {
+            desc += `（至少 ${minDamage} 点）`;
+          }
+          desc += `。`;
+          break;
         }
+      case 'executeDamage':
+        desc += `造成 ${effect.value} 点伤害，对生命低于${Math.floor((effect.threshold || 0.3) * 100)}%的敌人造成双倍。`;
+        break;
+      case 'consumeAllEnergy':
+        desc += `消耗所有灵力，每点灵力造成 ${effect.damagePerEnergy} 点伤害。`;
+        break;
+      case 'conditionalDraw':
+        if (effect.condition === 'lowHp') {
+          desc += `若生命低于${Math.floor(effect.threshold * 100)}%，抽${effect.drawValue}张牌+${effect.energyValue}灵力。`;
+        }
+        break;
+      case 'bonusGold':
+        desc += `战斗结束后获得 ${effect.min}-${effect.max} 灵石。`;
+        break;
+      case 'ringExp':
+        desc += `命环经验+${effect.value}。`;
+        break;
+      case 'gainSin':
+        desc += `增加 ${effect.value} 点业力。`;
+        break;
+      case 'gainMerit':
+        desc += `增加 ${effect.value} 点功德。`;
+        break;
+      case 'discardHand':
+        desc += `丢弃所有手牌。`;
+        break;
+      case 'drawCalculated':
+        desc += `抽 ${effect.base}+弃牌数x${effect.perDiscard} 张牌。`;
+        break;
+      case 'discardRandom':
+        desc += `随机弃 ${effect.value || 1} 张手牌。`;
+        break;
+      case 'addStatus':
+        {
+          const count = Math.max(1, Number(effect.count) || 1);
+          const cardName = CARDS[effect.cardId] ? CARDS[effect.cardId].name : '状态牌';
+          const zone = effect.zone === 'hand' ? '手牌' : effect.zone === 'draw' ? '牌库顶' : '弃牌堆';
+          desc += `向${zone}置入 ${count} 张${cardName}。`;
+          break;
+        }
+      case 'createCard':
+        {
+          const count = Math.max(1, Number(effect.count) || 1);
+          const cardName = CARDS[effect.cardId] ? CARDS[effect.cardId].name : '构件';
+          const zone = effect.zone === 'discard' ? '弃牌堆' : effect.zone === 'draw' ? '牌库顶' : '手牌';
+          desc += `向${zone}生成 ${count} 张${cardName}${effect.temporary ? '（临时）' : ''}。`;
+          break;
+        }
+      case 'mulligan':
+        desc += `丢弃当前手牌并抽取等量卡牌。`;
+        break;
+      case 'cleanse':
+        desc += `移除 ${effect.value} 个负面状态。`;
+        break;
+      case 'debuff':
+        if (effect.buffType === 'burn') desc += `使敌人获得 ${effect.value} 层灼烧。`;else if (effect.buffType === 'poison') desc += `给予 ${effect.value} 层中毒。`;else if (effect.buffType === 'vulnerable') desc += `使敌人获得 ${effect.value} 层易伤。`;else if (effect.buffType === 'weak') desc += `使敌人获得 ${effect.value} 层虚弱。`;else if (effect.buffType === 'paralysis') desc += `使敌人获得 ${effect.value} 层麻痹。`;else if (effect.buffType === 'stun') desc += `敌人跳过下一回合。`;
+        break;
+      case 'buff':
+        if (effect.buffType === 'strength') desc += `获得 ${effect.value} 点力量${effect.permanent ? '(永久)' : ''}。`;else if (effect.buffType === 'thorns') desc += `获得 ${effect.value} 点荆棘。`;else if (effect.buffType === 'dodge') desc += `获得 ${effect.value} 层闪避。`;else if (effect.buffType === 'dodgeChance') desc += `获得 ${Math.floor(effect.value * 100)}% 闪避率。`;else if (effect.buffType === 'nextTurnBlock') desc += `下回合开始时获得 ${effect.value} 点护盾。`;else if (effect.buffType === 'retainBlock') desc += `回合结束保留护盾 ${effect.value} 次。`;else if (effect.buffType === 'damageReduction') desc += `本回合受到的伤害减少${effect.value}%。`;else if (effect.buffType === 'nextAttackBonus') desc += `下一张攻击牌伤害+${effect.value}。`;else if (effect.buffType === 'stealBonus') desc += `本战法则盗取率+${Math.floor(effect.value * 100)}%。`;else if (effect.buffType === 'reflect') desc += `下次被攻击时反弹等量伤害。`;else if (effect.buffType === 'extraTurn') desc += `你额外行动 ${effect.value} 次。`;else if (effect.buffType === 'blockOnAttack') desc += `每打出攻击牌获得 ${effect.value} 点护盾。`;else if (effect.buffType === 'regen') desc += `回合开始时回复 ${effect.value} 点生命。`;else if (effect.buffType === 'meritOnRetain') desc += `回合结束每保留一张牌获得 ${effect.value} 点功德。`;else if (effect.buffType === 'energyOnVulnerable') desc += `攻击易伤敌人回复 ${effect.value} 点灵力。`;else if (effect.buffType === 'oathDebt') desc += `获得 ${effect.value} 层誓债。`;
+        break;
+      case 'damagePerLaw':
+        desc += `根据装载法则数量+${effect.baseDamage}伤害（当前+${effect.damagePerLaw}/个）。`;
+        break;
+      case 'conditionalDamage':
+        if (effect.condition === 'lowHp') {
+          desc += `若生命低于${Math.floor(effect.threshold * 100)}%，伤害翻倍。`;
+        } else if (effect.condition === 'marked') {
+          desc += `若目标有破绽，额外造成 ${effect.value} 点伤害。`;
+        } else if (effect.condition === 'sealed') {
+          desc += `若有被封印的命环槽，额外造成 ${effect.bonusDamage} 点伤害。`;
+        } else {
+          desc += `若命环≥${effect.minLevel}级，再造成 ${effect.bonusDamage} 点伤害。`;
+        }
+        break;
+      case 'applyBleed':
+        desc += `施加 ${effect.value} 层流血。`;
+        break;
+      case 'applyMark':
+        desc += `施加 ${effect.value} 层破绽。`;
+        break;
+      case 'setStance':
+        {
+          const stanceText = effect.stance === 'aggressive' ? '攻势' : effect.stance === 'defensive' ? '守势' : '中和';
+          desc += `切换到${stanceText}架势。`;
+          break;
+        }
+      case 'blockFromLostHp':
+        desc += `获得等于已损失生命${Math.floor(effect.percent * 100)}%的护盾。`;
+        break;
+      case 'echoLastPlayedCard':
+        {
+          const ratio = Math.max(0, Number(effect.value) || 0);
+          const count = Math.max(1, Number(effect.repeatCount) || 1);
+          desc += `以 ${Math.floor(ratio * 100)}% 强度回响上一张已打出的牌`;
+          if (count > 1) desc += ` ${count} 次`;
+          desc += `。`;
+          break;
+        }
+      case 'consumeOathDebt':
+        desc += `清算全部誓债，每层造成 ${effect.value} 点伤害。`;
+        break;
     }
-    return desc.trim() || card.description;
+  }
+  return desc.trim() || card.description;
 }
-
 /**
  * 检查卡牌是否可升级
  */
-function canUpgradeCard(card) {
-    return card && !card.upgraded;
+export function canUpgradeCard(card) {
+  return card && !card.upgraded;
 }

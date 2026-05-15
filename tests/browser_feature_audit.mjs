@@ -1118,7 +1118,7 @@ async function safeScreenshot(page, outPath) {
   );
 
   const rewardMetaProbe = await page.evaluate(() => {
-    if (!window.game || typeof game.renderRewardBattleMeta !== 'function') return { ok: false, reason: 'no_render_method' };
+    if (!window.game || !window.game.rewardView || typeof game.rewardView.renderRewardBattleMeta !== 'function') return { ok: false, reason: 'no_render_method' };
 
     game.lastBattleRewardMeta = {
       encounter: {
@@ -1136,7 +1136,7 @@ async function safeScreenshot(page, outPath) {
         synergyThemeName: '轮段·反制晶格'
       }
     };
-    game.renderRewardBattleMeta();
+    game.rewardView.renderRewardBattleMeta();
 
     const panel = document.getElementById('reward-battle-meta');
     const chips = Array.from(panel?.querySelectorAll('.reward-meta-chip') || []);
@@ -1146,7 +1146,7 @@ async function safeScreenshot(page, outPath) {
     const title = panel ? (panel.querySelector('.reward-meta-title')?.textContent || '').trim() : '';
 
     game.lastBattleRewardMeta = null;
-    game.renderRewardBattleMeta();
+    game.rewardView.renderRewardBattleMeta();
     const clearedDisplay = panel ? panel.style.display : '';
     const clearedHtml = panel ? panel.innerHTML.trim() : '';
 
@@ -1305,12 +1305,12 @@ async function safeScreenshot(page, outPath) {
     }
     const tag = document.querySelector('.enemy .enemy-intent .intent-tag.breaker');
     const intent = document.querySelector('.enemy .enemy-intent');
-    const tooltipBind = intent ? (intent.getAttribute('onmouseenter') || '') : '';
+    const tooltipText = intent ? (intent.getAttribute('data-tooltip-safe') || '') : '';
     return {
       ok: !!tag && /破盾/.test(tag.textContent || '') && !!intent && intent.classList.contains('breaker'),
       tagText: tag ? (tag.textContent || '').trim() : '',
       className: intent ? intent.className : '',
-      tooltipBind
+      tooltipText
     };
   });
   add(
@@ -1320,9 +1320,9 @@ async function safeScreenshot(page, outPath) {
   );
   add(
     'sunder guardbreak tooltip includes shatter preview',
-    /预计击碎 0 护盾/.test(guardBreakIntentVisible?.tooltipBind || '') &&
-      /追加 0 伤害/.test(guardBreakIntentVisible?.tooltipBind || ''),
-    guardBreakIntentVisible?.tooltipBind || ''
+    /预计击碎 0 护盾/.test(guardBreakIntentVisible?.tooltipText || '') &&
+      /追加 0 伤害/.test(guardBreakIntentVisible?.tooltipText || ''),
+    guardBreakIntentVisible?.tooltipText || ''
   );
 
   const multiActionIntentProbe = await page.evaluate(() => {
@@ -1352,11 +1352,11 @@ async function safeScreenshot(page, outPath) {
       game.battle.updateEnemiesUI();
     }
     const intent = document.querySelector('.enemy .enemy-intent');
-    const tooltipBind = intent ? (intent.getAttribute('onmouseenter') || '') : '';
+    const tooltipText = intent ? (intent.getAttribute('data-tooltip-safe') || '') : '';
     return {
-      ok: !!intent && /子行动/.test(tooltipBind) && /1\.施加减益/.test(tooltipBind) && /2\.攻击/.test(tooltipBind),
+      ok: !!intent && /子行动/.test(tooltipText) && /1\.施加减益/.test(tooltipText) && /2\.攻击/.test(tooltipText),
       className: intent ? intent.className : '',
-      tooltipBind
+      tooltipText
     };
   });
   add(
@@ -1389,12 +1389,12 @@ async function safeScreenshot(page, outPath) {
     }
     const roleTag = document.querySelector('.enemy .enemy-role-tag');
     const intent = document.querySelector('.enemy .enemy-intent');
-    const tooltipBind = intent ? (intent.getAttribute('onmouseenter') || '') : '';
+    const tooltipText = intent ? (intent.getAttribute('data-tooltip-safe') || '') : '';
     return {
-      ok: !!roleTag && /控场型/.test(roleTag.textContent || '') && roleTag.classList.contains('role-hexer') && /战术：控场型/.test(tooltipBind),
+      ok: !!roleTag && /控场型/.test(roleTag.textContent || '') && roleTag.classList.contains('role-hexer') && /战术：控场型/.test(tooltipText),
       text: roleTag ? (roleTag.textContent || '').trim() : '',
       className: roleTag ? roleTag.className : '',
-      tooltipBind
+      tooltipText
     };
   });
   add(
@@ -1430,14 +1430,14 @@ async function safeScreenshot(page, outPath) {
     }
     const planTag = document.querySelector('.enemy .enemy-plan-tag');
     const intent = document.querySelector('.enemy .enemy-intent');
-    const tooltipBind = intent ? (intent.getAttribute('onmouseenter') || '') : '';
+    const tooltipText = intent ? (intent.getAttribute('data-tooltip-safe') || '') : '';
     return {
       ok:
         !!planTag &&
         /节奏·/.test(planTag.textContent || '') &&
-        /节奏：/.test(tooltipBind || ''),
+        /节奏：/.test(tooltipText || ''),
       text: planTag ? (planTag.textContent || '').trim() : '',
-      tooltipBind
+      tooltipText
     };
   });
   add(
@@ -1475,17 +1475,17 @@ async function safeScreenshot(page, outPath) {
     }));
     const tags = tagMeta.map((item) => item.text);
     const intent = document.querySelector('.enemy .enemy-intent');
-    const tooltipBind = intent ? (intent.getAttribute('onmouseenter') || '') : '';
+    const tooltipText = intent ? (intent.getAttribute('data-tooltip-safe') || '') : '';
     return {
       ok:
         tags.length >= 1 &&
         tags.some((t) => t.includes('状态压制') || t.includes('爆发斩杀')) &&
-        /威胁：/.test(tooltipBind) &&
+        /威胁：/.test(tooltipText) &&
         tagMeta.some((item) => item.highRisk) &&
         tagMeta.every((item) => item.title.length >= 6),
       tags,
       tagMeta,
-      tooltipBind
+      tooltipText
     };
   });
   add(
@@ -1525,16 +1525,16 @@ async function safeScreenshot(page, outPath) {
     }
     const counterTag = document.querySelector('.enemy .enemy-counter-tag');
     const intent = document.querySelector('.enemy .enemy-intent');
-    const tooltipBind = intent ? (intent.getAttribute('onmouseenter') || '') : '';
+    const tooltipText = intent ? (intent.getAttribute('data-tooltip-safe') || '') : '';
     return {
       ok:
         !!counterTag &&
         /反制·/.test(counterTag.textContent || '') &&
-        /反制：/.test(tooltipBind || '') &&
-        /净化/.test(tooltipBind || ''),
+        /反制：/.test(tooltipText || '') &&
+        /净化/.test(tooltipText || ''),
       text: counterTag ? (counterTag.textContent || '').trim() : '',
       title: counterTag ? (counterTag.getAttribute('title') || '') : '',
-      tooltipBind
+      tooltipText
     };
   });
   add(
@@ -2065,17 +2065,17 @@ async function safeScreenshot(page, outPath) {
     const themeTag = document.querySelector('.enemy .enemy-encounter-tag');
     const affixTag = document.querySelector('.enemy .enemy-encounter-affix');
     const intent = document.querySelector('.enemy .enemy-intent');
-    const tooltipBind = intent ? (intent.getAttribute('onmouseenter') || '') : '';
+    const tooltipText = intent ? (intent.getAttribute('data-tooltip-safe') || '') : '';
     return {
       ok:
         !!themeTag &&
         !!affixTag &&
         /III阶/.test(themeTag.textContent || '') &&
         /词缀/.test(affixTag.textContent || '') &&
-        /遭遇词缀：咒潮/.test(tooltipBind || ''),
+        /遭遇词缀：咒潮/.test(tooltipText || ''),
       themeText: themeTag ? (themeTag.textContent || '').trim() : '',
       affixText: affixTag ? (affixTag.textContent || '').trim() : '',
-      tooltipBind
+      tooltipText
     };
   });
   add(

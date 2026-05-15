@@ -1,97 +1,87 @@
+import { escapeAttr as importedEscapeAttr, escapeHtml as importedEscapeHtml } from "../core/safe-html.js";
+
 (function (globalScope) {
-    const api = {};
-
-    api.escapeHtml = function escapeHtml(value) {
-        return String(value ?? '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
+  const api = {};
+  const fallbackEscapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch] || ch));
+  const fallbackEscapeAttr = value => fallbackEscapeHtml(value).replace(/\r?\n/g, '&#10;');
+  api.escapeHtml = typeof importedEscapeHtml === 'function' ? importedEscapeHtml : fallbackEscapeHtml;
+  api.escapeAttr = typeof importedEscapeAttr === 'function' ? importedEscapeAttr : fallbackEscapeAttr;
+  api.shouldUseCompactBattleHud = function shouldUseCompactBattleHud(viewportWidth) {
+    const width = Number(viewportWidth) || (typeof window !== 'undefined' ? Number(window.innerWidth) || 0 : 0);
+    return width > 0 && width <= 768;
+  };
+  api.clampFloatingPanelPosition = function clampFloatingPanelPosition(options = {}) {
+    const viewportWidth = Math.max(0, Number(options.viewportWidth) || 0);
+    const viewportHeight = Math.max(0, Number(options.viewportHeight) || 0);
+    const width = Math.max(0, Number(options.width) || 0);
+    const height = Math.max(0, Number(options.height) || 0);
+    const gutter = Math.max(0, Number(options.gutter) || 8);
+    const maxLeft = Math.max(gutter, viewportWidth - width - gutter);
+    const maxTop = Math.max(gutter, viewportHeight - height - gutter);
+    return {
+      left: Math.min(Math.max(gutter, Math.round(Number(options.left) || 0)), maxLeft),
+      top: Math.min(Math.max(gutter, Math.round(Number(options.top) || 0)), maxTop)
     };
-
-    api.shouldUseCompactBattleHud = function shouldUseCompactBattleHud(viewportWidth) {
-        const width = Number(viewportWidth)
-            || (typeof window !== 'undefined' ? Number(window.innerWidth) || 0 : 0);
-        return width > 0 && width <= 768;
+  };
+  api.truncateBattleLabel = function truncateBattleLabel(value, maxLength = 6) {
+    const safeValue = String(value || '').trim();
+    if (!safeValue) return '';
+    const glyphs = Array.from(safeValue);
+    if (glyphs.length <= maxLength) return safeValue;
+    return `${glyphs.slice(0, maxLength).join('')}…`;
+  };
+  api.resolveEnemyIntentDisplay = function resolveEnemyIntentDisplay(pattern = {}) {
+    const fallbackIcons = {
+      attack: '⚔️',
+      multiAttack: '⚔️',
+      defend: '🛡️',
+      buff: '✨',
+      debuff: '🌀',
+      heal: '💚',
+      addStatus: '🕳️',
+      summon: '👥',
+      multiAction: '✦',
+      executeDamage: '💥'
     };
-
-    api.clampFloatingPanelPosition = function clampFloatingPanelPosition(options = {}) {
-        const viewportWidth = Math.max(0, Number(options.viewportWidth) || 0);
-        const viewportHeight = Math.max(0, Number(options.viewportHeight) || 0);
-        const width = Math.max(0, Number(options.width) || 0);
-        const height = Math.max(0, Number(options.height) || 0);
-        const gutter = Math.max(0, Number(options.gutter) || 8);
-        const maxLeft = Math.max(gutter, viewportWidth - width - gutter);
-        const maxTop = Math.max(gutter, viewportHeight - height - gutter);
-        return {
-            left: Math.min(Math.max(gutter, Math.round(Number(options.left) || 0)), maxLeft),
-            top: Math.min(Math.max(gutter, Math.round(Number(options.top) || 0)), maxTop)
-        };
+    const rawIntent = String(pattern.intent || '').trim();
+    const labelStart = rawIntent.search(/[A-Za-z0-9\u3400-\u9FFF]/);
+    const explicitIcon = labelStart > 0 ? rawIntent.slice(0, labelStart).trim() : labelStart === -1 ? rawIntent : '';
+    const explicitLabel = labelStart >= 0 ? rawIntent.slice(Math.max(0, labelStart)).trim() : '';
+    const fallbackIcon = fallbackIcons[pattern.type] || '❓';
+    const icon = explicitIcon || fallbackIcon;
+    const label = api.truncateBattleLabel(explicitLabel);
+    return {
+      icon,
+      label,
+      hasLabel: !!label,
+      rawIntent,
+      type: String(pattern.type || 'unknown')
     };
-
-    api.truncateBattleLabel = function truncateBattleLabel(value, maxLength = 6) {
-        const safeValue = String(value || '').trim();
-        if (!safeValue) return '';
-        const glyphs = Array.from(safeValue);
-        if (glyphs.length <= maxLength) return safeValue;
-        return `${glyphs.slice(0, maxLength).join('')}…`;
-    };
-
-    api.resolveEnemyIntentDisplay = function resolveEnemyIntentDisplay(pattern = {}) {
-        const fallbackIcons = {
-            attack: '⚔️',
-            multiAttack: '⚔️',
-            defend: '🛡️',
-            buff: '✨',
-            debuff: '🌀',
-            heal: '💚',
-            addStatus: '🕳️',
-            summon: '👥',
-            multiAction: '✦',
-            executeDamage: '💥'
-        };
-
-        const rawIntent = String(pattern.intent || '').trim();
-        const labelStart = rawIntent.search(/[A-Za-z0-9\u3400-\u9FFF]/);
-        const explicitIcon = labelStart > 0
-            ? rawIntent.slice(0, labelStart).trim()
-            : labelStart === -1
-                ? rawIntent
-                : '';
-        const explicitLabel = labelStart >= 0
-            ? rawIntent.slice(Math.max(0, labelStart)).trim()
-            : '';
-        const fallbackIcon = fallbackIcons[pattern.type] || '❓';
-        const icon = explicitIcon || fallbackIcon;
-        const label = api.truncateBattleLabel(explicitLabel);
-
-        return {
-            icon,
-            label,
-            hasLabel: !!label,
-            rawIntent,
-            type: String(pattern.type || 'unknown')
-        };
-    };
-
-    api.buildEnemyIntentMarkup = function buildEnemyIntentMarkup(input = {}) {
-        const escapeHtml = api.escapeHtml;
-        const typeClass = escapeHtml(input.type || 'unknown');
-        const icon = escapeHtml(input.icon || '❓');
-        const label = escapeHtml(input.label || '');
-        const value = escapeHtml(input.value || '');
-        const tooltipSafe = escapeHtml(input.tooltipSafe || '');
-        const ariaLabel = escapeHtml(input.ariaLabel || input.label || input.type || '敌方意图');
-        const hasLabel = !!String(input.label || '').trim();
-        const breakerClass = input.isGuardBreaker ? 'breaker' : '';
-        const densityClass = hasLabel ? 'has-label' : 'icon-only';
-
-        return `
+  };
+  api.buildEnemyIntentMarkup = function buildEnemyIntentMarkup(input = {}) {
+    const escapeHtml = api.escapeHtml;
+    const escapeAttr = api.escapeAttr;
+    const typeClass = escapeHtml(input.type || 'unknown');
+    const icon = escapeHtml(input.icon || '❓');
+    const label = escapeHtml(input.label || '');
+    const value = escapeHtml(input.value || '');
+    const tooltipSafe = escapeAttr(input.tooltipSafe || '');
+    const ariaLabel = escapeAttr(input.ariaLabel || input.label || input.type || '敌方意图');
+    const hasLabel = !!String(input.label || '').trim();
+    const breakerClass = input.isGuardBreaker ? 'breaker' : '';
+    const densityClass = hasLabel ? 'has-label' : 'icon-only';
+    return `
             <div class="enemy-intent ${typeClass} ${breakerClass} ${densityClass}"
                  role="img"
                  aria-label="${ariaLabel}"
-                 onmouseenter="Utils.showTooltip('${tooltipSafe}', event.clientX, event.clientY)"
-                 onmouseleave="Utils.hideTooltip()">
+                 data-tooltip-safe="${tooltipSafe}"
+                 data-intent-type="${escapeAttr(input.type || 'unknown')}">
                 <span class="enemy-intent-core">
                     <span class="enemy-intent-icon">${icon}</span>
                     ${hasLabel ? `<span class="enemy-intent-label">${label}</span>` : ''}
@@ -100,40 +90,35 @@
                 ${input.isGuardBreaker ? '<span class="intent-tag breaker">破盾</span>' : ''}
             </div>
         `;
-    };
-
-    api.buildEnemyMetaStripMarkup = function buildEnemyMetaStripMarkup(input = {}) {
-        const escapeHtml = api.escapeHtml;
-        const stripClass = escapeHtml(input.stripClass || 'enemy-meta-strip');
-        const items = Array.isArray(input.items)
-            ? input.items.filter((item) => item && String(item.text || '').trim())
-            : [];
-
-        if (items.length === 0) return '';
-
-        return `
+  };
+  api.buildEnemyMetaStripMarkup = function buildEnemyMetaStripMarkup(input = {}) {
+    const escapeHtml = api.escapeHtml;
+    const escapeAttr = api.escapeAttr;
+    const stripClass = escapeHtml(input.stripClass || 'enemy-meta-strip');
+    const items = Array.isArray(input.items) ? input.items.filter(item => item && String(item.text || '').trim()) : [];
+    if (items.length === 0) return '';
+    return `
             <div class="${stripClass}">
-                ${items.map((item) => `
+                ${items.map(item => `
                     <span class="${escapeHtml(item.className || 'enemy-meta-chip')}"
-                          ${item.title ? `title="${escapeHtml(item.title)}"` : ''}>
+                          ${item.title ? `title="${escapeAttr(item.title)}"` : ''}>
                         ${escapeHtml(item.text)}
                     </span>
                 `).join('')}
             </div>
         `;
-    };
-
-    api.buildBossActPanelMarkup = function buildBossActPanelMarkup(input = {}) {
-        const escapeHtml = api.escapeHtml;
-        const bossName = escapeHtml(input.bossName || 'Boss');
-        const hpPercent = Math.max(0, Math.min(100, Number(input.hpPercent) || 0));
-        const currentActName = escapeHtml(input.currentActName || '当前幕');
-        const acts = Array.isArray(input.acts) ? input.acts : [];
-        const currentIndex = Math.max(0, Math.floor(Number(input.currentIndex) || 0));
-        const counterChips = Array.isArray(input.counterChips) ? input.counterChips : [];
-        const lines = Array.isArray(input.lines) ? input.lines : [];
-
-        return `
+  };
+  api.buildBossActPanelMarkup = function buildBossActPanelMarkup(input = {}) {
+    const escapeHtml = api.escapeHtml;
+    const escapeAttr = api.escapeAttr;
+    const bossName = escapeHtml(input.bossName || 'Boss');
+    const hpPercent = Math.max(0, Math.min(100, Number(input.hpPercent) || 0));
+    const currentActName = escapeHtml(input.currentActName || '当前幕');
+    const acts = Array.isArray(input.acts) ? input.acts : [];
+    const currentIndex = Math.max(0, Math.floor(Number(input.currentIndex) || 0));
+    const counterChips = Array.isArray(input.counterChips) ? input.counterChips : [];
+    const lines = Array.isArray(input.lines) ? input.lines : [];
+    return `
             <div class="boss-act-header">
                 <div>
                     <div class="boss-act-title">${bossName} · 三幕式</div>
@@ -151,14 +136,14 @@
             </div>
             ${counterChips.length > 0 ? `
                 <div class="boss-act-counter-chips">
-                    ${counterChips.map((chip) => `
+                    ${counterChips.map(chip => `
                         <span class="boss-act-counter-chip chip-${escapeHtml(chip.id || 'hint')}"
-                              title="${escapeHtml(chip.tip || '')}">${escapeHtml(chip.label || '')}</span>
+                              title="${escapeAttr(chip.tip || '')}">${escapeHtml(chip.label || '')}</span>
                     `).join('')}
                 </div>
             ` : ''}
             <div class="boss-act-body">
-                ${lines.map((line) => `
+                ${lines.map(line => `
                     <div class="boss-act-line ${escapeHtml(line.id || 'note')}">
                         <span class="label">${escapeHtml(line.label || '')}</span>
                         <span class="value">${escapeHtml(line.value || '')}</span>
@@ -166,22 +151,18 @@
                 `).join('')}
             </div>
         `;
-    };
-
-    api.buildBattleSystemsStripMarkup = function buildBattleSystemsStripMarkup(input = {}) {
-        const escapeHtml = api.escapeHtml;
-        const items = Array.isArray(input.items)
-            ? input.items.filter((item) => item && String(item.label || '').trim())
-            : [];
-
-        if (items.length === 0) return '';
-
-        return `
+  };
+  api.buildBattleSystemsStripMarkup = function buildBattleSystemsStripMarkup(input = {}) {
+    const escapeHtml = api.escapeHtml;
+    const escapeAttr = api.escapeAttr;
+    const items = Array.isArray(input.items) ? input.items.filter(item => item && String(item.label || '').trim()) : [];
+    if (items.length === 0) return '';
+    return `
             <section class="battle-system-strip" aria-label="战斗系统状态带">
-                ${items.map((item) => `
+                ${items.map(item => `
                     <article class="battle-system-chip tone-${escapeHtml(item.tone || item.id || 'state')}"
-                             data-system-id="${escapeHtml(item.id || '')}"
-                             ${item.detail ? `title="${escapeHtml(item.detail)}"` : ''}>
+                             data-system-id="${escapeAttr(item.id || '')}"
+                             ${item.detail ? `title="${escapeAttr(item.detail)}"` : ''}>
                         <div class="battle-system-chip-head">
                             <span class="battle-system-chip-label">
                                 <span class="battle-system-chip-icon">${escapeHtml(item.icon || '✦')}</span>
@@ -194,26 +175,22 @@
                 `).join('')}
             </section>
         `;
-    };
-
-    api.buildBattleSystemsDetailMarkup = function buildBattleSystemsDetailMarkup(input = {}) {
-        const escapeHtml = api.escapeHtml;
-        const items = Array.isArray(input.items)
-            ? input.items.filter((item) => item && String(item.label || '').trim())
-            : [];
-
-        if (items.length === 0) return '';
-
-        return `
+  };
+  api.buildBattleSystemsDetailMarkup = function buildBattleSystemsDetailMarkup(input = {}) {
+    const escapeHtml = api.escapeHtml;
+    const escapeAttr = api.escapeAttr;
+    const items = Array.isArray(input.items) ? input.items.filter(item => item && String(item.label || '').trim()) : [];
+    if (items.length === 0) return '';
+    return `
             <div class="battle-advisor-block battle-system-block">
                 <div class="battle-advisor-section-head">
                     <span class="battle-advisor-section-title">中层系统状态</span>
                     <span class="battle-advisor-section-note">把命格、誓约、灵契、章节、法则与法宝放进同一层观察。</span>
                 </div>
                 <div class="battle-system-grid">
-                    ${items.map((item) => `
+                    ${items.map(item => `
                         <article class="battle-system-card tone-${escapeHtml(item.tone || item.id || 'state')}"
-                                 data-system-id="${escapeHtml(item.id || '')}">
+                                 data-system-id="${escapeAttr(item.id || '')}">
                             <div class="battle-system-card-head">
                                 <span class="battle-system-card-label">
                                     <span class="battle-system-card-icon">${escapeHtml(item.icon || '✦')}</span>
@@ -228,28 +205,28 @@
                 </div>
             </div>
         `;
-    };
-
-    api.buildBattleCommandPanelMarkup = function buildBattleCommandPanelMarkup(input = {}) {
-        const escapeHtml = api.escapeHtml;
-        const points = Math.max(0, Math.floor(Number(input.points) || 0));
-        const maxPoints = Math.max(1, Math.floor(Number(input.maxPoints) || 12));
-        const progress = Math.max(0, Math.min(100, Math.round(Number(input.progress) || 0)));
-        const commands = Array.isArray(input.commands) ? input.commands : [];
-        const systems = input.systems && typeof input.systems === 'object' ? input.systems : {};
-        const advisor = input.advisor && typeof input.advisor === 'object' ? input.advisor : {};
-        const advisorExpanded = !!input.advisorExpanded;
-        const spirit = advisor.spirit && typeof advisor.spirit === 'object' ? advisor.spirit : null;
-        const systemStripMarkup = api.buildBattleSystemsStripMarkup({
-            items: Array.isArray(systems.stripItems) ? systems.stripItems : []
-        });
-        const systemDetailMarkup = api.buildBattleSystemsDetailMarkup({
-            items: Array.isArray(systems.stripItems) ? systems.stripItems : []
-        });
-
-        const commandButtons = commands.map((command) => `
+  };
+  api.buildBattleCommandPanelMarkup = function buildBattleCommandPanelMarkup(input = {}) {
+    const escapeHtml = api.escapeHtml;
+    const escapeAttr = api.escapeAttr;
+    const points = Math.max(0, Math.floor(Number(input.points) || 0));
+    const maxPoints = Math.max(1, Math.floor(Number(input.maxPoints) || 12));
+    const progress = Math.max(0, Math.min(100, Math.round(Number(input.progress) || 0)));
+    const commands = Array.isArray(input.commands) ? input.commands : [];
+    const systems = input.systems && typeof input.systems === 'object' ? input.systems : {};
+    const advisor = input.advisor && typeof input.advisor === 'object' ? input.advisor : {};
+    const advisorExpanded = !!input.advisorExpanded;
+    const spirit = advisor.spirit && typeof advisor.spirit === 'object' ? advisor.spirit : null;
+    const systemStripMarkup = api.buildBattleSystemsStripMarkup({
+      items: Array.isArray(systems.stripItems) ? systems.stripItems : []
+    });
+    const systemDetailMarkup = api.buildBattleSystemsDetailMarkup({
+      items: Array.isArray(systems.stripItems) ? systems.stripItems : []
+    });
+    const commandButtons = commands.map(command => `
             <button class="${escapeHtml(command.classes || 'battle-command-btn')}" ${command.disabled ? 'disabled' : ''}
-                    onclick="window.game && game.battle && game.battle.activateBattleCommand('${escapeHtml(command.id)}')"
+                    data-action="activate-battle-command"
+                    data-command-id="${escapeAttr(command.id || '')}"
                     title="${escapeHtml(command.desc)}">
                 <span class="battle-command-head">
                     <span class="battle-command-icon">${escapeHtml(command.icon)}</span>
@@ -258,41 +235,30 @@
                 <span class="battle-command-meta">消耗 ${Math.max(0, Math.floor(Number(command.cost) || 0))} ｜ ${escapeHtml(command.statusText)}</span>
             </button>
         `).join('');
-
-        const threatChips = Array.isArray(advisor.threatChips)
-            ? advisor.threatChips.map((chip) => `
+    const threatChips = Array.isArray(advisor.threatChips) ? advisor.threatChips.map(chip => `
                 <span class="battle-advisor-threat-chip chip-${escapeHtml(chip.id)}"
                       title="${escapeHtml(chip.tip)}">${escapeHtml(chip.label)}</span>
-            `).join('')
-            : '';
-
-        const matrixControls = Array.isArray(advisor.matrixControls)
-            ? advisor.matrixControls.map((mode) => `
+            `).join('') : '';
+    const matrixControls = Array.isArray(advisor.matrixControls) ? advisor.matrixControls.map(mode => `
                 <button type="button"
                         class="battle-advisor-matrix-btn ${mode.active ? 'active' : ''}"
-                        data-mode="${escapeHtml(mode.id)}"
-                        onclick="window.game && game.battle && game.battle.setResonanceMatrixSignalMode('${escapeHtml(mode.id)}')">
+                        data-action="set-resonance-matrix-mode"
+                        data-mode="${escapeAttr(mode.id || '')}">
                     ${escapeHtml(mode.label)}
                 </button>
-            `).join('')
-            : '';
-
-        const cardPlanSteps = Array.isArray(advisor.cardPlanSteps)
-            ? advisor.cardPlanSteps.map((step, idx) => `
+            `).join('') : '';
+    const cardPlanSteps = Array.isArray(advisor.cardPlanSteps) ? advisor.cardPlanSteps.map((step, idx) => `
                 <button type="button"
                         class="battle-advisor-cardstep-btn"
+                        data-action="preview-advisor-card"
                         data-card-index="${Math.max(0, Math.floor(Number(step.index) || 0))}"
-                        onclick="window.game && game.battle && game.battle.previewAdvisorCard(${Math.max(0, Math.floor(Number(step.index) || 0))})"
-                        title="${escapeHtml(step.reason || '')}">
+                        title="${escapeAttr(step.reason || '')}">
                     ${idx === 0 ? '①' : '②'} ${escapeHtml(step.name || `手牌${idx + 1}`)}
                 </button>
-            `).join('')
-            : '';
-
-        const tempoRail = advisor.tempoRail && Array.isArray(advisor.tempoRail.segments)
-            ? advisor.tempoRail.segments.map((segment) => `
+            `).join('') : '';
+    const tempoRail = advisor.tempoRail && Array.isArray(advisor.tempoRail.segments) ? advisor.tempoRail.segments.map(segment => `
                 <div class="battle-advisor-tempo-segment ${segment.active ? 'active' : ''} tone-${escapeHtml(segment.id)}"
-                     title="${escapeHtml(segment.tip || '')}">
+                     title="${escapeAttr(segment.tip || '')}">
                     <div class="battle-advisor-tempo-row">
                         <span class="battle-advisor-tempo-label">${escapeHtml(segment.label)}</span>
                         <span class="battle-advisor-tempo-score">${Math.max(0, Math.floor(Number(segment.score) || 0))}%</span>
@@ -301,29 +267,23 @@
                         <span class="battle-advisor-tempo-fill" style="width:${Math.max(0, Math.min(100, Math.floor(Number(segment.score) || 0)))}%"></span>
                     </div>
                 </div>
-            `).join('')
-            : '';
-
-        const statusIslands = Array.isArray(advisor.statusIslands)
-            ? advisor.statusIslands.map((item) => `
+            `).join('') : '';
+    const statusIslands = Array.isArray(advisor.statusIslands) ? advisor.statusIslands.map(item => `
                 <span class="battle-advisor-status-chip tone-${escapeHtml(item.tone || item.id || 'state')}"
-                      title="${escapeHtml(item.label)}">
+                      title="${escapeAttr(item.label)}">
                     <span class="battle-advisor-status-label">${escapeHtml(item.label)}</span>
                     <span class="battle-advisor-status-value">${escapeHtml(item.value)}</span>
                 </span>
-            `).join('')
-            : '';
-
-        const spiritHeaderChip = spirit ? `
+            `).join('') : '';
+    const spiritHeaderChip = spirit ? `
             <span class="battle-command-spirit-chip ${spirit.ready ? 'ready' : ''}"
-                  title="${escapeHtml(`${spirit.name || '灵契'} ${spirit.chargeText || ''}`)}">
+                  title="${escapeAttr(`${spirit.name || '灵契'} ${spirit.chargeText || ''}`)}">
                 <span class="battle-command-spirit-icon">${escapeHtml(spirit.icon || '✦')}</span>
                 <span class="battle-command-spirit-name">${escapeHtml(spirit.name || '灵契')}</span>
                 <span class="battle-command-spirit-charge">${escapeHtml(spirit.chargeText || '')}</span>
             </span>
         ` : '';
-
-        const spiritPanel = spirit ? `
+    const spiritPanel = spirit ? `
             <div class="battle-advisor-block battle-advisor-spirit-block">
                 <div class="battle-advisor-section-head">
                     <span class="battle-advisor-section-title">灵契护道</span>
@@ -345,31 +305,21 @@
                     <button type="button"
                             class="battle-advisor-spirit-btn ${spirit.ready ? 'ready' : ''}"
                             ${spirit.ready ? '' : 'disabled'}
-                            onclick="window.game && game.battle && game.battle.activateSpiritCompanion()">
+                            data-action="activate-spirit-companion">
                         ${spirit.ready ? `释放 ${escapeHtml(spirit.activeLabel || '灵契主动')}` : `蓄能中 ${escapeHtml(spirit.chargeText || '')}`}
                     </button>
                 </div>
             </div>
         ` : '';
-
-        const executionChainItems = Array.isArray(advisor.executionChain?.items)
-            ? advisor.executionChain.items.map((item) => `
+    const executionChainItems = Array.isArray(advisor.executionChain?.items) ? advisor.executionChain.items.map(item => `
                 <span class="battle-advisor-chain-step">${escapeHtml(item)}</span>
-            `).join('<span class="battle-advisor-chain-arrow">→</span>')
-            : '';
-
-        const executionChainTags = Array.isArray(advisor.executionChain?.tags)
-            ? advisor.executionChain.tags.map((tag) => `
+            `).join('<span class="battle-advisor-chain-arrow">→</span>') : '';
+    const executionChainTags = Array.isArray(advisor.executionChain?.tags) ? advisor.executionChain.tags.map(tag => `
                 <span class="battle-advisor-chain-tag tone-${escapeHtml(tag.id || 'tag')}"
-                      title="${escapeHtml(tag.tip || '')}">${escapeHtml(tag.label || '')}</span>
-            `).join('')
-            : '';
-
-        const executionChainIndex = advisor.executionChain && advisor.executionChain.index != null && Number.isFinite(Number(advisor.executionChain.index))
-            ? Math.floor(Number(advisor.executionChain.index))
-            : -1;
-
-        const advisorBody = `
+                      title="${escapeAttr(tag.tip || '')}">${escapeHtml(tag.label || '')}</span>
+            `).join('') : '';
+    const executionChainIndex = advisor.executionChain && advisor.executionChain.index != null && Number.isFinite(Number(advisor.executionChain.index)) ? Math.floor(Number(advisor.executionChain.index)) : -1;
+    const advisorBody = `
             ${tempoRail ? `
                 <div class="battle-advisor-block battle-advisor-tempo-block">
                     <div class="battle-advisor-section-head">
@@ -414,8 +364,7 @@
             ${matrixControls ? '<p class="battle-advisor-line battle-advisor-hotkey">快捷预设：H开关助手 · 1自适应 2守势 3破阵 4净域 5歼灭</p>' : '<p class="battle-advisor-line battle-advisor-hotkey">快捷预设：H 开关助手</p>'}
             ${advisor.lastModeLabel ? `<p class="battle-advisor-line battle-advisor-last">上次命环模式：${escapeHtml(advisor.lastModeLabel)}</p>` : ''}
         `;
-
-        return `
+    return `
             <div class="battle-command-header">
                 <span class="battle-command-title-group">
                     <span class="battle-command-title">战场指令</span>
@@ -423,8 +372,7 @@
                 </span>
                 <span class="battle-command-right">
                     <span class="battle-command-points">${points}/${maxPoints}</span>
-                    <button type="button" class="battle-advisor-toggle"
-                            onclick="window.game && game.battle && game.battle.toggleTacticalAdvisor()">
+                    <button type="button" class="battle-advisor-toggle" data-action="toggle-tactical-advisor">
                         ${advisorExpanded ? '收起助手' : '展开助手'}
                     </button>
                 </span>
@@ -448,13 +396,20 @@
                 </div>
             </section>
         `;
-    };
+  };
+  if (globalScope) {
+    globalScope.DefierBattleHud = api;
+  }
+})(typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : this);
 
-    if (typeof module !== 'undefined' && module.exports) {
-        module.exports = api;
-    }
-
-    if (globalScope) {
-        globalScope.DefierBattleHud = api;
-    }
-})(typeof globalThis !== 'undefined' ? globalThis : this);
+export const BattleHUD = (typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : this).DefierBattleHud;
+export const shouldUseCompactBattleHud = BattleHUD.shouldUseCompactBattleHud;
+export const clampFloatingPanelPosition = BattleHUD.clampFloatingPanelPosition;
+export const truncateBattleLabel = BattleHUD.truncateBattleLabel;
+export const resolveEnemyIntentDisplay = BattleHUD.resolveEnemyIntentDisplay;
+export const buildEnemyIntentMarkup = BattleHUD.buildEnemyIntentMarkup;
+export const buildEnemyMetaStripMarkup = BattleHUD.buildEnemyMetaStripMarkup;
+export const buildBossActPanelMarkup = BattleHUD.buildBossActPanelMarkup;
+export const buildBattleSystemsStripMarkup = BattleHUD.buildBattleSystemsStripMarkup;
+export const buildBattleSystemsDetailMarkup = BattleHUD.buildBattleSystemsDetailMarkup;
+export const buildBattleCommandPanelMarkup = BattleHUD.buildBattleCommandPanelMarkup;

@@ -30,7 +30,7 @@ const runTests = async () => {
 
     // 1. 注册
     let res = await request({
-        hostname: '127.0.0.1', port: 9000, path: '/auth/register', method: 'POST',
+        hostname: '127.0.0.1', port: 9000, path: '/api/auth/register', method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     }, testUser);
     console.log('注册:', res.data.success ? '成功' : '失败');
@@ -38,35 +38,35 @@ const runTests = async () => {
 
     // 2. 登录
     res = await request({
-        hostname: '127.0.0.1', port: 9000, path: '/auth/login', method: 'POST',
+        hostname: '127.0.0.1', port: 9000, path: '/api/auth/login', method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     }, testUser);
     console.log('登录:', res.data.success ? '成功' : '失败');
 
     // 3. 上传存档
     res = await request({
-        hostname: '127.0.0.1', port: 9000, path: '/saves', method: 'POST',
+        hostname: '127.0.0.1', port: 9000, path: '/api/saves', method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }
     }, { slotIndex: 1, saveData: { level: 5, gold: 100 }, saveTime: Date.now() });
     console.log('上传存档:', res.data.success ? '成功' : '失败');
 
     // 4. 读取存档
     res = await request({
-        hostname: '127.0.0.1', port: 9000, path: '/saves', method: 'GET',
+        hostname: '127.0.0.1', port: 9000, path: '/api/saves', method: 'GET',
         headers: { 'Authorization': 'Bearer ' + token }
     });
     console.log('读取存档:', res.data.success && res.data.data.length === 1 ? '成功' : '失败');
 
     // 5. 上传残影
     res = await request({
-        hostname: '127.0.0.1', port: 9000, path: '/ghosts/current', method: 'POST',
+        hostname: '127.0.0.1', port: 9000, path: '/api/ghosts/current', method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }
-    }, { realm: 3, ghostData: { name: 'TestPlayer', hp: 500 } });
+    }, { realm: 3, ghostData: { name: 'TestPlayer', hp: 500, maxHp: 500, deck: [{ id: 'audit_strike' }] } });
     console.log('上传残影:', res.data.success ? '成功' : '失败');
 
     // 6. 随机拉取残影 (不带 token 以拉取自己的进行验证)
     res = await request({
-        hostname: '127.0.0.1', port: 9000, path: '/ghosts/random?realm=3', method: 'GET'
+        hostname: '127.0.0.1', port: 9000, path: '/api/ghosts/random?realm=3', method: 'GET'
     });
     console.log('拉取残影:', res.data.success ? '成功' : '失败', res.data.data ? res.data.data.userName : '');
     

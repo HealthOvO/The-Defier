@@ -801,8 +801,10 @@
     .modal-content {
         width: 95%;
         max-width: 95%;
+        max-height: 85vh;
         margin: 10px auto;
         padding: 15px;
+        overflow-y: auto;
     }
 
     .modal-content.large {

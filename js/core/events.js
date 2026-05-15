@@ -1,44 +1,49 @@
+import { getRandomEvent } from "../data/events.js";
+import { Utils } from "./utils.js";
+import { CARDS, ENEMIES } from "../data/index.js";
+import { getRandomCard } from "../data/cards.js";
+import { LAWS } from "../data/laws.js";
+import { getRandomEnemy } from "../data/enemies.js";
+import { TREASURES } from "../data/treasures.js";
 /**
  * The Defier 2.0 - 事件系统
  */
+export class EventSystem {
+  constructor(game) {
+    this.game = game;
+    this.currentEvent = null;
+    this.isExecutingChoice = false;
+    this.closeTimer = null;
+  }
 
-class EventSystem {
-    constructor(game) {
-        this.game = game;
-        this.currentEvent = null;
-        this.isExecutingChoice = false;
-        this.closeTimer = null;
+  // 触发随机事件
+  triggerRandomEvent() {
+    const event = getRandomEvent();
+    if (event) {
+      this.showEvent(event);
+    }
+  }
+
+  // 显示事件
+  showEvent(event) {
+    if (!event || !Array.isArray(event.choices)) return;
+
+    // Fix: Delegate to main game event modal to prevent duplicates and ensure consistency
+    if (this.game && this.game.showEventModal) {
+      this.game.showEventModal(event, this.game.currentBattleNode);
+      return;
     }
 
-    // 触发随机事件
-    triggerRandomEvent() {
-        const event = getRandomEvent();
-        if (event) {
-            this.showEvent(event);
-        }
-    }
+    // Fallback (Legacy)
+    this.closeEvent();
+    this.isExecutingChoice = false;
+    this.currentEvent = event;
 
-    // 显示事件
-    showEvent(event) {
-        if (!event || !Array.isArray(event.choices)) return;
-
-        // Fix: Delegate to main game event modal to prevent duplicates and ensure consistency
-        if (this.game && this.game.showEventModal) {
-            this.game.showEventModal(event, this.game.currentBattleNode);
-            return;
-        }
-
-        // Fallback (Legacy)
-        this.closeEvent();
-        this.isExecutingChoice = false;
-        this.currentEvent = event;
-
-        // 创建事件模态框
-        const modal = document.createElement('div');
-        modal.className = 'event-modal active';
-        modal.id = 'event-modal';
-
-        modal.innerHTML = `
+    // 创建事件模态框
+    const modal = document.createElement('div');
+    modal.className = 'event-modal active';
+    modal.id = 'event-modal';
+    modal.innerHTML = `
             <div class="event-container">
                 <div class="event-header">
                     <div class="event-icon">${event.icon}</div>
@@ -59,21 +64,19 @@ class EventSystem {
                 </div>
             </div>
         `;
+    document.body.appendChild(modal);
 
-        document.body.appendChild(modal);
+    // 绑定选项点击事件
+    this.bindChoiceEvents(modal, event.choices);
+  }
 
-        // 绑定选项点击事件
-        this.bindChoiceEvents(modal, event.choices);
-    }
-
-    // 渲染选项
-    renderChoices(choices) {
-        if (!Array.isArray(choices)) return '';
-        return choices.map((choice, index) => {
-            const canChoose = this.checkCondition(choice.condition);
-            const disabledClass = canChoose ? '' : 'disabled';
-
-            return `
+  // 渲染选项
+  renderChoices(choices) {
+    if (!Array.isArray(choices)) return '';
+    return choices.map((choice, index) => {
+      const canChoose = this.checkCondition(choice.condition);
+      const disabledClass = canChoose ? '' : 'disabled';
+      return `
                 <div class="event-choice ${disabledClass}" data-index="${index}" ${canChoose ? '' : 'style="opacity: 0.5; pointer-events: none;"'}>
                     <div class="choice-icon">${choice.icon}</div>
                     <div class="choice-content">
@@ -82,286 +85,260 @@ class EventSystem {
                     </div>
                 </div>
             `;
-        }).join('');
+    }).join('');
+  }
+
+  // 检查条件
+  checkCondition(condition) {
+    if (!condition) return true;
+    const player = this.game.player;
+    switch (condition.type) {
+      case 'hp':
+        return player.currentHp >= condition.min;
+      case 'awakenRing':
+        // 中文注释：条件判断不能触发觉醒本身，否则会出现“仅预览选项就改状态”的隐式副作用
+        return !!(player.fateRing && player.fateRing.level >= 1);
+      case 'gold':
+        return player.gold >= condition.min;
+      case 'deckSize':
+        return player.deck.length >= condition.min;
+      default:
+        return true;
     }
+  }
 
-    // 检查条件
-    checkCondition(condition) {
-        if (!condition) return true;
+  // 绑定选项事件
+  bindChoiceEvents(modal, choices) {
+    const choiceEls = modal.querySelectorAll('.event-choice:not(.disabled)');
+    choiceEls.forEach(el => {
+      el.addEventListener('click', () => {
+        const index = parseInt(el.dataset.index, 10);
+        const choice = choices[index];
+        if (!choice) return;
+        this.executeChoice(choice, modal);
+      }, {
+        once: true
+      });
+    });
+  }
 
-        const player = this.game.player;
-
-        switch (condition.type) {
-            case 'hp':
-                return player.currentHp >= condition.min;
-            case 'awakenRing':
-                // 中文注释：条件判断不能触发觉醒本身，否则会出现“仅预览选项就改状态”的隐式副作用
-                return !!(player.fateRing && player.fateRing.level >= 1);
-
-            case 'gold':
-                return player.gold >= condition.min;
-            case 'deckSize':
-                return player.deck.length >= condition.min;
-            default:
-                return true;
-        }
+  // 执行选项
+  async executeChoice(choice, modal = null) {
+    if (!choice || this.isExecutingChoice) return;
+    this.isExecutingChoice = true;
+    const choiceEls = (modal || document).querySelectorAll('.event-choice');
+    choiceEls.forEach(el => {
+      el.style.pointerEvents = 'none';
+      el.classList.add('disabled');
+    });
+    const results = [];
+    try {
+      const effects = Array.isArray(choice.effects) ? choice.effects : [];
+      for (const effect of effects) {
+        const result = await this.executeEffect(effect);
+        if (result) results.push(result);
+      }
+    } catch (error) {
+      console.error('Execute choice failed:', error);
+      results.push('事件执行异常，已跳过本次操作');
     }
+    try {
+      // 关闭事件模态框
+      this.closeEvent();
 
-    // 绑定选项事件
-    bindChoiceEvents(modal, choices) {
-        const choiceEls = modal.querySelectorAll('.event-choice:not(.disabled)');
+      // 显示结果
+      if (results.length > 0) {
+        this.showResults(results);
+      }
 
-        choiceEls.forEach(el => {
-            el.addEventListener('click', () => {
-                const index = parseInt(el.dataset.index, 10);
-                const choice = choices[index];
-                if (!choice) return;
-                this.executeChoice(choice, modal);
-            }, { once: true });
-        });
+      // 完成事件节点
+      this.game.onEventComplete();
+    } finally {
+      this.isExecutingChoice = false;
     }
+  }
 
-    // 执行选项
-    async executeChoice(choice, modal = null) {
-        if (!choice || this.isExecutingChoice) return;
-        this.isExecutingChoice = true;
-
-        const choiceEls = (modal || document).querySelectorAll('.event-choice');
-        choiceEls.forEach(el => {
-            el.style.pointerEvents = 'none';
-            el.classList.add('disabled');
-        });
-
-        const results = [];
-
-        try {
-            const effects = Array.isArray(choice.effects) ? choice.effects : [];
-            for (const effect of effects) {
-                const result = await this.executeEffect(effect);
-                if (result) results.push(result);
-            }
-        } catch (error) {
-            console.error('Execute choice failed:', error);
-            results.push('事件执行异常，已跳过本次操作');
+  // 执行效果
+  async executeEffect(effect) {
+    const player = this.game.player;
+    switch (effect.type) {
+      case 'awakenRing':
+        if (player.awakenFateRing()) {
+          return '逆命之环已觉醒！解锁法则盗取！';
         }
-
-        try {
-            // 关闭事件模态框
-            this.closeEvent();
-
-            // 显示结果
-            if (results.length > 0) {
-                this.showResults(results);
-            }
-
-            // 完成事件节点
-            this.game.onEventComplete();
-        } finally {
-            this.isExecutingChoice = false;
+        return '命环已觉醒';
+      case 'gold':
+        if (effect.percent) {
+          const amount = Math.floor(player.gold * (effect.percent / 100));
+          player.gold += amount;
+          return `灵石 ${amount >= 0 ? '+' : ''}${amount}`;
+        } else {
+          player.gold += effect.value;
+          return `灵石 ${effect.value >= 0 ? '+' : ''}${effect.value}`;
         }
-    }
-
-    // 执行效果
-    async executeEffect(effect) {
-        const player = this.game.player;
-
-        switch (effect.type) {
-            case 'awakenRing':
-                if (player.awakenFateRing()) {
-                    return '逆命之环已觉醒！解锁法则盗取！';
-                }
-                return '命环已觉醒';
-
-            case 'gold':
-                if (effect.percent) {
-                    const amount = Math.floor(player.gold * (effect.percent / 100));
-                    player.gold += amount;
-                    return `灵石 ${amount >= 0 ? '+' : ''}${amount}`;
-                } else {
-                    player.gold += effect.value;
-                    return `灵石 ${effect.value >= 0 ? '+' : ''}${effect.value}`;
-                }
-
-            case 'randomGold':
-                const gold = Utils.random(effect.min, effect.max);
-                player.gold += gold;
-                return `灵石 +${gold}`;
-
-            case 'damage':
-                if (player.takeDamage) {
-                    player.takeDamage(effect.value);
-                } else {
-                    player.currentHp = Math.max(0, player.currentHp - effect.value);
-                }
-                return `生命 -${effect.value}`;
-
-            case 'heal':
-                const healed = Math.min(effect.value, player.maxHp - player.currentHp);
-                player.heal(effect.value);
-                return `恢复 ${healed} 生命`;
-
-            case 'maxHp':
-                player.maxHp += effect.value;
-                if (effect.value > 0) {
-                    player.currentHp += effect.value;
-                }
-                return `最大生命 ${effect.value >= 0 ? '+' : ''}${effect.value}`;
-
-            case 'card':
-                let card;
-                if (effect.cardId) {
-                    card = CARDS[effect.cardId];
-                } else if (effect.rarity) {
-                    card = getRandomCard(effect.rarity);
-                } else {
-                    card = getRandomCard();
-                }
-                if (card) {
-                    player.addCardToDeck(card);
-                    return `获得卡牌: ${card.name}`;
-                }
-                break;
-
-            case 'ringExp':
-                player.fateRing.exp += effect.value;
-                player.checkFateRingLevelUp();
-                return `命环经验 +${effect.value}`;
-
-            case 'law':
-                if (effect.random) {
-                    const lawIds = Object.keys(LAWS);
-                    const randomLawId = lawIds[Math.floor(Math.random() * lawIds.length)];
-                    const law = LAWS[randomLawId];
-                    if (law && player.collectLaw({ ...law })) {
-                        return `获得法则: ${law.name}`;
-                    }
-                }
-                break;
-
-            case 'battle':
-                const enemy = ENEMIES[effect.enemyId];
-                if (enemy) {
-                    this.game.startBattle([JSON.parse(JSON.stringify(enemy))]);
-                    return null; // 战斗会单独处理
-                }
-                break;
-
-            case 'permaBuff':
-                player.permaBuffs = player.permaBuffs || {};
-                player.permaBuffs[effect.stat] = (player.permaBuffs[effect.stat] || 0) + effect.value;
-                // 立即重新计算属性，确保UI更新
-                if (player.recalculateStats) player.recalculateStats();
-                return `永久${effect.stat} ${effect.value >= 0 ? '+' : ''}${effect.value}`;
-
-            case 'upgradeCard':
-                if (!Array.isArray(player.deck) || player.deck.length === 0) {
-                    return '没有可升级的卡牌';
-                }
-                const upgradable = player.deck.filter(c => !c.upgraded);
-                if (upgradable.length === 0) {
-                    return '没有可升级的卡牌';
-                }
-                const upgradeTarget = upgradable[Math.floor(Math.random() * upgradable.length)];
-                if (typeof Utils !== 'undefined' && Utils.upgradeCard) {
-                    const upgraded = Utils.upgradeCard(upgradeTarget);
-                    const idx = player.deck.indexOf(upgradeTarget);
-                    if (idx >= 0) player.deck[idx] = upgraded;
-                    return `升级卡牌: ${upgraded.name}`;
-                }
-                upgradeTarget.upgraded = true;
-                upgradeTarget.name = `${upgradeTarget.name}+`;
-                return `升级卡牌: ${upgradeTarget.name}`;
-
-            case 'removeCardType':
-                if (!Array.isArray(player.deck) || player.deck.length === 0) {
-                    return '没有可移除的卡牌';
-                }
-                const maxRemove = effect.count || 1;
-                let removed = 0;
-                for (let i = player.deck.length - 1; i >= 0 && removed < maxRemove; i--) {
-                    if (player.deck[i].type === effect.cardType) {
-                        player.deck.splice(i, 1);
-                        removed++;
-                    }
-                }
-                return removed > 0
-                    ? `移除${removed}张${effect.cardType === 'defense' ? '防御' : '攻击'}牌`
-                    : '未找到可移除的目标卡牌';
-
-            case 'random':
-                const roll = Math.random();
-                let cumulative = 0;
-                for (const option of effect.options) {
-                    cumulative += option.chance;
-                    if (roll < cumulative) {
-                        return await this.executeEffect(option);
-                    }
-                }
-                break;
-
-            case 'trial':
-                if (typeof getRandomEnemy === 'function') {
-                    const enemy = getRandomEnemy(player.realm);
-                    if (enemy) {
-                        this.game.startBattle([JSON.parse(JSON.stringify(enemy))]);
-                        return null;
-                    }
-                }
-                return '试炼开始失败：未找到试炼敌人';
-
-            case 'treasure':
-                if (typeof TREASURES === 'undefined') {
-                    return '法宝系统未加载';
-                }
-                if (effect.treasureId) {
-                    if (player.addTreasure && player.addTreasure(effect.treasureId)) {
-                        return `获得法宝: ${TREASURES[effect.treasureId].name}`;
-                    }
-                    return '已拥有该法宝，未获得新法宝';
-                }
-                if (effect.random) {
-                    const pool = Object.keys(TREASURES).filter(id => !player.hasTreasure || !player.hasTreasure(id));
-                    if (pool.length === 0) return '法宝已收集齐';
-                    const randomTreasureId = pool[Math.floor(Math.random() * pool.length)];
-                    if (player.addTreasure) {
-                        player.addTreasure(randomTreasureId);
-                        return `获得法宝: ${TREASURES[randomTreasureId].name}`;
-                    }
-                }
-                return null;
-
-            case 'nothing':
-                return null;
+      case 'randomGold':
+        const gold = Utils.random(effect.min, effect.max);
+        player.gold += gold;
+        return `灵石 +${gold}`;
+      case 'damage':
+        if (player.takeDamage) {
+          player.takeDamage(effect.value);
+        } else {
+          player.currentHp = Math.max(0, player.currentHp - effect.value);
         }
-
+        return `生命 -${effect.value}`;
+      case 'heal':
+        const healed = Math.min(effect.value, player.maxHp - player.currentHp);
+        player.heal(effect.value);
+        return `恢复 ${healed} 生命`;
+      case 'maxHp':
+        player.maxHp += effect.value;
+        if (effect.value > 0) {
+          player.currentHp += effect.value;
+        }
+        return `最大生命 ${effect.value >= 0 ? '+' : ''}${effect.value}`;
+      case 'card':
+        let card;
+        if (effect.cardId) {
+          card = CARDS[effect.cardId];
+        } else if (effect.rarity) {
+          card = getRandomCard(effect.rarity);
+        } else {
+          card = getRandomCard();
+        }
+        if (card) {
+          player.addCardToDeck(card);
+          return `获得卡牌: ${card.name}`;
+        }
+        break;
+      case 'ringExp':
+        player.fateRing.exp += effect.value;
+        player.checkFateRingLevelUp();
+        return `命环经验 +${effect.value}`;
+      case 'law':
+        if (effect.random) {
+          const lawIds = Object.keys(LAWS);
+          const randomLawId = lawIds[Math.floor(Math.random() * lawIds.length)];
+          const law = LAWS[randomLawId];
+          if (law && player.collectLaw({
+            ...law
+          })) {
+            return `获得法则: ${law.name}`;
+          }
+        }
+        break;
+      case 'battle':
+        const enemy = ENEMIES[effect.enemyId];
+        if (enemy) {
+          this.game.startBattle([JSON.parse(JSON.stringify(enemy))]);
+          return null; // 战斗会单独处理
+        }
+        break;
+      case 'permaBuff':
+        player.permaBuffs = player.permaBuffs || {};
+        player.permaBuffs[effect.stat] = (player.permaBuffs[effect.stat] || 0) + effect.value;
+        // 立即重新计算属性，确保UI更新
+        if (player.recalculateStats) player.recalculateStats();
+        return `永久${effect.stat} ${effect.value >= 0 ? '+' : ''}${effect.value}`;
+      case 'upgradeCard':
+        if (!Array.isArray(player.deck) || player.deck.length === 0) {
+          return '没有可升级的卡牌';
+        }
+        const upgradable = player.deck.filter(c => !c.upgraded);
+        if (upgradable.length === 0) {
+          return '没有可升级的卡牌';
+        }
+        const upgradeTarget = upgradable[Math.floor(Math.random() * upgradable.length)];
+        if (typeof Utils !== 'undefined' && Utils.upgradeCard) {
+          const upgraded = Utils.upgradeCard(upgradeTarget);
+          const idx = player.deck.indexOf(upgradeTarget);
+          if (idx >= 0) player.deck[idx] = upgraded;
+          return `升级卡牌: ${upgraded.name}`;
+        }
+        upgradeTarget.upgraded = true;
+        upgradeTarget.name = `${upgradeTarget.name}+`;
+        return `升级卡牌: ${upgradeTarget.name}`;
+      case 'removeCardType':
+        if (!Array.isArray(player.deck) || player.deck.length === 0) {
+          return '没有可移除的卡牌';
+        }
+        const maxRemove = effect.count || 1;
+        let removed = 0;
+        for (let i = player.deck.length - 1; i >= 0 && removed < maxRemove; i--) {
+          if (player.deck[i].type === effect.cardType) {
+            player.deck.splice(i, 1);
+            removed++;
+          }
+        }
+        return removed > 0 ? `移除${removed}张${effect.cardType === 'defense' ? '防御' : '攻击'}牌` : '未找到可移除的目标卡牌';
+      case 'random':
+        const roll = Math.random();
+        let cumulative = 0;
+        for (const option of effect.options) {
+          cumulative += option.chance;
+          if (roll < cumulative) {
+            return await this.executeEffect(option);
+          }
+        }
+        break;
+      case 'trial':
+        if (typeof getRandomEnemy === 'function') {
+          const enemy = getRandomEnemy(player.realm);
+          if (enemy) {
+            this.game.startBattle([JSON.parse(JSON.stringify(enemy))]);
+            return null;
+          }
+        }
+        return '试炼开始失败：未找到试炼敌人';
+      case 'treasure':
+        if (typeof TREASURES === 'undefined') {
+          return '法宝系统未加载';
+        }
+        if (effect.treasureId) {
+          if (player.addTreasure && player.addTreasure(effect.treasureId)) {
+            return `获得法宝: ${TREASURES[effect.treasureId].name}`;
+          }
+          return '已拥有该法宝，未获得新法宝';
+        }
+        if (effect.random) {
+          const pool = Object.keys(TREASURES).filter(id => !player.hasTreasure || !player.hasTreasure(id));
+          if (pool.length === 0) return '法宝已收集齐';
+          const randomTreasureId = pool[Math.floor(Math.random() * pool.length)];
+          if (player.addTreasure) {
+            player.addTreasure(randomTreasureId);
+            return `获得法宝: ${TREASURES[randomTreasureId].name}`;
+          }
+        }
+        return null;
+      case 'nothing':
         return null;
     }
+    return null;
+  }
 
-    // 显示结果
-    showResults(results) {
-        const validResults = results.filter(r => r);
-        if (validResults.length === 0) return;
+  // 显示结果
+  showResults(results) {
+    const validResults = results.filter(r => r);
+    if (validResults.length === 0) return;
+    const message = validResults.join('\n');
+    Utils.showBattleLog(message);
+  }
 
-        const message = validResults.join('\n');
-        Utils.showBattleLog(message);
+  // 关闭事件
+  closeEvent() {
+    if (this.closeTimer) {
+      clearTimeout(this.closeTimer);
+      this.closeTimer = null;
     }
-
-    // 关闭事件
-    closeEvent() {
-        if (this.closeTimer) {
-            clearTimeout(this.closeTimer);
-            this.closeTimer = null;
-        }
-
-        const modal = document.getElementById('event-modal');
-        if (modal) {
-            modal.classList.remove('active');
-            this.closeTimer = setTimeout(() => {
-                modal.remove();
-                this.closeTimer = null;
-            }, 300);
-        }
-        this.currentEvent = null;
-        this.isExecutingChoice = false;
+    const modal = document.getElementById('event-modal');
+    if (modal) {
+      modal.classList.remove('active');
+      this.closeTimer = setTimeout(() => {
+        modal.remove();
+        this.closeTimer = null;
+      }, 300);
     }
+    this.currentEvent = null;
+    this.isExecutingChoice = false;
+  }
 }

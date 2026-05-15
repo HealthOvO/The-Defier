@@ -7,19 +7,18 @@ const { chromium } = require('playwright');
     let errors = 0;
     page.on('console', msg => {
         if (msg.type() === 'error') {
-            console.error('BROWSER ERROR:', msg.text());
-            errors++;
+            console.error(`BROWSER ERROR: ${msg.text()} at ${msg.location().url}:${msg.location().lineNumber}`);
         }
     });
     page.on('pageerror', err => {
-        console.error('PAGE ERROR:', err.message);
+        console.error(`PAGE ERROR: ${err.message}\n${err.stack}`);
         errors++;
     });
 
     const { exec } = require('child_process');
     const server = exec('npx http-server -p 4196');
     
-    await page.waitForTimeout(3000); 
+    await page.waitForTimeout(6000); 
 
     try {
         await page.goto('http://127.0.0.1:4196/index.html');
