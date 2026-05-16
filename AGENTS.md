@@ -89,6 +89,44 @@
   - `progress.md` 与游戏内介绍同步
   - Node 测试补点与 release gate 收口
 
+## Production Deployment Rule
+
+- 本项目正式线上环境是用户自己的服务器，不是 GitHub Pages；线上访问地址固定为 `https://080305.xyz/`。
+- 服务器 SSH Host 为 `cloud119`，当前解析目标为 `119.91.252.137`，默认使用本机 `~/.ssh/config` 中的配置连接。
+- 前端静态站点部署目录为远端 `/www/wwwroot`；后端 Node 服务目录为远端 `/www/server/the-defier-backend`。
+- GitHub Pages 的 `CNAME` 和 `.site` 构建可以保留作为构建产物/备用发布配置，但不能把“已推 GitHub Pages”当作正式线上部署完成。
+- 前端生产构建流程：
+  - 先执行 `npm run build:pages` 生成 `.site`。
+  - 再用 `rsync -az .site/ cloud119:/www/wwwroot/` 同步到服务器。
+  - 不要随意对 `/www/wwwroot` 使用 `--delete`，除非已经确认远端历史目录可以删除并做好备份。
+- 后端部署流程：
+  - 用 `rsync -az --delete --exclude='node_modules/' --exclude='db/*.sqlite' --exclude='backend.log' server/ cloud119:/www/server/the-defier-backend/` 同步代码。
+  - 不要覆盖或删除远端 `db/*.sqlite`、`backend.log`、`node_modules/`，避免丢线上数据或破坏 Linux 原生依赖。
+  - 后端通过 systemd 服务 `the-defier-backend` 运行，端口为 `9000`。
+  - 同步后使用 `ssh cloud119 'systemctl restart the-defier-backend'` 重启，并确认 `systemctl is-active the-defier-backend` 返回 `active`。
+- Nginx 线上约束：
+  - `080305.xyz` / `www.080305.xyz` 的静态 root 指向 `/www/wwwroot`。
+  - `/api/` 必须反代到 `http://127.0.0.1:9000`，不要再加旧的 `/api` rewrite；后端真实路由就是 `/api/*`。
+  - 修改 Nginx 后必须执行 `nginx -t`，通过后再 `systemctl reload nginx`。
+- HTTPS 证书约束：
+  - 当前使用 Let’s Encrypt，证书路径为 `/etc/letsencrypt/live/080305.xyz/fullchain.pem` 和 `/etc/letsencrypt/live/080305.xyz/privkey.pem`。
+  - 续期后通过 `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` 自动 reload Nginx。
+  - 若证书异常，优先检查 `certbot`、DNS 是否仍指向 `119.91.252.137`、以及 80/443 端口是否可访问。
+- 生产 API 配置：
+  - `js/config/bmob.config.js` 只在 `080305.xyz` / `www.080305.xyz` 下自动启用同源 API。
+  - 本地开发默认仍可保持离线，不要把生产密钥或服务器私密配置写入前端 bundle。
+  - 服务器侧 `JWT_SECRET`、`DEFIER_HMAC_SECRET` 应只存在于 systemd 环境或服务器私密配置中，不得提交到仓库。
+- 每次声明“线上已部署”前必须验证：
+  - `npm run build:pages`
+  - `npm run test:node`
+  - `curl -I https://080305.xyz/` 返回 `200 OK`
+  - `curl -sS https://080305.xyz/api/health` 返回 `{ "status": "ok" ... }`
+  - 真实 API smoke 至少覆盖注册、登录、存档、残影上传/拉取。
+  - `ssh cloud119 'systemctl is-active the-defier-backend; nginx -t'` 均通过。
+- 部署前默认先备份远端：
+  - 静态站点备份到 `/www/backup/the-defier/wwwroot_*.tar.gz`。
+  - 后端备份到 `/www/backup/the-defier/backend_*.tar.gz`，排除 `node_modules`、SQLite 数据库和日志。
+
 ## Final Rule
 
 - 在 The Defier 仓库里，subagent 不是“用户额外提醒后才可用的特殊操作”，而是默认协作工具。
