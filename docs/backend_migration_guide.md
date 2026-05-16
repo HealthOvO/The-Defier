@@ -25,6 +25,8 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 
 所有请求默认接收和返回 `application/json`，且对于需要认证的接口，请求头需带上 `Authorization: Bearer <sessionToken>`。
 
+> 安全说明：浏览器端不会持有服务端 HMAC 密钥。云存档和残影的可信度必须依赖服务端规则校验；如需启用额外完整性签名，只能使用服务端私有的 `DEFIER_HMAC_SECRET`，不要把该密钥写入前端配置或源码。
+
 ### 1. 认证模块 (Auth)
 
 #### 1.1 注册

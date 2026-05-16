@@ -1,21 +1,36 @@
 const crypto = require('crypto');
 
-// The secret key should ideally come from an environment variable
-// Using a hardcoded fallback for development purposes
-const SECRET_KEY = process.env.DEFIER_HMAC_SECRET || 'the_defier_secret_key_2026';
+function getSecretKey() {
+    return typeof process.env.DEFIER_HMAC_SECRET === 'string'
+        ? process.env.DEFIER_HMAC_SECRET.trim()
+        : '';
+}
+
+function isSignatureConfigured() {
+    return getSecretKey().length > 0;
+}
 
 function generateSignature(dataStr, salt) {
-    return crypto.createHmac('sha256', SECRET_KEY)
+    const secretKey = getSecretKey();
+    if (!secretKey) {
+        throw new Error('DEFIER_HMAC_SECRET is not configured');
+    }
+    return crypto.createHmac('sha256', secretKey)
         .update(dataStr + salt)
         .digest('hex');
 }
 
 function verifySignature(dataStr, salt, signature) {
+    if (!isSignatureConfigured() || !signature) return false;
     const expected = generateSignature(dataStr, salt);
-    return expected === signature;
+    const expectedBuffer = Buffer.from(expected, 'hex');
+    const signatureBuffer = Buffer.from(String(signature), 'hex');
+    return expectedBuffer.length === signatureBuffer.length
+        && crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
 }
 
 module.exports = {
     generateSignature,
+    isSignatureConfigured,
     verifySignature
 };

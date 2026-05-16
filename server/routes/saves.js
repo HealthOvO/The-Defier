@@ -1,7 +1,7 @@
 const express = require('express');
 const { db } = require('../db/database');
 const { authenticate } = require('../middleware/auth');
-const { verifySignature } = require('../utils/hmac');
+const { isSignatureConfigured, verifySignature } = require('../utils/hmac');
 
 const router = express.Router();
 
@@ -20,14 +20,13 @@ router.post('/', authenticate, (req, res) => {
 
     const dataStr = typeof saveData === 'string' ? saveData : JSON.stringify(saveData);
 
-    // 防篡改签名校验
-    if (signature && salt) {
+    // Optional integrity check. It is only active when the server owns a private HMAC secret.
+    if (signature && salt && isSignatureConfigured()) {
         if (!verifySignature(dataStr, salt, signature)) {
             return res.status(403).json({ success: false, message: '存档数据被篡改，拒绝保存' });
         }
-    } else {
-        // 出于过渡兼容性考虑，暂不强制要求签名，但可以记录警告日志
-        console.warn(`[Anti-Cheat] User ${userId} uploaded save without HMAC signature.`);
+    } else if (signature && salt) {
+        console.warn(`[Integrity] User ${userId} sent save signature, but DEFIER_HMAC_SECRET is not configured.`);
     }
 
     const sIndex = Number(slotIndex);

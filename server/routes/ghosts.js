@@ -2,7 +2,7 @@ const express = require('express');
 const { db } = require('../db/database');
 const { authenticate } = require('../middleware/auth');
 const { validateGhostData } = require('../utils/ghostValidator');
-const { verifySignature } = require('../utils/hmac');
+const { isSignatureConfigured, verifySignature } = require('../utils/hmac');
 
 const router = express.Router();
 
@@ -19,13 +19,13 @@ router.post('/current', authenticate, (req, res) => {
     const nRealm = Math.max(1, Number(realm) || 1);
     const dataStr = typeof ghostData === 'string' ? ghostData : JSON.stringify(ghostData);
 
-    // HMAC 防篡改签名校验
-    if (signature && salt) {
+    // Optional integrity check. PVP safety still depends on server-side validation below.
+    if (signature && salt && isSignatureConfigured()) {
         if (!verifySignature(dataStr, salt, signature)) {
             return res.status(403).json({ success: false, message: '幽灵数据被篡改，拒绝上传' });
         }
-    } else {
-        console.warn(`[Anti-Cheat] User ${userId} uploaded ghost data without HMAC signature.`);
+    } else if (signature && salt) {
+        console.warn(`[Integrity] User ${userId} sent ghost signature, but DEFIER_HMAC_SECRET is not configured.`);
     }
 
     // 防作弊校验
