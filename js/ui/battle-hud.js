@@ -372,7 +372,11 @@ import { escapeAttr as importedEscapeAttr, escapeHtml as importedEscapeHtml } fr
                 </span>
                 <span class="battle-command-right">
                     <span class="battle-command-points">${points}/${maxPoints}</span>
-                    <button type="button" class="battle-advisor-toggle" data-action="toggle-tactical-advisor">
+                    <button type="button"
+                            class="battle-advisor-toggle"
+                            data-action="toggle-tactical-advisor"
+                            aria-controls="battle-tactical-advisor"
+                            aria-expanded="${advisorExpanded ? 'true' : 'false'}">
                         ${advisorExpanded ? '收起助手' : '展开助手'}
                     </button>
                 </span>
@@ -380,10 +384,9 @@ import { escapeAttr as importedEscapeAttr, escapeHtml as importedEscapeHtml } fr
             <div class="battle-command-track">
                 <div class="battle-command-fill" style="width:${progress}%"></div>
             </div>
-            <div class="battle-command-list">${commandButtons}</div>
-            ${systemStripMarkup}
             <section id="battle-tactical-advisor"
-                     class="battle-tactical-advisor ${advisorExpanded ? '' : 'collapsed'}">
+                     class="battle-tactical-advisor ${advisorExpanded ? '' : 'collapsed'}"
+                     aria-hidden="${advisorExpanded ? 'false' : 'true'}">
                 <div class="battle-advisor-header">
                     <button type="button"
                             class="battle-advisor-drag-handle"
@@ -395,6 +398,8 @@ import { escapeAttr as importedEscapeAttr, escapeHtml as importedEscapeHtml } fr
                     ${advisorBody}
                 </div>
             </section>
+            <div class="battle-command-list">${commandButtons}</div>
+            ${systemStripMarkup}
         `;
   };
   if (globalScope) {

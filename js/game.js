@@ -3679,7 +3679,7 @@ export class Game {
     if (!this.saveManager) {
       this.saveManager = new SaveManager(this);
     }
-    this.saveManager.saveGame();
+    return this.saveManager.saveGame();
   }
   migrateSaveData(rawSave) {
     const migrated = rawSave && typeof rawSave === 'object' ? rawSave : {};

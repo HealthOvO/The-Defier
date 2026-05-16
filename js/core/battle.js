@@ -5048,6 +5048,9 @@ export class Battle {
             const avatarSrc = char.image || char.avatar;
             faceVisual.style.backgroundImage = `url('${avatarSrc}')`;
             faceVisual.textContent = '';
+            faceVisual.classList.add('is-image');
+            faceVisual.setAttribute('role', 'img');
+            faceVisual.setAttribute('aria-label', `${char.name || '角色'}战斗模型`);
             avatarEl.classList.add('has-image-avatar');
             // Ensure name is visible (handled by CSS z-index)
           } else {
@@ -5055,6 +5058,9 @@ export class Battle {
             faceVisual.style.backgroundImage = '';
             faceVisual.textContent = '';
             faceVisual.style.backgroundImage = '';
+            faceVisual.classList.remove('is-image');
+            faceVisual.removeAttribute('role');
+            faceVisual.removeAttribute('aria-label');
             avatarEl.classList.remove('has-image-avatar');
             faceVisual.textContent = char.avatar;
             faceVisual.style.display = 'flex';
@@ -8938,7 +8944,9 @@ export class Battle {
     if (toggleBtn) {
       toggleBtn.textContent = expanded ? '收起助手' : '展开助手';
       toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      toggleBtn.setAttribute('aria-controls', 'battle-tactical-advisor');
     }
+    advisor.setAttribute('aria-hidden', expanded ? 'false' : 'true');
     return true;
   }
   clearBattleCommandPanelDragHandlers() {

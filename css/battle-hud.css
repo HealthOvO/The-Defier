@@ -49,6 +49,7 @@
 #battle-screen .battle-command-panel .battle-command-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 4px;
+    margin-top: 7px;
 }
 
 #battle-screen .battle-command-panel .battle-command-btn {
@@ -69,8 +70,9 @@
     margin-top: 5px;
     max-height: min(132px, 16vh);
     overflow-y: auto;
+    will-change: max-height, opacity;
     transition:
-        max-height var(--hud-transition-medium),
+        max-height 220ms ease,
         opacity var(--hud-transition-fast),
         margin var(--hud-transition-fast),
         border-color var(--hud-transition-fast),
@@ -84,10 +86,96 @@
 
 #battle-screen .battle-advisor-header {
     min-height: 28px;
+    gap: 7px;
+    border-radius: 10px;
 }
 
 #battle-screen .battle-advisor-title {
     font-size: 0.68rem;
+}
+
+#battle-screen .player-area {
+    justify-content: flex-end;
+    align-items: center;
+    padding-left: clamp(304px, 25vw, 350px);
+    padding-right: clamp(16px, 3vw, 42px);
+    pointer-events: none;
+}
+
+#battle-screen .player-character {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(92px, 138px);
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(119, 205, 255, 0.18);
+    border-radius: 22px;
+    background:
+        linear-gradient(145deg, rgba(6, 16, 35, 0.74), rgba(5, 10, 24, 0.5)),
+        radial-gradient(circle at 22% 30%, rgba(79, 196, 255, 0.13), transparent 44%);
+    box-shadow:
+        0 18px 36px rgba(0, 0, 0, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    pointer-events: auto;
+}
+
+#battle-screen .player-character::after {
+    content: "";
+    position: absolute;
+    left: 20px;
+    right: 18px;
+    bottom: -13px;
+    height: 18px;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.42), transparent 70%);
+    pointer-events: none;
+}
+
+#battle-screen .player-avatar {
+    width: 96px;
+    height: 96px;
+    border-color: rgba(255, 221, 151, 0.88);
+    background:
+        radial-gradient(circle at 30% 18%, rgba(255, 255, 255, 0.25), transparent 24%),
+        linear-gradient(145deg, rgba(35, 52, 88, 0.9), rgba(32, 18, 62, 0.94));
+    box-shadow:
+        0 0 0 6px rgba(255, 221, 151, 0.08),
+        0 0 36px rgba(106, 201, 255, 0.24),
+        inset 0 -18px 26px rgba(0, 0, 0, 0.34);
+}
+
+#battle-screen .player-face-visual {
+    background-repeat: no-repeat;
+    background-position: top center;
+    background-size: cover;
+}
+
+#battle-screen .player-face-visual.is-image {
+    border: 0;
+    box-shadow: inset 0 -18px 28px rgba(0, 0, 0, 0.18);
+}
+
+#battle-screen .player-avatar>span,
+#battle-screen .player-avatar>#player-name-display {
+    position: absolute;
+    left: 50%;
+    bottom: -18px;
+    min-width: 76px;
+    padding: 3px 8px;
+    border: 1px solid rgba(255, 221, 151, 0.36);
+    border-radius: 999px;
+    background: rgba(6, 12, 26, 0.82);
+    color: rgba(255, 242, 212, 0.96);
+    font-size: 0.68rem;
+    line-height: 1.1;
+    text-align: center;
+    transform: translateX(-50%);
+}
+
+#battle-screen .player-bars {
+    width: 100%;
+    min-width: 112px;
 }
 
 #battle-screen .battle-advisor-line {

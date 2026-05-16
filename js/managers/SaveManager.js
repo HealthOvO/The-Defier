@@ -12,7 +12,11 @@ export class SaveManager {
   }
   saveGame() {
     if (this.game.automationBootConfig) {
-      return false;
+      return {
+        success: false,
+        skipped: true,
+        reason: 'automation-boot'
+      };
     }
     try {
       const pvpEconomySnapshot = typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getEconomySnapshot === 'function' ? PVPService.getEconomySnapshot() : null;
@@ -54,23 +58,58 @@ export class SaveManager {
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(gameState));
       console.log('游戏已保存 (本地)');
       const targetSlot = this.game.currentSaveSlot;
+      const result = {
+        success: true,
+        local: true,
+        cloud: false,
+        slot: targetSlot,
+        timestamp: gameState.timestamp
+      };
       if (typeof AuthService !== 'undefined' && AuthService.isLoggedIn() && targetSlot !== null && targetSlot !== undefined) {
-        AuthService.saveCloudData(gameState, targetSlot).then(res => {
+        this.game.cachedSlots = this.game.cachedSlots || {};
+        const cloudPromise = AuthService.saveCloudData(gameState, targetSlot).then(res => {
           if (res.success) {
             console.log(`游戏已同步 (云端 Slot ${targetSlot})`);
             this.game.cachedSlots[targetSlot] = gameState;
             if (typeof Utils !== 'undefined') Utils.showBattleLog('游戏进度已保存到云端');
+            return {
+              ...result,
+              cloud: true,
+              cloudResult: res
+            };
           } else {
             console.warn('云端同步失败', res);
             if (typeof Utils !== 'undefined') Utils.showBattleLog('云端同步失败，仅保存本地');
+            return {
+              ...result,
+              cloud: false,
+              cloudResult: res
+            };
           }
         }).catch(err => {
           console.error('Cloud save error:', err);
+          if (typeof Utils !== 'undefined') Utils.showBattleLog('云端同步失败，仅保存本地');
+          return {
+            ...result,
+            cloud: false,
+            cloudError: err && err.message ? err.message : String(err)
+          };
         });
+        return {
+          ...result,
+          cloudPending: true,
+          cloudPromise
+        };
       }
+      return result;
     } catch (e) {
       console.error('Save Game Error:', e);
       if (typeof Utils !== 'undefined') Utils.showBattleLog('严重错误：存档失败！请检查存储空间');
+      return {
+        success: false,
+        local: false,
+        error: e && e.message ? e.message : String(e)
+      };
     }
   }
 } // Temporary export mechanism to allow global usage before full ESM
