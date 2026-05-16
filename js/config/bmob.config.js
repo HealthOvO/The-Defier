@@ -13,6 +13,13 @@
     if (typeof window === 'undefined') return;
 
     window.__THE_DEFIER_CONFIG__ = window.__THE_DEFIER_CONFIG__ || {};
+    const productionHosts = new Set(['080305.xyz', 'www.080305.xyz']);
+    const currentHost = window.location && typeof window.location.hostname === 'string'
+        ? window.location.hostname
+        : '';
+    const productionBaseUrl = productionHosts.has(currentHost) && window.location.origin
+        ? window.location.origin
+        : '';
 
     window.__THE_DEFIER_CONFIG__.backend = window.__THE_DEFIER_CONFIG__.backend || {
         provider: 'server'
@@ -25,7 +32,7 @@
     };
 
     window.__THE_DEFIER_CONFIG__.server = window.__THE_DEFIER_CONFIG__.server || {
-        baseUrl: '',
+        baseUrl: productionBaseUrl,
         authPathPrefix: '/api/auth',
         savePathPrefix: '/api/saves',
         userPathPrefix: '/api/user',
