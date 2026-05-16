@@ -8060,6 +8060,13 @@ export class Game {
   // 打开存档选择界面 (同步云端)
   async openSaveSlotsWithSync() {
     if (this.isSyncingSlots) return;
+    const cloudEnabled = !AuthService.isCloudEnabled || AuthService.isCloudEnabled();
+    if (!cloudEnabled) {
+      this.guestMode = true;
+      Utils.showBattleLog('云存档未配置，已进入离线开局');
+      this.showCharacterSelection();
+      return;
+    }
     if (!AuthService.isLoggedIn()) {
       this.showConfirmModal('尚未登录，是否先登录以同步云端存档？', () => {
         this.guestMode = false;
@@ -8159,6 +8166,7 @@ export class Game {
     this.currentSaveSlot = index;
     // 持久化存储，防止刷新丢失
     sessionStorage.setItem('currentSaveSlot', index);
+    localStorage.setItem('lastSaveSlot', String(index));
     const modal = document.getElementById('save-slots-modal');
     if (mode === 'load') {
       const cloudData = this.cachedSlots[index];
@@ -8191,6 +8199,7 @@ export class Game {
         // If we treat "New Game" as "Go to Character Select":
         this.showCharacterSelection();
         sessionStorage.setItem('currentSaveSlot', index);
+        localStorage.setItem('lastSaveSlot', String(index));
       };
       if (mode === 'overwrite') {
         this.showConfirmModal('确定要覆盖此存档吗？旧进度将丢失！', doOverwrite);

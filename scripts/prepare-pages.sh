@@ -53,6 +53,7 @@ copy_dist_path() {
 }
 
 copy_dist_path "."
+copy_path "CNAME"
 copy_path "game-intro.html"
 copy_path "assets"
 copy_path "audio"

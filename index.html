@@ -36,7 +36,7 @@
 
             <div class="game-description">
                 <p>天道无情，命环为锁，众生皆困囹圄。</p>
-                <p>这一次，不为长生，只为——<span style="color: var(--accent-gold); font-weight: bold;">逆天改命！</span></p>
+                <p>读章节、走地图、组卡牌、炼法宝、破天命；这一次，不为长生，只为——<span style="color: var(--accent-gold); font-weight: bold;">逆天改命！</span></p>
             </div>
 
             <div class="menu-buttons">
@@ -92,7 +92,7 @@
                     <button class="util-btn" onclick="game.showChallengeHub('daily')">
                         <span class="btn-icon">🔭</span>
                     </button>
-                    <span class="util-label">周挑战</span>
+                    <span class="util-label">挑战观察站</span>
                 </div>
                 <div class="util-btn-wrapper">
                     <button class="util-btn" onclick="game.showAchievements()">
@@ -140,7 +140,7 @@
                 <button class="menu-btn small cheat-btn" onclick="game.cheat()"
                     style="display: none; width: auto; padding: 5px 15px;">🛠️ 作弊</button>
             </div>
-            <div class="version-info">v9.2 命途任务·章节考试·工程主轴·DRI风险指数·PVP复盘·焦点约战·对手档案·赛季账本·样本筛面</div>
+            <div class="version-info">v9.2 玩家指南更新 · 命途任务 · 章节考试 · DRI读题 · 洞府议程 · 挑战观察站 · PVP复盘</div>
         </div>
     </div>
 
@@ -574,9 +574,9 @@
                                 <span class="codex-side-kicker">检索建议</span>
                                 <h3>浏览方式</h3>
                                 <ul class="codex-side-list">
-                                    <li>优先补齐未解锁法则，可直接提升后续共鸣可用性。</li>
-                                    <li>先看右侧摘要，再回到主区决定要补的元素流派。</li>
-                                    <li>已点亮共鸣会在主区显示激活标记，方便规划下一局偷取路线。</li>
+                                    <li>先看当前构筑缺伤害、防御还是净化，再决定要补哪一系法则。</li>
+                                    <li>五行克制是稳定增伤来源；遇到卡关章节时，优先查看对应章节和 Boss 的弱点。</li>
+                                    <li>已点亮共鸣会显示激活标记，可用来规划下一局偷取路线和命环槽位。</li>
                                 </ul>
                             </section>
                         </aside>
@@ -637,9 +637,9 @@
                                 <span class="codex-side-kicker">查看建议</span>
                                 <h3>如何使用</h3>
                                 <ul class="codex-side-list">
-                                    <li>先找当前角色更易共鸣的灵契，再决定下一条灵契窟路线。</li>
-                                    <li>章节档案会同步标注推荐灵契，适合与世界规则一起看。</li>
-                                    <li>未解锁条目会给出角色和路线线索，不需要盲猜。</li>
+                                    <li>先找当前角色更易共鸣的灵契，再决定是否走灵契窟或相关事件路线。</li>
+                                    <li>灵契适合和章节档案一起看：一边看本章考题，一边确认需要护道、续航还是爆发。</li>
+                                    <li>未解锁条目会给出角色、路线和章节线索，不需要盲猜。</li>
                                 </ul>
                             </section>
                         </aside>
@@ -700,8 +700,8 @@
                                 <span class="codex-side-kicker">查看建议</span>
                                 <h3>如何使用</h3>
                                 <ul class="codex-side-list">
-                                    <li>先看天象和地脉，再看生态模板，不要只看章节名。</li>
-                                    <li>章节内路线价值会随着 Boss 传闻和誓约变化而改变。</li>
+                                    <li>先看天象、地脉、生态模板和 DRI 主轴，不要只看章节名。</li>
+                                    <li>章节内路线价值会随着 Boss 传闻、誓约、命途任务和 pressureWindow 改变。</li>
                                     <li>这页适合和构筑快照一起看，能更快发现“这章到底在考什么”。</li>
                                 </ul>
                             </section>
@@ -764,8 +764,8 @@
                                 <h3>如何使用</h3>
                                 <ul class="codex-side-list">
                                     <li>不要只记住“它很痛”，要记住它在哪一拍开始逼问你的构筑。</li>
-                                    <li>反制法宝不是必带答案，而是帮你降低这场检定的出错成本。</li>
-                                    <li>Boss 档案最好和章节档案配合看，很多主宰是在继续放大章节规则。</li>
+                                    <li>反制法宝不是必带答案，而是降低检定出错成本的保险。</li>
+                                    <li>Boss 档案最好和章节档案、DRI 主轴配合看，很多主宰是在继续放大章节规则。</li>
                                 </ul>
                             </section>
                         </aside>
@@ -826,9 +826,9 @@
                                 <span class="codex-side-kicker">查看建议</span>
                                 <h3>如何使用</h3>
                                 <ul class="codex-side-list">
-                                    <li>先看首拍动作和战术画像，再决定是抢节奏、立盾还是留净化。</li>
-                                    <li>敌影档案适合和章节档案一起看，能更快分辨“这是单怪问题还是整章生态都在考这个”。</li>
-                                    <li>未来敌影会先显示大类和章节归属，方便提前准备法宝与法则切换。</li>
+                                    <li>先看首拍动作和战术画像，再决定抢节奏、立盾、破盾还是留净化。</li>
+                                    <li>敌影档案适合和章节档案一起看，分辨“这是单怪问题还是整章生态都在考这个”。</li>
+                                    <li>未来敌影会先显示大类、章节归属和应对关键词，方便提前准备法宝与法则切换。</li>
                                 </ul>
                             </section>
                         </aside>
@@ -889,8 +889,8 @@
                                 <h3>如何使用</h3>
                                 <ul class="codex-side-list">
                                     <li>这页不是单纯算平均数，而是帮你判断“这一套到底靠什么赢”。</li>
-                                    <li>构筑快照和章节档案一起看，最容易发现当前章节真正缺的那一块。</li>
-                                    <li>如果缺口集中在命环或灵契，优先补系统协同，而不是继续平铺加牌。</li>
+                                    <li>和章节档案、objective、pressureWindow 一起看，最容易发现当前章节真正缺的那一块。</li>
+                                    <li>如果缺口集中在命环、灵契或法宝窗口，优先补系统协同，而不是继续平铺加牌。</li>
                                 </ul>
                             </section>
                         </aside>
@@ -949,7 +949,7 @@
                             <section class="codex-side-card codex-guide-card" id="run-slate-shelf-guide">
                                 <span class="codex-side-kicker">使用建议</span>
                                 <h3>怎么把书架喂回主线</h3>
-                                <p>先挑一份贴题答卷设为当前训练参考，再回观星台复盘命盘，最后把洞府议程立成下一章承诺。</p>
+                                <p>先挑一份贴题答卷设为训练参考，再回观星台复盘命盘；若这份答卷能解释当前缺口，就把洞府议程立成下一章承诺。</p>
                             </section>
                         </aside>
                     </div>
@@ -1007,7 +1007,7 @@
                             <section class="codex-side-card codex-guide-card" id="sanctum-guide">
                                 <span class="codex-side-kicker">使用建议</span>
                                 <h3>洞府怎么喂主线</h3>
-                                <p>先从归卷答卷定题，再在洞府里立项议程；章节内按关键节点推进处置，并在第二关键节点后于三条锁线契约中择一，必要时承担契押换取更高回报，章末再把成功研究继续压成跨章工程。</p>
+                                <p>先从归卷答卷定题，再在洞府里立项议程；章节内按关键节点推进处置，第二关键节点后选择锁线契约，章末再把成功研究压成跨章工程或把失败残卷回收成下轮线索。</p>
                             </section>
                         </aside>
                     </div>

@@ -109,7 +109,9 @@ async function openNewGameEntry(page) {
   await page.waitForFunction(() => {
     const confirmModal = document.getElementById('generic-confirm-modal');
     const saveSlotsModal = document.getElementById('save-slots-modal');
-    return !!confirmModal?.classList.contains('active') || !!saveSlotsModal?.classList.contains('active');
+    return !!confirmModal?.classList.contains('active')
+      || !!saveSlotsModal?.classList.contains('active')
+      || window.game?.currentScreen === 'character-selection-screen';
   }, { timeout: 3000 });
   return 'ui-click';
 }
@@ -219,17 +221,32 @@ async function openNewGameEntry(page) {
     slotsModalActive ? 'unexpectedly opened save slots' : ''
   );
 
-  const confirmModalActive = await page.evaluate(() => {
+  const newGameState = await page.evaluate(() => {
     const modal = document.getElementById('generic-confirm-modal');
-    return !!modal && modal.classList.contains('active');
+    const cloudEnabled = (typeof AuthService !== 'undefined' && typeof AuthService.isCloudEnabled === 'function')
+      ? AuthService.isCloudEnabled()
+      : null;
+    return {
+      confirmModalActive: !!modal && modal.classList.contains('active'),
+      mode: window.game?.currentScreen || null,
+      cloudEnabled
+    };
   });
-  add(
-    'new game shows login-or-guest confirm',
-    confirmModalActive,
-    confirmModalActive ? '' : 'generic-confirm-modal is not active'
-  );
+  if (newGameState.cloudEnabled !== true) {
+    add(
+      'new game falls back to local character selection when cloud is disabled',
+      newGameState.mode === 'character-selection-screen' && !newGameState.confirmModalActive,
+      JSON.stringify(newGameState)
+    );
+  } else {
+    add(
+      'new game shows login-or-guest confirm when cloud is enabled',
+      newGameState.confirmModalActive,
+      JSON.stringify(newGameState)
+    );
+  }
 
-  if (confirmModalActive) {
+  if (newGameState.confirmModalActive) {
     await page.click('#generic-cancel-btn', { timeout: 3000 });
     await page.waitForTimeout(350);
   }
