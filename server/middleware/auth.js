@@ -1,6 +1,16 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'the-defier-local-dev-secret';
+function getJwtSecret() {
+    return process.env.JWT_SECRET || 'the-defier-local-dev-secret';
+}
+
+function validateAuthConfig() {
+    if (process.env.NODE_ENV !== 'production') return;
+    const secret = process.env.JWT_SECRET || '';
+    if (secret.trim().length < 32) {
+        throw new Error('JWT_SECRET must be configured with at least 32 characters in production');
+    }
+}
 
 const authenticate = (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -10,7 +20,7 @@ const authenticate = (req, res, next) => {
 
     const token = authHeader.split(' ')[1];
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
+        const decoded = jwt.verify(token, getJwtSecret());
         req.user = decoded; // { id, username }
         next();
     } catch (err) {
@@ -21,7 +31,7 @@ const authenticate = (req, res, next) => {
 const generateToken = (user) => {
     return jwt.sign(
         { id: user.id, username: user.username },
-        JWT_SECRET,
+        getJwtSecret(),
         { expiresIn: '30d' }
     );
 };
@@ -29,5 +39,9 @@ const generateToken = (user) => {
 module.exports = {
     authenticate,
     generateToken,
-    JWT_SECRET
+    get JWT_SECRET() {
+        return getJwtSecret();
+    },
+    getJwtSecret,
+    validateAuthConfig
 };

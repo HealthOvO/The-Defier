@@ -25,7 +25,30 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 
 所有请求默认接收和返回 `application/json`，且对于需要认证的接口，请求头需带上 `Authorization: Bearer <sessionToken>`。
 
-> 安全说明：浏览器端不会持有服务端 HMAC 密钥。云存档和残影的可信度必须依赖服务端规则校验；如需启用额外完整性签名，只能使用服务端私有的 `DEFIER_HMAC_SECRET`，不要把该密钥写入前端配置或源码。
+> 安全说明：浏览器端不会持有服务端 HMAC 密钥。云存档和残影的可信度必须依赖服务端认证、服务端规则校验和反作弊约束；如需启用额外完整性签名，只能使用服务端私有的 `DEFIER_HMAC_SECRET`，不要把该密钥写入前端配置或源码。
+
+### 后端安全配置
+
+| 环境变量 | 必填条件 | 说明 |
+| --- | --- | --- |
+| `JWT_SECRET` | 生产环境必填 | 生产环境必须配置至少 32 字符的 JWT 私钥；开发环境未配置时仅使用本地默认值。 |
+| `DEFIER_HMAC_SECRET` | `DEFIER_INTEGRITY_REQUIRED=1` 时必填 | 服务端私有 HMAC 密钥，至少 32 字符，只能保存在服务端环境变量中。 |
+| `DEFIER_INTEGRITY_REQUIRED` | 可选 | 设为 `1`/`true`/`yes`/`on` 时，`/api/saves` 与 `/api/ghosts/current` 强制要求 `signature` 和 `salt` 并校验通过。 |
+
+启动校验：
+
+- 生产环境缺失合规 `JWT_SECRET` 时，服务会 fail-fast，不会继续启动。
+- `DEFIER_INTEGRITY_REQUIRED=1` 但缺失合规 `DEFIER_HMAC_SECRET` 时，服务会 fail-fast，不会继续启动。
+
+完整性签名规则：
+
+- 签名算法：`HMAC-SHA256`。
+- 签名输入：服务端使用版本化分段输入 `v1 + "\n" + salt + "\n" + JSON payload`，避免简单字符串拼接二义性。
+- `signature` 必须是 64 位 hex 字符串。
+- `salt` 必须是 8-128 位字符串，只允许字母、数字、`.`、`_`、`:`、`-`。
+- 当 `DEFIER_INTEGRITY_REQUIRED` 未开启时，签名为兼容性可选字段；当它开启时，缺失签名返回 400，签名不匹配返回 403。
+- 默认浏览器客户端不会发送 `salt`/`signature`。只有可信中间层、自建工具或服务端代理生成签名时才应携带这两个字段。
+- 当请求显式携带 `salt` 或 `signature` 任一字段时，服务端会视为一次完整性签名尝试；两者必须同时存在且满足格式要求，否则返回 400，即使未开启强制模式。
 
 ### 1. 认证模块 (Auth)
 
@@ -44,7 +67,8 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 #### 2.1 保存存档
 - **POST** `/api/saves`
 - **Auth**: Required
-- **Body**: `{ "slotIndex": 0, "saveData": { ... }, "saveTime": 1710000000000 }`
+- **Body**: `{ "slotIndex": 0, "saveData": { ... }, "saveTime": 1710000000000, "salt": "optional-nonce", "signature": "optional-hmac" }`
+- **Note**: `salt` 和 `signature` 仅供可信调用方使用，默认浏览器客户端不发送。
 - **Response**: `{ "success": true }`
 
 #### 2.2 读取云存档 (多槽位)
@@ -79,7 +103,8 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 #### 4.1 上传残影
 - **POST** `/api/ghosts/current`
 - **Auth**: Required
-- **Body**: `{ "realm": 3, "ghostData": { "name": "xxx", "hp": 100, "deck": [...] } }`
+- **Body**: `{ "realm": 3, "ghostData": { "name": "xxx", "hp": 100, "deck": [...] }, "salt": "optional-nonce", "signature": "optional-hmac" }`
+- **Note**: `salt` 和 `signature` 仅供可信调用方使用，默认浏览器客户端不发送。
 - **Response**: `{ "success": true }`
 
 #### 4.2 随机拉取对手残影

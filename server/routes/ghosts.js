@@ -2,7 +2,7 @@ const express = require('express');
 const { db } = require('../db/database');
 const { authenticate } = require('../middleware/auth');
 const { validateGhostData } = require('../utils/ghostValidator');
-const { isSignatureConfigured, verifySignature } = require('../utils/hmac');
+const { verifyRequestIntegrity } = require('../utils/hmac');
 
 const router = express.Router();
 
@@ -18,18 +18,26 @@ router.post('/current', authenticate, (req, res) => {
 
     const nRealm = Math.max(1, Number(realm) || 1);
     const dataStr = typeof ghostData === 'string' ? ghostData : JSON.stringify(ghostData);
-
-    // Optional integrity check. PVP safety still depends on server-side validation below.
-    if (signature && salt && isSignatureConfigured()) {
-        if (!verifySignature(dataStr, salt, signature)) {
-            return res.status(403).json({ success: false, message: '幽灵数据被篡改，拒绝上传' });
+    let parsedGhostData = ghostData;
+    if (typeof ghostData === 'string') {
+        try {
+            parsedGhostData = JSON.parse(ghostData);
+        } catch (error) {
+            return res.status(400).json({ success: false, message: '残影数据格式无效' });
         }
-    } else if (signature && salt) {
-        console.warn(`[Integrity] User ${userId} sent ghost signature, but DEFIER_HMAC_SECRET is not configured.`);
+    }
+
+    const integrity = verifyRequestIntegrity(dataStr, salt, signature, {
+        route: 'POST /api/ghosts/current',
+        userId
+    });
+    if (!integrity.ok) {
+        console.warn(`[Integrity] Rejected ghost upload for user ${userId}: ${integrity.reason}`);
+        return res.status(integrity.status).json({ success: false, message: integrity.message });
     }
 
     // 防作弊校验
-    const validation = validateGhostData(nRealm, typeof ghostData === 'string' ? JSON.parse(ghostData) : ghostData);
+    const validation = validateGhostData(nRealm, parsedGhostData);
     if (!validation.valid) {
         console.warn(`[Anti-Cheat] Ghost rejected for User ${userId}: ${validation.reason}`);
         return res.status(403).json({ success: false, message: `幽灵数据异常，拒绝上传: ${validation.reason}` });

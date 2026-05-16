@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 node tests/sanity_auth_config_checks.cjs
 node tests/sanity_backend_hmac_checks.cjs
+node tests/backend_security_checks.cjs
 node tests/sanity_balance_checks.cjs
 node tests/sanity_expansion_system_checks.cjs
 node tests/sanity_event_flow_checks.cjs

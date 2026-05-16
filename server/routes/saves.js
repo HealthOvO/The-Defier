@@ -1,7 +1,7 @@
 const express = require('express');
 const { db } = require('../db/database');
 const { authenticate } = require('../middleware/auth');
-const { isSignatureConfigured, verifySignature } = require('../utils/hmac');
+const { verifyRequestIntegrity } = require('../utils/hmac');
 
 const router = express.Router();
 
@@ -20,13 +20,13 @@ router.post('/', authenticate, (req, res) => {
 
     const dataStr = typeof saveData === 'string' ? saveData : JSON.stringify(saveData);
 
-    // Optional integrity check. It is only active when the server owns a private HMAC secret.
-    if (signature && salt && isSignatureConfigured()) {
-        if (!verifySignature(dataStr, salt, signature)) {
-            return res.status(403).json({ success: false, message: '存档数据被篡改，拒绝保存' });
-        }
-    } else if (signature && salt) {
-        console.warn(`[Integrity] User ${userId} sent save signature, but DEFIER_HMAC_SECRET is not configured.`);
+    const integrity = verifyRequestIntegrity(dataStr, salt, signature, {
+        route: 'POST /api/saves',
+        userId
+    });
+    if (!integrity.ok) {
+        console.warn(`[Integrity] Rejected save upload for user ${userId}: ${integrity.reason}`);
+        return res.status(integrity.status).json({ success: false, message: integrity.message });
     }
 
     const sIndex = Number(slotIndex);

@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const { initDb } = require('./db/database');
+const { validateAuthConfig } = require('./middleware/auth');
+const { validateIntegrityConfig } = require('./utils/hmac');
 
 const authRoutes = require('./routes/auth');
 const savesRoutes = require('./routes/saves');
@@ -28,6 +30,8 @@ app.get('/health', (req, res) => {
 // Start Server
 const startServer = async () => {
     try {
+        validateAuthConfig();
+        validateIntegrityConfig();
         await initDb();
         console.log('Database initialized successfully.');
         
