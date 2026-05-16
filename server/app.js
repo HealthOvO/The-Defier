@@ -26,6 +26,9 @@ app.use('/api/ghosts', ghostsRoutes);
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: 'The Defier Backend is running' });
 });
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', message: 'The Defier Backend is running' });
+});
 
 // Start Server
 const startServer = async () => {
