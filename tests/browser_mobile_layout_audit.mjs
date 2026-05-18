@@ -334,6 +334,14 @@ function add(name, pass, detail = '') {
     window.scrollTo(0, 0);
   });
   await page.waitForTimeout(1000);
+  await page.evaluate(() => {
+    const intelToggle = document.querySelector('#map-screen [data-map-action="toggle-map-intel"]');
+    const shell = document.querySelector('#map-screen .map-screen-v3');
+    if (shell && !shell.classList.contains('show-map-intel') && intelToggle && typeof intelToggle.click === 'function') {
+      intelToggle.click();
+    }
+  });
+  await page.waitForTimeout(250);
 
   const expeditionPanelsProbe = await page.evaluate(() => {
     const panels = document.getElementById('map-expedition-panels');

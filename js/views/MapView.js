@@ -35,20 +35,27 @@ export class MapView {
                 <div class="map-v3-header">
                     <button class="back-btn" type="button" data-map-action="show-screen" data-screen-id="realm-select-screen">← 返回关卡</button>
                     <div class="map-header-right">
-                        <div class="player-status-bar">
-                            <div class="status-item hp">
-                                <span class="icon">❤️</span>
-                                <span id="map-hp">${this.game.player.currentHp}/${this.game.player.maxHp}</span>
+                        <div class="map-header-toolbar">
+                            <div class="player-status-bar">
+                                <div class="status-item hp">
+                                    <span class="icon">❤️</span>
+                                    <span id="map-hp">${this.game.player.currentHp}/${this.game.player.maxHp}</span>
+                                </div>
+                                <div class="status-item gold">
+                                    <span class="icon">💰</span>
+                                    <span id="map-gold">${this.game.player.gold}</span>
+                                </div>
+                                <div class="status-item floor">
+                                    <span class="icon">🏔️</span>
+                                    <span id="map-floor">${this.map.getRealmName(this.game.player.realm)}</span>
+                                </div>
                             </div>
-                            <div class="status-item gold">
-                                <span class="icon">💰</span>
-                                <span id="map-gold">${this.game.player.gold}</span>
-                            </div>
-                            <div class="status-item floor">
-                                <span class="icon">🏔️</span>
-                                <span id="map-floor">${this.map.getRealmName(this.game.player.realm)}</span>
+                            <div class="map-header-actions">
+                                <button class="menu-btn small map-header-toggle" type="button" data-map-action="toggle-map-intel" aria-expanded="false" aria-controls="map-detail-panels map-expedition-panels">关卡情报</button>
+                                <button class="menu-btn small map-header-toggle" type="button" data-map-action="toggle-map-tools" aria-expanded="false" aria-controls="map-footer">工具</button>
                             </div>
                         </div>
+                        <div id="map-detail-panels" class="map-detail-panels" aria-hidden="true">
                         <div id="map-situation-overview" class="map-situation-overview" style="display:none;"></div>
                         <div id="map-chapter-risk-card" class="map-chapter-risk-card" style="display:none;"></div>
                         <div id="map-chapter-brief" class="map-chapter-brief" style="display:none;"></div>
@@ -72,6 +79,7 @@ export class MapView {
                             <div class="mission-progress">0/0</div>
                         </div>
                         <div id="map-run-path-flash" class="map-run-path-flash" style="display:none;"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -82,7 +90,7 @@ export class MapView {
                     </div>
                 </div>
 
-                <div class="map-footer">
+                <div class="map-footer" id="map-footer" aria-hidden="true">
                     <button class="menu-btn small" type="button" data-map-action="show-deck">查看牌组</button>
                     <button class="menu-btn small" type="button" data-map-action="show-treasure-bag">法宝囊</button>
                     <button class="menu-btn small" type="button" data-map-action="show-fate-ring">命环</button>
@@ -92,6 +100,7 @@ export class MapView {
     this.bindMapDelegates(container);
     this.renderV3Nodes();
     this.map.updateStatusBar();
+    this.syncMapChrome(container);
 
     // Auto-scroll to current row
     setTimeout(() => {
@@ -146,9 +155,53 @@ export class MapView {
       }
       if (action === 'show-fate-ring') {
         this.game.showFateRing();
+        return;
+      }
+      if (action === 'toggle-map-intel') {
+        const shell = container.querySelector('.map-screen-v3');
+        if (!shell) return;
+        shell.classList.toggle('show-map-intel');
+        this.syncMapChrome(container);
+        return;
+      }
+      if (action === 'toggle-map-tools') {
+        const shell = container.querySelector('.map-screen-v3');
+        if (!shell) return;
+        shell.classList.toggle('show-map-tools');
+        this.syncMapChrome(container);
       }
     });
     container.__mapDelegatesBound = true;
+  }
+
+  syncMapChrome(container) {
+    if (!container) return;
+    const shell = container.querySelector('.map-screen-v3');
+    if (!shell) return;
+    const intelOpen = shell.classList.contains('show-map-intel');
+    const toolsOpen = shell.classList.contains('show-map-tools');
+    const intelBtn = container.querySelector('[data-map-action="toggle-map-intel"]');
+    const toolsBtn = container.querySelector('[data-map-action="toggle-map-tools"]');
+    const detailPanels = container.querySelector('#map-detail-panels');
+    const expeditionPanels = container.querySelector('#map-expedition-panels');
+    const footer = container.querySelector('#map-footer');
+    if (intelBtn) {
+      intelBtn.textContent = intelOpen ? '收起情报' : '关卡情报';
+      intelBtn.setAttribute('aria-expanded', intelOpen ? 'true' : 'false');
+    }
+    if (toolsBtn) {
+      toolsBtn.textContent = toolsOpen ? '收起工具' : '工具';
+      toolsBtn.setAttribute('aria-expanded', toolsOpen ? 'true' : 'false');
+    }
+    if (detailPanels) {
+      detailPanels.setAttribute('aria-hidden', intelOpen ? 'false' : 'true');
+    }
+    if (expeditionPanels) {
+      expeditionPanels.setAttribute('aria-hidden', intelOpen ? 'false' : 'true');
+    }
+    if (footer) {
+      footer.setAttribute('aria-hidden', toolsOpen ? 'false' : 'true');
+    }
   }
 
   renderV3Nodes() {

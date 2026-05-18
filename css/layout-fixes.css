@@ -1602,11 +1602,26 @@ body[data-current-screen="battle-screen"] #battle-log {
 #map-screen #map-expedition-panels {
     grid-row: 3;
     min-height: 0;
-    max-height: min(22dvh, 220px);
+    max-height: 0;
+    padding: 0 20px;
+    opacity: 0;
+    pointer-events: none;
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
+    transition:
+        max-height 220ms ease,
+        opacity 180ms ease,
+        padding 180ms ease;
+}
+
+#map-screen .map-screen-v3.show-map-intel #map-expedition-panels {
+    max-height: min(22dvh, 220px);
+    padding: 0 20px 16px;
+    opacity: 1;
+    pointer-events: auto;
+    overflow-y: auto;
 }
 
 #map-screen .map-v3-header {
@@ -1615,9 +1630,7 @@ body[data-current-screen="battle-screen"] #battle-log {
     top: auto;
     left: auto;
     width: 100%;
-    max-height: min(26dvh, 238px);
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: visible;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
@@ -1648,13 +1661,59 @@ body[data-current-screen="battle-screen"] #battle-log {
     max-width: 980px;
     min-width: 0;
     justify-self: end;
+    display: grid;
     align-items: stretch;
+}
+
+#map-screen .map-header-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+#map-screen .map-header-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+#map-screen .map-header-toggle {
+    min-height: 34px;
+    padding: 7px 12px;
+    border: 1px solid rgba(166, 209, 255, 0.18);
+    background: rgba(11, 18, 35, 0.78);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
 }
 
 #map-screen .player-status-bar {
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 9px;
+}
+
+#map-screen .map-detail-panels {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    margin-top: 0;
+    transition:
+        max-height 220ms ease,
+        opacity 180ms ease,
+        margin-top 180ms ease;
+}
+
+#map-screen .map-screen-v3.show-map-intel .map-detail-panels {
+    max-height: min(48dvh, 520px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    opacity: 1;
+    pointer-events: auto;
+    margin-top: 10px;
 }
 
 #map-screen .status-item {
@@ -1816,16 +1875,33 @@ body[data-current-screen="battle-screen"] #battle-log {
 }
 
 #map-screen .map-footer {
-    grid-row: 4;
-    position: relative;
+    position: absolute;
+    right: 18px;
+    bottom: 18px;
     z-index: 30;
-    flex: 0 0 auto;
-    padding: 12px 16px 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
     background:
-        linear-gradient(180deg, rgba(5, 7, 18, 0.54), rgba(3, 5, 14, 0.94)),
+        linear-gradient(180deg, rgba(5, 7, 18, 0.72), rgba(3, 5, 14, 0.96)),
         radial-gradient(circle at 50% 0%, rgba(125, 186, 255, 0.12), transparent 52%);
-    border-top: 1px solid rgba(168, 202, 255, 0.16);
+    border: 1px solid rgba(168, 202, 255, 0.16);
+    border-radius: 999px;
     backdrop-filter: blur(12px);
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    transform: translateY(10px);
+    pointer-events: none;
+    transition:
+        opacity 180ms ease,
+        transform 180ms ease;
+}
+
+#map-screen .map-screen-v3.show-map-tools .map-footer {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
 }
 
 #map-screen .map-footer .menu-btn.small {
@@ -1921,12 +1997,12 @@ body[data-current-screen="battle-screen"] #battle-log {
     }
 
     #map-screen .map-v3-header {
-        max-height: min(22dvh, 190px);
         padding: 10px 14px 8px;
     }
 
     #map-screen #map-expedition-panels {
-        max-height: min(18dvh, 160px);
+        padding-left: 14px;
+        padding-right: 14px;
     }
 
     #map-screen .map-scroll-container {
@@ -1971,13 +2047,17 @@ body[data-current-screen="battle-screen"] #battle-log {
         display: flex;
         flex-direction: column;
         align-items: stretch;
-        max-height: min(24dvh, 220px);
         padding: 10px;
         gap: 8px;
     }
 
+    #map-screen .map-header-toolbar {
+        justify-content: stretch;
+    }
+
     #map-screen #map-expedition-panels {
-        max-height: min(18dvh, 170px);
+        padding-left: 10px;
+        padding-right: 10px;
     }
 
     #map-screen .map-v3-header .back-btn {
@@ -1987,6 +2067,12 @@ body[data-current-screen="battle-screen"] #battle-log {
     #map-screen .map-header-right {
         width: 100%;
         gap: 7px;
+    }
+
+    #map-screen .map-header-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
     }
 
     #map-screen .player-status-bar {
@@ -2028,8 +2114,11 @@ body[data-current-screen="battle-screen"] #battle-log {
     }
 
     #map-screen .map-footer {
-        gap: 8px;
-        padding: 10px;
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        justify-content: center;
+        border-radius: 18px;
     }
 
     #collection .compendium-toolbar,
