@@ -16,6 +16,18 @@ export class MapView {
       return;
     }
     const currentRealm = this.game.player.realm;
+    const displayRealmName = this.game && typeof this.game.getDisplayRealmName === 'function'
+      ? this.game.getDisplayRealmName(currentRealm)
+      : this.map.getRealmName(currentRealm);
+    const chapterSnapshot = this.game && typeof this.game.getChapterDisplaySnapshot === 'function'
+      ? this.game.getChapterDisplaySnapshot(currentRealm)
+      : null;
+    const mapHeadline = chapterSnapshot
+      ? `${chapterSnapshot.fullName || chapterSnapshot.name || displayRealmName}${chapterSnapshot.stageLabel ? ` · ${chapterSnapshot.stageLabel}` : ''}`
+      : displayRealmName;
+    const mapSubline = chapterSnapshot
+      ? [chapterSnapshot.skyOmen?.name, chapterSnapshot.leyline?.name, chapterSnapshot.routePrompt].filter(Boolean).join(' · ')
+      : '沿当前节点路线推进，优先处理高亮可进入节点。';
     const mapKey = this.game && typeof this.game.getMapCacheKey === 'function' ? this.game.getMapCacheKey(currentRealm) : String(currentRealm);
     const nodeLayoutSignature = this.map.getNodeLayoutSignature();
     const existingMap = container.querySelector('.map-screen-v3');
@@ -47,7 +59,7 @@ export class MapView {
                                 </div>
                                 <div class="status-item floor">
                                     <span class="icon">🏔️</span>
-                                    <span id="map-floor">${this.map.getRealmName(this.game.player.realm)}</span>
+                                    <span id="map-floor">${displayRealmName}</span>
                                 </div>
                             </div>
                             <div class="map-header-actions">
@@ -85,6 +97,19 @@ export class MapView {
 
                 <div class="map-scroll-container" id="map-scroll-container">
                     <div class="map-content-wrapper" id="map-content-wrapper">
+                        <div class="map-canvas-header">
+                            <div class="map-canvas-kicker">当前关卡</div>
+                            <div class="map-canvas-title-row">
+                                <div class="map-canvas-title">${mapHeadline}</div>
+                                <div class="map-canvas-stage">${displayRealmName}</div>
+                            </div>
+                            <div class="map-canvas-subtitle">${mapSubline}</div>
+                            <div class="map-canvas-legend" aria-hidden="true">
+                                <span class="map-legend-chip current">当前可进入</span>
+                                <span class="map-legend-chip completed">已完成</span>
+                                <span class="map-legend-chip locked">未解锁</span>
+                            </div>
+                        </div>
                         <!-- SVG Layer -->
                         <svg class="map-connections-svg" id="map-svg-layer"></svg>
                     </div>
@@ -105,7 +130,21 @@ export class MapView {
     // Auto-scroll to current row
     setTimeout(() => {
       const wrapper = document.getElementById('map-scroll-container');
-      const currentRow = document.querySelector('.node-row-v3:has(.map-node-v3.current)');
+      let currentRow = null;
+      try {
+        currentRow = document.querySelector('.node-row-v3:has(.map-node-v3.current)');
+      } catch (error) {
+        const currentNode = document.querySelector('.map-node-v3.current');
+        currentRow = currentNode && typeof currentNode.closest === 'function'
+          ? currentNode.closest('.node-row-v3')
+          : null;
+      }
+      if (!currentRow) {
+        const currentNode = document.querySelector('.map-node-v3.current');
+        currentRow = currentNode && typeof currentNode.closest === 'function'
+          ? currentNode.closest('.node-row-v3')
+          : null;
+      }
       if (wrapper && currentRow) {
         const scrollPos = currentRow.offsetTop - wrapper.clientHeight / 2 + currentRow.clientHeight / 2;
         wrapper.scrollTo({
