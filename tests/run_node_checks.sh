@@ -6,6 +6,8 @@ cd "$ROOT_DIR"
 
 node tests/sanity_auth_config_checks.cjs
 node tests/sanity_backend_hmac_checks.cjs
+node tests/sanity_backend_timestamp_checks.cjs
+node tests/sanity_frontend_cloud_sync_checks.mjs
 node tests/backend_security_checks.cjs
 node tests/sanity_balance_checks.cjs
 node tests/sanity_expansion_system_checks.cjs
@@ -40,7 +42,9 @@ node tests/sanity_path_doctrine_growth_checks.cjs
 node tests/sanity_run_destiny_system_checks.cjs
 node tests/sanity_run_vow_system_checks.cjs
 node tests/sanity_chapter_world_rule_checks.cjs
+node tests/sanity_chapter_event_composer_ledger_checks.cjs
 node tests/sanity_chapter_battlefield_runtime_checks.cjs
+node tests/sanity_intro_progress_sync_checks.cjs
 node tests/sanity_codex_sanctum_checks.cjs
 node tests/sanity_fate_lineage_system_checks.cjs
 node tests/sanity_codex_unlock_flow_checks.cjs
@@ -63,6 +67,7 @@ node tests/sanity_map_weight_checks.cjs
 node tests/sanity_map_path_synergy_checks.cjs
 node tests/sanity_map_ghost_duel_checks.cjs
 node tests/sanity_map_node_risk_checks.cjs
+node tests/sanity_map_overview_risk_card_checks.cjs
 node tests/sanity_map_engineering_progress_checks.cjs
 node tests/sanity_map_faction_bounty_signal_checks.cjs
 node tests/sanity_reward_modal_closure_checks.cjs
@@ -93,5 +98,6 @@ node tests/sanity_endless_mode_checks.cjs
 node tests/sanity_endless_pressure_curve_checks.cjs
 node tests/sanity_endless_phase_boss_checks.cjs
 node tests/sanity_endless_shop_service_checks.cjs
+node tests/test_e2e_backend.cjs
 
 echo "All node checks passed."

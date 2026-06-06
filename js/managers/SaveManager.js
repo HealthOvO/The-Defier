@@ -68,13 +68,22 @@ export class SaveManager {
       if (typeof AuthService !== 'undefined' && AuthService.isLoggedIn() && targetSlot !== null && targetSlot !== undefined) {
         this.game.cachedSlots = this.game.cachedSlots || {};
         const cloudPromise = AuthService.saveCloudData(gameState, targetSlot).then(res => {
-          if (res.success) {
+          if (res.success && !res.skipped) {
             console.log(`游戏已同步 (云端 Slot ${targetSlot})`);
             this.game.cachedSlots[targetSlot] = gameState;
             if (typeof Utils !== 'undefined') Utils.showBattleLog('游戏进度已保存到云端');
             return {
               ...result,
               cloud: true,
+              cloudResult: res
+            };
+          } else if (res.success && res.skipped) {
+            console.warn('云端已有更新，本次未覆盖', res);
+            if (typeof Utils !== 'undefined') Utils.showBattleLog('云端已有更新，本次仅保存本地');
+            return {
+              ...result,
+              cloud: false,
+              cloudSkipped: true,
               cloudResult: res
             };
           } else {

@@ -1,6 +1,7 @@
 import { PVP_SHOP_ITEMS } from "../data/shop-items.js";
 import { EloCalculator } from "../core/elo-calculator.js";
 import { AuthService } from "./authService.js";
+import { BackendClient } from "./backend-client.js";
 import { CARDS } from "../data/index.js";
 import { Utils } from "../core/utils.js";
 import { STARTER_DECK } from "../data/cards.js";
@@ -12,8 +13,8 @@ import { STARTER_DECK } from "../data/cards.js";
 export const PVPService = {
   context: {
     game: null,
-    authService: typeof AuthService !== 'undefined' ? AuthService : null,
-    utils: typeof Utils !== 'undefined' ? Utils : null
+    authService: null,
+    utils: null
   },
   // 缓存数据
   currentRankData: null,
@@ -58,10 +59,44 @@ export const PVPService = {
     if (typeof sessionStorage !== 'undefined') return sessionStorage;
     return null;
   },
+  getBackendPvpClient() {
+    try {
+      if (typeof BackendClient !== 'undefined' && BackendClient && typeof BackendClient.ensureReady === 'function') {
+        return BackendClient;
+      }
+    } catch (error) {}
+    return null;
+  },
+  isServerPvpAvailable() {
+    const client = this.getBackendPvpClient();
+    if (!client) return false;
+    try {
+      if (!client.ensureReady()) return false;
+      return !!(typeof client.getCurrentUser === 'function' && client.getCurrentUser());
+    } catch (error) {
+      return false;
+    }
+  },
+  isBmobPvpAvailable() {
+    let authService = this.context && this.context.authService ? this.context.authService : null;
+    try {
+      authService = authService || AuthService;
+    } catch (error) {
+      authService = null;
+    }
+    return !!(typeof Bmob !== 'undefined' && authService && typeof authService.isLoggedIn === 'function' && authService.isLoggedIn());
+  },
   isOnlinePvpAvailable() {
-    return !!(typeof Bmob !== 'undefined' && typeof AuthService !== 'undefined' && AuthService && typeof AuthService.isLoggedIn === 'function' && AuthService.isLoggedIn());
+    return this.isServerPvpAvailable() || this.isBmobPvpAvailable();
   },
   getCurrentUserSafe() {
+    const client = this.getBackendPvpClient();
+    try {
+      if (client && client.ensureReady() && typeof client.getCurrentUser === 'function') {
+        const user = client.getCurrentUser();
+        if (user && user.objectId) return user;
+      }
+    } catch (error) {}
     if (typeof Bmob === 'undefined' || !Bmob.User || typeof Bmob.User.current !== 'function') return null;
     return Bmob.User.current();
   },
@@ -2058,7 +2093,7 @@ export const PVPService = {
       const now = Date.now();
       const maxAge = 10 * 60 * 1000;
       const isExpired = !parsed.issuedAt || now - parsed.issuedAt > maxAge;
-      const currentUser = typeof Bmob !== 'undefined' && Bmob.User && typeof Bmob.User.current === 'function' ? Bmob.User.current() : null;
+      const currentUser = this.getCurrentUserSafe();
       const userMismatch = !!(parsed.userId && currentUser && parsed.userId !== currentUser.objectId);
       if (parsed.consumed || isExpired) {
         storage.removeItem(this.activeMatchStorageKey);
@@ -2146,6 +2181,52 @@ export const PVPService = {
         message: '已保存到本地演武场（离线）'
       };
     }
+    const serverClient = this.getBackendPvpClient();
+    if (this.isServerPvpAvailable() && serverClient && typeof serverClient.uploadPvpDefenseSnapshot === 'function') {
+      try {
+        const result = await serverClient.uploadPvpDefenseSnapshot({
+          ...localSnapshot,
+          battleData: normalizedData
+        });
+        if (result && result.success) {
+          const serverSnapshot = result.snapshot && typeof result.snapshot === 'object' ? {
+            ...result.snapshot,
+            data: typeof result.snapshot.data === 'string' ? result.snapshot.data : JSON.stringify(result.snapshot.battleData || normalizedData),
+            isLocal: false,
+            isServer: true
+          } : {
+            ...localSnapshot,
+            objectId: `server-ghost-${Date.now()}`,
+            user: this.getCurrentUserSafe() || localSnapshot.user,
+            isLocal: false,
+            isServer: true
+          };
+          this.saveLocalSnapshot(serverSnapshot);
+          if (result.rank) {
+            this.currentRankData = {
+              ...result.rank,
+              isServer: true
+            };
+            this.saveLocalRank(this.currentRankData);
+          }
+          return {
+            success: true,
+            server: true,
+            snapshot: serverSnapshot
+          };
+        }
+      } catch (error) {
+        console.warn('Upload server PVP snapshot failed:', error);
+      }
+      if (!this.isBmobPvpAvailable()) {
+        this.saveLocalSnapshot(localSnapshot);
+        return {
+          success: true,
+          local: true,
+          message: '云端上传失败，已保存到本地演武场'
+        };
+      }
+    }
     try {
       const user = this.getCurrentUserSafe();
       if (!user || !user.objectId) {
@@ -2221,6 +2302,25 @@ export const PVPService = {
     if (!this.isOnlinePvpAvailable()) {
       return this.loadLocalSnapshot();
     }
+    const serverClient = this.getBackendPvpClient();
+    if (this.isServerPvpAvailable() && serverClient && typeof serverClient.getPvpDefenseSnapshot === 'function') {
+      try {
+        const result = await serverClient.getPvpDefenseSnapshot();
+        if (result && result.success && result.snapshot) {
+          const snapshot = {
+            ...result.snapshot,
+            data: typeof result.snapshot.data === 'string' ? result.snapshot.data : JSON.stringify(result.snapshot.battleData || {}),
+            isLocal: false,
+            isServer: true
+          };
+          this.saveLocalSnapshot(snapshot);
+          return snapshot;
+        }
+      } catch (error) {
+        console.warn('Get server PVP snapshot failed:', error);
+      }
+      if (!this.isBmobPvpAvailable()) return this.loadLocalSnapshot();
+    }
     try {
       const user = this.getCurrentUserSafe();
       if (!user || !user.objectId) return this.loadLocalSnapshot();
@@ -2263,6 +2363,126 @@ export const PVPService = {
         success: false,
         message: '未登录'
       };
+    }
+    const serverClient = this.getBackendPvpClient();
+    if (this.isServerPvpAvailable() && serverClient && typeof serverClient.findPvpOpponent === 'function') {
+      try {
+        const user = this.getCurrentUserSafe();
+        if (!user || !user.objectId) {
+          if (allowPractice) {
+            return this.createPracticeOpponent(myScore, myRealm, 'missing_user', {
+              preferredRank,
+              preferredDangerProfile
+            });
+          }
+          return {
+            success: false,
+            message: '未登录'
+          };
+        }
+        const serverResult = await serverClient.findPvpOpponent({
+          myScore,
+          myRealm,
+          preferredRankId: preferredRank && preferredRank.objectId ? preferredRank.objectId : '',
+          allowPractice
+        });
+        if (serverResult && serverResult.success && serverResult.opponent) {
+          const opponentRank = this.normalizeFocusRank(serverResult.opponent.rank);
+          const ghostData = serverResult.opponent.ghost || {};
+          const rawBattleData = serverResult.opponent.battleData || (typeof ghostData.data === 'string' ? JSON.parse(ghostData.data) : ghostData.data) || {};
+          const safeBattleData = this.normalizeBattleData(rawBattleData);
+          const dangerProfile = this.getPVPDangerProfile({
+            rank: opponentRank,
+            ghost: ghostData,
+            battleData: safeBattleData
+          }, {
+            myRank: this.currentRankData || null,
+            myScore,
+            myRealm
+          });
+          const matchIntent = this.getFocusDuelSlip({
+            rank: opponentRank,
+            dangerProfile
+          }, {
+            myRank: this.currentRankData || null,
+            myScore,
+            myRealm
+          });
+          const dossier = this.getFocusOpponentDossier({
+            rank: opponentRank,
+            dangerProfile,
+            duelBrief: matchIntent
+          }, {
+            myRank: this.currentRankData || null,
+            myScore,
+            myRealm
+          });
+          const issuedAt = Number(serverResult.issuedAt) || Date.now();
+          const matchTicket = serverResult.matchTicket || serverResult.opponent.matchTicket;
+          this.setActiveMatch({
+            ticket: matchTicket,
+            issuedAt,
+            expiresAt: Number(serverResult.expiresAt) || issuedAt + 10 * 60 * 1000,
+            opponentRankId: opponentRank.objectId || null,
+            opponentUserId: opponentRank.user && opponentRank.user.objectId ? opponentRank.user.objectId : null,
+            opponentRating: Math.max(100, Number(opponentRank.score) || 1000),
+            userId: user.objectId,
+            consumed: false,
+            serverMatch: true,
+            focusRankId: preferredRank ? preferredRank.objectId : null,
+            focusUserId: preferredRank && preferredRank.user ? preferredRank.user.objectId : null,
+            matchIntent,
+            dangerProfileSnapshot: dangerProfile,
+            dossierSnapshot: dossier ? {
+              seasonId: this.getCurrentSeasonMeta().id || '',
+              seasonName: dossier.seasonName || this.getCurrentSeasonMeta().name || '',
+              targetName: dossier.targetName || '',
+              targetDivision: dossier.targetDivision || '',
+              targetRealm: dossier.targetRealm || 1,
+              archetypeLabel: dossier.archetypeLabel || '',
+              segmentLabel: dossier.segmentLabel || '',
+              comparisonValue: dossier.comparisonValue || ''
+            } : null
+          });
+          return {
+            success: true,
+            opponent: {
+              rank: opponentRank,
+              ghost: ghostData,
+              battleData: safeBattleData,
+              matchTicket,
+              matchIntent,
+              dangerProfile
+            }
+          };
+        }
+        if (!this.isBmobPvpAvailable()) {
+          if (allowPractice) {
+            return this.createPracticeOpponent(myScore, myRealm, 'no_server_opponent', {
+              preferredRank,
+              preferredDangerProfile
+            });
+          }
+          return {
+            success: false,
+            message: serverResult && serverResult.message ? serverResult.message : '暂无对手，请稍后再试'
+          };
+        }
+      } catch (error) {
+        console.warn('Find server PVP opponent failed:', error);
+        if (!this.isBmobPvpAvailable()) {
+          if (allowPractice) {
+            return this.createPracticeOpponent(myScore, myRealm, 'query_error', {
+              preferredRank,
+              preferredDangerProfile
+            });
+          }
+          return {
+            success: false,
+            error
+          };
+        }
+      }
     }
     try {
       // 策略：找积分相近的对手 (±200分)
@@ -2592,6 +2812,30 @@ export const PVPService = {
       this.currentRankData = this.loadLocalRank();
       return this.currentRankData;
     }
+    const serverClient = this.getBackendPvpClient();
+    if (this.isServerPvpAvailable() && serverClient && typeof serverClient.getPvpRank === 'function') {
+      try {
+        const result = await serverClient.getPvpRank();
+        if (result && result.success && result.rank) {
+          this.currentRankData = {
+            ...result.rank,
+            score: Math.max(0, Math.floor(Number(result.rank.score) || 1000)),
+            realm: Math.max(1, Math.floor(Number(result.rank.realm) || 1)),
+            division: result.rank.division || this.getDivisionByScore(result.rank.score),
+            isServer: true
+          };
+          this.saveLocalRank(this.currentRankData);
+          if (result.economy) this.setEconomySnapshot(result.economy);
+          return this.currentRankData;
+        }
+      } catch (error) {
+        console.warn('Sync server PVP rank failed:', error);
+      }
+      if (!this.isBmobPvpAvailable()) {
+        this.currentRankData = this.loadLocalRank();
+        return this.currentRankData;
+      }
+    }
     try {
       const user = this.getCurrentUserSafe();
       if (!user || !user.objectId) {
@@ -2760,6 +3004,61 @@ export const PVPService = {
         wallet: this.getWalletSummary(historyState)
       };
     };
+    const serverClient = this.getBackendPvpClient();
+    if (active && active.serverMatch && this.isServerPvpAvailable() && serverClient && typeof serverClient.reportPvpMatchResult === 'function') {
+      try {
+        const serverResult = await serverClient.reportPvpMatchResult({
+          matchTicket,
+          didWin: isWin
+        });
+        if (!serverResult || !serverResult.success) {
+          if (serverResult && serverResult.reason === 'server_authority_unavailable') {
+            const localOppRating = Math.max(100, Number(active && active.opponentRating || opponentRankData && opponentRankData.score || 1000));
+            return applyLocalSettlement(localOppRating);
+          }
+          this.clearActiveMatch();
+          return {
+            newRating: currentRating,
+            delta: 0,
+            rejected: true,
+            message: serverResult && serverResult.message ? serverResult.message : 'PVP 结算失败'
+          };
+        }
+        if (serverResult.rank) {
+          this.currentRankData = {
+            ...serverResult.rank,
+            isServer: true
+          };
+          this.saveLocalRank(this.currentRankData);
+        } else {
+          this.currentRankData = this.normalizeLocalRank({
+            ...this.currentRankData,
+            score: serverResult.newRating,
+            wins: (this.currentRankData.wins || 0) + (isWin ? 1 : 0),
+            losses: (this.currentRankData.losses || 0) + (isWin ? 0 : 1),
+            division: this.getDivisionByScore(serverResult.newRating)
+          });
+          this.saveLocalRank(this.currentRankData);
+        }
+        if (serverResult.economy) this.setEconomySnapshot(serverResult.economy);
+        this.clearActiveMatch();
+        return {
+          newRating: Math.max(0, Math.floor(Number(serverResult.newRating) || currentRating)),
+          delta: Math.trunc(Number(serverResult.delta) || 0),
+          coinsAwarded: Math.max(0, Math.floor(Number(serverResult.coinsAwarded) || 0)),
+          wallet: serverResult.wallet || this.getWalletSummary()
+        };
+      } catch (error) {
+        console.error('PVP server settlement failed:', error);
+        this.clearActiveMatch();
+        return {
+          newRating: currentRating,
+          delta: 0,
+          rejected: true,
+          error
+        };
+      }
+    }
     if (!onlineAvailable || active.localPractice) {
       const localOppRating = Math.max(100, Number(active && active.opponentRating || opponentRankData && opponentRankData.score || 1000));
       return applyLocalSettlement(localOppRating);
@@ -2875,6 +3174,20 @@ export const PVPService = {
   async getLeaderboard() {
     if (!this.isOnlinePvpAvailable()) {
       return this.createPracticeLeaderboard(this.currentRankData || this.loadLocalRank());
+    }
+    const serverClient = this.getBackendPvpClient();
+    if (this.isServerPvpAvailable() && serverClient && typeof serverClient.getPvpLeaderboard === 'function') {
+      try {
+        const result = await serverClient.getPvpLeaderboard(20);
+        if (result && result.success && Array.isArray(result.data) && result.data.length > 0) {
+          return result.data;
+        }
+      } catch (error) {
+        console.warn('Get server leaderboard failed:', error);
+      }
+      if (!this.isBmobPvpAvailable()) {
+        return this.createPracticeLeaderboard(this.currentRankData || this.loadLocalRank());
+      }
     }
     try {
       const query = Bmob.Query('PlayerRank');

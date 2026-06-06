@@ -41,11 +41,35 @@ function generateSignature(dataStr, salt) {
         .digest('hex');
 }
 
+function generateSessionSignature(dataStr, salt, sessionToken) {
+    if (typeof sessionToken !== 'string' || sessionToken.length < 16) {
+        throw new Error('session token is required for session integrity signatures');
+    }
+    return crypto.createHmac('sha256', sessionToken)
+        .update('session-v1', 'utf8')
+        .update('\n', 'utf8')
+        .update(String(salt), 'utf8')
+        .update('\n', 'utf8')
+        .update(String(dataStr), 'utf8')
+        .digest('hex');
+}
+
 function verifySignature(dataStr, salt, signature) {
     if (!isSignatureConfigured()) return false;
     const input = validateSignatureInput(salt, signature);
     if (!input.valid) return false;
     const expected = generateSignature(dataStr, salt);
+    const expectedBuffer = Buffer.from(expected, 'hex');
+    const signatureBuffer = Buffer.from(String(signature), 'hex');
+    return expectedBuffer.length === signatureBuffer.length
+        && crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
+}
+
+function verifySessionSignature(dataStr, salt, signature, sessionToken) {
+    if (typeof sessionToken !== 'string' || sessionToken.length < 16) return false;
+    const input = validateSignatureInput(salt, signature);
+    if (!input.valid) return false;
+    const expected = generateSessionSignature(dataStr, salt, sessionToken);
     const expectedBuffer = Buffer.from(expected, 'hex');
     const signatureBuffer = Buffer.from(String(signature), 'hex');
     return expectedBuffer.length === signatureBuffer.length
@@ -65,6 +89,8 @@ function verifyRequestIntegrity(dataStr, salt, signature, context = {}) {
     const hasSignature = signature !== undefined || salt !== undefined;
     const route = context.route || 'unknown-route';
     const userId = context.userId || 'anonymous';
+    const signatureMode = typeof context.signatureMode === 'string' ? context.signatureMode : '';
+    const sessionToken = typeof context.sessionToken === 'string' ? context.sessionToken : '';
 
     if (!hasSignature) {
         if (isIntegrityRequired()) {
@@ -79,11 +105,21 @@ function verifyRequestIntegrity(dataStr, salt, signature, context = {}) {
     }
 
     if (!isSignatureConfigured()) {
-        if (isIntegrityRequired()) {
-            return { ok: false, status: 403, reason: 'hmac-not-configured', message: '服务端完整性校验未配置' };
+        if (signatureMode === 'session') {
+            if (verifySessionSignature(dataStr, salt, signature, sessionToken)) {
+                return { ok: true, mode: 'session' };
+            }
+            return { ok: false, status: 403, reason: 'session-signature-mismatch', message: '会话完整性签名校验失败' };
         }
-        console.warn(`[Integrity] Ignored signature for ${route} from user ${userId}: DEFIER_HMAC_SECRET is not configured.`);
-        return { ok: true, skipped: true };
+        console.warn(`[Integrity] Rejected signature for ${route} from user ${userId}: DEFIER_HMAC_SECRET is not configured.`);
+        return { ok: false, status: 403, reason: 'hmac-not-configured', message: '服务端完整性校验未配置' };
+    }
+
+    if (signatureMode === 'session') {
+        if (verifySessionSignature(dataStr, salt, signature, sessionToken)) {
+            return { ok: true, mode: 'session' };
+        }
+        return { ok: false, status: 403, reason: 'session-signature-mismatch', message: '会话完整性签名校验失败' };
     }
 
     if (!verifySignature(dataStr, salt, signature)) {
@@ -95,10 +131,12 @@ function verifyRequestIntegrity(dataStr, salt, signature, context = {}) {
 
 module.exports = {
     generateSignature,
+    generateSessionSignature,
     isSignatureConfigured,
     isIntegrityRequired,
     validateIntegrityConfig,
     validateSignatureInput,
     verifyRequestIntegrity,
-    verifySignature
+    verifySignature,
+    verifySessionSignature
 };

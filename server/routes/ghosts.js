@@ -3,12 +3,13 @@ const { db } = require('../db/database');
 const { authenticate } = require('../middleware/auth');
 const { validateGhostData } = require('../utils/ghostValidator');
 const { verifyRequestIntegrity } = require('../utils/hmac');
+const { getMaxAcceptedClientTimestamp, normalizeClientTimestamp } = require('../utils/timestamps');
 
 const router = express.Router();
 
 // POST /api/ghosts/current - 上传玩家残影数据
 router.post('/current', authenticate, (req, res) => {
-    const { realm, ghostData, signature, salt } = req.body;
+    const { realm, ghostData, uploadTime, signature, salt, signatureMode } = req.body;
     const userId = req.user.id;
     const userName = req.user.username;
 
@@ -29,7 +30,9 @@ router.post('/current', authenticate, (req, res) => {
 
     const integrity = verifyRequestIntegrity(dataStr, salt, signature, {
         route: 'POST /api/ghosts/current',
-        userId
+        userId,
+        sessionToken: req.authToken,
+        signatureMode
     });
     if (!integrity.ok) {
         console.warn(`[Integrity] Rejected ghost upload for user ${userId}: ${integrity.reason}`);
@@ -43,32 +46,41 @@ router.post('/current', authenticate, (req, res) => {
         return res.status(403).json({ success: false, message: `幽灵数据异常，拒绝上传: ${validation.reason}` });
     }
 
-    const now = Date.now();
+    const dataUpdatedAt = parsedGhostData && typeof parsedGhostData === 'object' && Number.isFinite(Number(parsedGhostData.updatedAt))
+        ? Number(parsedGhostData.updatedAt)
+        : 0;
+    const now = normalizeClientTimestamp(
+        uploadTime,
+        dataUpdatedAt > 0 ? normalizeClientTimestamp(dataUpdatedAt) : Date.now()
+    );
+    const maxStoredTime = getMaxAcceptedClientTimestamp();
+    const storedGhostData = { ...parsedGhostData, updatedAt: now };
+    const storedDataStr = JSON.stringify(storedGhostData);
 
-    // 先查询该用户是否已有残影，如果有则更新，没有则插入
-    db.get(`SELECT id FROM game_ghosts WHERE user_id = ?`, [userId], (err, row) => {
-        if (err) return res.status(500).json({ success: false, message: '数据库错误' });
-
-        if (row) {
-            db.run(
-                `UPDATE game_ghosts SET realm = ?, ghost_data = ?, upload_time = ? WHERE user_id = ?`,
-                [nRealm, dataStr, now, userId],
-                (err) => {
-                    if (err) return res.status(500).json({ success: false, message: '更新残影失败' });
-                    res.json({ success: true });
-                }
-            );
-        } else {
-            db.run(
-                `INSERT INTO game_ghosts (user_id, user_name, realm, ghost_data, upload_time) VALUES (?, ?, ?, ?, ?)`,
-                [userId, userName, nRealm, dataStr, now],
-                (err) => {
-                    if (err) return res.status(500).json({ success: false, message: '上传残影失败' });
-                    res.json({ success: true });
-                }
-            );
+    db.run(
+        `INSERT INTO game_ghosts (user_id, user_name, realm, ghost_data, upload_time)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_id)
+         DO UPDATE SET
+            user_name = excluded.user_name,
+            realm = excluded.realm,
+            ghost_data = excluded.ghost_data,
+            upload_time = excluded.upload_time
+         WHERE excluded.upload_time > CASE
+            WHEN game_ghosts.upload_time > ? THEN 0
+            ELSE game_ghosts.upload_time
+         END`,
+        [userId, userName, nRealm, storedDataStr, now, maxStoredTime],
+        function(err) {
+            if (err) return res.status(500).json({ success: false, message: '上传残影失败' });
+            res.json({
+                success: true,
+                skipped: this.changes === 0,
+                uploadTime: now,
+                message: this.changes === 0 ? 'stale-ghost-ignored' : undefined
+            });
         }
-    });
+    );
 });
 
 // GET /api/ghosts/random?realm=3 - 随机拉取当前层数附近的残影

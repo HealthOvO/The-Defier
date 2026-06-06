@@ -1,5 +1,14 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-04: 生产 PVP smoke 与介绍页锚点补强
+  - 本轮完成
+    - `tests/prod_api_smoke.cjs` 补入最小 PVP 生产 API 链路，覆盖 `/api/pvp/rank`、`/api/pvp/economy`、`/api/pvp/defense`、`/api/pvp/defense/me`、`/api/pvp/leaderboard`、`/api/pvp/match`、`/api/pvp/match/result` 默认权威门禁与 `/api/pvp/shop/purchase`，并保留生产目标 `CONFIRM_PROD=1` 写入保护。
+    - `game-intro.html` 把 `seasonBoard.frontier.chronicle` 与 `seasonBoard.frontier.chronicleArchive` 的口径拆清：前者负责本周战役史卷，后者负责多周史卷回看。
+    - `tests/sanity_intro_progress_sync_checks.cjs` 增加 `seasonBoard.frontier.chronicleArchive` 共享锚点，避免介绍页和进度文档一起停在旧口径。
+  - 本轮验证
+    - `node --check tests/prod_api_smoke.cjs` ✅
+    - `node tests/prod_api_smoke.cjs http://127.0.0.1:19031`（临时本地后端）✅
+
 - 2026-05-10: V9.2《三周一章：章势压强》M6 开发完成
   - 本轮策划
     - 在 M5 的章目标板之外，继续把 `seasonBoard.chapterArc` 发展成一块更稳定的只读章势压强层：当玩家在 reward / expedition / map / Sanctum 看到三周章程时，除了章目标与章末回响，还能同步看到一条统一的 `pressureWindow`，用来解释当前章势节奏、压强状态与章内导引，但仍不引入第二任务源。
@@ -7816,7 +7825,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - 新增 `tests/sanity_map_node_risk_checks.js`
         - 断言污染禁术坛、宿敌触发、悬赏牵引下的节点级 DRI 与对策输出
         - 断言前路预测会优先选出最高压节点
-      - `tests/sanity_map_overview_risk_card_checks.js`
+      - `tests/sanity_map_overview_risk_card_checks.cjs`
         - 新增 `前路主险 / 节点预警` 断言
       - `tests/browser_map_overview_risk_audit.mjs`
         - 新增局势总览条 `前路主险` 文案断言
@@ -7834,7 +7843,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - `node --check tests/browser_map_overview_risk_audit.mjs` ✅
     - Node：
       - `node tests/sanity_map_node_risk_checks.js` ✅
-      - `node tests/sanity_map_overview_risk_card_checks.js` ✅
+      - `node tests/sanity_map_overview_risk_card_checks.cjs` ✅
       - `bash tests/run_node_checks.sh` ✅
     - 浏览器：
       - `node tests/browser_map_overview_risk_audit.mjs http://127.0.0.1:4173 output/browser-map-overview-risk-v7-next` ✅
@@ -8888,12 +8897,258 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - 新增 `tests/browser_challenge_mobile_flow_audit.mjs`，单独覆盖挑战移动端 hub / 开局锁定 / 运行横幅 / 回放 / 失败回档链路。
   - 新增 `tests/browser_reward_meta_mobile_audit.mjs`，单独覆盖奖励页移动端季盘 dense panel、章程块、结题赏按钮与 CTA 可达性。
   - 新增 `tests/browser_pvp_mobile_result_audit.mjs`，单独覆盖 PVP 移动端结果层内容、布局与回榜单回路。
-  - 新增 `tests/sanity_intro_progress_sync_checks.js`，用文件级 sanity 把 `game-intro.html` 与 `progress.md` 的版本锚点收成固定门禁。
+  - 新增 `tests/sanity_intro_progress_sync_checks.cjs`，用文件级 sanity 把 `game-intro.html` 与 `progress.md` 的版本锚点收成固定门禁。
   - `js/game.js` / `index.html` 将游戏内更新页与首页版本标识同步到 `V9.2`，并补入 `三周一章 / feedbackLine / objective / pressureWindow` 文案锚点，消除 guide modal 的版本漂移。
 
 - 验证
   - `node tests/browser_challenge_mobile_flow_audit.mjs http://127.0.0.1:4173 output/browser-challenge-mobile-flow-audit` ✅
   - `node tests/browser_reward_meta_mobile_audit.mjs http://127.0.0.1:4173 output/browser-reward-meta-mobile-audit` ✅
   - `node tests/browser_pvp_mobile_result_audit.mjs http://127.0.0.1:4173 output/browser-pvp-mobile-result-audit` ✅
-  - `node tests/sanity_intro_progress_sync_checks.js` ✅
+  - `node tests/sanity_intro_progress_sync_checks.cjs` ✅
   - `node tests/browser_guide_modal_audit.mjs http://127.0.0.1:4173 output/browser-guide-modal-audit-sync` ✅
+
+## 2026-06-03 Backend Integrity And Local Release Gate Evidence
+
+- 变更
+  - 浏览器客户端云同步改为会话级完整性签名，不把 `DEFIER_HMAC_SECRET` 写入前端 bundle。
+  - `/api/saves`、`/api/user/global`、`/api/ghosts/current` 在 required integrity 模式下均覆盖前端服务层 E2E。
+  - Required integrity 模式新增缺签名负向门禁：存档、全局数据、残影未带 `salt/signature` 时必须拒绝，避免生产 smoke 只验证成功路径。
+  - 全局数据新增 `global_updated_at` 迁移与 stale-skip 写入语义。
+  - 残影上传改为按 `uploadTime/updatedAt` stale-skip，避免旧残影晚到覆盖新残影。
+  - 存档、全局数据和残影时间戳统一做服务端归一化：`Infinity`、负数、非数字和过分超前时间会回退到可信时间，避免旧客户端或恶意请求把记录永久锁成未来版本。
+  - 新增 `CONFIRM_PROD=1 npm run test:prod:api -- https://080305.xyz` 生产 API smoke，覆盖 health、注册、登录、坏 JWT 拒绝、存档、全局数据、残影上传、残影拉取、缺签名拒绝、非法/未来时间戳恢复，以及 save/global/ghost 旧时间与同时间 stale-skip。
+  - 浏览器 release gate 新增 `backend-client` 模块，用构建后的前端 bundle 在浏览器内调用 `BackendClient`，真实覆盖注册、登录、存档、全局数据、残影上传和残影拉取。
+  - 浏览器 release gate 新增 `auth-ui-cloud` 模块，覆盖真实登录 UI 注册、登录、自动绑定、云存档槽位渲染、点击“继续”并从云存档恢复本地存档状态。
+  - `auth-ui-cloud` smoke 改用随机临时后端端口和独立浏览器上下文，避免固定端口误连既有本地后端，也避免同一 session/localStorage 掩盖云端读回问题。
+  - 浏览器 release 汇总器新增 26 个期望模块硬校验；缺失、重复或额外未知模块都会直接失败，避免新增模块没有产出报告或 output 混入旁路报告时完整 gate 仍绿灯。
+  - 浏览器 release 汇总器截图统计改为只统计 26 个正式模块目录，避免 output 根目录或未知模块里的调试图片污染正式截图证据。
+  - `BackendClient` 现在透传服务端返回的 `skipped` 与 canonical `saveTime/globalUpdatedAt/uploadTime`；`AuthService` 用 canonical save time 更新本地 stale gate，避免未来时间戳被服务端规范化后前端仍自锁。
+  - `AuthService` 在登出和账号身份切换时清空 `saveQueueBySlot/latestSaveTimeBySlot`，避免账号 A 的本地 stale gate 误跳过账号 B 的合法云存档。
+  - `AuthService.logout()` 对无 `PVPService` 绑定的测试/VM 环境补齐 `typeof` 保护，避免退出登录时触发 ReferenceError。
+  - `SaveManager` 在云端返回 `skipped: true` 时不再提示“云端同步成功”，也不会把本地旧状态写入 `cachedSlots` 当作云端已落盘。
+  - `PVPService` 延后读取 `AuthService/Utils`，修复浏览器 debug smoke 下循环导入导致的 `Cannot access 'AuthService' before initialization`。
+  - PVP 移动端结算页收紧标题、积分、对手行与复盘卡间距；`browser_pvp_mobile_result_audit` 改为检查容器和按钮的上下左右四边界，避免只验横向不溢出的弱门禁。
+  - `frontend-layout` 新增 `map-screen-expedition-intel-click` 场景，覆盖远征情报栏自动展开、用户手动收起不被 rerender 重开、重新展开后地图节点仍可点击。
+  - `frontend-layout` 的地图节点点击改为先 DOM 滚动进真实 viewport，再用中心点命中和移动端 tap 验证；避免离屏坐标或动画节点被误判为可点击。
+  - `frontend-layout` 新增 `map-screen` / `map-screen-expedition-intel-click` / `reward-screen` 的非战斗 toast 遮挡压力门禁，并保留对应 stress screenshot。
+  - 移动端地图情报模式收紧 header/detail/map/panel 的高度分配：详情区内部滚动，远征面板首卡在 390x844 首屏完整可见，深层路线/悬赏 CTA 通过真实滚动后可触达。
+  - 移动端 map 的非战斗 toast 在活跃地图页改走底部位置，避免压住“关卡情报 / 工具”等头部按钮。
+  - `browser_mobile_layout_audit` 拆分远征情报首屏证据、深层 CTA 触达证据和 toast 遮挡证据，避免滚动后离屏状态仍被当作“可读”。
+  - `browser_reward_meta_mobile_audit` 新增 reward 底部 CTA 的滚动进 viewport、中心点命中和真实点击断言，覆盖 `handoff` 跳转藏经阁与 `lane reward` 领取状态更新。
+  - `prod_api_smoke` 新增篡改 Bearer token 后访问受保护接口必须 `401` 的公开行为级 JWT 负向验证，并覆盖 `/api/saves`、`/api/user/global`、`/api/ghosts/current`。
+  - `backend_security_checks` 新增 `NODE_ENV=production` 且 `JWT_SECRET` 缺失/过短时服务必须启动失败的本地回归。
+  - 新增 `docs/production_deploy.md`，明确正式线上环境是 `cloud119` / `https://080305.xyz/`，`.site` 和 GitHub Pages 产物不等于正式部署完成。
+  - 新增 `scripts/check-production-runtime-env.sh` 与 `npm run test:prod:env -- cloud119`，用于上线时只读检查运行中服务是否满足 `NODE_ENV=production`、`JWT_SECRET` / `DEFIER_HMAC_SECRET` 长度和 `DEFIER_INTEGRITY_REQUIRED=1`；脚本只输出条件，不回显密钥值。
+  - 新增 `scripts/check-production-read-only.sh` 与 `npm run test:prod:read -- cloud119 https://080305.xyz`，只读检查公网首页/API health、后端服务 active、`nginx -t`、远端静态/后端文件时间戳和当前关键字漂移，不读取密钥、不写生产数据。
+  - 新增 `scripts/deploy-production.sh` 与 `npm run deploy:prod`，用 `CONFIRM_PROD_DEPLOY=1` / `CONFIRM_PROD=1` 双确认阀串联本地 release gate、远端代码备份、前后端 rsync、后端重启、生产只读巡检、生产运行时环境检查、生产 API smoke 和正式域名浏览器 release 审计。
+  - `docs/production_deploy.md` 明确当前后端备份是代码备份，不包含 SQLite 数据库和日志；若需要数据级回滚，必须另走数据库专用备份流程。
+  - 后端部署排除规则补齐 `db/*.sqlite-*`，避免 `rsync --delete` 误删 SQLite WAL/SHM sidecar 文件。
+  - `/api/saves` 的 `slotIndex` 改为必须是 `0..3` 整数，显式拒绝 `NaN`、空串、`null` 和小数，避免非法槽位落到 SQLite 异常路径。
+  - Optional integrity 模式下，完全不带签名仍兼容旧客户端；但只要请求显式提供 HMAC 签名且服务端没有可用 HMAC secret，就返回拒绝，不再把伪签名当作成功写入。
+
+- 验证
+  - `node --check js/services/authService.js` ✅
+  - `node --check server/routes/saves.js` ✅
+  - `node --check server/routes/ghosts.js` ✅
+  - `node --check server/utils/hmac.js` ✅
+  - `node --check server/utils/timestamps.js` ✅
+  - `node --check tests/backend_security_checks.cjs` ✅
+  - `node --check tests/test_e2e_backend.cjs` ✅
+  - `bash -n scripts/check-production-runtime-env.sh` ✅
+  - `node --check tests/prod_api_smoke.cjs` ✅
+  - `node --check tests/browser_backend_client_smoke.mjs` ✅
+  - `node --check tests/browser_auth_ui_cloud_smoke.mjs` ✅
+  - `node --check tests/summarize_browser_release_reports.cjs` ✅
+  - `node tests/sanity_backend_hmac_checks.cjs` ✅
+  - `node tests/sanity_backend_timestamp_checks.cjs` ✅
+  - `node tests/sanity_frontend_cloud_sync_checks.mjs` ✅，覆盖 canonical save time、本地 stale-skip、`logout()` 清空 stale gate 与 SaveManager 对 skipped 云写的处理。
+  - `node tests/backend_security_checks.cjs` ✅
+  - `node tests/test_e2e_backend.cjs` ✅，覆盖前端服务层注册、登录、存档、全局数据、残影上传/拉取，以及跨账号低时间戳保存不会被上一账号 stale gate 误跳过。
+  - `node tests/prod_api_smoke.cjs`（无 URL 时拒绝，避免误写生产）✅
+  - `npm run test:prod:api -- http://127.0.0.1:9013`（临时本地后端，含 save/global/ghost 坏 JWT 401、缺签名拒绝、非法/未来时间戳恢复、save/global/ghost 旧时间与同时间 stale-skip）✅
+  - `node tests/browser_backend_client_smoke.mjs http://127.0.0.1:4173 output/browser-backend-client-smoke-current` ✅
+  - `node tests/browser_auth_ui_cloud_smoke.mjs http://127.0.0.1:4173 output/browser-auth-ui-cloud-smoke-current` ✅，临时后端随机端口；注册、登录、自动绑定、云存档槽位和点击“继续”后的本地读回均通过。
+  - `node tests/browser_pvp_mobile_result_audit.mjs http://127.0.0.1:4173 output/browser-pvp-mobile-result-current` ✅
+  - `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4173 output/browser-frontend-layout-current2` ✅
+  - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4173 output/browser-mobile-layout-current` ✅
+  - `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4173 output/browser-frontend-layout-current`（135 条布局 finding，0 失败，0 console error）✅
+  - `node tests/browser_reward_meta_mobile_audit.mjs http://127.0.0.1:4173 output/browser-reward-mobile-current` ✅
+  - `npm run test:node` ✅
+  - `npm run build:pages` ✅
+  - `npm run test:release:local` ✅
+  - `curl -I https://080305.xyz/` ✅，线上首页返回 `200 OK`，`Last-Modified: Mon, 18 May 2026 11:31:15 GMT`
+  - `curl -sS https://080305.xyz/api/health` ✅，返回 `{"status":"ok","message":"The Defier Backend is running"}`
+  - `ssh cloud119 'hostname; whoami; pwd; systemctl is-active the-defier-backend; nginx -t'` ✅，返回 `VM-0-14-opencloudos` / `root` / `/root`，后端服务 `active`，Nginx 配置语法通过。
+  - `ssh cloud119 'systemctl is-active the-defier-backend'` ✅，返回 `active`
+  - `ssh cloud119 'nginx -t'` ✅，Nginx 配置语法通过
+  - 只读远端文件检查显示：`/www/wwwroot/index.html` 时间戳为 `2026-05-18 19:31:15 +0800`，`/www/server/the-defier-backend/app.js` 为 `2026-05-16 20:45:10 +0800`，`/www/server/the-defier-backend/routes/saves.js` 为 `2026-05-16 14:22:02 +0800`；线上尚未同步当前 2026-06-03 本地构建和后端改动。
+  - `npm run test:prod:read -- cloud119 https://080305.xyz` ✅，只读巡检确认公网首页/API health、后端服务 active、本机后端 health 与 `nginx -t` 均正常；同时提示线上后端未包含 `global_updated_at` 迁移，说明不能把当前本地时间戳门禁结论外推到线上。
+  - `bash -n scripts/deploy-production.sh scripts/check-production-read-only.sh scripts/check-production-runtime-env.sh scripts/run-local-release-gate.sh` ✅
+  - `npm run deploy:prod`（无 `CONFIRM_PROD_DEPLOY=1` 时拒绝执行，未写远端）✅
+  - `node tests/summarize_browser_release_reports.cjs output/release-browser-audits-local http://127.0.0.1:4173` ✅，26 个期望模块全部存在，`missingModules=[]`，`duplicateModules=[]`，`unknownModules=[]`。
+  - 临时 fixture 注入第 27 个 `unexpected-module/report.json` 后执行 `node tests/summarize_browser_release_reports.cjs` ✅，汇总器按预期失败并报告 `unexpected-release-report`。
+  - `npm run test:release:local` ✅，在当前工作树上完整重跑并生成 `output/release-browser-audits-local/report.json`，26 个报告、545 条 finding、0 失败、0 console error、295 张截图。
+  - `npm run test:node` ✅，在 slotIndex 和 optional integrity 修复后重跑通过。
+  - `npm run test:prod:api -- http://127.0.0.1:9013` ✅，本机临时生产配置后端通过生产 API smoke，坏 JWT 对 save/global/ghost 受保护接口均返回 `401`。
+  - `node tests/browser_mobile_layout_audit.mjs https://080305.xyz output/browser-mobile-layout-prod-read` ✅，生产域只读移动端审计通过，0 console error；但该结果只代表当前旧线上包的移动端基础布局。
+  - `node tests/browser_frontend_layout_audit.mjs https://080305.xyz output/browser-frontend-layout-prod-read` ❌，生产域只读前端审计 135 条 finding 中 7 条失败、0 console error；失败集中在 `map-screen-expedition-intel-click` 的远征情报栏自动展开、手动收起保持、重开后可点击闭环。截图产物已落在 `output/browser-frontend-layout-prod-read/`。
+
+- 当前 fresh 浏览器证据
+  - 本轮最新 fresh release gate 目录以 `output/release-browser-audits-local/` 为准。
+  - `output/release-browser-audits-local/report.json` 汇总时间 `2026-06-03T14:23:26.605Z`：期望 26 个报告，实际 26 个报告、545 条 finding、0 失败、0 console error、295 张正式模块截图，`missingModules=[]`，`duplicateModules=[]`，`unknownModules=[]`。
+  - 新增报告模块包含 `backend-client` 与 `auth-ui-cloud`；`auth-ui-cloud` 报告确认登录 UI 注册/登录、自动绑定、云存档槽位渲染、点击“继续”后本地存档 marker/境界/目标 screen 读回；`frontend-layout` 汇总内包含远征情报栏交互闭环、map/reward toast stress screenshot 和真实地图节点点击；`mobile` 报告确认远征首卡可见率 `1`、面板 `421.03125..761.03125`、深层按钮中心点 `y=591`；`reward-mobile` 报告确认 handoff / lane reward CTA 滚动后中心点命中并可点击；`pvp-mobile-result` 报告确认移动结算容器 `bottom=668`、按钮 `bottom=655`，均在 390x844 视口内。
+  - 旧 `output/release-browser-audits-v7-*`、`output/release-browser-audits-2026-06-03-final*` 目录只作为历史参考，不作为当前最终结论。
+
+- 当前结论
+  - 本地 Node 门禁、构建、生产 API smoke 本地目标、浏览器后端链路 smoke 和完整本地 release gate 均通过。
+  - 这不是线上部署记录；声明“线上已部署”前仍必须按 `docs/production_deploy.md` 完成远端备份、同步、服务重启、`curl`、`npm run test:prod:read -- cloud119 https://080305.xyz`、`npm run test:prod:env -- cloud119`、`CONFIRM_PROD=1 npm run test:prod:api -- https://080305.xyz`、生产域浏览器 release 审计、`systemctl is-active` 和 `nginx -t`。
+  - 当前线上 `https://080305.xyz/` 可访问且 API health 正常，但静态文件和后端源码时间戳均显示生产仍是 5 月中旬版本，不是本轮本地已验证版本。
+  - 本轮尝试执行远端生产运行时环境检查被安全审查拦下，未绕过执行；因此 `NODE_ENV/JWT/HMAC/DEFIER_INTEGRITY_REQUIRED` 的 live 生产配置仍未在本轮验证。
+  - 本轮尝试执行带确认阀的正式生产部署也被安全审查拦下，未绕过执行；因此当前远端仍未同步本地 2026-06-03 已通过的前后端修复。
+  - 生产域前端只读审计失败与远端版本漂移一致：本地 release gate 已覆盖并通过远征情报栏交互闭环，但线上旧包尚未部署这些修复。
+
+## 2026-06-03 登录后全局成就云同步补强
+
+- 修复
+  - `Game.onLoginSuccess()` 在登录/注册成功后会显式触发 `AchievementSystem.syncFromCloud()`，不再只依赖页面启动时 2 秒延迟同步；因此用户先打开页面、后登录时，后端 global achievements 会合并进当前游戏态。
+  - 登录后 global progress 与云存档槽并行拉取；global sync 最多软等 5 秒，超时会继续展示存档槽，避免 `/api/user/global` 慢或异常时卡住登录后的存档选择 UI。
+  - `AchievementSystem.syncFromCloud()` 返回结构化同步结果，并保持 unlocked/claimed 并集、stats 数字取 max、数组取并集、startBonuses 取 max、unlocks 并集的语义。
+  - `AchievementSystem.syncFromCloud()` 补齐 `conf.cardBacks` 并集合并，云端解锁的卡背会在其他设备登录后落到 `theDefierCardBacks`。
+  - `browser_auth_ui_cloud_smoke` 现在用真实本地后端注册账号、写入云端 global data，再在新的浏览器上下文登录；登录页预种本地-only 成就、stats、startBonuses、unlocks、cardBacks，断言存档槽弹出时已经完成 cloud/local union 和 max merge。
+
+- 验证
+  - `node --check js/game.js && node --check js/core/achievements.js && node --check tests/browser_auth_ui_cloud_smoke.mjs` ✅
+  - `npm run build:pages` ✅
+  - `node tests/browser_auth_ui_cloud_smoke.mjs http://127.0.0.1:4173 output/browser-auth-ui-cloud-smoke-global-login` ✅，`globalProbe` 确认 `firstBlood` 云端解锁/领取进入运行态与 localStorage，本地 `veteran` 保留，`enemiesDefeated` 保留本地 max=20，`maxCombo` 采用云端 max，`uniqueCards` 并集，`startBonuses.maxHp` 保留本地 12，云端 `spirit` 合入，cloud/local unlock 与 cardBack 均合入，且 `save-slots-modal` 已 active。
+  - `npm run test:node` ✅
+  - `npm run test:release:local` ✅，最新 `output/release-browser-audits-local/report.json` 汇总时间 `2026-06-03T14:45:00.289Z`：26/26 模块、545 条 finding、0 失败、0 console error、295 张截图，`missingModules=[]`、`duplicateModules=[]`、`unknownModules=[]`。
+
+- 当前结论
+  - 本地登录 UI -> 后端 global API -> 当前成就系统运行态 -> 云存档槽展示/读回链路已通过真实浏览器 smoke 和完整 release gate。
+  - 这仍不是线上部署记录；生产 `https://080305.xyz/` 仍需按正式部署流程同步后再做生产读写 smoke 与生产域浏览器审计。
+
+## 2026-06-03 残影后端到地图战斗 UI 闭环补强
+
+- 修复 / 覆盖
+  - `tests/browser_backend_client_smoke.mjs` 的本地后端 smoke 不再停在 `BackendClient.fetchRandomGhost()` 服务层；现在会在同一主账号登录态下启动真实游戏地图，把一个真实可达节点改成 `ghost_duel`，通过浏览器鼠标坐标点击节点，并断言进入 `battle-screen`。
+  - 测试 realm 固定在 `1..18` 内（默认第 6 重），让后端上传的 ghost realm 与真实 `game.player.realm` 一致。
+  - 新增 UI 断言覆盖：
+    - `game.currentScreen === 'battle-screen'`
+    - `document.body.dataset.currentScreen === 'battle-screen'`
+    - `#battle-screen.active` 存在
+    - `currentBattleNode.type === 'ghost_duel'`
+    - `currentEnemies[0].id === 'ghost_demon'`
+    - `currentEnemies[0].ghostPayload.name === opponentName`
+    - `#enemy-container .enemy-name` 渲染出 `【心魔】${opponentName}`
+    - `player.gold` 未增加 100，确认没有走 ghost fallback 补偿分支。
+  - 地图点击不用 Playwright 默认 `page.click()` 等待稳定状态，而是先取节点中心点，再用真实 `page.mouse.click(x, y)`；这规避了地图 smooth scroll / 节点动画导致的 `element is not stable` flake，同时仍走真实 DOM click 事件。
+
+- 验证
+  - `node --check tests/browser_backend_client_smoke.mjs` ✅
+  - `node tests/browser_backend_client_smoke.mjs http://127.0.0.1:4173 output/browser-backend-client-smoke-ghost-ui` ✅，报告确认 `ghostBattleProbe.currentScreen="battle-screen"`、`enemyId="ghost_demon"`、`ghostPayloadDeckIds=["audit_guard"]`、`fallbackCompensationAvoided=true`。
+  - `npm run test:release:local` ✅，最新 `output/release-browser-audits-local/report.json` 汇总时间 `2026-06-03T15:01:34.175Z`：26/26 模块、545 条 finding、0 失败、0 console error、297 张截图，`missingModules=[]`、`duplicateModules=[]`、`unknownModules=[]`。
+  - 最新 `output/release-browser-audits-local/backend-client/report.json` 的 finding 为 `browser BackendClient register/login/save/global/ghost/fetch chain reaches ghost duel battle UI`，`pass=true`，detail 显示 `fetchedGhostPayloadName` 与 `ghostPayloadName` 均为对手账号，`enemyNameRendered=true`。
+
+- 当前结论
+  - 本地真实后端注册/登录/存档/global/ghost 上传/ghost 拉取 -> 真实地图节点点击 -> ghost battle-screen 的前后端链路已进入 release browser gate 并通过。
+  - 这仍不是线上部署记录；生产环境仍需按正式部署流程同步后再做生产域读写 smoke 与浏览器审计。
+
+## 2026-06-03 登录云存档加载后写回闭环补强
+
+- 覆盖
+  - `tests/browser_auth_ui_cloud_smoke.mjs` 在原有真实 UI 注册、登录、global progress 合并、云端 slot 渲染、点击 slot 0 加载并刷新恢复的基础上，继续修改加载后的真实运行时 `player.gold`，调用 `game.saveGame()`，等待 `SaveManager` 返回的 `cloudPromise` 完成，再通过后端 `GET /api/saves` 读回 slot 0，确认云端保存的是本次写回后的存档。
+  - 最终云端读回不再复用注册页上下文 token，而是读取登录页自己的 `theDefierServerSession` token；报告中断言 `loginSessionProbe.hasToken=true`、`usernameMatched=true`、`usedLoginSessionForReadback=true`，避免“旧 token 仍有效”造成假阳性。
+  - finding 名称更新为 `real auth UI register/login syncs global progress, loads cloud slot, and writes save back to cloud`，让 release 报告准确体现已覆盖加载后写回。
+
+- 验证
+  - `node --check tests/browser_auth_ui_cloud_smoke.mjs` ✅
+  - `node tests/browser_auth_ui_cloud_smoke.mjs http://127.0.0.1:4173 output/browser-auth-ui-cloud-smoke-writeback-login-token` ✅，报告确认 `cloudSuccess=true`、`cloudSkipped=false`、`cloudSavedGold` 等于本轮写入值、`cloudSaveSlot=0`、`cloudSaveTimeAdvanced=true`，且最终读回使用登录页 session。
+  - 挑战者 subagent 复核后指出 token 来源与 finding 命名问题；两项均已修正。
+  - `npm run test:release:local` ✅，最新 `output/release-browser-audits-local/report.json` 汇总时间 `2026-06-03T15:20:55.260Z`：26/26 模块、545 条 finding、0 失败、0 console error、298 张截图，`missingModules=[]`、`duplicateModules=[]`、`unknownModules=[]`。
+
+- 当前结论
+  - 本地真实 UI 登录 -> 后端 global 合并 -> 云端 slot 加载 -> 刷新恢复 -> `game.saveGame()` -> `AuthService.saveCloudData()` -> `BackendClient.saveCloudData()` -> `POST /api/saves` -> 登录页 session `GET /api/saves` 读回的闭环已进入 release gate 并通过。
+  - 这仍不是线上部署记录；生产 `https://080305.xyz/` 仍需按正式部署流程同步后再做生产读写 smoke 与生产域浏览器审计。
+
+## 2026-06-03 云存档冲突弹窗决策闭环补强
+
+- 修复 / 覆盖
+  - `resolveSaveConflict('local')` 不再把后端 `stale-save-ignored` 当成成功覆盖；云端已有更新时会保留冲突弹窗，不更新 `cachedSlots`，并在战斗日志提示本地存档未覆盖云端。
+  - `resolveSaveConflict('local')` 不再在 `currentSaveSlot` 缺失或非法时静默回退到 slot 0；现在会提示无法确定存档位并中止，避免误写云端 slot 0。
+  - `tests/browser_auth_ui_cloud_smoke.mjs` 新增真实冲突弹窗决策探针：非法 slot、过期本地 keep-local、正常 keep-local、keep-cloud 四条路径都通过真实按钮/方法触发，并用后端 `/api/saves` 读回校验云端 marker、gold、slot、saveTime 是否符合预期。
+
+- 验证
+  - `node --check js/game.js` ✅
+  - `node --check tests/browser_auth_ui_cloud_smoke.mjs` ✅
+  - `node tests/browser_auth_ui_cloud_smoke.mjs http://127.0.0.1:4173 output/browser-auth-ui-cloud-smoke-conflict-modal` ✅，`saveConflictProbe` 确认非法 slot 未写 slot 0、过期本地覆盖返回 `skipped=true` 且弹窗保持、正常 keep-local 写回云端、keep-cloud 触发本地恢复并保持云端不变。
+  - `npm run test:node` ✅
+  - `npm run test:release:local` ✅，最新 `output/release-browser-audits-local/report.json` 汇总写入成功，release gate 输出 `[release-checks] All browser release audits passed.`。
+
+- 当前结论
+  - 本地真实 UI/后端链路已经覆盖云存档冲突弹窗的主要决策闭环，包含后端拒绝过期覆盖与前端非法 slot 防误写。
+  - 这仍不是线上部署记录；生产 `https://080305.xyz/` 仍需按正式部署流程同步后再做生产读写 smoke 与生产域浏览器审计。
+
+## 2026-06-04 法宝囊布局门禁与云存档时间戳归一补强
+
+- 修复 / 覆盖
+  - `tests/browser_frontend_layout_audit.mjs` 新增 `treasure-bag-modal` 场景，覆盖桌面、矮屏与移动端三种视口；审计现在会打开真实法宝囊 UI，并把 `.treasure-slot`、`.inventory-item` 纳入卡片可见性、遮挡与视口检查。
+  - 法宝囊场景补齐审计专用 fallback 法宝样本，并把 `treasureBagProbe.filledSlotCount` / `inventoryItemCount` 作为硬断言；如果未来只渲染空态，门禁会直接失败。
+  - `treasure-bag-modal` 的清理逻辑单独隐藏 inline `display` 控制的弹窗，避免该弹窗残留污染后续布局场景。
+  - `POST /api/saves` 继续先按请求原文做 HMAC 完整性验证；验证通过后，服务端把可解析的 object / JSON string `saveData.timestamp` 归一为 canonical `saveTime` 再入库，避免数据库排序键和前端展示/冲突弹窗使用的内嵌时间戳分叉。
+  - legacy 非 JSON string 存档数据保持原样，避免破坏旧格式读写兼容。
+  - `backend_security_checks` 与 `prod_api_smoke` 增加 future / `Infinity` / dirty embedded timestamp 读回断言，确认云端返回的 `saveData.timestamp` 与 canonical `saveTime` 一致，且 future timestamp poison 后正常存档可恢复为最新。
+  - `prod_api_smoke` 的恢复写入不再用本地 `Date.now()` 追服务端时间；现在基于上一次响应返回的 canonical 服务端时间 +1 推进，并显式断言恢复写入没有被 stale gate 跳过，避免真实生产服务器时钟领先客户端时误判。
+
+- 验证
+  - `node --check server/routes/saves.js` ✅
+  - `node --check tests/backend_security_checks.cjs` ✅
+  - `node --check tests/prod_api_smoke.cjs` ✅
+  - `node --check tests/browser_frontend_layout_audit.mjs` ✅
+  - `node tests/backend_security_checks.cjs` ✅
+  - 本地临时生产后端 `http://127.0.0.1:9015` + `npm run test:prod:api -- http://127.0.0.1:9015` ✅
+  - `npm run test:node` ✅
+  - `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4173 output/browser-frontend-layout-treasure-bag-fixed` ✅，`treasure-bag-modal` 在 desktop / short / mobile 均通过，三个视口均为 `filledSlotCount=2`、`inventoryItemCount=2`、`equippedCountText="2/2"`。
+  - `PORT=4174 npm run test:release:local` ✅，最新 `output/release-browser-audits-local/report.json` 汇总时间 `2026-06-03T16:27:47.744Z`：26/26 模块、549 条 finding、0 失败、0 console error、307 张截图，`missingModules=[]`、`duplicateModules=[]`、`unknownModules=[]`；release gate 输出 `[release-checks] All browser release audits passed.`。
+
+- 当前结论
+  - 本地布局门禁已补到法宝囊弹窗；云存档后端现在能把存储排序键和前端读回展示用时间戳保持一致。
+  - 这仍不是线上部署记录；生产 `https://080305.xyz/` 未同步，仍需按正式部署流程备份、构建、测试、rsync、重启并做生产 API / 浏览器 smoke。
+  - 仍需继续补强真实后端 PVP UI 链路，以及真实游戏流程进入 reward / expedition / meta / challenge 后的云端持久化与 reload 恢复闭环。
+
+## 2026-06-04 云存档奖励真实流程恢复门禁补强
+
+- 覆盖
+  - `tests/browser_auth_ui_cloud_smoke.mjs` 在真实 UI 注册、登录、global 合并、云端 slot 加载、`game.saveGame()` 写回之外，新增干净浏览器上下文恢复探针：只注入服务端 session，清空本地 `theDefierSave` / slot 状态，打开真实存档位弹窗，点击 slot 0 加载，刷新后确认本地存档、运行时玩家、slot、`loadGameResult` 与主菜单“继续冒险”入口都可用。
+  - 同一脚本新增奖励页真实流程：调用 `game.showRewardScreen()` 进入真实奖励页，点击奖励卡，确认卡组精确增加 1 张；点击 `#continue-reward-btn` 后等待本地保存、后端云端保存和干净上下文重新加载三段都精确恢复到同一张新增卡。
+  - 奖励恢复断言从“卡组长度至少达到”收紧为“卡组长度精确等于预期”，避免重复加卡、多写卡或错误累加时被 `>=` 掩盖。
+  - 干净恢复后的页面预期是主菜单；门禁现在显式检查“继续冒险”按钮可见且未禁用，确认云档加载后玩家能继续进入游戏。
+
+- 验证
+  - `node --check tests/browser_auth_ui_cloud_smoke.mjs` ✅
+  - `node tests/browser_auth_ui_cloud_smoke.mjs http://127.0.0.1:4173 output/browser-auth-ui-cloud-tightened` ✅，报告确认 `cleanCloudRestoreProbe.after.continueVisible=true`、`continueDisabled=false`，奖励流程 `deckGrewByOne=true`，本地 / 云端 / 干净恢复后的卡组长度均精确为 11，且都包含新增卡。
+  - `PORT=4174 npm run test:release:local` ✅，最新 `output/release-browser-audits-local/report.json` 汇总时间 `2026-06-03T16:56:45.768Z`：549 条 finding、0 失败、0 console error，`missingModules=[]`、`duplicateModules=[]`、`unknownModules=[]`；release gate 输出 `[release-checks] All browser release audits passed.`。
+
+- 当前结论
+  - 本地真实登录 -> 云端 slot -> 奖励选卡 -> 继续奖励页 -> 本地保存 -> 后端云保存 -> 干净上下文云恢复 -> 主菜单继续入口可用，已经进入 release gate 并通过。
+  - 这仍不是线上部署记录；本轮没有 rsync、没有重启生产后端，也没有写生产数据。
+  - subagent 巡检确认当前 Node 后端仍没有完整 PVP rank / match / settlement / shop / currency API，PVP 主链仍依赖 Bmob 或本地 fallback；challenge / expedition 等 sidecar localStorage 状态也还需要继续补真实云端恢复闭环。
+
+## 2026-06-04 动态弹窗布局门禁补强
+
+- 覆盖
+  - `tests/browser_frontend_layout_audit.mjs` 新增 `dynamic-card-detail-modal`、`alert-modal`、`treasure-bag-alert-modal` 三个场景，分别覆盖运行时动态创建的卡牌详情弹窗、通用提示弹窗、以及法宝囊上叠通用提示弹窗。
+  - 动态卡牌详情通过 `Utils.showCardDetail()` 打开真实弹窗，并断言详情容器、预览卡、关闭按钮、摘要行和状态标签均可见；fallback 仍保留一个最小动态 DOM，避免工具函数缺失时场景静默空跑。
+  - 通用提示弹窗增加标题、正文长度、确定按钮、关闭按钮探针，防止长文案在移动端遮挡或缺控件。
+  - 法宝囊叠 alert 场景先打开真实法宝囊，再弹出“槽位已满”提示；门禁现在断言底层法宝囊仍存在、顶层 alert 内容可见、确定按钮命中目标位于最上层，且 `alertZ` 高于 `bagZ`。
+  - 弹窗清理逻辑补充 `.modal-overlay`，避免动态 `#card-detail-modal` 残留污染后续审计场景。
+
+- 验证
+  - `node --check tests/browser_frontend_layout_audit.mjs` ✅
+  - `npm run build` ✅
+  - `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4173 output/browser-frontend-layout-dynamic-modal-stack` ✅，147 条 finding、0 失败、0 console error。
+  - `npm run test:browser:release -- http://127.0.0.1:4173 output/release-browser-audits-dynamic-modal-stack-full` ✅，最新汇总时间 `2026-06-04T03:09:33.245Z`：26/26 模块、559 条 finding、0 失败、0 console error、320 张截图。
+  - 新增场景在 release gate 中的移动端证据：`dynamic-card-detail-modal` 的 `containerVisible=true`、`previewCardVisible=true`、`closeButtonVisible=true`、`summaryRowCount=7`；`alert-modal` 的标题为“云同步提示”且确定/关闭按钮可见；`treasure-bag-alert-modal` 的 `okButtonTopHit=true`、`alertZ=10001`、`bagZ=1000`。
+
+- 当前结论
+  - 动态卡牌详情、通用 alert、法宝囊叠 alert 三条高风险弹窗链路已进入前端布局 release gate，并在桌面、矮屏、移动端完整通过。
+  - 这仍不是线上部署记录；本轮没有同步生产服务器，也没有改动生产数据。

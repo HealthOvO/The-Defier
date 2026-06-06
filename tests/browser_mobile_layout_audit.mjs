@@ -343,6 +343,8 @@ function add(name, pass, detail = '') {
   });
   await page.waitForTimeout(250);
 
+  await safeAuditScreenshot(page, path.join(outDir, 'mobile-expedition-panels.png'), 'browser_mobile_layout_audit', { timeout: 8000 });
+
   const expeditionPanelsProbe = await page.evaluate(() => {
     const panels = document.getElementById('map-expedition-panels');
     const root = document.documentElement;
@@ -364,15 +366,60 @@ function add(name, pass, detail = '') {
         height: rect.height,
       };
     };
+    const overlapArea = (a, b) => {
+      if (!a || !b) return 0;
+      const left = Math.max(a.left, b.left);
+      const right = Math.min(a.right, b.right);
+      const top = Math.max(a.top, b.top);
+      const bottom = Math.min(a.bottom, b.bottom);
+      return Math.max(0, right - left) * Math.max(0, bottom - top);
+    };
+    const visibleRatio = (rect) => {
+      if (!rect || rect.width <= 0 || rect.height <= 0) return 0;
+      const viewportRect = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+      return overlapArea(rect, viewportRect) / (rect.width * rect.height);
+    };
+    const selectorFor = (el) => {
+      if (!el) return '';
+      if (el.id) return `#${el.id}`;
+      const classes = Array.from(el.classList || []).slice(0, 3).join('.');
+      return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
+    };
     const isRectVisible = (rect) => !!rect
       && rect.top >= 0
       && rect.bottom <= window.innerHeight
       && rect.left >= 0
       && rect.right <= window.innerWidth;
+    const isReachable = (el) => {
+      if (!el) return { reachable: false, point: null, hit: '' };
+      const rect = rectObj(el);
+      if (!isRectVisible(rect)) return { reachable: false, point: null, hit: '', rect };
+      const point = {
+        x: Math.round(rect.left + rect.width / 2),
+        y: Math.round(rect.top + rect.height / 2)
+      };
+      const hit = document.elementFromPoint(point.x, point.y);
+      return {
+        reachable: !!hit && (hit === el || el.contains(hit) || hit.contains(el)),
+        point,
+        hit: selectorFor(hit),
+        rect
+      };
+    };
     const getText = (selector) => {
       const el = panels?.querySelector(selector);
       return el ? (el.textContent || '').replace(/\s+/g, ' ').trim() : '';
     };
+    const cards = Array.from(panels?.querySelectorAll('.expedition-panel-card') || []);
+    const initialPanelRect = rectObj(panels);
+    const firstCardRect = rectObj(cards[0]);
+    const headerRect = rectObj(document.querySelector('#map-screen .map-v3-header'));
+    const initialVisibleCards = cards.map((card) => ({
+      selector: selectorFor(card),
+      text: (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+      rect: rectObj(card),
+      visibleRatio: Number(visibleRatio(rectObj(card)).toFixed(3))
+    })).filter((card) => card.visibleRatio >= 0.55);
     const buttons = Array.from(panels?.querySelectorAll('button') || []);
     const branchButtons = buttons.filter((btn) => /路线/.test(btn.textContent || ''));
     const bountyButtons = buttons.filter((btn) => /悬赏/.test(btn.textContent || ''));
@@ -383,22 +430,37 @@ function add(name, pass, detail = '') {
         target.scrollIntoView({ block: 'center', inline: 'nearest' });
       }
       const after = rectObj(target);
+      const reach = isReachable(target);
       return {
-        reachable: isRectVisible(after),
+        reachable: reach.reachable,
         before,
-        after
+        after,
+        point: reach.point,
+        hit: reach.hit
       };
     };
 
     const branchReach = visibilityAfterScroll(branchButtons);
     const bountyReach = visibilityAfterScroll(bountyButtons);
     const viewportWidth = window.innerWidth;
-    const panelRect = rectObj(panels);
-    window.scrollTo(0, 0);
+    const scrolledPanelRect = rectObj(panels);
+    const initialPanelInViewport = !!initialPanelRect
+      && initialPanelRect.top >= -4
+      && initialPanelRect.top < window.innerHeight
+      && initialPanelRect.left >= -4
+      && initialPanelRect.right <= viewportWidth + 4;
+    const firstCardReadable = visibleRatio(firstCardRect) >= 0.7;
+    const firstCardHeaderOverlap = overlapArea(firstCardRect, headerRect);
 
     return {
       panelVisible: isVisible(panels),
-      panelRect,
+      initialPanelRect,
+      scrolledPanelRect,
+      firstCardRect,
+      headerRect,
+      firstCardVisibleRatio: Number(visibleRatio(firstCardRect).toFixed(3)),
+      firstCardHeaderOverlap: Math.round(firstCardHeaderOverlap),
+      initialVisibleCards,
       panelCount: panels?.querySelectorAll('.expedition-panel-card').length || 0,
       overviewText: getText('.expedition-overview-card'),
       observatoryText: getText('.expedition-observatory-card'),
@@ -411,6 +473,10 @@ function add(name, pass, detail = '') {
       bountyReach,
       ok:
         isVisible(panels) &&
+        initialPanelInViewport &&
+        firstCardReadable &&
+        firstCardHeaderOverlap <= 12 &&
+        initialVisibleCards.length >= 1 &&
         (panels?.querySelectorAll('.expedition-panel-card').length || 0) >= 6 &&
         getText('.expedition-overview-card').length >= 30 &&
         getText('.expedition-observatory-card').length >= 30 &&
@@ -425,12 +491,73 @@ function add(name, pass, detail = '') {
   });
 
   add(
-    'mobile expedition panels keep overview, observatory, and signal cards readable without horizontal overflow',
+    'mobile expedition panels keep first-screen cards readable and deep actions touchable without horizontal overflow',
     !!expeditionPanelsProbe && !!expeditionPanelsProbe.ok,
     JSON.stringify(expeditionPanelsProbe || null)
   );
 
-  await safeAuditScreenshot(page, path.join(outDir, 'mobile-expedition-panels.png'), 'browser_mobile_layout_audit', { timeout: 8000 });
+  await safeAuditScreenshot(page, path.join(outDir, 'mobile-expedition-panels-scrolled-cta.png'), 'browser_mobile_layout_audit', { timeout: 8000 });
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+    document.querySelector('#map-screen .map-scroll-container')?.scrollTo(0, 0);
+    document.getElementById('map-expedition-panels')?.scrollTo(0, 0);
+    if (window.Utils && typeof window.Utils.showBattleLog === 'function') {
+      window.Utils.showBattleLog('移动端远征遮挡测试：非战斗反馈不应挡住情报卡片。', { category: 'system', duration: 6000 });
+    }
+  });
+  await page.waitForTimeout(250);
+  const expeditionToastProbe = await page.evaluate(() => {
+    const log = document.getElementById('battle-log');
+    const firstCard = document.querySelector('#map-expedition-panels .expedition-panel-card');
+    const headerButtons = Array.from(document.querySelectorAll('#map-screen .map-v3-header button, #map-screen .map-v3-header [role="button"]'));
+    const rectObj = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+      };
+    };
+    const overlapArea = (a, b) => {
+      if (!a || !b) return 0;
+      const left = Math.max(a.left, b.left);
+      const right = Math.min(a.right, b.right);
+      const top = Math.max(a.top, b.top);
+      const bottom = Math.min(a.bottom, b.bottom);
+      return Math.max(0, right - left) * Math.max(0, bottom - top);
+    };
+    const isVisible = (el) => {
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0 && rect.width > 0 && rect.height > 0;
+    };
+    const logRect = rectObj(log);
+    const firstCardRect = rectObj(firstCard);
+    const buttonOverlaps = headerButtons.filter(isVisible).map((button) => ({
+      text: (button.textContent || button.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim(),
+      rect: rectObj(button),
+      overlap: Math.round(overlapArea(logRect, rectObj(button)))
+    })).filter((entry) => entry.overlap > 12);
+    const firstCardOverlap = Math.round(overlapArea(logRect, firstCardRect));
+    return {
+      logVisible: isVisible(log),
+      logRect,
+      firstCardRect,
+      firstCardOverlap,
+      buttonOverlaps,
+      ok: isVisible(log) && firstCardOverlap <= 12 && buttonOverlaps.length === 0
+    };
+  });
+  add(
+    'mobile expedition non-battle toast does not cover map header actions or first expedition card',
+    !!expeditionToastProbe && !!expeditionToastProbe.ok,
+    JSON.stringify(expeditionToastProbe || null)
+  );
 
   const strategicModalProbe = await page.evaluate(() => {
     if (!window.game || typeof game.showObservatoryNode !== 'function') return null;

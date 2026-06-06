@@ -35,6 +35,7 @@ function assert(condition, message) {
     'pressureWindow',
     'seasonBoard.frontier',
     'seasonBoard.frontier.chronicle',
+    'seasonBoard.frontier.chronicleArchive',
     'seasonBoard.frontier.council',
     'seasonBoard.frontier.resolution',
     'seasonBoard.chapterArc',

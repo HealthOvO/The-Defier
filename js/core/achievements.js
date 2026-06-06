@@ -142,102 +142,152 @@ export class AchievementSystem {
     await AuthService.saveGlobalData(data);
   }
   async syncFromCloud() {
-    if (typeof AuthService === 'undefined' || !AuthService.isLoggedIn()) return;
+    if (typeof AuthService === 'undefined' || !AuthService.isLoggedIn()) {
+      return {
+        success: false,
+        skipped: true,
+        reason: 'not-logged-in'
+      };
+    }
     console.log('Fetching achievements from cloud...');
     const result = await AuthService.getGlobalData();
-    if (result.success && result.data) {
-      const cloud = result.data;
+    if (!result.success) {
+      return {
+        success: false,
+        skipped: false,
+        reason: result.message || 'fetch-failed',
+        result
+      };
+    }
+    if (!result.data) {
+      return {
+        success: true,
+        changed: false,
+        configChanged: false,
+        empty: true
+      };
+    }
 
-      // Merge Strategy: Union of unlocked/claimed, Max of stats (or overwrite if cloud is newer?)
-      // Achievements are cumulative, so Union is best.
+    const cloud = result.data;
 
-      let changed = false;
+    // Merge Strategy: Union of unlocked/claimed, Max of stats (or overwrite if cloud is newer?)
+    // Achievements are cumulative, so Union is best.
 
-      // 1. Merge Unlocked
-      if (Array.isArray(cloud.unlocked)) {
-        cloud.unlocked.forEach(id => {
-          if (!this.unlockedAchievements.includes(id)) {
-            this.unlockedAchievements.push(id);
+    let changed = false;
+    let configChanged = false;
+
+    // 1. Merge Unlocked
+    if (Array.isArray(cloud.unlocked)) {
+      cloud.unlocked.forEach(id => {
+        if (!this.unlockedAchievements.includes(id)) {
+          this.unlockedAchievements.push(id);
+          changed = true;
+        }
+      });
+    }
+
+    // 2. Merge Claimed
+    if (Array.isArray(cloud.claimed)) {
+      cloud.claimed.forEach(id => {
+        if (!this.claimedAchievements.includes(id)) {
+          this.claimedAchievements.push(id);
+          changed = true;
+        }
+      });
+    }
+
+    // 3. Sync Stats (Max value logic)
+    if (cloud.stats) {
+      // For cumulative stats like kills, we ideally want to sync. 
+      // But blindly taking max might miss local progress if offline. 
+      // Simple approach: Take cloud if cloud > local (assuming playing on multiple devices)
+      // Actually, if we play offline, local > cloud. 
+      // Let's just Max() numeric values.
+      for (const key in cloud.stats) {
+        if (typeof cloud.stats[key] === 'number') {
+          if ((cloud.stats[key] || 0) > (this.stats[key] || 0)) {
+            this.stats[key] = cloud.stats[key];
             changed = true;
           }
-        });
-      }
-
-      // 2. Merge Claimed
-      if (Array.isArray(cloud.claimed)) {
-        cloud.claimed.forEach(id => {
-          if (!this.claimedAchievements.includes(id)) {
-            this.claimedAchievements.push(id);
-            changed = true;
-          }
-        });
-      }
-
-      // 3. Sync Stats (Max value logic)
-      if (cloud.stats) {
-        // For cumulative stats like kills, we ideally want to sync. 
-        // But blindly taking max might miss local progress if offline. 
-        // Simple approach: Take cloud if cloud > local (assuming playing on multiple devices)
-        // Actually, if we play offline, local > cloud. 
-        // Let's just Max() numeric values.
-        for (const key in cloud.stats) {
-          if (typeof cloud.stats[key] === 'number') {
-            if ((cloud.stats[key] || 0) > (this.stats[key] || 0)) {
-              this.stats[key] = cloud.stats[key];
+        }
+        // Arrays (unique cards etc)
+        else if (Array.isArray(cloud.stats[key])) {
+          if (!this.stats[key]) this.stats[key] = [];
+          cloud.stats[key].forEach(item => {
+            if (!this.stats[key].includes(item)) {
+              this.stats[key].push(item);
               changed = true;
             }
-          }
-          // Arrays (unique cards etc)
-          else if (Array.isArray(cloud.stats[key])) {
-            if (!this.stats[key]) this.stats[key] = [];
-            cloud.stats[key].forEach(item => {
-              if (!this.stats[key].includes(item)) {
-                this.stats[key].push(item);
-                changed = true;
-              }
-            });
-          }
-        }
-      }
-
-      // 4. Configs
-      if (cloud.conf) {
-        // Merge Start Bonuses
-        if (cloud.conf.startBonuses) {
-          const localBonuses = this.loadStartBonuses();
-          let bonusChanged = false;
-          for (const k in cloud.conf.startBonuses) {
-            if ((cloud.conf.startBonuses[k] || 0) > (localBonuses[k] || 0)) {
-              localBonuses[k] = cloud.conf.startBonuses[k];
-              bonusChanged = true;
-            }
-          }
-          if (bonusChanged) this.saveStartBonuses(localBonuses);
-        }
-
-        // Merge Unlocks
-        if (cloud.conf.unlocks) {
-          const localUnlocks = this.loadUnlocks();
-          let unlockChanged = false;
-          cloud.conf.unlocks.forEach(u => {
-            if (!localUnlocks.includes(u)) {
-              localUnlocks.push(u);
-              unlockChanged = true;
-            }
           });
-          if (unlockChanged) this.saveUnlocks(localUnlocks);
         }
-      }
-      if (changed) {
-        this.saveUnlocked();
-        this.saveClaimed();
-        this.saveStats();
-        console.log('Achievements synced from cloud successfully.');
-
-        // Refresh UI if exists
-        // const ui = document.querySelector('achievement-panel');
       }
     }
+
+    // 4. Configs
+    if (cloud.conf) {
+      // Merge Start Bonuses
+      if (cloud.conf.startBonuses) {
+        const localBonuses = this.loadStartBonuses();
+        let bonusChanged = false;
+        for (const k in cloud.conf.startBonuses) {
+          if ((cloud.conf.startBonuses[k] || 0) > (localBonuses[k] || 0)) {
+            localBonuses[k] = cloud.conf.startBonuses[k];
+            bonusChanged = true;
+          }
+        }
+        if (bonusChanged) {
+          this.saveStartBonuses(localBonuses);
+          configChanged = true;
+        }
+      }
+
+      // Merge Unlocks
+      if (cloud.conf.unlocks) {
+        const localUnlocks = this.loadUnlocks();
+        let unlockChanged = false;
+        cloud.conf.unlocks.forEach(u => {
+          if (!localUnlocks.includes(u)) {
+            localUnlocks.push(u);
+            unlockChanged = true;
+          }
+        });
+        if (unlockChanged) {
+          this.saveUnlocks(localUnlocks);
+          configChanged = true;
+        }
+      }
+
+      // Merge Card Backs
+      if (Array.isArray(cloud.conf.cardBacks)) {
+        const localCardBacks = this.loadCardBacks();
+        let cardBackChanged = false;
+        cloud.conf.cardBacks.forEach(backId => {
+          if (!localCardBacks.includes(backId)) {
+            localCardBacks.push(backId);
+            cardBackChanged = true;
+          }
+        });
+        if (cardBackChanged) {
+          this.saveCardBacks(localCardBacks);
+          configChanged = true;
+        }
+      }
+    }
+    if (changed) {
+      this.saveUnlocked();
+      this.saveClaimed();
+      this.saveStats();
+      console.log('Achievements synced from cloud successfully.');
+
+      // Refresh UI if exists
+      // const ui = document.querySelector('achievement-panel');
+    }
+    return {
+      success: true,
+      changed,
+      configChanged,
+      empty: false
+    };
   }
 
   // 默认统计数据

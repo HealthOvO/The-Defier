@@ -350,6 +350,200 @@ function recordConsoleError(text) {
   );
   await safeAuditScreenshot(page, path.join(outDir, 'reward-mobile-390.png'), 'browser_reward_meta_mobile_audit', { timeout: 9000 });
 
+  const rewardCtaViewportProbe = await page.evaluate(async () => {
+    const toRect = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    const inspectButtonReach = async (selector) => {
+      const button = document.querySelector(selector);
+      if (!button) return { ok: false, reason: 'missing_button', selector };
+      const beforeRect = toRect(button);
+      const beforeScrollY = Math.round(window.scrollY || 0);
+      if (typeof button.scrollIntoView === 'function') {
+        button.scrollIntoView({ block: 'center', inline: 'nearest' });
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      }
+      const afterRect = toRect(button);
+      const centerX = afterRect ? Math.round(afterRect.left + (afterRect.width / 2)) : null;
+      const centerY = afterRect ? Math.round(afterRect.top + (afterRect.height / 2)) : null;
+      const centerInsideViewport = Number.isFinite(centerX)
+        && Number.isFinite(centerY)
+        && centerX >= 0
+        && centerX <= window.innerWidth
+        && centerY >= 0
+        && centerY <= window.innerHeight;
+      const hit = centerInsideViewport ? document.elementFromPoint(centerX, centerY) : null;
+      const hitMatches = !!hit && (hit === button || button.contains(hit));
+      return {
+        ok: !!afterRect && centerInsideViewport && hitMatches,
+        selector,
+        text: (button.textContent || '').replace(/\s+/g, ' ').trim(),
+        dataset: { ...button.dataset },
+        beforeRect,
+        afterRect,
+        beforeScrollY,
+        afterScrollY: Math.round(window.scrollY || 0),
+        center: centerInsideViewport ? { x: centerX, y: centerY } : null,
+        centerInsideViewport,
+        hitMatches,
+        hitTag: hit?.tagName || null,
+        hitText: hit ? (hit.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '',
+      };
+    };
+
+    const laneReward = await inspectButtonReach('#reward-expedition-meta [data-season-board-lane-reward-claim="true"]');
+    const handoff = await inspectButtonReach('#reward-expedition-meta [data-season-board-handoff-cta="true"]');
+    return {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      laneReward,
+      handoff,
+    };
+  });
+
+  add(
+    'reward mobile CTA buttons scroll into the 390x844 viewport and win center-point hit testing',
+    !!rewardCtaViewportProbe?.laneReward?.ok
+      && !!rewardCtaViewportProbe?.handoff?.ok,
+    JSON.stringify(rewardCtaViewportProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'reward-mobile-390-cta.png'), 'browser_reward_meta_mobile_audit', { timeout: 9000 });
+
+  const laneRewardButton = page.locator('#reward-expedition-meta [data-season-board-lane-reward-claim="true"]').first();
+  let laneRewardClickProbe = null;
+  if ((await laneRewardButton.count()) < 1) {
+    laneRewardClickProbe = { ok: false, reason: 'missing_lane_reward_button' };
+  } else {
+    try {
+      const laneRewardBefore = await laneRewardButton.evaluate((button) => ({
+        dataset: { ...button.dataset },
+        text: (button.textContent || '').replace(/\s+/g, ' ').trim(),
+        rect: {
+          left: Math.round(button.getBoundingClientRect().left),
+          top: Math.round(button.getBoundingClientRect().top),
+          right: Math.round(button.getBoundingClientRect().right),
+          bottom: Math.round(button.getBoundingClientRect().bottom),
+        },
+      }));
+      await laneRewardButton.scrollIntoViewIfNeeded({ timeout: 5000 });
+      await laneRewardButton.click({ timeout: 5000 });
+      await page.waitForTimeout(300);
+      laneRewardClickProbe = await page.evaluate((before) => {
+        const payload = typeof window.render_game_to_text === 'function'
+          ? JSON.parse(window.render_game_to_text())
+          : null;
+        const expeditionPanel = document.getElementById('reward-expedition-meta');
+        const seasonBoard = payload?.reward?.expedition?.seasonBoard || null;
+        const trainingReward = (seasonBoard?.laneRewards || []).find((reward) => reward?.laneId === 'training') || null;
+        const trainingRewardButton = expeditionPanel?.querySelector('[data-season-board-lane-reward-lane-id="training"] [data-season-board-lane-reward-claim="true"]') || null;
+        const claimedLaneRewards = game?.seasonVerificationState?.claimedLaneRewards || null;
+        return {
+          ok:
+            before.rect?.right > before.rect?.left &&
+            seasonBoard?.laneRewardSummary?.claimableCount === 0 &&
+            seasonBoard?.laneRewardSummary?.claimedCount >= 1 &&
+            trainingReward?.claimed === true &&
+            trainingReward?.claimable === false &&
+            (!trainingRewardButton || /已领取/.test(trainingRewardButton.textContent || '')) &&
+            !!claimedLaneRewards,
+          before,
+          after: {
+            currentScreen: game?.currentScreen || '',
+            laneRewardSummary: seasonBoard?.laneRewardSummary || null,
+            trainingReward,
+            trainingRewardButtonText: (trainingRewardButton?.textContent || '').replace(/\s+/g, ' ').trim(),
+            claimedLaneRewards,
+            rewardText: (expeditionPanel?.textContent || '').replace(/\s+/g, ' ').trim(),
+          },
+        };
+      }, laneRewardBefore);
+    } catch (error) {
+      laneRewardClickProbe = {
+        ok: false,
+        reason: 'playwright_lane_reward_click_failed',
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  add(
+    'reward mobile lane reward CTA is clickable after scroll and updates claim state',
+    !!laneRewardClickProbe?.ok,
+    JSON.stringify(laneRewardClickProbe || null)
+  );
+
+  const rewardSeasonHandoffButton = page.locator('#reward-expedition-meta [data-season-board-handoff-cta="true"]').first();
+  let rewardSeasonHandoffClickProbe = null;
+  if ((await rewardSeasonHandoffButton.count()) < 1) {
+    rewardSeasonHandoffClickProbe = { ok: false, reason: 'missing_reward_handoff_button' };
+  } else {
+    try {
+      const rewardSeasonHandoffBefore = await rewardSeasonHandoffButton.evaluate((btn) => ({
+        dataset: { ...btn.dataset },
+        text: (btn.textContent || '').replace(/\s+/g, ' ').trim(),
+        visible: btn.getBoundingClientRect().width > 0 && btn.getBoundingClientRect().height > 0,
+      }));
+      await rewardSeasonHandoffButton.scrollIntoViewIfNeeded({ timeout: 5000 });
+      await rewardSeasonHandoffButton.click({ timeout: 5000 });
+      await page.waitForTimeout(300);
+      rewardSeasonHandoffClickProbe = await page.evaluate((before) => {
+        const last = game?.lastRewardSeasonBoardHandoff || null;
+        const arrival = game?.lastRewardSeasonBoardHandoffArrivalNotice || null;
+        const notice = document.querySelector('[data-season-board-handoff-arrival="true"]');
+        const noticeText = (notice?.textContent || '').replace(/\s+/g, ' ').trim();
+        return {
+          ok:
+            before.visible === true &&
+            game?.currentScreen === 'collection' &&
+            game?.collectionHubState?.section === before.dataset.seasonBoardHandoffValue &&
+            last?.sourceKey === before.dataset.seasonBoardHandoffSourceKey &&
+            last?.action === before.dataset.seasonBoardHandoffAction &&
+            last?.value === before.dataset.seasonBoardHandoffValue &&
+            (!!arrival || !!notice) &&
+            (!arrival || arrival?.value === before.dataset.seasonBoardHandoffValue) &&
+            (!noticeText || noticeText.includes(before.text) || noticeText.includes('已定位到')),
+          before,
+          after: {
+            currentScreen: game?.currentScreen || '',
+            section: game?.collectionHubState?.section || '',
+            last,
+            arrival,
+            notice: notice ? { dataset: { ...notice.dataset }, text: noticeText } : null,
+          },
+        };
+      }, rewardSeasonHandoffBefore);
+    } catch (error) {
+      rewardSeasonHandoffClickProbe = {
+        ok: false,
+        reason: 'playwright_reward_handoff_click_failed',
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  add(
+    'reward mobile handoff CTA is clickable after scroll and routes into collection followup',
+    !!rewardSeasonHandoffClickProbe?.ok,
+    JSON.stringify(rewardSeasonHandoffClickProbe || null)
+  );
+
+  await page.evaluate(() => {
+    if (!window.game || typeof game.showRewardScreen !== 'function') return;
+    const lawId = typeof LAWS !== 'undefined' ? Object.keys(LAWS)[0] : null;
+    game.showRewardScreen(145, true, { stealLaw: lawId, stealChance: 1 }, 32, { insight: 8, karma: 3 });
+    window.scrollTo(0, 0);
+  });
+  await page.waitForTimeout(180);
+
   await page.setViewportSize({ width: 360, height: 780 });
   await page.waitForTimeout(180);
 

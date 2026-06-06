@@ -27,7 +27,12 @@ router.post('/register', async (req, res) => {
             db.run(`INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)`, 
                 [userId, username, hash, now], 
                 function(err) {
-                    if (err) return res.status(500).json({ success: false, message: '注册失败' });
+                    if (err) {
+                        if (err.code === 'SQLITE_CONSTRAINT') {
+                            return res.status(400).json({ success: false, message: '用户名已存在' });
+                        }
+                        return res.status(500).json({ success: false, message: '注册失败' });
+                    }
                     
                     const token = generateToken({ id: userId, username });
                     res.json({

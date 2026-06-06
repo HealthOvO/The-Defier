@@ -2,6 +2,8 @@
 
 日期：2026-05-16
 
+说明：本文记录 2026-05-16 当日战斗 UI 专项快照；当前 release gate 布局审计规模以后续 `output/release-browser-audits-*/report.json` 为准。
+
 ## 结论
 
 - 本轮已完成战斗界面角色显示、存档返回结果、战斗助手折叠/展开、桌面与移动端适配的专项优化。
@@ -48,7 +50,7 @@
 | 战斗助手动画 | `max-height 220ms ease`，折叠高度约 40，展开高度 215 |
 | 桌面视口采样 | 1365x768，战斗界面关键元素均可见 |
 | 移动端专项 | 390x844，战斗 HUD、助手展开、手牌、结束回合、敌人 lane 均通过 |
-| 布局审计规模 | `browser_frontend_layout_audit` 覆盖桌面/移动共 117 项，失败 0 |
+| 布局审计规模 | `browser_frontend_layout_audit` 当日覆盖桌面/移动共 117 项，失败 0；当前 final5 基线为 132 项 |
 | console error | 浏览器审计与专项采样均为 0 |
 
 ## 验证结果
@@ -58,7 +60,7 @@
 - `node tests/browser_feature_audit.mjs http://127.0.0.1:4176 output/battle-ui-feature`：通过。
 - `node tests/browser_audit.mjs http://127.0.0.1:4176 output/battle-ui-core`：通过。
 - `node tests/browser_audit.mjs http://127.0.0.1:4176 output/battle-ui-core-rerun`：模板级 ARIA 兜底补丁后复跑通过。
-- `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4176 output/battle-ui-layout`：通过，117 项失败 0。
+- `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4176 output/battle-ui-layout`：通过，117 项失败 0（2026-05-16 当日基线）。
 - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4176 output/battle-ui-mobile`：通过。
 - 专项保存 probe：通过，`localStorage.theDefierSave` 写入成功，包含 `player`、`map`、`combatMeta.ruleVersion= combat-v2`，返回时间戳与存档时间戳一致。
 

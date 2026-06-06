@@ -152,6 +152,10 @@ function add(name, pass, detail = '') {
     const buttons = Array.from(document.querySelectorAll('#pvp-result-overlay .result-actions button'));
 
     return {
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      },
       overlayClassName: overlay?.className || '',
       overlayRect: toRect(overlay),
       containerRect: toRect(container),
@@ -173,18 +177,25 @@ function add(name, pass, detail = '') {
   add(
     'pvp mobile result overlay keeps victory recap, review, and actions inside the viewport',
     !!resultProbe?.containerRect
+      && !!resultProbe?.viewport
       && /victory/.test(resultProbe.overlayClassName || '')
       && /\d/.test(resultProbe.score || '')
       && /[+-]?\d+/.test(resultProbe.delta || '')
       && resultProbe.containerRect.left >= 0
-      && resultProbe.containerRect.right <= 390
+      && resultProbe.containerRect.right <= resultProbe.viewport.width
+      && resultProbe.containerRect.top >= 0
+      && resultProbe.containerRect.bottom <= resultProbe.viewport.height
       && /DRI/.test(resultProbe.reviewChip || '')
       && resultProbe.reviewSummary.length > 0
       && resultProbe.reviewFocus.length > 0
       && resultProbe.reviewNext.length > 0
       && resultProbe.reviewFoot.length > 0
       && resultProbe.buttonTexts.length >= 1
-      && resultProbe.buttonRects.every((rect) => rect && rect.left >= 0 && rect.right <= 390)
+      && resultProbe.buttonRects.every((rect) => rect
+        && rect.left >= 0
+        && rect.right <= resultProbe.viewport.width
+        && rect.top >= 0
+        && rect.bottom <= resultProbe.viewport.height)
       && !!resultProbe.payloadReview
       && /DRI/.test(resultProbe.payloadReview.dangerLine || '')
       && typeof resultProbe.payloadReview.focusText === 'string'

@@ -25,7 +25,7 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 
 所有请求默认接收和返回 `application/json`，且对于需要认证的接口，请求头需带上 `Authorization: Bearer <sessionToken>`。
 
-> 安全说明：浏览器端不会持有服务端 HMAC 密钥。云存档和残影的可信度必须依赖服务端认证、服务端规则校验和反作弊约束；如需启用额外完整性签名，只能使用服务端私有的 `DEFIER_HMAC_SECRET`，不要把该密钥写入前端配置或源码。
+> 安全说明：浏览器端不会持有服务端 HMAC 密钥。云存档和残影的可信度必须依赖服务端认证、服务端规则校验和反作弊约束；浏览器链路只使用会话级签名，服务端私有的 `DEFIER_HMAC_SECRET` 不得写入前端配置或源码。
 
 ### 后端安全配置
 
@@ -33,7 +33,7 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 | --- | --- | --- |
 | `JWT_SECRET` | 生产环境必填 | 生产环境必须配置至少 32 字符的 JWT 私钥；开发环境未配置时仅使用本地默认值。 |
 | `DEFIER_HMAC_SECRET` | `DEFIER_INTEGRITY_REQUIRED=1` 时必填 | 服务端私有 HMAC 密钥，至少 32 字符，只能保存在服务端环境变量中。 |
-| `DEFIER_INTEGRITY_REQUIRED` | 可选 | 设为 `1`/`true`/`yes`/`on` 时，`/api/saves` 与 `/api/ghosts/current` 强制要求 `signature` 和 `salt` 并校验通过。 |
+| `DEFIER_INTEGRITY_REQUIRED` | 可选 | 设为 `1`/`true`/`yes`/`on` 时，`/api/saves`、`/api/user/global` 与 `/api/ghosts/current` 强制要求 `signature` 和 `salt` 并校验通过。 |
 
 启动校验：
 
@@ -47,8 +47,10 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 - `signature` 必须是 64 位 hex 字符串。
 - `salt` 必须是 8-128 位字符串，只允许字母、数字、`.`、`_`、`:`、`-`。
 - 当 `DEFIER_INTEGRITY_REQUIRED` 未开启时，签名为兼容性可选字段；当它开启时，缺失签名返回 400，签名不匹配返回 403。
-- 默认浏览器客户端不会发送 `salt`/`signature`。只有可信中间层、自建工具或服务端代理生成签名时才应携带这两个字段。
+- 默认浏览器客户端不会持有服务端 HMAC secret。生产浏览器链路使用 `signatureMode: "session"`，以当前登录 token 作为会话级 HMAC key，签名输入为 `session-v1 + "\n" + salt + "\n" + JSON payload`。
+- 可信中间层、自建工具或服务端代理仍可使用服务端私有 HMAC secret 的 `v1` 签名模式。
 - 当请求显式携带 `salt` 或 `signature` 任一字段时，服务端会视为一次完整性签名尝试；两者必须同时存在且满足格式要求，否则返回 400，即使未开启强制模式。
+- 存档、全局数据和残影写入会对客户端时间戳做归一化：只接受有限、非负、不过分超前的毫秒时间；异常值会回退到服务端当前时间，避免旧客户端或恶意请求把数据永久锁成未来版本。
 
 ### 1. 认证模块 (Auth)
 
@@ -67,9 +69,9 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 #### 2.1 保存存档
 - **POST** `/api/saves`
 - **Auth**: Required
-- **Body**: `{ "slotIndex": 0, "saveData": { ... }, "saveTime": 1710000000000, "salt": "optional-nonce", "signature": "optional-hmac" }`
-- **Note**: `salt` 和 `signature` 仅供可信调用方使用，默认浏览器客户端不发送。
-- **Response**: `{ "success": true }`
+- **Body**: `{ "slotIndex": 0, "saveData": { ... }, "saveTime": 1710000000000, "salt": "optional-nonce", "signature": "optional-hmac", "signatureMode": "session" }`
+- **Note**: `saveTime` 较旧时不会覆盖已有新存档；浏览器客户端使用 `signatureMode: "session"`。
+- **Response**: `{ "success": true, "skipped": false }`
 
 #### 2.2 读取云存档 (多槽位)
 - **GET** `/api/saves`
@@ -90,22 +92,23 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 #### 3.1 保存全局数据 (如成就)
 - **POST** `/api/user/global`
 - **Auth**: Required
-- **Body**: `{ "globalData": { "achievements": [...] } }`
-- **Response**: `{ "success": true }`
+- **Body**: `{ "globalData": { "achievements": [...], "updatedAt": 1710000000000 }, "globalUpdatedAt": 1710000000000, "salt": "optional-nonce", "signature": "optional-hmac", "signatureMode": "session" }`
+- **Note**: `globalData` 必须是对象；数组、字符串和空值会返回 400。`globalUpdatedAt` 较旧时不会覆盖已有新数据。
+- **Response**: `{ "success": true, "skipped": false, "globalUpdatedAt": 1710000000000 }`
 
 #### 3.2 读取全局数据
 - **GET** `/api/user/global`
 - **Auth**: Required
-- **Response**: `{ "success": true, "data": { "achievements": [...] } }`
+- **Response**: `{ "success": true, "data": { "achievements": [...] }, "globalUpdatedAt": 1710000000000 }`
 
 ### 4. 异步 PVP 残影 (Ghosts)
 
 #### 4.1 上传残影
 - **POST** `/api/ghosts/current`
 - **Auth**: Required
-- **Body**: `{ "realm": 3, "ghostData": { "name": "xxx", "hp": 100, "deck": [...] }, "salt": "optional-nonce", "signature": "optional-hmac" }`
-- **Note**: `salt` 和 `signature` 仅供可信调用方使用，默认浏览器客户端不发送。
-- **Response**: `{ "success": true }`
+- **Body**: `{ "realm": 3, "ghostData": { "name": "xxx", "hp": 100, "maxHp": 100, "deck": [...], "updatedAt": 1710000000000 }, "uploadTime": 1710000000000, "salt": "optional-nonce", "signature": "optional-hmac", "signatureMode": "session" }`
+- **Note**: 每个用户只保留一条当前残影；`uploadTime` 较旧时不会覆盖已有新残影。
+- **Response**: `{ "success": true, "skipped": false, "uploadTime": 1710000000000 }`
 
 #### 4.2 随机拉取对手残影
 - **GET** `/api/ghosts/random?realm=3`
@@ -119,6 +122,7 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 - `username` (unique, string)
 - `password_hash` (string)
 - `global_data` (json)
+- `global_updated_at` (bigint)
 - `created_at` (timestamp)
 
 ### game_saves
@@ -137,6 +141,7 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 - `ghost_data` (json)
 - `upload_time` (bigint)
 - Index on `realm`
+- Unique Key: `(user_id)`
 
 ## 第一阶段迁移提示
 

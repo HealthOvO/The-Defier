@@ -4276,18 +4276,31 @@ const expeditionHubMethods = Object.create(null);
       syncChapterBrief();
       return;
     }
-    if (!container) {
-      container = document.createElement('div');
-      container.id = 'map-expedition-panels';
-      container.className = 'map-expedition-panels';
+	    if (!container) {
+	      container = document.createElement('div');
+	      container.id = 'map-expedition-panels';
+	      container.className = 'map-expedition-panels';
       const header = shell.querySelector('.map-v3-header');
       if (header && header.parentNode) {
         header.insertAdjacentElement('afterend', container);
       } else {
-        shell.prepend(container);
-      }
-    }
-    const selectedBranch = state.branchOptions.find(entry => entry.id === state.selectedBranchId) || null;
+	        shell.prepend(container);
+	      }
+	    }
+	    if (!shell.classList.contains('show-map-intel') && shell.dataset.mapIntelUserToggled !== 'true') {
+	      shell.classList.add('show-map-intel');
+	      const intelButton = shell.querySelector('[data-map-action="toggle-map-intel"]');
+	      const detailPanels = shell.querySelector('#map-detail-panels');
+	      if (intelButton) {
+	        intelButton.textContent = '收起情报';
+	        intelButton.setAttribute('aria-expanded', 'true');
+	      }
+	      if (detailPanels) {
+	        detailPanels.setAttribute('aria-hidden', 'false');
+	      }
+	      container.setAttribute('aria-hidden', 'false');
+	    }
+	    const selectedBranch = state.branchOptions.find(entry => entry.id === state.selectedBranchId) || null;
     const activeBounties = this.getActiveExpeditionBounties(state);
     const ending = this.determineExpeditionEnding(state);
     const nemesisMeta = getNemesisStatusMeta(state.activeNemesis?.status || 'hunting');

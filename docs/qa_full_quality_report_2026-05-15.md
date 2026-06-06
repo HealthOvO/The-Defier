@@ -3,6 +3,7 @@
 ## 1. 测试概述
 
 - 测试日期：2026-05-15
+- 快照说明：本文是 2026-05-15 当日质量快照；当前 release gate 基线以后续 `output/release-browser-audits-*/report.json` 和 `tests/run_browser_release_checks.sh` 为准。
 - 测试范围：前端渲染、后端接口、卡牌系统、游戏流程、兼容性、存档与进度保存
 - 测试环境：
   - macOS 本地环境
@@ -12,7 +13,7 @@
 - 主要产物：
   - 本轮浏览器审计输出：`output/qa-full-release-2026-05-15/`
   - 说明：该路径为本轮命令显式指定的自定义输出目录，不是 `run_browser_release_checks.sh` 的默认目录。
-  - 本轮浏览器主跑报告数量：23 个 `report.json`
+  - 本轮浏览器主跑报告数量：23 个 `report.json`（2026-05-15 当日基线；当前 release gate 已扩展到 24 组报告）
   - 本轮截图/报告文件数量：158 个
 
 ## 2. 执行结论
@@ -21,7 +22,7 @@
 | --- | --- | --- |
 | 构建 | 通过 | `npm run build` 成功，Vite 产物生成正常 |
 | Node 规则校验 | 通过 | `npm run test:node` 全量 sanity 通过 |
-| 前端渲染审计 | 通过 | 23 个 Playwright 发布审计脚本全部通过 |
+| 前端渲染审计 | 通过 | 23 个 Playwright 发布审计脚本全部通过；当前 release gate 基线为 24 组报告 |
 | 移动端兼容 | 通过 | release 审计包含 mobile、reward-mobile、pvp-mobile、challenge-mobile-flow |
 | 后端 API 功能 | 通过 | 注册、登录、存档、读取、残影上传、随机残影均通过 |
 | 后端异常处理 | 通过 | 未授权读取存档返回 401，错误登录返回 401 |

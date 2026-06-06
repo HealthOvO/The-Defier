@@ -32,6 +32,10 @@ const scenarios = [
   { id: 'treasure-compendium', root: '#treasure-compendium', title: 'Treasure Compendium' },
   { id: 'realm-select-screen', root: '#realm-select-screen', title: 'Realm Select' },
   { id: 'map-screen', root: '#map-screen', title: 'Map' },
+  { id: 'map-screen-tools', root: '#map-screen', title: 'Map Tools Open' },
+  { id: 'map-screen-intel-toggle', root: '#map-screen', title: 'Map Intel Toggle' },
+  { id: 'map-screen-tools-toggle', root: '#map-screen', title: 'Map Tools Toggle' },
+  { id: 'map-screen-expedition-intel-click', root: '#map-screen', title: 'Map Expedition Intel Clickability' },
   { id: 'battle-screen', root: '#battle-screen', title: 'Battle' },
   { id: 'reward-screen', root: '#reward-screen', title: 'Reward' },
   { id: 'shop-screen', root: '#shop-screen', title: 'Shop' },
@@ -40,17 +44,23 @@ const scenarios = [
   { id: 'game-over-screen', root: '#game-over-screen', title: 'Game Over' },
   { id: 'pvp-result-overlay', root: '#pvp-result-overlay', title: 'PVP Result Overlay' },
   { id: 'event-modal', root: '#event-modal', title: 'Event Modal' },
+  { id: 'remove-card-modal', root: '#remove-card-modal', title: 'Remove Card Modal' },
   { id: 'settings-modal', root: '#settings-modal', title: 'Settings Modal' },
   { id: 'auth-modal', root: '#auth-modal', title: 'Auth Modal' },
   { id: 'save-conflict-modal', root: '#save-conflict-modal', title: 'Save Conflict Modal' },
   { id: 'save-slots-modal', root: '#save-slots-modal', title: 'Save Slots Modal' },
   { id: 'deck-modal', root: '#deck-modal', title: 'Deck Modal' },
+  { id: 'treasure-bag-modal', root: '#treasure-bag-modal', title: 'Treasure Bag Modal' },
   { id: 'card-modal', root: '#card-modal', title: 'Card Detail Modal' },
+  { id: 'dynamic-card-detail-modal', root: '#card-detail-modal', title: 'Dynamic Card Detail Modal' },
+  { id: 'skill-confirm-modal', root: '#skill-confirm-modal', title: 'Skill Confirm Modal' },
   { id: 'treasure-detail-modal', root: '#treasure-detail-modal', title: 'Treasure Detail Modal' },
   { id: 'law-detail-modal', root: '#law-detail-modal', title: 'Law Detail Modal' },
   { id: 'ring-modal', root: '#ring-modal', title: 'Fate Ring Modal' },
   { id: 'reward-modal', root: '#reward-modal', title: 'Reward Popup Modal' },
   { id: 'confirm-modal', root: '#generic-confirm-modal', title: 'Confirm Modal' },
+  { id: 'alert-modal', root: '#generic-alert-modal', title: 'Alert Modal' },
+  { id: 'treasure-bag-alert-modal', root: '#generic-alert-modal', title: 'Treasure Bag Alert Stack' },
   { id: 'purification-modal', root: '#purification-modal', title: 'Purification Modal' },
 ];
 
@@ -89,15 +99,58 @@ async function prepareScenario(page, scenarioId) {
     const allLaws = () => (typeof LAWS !== 'undefined' && LAWS) ? Object.values(LAWS) : [];
     const allTreasures = () => (typeof TREASURES !== 'undefined' && TREASURES) ? Object.values(TREASURES) : [];
     const allEvents = () => (typeof EVENTS !== 'undefined' && EVENTS) ? Object.values(EVENTS) : [];
+    const auditTreasureSamples = () => [
+      {
+        id: 'layout_aegis_relic',
+        name: '玄甲镇符',
+        icon: '🛡️',
+        rarity: 'legendary',
+        description: '获得护盾时额外稳住节奏，用于检查已装备法宝卡片的多行布局。',
+      },
+      {
+        id: 'layout_star_compass',
+        name: '星衡罗盘',
+        icon: '✨',
+        rarity: 'rare',
+        description: '回合开始校准灵力与抽牌节奏，用于检查短描述与按钮不互相遮挡。',
+      },
+      {
+        id: 'layout_rift_blade',
+        name: '裂脉短刃',
+        icon: '🩸',
+        rarity: 'mythic',
+        description: '命中流血目标时追加斩击，并保留足够长的仓库描述压力样本。',
+      },
+      {
+        id: 'layout_wuxing_charm',
+        name: '五行净符',
+        icon: '☯️',
+        rarity: 'common',
+        description: '若本回合完成净化则抽牌，否则获得灵力，测试仓库卡片换行。',
+      },
+    ];
+    const treasureSamples = () => {
+      const source = allTreasures();
+      const samples = source.length >= 4 ? source : auditTreasureSamples();
+      return samples.map((treasure, index) => ({
+        ...treasure,
+        id: treasure.id || `layout_treasure_${index}`,
+      }));
+    };
 
     const deactivateModal = (modal) => {
       if (!modal) return;
       modal.classList.remove('active', 'upgrade-mode');
       if (modal.id === 'pvp-result-overlay') modal.style.display = 'none';
+      if (modal.id === 'treasure-bag-modal') modal.style.display = 'none';
     };
 
     const cleanup = () => {
       document.querySelectorAll('.modal').forEach(deactivateModal);
+      document.querySelectorAll('.modal-overlay').forEach((modal) => {
+        modal.classList.remove('active');
+        modal.style.display = 'none';
+      });
       const purification = document.getElementById('purification-modal');
       if (purification) {
         purification.classList.remove('active');
@@ -160,7 +213,7 @@ async function prepareScenario(page, scenarioId) {
 
       const laws = allLaws().slice(0, 18).map((law, index) => ({ ...law, id: law.id || Object.keys(LAWS || {})[index] }));
       if (laws.length) player.collectedLaws = laws;
-      const treasures = allTreasures().slice(0, 12).map((treasure, index) => ({ ...treasure, id: treasure.id || Object.keys(TREASURES || {})[index] }));
+      const treasures = treasureSamples().slice(0, 12);
       if (treasures.length) player.collectedTreasures = treasures;
 
       if (typeof game.normalizeRunSlateArchive === 'function') {
@@ -250,6 +303,82 @@ async function prepareScenario(page, scenarioId) {
       }
     };
 
+    const showMapToolsProbe = () => {
+      showMapProbe();
+      const shell = document.querySelector('#map-screen .map-screen-v3');
+      if (shell) {
+        shell.classList.add('show-map-tools');
+        const toolsButton = shell.querySelector('[data-map-action="toggle-map-tools"]');
+        const footer = shell.querySelector('#map-footer');
+        if (toolsButton) {
+          toolsButton.textContent = '收起工具';
+          toolsButton.setAttribute('aria-expanded', 'true');
+        }
+        if (footer) footer.setAttribute('aria-hidden', 'false');
+      }
+    };
+
+    const showMapExpeditionIntelProbe = () => {
+      ensureGame();
+      if (typeof game.initializeExpeditionForRealm === 'function') {
+        game.initializeExpeditionForRealm(game.player?.realm || 1, true);
+      }
+      game.showScreen('map-screen');
+      const container = document.getElementById('map-screen');
+      const shell = container?.querySelector('.map-screen-v3');
+      if (shell) {
+        delete shell.dataset.mapIntelUserToggled;
+        shell.classList.remove('show-map-intel', 'show-map-tools');
+        if (window.game?.mapView && typeof game.mapView.syncMapChrome === 'function') {
+          game.mapView.syncMapChrome(container);
+        }
+      }
+      if (typeof game.renderExpeditionMapPanels === 'function') {
+        game.renderExpeditionMapPanels();
+      }
+      const panels = container?.querySelector('#map-expedition-panels');
+      const button = container?.querySelector('[data-map-action="toggle-map-intel"]');
+      const panelVisible = !!panels
+        && getComputedStyle(panels).display !== 'none'
+        && panels.getAttribute('aria-hidden') === 'false';
+      return {
+        ok: !!container && !!shell && !!panels && !!button && shell.classList.contains('show-map-intel') && panelVisible,
+        rootSelector: '#map-screen',
+        shellClass: shell?.className || '',
+        panelHidden: panels?.getAttribute('aria-hidden') || '',
+        panelCount: panels?.querySelectorAll('.expedition-panel-card, .expedition-overview-card, .expedition-choice-card').length || 0,
+        buttonExpanded: button?.getAttribute('aria-expanded') || '',
+        userToggled: shell?.dataset?.mapIntelUserToggled || ''
+      };
+    };
+
+    const clickMapHeaderToggle = (action) => {
+      showMapProbe();
+      const container = document.getElementById('map-screen');
+      const shell = container?.querySelector('.map-screen-v3');
+      if (!container || !shell) return { ok: false, reason: 'missing_map_shell', action };
+      shell.classList.remove('show-map-intel', 'show-map-tools');
+      if (window.game?.mapView && typeof game.mapView.syncMapChrome === 'function') {
+        game.mapView.syncMapChrome(container);
+      }
+      const button = container.querySelector(`[data-map-action="${action}"]`);
+      if (!button) return { ok: false, reason: 'missing_toggle_button', action };
+      button.click();
+      const openClass = action === 'toggle-map-intel' ? 'show-map-intel' : 'show-map-tools';
+      const target = action === 'toggle-map-intel'
+        ? container.querySelector('#map-expedition-panels')
+        : container.querySelector('#map-footer');
+      const expanded = button.getAttribute('aria-expanded') === 'true';
+      const targetVisible = target && target.getAttribute('aria-hidden') === 'false';
+      return {
+        ok: shell.classList.contains(openClass) && expanded && targetVisible,
+        action,
+        shellClass: shell.className,
+        expanded: button.getAttribute('aria-expanded'),
+        targetHidden: target?.getAttribute('aria-hidden') || '',
+      };
+    };
+
     const showBattleProbe = () => {
       ensureGame();
       if (typeof game.startDebugBattle === 'function') {
@@ -297,6 +426,24 @@ async function prepareScenario(page, scenarioId) {
         const modal = document.getElementById('event-modal');
         if (modal) modal.classList.add('active');
       }
+    };
+
+    const activateRemoveCardModal = () => {
+      ensureGame();
+      game.showScreen('map-screen');
+      const modal = document.getElementById('remove-card-modal');
+      const list = document.getElementById('remove-card-list');
+      if (list) {
+        list.innerHTML = '';
+        (game.player?.deck || allCards()).slice(0, 10).forEach((card, index) => {
+          const item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'collection-card remove-card-option';
+          item.innerHTML = `<strong>${safeText(card.icon || '🃏')} ${safeText(card.name || `卡牌 ${index + 1}`)}</strong><span>${safeText(card.description || card.desc || '选择后会从牌组中移除。')}</span>`;
+          list.appendChild(item);
+        });
+      }
+      if (modal) modal.classList.add('active');
     };
 
     const activateSettingsModal = () => {
@@ -351,6 +498,25 @@ async function prepareScenario(page, scenarioId) {
       else document.getElementById('deck-modal')?.classList.add('active');
     };
 
+    const activateTreasureBagModal = () => {
+      ensureGame();
+      game.showScreen('map-screen');
+      const treasures = treasureSamples().slice(0, 10);
+      if (treasures.length && game.player) {
+        game.player.collectedTreasures = treasures;
+        game.player.equippedTreasures = treasures.slice(0, Math.min(2, treasures.length));
+        game.player.treasures = game.player.equippedTreasures;
+      }
+      if (game.inventoryView && typeof game.inventoryView.showTreasureBag === 'function') {
+        game.inventoryView.showTreasureBag();
+      } else if (typeof game.showTreasureBag === 'function') {
+        game.showTreasureBag();
+      } else {
+        const modal = document.getElementById('treasure-bag-modal');
+        if (modal) modal.style.display = 'flex';
+      }
+    };
+
     const activateCardModal = () => {
       ensureGame();
       game.showScreen('map-screen');
@@ -367,6 +533,95 @@ async function prepareScenario(page, scenarioId) {
         }
       }
       if (modal) modal.classList.add('active');
+    };
+
+    const activateDynamicCardDetailModal = () => {
+      ensureGame();
+      game.showScreen('map-screen');
+      const sourceCard = game.player?.deck?.find(card => Array.isArray(card.effects) && card.effects.length >= 2)
+        || allCards().find(card => Array.isArray(card.effects) && card.effects.length >= 2)
+        || game.player?.deck?.[0]
+        || allCards()[0]
+        || {
+          id: 'layout_dynamic_card_detail',
+          name: '星镜归卷·长名压力样本',
+          icon: '🔭',
+          type: 'skill',
+          rarity: 'legendary',
+          cost: 2,
+          description: '检视当前手牌、抽牌堆与弃牌堆，把下一次关键抉择压成可复盘样本；这段说明用于检查动态详情弹窗在移动端不会遮挡、裁切或压住关闭按钮。',
+          lore: '史卷会记下每一次犹豫，但只奖励真正看懂题面的人。',
+          effects: [
+            { type: 'draw', value: 2 },
+            { type: 'block', value: 8 },
+            { type: 'energy', value: 1 },
+          ],
+        };
+      const card = {
+        ...sourceCard,
+        name: sourceCard.name || '星镜归卷·长名压力样本',
+        icon: sourceCard.icon || '🔭',
+        type: sourceCard.type || 'skill',
+        rarity: sourceCard.rarity || 'legendary',
+        cost: typeof sourceCard.cost === 'number' ? sourceCard.cost : 2,
+        description: sourceCard.description || sourceCard.desc || '检视当前手牌、抽牌堆与弃牌堆，把下一次关键抉择压成可复盘样本；这段说明用于检查动态详情弹窗在移动端不会遮挡、裁切或压住关闭按钮。',
+        lore: sourceCard.lore || '史卷会记下每一次犹豫，但只奖励真正看懂题面的人。',
+        effects: Array.isArray(sourceCard.effects) && sourceCard.effects.length
+          ? sourceCard.effects
+          : [
+              { type: 'draw', value: 2 },
+              { type: 'block', value: 8 },
+              { type: 'energy', value: 1 },
+            ],
+      };
+      if (typeof Utils !== 'undefined' && typeof Utils.showCardDetail === 'function') {
+        Utils.showCardDetail(card, {
+          sectionLabel: '布局审计·动态详情',
+          priceText: '300 天道币',
+          availabilityText: '可预览',
+          sourceLabel: 'PVP 商店 / 图鉴详情',
+          usageHint: '先确认费用与效果数，再阅读卡面说明；移动端必须保持关闭按钮和摘要信息可见。',
+          extraSummaryRows: [
+            { label: '测试锚点', value: 'card-detail-modal' },
+            { label: '来源', value: '动态创建' },
+          ],
+        });
+      } else {
+        let modal = document.getElementById('card-detail-modal');
+        if (!modal) {
+          modal = document.createElement('div');
+          modal.id = 'card-detail-modal';
+          modal.className = 'modal-overlay card-detail-overlay';
+          document.body.appendChild(modal);
+        }
+        modal.innerHTML = `<div class="card-detail-container"><button data-card-detail-close="true">关闭界面</button><div class="card"><div class="card-name">${safeText(card.name)}</div><div class="card-desc">${safeText(card.description)}</div></div></div>`;
+        modal.style.display = 'flex';
+      }
+    };
+
+    const activateSkillConfirmModal = () => {
+      ensureGame();
+      game.showScreen('battle-screen');
+      if (!game.player.activeSkill) {
+        game.player.activeSkill = {
+          name: '破界雷令',
+          icon: '⚡',
+          description: '立即对敌方造成伤害，并为下一回合保留一次反制窗口。',
+          getDescription: () => '立即对敌方造成伤害，并为下一回合保留一次反制窗口。'
+        };
+      }
+      if (typeof game.showSkillConfirmModal === 'function') {
+        game.showSkillConfirmModal();
+      } else {
+        const modal = document.getElementById('skill-confirm-modal');
+        const titleEl = document.getElementById('skill-confirm-title');
+        const iconEl = document.getElementById('skill-confirm-icon');
+        const descEl = document.getElementById('skill-confirm-desc');
+        if (titleEl) titleEl.textContent = game.player.activeSkill.name;
+        if (iconEl) iconEl.textContent = game.player.activeSkill.icon || '⚡';
+        if (descEl) descEl.textContent = game.player.activeSkill.description || '';
+        if (modal) modal.classList.add('active');
+      }
     };
 
     const activateTreasureDetailModal = () => {
@@ -412,6 +667,31 @@ async function prepareScenario(page, scenarioId) {
       }
     };
 
+    const activateAlertModal = () => {
+      ensureGame();
+      game.showScreen('main-menu');
+      if (typeof game.showAlertModal === 'function') {
+        game.showAlertModal(
+          '云端已有更新，本地存档未覆盖云端。\n请回到存档位重新选择保留本地或读取云端；这段长提示用于检查移动端通用提示弹窗的换行、按钮和关闭控件不会互相遮挡。',
+          '云同步提示'
+        );
+      } else if (game.systemView && typeof game.systemView.showAlertModal === 'function') {
+        game.systemView.showAlertModal('云端已有更新，本地存档未覆盖云端。', '云同步提示');
+      }
+    };
+
+    const activateTreasureBagAlertStack = () => {
+      activateTreasureBagModal();
+      if (typeof game.showAlertModal === 'function') {
+        game.showAlertModal(
+          '法宝槽位已满，请先卸下一件已装备法宝再继续操作。\n这条提示覆盖在法宝囊之上，必须保持标题、正文、确定按钮和关闭按钮都可见可点。',
+          '无法装备'
+        );
+      } else if (game.systemView && typeof game.systemView.showAlertModal === 'function') {
+        game.systemView.showAlertModal('法宝槽位已满，请先卸下一件已装备法宝再继续操作。', '无法装备');
+      }
+    };
+
     const activatePurificationModal = () => {
       ensureGame();
       game.showScreen('shop-screen');
@@ -438,6 +718,8 @@ async function prepareScenario(page, scenarioId) {
     cleanup();
 
     if (!window.game) return { ok: false, reason: 'missing_game', rootSelector: 'body' };
+
+    let setupResult = {};
 
     switch (id) {
       case 'main-menu':
@@ -507,6 +789,21 @@ async function prepareScenario(page, scenarioId) {
       case 'map-screen':
         showMapProbe();
         break;
+      case 'map-screen-tools':
+        showMapToolsProbe();
+        break;
+      case 'map-screen-intel-toggle':
+        setupResult = clickMapHeaderToggle('toggle-map-intel');
+        if (!setupResult.ok) return setupResult;
+        break;
+      case 'map-screen-tools-toggle':
+        setupResult = clickMapHeaderToggle('toggle-map-tools');
+        if (!setupResult.ok) return setupResult;
+        break;
+      case 'map-screen-expedition-intel-click':
+        setupResult = showMapExpeditionIntelProbe();
+        if (!setupResult.ok) return setupResult;
+        break;
       case 'battle-screen':
         showBattleProbe();
         break;
@@ -551,6 +848,9 @@ async function prepareScenario(page, scenarioId) {
       case 'event-modal':
         activateEventModal();
         break;
+      case 'remove-card-modal':
+        activateRemoveCardModal();
+        break;
       case 'settings-modal':
         activateSettingsModal();
         break;
@@ -566,8 +866,17 @@ async function prepareScenario(page, scenarioId) {
       case 'deck-modal':
         activateDeckModal();
         break;
+      case 'treasure-bag-modal':
+        activateTreasureBagModal();
+        break;
       case 'card-modal':
         activateCardModal();
+        break;
+      case 'dynamic-card-detail-modal':
+        activateDynamicCardDetailModal();
+        break;
+      case 'skill-confirm-modal':
+        activateSkillConfirmModal();
         break;
       case 'treasure-detail-modal':
         activateTreasureDetailModal();
@@ -584,6 +893,12 @@ async function prepareScenario(page, scenarioId) {
       case 'confirm-modal':
         activateConfirmModal();
         break;
+      case 'alert-modal':
+        activateAlertModal();
+        break;
+      case 'treasure-bag-alert-modal':
+        activateTreasureBagAlertStack();
+        break;
       case 'purification-modal':
         activatePurificationModal();
         break;
@@ -592,7 +907,7 @@ async function prepareScenario(page, scenarioId) {
     }
 
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    return { ok: true };
+    return { ok: true, ...setupResult };
   }, scenarioId);
 }
 
@@ -619,8 +934,19 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
     };
 
+    const hasHiddenAncestor = (el) => {
+      let node = el;
+      while (node && node instanceof Element) {
+        const style = getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return true;
+        node = node.parentElement;
+      }
+      return false;
+    };
+
     const isVisible = (el) => {
       if (!el || !(el instanceof Element)) return false;
+      if (hasHiddenAncestor(el)) return false;
       const style = getComputedStyle(el);
       if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
       const rect = el.getBoundingClientRect();
@@ -761,6 +1087,37 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       issues.push({ type: 'root-outside-viewport', selector: rootSelector, rect: rectObj(rootRect) });
     }
 
+    if (/^map-screen/.test(scenarioId) && viewport.width <= 520) {
+      const mapScroller = root.querySelector('#map-scroll-container');
+      const rows = Array.from(root.querySelectorAll('.node-row-v3')).filter(isVisible);
+      if (mapScroller && rows.length) {
+        const scrollerRect = mapScroller.getBoundingClientRect();
+        const fullRows = rows.filter((row) => {
+          const rowRect = row.getBoundingClientRect();
+          return rowRect.top >= scrollerRect.top + 2
+            && rowRect.bottom <= scrollerRect.bottom - 2
+            && rowRect.height >= 72;
+        });
+        if (fullRows.length === 0) {
+          issues.push({
+            type: 'mobile-map-has-no-full-visible-node-row',
+            selector: '#map-scroll-container',
+            rect: rectObj(scrollerRect),
+            rowCount: rows.length,
+          });
+        }
+        if (mapScroller.scrollHeight > mapScroller.clientHeight + 8 && !isScrollable(mapScroller, 'y')) {
+          issues.push({
+            type: 'mobile-map-scroll-container-not-scrollable',
+            selector: '#map-scroll-container',
+            rect: rectObj(scrollerRect),
+            scrollHeight: mapScroller.scrollHeight,
+            clientHeight: mapScroller.clientHeight,
+          });
+        }
+      }
+    }
+
     const candidateSelector = [
       'button',
       'a[href]',
@@ -784,6 +1141,7 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       '.shop-container',
       '.game-over-container',
       '.pvp-result-container',
+      '.card-detail-container',
       '.modal-content',
       '.ring-scene-container',
       '.purification-container',
@@ -796,9 +1154,110 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       '.inheritance-card',
       '.pvp-panel',
       '.pvp-card',
+      '.treasure-slot',
+      '.inventory-item',
     ].join(',');
 
     const candidates = Array.from(root.querySelectorAll(candidateSelector)).filter(isVisible);
+    let treasureBagProbe = null;
+    let alertModalProbe = null;
+    let treasureBagAlertProbe = null;
+    let dynamicCardDetailProbe = null;
+    if (scenarioId === 'treasure-bag-modal') {
+      const filledSlots = Array.from(root.querySelectorAll('.treasure-slot.filled')).filter(isVisible);
+      const inventoryItems = Array.from(root.querySelectorAll('.inventory-item')).filter(isVisible);
+      const emptyInventory = root.querySelector('.empty-inventory');
+      const equippedCountText = root.querySelector('#equipped-count')?.textContent?.trim() || '';
+      treasureBagProbe = {
+        filledSlotCount: filledSlots.length,
+        inventoryItemCount: inventoryItems.length,
+        equippedCountText,
+        emptyInventoryText: emptyInventory ? textLabel(emptyInventory) : '',
+      };
+      if (filledSlots.length < 1) {
+        issues.push({
+          type: 'treasure-bag-missing-filled-slot',
+          selector: '.treasure-slot.filled',
+          detail: treasureBagProbe,
+        });
+      }
+      if (inventoryItems.length < 1) {
+        issues.push({
+          type: 'treasure-bag-missing-inventory-item',
+          selector: '.inventory-item',
+          detail: treasureBagProbe,
+        });
+      }
+    }
+    if (scenarioId === 'alert-modal' || scenarioId === 'treasure-bag-alert-modal') {
+      const title = root.querySelector('#generic-alert-title');
+      const message = root.querySelector('#generic-alert-message');
+      const okButton = root.querySelector('#generic-alert-btn');
+      alertModalProbe = {
+        title: title ? textLabel(title) : '',
+        messageLength: message ? textLabel(message).length : 0,
+        okButtonVisible: !!(okButton && isVisible(okButton)),
+        closeButtonVisible: !!(root.querySelector('.modal-close') && isVisible(root.querySelector('.modal-close'))),
+      };
+      if (!alertModalProbe.title || alertModalProbe.messageLength < 24 || !alertModalProbe.okButtonVisible) {
+        issues.push({
+          type: 'alert-modal-missing-content',
+          selector: '#generic-alert-modal',
+          detail: alertModalProbe,
+        });
+      }
+    }
+    if (scenarioId === 'treasure-bag-alert-modal') {
+      const treasureBag = document.getElementById('treasure-bag-modal');
+      const alertContent = root.querySelector('.modal-content');
+      const okButton = root.querySelector('#generic-alert-btn');
+      const okRect = okButton ? okButton.getBoundingClientRect() : null;
+      const okPoint = okRect ? {
+        x: Math.round(okRect.left + okRect.width / 2),
+        y: Math.round(okRect.top + okRect.height / 2),
+      } : null;
+      const topAtOk = okPoint ? document.elementFromPoint(okPoint.x, okPoint.y) : null;
+      const alertZ = Number.parseInt(getComputedStyle(root).zIndex || '0', 10) || 0;
+      const bagZ = treasureBag ? (Number.parseInt(getComputedStyle(treasureBag).zIndex || '0', 10) || 0) : 0;
+      treasureBagAlertProbe = {
+        treasureBagVisible: !!(treasureBag && isVisible(treasureBag)),
+        alertContentVisible: !!(alertContent && isVisible(alertContent)),
+        okButtonVisible: !!(okButton && isVisible(okButton)),
+        okButtonTopHit: !!(okButton && topAtOk && (topAtOk === okButton || okButton.contains(topAtOk))),
+        alertZ,
+        bagZ,
+        topAtOk: selectorFor(topAtOk),
+      };
+      if (!treasureBagAlertProbe.treasureBagVisible || !treasureBagAlertProbe.alertContentVisible || !treasureBagAlertProbe.okButtonVisible || !treasureBagAlertProbe.okButtonTopHit || alertZ <= bagZ) {
+        issues.push({
+          type: 'treasure-bag-alert-stack-invalid',
+          selector: '#generic-alert-modal',
+          detail: treasureBagAlertProbe,
+        });
+      }
+    }
+    if (scenarioId === 'dynamic-card-detail-modal') {
+      const container = root.querySelector('.card-detail-container');
+      const previewCard = root.querySelector('.big-preview.card, .card.big-preview, .card-detail-container .card');
+      const closeButton = root.querySelector('[data-card-detail-close="true"]');
+      const summaryRows = Array.from(root.querySelectorAll('.cd-summary-row')).filter(isVisible);
+      const statusChips = Array.from(root.querySelectorAll('.detail-status-chip')).filter(isVisible);
+      dynamicCardDetailProbe = {
+        containerVisible: !!(container && isVisible(container)),
+        previewCardVisible: !!(previewCard && isVisible(previewCard)),
+        closeButtonVisible: !!(closeButton && isVisible(closeButton)),
+        summaryRowCount: summaryRows.length,
+        statusChipCount: statusChips.length,
+        title: textLabel(root.querySelector('.cd-header h2') || root.querySelector('.card-name')),
+      };
+      if (!dynamicCardDetailProbe.containerVisible || !dynamicCardDetailProbe.previewCardVisible || !dynamicCardDetailProbe.closeButtonVisible || dynamicCardDetailProbe.summaryRowCount < 2) {
+        issues.push({
+          type: 'dynamic-card-detail-missing-content',
+          selector: '#card-detail-modal',
+          detail: dynamicCardDetailProbe,
+        });
+      }
+    }
 
     for (const el of candidates) {
       const rect = el.getBoundingClientRect();
@@ -807,8 +1266,8 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       const selector = selectorFor(el);
       const intersectsViewport = hasVisibleArea(visibleRect);
       const isInteractive = el.matches('button, a[href], input, select, textarea, [role="button"]');
-      const isCard = el.matches('.card, .character-card, .realm-card, .reward-card, .shop-service, .save-slot, .event-choice, .achievement-card, .inheritance-card');
-      const isShell = el.matches('.codex-shell, .challenge-shell, .treasure-compendium-shell, .reward-shell, .shop-container, .game-over-container, .pvp-result-container, .modal-content, .ring-scene-container, .purification-container');
+      const isCard = el.matches('.card, .character-card, .realm-card, .reward-card, .shop-service, .save-slot, .event-choice, .achievement-card, .inheritance-card, .treasure-slot, .inventory-item');
+      const isShell = el.matches('.codex-shell, .challenge-shell, .treasure-compendium-shell, .reward-shell, .shop-container, .game-over-container, .pvp-result-container, .card-detail-container, .modal-content, .ring-scene-container, .purification-container');
 
       if (intersectsViewport && (isInteractive || isCard || isShell)) {
         const outLeft = rect.left < -2;
@@ -912,6 +1371,8 @@ async function inspectLayout(page, rootSelector, scenarioId) {
         isViewportVisible(el)
         && (
           el.matches('.event-choice, #battle-tactical-advisor, .modal-content.event-view, .fate-ring-info-panel')
+          || el.matches('.modal-content.deck-view, #map-scroll-container')
+          || el.matches('.map-v3-header')
           || (el.matches('.card') && !isBattleHandCard(el))
           || isCollectionToolbar(el)
         )
@@ -964,13 +1425,24 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       viewport,
       scenarioId,
       candidateCount: candidates.length,
+      treasureBagProbe,
+      alertModalProbe,
+      treasureBagAlertProbe,
+      dynamicCardDetailProbe,
       rootRect: rectObj(rootRect),
     };
   }, { rootSelector, scenarioId });
 }
 
 async function inspectBattleLogStress(page, rootSelector, scenarioId) {
-  const stressScenarios = new Set(['realm-select-screen', 'pvp-screen', 'battle-screen']);
+  const stressScenarios = new Set([
+    'realm-select-screen',
+    'pvp-screen',
+    'battle-screen',
+    'map-screen',
+    'map-screen-expedition-intel-click',
+    'reward-screen',
+  ]);
   if (!stressScenarios.has(scenarioId)) {
     return { ok: true, skipped: true };
   }
@@ -1006,8 +1478,19 @@ async function inspectBattleLogStress(page, rootSelector, scenarioId) {
       return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
     };
 
+    const hasHiddenAncestor = (el) => {
+      let node = el;
+      while (node && node instanceof Element) {
+        const style = getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return true;
+        node = node.parentElement;
+      }
+      return false;
+    };
+
     const isVisible = (el) => {
       if (!el || !(el instanceof Element)) return false;
+      if (hasHiddenAncestor(el)) return false;
       const style = getComputedStyle(el);
       if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
       const rect = el.getBoundingClientRect();
@@ -1074,6 +1557,178 @@ async function inspectBattleLogStress(page, rootSelector, scenarioId) {
       targetCount: targets.length,
     };
   }, { rootSelector, scenarioId });
+}
+
+async function inspectMapNodeClickability(page, scenarioId) {
+  if (!['map-screen', 'map-screen-expedition-intel-click'].includes(scenarioId)) {
+    return { ok: true, skipped: true };
+  }
+
+  const selector = '#map-screen .map-node-v3.current, #map-screen .map-node-v3.available, #map-screen .map-node-v3:not(.locked)';
+  try {
+    const locator = page.locator(selector).first();
+    await locator.waitFor({ state: 'visible', timeout: 3000 });
+    await page.evaluate((nodeSelector) => {
+      const node = document.querySelector(nodeSelector);
+      if (!node || typeof node.scrollIntoView !== 'function') return;
+      node.scrollIntoView({ block: 'center', inline: 'center' });
+      const rect = node.getBoundingClientRect();
+      const scroller = document.getElementById('map-scroll-container');
+      if (scroller && rect.left < 0) scroller.scrollLeft += rect.left - 16;
+      if (scroller && rect.right > window.innerWidth) scroller.scrollLeft += rect.right - window.innerWidth + 16;
+    }, selector);
+    await waitForPaint(page);
+    const target = await page.evaluate((nodeSelector) => {
+      const node = document.querySelector(nodeSelector);
+      if (!node) return { ok: false, issue: { type: 'map-node-not-found' } };
+      const rect = node.getBoundingClientRect();
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      const point = {
+        x: Math.round(rect.left + rect.width / 2),
+        y: Math.round(rect.top + rect.height / 2),
+      };
+      const rectObj = (value) => ({
+        left: Math.round(value.left * 10) / 10,
+        top: Math.round(value.top * 10) / 10,
+        right: Math.round(value.right * 10) / 10,
+        bottom: Math.round(value.bottom * 10) / 10,
+        width: Math.round(value.width * 10) / 10,
+        height: Math.round(value.height * 10) / 10,
+      });
+      const selectorFor = (el) => {
+        if (!el) return '';
+        if (el.id) return `#${el.id}`;
+        const classes = Array.from(el.classList || []).slice(0, 3).join('.');
+        return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
+      };
+      if (point.x < 0 || point.x > viewport.width || point.y < 0 || point.y > viewport.height) {
+        return {
+          ok: false,
+          issue: {
+            type: 'map-node-center-outside-viewport',
+            node: selectorFor(node),
+            point,
+            rect: rectObj(rect),
+            viewport,
+          },
+        };
+      }
+      const stack = document.elementsFromPoint(point.x, point.y).filter((entry) => {
+        if (!(entry instanceof Element)) return false;
+        const style = getComputedStyle(entry);
+        return style.pointerEvents !== 'none' && style.visibility !== 'hidden';
+      });
+      const top = stack[0] || null;
+      if (top && top !== node && !node.contains(top) && !top.contains(node)) {
+        return {
+          ok: false,
+          issue: {
+            type: 'map-node-obscured',
+            by: selectorFor(top),
+            node: selectorFor(node),
+            point,
+          },
+        };
+      }
+      return {
+        ok: true,
+        point,
+        node: selectorFor(node),
+        top: selectorFor(top),
+      };
+    }, selector);
+    if (!target.ok) {
+      return {
+        ok: false,
+        skipped: false,
+        issues: [target.issue || { type: 'map-node-click-target-invalid' }],
+      };
+    }
+    const before = await page.evaluate(() => ({
+      mode: document.body?.dataset?.currentScreen || window.game?.currentScreen || '',
+      eventOpen: !!document.querySelector('#event-modal.active'),
+      battleActive: !!document.querySelector('#battle-screen.active'),
+    }));
+    const viewport = page.viewportSize();
+    if (viewport && viewport.width <= 520) {
+      await page.touchscreen.tap(target.point.x, target.point.y);
+    } else {
+      await page.mouse.click(target.point.x, target.point.y);
+    }
+    await waitForPaint(page);
+    const after = await page.evaluate(() => ({
+      mode: document.body?.dataset?.currentScreen || window.game?.currentScreen || '',
+      eventOpen: !!document.querySelector('#event-modal.active'),
+      battleActive: !!document.querySelector('#battle-screen.active'),
+    }));
+    return {
+      ok: true,
+      skipped: false,
+      target,
+      before,
+      after,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      skipped: false,
+      issues: [
+        {
+          type: 'map-node-dom-click-failed',
+          message: error?.message || String(error),
+        },
+      ],
+    };
+  }
+}
+
+async function inspectMapExpeditionIntelPersistence(page, scenarioId) {
+  if (scenarioId !== 'map-screen-expedition-intel-click') {
+    return { ok: true, skipped: true };
+  }
+  return page.evaluate(() => {
+    const container = document.getElementById('map-screen');
+    const shell = container?.querySelector('.map-screen-v3');
+    const panels = container?.querySelector('#map-expedition-panels');
+    const button = container?.querySelector('[data-map-action="toggle-map-intel"]');
+    if (!container || !shell || !panels || !button) {
+      return { ok: false, skipped: false, issues: [{ type: 'missing-expedition-intel-controls' }] };
+    }
+
+    const readState = () => ({
+      open: shell.classList.contains('show-map-intel'),
+      expanded: button.getAttribute('aria-expanded') === 'true',
+      panelVisible: panels.getAttribute('aria-hidden') === 'false' && getComputedStyle(panels).display !== 'none',
+      userToggled: shell.dataset.mapIntelUserToggled || '',
+    });
+
+    const initial = readState();
+    button.click();
+    const closed = readState();
+    if (window.game && typeof game.renderExpeditionMapPanels === 'function') {
+      game.renderExpeditionMapPanels();
+    }
+    if (window.game?.mapView && typeof game.mapView.syncMapChrome === 'function') {
+      game.mapView.syncMapChrome(container);
+    }
+    const afterRerender = readState();
+    button.click();
+    const reopened = readState();
+    const issues = [];
+    if (!initial.open || !initial.expanded || !initial.panelVisible) issues.push({ type: 'expedition-intel-not-auto-open', initial });
+    if (closed.open || closed.expanded || closed.panelVisible) issues.push({ type: 'expedition-intel-did-not-close', closed });
+    if (afterRerender.open || afterRerender.expanded || afterRerender.panelVisible) issues.push({ type: 'expedition-intel-reopened-after-user-close', afterRerender });
+    if (!reopened.open || !reopened.expanded || !reopened.panelVisible) issues.push({ type: 'expedition-intel-did-not-reopen-for-clickability-check', reopened });
+    return {
+      ok: issues.length === 0,
+      skipped: false,
+      initial,
+      closed,
+      afterRerender,
+      reopened,
+      issues,
+    };
+  });
 }
 
 async function inspectBattleOverlaySwitchGuard(page) {
@@ -1249,6 +1904,8 @@ async function inspectBattleOverlaySwitchGuard(page) {
       const rootSelector = prepareResult?.rootSelector || scenario.root;
       const result = await inspectLayout(page, rootSelector, scenario.id);
       const overlayStress = await inspectBattleLogStress(page, rootSelector, scenario.id);
+      const mapExpeditionIntel = await inspectMapExpeditionIntelPersistence(page, scenario.id);
+      const mapNodeClick = await inspectMapNodeClickability(page, scenario.id);
       let overlayStressScreenshot = null;
       if (!overlayStress.skipped) {
         const overlayScreenshotPath = path.join(outDir, screenshotName(viewport.id, `${scenario.id}-battle-log-stress`));
@@ -1263,10 +1920,12 @@ async function inspectBattleOverlaySwitchGuard(page) {
         setup: prepareResult,
         screenshot: path.relative(process.cwd(), screenshotPath).replace(/\\/g, '/'),
         overlayStress,
+        mapExpeditionIntel,
+        mapNodeClick,
         overlayStressScreenshot,
         ...result,
       };
-      add(viewport.id, scenario.id, !!prepareResult?.ok && !!result?.ok && !!overlayStress?.ok, JSON.stringify(detail));
+      add(viewport.id, scenario.id, !!prepareResult?.ok && !!result?.ok && !!overlayStress?.ok && !!mapExpeditionIntel?.ok && !!mapNodeClick?.ok, JSON.stringify(detail));
     }
 
     try {

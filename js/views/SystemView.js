@@ -781,6 +781,7 @@ export class SystemView {
     // Populate Info
     const localInfo = document.getElementById('local-save-info');
     const cloudInfo = document.getElementById('cloud-save-info');
+    const statusInfo = document.getElementById('save-conflict-status');
     const formatInfo = (data, time) => {
       if (!data) return '无数据';
       const date = time ? new Date(time).toLocaleString() : data.timestamp ? new Date(data.timestamp).toLocaleString() : '未知时间';
@@ -795,6 +796,7 @@ export class SystemView {
     };
     if (localInfo) localInfo.innerHTML = formatInfo(localData, localData ? localData.timestamp : null);
     if (cloudInfo) cloudInfo.innerHTML = formatInfo(cloudData, cloudTime);
+    if (statusInfo) statusInfo.textContent = '';
 
     // Store temp data
     this.game.tempCloudData = cloudData;

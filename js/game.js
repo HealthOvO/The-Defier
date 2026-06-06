@@ -11,6 +11,7 @@ import { InventoryView } from "./views/InventoryView.js";
 import { RewardView } from "./views/RewardView.js";
 import { EventView } from "./views/EventView.js";
 import { AuthService } from "./services/authService.js";
+import { BackendClient } from "./services/backend-client.js";
 import { RUN_DESTINIES } from "./data/run_destinies.js";
 import { RUN_VOWS } from "./data/run_vows.js";
 import { Utils } from "./core/utils.js";
@@ -8106,6 +8107,54 @@ export class Game {
     }
   }
 
+  async syncGlobalProgressFromCloud(source = 'login', timeoutMs = 5000) {
+    if (!this.achievementSystem || typeof this.achievementSystem.syncFromCloud !== 'function') {
+      return {
+        success: false,
+        skipped: true,
+        reason: 'achievement-system-unavailable'
+      };
+    }
+    const syncTask = (async () => {
+      const result = await this.achievementSystem.syncFromCloud();
+      if (result && result.success && (result.changed || result.configChanged)) {
+        console.log(`Global progress synced from cloud after ${source}.`, result);
+      }
+      return result || {
+        success: true,
+        changed: false,
+        configChanged: false
+      };
+    })();
+    let timeoutId = null;
+    const timeoutTask = new Promise(resolve => {
+      timeoutId = setTimeout(() => {
+        resolve({
+          success: false,
+          skipped: true,
+          reason: 'timeout'
+        });
+      }, timeoutMs);
+    });
+    try {
+      const result = await Promise.race([syncTask, timeoutTask]);
+      if (result && result.reason === 'timeout') {
+        console.warn(`Global progress sync after ${source} timed out after ${timeoutMs}ms; continuing login flow.`);
+      }
+      return result;
+    } catch (error) {
+      console.warn(`Global progress sync after ${source} failed:`, error);
+      return {
+        success: false,
+        skipped: false,
+        reason: 'sync-failed',
+        error
+      };
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  }
+
   // 统一的登录成功逻辑
   async onLoginSuccess(messageEl, successMsg) {
     messageEl.innerText = successMsg;
@@ -8114,6 +8163,7 @@ export class Game {
     setTimeout(async () => {
       this.closeModal();
       this.checkLoginStatus();
+      const globalSyncPromise = this.syncGlobalProgressFromCloud(successMsg.includes('注册') ? 'register' : 'login');
 
       // 登录成功后，获取云端存档列表并展示选择界面
       let res = {
@@ -8126,6 +8176,7 @@ export class Game {
       } catch (error) {
         console.error('Fetch cloud data after login failed:', error);
       }
+      await globalSyncPromise;
 
       // 检查本地旧存档
       const localSave = localStorage.getItem('theDefierSave');
@@ -8334,26 +8385,47 @@ export class Game {
   // 解决存档冲突
   resolveSaveConflict(choice) {
     const modal = document.getElementById('save-conflict-modal');
+    const statusInfo = document.getElementById('save-conflict-status');
+    const setConflictStatus = (message, color = 'var(--accent-gold)') => {
+      if (!statusInfo) return;
+      statusInfo.textContent = message || '';
+      statusInfo.style.color = color;
+    };
     if (choice === 'local') {
       // Keep Local -> Upload to Cloud
       const localSave = localStorage.getItem('theDefierSave');
       if (localSave) {
         try {
           const data = JSON.parse(localSave);
-          const targetSlot = Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : 0;
-          if (targetSlot === undefined || targetSlot === null) {
+          const targetSlot = Number(this.currentSaveSlot);
+          if (!Number.isInteger(targetSlot) || targetSlot < 0 || targetSlot > 3) {
+            setConflictStatus('无法确定存档位，请先进入游戏选择存档位后再尝试同步。', '#ffb6b6');
             alert('错误：无法确定存档位，请先进入游戏选择存档位后再尝试同步。');
             return;
           }
-          AuthService.saveCloudData(data, targetSlot).then(res => {
-            if (res.success) {
+          setConflictStatus('正在同步本地存档...');
+          return AuthService.saveCloudData(data, targetSlot).then(res => {
+            if (res.success && !res.skipped) {
+              setConflictStatus('');
               Utils.showBattleLog(`本地存档已覆盖云端！(Slot ${targetSlot + 1})`);
-              modal.classList.remove('active');
+              if (modal) modal.classList.remove('active');
               // Update cache
               if (this.cachedSlots) this.cachedSlots[targetSlot] = data;
+            } else if (res.success && res.skipped) {
+              setConflictStatus('云端已有更新，本地存档未覆盖云端', '#ffd36b');
+              Utils.showBattleLog('云端已有更新，本地存档未覆盖云端');
             } else {
+              setConflictStatus(`云端同步失败：${res.message || '未知错误'}`, '#ffb6b6');
               alert('云端同步失败：' + (res.message || '未知错误'));
             }
+            return res;
+          }).catch(error => {
+            setConflictStatus(`云端同步失败：${error && error.message ? error.message : '未知错误'}`, '#ffb6b6');
+            alert('云端同步失败：' + (error && error.message ? error.message : '未知错误'));
+            return {
+              success: false,
+              message: error && error.message ? error.message : '未知错误'
+            };
           });
         } catch (e) {
           console.error('Resolve conflict error:', e);
@@ -8657,6 +8729,14 @@ function initializeGameInstance() {
     }
     game = new Game();
     window.game = game; // Expose to window for tests and console debugging
+    if (game.debugMode) {
+      window.__THE_DEFIER_SERVICES__ = { BackendClient };
+      try {
+        window.__THE_DEFIER_SERVICES__.AuthService = AuthService;
+      } catch (error) {
+        console.warn('[Debug] AuthService was not ready for service exposure:', error && error.message ? error.message : error);
+      }
+    }
     console.log('Game Initialized:', game);
   } catch (error) {
     console.error('Game Initialization Failed:', error);

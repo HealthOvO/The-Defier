@@ -48,7 +48,8 @@ export const BackendClient = {
       authPathPrefix: typeof config.authPathPrefix === 'string' ? config.authPathPrefix.trim() : '/api/auth',
       savePathPrefix: typeof config.savePathPrefix === 'string' ? config.savePathPrefix.trim() : '/api/saves',
       userPathPrefix: typeof config.userPathPrefix === 'string' ? config.userPathPrefix.trim() : '/api/user',
-      ghostPathPrefix: typeof config.ghostPathPrefix === 'string' ? config.ghostPathPrefix.trim() : '/api/ghosts'
+      ghostPathPrefix: typeof config.ghostPathPrefix === 'string' ? config.ghostPathPrefix.trim() : '/api/ghosts',
+      pvpPathPrefix: typeof config.pvpPathPrefix === 'string' ? config.pvpPathPrefix.trim() : '/api/pvp'
     };
   },
   cloneData(data) {
@@ -62,6 +63,52 @@ export const BackendClient = {
       };
       return data;
     }
+  },
+  getRuntimeCrypto() {
+    if (typeof globalThis !== 'undefined' && globalThis.crypto) return globalThis.crypto;
+    if (typeof window !== 'undefined' && window.crypto) return window.crypto;
+    return null;
+  },
+  createIntegritySalt() {
+    const cryptoObj = this.getRuntimeCrypto();
+    const prefix = `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
+    if (!cryptoObj || typeof cryptoObj.getRandomValues !== 'function') return `session-${prefix}`;
+    const bytes = new Uint8Array(8);
+    cryptoObj.getRandomValues(bytes);
+    const random = Array.from(bytes).map(value => value.toString(16).padStart(2, '0')).join('');
+    return `session-${prefix}-${random}`;
+  },
+  bytesToHex(bytes) {
+    return Array.from(bytes || []).map(value => value.toString(16).padStart(2, '0')).join('');
+  },
+  async signSessionPayload(dataStr, salt, token) {
+    const cryptoObj = this.getRuntimeCrypto();
+    const Encoder = typeof TextEncoder !== 'undefined' ? TextEncoder : null;
+    if (!cryptoObj || !cryptoObj.subtle || !Encoder || !token) return '';
+    const encoder = new Encoder();
+    const key = await cryptoObj.subtle.importKey(
+      'raw',
+      encoder.encode(String(token)),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const message = `session-v1\n${salt}\n${String(dataStr)}`;
+    const signature = await cryptoObj.subtle.sign('HMAC', key, encoder.encode(message));
+    return this.bytesToHex(new Uint8Array(signature));
+  },
+  async createSessionIntegrityFields(data) {
+    const session = this.loadServerSession();
+    if (!session || !session.token) return {};
+    const dataStr = typeof data === 'string' ? data : JSON.stringify(data);
+    const salt = this.createIntegritySalt();
+    const signature = await this.signSessionPayload(dataStr, salt, session.token);
+    if (!signature) return {};
+    return {
+      salt,
+      signature,
+      signatureMode: 'session'
+    };
   },
   createError(message, code = null, extra = null) {
     const error = new Error(message || 'backend-error');
@@ -299,17 +346,22 @@ export const BackendClient = {
     try {
       const payload = this.cloneData(gameData);
       const saveTime = Number.isFinite(payload && payload.timestamp) ? payload.timestamp : Date.now();
-      await this.requestServer(this.getServerConfig().savePathPrefix, {
+      const integrity = await this.createSessionIntegrityFields(payload);
+      const result = await this.requestServer(this.getServerConfig().savePathPrefix, {
         method: 'POST',
         data: {
           slotIndex: slot,
           saveData: payload,
-          saveTime
+          saveTime,
+          ...integrity
         }
       });
+      const serverSaveTime = Number(result && result.saveTime);
       return {
         success: true,
-        saveTime
+        skipped: !!(result && result.skipped),
+        saveTime: Number.isFinite(serverSaveTime) ? serverSaveTime : saveTime,
+        message: result && result.message ? result.message : undefined
       };
     } catch (error) {
       return {
@@ -373,14 +425,23 @@ export const BackendClient = {
       message: '未登录'
     };
     try {
-      await this.requestServer(`${this.getServerConfig().userPathPrefix}/global`, {
+      const payload = this.cloneData(data);
+      const globalUpdatedAt = Number.isFinite(payload && payload.updatedAt) ? payload.updatedAt : Date.now();
+      const integrity = await this.createSessionIntegrityFields(payload);
+      const result = await this.requestServer(`${this.getServerConfig().userPathPrefix}/global`, {
         method: 'POST',
         data: {
-          globalData: data
+          globalData: payload,
+          globalUpdatedAt,
+          ...integrity
         }
       });
+      const serverUpdatedAt = Number(result && result.globalUpdatedAt);
       return {
-        success: true
+        success: true,
+        skipped: !!(result && result.skipped),
+        globalUpdatedAt: Number.isFinite(serverUpdatedAt) ? serverUpdatedAt : globalUpdatedAt,
+        message: result && result.message ? result.message : undefined
       };
     } catch (error) {
       return {
@@ -423,6 +484,7 @@ export const BackendClient = {
       name: player && player.characterId ? player.characterId : 'unknown',
       maxHp: Math.max(1, Math.floor(Number(player && player.maxHp) || 100)),
       hp: Math.max(1, Math.floor(Number(player && player.currentHp) || 100)),
+      updatedAt: Date.now(),
       deck: safeDeck,
       treasures: this.cloneData(player && player.treasures ? player.treasures : []),
       laws: this.cloneData(player && player.collectedLaws ? player.collectedLaws : []),
@@ -438,15 +500,23 @@ export const BackendClient = {
     };
     try {
       const ghostData = this.buildGhostPayload(player);
-      await this.requestServer(`${this.getServerConfig().ghostPathPrefix}/current`, {
+      const uploadTime = Number.isFinite(ghostData.updatedAt) ? ghostData.updatedAt : Date.now();
+      const integrity = await this.createSessionIntegrityFields(ghostData);
+      const result = await this.requestServer(`${this.getServerConfig().ghostPathPrefix}/current`, {
         method: 'POST',
         data: {
           realm: Math.max(1, Math.floor(Number(realm) || 1)),
-          ghostData
+          ghostData,
+          uploadTime,
+          ...integrity
         }
       });
+      const serverUploadTime = Number(result && result.uploadTime);
       return {
-        success: true
+        success: true,
+        skipped: !!(result && result.skipped),
+        uploadTime: Number.isFinite(serverUploadTime) ? serverUploadTime : uploadTime,
+        message: result && result.message ? result.message : undefined
       };
     } catch (error) {
       return {
@@ -479,6 +549,236 @@ export const BackendClient = {
         success: false,
         error,
         message: error.message || '残影读取失败'
+      };
+    }
+  },
+  async getPvpRank() {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    try {
+      const result = await this.requestServer(`${this.getServerConfig().pvpPathPrefix}/rank`, {
+        method: 'GET'
+      });
+      return {
+        success: true,
+        rank: result && result.rank ? result.rank : null,
+        wallet: result && result.wallet ? result.wallet : null,
+        economy: result && result.economy ? result.economy : null
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        message: error.message || 'PVP 段位读取失败'
+      };
+    }
+  },
+  async getPvpLeaderboard(limit = 20) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    try {
+      const safeLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 20)));
+      const result = await this.requestServer(`${this.getServerConfig().pvpPathPrefix}/leaderboard?limit=${encodeURIComponent(safeLimit)}`, {
+        method: 'GET'
+      });
+      return {
+        success: true,
+        data: result && Array.isArray(result.data) ? result.data : []
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        message: error.message || 'PVP 排行榜读取失败'
+      };
+    }
+  },
+  async uploadPvpDefenseSnapshot(snapshot = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    try {
+      let battleData = snapshot.battleData !== undefined ? snapshot.battleData : snapshot.data;
+      if (typeof battleData === 'string') {
+        try {
+          battleData = JSON.parse(battleData);
+        } catch (error) {}
+      }
+      const payload = this.cloneData(battleData || {});
+      const defenseRequest = {
+        realm: Math.max(1, Math.floor(Number(snapshot.realm) || 1)),
+        powerScore: Math.max(0, Math.floor(Number(snapshot.powerScore) || 100)),
+        battleData: payload,
+        config: this.cloneData(snapshot.config || {}),
+        snapshotTime: Number.isFinite(Number(snapshot.saveTime || snapshot.snapshotTime)) ? Number(snapshot.saveTime || snapshot.snapshotTime) : Date.now()
+      };
+      const integrity = await this.createSessionIntegrityFields(defenseRequest);
+      const result = await this.requestServer(`${this.getServerConfig().pvpPathPrefix}/defense`, {
+        method: 'POST',
+        data: {
+          ...defenseRequest,
+          ...integrity
+        }
+      });
+      return {
+        success: true,
+        snapshot: result && result.snapshot ? result.snapshot : null,
+        rank: result && result.rank ? result.rank : null,
+        saveTime: result && result.saveTime ? result.saveTime : undefined
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        message: error.message || 'PVP 防御上传失败'
+      };
+    }
+  },
+  async getPvpDefenseSnapshot() {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    try {
+      const result = await this.requestServer(`${this.getServerConfig().pvpPathPrefix}/defense/me`, {
+        method: 'GET'
+      });
+      if (result && result.success === false) return result;
+      return {
+        success: true,
+        snapshot: result && result.snapshot ? result.snapshot : null
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        message: error.message || 'PVP 防御读取失败'
+      };
+    }
+  },
+  async findPvpOpponent(options = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    try {
+      const matchRequest = {
+        myScore: Math.max(0, Math.floor(Number(options.myScore) || 1000)),
+        myRealm: Math.max(1, Math.floor(Number(options.myRealm) || 1)),
+        preferredRankId: options.preferredRankId || '',
+        allowPractice: options.allowPractice !== false
+      };
+      const integrity = await this.createSessionIntegrityFields(matchRequest);
+      const result = await this.requestServer(`${this.getServerConfig().pvpPathPrefix}/match`, {
+        method: 'POST',
+        data: {
+          ...matchRequest,
+          ...integrity
+        }
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: 'PVP 匹配返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        message: error.message || 'PVP 匹配失败'
+      };
+    }
+  },
+  async reportPvpMatchResult(report = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    try {
+      const signedReport = {
+        matchTicket: String(report.matchTicket || ''),
+        didWin: !!report.didWin
+      };
+      const integrity = await this.createSessionIntegrityFields(signedReport);
+      const result = await this.requestServer(`${this.getServerConfig().pvpPathPrefix}/match/result`, {
+        method: 'POST',
+        data: {
+          report: signedReport,
+          ...integrity
+        }
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: 'PVP 结算返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        message: error.message || 'PVP 结算失败'
+      };
+    }
+  },
+  async getPvpEconomy() {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    try {
+      const result = await this.requestServer(`${this.getServerConfig().pvpPathPrefix}/economy`, {
+        method: 'GET'
+      });
+      return {
+        success: true,
+        economy: result && result.economy ? result.economy : null,
+        wallet: result && result.wallet ? result.wallet : null
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        message: error.message || 'PVP 钱包读取失败'
+      };
+    }
+  },
+  async purchasePvpShopItem(item = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    try {
+      const purchase = {
+        itemId: String(item.itemId || item.id || ''),
+      };
+      const integrity = await this.createSessionIntegrityFields(purchase);
+      const result = await this.requestServer(`${this.getServerConfig().pvpPathPrefix}/shop/purchase`, {
+        method: 'POST',
+        data: {
+          ...purchase,
+          ...integrity
+        }
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: 'PVP 商店返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        message: error.message || 'PVP 商店购买失败'
       };
     }
   }

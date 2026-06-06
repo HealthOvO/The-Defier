@@ -199,6 +199,7 @@ export class MapView {
       if (action === 'toggle-map-intel') {
         const shell = container.querySelector('.map-screen-v3');
         if (!shell) return;
+        shell.dataset.mapIntelUserToggled = 'true';
         shell.classList.toggle('show-map-intel');
         this.syncMapChrome(container);
         return;

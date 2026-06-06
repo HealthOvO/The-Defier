@@ -8,6 +8,13 @@ export const AuthService = {
   currentUser: null,
   saveQueueBySlot: {},
   latestSaveTimeBySlot: {},
+  getUserIdentity(user) {
+    return user && (user.objectId || user.id || user.userId || user.username) || null;
+  },
+  resetCloudSaveState() {
+    this.saveQueueBySlot = {};
+    this.latestSaveTimeBySlot = {};
+  },
   getRuntimeConfig() {
     if (typeof BackendClient !== 'undefined') {
       return BackendClient.getRootConfig();
@@ -61,9 +68,14 @@ export const AuthService = {
         message: this.initError || '云服务未就绪'
       };
     }
+    const previousUserId = this.getUserIdentity(this.currentUser);
     const response = await BackendClient.register(username, password);
     if (response.success) {
-      this.currentUser = BackendClient.getCurrentUser();
+      const nextUser = BackendClient.getCurrentUser();
+      if (previousUserId !== this.getUserIdentity(nextUser)) {
+        this.resetCloudSaveState();
+      }
+      this.currentUser = nextUser;
     }
     return response;
   },
@@ -74,25 +86,30 @@ export const AuthService = {
         message: this.initError || '云服务未就绪'
       };
     }
+    const previousUserId = this.getUserIdentity(this.currentUser);
     const response = await BackendClient.login(username, password);
     if (response.success) {
-      this.currentUser = BackendClient.getCurrentUser();
+      const nextUser = BackendClient.getCurrentUser();
+      if (previousUserId !== this.getUserIdentity(nextUser)) {
+        this.resetCloudSaveState();
+      }
+      this.currentUser = nextUser;
     }
     return response;
   },
   logout() {
     if (!this.isInitialized || typeof BackendClient === 'undefined') {
       this.currentUser = null;
-      this.saveQueueBySlot = {};
-      if (typeof window !== 'undefined' && PVPService && typeof PVPService.clearActiveMatch === 'function') {
+      this.resetCloudSaveState();
+      if (typeof window !== 'undefined' && typeof PVPService !== 'undefined' && PVPService && typeof PVPService.clearActiveMatch === 'function') {
         PVPService.clearActiveMatch();
       }
       return;
     }
     BackendClient.logout();
     this.currentUser = null;
-    this.saveQueueBySlot = {};
-    if (typeof window !== 'undefined' && PVPService && typeof PVPService.clearActiveMatch === 'function') {
+    this.resetCloudSaveState();
+    if (typeof window !== 'undefined' && typeof PVPService !== 'undefined' && PVPService && typeof PVPService.clearActiveMatch === 'function') {
       PVPService.clearActiveMatch();
     }
   },
@@ -119,7 +136,9 @@ export const AuthService = {
       }
       const result = await BackendClient.saveCloudData(gameData, slot);
       if (result.success) {
-        this.latestSaveTimeBySlot[slot] = saveTime;
+        const serverSaveTime = Number(result.saveTime);
+        const canonicalSaveTime = Number.isFinite(serverSaveTime) ? serverSaveTime : saveTime;
+        this.latestSaveTimeBySlot[slot] = Math.max(this.latestSaveTimeBySlot[slot] || 0, canonicalSaveTime);
       }
       return result;
     });
