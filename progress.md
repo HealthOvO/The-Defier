@@ -1,5 +1,33 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-15: 观星台星轨预报与本地前后端全量复检
+  - 本轮完成
+    - `js/game.js` 新增 `buildObservatoryRouteForecast()` / `serializeObservatoryRouteForecast()` / `rememberObservatoryRouteForecast()`，观星台会读取后续两行地图节点、节点类型标签与 DRI 风险，生成可序列化的星轨预报。
+    - `js/views/StrategicView.js` 在观星台弹窗内展示 `observatory-route-forecast`，玩家能在锁定福缘星轨、锋芒星轨或星图战利前读到后续显形节点、建议关注路线与最高压节点。
+    - `render_game_to_text()` 新增 `map.observatoryForecast`，锁定星轨后会记录 `selectedRoute`、`focusNodeTypes`、`visibleNodeCount`、`topRisk` 与预报节点明细，供浏览器审计和后续系统复用。
+    - `js/core/map.js` 与路线谶语消费链补充观星预报生命周期清理：进入新地图或消费下一重路线谶语后，`map.observatoryForecast` 不再暴露旧观星台样本。
+    - `css/style.css` 补充观星台星轨预报卡片样式，保持桌面与移动端弹窗内的密度和可读性。
+    - `game-intro.html` 同步玩家可见版本说明，把观星台星轨预报写入当前版本重点。
+    - `tests/sanity_strategic_node_system_checks.cjs` 增加 Node 断言，锁定星轨预报构建、风险排序、序列化与 `renderGameToText().map.observatoryForecast` 暴露。
+    - `tests/browser_feature_audit.mjs` 增加真实浏览器回归：构造观星台和后续路线，打开观星台弹窗，确认星轨预报文案可见、福缘路线 payload 落地、星图战利 label 正确，并验证清理后不残留旧预报。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 锁定观星台预报 sanity / feature / mobile release marker，避免新增玩法脱离发布门禁。
+  - 本轮验证
+    - TDD 红灯：`node tests/sanity_strategic_node_system_checks.cjs` 在实现前失败于 `game.buildObservatoryRouteForecast is not a function`。
+    - TDD 红灯：`node tests/browser_feature_audit.mjs http://127.0.0.1:4194 output/browser-feature-observatory-forecast-red-20260615b` 在实现前确认观星台弹窗缺少预报文案，`forecastText=""`、`payloadForecast=null`。
+    - `node tests/sanity_strategic_node_system_checks.cjs` ✅
+    - `node --check js/game.js` ✅
+    - `node --check js/views/StrategicView.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4194 output/browser-feature-observatory-forecast-final-20260615` ✅，确认 `visibleNodeCount=4`、`selectedRoute=utility`、`rewardPayloadForecast.selectedRouteLabel="星图战利"`、`clearedForecast=null`，最高压节点为试炼碑。
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/sanity_intro_progress_sync_checks.cjs` ✅，确认独立介绍页与进度锚点仍一致。
+    - `npm run test:node` ✅，包含本地后端安全、HMAC、PVP、存档、残影与本地 Node API E2E。
+    - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4194 output/browser-mobile-observatory-forecast-green-20260615` ✅，确认移动端观星台弹窗 `choiceCount=4` 且所有选择可达。
+    - `PORT=4196 OUTPUT_ROOT=output/release-browser-audits-local-20260615-observatory-forecast-final npm run test:release:local` ✅，本地构建、Node checks 与完整浏览器 release gate 通过；fresh 汇总 `output/release-browser-audits-local-20260615-observatory-forecast-final/report.json`：26/26 模块、576 条 findings、0 失败、0 console error、332 张截图。
+  - 当前结论
+    - 观星台已经从单次三选一扩展为可读、可锁定、可导出的星轨预报入口，首版不改地图生成权重和事件池，降低对远征、奖励页、PVP 与挑战链路的连带风险。
+    - 本轮严格只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-15: 秘宝回响试炼包与法宝奖励闭环
   - 本轮完成
     - `js/game.js` 新增试炼碑挑战包 `treasureHunt / 秘宝回响`：要求 6 回合内且最多打出 8 张牌完成试炼，敌方获得更厚护宝阵，成功后奖励法宝。

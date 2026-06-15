@@ -64,6 +64,10 @@ export class StrategicView {
     } = this.game.getEventModalRefs();
     if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) {
       const forecast = this.game.applyStrategicRouteForecast('utility');
+      const routeForecast = typeof this.game.buildObservatoryRouteForecast === 'function' ? this.game.buildObservatoryRouteForecast(node) : null;
+      if (typeof this.game.rememberObservatoryRouteForecast === 'function') {
+        this.game.rememberObservatoryRouteForecast(routeForecast, 'utility');
+      }
       const gained = this.game.grantStrategicCurrencies({
         insight: 1
       }, '观星推演');
@@ -79,6 +83,21 @@ export class StrategicView {
     const bossInfo = typeof this.game.getRealmBossInfo === 'function' ? this.game.getRealmBossInfo(nextRealm) : null;
     const pending = this.game.getPendingRouteRumorProfile(nextRealm);
     const pendingText = pending && pending.label ? `<br><span style="color:#8ecbff;">当前已锁定：${pending.label}</span>` : '';
+    const routeForecast = typeof this.game.buildObservatoryRouteForecast === 'function' ? this.game.buildObservatoryRouteForecast(node) : null;
+    const escapeForecast = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    })[ch] || ch);
+    const routeForecastHtml = routeForecast && routeForecast.summaryLine ? `
+            <div class="observatory-route-forecast" data-observatory-route-forecast="true">
+                <strong>${escapeForecast(routeForecast.summaryLine)}</strong>
+                <span>${escapeForecast(routeForecast.routeLine || '')}</span>
+                <span>${escapeForecast(routeForecast.riskLine || '')}</span>
+            </div>
+        ` : '';
     titleEl.textContent = '观星台';
     iconEl.textContent = '🔭';
     descEl.innerHTML = `
@@ -86,6 +105,7 @@ export class StrategicView {
             天象：${env.name} · ${env.desc}<br>
             ${bossInfo && bossInfo.bossName ? `Boss 倾向：${bossInfo.bossName}${bossInfo.mechDesc ? ` · ${bossInfo.mechDesc}` : ''}` : 'Boss 倾向仍未完全显形。'}
             ${pendingText}
+            ${routeForecastHtml}
         `;
     choicesEl.innerHTML = '';
     const appendChoice = (icon, text, result, handler) => {
@@ -100,6 +120,9 @@ export class StrategicView {
     };
     appendChoice('🗺️', '锁定福缘星轨', '偏向商路、观星、营地与平稳事件。', () => {
       const forecast = this.game.applyStrategicRouteForecast('utility');
+      if (typeof this.game.rememberObservatoryRouteForecast === 'function') {
+        this.game.rememberObservatoryRouteForecast(routeForecast, 'utility');
+      }
       const gained = this.game.grantStrategicCurrencies({
         insight: 1
       }, '观星推演');
@@ -108,6 +131,9 @@ export class StrategicView {
     });
     appendChoice('⚔️', '锁定锋芒星轨', '偏向试炼、精英、锻炉与禁术节点。', () => {
       const forecast = this.game.applyStrategicRouteForecast('assault');
+      if (typeof this.game.rememberObservatoryRouteForecast === 'function') {
+        this.game.rememberObservatoryRouteForecast(routeForecast, 'assault');
+      }
       const gained = this.game.grantStrategicCurrencies({
         insight: 1
       }, '观星推演');
@@ -116,6 +142,9 @@ export class StrategicView {
     });
     appendChoice('✨', '校准星图战利', '锁定 1 次高稀有奖励，并获取 1 点天机。', () => {
       const rumors = this.game.ensureShopRumors();
+      if (typeof this.game.rememberObservatoryRouteForecast === 'function') {
+        this.game.rememberObservatoryRouteForecast(routeForecast, 'reward');
+      }
       rumors.rewardRareCharges += 1;
       rumors.rewardRareBonus = Math.max(Number(rumors.rewardRareBonus) || 0, 0.25);
       if (nextRealm >= 5) {

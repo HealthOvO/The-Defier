@@ -13,6 +13,7 @@ const browserAudit = read('tests/browser_audit.mjs');
 const browserFeatureAudit = read('tests/browser_feature_audit.mjs');
 const browserMobileAudit = read('tests/browser_mobile_layout_audit.mjs');
 const challengeMobileAudit = read('tests/browser_challenge_mobile_flow_audit.mjs');
+const strategicNodeChecks = read('tests/sanity_strategic_node_system_checks.cjs');
 const runVowChecks = read('tests/sanity_run_vow_system_checks.cjs');
 const runNodeChecks = read('tests/run_node_checks.sh');
 [
@@ -304,10 +305,37 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
 
 [
   'node tests/sanity_trial_challenge_checks.cjs',
+  'node tests/sanity_strategic_node_system_checks.cjs',
 ].forEach((needle) => {
   assert.ok(
     runNodeChecks.includes(needle),
-    `node release checks should include trial challenge sanity marker: ${needle}`,
+    `node release checks should include strategic gameplay sanity marker: ${needle}`,
+  );
+});
+
+[
+  'buildObservatoryRouteForecast',
+  '星轨预报',
+  'visibleNodeCount === 4',
+  'focusNodeTypes.includes(\'trial\')',
+  'forecast.topRisk && forecast.topRisk.type === \'trial\'',
+].forEach((needle) => {
+  assert.ok(
+    strategicNodeChecks.includes(needle),
+    `strategic node sanity should cover observatory route forecast marker: ${needle}`,
+  );
+});
+
+[
+  'data-observatory-route-forecast="true"',
+  'payloadForecast',
+  'observatoryProbe.payloadForecast?.selectedRoute === \'utility\'',
+  'observatory node previews future realm and can lock a route forecast',
+  '星轨预报',
+].forEach((needle) => {
+  assert.ok(
+    browserFeatureAudit.includes(needle),
+    `browser feature audit should cover observatory forecast marker: ${needle}`,
   );
 });
 

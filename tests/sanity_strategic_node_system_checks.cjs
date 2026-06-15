@@ -153,16 +153,19 @@ function loadFile(ctx, filePath) {
     const player = new Player();
     player.realm = 4;
     const EventView = vm.runInContext('EventView', ctx);
-  const RewardView = vm.runInContext('RewardView', ctx);const game = Object.create(Game.prototype);
+    const RewardView = vm.runInContext('RewardView', ctx);
+    const game = Object.create(Game.prototype);
 
-  if (typeof game.attachHubControllers === 'function') game.attachHubControllers();
-  try { game.eventView = new EventView(game); } catch(e){}
-  try { game.rewardView = new RewardView(game); } catch(e){}
+    if (typeof game.attachHubControllers === 'function') game.attachHubControllers();
+    try { game.eventView = new EventView(game); } catch(e){}
+    try { game.rewardView = new RewardView(game); } catch(e){}
     game.player = player;
     game.normalizeShopRumors = Game.prototype.normalizeShopRumors;
     game.ensureShopRumors = Game.prototype.ensureShopRumors;
     game.setNextRealmMapRumor = Game.prototype.setNextRealmMapRumor;
     game.getPendingRouteRumorProfile = Game.prototype.getPendingRouteRumorProfile;
+    game.consumePendingRouteRumorProfile = Game.prototype.consumePendingRouteRumorProfile;
+    game.clearObservatoryRouteForecast = Game.prototype.clearObservatoryRouteForecast;
     game.getStrategicRouteForecasts = Game.prototype.getStrategicRouteForecasts;
     game.getStrategicRouteForecast = Game.prototype.getStrategicRouteForecast;
     game.applyStrategicRouteForecast = Game.prototype.applyStrategicRouteForecast;
@@ -177,9 +180,65 @@ function loadFile(ctx, filePath) {
     assert(!!pending, 'applying rift forecast should create pending rumor profile');
     assert(pending.label === '裂隙回响线', `rift forecast should set correct label, got ${pending.label}`);
     assert((pending.shift.memory_rift || 0) > 0, 'rift forecast should store memory rift weight shift');
+
+    game.lastObservatoryRouteForecast = { available: true, selectedRoute: 'rift' };
+    game.consumePendingRouteRumorProfile(5);
+    assert(!game.getPendingRouteRumorProfile(5), 'consuming route rumor should clear pending profile');
+    assert(game.lastObservatoryRouteForecast === null, 'consuming route rumor should clear stale observatory forecast');
   }
 
-  // 5) 记忆裂隙所需的命格升阶 helper 应能真实提升命格阶位
+  // 5) 观星台应能把当前地图后续节点压成可读星轨预报
+  {
+    const player = new Player();
+    player.realm = 3;
+
+    const EventView = vm.runInContext('EventView', ctx);
+  const RewardView = vm.runInContext('RewardView', ctx);const game = Object.create(Game.prototype);
+
+  if (typeof game.attachHubControllers === 'function') game.attachHubControllers();
+  try { game.eventView = new EventView(game); } catch(e){}
+  try { game.rewardView = new RewardView(game); } catch(e){}
+    game.player = player;
+    game.map = new GameMap(game);
+    game.getCurrentChapterEnvironment = () => ({
+      dangerProfile: {
+        dominantRisk: 'execution',
+        index: 62,
+        tierId: 'medium',
+        tierLabel: '中压'
+      },
+      nemesis: null,
+      factions: {
+        star_seers: { stance: 2 },
+        ash: { stance: -1 }
+      }
+    });
+    game.map.nodes = [
+      [{ id: 'obs', row: 0, type: 'observatory', accessible: true, completed: false }],
+      [
+        { id: 'trial', row: 1, type: 'trial', accessible: false, completed: false },
+        { id: 'event', row: 1, type: 'event', accessible: false, completed: false }
+      ],
+      [
+        { id: 'memory', row: 2, type: 'memory_rift', accessible: false, completed: false },
+        { id: 'shop', row: 2, type: 'shop', accessible: false, completed: false }
+      ]
+    ];
+
+    const forecast = game.buildObservatoryRouteForecast(game.map.nodes[0][0]);
+    assert(forecast && forecast.available === true, `observatory forecast should be available, got ${JSON.stringify(forecast)}`);
+    assert(forecast.visibleNodeCount === 4, `forecast should inspect four visible future nodes, got ${forecast.visibleNodeCount}`);
+    assert(Array.isArray(forecast.focusNodeTypes) && forecast.focusNodeTypes.includes('trial') && forecast.focusNodeTypes.includes('memory_rift'), `forecast should keep future node types, got ${JSON.stringify(forecast.focusNodeTypes)}`);
+    assert(/星轨预报/.test(forecast.summaryLine || ''), `forecast summary should be player-readable, got ${forecast.summaryLine}`);
+    assert(/试炼碑|记忆裂隙/.test(forecast.routeLine || ''), `forecast route line should mention concrete node labels, got ${forecast.routeLine}`);
+    assert(forecast.topRisk && forecast.topRisk.type === 'trial', `forecast should expose top future risk, got ${JSON.stringify(forecast.topRisk)}`);
+
+    const remembered = game.rememberObservatoryRouteForecast(forecast, 'reward');
+    assert(remembered && remembered.selectedRoute === 'reward', `remembered forecast should keep reward route id, got ${JSON.stringify(remembered)}`);
+    assert(remembered.selectedRouteLabel === '星图战利', `reward forecast should keep reward label, got ${remembered.selectedRouteLabel}`);
+  }
+
+  // 6) 记忆裂隙所需的命格升阶 helper 应能真实提升命格阶位
   {
     const player = new Player();
     const upgradeable = Object.values(RUN_DESTINIES).find((item) => item && Array.isArray(item.tiers) && item.tiers.length > 1);
@@ -202,7 +261,7 @@ function loadFile(ctx, filePath) {
     assert(result.meta && result.meta.tier === 2, 'advanceRunDestinyTier should return tier-2 meta');
   }
 
-  // 6) 灵契窟所需的灵契升阶 helper 应能真实提升灵契阶位
+  // 7) 灵契窟所需的灵契升阶 helper 应能真实提升灵契阶位
   {
     const player = new Player();
     player.setSpiritCompanion('frostChi', 1);

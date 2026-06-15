@@ -848,6 +848,7 @@ export class Game {
           rewardText: this.lastRunPathMapFeedback.rewardText || '',
           completed: !!this.lastRunPathMapFeedback.completed
         } : null,
+        observatoryForecast: typeof this.serializeObservatoryRouteForecast === 'function' ? this.serializeObservatoryRouteForecast(this.lastObservatoryRouteForecast) : null,
         activeNodes: typeof this.map.getAccessibleNodes === 'function' ? this.map.getAccessibleNodes().map(n => {
           const risk = typeof this.map.resolveNodeRiskProfile === 'function' ? this.map.resolveNodeRiskProfile(n, chapterSnapshot) : null;
           return {
@@ -2289,6 +2290,124 @@ export class Game {
     if (!forecast) return null;
     this.setNextRealmMapRumor(forecast.shift, forecast.label);
     return forecast;
+  }
+  buildObservatoryRouteForecast(node = null) {
+    const map = this.map || null;
+    const rows = Array.isArray(map?.nodes) ? map.nodes : [];
+    const currentRow = Math.max(0, Math.floor(Number(node?.row) || 0));
+    const visibleNodes = rows
+      .slice(currentRow + 1, currentRow + 3)
+      .flatMap(row => Array.isArray(row) ? row : [])
+      .filter(item => item && item.type && !item.completed && item.type !== 'boss');
+    const fallbackNodes = visibleNodes.length > 0 ? visibleNodes : (typeof map?.getAccessibleNodes === 'function' ? map.getAccessibleNodes().filter(item => item && item.id !== node?.id && item.type && !item.completed) : []);
+    const targetNodes = fallbackNodes.slice(0, 6);
+    const chapter = typeof this.getCurrentChapterEnvironment === 'function' ? this.getCurrentChapterEnvironment() : null;
+    const byType = new Map();
+    const nodeDetails = targetNodes.map(item => {
+      const type = String(item.type || '').trim();
+      const label = typeof map?.getNodeTypeLabel === 'function' ? map.getNodeTypeLabel(type) : type || '未知区域';
+      const risk = typeof map?.resolveNodeRiskProfile === 'function' ? map.resolveNodeRiskProfile(item, chapter) : null;
+      const entry = byType.get(type) || {
+        type,
+        label,
+        count: 0,
+        maxRisk: 0
+      };
+      entry.count += 1;
+      entry.maxRisk = Math.max(entry.maxRisk, Math.floor(Number(risk?.index) || 0));
+      byType.set(type, entry);
+      return {
+        id: item.id,
+        row: item.row,
+        type,
+        label,
+        risk: risk ? {
+          index: Math.floor(Number(risk.index) || 0),
+          tierId: risk.tierId || '',
+          tierLabel: risk.tierLabel || '',
+          summary: risk.summary || ''
+        } : null
+      };
+    });
+    const focusEntries = Array.from(byType.values()).sort((a, b) => b.count - a.count || b.maxRisk - a.maxRisk || a.label.localeCompare(b.label, 'zh-Hans-CN'));
+    const topRisk = nodeDetails
+      .map(item => item.risk ? {
+        type: item.type,
+        label: item.label,
+        ...item.risk
+      } : null)
+      .filter(Boolean)
+      .sort((a, b) => b.index - a.index)[0] || null;
+    const focusNodeTypes = focusEntries.slice(0, 3).map(entry => entry.type);
+    const focusLabels = focusEntries.slice(0, 3).map(entry => entry.label);
+    const riskLine = topRisk ? `最高压：${topRisk.label} · ${topRisk.tierLabel || '未知'} · DRI ${topRisk.index}` : '最高压：暂无明确风险。';
+    const routeLine = focusLabels.length > 0 ? `建议关注：${focusLabels.join(' / ')}。` : '建议关注：前路仍被星雾遮蔽，先保持稳态路线。';
+    const summaryLine = targetNodes.length > 0 ? `星轨预报：后续 ${targetNodes.length} 个节点已显形，${riskLine}` : '星轨预报：后续节点尚未显形，先用观星锁定下一重路线。';
+    return {
+      available: targetNodes.length > 0,
+      sourceNodeId: node?.id ?? null,
+      sourceRow: currentRow,
+      visibleNodeCount: targetNodes.length,
+      focusNodeTypes,
+      focusNodeLabels: focusLabels,
+      summaryLine,
+      routeLine,
+      riskLine,
+      topRisk,
+      nodes: nodeDetails.slice(0, 6)
+    };
+  }
+  serializeObservatoryRouteForecast(forecast = null) {
+    if (!forecast || typeof forecast !== 'object') return null;
+    return {
+      available: !!forecast.available,
+      selectedRoute: forecast.selectedRoute || '',
+      selectedRouteLabel: forecast.selectedRouteLabel || '',
+      sourceNodeId: forecast.sourceNodeId ?? null,
+      sourceRow: Math.max(0, Math.floor(Number(forecast.sourceRow) || 0)),
+      visibleNodeCount: Math.max(0, Math.floor(Number(forecast.visibleNodeCount) || 0)),
+      focusNodeTypes: Array.isArray(forecast.focusNodeTypes) ? forecast.focusNodeTypes.map(item => String(item || '')).filter(Boolean).slice(0, 4) : [],
+      focusNodeLabels: Array.isArray(forecast.focusNodeLabels) ? forecast.focusNodeLabels.map(item => String(item || '')).filter(Boolean).slice(0, 4) : [],
+      summaryLine: String(forecast.summaryLine || ''),
+      routeLine: String(forecast.routeLine || ''),
+      riskLine: String(forecast.riskLine || ''),
+      topRisk: forecast.topRisk ? {
+        type: String(forecast.topRisk.type || ''),
+        label: String(forecast.topRisk.label || ''),
+        index: Math.max(0, Math.floor(Number(forecast.topRisk.index) || 0)),
+        tierId: String(forecast.topRisk.tierId || ''),
+        tierLabel: String(forecast.topRisk.tierLabel || ''),
+        summary: String(forecast.topRisk.summary || '')
+      } : null,
+      nodes: Array.isArray(forecast.nodes) ? forecast.nodes.slice(0, 6).map(item => ({
+        id: item?.id ?? null,
+        row: Math.max(0, Math.floor(Number(item?.row) || 0)),
+        type: String(item?.type || ''),
+        label: String(item?.label || ''),
+        risk: item?.risk ? {
+          index: Math.max(0, Math.floor(Number(item.risk.index) || 0)),
+          tierId: String(item.risk.tierId || ''),
+          tierLabel: String(item.risk.tierLabel || ''),
+          summary: String(item.risk.summary || '')
+        } : null
+      })) : []
+    };
+  }
+  rememberObservatoryRouteForecast(forecast = null, selectedRoute = '') {
+    const routeLabelById = {
+      reward: '星图战利'
+    };
+    const route = selectedRoute && !routeLabelById[selectedRoute] ? this.getStrategicRouteForecast(selectedRoute) : null;
+    const normalized = this.serializeObservatoryRouteForecast({
+      ...(forecast || {}),
+      selectedRoute: selectedRoute || '',
+      selectedRouteLabel: routeLabelById[selectedRoute] || route?.label || ''
+    });
+    this.lastObservatoryRouteForecast = normalized;
+    return normalized;
+  }
+  clearObservatoryRouteForecast() {
+    this.lastObservatoryRouteForecast = null;
   }
   advanceRunDestinyTier(reason = '') {
     Game.prototype.ensureRunManager.call(this);
@@ -7507,6 +7626,9 @@ export class Game {
     rumors.nextRealmMapShift = null;
     rumors.nextRealmLabel = '';
     rumors.nextRealmTarget = null;
+    if (typeof this.clearObservatoryRouteForecast === 'function') {
+      this.clearObservatoryRouteForecast();
+    }
   }
 
   // 渲染商店

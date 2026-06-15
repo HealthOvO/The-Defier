@@ -77,6 +77,12 @@ export class GameMap {
       // Re-bind click events (functions are not saved in JSON)
       // Actually, renderV3Nodes re-binds them based on data.
       // But we need to ensure the data structure is valid.
+      if (this.game && typeof this.game.consumePendingRouteRumorProfile === 'function') {
+        this.game.consumePendingRouteRumorProfile(realm);
+      }
+      if (this.game && typeof this.game.clearObservatoryRouteForecast === 'function') {
+        this.game.clearObservatoryRouteForecast();
+      }
       return this.nodes;
     }
     console.log(`Generating new map for Realm ${realm}`);
@@ -149,6 +155,9 @@ export class GameMap {
     this.saveStateToCache(cacheKey);
     if (this.game && typeof this.game.consumePendingRouteRumorProfile === 'function') {
       this.game.consumePendingRouteRumorProfile(realm);
+    }
+    if (this.game && typeof this.game.clearObservatoryRouteForecast === 'function') {
+      this.game.clearObservatoryRouteForecast();
     }
     return this.nodes;
   }

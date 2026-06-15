@@ -2326,21 +2326,63 @@ async function safeScreenshot(page, outPath) {
     game.player.shopRumors = typeof game.normalizeShopRumors === 'function'
       ? game.normalizeShopRumors(null)
       : { rewardRareCharges: 0, rewardRareBonus: 0, treasureCharges: 0, treasureChanceBonus: 0, nextRealmMapShift: null, nextRealmLabel: '', nextRealmTarget: null, history: [] };
-    game.showObservatoryNode({ id: 91008, row: 2, type: 'observatory', completed: false, accessible: true });
+    if (game.map) {
+      game.map.nodes = [
+        [{ id: 91008, row: 0, type: 'observatory', icon: '🔭', completed: false, accessible: true }],
+        [
+          { id: 91009, row: 1, type: 'trial', icon: '⚖️', completed: false, accessible: false },
+          { id: 91010, row: 1, type: 'event', icon: '❓', completed: false, accessible: false }
+        ],
+        [
+          { id: 91011, row: 2, type: 'memory_rift', icon: '🪞', completed: false, accessible: false },
+          { id: 91012, row: 2, type: 'shop', icon: '🏪', completed: false, accessible: false }
+        ]
+      ];
+    }
+    game.showObservatoryNode({ id: 91008, row: 0, type: 'observatory', completed: false, accessible: true });
     const title = document.getElementById('event-title')?.textContent || '';
     const desc = (document.getElementById('event-desc')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const forecastText = (document.querySelector('[data-observatory-route-forecast="true"]')?.textContent || '').replace(/\s+/g, ' ').trim();
     const choices = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
-    const forecastBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('福缘星轨'));
-    if (forecastBtn) forecastBtn.click();
+    const utilityBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('福缘星轨'));
+    if (utilityBtn) utilityBtn.click();
+    const utilityPayload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : {};
+    const utilityNextRealmLabel = game.player?.shopRumors?.nextRealmLabel || '';
+    document.getElementById('reward-modal')?.classList.remove('active');
+    document.getElementById('event-modal')?.classList.remove('active');
+
+    game.player.shopRumors = typeof game.normalizeShopRumors === 'function'
+      ? game.normalizeShopRumors(null)
+      : { rewardRareCharges: 0, rewardRareBonus: 0, treasureCharges: 0, treasureChanceBonus: 0, nextRealmMapShift: null, nextRealmLabel: '', nextRealmTarget: null, history: [] };
+    game.showObservatoryNode({ id: 91008, row: 0, type: 'observatory', completed: false, accessible: true });
+    const rewardBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('校准星图战利'));
+    if (rewardBtn) rewardBtn.click();
+    const rewardPayload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : {};
+    const rewardRumors = game.player?.shopRumors || {};
+    if (typeof game.clearObservatoryRouteForecast === 'function') {
+      game.clearObservatoryRouteForecast();
+    }
+    const clearedPayload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : {};
     return {
       title,
       desc,
+      forecastText,
       choiceCount: choices.length,
       hasUtility: choices.some((t) => t.includes('福缘星轨')),
       hasAssault: choices.some((t) => t.includes('锋芒星轨')),
       hasReward: choices.some((t) => t.includes('校准星图战利')),
-      nextRealmLabel: game.player?.shopRumors?.nextRealmLabel || '',
-      insight: Number(game.player?.heavenlyInsight || 0)
+      nextRealmLabel: utilityNextRealmLabel,
+      insight: Number(game.player?.heavenlyInsight || 0),
+      payloadForecast: utilityPayload?.map?.observatoryForecast || null,
+      rewardPayloadForecast: rewardPayload?.map?.observatoryForecast || null,
+      rewardRareCharges: Number(rewardRumors.rewardRareCharges || 0),
+      clearedForecast: clearedPayload?.map?.observatoryForecast || null
     };
   });
   add(
@@ -2352,8 +2394,16 @@ async function safeScreenshot(page, outPath) {
       observatoryProbe.hasReward &&
       observatoryProbe.choiceCount >= 4 &&
       /天象|Boss/.test(observatoryProbe.desc) &&
+      /星轨预报/.test(observatoryProbe.forecastText) &&
+      /试炼碑|记忆裂隙/.test(observatoryProbe.forecastText) &&
       /机缘补给线/.test(observatoryProbe.nextRealmLabel) &&
-      observatoryProbe.insight >= 1,
+      observatoryProbe.insight >= 1 &&
+      observatoryProbe.payloadForecast?.selectedRoute === 'utility' &&
+      observatoryProbe.rewardPayloadForecast?.selectedRoute === 'reward' &&
+      observatoryProbe.rewardPayloadForecast?.selectedRouteLabel === '星图战利' &&
+      observatoryProbe.rewardRareCharges >= 1 &&
+      observatoryProbe.clearedForecast === null &&
+      /星轨预报/.test(observatoryProbe.payloadForecast?.summaryLine || ''),
     JSON.stringify(observatoryProbe || null)
   );
   await page.evaluate(() => {

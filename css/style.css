@@ -6707,6 +6707,28 @@ body {
     margin-bottom: var(--spacing-lg);
 }
 
+.observatory-route-forecast {
+    display: grid;
+    gap: 4px;
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(142, 203, 255, 0.24);
+    border-radius: 8px;
+    background: rgba(17, 29, 43, 0.64);
+    color: rgba(220, 235, 255, 0.9);
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.observatory-route-forecast strong {
+    color: #f4d27a;
+    font-weight: 700;
+}
+
+.observatory-route-forecast span {
+    color: rgba(214, 225, 237, 0.84);
+}
+
 .event-choices {
     display: flex;
     flex-direction: column;
