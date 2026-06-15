@@ -395,6 +395,13 @@ async function runBrowserSmoke(page, targetApiUrl = apiUrl) {
     assertStep(serverRankBeforeSettlement.success, 'PVP server rank read before settlement failed', serverRankBeforeSettlement);
     const pvpSettlement = await PVPService.reportMatchResult(true, pvpMatch.opponent.rank, pvpMatchTicket);
     assertStep(pvpSettlement && pvpSettlement.rejected !== true && Number(pvpSettlement.coinsAwarded) > 0, 'PVP local settlement fallback failed under default server authority gate', pvpSettlement);
+    assertStep(
+      pvpSettlement.settlementSource === 'local_authority_gate'
+        && /本地演武回执/.test(pvpSettlement.settlementLine || '')
+        && /服务端权威结算未启用/.test(pvpSettlement.settlementLine || ''),
+      'PVP default authority-gate fallback should expose exact local authority receipt',
+      pvpSettlement
+    );
     const serverRankAfterSettlement = await BackendClient.getPvpRank();
     assertStep(serverRankAfterSettlement.success, 'PVP server rank read after settlement failed', serverRankAfterSettlement);
     assertStep(
@@ -450,6 +457,8 @@ async function runBrowserSmoke(page, targetApiUrl = apiUrl) {
         matchTicket: pvpMatchTicket,
         opponentDeckIds: pvpOpponentDeck.map(card => card?.id || ''),
         settlementFallbackLocal: pvpSettlement.rejected !== true && Number(pvpSettlement.coinsAwarded) > 0,
+        settlementSource: pvpSettlement.settlementSource || '',
+        settlementLine: pvpSettlement.settlementLine || '',
         serverScoreBeforeSettlement: serverRankBeforeSettlement.rank?.score,
         serverScoreAfterSettlement: serverRankAfterSettlement.rank?.score,
         serverWinsBeforeSettlement: serverRankBeforeSettlement.rank?.wins,
@@ -727,6 +736,13 @@ async function runAuthoritativePvpSettlementSmoke(browser) {
 
       const settlement = await PVPService.reportMatchResult(true, match.opponent.rank, ticket);
       assertStep(settlement && settlement.rejected !== true && Number(settlement.delta) > 0 && Number(settlement.coinsAwarded) > 0, 'authority PVPService server settlement failed', settlement);
+      assertStep(
+        settlement.settlementSource === 'server_authoritative'
+          && /服务端|权威/.test(settlement.settlementLine || '')
+          && /Node/.test(settlement.settlementLine || ''),
+        'authority PVPService settlement should expose a server-authoritative receipt',
+        settlement
+      );
       const rankAfter = await BackendClient.getPvpRank();
       const economyAfter = await BackendClient.getPvpEconomy();
       const localWallet = PVPService.getWalletSummary?.();
@@ -735,6 +751,12 @@ async function runAuthoritativePvpSettlementSmoke(browser) {
       assertStep(localWallet?.coins === economyAfter.wallet?.coins, 'authority local PVP economy snapshot diverged from server wallet', { localWallet, economyAfter });
       assertStep(economyAfter.wallet.coins === economyBefore.wallet.coins + settlement.coinsAwarded, 'authority settlement appears to have double-awarded or missed coins', { economyBefore, economyAfter, settlement });
 
+      if (typeof window.game?.showScreen === 'function') {
+        window.game.showScreen('pvp-screen');
+      }
+      if (typeof window.PVPScene?.onShow === 'function') {
+        window.PVPScene.onShow();
+      }
       return {
         mainName,
         opponentName,
@@ -751,9 +773,105 @@ async function runAuthoritativePvpSettlementSmoke(browser) {
         coinsAfter: economyAfter.wallet.coins,
         coinsAwarded: settlement.coinsAwarded,
         localWalletCoins: localWallet?.coins,
+        settlementSource: settlement.settlementSource || '',
+        settlementLine: settlement.settlementLine || '',
         settlement,
       };
     }, { runId: authorityRunId, password, realm });
+
+    await page.waitForFunction(
+      ({ opponentName }) => {
+        const payload = typeof window.render_game_to_text === 'function' ? JSON.parse(window.render_game_to_text()) : {};
+        const rows = Array.from(document.querySelectorAll('#ranking-list .jade-slip-row'));
+        return payload.mode === 'pvp-screen'
+          && rows.some(row => (row.textContent || '').includes(opponentName))
+          && !!document.querySelector('#tab-ranking .challenge-btn');
+      },
+      { opponentName: result.opponentName },
+      { timeout: 12000 }
+    );
+    const uiSettlement = await page.evaluate(async ({ opponentName }) => {
+      const assertStep = (condition, message, detail = null) => {
+        if (!condition) {
+          throw new Error(`${message}${detail ? `: ${JSON.stringify(detail)}` : ''}`);
+        }
+      };
+      const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+      const BackendClient = window.__THE_DEFIER_SERVICES__?.BackendClient;
+      const PVPService = window.PVPService || window.__THE_DEFIER_SERVICES__?.PVPService;
+      const PVPScene = window.PVPScene;
+      assertStep(BackendClient && PVPService && PVPScene && window.game, 'authority UI smoke services missing');
+      const rankBefore = await BackendClient.getPvpRank();
+      const economyBefore = await BackendClient.getPvpEconomy();
+      assertStep(rankBefore.success && economyBefore.success, 'authority UI pre-settlement backend reads failed', { rankBefore, economyBefore });
+      const rows = Array.from(document.querySelectorAll('#ranking-list .jade-slip-row'));
+      const targetRow = rows.find(row => (row.textContent || '').includes(opponentName));
+      assertStep(targetRow, 'authority UI opponent row missing', rows.map(row => row.textContent || ''));
+      targetRow.click();
+      await delay(250);
+      const focusPayload = JSON.parse(window.render_game_to_text());
+      assertStep(focusPayload.pvp?.rankingFocus?.rank?.user?.username === opponentName, 'authority UI focus did not select opponent', focusPayload.pvp?.rankingFocus);
+      const challengeBtn = document.querySelector('#tab-ranking .challenge-btn');
+      assertStep(challengeBtn, 'authority UI challenge button missing');
+      challengeBtn.click();
+      const deadline = Date.now() + 12000;
+      let battlePayload = null;
+      while (Date.now() < deadline) {
+        await delay(100);
+        battlePayload = JSON.parse(window.render_game_to_text());
+        if (battlePayload.mode === 'battle-screen' && battlePayload.pvp?.activeMatch?.ticket && PVPService.activeMatch?.serverMatch === true) break;
+      }
+      assertStep(
+        battlePayload?.mode === 'battle-screen'
+          && battlePayload.pvp?.activeMatch?.ticket
+          && !String(battlePayload.pvp.activeMatch.ticket).startsWith('practice:')
+          && PVPService.activeMatch?.serverMatch === true,
+        'authority UI challenge did not enter a server PVP battle',
+        { battlePayload, activeMatch: PVPService.activeMatch }
+      );
+      const enemies = window.game?.battle?.enemies || [];
+      assertStep(Array.isArray(enemies) && enemies.length > 0, 'authority UI battle enemies missing');
+      enemies.forEach(enemy => { enemy.currentHp = 0; });
+      if (typeof window.game.battle.checkBattleEnd === 'function') {
+        window.game.battle.checkBattleEnd();
+      }
+      let resultPayload = null;
+      while (Date.now() < deadline + 12000) {
+        await delay(150);
+        resultPayload = JSON.parse(window.render_game_to_text());
+        if (resultPayload.pvp?.resultOverlay?.settlementSource === 'server_authoritative') break;
+      }
+      const overlay = document.getElementById('pvp-result-overlay');
+      const rankAfter = await BackendClient.getPvpRank();
+      const economyAfter = await BackendClient.getPvpEconomy();
+      const localWallet = PVPService.getWalletSummary?.();
+      return {
+        ok:
+          !!overlay
+          && overlay.style.display !== 'none'
+          && resultPayload?.pvp?.resultOverlay?.settlementSource === 'server_authoritative'
+          && /Node|服务端|权威/.test(resultPayload?.pvp?.resultOverlay?.settlementLine || '')
+          && rankAfter.success
+          && economyAfter.success
+          && Number(rankAfter.rank?.wins) === Number(rankBefore.rank?.wins || 0) + 1
+          && Number(rankAfter.rank?.score) > Number(rankBefore.rank?.score || 0)
+          && Number(economyAfter.wallet?.coins) > Number(economyBefore.wallet?.coins || 0)
+          && Number(localWallet?.coins) === Number(economyAfter.wallet?.coins),
+        rankBefore: rankBefore.rank,
+        rankAfter: rankAfter.rank,
+        economyBefore: economyBefore.wallet,
+        economyAfter: economyAfter.wallet,
+        localWallet,
+        resultOverlay: resultPayload?.pvp?.resultOverlay || null,
+        overlayVisible: !!overlay && overlay.style.display !== 'none',
+        activeMatchAfter: PVPService.activeMatch || null
+      };
+    }, { opponentName: result.opponentName });
+    add(
+      'browser online pvp screen drives authoritative settlement end-to-end',
+      !!uiSettlement?.ok,
+      JSON.stringify(uiSettlement || null)
+    );
 
     await safeAuditScreenshot(page, path.join(outDir, 'browser-backend-pvp-authoritative-smoke.png'), 'browser_backend_pvp_authoritative_smoke', {
       fullPage: false,
@@ -824,6 +942,8 @@ try {
       && Array.isArray(result.pvpProbe?.opponentDeckIds)
       && result.pvpProbe.opponentDeckIds.includes('mirrorWall')
       && result.pvpProbe?.settlementFallbackLocal === true
+      && result.pvpProbe?.settlementSource === 'local_authority_gate'
+      && /服务端权威结算未启用/.test(result.pvpProbe?.settlementLine || '')
       && result.pvpProbe?.serverScoreBeforeSettlement === result.pvpProbe?.serverScoreAfterSettlement
       && result.pvpProbe?.serverWinsBeforeSettlement === result.pvpProbe?.serverWinsAfterSettlement
       && result.pvpProbe?.serverLossesBeforeSettlement === result.pvpProbe?.serverLossesAfterSettlement,
@@ -840,7 +960,9 @@ try {
       && Number(authorityResult?.winsAfter) === Number(authorityResult?.winsBefore) + 1
       && Number(authorityResult?.coinsAwarded) > 0
       && Number(authorityResult?.coinsAfter) === Number(authorityResult?.coinsBefore) + Number(authorityResult?.coinsAwarded)
-      && Number(authorityResult?.localWalletCoins) === Number(authorityResult?.coinsAfter),
+      && Number(authorityResult?.localWalletCoins) === Number(authorityResult?.coinsAfter)
+      && authorityResult?.settlementSource === 'server_authoritative'
+      && /服务端|权威/.test(authorityResult?.settlementLine || ''),
     JSON.stringify(authorityResult || null)
   );
 } catch (error) {

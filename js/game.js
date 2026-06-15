@@ -488,6 +488,8 @@ export class Game {
       nextText: String(this.pvpResultReview.nextText || ''),
       economyLine: String(this.pvpResultReview.economyLine || ''),
       dangerLine: String(this.pvpResultReview.dangerLine || ''),
+      settlementSource: String(this.pvpResultReview.settlementSource || ''),
+      settlementLine: String(this.pvpResultReview.settlementLine || ''),
       tags: Array.isArray(this.pvpResultReview.tags) ? this.pvpResultReview.tags.slice(0, 3) : [],
       dangerProfile: normalizePvpDanger(this.pvpResultReview.dangerProfile || null)
     } : null;
@@ -5564,13 +5566,23 @@ export class Game {
       return null;
     }
     const delta = result && result.delta !== undefined ? result.delta : result && result.ratingChange || 0;
-    return PVPService.getPvpResultReview({
+    const review = PVPService.getPvpResultReview({
       didWin,
       dangerProfile: this.pvpDangerProfile,
       ratingDelta: delta,
       coinsAwarded: result && result.coinsAwarded,
       opponent: this.pvpOpponentRank
     });
+    const settlementSource = String(result?.settlementSource || '').trim();
+    const settlementLine = String(result?.settlementLine || '').trim();
+    if (!review || (!settlementSource && !settlementLine)) return review;
+    const economyLine = String(review.economyLine || '').trim();
+    return {
+      ...review,
+      settlementSource,
+      settlementLine,
+      economyLine: [economyLine, settlementLine].filter(Boolean).join(' · ')
+    };
   }
   renderPVPResultReview(review = null) {
     if (!this.pvpResultView) this.pvpResultView = new PVPResultView(this);

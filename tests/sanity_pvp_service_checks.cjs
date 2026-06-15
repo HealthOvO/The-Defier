@@ -370,6 +370,8 @@ function loadFile(ctx, filePath) {
   const beforeCoins = PVPService.getWalletSummary().coins;
   const settleRes = await PVPService.reportMatchResult(true, matchRes.opponent.rank, matchRes.opponent.matchTicket);
   assert(!settleRes.rejected, 'valid practice ticket should be accepted');
+  assert(settleRes.settlementSource === 'local_practice', 'practice settlement should expose exact local practice receipt source');
+  assert(/本地演武回执/.test(settleRes.settlementLine || '') && /不占用服务端权威榜单/.test(settleRes.settlementLine || ''), 'practice settlement should explain it does not use the authoritative server ledger');
   assert((Number(settleRes.newRating) || 0) > beforeScore, 'win should increase local rating');
   assert((Number(settleRes.coinsAwarded) || 0) > 0, 'valid settlement should grant pvp coins');
   assert((settleRes.wallet && settleRes.wallet.coins) > beforeCoins, 'settlement reward should increase wallet balance');
@@ -508,6 +510,8 @@ function loadFile(ctx, filePath) {
 
   const duplicateSettle = await PVPService.reportMatchResult(true, matchRes.opponent.rank, matchRes.opponent.matchTicket);
   assert(duplicateSettle.rejected === true, 'duplicate ticket settlement should be rejected');
+  assert(duplicateSettle.settlementSource === 'rejected', 'duplicate ticket rejection should expose exact rejected receipt source');
+  assert(/不写入榜单账本/.test(duplicateSettle.settlementLine || ''), 'duplicate ticket rejection should explain that no ledger write happened');
   assert(PVPService.getRecentMatchHistory(24).length === acceptedHistoryCount, 'duplicate ticket should not append another history entry');
 
   const logs = PVPService.getRecentTransactions(6);
@@ -521,6 +525,8 @@ function loadFile(ctx, filePath) {
   const staleHistoryCount = PVPService.getRecentMatchHistory(24).length;
   const staleReport = await PVPService.reportMatchResult(true, staleMatch.opponent.rank, staleMatch.opponent.matchTicket);
   assert(staleReport.rejected === true, 'expired ticket should be rejected');
+  assert(staleReport.settlementSource === 'rejected', 'expired ticket rejection should expose exact rejected receipt source');
+  assert(/不写入榜单账本/.test(staleReport.settlementLine || ''), 'expired ticket rejection should explain that no ledger write happened');
   assert(PVPService.getRecentMatchHistory(24).length === staleHistoryCount, 'expired ticket should not append history');
 
   const mismatchMatch = await PVPService.findOpponent(1000, 2, { allowPractice: true });
@@ -529,7 +535,117 @@ function loadFile(ctx, filePath) {
   const mismatchHistoryCount = PVPService.getRecentMatchHistory(24).length;
   const mismatchReport = await PVPService.reportMatchResult(true, mismatchRank, mismatchMatch.opponent.matchTicket);
   assert(mismatchReport.rejected === true, 'opponent mismatch should be rejected');
+  assert(mismatchReport.settlementSource === 'rejected', 'opponent mismatch rejection should expose exact rejected receipt source');
+  assert(/不写入榜单账本/.test(mismatchReport.settlementLine || ''), 'opponent mismatch rejection should explain that no ledger write happened');
   assert(PVPService.getRecentMatchHistory(24).length === mismatchHistoryCount, 'opponent mismatch should not append history');
+
+  const fallbackRank = {
+    objectId: 'online-fallback-rank',
+    score: 1180,
+    realm: 2,
+    division: PVPService.getDivisionByScore(1180),
+    user: {
+      objectId: 'online-fallback-user',
+      username: '降级对手'
+    }
+  };
+  const fallbackTicket = `online-fallback-ticket-${Date.now()}`;
+  PVPService.currentRankData = PVPService.normalizeLocalRank({
+    objectId: 'local-online-fallback-rank',
+    score: 1000,
+    realm: 2,
+    wins: 0,
+    losses: 0,
+    user: {
+      objectId: 'local-online-fallback-user',
+      username: '本地降级'
+    }
+  });
+  PVPService.setActiveMatch({
+    ticket: fallbackTicket,
+    issuedAt: Date.now(),
+    opponentRankId: fallbackRank.objectId,
+    opponentUserId: fallbackRank.user.objectId,
+    opponentRating: fallbackRank.score,
+    consumed: false
+  });
+  const fallbackReport = await PVPService.reportMatchResult(true, fallbackRank, fallbackTicket);
+  assert(fallbackReport.rejected !== true, 'online fallback settlement should still accept a valid ticket');
+  assert(fallbackReport.settlementSource === 'local_online_fallback', 'online fallback settlement should expose exact fallback receipt source');
+  assert(/在线榜单校验降级/.test(fallbackReport.settlementLine || '') && /本地账本/.test(fallbackReport.settlementLine || ''), 'online fallback settlement should explain the local ledger write');
+
+  const bmobUser = {
+    objectId: 'bmob-user',
+    username: 'Bmob用户'
+  };
+  const bmobRank = {
+    objectId: 'bmob-rank',
+    score: 1000,
+    realm: 2,
+    wins: 0,
+    losses: 0,
+    division: PVPService.getDivisionByScore(1000),
+    user: bmobUser
+  };
+  const bmobOpponentRank = {
+    objectId: 'bmob-opponent-rank',
+    score: 1120,
+    realm: 2,
+    division: PVPService.getDivisionByScore(1120),
+    user: {
+      objectId: 'bmob-opponent-user',
+      username: 'Bmob对手'
+    }
+  };
+  const originalBmob = ctx.Bmob;
+  const originalIsOnlinePvpAvailable = PVPService.isOnlinePvpAvailable;
+  const originalIsServerPvpAvailable = PVPService.isServerPvpAvailable;
+  const originalGetCurrentUserSafe = PVPService.getCurrentUserSafe;
+  const originalGetRankByObjectId = PVPService.getRankByObjectId;
+  try {
+    ctx.Bmob = {
+      Query() {
+        const state = {};
+        return {
+          set(key, value) {
+            state[key] = value;
+          },
+          async save() {
+            return { ...state };
+          }
+        };
+      }
+    };
+    PVPService.isOnlinePvpAvailable = () => true;
+    PVPService.isServerPvpAvailable = () => false;
+    PVPService.getCurrentUserSafe = () => bmobUser;
+    PVPService.getRankByObjectId = async (rankId) => (rankId === bmobOpponentRank.objectId ? bmobOpponentRank : null);
+    PVPService.currentRankData = { ...bmobRank };
+    PVPService.setActiveMatch({
+      ticket: 'bmob-online-ticket',
+      issuedAt: Date.now(),
+      opponentRankId: bmobOpponentRank.objectId,
+      opponentUserId: bmobOpponentRank.user.objectId,
+      opponentRating: bmobOpponentRank.score,
+      userId: bmobUser.objectId,
+      consumed: false
+    });
+    const bmobReport = await PVPService.reportMatchResult(true, bmobOpponentRank, 'bmob-online-ticket');
+    assert(bmobReport.rejected !== true, 'Bmob online settlement should accept a valid ticket');
+    assert(bmobReport.settlementSource === 'bmob_online', 'Bmob online settlement should expose exact online receipt source');
+    assert(/Bmob 在线回执/.test(bmobReport.settlementLine || '') && /已同步/.test(bmobReport.settlementLine || ''), 'Bmob online settlement should explain the synced online ledger write');
+  } finally {
+    if (originalBmob === undefined) {
+      delete ctx.Bmob;
+    } else {
+      ctx.Bmob = originalBmob;
+    }
+    PVPService.isOnlinePvpAvailable = originalIsOnlinePvpAvailable;
+    PVPService.isServerPvpAvailable = originalIsServerPvpAvailable;
+    PVPService.getCurrentUserSafe = originalGetCurrentUserSafe;
+    PVPService.getRankByObjectId = originalGetRankByObjectId;
+    PVPService.clearActiveMatch();
+  }
 
   const board = await PVPService.getLeaderboard();
   assert(Array.isArray(board) && board.length >= 3, 'leaderboard fallback should provide local board');

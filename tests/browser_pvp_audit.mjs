@@ -342,7 +342,10 @@ async function clickRuneTab(page, label) {
       && !!resultProbe.payloadReview
       && /DRI/.test(resultProbe.payloadReview.dangerLine || '')
       && typeof resultProbe.payloadReview.focusText === 'string'
-      && resultProbe.payloadReview.focusText.length > 0,
+      && resultProbe.payloadReview.focusText.length > 0
+      && resultProbe.payloadReview.settlementSource === 'local_practice'
+      && /本地演武回执/.test(resultProbe.reviewFoot || '')
+      && /不占用服务端权威榜单/.test(resultProbe.payloadReview.settlementLine || ''),
     JSON.stringify(resultProbe)
   );
   await safeElementScreenshot(page, '#pvp-result-overlay .pvp-result-container', path.join(outDir, 'pvp-result.png'));

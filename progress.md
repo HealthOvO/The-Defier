@@ -1,5 +1,31 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-15: PVP 结算回执与真实页面权威链
+  - 本轮完成
+    - `js/services/pvp-service.js` 给 PVP 结算返回值新增 `settlementSource` / `settlementLine`，区分 `server_authoritative`、`local_authority_gate`、`local_practice`、`local_online_fallback`、`bmob_online` 与 rejected 分支。
+    - `js/game.js` 的 `buildPVPResultReview()` 会把结算回执并入赛后复盘脚注，并通过 `render_game_to_text().pvp.resultOverlay` 暴露给浏览器审计。
+    - `tests/browser_backend_client_smoke.mjs` 不再只证明 service 级权威结算；新增真实 PVP 页面链路：登录本地测试后端、打开天道榜、点击真实挑战按钮、进入 serverMatch 战斗、由 battle end handler 触发权威结算，再对比 Node rank / wallet / 本地经济快照。
+    - `tests/browser_pvp_audit.mjs` 增加普通离线 / 本地演武场景的赛后回执断言，确保 PVP 复盘页不会只显示分数和天道币而丢失来源。
+    - `game-intro.html` 与 `tests/sanity_intro_progress_sync_checks.cjs` 同步 `PVP 结算回执` 玩家可见锚点。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 `server_authoritative`、真实 PVP 页面权威结算、赛后回执 payload / UI 防漏扫 marker。
+  - 本轮验证
+    - TDD 红灯：`BROWSER_BACKEND_SMOKE_PORT=9031 BROWSER_BACKEND_AUTHORITY_SMOKE_PORT=9032 node tests/browser_backend_client_smoke.mjs http://127.0.0.1:4250 output/browser-backend-pvp-settlement-receipt-red-20260615` 在实现前失败于 `authority PVPService settlement should expose a server-authoritative receipt`，当时权威结算已成功但返回值缺少 `settlementSource/settlementLine`。
+    - TDD 红灯：`node tests/browser_pvp_audit.mjs http://127.0.0.1:4250 output/browser-pvp-settlement-receipt-red-20260615` 在实现前失败于 `pvp settlement overlay renders review recap and exposes it in render_game_to_text`，当时赛后复盘脚注只有道韵 / 天道币 / 对手，没有本地或权威回执来源。
+    - `node --check js/services/pvp-service.js` ✅
+    - `node --check js/game.js` ✅
+    - `node --check tests/browser_backend_client_smoke.mjs` ✅
+    - `node --check tests/browser_pvp_audit.mjs` ✅
+    - `BROWSER_BACKEND_SMOKE_PORT=9035 BROWSER_BACKEND_AUTHORITY_SMOKE_PORT=9036 node tests/browser_backend_client_smoke.mjs http://127.0.0.1:4250 output/browser-backend-pvp-screen-authority-green-20260615` ✅，4 条 finding、0 失败、0 console error，包含真实 PVP 页面权威结算端到端链路。
+    - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4250 output/browser-pvp-settlement-receipt-green-20260615` ✅，确认赛后复盘 UI / payload 展示 `local_practice` 本地演武回执。
+    - 反向巡检后补强 exact source 断言：`node tests/sanity_pvp_service_checks.cjs` ✅，覆盖 `local_practice`、`local_online_fallback`、`bmob_online` 与 `rejected` 回执；`node tests/sanity_release_gate_coverage_checks.cjs` ✅，确认 release gate 会跑关键 Node / PVP browser 检查且钉住回执 marker。
+    - `BROWSER_BACKEND_SMOKE_PORT=9041 BROWSER_BACKEND_AUTHORITY_SMOKE_PORT=9042 node tests/browser_backend_client_smoke.mjs http://127.0.0.1:4252 output/browser-backend-receipt-exact-green-20260615` ✅，确认默认 Node 权威门禁 fallback 精确标记 `local_authority_gate`，且权威测试服路径仍精确标记 `server_authoritative`。
+    - `node tests/browser_pvp_audit.mjs http://127.0.0.1:4252 output/browser-pvp-receipt-exact-green-20260615` ✅，确认 PVP 普通页面赛后 UI / payload 精确标记 `local_practice`。
+    - `PORT=4253 OUTPUT_ROOT=output/release-browser-audits-local-20260615-pvp-settlement-receipt-exact npm run test:release:local` ✅，本地构建、Node checks 与完整浏览器 release gate 通过；fresh 汇总 `output/release-browser-audits-local-20260615-pvp-settlement-receipt-exact/report.json`：26/26 模块、580 条 findings、0 失败、0 console error、332 张截图；`backend-client` 4 条 finding 全绿，包含真实 PVP 页面权威结算端到端链路。
+    - `lsof -nP -iTCP:4250 -iTCP:4251 -iTCP:4252 -iTCP:4253 -sTCP:LISTEN` 无监听残留。
+  - 当前结论
+    - PVP 结算现在不再只告诉玩家“赢了多少分 / 给多少币”，而是明确标记这场是服务端权威榜单、本地演武还是降级回执；自动化也能从真实页面链路证明本地 Node 权威结算确实走到了结果层。
+    - 本轮严格只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-15: 章节档案演练焦点
   - 本轮完成
     - `js/core/collection_hub.js` 给章节档案详情新增 `章节演练` 卡片，按所选章节的天象、地脉、生态、Boss 传闻和章节标签生成观星台训练焦点。

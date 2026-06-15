@@ -10,6 +10,7 @@ const browserReleaseScript = read('tests/run_browser_release_checks.sh');
 const backendSecurityChecks = read('tests/backend_security_checks.cjs');
 const backendClientSmoke = read('tests/browser_backend_client_smoke.mjs');
 const browserAudit = read('tests/browser_audit.mjs');
+const browserPvpAudit = read('tests/browser_pvp_audit.mjs');
 const browserFeatureAudit = read('tests/browser_feature_audit.mjs');
 const browserEventBranchAudit = read('tests/browser_event_branch_audit.mjs');
 const browserRunPathEventAudit = read('tests/browser_run_path_event_audit.mjs');
@@ -18,6 +19,8 @@ const challengeMobileAudit = read('tests/browser_challenge_mobile_flow_audit.mjs
 const browserChapterFlowAudit = read('tests/browser_chapter_flow_audit.mjs');
 const strategicNodeChecks = read('tests/sanity_strategic_node_system_checks.cjs');
 const runVowChecks = read('tests/sanity_run_vow_system_checks.cjs');
+const pvpService = read('js/services/pvp-service.js');
+const pvpServiceChecks = read('tests/sanity_pvp_service_checks.cjs');
 const runNodeChecks = read('tests/run_node_checks.sh');
 [
   'routes/pvp.js',
@@ -283,6 +286,9 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'node tests/browser_feature_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/feature"',
   'node tests/browser_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/core"',
   'node tests/browser_backend_client_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/backend-client"',
+  'node tests/browser_pvp_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp"',
+  'node tests/browser_pvp_mobile_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-mobile"',
+  'node tests/browser_pvp_mobile_result_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-mobile-result"',
   'node tests/browser_chapter_flow_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/chapter-flow"',
   'node tests/browser_run_path_event_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/run-path-events"',
   'node tests/browser_event_branch_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/events"',
@@ -319,10 +325,41 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'node tests/sanity_trial_challenge_checks.cjs',
   'node tests/sanity_strategic_node_system_checks.cjs',
   'node tests/sanity_codex_sanctum_checks.cjs',
+  'node tests/sanity_intro_progress_sync_checks.cjs',
+  'node tests/sanity_pvp_service_checks.cjs',
+  'node tests/test_e2e_backend.cjs',
 ].forEach((needle) => {
   assert.ok(
     runNodeChecks.includes(needle),
     `node release checks should include strategic gameplay sanity marker: ${needle}`,
+  );
+});
+
+[
+  "settlementSource: 'local_authority_gate'",
+  "settlementSource: 'local_online_fallback'",
+  "settlementSource: 'local_practice'",
+  "settlementSource: 'server_authoritative'",
+  "settlementSource: 'bmob_online'",
+  "settlementSource: 'rejected'",
+].forEach((needle) => {
+  assert.ok(
+    pvpService.includes(needle),
+    `PVP service should preserve settlement receipt marker: ${needle}`,
+  );
+});
+
+[
+  "settleRes.settlementSource === 'local_practice'",
+  "fallbackReport.settlementSource === 'local_online_fallback'",
+  "bmobReport.settlementSource === 'bmob_online'",
+  "duplicateSettle.settlementSource === 'rejected'",
+  "staleReport.settlementSource === 'rejected'",
+  "mismatchReport.settlementSource === 'rejected'",
+].forEach((needle) => {
+  assert.ok(
+    pvpServiceChecks.includes(needle),
+    `PVP service sanity should pin settlement receipt marker: ${needle}`,
   );
 });
 
@@ -462,11 +499,29 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'authority PVPService server settlement failed',
   'authority server rank did not match PVPService settlement',
   'authority local PVP economy snapshot diverged from server wallet',
+  'browser online pvp screen drives authoritative settlement end-to-end',
+  'settlementSource === \'server_authoritative\'',
+  'settlementSource === \'local_authority_gate\'',
+  'authority UI challenge did not enter a server PVP battle',
+  'authority UI pre-settlement backend reads failed',
   'fallbackCompensationAvoided',
 ].forEach((needle) => {
   assert.ok(
     backendClientSmoke.includes(needle),
     `browser backend smoke should cover authoritative PVP settlement marker: ${needle}`,
+  );
+});
+
+[
+  'settlementSource',
+  'settlementLine',
+  "resultProbe.payloadReview.settlementSource === 'local_practice'",
+  '/本地演武回执/.test(resultProbe.reviewFoot || \'\')',
+  '/不占用服务端权威榜单/.test(resultProbe.payloadReview.settlementLine || \'\')',
+].forEach((needle) => {
+  assert.ok(
+    browserPvpAudit.includes(needle),
+    `browser pvp audit should expose settlement receipt marker: ${needle}`,
   );
 });
 

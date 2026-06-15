@@ -2930,7 +2930,9 @@ export const PVPService = {
       return {
         newRating: currentRating,
         delta: 0,
-        rejected: true
+        rejected: true,
+        settlementSource: 'rejected',
+        settlementLine: '结算回执：对局票据校验未通过，本场不写入榜单账本。'
       };
     }
     active.consumed = true;
@@ -2945,7 +2947,25 @@ export const PVPService = {
         delta: fallbackDelta
       };
     };
-    const applyLocalSettlement = (opponentRating = 1000) => {
+    const getLocalSettlementReceipt = (source = '') => {
+      if (source === 'local_authority_gate') {
+        return {
+          settlementSource: 'local_authority_gate',
+          settlementLine: '本地演武回执 · 服务端权威结算未启用，本场只写入本地榜单与天道币。'
+        };
+      }
+      if (source === 'local_online_fallback') {
+        return {
+          settlementSource: 'local_online_fallback',
+          settlementLine: '本地回执 · 在线榜单校验降级，本场先写入本地账本。'
+        };
+      }
+      return {
+        settlementSource: 'local_practice',
+        settlementLine: '本地演武回执 · 镜像练战已写入本地战报，不占用服务端权威榜单。'
+      };
+    };
+    const applyLocalSettlement = (opponentRating = 1000, source = '') => {
       const result = isWin ? 1 : 0;
       const calcRes = calcRating(currentRating, opponentRating, result);
       const next = this.normalizeLocalRank({
@@ -2998,10 +3018,12 @@ export const PVPService = {
       const historyState = this.appendMatchHistory(reward.economyState || this.getEconomySnapshot(), historyEntry);
       this.saveEconomyState(historyState);
       this.clearActiveMatch();
+      const receipt = getLocalSettlementReceipt(source || (active && active.serverMatch ? 'local_authority_gate' : 'local_practice'));
       return {
         ...calcRes,
         coinsAwarded: reward.coinsAwarded,
-        wallet: this.getWalletSummary(historyState)
+        wallet: this.getWalletSummary(historyState),
+        ...receipt
       };
     };
     const serverClient = this.getBackendPvpClient();
@@ -3014,14 +3036,16 @@ export const PVPService = {
         if (!serverResult || !serverResult.success) {
           if (serverResult && serverResult.reason === 'server_authority_unavailable') {
             const localOppRating = Math.max(100, Number(active && active.opponentRating || opponentRankData && opponentRankData.score || 1000));
-            return applyLocalSettlement(localOppRating);
+            return applyLocalSettlement(localOppRating, 'local_authority_gate');
           }
           this.clearActiveMatch();
           return {
             newRating: currentRating,
             delta: 0,
             rejected: true,
-            message: serverResult && serverResult.message ? serverResult.message : 'PVP 结算失败'
+            message: serverResult && serverResult.message ? serverResult.message : 'PVP 结算失败',
+            settlementSource: 'rejected',
+            settlementLine: '结算回执：服务端拒绝本场上报，本场不写入榜单账本。'
           };
         }
         if (serverResult.rank) {
@@ -3046,7 +3070,9 @@ export const PVPService = {
           newRating: Math.max(0, Math.floor(Number(serverResult.newRating) || currentRating)),
           delta: Math.trunc(Number(serverResult.delta) || 0),
           coinsAwarded: Math.max(0, Math.floor(Number(serverResult.coinsAwarded) || 0)),
-          wallet: serverResult.wallet || this.getWalletSummary()
+          wallet: serverResult.wallet || this.getWalletSummary(),
+          settlementSource: 'server_authoritative',
+          settlementLine: 'Node 服务端权威回执 · 排名、胜负与天道币已同步。'
         };
       } catch (error) {
         console.error('PVP server settlement failed:', error);
@@ -3055,16 +3081,18 @@ export const PVPService = {
           newRating: currentRating,
           delta: 0,
           rejected: true,
-          error
+          error,
+          settlementSource: 'rejected',
+          settlementLine: '结算回执：服务端结算异常，本场不写入榜单账本。'
         };
       }
     }
     if (!onlineAvailable || active.localPractice) {
       const localOppRating = Math.max(100, Number(active && active.opponentRating || opponentRankData && opponentRankData.score || 1000));
-      return applyLocalSettlement(localOppRating);
+      return applyLocalSettlement(localOppRating, active.localPractice ? 'local_practice' : 'local_online_fallback');
     }
     if (!user || !user.objectId) {
-      return applyLocalSettlement(Number(opponentRankData && opponentRankData.score) || 1000);
+      return applyLocalSettlement(Number(opponentRankData && opponentRankData.score) || 1000, 'local_online_fallback');
     }
     const myRating = currentRating;
     let oppRating = opponentRankData ? opponentRankData.score || 1000 : 1000;
@@ -3078,7 +3106,9 @@ export const PVPService = {
           return {
             newRating: currentRating,
             delta: 0,
-            rejected: true
+            rejected: true,
+            settlementSource: 'rejected',
+            settlementLine: '结算回执：对手身份校验不一致，本场不写入榜单账本。'
           };
         }
         oppRating = verifiedOpponentRank.score;
@@ -3111,7 +3141,9 @@ export const PVPService = {
         newRating: currentRating,
         delta: 0,
         rejected: true,
-        error
+        error,
+        settlementSource: 'rejected',
+        settlementLine: '结算回执：在线榜单写入失败，本场不写入榜单账本。'
       };
     }
 
@@ -3165,7 +3197,9 @@ export const PVPService = {
     return {
       ...calcRes,
       coinsAwarded: reward.coinsAwarded,
-      wallet: this.getWalletSummary(historyState)
+      wallet: this.getWalletSummary(historyState),
+      settlementSource: 'bmob_online',
+      settlementLine: 'Bmob 在线回执 · 排名、胜负与天道币已同步。'
     }; // Return delta for UI
   },
   /**

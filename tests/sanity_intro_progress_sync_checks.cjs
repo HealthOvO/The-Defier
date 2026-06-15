@@ -44,6 +44,7 @@ function assert(condition, message) {
     '章节演练',
     '设为章节演练',
     '裂隙回响线',
+    'PVP 结算回执',
   ];
 
   const introOnlyAnchors = [
