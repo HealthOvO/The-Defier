@@ -48,6 +48,7 @@ function add(name, pass, detail = '') {
     const text = (detail?.textContent || '').replace(/\s+/g, ' ').trim();
     const beatCards = detail?.querySelectorAll('.collection-mini-card').length || 0;
     const tags = detail?.querySelectorAll('.collection-tag').length || 0;
+    const drillButton = detail?.querySelector('[data-collection-action="apply-chapter-drill-focus"]');
 
     return {
       ok:
@@ -55,18 +56,66 @@ function add(name, pass, detail = '') {
         !!summary &&
         /连续叙事线/.test(text) &&
         /终焉回收|终章总回收/.test(text) &&
+        !!drillButton &&
+        /章节演练|设为/.test(drillButton.textContent || '') &&
         beatCards >= 3 &&
         tags >= 5,
       text,
       beatCards,
-      tags
+      tags,
+      drillButtonText: drillButton?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      drillDataset: drillButton ? { ...drillButton.dataset } : null
     };
   });
 
   add(
-    'chapter codex surfaces continuous narrative beats and final worldview recall for chapter six',
+    'chapter codex surfaces continuous narrative beats, final worldview recall, and a chapter drill CTA for chapter six',
     !!probe?.ok,
     JSON.stringify(probe || null)
+  );
+
+  const drillProbe = await page.evaluate(async () => {
+    const detail = document.getElementById('chapter-codex-detail');
+    const button = detail?.querySelector('[data-collection-action="apply-chapter-drill-focus"]');
+    if (!button) return { ok: false, reason: 'missing_drill_button' };
+    const before = {
+      currentScreen: window.game?.currentScreen || '',
+      section: window.game?.collectionHubState?.section || '',
+      selectedChapter: window.game?.selectedChapterCodexId || '',
+      dataset: { ...button.dataset },
+      text: (button.textContent || '').replace(/\s+/g, ' ').trim()
+    };
+    button.click();
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    const focus = payload?.challenge?.trainingFocus || null;
+    const focusText = document.querySelector('[data-observatory-training-focus="true"]')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    return {
+      ok:
+        window.game?.currentScreen === 'challenge-screen'
+        && window.game?.challengeHubState?.tab === 'daily'
+        && focus?.sourceRunId === `chapter_codex:${before.selectedChapter}`
+        && focus?.guideRecordId === `chapter_codex:${before.selectedChapter}`
+        && /终焉|第六章|章节/.test(focus?.chapterName || '')
+        && /章节演练|章节复盘|复盘/.test(focus?.trainingAdvice || '')
+        && /终庭|Boss|生态|天象|地脉/.test(focusText || focus?.trainingAdvice || '')
+        && (focus?.trainingTags || []).length >= 3,
+      before,
+      after: {
+        currentScreen: window.game?.currentScreen || '',
+        tab: window.game?.challengeHubState?.tab || '',
+        focus,
+        focusText
+      }
+    };
+  });
+
+  add(
+    'chapter drill CTA stores a chapter training focus and opens daily challenge hub',
+    !!drillProbe?.ok,
+    JSON.stringify(drillProbe || null)
   );
   await safeAuditScreenshot(page, path.join(outDir, 'chapter-codex-final.png'), 'browser_chapter_flow_audit', { timeout: 8000 });
 

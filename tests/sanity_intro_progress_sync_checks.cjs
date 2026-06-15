@@ -41,6 +41,8 @@ function assert(condition, message) {
     'seasonBoard.chapterArc',
     '章程回执直达',
     '查看章节档案',
+    '章节演练',
+    '设为章节演练',
     '裂隙回响线',
   ];
 

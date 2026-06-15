@@ -15,6 +15,7 @@ const browserEventBranchAudit = read('tests/browser_event_branch_audit.mjs');
 const browserRunPathEventAudit = read('tests/browser_run_path_event_audit.mjs');
 const browserMobileAudit = read('tests/browser_mobile_layout_audit.mjs');
 const challengeMobileAudit = read('tests/browser_challenge_mobile_flow_audit.mjs');
+const browserChapterFlowAudit = read('tests/browser_chapter_flow_audit.mjs');
 const strategicNodeChecks = read('tests/sanity_strategic_node_system_checks.cjs');
 const runVowChecks = read('tests/sanity_run_vow_system_checks.cjs');
 const runNodeChecks = read('tests/run_node_checks.sh');
@@ -282,6 +283,7 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'node tests/browser_feature_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/feature"',
   'node tests/browser_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/core"',
   'node tests/browser_backend_client_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/backend-client"',
+  'node tests/browser_chapter_flow_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/chapter-flow"',
   'node tests/browser_run_path_event_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/run-path-events"',
   'node tests/browser_event_branch_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/events"',
 ].forEach((needle) => {
@@ -316,6 +318,7 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'node tests/sanity_fate_aftereffect_system_checks.cjs',
   'node tests/sanity_trial_challenge_checks.cjs',
   'node tests/sanity_strategic_node_system_checks.cjs',
+  'node tests/sanity_codex_sanctum_checks.cjs',
 ].forEach((needle) => {
   assert.ok(
     runNodeChecks.includes(needle),
@@ -476,6 +479,19 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     challengeMobileAudit.includes(needle),
     `challenge mobile audit should enforce vertical banner viewport marker: ${needle}`,
+  );
+});
+
+[
+  'chapter drill CTA stores a chapter training focus and opens daily challenge hub',
+  'apply-chapter-drill-focus',
+  'focus?.sourceRunId === `chapter_codex:${before.selectedChapter}`',
+  'data-observatory-training-focus',
+  'trainingTags',
+].forEach((needle) => {
+  assert.ok(
+    browserChapterFlowAudit.includes(needle),
+    `browser chapter flow audit should cover chapter drill focus marker: ${needle}`,
   );
 });
 

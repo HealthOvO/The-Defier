@@ -201,6 +201,23 @@ if (typeof ctx.__attachCollectionHubController === 'function') ctx.__attachColle
   assert(chapters[1].bosses.length >= 1, `chapter 2 should list at least one boss, got ${chapters[1].bosses.length}`);
   assert(chapters[0].ecologyTemplates && chapters[0].ecologyTemplates.formation, 'chapter 1 should expose ecology template metadata');
   assert(chapters[5].eliteCombo && /终庭/.test(chapters[5].eliteCombo.name), `chapter 6 should expose elite combo summary, got ${JSON.stringify(chapters[5].eliteCombo)}`);
+  assert(typeof game.buildChapterCodexTrainingFocus === 'function', 'chapter codex should expose a training focus builder');
+  const chapterDrillFocus = game.buildChapterCodexTrainingFocus(chapters[5]);
+  assert(
+    chapterDrillFocus
+      && chapterDrillFocus.sourceRunId === `chapter_codex:${chapters[5].id}`
+      && chapterDrillFocus.guideRecordId === `chapter_codex:${chapters[5].id}`
+      && chapterDrillFocus.chapterName === chapters[5].fullName
+      && chapterDrillFocus.sourceTitle.includes(chapters[5].fullName)
+      && ['assault', 'bulwark', 'forge', 'oracle', 'tempo', 'marathon'].includes(chapterDrillFocus.themeKey)
+      && chapterDrillFocus.themeLabel
+      && /章节演练|章节复盘|复盘/.test(chapterDrillFocus.trainingAdvice)
+      && chapterDrillFocus.routeFocusLine.includes(chapters[5].realmLabel)
+      && chapterDrillFocus.compareHint
+      && chapterDrillFocus.trainingTags.length >= 3
+      && chapterDrillFocus.goalHighlights.some((line) => /天象|地脉|生态|Boss/.test(line)),
+    `chapter codex training focus should turn selected chapter into observatory drill advice, got ${JSON.stringify(chapterDrillFocus)}`
+  );
 
   const enemies = game.getEnemyCodexEntries();
   const graveRaven = enemies.find((entry) => entry.id === 'graveRaven');

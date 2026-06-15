@@ -15,6 +15,7 @@ const collectionHubMethods = Object.create(null);
   const BOSS_MEMORY_RECORDS_KEY = 'theDefierBossMemoryRecordsV1';
   const RUN_PATH_RECORDS_KEY = 'theDefierRunPathRecordsV1';
   const RUN_PATH_BOSS_SAMPLES_KEY = 'theDefierRunPathBossSamplesV1';
+  const OBSERVATORY_GUIDE_STATE_KEY = 'theDefierObservatoryGuideStateV1';
   const SECTION_META = {
     laws: {
       title: '藏经阁 · 法则图鉴',
@@ -47,6 +48,44 @@ const collectionHubMethods = Object.create(null);
     sanctum: {
       title: '洞府总览 · 藏经阁',
       subtitle: '查看洞府房间、命盘档案、研究项与近期解锁记录。'
+    }
+  };
+  const CHAPTER_CODEX_TRAINING_THEMES = {
+    assault: {
+      key: 'assault',
+      label: '前压爆发',
+      routeLine: '优先常规战、精英与试炼，先把输出窗口打成稳定节拍。',
+      compareHint: '对比先手压制、收头效率与高压前的资源保留。'
+    },
+    bulwark: {
+      key: 'bulwark',
+      label: '稳守续航',
+      routeLine: '优先营地、商店与观星台，把护盾、恢复和长线容错做厚。',
+      compareHint: '对比护阵厚度、血线稳定和拖回合后的收官效率。'
+    },
+    forge: {
+      key: 'forge',
+      label: '法宝共振',
+      routeLine: '优先炼器台、商店与高价值战斗，尽快补齐关键法宝部件。',
+      compareHint: '对比法宝补件速度、经济换强度效率与器灵协同质量。'
+    },
+    oracle: {
+      key: 'oracle',
+      label: '推演控场',
+      routeLine: '优先观星台、事件与记忆裂隙，把信息差换成更稳的决策。',
+      compareHint: '对比观测收益、控场链条和路线贴合度。'
+    },
+    tempo: {
+      key: 'tempo',
+      label: '连携节拍',
+      routeLine: '优先灵契窟、事件与普通战，把连携链尽快滚起来。',
+      compareHint: '对比连段衔接、中盘滚动速度与资源衰减点。'
+    },
+    marathon: {
+      key: 'marathon',
+      label: '跨章耐压',
+      routeLine: '优先精英、试炼与观星台，让长线答卷更完整。',
+      compareHint: '对比跨章承压、终盘效率与高压路段的答卷完整度。'
     }
   };
   let originalShowCollection = null;
@@ -3439,6 +3478,100 @@ const collectionHubMethods = Object.create(null);
     });
     this.initCollection();
   };
+  collectionHubMethods.resolveChapterCodexTrainingTheme = function (entry = null) {
+    const text = [
+      entry?.name,
+      entry?.fullName,
+      entry?.mechanic,
+      entry?.mood,
+      entry?.skyOmen?.name,
+      entry?.skyOmen?.desc,
+      entry?.leyline?.name,
+      entry?.leyline?.desc,
+      entry?.routePrompt,
+      entry?.bossPrompt,
+      entry?.ecologyTemplates?.formation?.name,
+      entry?.ecologyTemplates?.formation?.desc,
+      entry?.eliteCombo?.name,
+      entry?.eliteCombo?.summary,
+      ...(entry?.focusTags || []),
+      ...(entry?.ecologyTags || [])
+    ].filter(Boolean).join(' ');
+    if (/炼器|法宝|器灵|锻炉|共振/.test(text)) return CHAPTER_CODEX_TRAINING_THEMES.forge;
+    if (/终章|终焉|跨章|主宰|Boss|高压|耐压|问命|裁/.test(text)) return CHAPTER_CODEX_TRAINING_THEMES.marathon;
+    if (/观星|推演|控场|控制|命盘|信息|天象/.test(text)) return CHAPTER_CODEX_TRAINING_THEMES.oracle;
+    if (/续航|护盾|恢复|稳|守|地脉/.test(text)) return CHAPTER_CODEX_TRAINING_THEMES.bulwark;
+    if (/灵契|连携|连段|节拍|资源/.test(text)) return CHAPTER_CODEX_TRAINING_THEMES.tempo;
+    return CHAPTER_CODEX_TRAINING_THEMES.assault;
+  };
+  collectionHubMethods.buildChapterCodexTrainingFocus = function (chapter = null) {
+    const entries = this.getChapterCodexEntries();
+    const selected = typeof chapter === 'string'
+      ? entries.find(entry => entry.id === chapter)
+      : chapter && typeof chapter === 'object'
+        ? chapter
+        : entries.find(entry => entry.id === this.selectedChapterCodexId) || entries[0] || null;
+    if (!selected) return null;
+    const theme = this.resolveChapterCodexTrainingTheme(selected);
+    const chapterName = String(selected.fullName || selected.name || `第 ${selected.chapterIndex || '?'} 章`).trim();
+    const skyLine = selected.skyOmen?.name ? `天象：${selected.skyOmen.name}` : '天象：待复核';
+    const leylineLine = selected.leyline?.name ? `地脉：${selected.leyline.name}` : '地脉：待复核';
+    const ecologyLine = selected.ecologyTags?.length ? `生态：${selected.ecologyTags.slice(0, 3).join(' / ')}` : '生态：先按章节敌影试压';
+    const bossNames = (selected.bosses || []).map(boss => boss?.name).filter(Boolean).slice(0, 2).join('、');
+    const trainingTags = [
+      theme.label,
+      ...(selected.focusTags || []),
+      ...(selected.ecologyTags || []),
+      selected.skyOmen?.name,
+      selected.leyline?.name
+    ].map(item => String(item || '').trim()).filter(Boolean);
+    return {
+      sourceRunId: `chapter_codex:${selected.id}`,
+      chapterName,
+      sourceTitle: `章节档案 · ${chapterName}`,
+      guideRecordId: `chapter_codex:${selected.id}`,
+      themeKey: theme.key,
+      themeLabel: theme.label,
+      ratingLabel: selected.statusLabel || (selected.isCleared ? '已贯通' : selected.isCurrent ? '当前章节' : '未来章节'),
+      ratingTone: selected.isCleared ? 'completed' : selected.isCurrent ? 'selected' : 'suggested',
+      trainingAdvice: `章节演练：按【${chapterName}】复盘 ${selected.skyOmen?.name || '天象'} 与 ${selected.leyline?.name || '地脉'}，先用今日天机筛出能处理本章生态的样本。`,
+      highlightLine: `${skyLine} · ${leylineLine}`,
+      branchName: selected.stageLabel || selected.realmLabel || '',
+      routeFocusLine: `${selected.realmLabel || '当前章节'} · ${theme.routeLine}`,
+      compareHint: `${theme.compareHint}${bossNames ? ` 重点对照 Boss：${bossNames}。` : ''}`,
+      trainingTags: [...new Set(trainingTags)].slice(0, 4),
+      goalHighlights: [
+        `${skyLine}，开局先确认本章放大的玩法轴。`,
+        `${leylineLine}，中盘按规则修正路线。`,
+        `${ecologyLine}${bossNames ? `；Boss：${bossNames}` : ''}。`
+      ]
+    };
+  };
+  collectionHubMethods.applyChapterCodexDrillFocus = function (chapterId = '', mode = 'daily') {
+    const focus = this.buildChapterCodexTrainingFocus(chapterId || this.selectedChapterCodexId);
+    if (!focus) return false;
+    if (typeof this.setObservatoryTrainingFocus === 'function') {
+      this.setObservatoryTrainingFocus(focus);
+    } else {
+      this.observatoryGuideState = {
+        ...(this.observatoryGuideState && typeof this.observatoryGuideState === 'object' ? this.observatoryGuideState : {}),
+        trainingFocus: focus,
+        updatedAt: Date.now()
+      };
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(OBSERVATORY_GUIDE_STATE_KEY, JSON.stringify(this.observatoryGuideState));
+        }
+      } catch (error) {
+        console.warn('Persist chapter codex drill focus failed:', error);
+      }
+    }
+    const safeMode = ['daily', 'weekly', 'global'].includes(String(mode || '')) ? String(mode) : 'daily';
+    if (typeof this.showChallengeHub === 'function') {
+      this.showChallengeHub(safeMode);
+    }
+    return true;
+  };
   collectionHubMethods.getEnemyAiProfileLabel = function (profile = 'aggressive') {
     switch (profile) {
       case 'control':
@@ -5338,6 +5471,7 @@ const collectionHubMethods = Object.create(null);
       detail.innerHTML = '<div class="codex-empty-state">暂无章节档案。</div>';
       return;
     }
+    const drillFocus = typeof this.buildChapterCodexTrainingFocus === 'function' ? this.buildChapterCodexTrainingFocus(selected) : null;
     detail.innerHTML = `
             <div class="collection-detail-shell">
                 <section class="collection-detail-hero">
@@ -5355,6 +5489,23 @@ const collectionHubMethods = Object.create(null);
                         <span class="detail-status-chip">${escapeHtml(selected.stageLabel)}</span>
                     </div>
                 </section>
+                ${drillFocus ? `
+                    <section class="collection-detail-card" data-chapter-codex-drill="true" data-chapter-codex-drill-id="${escapeHtml(selected.id)}" data-chapter-codex-drill-theme="${escapeHtml(drillFocus.themeKey || '')}">
+                        <span class="detail-mini-label">章节演练</span>
+                        <strong>${escapeHtml(drillFocus.themeLabel || '章节复盘')}</strong>
+                        <p>${escapeHtml(drillFocus.trainingAdvice)}</p>
+                        <div class="collection-card-tags">
+                            ${(drillFocus.trainingTags || []).map(tag => `<span class="collection-tag">${escapeHtml(tag)}</span>`).join('')}
+                        </div>
+                        <ul class="collection-detail-list compact">
+                            ${(drillFocus.goalHighlights || []).slice(0, 3).map(line => `<li>${escapeHtml(line)}</li>`).join('')}
+                        </ul>
+                        <button type="button" class="collection-inline-btn"
+                            data-collection-action="apply-chapter-drill-focus"
+                            data-chapter-id="${escapeHtml(selected.id)}"
+                            data-challenge-mode="daily">设为章节演练</button>
+                    </section>
+                ` : ''}
                 <div class="collection-detail-grid">
                     <section class="collection-detail-card">
                         <span class="detail-mini-label">章节天象</span>
@@ -6587,6 +6738,14 @@ const collectionHubMethods = Object.create(null);
           const mode = String(collectionActionBtn.dataset.challengeMode || 'daily');
           if (typeof this.showChallengeHub === 'function') {
             this.showChallengeHub(mode);
+            return;
+          }
+        }
+        if (action === 'apply-chapter-drill-focus') {
+          const chapterId = String(collectionActionBtn.dataset.chapterId || this.selectedChapterCodexId || '');
+          const mode = String(collectionActionBtn.dataset.challengeMode || 'daily');
+          if (typeof this.applyChapterCodexDrillFocus === 'function') {
+            this.applyChapterCodexDrillFocus(chapterId, mode);
             return;
           }
         }
