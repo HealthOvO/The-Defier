@@ -88,6 +88,22 @@ const collectionHubMethods = Object.create(null);
       compareHint: '对比跨章承压、终盘效率与高压路段的答卷完整度。'
     }
   };
+  const CHAPTER_CODEX_DRILL_MODES = [{
+    mode: 'daily',
+    label: '今日天机章节演练',
+    shortLabel: '今日天机',
+    description: '用当日固定命盘快速筛本章可复刻样本。'
+  }, {
+    mode: 'weekly',
+    label: '七日劫数章节演练',
+    shortLabel: '七日劫数',
+    description: '把同一章压进周积分视角，反复校正长线答卷。'
+  }, {
+    mode: 'global',
+    label: '众生试炼章节演练',
+    shortLabel: '众生试炼',
+    description: '用统一规则对照本章主练轴，观察跨赛道表现。'
+  }];
   let originalShowCollection = null;
   let originalInitCollection = null;
   let originalStartBattle = null;
@@ -3534,7 +3550,7 @@ const collectionHubMethods = Object.create(null);
       themeLabel: theme.label,
       ratingLabel: selected.statusLabel || (selected.isCleared ? '已贯通' : selected.isCurrent ? '当前章节' : '未来章节'),
       ratingTone: selected.isCleared ? 'completed' : selected.isCurrent ? 'selected' : 'suggested',
-      trainingAdvice: `章节演练：按【${chapterName}】复盘 ${selected.skyOmen?.name || '天象'} 与 ${selected.leyline?.name || '地脉'}，先用今日天机筛出能处理本章生态的样本。`,
+      trainingAdvice: `章节演练：按【${chapterName}】复盘 ${selected.skyOmen?.name || '天象'} 与 ${selected.leyline?.name || '地脉'}，先用观星台轮换筛出能处理本章生态的样本。`,
       highlightLine: `${skyLine} · ${leylineLine}`,
       branchName: selected.stageLabel || selected.realmLabel || '',
       routeFocusLine: `${selected.realmLabel || '当前章节'} · ${theme.routeLine}`,
@@ -3546,6 +3562,11 @@ const collectionHubMethods = Object.create(null);
         `${ecologyLine}${bossNames ? `；Boss：${bossNames}` : ''}。`
       ]
     };
+  };
+  collectionHubMethods.getChapterCodexDrillModes = function () {
+    return CHAPTER_CODEX_DRILL_MODES.map(entry => ({
+      ...entry
+    }));
   };
   collectionHubMethods.applyChapterCodexDrillFocus = function (chapterId = '', mode = 'daily') {
     const focus = this.buildChapterCodexTrainingFocus(chapterId || this.selectedChapterCodexId);
@@ -5500,10 +5521,13 @@ const collectionHubMethods = Object.create(null);
                         <ul class="collection-detail-list compact">
                             ${(drillFocus.goalHighlights || []).slice(0, 3).map(line => `<li>${escapeHtml(line)}</li>`).join('')}
                         </ul>
-                        <button type="button" class="collection-inline-btn"
-                            data-collection-action="apply-chapter-drill-focus"
-                            data-chapter-id="${escapeHtml(selected.id)}"
-                            data-challenge-mode="daily">设为章节演练</button>
+                        <div class="collection-action-row">
+                            ${this.getChapterCodexDrillModes().map(mode => `<button type="button" class="collection-inline-btn"
+                                data-collection-action="apply-chapter-drill-focus"
+                                data-chapter-id="${escapeHtml(selected.id)}"
+                                data-challenge-mode="${escapeHtml(mode.mode)}"
+                                title="${escapeHtml(mode.description)}">设为${escapeHtml(mode.shortLabel)}章节演练</button>`).join('')}
+                        </div>
                     </section>
                 ` : ''}
                 <div class="collection-detail-grid">

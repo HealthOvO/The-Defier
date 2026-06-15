@@ -49,6 +49,9 @@ function add(name, pass, detail = '') {
     const beatCards = detail?.querySelectorAll('.collection-mini-card').length || 0;
     const tags = detail?.querySelectorAll('.collection-tag').length || 0;
     const drillButton = detail?.querySelector('[data-collection-action="apply-chapter-drill-focus"]');
+    const drillButtons = Array.from(detail?.querySelectorAll('[data-collection-action="apply-chapter-drill-focus"]') || []);
+    const drillModes = drillButtons.map((button) => button.dataset.challengeMode || '');
+    const drillButtonTexts = drillButtons.map((button) => button.textContent?.replace(/\s+/g, ' ').trim() || '');
 
     return {
       ok:
@@ -58,13 +61,20 @@ function add(name, pass, detail = '') {
         /终焉回收|终章总回收/.test(text) &&
         !!drillButton &&
         /章节演练|设为/.test(drillButton.textContent || '') &&
+        drillButtons.length === 3 &&
+        ['daily', 'weekly', 'global'].every((mode) => drillModes.includes(mode)) &&
+        drillButtonTexts.some((line) => /今日天机/.test(line)) &&
+        drillButtonTexts.some((line) => /七日劫数/.test(line)) &&
+        drillButtonTexts.some((line) => /众生试炼/.test(line)) &&
         beatCards >= 3 &&
         tags >= 5,
       text,
       beatCards,
       tags,
       drillButtonText: drillButton?.textContent?.replace(/\s+/g, ' ').trim() || '',
-      drillDataset: drillButton ? { ...drillButton.dataset } : null
+      drillDataset: drillButton ? { ...drillButton.dataset } : null,
+      drillModes,
+      drillButtonTexts
     };
   });
 
@@ -76,8 +86,8 @@ function add(name, pass, detail = '') {
 
   const drillProbe = await page.evaluate(async () => {
     const detail = document.getElementById('chapter-codex-detail');
-    const button = detail?.querySelector('[data-collection-action="apply-chapter-drill-focus"]');
-    if (!button) return { ok: false, reason: 'missing_drill_button' };
+    const button = detail?.querySelector('[data-collection-action="apply-chapter-drill-focus"][data-challenge-mode="daily"]');
+    if (!button) return { ok: false, reason: 'missing_daily_drill_button' };
     const before = {
       currentScreen: window.game?.currentScreen || '',
       section: window.game?.collectionHubState?.section || '',
@@ -116,6 +126,50 @@ function add(name, pass, detail = '') {
     'chapter drill CTA stores a chapter training focus and opens daily challenge hub',
     !!drillProbe?.ok,
     JSON.stringify(drillProbe || null)
+  );
+
+  const laneProbe = await page.evaluate(async () => {
+    if (!window.game) return { ok: false, reason: 'no_game' };
+    const results = [];
+    for (const mode of ['weekly', 'global']) {
+      game.showCollection();
+      game.switchCollectionSection('chapters');
+      game.selectChapterCodexEntry('final_court');
+      const detail = document.getElementById('chapter-codex-detail');
+      const button = detail?.querySelector(`[data-collection-action="apply-chapter-drill-focus"][data-challenge-mode="${mode}"]`);
+      if (!button) {
+        results.push({ mode, ok: false, reason: 'missing_mode_button' });
+        continue;
+      }
+      button.click();
+      await new Promise(resolve => setTimeout(resolve, 450));
+      const payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())
+        : null;
+      const focus = payload?.challenge?.trainingFocus || null;
+      results.push({
+        mode,
+        ok:
+          window.game?.currentScreen === 'challenge-screen'
+          && window.game?.challengeHubState?.tab === mode
+          && focus?.sourceRunId === 'chapter_codex:final_court'
+          && focus?.guideRecordId === 'chapter_codex:final_court'
+          && /章节演练|章节复盘|复盘/.test(focus?.trainingAdvice || ''),
+        tab: window.game?.challengeHubState?.tab || '',
+        focus,
+        buttonText: button.textContent?.replace(/\s+/g, ' ').trim() || ''
+      });
+    }
+    return {
+      ok: results.length === 2 && results.every((entry) => entry.ok),
+      results
+    };
+  });
+
+  add(
+    'chapter drill mode buttons can route the same chapter focus into weekly and global challenge hubs',
+    !!laneProbe?.ok,
+    JSON.stringify(laneProbe || null)
   );
   await safeAuditScreenshot(page, path.join(outDir, 'chapter-codex-final.png'), 'browser_chapter_flow_audit', { timeout: 8000 });
 

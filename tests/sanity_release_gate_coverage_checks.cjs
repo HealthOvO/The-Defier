@@ -17,6 +17,7 @@ const browserRunPathEventAudit = read('tests/browser_run_path_event_audit.mjs');
 const browserMobileAudit = read('tests/browser_mobile_layout_audit.mjs');
 const challengeMobileAudit = read('tests/browser_challenge_mobile_flow_audit.mjs');
 const browserChapterFlowAudit = read('tests/browser_chapter_flow_audit.mjs');
+const codexSanctumChecks = read('tests/sanity_codex_sanctum_checks.cjs');
 const strategicNodeChecks = read('tests/sanity_strategic_node_system_checks.cjs');
 const runVowChecks = read('tests/sanity_run_vow_system_checks.cjs');
 const pvpService = read('js/services/pvp-service.js');
@@ -539,14 +540,32 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
 
 [
   'chapter drill CTA stores a chapter training focus and opens daily challenge hub',
+  'chapter drill mode buttons can route the same chapter focus into weekly and global challenge hubs',
   'apply-chapter-drill-focus',
+  "['daily', 'weekly', 'global'].every((mode) => drillModes.includes(mode))",
+  '七日劫数',
+  '众生试炼',
   'focus?.sourceRunId === `chapter_codex:${before.selectedChapter}`',
+  "focus?.sourceRunId === 'chapter_codex:final_court'",
   'data-observatory-training-focus',
   'trainingTags',
 ].forEach((needle) => {
   assert.ok(
     browserChapterFlowAudit.includes(needle),
     `browser chapter flow audit should cover chapter drill focus marker: ${needle}`,
+  );
+});
+
+[
+  "game.applyChapterCodexDrillFocus(chapters[5].id, 'weekly')",
+  "game.applyChapterCodexDrillFocus(chapters[5].id, 'global')",
+  "game.challengeHubState.tab === 'weekly'",
+  "game.challengeHubState.tab === 'global'",
+  "`chapter_codex:${chapters[5].id}`",
+].forEach((needle) => {
+  assert.ok(
+    codexSanctumChecks.includes(needle),
+    `codex sanctum checks should cover chapter drill direct routing marker: ${needle}`,
   );
 });
 

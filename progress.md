@@ -1,5 +1,30 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-15: 章节演练三赛道入口
+  - 本轮完成
+    - `js/core/collection_hub.js` 给章节档案详情新增三赛道章节演练 action：今日天机、七日劫数、众生试炼都会复用同一份 `buildChapterCodexTrainingFocus()` 结果，并通过既有 `applyChapterCodexDrillFocus(chapterId, mode)` 写入观星台主练焦点后跳到对应 challenge tab。
+    - `buildChapterCodexTrainingFocus()` 的训练建议不再硬写“今日天机”，改为“观星台轮换”，避免玩家从七日劫数或众生试炼进入时看到错赛道文案。
+    - `tests/sanity_codex_sanctum_checks.cjs` 增加 `getChapterCodexDrillModes()` 合同断言，锁定 `daily|weekly|global` 三个章节演练入口、按钮标签和说明。
+    - `tests/browser_chapter_flow_audit.mjs` 增加真实浏览器回归，确认第六章章节档案同时出现三个章节演练按钮，并且 weekly/global 按钮能把 `chapter_codex:final_court` 主练焦点落到对应挑战站。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加三赛道章节演练 marker，防止后续只保留 daily 按钮或丢掉七日劫数 / 众生试炼入口。
+    - `game-intro.html` 同步玩家可见说明：章节演练现在可以设为今日天机、七日劫数或众生试炼。
+  - 本轮验证
+    - TDD 红灯：`node tests/sanity_codex_sanctum_checks.cjs` 在实现前失败于 `chapter codex should expose drill mode actions for multiple challenge lanes`。
+    - TDD 红灯：`node tests/browser_chapter_flow_audit.mjs http://127.0.0.1:4260 output/browser-chapter-drill-multilane-red-20260615` 在实现前确认章节档案只有 `daily` 一个按钮，weekly/global 缺失。
+    - `node --check js/core/collection_hub.js` ✅
+    - `node --check tests/sanity_codex_sanctum_checks.cjs` ✅
+    - `node --check tests/browser_chapter_flow_audit.mjs` ✅
+    - `node tests/sanity_codex_sanctum_checks.cjs` ✅
+    - `node tests/browser_chapter_flow_audit.mjs http://127.0.0.1:4260 output/browser-chapter-drill-multilane-green-20260615` ✅
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/sanity_intro_progress_sync_checks.cjs` ✅
+    - `npm run test:node` ✅
+    - `npm run build:pages` ✅
+    - `git diff --check` ✅
+  - 当前结论
+    - 章节档案不再只能把章节复盘带到今日天机；同一章可以直接转成日常、周积分或统一规则三种训练赛道，玩家能按目标选择更短的练习、长周期冲分或跨赛道对照。
+    - 本轮严格只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-15: PVP 结算回执与真实页面权威链
   - 本轮完成
     - `js/services/pvp-service.js` 给 PVP 结算返回值新增 `settlementSource` / `settlementLine`，区分 `server_authoritative`、`local_authority_gate`、`local_practice`、`local_online_fallback`、`bmob_online` 与 rejected 分支。
@@ -29,11 +54,11 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 - 2026-06-15: 章节档案演练焦点
   - 本轮完成
     - `js/core/collection_hub.js` 给章节档案详情新增 `章节演练` 卡片，按所选章节的天象、地脉、生态、Boss 传闻和章节标签生成观星台训练焦点。
-    - 新增 `buildChapterCodexTrainingFocus()` / `applyChapterCodexDrillFocus()`，点击“设为章节演练”后写入既有 `observatoryGuideState.trainingFocus`，再跳转到今日天机；不新增奖励账本、不改挑战结算规则。
+    - 新增 `buildChapterCodexTrainingFocus()` / `applyChapterCodexDrillFocus()`，首版点击“设为章节演练”后写入既有 `observatoryGuideState.trainingFocus`，再跳转到今日天机；后续已在上方「章节演练三赛道入口」扩展为今日天机 / 七日劫数 / 众生试炼三赛道入口，不新增奖励账本、不改挑战结算规则。
     - 训练主题复用挑战页已有主题键：前压爆发、稳守续航、法宝共振、推演控场、连携节拍、跨章耐压，避免 chapter codex 自建第二套筛选语义。
-    - challenge hub 懒加载时会先把 raw trainingFocus 写入本地 guide state，加载后由既有 normalizer 接管，保证从藏经阁首次跳今日天机也能看到章节复盘建议。
+    - challenge hub 懒加载时会先把 raw trainingFocus 写入本地 guide state，加载后由既有 normalizer 接管，保证从藏经阁首次跳观星台轮换时也能看到章节复盘建议。
     - `tests/sanity_codex_sanctum_checks.cjs` 增加 Node 合同断言，锁定章节档案必须能生成包含 `chapter_codex:<chapterId>`、训练主题、路线提示、对比抓手和三条目标高亮的 training focus。
-    - `tests/browser_chapter_flow_audit.mjs` 增加真实浏览器回归，确认第六章详情出现“设为章节演练”按钮，点击后进入 `challenge-screen` 的 daily tab，并在 payload / DOM 中展示章节训练焦点。
+    - `tests/browser_chapter_flow_audit.mjs` 增加真实浏览器回归，确认第六章详情出现“设为章节演练”按钮，首版点击后进入 `challenge-screen` 的 daily tab，并在 payload / DOM 中展示章节训练焦点；三赛道回归见上方最新条目。
     - `game-intro.html` 与 `tests/sanity_intro_progress_sync_checks.cjs` 同步 `章节演练` / `设为章节演练` 玩家可见锚点。
   - 本轮验证
     - TDD 红灯：`node tests/sanity_codex_sanctum_checks.cjs` 在实现前失败于 `chapter codex should expose a training focus builder`。
@@ -47,12 +72,12 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node tests/sanity_release_gate_coverage_checks.cjs` ✅，release 防漏扫已覆盖 `browser_chapter_flow_audit`、章节演练 CTA、`chapter_codex:<id>` training focus、DOM 展示与训练标签。
     - `npm run build:pages` ✅
     - `npm run test:node` ✅，包含本地后端安全、HMAC、PVP、存档、残影与本地 Node API E2E。
-    - `node tests/browser_chapter_flow_audit.mjs http://127.0.0.1:4240 output/browser-chapter-drill-target-20260615` ✅，确认章节档案按钮、daily challenge payload 与页面训练焦点均落地。
+    - `node tests/browser_chapter_flow_audit.mjs http://127.0.0.1:4240 output/browser-chapter-drill-target-20260615` ✅，首版确认章节档案按钮、daily challenge payload 与页面训练焦点均落地；三赛道回归见上方最新条目。
     - `node tests/browser_challenge_audit.mjs http://127.0.0.1:4240 output/browser-challenge-chapter-drill-20260615` ✅，确认挑战页既有观星台训练焦点链路未被章节演练写入破坏。
     - `PORT=4241 OUTPUT_ROOT=output/release-browser-audits-local-20260615-chapter-drill-focus npm run test:release:local` ✅，本地构建、Node checks 与完整浏览器 release gate 通过；fresh 汇总 `output/release-browser-audits-local-20260615-chapter-drill-focus/report.json`：26/26 模块、579 条 findings、0 失败、0 console error、332 张截图。
     - `lsof -nP -iTCP:4240 -iTCP:4241 -sTCP:LISTEN` 无监听残留。
   - 当前结论
-    - 藏经阁章节档案不再只是读天象 / 地脉 / Boss 传闻；玩家可以把任意章节压成下一轮观星演练焦点，再去今日天机筛可复刻样本。
+    - 藏经阁章节档案不再只是读天象 / 地脉 / Boss 传闻；玩家可以把任意章节压成下一轮观星演练焦点。首版落在今日天机，后续已扩展为今日天机 / 七日劫数 / 众生试炼三赛道入口。
     - 本地前后端 release gate 已覆盖 `auth-ui-cloud`、`backend-client`、PVP、challenge、map、events、reward、mobile 等 26 个模块；本轮最新 fresh 报告无失败、无浏览器 console error。
     - 本轮严格只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
 

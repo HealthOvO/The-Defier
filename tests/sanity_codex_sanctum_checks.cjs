@@ -218,6 +218,44 @@ if (typeof ctx.__attachCollectionHubController === 'function') ctx.__attachColle
       && chapterDrillFocus.goalHighlights.some((line) => /天象|地脉|生态|Boss/.test(line)),
     `chapter codex training focus should turn selected chapter into observatory drill advice, got ${JSON.stringify(chapterDrillFocus)}`
   );
+  assert(typeof game.getChapterCodexDrillModes === 'function', 'chapter codex should expose drill mode actions for multiple challenge lanes');
+  const chapterDrillModes = game.getChapterCodexDrillModes();
+  assert(
+    Array.isArray(chapterDrillModes)
+      && chapterDrillModes.length === 3
+      && chapterDrillModes.map(mode => mode.mode).join('|') === 'daily|weekly|global'
+      && chapterDrillModes.every(mode => /章节演练/.test(mode.label || '') && /天机|七日|众生/.test(mode.label || '') && mode.description),
+    `chapter codex should expose daily/weekly/global drill actions, got ${JSON.stringify(chapterDrillModes)}`
+  );
+  const originalShowChallengeHub = game.showChallengeHub;
+  const routedChapterDrillModes = [];
+  game.showChallengeHub = function(mode = 'daily') {
+    const safeMode = ['daily', 'weekly', 'global'].includes(String(mode || '')) ? String(mode) : 'daily';
+    routedChapterDrillModes.push(safeMode);
+    this.currentScreen = 'challenge-screen';
+    this.challengeHubState = {
+      ...(this.challengeHubState && typeof this.challengeHubState === 'object' ? this.challengeHubState : {}),
+      tab: safeMode
+    };
+    return true;
+  };
+  const weeklyDrillApplied = game.applyChapterCodexDrillFocus(chapters[5].id, 'weekly');
+  assert(
+    weeklyDrillApplied
+      && routedChapterDrillModes[routedChapterDrillModes.length - 1] === 'weekly'
+      && game.challengeHubState.tab === 'weekly'
+      && game.observatoryGuideState?.trainingFocus?.sourceRunId === `chapter_codex:${chapters[5].id}`,
+    `chapter codex weekly drill should route into weekly challenge hub, got ${JSON.stringify({ weeklyDrillApplied, routedChapterDrillModes, tab: game.challengeHubState?.tab, focus: game.observatoryGuideState?.trainingFocus })}`
+  );
+  const globalDrillApplied = game.applyChapterCodexDrillFocus(chapters[5].id, 'global');
+  assert(
+    globalDrillApplied
+      && routedChapterDrillModes[routedChapterDrillModes.length - 1] === 'global'
+      && game.challengeHubState.tab === 'global'
+      && game.observatoryGuideState?.trainingFocus?.guideRecordId === `chapter_codex:${chapters[5].id}`,
+    `chapter codex global drill should route into global challenge hub, got ${JSON.stringify({ globalDrillApplied, routedChapterDrillModes, tab: game.challengeHubState?.tab, focus: game.observatoryGuideState?.trainingFocus })}`
+  );
+  game.showChallengeHub = originalShowChallengeHub;
 
   const enemies = game.getEnemyCodexEntries();
   const graveRaven = enemies.find((entry) => entry.id === 'graveRaven');
