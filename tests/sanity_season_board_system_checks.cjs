@@ -2169,6 +2169,42 @@ function loadFile(ctx, filePath) {
       && chapterArcRewardTarget.title === (chapterArc.arcLabel || chapterArc.chapterLabel),
     `chapter arc reward target should route to collection chapters without mutating chapterArc metadata, got ${JSON.stringify(chapterArcRewardTarget)}`
   );
+  const chapterArcDrillTarget = chapterArcGame.rewardView.getRewardChapterArcDrillTarget('weekly');
+  assert(
+    chapterArcDrillTarget
+      && chapterArcDrillTarget.sourceKey === 'chapterArcDrill'
+      && chapterArcDrillTarget.action === 'challenge'
+      && chapterArcDrillTarget.value === 'weekly'
+      && chapterArcDrillTarget.mode === 'weekly'
+      && chapterArcDrillTarget.source === 'chapter_arc'
+      && chapterArcDrillTarget.sourceId === chapterArc.id
+      && chapterArcDrillTarget.chapterId
+      && chapterArcDrillTarget.focusId === `chapter_codex:${chapterArcDrillTarget.chapterId}`
+      && /章节演练/.test(chapterArcDrillTarget.buttonLabel || ''),
+    `chapter arc reward drill target should route to weekly challenge focus, got ${JSON.stringify(chapterArcDrillTarget)}`
+  );
+  const originalChapterArcShowScreen = chapterArcGame.showScreen;
+  chapterArcGame.showScreen = (screenId) => {
+    chapterArcGame.currentScreen = screenId;
+    return true;
+  };
+  assert(
+    chapterArcGame.rewardView.followRewardChapterArcDrill(chapterArcDrillTarget.chapterId, 'weekly') === true
+      && chapterArcGame.currentScreen === 'challenge-screen'
+      && chapterArcGame.challengeHubState?.tab === 'weekly'
+      && chapterArcGame.observatoryGuideState?.trainingFocus?.sourceRunId === chapterArcDrillTarget.focusId
+      && chapterArcGame.observatoryGuideState?.trainingFocus?.guideRecordId === chapterArcDrillTarget.focusId
+      && chapterArcGame.lastRewardSeasonBoardHandoff?.sourceKey === 'chapterArcDrill'
+      && chapterArcGame.lastRewardSeasonBoardHandoff?.action === 'challenge'
+      && chapterArcGame.lastRewardSeasonBoardHandoff?.value === 'weekly',
+    `chapter arc reward drill follow should write chapter focus and open weekly challenge hub, got ${JSON.stringify({
+      currentScreen: chapterArcGame.currentScreen,
+      challengeHubState: chapterArcGame.challengeHubState,
+      focus: chapterArcGame.observatoryGuideState?.trainingFocus,
+      last: chapterArcGame.lastRewardSeasonBoardHandoff
+    })}`
+  );
+  chapterArcGame.showScreen = originalChapterArcShowScreen;
   chapterArcGame.currentScreen = 'reward-screen';
   const chapterArcPayload = JSON.parse(chapterArcGame.renderGameToText());
   const mirroredChapterArc = assertSeasonBoardChapterArcMirror(chapterArcPayload, 'chapter arc payload');

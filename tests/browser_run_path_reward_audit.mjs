@@ -340,6 +340,7 @@ async function safeScreenshot(page, outPath) {
     const chapterArcPressureChip = panel?.querySelector('[data-season-board-chip="chapter-arc-pressure"]') || null;
     const chapterArcObjectiveChip = panel?.querySelector('[data-season-board-chip="chapter-arc-objective"]') || null;
     const chapterArcButton = chapterArcNode?.querySelector('[data-season-board-handoff-cta="true"]') || null;
+    const chapterArcDrillButton = chapterArcNode?.querySelector('[data-season-board-chapter-drill-cta="true"]') || null;
     const payload = typeof window.render_game_to_text === 'function'
       ? JSON.parse(window.render_game_to_text())
       : null;
@@ -361,6 +362,8 @@ async function safeScreenshot(page, outPath) {
       chapterArcButtonCount: chapterArcNode?.querySelectorAll('button').length || 0,
       chapterArcButtonText: chapterArcButton?.textContent?.replace(/\s+/g, ' ').trim() || '',
       chapterArcButtonDataset: chapterArcButton ? { ...chapterArcButton.dataset } : null,
+      chapterArcDrillButtonText: chapterArcDrillButton?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      chapterArcDrillButtonDataset: chapterArcDrillButton ? { ...chapterArcDrillButton.dataset } : null,
       chapterArcDataset: chapterArcNode ? { ...chapterArcNode.dataset } : null,
       rewardPayload: payload?.reward?.expedition || null,
       latestSlateId: payload?.expedition?.latestSlate?.id || null,
@@ -388,6 +391,12 @@ async function safeScreenshot(page, outPath) {
       && expeditionRewardProbe.chapterArcText.length > 0
       && expeditionRewardProbe.chapterArcButtonCount >= 1
       && /章节|章程|档案/.test(expeditionRewardProbe.chapterArcButtonText || '')
+      && /章节演练/.test(expeditionRewardProbe.chapterArcDrillButtonText || '')
+      && expeditionRewardProbe.chapterArcDrillButtonDataset?.seasonBoardChapterDrillCta === 'true'
+      && expeditionRewardProbe.chapterArcDrillButtonDataset?.seasonBoardChapterDrillMode === 'weekly'
+      && expeditionRewardProbe.chapterArcDrillButtonDataset?.seasonBoardChapterDrillSource === 'chapter_arc'
+      && !!expeditionRewardProbe.chapterArcDrillButtonDataset?.seasonBoardChapterDrillChapterId
+      && /^chapter_codex:/.test(expeditionRewardProbe.chapterArcDrillButtonDataset?.seasonBoardChapterDrillFocusId || '')
       && !!expeditionRewardProbe.rewardPayload?.seasonBoard?.chapterArc
       && expeditionRewardProbe.chapterArcButtonDataset?.seasonBoardHandoffSourceKey === 'chapterArc'
       && expeditionRewardProbe.chapterArcButtonDataset?.seasonBoardHandoffAction === 'collection'
@@ -483,6 +492,47 @@ async function safeScreenshot(page, outPath) {
     'reward chapter-arc CTA opens chapter archive and records arrival feedback',
     !!chapterArcHandoffProbe?.ok,
     JSON.stringify(chapterArcHandoffProbe || null)
+  );
+
+  const chapterArcDrillProbe = await page.evaluate(async () => {
+    const button = document.querySelector('#reward-expedition-meta [data-season-board-chapter-arc-reward="true"] [data-season-board-chapter-drill-cta="true"]');
+    if (!button) return { ok: false, reason: 'chapter_arc_drill_missing' };
+    const before = {
+      currentScreen: window.game?.currentScreen || '',
+      dataset: { ...button.dataset },
+      text: (button.textContent || '').replace(/\s+/g, ' ').trim()
+    };
+    button.click();
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    const focus = payload?.challenge?.trainingFocus || null;
+    const focusText = document.querySelector('[data-observatory-training-focus="true"]')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    const expectedFocusId = before.dataset.seasonBoardChapterDrillFocusId || `chapter_codex:${before.dataset.seasonBoardChapterDrillChapterId || ''}`;
+    return {
+      ok:
+        window.game?.currentScreen === 'challenge-screen'
+        && window.game?.challengeHubState?.tab === 'weekly'
+        && focus?.sourceRunId === expectedFocusId
+        && focus?.guideRecordId === expectedFocusId
+        && /章节演练|章节复盘|复盘/.test(focus?.trainingAdvice || '')
+        && /章|章节|章程|三周/.test(focus?.sourceTitle || focus?.chapterName || focusText || '')
+        && (focus?.trainingTags || []).length >= 3,
+      before,
+      after: {
+        currentScreen: window.game?.currentScreen || '',
+        tab: window.game?.challengeHubState?.tab || '',
+        focus,
+        focusText
+      }
+    };
+  });
+
+  add(
+    'reward chapter-arc drill CTA stores chapter training focus and opens weekly challenge hub',
+    !!chapterArcDrillProbe?.ok,
+    JSON.stringify(chapterArcDrillProbe || null)
   );
 
   await safeScreenshot(page, path.join(outDir, 'reward-expedition-summary.png'));

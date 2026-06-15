@@ -455,6 +455,63 @@ export class RewardView {
         return null;
     }
   }
+  getRewardChapterArcDrillTarget(mode = 'weekly') {
+    const expeditionMeta = typeof this.getRewardExpeditionMeta === 'function' ? this.getRewardExpeditionMeta() : null;
+    const seasonBoard = expeditionMeta?.seasonBoard && typeof expeditionMeta.seasonBoard === 'object' ? expeditionMeta.seasonBoard : null;
+    const chapterArc = seasonBoard?.chapterArc && typeof seasonBoard.chapterArc === 'object' ? seasonBoard.chapterArc : null;
+    if (!chapterArc) return null;
+    const safeMode = ['daily', 'weekly', 'global'].includes(String(mode || '')) ? String(mode) : 'weekly';
+    const entries = typeof this.game.getChapterCodexEntries === 'function' ? this.game.getChapterCodexEntries() : [];
+    if (!Array.isArray(entries) || entries.length === 0) return null;
+    const clampChapterIndex = (value) => {
+      const normalized = Math.floor(Number(value) || 0);
+      return normalized > 0 ? Math.max(1, Math.min(6, normalized)) : 0;
+    };
+    // chapterArc labels are season arc numbers, so use combat chapter signals for codex mapping.
+    const chapterIndexes = [
+      seasonBoard.settlement?.chapterIndex,
+      expeditionMeta.chapterIndex,
+      this.game.player?.realm ? Math.floor((Math.max(1, Math.floor(Number(this.game.player.realm) || 1)) - 1) / 3) + 1 : 0
+    ].map(clampChapterIndex).filter(Boolean);
+    const nameHints = [
+      chapterArc.chapterLabel,
+      chapterArc.arcLabel
+    ].map(item => String(item || '').trim()).filter(Boolean);
+    let chapter = null;
+    for (const chapterIndex of chapterIndexes) {
+      chapter = entries.find(entry => Math.floor(Number(entry?.chapterIndex) || 0) === chapterIndex) || null;
+      if (chapter) break;
+    }
+    if (!chapter && nameHints.length > 0) {
+      chapter = entries.find(entry => {
+        const names = [entry?.fullName, entry?.name].map(item => String(item || '').trim()).filter(Boolean);
+        return names.some(name => nameHints.some(hint => hint.includes(name) || name.includes(hint)));
+      }) || null;
+    }
+    if (!chapter) {
+      chapter = entries.find(entry => entry?.isCurrent) || entries[0] || null;
+    }
+    const chapterId = String(chapter?.id || '').trim();
+    if (!chapterId) return null;
+    const focusId = `chapter_codex:${chapterId}`;
+    return {
+      sourceKey: 'chapterArcDrill',
+      action: 'challenge',
+      value: safeMode,
+      mode: safeMode,
+      buttonLabel: safeMode === 'weekly' ? '设为七日劫数章节演练' : '设为章节演练',
+      source: 'chapter_arc',
+      sourceId: String(chapterArc.id || '').trim(),
+      taskSource: 'chapter_codex',
+      taskSourceId: chapterId,
+      taskId: chapterId,
+      chapterId,
+      focusId,
+      anchorSection: 'challenge',
+      title: chapter.fullName || chapter.name || chapterArc.arcLabel || '三周一章',
+      note: chapterArc.objective?.summaryLine || chapterArc.feedbackLine || chapterArc.statusLine || chapterArc.summaryLine || ''
+    };
+  }
   getRewardSkipCost() {
     const realm = Math.max(1, Math.floor(Number(this.game.player?.realm) || 1));
     return 50 * realm;
@@ -537,6 +594,21 @@ export class RewardView {
       return this.jumpToSeasonVerificationAnchor(target.anchorSection);
     }
     return false;
+  }
+  followRewardChapterArcDrill(chapterId = '', mode = 'weekly') {
+    const target = this.getRewardChapterArcDrillTarget(mode);
+    const selectedChapterId = String(chapterId || target?.chapterId || '').trim();
+    if (!target || !selectedChapterId || typeof this.game.applyChapterCodexDrillFocus !== 'function') return false;
+    const handoffNotice = {
+      ...target,
+      chapterId: selectedChapterId,
+      focusId: `chapter_codex:${selectedChapterId}`,
+      taskSourceId: selectedChapterId,
+      taskId: selectedChapterId,
+      createdAt: Date.now()
+    };
+    this.syncRewardSeasonBoardHandoffState(handoffNotice);
+    return this.game.applyChapterCodexDrillFocus(selectedChapterId, target.mode || target.value || 'weekly');
   }
   updateRewardHeaderCopy() {
     if (typeof document === 'undefined') return;
@@ -695,6 +767,7 @@ export class RewardView {
     })();
     const buildDataAttrs = (entries = {}) => buildDataAttributes(entries);
     const getHandoffAction = (sourceKey = 'primary') => typeof this.getRewardSeasonBoardHandoffTarget === 'function' ? this.getRewardSeasonBoardHandoffTarget(sourceKey) : null;
+    const chapterArcDrillAction = typeof this.getRewardChapterArcDrillTarget === 'function' ? this.getRewardChapterArcDrillTarget('weekly') : null;
     const buildActionCard = ({
       tone = 'tracking',
       dataAttrs = {},
@@ -702,7 +775,8 @@ export class RewardView {
       body = '',
       detail = '',
       metaLines = [],
-      action = null
+      action = null,
+      extraActions = []
     }) => {
       const summaryLine = String(body || '').trim();
       const detailLine = String(detail || '').trim();
@@ -721,6 +795,11 @@ export class RewardView {
         'data-season-board-handoff-lane-id': handoff.laneId || '',
         'data-season-board-handoff-anchor': handoff.anchorSection || ''
       }) : '';
+      const secondaryButtons = (Array.isArray(extraActions) ? extraActions : []).map(extraAction => {
+        if (!extraAction || typeof extraAction !== 'object') return '';
+        const attrs = buildDataAttrs(extraAction.dataAttrs || {});
+        return `<button type="button" class="reward-expedition-handoff-btn"${attrs}>${escape(extraAction.buttonLabel || '前往推进')}</button>`;
+      }).filter(Boolean).join('');
       if (!kicker && !summaryLine && !detailLine && !compactMeta) return '';
       return `
                 <div class="reward-expedition-line reward-expedition-callout is-${tone}"${buildDataAttrs(dataAttrs)}>
@@ -729,6 +808,7 @@ export class RewardView {
                     ${detailLine ? `<div class="reward-expedition-callout-detail">${escape(detailLine)}</div>` : ''}
                     ${compactMeta ? `<div class="reward-expedition-callout-meta">${escape(compactMeta)}</div>` : ''}
                     ${handoff ? `<button type="button" class="reward-expedition-handoff-btn"${handoffAttrs}>${escape(handoff.buttonLabel || '前往推进')}</button>` : ''}
+                    ${secondaryButtons}
                 </div>
             `;
     };
@@ -841,7 +921,21 @@ export class RewardView {
       body: seasonBoardChapterArc.summaryLine || seasonBoardChapterArc.statusLine || `第 ${seasonBoardChapterArc.weekSlot || 1}/${seasonBoardChapterArc.targetWeeks || 3} 周章程待同步`,
       detail: [seasonBoardChapterArcPressureWindow?.reasonLine || seasonBoardChapterArcPressureWindow?.shortLine || '', seasonBoardChapterArcObjective?.summaryLine || '', seasonBoardChapterArc.feedbackLine || '', seasonBoardChapterArcRescue?.open ? seasonBoardChapterArcRescue.guideLine || seasonBoardChapterArcRescue.reasonLine || seasonBoardChapterArcRescue.statusLabel || '' : seasonBoardChapterArcReview?.summaryLine || seasonBoardChapterArcReview?.endingPreviewLine || seasonBoardChapterArc.goalLine || '', seasonBoardChapterArc.goalLine || ''].filter(Boolean).join(' · '),
       metaLines: [seasonBoardChapterArc.windowLabel || '', `第 ${seasonBoardChapterArc.weekSlot || 1}/${seasonBoardChapterArc.targetWeeks || 3} 周`, seasonBoardChapterArcPressureWindow?.shortLine || '', seasonBoardChapterArcObjective?.shortLine || '', seasonBoardChapterArc.progressText ? `归卷 ${seasonBoardChapterArc.progressText}` : '', seasonBoardChapterArcRescue?.statusLabel || seasonBoardChapterArcReview?.statusLabel || ''],
-      action: getHandoffAction('chapterArc')
+      action: getHandoffAction('chapterArc'),
+      extraActions: chapterArcDrillAction ? [{
+        buttonLabel: chapterArcDrillAction.buttonLabel,
+        dataAttrs: {
+          'data-season-board-chapter-drill-cta': 'true',
+          'data-season-board-chapter-drill-source-key': chapterArcDrillAction.sourceKey,
+          'data-season-board-chapter-drill-source': chapterArcDrillAction.source,
+          'data-season-board-chapter-drill-source-id': chapterArcDrillAction.sourceId,
+          'data-season-board-chapter-drill-chapter-id': chapterArcDrillAction.chapterId,
+          'data-season-board-chapter-drill-focus-id': chapterArcDrillAction.focusId,
+          'data-season-board-chapter-drill-mode': chapterArcDrillAction.mode,
+          'data-season-board-chapter-drill-action': chapterArcDrillAction.action,
+          'data-season-board-chapter-drill-value': chapterArcDrillAction.value
+        }
+      }] : []
     }) : '';
     const chips = [];
     const lineageChips = [];

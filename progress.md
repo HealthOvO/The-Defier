@@ -1,5 +1,34 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-15: 奖励页章程直达七日劫数章节演练
+  - 本轮完成
+    - `js/views/RewardView.js` 在三周一章奖励卡保留 `查看章节档案`，新增 `设为七日劫数章节演练`，从 `seasonBoard.settlement.chapterIndex` 等字段映射到真实章节档案 id，并复用 `applyChapterCodexDrillFocus(chapterId, 'weekly')` 写入观星台主练焦点。
+    - `js/game.js` 接入 `data-season-board-chapter-drill-cta` 全局点击，点击后直接进入 challenge weekly，不改变原 `chapterArc -> collection/chapters` handoff。
+    - `tests/browser_run_path_reward_audit.mjs` 覆盖奖励页章节演练 CTA、dataset、focusId、weekly tab 与训练建议；`tests/sanity_season_board_system_checks.cjs` 增加 Node 合同守卫。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 release gate 防漏 marker；`tests/browser_meta_screen_audit.mjs` 更新为区分章节档案按钮与章节演练按钮。
+    - `game-intro.html` 同步玩家可见说明。
+  - 本轮验证
+    - TDD 红灯：`node tests/browser_run_path_reward_audit.mjs http://127.0.0.1:4270 output/browser-reward-chapter-arc-drill-red-20260615` 在实现前确认奖励页缺少章节演练 CTA。
+    - `node --check js/views/RewardView.js` ✅
+    - `node --check js/game.js` ✅
+    - `node --check tests/browser_run_path_reward_audit.mjs` ✅
+    - `node --check tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node --check tests/sanity_season_board_system_checks.cjs` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/browser_run_path_reward_audit.mjs http://127.0.0.1:4270 output/browser-reward-chapter-arc-drill-green-20260615` ✅，确认点击后进入 `challenge-screen` 的 weekly tab，并写入 `chapter_codex:fractured_oath` 训练焦点。
+    - `node tests/sanity_season_board_system_checks.cjs` ✅
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/sanity_intro_progress_sync_checks.cjs` ✅
+    - `npm run test:node` ✅，包含本地后端安全、HMAC、PVP、存档、残影与本地 Node API E2E。
+    - `npm run build:pages` ✅
+    - `git diff --check` ✅
+    - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4270 output/browser-meta-reward-chapter-arc-drill-green-20260615` ✅，确认奖励页桌面按钮分桶与 dataset 无回归。
+    - `node tests/browser_run_path_reward_audit.mjs http://127.0.0.1:4270 output/browser-reward-chapter-arc-drill-final-20260615` ✅，防御性章节映射调整后再次确认点击进入 weekly，并写入 `chapter_codex:fractured_oath` 训练焦点。
+    - `PORT=4271 OUTPUT_ROOT=output/release-browser-audits-local-20260615-reward-chapter-arc-drill-final npm run test:release:local` ✅，本地构建、Node checks 与完整浏览器 release gate 通过；fresh 汇总 `output/release-browser-audits-local-20260615-reward-chapter-arc-drill-final/report.json` 无失败、无浏览器 console error。
+  - 当前结论
+    - 奖励页三周一章不再只能去章节档案；玩家可以直接把当前章复盘焦点送入七日劫数，且原章节档案入口仍保留。
+    - 本轮严格只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-15: 章节演练三赛道入口
   - 本轮完成
     - `js/core/collection_hub.js` 给章节档案详情新增三赛道章节演练 action：今日天机、七日劫数、众生试炼都会复用同一份 `buildChapterCodexTrainingFocus()` 结果，并通过既有 `applyChapterCodexDrillFocus(chapterId, mode)` 写入观星台主练焦点后跳到对应 challenge tab。

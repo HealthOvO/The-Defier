@@ -3736,6 +3736,13 @@ export class Game {
         }
         return;
       }
+      const chapterDrillBtn = e.target.closest('[data-season-board-chapter-drill-cta="true"]');
+      if (chapterDrillBtn) {
+        const chapterId = String(chapterDrillBtn.dataset.seasonBoardChapterDrillChapterId || '');
+        const mode = String(chapterDrillBtn.dataset.seasonBoardChapterDrillMode || 'weekly');
+        this.followRewardChapterArcDrill(chapterId, mode);
+        return;
+      }
       const handoffBtn = e.target.closest('[data-season-board-handoff-cta="true"]');
       if (handoffBtn) {
         const sourceKey = String(handoffBtn.dataset.seasonBoardHandoffSourceKey || 'primary');
@@ -8905,6 +8912,9 @@ export class Game {
   }
   followRewardSeasonBoardHandoff(sourceKey = 'primary') {
     return Game.prototype.ensureRewardView.call(this).followRewardSeasonBoardHandoff(sourceKey);
+  }
+  followRewardChapterArcDrill(chapterId = '', mode = 'weekly') {
+    return Game.prototype.ensureRewardView.call(this).followRewardChapterArcDrill(chapterId, mode);
   }
   updateRewardHeaderCopy() {
     return Game.prototype.ensureRewardView.call(this).updateRewardHeaderCopy();
