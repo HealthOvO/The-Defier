@@ -26,6 +26,16 @@ function rectObject(rect) {
   };
 }
 
+function rectFitsWidth(rect, viewportWidth) {
+  return !!rect && rect.left >= 0 && rect.right <= viewportWidth;
+}
+
+function rectFitsViewport(rect, viewportWidth, viewportHeight) {
+  return rectFitsWidth(rect, viewportWidth)
+    && rect.top >= 0
+    && rect.bottom <= viewportHeight;
+}
+
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -109,6 +119,8 @@ function rectObject(rect) {
       shellWidth: Math.round(shell?.getBoundingClientRect().width || 0),
       scrollWidth: Math.round(scroll?.getBoundingClientRect().width || 0),
       docScrollWidth: Math.round(document.documentElement?.scrollWidth || 0),
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
       tabCount: document.querySelectorAll('#challenge-screen .challenge-tab-btn').length,
       rewardCount: document.querySelectorAll('#challenge-hub-rewards .challenge-reward-card').length,
       dangerChipCount: document.querySelectorAll('#challenge-hub-summary .challenge-danger-chip').length,
@@ -117,7 +129,7 @@ function rectObject(rect) {
     };
   });
   add(
-    'challenge mobile hub keeps summary, launch CTA, and reward cards inside the viewport',
+    'challenge mobile hub keeps launch CTA visible and content inside mobile width',
     !!hubProbe
       && hubProbe.mode === 'challenge-screen'
       && hubProbe.activeTab === 'daily'
@@ -132,15 +144,43 @@ function rectObject(rect) {
       && hubProbe.shellWidth >= 300
       && hubProbe.scrollWidth >= 300
       && hubProbe.docScrollWidth <= 398
-      && !!hubProbe.launchRect
-      && hubProbe.launchRect.left >= 0
-      && hubProbe.launchRect.right <= 390
-      && !!hubProbe.firstRewardRect
-      && hubProbe.firstRewardRect.left >= 0
-      && hubProbe.firstRewardRect.right <= 390,
+      && rectFitsViewport(hubProbe.launchRect, hubProbe.viewportWidth, hubProbe.viewportHeight)
+      && rectFitsWidth(hubProbe.firstRewardRect, hubProbe.viewportWidth),
     JSON.stringify(hubProbe || null)
   );
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-mobile-hub.png'), 'browser_challenge_mobile_flow_audit', { timeout: 9000 });
+
+  const rewardReachProbe = await page.evaluate(() => {
+    const rectObject = (rect) => {
+      if (!rect) return null;
+      return {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    const firstReward = document.querySelector('#challenge-hub-rewards .challenge-reward-card');
+    firstReward?.scrollIntoView({ block: 'center', inline: 'nearest' });
+    const scroll = document.querySelector('.challenge-scroll-container');
+    return {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      docScrollWidth: Math.round(document.documentElement?.scrollWidth || 0),
+      scrollTop: Math.round(scroll?.scrollTop || window.scrollY || 0),
+      firstRewardRect: rectObject(firstReward?.getBoundingClientRect() || null),
+    };
+  });
+  add(
+    'challenge mobile reward cards can be scrolled into view without horizontal overflow',
+    !!rewardReachProbe
+      && rewardReachProbe.docScrollWidth <= 398
+      && rewardReachProbe.scrollTop > 0
+      && rectFitsViewport(rewardReachProbe.firstRewardRect, rewardReachProbe.viewportWidth, rewardReachProbe.viewportHeight),
+    JSON.stringify(rewardReachProbe || null)
+  );
 
   await page.evaluate(() => {
     if (window.game?.beginChallengeStart) game.beginChallengeStart('daily');
@@ -230,6 +270,8 @@ function rectObject(rect) {
       activeRun: payload?.challenge?.activeRun || null,
       bannerText: banner?.textContent?.replace(/\s+/g, ' ').trim() || '',
       focusText: focus?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
       bannerRect: rectObject(banner?.getBoundingClientRect() || null),
       focusRect: rectObject(focus?.getBoundingClientRect() || null),
       runDestinyId: payload?.player?.runDestiny?.id || '',
@@ -246,12 +288,8 @@ function rectObject(rect) {
       && !!activeBannerProbe.runDestinyId
       && !!activeBannerProbe.spiritId
       && !!activeBannerProbe.bannerRect
-      && activeBannerProbe.bannerRect.left >= 0
-      && activeBannerProbe.bannerRect.right <= 390
-      && (!activeBannerProbe.focusRect || (
-        activeBannerProbe.focusRect.left >= 0
-        && activeBannerProbe.focusRect.right <= 390
-      )),
+      && rectFitsViewport(activeBannerProbe.bannerRect, activeBannerProbe.viewportWidth, activeBannerProbe.viewportHeight)
+      && (!activeBannerProbe.focusRect || rectFitsViewport(activeBannerProbe.focusRect, activeBannerProbe.viewportWidth, activeBannerProbe.viewportHeight)),
     JSON.stringify(activeBannerProbe || null)
   );
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-mobile-active-banner.png'), 'browser_challenge_mobile_flow_audit', { timeout: 9000 });
@@ -352,6 +390,8 @@ function rectObject(rect) {
       activeRun: payload?.challenge?.activeRun || null,
       bannerText: banner?.textContent?.replace(/\s+/g, ' ').trim() || '',
       focusText: focus?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
       bannerRect: rectObject(banner?.getBoundingClientRect() || null),
       focusRect: rectObject(focus?.getBoundingClientRect() || null),
     };
@@ -367,12 +407,8 @@ function rectObject(rect) {
       && /不计奖励/.test(replayBannerProbe.bannerText || '')
       && /训练重点/.test(replayBannerProbe.focusText || '')
       && !!replayBannerProbe.bannerRect
-      && replayBannerProbe.bannerRect.left >= 0
-      && replayBannerProbe.bannerRect.right <= 390
-      && (!replayBannerProbe.focusRect || (
-        replayBannerProbe.focusRect.left >= 0
-        && replayBannerProbe.focusRect.right <= 390
-      )),
+      && rectFitsViewport(replayBannerProbe.bannerRect, replayBannerProbe.viewportWidth, replayBannerProbe.viewportHeight)
+      && (!replayBannerProbe.focusRect || rectFitsViewport(replayBannerProbe.focusRect, replayBannerProbe.viewportWidth, replayBannerProbe.viewportHeight)),
     JSON.stringify(replayBannerProbe || null)
   );
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-mobile-replay-banner.png'), 'browser_challenge_mobile_flow_audit', { timeout: 9000 });

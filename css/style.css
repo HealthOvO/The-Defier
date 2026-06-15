@@ -4644,6 +4644,7 @@ body {
 .reward-expedition-handoff-btn {
     justify-self: start;
     margin-top: 4px;
+    scroll-margin-block: 14px;
     border: 1px solid rgba(124, 209, 255, 0.34);
     border-radius: 999px;
     padding: 7px 11px;
@@ -18332,6 +18333,11 @@ body {
     max-height: min(84vh, 860px);
 }
 
+.card-detail-container {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
 .detail-dual-layout {
     display: grid;
     grid-template-columns: minmax(0, 1.18fr) minmax(300px, 0.82fr);
@@ -18371,6 +18377,11 @@ body {
     border-radius: 18px;
     overflow: hidden;
     background: linear-gradient(135deg, #111827 0%, #090e1d 100%);
+}
+
+.cd-preview-pane {
+    min-height: 400px;
+    overflow: visible;
 }
 
 .treasure-visual-col {
@@ -18714,6 +18725,10 @@ body {
     .treasure-visual-col,
     .cd-preview-pane {
         min-height: 240px;
+    }
+
+    .cd-preview-pane {
+        min-height: 320px;
     }
 
     .card-detail-main .big-preview {
@@ -20517,8 +20532,34 @@ body {
     }
 
     .challenge-layout {
+        display: flex;
+        flex-direction: column;
         padding: 14px;
         gap: 14px;
+    }
+
+    .challenge-main-column {
+        order: 2;
+    }
+
+    .challenge-side-column {
+        display: contents;
+    }
+
+    #challenge-hub-launch {
+        order: 1;
+    }
+
+    #challenge-hub-side,
+    #challenge-hub-ranking {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        order: 3;
+    }
+
+    #challenge-hub-ranking {
+        order: 4;
     }
 
     .challenge-focus-meta {
@@ -20533,11 +20574,34 @@ body {
     .challenge-run-banner {
         width: calc(100% - 24px);
         flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 8px 10px;
+        padding: 10px 12px;
+        border-radius: 14px;
+    }
+
+    .challenge-run-text {
+        flex: 1 1 calc(100% - 88px);
+        gap: 3px;
+    }
+
+    .challenge-run-text strong {
+        font-size: 0.92rem;
+        line-height: 1.2;
+    }
+
+    .challenge-run-text span,
+    .challenge-run-stats span {
+        font-size: 0.78rem;
+        line-height: 1.25;
     }
 
     .challenge-run-stats {
+        width: 100%;
         margin-left: 0;
-        align-items: flex-start;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
     }
 
     .challenge-record-item {
@@ -20582,6 +20646,10 @@ body {
     }
 
     .challenge-run-focus {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
         white-space: normal;
     }
 }

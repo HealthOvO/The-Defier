@@ -99,7 +99,9 @@ router.get('/random', (req, res) => {
         try {
             const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
             currentUserId = decoded.id;
-        } catch (e) {}
+        } catch (e) {
+            return res.status(401).json({ success: false, message: 'Token无效或已过期' });
+        }
     }
 
     let query = `SELECT user_name as userName, realm, ghost_data as ghostData FROM game_ghosts WHERE realm >= ? AND realm <= ?`;

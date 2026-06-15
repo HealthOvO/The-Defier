@@ -643,8 +643,13 @@ function add(name, pass, detail = '') {
     const content = modal ? modal.querySelector('.modal-content') : null;
     const rect = content ? content.getBoundingClientRect() : null;
     const choices = Array.from(document.querySelectorAll('#event-choices .event-choice'));
+    const choiceTexts = choices.map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
     return {
       choiceCount: choices.length,
+      hasCardLimit: choiceTexts.some((text) => text.includes('剑心限令')),
+      hasTreasureHunt: choiceTexts.some((text) => text.includes('秘宝回响')),
+      cardLimitConditionVisible: choiceTexts.some((text) => text.includes('最多打出 6 张牌')),
+      treasureHuntConditionVisible: choiceTexts.some((text) => text.includes('6 回合内取胜') && text.includes('最多打出 8 张牌')),
       top: rect ? rect.top : null,
       bottom: rect ? rect.bottom : null,
       height: rect ? rect.height : null,
@@ -653,7 +658,11 @@ function add(name, pass, detail = '') {
         rect.top >= 8 &&
         rect.bottom <= window.innerHeight - 8 &&
         rect.height <= window.innerHeight - 16 &&
-        choices.length >= 4
+        choices.length >= 6 &&
+        choiceTexts.some((text) => text.includes('剑心限令')) &&
+        choiceTexts.some((text) => text.includes('最多打出 6 张牌')) &&
+        choiceTexts.some((text) => text.includes('秘宝回响')) &&
+        choiceTexts.some((text) => text.includes('6 回合内取胜') && text.includes('最多打出 8 张牌'))
     };
   });
 

@@ -2536,8 +2536,8 @@ async function safeScreenshot(page, outPath) {
     game.showTrialChallengeSelection({ id: 91013, row: 2, type: 'trial', completed: false, accessible: true });
     const title = document.getElementById('event-title')?.textContent || '';
     const choices = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
-    const dualBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('双誓并压'));
-    if (dualBtn) dualBtn.click();
+    const cardLimitBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('剑心限令'));
+    if (cardLimitBtn) cardLimitBtn.click();
     const trialPayload = typeof window.render_game_to_text === 'function'
       ? JSON.parse(window.render_game_to_text())
       : null;
@@ -2547,6 +2547,10 @@ async function safeScreenshot(page, outPath) {
       hasSpeed: choices.some((t) => t.includes('逐光试斩')),
       hasNoDamage: choices.some((t) => t.includes('无伤镜湖')),
       hasDual: choices.some((t) => t.includes('双誓并压')),
+      hasCardLimit: choices.some((t) => t.includes('剑心限令')),
+      hasTreasureHunt: choices.some((t) => t.includes('秘宝回响')),
+      cardLimitConditionVisible: choices.some((t) => t.includes('最多打出 6 张牌')),
+      treasureHuntRewardVisible: choices.some((t) => t.includes('法宝') && t.includes('6 回合内取胜') && t.includes('最多打出 8 张牌')),
       activeTrial: game.activeTrial,
       trialName: game.trialData?.name || null,
       trialChallenge: trialPayload?.battle?.trialChallenge || null,
@@ -2561,19 +2565,151 @@ async function safeScreenshot(page, outPath) {
     'trial node upgrades into selectable challenge碑 and chosen affix package enters battle state',
     !!trialChallengeProbe &&
       /试炼碑/.test(trialChallengeProbe.title) &&
-      trialChallengeProbe.choiceCount >= 4 &&
+      trialChallengeProbe.choiceCount >= 6 &&
       trialChallengeProbe.hasSpeed &&
       trialChallengeProbe.hasNoDamage &&
       trialChallengeProbe.hasDual &&
-      trialChallengeProbe.activeTrial === 'oathMirror' &&
-      trialChallengeProbe.trialName === '双誓并压' &&
-      trialChallengeProbe.trialChallenge?.conditions?.noDamage === true &&
-      Number(trialChallengeProbe.trialChallenge?.conditions?.maxTurns || 0) === 5 &&
-      trialChallengeProbe.trialReward === 'law' &&
+      trialChallengeProbe.hasCardLimit &&
+      trialChallengeProbe.hasTreasureHunt &&
+      trialChallengeProbe.cardLimitConditionVisible &&
+      trialChallengeProbe.treasureHuntRewardVisible &&
+      trialChallengeProbe.activeTrial === 'cardLimit' &&
+      trialChallengeProbe.trialName === '剑心限令' &&
+      Number(trialChallengeProbe.trialChallenge?.conditions?.maxCardsPlayed || 0) === 6 &&
+      trialChallengeProbe.trialReward === 'rare_card' &&
       trialChallengeProbe.currentScreen === 'battle-screen' &&
       /试炼/.test(trialChallengeProbe.enemyName) &&
       trialChallengeProbe.enemyHasTrialDebuff,
     JSON.stringify(trialChallengeProbe || null)
+  );
+
+  const trialCardLimitFailureProbe = await page.evaluate(async () => {
+    if (!window.game || typeof game.showTrialChallengeSelection !== 'function' || typeof game.onBattleWon !== 'function') return null;
+    const beforeHistoryCount = Array.isArray(window.Utils?._battleLogHistory) ? window.Utils._battleLogHistory.length : 0;
+    game.showTrialChallengeSelection({ id: 91014, row: 2, type: 'trial', completed: false, accessible: true });
+    const cardLimitBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('剑心限令'));
+    if (!cardLimitBtn) return { ok: false, reason: 'missing_card_limit_choice' };
+    cardLimitBtn.click();
+    if (!game.battle || !game.player || !Array.isArray(game.battle.enemies) || !game.battle.enemies[0]) {
+      return { ok: false, reason: 'battle_not_started', currentScreen: game.currentScreen };
+    }
+    const enemy = game.battle.enemies[0];
+    enemy.currentHp = Math.max(80, Number(enemy.currentHp || enemy.hp || enemy.maxHp || 80));
+    enemy.hp = enemy.currentHp;
+    enemy.maxHp = Math.max(enemy.currentHp, Number(enemy.maxHp || enemy.currentHp));
+    game.player.currentEnergy = 9;
+    game.player.maxEnergy = Math.max(game.player.maxEnergy || 0, 9);
+    game.player.hand = Array.from({ length: 7 }, (_, index) => ({
+      id: `audit_card_limit_${index + 1}`,
+      name: `限令审计牌${index + 1}`,
+      type: 'skill',
+      cost: 0,
+      effects: [{ type: 'block', value: 0 }]
+    }));
+    game.player.drawPile = [];
+    game.player.discardPile = [];
+    game.battle.cardsPlayedThisBattle = 0;
+    game.battle.cardsPlayedThisTurn = 0;
+    for (let index = 0; index < 7; index += 1) {
+      await game.battle.playCardOnTarget(0, 0);
+      if (game.battle.battleEnded) break;
+    }
+    const playedAfterCards = Number(game.battle.cardsPlayedThisBattle || 0);
+    const activeBeforeWin = game.activeTrial;
+    const trialNameBeforeWin = game.trialData?.name || null;
+    enemy.currentHp = 0;
+    enemy.hp = 0;
+    await game.onBattleWon([enemy]);
+    const logTexts = Array.isArray(window.Utils?._battleLogHistory)
+      ? window.Utils._battleLogHistory.slice(beforeHistoryCount).map((item) => String(item?.message || '').trim()).filter(Boolean)
+      : [];
+    return {
+      playedAfterCards,
+      activeBeforeWin,
+      trialNameBeforeWin,
+      trialCleared: game.activeTrial === null && game.trialData === null && game.trialMode === null,
+      failureLogged: logTexts.some((text) => text.includes('试炼未达成【剑心限令】条件')),
+      successLogged: logTexts.some((text) => text.includes('试炼完成【剑心限令】')),
+      rewardLogged: logTexts.some((text) => text.includes('试炼碑赐赏')),
+      currentScreen: game.currentScreen,
+      logs: logTexts.slice(-10)
+    };
+  });
+  add(
+    'card-limit trial fails after seven real browser card plays and clears trial state',
+    !!trialCardLimitFailureProbe &&
+      trialCardLimitFailureProbe.playedAfterCards === 7 &&
+      trialCardLimitFailureProbe.activeBeforeWin === 'cardLimit' &&
+      trialCardLimitFailureProbe.trialNameBeforeWin === '剑心限令' &&
+      trialCardLimitFailureProbe.trialCleared &&
+      trialCardLimitFailureProbe.failureLogged &&
+      !trialCardLimitFailureProbe.successLogged &&
+      !trialCardLimitFailureProbe.rewardLogged,
+    JSON.stringify(trialCardLimitFailureProbe || null)
+  );
+
+  const trialTreasureRewardProbe = await page.evaluate(async () => {
+    if (!window.game || typeof game.showTrialChallengeSelection !== 'function' || typeof game.onBattleWon !== 'function') return null;
+    if (Array.isArray(window.Utils?._battleLogHistory)) {
+      window.Utils._battleLogHistory.length = 0;
+    }
+    const beforeHistoryCount = 0;
+    if (game.player) {
+      game.player.collectedTreasures = [];
+      game.player.equippedTreasures = [];
+      game.player.treasures = game.player.equippedTreasures;
+    }
+    game.showTrialChallengeSelection({ id: 91015, row: 2, type: 'trial', completed: false, accessible: true });
+    const treasureBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('秘宝回响'));
+    if (!treasureBtn) return { ok: false, reason: 'missing_treasure_trial_choice' };
+    treasureBtn.click();
+    if (!game.battle || !game.player || !Array.isArray(game.battle.enemies) || !game.battle.enemies[0]) {
+      return { ok: false, reason: 'battle_not_started', currentScreen: game.currentScreen };
+    }
+    const beforeTreasureCount = Array.isArray(game.player.collectedTreasures) ? game.player.collectedTreasures.length : 0;
+    const enemy = game.battle.enemies[0];
+    enemy.currentHp = 0;
+    enemy.hp = 0;
+    game.battle.turnNumber = 2;
+    game.battle.cardsPlayedThisBattle = 1;
+    game.battle.playerTookDamage = false;
+    const activeBeforeWin = game.activeTrial;
+    const trialNameBeforeWin = game.trialData?.name || null;
+    const rewardBeforeWin = game.trialData?.reward || null;
+    await game.onBattleWon([enemy]);
+    const afterTreasureCount = Array.isArray(game.player.collectedTreasures) ? game.player.collectedTreasures.length : 0;
+    const gainedTreasure = Array.isArray(game.player.collectedTreasures) ? game.player.collectedTreasures[game.player.collectedTreasures.length - 1] || null : null;
+    const logTexts = Array.isArray(window.Utils?._battleLogHistory)
+      ? window.Utils._battleLogHistory.slice(beforeHistoryCount).map((item) => String(item?.message || '').trim()).filter(Boolean)
+      : [];
+    return {
+      activeBeforeWin,
+      trialNameBeforeWin,
+      rewardBeforeWin,
+      beforeTreasureCount,
+      afterTreasureCount,
+      gainedTreasureName: gainedTreasure?.name || '',
+      trialCleared: game.activeTrial === null && game.trialData === null && game.trialMode === null,
+      successLogged: logTexts.some((text) => text.includes('试炼完成【秘宝回响】')),
+      treasureRewardLogged: logTexts.some((text) => text.includes('试炼碑赐赏') && text.includes('法宝')),
+      failureLogged: logTexts.some((text) => text.includes('试炼未达成【秘宝回响】条件')),
+      currentScreen: game.currentScreen,
+      logs: logTexts.slice(-10)
+    };
+  });
+  add(
+    'treasure trial grants a real treasure reward after browser victory and clears trial state',
+    !!trialTreasureRewardProbe &&
+      trialTreasureRewardProbe.activeBeforeWin === 'treasureHunt' &&
+      trialTreasureRewardProbe.trialNameBeforeWin === '秘宝回响' &&
+      trialTreasureRewardProbe.rewardBeforeWin === 'treasure' &&
+      trialTreasureRewardProbe.afterTreasureCount > trialTreasureRewardProbe.beforeTreasureCount &&
+      trialTreasureRewardProbe.gainedTreasureName &&
+      trialTreasureRewardProbe.trialCleared &&
+      trialTreasureRewardProbe.successLogged &&
+      trialTreasureRewardProbe.treasureRewardLogged &&
+      !trialTreasureRewardProbe.failureLogged,
+    JSON.stringify(trialTreasureRewardProbe || null)
   );
 
   const campExpandedProbe = await page.evaluate(() => {

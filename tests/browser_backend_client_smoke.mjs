@@ -30,16 +30,21 @@ function recordConsoleError(text) {
   consoleErrors.push(message);
 }
 
-function startBackend() {
+function startBackend(options = {}) {
+  const backendPort = Number(options.port || port);
+  const backendDbPath = options.dbPath || dbPath;
+  const allowClientResult = options.allowClientResult === true;
   const child = spawn(process.execPath, ['server/app.js'], {
     cwd: process.cwd(),
     env: {
       ...process.env,
-      PORT: String(port),
+      PORT: String(backendPort),
       JWT_SECRET: 'integration-jwt-secret-32-characters',
       DEFIER_HMAC_SECRET: 'integration-hmac-secret-32-characters',
       DEFIER_INTEGRITY_REQUIRED: '1',
-      DEFIER_DB_PATH: dbPath,
+      DEFIER_PVP_ALLOW_CLIENT_REPORTED_RESULT: allowClientResult ? '1' : '',
+      DEFIER_PVP_TEST_MODE: allowClientResult ? '1' : '',
+      DEFIER_DB_PATH: backendDbPath,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -61,12 +66,12 @@ async function stopBackend(server) {
   });
 }
 
-async function waitForHealth(server) {
+async function waitForHealth(server, targetApiUrl = apiUrl) {
   const deadline = Date.now() + 10000;
   let lastError = null;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${apiUrl}/api/health`);
+      const res = await fetch(`${targetApiUrl}/api/health`);
       const payload = await res.json();
       if (res.status === 200 && payload?.status === 'ok') return;
       lastError = new Error(`health returned ${res.status}: ${JSON.stringify(payload)}`);
@@ -95,7 +100,7 @@ function writeReport() {
   fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
 }
 
-async function runBrowserSmoke(page) {
+async function runBrowserSmoke(page, targetApiUrl = apiUrl) {
   await page.addInitScript((targetApiUrl) => {
     try {
       localStorage.setItem('theDefierDebug', 'true');
@@ -112,7 +117,7 @@ async function runBrowserSmoke(page) {
       sessionStorage.removeItem('currentSaveSlot');
       sessionStorage.removeItem('theDefierPvpActiveMatchV1');
     } catch {}
-  }, apiUrl);
+  }, targetApiUrl);
 
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(
@@ -582,6 +587,188 @@ async function runBrowserSmoke(page) {
   };
 }
 
+async function runAuthoritativePvpSettlementSmoke(browser) {
+  const authorityPort = Number(process.env.BROWSER_BACKEND_AUTHORITY_SMOKE_PORT || port + 1);
+  const authorityApiUrl = `http://127.0.0.1:${authorityPort}`;
+  const authorityDbPath = path.join(os.tmpdir(), `the-defier-browser-backend-authority-${process.pid}.sqlite`);
+  const authorityRunId = `authority_${runId}`;
+  const server = startBackend({
+    port: authorityPort,
+    dbPath: authorityDbPath,
+    allowClientResult: true,
+  });
+  let page = null;
+  try {
+    await waitForHealth(server, authorityApiUrl);
+    page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') recordConsoleError(msg.text());
+    });
+    page.on('pageerror', err => recordConsoleError(String(err)));
+    await page.addInitScript((targetApiUrl) => {
+      try {
+        localStorage.setItem('theDefierDebug', 'true');
+        localStorage.setItem('theDefierServerConfig', JSON.stringify({ baseUrl: targetApiUrl }));
+        localStorage.removeItem('theDefierServerSession');
+        localStorage.removeItem('theDefierSave');
+        localStorage.removeItem('theDefierPvpLocalRankV1');
+        localStorage.removeItem('theDefierPvpLocalSnapshotV1');
+        localStorage.removeItem('theDefierPvpPracticeSeedV1');
+        localStorage.removeItem('theDefierPvpActiveMatchV1');
+        Object.keys(localStorage)
+          .filter(key => key.startsWith('theDefierPvpEconomyV1:'))
+          .forEach(key => localStorage.removeItem(key));
+        sessionStorage.removeItem('currentSaveSlot');
+        sessionStorage.removeItem('theDefierPvpActiveMatchV1');
+      } catch {}
+    }, authorityApiUrl);
+    await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => !!window.game && !!window.__THE_DEFIER_SERVICES__?.BackendClient && !!window.PVPService,
+      null,
+      { timeout: 12000 }
+    );
+
+    const result = await page.evaluate(async ({ runId, password, realm }) => {
+      const services = window.__THE_DEFIER_SERVICES__;
+      const BackendClient = services?.BackendClient;
+      const AuthService = services?.AuthService;
+      const PVPService = window.PVPService || services?.PVPService;
+      if (!BackendClient) throw new Error('BackendClient service was not exposed in authority smoke');
+      if (!AuthService) throw new Error('AuthService service was not exposed in authority smoke');
+      if (!PVPService) throw new Error('PVPService service was not exposed in authority smoke');
+
+      const assertStep = (condition, message, detail = null) => {
+        if (!condition) {
+          throw new Error(`${message}${detail ? `: ${JSON.stringify(detail)}` : ''}`);
+        }
+      };
+      const mainName = `browser_auth_${runId}`;
+      const opponentName = `browser_auth_opp_${runId}`;
+      const mainDeck = ['strike', 'heavyStrike', 'quickSlash', 'defend', 'ironWill', 'shieldBash', 'spiritBoost', 'meditation'];
+      const opponentDeck = ['mirrorWall', 'ironBreath', 'reboundingShell', 'bastionStudy', 'wardingSweep', 'defend', 'ironWill', 'shieldBash'];
+
+      BackendClient.REQUEST_TIMEOUT_MS = 8000;
+      BackendClient.NETWORK_RETRY = 0;
+      BackendClient.clearServerSession();
+      const init = BackendClient.init();
+      assertStep(init?.success, 'BackendClient init failed for authority smoke', init);
+      AuthService.init?.();
+      PVPService.context = {
+        ...(PVPService.context || {}),
+        authService: AuthService,
+      };
+
+      const mainReg = await BackendClient.register(mainName, password);
+      assertStep(mainReg.success, 'authority main registration failed', mainReg);
+      const mainLogin = await BackendClient.login(mainName, password);
+      assertStep(mainLogin.success, 'authority main login failed', mainLogin);
+      PVPService.currentRankData = null;
+      PVPService.clearActiveMatch?.();
+      const mainInitialRank = await PVPService.syncRank();
+      assertStep(mainInitialRank?.isServer === true && mainInitialRank?.user?.username === mainName, 'authority main rank did not come from Node backend', mainInitialRank);
+      const mainUpload = await PVPService.uploadSnapshot({
+        realm,
+        powerScore: 1500,
+        data: {
+          me: { maxHp: 360, energy: 4, currEnergy: 4 },
+          deck: mainDeck.map(id => ({ id })),
+          aiProfile: 'balanced',
+          deckArchetype: 'balanced',
+          ruleVersion: 'browser-authority-pvp',
+        },
+        personality: 'balanced',
+      });
+      assertStep(mainUpload.success && mainUpload.server === true, 'authority main defense upload failed', mainUpload);
+
+      const opponentReg = await BackendClient.register(opponentName, password);
+      assertStep(opponentReg.success, 'authority opponent registration failed', opponentReg);
+      const opponentLogin = await BackendClient.login(opponentName, password);
+      assertStep(opponentLogin.success, 'authority opponent login failed', opponentLogin);
+      PVPService.currentRankData = null;
+      PVPService.clearActiveMatch?.();
+      const opponentRank = await PVPService.syncRank();
+      assertStep(opponentRank?.isServer === true && opponentRank?.user?.username === opponentName, 'authority opponent rank did not come from Node backend', opponentRank);
+      const opponentUpload = await PVPService.uploadSnapshot({
+        realm,
+        powerScore: 1740,
+        data: {
+          me: { maxHp: 420, energy: 5, currEnergy: 5 },
+          deck: opponentDeck.map(id => ({ id })),
+          aiProfile: 'fortified',
+          deckArchetype: 'fortified',
+          ruleVersion: 'browser-authority-pvp',
+        },
+        personality: 'fortified',
+      });
+      assertStep(opponentUpload.success && opponentUpload.server === true, 'authority opponent defense upload failed', opponentUpload);
+
+      const reloginMain = await BackendClient.login(mainName, password);
+      assertStep(reloginMain.success, 'authority main relogin failed', reloginMain);
+      PVPService.currentRankData = null;
+      PVPService.clearActiveMatch?.();
+      PVPService.loadEconomyState?.();
+      const mainRankBefore = await PVPService.syncRank();
+      const economyBefore = await BackendClient.getPvpEconomy();
+      assertStep(mainRankBefore?.isServer === true && mainRankBefore?.user?.username === mainName, 'authority main rank before match failed', mainRankBefore);
+      assertStep(economyBefore.success && Number.isFinite(Number(economyBefore.wallet?.coins)), 'authority economy before match failed', economyBefore);
+      const match = await PVPService.findOpponent(mainRankBefore.score, realm, {
+        preferredRank: opponentRank,
+        allowPractice: false,
+      });
+      const ticket = match?.opponent?.matchTicket || '';
+      const opponentDeckIds = Array.isArray(match?.opponent?.battleData?.deck)
+        ? match.opponent.battleData.deck.map(card => card?.id || '')
+        : [];
+      assertStep(match?.success && match?.opponent?.rank?.user?.username === opponentName, 'authority server matchmaking did not return requested opponent', match);
+      assertStep(PVPService.activeMatch?.serverMatch === true && PVPService.activeMatch?.localPractice !== true, 'authority active match was not a server match', PVPService.activeMatch);
+      assertStep(ticket && !ticket.startsWith('practice:'), 'authority matchmaking returned a practice ticket', { ticket });
+      assertStep(opponentDeckIds.includes('mirrorWall'), 'authority matchmaking did not return opponent battle data', opponentDeckIds);
+
+      const settlement = await PVPService.reportMatchResult(true, match.opponent.rank, ticket);
+      assertStep(settlement && settlement.rejected !== true && Number(settlement.delta) > 0 && Number(settlement.coinsAwarded) > 0, 'authority PVPService server settlement failed', settlement);
+      const rankAfter = await BackendClient.getPvpRank();
+      const economyAfter = await BackendClient.getPvpEconomy();
+      const localWallet = PVPService.getWalletSummary?.();
+      assertStep(rankAfter.success && rankAfter.rank?.score === settlement.newRating && rankAfter.rank?.wins === (mainRankBefore.wins || 0) + 1, 'authority server rank did not match PVPService settlement', { rankAfter, settlement, mainRankBefore });
+      assertStep(economyAfter.success && economyAfter.wallet?.coins === settlement.wallet?.coins, 'authority economy read did not match settlement wallet', { economyAfter, settlement });
+      assertStep(localWallet?.coins === economyAfter.wallet?.coins, 'authority local PVP economy snapshot diverged from server wallet', { localWallet, economyAfter });
+      assertStep(economyAfter.wallet.coins === economyBefore.wallet.coins + settlement.coinsAwarded, 'authority settlement appears to have double-awarded or missed coins', { economyBefore, economyAfter, settlement });
+
+      return {
+        mainName,
+        opponentName,
+        realm,
+        matchedOpponentName: match.opponent.rank.user.username,
+        serverMatch: PVPService.activeMatch == null,
+        matchTicket: ticket,
+        opponentDeckIds,
+        scoreBefore: mainRankBefore.score,
+        scoreAfter: rankAfter.rank.score,
+        winsBefore: mainRankBefore.wins || 0,
+        winsAfter: rankAfter.rank.wins,
+        coinsBefore: economyBefore.wallet.coins,
+        coinsAfter: economyAfter.wallet.coins,
+        coinsAwarded: settlement.coinsAwarded,
+        localWalletCoins: localWallet?.coins,
+        settlement,
+      };
+    }, { runId: authorityRunId, password, realm });
+
+    await safeAuditScreenshot(page, path.join(outDir, 'browser-backend-pvp-authoritative-smoke.png'), 'browser_backend_pvp_authoritative_smoke', {
+      fullPage: false,
+      timeout: 8000,
+    });
+    return {
+      authorityApiUrl,
+      ...result,
+    };
+  } finally {
+    if (page) await page.close().catch(() => {});
+    await stopBackend(server);
+  }
+}
+
 let server = null;
 let browser = null;
 try {
@@ -599,6 +786,7 @@ try {
   page.on('pageerror', err => recordConsoleError(String(err)));
 
   const result = await runBrowserSmoke(page);
+  const authorityResult = await runAuthoritativePvpSettlementSmoke(browser);
   add(
     'browser BackendClient register/login/save/global/ghost/fetch chain reaches ghost duel battle UI',
     !!result.ghostBattleProbe?.battleScreenActive
@@ -641,9 +829,24 @@ try {
       && result.pvpProbe?.serverLossesBeforeSettlement === result.pvpProbe?.serverLossesAfterSettlement,
     JSON.stringify(result.pvpProbe || null)
   );
+  add(
+    'browser PVPService completes authoritative Node settlement when local test server allows client result',
+    authorityResult?.matchedOpponentName === authorityResult?.opponentName
+      && authorityResult?.matchTicket
+      && !authorityResult.matchTicket.startsWith('practice:')
+      && Array.isArray(authorityResult?.opponentDeckIds)
+      && authorityResult.opponentDeckIds.includes('mirrorWall')
+      && Number(authorityResult?.scoreAfter) > Number(authorityResult?.scoreBefore)
+      && Number(authorityResult?.winsAfter) === Number(authorityResult?.winsBefore) + 1
+      && Number(authorityResult?.coinsAwarded) > 0
+      && Number(authorityResult?.coinsAfter) === Number(authorityResult?.coinsBefore) + Number(authorityResult?.coinsAwarded)
+      && Number(authorityResult?.localWalletCoins) === Number(authorityResult?.coinsAfter),
+    JSON.stringify(authorityResult || null)
+  );
 } catch (error) {
   add('browser BackendClient register/login/save/global/ghost/fetch chain reaches ghost duel battle UI', false, error?.message || String(error));
   add('browser PVPService uses Node backend rank defense matchmaking and local authority-gate settlement fallback', false, error?.message || String(error));
+  add('browser PVPService completes authoritative Node settlement when local test server allows client result', false, error?.message || String(error));
 } finally {
   if (browser) await browser.close().catch(() => {});
   await stopBackend(server);

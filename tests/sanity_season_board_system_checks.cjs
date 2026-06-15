@@ -2532,6 +2532,22 @@ function loadFile(ctx, filePath) {
       && !!debtBoard.debtPack?.occupiedMandateTaskId,
     `ranking debt board should reserve a mandate strong slot for debt clearing, got ${JSON.stringify(debtBoard?.debtPack)}`
   );
+  const debtMandate = debtGame.getHeavenlyMandateExpeditionSnapshot();
+  assert(
+    debtMandate?.focusTask?.source === 'seasonDebtPack'
+      && debtMandate.focusTask.occupiesStrongSlot === true
+      && debtMandate.focusTask.id === debtBoard.debtPack?.occupiedMandateTaskId
+      && debtMandate.nextTask?.id === debtMandate.focusTask.id
+      && debtMandate.lanes
+        ?.flatMap((lane) => lane.tasks || [])
+        ?.some((task) => task.id === debtMandate.focusTask.id && task.occupiesStrongSlot),
+    `debt mandate should focus the debt-clearing strong slot, got ${JSON.stringify({
+      focusTask: debtMandate?.focusTask,
+      nextTask: debtMandate?.nextTask,
+      debtPack: debtBoard?.debtPack,
+      lanes: debtMandate?.lanes
+    })}`
+  );
   const repairedDebtBoard = debtGame.normalizeSeasonBoardSnapshot({
     ...debtBoard,
     debtPack: {
@@ -2885,6 +2901,66 @@ function loadFile(ctx, filePath) {
       && clearedDebtBoard.verificationArchive?.latestEntry?.actionType === 'screen'
       && clearedDebtBoard.verificationArchive?.latestEntry?.actionValue === 'map-screen',
     `debt-clear writeback should surface an endless-followup archive entry with mirrored verdict metadata, got ${JSON.stringify(clearedDebtBoard?.verificationArchive)}`
+  );
+
+  resetStorages();
+  const slimDebtGame = createGame();
+  const slimDebtOpenedAt = findWeeksAgoTimestamp(slimDebtGame, 1);
+  const slimDebtSlate = buildSlate('season_board_slim_debt_pack', slimDebtOpenedAt, {
+    ratingLabel: '留痕待补',
+    ratingTone: 'selected',
+    score: 204
+  });
+  slimDebtGame.runSlateArchive = slimDebtGame.normalizeRunSlateArchive([slimDebtSlate]);
+  slimDebtGame.persistRunSlateArchive();
+  slimDebtGame.sanctumAgendaState = slimDebtGame.normalizeSanctumAgendaState({
+    lastResolved: {
+      agendaId: 'season_board_slim_debt_agenda',
+      icon: '🧮',
+      name: '镜债校卷',
+      sourceRunId: slimDebtSlate.id,
+      sourceTitle: '镜债试锋',
+      themeKey: 'oracle',
+      themeLabel: '推演控场',
+      ratingLabel: '留痕待补',
+      ratingTone: 'selected',
+      selectedContractLabel: '镜债锁线',
+      contractResolved: true,
+      contractSuccess: false,
+      contractResolutionLine: '锁线契约：镜债锁线未兑现 · 契押：🔮 1',
+      outcome: 'failed',
+      outcomeLabel: '研究未成',
+      summaryLine: '镜债校卷没有结成，留下了一笔待清的研究债账。',
+      recoveryEligible: true,
+      recoveryLine: '洞府已回收一部分残卷，但下一轮要优先补这笔镜债。',
+      recoveryHintLine: '先去高压环境补一轮镜债验证，再决定要不要继续冲榜。',
+      rewardTrackId: 'observatory',
+      rewardTrackName: '命盘档案室',
+      rewardTrackIcon: '🔭',
+      updatedAt: slimDebtOpenedAt
+    },
+    history: [],
+    totalCompleted: 0,
+    totalFailed: 1
+  });
+  const slimDebtEndlessState = slimDebtGame.ensureEndlessState();
+  slimDebtEndlessState.currentCycle = 1;
+  slimDebtEndlessState.seasonWeekTag = slimDebtGame.getHeavenlyMandateWeekMeta().weekTag;
+  slimDebtEndlessState.seasonCycleClears = 1;
+  slimDebtEndlessState.seasonScore = 128;
+  const slimDebtBoard = slimDebtGame.getSeasonBoardSnapshot();
+  const slimDebtMandate = slimDebtGame.getHeavenlyMandateExpeditionSnapshot();
+  assert(
+    slimDebtBoard.debtPack?.occupiesStrongSlot
+      && slimDebtMandate?.focusTask?.source === 'seasonDebtPack'
+      && slimDebtMandate.focusTask.occupiesStrongSlot === true
+      && slimDebtMandate.focusTask.id === slimDebtBoard.debtPack?.occupiedMandateTaskId,
+    `slim debt mandate should focus the debt-clearing strong slot without extra training focus, got ${JSON.stringify({
+      boardDebtPack: slimDebtBoard?.debtPack,
+      boardNextTask: slimDebtBoard?.nextTask,
+      mandateFocusTask: slimDebtMandate?.focusTask,
+      mandateLanes: slimDebtMandate?.lanes
+    })}`
   );
 
   resetStorages();

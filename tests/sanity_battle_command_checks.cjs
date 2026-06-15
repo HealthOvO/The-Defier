@@ -88,7 +88,14 @@ function makePlayer() {
           tier: 1,
           tierLabel: '第一阶',
           category: '风险',
-          summary: '以风险换高压收益。'
+          summary: '以风险换高压收益。',
+          risk: '误判会让血线承压。',
+          routeHint: '偏好精英与试炼',
+          buildFit: '适合高压抢节奏构筑。',
+          counterplay: '先留护盾，再把誓约收益兑现成收束窗口。',
+          uiMeta: {
+            readableCue: '誓约收益要在前两拍兑现。'
+          }
         }
       ];
     },
@@ -277,6 +284,57 @@ function makePlayer() {
   assert(systemState.stripItems.length >= 6, 'battle system state should include all readability system entries');
   assert(systemState.destiny && systemState.destiny.name === '试作命格', 'battle system state should expose current destiny');
   assert(systemState.vows && systemState.vows.count === 1, 'battle system state should expose current vows');
+  assert(systemState.vowReadable && systemState.vowReadable.count === 1, 'battle system state should expose readable vow summary');
+  assert(systemState.vowReadable.active[0].summary === '以风险换高压收益。', 'readable vow summary should keep tier summary');
+  assert(systemState.vowReadable.active[0].risk === '误判会让血线承压。', 'readable vow summary should keep risk line');
+  assert(systemState.vowReadable.active[0].counterplay === '先留护盾，再把誓约收益兑现成收束窗口。', 'readable vow summary should keep counterplay line');
+  assert(systemState.vowReadable.active[0].readableCue === '誓约收益要在前两拍兑现。', 'readable vow summary should keep player cue');
+  const vowStrip = systemState.stripItems.find(item => item && item.id === 'vows');
+  assert(vowStrip && /收益：以风险换高压收益/.test(vowStrip.detail), 'vow HUD detail should include benefit summary');
+  assert(vowStrip && /赌注：误判会让血线承压/.test(vowStrip.detail), 'vow HUD detail should include risk summary');
+  assert(vowStrip && /对策：先留护盾/.test(vowStrip.detail), 'vow HUD detail should include counterplay summary');
+
+  battle.player.runVows = [{ id: 'audit_vow', tier: 1 }, { id: 'audit_vow_two', tier: 1 }];
+  battle.player.getRunVowMetas = () => [
+    {
+      id: 'audit_vow',
+      name: '破界誓',
+      icon: '✧',
+      tier: 1,
+      tierLabel: '第一阶',
+      category: '风险',
+      summary: '以风险换高压收益。',
+      risk: '误判会让血线承压。',
+      routeHint: '偏好精英与试炼',
+      buildFit: '适合高压抢节奏构筑。',
+      counterplay: '先留护盾，再把誓约收益兑现成收束窗口。',
+      uiMeta: { readableCue: '誓约收益要在前两拍兑现。' }
+    },
+    {
+      id: 'audit_vow_two',
+      name: '星债誓',
+      icon: '✦',
+      tier: 1,
+      tierLabel: '初契',
+      category: '债务',
+      summary: '预支首拍后续还债。',
+      risk: '商店会变贵。',
+      routeHint: '偏好观星与裂隙',
+      buildFit: '适合首拍抢节奏构筑。',
+      counterplay: '先把预支收益转换成击杀窗口。',
+      uiMeta: { readableCue: '还债前别乱买。' }
+    }
+  ];
+  const dualVowState = battle.getBattleSystemDisplayState();
+  const dualVowStrip = dualVowState.stripItems.find(item => item && item.id === 'vows');
+  assert(dualVowState.vowReadable.count === 2, 'dual vow state should expose both active vows');
+  assert(dualVowState.vowReadable.active[0].id === 'audit_vow', 'dual vow state should preserve lead vow order');
+  assert(dualVowState.vowReadable.active[1].id === 'audit_vow_two', 'dual vow state should preserve secondary vow order');
+  assert(dualVowStrip.value === '破界誓 +1', 'dual vow strip should summarize extra active vow count');
+  assert(/第一阶 · 2\/2 条进行中/.test(dualVowStrip.meta), 'dual vow strip should show two active vows in meta');
+  assert(/收益：以风险换高压收益/.test(dualVowStrip.detail), 'dual vow strip should keep lead vow readable detail');
+  assert(!/预支首拍后续还债/.test(dualVowStrip.detail), 'dual vow strip detail should not mix secondary vow into lead summary');
+
   assert(systemState.spirit && systemState.spirit.name === '霜螭', 'battle system state should expose current spirit');
   assert(systemState.chapter && typeof systemState.chapter === 'object', 'battle system state should expose chapter wrapper');
   assert(systemState.lawWeave && systemState.lawWeave.comboLabel === '雷火崩坏', 'battle system state should resolve current law weave combo');

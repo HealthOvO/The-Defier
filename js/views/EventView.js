@@ -208,6 +208,7 @@ export class EventView {
     challenges.forEach(challenge => {
       const conditionParts = [];
       if (challenge.conditions?.maxTurns > 0) conditionParts.push(`${challenge.conditions.maxTurns} 回合内取胜`);
+      if (challenge.conditions?.maxCardsPlayed > 0) conditionParts.push(`最多打出 ${challenge.conditions.maxCardsPlayed} 张牌`);
       if (challenge.conditions?.noDamage) conditionParts.push('本场不可失去生命');
       const enemyParts = [];
       if (challenge.enemyHpMul > 1) enemyParts.push(`敌方生命 x${challenge.enemyHpMul.toFixed(2)}`);

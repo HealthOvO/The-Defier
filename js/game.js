@@ -597,6 +597,7 @@ export class Game {
       } : null,
       resultOverlay: pvpResultReview
     } : null;
+    const battleSystemDisplay = isBattleMode && this.battle && typeof this.battle.getBattleSystemDisplayState === 'function' ? this.battle.getBattleSystemDisplayState() : null;
     const payload = {
       coordSystem: 'ui-screen-space, origin top-left, +x right, +y down',
       mode,
@@ -727,7 +728,8 @@ export class Game {
           } : null
         } : null,
         chapterBattlefield: typeof this.battle.getChapterBattlefieldDisplayState === 'function' ? this.battle.getChapterBattlefieldDisplayState() : null,
-        systemsHud: typeof this.battle.getBattleSystemDisplayState === 'function' ? this.battle.getBattleSystemDisplayState() : null,
+        systemsHud: battleSystemDisplay,
+        vowReadable: battleSystemDisplay?.vowReadable || battleSystemDisplay?.vows?.readable || null,
         bossAct: typeof this.battle.getBossActDisplayState === 'function' ? (() => {
           const display = this.battle.getBossActDisplayState();
           if (!display || !display.state || !display.act) return null;
@@ -2142,6 +2144,7 @@ export class Game {
       if (Number(effects.firstTurnDraw) > 0) tags.push(`首回合抽牌 +${Math.floor(Number(effects.firstTurnDraw) || 0)}`);
       if (Number(effects.firstTurnEnergy) > 0) tags.push(`首回合灵力 +${Math.floor(Number(effects.firstTurnEnergy) || 0)}`);
       if (Number(effects.openingBlock) > 0) tags.push(`开场护盾 +${Math.floor(Number(effects.openingBlock) || 0)}`);
+      if (Number(effects.battleStartEnemyWeakAll) > 0) tags.push(`敌方开场虚弱 +${Math.floor(Number(effects.battleStartEnemyWeakAll) || 0)}`);
       if (Number(effects.firstAttackBonusPerBattle) > 0) tags.push(`首击增伤 +${Math.floor(Number(effects.firstAttackBonusPerBattle) || 0)}`);
       if (Number(effects.onKillHeal) > 0) tags.push(`击杀回复 ${Math.floor(Number(effects.onKillHeal) || 0)}`);
       if (Number(effects.blockGainMultiplier) > 0) tags.push(`护盾效率 +${Math.round(Number(effects.blockGainMultiplier) * 100)}%`);
@@ -5740,6 +5743,43 @@ export class Game {
         value: 1
       }
     }, {
+      id: 'cardLimit',
+      name: '剑心限令',
+      icon: '🗡️',
+      desc: '最多打出 6 张牌结束战斗。敌方携带破绽压制，要求你用高价值动作收束。',
+      conditions: {
+        maxCardsPlayed: 6
+      },
+      rewardMultiplier: 1.62,
+      reward: 'rare_card',
+      bonusGold: 70 + realm * 7,
+      enemyHpMul: 1.16,
+      enemyAtkMul: 1.1,
+      enemyOpeningBlock: 8,
+      enemyDebuff: {
+        type: 'vulnerable',
+        value: 1
+      }
+    }, {
+      id: 'treasureHunt',
+      name: '秘宝回响',
+      icon: '🏺',
+      desc: '6 回合内且最多打出 8 张牌完成试炼。敌方护宝阵更厚，胜利后赐一件法宝。',
+      conditions: {
+        maxTurns: 6,
+        maxCardsPlayed: 8
+      },
+      rewardMultiplier: 1.48,
+      reward: 'treasure',
+      bonusGold: 55 + realm * 6,
+      enemyHpMul: 1.2,
+      enemyAtkMul: 1.08,
+      enemyOpeningBlock: 16,
+      enemyDebuff: {
+        type: 'weak',
+        value: 1
+      }
+    }, {
       id: 'oathMirror',
       name: '双誓并压',
       icon: '☯️',
@@ -5764,6 +5804,7 @@ export class Game {
     if (!config || typeof config !== 'object') return null;
     const conditions = config.conditions && typeof config.conditions === 'object' ? config.conditions : {};
     const maxTurns = Math.max(0, Math.floor(Number(config.maxTurns != null ? config.maxTurns : config.rounds != null ? config.rounds : conditions.maxTurns) || 0));
+    const maxCardsPlayed = Math.max(0, Math.floor(Number(config.maxCardsPlayed != null ? config.maxCardsPlayed : conditions.maxCardsPlayed) || 0));
     const noDamage = !!(config.noDamage != null ? config.noDamage : conditions.noDamage);
     const normalized = {
       id: String(config.id || config.trialType || 'trialChallenge'),
@@ -5772,6 +5813,7 @@ export class Game {
       desc: String(config.desc || config.description || '通过额外条件换取更高回报。'),
       conditions: {
         maxTurns,
+        maxCardsPlayed,
         noDamage
       },
       rounds: maxTurns,
@@ -5802,6 +5844,12 @@ export class Game {
     const conditions = trial.conditions && typeof trial.conditions === 'object' ? trial.conditions : {};
     if (Number(conditions.maxTurns) > 0 && this.battle && Number(this.battle.turnNumber) > Number(conditions.maxTurns)) {
       return false;
+    }
+    if (Number(conditions.maxCardsPlayed) > 0 && this.battle) {
+      const played = Math.max(0, Math.floor(Number(this.battle.cardsPlayedThisBattle != null ? this.battle.cardsPlayedThisBattle : this.battle.cardsPlayedThisTurn) || 0));
+      if (played > Number(conditions.maxCardsPlayed)) {
+        return false;
+      }
     }
     if (conditions.noDamage && this.battle && this.battle.playerTookDamage) {
       return false;
@@ -5839,6 +5887,30 @@ export class Game {
       if (card && typeof this.player.addCardToDeck === 'function') {
         this.player.addCardToDeck(card);
         rewardLines.push(`获得稀有卡：${card.name}`);
+      }
+    } else if (trial.reward === 'treasure') {
+      let treasure = typeof this.getWeightedRandomTreasure === 'function' ? this.getWeightedRandomTreasure() : null;
+      if (!treasure && typeof TREASURES !== 'undefined' && TREASURES) {
+        const pool = Object.values(TREASURES).filter(item => item && (!this.player?.hasTreasure || !this.player.hasTreasure(item.id)));
+        treasure = pool[0] || null;
+      }
+      if (treasure && treasure.id && typeof this.player?.addTreasure === 'function') {
+        const beforeCount = Array.isArray(this.player.collectedTreasures) ? this.player.collectedTreasures.length : 0;
+        const beforeGold = Math.max(0, Math.floor(Number(this.player.gold) || 0));
+        const addResult = this.player.addTreasure(treasure.id);
+        const afterCount = Array.isArray(this.player.collectedTreasures) ? this.player.collectedTreasures.length : beforeCount;
+        if (afterCount > beforeCount || addResult === true) {
+          rewardLines.push(`获得法宝：${treasure.name || treasure.id}`);
+        } else {
+          const afterGold = Math.max(0, Math.floor(Number(this.player.gold) || 0));
+          if (afterGold <= beforeGold) {
+            this.player.gold += 50;
+          }
+          rewardLines.push('法宝回响转化为 50 灵石');
+        }
+      } else {
+        this.player.gold += 120;
+        rewardLines.push('法宝已尽，转化为 120 灵石');
       }
     }
     return {

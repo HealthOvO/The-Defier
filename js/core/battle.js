@@ -740,6 +740,7 @@ export class Battle {
     this.pendingLifeSteal = 0;
     this.lastPlayerCardSnapshot = null;
     this.cardsPlayedThisTurn = 0;
+    this.cardsPlayedThisBattle = 0;
     this.playerAttackedThisTurn = false;
     this.activeCardActionId = 0;
     this.activeEncounterTheme = null;
@@ -2067,6 +2068,46 @@ export class Battle {
       leadSet: activeSets[0] || null
     };
   }
+  resolveBattleVowReadableState(vows = null) {
+    const source = Array.isArray(vows) ? vows : this.player && typeof this.player.getRunVowMetas === 'function' ? this.player.getRunVowMetas() : [];
+    const active = source.filter(Boolean).map(vow => {
+      const uiMeta = vow.uiMeta && typeof vow.uiMeta === 'object' ? vow.uiMeta : {};
+      return {
+        id: String(vow.id || ''),
+        name: String(vow.name || vow.id || '誓约'),
+        icon: String(vow.icon || '✧'),
+        tier: Math.max(1, Math.floor(Number(vow.tier) || 1)),
+        tierLabel: String(vow.tierLabel || `第 ${Math.max(1, Math.floor(Number(vow.tier) || 1))} 阶`),
+        category: String(vow.category || '誓约'),
+        summary: String(vow.summary || vow.description || ''),
+        risk: String(vow.risk || ''),
+        routeHint: String(vow.routeHint || ''),
+        buildFit: String(vow.buildFit || ''),
+        counterplay: String(vow.counterplay || ''),
+        readableCue: String(vow.readableCue || uiMeta.readableCue || ''),
+        tone: String(vow.tone || uiMeta.tone || (vow.category === '赌博' ? 'warning' : 'oath'))
+      };
+    });
+    const lead = active[0] || null;
+    const detailParts = lead ? [
+      lead.summary ? `收益：${lead.summary}` : '',
+      lead.risk ? `赌注：${lead.risk}` : '',
+      lead.counterplay ? `对策：${lead.counterplay}` : '',
+      lead.readableCue ? `提示：${lead.readableCue}` : '',
+      lead.routeHint ? `路线：${lead.routeHint}` : ''
+    ].filter(Boolean) : [];
+    return {
+      count: active.length,
+      lead,
+      active,
+      summaryLine: lead?.summary || '',
+      riskLine: lead?.risk || '',
+      counterplayLine: lead?.counterplay || '',
+      cueLine: lead?.readableCue || '',
+      routeLine: lead?.routeHint || '',
+      detailLine: detailParts.join(' / ')
+    };
+  }
   getBattleSystemDisplayState() {
     const runPath = this.player && typeof this.player.getRunPathMeta === 'function' ? this.player.getRunPathMeta() : null;
     const destiny = this.player && typeof this.player.getRunDestinyMeta === 'function' ? this.player.getRunDestinyMeta() : null;
@@ -2079,6 +2120,7 @@ export class Battle {
     const pathId = String(this.player?.fateRing?.path || '');
     const pathMeta = typeof FATE_RING !== 'undefined' && FATE_RING && FATE_RING.paths && pathId && FATE_RING.paths[pathId] ? FATE_RING.paths[pathId] : null;
     const treasure = this.getBattleHudTreasureSetState();
+    const vowReadable = this.resolveBattleVowReadableState(vows);
     const vowNames = vows.map(vow => `${vow.icon || '✧'} ${vow.name || vow.id || '誓约'}`);
     const resonanceNames = activeResonances.map(entry => entry.name || entry.id || '法则共鸣');
     const loadedLawNames = loadedLaws.map(law => `${law.icon || '📜'} ${law.name || law.id || '法则'}`);
@@ -2092,7 +2134,7 @@ export class Battle {
     const destinyValue = destiny?.name || '未定';
     const destinyMeta = destiny ? `${destiny.tierLabel || `T${Math.max(1, Math.floor(Number(destiny.tier) || 1))}`} · ${destiny.category || '命格'}` : '本局尚未选择';
     const vowValue = vows.length <= 0 ? '无誓约' : vows.length === 1 ? vows[0].name || vows[0].id || '誓约' : `${vows[0].name || vows[0].id || '誓约'} +${Math.max(0, vows.length - 1)}`;
-    const vowMeta = vows.length > 0 ? `${vows.length}/2 条进行中` : '尚未签订';
+    const vowMeta = vows.length > 0 ? `${vowReadable.lead?.tierLabel || `${vows.length}/2 条进行中`} · ${vows.length}/2 条进行中` : '尚未签订';
     const spiritValue = spirit?.name || '未缔约';
     const spiritMeta = spirit ? `${spirit.chargeText}${spirit.ready ? ' · 可释放' : ' · 蓄能中'}` : '当前无灵契';
     const lawValue = activeResonances.length > 0 ? `${activeResonances[0].name || activeResonances[0].id || '法则共鸣'}${activeResonances.length > 1 ? ` +${activeResonances.length - 1}` : ''}` : loadedLaws.length > 0 ? `${loadedLaws[0].name || loadedLaws[0].id || '法则'}${loadedLaws.length > 1 ? ` +${loadedLaws.length - 1}` : ''}` : '尚未装配';
@@ -2121,8 +2163,8 @@ export class Battle {
       icon: vows[0]?.icon || '✧',
       value: vowValue,
       meta: vowMeta,
-      detail: vows.length > 0 ? vowNames.join(' / ') : '当前没有誓约代价与收益。',
-      tone: vows.length > 0 ? vows.some(vow => vow?.category === '赌博') ? 'warning' : 'oath' : 'muted'
+      detail: vows.length > 0 ? vowReadable.detailLine || vowNames.join(' / ') : '当前没有誓约代价与收益。',
+      tone: vows.length > 0 ? vowReadable.lead?.tone || (vows.some(vow => vow?.category === '赌博') ? 'warning' : 'oath') : 'muted'
     }, {
       id: 'spirit',
       label: '灵契',
@@ -2161,8 +2203,10 @@ export class Battle {
       destiny,
       vows: {
         count: vows.length,
-        items: vows
+        items: vows,
+        readable: vowReadable
       },
+      vowReadable,
       spirit,
       chapter: {
         chapterIndex: chapterField?.chapterIndex || chapter?.chapterIndex || 0,
@@ -3229,6 +3273,17 @@ export class Battle {
       cooldown: 3,
       desc: '锁定高威胁目标并叠加破绽。'
     }];
+    const activeVows = this.player && typeof this.player.getRunVowMetas === 'function' ? this.player.getRunVowMetas() : [];
+    if (activeVows.some(vow => vow && vow.id === 'realmBreak')) {
+      baseCatalog.push({
+        id: 'realm_break_order',
+        icon: '⚡',
+        name: '破界裂令',
+        cost: 3,
+        cooldown: 2,
+        desc: '破界誓专属：突袭最低血目标，回收 1 点指令槽；手牌过薄时抽 1 张。'
+      });
+    }
     if (this.game && typeof this.game.isEndlessActive === 'function' && this.game.isEndlessActive()) {
       baseCatalog.push({
         id: 'rift_surge_order',
@@ -3289,6 +3344,11 @@ export class Battle {
     }));
     const loadout = [];
     const maxCommands = Math.min(endlessActive ? 4 : 3, pool.length);
+    const forcedVowIndex = pool.findIndex(item => item && item.id === 'realm_break_order');
+    if (forcedVowIndex >= 0 && loadout.length < maxCommands) {
+      loadout.push(pool[forcedVowIndex]);
+      pool.splice(forcedVowIndex, 1);
+    }
     if (endlessActive) {
       const forcedEndlessIds = ['rift_surge_order'];
       forcedEndlessIds.forEach(id => {
@@ -4001,6 +4061,37 @@ export class Battle {
       await Utils.sleep(160);
       return true;
     }
+    if (command.id === 'realm_break_order') {
+      const aliveEnemies = this.enemies.filter(enemy => enemy && enemy.currentHp > 0);
+      if (aliveEnemies.length === 0) return false;
+      let target = aliveEnemies[0];
+      for (let i = 1; i < aliveEnemies.length; i += 1) {
+        const challengerHp = Math.max(0, Math.floor(Number(aliveEnemies[i]?.currentHp) || 0));
+        const targetHp = Math.max(0, Math.floor(Number(target?.currentHp) || 0));
+        if (challengerHp < targetHp) target = aliveEnemies[i];
+      }
+      const targetIndex = this.enemies.indexOf(target);
+      const thinHand = Array.isArray(this.player?.hand) && this.player.hand.length <= 1;
+      const strike = Math.max(9, Math.floor((10 + this.turnNumber * 0.9) * scale));
+      target.buffs = target.buffs || {};
+      target.buffs.mark = Math.max(0, Math.floor(Number(target.buffs.mark) || 0)) + 1;
+      const damage = this.dealDamageToEnemy(target, strike, 'thunder');
+      const refund = this.gainBattleCommandPoints(1, 'realmBreak');
+      let drew = 0;
+      if (thinHand && typeof this.player?.drawCards === 'function') {
+        const beforeHand = Array.isArray(this.player.hand) ? this.player.hand.length : 0;
+        this.player.drawCards(1);
+        drew = Math.max(0, (Array.isArray(this.player.hand) ? this.player.hand.length : 0) - beforeHand);
+      }
+      const enemyEl = document.querySelector(`.enemy[data-index="${targetIndex}"]`);
+      if (enemyEl) {
+        Utils.addShakeEffect(enemyEl, damage >= 16 ? 'heavy' : 'medium');
+        Utils.showFloatingNumber(enemyEl, damage, 'damage');
+      }
+      Utils.showBattleLog(`破界裂令：突袭 ${target.name} 造成 ${Math.max(0, damage)} 伤害并叠加 1 层破绽` + `${refund > 0 ? `，回收指令槽 +${refund}` : ''}` + `${drew > 0 ? '，薄手补牌 +1' : ''}`);
+      await Utils.sleep(150);
+      return true;
+    }
     if (command.id === 'rift_surge_order') {
       const aliveEnemies = this.enemies.filter(enemy => enemy && enemy.currentHp > 0);
       if (aliveEnemies.length === 0) return false;
@@ -4684,6 +4775,7 @@ export class Battle {
     this.playerTookDamage = false; // For Trial Challenge
     this.player.resurrectCount = 0; // Reset resurrection counter
     this.cardsPlayedThisTurn = 0;
+    this.cardsPlayedThisBattle = 0;
     this.playerAttackedThisTurn = false;
     this.playerFirstAttackBoostUsed = false;
     this.turnStartTime = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
@@ -4701,6 +4793,7 @@ export class Battle {
 
     // 玩家回合开始
     this.player.startTurn();
+    this.applyRunVowBattleStart();
     this.applySpiritCompanionBattleStart();
     if (this.player.archetypeResonance) {
       const res = this.player.archetypeResonance;
@@ -6450,6 +6543,8 @@ export class Battle {
       if (typeof this.player?.rememberPlayedCardForEcho === 'function') {
         this.player.rememberPlayedCardForEcho(this.lastPlayerCardSnapshot, previousCardSnapshot);
       }
+
+      this.cardsPlayedThisBattle = Math.max(0, Math.floor(Number(this.cardsPlayedThisBattle) || 0)) + 1;
 
       // 检查战斗是否结束
       if (this.checkBattleEnd()) return;
@@ -8781,6 +8876,19 @@ export class Battle {
       applied = true;
     }
     return applied;
+  }
+  applyRunVowBattleStart() {
+    if (!this.player || typeof this.player.getRunVowEffects !== 'function') return false;
+    const effects = this.player.getRunVowEffects();
+    const weakAll = Math.max(0, Math.floor(Number(effects.battleStartEnemyWeakAll) || 0));
+    if (weakAll <= 0) return false;
+    this.enemies.forEach(enemy => {
+      if (!enemy || enemy.currentHp <= 0) return;
+      enemy.buffs = enemy.buffs || {};
+      enemy.buffs.weak = (enemy.buffs.weak || 0) + weakAll;
+    });
+    Utils.showBattleLog(`誓约霜封：全体敌人虚弱 +${weakAll}`);
+    return true;
   }
   handleSpiritCompanionCardPlayed(card = null) {
     if (!this.player || typeof this.player.getSpiritCompanionMeta !== 'function') return false;

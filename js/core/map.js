@@ -2768,6 +2768,9 @@ export class GameMap {
       if (Number(armedTrial?.conditions?.maxTurns || 0) > 0) {
         conditionLines.push(`${armedTrial.conditions.maxTurns} 回合内取胜`);
       }
+      if (Number(armedTrial?.conditions?.maxCardsPlayed || 0) > 0) {
+        conditionLines.push(`最多打出 ${armedTrial.conditions.maxCardsPlayed} 张牌`);
+      }
       if (armedTrial?.conditions?.noDamage) {
         conditionLines.push('本场不可失去生命');
       }

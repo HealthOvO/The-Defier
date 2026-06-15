@@ -4853,6 +4853,21 @@ function rectObj(rect) {
     const currentWeekTag = typeof game.getHeavenlyMandateWeekMeta === 'function'
       ? String(game.getHeavenlyMandateWeekMeta().weekTag || '').trim()
       : '';
+    const findPreviousMandateWeekTimestamp = () => {
+      if (typeof game.getHeavenlyMandateWeekMeta !== 'function') {
+        return Date.now() - (7 * 24 * 60 * 60 * 1000);
+      }
+      let cursor = Date.now();
+      let lastTag = String(game.getHeavenlyMandateWeekMeta(cursor).weekTag || '').trim();
+      for (let day = 0; day < 14; day += 1) {
+        cursor -= 24 * 60 * 60 * 1000;
+        const nextTag = String(game.getHeavenlyMandateWeekMeta(cursor).weekTag || '').trim();
+        if (nextTag && nextTag !== lastTag) return cursor;
+        if (nextTag) lastTag = nextTag;
+      }
+      return Date.now() - (7 * 24 * 60 * 60 * 1000);
+    };
+    const debtOpenedAt = findPreviousMandateWeekTimestamp();
     const debtSlate = {
       id: 'audit_heavenly_mandate_debt_pack',
       chapterIndex: 5,
@@ -4868,7 +4883,7 @@ function rectObj(rect) {
         ratingTone: 'selected',
         trainingAdvice: '先把上一道押卷留下的债账补掉，再考虑冲更高压样本。'
       },
-      timestamp: Date.now() - (8 * 24 * 60 * 60 * 1000)
+      timestamp: debtOpenedAt
     };
     if (typeof game.normalizeRunSlateArchive === 'function') {
       game.runSlateArchive = game.normalizeRunSlateArchive([debtSlate]);
@@ -4916,7 +4931,8 @@ function rectObj(rect) {
           recoveryHintLine: '先去高压环境补一轮镜债验证，再决定要不要继续冲榜。',
           rewardTrackId: 'observatory',
           rewardTrackName: '命盘档案室',
-          rewardTrackIcon: '🔭'
+          rewardTrackIcon: '🔭',
+          updatedAt: debtOpenedAt
         },
         history: [],
         totalCompleted: 0,

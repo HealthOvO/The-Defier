@@ -37,6 +37,8 @@ const scenarios = [
   { id: 'map-screen-tools-toggle', root: '#map-screen', title: 'Map Tools Toggle' },
   { id: 'map-screen-expedition-intel-click', root: '#map-screen', title: 'Map Expedition Intel Clickability' },
   { id: 'battle-screen', root: '#battle-screen', title: 'Battle' },
+  { id: 'horizon-barter-modal', root: '#horizon-barter-modal', title: 'Horizon Barter Modal' },
+  { id: 'resonance-matrix-modal', root: '#resonance-matrix-modal', title: 'Resonance Matrix Modal' },
   { id: 'reward-screen', root: '#reward-screen', title: 'Reward' },
   { id: 'shop-screen', root: '#shop-screen', title: 'Shop' },
   { id: 'achievements-screen', root: '#achievements-screen', title: 'Achievements' },
@@ -44,6 +46,7 @@ const scenarios = [
   { id: 'game-over-screen', root: '#game-over-screen', title: 'Game Over' },
   { id: 'pvp-result-overlay', root: '#pvp-result-overlay', title: 'PVP Result Overlay' },
   { id: 'event-modal', root: '#event-modal', title: 'Event Modal' },
+  { id: 'endless-paranoia-modal', root: '#event-modal', title: 'Endless Paranoia Modal' },
   { id: 'remove-card-modal', root: '#remove-card-modal', title: 'Remove Card Modal' },
   { id: 'settings-modal', root: '#settings-modal', title: 'Settings Modal' },
   { id: 'auth-modal', root: '#auth-modal', title: 'Auth Modal' },
@@ -63,6 +66,11 @@ const scenarios = [
   { id: 'treasure-bag-alert-modal', root: '#generic-alert-modal', title: 'Treasure Bag Alert Stack' },
   { id: 'purification-modal', root: '#purification-modal', title: 'Purification Modal' },
 ];
+
+const realBattleResolverScenarios = new Set([
+  'horizon-barter-modal',
+  'resonance-matrix-modal',
+]);
 
 const findings = [];
 const consoleErrors = [];
@@ -90,6 +98,22 @@ function screenshotName(viewportId, scenarioId) {
 async function waitForPaint(page) {
   await page.waitForTimeout(120);
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+async function closeWithTimeout(closeFn, label, timeoutMs = 5000) {
+  let timer;
+  try {
+    await Promise.race([
+      closeFn(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} close timed out after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } catch (err) {
+    console.warn(`[frontend-layout] ${err?.message || String(err)}`);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function prepareScenario(page, scenarioId) {
@@ -129,8 +153,33 @@ async function prepareScenario(page, scenarioId) {
         description: '若本回合完成净化则抽牌，否则获得灵力，测试仓库卡片换行。',
       },
     ];
+    const auditLawSample = () => ({
+      id: 'layout_law_starlight',
+      name: '星衡归律',
+      icon: '✨',
+      rarity: 'legendary',
+      element: 'fire',
+      description: '每回合首次完成调序后获得护盾，并把下一张技能牌费用降低；用于检查法则详情弹窗在移动端的长文案、状态标签与关闭按钮。',
+      passive: {
+        type: 'damageBonus',
+        value: 4,
+      },
+      unlockCards: ['观星', '星轨改写'],
+    });
+    const isRealTreasureSample = (treasure) => {
+      if (!treasure || typeof treasure !== 'object') return false;
+      const name = String(treasure.name || '').trim();
+      const description = String(treasure.description || '').trim();
+      return name && name !== '法宝名称' && description.length >= 12;
+    };
+    const isRealLawSample = (law) => {
+      if (!law || typeof law !== 'object') return false;
+      const name = String(law.name || '').trim();
+      const description = String(law.description || '').trim();
+      return name && name !== '法则名称' && description.length >= 12 && !!law.passive?.type;
+    };
     const treasureSamples = () => {
-      const source = allTreasures();
+      const source = allTreasures().filter(isRealTreasureSample);
       const samples = source.length >= 4 ? source : auditTreasureSamples();
       return samples.map((treasure, index) => ({
         ...treasure,
@@ -145,7 +194,20 @@ async function prepareScenario(page, scenarioId) {
       if (modal.id === 'treasure-bag-modal') modal.style.display = 'none';
     };
 
-    const cleanup = () => {
+    const cleanup = async () => {
+      document.querySelectorAll('#horizon-barter-cancel, #resonance-matrix-cancel').forEach((button) => {
+        if (button instanceof HTMLButtonElement) button.click();
+      });
+      const pendingBattleCommandModal = window.__layoutPendingBattleCommandModal;
+      window.__layoutPendingBattleCommandModal = null;
+      if (pendingBattleCommandModal && typeof pendingBattleCommandModal.then === 'function') {
+        try {
+          await Promise.race([
+            pendingBattleCommandModal,
+            new Promise((resolve) => setTimeout(resolve, 250)),
+          ]);
+        } catch (_) {}
+      }
       document.querySelectorAll('.modal').forEach(deactivateModal);
       document.querySelectorAll('.modal-overlay').forEach((modal) => {
         modal.classList.remove('active');
@@ -243,6 +305,50 @@ async function prepareScenario(page, scenarioId) {
       }
     };
 
+    const runWithWebdriverDisabled = (callback) => {
+      const ownDescriptor = Object.getOwnPropertyDescriptor(navigator, 'webdriver');
+      const proto = Object.getPrototypeOf(navigator);
+      const protoDescriptor = proto ? Object.getOwnPropertyDescriptor(proto, 'webdriver') : null;
+      let overrideApplied = false;
+      try {
+        Object.defineProperty(navigator, 'webdriver', {
+          configurable: true,
+          get: () => false,
+        });
+        overrideApplied = true;
+      } catch (error) {
+        try {
+          if (proto) {
+            Object.defineProperty(proto, 'webdriver', {
+              configurable: true,
+              get: () => false,
+            });
+            overrideApplied = true;
+          }
+        } catch (_) {
+          overrideApplied = false;
+        }
+      }
+      try {
+        return { overrideApplied, result: callback() };
+      } finally {
+        if (overrideApplied) {
+          try {
+            if (ownDescriptor) {
+              Object.defineProperty(navigator, 'webdriver', ownDescriptor);
+            } else {
+              delete navigator.webdriver;
+              if (proto && protoDescriptor) Object.defineProperty(proto, 'webdriver', protoDescriptor);
+            }
+          } catch (_) {
+            try {
+              if (proto && protoDescriptor) Object.defineProperty(proto, 'webdriver', protoDescriptor);
+            } catch (_) {}
+          }
+        }
+      }
+    };
+
     const showCollectionSection = (section) => {
       ensureGame();
       if (typeof game.showCollection === 'function') game.showCollection(section);
@@ -257,9 +363,100 @@ async function prepareScenario(page, scenarioId) {
 
     const showRewardProbe = () => {
       ensureGame();
+      game.guestMode = true;
+      if (typeof game.startNewGame === 'function') game.startNewGame('linFeng');
+      if (typeof game.startRealm === 'function') game.startRealm(1, false);
+      if (typeof game.createDefaultSeasonVerificationState === 'function') {
+        game.seasonVerificationState = game.createDefaultSeasonVerificationState();
+      } else if (game.seasonVerificationState && typeof game.seasonVerificationState === 'object') {
+        game.seasonVerificationState.claimedLaneRewards = {};
+      }
+      game.player?.setRunPath?.('insight');
+      game.player?.setRunDestiny?.('rebelScale', 1);
       if (game.player) game.player.getStealBonus = () => 0;
       game.currentBattleNode = { type: 'elite', id: 880101, completed: false };
       game.stealAttempted = false;
+      const rewardLineageSlate = {
+        id: 'layout_reward_cta_probe',
+        chapterIndex: 6,
+        chapterName: '第 6 章·星镜归档',
+        endingId: 'alliance',
+        endingName: '星图合卷',
+        endingIcon: '🔭',
+        score: 256,
+        branchName: '观测锁线',
+        tags: ['课题·推演控场', '答卷·天象合卷'],
+        answerReview: {
+          ratingLabel: '天象合卷',
+          ratingTone: 'completed',
+          trainingAdvice: '继续沿观测锁线压路线贴合与控场节奏。',
+          highlightLine: '本章答卷已经压成可复盘的观测样本。',
+        },
+        practiceTopic: {
+          id: 'layout_reward_cta_topic',
+          sourceRecordId: 'layout_reward_cta_guide',
+          sourceTitle: '星镜试锋',
+          themeKey: 'oracle',
+          themeLabel: '推演控场',
+          routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+          compareHint: '对比观测收益、路线贴合与控场稳定。',
+          trainingTags: ['路线贴合', '控场稳定'],
+          goalLines: ['先走观星线再补事件收益'],
+        },
+        observatoryLink: {
+          sourceRecordId: 'layout_reward_cta_guide',
+          sourceTitle: '星镜试锋',
+          sourceThemeKey: 'oracle',
+          sourceThemeLabel: '推演控场',
+          routeFocusLine: '优先节点：观星 / 事件 / 裂隙',
+          compareHint: '对比观测收益、路线贴合与控场稳定。',
+          trainingTags: ['路线贴合', '控场稳定'],
+          drillObjective: '连续两次走观星相关节点并维持控场稳定。',
+        },
+        timestamp: Date.now(),
+      };
+      if (typeof game.normalizeRunSlateArchive === 'function') {
+        game.runSlateArchive = game.normalizeRunSlateArchive([rewardLineageSlate]);
+      } else {
+        game.runSlateArchive = [rewardLineageSlate];
+      }
+      if (typeof game.buildObservatoryTrainingFocusFromSlate === 'function' && typeof game.setObservatoryTrainingFocus === 'function') {
+        const focus = game.buildObservatoryTrainingFocusFromSlate(rewardLineageSlate);
+        if (focus) game.setObservatoryTrainingFocus(focus, { silent: true });
+      }
+      if (typeof game.buildRewardExpeditionMeta === 'function') {
+        game.lastExpeditionRewardMeta = game.buildRewardExpeditionMeta(rewardLineageSlate);
+      }
+      if (typeof game.getSeasonBoardSnapshot === 'function' && typeof game.normalizeSeasonBoardSnapshot === 'function') {
+        const originalGetSeasonBoardSnapshot = game.getSeasonBoardSnapshot.bind(game);
+        const rewardLaneBoard = originalGetSeasonBoardSnapshot({ latestSlate: rewardLineageSlate });
+        const completeLane = (lane) => ({
+          ...lane,
+          tasks: (Array.isArray(lane?.tasks) ? lane.tasks : []).map((task) => {
+            const target = Math.max(1, Math.floor(Number(task?.target) || 1));
+            return {
+              ...task,
+              progress: target,
+              target,
+              completed: true,
+              progressText: `${target}/${target}`,
+            };
+          }),
+        });
+        const rewardLaneBoardSource = rewardLaneBoard
+          ? {
+              ...rewardLaneBoard,
+              lanes: (rewardLaneBoard.lanes || []).map((lane) => lane.id === 'training' ? completeLane(lane) : lane),
+            }
+          : null;
+        if (rewardLaneBoardSource) {
+          game.getSeasonBoardSnapshot = () => game.normalizeSeasonBoardSnapshot(rewardLaneBoardSource);
+          game.lastExpeditionRewardMeta = {
+            ...(game.lastExpeditionRewardMeta || {}),
+            seasonBoard: game.getSeasonBoardSnapshot(),
+          };
+        }
+      }
       game.lastBattleRewardMeta = {
         encounter: { themeName: '轮段·反制晶格', tierStage: 2, goldBonus: 18, ringExpBonus: 9 },
         squad: { squadName: '咒织链阵', goldBonus: 14, ringExpBonus: 11 },
@@ -391,6 +588,179 @@ async function prepareScenario(page, scenarioId) {
       }
     };
 
+    const createBattleCommandModal = ({
+      modalId,
+      title,
+      subtitle,
+      recommend,
+      choiceContainerId,
+      cancelId,
+      cancelTitle,
+      cancelDesc,
+      zIndex,
+      profiles,
+      activation = 'synthetic-fallback',
+    }) => {
+      const oldModal = document.getElementById(modalId);
+      if (oldModal && oldModal.parentElement) oldModal.parentElement.removeChild(oldModal);
+      const modal = document.createElement('div');
+      modal.id = modalId;
+      modal.className = 'modal';
+      modal.style.zIndex = String(zIndex);
+
+      const content = document.createElement('div');
+      content.className = 'modal-content';
+      content.style.maxWidth = modalId === 'resonance-matrix-modal' ? '460px' : '440px';
+      content.style.textAlign = 'center';
+      content.style.padding = '24px';
+
+      const heading = document.createElement('h2');
+      heading.style.marginBottom = '10px';
+      heading.textContent = title;
+      content.appendChild(heading);
+
+      const subtitleEl = document.createElement('p');
+      subtitleEl.style.opacity = '.85';
+      subtitleEl.style.marginBottom = recommend ? '6px' : '14px';
+      subtitleEl.textContent = subtitle;
+      content.appendChild(subtitleEl);
+
+      if (recommend) {
+        const recommendEl = document.createElement('p');
+        recommendEl.style.opacity = '.7';
+        recommendEl.style.marginBottom = '14px';
+        recommendEl.textContent = recommend;
+        content.appendChild(recommendEl);
+      }
+
+      const choices = document.createElement('div');
+      choices.id = choiceContainerId;
+      choices.style.display = 'flex';
+      choices.style.flexDirection = 'column';
+      choices.style.gap = '8px';
+      profiles.forEach((profile) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'event-choice battle-command-choice';
+        const label = document.createElement('div');
+        label.textContent = profile.label || profile.id || '战术选项';
+        const desc = document.createElement('div');
+        desc.className = 'choice-effect';
+        desc.textContent = profile.desc || '选择本次战斗指令的执行方式。';
+        btn.append(label, desc);
+        choices.appendChild(btn);
+      });
+      content.appendChild(choices);
+
+      const cancel = document.createElement('button');
+      cancel.id = cancelId;
+      cancel.type = 'button';
+      cancel.className = 'event-choice';
+      cancel.style.marginTop = '10px';
+      const cancelLabel = document.createElement('div');
+      cancelLabel.textContent = cancelTitle;
+      const cancelEffect = document.createElement('div');
+      cancelEffect.className = 'choice-effect';
+      cancelEffect.textContent = cancelDesc;
+      cancel.append(cancelLabel, cancelEffect);
+      content.appendChild(cancel);
+
+      modal.appendChild(content);
+      document.body.appendChild(modal);
+      modal.classList.add('active');
+      return { ok: true, modalId, profileCount: profiles.length, activation };
+    };
+
+    const activateRealBattleCommandModal = (kind) => {
+      showBattleProbe();
+      const battle = game.battle;
+      if (!battle) return { ok: false, reason: 'missing_battle' };
+      const modalId = kind === 'matrix' ? 'resonance-matrix-modal' : 'horizon-barter-modal';
+      const methodName = kind === 'matrix' ? 'resolveResonanceMatrixMode' : 'resolveHorizonBarterMode';
+      if (typeof battle[methodName] !== 'function') return { ok: false, reason: `missing_${methodName}` };
+      try {
+        const openResult = runWithWebdriverDisabled(() => {
+          if (kind === 'matrix') {
+            return battle.resolveResonanceMatrixMode(null, {
+              needDefend: true,
+              needBreak: false,
+              needCleanse: false,
+            });
+          }
+          return battle.resolveHorizonBarterMode();
+        });
+        const pending = openResult?.result;
+        if (pending && typeof pending.then === 'function') {
+          window.__layoutPendingBattleCommandModal = pending.catch(() => null);
+        }
+        const modal = document.getElementById(modalId);
+        const choices = modal?.querySelectorAll('.event-choice').length || 0;
+        return {
+          ok: !!modal,
+          modalId,
+          activation: 'real-battle-resolver',
+          webdriverOverrideApplied: !!openResult?.overrideApplied,
+          choiceElementCount: choices,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: 'real_resolver_failed',
+          message: error?.message || String(error),
+        };
+      }
+    };
+
+    const activateHorizonBarterModal = () => {
+      const real = activateRealBattleCommandModal('horizon');
+      if (real.ok) return real;
+      const profiles = game.battle && typeof game.battle.getHorizonBarterModeProfiles === 'function'
+        ? game.battle.getHorizonBarterModeProfiles()
+        : {
+            conservative: { id: 'conservative', label: '保守交易', desc: '低投入，稳定续航，优先过牌与控压。' },
+            balanced: { id: 'balanced', label: '均衡交易', desc: '均衡收益，攻防两端都可接受。' },
+            aggressive: { id: 'aggressive', label: '激进交易', desc: '高投入高爆发，空转会引发更强反噬。' },
+          };
+      return createBattleCommandModal({
+        modalId: 'horizon-barter-modal',
+        title: '界隙交易',
+        subtitle: '选择本次交易档位',
+        choiceContainerId: 'horizon-barter-choices',
+        cancelId: 'horizon-barter-cancel',
+        cancelTitle: '取消交易',
+        cancelDesc: '不发动本次指令',
+        zIndex: 10040,
+        profiles: [profiles.conservative, profiles.balanced, profiles.aggressive].filter(Boolean),
+        activation: 'synthetic-fallback',
+      });
+    };
+
+    const activateResonanceMatrixModal = () => {
+      const real = activateRealBattleCommandModal('matrix');
+      if (real.ok) return real;
+      const profiles = game.battle && typeof game.battle.getResonanceMatrixModeProfiles === 'function'
+        ? game.battle.getResonanceMatrixModeProfiles()
+        : {
+            auto: { id: 'auto', label: '自适应回路', desc: '根据敌我态势自动选择守势/破阵/净域/歼灭。' },
+            guard: { id: 'guard', label: '守势优先', desc: '强制优先触发守势回路，稳住血线与减益。' },
+            break: { id: 'break', label: '破阵优先', desc: '强制优先触发破阵回路，先拆盾再开口。' },
+            cleanse: { id: 'cleanse', label: '净域优先', desc: '强制优先触发净域回路，优先解控与稳压。' },
+            burst: { id: 'burst', label: '歼灭优先', desc: '强制优先触发歼灭回路，抢节奏打爆发。' },
+          };
+      return createBattleCommandModal({
+        modalId: 'resonance-matrix-modal',
+        title: '命环共振',
+        subtitle: '选择本次回路策略',
+        recommend: `战术建议：${profiles.guard?.label || '守势优先'}`,
+        choiceContainerId: 'resonance-matrix-choices',
+        cancelId: 'resonance-matrix-cancel',
+        cancelTitle: '取消指令',
+        cancelDesc: '不发动本次命环共振',
+        zIndex: 10042,
+        profiles: [profiles.auto, profiles.guard, profiles.break, profiles.cleanse, profiles.burst].filter(Boolean),
+      });
+    };
+
     const showGameOverProbe = () => {
       ensureGame();
       game.showScreen('game-over-screen');
@@ -428,6 +798,36 @@ async function prepareScenario(page, scenarioId) {
       }
     };
 
+    const activateEndlessParanoiaModal = () => {
+      ensureGame();
+      if (typeof game.isEndlessActive === 'function' && !game.isEndlessActive() && typeof game.startEndlessMode === 'function') {
+        game.startEndlessMode();
+      }
+      if (typeof game.ensureEndlessState !== 'function') return { ok: false, reason: 'missing_ensureEndlessState' };
+      if (typeof game.showEndlessParanoiaSelection !== 'function') return { ok: false, reason: 'missing_showEndlessParanoiaSelection' };
+      const state = game.ensureEndlessState();
+      state.currentCycle = 26;
+      state.activeParanoiaBurdens = ['withered_mend'];
+      state.activeParanoiaBoons = ['rare_surge'];
+      state.paranoiaLevel = 1;
+      state.paranoiaHistory = [{ burdenId: 'withered_mend', boonId: 'rare_surge', cycle: 13 }];
+      if (typeof game.showScreen === 'function') game.showScreen('map-screen');
+      game.showEndlessParanoiaSelection(26);
+      const modal = document.getElementById('event-modal');
+      const title = document.getElementById('event-title')?.textContent?.trim() || '';
+      const desc = document.getElementById('event-desc')?.textContent?.trim() || '';
+      const choices = Array.from(document.querySelectorAll('#event-choices .event-choice.endless-paranoia-choice'));
+      return {
+        ok: !!modal && modal.classList.contains('active') && title === '轮回偏执' && choices.length === 3,
+        activation: 'real-endless-paranoia-selection',
+        rootSelector: '#event-modal',
+        active: !!modal?.classList.contains('active'),
+        title,
+        desc,
+        choiceCount: choices.length,
+      };
+    };
+
     const activateRemoveCardModal = () => {
       ensureGame();
       game.showScreen('map-screen');
@@ -463,12 +863,30 @@ async function prepareScenario(page, scenarioId) {
     const activateSaveConflictModal = () => {
       ensureGame();
       game.showScreen('main-menu');
-      const modal = document.getElementById('save-conflict-modal');
-      const local = document.getElementById('local-save-info');
-      const cloud = document.getElementById('cloud-save-info');
-      if (local) local.textContent = '林风 · 第 7 重天 · 42 分钟前更新，法则 12 / 法宝 7。';
-      if (cloud) cloud.textContent = '云端：无尽第 2 轮 · 道韵 1280 · 今日同步。';
-      if (modal) modal.classList.add('active');
+      const localData = {
+        timestamp: Date.now() - 42 * 60000,
+        player: {
+          realm: 7,
+          currentHp: 79,
+          gold: 8700,
+        },
+        layoutMarker: 'layout-local-save-conflict',
+      };
+      const cloudTime = Date.now() - 5 * 60000;
+      const cloudData = {
+        timestamp: cloudTime,
+        player: {
+          realm: 5,
+          currentHp: 93,
+          gold: 5100,
+        },
+        layoutMarker: 'layout-cloud-save-conflict',
+      };
+      if (typeof game.showSaveConflictModal === 'function') {
+        game.showSaveConflictModal(localData, cloudData, cloudTime);
+        return { ok: true, activation: 'real-show-save-conflict-modal' };
+      }
+      return { ok: false, reason: 'missing showSaveConflictModal' };
     };
 
     const activateSaveSlotsModal = () => {
@@ -627,15 +1045,16 @@ async function prepareScenario(page, scenarioId) {
     const activateTreasureDetailModal = () => {
       ensureGame();
       game.showScreen('treasure-compendium');
-      const treasure = allTreasures()[0];
-      if (treasure && typeof game.showTreasureDetail === 'function') game.showTreasureDetail(treasure, true);
+      const treasure = treasureSamples()[0];
+      if (treasure && game.inventoryView && typeof game.inventoryView.showTreasureDetail === 'function') game.inventoryView.showTreasureDetail(treasure, true);
+      else if (treasure && typeof game.showTreasureDetail === 'function') game.showTreasureDetail(treasure, true);
       else document.getElementById('treasure-detail-modal')?.classList.add('active');
     };
 
     const activateLawDetailModal = () => {
       ensureGame();
       game.showScreen('collection');
-      const law = allLaws()[0];
+      const law = allLaws().find(isRealLawSample) || auditLawSample();
       if (law && typeof game.showLawDetail === 'function') game.showLawDetail(law, true);
       else document.getElementById('law-detail-modal')?.classList.add('active');
     };
@@ -715,7 +1134,7 @@ async function prepareScenario(page, scenarioId) {
       }
     };
 
-    cleanup();
+    await cleanup();
 
     if (!window.game) return { ok: false, reason: 'missing_game', rootSelector: 'body' };
 
@@ -807,6 +1226,14 @@ async function prepareScenario(page, scenarioId) {
       case 'battle-screen':
         showBattleProbe();
         break;
+      case 'horizon-barter-modal':
+        setupResult = activateHorizonBarterModal();
+        if (!setupResult.ok) return setupResult;
+        break;
+      case 'resonance-matrix-modal':
+        setupResult = activateResonanceMatrixModal();
+        if (!setupResult.ok) return setupResult;
+        break;
       case 'reward-screen':
         showRewardProbe();
         break;
@@ -848,6 +1275,10 @@ async function prepareScenario(page, scenarioId) {
       case 'event-modal':
         activateEventModal();
         break;
+      case 'endless-paranoia-modal':
+        setupResult = activateEndlessParanoiaModal();
+        if (!setupResult.ok) return setupResult;
+        break;
       case 'remove-card-modal':
         activateRemoveCardModal();
         break;
@@ -858,7 +1289,8 @@ async function prepareScenario(page, scenarioId) {
         activateAuthModal();
         break;
       case 'save-conflict-modal':
-        activateSaveConflictModal();
+        setupResult = activateSaveConflictModal();
+        if (!setupResult.ok) return setupResult;
         break;
       case 'save-slots-modal':
         activateSaveSlotsModal();
@@ -1163,6 +1595,47 @@ async function inspectLayout(page, rootSelector, scenarioId) {
     let alertModalProbe = null;
     let treasureBagAlertProbe = null;
     let dynamicCardDetailProbe = null;
+    let battleCommandModalProbe = null;
+    let endlessParanoiaModalProbe = null;
+    let saveSlotsModalProbe = null;
+    let saveConflictModalProbe = null;
+    let authModalProbe = null;
+    let confirmModalProbe = null;
+    let rewardExpeditionCtaProbe = null;
+    let skillConfirmModalProbe = null;
+    let treasureDetailModalProbe = null;
+    let lawDetailModalProbe = null;
+    let rewardModalProbe = null;
+    const readHitState = (element) => {
+      const rect = element ? element.getBoundingClientRect() : null;
+      const point = rect ? {
+        x: Math.round(rect.left + rect.width / 2),
+        y: Math.round(rect.top + rect.height / 2),
+      } : null;
+      const inViewport = !!(point && point.x >= 0 && point.y >= 0 && point.x <= viewport.width && point.y <= viewport.height);
+      const top = inViewport ? document.elementFromPoint(point.x, point.y) : null;
+      return {
+        rect: rect ? rectObj(rect) : null,
+        point,
+        inViewport,
+        topSelector: selectorFor(top),
+        topHit: !!(element && top && (top === element || element.contains(top))),
+      };
+    };
+    const readHitStateAfterScroll = (element) => {
+      const initial = readHitState(element);
+      let final = initial;
+      if (element && !initial.topHit && typeof element.scrollIntoView === 'function') {
+        element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        final = readHitState(element);
+      }
+      return { initial, final };
+    };
+    const rectFitsViewport = (rect, tolerance = 1) => !!(rect
+      && rect.left >= -tolerance
+      && rect.top >= -tolerance
+      && rect.right <= viewport.width + tolerance
+      && rect.bottom <= viewport.height + tolerance);
     if (scenarioId === 'treasure-bag-modal') {
       const filledSlots = Array.from(root.querySelectorAll('.treasure-slot.filled')).filter(isVisible);
       const inventoryItems = Array.from(root.querySelectorAll('.inventory-item')).filter(isVisible);
@@ -1219,16 +1692,57 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       const topAtOk = okPoint ? document.elementFromPoint(okPoint.x, okPoint.y) : null;
       const alertZ = Number.parseInt(getComputedStyle(root).zIndex || '0', 10) || 0;
       const bagZ = treasureBag ? (Number.parseInt(getComputedStyle(treasureBag).zIndex || '0', 10) || 0) : 0;
+      const initialTreasureBagVisible = !!(treasureBag && isVisible(treasureBag));
+      const initialAlertContentVisible = !!(alertContent && isVisible(alertContent));
+      const initialOkButtonVisible = !!(okButton && isVisible(okButton));
+      const initialOkButtonTopHit = !!(okButton && topAtOk && (topAtOk === okButton || okButton.contains(topAtOk)));
+      let dismissChain = null;
+      if (okButton) {
+        okButton.click();
+        const bagCloseButton = treasureBag?.querySelector('[data-inventory-action="close-treasure-bag"]');
+        const closeButtonHit = readHitState(bagCloseButton);
+        const afterOk = {
+          alertVisible: isVisible(root),
+          alertActive: root.classList.contains('active'),
+          treasureBagVisible: !!(treasureBag && isVisible(treasureBag)),
+          treasureBagDisplay: treasureBag ? getComputedStyle(treasureBag).display : '',
+          closeButtonTopHit: closeButtonHit.topHit,
+          closeButtonTopAt: closeButtonHit.topSelector,
+        };
+        if (bagCloseButton) bagCloseButton.click();
+        dismissChain = {
+          afterOk,
+          afterClose: {
+            alertVisible: isVisible(root),
+            alertActive: root.classList.contains('active'),
+            treasureBagVisible: !!(treasureBag && isVisible(treasureBag)),
+            treasureBagDisplay: treasureBag ? getComputedStyle(treasureBag).display : '',
+          },
+        };
+      }
       treasureBagAlertProbe = {
-        treasureBagVisible: !!(treasureBag && isVisible(treasureBag)),
-        alertContentVisible: !!(alertContent && isVisible(alertContent)),
-        okButtonVisible: !!(okButton && isVisible(okButton)),
-        okButtonTopHit: !!(okButton && topAtOk && (topAtOk === okButton || okButton.contains(topAtOk))),
+        treasureBagVisible: initialTreasureBagVisible,
+        alertContentVisible: initialAlertContentVisible,
+        okButtonVisible: initialOkButtonVisible,
+        okButtonTopHit: initialOkButtonTopHit,
         alertZ,
         bagZ,
         topAtOk: selectorFor(topAtOk),
+        dismissChain,
       };
-      if (!treasureBagAlertProbe.treasureBagVisible || !treasureBagAlertProbe.alertContentVisible || !treasureBagAlertProbe.okButtonVisible || !treasureBagAlertProbe.okButtonTopHit || alertZ <= bagZ) {
+      if (!treasureBagAlertProbe.treasureBagVisible
+        || !treasureBagAlertProbe.alertContentVisible
+        || !treasureBagAlertProbe.okButtonVisible
+        || !treasureBagAlertProbe.okButtonTopHit
+        || alertZ <= bagZ
+        || !dismissChain
+        || dismissChain.afterOk.alertVisible
+        || dismissChain.afterOk.alertActive
+        || !dismissChain.afterOk.treasureBagVisible
+        || !dismissChain.afterOk.closeButtonTopHit
+        || dismissChain.afterClose.alertVisible
+        || dismissChain.afterClose.alertActive
+        || dismissChain.afterClose.treasureBagVisible) {
         issues.push({
           type: 'treasure-bag-alert-stack-invalid',
           selector: '#generic-alert-modal',
@@ -1242,11 +1756,19 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       const closeButton = root.querySelector('[data-card-detail-close="true"]');
       const summaryRows = Array.from(root.querySelectorAll('.cd-summary-row')).filter(isVisible);
       const statusChips = Array.from(root.querySelectorAll('.detail-status-chip')).filter(isVisible);
+      const closeButtonHit = readHitStateAfterScroll(closeButton);
+      const summaryRowHit = readHitStateAfterScroll(summaryRows[0]);
       dynamicCardDetailProbe = {
         containerVisible: !!(container && isVisible(container)),
         previewCardVisible: !!(previewCard && isVisible(previewCard)),
         closeButtonVisible: !!(closeButton && isVisible(closeButton)),
+        closeButtonInitiallyTopHit: closeButtonHit.initial.topHit,
+        closeButtonTopHit: closeButtonHit.final.topHit,
+        closeButtonRect: closeButtonHit.final.rect,
         summaryRowCount: summaryRows.length,
+        summaryRowInitiallyTopHit: summaryRowHit.initial.topHit,
+        summaryRowTopHit: summaryRowHit.final.topHit,
+        summaryRowRect: summaryRowHit.final.rect,
         statusChipCount: statusChips.length,
         title: textLabel(root.querySelector('.cd-header h2') || root.querySelector('.card-name')),
       };
@@ -1255,6 +1777,640 @@ async function inspectLayout(page, rootSelector, scenarioId) {
           type: 'dynamic-card-detail-missing-content',
           selector: '#card-detail-modal',
           detail: dynamicCardDetailProbe,
+        });
+      }
+      if (!dynamicCardDetailProbe.closeButtonTopHit || !dynamicCardDetailProbe.summaryRowTopHit) {
+        issues.push({
+          type: 'dynamic-card-detail-unreachable-content',
+          selector: '#card-detail-modal',
+          detail: dynamicCardDetailProbe,
+        });
+      }
+    }
+    if (scenarioId === 'skill-confirm-modal') {
+      const content = root.querySelector('.modal-content');
+      const title = root.querySelector('#skill-confirm-title');
+      const icon = root.querySelector('#skill-confirm-icon');
+      const desc = root.querySelector('#skill-confirm-desc');
+      const closeButton = root.querySelector('.modal-close');
+      const actionButtons = Array.from(root.querySelectorAll('button')).filter(isVisible);
+      const releaseButton = actionButtons.find((button) => /释放技能/.test(textLabel(button))) || null;
+      const cancelButton = actionButtons.find((button) => /取消/.test(textLabel(button))) || null;
+      const closeHit = readHitStateAfterScroll(closeButton);
+      const releaseHit = readHitStateAfterScroll(releaseButton);
+      const cancelHit = readHitStateAfterScroll(cancelButton);
+      const contentRect = content ? content.getBoundingClientRect() : null;
+      const clippedWarnings = warnings.filter((warning) => [
+        'text-may-be-clipped',
+        'non-scrollable-content-clipped',
+      ].includes(warning.type));
+      skillConfirmModalProbe = {
+        title: title ? textLabel(title) : '',
+        icon: icon ? textLabel(icon) : '',
+        descriptionLength: desc ? textLabel(desc).length : 0,
+        contentVisible: !!(content && isVisible(content)),
+        contentRectFitsViewport: rectFitsViewport(contentRect ? rectObj(contentRect) : null),
+        releaseVisible: !!(releaseButton && isVisible(releaseButton)),
+        cancelVisible: !!(cancelButton && isVisible(cancelButton)),
+        closeVisible: !!(closeButton && isVisible(closeButton)),
+        releaseTopHit: releaseHit.final.topHit,
+        cancelTopHit: cancelHit.final.topHit,
+        closeTopHit: closeHit.final.topHit,
+        topAtRelease: releaseHit.final.topSelector,
+        topAtCancel: cancelHit.final.topSelector,
+        topAtClose: closeHit.final.topSelector,
+        releaseRect: releaseHit.final.rect,
+        cancelRect: cancelHit.final.rect,
+        closeRect: closeHit.final.rect,
+        clippedWarningCount: clippedWarnings.length,
+      };
+      if (
+        skillConfirmModalProbe.title.length < 2
+        || skillConfirmModalProbe.descriptionLength < 16
+        || !skillConfirmModalProbe.contentVisible
+        || !skillConfirmModalProbe.contentRectFitsViewport
+        || !skillConfirmModalProbe.releaseVisible
+        || !skillConfirmModalProbe.cancelVisible
+        || !skillConfirmModalProbe.closeVisible
+        || !skillConfirmModalProbe.releaseTopHit
+        || !skillConfirmModalProbe.cancelTopHit
+        || !skillConfirmModalProbe.closeTopHit
+        || skillConfirmModalProbe.clippedWarningCount > 0
+      ) {
+        issues.push({
+          type: 'skill-confirm-modal-actions-invalid',
+          selector: '#skill-confirm-modal',
+          detail: skillConfirmModalProbe,
+        });
+      }
+    }
+    if (scenarioId === 'treasure-detail-modal') {
+      const content = root.querySelector('.treasure-detail-view');
+      const layout = root.querySelector('.treasure-detail-layout');
+      const title = root.querySelector('#detail-name');
+      const desc = root.querySelector('#detail-desc');
+      const lore = root.querySelector('#detail-lore');
+      const closeButton = root.querySelector('.modal-close');
+      const footerCloseButton = root.querySelector('.cd-close-btn');
+      const statusChips = Array.from(root.querySelectorAll('.detail-status-chip')).filter(isVisible);
+      const closeHit = readHitStateAfterScroll(closeButton);
+      const footerCloseHit = readHitStateAfterScroll(footerCloseButton);
+      const titleHit = readHitStateAfterScroll(title);
+      const contentRect = content ? content.getBoundingClientRect() : null;
+      const clippedWarnings = warnings.filter((warning) => [
+        'text-may-be-clipped',
+        'non-scrollable-content-clipped',
+      ].includes(warning.type));
+      treasureDetailModalProbe = {
+        title: title ? textLabel(title) : '',
+        descriptionLength: desc ? textLabel(desc).length : 0,
+        loreLength: lore ? textLabel(lore).length : 0,
+        contentVisible: !!(content && isVisible(content)),
+        layoutVisible: !!(layout && isVisible(layout)),
+        contentRectFitsViewport: rectFitsViewport(contentRect ? rectObj(contentRect) : null),
+        statusChipCount: statusChips.length,
+        closeVisible: !!(closeButton && isVisible(closeButton)),
+        footerCloseVisible: !!(footerCloseButton && isVisible(footerCloseButton)),
+        titleTopHit: titleHit.final.topHit,
+        closeTopHit: closeHit.final.topHit,
+        footerCloseTopHit: footerCloseHit.final.topHit,
+        topAtTitle: titleHit.final.topSelector,
+        topAtClose: closeHit.final.topSelector,
+        topAtFooterClose: footerCloseHit.final.topSelector,
+        contentRect: contentRect ? rectObj(contentRect) : null,
+        closeRect: closeHit.final.rect,
+        footerCloseRect: footerCloseHit.final.rect,
+        clippedWarningCount: clippedWarnings.length,
+      };
+      if (
+        treasureDetailModalProbe.title.length < 2
+        || treasureDetailModalProbe.descriptionLength < 16
+        || treasureDetailModalProbe.loreLength < 8
+        || !treasureDetailModalProbe.contentVisible
+        || !treasureDetailModalProbe.layoutVisible
+        || !treasureDetailModalProbe.contentRectFitsViewport
+        || treasureDetailModalProbe.statusChipCount < 2
+        || !treasureDetailModalProbe.closeVisible
+        || !treasureDetailModalProbe.footerCloseVisible
+        || !treasureDetailModalProbe.titleTopHit
+        || !treasureDetailModalProbe.closeTopHit
+        || !treasureDetailModalProbe.footerCloseTopHit
+        || treasureDetailModalProbe.clippedWarningCount > 0
+      ) {
+        issues.push({
+          type: 'treasure-detail-modal-actions-invalid',
+          selector: '#treasure-detail-modal',
+          detail: treasureDetailModalProbe,
+        });
+      }
+    }
+    if (scenarioId === 'law-detail-modal') {
+      const content = root.querySelector('.law-detail-view');
+      const layout = root.querySelector('.law-detail-layout');
+      const title = root.querySelector('#law-detail-name');
+      const desc = root.querySelector('#law-detail-desc');
+      const passive = root.querySelector('#law-detail-passive');
+      const readiness = root.querySelector('#law-detail-readiness');
+      const closeButton = root.querySelector('.modal-close');
+      const footerCloseButton = root.querySelector('.cd-close-btn');
+      const statusChips = Array.from(root.querySelectorAll('#law-detail-chips .detail-status-chip, #law-detail-chips > *')).filter(isVisible);
+      const closeHit = readHitStateAfterScroll(closeButton);
+      const footerCloseHit = readHitStateAfterScroll(footerCloseButton);
+      const titleHit = readHitStateAfterScroll(title);
+      const contentRect = content ? content.getBoundingClientRect() : null;
+      const clippedWarnings = warnings.filter((warning) => [
+        'text-may-be-clipped',
+        'non-scrollable-content-clipped',
+      ].includes(warning.type));
+      lawDetailModalProbe = {
+        title: title ? textLabel(title) : '',
+        descriptionLength: desc ? textLabel(desc).length : 0,
+        passiveLength: passive ? textLabel(passive).length : 0,
+        readinessLength: readiness ? textLabel(readiness).length : 0,
+        contentVisible: !!(content && isVisible(content)),
+        layoutVisible: !!(layout && isVisible(layout)),
+        contentRectFitsViewport: rectFitsViewport(contentRect ? rectObj(contentRect) : null),
+        statusChipCount: statusChips.length,
+        closeVisible: !!(closeButton && isVisible(closeButton)),
+        footerCloseVisible: !!(footerCloseButton && isVisible(footerCloseButton)),
+        titleTopHit: titleHit.final.topHit,
+        closeTopHit: closeHit.final.topHit,
+        footerCloseTopHit: footerCloseHit.final.topHit,
+        topAtTitle: titleHit.final.topSelector,
+        topAtClose: closeHit.final.topSelector,
+        topAtFooterClose: footerCloseHit.final.topSelector,
+        contentRect: contentRect ? rectObj(contentRect) : null,
+        closeRect: closeHit.final.rect,
+        footerCloseRect: footerCloseHit.final.rect,
+        clippedWarningCount: clippedWarnings.length,
+      };
+      if (
+        lawDetailModalProbe.title.length < 2
+        || lawDetailModalProbe.descriptionLength < 16
+        || lawDetailModalProbe.passiveLength < 8
+        || lawDetailModalProbe.readinessLength < 8
+        || !lawDetailModalProbe.contentVisible
+        || !lawDetailModalProbe.layoutVisible
+        || !lawDetailModalProbe.contentRectFitsViewport
+        || lawDetailModalProbe.statusChipCount < 1
+        || !lawDetailModalProbe.closeVisible
+        || !lawDetailModalProbe.footerCloseVisible
+        || !lawDetailModalProbe.titleTopHit
+        || !lawDetailModalProbe.closeTopHit
+        || !lawDetailModalProbe.footerCloseTopHit
+        || lawDetailModalProbe.clippedWarningCount > 0
+      ) {
+        issues.push({
+          type: 'law-detail-modal-actions-invalid',
+          selector: '#law-detail-modal',
+          detail: lawDetailModalProbe,
+        });
+      }
+    }
+    if (scenarioId === 'reward-modal') {
+      const content = root.querySelector('.modal-content');
+      const title = root.querySelector('#reward-title');
+      const icon = root.querySelector('#reward-icon');
+      const message = root.querySelector('#reward-message');
+      const confirmButton = root.querySelector('#reward-confirm-btn');
+      const confirmHit = readHitStateAfterScroll(confirmButton);
+      const contentRect = content ? content.getBoundingClientRect() : null;
+      const clippedWarnings = warnings.filter((warning) => [
+        'text-may-be-clipped',
+        'non-scrollable-content-clipped',
+      ].includes(warning.type));
+      const zIndex = Number.parseInt(getComputedStyle(root).zIndex || '0', 10) || 0;
+      rewardModalProbe = {
+        title: title ? textLabel(title) : '',
+        icon: icon ? textLabel(icon) : '',
+        messageLength: message ? textLabel(message).length : 0,
+        contentVisible: !!(content && isVisible(content)),
+        contentRectFitsViewport: rectFitsViewport(contentRect ? rectObj(contentRect) : null),
+        confirmVisible: !!(confirmButton && isVisible(confirmButton)),
+        confirmTopHit: confirmHit.final.topHit,
+        topAtConfirm: confirmHit.final.topSelector,
+        confirmRect: confirmHit.final.rect,
+        contentRect: contentRect ? rectObj(contentRect) : null,
+        clippedWarningCount: clippedWarnings.length,
+        zIndex,
+      };
+      if (
+        rewardModalProbe.title.length < 4
+        || rewardModalProbe.messageLength < 30
+        || !rewardModalProbe.contentVisible
+        || !rewardModalProbe.contentRectFitsViewport
+        || !rewardModalProbe.confirmVisible
+        || !rewardModalProbe.confirmTopHit
+        || rewardModalProbe.clippedWarningCount > 0
+        || rewardModalProbe.zIndex < 10000
+      ) {
+        issues.push({
+          type: 'reward-modal-actions-invalid',
+          selector: '#reward-modal',
+          detail: rewardModalProbe,
+        });
+      }
+    }
+    if (scenarioId === 'auth-modal') {
+      const content = root.querySelector('.modal-content');
+      const title = root.querySelector('#auth-title');
+      const username = root.querySelector('#auth-username');
+      const password = root.querySelector('#auth-password');
+      const loginButton = root.querySelector('#login-btn-modal');
+      const registerButton = root.querySelector('#register-btn-modal');
+      const closeButton = root.querySelector('.modal-close');
+      const usernameHit = readHitStateAfterScroll(username);
+      const passwordHit = readHitStateAfterScroll(password);
+      const loginHit = readHitStateAfterScroll(loginButton);
+      const registerHit = readHitStateAfterScroll(registerButton);
+      const closeHit = readHitStateAfterScroll(closeButton);
+      authModalProbe = {
+        title: title ? textLabel(title) : '',
+        contentVisible: !!(content && isVisible(content)),
+        usernameVisible: !!(username && isVisible(username)),
+        passwordVisible: !!(password && isVisible(password)),
+        loginVisible: !!(loginButton && isVisible(loginButton)),
+        registerVisible: !!(registerButton && isVisible(registerButton)),
+        closeVisible: !!(closeButton && isVisible(closeButton)),
+        usernameTopHit: usernameHit.final.topHit,
+        passwordTopHit: passwordHit.final.topHit,
+        loginTopHit: loginHit.final.topHit,
+        registerTopHit: registerHit.final.topHit,
+        closeTopHit: closeHit.final.topHit,
+        topAtUsername: usernameHit.final.topSelector,
+        topAtPassword: passwordHit.final.topSelector,
+        topAtLogin: loginHit.final.topSelector,
+        topAtRegister: registerHit.final.topSelector,
+        topAtClose: closeHit.final.topSelector,
+        loginRect: loginHit.final.rect,
+        registerRect: registerHit.final.rect,
+      };
+      if (
+        authModalProbe.title !== '登入轮回'
+        || !authModalProbe.contentVisible
+        || !authModalProbe.usernameVisible
+        || !authModalProbe.passwordVisible
+        || !authModalProbe.loginVisible
+        || !authModalProbe.registerVisible
+        || !authModalProbe.closeVisible
+        || !authModalProbe.usernameTopHit
+        || !authModalProbe.passwordTopHit
+        || !authModalProbe.loginTopHit
+        || !authModalProbe.registerTopHit
+        || !authModalProbe.closeTopHit
+      ) {
+        issues.push({
+          type: 'auth-modal-actions-invalid',
+          selector: '#auth-modal',
+          detail: authModalProbe,
+        });
+      }
+    }
+    if (scenarioId === 'confirm-modal') {
+      const content = root.querySelector('.modal-content');
+      const title = root.querySelector('#generic-confirm-title');
+      const message = root.querySelector('#generic-confirm-message');
+      const confirmButton = root.querySelector('#generic-confirm-btn');
+      const cancelButton = root.querySelector('#generic-cancel-btn');
+      const closeButton = root.querySelector('.modal-close');
+      const confirmHit = readHitStateAfterScroll(confirmButton);
+      const cancelHit = readHitStateAfterScroll(cancelButton);
+      const closeHit = readHitStateAfterScroll(closeButton);
+      const zIndex = Number.parseInt(getComputedStyle(root).zIndex || '0', 10) || 0;
+      confirmModalProbe = {
+        title: title ? textLabel(title) : '',
+        message: message ? textLabel(message) : '',
+        contentVisible: !!(content && isVisible(content)),
+        confirmVisible: !!(confirmButton && isVisible(confirmButton)),
+        cancelVisible: !!(cancelButton && isVisible(cancelButton)),
+        closeVisible: !!(closeButton && isVisible(closeButton)),
+        confirmTopHit: confirmHit.final.topHit,
+        cancelTopHit: cancelHit.final.topHit,
+        closeTopHit: closeHit.final.topHit,
+        topAtConfirm: confirmHit.final.topSelector,
+        topAtCancel: cancelHit.final.topSelector,
+        topAtClose: closeHit.final.topSelector,
+        confirmRect: confirmHit.final.rect,
+        cancelRect: cancelHit.final.rect,
+        zIndex,
+      };
+      if (
+        confirmModalProbe.title !== '提示'
+        || confirmModalProbe.message.length < 20
+        || !confirmModalProbe.contentVisible
+        || !confirmModalProbe.confirmVisible
+        || !confirmModalProbe.cancelVisible
+        || !confirmModalProbe.closeVisible
+        || !confirmModalProbe.confirmTopHit
+        || !confirmModalProbe.cancelTopHit
+        || !confirmModalProbe.closeTopHit
+        || confirmModalProbe.zIndex < 10000
+      ) {
+        issues.push({
+          type: 'confirm-modal-actions-invalid',
+          selector: '#generic-confirm-modal',
+          detail: confirmModalProbe,
+        });
+      }
+    }
+    if (scenarioId === 'reward-screen') {
+      const panel = root.querySelector('#reward-expedition-meta');
+      const sideColumn = root.querySelector('.reward-side-column');
+      const laneRewardButton = panel?.querySelector('[data-season-board-lane-reward-claim="true"]') || null;
+      const handoffButton = panel?.querySelector('[data-season-board-handoff-cta="true"]') || null;
+      const laneRewardHit = readHitStateAfterScroll(laneRewardButton);
+      const handoffHit = readHitStateAfterScroll(handoffButton);
+      const panelRect = panel ? panel.getBoundingClientRect() : null;
+      const sideRect = sideColumn ? sideColumn.getBoundingClientRect() : null;
+      rewardExpeditionCtaProbe = {
+        panelVisible: !!(panel && isVisible(panel)),
+        sideColumnVisible: !!(sideColumn && isVisible(sideColumn)),
+        laneRewardVisible: !!(laneRewardButton && isVisible(laneRewardButton)),
+        handoffVisible: !!(handoffButton && isVisible(handoffButton)),
+        laneRewardText: laneRewardButton ? textLabel(laneRewardButton) : '',
+        handoffText: handoffButton ? textLabel(handoffButton) : '',
+        laneRewardClaimable: laneRewardButton?.dataset?.seasonBoardLaneRewardClaimable || '',
+        handoffAction: handoffButton?.dataset?.seasonBoardHandoffAction || '',
+        handoffValue: handoffButton?.dataset?.seasonBoardHandoffValue || '',
+        laneRewardInitiallyTopHit: laneRewardHit.initial.topHit,
+        laneRewardTopHit: laneRewardHit.final.topHit,
+        handoffInitiallyTopHit: handoffHit.initial.topHit,
+        handoffTopHit: handoffHit.final.topHit,
+        laneRewardRectFitsViewport: rectFitsViewport(laneRewardHit.final.rect),
+        handoffRectFitsViewport: rectFitsViewport(handoffHit.final.rect),
+        topAtLaneReward: laneRewardHit.final.topSelector,
+        topAtHandoff: handoffHit.final.topSelector,
+        laneRewardRect: laneRewardHit.final.rect,
+        handoffRect: handoffHit.final.rect,
+        panelRect: panelRect ? rectObj(panelRect) : null,
+        sideRect: sideRect ? rectObj(sideRect) : null,
+        panelScrollWidth: panel?.scrollWidth || 0,
+        panelClientWidth: panel?.clientWidth || 0,
+      };
+      if (
+        !rewardExpeditionCtaProbe.panelVisible
+        || !rewardExpeditionCtaProbe.sideColumnVisible
+        || !rewardExpeditionCtaProbe.laneRewardVisible
+        || !rewardExpeditionCtaProbe.handoffVisible
+        || rewardExpeditionCtaProbe.laneRewardClaimable !== 'true'
+        || !/领取|已领取|未结题/.test(rewardExpeditionCtaProbe.laneRewardText)
+        || rewardExpeditionCtaProbe.handoffAction.length < 3
+        || rewardExpeditionCtaProbe.handoffValue.length < 3
+        || !rewardExpeditionCtaProbe.laneRewardTopHit
+        || !rewardExpeditionCtaProbe.handoffTopHit
+        || !rewardExpeditionCtaProbe.laneRewardRectFitsViewport
+        || !rewardExpeditionCtaProbe.handoffRectFitsViewport
+        || rewardExpeditionCtaProbe.panelScrollWidth > rewardExpeditionCtaProbe.panelClientWidth + 2
+      ) {
+        issues.push({
+          type: 'reward-expedition-cta-invalid',
+          selector: '#reward-expedition-meta',
+          detail: rewardExpeditionCtaProbe,
+        });
+      }
+    }
+    if (scenarioId === 'save-slots-modal') {
+      const content = root.querySelector('.modal-content');
+      const slots = Array.from(root.querySelectorAll('.save-slot')).filter(isVisible);
+      const filledSlots = slots.filter((slot) => !slot.classList.contains('empty'));
+      const emptySlots = slots.filter((slot) => slot.classList.contains('empty'));
+      const lastFilledSlot = filledSlots[filledSlots.length - 1] || null;
+      const loadButton = lastFilledSlot?.querySelector('[data-system-action="select-slot"][data-slot-mode="load"]') || null;
+      const overwriteButton = lastFilledSlot?.querySelector('[data-system-action="select-slot"][data-slot-mode="overwrite"]') || null;
+      const cancelButton = root.querySelector('.modal-footer button');
+      const loadHit = readHitStateAfterScroll(loadButton);
+      const overwriteHit = readHitStateAfterScroll(overwriteButton);
+      const cancelHit = readHitStateAfterScroll(cancelButton);
+      saveSlotsModalProbe = {
+        contentVisible: !!(content && isVisible(content)),
+        slotCount: slots.length,
+        filledSlotCount: filledSlots.length,
+        emptySlotCount: emptySlots.length,
+        lastFilledSlotText: lastFilledSlot ? textLabel(lastFilledSlot) : '',
+        loadVisible: !!(loadButton && isVisible(loadButton)),
+        overwriteVisible: !!(overwriteButton && isVisible(overwriteButton)),
+        cancelVisible: !!(cancelButton && isVisible(cancelButton)),
+        loadText: loadButton ? textLabel(loadButton) : '',
+        overwriteText: overwriteButton ? textLabel(overwriteButton) : '',
+        loadInitiallyTopHit: loadHit.initial.topHit,
+        loadTopHit: loadHit.final.topHit,
+        overwriteInitiallyTopHit: overwriteHit.initial.topHit,
+        overwriteTopHit: overwriteHit.final.topHit,
+        cancelTopHit: cancelHit.final.topHit,
+        topAtLoad: loadHit.final.topSelector,
+        topAtOverwrite: overwriteHit.final.topSelector,
+        loadRect: loadHit.final.rect,
+        overwriteRect: overwriteHit.final.rect,
+        cancelRect: cancelHit.final.rect,
+      };
+      if (
+        !saveSlotsModalProbe.contentVisible
+        || saveSlotsModalProbe.slotCount !== 4
+        || saveSlotsModalProbe.filledSlotCount !== 2
+        || saveSlotsModalProbe.emptySlotCount !== 2
+        || !saveSlotsModalProbe.loadVisible
+        || !saveSlotsModalProbe.overwriteVisible
+        || !saveSlotsModalProbe.cancelVisible
+        || !/继续/.test(saveSlotsModalProbe.loadText)
+        || !/覆盖/.test(saveSlotsModalProbe.overwriteText)
+        || !saveSlotsModalProbe.loadTopHit
+        || !saveSlotsModalProbe.overwriteTopHit
+        || !saveSlotsModalProbe.cancelTopHit
+      ) {
+        issues.push({
+          type: 'save-slots-modal-actions-invalid',
+          selector: '#save-slots-modal',
+          detail: saveSlotsModalProbe,
+        });
+      }
+    }
+    if (scenarioId === 'save-conflict-modal') {
+      const content = root.querySelector('.modal-content');
+      const title = root.querySelector('h2');
+      const localInfo = root.querySelector('#local-save-info');
+      const cloudInfo = root.querySelector('#cloud-save-info');
+      const statusInfo = root.querySelector('#save-conflict-status');
+      const buttons = Array.from(root.querySelectorAll('button')).filter(isVisible);
+      const localButton = buttons.find((button) => /保留本地/.test(textLabel(button))) || null;
+      const cloudButton = buttons.find((button) => /保留云端/.test(textLabel(button))) || null;
+      const localHit = readHitStateAfterScroll(localButton);
+      const cloudHit = readHitStateAfterScroll(cloudButton);
+      saveConflictModalProbe = {
+        title: title ? textLabel(title) : '',
+        contentVisible: !!(content && isVisible(content)),
+        localInfoVisible: !!(localInfo && isVisible(localInfo)),
+        cloudInfoVisible: !!(cloudInfo && isVisible(cloudInfo)),
+        localInfoText: localInfo ? textLabel(localInfo) : '',
+        cloudInfoText: cloudInfo ? textLabel(cloudInfo) : '',
+        statusText: statusInfo ? textLabel(statusInfo) : '',
+        tempCloudMarker: window.game?.tempCloudData?.layoutMarker || '',
+        localButtonVisible: !!(localButton && isVisible(localButton)),
+        cloudButtonVisible: !!(cloudButton && isVisible(cloudButton)),
+        localButtonText: localButton ? textLabel(localButton) : '',
+        cloudButtonText: cloudButton ? textLabel(cloudButton) : '',
+        localButtonInitiallyTopHit: localHit.initial.topHit,
+        localButtonTopHit: localHit.final.topHit,
+        cloudButtonInitiallyTopHit: cloudHit.initial.topHit,
+        cloudButtonTopHit: cloudHit.final.topHit,
+        topAtLocalButton: localHit.final.topSelector,
+        topAtCloudButton: cloudHit.final.topSelector,
+        localButtonRect: localHit.final.rect,
+        cloudButtonRect: cloudHit.final.rect,
+      };
+      if (
+        saveConflictModalProbe.title !== '检测到存档冲突'
+        || !saveConflictModalProbe.contentVisible
+        || !saveConflictModalProbe.localInfoVisible
+        || !saveConflictModalProbe.cloudInfoVisible
+        || saveConflictModalProbe.localInfoText.length < 16
+        || saveConflictModalProbe.cloudInfoText.length < 16
+        || !/第 7 重天/.test(saveConflictModalProbe.localInfoText)
+        || !/8700/.test(saveConflictModalProbe.localInfoText)
+        || !/第 5 重天/.test(saveConflictModalProbe.cloudInfoText)
+        || !/5100/.test(saveConflictModalProbe.cloudInfoText)
+        || saveConflictModalProbe.statusText !== ''
+        || saveConflictModalProbe.tempCloudMarker !== 'layout-cloud-save-conflict'
+        || !saveConflictModalProbe.localButtonVisible
+        || !saveConflictModalProbe.cloudButtonVisible
+        || !/保留本地/.test(saveConflictModalProbe.localButtonText)
+        || !/保留云端/.test(saveConflictModalProbe.cloudButtonText)
+        || !saveConflictModalProbe.localButtonTopHit
+        || !saveConflictModalProbe.cloudButtonTopHit
+      ) {
+        issues.push({
+          type: 'save-conflict-modal-actions-invalid',
+          selector: '#save-conflict-modal',
+          detail: saveConflictModalProbe,
+        });
+      }
+    }
+    const battleCommandModalConfigs = {
+      'horizon-barter-modal': {
+        title: '界隙交易',
+        choices: '#horizon-barter-choices',
+        cancel: '#horizon-barter-cancel',
+        expectedChoices: 3,
+        minZ: 10040,
+      },
+      'resonance-matrix-modal': {
+        title: '命环共振',
+        choices: '#resonance-matrix-choices',
+        cancel: '#resonance-matrix-cancel',
+        expectedChoices: 5,
+        minZ: 10042,
+      },
+    };
+    const battleCommandConfig = battleCommandModalConfigs[scenarioId] || null;
+    if (battleCommandConfig) {
+      const title = root.querySelector('h2');
+      const content = root.querySelector('.modal-content');
+      const choicesContainer = root.querySelector(battleCommandConfig.choices);
+      const choiceButtons = Array.from(choicesContainer?.querySelectorAll('.event-choice') || []).filter(isVisible);
+      const effectLines = Array.from(root.querySelectorAll('.choice-effect')).filter(isVisible);
+      const cancelButton = root.querySelector(battleCommandConfig.cancel);
+      const readHitState = (element) => {
+        const rect = element ? element.getBoundingClientRect() : null;
+        const point = rect ? {
+          x: Math.round(rect.left + rect.width / 2),
+          y: Math.round(rect.top + rect.height / 2),
+        } : null;
+        const inViewport = !!(point && point.x >= 0 && point.y >= 0 && point.x <= viewport.width && point.y <= viewport.height);
+        const top = inViewport ? document.elementFromPoint(point.x, point.y) : null;
+        return {
+          rect: rect ? rectObj(rect) : null,
+          point,
+          inViewport,
+          top,
+          topSelector: selectorFor(top),
+          topHit: !!(element && top && (top === element || element.contains(top))),
+        };
+      };
+      const initialCancelHit = readHitState(cancelButton);
+      let finalCancelHit = initialCancelHit;
+      if (cancelButton && !initialCancelHit.topHit && typeof cancelButton.scrollIntoView === 'function') {
+        cancelButton.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        finalCancelHit = readHitState(cancelButton);
+      }
+      const zIndex = Number.parseInt(getComputedStyle(root).zIndex || '0', 10) || 0;
+      battleCommandModalProbe = {
+        title: title ? textLabel(title) : '',
+        contentVisible: !!(content && isVisible(content)),
+        choiceCount: choiceButtons.length,
+        effectLineCount: effectLines.length,
+        cancelVisible: !!(cancelButton && isVisible(cancelButton)),
+        cancelInitiallyTopHit: initialCancelHit.topHit,
+        cancelTopHit: finalCancelHit.topHit,
+        zIndex,
+        topAtCancel: finalCancelHit.topSelector,
+        initialTopAtCancel: initialCancelHit.topSelector,
+        cancelRect: finalCancelHit.rect,
+        choiceLabels: choiceButtons.map(textLabel),
+      };
+      if (
+        battleCommandModalProbe.title !== battleCommandConfig.title
+        || !battleCommandModalProbe.contentVisible
+        || battleCommandModalProbe.choiceCount !== battleCommandConfig.expectedChoices
+        || battleCommandModalProbe.effectLineCount < battleCommandConfig.expectedChoices + 1
+        || !battleCommandModalProbe.cancelVisible
+        || !battleCommandModalProbe.cancelTopHit
+        || battleCommandModalProbe.zIndex < battleCommandConfig.minZ
+      ) {
+        issues.push({
+          type: 'battle-command-modal-invalid',
+          selector: `#${scenarioId}`,
+          detail: battleCommandModalProbe,
+        });
+      }
+    }
+    if (scenarioId === 'endless-paranoia-modal') {
+      const title = root.querySelector('#event-title');
+      const desc = root.querySelector('#event-desc');
+      const choices = Array.from(root.querySelectorAll('#event-choices .event-choice.endless-paranoia-choice')).filter(isVisible);
+      const effectLines = Array.from(root.querySelectorAll('#event-choices .event-choice.endless-paranoia-choice .choice-effect')).filter(isVisible);
+      const readHitState = (element) => {
+        const rect = element ? element.getBoundingClientRect() : null;
+        const point = rect ? {
+          x: Math.round(rect.left + rect.width / 2),
+          y: Math.round(rect.top + rect.height / 2),
+        } : null;
+        const inViewport = !!(point && point.x >= 0 && point.y >= 0 && point.x <= viewport.width && point.y <= viewport.height);
+        const top = inViewport ? document.elementFromPoint(point.x, point.y) : null;
+        return {
+          rect: rect ? rectObj(rect) : null,
+          point,
+          inViewport,
+          topSelector: selectorFor(top),
+          topHit: !!(element && top && (top === element || element.contains(top))),
+        };
+      };
+      const initialChoiceHit = readHitState(choices[0]);
+      let finalChoiceHit = initialChoiceHit;
+      if (choices[0] && !initialChoiceHit.topHit && typeof choices[0].scrollIntoView === 'function') {
+        choices[0].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        finalChoiceHit = readHitState(choices[0]);
+      }
+      endlessParanoiaModalProbe = {
+        title: title ? textLabel(title) : '',
+        desc: desc ? textLabel(desc) : '',
+        choiceCount: choices.length,
+        effectLineCount: effectLines.length,
+        firstChoiceTopHit: finalChoiceHit.topHit,
+        topAtFirstChoice: finalChoiceHit.topSelector,
+        firstChoiceRect: finalChoiceHit.rect,
+        choiceLabels: choices.map(textLabel),
+      };
+      if (
+        endlessParanoiaModalProbe.title !== '轮回偏执'
+        || !/大轮回/.test(endlessParanoiaModalProbe.desc)
+        || endlessParanoiaModalProbe.choiceCount !== 3
+        || endlessParanoiaModalProbe.effectLineCount !== 3
+        || !endlessParanoiaModalProbe.choiceLabels.every((label) => /【负】/.test(label) && /【偿】/.test(label))
+        || !endlessParanoiaModalProbe.firstChoiceTopHit
+      ) {
+        issues.push({
+          type: 'endless-paranoia-modal-invalid',
+          selector: '#event-modal',
+          detail: endlessParanoiaModalProbe,
         });
       }
     }
@@ -1381,6 +2537,41 @@ async function inspectLayout(page, rootSelector, scenarioId) {
     }));
     warnings.push(...scrollLocks);
 
+    if (scenarioId === 'dynamic-card-detail-modal') {
+      const clippedWarnings = warnings.filter((warning) => [
+        'text-may-be-clipped',
+        'non-scrollable-content-clipped',
+      ].includes(warning.type));
+      if (clippedWarnings.length > 0) {
+        issues.push({
+          type: 'dynamic-card-detail-clipped-content',
+          selector: '#card-detail-modal',
+          warnings: clippedWarnings,
+        });
+      }
+    }
+    const probedModalClippedWarnings = warnings.filter((warning) => [
+      'text-may-be-clipped',
+      'non-scrollable-content-clipped',
+    ].includes(warning.type));
+    const modalClipProbes = {
+      'skill-confirm-modal': { probe: skillConfirmModalProbe, issueType: 'skill-confirm-modal-clipped-content', selector: '#skill-confirm-modal' },
+      'treasure-detail-modal': { probe: treasureDetailModalProbe, issueType: 'treasure-detail-modal-clipped-content', selector: '#treasure-detail-modal' },
+      'law-detail-modal': { probe: lawDetailModalProbe, issueType: 'law-detail-modal-clipped-content', selector: '#law-detail-modal' },
+      'reward-modal': { probe: rewardModalProbe, issueType: 'reward-modal-clipped-content', selector: '#reward-modal' },
+    };
+    const modalClipProbe = modalClipProbes[scenarioId];
+    if (modalClipProbe?.probe) {
+      modalClipProbe.probe.clippedWarningCount = probedModalClippedWarnings.length;
+      if (probedModalClippedWarnings.length > 0) {
+        issues.push({
+          type: modalClipProbe.issueType,
+          selector: modalClipProbe.selector,
+          warnings: probedModalClippedWarnings,
+        });
+      }
+    }
+
     const previewPanel = root.querySelector('#realm-preview-panel');
     if (previewPanel) {
       const previewBody = previewPanel.querySelector('.preview-scroll-body');
@@ -1429,6 +2620,17 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       alertModalProbe,
       treasureBagAlertProbe,
       dynamicCardDetailProbe,
+      battleCommandModalProbe,
+      endlessParanoiaModalProbe,
+      saveSlotsModalProbe,
+      saveConflictModalProbe,
+      authModalProbe,
+      confirmModalProbe,
+      rewardExpeditionCtaProbe,
+      skillConfirmModalProbe,
+      treasureDetailModalProbe,
+      lawDetailModalProbe,
+      rewardModalProbe,
       rootRect: rectObj(rootRect),
     };
   }, { rootSelector, scenarioId });
@@ -1925,7 +3127,27 @@ async function inspectBattleOverlaySwitchGuard(page) {
         overlayStressScreenshot,
         ...result,
       };
-      add(viewport.id, scenario.id, !!prepareResult?.ok && !!result?.ok && !!overlayStress?.ok && !!mapExpeditionIntel?.ok && !!mapNodeClick?.ok, JSON.stringify(detail));
+      const realBattleResolverRequired = realBattleResolverScenarios.has(scenario.id);
+      const realBattleResolverOk = !realBattleResolverRequired
+        || (
+          prepareResult?.activation === 'real-battle-resolver'
+          && prepareResult?.webdriverOverrideApplied === true
+        );
+      add(
+        viewport.id,
+        scenario.id,
+        !!prepareResult?.ok
+          && realBattleResolverOk
+          && !!result?.ok
+          && !!overlayStress?.ok
+          && !!mapExpeditionIntel?.ok
+          && !!mapNodeClick?.ok,
+        JSON.stringify({
+          ...detail,
+          realBattleResolverRequired,
+          realBattleResolverOk,
+        }),
+      );
     }
 
     try {
@@ -1948,7 +3170,7 @@ async function inspectBattleOverlaySwitchGuard(page) {
       }));
     }
 
-    await page.close();
+    await closeWithTimeout(() => page.close(), `page:${viewport.id}`, 3000);
   }
 
   const report = {
@@ -1966,12 +3188,10 @@ async function inspectBattleOverlaySwitchGuard(page) {
   fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 
-  await browser.close();
+  await closeWithTimeout(() => browser.close(), 'browser', 5000);
 
-  if (report.summary.failed > 0 || report.summary.consoleErrors > 0) {
-    process.exitCode = 1;
-  }
+  process.exit(report.summary.failed > 0 || report.summary.consoleErrors > 0 ? 1 : 0);
 })().catch((err) => {
   console.error(err);
-  process.exitCode = 1;
+  process.exit(1);
 });

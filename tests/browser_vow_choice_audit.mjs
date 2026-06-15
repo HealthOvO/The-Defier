@@ -94,6 +94,78 @@ async function safeScreenshot(page, outPath) {
   );
   await safeScreenshot(page, path.join(outDir, 'vow-choice-modal.png'));
 
+  const starDebtProbe = await page.evaluate(() => {
+    if (!window.game || !game.player) return { ok: false, reason: 'no_game' };
+    game.guestMode = true;
+    game.startNewGame('yanHan');
+    game.player.setRunVows([{ id: 'starDebt', tier: 1 }]);
+    game.showRunVowSelection(3);
+
+    const choices = Array.from(document.querySelectorAll('#event-choices .run-vow-choice'));
+    const choiceTexts = choices.map((choice) => (choice?.textContent || '').replace(/\s+/g, ' ').trim());
+    const starDebtText = choiceTexts.find((text) => /星债誓/.test(text)) || '';
+    const rendered = typeof game.renderGameToText === 'function' ? JSON.parse(game.renderGameToText()) : null;
+
+    return {
+      ok:
+        choices.length >= 1 &&
+        /星债誓/.test(starDebtText) &&
+        /陨契/.test(starDebtText) &&
+        /每场战斗开始失去 5 生命/.test(starDebtText) &&
+        /首击伤害 \+3/.test(starDebtText) &&
+        /商店价格 \+18%/.test(starDebtText) &&
+        /高稀有奖励倾向/.test(starDebtText) &&
+        rendered?.eventModal?.tone === 'oath',
+      choiceCount: choices.length,
+      starDebtText,
+      choiceTexts,
+      renderModal: rendered?.eventModal || null
+    };
+  });
+
+  add(
+    'star debt vow upgrade is visible as a playable chapter-end oath choice',
+    !!starDebtProbe?.ok,
+    JSON.stringify(starDebtProbe || null)
+  );
+  await safeScreenshot(page, path.join(outDir, 'vow-choice-star-debt-upgrade.png'));
+
+  const frostSealProbe = await page.evaluate(() => {
+    if (!window.game || !game.player) return { ok: false, reason: 'no_game' };
+    game.guestMode = true;
+    game.startNewGame('ningXuan');
+    game.player.setRunVows([{ id: 'frostSeal', tier: 1 }]);
+    game.showRunVowSelection(3);
+
+    const choices = Array.from(document.querySelectorAll('#event-choices .run-vow-choice'));
+    const choiceTexts = choices.map((choice) => (choice?.textContent || '').replace(/\s+/g, ' ').trim());
+    const frostSealText = choiceTexts.find((text) => /霜封誓/.test(text)) || '';
+    const rendered = typeof game.renderGameToText === 'function' ? JSON.parse(game.renderGameToText()) : null;
+
+    return {
+      ok:
+        choices.length >= 1 &&
+        /霜封誓/.test(frostSealText) &&
+        /封契/.test(frostSealText) &&
+        /全体敌人开场虚弱 \+2/.test(frostSealText) &&
+        /开场护盾 \+6/.test(frostSealText) &&
+        /治疗效率降至 78%/.test(frostSealText) &&
+        /敌方开场虚弱 \+2/.test(frostSealText) &&
+        rendered?.eventModal?.tone === 'oath',
+      choiceCount: choices.length,
+      frostSealText,
+      choiceTexts,
+      renderModal: rendered?.eventModal || null
+    };
+  });
+
+  add(
+    'frost seal vow upgrade is visible as a playable chapter-end control oath choice',
+    !!frostSealProbe?.ok,
+    JSON.stringify(frostSealProbe || null)
+  );
+  await safeScreenshot(page, path.join(outDir, 'vow-choice-frost-seal-upgrade.png'));
+
   add('no console errors were emitted during vow choice audit', consoleErrors.length === 0, JSON.stringify(consoleErrors));
 
   const failed = findings.filter((item) => !item.pass);

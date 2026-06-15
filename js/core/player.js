@@ -601,6 +601,13 @@ export class Player {
       description: base.description || '',
       playstyle: base.playstyle || '',
       routeHint: base.routeHint || '',
+      buildFit: base.buildFit || '',
+      counterplay: base.counterplay || '',
+      source: base.source || '',
+      tags: Array.isArray(base.tags) ? base.tags.slice() : [],
+      uiMeta: base.uiMeta && typeof base.uiMeta === 'object' ? {
+        ...base.uiMeta
+      } : {},
       affinities: Array.isArray(base.affinities) ? base.affinities.slice() : [],
       tier: safeTier,
       maxTier,
@@ -623,6 +630,7 @@ export class Player {
       firstAttackBonusPerBattle: 0,
       onKillHeal: 0,
       battleStartHpLoss: 0,
+      battleStartEnemyWeakAll: 0,
       rewardRareChance: 0,
       battleCommandPointCapBonus: 0,
       initialCommandPointsBonus: 0,
@@ -644,6 +652,7 @@ export class Player {
       result.firstAttackBonusPerBattle += Math.max(0, Math.floor(Number(effects.firstAttackBonusPerBattle) || 0));
       result.onKillHeal += Math.max(0, Math.floor(Number(effects.onKillHeal) || 0));
       result.battleStartHpLoss += Math.max(0, Math.floor(Number(effects.battleStartHpLoss) || 0));
+      result.battleStartEnemyWeakAll += Math.max(0, Math.floor(Number(effects.battleStartEnemyWeakAll) || 0));
       result.rewardRareChance += Math.max(0, Number(effects.rewardRareChance) || 0);
       result.battleCommandPointCapBonus += Math.max(0, Math.floor(Number(effects.battleCommandPointCapBonus) || 0));
       result.initialCommandPointsBonus += Math.max(0, Math.floor(Number(effects.initialCommandPointsBonus) || 0));

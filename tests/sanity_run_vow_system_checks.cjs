@@ -41,7 +41,7 @@ function makeEnemy(id, hp = 40) {
   };
 }
 
-(function run() {
+(async function run() {
   const root = path.resolve(__dirname, '..');
   const mathObj = Object.create(Math);
   mathObj.random = () => 0.31;
@@ -62,6 +62,24 @@ function makeEnemy(id, hp = 40) {
       querySelector: () => null,
       getElementById: () => null,
       querySelectorAll: () => [],
+      createElement: () => ({
+        id: '',
+        className: '',
+        style: {},
+        dataset: {},
+        innerHTML: '',
+        parentElement: null,
+        firstChild: null,
+        classList: { add() {}, remove() {}, contains: () => false, toggle() {} },
+        appendChild() {},
+        removeChild() {},
+        insertBefore() {},
+        insertAdjacentElement() {},
+        querySelector: () => null,
+        querySelectorAll: () => [],
+        addEventListener() {},
+        removeEventListener() {}
+      }),
       addEventListener: () => {},
       body: null
     },
@@ -185,6 +203,39 @@ function makeEnemy(id, hp = 40) {
 
   // 4) 破界誓：战场指令上限与费用修正
   {
+    const plainPlayer = new Player();
+    plainPlayer.realm = 2;
+    const plainGame = {
+      player: plainPlayer,
+      mode: 'pve',
+      currentBattleNode: null,
+      isEndlessActive: () => false
+    };
+    const plainBattle = new Battle(plainGame);
+    plainBattle.player = plainPlayer;
+    plainBattle.game = plainGame;
+    plainGame.battle = plainBattle;
+    plainBattle.enemies = [makeEnemy('plain_command_target', 60)];
+    plainBattle.initializeBattleCommandSystem();
+    assert(!plainBattle.commandState.commands.some(command => command && command.id === 'realm_break_order'), 'plain battle should not leak realmBreak dedicated command');
+
+    const frostPlayer = new Player();
+    frostPlayer.realm = 2;
+    frostPlayer.setRunVows([{ id: 'frostSeal', tier: 1 }]);
+    const frostGame = {
+      player: frostPlayer,
+      mode: 'pve',
+      currentBattleNode: null,
+      isEndlessActive: () => false
+    };
+    const frostBattle = new Battle(frostGame);
+    frostBattle.player = frostPlayer;
+    frostBattle.game = frostGame;
+    frostGame.battle = frostBattle;
+    frostBattle.enemies = [makeEnemy('frost_command_target', 60)];
+    frostBattle.initializeBattleCommandSystem();
+    assert(!frostBattle.commandState.commands.some(command => command && command.id === 'realm_break_order'), 'non-realmBreak vow should not unlock realmBreak dedicated command');
+
     const player = new Player();
     player.realm = 2;
     player.setRunVows([{ id: 'realmBreak', tier: 1 }]);
@@ -206,6 +257,41 @@ function makeEnemy(id, hp = 40) {
     assert(!!firstCommand, 'realmBreak should provide at least one command');
     const effectiveCost = battle.resolveBattleCommandEffectiveCost(firstCommand);
     assert(effectiveCost <= Math.max(1, firstCommand.cost - 1), `realmBreak should discount command cost, got ${effectiveCost} from ${firstCommand.cost}`);
+    const realmBreakCommand = battle.commandState.commands.find(command => command && command.id === 'realm_break_order');
+    assert(!!realmBreakCommand, `realmBreak should add dedicated realm break command, got ${battle.commandState.commands.map(command => command.id).join(',')}`);
+    const commandCost = battle.resolveBattleCommandEffectiveCost(realmBreakCommand);
+    battle.commandState.points = battle.commandState.maxPoints;
+    player.hand = [];
+    player.drawPile = [
+      { id: 'realm_break_draw', name: '裂令补牌', type: 'skill', cost: 0, effects: [], instanceId: 'realm_break_draw' }
+    ];
+    const targetHpBefore = battle.enemies[0].currentHp;
+    const pointsBefore = battle.commandState.points;
+    const ok = await battle.activateBattleCommand('realm_break_order');
+    assert(ok === true, 'realmBreak dedicated command should activate');
+    assert(battle.commandState.lastCommandId === 'realm_break_order', 'realmBreak command should become last activated command');
+    assert(battle.enemies[0].currentHp < targetHpBefore, `realmBreak command should damage enemy, ${targetHpBefore} -> ${battle.enemies[0].currentHp}`);
+    assert(player.hand.some(card => card && card.id === 'realm_break_draw'), 'realmBreak command should draw when hand is thin');
+    assert(battle.commandState.points === pointsBefore - commandCost + 1, `realmBreak command should refund 1 command point after spending, got ${battle.commandState.points}, before=${pointsBefore}, cost=${commandCost}`);
+
+    const endlessPlayer = new Player();
+    endlessPlayer.realm = 2;
+    endlessPlayer.setRunVows([{ id: 'realmBreak', tier: 1 }]);
+    const endlessGame = {
+      player: endlessPlayer,
+      mode: 'pve',
+      currentBattleNode: null,
+      isEndlessActive: () => true
+    };
+    const endlessBattle = new Battle(endlessGame);
+    endlessBattle.player = endlessPlayer;
+    endlessBattle.game = endlessGame;
+    endlessGame.battle = endlessBattle;
+    endlessBattle.enemies = [makeEnemy('endless_command_target', 60)];
+    endlessBattle.initializeBattleCommandSystem();
+    const endlessCommandIds = endlessBattle.commandState.commands.map(command => command && command.id);
+    assert(endlessCommandIds[0] === 'realm_break_order', `realmBreak + endless should keep dedicated command first, got ${endlessCommandIds.join(',')}`);
+    assert(endlessCommandIds.includes('rift_surge_order'), `realmBreak + endless should preserve forced endless command, got ${endlessCommandIds.join(',')}`);
   }
 
   // 5) 焚命誓：低血增伤
@@ -225,7 +311,81 @@ function makeEnemy(id, hp = 40) {
     assert(dealt >= 12, `blazingLife should amplify low-hp damage, got ${dealt}`);
   }
 
-  // 6) Game helper：章末提供誓约与商店倍率会受窥天誓影响
+  // 6) 星债誓：借首拍换后续债务与奖励倾向
+  {
+    assert(RUN_VOWS.starDebt, 'starDebt vow should exist');
+    const player = new Player();
+    player.realm = 2;
+    player.currentHp = 40;
+    player.setRunVows([{ id: 'starDebt', tier: 1 }]);
+    const starDebtMeta = player.getRunVowMetas()[0];
+    assert(starDebtMeta.buildFit && /首拍|关键件/.test(starDebtMeta.buildFit), 'starDebt meta should expose build fit for battle readability');
+    assert(starDebtMeta.counterplay && /首拍|溢价|容错/.test(starDebtMeta.counterplay), 'starDebt meta should expose counterplay for battle readability');
+    assert(starDebtMeta.uiMeta && /还债/.test(starDebtMeta.uiMeta.readableCue || ''), 'starDebt meta should expose readable cue for battle readability');
+    const effects = player.getRunVowEffects();
+    assert(effects.battleStartHpLoss === 3, `starDebt tier 1 should start each battle with 3 hp debt, got ${effects.battleStartHpLoss}`);
+    assert(effects.firstTurnEnergy === 1, `starDebt tier 1 should grant first-turn energy, got ${effects.firstTurnEnergy}`);
+    assert(effects.rewardRareChance >= 0.12, `starDebt tier 1 should raise rare reward chance, got ${effects.rewardRareChance}`);
+    assert(effects.shopPriceMul > 1, `starDebt tier 1 should make shop debt visible, got ${effects.shopPriceMul}`);
+    player.prepareBattle();
+    assert(player.currentHp === 37, `starDebt should collect hp debt on battle start, got ${player.currentHp}`);
+
+    const tier2Player = new Player();
+    tier2Player.realm = 2;
+    tier2Player.currentHp = 40;
+    tier2Player.setRunVows([{ id: 'starDebt', tier: 2 }]);
+    const tier2Effects = tier2Player.getRunVowEffects();
+    assert(tier2Effects.battleStartHpLoss === 5, `starDebt tier 2 should start each battle with 5 hp debt, got ${tier2Effects.battleStartHpLoss}`);
+    assert(tier2Effects.firstTurnEnergy === 1, `starDebt tier 2 should keep first-turn energy, got ${tier2Effects.firstTurnEnergy}`);
+    assert(tier2Effects.firstAttackBonusPerBattle === 3, `starDebt tier 2 should grant first attack bonus +3, got ${tier2Effects.firstAttackBonusPerBattle}`);
+    assert(tier2Effects.rewardRareChance >= 0.22, `starDebt tier 2 should further raise rare reward chance, got ${tier2Effects.rewardRareChance}`);
+    assert(tier2Effects.shopPriceMul >= 1.18, `starDebt tier 2 should raise shop debt to 18%, got ${tier2Effects.shopPriceMul}`);
+    tier2Player.prepareBattle();
+    assert(tier2Player.currentHp === 35, `starDebt tier 2 should collect 5 hp debt on battle start, got ${tier2Player.currentHp}`);
+  }
+
+  // 7) 霜封誓：开场控场压制
+  {
+    assert(RUN_VOWS.frostSeal, 'frostSeal vow should exist');
+    const player = new Player();
+    player.realm = 2;
+    player.currentHp = 60;
+    player.setRunVows([{ id: 'frostSeal', tier: 1 }]);
+    const frostMeta = player.getRunVowMetas()[0];
+    assert(frostMeta.buildFit && /虚弱|控场/.test(frostMeta.buildFit), 'frostSeal meta should expose control build fit');
+    assert(frostMeta.counterplay && /治疗|拖/.test(frostMeta.counterplay), 'frostSeal meta should expose sustain counterplay');
+    assert(frostMeta.uiMeta && /虚弱/.test(frostMeta.uiMeta.readableCue || ''), 'frostSeal meta should expose readable weak cue');
+    const effects = player.getRunVowEffects();
+    assert(effects.battleStartEnemyWeakAll === 1, `frostSeal tier 1 should apply 1 enemy weak on battle start, got ${effects.battleStartEnemyWeakAll}`);
+    assert(effects.firstTurnDraw === 1, `frostSeal tier 1 should draw on first turn, got ${effects.firstTurnDraw}`);
+    assert(effects.healMultiplier < 1, `frostSeal tier 1 should reduce healing, got ${effects.healMultiplier}`);
+    assert(effects.mapWeightShift.observatory > 0, 'frostSeal should bias routes toward observatory planning nodes');
+    assert(effects.mapWeightShift.elite < 0, 'frostSeal should reduce elite route pressure');
+
+    const game = {
+      player,
+      mode: 'pve',
+      currentBattleNode: null,
+      isEndlessActive: () => false,
+      onBattleWon: () => {},
+      onBattleLost: () => {}
+    };
+    const battle = new Battle(game);
+    game.battle = battle;
+    battle.player = player;
+    battle.enemies = [makeEnemy('frost_a', 60), makeEnemy('frost_b', 60)];
+    battle.startBattle();
+    assert(battle.enemies.every(enemy => (enemy.buffs.weak || 0) >= 1), 'frostSeal should apply weak to all enemies at battle start');
+
+    const tier2Player = new Player();
+    tier2Player.realm = 2;
+    tier2Player.setRunVows([{ id: 'frostSeal', tier: 2 }]);
+    const tier2Effects = tier2Player.getRunVowEffects();
+    assert(tier2Effects.battleStartEnemyWeakAll === 2, `frostSeal tier 2 should apply 2 enemy weak, got ${tier2Effects.battleStartEnemyWeakAll}`);
+    assert(tier2Effects.openingBlock >= 6, `frostSeal tier 2 should add opening block, got ${tier2Effects.openingBlock}`);
+  }
+
+  // 8) Game helper：章末提供誓约与商店倍率会受窥天誓影响
   {
     const player = new Player();
     player.realm = 2;const fakeGame = Object.create(Game.prototype);
@@ -243,4 +403,7 @@ function makeEnemy(id, hp = 40) {
   }
 
   console.log('Run vow system checks passed.');
-})();
+})().catch(error => {
+  console.error(error);
+  process.exit(1);
+});

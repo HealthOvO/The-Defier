@@ -539,6 +539,31 @@ async function openNewGameEntry(page) {
     JSON.stringify(vowRouteProbe || null)
   );
 
+  const frostSealBattleSetup = await page.evaluate(() => {
+    if (!window.game || !game.player) return null;
+    if (typeof game.player.setRunVows === 'function') {
+      game.player.setRunVows([{ id: 'frostSeal', tier: 2 }]);
+    } else {
+      game.player.runVows = [{ id: 'frostSeal', tier: 2 }];
+      if (typeof game.player.normalizeRunVows === 'function') game.player.normalizeRunVows(game.player.runVows);
+    }
+    if (game.map && typeof game.map.updateStatusBar === 'function') game.map.updateStatusBar();
+    let payload = null;
+    try {
+      payload = JSON.parse(window.render_game_to_text());
+    } catch {}
+    return {
+      vowIds: Array.isArray(payload?.player?.runVows) ? payload.player.runVows.map((item) => `${item.id}:${item.tier}`) : []
+    };
+  });
+  add(
+    'frost seal vow is armed before entering a real browser battle',
+    !!frostSealBattleSetup
+      && Array.isArray(frostSealBattleSetup.vowIds)
+      && frostSealBattleSetup.vowIds.includes('frostSeal:2'),
+    JSON.stringify(frostSealBattleSetup || null)
+  );
+
   // Force an accessible combat node to validate battle transition.
   const combatNodeType = await page.evaluate(() => {
     if (!window.game || !game.map || typeof game.map.getAccessibleNodes !== 'function') return null;
@@ -559,24 +584,156 @@ async function openNewGameEntry(page) {
   add('map node can enter battle', battleMode === 'battle-screen', `nodeType=${combatNodeType}, mode=${battleMode}`);
 
   const vowBattleProbe = await page.evaluate(() => {
+    const advisorBody = document.querySelector('#battle-command-panel .battle-advisor-body');
+    if (advisorBody && advisorBody.hasAttribute('hidden')) {
+      document.querySelector('#battle-command-panel .battle-advisor-toggle')?.click();
+    }
     const chips = Array.from(document.querySelectorAll('#battle-command-panel .battle-advisor-status-chip')).map((el) => (el.textContent || '').trim());
+    const vowChip = document.querySelector('#battle-command-panel .battle-system-chip[data-system-id="vows"]');
+    const vowCard = document.querySelector('#battle-command-panel .battle-system-card[data-system-id="vows"]');
     let payload = null;
     try {
       payload = JSON.parse(window.render_game_to_text());
     } catch {}
+    const vowReadable = payload?.battle?.vowReadable || null;
+    const vowSystemsReadable = payload?.battle?.systemsHud?.vows?.readable || null;
+    const readText = (root, selector) => root?.querySelector(selector)?.textContent?.trim() || '';
     return {
       chips,
-      vowIds: Array.isArray(payload?.player?.runVows) ? payload.player.runVows.map((item) => item.id) : []
+      vowIds: Array.isArray(payload?.player?.runVows) ? payload.player.runVows.map((item) => item.id) : [],
+      vowReadable,
+      vowSystemsReadable,
+      enemies: Array.isArray(payload?.battle?.enemies) ? payload.battle.enemies.map((enemy) => ({
+        id: enemy.id,
+        name: enemy.name,
+        weak: Math.max(0, Math.floor(Number(enemy?.buffs?.weak) || 0)),
+        buffs: enemy.buffs || {}
+      })) : [],
+      vowStrip: Array.isArray(payload?.battle?.systemsHud?.stripItems)
+        ? payload.battle.systemsHud.stripItems.find((item) => item && item.id === 'vows') || null
+        : null,
+      vowChip: vowChip ? {
+        text: (vowChip.textContent || '').trim(),
+        value: readText(vowChip, '.battle-system-chip-value'),
+        meta: readText(vowChip, '.battle-system-chip-meta'),
+        title: vowChip.getAttribute('title') || ''
+      } : null,
+      vowCard: vowCard ? {
+        text: (vowCard.textContent || '').trim(),
+        value: readText(vowCard, '.battle-system-card-value'),
+        meta: readText(vowCard, '.battle-system-card-meta'),
+        detail: readText(vowCard, '.battle-system-card-detail'),
+        visible: !!(vowCard.offsetWidth || vowCard.offsetHeight || vowCard.getClientRects().length)
+      } : null
     };
   });
   add(
-    'battle HUD surfaces active vow status',
+    'battle HUD surfaces active vow readable status',
     !!vowBattleProbe
       && Array.isArray(vowBattleProbe.chips)
-      && vowBattleProbe.chips.some((text) => /誓约|窥天誓/.test(text))
+      && vowBattleProbe.chips.some((text) => /誓约|霜封誓/.test(text))
       && Array.isArray(vowBattleProbe.vowIds)
-      && vowBattleProbe.vowIds.includes('heavenlyGaze'),
+      && vowBattleProbe.vowIds.includes('frostSeal')
+      && vowBattleProbe.vowReadable
+      && vowBattleProbe.vowReadable.count === 1
+      && Array.isArray(vowBattleProbe.vowReadable.active)
+      && /全体敌人开场虚弱 \+2/.test(vowBattleProbe.vowReadable.active[0]?.summary || '')
+      && /开场护盾 \+6/.test(vowBattleProbe.vowReadable.active[0]?.summary || '')
+      && /治疗效率降至 78%/.test(vowBattleProbe.vowReadable.active[0]?.summary || '')
+      && /治疗折损|续航/.test(vowBattleProbe.vowReadable.active[0]?.risk || '')
+      && /治疗折损|续航/.test(vowBattleProbe.vowReadable.active[0]?.counterplay || '')
+      && /虚弱|霜封/.test(vowBattleProbe.vowReadable.active[0]?.readableCue || '')
+      && /观星台|记忆裂隙|营地/.test(vowBattleProbe.vowReadable.active[0]?.routeHint || '')
+      && vowBattleProbe.vowSystemsReadable
+      && vowBattleProbe.vowSystemsReadable.count === vowBattleProbe.vowReadable.count
+      && vowBattleProbe.vowSystemsReadable.detailLine === vowBattleProbe.vowReadable.detailLine
+      && Array.isArray(vowBattleProbe.enemies)
+      && vowBattleProbe.enemies.length > 0
+      && vowBattleProbe.enemies.every((enemy) => enemy.weak >= 2)
+      && vowBattleProbe.vowStrip
+      && /封契 · 1\/2/.test(vowBattleProbe.vowStrip.meta || '')
+      && /收益：/.test(vowBattleProbe.vowStrip.detail || '')
+      && /赌注：/.test(vowBattleProbe.vowStrip.detail || '')
+      && /对策：/.test(vowBattleProbe.vowStrip.detail || '')
+      && /路线：/.test(vowBattleProbe.vowStrip.detail || '')
+      && vowBattleProbe.vowChip
+      && /霜封誓/.test(vowBattleProbe.vowChip.value || '')
+      && /封契 · 1\/2/.test(vowBattleProbe.vowChip.meta || '')
+      && /收益：/.test(vowBattleProbe.vowChip.title || '')
+      && /路线：/.test(vowBattleProbe.vowChip.title || '')
+      && vowBattleProbe.vowCard
+      && vowBattleProbe.vowCard.visible
+      && /霜封誓/.test(vowBattleProbe.vowCard.value || '')
+      && /封契 · 1\/2/.test(vowBattleProbe.vowCard.meta || '')
+      && /收益：/.test(vowBattleProbe.vowCard.detail || '')
+      && /赌注：/.test(vowBattleProbe.vowCard.detail || '')
+      && /对策：/.test(vowBattleProbe.vowCard.detail || '')
+      && /路线：/.test(vowBattleProbe.vowCard.detail || ''),
     JSON.stringify(vowBattleProbe || null)
+  );
+
+  const realmBreakCommandProbe = await page.evaluate(async () => {
+    if (!window.game || !game.player || !game.battle) return null;
+    if (typeof game.player.setRunVows === 'function') {
+      game.player.setRunVows([{ id: 'realmBreak', tier: 2 }]);
+    } else {
+      game.player.runVows = [{ id: 'realmBreak', tier: 2 }];
+      if (typeof game.player.normalizeRunVows === 'function') game.player.normalizeRunVows(game.player.runVows);
+    }
+    if (typeof game.battle.initializeBattleCommandSystem === 'function') {
+      game.battle.initializeBattleCommandSystem();
+    }
+    if (game.battle.commandState) {
+      game.battle.commandState.points = game.battle.commandState.maxPoints || 12;
+    }
+    game.player.hand = [];
+    game.player.drawPile = [
+      { id: 'realm_break_browser_draw', name: '裂令补牌', type: 'skill', cost: 0, effects: [], instanceId: 'realm_break_browser_draw' }
+    ];
+    if (typeof game.battle.updateBattleCommandUI === 'function') game.battle.updateBattleCommandUI();
+    const button = document.querySelector('#battle-command-panel [data-command-id="realm_break_order"]');
+    const commandTextsBefore = Array.from(document.querySelectorAll('#battle-command-panel .battle-command-btn')).map((el) => (el.textContent || '').trim());
+    const target = Array.isArray(game.battle.enemies) ? game.battle.enemies.find((enemy) => enemy && enemy.currentHp > 0) : null;
+    const hpBefore = Math.max(0, Math.floor(Number(target?.currentHp) || 0));
+    const pointsBefore = Math.max(0, Math.floor(Number(game.battle.commandState?.points) || 0));
+    const costBefore = button ? (button.textContent || '').trim() : '';
+    if (button) button.click();
+    await new Promise(resolve => setTimeout(resolve, 350));
+    let payload = null;
+    try {
+      payload = JSON.parse(window.render_game_to_text());
+    } catch {}
+    const hpAfter = Math.max(0, Math.floor(Number(target?.currentHp) || 0));
+    const pointsAfter = Math.max(0, Math.floor(Number(game.battle.commandState?.points) || 0));
+    return {
+      buttonVisible: !!button,
+      buttonText: button ? (button.textContent || '').trim() : '',
+      costBefore,
+      commandTextsBefore,
+      hpBefore,
+      hpAfter,
+      pointsBefore,
+      pointsAfter,
+      lastCommandId: game.battle.commandState?.lastCommandId || '',
+      handIds: Array.isArray(game.player.hand) ? game.player.hand.map((card) => card && card.id).filter(Boolean) : [],
+      payloadCommand: Array.isArray(payload?.battle?.battleCommand?.commands)
+        ? payload.battle.battleCommand.commands.find((command) => command && command.id === 'realm_break_order') || null
+        : null
+    };
+  });
+  add(
+    'realm break vow adds a clickable dedicated battle command',
+    !!realmBreakCommandProbe
+      && realmBreakCommandProbe.buttonVisible
+      && /破界裂令/.test(realmBreakCommandProbe.buttonText || '')
+      && /消耗/.test(realmBreakCommandProbe.costBefore || '')
+      && realmBreakCommandProbe.lastCommandId === 'realm_break_order'
+      && realmBreakCommandProbe.hpAfter < realmBreakCommandProbe.hpBefore
+      && realmBreakCommandProbe.pointsAfter === realmBreakCommandProbe.pointsBefore - 1
+      && realmBreakCommandProbe.handIds.includes('realm_break_browser_draw')
+      && realmBreakCommandProbe.payloadCommand
+      && /破界裂令/.test(realmBreakCommandProbe.payloadCommand.name || ''),
+    JSON.stringify(realmBreakCommandProbe || null)
   );
 
   const spiritBattleProbe = await page.evaluate(() => {

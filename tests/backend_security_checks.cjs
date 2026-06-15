@@ -183,6 +183,13 @@ function makeSessionIntegrity(data, salt, token) {
   };
 }
 
+function corruptToken(token) {
+  assert(token && token.length > 8, `cannot corrupt invalid token: ${token}`);
+  const last = token[token.length - 1];
+  const replacement = last === 'a' ? 'b' : 'a';
+  return `${token.slice(0, -1)}${replacement}`;
+}
+
 function makePvpBattleData(overrides = {}) {
   return {
     me: {
@@ -225,6 +232,33 @@ function makePvpMatchRequest(overrides = {}) {
     preferredRankId: overrides.preferredRankId || '',
     allowPractice: overrides.allowPractice !== false
   };
+}
+
+function pvpEconomyMutationSnapshot(economy) {
+  assert(economy && typeof economy === 'object', `invalid economy snapshot: ${JSON.stringify(economy)}`);
+  return {
+    coins: economy.coins,
+    totalSpent: economy.totalSpent,
+    purchases: { ...(economy.purchases || {}) },
+    ownedItems: { ...(economy.ownedItems || {}) },
+    equippedSkinId: economy.equippedSkinId || null,
+    equippedTitleId: economy.equippedTitleId || null,
+    transactionLog: Array.isArray(economy.transactionLog) ? economy.transactionLog.map(item => ({ ...item })) : [],
+    lastPurchaseAt: economy.lastPurchaseAt || 0
+  };
+}
+
+async function getPvpEconomyMutationSnapshot(user) {
+  const economyRes = await request('/api/pvp/economy', { token: user.token });
+  assert.strictEqual(economyRes.status, 200, `PVP economy should be readable: ${JSON.stringify(economyRes.payload)}`);
+  return pvpEconomyMutationSnapshot(economyRes.payload.economy);
+}
+
+async function replacePvpEconomy(user, economy) {
+  await dbRun(
+    `UPDATE pvp_economy SET economy_data = ?, updated_at = ? WHERE user_id = ?`,
+    [JSON.stringify(economy), Date.now(), user.id]
+  );
 }
 
 async function seedLegacyGhostDuplicates() {
@@ -381,6 +415,47 @@ async function runOptionalIntegrityChecks() {
     const missingGlobalAuth = await request('/api/user/global');
     assert.strictEqual(missingGlobalAuth.status, 401, 'global data read without auth should return 401');
 
+    const missingUserAliasAuth = await request('/api/user');
+    assert.strictEqual(missingUserAliasAuth.status, 401, 'missing user alias auth should return 401');
+
+    const corruptedJwt = corruptToken(user.token);
+    const badTokenSaveRead = await request('/api/saves', { token: corruptedJwt });
+    assert.strictEqual(badTokenSaveRead.status, 401, 'corrupted JWT save read should return 401');
+
+    const badTokenUserAliasRead = await request('/api/user', { token: corruptedJwt });
+    assert.strictEqual(badTokenUserAliasRead.status, 401, 'corrupted JWT /api/user alias read should return 401');
+
+    const badTokenUserAliasWrite = await request('/api/user', {
+      method: 'POST',
+      token: corruptedJwt,
+      body: { slotIndex: 0, saveData: { marker: 'bad-token-user-alias' }, saveTime: Date.now() }
+    });
+    assert.strictEqual(badTokenUserAliasWrite.status, 401, 'corrupted JWT /api/user alias write should return 401');
+
+    const badTokenGlobalWrite = await request('/api/user/global', {
+      method: 'POST',
+      token: corruptedJwt,
+      body: { globalData: { marker: 'bad-token-global', updatedAt: Date.now() } }
+    });
+    assert.strictEqual(badTokenGlobalWrite.status, 401, 'corrupted JWT global write should return 401');
+
+    const badTokenGhostWrite = await request('/api/ghosts/current', {
+      method: 'POST',
+      token: corruptedJwt,
+      body: {
+        realm: 3,
+        ghostData: { name: 'BadTokenGhost', hp: 500, maxHp: 1000, deck: [{ id: 'audit_guard' }], updatedAt: Date.now() },
+        uploadTime: Date.now()
+      }
+    });
+    assert.strictEqual(badTokenGhostWrite.status, 401, 'corrupted JWT ghost upload should return 401');
+
+    const badTokenPvpRank = await request('/api/pvp/rank', { token: corruptedJwt });
+    assert.strictEqual(badTokenPvpRank.status, 401, 'corrupted JWT PVP rank read should return 401');
+
+    const badTokenRandomGhost = await request('/api/ghosts/random?realm=3', { token: corruptedJwt });
+    assert.strictEqual(badTokenRandomGhost.status, 401, 'corrupted JWT random ghost lookup should return 401 instead of anonymous fallback');
+
     const optionalGlobalData = { achievements: ['first_clear'], coins: 12, updatedAt: Date.now() };
     const globalWrite = await request('/api/user/global', {
       method: 'POST',
@@ -416,6 +491,31 @@ async function runOptionalIntegrityChecks() {
     const ghostNoMatch = await request('/api/ghosts/random?realm=9999');
     assert.strictEqual(ghostNoMatch.status, 200, 'ghost no-match lookup should return HTTP 200');
     assert.strictEqual(ghostNoMatch.payload.success, false, 'ghost no-match lookup should report success=false');
+
+    const anonymousGhostName = `AnonymousReadableGhost_${Date.now()}`;
+    const anonymousGhostUpload = await request('/api/ghosts/current', {
+      method: 'POST',
+      token: user.token,
+      body: {
+        realm: 77,
+        ghostData: {
+          name: anonymousGhostName,
+          hp: 777,
+          maxHp: 888,
+          deck: [{ id: 'anonymous_ghost_audit_card' }],
+          updatedAt: Date.now()
+        },
+        uploadTime: Date.now()
+      }
+    });
+    assert.strictEqual(anonymousGhostUpload.status, 200, 'authenticated ghost upload should seed anonymous random lookup');
+    assert.strictEqual(anonymousGhostUpload.payload.success, true, 'authenticated ghost upload should succeed before anonymous lookup');
+    const anonymousRandomGhost = await request('/api/ghosts/random?realm=77');
+    assert.strictEqual(anonymousRandomGhost.status, 200, 'anonymous ghost lookup should return HTTP 200');
+    assert.strictEqual(anonymousRandomGhost.payload.success, true, 'anonymous ghost lookup should return a seeded ghost without token');
+    assert.strictEqual(anonymousRandomGhost.payload.data.userName, user.username, 'anonymous ghost lookup should expose the seeded ghost owner name');
+    assert.strictEqual(anonymousRandomGhost.payload.data.realm, 77, 'anonymous ghost lookup should preserve the seeded ghost realm');
+    assert.strictEqual(anonymousRandomGhost.payload.data.ghostData.name, anonymousGhostName, 'anonymous ghost lookup should return parsed ghost data');
 
     const badLogin = await request('/api/auth/login', {
       method: 'POST',
@@ -1116,6 +1216,26 @@ async function runPvpRequiredIntegrityChecks() {
       assert.strictEqual(missingAuth.status, 401, `${pathToCheck} should reject missing auth`);
     }
 
+    const emptyDefense = await request('/api/pvp/defense/me', { token: user.token });
+    assert.strictEqual(emptyDefense.status, 200, 'PVP defense empty state should return HTTP 200');
+    assert.strictEqual(emptyDefense.payload.success, false, 'PVP defense empty state should return success=false');
+    assert.strictEqual(emptyDefense.payload.message, '未设置防御快照', 'PVP defense empty state should explain missing snapshot');
+
+    const emptyMatchRequest = makePvpMatchRequest({ myRealm: 7 });
+    const emptyMatch = await request('/api/pvp/match', {
+      method: 'POST',
+      token: user.token,
+      body: {
+        ...emptyMatchRequest,
+        ...makeSessionIntegrity(emptyMatchRequest, 'pvp-match-empty-opponent', user.token)
+      }
+    });
+    assert.strictEqual(emptyMatch.status, 200, 'PVP match empty opponent state should return HTTP 200');
+    assert.strictEqual(emptyMatch.payload.success, false, 'PVP match empty opponent state should return success=false');
+    assert.strictEqual(emptyMatch.payload.message, '暂无对手数据', 'PVP match empty opponent state should explain missing opponent');
+    const emptyMatchTickets = await dbGet('SELECT COUNT(*) as count FROM pvp_match_tickets WHERE user_id = ?', [user.id]);
+    assert.strictEqual(emptyMatchTickets.count, 0, 'PVP match empty opponent state should not create a match ticket');
+
     const defenseRequest = makePvpDefenseRequest({ realm: 7, powerScore: 700 });
     const missingDefenseSig = await request('/api/pvp/defense', {
       method: 'POST',
@@ -1165,6 +1285,168 @@ async function runPvpRequiredIntegrityChecks() {
     assert(validWildDefense.payload.snapshot.battleData.me.maxHp <= 5000, 'PVP defense maxHp should be clamped server-side');
     assert(validWildDefense.payload.snapshot.battleData.me.energy <= 12, 'PVP defense energy should be clamped server-side');
     assert(validWildDefense.payload.snapshot.battleData.deck.length <= 20, 'PVP defense deck should be capped server-side');
+
+    const defenseBaseTime = Date.now() - 1000;
+    const newestDefenseRequest = makePvpDefenseRequest({
+      realm: 10,
+      powerScore: 1000,
+      snapshotTime: defenseBaseTime + 1000,
+      config: { personality: 'newest-defense', guardianFormation: true }
+    });
+    const newestDefense = await request('/api/pvp/defense', {
+      method: 'POST',
+      token: user.token,
+      body: {
+        ...newestDefenseRequest,
+        ...makeSessionIntegrity(newestDefenseRequest, 'pvp-defense-newest', user.token)
+      }
+    });
+    assert.strictEqual(newestDefense.status, 200, 'newest PVP defense should upload');
+    assert.notStrictEqual(newestDefense.payload.skipped, true, 'newest PVP defense should not be skipped');
+    assert.strictEqual(newestDefense.payload.snapshot.realm, 10, 'newest PVP defense should set current realm');
+    assert.strictEqual(newestDefense.payload.snapshot.config.personality, 'newest-defense', 'newest PVP defense should store config');
+    assert.strictEqual(newestDefense.payload.rank.realm, 10, 'newest PVP defense should update rank realm');
+    const rankAfterNewestDefense = await request('/api/pvp/rank', { token: user.token });
+    assert.strictEqual(rankAfterNewestDefense.payload.rank.realm, 10, 'newest PVP defense should persist rank realm');
+    assert.strictEqual(rankAfterNewestDefense.payload.rank.hasDefenseSnapshot, true, 'newest PVP defense should mark rank as defended');
+    const newestDefenseRankUpdatedAt = rankAfterNewestDefense.payload.rank.updatedAt;
+
+    const staleDefenseRequest = makePvpDefenseRequest({
+      realm: 2,
+      powerScore: 200,
+      snapshotTime: defenseBaseTime,
+      config: { personality: 'stale-defense', guardianFormation: false }
+    });
+    const staleDefense = await request('/api/pvp/defense', {
+      method: 'POST',
+      token: user.token,
+      body: {
+        ...staleDefenseRequest,
+        ...makeSessionIntegrity(staleDefenseRequest, 'pvp-defense-stale', user.token)
+      }
+    });
+    assert.strictEqual(staleDefense.status, 200, 'stale PVP defense should be acknowledged');
+    assert.strictEqual(staleDefense.payload.skipped, true, 'stale PVP defense should be skipped');
+    const defenseAfterStale = await request('/api/pvp/defense/me', { token: user.token });
+    assert.strictEqual(defenseAfterStale.payload.snapshot.realm, 10, 'stale PVP defense should not overwrite realm');
+    assert.strictEqual(defenseAfterStale.payload.snapshot.powerScore, 1000, 'stale PVP defense should not overwrite power score');
+    assert.strictEqual(defenseAfterStale.payload.snapshot.config.personality, 'newest-defense', 'stale PVP defense should not overwrite config');
+    assert.strictEqual(staleDefense.payload.rank.realm, 10, 'stale PVP defense response should keep rank realm');
+    assert.strictEqual(staleDefense.payload.rank.updatedAt, newestDefenseRankUpdatedAt, 'stale PVP defense should not bump rank updatedAt');
+    const rankAfterStaleDefense = await request('/api/pvp/rank', { token: user.token });
+    assert.strictEqual(rankAfterStaleDefense.payload.rank.realm, 10, 'stale PVP defense should not persist stale rank realm');
+    assert.strictEqual(rankAfterStaleDefense.payload.rank.updatedAt, newestDefenseRankUpdatedAt, 'stale PVP defense should not persist rank updatedAt bump');
+
+    await sleep(5);
+    const sameDefenseTime = Date.now();
+    const sameDefenseFirstRequest = makePvpDefenseRequest({
+      realm: 11,
+      powerScore: 1100,
+      snapshotTime: sameDefenseTime,
+      config: { personality: 'same-defense-first', guardianFormation: true }
+    });
+    const sameDefenseFirst = await request('/api/pvp/defense', {
+      method: 'POST',
+      token: user.token,
+      body: {
+        ...sameDefenseFirstRequest,
+        ...makeSessionIntegrity(sameDefenseFirstRequest, 'pvp-defense-same-first', user.token)
+      }
+    });
+    assert.strictEqual(sameDefenseFirst.status, 200, 'first same-time PVP defense should upload');
+    assert.notStrictEqual(sameDefenseFirst.payload.skipped, true, 'first same-time PVP defense should not be skipped');
+    assert.strictEqual(sameDefenseFirst.payload.rank.realm, 11, 'first same-time PVP defense should update rank realm');
+    const rankAfterSameDefenseFirst = await request('/api/pvp/rank', { token: user.token });
+    assert.strictEqual(rankAfterSameDefenseFirst.payload.rank.realm, 11, 'first same-time PVP defense should persist rank realm');
+    const sameDefenseRankUpdatedAt = rankAfterSameDefenseFirst.payload.rank.updatedAt;
+    const sameDefenseSecondRequest = makePvpDefenseRequest({
+      realm: 12,
+      powerScore: 1200,
+      snapshotTime: sameDefenseTime,
+      config: { personality: 'same-defense-second', guardianFormation: false }
+    });
+    const sameDefenseSecond = await request('/api/pvp/defense', {
+      method: 'POST',
+      token: user.token,
+      body: {
+        ...sameDefenseSecondRequest,
+        ...makeSessionIntegrity(sameDefenseSecondRequest, 'pvp-defense-same-second', user.token)
+      }
+    });
+    assert.strictEqual(sameDefenseSecond.status, 200, 'same-time PVP defense conflict should be acknowledged');
+    assert.strictEqual(sameDefenseSecond.payload.skipped, true, 'same-time PVP defense conflict should not overwrite');
+    assert.strictEqual(sameDefenseSecond.payload.rank.realm, 11, 'same-time PVP defense conflict response should preserve rank realm');
+    assert.strictEqual(sameDefenseSecond.payload.rank.updatedAt, sameDefenseRankUpdatedAt, 'same-time PVP defense conflict should not bump rank updatedAt');
+    const defenseAfterSame = await request('/api/pvp/defense/me', { token: user.token });
+    assert.strictEqual(defenseAfterSame.payload.snapshot.realm, 11, 'same-time PVP defense should preserve first realm');
+    assert.strictEqual(defenseAfterSame.payload.snapshot.config.personality, 'same-defense-first', 'same-time PVP defense should preserve first config');
+    const rankAfterSameDefense = await request('/api/pvp/rank', { token: user.token });
+    assert.strictEqual(rankAfterSameDefense.payload.rank.realm, 11, 'same-time PVP defense should persist first rank realm');
+    assert.strictEqual(rankAfterSameDefense.payload.rank.updatedAt, sameDefenseRankUpdatedAt, 'same-time PVP defense should persist first rank updatedAt');
+
+    await sleep(5);
+    const futureDefenseOriginalTime = Date.now() + (6 * DAY_MS);
+    const futureDefenseRequest = makePvpDefenseRequest({
+      realm: 13,
+      powerScore: 1300,
+      snapshotTime: futureDefenseOriginalTime,
+      config: { personality: 'future-defense', guardianFormation: true }
+    });
+    const futureDefense = await request('/api/pvp/defense', {
+      method: 'POST',
+      token: user.token,
+      body: {
+        ...futureDefenseRequest,
+        ...makeSessionIntegrity(futureDefenseRequest, 'pvp-defense-future', user.token)
+      }
+    });
+    assert.strictEqual(futureDefense.status, 200, 'future PVP defense timestamp should be normalized');
+    assert.notStrictEqual(futureDefense.payload.skipped, true, 'future PVP defense timestamp should not be skipped');
+    assert(futureDefense.payload.saveTime < futureDefenseOriginalTime, 'future PVP defense saveTime should be clamped below client future time');
+    assert.strictEqual(futureDefense.payload.snapshot.realm, 13, 'future PVP defense should still write normalized snapshot');
+    assert.strictEqual(futureDefense.payload.rank.realm, 13, 'future PVP defense should update rank realm after normalization');
+
+    await sleep(5);
+    const normalAfterFutureDefenseRequest = makePvpDefenseRequest({
+      realm: 14,
+      powerScore: 1400,
+      snapshotTime: Date.now(),
+      config: { personality: 'normal-after-future-defense', guardianFormation: false }
+    });
+    const normalAfterFutureDefense = await request('/api/pvp/defense', {
+      method: 'POST',
+      token: user.token,
+      body: {
+        ...normalAfterFutureDefenseRequest,
+        ...makeSessionIntegrity(normalAfterFutureDefenseRequest, 'pvp-defense-normal-after-future', user.token)
+      }
+    });
+    assert.strictEqual(normalAfterFutureDefense.status, 200, 'normal PVP defense should work after future timestamp input');
+    assert.notStrictEqual(normalAfterFutureDefense.payload.skipped, true, 'future PVP defense timestamp should not lock snapshot');
+    assert.strictEqual(normalAfterFutureDefense.payload.snapshot.realm, 14, 'normal PVP defense should overwrite future-normalized snapshot');
+    assert.strictEqual(normalAfterFutureDefense.payload.rank.realm, 14, 'normal PVP defense should update rank realm after future-normalized snapshot');
+
+    await dbRun('UPDATE pvp_defense_snapshots SET save_time = ? WHERE user_id = ?', [9999999999999999, user.id]);
+    const recoveredDefenseRequest = makePvpDefenseRequest({
+      realm: 15,
+      powerScore: 1500,
+      snapshotTime: Date.now(),
+      config: { personality: 'recovered-defense', guardianFormation: true }
+    });
+    const recoveredDefense = await request('/api/pvp/defense', {
+      method: 'POST',
+      token: user.token,
+      body: {
+        ...recoveredDefenseRequest,
+        ...makeSessionIntegrity(recoveredDefenseRequest, 'pvp-defense-recovered', user.token)
+      }
+    });
+    assert.strictEqual(recoveredDefense.status, 200, 'normal PVP defense should recover from poisoned future timestamp');
+    assert.notStrictEqual(recoveredDefense.payload.skipped, true, 'recovered PVP defense should not be skipped');
+    assert.strictEqual(recoveredDefense.payload.snapshot.realm, 15, 'recovered PVP defense should overwrite poisoned timestamp row');
+    assert.strictEqual(recoveredDefense.payload.rank.realm, 15, 'recovered PVP defense should update rank realm after poisoned timestamp');
+    const rankAfterRecoveredDefense = await request('/api/pvp/rank', { token: user.token });
+    assert.strictEqual(rankAfterRecoveredDefense.payload.rank.realm, 15, 'recovered PVP defense should persist recovered rank realm');
 
     const opponentDefenseRequest = makePvpDefenseRequest({
       realm: 8,
@@ -1294,6 +1576,89 @@ async function runPvpRequiredIntegrityChecks() {
     });
     assert.strictEqual(tamperedShop.status, 403, 'PVP shop should reject tampered signed item id');
 
+    const signedShopPurchase = (shopUser, itemId, salt) => {
+      const requestBody = { itemId };
+      return {
+        ...requestBody,
+        ...makeSessionIntegrity(requestBody, salt, shopUser.token)
+      };
+    };
+
+    const missingCatalogShopUser = await registerUser('pvp_shop_missing_catalog');
+    const missingCatalogBefore = await getPvpEconomyMutationSnapshot(missingCatalogShopUser);
+    const missingCatalogShop = await request('/api/pvp/shop/purchase', {
+      method: 'POST',
+      token: missingCatalogShopUser.token,
+      body: signedShopPurchase(missingCatalogShopUser, 'not_a_real_shop_item', 'pvp-shop-missing-catalog')
+    });
+    assert.strictEqual(missingCatalogShop.status, 400, 'PVP shop should reject missing catalog item');
+    assert.strictEqual(missingCatalogShop.payload.reason, 'missing', 'PVP shop missing catalog rejection should expose reason=missing');
+    const missingCatalogAfter = await getPvpEconomyMutationSnapshot(missingCatalogShopUser);
+    assert.deepStrictEqual(missingCatalogAfter, missingCatalogBefore, 'PVP shop missing item should not mutate economy');
+
+    const insufficientShopUser = await registerUser('pvp_shop_insufficient');
+    const insufficientBefore = await getPvpEconomyMutationSnapshot(insufficientShopUser);
+    const insufficientShop = await request('/api/pvp/shop/purchase', {
+      method: 'POST',
+      token: insufficientShopUser.token,
+      body: signedShopPurchase(insufficientShopUser, 'title_supreme', 'pvp-shop-insufficient')
+    });
+    assert.strictEqual(insufficientShop.status, 400, 'PVP shop should reject purchases with insufficient coins');
+    assert.strictEqual(insufficientShop.payload.reason, 'insufficient', 'PVP shop insufficient rejection should expose reason=insufficient');
+    const insufficientAfter = await getPvpEconomyMutationSnapshot(insufficientShopUser);
+    assert.deepStrictEqual(insufficientAfter, insufficientBefore, 'PVP shop insufficient coins should not mutate economy');
+
+    const ownedCosmeticUser = await registerUser('pvp_shop_owned_cosmetic');
+    const ownedEconomyRes = await request('/api/pvp/economy', { token: ownedCosmeticUser.token });
+    assert.strictEqual(ownedEconomyRes.status, 200, 'PVP shop owned cosmetic user should get default economy');
+    const ownedSeed = {
+      ...ownedEconomyRes.payload.economy,
+      coins: 3200,
+      ownedItems: {
+        ...(ownedEconomyRes.payload.economy.ownedItems || {}),
+        skin_void_walker: true
+      }
+    };
+    await replacePvpEconomy(ownedCosmeticUser, ownedSeed);
+    const ownedBefore = await getPvpEconomyMutationSnapshot(ownedCosmeticUser);
+    const ownedShop = await request('/api/pvp/shop/purchase', {
+      method: 'POST',
+      token: ownedCosmeticUser.token,
+      body: signedShopPurchase(ownedCosmeticUser, 'skin_void_walker', 'pvp-shop-owned-cosmetic')
+    });
+    assert.strictEqual(ownedShop.status, 400, 'PVP shop should reject already-owned cosmetics even if granted outside shop purchases');
+    assert.strictEqual(ownedShop.payload.reason, 'owned', 'PVP shop owned cosmetic rejection should expose reason=owned');
+    const ownedAfter = await getPvpEconomyMutationSnapshot(ownedCosmeticUser);
+    assert.deepStrictEqual(ownedAfter, ownedBefore, 'PVP shop owned cosmetic rejection should not mutate economy');
+
+    const soldOutShopUser = await registerUser('pvp_shop_sold_out');
+    const soldOutEconomyRes = await request('/api/pvp/economy', { token: soldOutShopUser.token });
+    assert.strictEqual(soldOutEconomyRes.status, 200, 'PVP shop sold-out user should get default economy');
+    const soldOutSeed = {
+      ...soldOutEconomyRes.payload.economy,
+      coins: 2000,
+      purchases: {
+        ...(soldOutEconomyRes.payload.economy.purchases || {}),
+        item_reset_stats: 5
+      },
+      transactionLog: [
+        ...(soldOutEconomyRes.payload.economy.transactionLog || []),
+        { type: 'test_seed', itemId: 'item_reset_stats', coins: 0, at: Date.now() - 1000 }
+      ],
+      lastPurchaseAt: Date.now() - 1000
+    };
+    await replacePvpEconomy(soldOutShopUser, soldOutSeed);
+    const soldOutBefore = await getPvpEconomyMutationSnapshot(soldOutShopUser);
+    const soldOutShop = await request('/api/pvp/shop/purchase', {
+      method: 'POST',
+      token: soldOutShopUser.token,
+      body: signedShopPurchase(soldOutShopUser, 'item_reset_stats', 'pvp-shop-sold-out')
+    });
+    assert.strictEqual(soldOutShop.status, 400, 'PVP shop should reject sold-out consumables');
+    assert.strictEqual(soldOutShop.payload.reason, 'sold_out', 'PVP shop sold-out rejection should expose reason=sold_out');
+    const soldOutAfter = await getPvpEconomyMutationSnapshot(soldOutShopUser);
+    assert.deepStrictEqual(soldOutAfter, soldOutBefore, 'PVP shop sold-out rejection should not mutate economy');
+
     const canonicalShop = await request('/api/pvp/shop/purchase', {
       method: 'POST',
       token: user.token,
@@ -1396,6 +1761,55 @@ async function runPvpClientReportedSettlementTestModeChecks() {
     });
     assert.strictEqual(match.status, 200, 'test-mode PVP match should be created');
     assert.strictEqual(match.payload.success, true, 'test-mode PVP match should return success');
+
+    const invalidTicketReport = { matchTicket: 'missing-ticket-for-testmode', didWin: true };
+    const rankBeforeInvalidTicket = await request('/api/pvp/rank', { token: user.token });
+    const invalidTicketResult = await request('/api/pvp/match/result', {
+      method: 'POST',
+      token: user.token,
+      body: {
+        report: invalidTicketReport,
+        ...makeSessionIntegrity(invalidTicketReport, 'pvp-testmode-report-invalid-ticket', user.token)
+      }
+    });
+    assert.strictEqual(invalidTicketResult.status, 400, 'test-mode PVP report should reject missing ticket');
+    const rankAfterInvalidTicket = await request('/api/pvp/rank', { token: user.token });
+    assert.strictEqual(rankAfterInvalidTicket.payload.rank.score, rankBeforeInvalidTicket.payload.rank.score, 'invalid ticket PVP report should not change score');
+    assert.strictEqual(rankAfterInvalidTicket.payload.wallet.coins, rankBeforeInvalidTicket.payload.wallet.coins, 'invalid ticket PVP report should not change wallet');
+    const invalidTicketHistoryCount = await dbGet('SELECT COUNT(*) as count FROM pvp_match_history WHERE ticket_id = ?', [invalidTicketReport.matchTicket]);
+    assert.strictEqual(invalidTicketHistoryCount.count, 0, 'invalid ticket PVP report should not create match history');
+
+    const expiredMatch = await request('/api/pvp/match', {
+      method: 'POST',
+      token: user.token,
+      body: {
+        ...matchRequest,
+        ...makeSessionIntegrity(matchRequest, 'pvp-testmode-expired-match', user.token)
+      }
+    });
+    assert.strictEqual(expiredMatch.status, 200, 'test-mode expired-ticket fixture should create a match');
+    assert.strictEqual(expiredMatch.payload.success, true, 'test-mode expired-ticket fixture should return success');
+    await dbRun(
+      'UPDATE pvp_match_tickets SET expires_at = ? WHERE ticket_id = ?',
+      [Date.now() - 1000, expiredMatch.payload.matchTicket]
+    );
+    const expiredTicketReport = { matchTicket: expiredMatch.payload.matchTicket, didWin: true };
+    const rankBeforeExpiredTicket = await request('/api/pvp/rank', { token: user.token });
+    const expiredTicketResult = await request('/api/pvp/match/result', {
+      method: 'POST',
+      token: user.token,
+      body: {
+        report: expiredTicketReport,
+        ...makeSessionIntegrity(expiredTicketReport, 'pvp-testmode-report-expired-ticket', user.token)
+      }
+    });
+    assert.strictEqual(expiredTicketResult.status, 410, 'test-mode PVP report should reject expired ticket');
+    const rankAfterExpiredTicket = await request('/api/pvp/rank', { token: user.token });
+    assert.strictEqual(rankAfterExpiredTicket.payload.rank.score, rankBeforeExpiredTicket.payload.rank.score, 'expired ticket PVP report should not change score');
+    assert.strictEqual(rankAfterExpiredTicket.payload.wallet.coins, rankBeforeExpiredTicket.payload.wallet.coins, 'expired ticket PVP report should not change wallet');
+    const expiredTicketHistoryCount = await dbGet('SELECT COUNT(*) as count FROM pvp_match_history WHERE ticket_id = ?', [expiredMatch.payload.matchTicket]);
+    assert.strictEqual(expiredTicketHistoryCount.count, 0, 'expired ticket PVP report should not create match history');
+
     const rankBeforeReport = await request('/api/pvp/rank', { token: user.token });
     const report = { matchTicket: match.payload.matchTicket, didWin: true };
     const firstReport = await request('/api/pvp/match/result', {
@@ -1426,6 +1840,52 @@ async function runPvpClientReportedSettlementTestModeChecks() {
     assert.strictEqual(rankAfterReplay.payload.wallet.coins, rankBeforeReplay.payload.wallet.coins, 'duplicate PVP report should not change wallet');
     const historyCount = await dbGet('SELECT COUNT(*) as count FROM pvp_match_history WHERE ticket_id = ?', [match.payload.matchTicket]);
     assert.strictEqual(historyCount.count, 1, 'duplicate PVP report should leave one match history row');
+
+    const concurrentMatch = await request('/api/pvp/match', {
+      method: 'POST',
+      token: user.token,
+      body: {
+        ...matchRequest,
+        ...makeSessionIntegrity(matchRequest, 'pvp-testmode-concurrent-match', user.token)
+      }
+    });
+    assert.strictEqual(concurrentMatch.status, 200, 'test-mode concurrent fixture should create a match');
+    assert.strictEqual(concurrentMatch.payload.success, true, 'test-mode concurrent fixture should return success');
+    const concurrentReport = { matchTicket: concurrentMatch.payload.matchTicket, didWin: true };
+    const rankBeforeConcurrentReport = await request('/api/pvp/rank', { token: user.token });
+    const [concurrentReportA, concurrentReportB] = await Promise.all([
+      request('/api/pvp/match/result', {
+        method: 'POST',
+        token: user.token,
+        body: {
+          report: concurrentReport,
+          ...makeSessionIntegrity(concurrentReport, 'pvp-testmode-report-concurrent-a', user.token)
+        }
+      }),
+      request('/api/pvp/match/result', {
+        method: 'POST',
+        token: user.token,
+        body: {
+          report: concurrentReport,
+          ...makeSessionIntegrity(concurrentReport, 'pvp-testmode-report-concurrent-b', user.token)
+        }
+      })
+    ]);
+    const concurrentResults = [concurrentReportA, concurrentReportB];
+    const concurrentSuccesses = concurrentResults.filter(item => item.status === 200 && item.payload?.success);
+    const concurrentConflicts = concurrentResults.filter(item => item.status === 409);
+    assert.strictEqual(concurrentSuccesses.length, 1, `concurrent PVP report should allow exactly one success: ${JSON.stringify(concurrentResults)}`);
+    assert.strictEqual(concurrentConflicts.length, 1, `concurrent PVP report should reject duplicate settlement: ${JSON.stringify(concurrentResults)}`);
+    const concurrentSuccess = concurrentSuccesses[0];
+    assert(concurrentSuccess.payload.rank.score > rankBeforeConcurrentReport.payload.rank.score, 'concurrent PVP win should increase score once');
+    assert(concurrentSuccess.payload.wallet.coins > rankBeforeConcurrentReport.payload.wallet.coins, 'concurrent PVP win should award coins once');
+    const rankAfterConcurrentReport = await request('/api/pvp/rank', { token: user.token });
+    assert.strictEqual(rankAfterConcurrentReport.payload.rank.score, concurrentSuccess.payload.rank.score, 'concurrent PVP final score should match the single successful settlement');
+    assert.strictEqual(rankAfterConcurrentReport.payload.wallet.coins, concurrentSuccess.payload.wallet.coins, 'concurrent PVP final wallet should match the single successful settlement');
+    const concurrentTicket = await dbGet('SELECT consumed_at FROM pvp_match_tickets WHERE ticket_id = ?', [concurrentMatch.payload.matchTicket]);
+    assert(Number(concurrentTicket.consumed_at) > 0, 'concurrent PVP report should consume ticket once');
+    const concurrentHistoryCount = await dbGet('SELECT COUNT(*) as count FROM pvp_match_history WHERE ticket_id = ?', [concurrentMatch.payload.matchTicket]);
+    assert.strictEqual(concurrentHistoryCount.count, 1, 'concurrent PVP report should leave one match history row');
   });
 }
 

@@ -176,6 +176,68 @@ export const RUN_VOWS = {
       }
     }]
   },
+  starDebt: {
+    id: 'starDebt',
+    name: '星债誓',
+    icon: '✦',
+    category: '借势',
+    tags: ['首拍', '奖励', '债务'],
+    description: '向未成形的星盘预支一拍，把未来的债务换成当下的行动窗口。',
+    playstyle: '首回合更容易抢节奏，奖励更容易出高质量选项，但每场战斗和每次消费都会被追债。',
+    routeHint: '偏好观星台、记忆裂隙、事件、商店',
+    buildFit: '适合需要第一拍启动、靠高质量奖励补关键件的技能链、法则与法宝构筑。',
+    counterplay: '怕连续低收益战和过度消费；若首拍没兑现成优势，开场掉血与商店溢价会持续压缩容错。',
+    source: '第 1 / 3 / 5 章章末誓约 · 星盘欠契',
+    unlockRules: {
+      chapterRealms: [3, 9, 15],
+      maxOwned: 2
+    },
+    uiMeta: {
+      tone: 'oath',
+      readableCue: '先借一拍星力，再用血线和灵石慢慢还债。'
+    },
+    affinities: ['yanHan', 'linFeng', 'xiangYe'],
+    tiers: [{
+      tier: 1,
+      label: '初契',
+      summary: '每场战斗开始失去 3 生命；首回合灵力 +1；商店价格 +10%；高稀有奖励倾向提升。',
+      risk: '星债会在每场开局先扣血，且中盘补件成本更高。',
+      effects: {
+        battleStartHpLoss: 3,
+        firstTurnEnergy: 1,
+        shopPriceMul: 1.1,
+        rewardRareChance: 0.12,
+        mapWeightShift: {
+          observatory: 0.04,
+          memory_rift: 0.04,
+          event: 0.03,
+          shop: 0.02,
+          enemy: -0.02,
+          rest: -0.03
+        }
+      }
+    }, {
+      tier: 2,
+      label: '陨契',
+      summary: '每场战斗开始失去 5 生命；首回合灵力 +1；首击伤害 +3；商店价格 +18%；高稀有奖励倾向进一步提升。',
+      risk: '债务进入陨星段，开局和消费都会更紧，必须用首拍优势换回主动权。',
+      effects: {
+        battleStartHpLoss: 5,
+        firstTurnEnergy: 1,
+        firstAttackBonusPerBattle: 3,
+        shopPriceMul: 1.18,
+        rewardRareChance: 0.22,
+        mapWeightShift: {
+          observatory: 0.06,
+          memory_rift: 0.05,
+          event: 0.04,
+          shop: 0.03,
+          enemy: -0.03,
+          rest: -0.04
+        }
+      }
+    }]
+  },
   karmaDevour: {
     id: 'karmaDevour',
     name: '噬业誓',
@@ -290,6 +352,64 @@ export const RUN_VOWS = {
           forge: 0.03,
           rest: -0.04,
           shop: -0.03
+        }
+      }
+    }]
+  },
+  frostSeal: {
+    id: 'frostSeal',
+    name: '霜封誓',
+    icon: '❄️',
+    category: '控场',
+    tags: ['虚弱', '控场', '防错'],
+    description: '把第一拍冻成慢题，用治疗折损换来敌方开场失速。',
+    playstyle: '敌人开场被虚弱压住，首回合更容易找到答案，但治疗收益会变薄。',
+    routeHint: '偏好观星台、记忆裂隙、营地',
+    buildFit: '适合虚弱控场、慢速防错、法则编织与需要先读题再收束的构筑。',
+    counterplay: '怕治疗折损和拖到后段乏力；若不能趁虚弱窗口稳住手牌，后续续航会吃紧。',
+    source: '第 1 / 3 / 5 章章末誓约 · 霜镜封题',
+    unlockRules: {
+      chapterRealms: [3, 9, 15],
+      maxOwned: 2
+    },
+    uiMeta: {
+      tone: 'oath',
+      readableCue: '敌人会先带着虚弱被冻慢，但你的治疗也会被霜封削薄。'
+    },
+    affinities: ['yanHan', 'ningXuan', 'xiangYe'],
+    tiers: [{
+      tier: 1,
+      label: '初契',
+      summary: '全体敌人开场虚弱 +1；首回合抽牌 +1；治疗效率降至 85%。',
+      risk: '回复被霜封压低，拖长战斗会更难补回血线。',
+      effects: {
+        battleStartEnemyWeakAll: 1,
+        firstTurnDraw: 1,
+        healMultiplier: 0.85,
+        mapWeightShift: {
+          observatory: 0.04,
+          memory_rift: 0.03,
+          rest: 0.02,
+          elite: -0.02,
+          trial: -0.02
+        }
+      }
+    }, {
+      tier: 2,
+      label: '封契',
+      summary: '全体敌人开场虚弱 +2；首回合抽牌 +1；开场护盾 +6；治疗效率降至 78%。',
+      risk: '霜封更深，若没有护盾和净化路线，治疗折损会变成中后段压力。',
+      effects: {
+        battleStartEnemyWeakAll: 2,
+        firstTurnDraw: 1,
+        openingBlock: 6,
+        healMultiplier: 0.78,
+        mapWeightShift: {
+          observatory: 0.05,
+          memory_rift: 0.04,
+          rest: 0.03,
+          elite: -0.03,
+          trial: -0.03
         }
       }
     }]

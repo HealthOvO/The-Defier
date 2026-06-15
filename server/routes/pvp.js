@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const { db } = require('../db/database');
 const { authenticate } = require('../middleware/auth');
 const { verifyRequestIntegrity } = require('../utils/hmac');
-const { normalizeClientTimestamp } = require('../utils/timestamps');
+const { getMaxAcceptedClientTimestamp, normalizeClientTimestamp } = require('../utils/timestamps');
 
 const router = express.Router();
 const SEASON_ID = 's1-genesis';
@@ -426,9 +426,10 @@ router.post('/defense', authenticate, asyncHandler(async (req, res) => {
     const realm = defenseRequest.realm;
     const powerScore = defenseRequest.powerScore;
     const saveTime = normalizeClientTimestamp(defenseRequest.snapshotTime, Date.now());
+    const maxStoredTime = getMaxAcceptedClientTimestamp();
     const snapshotId = makeId('pvp-defense');
     await ensureRank(req.user);
-    await dbRun(
+    const writeResult = await dbRun(
         `INSERT INTO pvp_defense_snapshots (id, user_id, user_name, power_score, realm, battle_data, config_data, save_time, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(user_id) DO UPDATE SET
@@ -438,16 +439,30 @@ router.post('/defense', authenticate, asyncHandler(async (req, res) => {
             battle_data = excluded.battle_data,
             config_data = excluded.config_data,
             save_time = excluded.save_time,
-            updated_at = excluded.updated_at`,
-        [snapshotId, req.user.id, req.user.username, powerScore, realm, JSON.stringify(battleData), JSON.stringify(config), saveTime, Date.now()]
+            updated_at = excluded.updated_at
+         WHERE excluded.save_time > CASE
+            WHEN pvp_defense_snapshots.save_time > ? THEN 0
+            ELSE pvp_defense_snapshots.save_time
+         END`,
+        [snapshotId, req.user.id, req.user.username, powerScore, realm, JSON.stringify(battleData), JSON.stringify(config), saveTime, Date.now(), maxStoredTime]
     );
-    await dbRun(
-        `UPDATE pvp_ranks SET realm = ?, division = ?, updated_at = ? WHERE user_id = ?`,
-        [realm, getDivisionByScore((await dbGet(`SELECT score FROM pvp_ranks WHERE user_id = ?`, [req.user.id]))?.score || 1000), Date.now(), req.user.id]
-    );
+    const skipped = writeResult.changes === 0;
+    if (!skipped) {
+        await dbRun(
+            `UPDATE pvp_ranks SET realm = ?, division = ?, updated_at = ? WHERE user_id = ?`,
+            [realm, getDivisionByScore((await dbGet(`SELECT score FROM pvp_ranks WHERE user_id = ?`, [req.user.id]))?.score || 1000), Date.now(), req.user.id]
+        );
+    }
     const row = await dbGet(`SELECT * FROM pvp_defense_snapshots WHERE user_id = ?`, [req.user.id]);
     const rank = await ensureRank(req.user);
-    res.json({ success: true, snapshot: publicDefense(row), rank, saveTime });
+    res.json({
+        success: true,
+        skipped,
+        message: skipped ? 'stale-pvp-defense-ignored' : undefined,
+        snapshot: publicDefense(row),
+        rank,
+        saveTime
+    });
 }));
 
 router.get('/defense/me', authenticate, asyncHandler(async (req, res) => {

@@ -1,5 +1,320 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-15: 秘宝回响试炼包与法宝奖励闭环
+  - 本轮完成
+    - `js/game.js` 新增试炼碑挑战包 `treasureHunt / 秘宝回响`：要求 6 回合内且最多打出 8 张牌完成试炼，敌方获得更厚护宝阵，成功后奖励法宝。
+    - `grantTrialChallengeReward()` 支持 `reward: 'treasure'`，优先通过现有 `getWeightedRandomTreasure()` 发放未拥有法宝；法宝池耗尽时转化为 120 灵石，重复/被拒绝发放时只转化 50 灵石且不误报“获得法宝”。
+    - `tests/sanity_trial_challenge_checks.cjs` 增加秘宝回响 catalog、组合条件、法宝奖励、空法宝池补偿、重复法宝补偿断言。
+    - `tests/browser_feature_audit.mjs` 增加真实浏览器回归：试炼碑弹窗必须展示 6 个挑战包；选择秘宝回响后模拟达成条件胜利，必须增加法宝、记录试炼赐赏日志并清理 trial 状态。
+    - `tests/browser_mobile_layout_audit.mjs` 收紧移动端试炼弹窗门禁，要求 `秘宝回响` 与 `6 回合内取胜 / 最多打出 8 张牌` 在 390px 视口内可见可达。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 补齐 `run_node_checks.sh` 与 `browser_mobile_layout_audit.mjs` 的防漏扫 marker，锁定剑心限令 7 张失败回归、移动端剑心限令、秘宝回响与完整 release gate 的 trial marker，避免 Node sanity 或移动端 trial marker 脱离 release 元门禁。
+  - 本轮验证
+    - TDD 红灯：`node tests/sanity_trial_challenge_checks.cjs` 在实现前失败于 `trial catalog should include treasureHunt`。
+    - TDD 红灯：`node tests/browser_feature_audit.mjs http://127.0.0.1:4192 output/browser-feature-trial-treasure-red-20260615` 在实现前确认缺少 `秘宝回响`，真实浏览器回归失败于 `missing_treasure_trial_choice`。
+    - 挑战者红灯：补入重复法宝用例后，`node tests/sanity_trial_challenge_checks.cjs` 失败于 `duplicate treasure should not report gained treasure`，随后修正 `addTreasure()` 返回 `false` 时的日志与补偿处理。
+    - `node --check js/game.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node --check tests/browser_mobile_layout_audit.mjs` ✅
+    - `node tests/sanity_trial_challenge_checks.cjs` ✅
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4192 output/browser-feature-trial-treasure-green-20260615` ✅，确认 `choiceCount=6`、`hasTreasureHunt=true`，并在真实浏览器胜利后从 0 件法宝增至 1 件法宝。
+    - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4192 output/browser-mobile-trial-treasure-green-20260615` ✅，确认移动端试炼弹窗 `choiceCount=6`、`hasTreasureHunt=true`、`treasureHuntConditionVisible=true`。
+    - `npm run test:node` ✅，包含本地后端安全、HMAC、PVP、存档、残影与本地 Node API E2E。
+    - 挑战者修复后复跑：`node tests/sanity_trial_challenge_checks.cjs` ✅、`node tests/sanity_release_gate_coverage_checks.cjs` ✅、`npm run test:node` ✅。
+    - 挑战者修复后浏览器复跑：`node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4192 output/browser-mobile-trial-treasure-after-review-20260615` ✅、`node tests/browser_feature_audit.mjs http://127.0.0.1:4192 output/browser-feature-trial-treasure-after-review-20260615b` ✅。
+    - `PORT=4193 OUTPUT_ROOT=output/release-browser-audits-local-20260615-trial-treasure npm run test:release:local` ✅，本地构建、Node checks 与完整浏览器 release gate 通过；fresh 汇总 `output/release-browser-audits-local-20260615-trial-treasure/report.json`：26/26 模块、576 条 findings、0 失败、0 console error、332 张截图。
+  - 当前结论
+    - 秘宝回响已作为第六个试炼碑挑战包进入本地玩法、奖励、Node sanity、真实浏览器回归和移动端门禁。
+    - 本地前后端 release gate 已覆盖 `auth-ui-cloud`、`backend-client`、PVP、challenge、map、events、reward、mobile 等 26 个模块；秘宝回响在 fresh feature 报告中确认 `choiceCount=6`，胜利后 `beforeTreasureCount=0`、`afterTreasureCount=1`、`trialCleared=true`，移动端报告确认 `hasTreasureHunt=true`、`treasureHuntConditionVisible=true`。
+    - 本轮严格只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+    - 下一个更低冲突的可玩性切片建议优先做观星台新增星轨预报，避免继续堆叠试炼碑热区。
+
+- 2026-06-15: 剑心限令试炼包与本地前后端全量复检
+  - 本轮完成
+    - `js/game.js` 新增试炼碑挑战包 `cardLimit / 剑心限令`，要求最多打出 6 张牌结束战斗，奖励稀有卡，并给敌方追加破绽压制、开场护盾与生命/攻击加成。
+    - `js/core/battle.js` 为战斗增加 `cardsPlayedThisBattle` 计数，在每场战斗开始时清零，并在真实出牌链路里累计，供试炼条件读取。
+    - `armTrialChallenge()` / `evaluateActiveTrialSuccess()` 统一保存并判定 `conditions.maxCardsPlayed`，使剑心限令能在胜利结算时正确通过或失败。
+    - `js/views/EventView.js` 与 `js/core/map.js` 补充 `最多打出 N 张牌` 条件文案，确保试炼选择弹窗和地图战斗日志都能读到新限制。
+    - `tests/sanity_trial_challenge_checks.cjs` 增加 Node 断言，覆盖 catalog 暴露 `cardLimit`、条件归一化、打出 7 张失败、打出 6 张边界成功。
+    - `tests/browser_feature_audit.mjs` 增加真实浏览器回归：选择剑心限令后实际调用 `playCardOnTarget()` 打出 7 张牌，再胜利结算，必须记录试炼未达成、清理 trial 状态且不发奖励。
+    - `tests/browser_mobile_layout_audit.mjs` 收紧移动端试炼弹窗门禁，要求 5 个挑战包可达，并显示 `剑心限令` 与 `最多打出 6 张牌`。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 锁定剑心限令、真实 7 张失败回归与移动端条件文案 marker，防止 release gate 漏扫。
+  - 本轮验证
+    - TDD 红灯：`node tests/sanity_trial_challenge_checks.cjs` 在实现前失败于 `trial catalog should include cardLimit`。
+    - TDD 红灯：`node tests/browser_feature_audit.mjs http://127.0.0.1:4188 output/browser-feature-trial-card-limit-red-20260615` 在实现前确认试炼弹窗仍只有 4 个包、缺少 `cardLimit`。
+    - `node --check js/game.js` ✅
+    - `node --check js/core/battle.js` ✅
+    - `node --check js/core/map.js` ✅
+    - `node --check js/views/EventView.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node --check tests/browser_mobile_layout_audit.mjs` ✅
+    - `node tests/sanity_trial_challenge_checks.cjs` ✅
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `npm run test:node` ✅，包含本地后端安全、HMAC、PVP、存档、残影与本地 Node API E2E。
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4190 output/browser-feature-trial-card-limit-rerun-20260615` ✅，真实浏览器 7 张出牌失败回归通过。
+    - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4190 output/browser-mobile-trial-card-limit-rerun-20260615b` ✅，移动端试炼弹窗确认 `choiceCount=5`、`hasCardLimit=true`、`cardLimitConditionVisible=true`。
+    - `PORT=4191 OUTPUT_ROOT=output/release-browser-audits-local-20260615-front-back-recheck-tightened npm run test:release:local` ✅，本地前后端 release 门禁 26/26 模块、575 条 findings、0 失败、0 console error、332 张截图，汇总见 `output/release-browser-audits-local-20260615-front-back-recheck-tightened/report.json`。
+  - 当前结论
+    - 剑心限令已作为第五个试炼碑挑战包进入本地玩法、文案、Node 回归、真实浏览器行为回归和移动端 release gate。
+    - 本轮严格只做本地前后端检查；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+    - 本地 preview 端口 4188 / 4189 / 4190 / 4191 均已清理或由门禁脚本自动退出。
+
+- 2026-06-15: 破界誓专属战场指令与本地前后端全量复检
+  - 本轮完成
+    - `js/core/battle.js` 为 `realmBreak / 破界誓` 增加专属战场指令 `realm_break_order / 破界裂令`，只在当前运行誓约包含破界誓时进入指令池。
+    - `resolveBattleCommandLoadout()` 会优先保留破界誓专属指令，避免随机抽样把玩家刚选择的誓约玩法藏起来。
+    - `破界裂令` 会突袭最低血存活目标、叠加 1 层破绽、回收 1 点指令槽；手牌过薄时从抽牌堆补 1 张，补足破界誓“多一点操作、但要承担节奏压力”的主动决策。
+    - `tests/sanity_run_vow_system_checks.cjs` 增加破界誓专属指令 Node 断言，覆盖指令出现、可发动、造成伤害、薄手补牌、费用折扣后再回收 1 点指令槽；反向补锁无誓约 / 非破界誓不泄漏 `realm_break_order`，以及破界誓 + 无尽同时保留专属指令与无尽强制指令。
+    - `tests/browser_audit.mjs` 增加真实浏览器战斗按钮探针，直接查询并点击 `data-command-id="realm_break_order"`，校验按钮文案、扣点、伤害、补牌和 `render_game_to_text()` payload。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 锁定 `realm break vow adds a clickable dedicated battle command`、`realm_break_order`、`破界裂令` 与负向/无尽组合 sanity marker，防止 release gate 漏扫新增玩法。
+  - 本轮验证
+    - TDD 红灯：`node tests/sanity_run_vow_system_checks.cjs` 在实现前失败于 `realmBreak should add dedicated realm break command`。
+    - TDD 红灯：`node tests/browser_audit.mjs http://127.0.0.1:4186 output/browser-audit-realm-break-command-red-20260615` 在实现前确认按钮不可见、payload 缺少专属指令。
+    - `node --check js/core/battle.js` ✅
+    - `node --check tests/sanity_run_vow_system_checks.cjs` ✅
+    - `node --check tests/browser_audit.mjs` ✅
+    - `node --check tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/sanity_run_vow_system_checks.cjs` ✅
+    - `npm run build` ✅
+    - `npm run test:node` ✅，包含本地后端安全、HMAC、PVP、存档、残影与本地 Node API E2E。
+    - `PORT=4187 OUTPUT_ROOT=output/release-browser-audits-local-20260615-realm-break-front-backend npm run test:release:local` ✅，26/26 模块、574 条 findings、0 失败、0 console error、332 张截图，汇总见 `output/release-browser-audits-local-20260615-realm-break-front-backend/report.json`。
+    - challenger 反向巡检后补点并复跑 `node tests/sanity_run_vow_system_checks.cjs` ✅、`node tests/sanity_release_gate_coverage_checks.cjs` ✅、`npm run test:node` ✅，确认新增负向/无尽组合覆盖也进入本地 Node 门禁。
+    - `git diff --check` ✅
+  - 当前结论
+    - 破界誓已经从被动数值修正扩展为可点击、可验证、会影响战斗节奏的主动指令。
+    - 本轮严格只做本地前后端检查；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+    - 本地 preview 端口 4186 / 4187 均已清理。
+
+- 2026-06-15: 霜封誓控场玩法扩展与本地前后端全量复检
+  - 本轮完成
+    - `js/data/run_vows.js` 新增 `frostSeal / 霜封誓`：用全体敌人开场虚弱、首回合抽牌与二阶开场护盾换取治疗效率折损，定位为控场、防错、虚弱窗口玩法。
+    - `js/core/player.js` 聚合 `battleStartEnemyWeakAll`，并保留霜封誓的 `buildFit / counterplay / uiMeta.readableCue / mapWeightShift` 等玩家可读元数据。
+    - `js/core/battle.js` 在 `startBattle()` 后接入 `applyRunVowBattleStart()`，战斗开始时把誓约虚弱施加到全部存活敌人。
+    - `js/game.js` 在章末誓约选择面补充 `敌方开场虚弱 +N` 效果标签，让霜封誓升阶的收益和代价能在真实 UI 中读到。
+    - `tests/sanity_run_vow_system_checks.cjs` 增加霜封誓断言，覆盖元数据、治疗折损、首回合抽牌、地图权重偏置、开战全体虚弱与二阶护盾。
+    - `tests/browser_vow_choice_audit.mjs` 增加霜封誓章末升阶浏览器探针，确认 `封契`、全体虚弱、开场护盾、治疗折损和通用 oath modal 状态均可见。
+    - `tests/browser_audit.mjs` 增加霜封誓真实战斗浏览器探针，进入战斗前预置 `frostSeal:2`，并校验战斗 HUD、`vowReadable` 与全体敌人 `weak >= 2`。
+  - 本轮验证
+    - `node --check js/data/run_vows.js js/core/player.js js/core/battle.js js/game.js tests/sanity_run_vow_system_checks.cjs tests/browser_vow_choice_audit.mjs` ✅
+    - `node tests/sanity_run_vow_system_checks.cjs` ✅
+    - `npm run build` ✅
+    - `npm run test:node` ✅，包含后端 HMAC / timestamp、本地后端安全检查、PVP / 存档 / 残影、以及本地 Node API E2E。
+    - `npm run test:browser:release -- http://127.0.0.1:4184 output/release-browser-audits-local-20260615-full-front-backend-check` ✅，完整浏览器 release 审计通过，汇总见 `output/release-browser-audits-local-20260615-full-front-backend-check/report.json`。
+    - 反向巡检后补跑 `node tests/browser_audit.mjs http://127.0.0.1:4185 output/browser-audit-frost-seal-real-battle-20260615` ✅，真实战斗中霜封誓 HUD / `vowReadable` / 敌方 `weak >= 2` 均通过。
+    - 反向巡检修正后补跑 `npm run test:browser:release -- http://127.0.0.1:4185 output/release-browser-audits-local-20260615-frost-seal-post-review` ✅，26/26 模块、573 条 findings、0 失败、0 console error、332 张截图，汇总见该目录 `report.json`。
+  - 当前结论
+    - 本轮按用户要求完成本地前后端检查和霜封誓玩法收口；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+    - 本地前端构建、Node / 后端测试、浏览器 release gate 均通过；本地 preview 已停止。
+
+- 2026-06-15: 本地前后端复检与战斗誓约可读门禁补强
+  - 本轮完成
+    - `js/core/player.js` 保留运行时誓约的 `buildFit / counterplay / source / tags / uiMeta.readableCue` 等只读元数据，避免 `Game` 层和 `Player` 层誓约信息不同步。
+    - `js/core/battle.js` 新增 `resolveBattleVowReadableState()`，把当前战斗誓约投影成 `vowReadable`，并让战斗系统卡的誓约条展示 `收益 / 赌注 / 对策 / 提示 / 路线`。
+    - `js/game.js` 在 `render_game_to_text()` 的 battle payload 中镜像 `systemsHud` 与顶层 `vowReadable`，方便浏览器审计直接校验当前战斗 HUD 应显示的誓约读法。
+    - `tests/browser_audit.mjs` 从只看 payload 扩展为同时检查真实 DOM：`battle-system-chip[data-system-id="vows"]` 和 `battle-system-card[data-system-id="vows"]` 必须显示誓约名称、`初契 · 1/2`、以及 `收益 / 赌注 / 对策 / 路线` 详情。
+    - `tests/sanity_battle_command_checks.cjs` 增加双誓约投影断言，锁定 `破界誓 +1`、`2/2 条进行中`、lead 誓约详情与 active 顺序。
+    - `tests/backend_security_checks.cjs` 补齐 `/api/ghosts/random` 无 token 匿名成功路径：先上传 77 层残影，再匿名随机拉取并断言 owner、realm 与 parsed ghostData。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 battle vow readable DOM marker、浏览器 release 脚本纳管 `browser_audit` / `backend-client`、以及匿名残影成功路径 marker。
+  - 本轮验证
+    - `npm run build` ✅
+    - `npm run test:browser:release -- http://127.0.0.1:4183 output/release-browser-audits-local-20260615-vow-readable-full` ✅，26/26 模块、571 条 finding、0 失败、0 console error、331 张截图。
+    - `node --check tests/browser_audit.mjs` ✅
+    - `node --check tests/backend_security_checks.cjs` ✅
+    - `node --check tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/backend_security_checks.cjs` ✅
+    - `node tests/sanity_battle_command_checks.cjs` ✅
+    - `node tests/browser_audit.mjs http://127.0.0.1:4183 output/browser-audit-vow-readable-dom-20260615` ✅，战斗誓约真实 DOM chip/card 与 payload 镜像均通过。
+    - `npm run test:node` ✅，包含本地 Node API E2E：注册、登录、存档、全局数据、残影上传/拉取、PVP 匹配与结算。
+  - 当前结论
+    - 本轮按用户要求只做本地前后端复检和门禁补强；未 SSH 到 `cloud119`，未访问 `https://080305.xyz/`，未 rsync，未重启线上后端 / Nginx。
+    - 前端 battle 誓约可读性已从 payload 扩展到真实 HUD DOM；后端可选鉴权残影随机拉取同时覆盖坏 token 401 和无 token 成功路径。
+
+- 2026-06-15: 星债誓玩法扩展与本地浏览器验证
+  - 本轮完成
+    - `js/data/run_vows.js` 新增 `starDebt / 星债誓`：定位为“预支首拍、后续还债”的章末誓约，提供首回合灵力、奖励高稀有倾向、观星/裂隙/事件/商店路线偏置，同时用每战开场失血与商店涨价作为代价。
+    - `starDebt` 支持两阶：初契提供每战开场失去 3 生命、首回合灵力 +1、商店价格 +10%、高稀有奖励倾向；陨契提升为每战开场失去 5 生命、首击伤害 +3、商店价格 +18%、更高奖励倾向。
+    - `tests/sanity_run_vow_system_checks.cjs` 增加星债誓回归，直接验证誓约存在、初契/陨契运行时效果聚合、每战开场扣血、首回合灵力、首击伤害、奖励倾向与商店债务。
+    - `tests/browser_vow_choice_audit.mjs` 增加浏览器可操作验证：在本地页面中预置星债誓初契后打开章末誓约选择，按卡牌内容定位陨契升阶项，确认开场失血、首击伤害、商店涨价、高稀有奖励倾向等玩家可读信息。
+  - 本轮验证
+    - TDD 红灯：`node tests/sanity_run_vow_system_checks.cjs` 在补数据前因 `starDebt vow should exist` 失败。
+    - `node --check tests/browser_vow_choice_audit.mjs` ✅
+    - `node --check js/data/run_vows.js` ✅
+    - `node tests/sanity_run_vow_system_checks.cjs` ✅
+    - `npm run build` ✅
+    - `node tests/browser_vow_choice_audit.mjs http://127.0.0.1:4177 output/browser-vow-choice-star-debt-local-20260615` ✅
+    - `npm run test:node` ✅，包含誓约 guardrail、星债誓运行时检查、PVP、后端 E2E 与现有本地 Node 门禁。
+  - 当前结论
+    - 星债誓已作为新的可玩誓约进入本地数据、运行时聚合、章末选择弹窗与浏览器审计链路。
+    - 本轮严格只做本地开发与验证，未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
+- 2026-06-09: 弹窗探针与浏览器后端结算成功链路收口
+  - 本轮完成
+    - `tests/browser_frontend_layout_audit.mjs` 为 `skill-confirm-modal`、`treasure-detail-modal`、`law-detail-modal`、`reward-modal` 增加专项探针，覆盖桌面、矮屏与移动端的内容可见性、视口边界、关闭/确认按钮 top-hit、状态 chip 与裁切 warning 升级。
+    - 法宝详情探针改走真实 `game.inventoryView.showTreasureDetail(...)`，避免只打开 `#treasure-detail-modal` 空模板；法则详情增加完整 fallback sample，避免缺 `passive.type` 时把脚本样本错误当成 UI 失败。
+    - `tests/browser_backend_client_smoke.mjs` 新增本地测试后端权威结算分支：另起临时 Node 后端并开启 `DEFIER_PVP_ALLOW_CLIENT_REPORTED_RESULT=1` / `DEFIER_PVP_TEST_MODE=1`，在浏览器内通过 `PVPService.reportMatchResult()` 验证服务端成功结算会同步 rank、wallet 与本地经济快照，且不会重复本地发奖。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 锁定上述四类弹窗探针 marker 与 PVP 浏览器后端 smoke 的新增 finding，防止 release gate 漏扫。
+  - 本轮验证
+    - `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4173 output/browser-frontend-layout-modal-probe-completeness` ✅，156 条 finding、0 失败、0 console error；四类弹窗在 desktop / short / mobile 均通过。
+    - `node tests/browser_backend_client_smoke.mjs http://127.0.0.1:4173 output/browser-backend-client-authoritative-pvp-smoke` ✅，3 条 finding、0 失败、0 console error，包含默认权威门禁 fallback 与测试后端允许时的服务端成功结算。
+    - `npm run test:node` ✅，包含本地 Node API E2E：注册、登录、存档、全局数据、残影上传/拉取、PVP 匹配与服务端结算。
+    - `PORT=4175 OUTPUT_ROOT=output/release-browser-audits-local-20260609-post-modal-authority npm run test:release:local` ✅，重新执行本地构建、Node checks 与完整浏览器 release gate。
+    - 最新汇总 `output/release-browser-audits-local-20260609-post-modal-authority/report.json`：26/26 模块、570 条 finding、0 失败、0 console error、330 张截图，`missingModules=[]`、`duplicateModules=[]`、`unknownModules=[]`。
+    - `git diff --check` ✅；本地 4173 / 4175 预览端口已清理。
+  - 当前结论
+    - 本轮继续严格只做本地验证，未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+    - 前端弹窗遮挡/裁切专项和浏览器侧真实本地后端 PVP 权威结算成功路径已进入完整 release gate。
+
+- 2026-06-09: 本地前后端完整门禁复核
+  - 本轮完成
+    - `tests/browser_frontend_layout_audit.mjs` 把动态卡牌详情、法宝囊叠 alert 与 reward / expedition CTA 从“可见”收紧到真实可命中、滚动后仍在视口内；reward CTA 的矩形判断保留 1px 浮点容差，避免小数像素误报。
+    - `css/style.css` 给 `reward-expedition-handoff-btn` 增加 scroll margin，并压缩移动端 challenge run banner 的排版，保证 active / replay banner 贴底时不越出 390x844 视口。
+    - `tests/backend_security_checks.cjs` 增加 PVP 空防御、无对手匹配的后端空态断言，并确认无对手匹配不会创建 match ticket。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 新增发布门禁覆盖自检，锁住生产只读脚本、reward CTA 视口门禁、challenge 移动端 banner 视口门禁、PVP 并发结算与空态无副作用断言。
+  - 本轮验证
+    - `PORT=4174 OUTPUT_ROOT=output/release-browser-audits-local-20260609-final-after-challenger npm run test:release:local` ✅，内部重新执行 `npm run build:pages`、`npm run test:node`，并在本地 `.site` 预览上跑完整浏览器 release gate。
+    - 最新汇总 `output/release-browser-audits-local-20260609-final-after-challenger/report.json`：26/26 模块、569 条 finding、0 失败、0 console error、329 张截图，`missingModules=[]`、`duplicateModules=[]`、`unknownModules=[]`。
+    - `git diff --check` ✅。
+  - 当前结论
+    - 本轮只做本地验证，未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+    - 在本地构建产物和本地真实后端 smoke 范围内，前端布局 / 遮挡、真实云存档 UI、PVP、挑战、远征、奖励页、地图、事件、移动端关键链路均进入 release gate 并通过。
+    - 线上生产域名仍未按本轮验证更新；如需声明线上状态，必须另走生产验证流程。
+
+- 2026-06-09: 动态卡牌详情、法宝囊弹窗栈与 PVP 并发结算门禁补强
+  - 本轮完成
+    - `css/layout-fixes.css` 为 `card-detail-container.detail-dual-layout` 增加最后加载的响应式 grid / 滚动规则，覆盖旧 `css/card-detail.css` 的固定 `800x500 + overflow:hidden`，解决动态卡牌详情在桌面与矮屏被裁切的问题。
+    - `tests/browser_frontend_layout_audit.mjs` 将 `dynamic-card-detail-modal` 的 `text-may-be-clipped` / `non-scrollable-content-clipped` 从 warning 升级为失败断言，并新增关闭按钮、摘要行滚动后 top-hit 断言，避免详情页重新退回不可滚动裁切或移动端不可关闭状态。
+    - `tests/browser_frontend_layout_audit.mjs` 为 `treasure-bag-alert-modal` 增加真实 dismiss 链断言：点击通用 alert 确认后 alert 必须关闭、法宝囊仍保持可见且关闭按钮可命中；再关闭法宝囊后两层弹窗都必须隐藏。
+    - `css/style.css` 压缩 challenge 移动端运行态横幅布局：训练重点限制为两行，统计区改为横向行，避免 replay 横幅把底部推出 390×844 视口。
+    - `tests/browser_challenge_mobile_flow_audit.mjs` 将 challenge active/replay run banner 从只检查横向宽度升级为完整 viewport 检查，防止 `bottom=864` 这类纵向出屏继续假通过。
+    - `tests/backend_security_checks.cjs` 增加 `/api/pvp/match/result` 同一 `matchTicket` 的并发双提交回归：两个并发请求必须恰好一个成功、一个 409，rank、wallet 与 `pvp_match_history` 只能结算一次。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加动态详情裁切/可达性失败规则、法宝囊 dismiss 链、challenge 移动端横幅纵向 viewport 断言，并扫描 `tests/backend_security_checks.cjs` 的 PVP 并发结算相关 marker，确保本地 release gate 不会漏掉这些专项断言。
+  - 本轮验证
+    - `node --check tests/browser_frontend_layout_audit.mjs` ✅
+    - `node --check tests/backend_security_checks.cjs` ✅
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `npm run build` ✅
+    - `node tests/backend_security_checks.cjs` ✅，包含 PVP match result 并发双提交只结算一次的断言。
+    - `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4173 output/browser-frontend-layout-treasure-alert-dismiss-chain` ✅，156 条 finding、0 失败、0 console error；法宝囊 alert dismiss 链通过。
+    - `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4173 output/browser-frontend-layout-dynamic-card-no-clipping-v2` ✅，156 条 finding、0 失败、0 console error；动态详情在 desktop / short / mobile 均无裁切失败。
+    - `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4173 output/browser-frontend-layout-dynamic-card-reachable-v3` ✅，156 条 finding、0 失败、0 console error；动态详情移动端关闭按钮与摘要行初始不可命中时，滚动后均可 top-hit。
+    - `node tests/browser_challenge_mobile_flow_audit.mjs http://127.0.0.1:4173 output/browser-challenge-mobile-flow-banner-viewport` ✅；active banner `bottom=844`，replay banner `bottom=844`，训练重点 `top=778 bottom=805`，均在 390×844 视口内。
+    - `npm run test:node` ✅，包含本地 Node API E2E：注册、登录、存档、全局数据、残影上传/拉取、PVP 匹配与结算。
+    - `npm run build:pages` ✅，本地生成 `.site` 构建产物。
+    - `git diff --check` ✅
+    - `npm run test:browser:release -- http://127.0.0.1:4173 output/release-browser-audits-local-20260609-dynamic-alert-pvp` ✅，最新汇总时间 `2026-06-09T09:50:15.361Z`：26/26 模块、569 条 finding、0 失败、0 console error、329 张截图。
+  - 当前结论
+    - 动态卡牌详情不再被旧固定高度与隐藏溢出样式裁切，并且裁切类 warning、关闭按钮/摘要行滚动后可达性都已纳入失败门禁。
+    - 法宝囊与通用 alert 的叠层关闭顺序已进入浏览器 release gate，能防止 alert 关闭后底层弹窗被遮挡或误关。
+    - Challenge 移动端运行态横幅不再纵向出屏，active/replay 两条路径都已有完整 viewport 断言。
+    - PVP 客户端上报结算已补并发双提交回归，当前后端只允许一个请求完成结算，重复并发提交返回冲突且不重复写账。
+    - 本轮严格按用户要求不动线上服务器；没有连接 `cloud119`，没有访问 `https://080305.xyz/`，没有部署、重启或修改远端 Nginx / systemd / 容器。
+
+- 2026-06-09: PVP 商店失败副作用与挑战页移动端 CTA 门禁补强
+  - 本轮完成
+    - `tests/backend_security_checks.cjs` 增加 `/api/user` alias 的损坏 JWT 负例，覆盖读取与写入都必须 401，避免同一用户数据接口别名漏掉鉴权回归。
+    - `tests/backend_security_checks.cjs` 增加 PVP 商店失败分支无副作用断言：不存在商品、余额不足、已拥有、售罄四类失败都必须保持 coins、ownedItems、equipped、purchases 与 transactionLog 不变。
+    - `css/style.css` 调整 challenge 移动端单列布局：窄屏下把 `#challenge-hub-launch` 提前为首屏可见 CTA，同时保持 side / ranking / main 内容继续纵向排列。
+    - `tests/browser_challenge_mobile_flow_audit.mjs` 将 challenge hub 的移动端首屏断言从只看横向边界升级为横向 + 纵向 viewport 检查，并新增奖励卡滚动可达性断言，防止 `top=5656` 这类假通过再次漏掉。
+  - 本轮验证
+    - `node --check tests/browser_challenge_mobile_flow_audit.mjs` ✅
+    - `node --check tests/backend_security_checks.cjs` ✅
+    - `node tests/backend_security_checks.cjs` ✅
+    - `npm run build` ✅
+    - `node tests/browser_challenge_mobile_flow_audit.mjs http://127.0.0.1:4173 output/browser-challenge-mobile-flow-cta-fix` ✅；旧 report 中 launch CTA 为 `top=5656 bottom=5706`，本轮修复后为 `top=211 bottom=261`，奖励卡滚动后为 `top=426 bottom=579`。
+    - `npm run test:node` ✅，包含本地 Node API E2E：注册、登录、存档、全局数据、残影上传/拉取、PVP 匹配与结算。
+    - `npm run build:pages` ✅，本地生成 `.site` 构建产物。
+    - `git diff --check` ✅
+    - `npm run test:browser:release -- http://127.0.0.1:4173 output/release-browser-audits-local-20260609-challenge-pvp` ✅，最新汇总时间 `2026-06-09T09:23:18.610Z`：26/26 模块、569 条 finding、0 失败、0 console error、329 张截图。
+  - 当前结论
+    - PVP 商店失败路径已具备后端无副作用回归门禁，失败购买不会改余额、拥有状态、装备状态、限购计数或交易日志。
+    - Challenge hub 移动端启动 CTA 已从深滚动位置提升到首屏，并纳入 release gate 的纵向可见性断言；奖励卡保持可滚动触达且无横向溢出。
+    - 本轮严格按用户要求不动线上服务器；没有连接 `cloud119`，没有访问 `https://080305.xyz/`，没有部署、重启或修改远端 Nginx / systemd / 容器。
+
+- 2026-06-09: PVP 防守快照、JWT 负例与奖励 CTA 布局门禁补强
+  - 本轮完成
+    - `server/routes/pvp.js` 为 `/api/pvp/defense` 补齐与存档/全局数据/残影同类的客户端时间戳防护：旧快照或同时间戳快照会被 `skipped=true` 接收但不覆盖当前防守；异常未来时间戳会被归一化，数据库里被污染成超大未来时间戳的行也不会永久锁死后续正常上传。
+    - `tests/backend_security_checks.cjs` 增加 PVP defense 的 newest / stale / same-time / future-normalized / normal-after-future / poisoned-future-recovery 回归用例，覆盖 realm、powerScore、config 不能被旧数据覆盖，并钉住 `pvp_ranks.realm/updatedAt` 不会被 stale 或同时间戳快照污染。
+    - `server/routes/ghosts.js` 收紧 `/api/ghosts/random` 可选登录逻辑：无 `Authorization` 时仍允许匿名随机残影；但传入损坏或过期 Bearer token 时必须返回 401，不能静默降级成匿名查询。
+    - `tests/backend_security_checks.cjs` 增加损坏 JWT 负例，覆盖 `/api/saves`、`/api/user/global`、`/api/ghosts/current`、`/api/pvp/rank` 与 `/api/ghosts/random`，防止坏 token 在后端关键读写链路里产生半匿名副作用。
+    - `index.html` 给登录弹窗内的登录/注册按钮补稳定 ID：`login-btn-modal`、`register-btn-modal`，供浏览器门禁直接定位关键操作按钮。
+    - `tests/browser_frontend_layout_audit.mjs` 新增 `authModalProbe` 与 `confirmModalProbe`，对 `auth-modal`、`generic-confirm-modal` 的内容、输入框、确认/取消/关闭按钮做可见性、滚动后 top-hit、移动端与短屏可操作性断言。
+    - `tests/browser_frontend_layout_audit.mjs` 扩展 `reward-screen` 的真实赛季奖励态：构造可领取训练线结题赏与赛季 `nextTask`，专项断言 `领取结题赏`、`回看洞府` 两个 CTA 在 desktop / short / mobile 三种视口滚动后均可 top-hit，且奖励面板无横向溢出。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 auth/confirm modal、reward CTA probe、top-hit、z-index 与 marker 覆盖，防止未来只保留场景列表但漏掉专项断言。
+  - 本轮验证
+    - TDD 红灯：`node tests/backend_security_checks.cjs` 在修复前因 `stale PVP defense should be skipped` 失败；`node tests/sanity_release_gate_coverage_checks.cjs` 在前端 probe 未实现前因 `authModalProbe` 缺失失败。
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node --check tests/browser_frontend_layout_audit.mjs && node --check tests/sanity_release_gate_coverage_checks.cjs && node --check server/routes/ghosts.js && node --check tests/backend_security_checks.cjs` ✅
+    - `node tests/backend_security_checks.cjs` ✅，包含 PVP defense 快照与 `pvp_ranks` 的 stale / same-time / future / recovery 副作用检查，以及损坏 JWT 对存档、全局数据、残影、PVP 与随机残影接口的 401 负例。
+    - `npm run build` ✅
+    - `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4173 output/browser-frontend-layout-reward-cta-auth-confirm-defense` ✅，156 条 finding、0 失败、0 console error；auth/confirm 与 reward-screen 在 desktop / short / mobile 三种视口均确认关键按钮滚动后 top-hit，reward CTA 面板无横向溢出。
+    - `npm run test:node` ✅，包含本地 Node API E2E：注册、登录、存档、全局数据、残影上传/拉取、PVP 匹配与结算。
+    - `node tests/sanity_intro_progress_sync_checks.cjs` ✅，11 个介绍页 / progress 共享锚点保持同步。
+    - `npm run test:browser:release -- http://127.0.0.1:4173 output/release-browser-audits-reward-cta-auth-confirm-defense` ✅，最新汇总时间 `2026-06-09T09:03:32.624Z`：26/26 模块、568 条 finding、0 失败、0 console error、329 张截图。
+    - `npm run build:pages` ✅，本地生成 `.site` 构建产物。
+    - `git diff --check` ✅
+  - 当前结论
+    - PVP 防守快照不会再被旧客户端状态、同时间戳重放或异常未来时间戳永久污染覆盖。
+    - 后端损坏 JWT 不会再在随机残影等可选登录接口中静默降级为匿名路径，关键读写链路都已有本地 401 负例。
+    - 登录/注册弹窗、通用确认弹窗与奖励页赛季 CTA 已进入完整本地浏览器 release gate，并通过桌面、矮屏、移动端遮挡与可操作性检查。
+    - 本轮严格按用户要求不动线上服务器；没有连接 `cloud119`，没有访问 `https://080305.xyz/`，没有部署、重启或修改远端 Nginx / systemd / 容器。
+
+- 2026-06-09: PVP ticket 生命周期与存档弹窗布局门禁补强
+  - 本轮完成
+    - `tests/backend_security_checks.cjs` 在 `DEFIER_PVP_ALLOW_CLIENT_REPORTED_RESULT=1` / `DEFIER_PVP_TEST_MODE=1` 本地测试链路里补齐 `/api/pvp/match/result` 的无效 ticket 与过期 ticket 负例：无效 ticket 必须 400、过期 ticket 必须 410，且都不能改动 rank score、wallet coins，也不能写入 `pvp_match_history`。
+    - `tests/browser_frontend_layout_audit.mjs` 新增 `saveSlotsModalProbe`，对 `save-slots-modal` 的 4 个存档位、最后一个非空槽位、`继续` / `覆盖` 按钮、取消按钮做可见性与滚动后 top-hit 断言，覆盖 desktop / short / mobile。
+    - 同一审计新增 `saveConflictModalProbe`，通过真实 `game.showSaveConflictModal(localData, cloudData, cloudTime)` 打开 `save-conflict-modal`，对本地/云端信息块、`保留本地` / `保留云端` 两个决策按钮做内容、可见性与 top-hit 断言，防止移动端冲突弹窗按钮被遮挡或信息区空跑。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 追加存档弹窗 probe marker，确保未来 release gate 不会只把这两个弹窗列入名单却缺少专项断言。
+  - 本轮验证
+    - 先跑 `node tests/sanity_release_gate_coverage_checks.cjs` ✅ 红灯确认：新增 sanity 约束在 probe 未实现前会因 `saveSlotsModalProbe` 缺失失败。
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node --check tests/browser_frontend_layout_audit.mjs && node --check tests/backend_security_checks.cjs` ✅
+    - `bash -n scripts/check-production-read-only.sh tests/run_node_checks.sh` ✅
+    - `node tests/backend_security_checks.cjs` ✅
+    - `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4173 output/browser-frontend-layout-save-modals-real-conflict` ✅，156 条 finding、0 失败、0 console error；`save-conflict-modal` 在三种视口均通过 `real-show-save-conflict-modal` 真实路径打开，`tempCloudMarker=layout-cloud-save-conflict`，本地/云端按钮均 top-hit；`save-slots-modal` 精确命中 4 个槽位、2 个非空、2 个空槽，移动端 `继续` / `覆盖` 初始不可命中但滚动后 `loadTopHit=true`、`overwriteTopHit=true`。
+    - `npm run build` ✅
+    - `npm run test:node` ✅，包含前端服务层到本地 Node API 的注册、登录、存档、全局数据、残影、PVP 匹配与默认结算门禁。
+    - `npm run test:browser:release -- http://127.0.0.1:4173 output/release-browser-audits-real-save-conflict` ✅，最新汇总时间 `2026-06-09T04:10:45.416Z`：26/26 模块、568 条 finding、0 失败、0 console error、329 张截图；本轮 fresh release gate 中 `save-conflict-modal` 三种视口均确认 `activation=real-show-save-conflict-modal`。
+  - 当前结论
+    - PVP 客户端上报结算的 ticket 生命周期负例已纳入本地后端安全门禁，能防止伪造或过期 ticket 产生结算副作用。
+    - 存档位选择与存档冲突两个高频动态弹窗已进入前端布局 release gate，并通过桌面、矮屏、移动端遮挡与可操作性检查。
+    - 本轮按用户要求不动线上服务器；没有连接 `cloud119`，没有访问生产域名，没有部署、重启或修改远端 Nginx / systemd / 容器。
+
+- 2026-06-09: 无尽偏执动态弹窗与生产只读门禁补强
+  - 本轮完成
+    - `tests/browser_frontend_layout_audit.mjs` 新增 `endless-paranoia-modal` 场景，复用真实 `#event-modal`，通过 `game.showEndlessParanoiaSelection(26)` 打开无尽模式“轮回偏执”选择弹窗，覆盖 desktop / short / mobile 三种视口。
+    - 新增 `endlessParanoiaModalProbe`，硬断言标题为“轮回偏执”、描述包含“大轮回”、3 个 `.event-choice.endless-paranoia-choice`、3 条 `.choice-effect`，以及首个选择按钮在当前视口可命中。
+    - `scripts/check-production-read-only.sh` 加严只读生产巡检：公网与远端本机 `/api/health` 不再只接受任意 `status=ok`，必须包含 `The Defier Backend is running`；远端还会点名 `routes/pvp.js` / `routes/ghosts.js` 并检查 PVP 结算门禁、PVP/Ghost HMAC 完整性调用与 Ghost 上传路由标记。
+    - 新增 `tests/sanity_release_gate_coverage_checks.cjs`，并接入 `npm run test:node`，防止生产只读脚本和前端布局审计遗漏这些关键门禁。
+  - 本轮验证
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `bash -n scripts/check-production-read-only.sh tests/run_node_checks.sh` ✅
+    - `node --check tests/browser_frontend_layout_audit.mjs` ✅
+    - `npm run build` ✅
+    - `npm run test:node` ✅
+    - `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4173 output/browser-frontend-layout-endless-paranoia` ✅，156 条 finding、0 失败、0 console error；`endless-paranoia-modal` 在 desktop / short / mobile 均为 `activation=real-endless-paranoia-selection`、`choiceCount=3`、`firstChoiceTopHit=true`。
+    - `node tests/summarize_browser_release_reports.cjs output/release-browser-audits-endless-paranoia http://127.0.0.1:4173` ✅，本地 release 聚合报告为 26/26 模块、568 条 finding、0 失败、0 console error、329 张截图；由于完整 `npm run test:browser:release` 运行过程中被中断，本条只把已落盘报告作为产物证据，不冒充命令完整退出证据。
+  - 当前结论
+    - 无尽模式“轮回偏执”这个高密度动态事件弹窗已进入前端布局门禁，并通过桌面、矮屏、移动端遮挡与可操作性检查。
+    - 生产只读巡检本地脚本已能区分 The Defier 后端与其他返回 `status=ok` 的服务，并补上 PVP / Ghost 重模块的远端静态标记检查。
+    - 本轮按用户要求不动线上服务器；没有部署、没有重启、没有修改远端 Nginx / systemd / 容器，也不把这些本地结果声明为线上已通过。
+
+- 2026-06-09: 战斗命令动态弹窗真实布局门禁补强
+  - 本轮完成
+    - `tests/browser_frontend_layout_audit.mjs` 新增 `horizon-barter-modal` 与 `resonance-matrix-modal` 两个战斗命令动态弹窗场景，覆盖 desktop / short / mobile 三种视口。
+    - 新增审计激活链会临时解除 `navigator.webdriver` 分支，并调用真实 `battle.resolveHorizonBarterMode()` / `battle.resolveResonanceMatrixMode(...)` 打开弹窗；`activation=real-battle-resolver` 与 `webdriverOverrideApplied=true` 现在是这两个场景的硬门禁。
+    - 新增 `battleCommandModalProbe`，硬断言标题、选项数量、效果行、取消按钮可见且可命中、以及弹窗 z-index；矮屏和移动端会先证明取消按钮可滚动到可点位置，避免高弹窗被误判为不可操作。
+    - 弹窗清理逻辑补充 `#horizon-barter-cancel` / `#resonance-matrix-cancel`，避免真实 resolver 的 pending promise 和 modal 状态污染后续场景。
+  - 本轮验证
+    - `node --check tests/browser_frontend_layout_audit.mjs` ✅
+    - `npm run build` ✅
+    - `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4173 output/browser-frontend-layout-battle-command-modals` ✅，153 条 finding、0 失败、0 console error；两个新增场景在三种视口均为 `activation=real-battle-resolver`、`webdriverOverrideApplied=true`、`realBattleResolverOk=true`。
+    - `npm run test:browser:release -- http://127.0.0.1:4173 output/release-browser-audits-battle-command-modals` ✅，最新汇总时间 `2026-06-09T02:58:48.932Z`：26/26 模块、565 条 finding、0 失败、0 console error、326 张截图。
+  - 当前结论
+    - `界隙交易` 与 `命环共振` 两条战斗动态弹窗已经进入前端布局 release gate，并通过真实 battle resolver 的桌面、矮屏、移动端遮挡与可操作性检查。
+    - 这仍不是线上部署记录；本轮没有 rsync、没有重启生产后端，也没有写生产数据。
+
 - 2026-06-04: 生产 PVP smoke 与介绍页锚点补强
   - 本轮完成
     - `tests/prod_api_smoke.cjs` 补入最小 PVP 生产 API 链路，覆盖 `/api/pvp/rank`、`/api/pvp/economy`、`/api/pvp/defense`、`/api/pvp/defense/me`、`/api/pvp/leaderboard`、`/api/pvp/match`、`/api/pvp/match/result` 默认权威门禁与 `/api/pvp/shop/purchase`，并保留生产目标 `CONFIRM_PROD=1` 写入保护。
