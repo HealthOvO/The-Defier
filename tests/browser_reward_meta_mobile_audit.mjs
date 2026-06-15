@@ -266,7 +266,7 @@ function recordConsoleError(text) {
     const cards = Array.from(document.querySelectorAll('#reward-cards .card'));
     const chapterArcNode = expeditionPanel?.querySelector('[data-season-board-chapter-arc-reward="true"]') || null;
     const laneRewardButton = expeditionPanel?.querySelector('[data-season-board-lane-reward-claim="true"]') || null;
-    const handoffButton = expeditionPanel?.querySelector('[data-season-board-handoff-cta="true"]') || null;
+    const handoffButton = expeditionPanel?.querySelector('[data-season-board-action-reward="true"] [data-season-board-handoff-cta="true"]') || null;
 
     const payload = typeof window.render_game_to_text === 'function'
       ? JSON.parse(window.render_game_to_text())
@@ -401,7 +401,7 @@ function recordConsoleError(text) {
     };
 
     const laneReward = await inspectButtonReach('#reward-expedition-meta [data-season-board-lane-reward-claim="true"]');
-    const handoff = await inspectButtonReach('#reward-expedition-meta [data-season-board-handoff-cta="true"]');
+    const handoff = await inspectButtonReach('#reward-expedition-meta [data-season-board-action-reward="true"] [data-season-board-handoff-cta="true"]');
     return {
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
@@ -481,7 +481,7 @@ function recordConsoleError(text) {
     JSON.stringify(laneRewardClickProbe || null)
   );
 
-  const rewardSeasonHandoffButton = page.locator('#reward-expedition-meta [data-season-board-handoff-cta="true"]').first();
+  const rewardSeasonHandoffButton = page.locator('#reward-expedition-meta [data-season-board-action-reward="true"] [data-season-board-handoff-cta="true"]').first();
   let rewardSeasonHandoffClickProbe = null;
   if ((await rewardSeasonHandoffButton.count()) < 1) {
     rewardSeasonHandoffClickProbe = { ok: false, reason: 'missing_reward_handoff_button' };

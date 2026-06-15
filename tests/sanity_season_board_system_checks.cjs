@@ -2156,6 +2156,19 @@ function loadFile(ctx, filePath) {
     chapterName: '第15周章经营验收',
     seasonBoard: chapterArcBoard
   };
+  const chapterArcRewardTarget = chapterArcGame.rewardView.getRewardSeasonBoardHandoffTarget('chapterArc');
+  assert(
+    chapterArcRewardTarget
+      && chapterArcRewardTarget.sourceKey === 'chapterArc'
+      && chapterArcRewardTarget.action === 'collection'
+      && chapterArcRewardTarget.value === 'chapters'
+      && chapterArcRewardTarget.source === 'chapter_arc'
+      && chapterArcRewardTarget.sourceId === chapterArc.id
+      && chapterArcRewardTarget.buttonLabel
+      && /章节|章程|档案/.test(chapterArcRewardTarget.buttonLabel)
+      && chapterArcRewardTarget.title === (chapterArc.arcLabel || chapterArc.chapterLabel),
+    `chapter arc reward target should route to collection chapters without mutating chapterArc metadata, got ${JSON.stringify(chapterArcRewardTarget)}`
+  );
   chapterArcGame.currentScreen = 'reward-screen';
   const chapterArcPayload = JSON.parse(chapterArcGame.renderGameToText());
   const mirroredChapterArc = assertSeasonBoardChapterArcMirror(chapterArcPayload, 'chapter arc payload');

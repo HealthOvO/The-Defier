@@ -338,6 +338,8 @@ function rectObj(rect) {
     const rewardSeasonBoardFrontierCouncilNodeCount = expeditionPanel?.querySelectorAll('[data-season-board-frontier-council-reward="true"]').length || 0;
     const rewardSeasonBoardChapterArcNodeCount = expeditionPanel?.querySelectorAll('[data-season-board-chapter-arc-reward="true"]').length || 0;
     const rewardSeasonBoardChapterArcButtonCount = rewardSeasonBoardChapterArcNode?.querySelectorAll('button').length || 0;
+    const rewardSeasonBoardChapterArcHandoff = rewardSeasonBoardChapterArcNode?.querySelector('[data-season-board-handoff-cta="true"]') || null;
+    const rewardSeasonBoardChapterArcHandoffText = (rewardSeasonBoardChapterArcHandoff?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardLaneRewardNodes = Array.from(expeditionPanel?.querySelectorAll('[data-season-board-lane-reward="true"]') || []);
     const rewardSeasonBoardLaneRewardButtons = Array.from(expeditionPanel?.querySelectorAll('[data-season-board-lane-reward-claim="true"]') || []);
     const rewardSeasonBoardLaneRewardText = rewardSeasonBoardLaneRewardNodes.map(nodeText).join(' ').trim();
@@ -346,6 +348,8 @@ function rectObj(rect) {
     const rewardSeasonBoardTrainingRewardNode = expeditionPanel?.querySelector('[data-season-board-lane-reward="true"][data-season-board-lane-reward-lane-id="training"]') || null;
     const rewardSeasonBoardTrainingRewardButton = rewardSeasonBoardTrainingRewardNode?.querySelector('[data-season-board-lane-reward-claim="true"]') || null;
     const rewardPrimaryHandoff = expeditionPanel?.querySelector('[data-season-board-action-reward="true"] [data-season-board-handoff-cta="true"]') || null;
+    const rewardPrimaryHandoffCount = expeditionPanel?.querySelectorAll('[data-season-board-action-reward="true"] [data-season-board-handoff-cta="true"]').length || 0;
+    const rewardChapterArcHandoffCount = rewardSeasonBoardChapterArcNode?.querySelectorAll('[data-season-board-handoff-cta="true"]').length || 0;
     const rewardHandoffButtonCount = expeditionPanel?.querySelectorAll('[data-season-board-handoff-cta="true"]').length || 0;
     const rewardPrimaryHandoffText = (rewardPrimaryHandoff?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardChipText = Array.from(expeditionPanel?.querySelectorAll('[data-season-board-chip]') || [])
@@ -480,12 +484,19 @@ function rectObj(rect) {
         rewardSeasonBoardFrontierChronicleNodeCount === 1 &&
         rewardSeasonBoardFrontierCouncilNodeCount === 1 &&
         rewardSeasonBoardChapterArcNodeCount === 1 &&
-        rewardSeasonBoardChapterArcButtonCount === 0 &&
+        rewardSeasonBoardChapterArcButtonCount === 1 &&
+        rewardSeasonBoardChapterArcButtonCount === rewardChapterArcHandoffCount &&
         rewardSeasonBoardChapterArcNode?.dataset?.seasonBoardChapterArcId === rewardSeasonBoard.chapterArc.id &&
         rewardSeasonBoardChapterArcNode?.dataset?.seasonBoardChapterArcWeekSlot === String(rewardSeasonBoard.chapterArc.weekSlot || '') &&
         rewardSeasonBoard.chapterArc.objective.available !== false &&
         rewardSeasonBoardChapterArcNode?.dataset?.seasonBoardChapterArcObjectiveId === rewardSeasonBoard.chapterArc.objective.id &&
         rewardSeasonBoardChapterArcNode?.dataset?.seasonBoardChapterArcObjectiveStatus === rewardSeasonBoard.chapterArc.objective.statusId &&
+        rewardSeasonBoardChapterArcHandoff?.dataset?.seasonBoardHandoffSourceKey === 'chapterArc' &&
+        rewardSeasonBoardChapterArcHandoff?.dataset?.seasonBoardHandoffAction === 'collection' &&
+        rewardSeasonBoardChapterArcHandoff?.dataset?.seasonBoardHandoffValue === 'chapters' &&
+        rewardSeasonBoardChapterArcHandoff?.dataset?.seasonBoardHandoffSource === 'chapter_arc' &&
+        rewardSeasonBoardChapterArcHandoff?.dataset?.seasonBoardHandoffSourceId === rewardSeasonBoard.chapterArc.id &&
+        /章节|章程|档案/.test(rewardSeasonBoardChapterArcHandoffText) &&
         rewardSeasonBoardChapterArcText.includes(rewardSeasonBoard.chapterArc.arcLabel || rewardSeasonBoard.chapterArc.chapterLabel || '') &&
         rewardSeasonBoardChapterArcText.includes(rewardSeasonBoard.chapterArc.summaryLine || '') &&
         rewardSeasonBoardChapterArcText.includes(rewardSeasonBoard.chapterArc.objective.summaryLine || '') &&
@@ -553,6 +564,7 @@ function rectObj(rect) {
         rewardSeasonBoard.nextWeekGoal?.taskSourceId === rewardSeasonBoard.nextTask.taskSourceId &&
         rewardSeasonBoard.nextWeekGoal?.action === rewardSeasonBoard.nextTask.actionType &&
         rewardSeasonBoard.nextWeekGoal?.value === rewardSeasonBoard.nextTask.actionValue &&
+        rewardPrimaryHandoffCount === 1 &&
         rewardPrimaryHandoff?.dataset?.seasonBoardHandoffSourceKey === 'nextTask' &&
         rewardPrimaryHandoff?.dataset?.seasonBoardHandoffAction === rewardSeasonBoard.nextWeekGoal?.action &&
         rewardPrimaryHandoff?.dataset?.seasonBoardHandoffValue === rewardSeasonBoard.nextWeekGoal?.value &&
@@ -560,7 +572,7 @@ function rectObj(rect) {
         rewardPrimaryHandoff?.dataset?.seasonBoardHandoffSourceId === rewardSeasonBoard.nextWeekGoal?.sourceId &&
         rewardPrimaryHandoff?.dataset?.seasonBoardHandoffTaskId === rewardSeasonBoard.nextWeekGoal?.taskId &&
         rewardPrimaryHandoffText === rewardSeasonBoard.nextWeekGoal?.buttonLabel &&
-        rewardHandoffButtonCount === 1 &&
+        rewardHandoffButtonCount === rewardPrimaryHandoffCount + rewardChapterArcHandoffCount &&
         rewardHeaderOutcome === rewardSeasonBoard.settlement.outcomeId &&
         rewardNextActionSource === 'nextTask' &&
         expeditionPanel?.dataset?.seasonBoardOutcome === 'locking_sheet' &&
@@ -645,6 +657,10 @@ function rectObj(rect) {
       rewardSeasonBoardFrontierCouncilNodeCount,
       rewardSeasonBoardChapterArcNodeCount,
       rewardSeasonBoardChapterArcButtonCount,
+      rewardPrimaryHandoffCount,
+      rewardChapterArcHandoffCount,
+      rewardSeasonBoardChapterArcHandoffDataset: rewardSeasonBoardChapterArcHandoff ? { ...rewardSeasonBoardChapterArcHandoff.dataset } : null,
+      rewardSeasonBoardChapterArcHandoffText,
       rewardSeasonBoardLaneRewardText,
       rewardSeasonBoardLaneRewardChipText,
       rewardSeasonBoardLaneRewardClaimableCount,

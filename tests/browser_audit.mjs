@@ -693,8 +693,17 @@ async function openNewGameEntry(page) {
     if (typeof game.battle.updateBattleCommandUI === 'function') game.battle.updateBattleCommandUI();
     const button = document.querySelector('#battle-command-panel [data-command-id="realm_break_order"]');
     const commandTextsBefore = Array.from(document.querySelectorAll('#battle-command-panel .battle-command-btn')).map((el) => (el.textContent || '').trim());
-    const target = Array.isArray(game.battle.enemies) ? game.battle.enemies.find((enemy) => enemy && enemy.currentHp > 0) : null;
+    const aliveEnemies = Array.isArray(game.battle.enemies) ? game.battle.enemies.filter((enemy) => enemy && enemy.currentHp > 0) : [];
+    const target = aliveEnemies.reduce((lowest, enemy) => {
+      if (!lowest) return enemy;
+      const enemyHp = Math.max(0, Math.floor(Number(enemy?.currentHp) || 0));
+      const lowestHp = Math.max(0, Math.floor(Number(lowest?.currentHp) || 0));
+      return enemyHp < lowestHp ? enemy : lowest;
+    }, null);
+    const targetIndex = Array.isArray(game.battle.enemies) ? game.battle.enemies.indexOf(target) : -1;
     const hpBefore = Math.max(0, Math.floor(Number(target?.currentHp) || 0));
+    const blockBefore = Math.max(0, Math.floor(Number(target?.block) || 0));
+    const durabilityBefore = hpBefore + blockBefore;
     const pointsBefore = Math.max(0, Math.floor(Number(game.battle.commandState?.points) || 0));
     const costBefore = button ? (button.textContent || '').trim() : '';
     if (button) button.click();
@@ -704,14 +713,22 @@ async function openNewGameEntry(page) {
       payload = JSON.parse(window.render_game_to_text());
     } catch {}
     const hpAfter = Math.max(0, Math.floor(Number(target?.currentHp) || 0));
+    const blockAfter = Math.max(0, Math.floor(Number(target?.block) || 0));
+    const durabilityAfter = hpAfter + blockAfter;
     const pointsAfter = Math.max(0, Math.floor(Number(game.battle.commandState?.points) || 0));
     return {
       buttonVisible: !!button,
       buttonText: button ? (button.textContent || '').trim() : '',
       costBefore,
       commandTextsBefore,
+      targetIndex,
+      targetName: target?.name || '',
       hpBefore,
       hpAfter,
+      blockBefore,
+      blockAfter,
+      durabilityBefore,
+      durabilityAfter,
       pointsBefore,
       pointsAfter,
       lastCommandId: game.battle.commandState?.lastCommandId || '',
@@ -728,7 +745,7 @@ async function openNewGameEntry(page) {
       && /破界裂令/.test(realmBreakCommandProbe.buttonText || '')
       && /消耗/.test(realmBreakCommandProbe.costBefore || '')
       && realmBreakCommandProbe.lastCommandId === 'realm_break_order'
-      && realmBreakCommandProbe.hpAfter < realmBreakCommandProbe.hpBefore
+      && realmBreakCommandProbe.durabilityAfter < realmBreakCommandProbe.durabilityBefore
       && realmBreakCommandProbe.pointsAfter === realmBreakCommandProbe.pointsBefore - 1
       && realmBreakCommandProbe.handIds.includes('realm_break_browser_draw')
       && realmBreakCommandProbe.payloadCommand

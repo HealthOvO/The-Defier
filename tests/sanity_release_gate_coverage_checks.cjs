@@ -257,6 +257,7 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'realm_break_order',
   '破界裂令',
   'realm_break_browser_draw',
+  'durabilityAfter < realmBreakCommandProbe.durabilityBefore',
   'pointsAfter === realmBreakCommandProbe.pointsBefore - 1',
 ].forEach((needle) => {
   assert.ok(

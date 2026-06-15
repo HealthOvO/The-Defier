@@ -339,6 +339,7 @@ async function safeScreenshot(page, outPath) {
     const chapterArcChip = panel?.querySelector('[data-season-board-chip="chapter-arc"]') || null;
     const chapterArcPressureChip = panel?.querySelector('[data-season-board-chip="chapter-arc-pressure"]') || null;
     const chapterArcObjectiveChip = panel?.querySelector('[data-season-board-chip="chapter-arc-objective"]') || null;
+    const chapterArcButton = chapterArcNode?.querySelector('[data-season-board-handoff-cta="true"]') || null;
     const payload = typeof window.render_game_to_text === 'function'
       ? JSON.parse(window.render_game_to_text())
       : null;
@@ -358,6 +359,8 @@ async function safeScreenshot(page, outPath) {
       chapterArcPressureChipText: chapterArcPressureChip?.textContent?.replace(/\s+/g, ' ').trim() || '',
       chapterArcObjectiveChipText: chapterArcObjectiveChip?.textContent?.replace(/\s+/g, ' ').trim() || '',
       chapterArcButtonCount: chapterArcNode?.querySelectorAll('button').length || 0,
+      chapterArcButtonText: chapterArcButton?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      chapterArcButtonDataset: chapterArcButton ? { ...chapterArcButton.dataset } : null,
       chapterArcDataset: chapterArcNode ? { ...chapterArcNode.dataset } : null,
       rewardPayload: payload?.reward?.expedition || null,
       latestSlateId: payload?.expedition?.latestSlate?.id || null,
@@ -383,8 +386,14 @@ async function safeScreenshot(page, outPath) {
       && /章程|三周|章节/.test(expeditionRewardProbe.chapterArcChipText || '')
       && typeof expeditionRewardProbe.chapterArcText === 'string'
       && expeditionRewardProbe.chapterArcText.length > 0
-      && expeditionRewardProbe.chapterArcButtonCount === 0
+      && expeditionRewardProbe.chapterArcButtonCount >= 1
+      && /章节|章程|档案/.test(expeditionRewardProbe.chapterArcButtonText || '')
       && !!expeditionRewardProbe.rewardPayload?.seasonBoard?.chapterArc
+      && expeditionRewardProbe.chapterArcButtonDataset?.seasonBoardHandoffSourceKey === 'chapterArc'
+      && expeditionRewardProbe.chapterArcButtonDataset?.seasonBoardHandoffAction === 'collection'
+      && expeditionRewardProbe.chapterArcButtonDataset?.seasonBoardHandoffValue === 'chapters'
+      && expeditionRewardProbe.chapterArcButtonDataset?.seasonBoardHandoffSource === 'chapter_arc'
+      && expeditionRewardProbe.chapterArcButtonDataset?.seasonBoardHandoffSourceId === expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.id
       && !!expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective
       && expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.objective.available !== false
       && !!expeditionRewardProbe.rewardPayload.seasonBoard.chapterArc.pressureWindow
@@ -428,6 +437,52 @@ async function safeScreenshot(page, outPath) {
       && typeof expeditionRewardProbe.rewardPayload?.trainingAdvice === 'string'
       && expeditionRewardProbe.rewardPayload.trainingAdvice.length > 0,
     JSON.stringify(expeditionRewardProbe || null)
+  );
+
+  const chapterArcHandoffProbe = await page.evaluate(() => {
+    const button = document.querySelector('#reward-expedition-meta [data-season-board-chapter-arc-reward="true"] [data-season-board-handoff-cta="true"]');
+    if (!button) return { ok: false, reason: 'chapter_arc_handoff_missing' };
+    const before = {
+      currentScreen: window.game?.currentScreen || '',
+      section: window.game?.collectionHubState?.section || '',
+      dataset: { ...button.dataset },
+      text: (button.textContent || '').replace(/\s+/g, ' ').trim()
+    };
+    button.click();
+    const notice = document.querySelector('[data-season-board-handoff-arrival="true"]');
+    const last = window.game?.lastRewardSeasonBoardHandoff || null;
+    const arrival = window.game?.lastRewardSeasonBoardHandoffArrivalNotice || null;
+    const noticeText = (notice?.textContent || '').replace(/\s+/g, ' ').trim();
+    const chapterPanel = document.querySelector('[data-collection-section="chapters"], [data-section="chapters"], #collection-chapters-panel');
+    return {
+      ok:
+        window.game?.currentScreen === 'collection'
+        && window.game?.collectionHubState?.section === 'chapters'
+        && last?.sourceKey === 'chapterArc'
+        && last?.action === 'collection'
+        && last?.value === 'chapters'
+        && last?.source === 'chapter_arc'
+        && arrival?.sourceKey === 'chapterArc'
+        && arrival?.value === 'chapters'
+        && (!notice || notice.dataset.seasonBoardHandoffSourceKey === 'chapterArc')
+        && /章节|章程|档案|已定位/.test(noticeText || before.text)
+        && !!chapterPanel,
+      before,
+      after: {
+        currentScreen: window.game?.currentScreen || '',
+        section: window.game?.collectionHubState?.section || '',
+        last,
+        arrival,
+        notice: notice ? { dataset: { ...notice.dataset }, text: noticeText } : null,
+        chapterPanelFound: !!chapterPanel
+      }
+    };
+  });
+
+  add(
+    'reward chapter-arc CTA opens chapter archive and records arrival feedback',
+    !!chapterArcHandoffProbe?.ok,
+    JSON.stringify(chapterArcHandoffProbe || null)
   );
 
   await safeScreenshot(page, path.join(outDir, 'reward-expedition-summary.png'));

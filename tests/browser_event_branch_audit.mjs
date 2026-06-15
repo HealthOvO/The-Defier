@@ -21,7 +21,7 @@ async function safeScreenshot(page, outPath) {
 
 async function clickEventChoice(page, selector) {
   try {
-    await page.click(selector, { timeout: 3000, force: true });
+    await page.click(selector, { timeout: 3000, force: true, noWaitAfter: true });
     return 'playwright-force-click';
   } catch (err) {
     const fallback = await page.evaluate((targetSelector) => {

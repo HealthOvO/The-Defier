@@ -1,5 +1,33 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-15: 奖励页章程回执直达与本地前后端全量复检
+  - 本轮完成
+    - `js/views/RewardView.js` 给 `seasonBoard.chapterArc` 奖励页卡片新增 `查看章节档案` CTA，点击后从奖励页直达藏经阁章节档案 `collection/chapters`。
+    - 章程回执直达只在 RewardView handoff helper 层派生，不把 `actionType / actionValue / ctaLabel` 等动作字段写回 `seasonBoard.chapterArc` 本体，保持三周一章仍是读侧投影。
+    - 到达藏经阁后会沿用现有 `renderRewardSeasonBoardHandoffArrival()`，展示来源、目标、章目标摘要和到达提示，避免玩家从奖励页跳转后丢失上下文。
+    - `tests/sanity_season_board_system_checks.cjs` 增加 Node 合同断言：`getRewardSeasonBoardHandoffTarget('chapterArc')` 必须路由到 `collection/chapters`，且 source/sourceId 对齐 chapterArc。
+    - `tests/browser_run_path_reward_audit.mjs` 增加真实浏览器回归：奖励页三周一章卡必须出现 CTA，按钮 dataset 必须标记 `chapterArc`，点击后进入章节档案并记录 arrival feedback。
+    - `game-intro.html` 与 `tests/sanity_intro_progress_sync_checks.cjs` 同步 `章程回执直达` 玩家可见锚点。
+  - 本轮验证
+    - TDD 红灯：`node tests/sanity_season_board_system_checks.cjs` 在实现前失败，确认 `chapterArc` sourceKey 会错误回退到默认 nextWeekGoal 的 `collection/sanctum`。
+    - `node tests/sanity_season_board_system_checks.cjs` ✅
+    - `npm run build:pages` ✅
+    - `node tests/browser_run_path_reward_audit.mjs http://127.0.0.1:4230 output/browser-run-path-reward-chapter-arc-cta-20260615` ✅，确认 `查看章节档案` 可见、点击后 `currentScreen=collection` 且 `collectionHubState.section=chapters`。
+    - 追加修正 release gate 暴露的测试防漏：`tests/browser_meta_screen_audit.mjs` 区分主任务 CTA 与章程档案 CTA，`tests/browser_reward_meta_mobile_audit.mjs` / `tests/browser_frontend_layout_audit.mjs` 均改为锚定主任务 CTA，避免新增辅助入口被误判为唯一主入口。
+    - 追加修正 `tests/browser_audit.mjs` 里的裂界敕令断言：真实战斗中敌方护盾会先吸收伤害，因此回归改为比较 `hp + block` 耐久下降，而不是只看 HP 下降。
+    - `node tests/sanity_intro_progress_sync_checks.cjs` ✅，确认独立介绍页与进度锚点包含 `查看章节档案` 等 14 个共享锚点。
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `npm run test:node` ✅，包含本地后端安全、HMAC、PVP、存档、残影与本地 Node API E2E。
+    - `node tests/browser_audit.mjs http://127.0.0.1:4234 output/browser-core-realm-break-durability-20260615` ✅，确认裂界敕令在有护盾目标上仍造成有效耐久下降。
+    - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4234 output/browser-meta-chapter-arc-bucket-20260615` ✅，确认奖励页主 CTA 与 `查看章节档案` 辅助 CTA 分桶正确。
+    - `node tests/browser_reward_meta_mobile_audit.mjs http://127.0.0.1:4234 output/browser-reward-mobile-chapter-arc-handoff-20260615` ✅
+    - `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4234 output/browser-frontend-layout-chapter-arc-handoff-20260615` ✅
+    - `PORT=4235 OUTPUT_ROOT=output/release-browser-audits-local-20260615-chapter-arc-handoff-final npm run test:release:local` ✅，本地构建、Node checks 与完整浏览器 release gate 通过；fresh 汇总 `output/release-browser-audits-local-20260615-chapter-arc-handoff-final/report.json`：26/26 模块、578 条 findings、0 失败、0 console error、332 张截图。
+  - 当前结论
+    - 奖励页的三周一章信息不再只是读侧说明，玩家可以从本章结算直接进入章节档案复盘天象、地脉、生态和 Boss 传闻，同时不会把章程本体变成第二任务源。
+    - 本地前后端 release gate 已覆盖 `auth-ui-cloud`、`backend-client`、PVP、challenge、map、events、reward、mobile 等 26 个模块；本轮最新 fresh 报告无失败、无浏览器 console error。
+    - 本轮严格只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-15: 观星台裂隙回响线
   - 本轮完成
     - `js/views/StrategicView.js` 在观星台弹窗新增 `锁定裂隙回响线`，复用现有 `rift` 路线谶语，下一重天更偏向记忆裂隙、观星台与事件节点。

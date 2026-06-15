@@ -39,6 +39,8 @@ function assert(condition, message) {
     'seasonBoard.frontier.council',
     'seasonBoard.frontier.resolution',
     'seasonBoard.chapterArc',
+    '章程回执直达',
+    '查看章节档案',
     '裂隙回响线',
   ];
 

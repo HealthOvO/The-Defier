@@ -322,6 +322,7 @@ export class RewardView {
     const normalizedSourceKey = String(sourceKey || 'primary').trim() || 'primary';
     const nextWeekGoal = seasonBoard.nextWeekGoal && typeof seasonBoard.nextWeekGoal === 'object' ? seasonBoard.nextWeekGoal : null;
     const nextTask = seasonBoard.nextTask && typeof seasonBoard.nextTask === 'object' ? seasonBoard.nextTask : null;
+    const chapterArc = seasonBoard.chapterArc && typeof seasonBoard.chapterArc === 'object' ? seasonBoard.chapterArc : null;
     const debtPack = seasonBoard.debtPack && typeof seasonBoard.debtPack === 'object' ? seasonBoard.debtPack : null;
     const verificationOrders = Array.isArray(seasonBoard.verificationOrders) ? seasonBoard.verificationOrders.filter(entry => entry && typeof entry === 'object') : [];
     const primaryVerification = verificationOrders.find(entry => String(entry.role || '').trim() === 'primary') || verificationOrders[0] || null;
@@ -429,6 +430,20 @@ export class RewardView {
           action: nextTask.actionType,
           value: nextTask.actionValue,
           buttonLabel: nextTask.ctaLabel || '前往推进'
+        }) : null;
+      case 'chapterArc':
+      case 'chapter_arc':
+        return chapterArc ? normalizeTarget(null, {
+          id: chapterArc.id,
+          source: 'chapter_arc',
+          sourceId: chapterArc.id,
+          action: 'collection',
+          value: 'chapters',
+          anchorSection: 'chapters',
+          fallbackSection: 'chapters',
+          buttonLabel: '查看章节档案',
+          title: chapterArc.arcLabel || chapterArc.chapterLabel || '三周一章',
+          note: chapterArc.objective?.summaryLine || chapterArc.feedbackLine || chapterArc.statusLine || chapterArc.summaryLine || ''
         }) : null;
       case 'primary':
       case 'nextWeekGoal':
@@ -825,7 +840,8 @@ export class RewardView {
       kicker: `三周一章 · ${seasonBoardChapterArc.arcLabel || seasonBoardChapterArc.chapterLabel || '当前章程'}`,
       body: seasonBoardChapterArc.summaryLine || seasonBoardChapterArc.statusLine || `第 ${seasonBoardChapterArc.weekSlot || 1}/${seasonBoardChapterArc.targetWeeks || 3} 周章程待同步`,
       detail: [seasonBoardChapterArcPressureWindow?.reasonLine || seasonBoardChapterArcPressureWindow?.shortLine || '', seasonBoardChapterArcObjective?.summaryLine || '', seasonBoardChapterArc.feedbackLine || '', seasonBoardChapterArcRescue?.open ? seasonBoardChapterArcRescue.guideLine || seasonBoardChapterArcRescue.reasonLine || seasonBoardChapterArcRescue.statusLabel || '' : seasonBoardChapterArcReview?.summaryLine || seasonBoardChapterArcReview?.endingPreviewLine || seasonBoardChapterArc.goalLine || '', seasonBoardChapterArc.goalLine || ''].filter(Boolean).join(' · '),
-      metaLines: [seasonBoardChapterArc.windowLabel || '', `第 ${seasonBoardChapterArc.weekSlot || 1}/${seasonBoardChapterArc.targetWeeks || 3} 周`, seasonBoardChapterArcPressureWindow?.shortLine || '', seasonBoardChapterArcObjective?.shortLine || '', seasonBoardChapterArc.progressText ? `归卷 ${seasonBoardChapterArc.progressText}` : '', seasonBoardChapterArcRescue?.statusLabel || seasonBoardChapterArcReview?.statusLabel || '']
+      metaLines: [seasonBoardChapterArc.windowLabel || '', `第 ${seasonBoardChapterArc.weekSlot || 1}/${seasonBoardChapterArc.targetWeeks || 3} 周`, seasonBoardChapterArcPressureWindow?.shortLine || '', seasonBoardChapterArcObjective?.shortLine || '', seasonBoardChapterArc.progressText ? `归卷 ${seasonBoardChapterArc.progressText}` : '', seasonBoardChapterArcRescue?.statusLabel || seasonBoardChapterArcReview?.statusLabel || ''],
+      action: getHandoffAction('chapterArc')
     }) : '';
     const chips = [];
     const lineageChips = [];

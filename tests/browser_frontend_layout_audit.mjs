@@ -2117,7 +2117,7 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       const panel = root.querySelector('#reward-expedition-meta');
       const sideColumn = root.querySelector('.reward-side-column');
       const laneRewardButton = panel?.querySelector('[data-season-board-lane-reward-claim="true"]') || null;
-      const handoffButton = panel?.querySelector('[data-season-board-handoff-cta="true"]') || null;
+      const handoffButton = panel?.querySelector('[data-season-board-action-reward="true"] [data-season-board-handoff-cta="true"]') || null;
       const laneRewardHit = readHitStateAfterScroll(laneRewardButton);
       const handoffHit = readHitStateAfterScroll(handoffButton);
       const panelRect = panel ? panel.getBoundingClientRect() : null;
