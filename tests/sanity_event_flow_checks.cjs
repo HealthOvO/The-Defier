@@ -97,6 +97,7 @@ function loadFile(ctx, filePath) {
       currentHp: 20,
       deck: [{ id: 'strike', name: 'Strike', type: 'attack', upgraded: false }],
       fateRing: { exp: 0, level: 0, name: '', path: '', initSlots() {} },
+      adventureBuffs: {},
       permaBuffs: { strength: 0, defense: 0, energy: 0, maxHp: 0, draw: 0 },
       takeDamage(v) {
         this.currentHp -= v;
@@ -119,6 +120,10 @@ function loadFile(ctx, filePath) {
       },
       hasTreasure(id) {
         return id === 't1';
+      },
+      grantAdventureBuff(buffId, charges = 1) {
+        this.adventureBuffs[buffId] = (this.adventureBuffs[buffId] || 0) + Math.max(1, Math.floor(Number(charges) || 1));
+        return true;
       },
       collectLaw() {
         return true;
@@ -198,6 +203,44 @@ function loadFile(ctx, filePath) {
   assert(state.lastRunPathProgressCall && state.lastRunPathProgressCall.eventType === 'playSkillCard', `runPathProgress should forward current phase event type, got ${JSON.stringify(state.lastRunPathProgressCall)}`);
   assert(state.lastRunPathProgressCall && state.lastRunPathProgressCall.context && state.lastRunPathProgressCall.context.force === true, 'runPathProgress should force event-side progression');
   assert(state.eventResults.some((line) => line.includes('命途推进')), `runPathProgress should append event result, got ${JSON.stringify(state.eventResults)}`);
+
+  state.eventResults = [];
+  state.player.fateRing.path = 'resonance';
+  state.player.fateRing.level = 7;
+  const echoBeforeExp = state.player.fateRing.exp;
+  interrupted = state.executeEventEffect({ type: 'fateRingEcho', exp: 18, charges: 1 });
+  assert(interrupted === false, 'fateRingEcho should not interrupt flow');
+  assert(state.player.fateRing.exp >= echoBeforeExp + 18, `fateRingEcho should grant ring exp, got ${state.player.fateRing.exp - echoBeforeExp}`);
+  assert(state.player.adventureBuffs.openingBlockBoostBattles >= 1, `resonance fateRingEcho should grant opening block buff, got ${JSON.stringify(state.player.adventureBuffs)}`);
+  assert(state.eventResults.some((line) => /命环回执/.test(line) && /回响之环/.test(line) && /开场护盾/.test(line)), `fateRingEcho should append readable resonance result, got ${JSON.stringify(state.eventResults)}`);
+
+  state.eventResults = [];
+  state.isEndlessActive = () => true;
+  state.endlessManager = {
+    getEndlessEventTuning: () => ({
+      ringExpFlat: 8,
+      bonusAdventureBuffCharges: 2
+    })
+  };
+  state.player.fateRing.path = 'wisdom';
+  const wisdomBeforeExp = state.player.fateRing.exp;
+  const wisdomBeforeDraw = state.player.adventureBuffs.firstTurnDrawBoostBattles || 0;
+  interrupted = state.executeEventEffect({ type: 'fateRingEcho', exp: 18, charges: 1 });
+  assert(interrupted === false, 'endless wisdom fateRingEcho should not interrupt flow');
+  assert(state.player.fateRing.exp >= wisdomBeforeExp + 26, `endless fateRingEcho should include ringExpFlat, got ${state.player.fateRing.exp - wisdomBeforeExp}`);
+  assert((state.player.adventureBuffs.firstTurnDrawBoostBattles || 0) >= wisdomBeforeDraw + 3, `endless wisdom fateRingEcho should include extra buff charges, got ${JSON.stringify(state.player.adventureBuffs)}`);
+  assert(state.eventResults.some((line) => /智慧之环/.test(line) && /首回合抽牌 \+3 场/.test(line)), `wisdom fateRingEcho should append tuned draw result, got ${JSON.stringify(state.eventResults)}`);
+  assert(state.eventResults.some((line) => /额外命环经验 \+8/.test(line)), `endless fateRingEcho should append ring exp tuning result, got ${JSON.stringify(state.eventResults)}`);
+  assert(state.eventResults.some((line) => /额外层数 \+2/.test(line)), `endless fateRingEcho should append buff charge tuning result, got ${JSON.stringify(state.eventResults)}`);
+
+  state.eventResults = [];
+  state.isEndlessActive = () => false;
+  state.endlessManager = null;
+  state.player.fateRing.path = 'defiance';
+  interrupted = state.executeEventEffect({ type: 'fateRingEcho', exp: 5, charges: 1 });
+  assert(interrupted === false, 'defiance fateRingEcho should not interrupt flow');
+  assert(state.eventResults.some((line) => /逆天之环/.test(line) && /首回合灵力/.test(line)), `defiance fateRingEcho should use defiance profile, got ${JSON.stringify(state.eventResults)}`);
+  assert(!state.eventResults.some((line) => /觉醒命环/.test(line)), `defiance fateRingEcho should not fall back to awakened copy, got ${JSON.stringify(state.eventResults)}`);
 
   console.log('Event flow checks passed.');
 })();

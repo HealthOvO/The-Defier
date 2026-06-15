@@ -1777,6 +1777,38 @@ export const EVENTS = {
       }]
     }]
   },
+  fateRingEchoShrine: {
+    id: 'fateRingEchoShrine',
+    name: '命环回执龛',
+    icon: '🧬',
+    description: '龛中回响会读取你当前命环路径，把一次普通事件抉择转成带路线倾向的短期补给。',
+    choices: [{
+      text: '命环回执',
+      icon: '🧬',
+      result: '按当前命环路径获得命环经验与一层行旅增益',
+      resultType: 'positive',
+      effects: [{
+        type: 'fateRingEcho',
+        exp: 18,
+        charges: 1
+      }]
+    }, {
+      text: '只取残响',
+      icon: '📜',
+      result: '获得少量命环经验，不触发路径回执',
+      resultType: 'neutral',
+      effects: [{
+        type: 'ringExp',
+        value: 22
+      }]
+    }, {
+      text: '封龛离开',
+      icon: '🚶',
+      result: '保持当前节奏',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
   artifactConfluxBazaar: {
     id: 'artifactConfluxBazaar',
     name: '灵器汇流集',
@@ -3882,8 +3914,8 @@ export const ARCHETYPE_EVENT_POOLS = {
 };
 export const FATE_PATH_EVENT_POOLS = {
   convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar'],
-  resonance: ['stormchaserCamp', 'thunderConductTrial', 'fulgurMarket'],
-  wisdom: ['lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary'],
+  resonance: ['fateRingEchoShrine', 'stormchaserCamp', 'thunderConductTrial', 'fulgurMarket'],
+  wisdom: ['fateRingEchoShrine', 'lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary'],
   destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden']
 };
 export const STRATEGIC_ENGINEERING_EVENT_POOLS = {

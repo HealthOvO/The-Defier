@@ -2845,6 +2845,53 @@ async function safeScreenshot(page, outPath) {
 
   await page.evaluate(() => {
     if (!window.game || typeof getRandomEvent !== 'function') return;
+    game.player.fateRing = game.player.fateRing || {};
+    game.player.fateRing.path = 'resonance';
+    game.player.fateRing.level = 7;
+    game.player.fateRing.exp = 0;
+    game.player.adventureBuffs = {};
+    window.__debugEventQueue = ['fateRingEchoShrine'];
+    const evt = getRandomEvent();
+    if (!evt) return;
+    game.showEventModal(evt, { id: 910021, row: 2, type: 'event', completed: false, accessible: true });
+  });
+  await page.waitForTimeout(120);
+  const fateRingEchoBefore = await page.evaluate(() => ({
+    ringExp: game.player?.fateRing?.exp || 0,
+    buffs: { ...(game.player?.adventureBuffs || {}) },
+    choiceText: Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) =>
+      (el.textContent || '').replace(/\s+/g, ' ').trim()
+    ).join(' | '),
+    payload: typeof window.render_game_to_text === 'function' ? JSON.parse(window.render_game_to_text()) : null
+  }));
+  await page.click('#event-choices .event-choice:nth-child(1)', { timeout: 3000, force: true });
+  await page.waitForTimeout(180);
+  const fateRingEchoAfter = await page.evaluate(() => ({
+    ringExp: game.player?.fateRing?.exp || 0,
+    buffs: { ...(game.player?.adventureBuffs || {}) },
+    resultText: (document.getElementById('event-desc')?.textContent || '').replace(/\s+/g, ' ').trim(),
+    payload: typeof window.render_game_to_text === 'function' ? JSON.parse(window.render_game_to_text()) : null
+  }));
+  const fateRingEchoProbe = { before: fateRingEchoBefore, after: fateRingEchoAfter };
+  add(
+    'fate ring echo event applies path-based resonance reward and mirrors result text',
+    !!fateRingEchoProbe &&
+      /命环回执/.test(fateRingEchoProbe.before?.choiceText || '') &&
+      (fateRingEchoProbe.after?.ringExp || 0) >= (fateRingEchoProbe.before?.ringExp || 0) + 18 &&
+      (fateRingEchoProbe.after?.buffs?.openingBlockBoostBattles || 0) > (fateRingEchoProbe.before?.buffs?.openingBlockBoostBattles || 0) &&
+      /命环回执/.test(fateRingEchoProbe.after?.resultText || '') &&
+      /回响之环/.test(fateRingEchoProbe.after?.resultText || '') &&
+      /开场护盾/.test(fateRingEchoProbe.after?.payload?.eventModal?.resultText || ''),
+    JSON.stringify(fateRingEchoProbe || null)
+  );
+  await page.evaluate(() => {
+    const em = document.getElementById('event-modal');
+    if (em) em.classList.remove('active');
+  });
+  await page.waitForTimeout(120);
+
+  await page.evaluate(() => {
+    if (!window.game || typeof getRandomEvent !== 'function') return;
     window.__debugEventQueue = ['floatingMarketRift'];
     const evt = getRandomEvent();
     if (!evt) return;

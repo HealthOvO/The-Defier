@@ -65,6 +65,7 @@ function createSeededRandom(seed) {
   const CARDS = vm.runInContext('CARDS', ctx);
   const ARCHETYPE_PACKS = vm.runInContext('ARCHETYPE_PACKS', ctx);
   const ARCHETYPE_EVENT_POOLS = vm.runInContext('ARCHETYPE_EVENT_POOLS', ctx);
+  const FATE_PATH_EVENT_POOLS = vm.runInContext('FATE_PATH_EVENT_POOLS', ctx);
   const STRATEGIC_ENGINEERING_EVENT_POOLS = vm.runInContext('STRATEGIC_ENGINEERING_EVENT_POOLS', ctx);
   const getRandomEvent = vm.runInContext('getRandomEvent', ctx);
 
@@ -147,6 +148,42 @@ function createSeededRandom(seed) {
     assert(
       resonanceRate >= 0.16,
       `${trackId} engineering resonance too weak: resonanceRate=${resonanceRate.toFixed(3)}, expected >= 0.16`
+    );
+  });
+
+  [
+    { pathId: 'resonance', seed: 13103, minEchoRate: 0.07 },
+    { pathId: 'wisdom', seed: 13217, minEchoRate: 0.07 }
+  ].forEach(({ pathId, seed, minEchoRate }) => {
+    const eventPool = FATE_PATH_EVENT_POOLS[pathId];
+    assert(Array.isArray(eventPool) && eventPool.includes('fateRingEchoShrine'), `${pathId} fate-path pool should include fateRingEchoShrine`);
+
+    ctx.window.game = {
+      player: {
+        deck: [],
+        fateRing: { path: pathId },
+        getPathDoctrineProfile: () => ({ path: pathId, tier: 3 })
+      }
+    };
+
+    ctx.Math.random = createSeededRandom(seed);
+    let hits = 0;
+    let echoHits = 0;
+    for (let i = 0; i < samples; i += 1) {
+      const event = getRandomEvent();
+      if (event && eventPool.includes(event.id)) hits += 1;
+      if (event && event.id === 'fateRingEchoShrine') echoHits += 1;
+    }
+    const hitRate = hits / samples;
+    const echoRate = echoHits / samples;
+    results.push({ pathId, hitRate, echoRate });
+    assert(
+      hitRate >= 0.28,
+      `${pathId} fate-path event bias too weak: hitRate=${hitRate.toFixed(3)}, expected >= 0.28`
+    );
+    assert(
+      echoRate >= minEchoRate,
+      `${pathId} fateRingEchoShrine bias too weak: echoRate=${echoRate.toFixed(3)}, expected >= ${minEchoRate}`
     );
   });
 

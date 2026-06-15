@@ -645,6 +645,7 @@ export class Game {
           tone: modal.dataset.eventTone || '',
           atmosphere: document.getElementById('event-atmosphere')?.textContent || '',
           summary: document.getElementById('event-system-summary')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          resultText: document.getElementById('event-desc')?.textContent?.replace(/\s+/g, ' ').trim() || '',
           engineeringEventMeta: this.currentEvent && this.currentEvent.engineeringEventMeta ? {
             trackId: this.currentEvent.engineeringEventMeta.trackId || '',
             name: this.currentEvent.engineeringEventMeta.name || '',

@@ -1,5 +1,36 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-15: 命环回执事件与本地前后端全量复检
+  - 本轮完成
+    - `js/data/events.js` 新增 `fateRingEchoShrine / 命环回执龛`，接入 resonance / wisdom 命环路径事件池，提供“命环回执”“只取残响”“封龛离开”三种事件抉择。
+    - `js/managers/EventManager.js` 新增 `fateRingEcho` 事件效果：按当前 `player.fateRing.path` 发放命环经验与路径相关行旅增益，并输出玩家可读结果；同时覆盖 resonance、wisdom、convergence、destruction、toughness、agility、insight、awakened、defiance 与 crippled 语义。
+    - `fateRingEcho` 已接入无尽事件调优：`ringExpFlat` 会追加命环经验，`bonusAdventureBuffCharges` 会追加行旅层数并沿用现有 5 层封顶。
+    - `render_game_to_text()` 的 `eventModal` 增加 `resultText`，真实浏览器审计可读取事件结算后的可见结果文案。
+    - `tests/sanity_event_flow_checks.cjs` 增补 resonance / wisdom / defiance / endless 回归，防止路径文案、无尽调优和行旅增益脱钩。
+    - `tests/sanity_event_bias_distribution_checks.cjs` 增补真实 fate-path bias 分布检查，确认 resonance / wisdom 路径可通过 `getRandomEvent()` 抽到 `fateRingEchoShrine`。
+    - `tests/browser_feature_audit.mjs` 增加真实浏览器回归：强制命环回执事件、点击首选项、确认命环经验、开场护盾增益、DOM 结果文案和 `eventModal.resultText` 均正确。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 补齐 event / fateRing 相关 Node 与浏览器 release marker，并把 `browser_run_path_event_audit`、`browser_event_branch_audit` 纳入 release 覆盖守卫。
+  - 本轮验证
+    - TDD 红灯：`node tests/sanity_event_flow_checks.cjs` 在实现前失败于 `未处理的事件效果: fateRingEcho` / `fateRingEcho should grant ring exp, got 0`。
+    - TDD 红灯：`node tests/browser_feature_audit.mjs http://127.0.0.1:4197 output/browser-feature-fate-ring-echo-red-20260615` 在实现前确认强制 `fateRingEchoShrine` 不存在，事件队列落到其他事件。
+    - 挑战者复查指出并已修复：`fateRingEcho` 缺少无尽修正、真实 fate-path bias 覆盖不足、`defiance` 路径回退到 awakened 文案。
+    - `node --check js/data/events.js` ✅
+    - `node --check js/managers/EventManager.js` ✅
+    - `node --check js/game.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node tests/sanity_event_flow_checks.cjs` ✅
+    - `node tests/sanity_event_bias_distribution_checks.cjs` ✅，其中 `resonance` 命中率 0.5158、`fateRingEchoShrine` 命中率 0.1392；`wisdom` 命中率 0.5942、`fateRingEchoShrine` 命中率 0.1475。
+    - `node tests/sanity_content_archetype_checks.cjs` ✅
+    - `node tests/sanity_engineering_event_surface_checks.cjs` ✅
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4197 output/browser-feature-fate-ring-echo-green-20260615` ✅，确认 `命环回执`、`回响之环`、`开场护盾` 与 `eventModal.resultText` 均落地。
+    - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4197 output/browser-event-branch-fate-ring-echo-check-20260615` ✅，确认既有事件分支与工程事件分支仍保持非中断流和奖励正确。
+    - `npm run test:node` ✅，包含本地后端安全、HMAC、时间戳、PVP、存档、残影与本地 Node API E2E。
+    - `PORT=4199 OUTPUT_ROOT=output/release-browser-audits-local-20260615-fate-ring-echo-full2 npm run test:release:local` ✅，本地构建、Node checks 与完整浏览器 release gate 通过；fresh 汇总 `output/release-browser-audits-local-20260615-fate-ring-echo-full2/report.json`：26/26 模块、577 条 findings、0 失败、0 console error、332 张截图。
+  - 当前结论
+    - 命环路径现在有一个低耦合事件侧回执入口，能把事件奖励和当前命环路径、行旅增益、无尽词缀、可读 UI 结果串起来；首版不进入战斗 / 试炼热区，降低对 PVP、奖励页和挑战链路的连带风险。
+    - 本轮严格只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-15: 观星台星轨预报与本地前后端全量复检
   - 本轮完成
     - `js/game.js` 新增 `buildObservatoryRouteForecast()` / `serializeObservatoryRouteForecast()` / `rememberObservatoryRouteForecast()`，观星台会读取后续两行地图节点、节点类型标签与 DRI 风险，生成可序列化的星轨预报。

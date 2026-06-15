@@ -287,8 +287,8 @@ function loadFile(ctx, filePath) {
 
   const expectedPathPools = {
     convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar'],
-    resonance: ['stormchaserCamp', 'thunderConductTrial', 'fulgurMarket'],
-    wisdom: ['lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary'],
+    resonance: ['fateRingEchoShrine', 'stormchaserCamp', 'thunderConductTrial', 'fulgurMarket'],
+    wisdom: ['fateRingEchoShrine', 'lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary'],
     destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden']
   };
   Object.entries(expectedPathPools).forEach(([pathId, expectedIds]) => {

@@ -11,6 +11,8 @@ const backendSecurityChecks = read('tests/backend_security_checks.cjs');
 const backendClientSmoke = read('tests/browser_backend_client_smoke.mjs');
 const browserAudit = read('tests/browser_audit.mjs');
 const browserFeatureAudit = read('tests/browser_feature_audit.mjs');
+const browserEventBranchAudit = read('tests/browser_event_branch_audit.mjs');
+const browserRunPathEventAudit = read('tests/browser_run_path_event_audit.mjs');
 const browserMobileAudit = read('tests/browser_mobile_layout_audit.mjs');
 const challengeMobileAudit = read('tests/browser_challenge_mobile_flow_audit.mjs');
 const strategicNodeChecks = read('tests/sanity_strategic_node_system_checks.cjs');
@@ -279,6 +281,8 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'node tests/browser_feature_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/feature"',
   'node tests/browser_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/core"',
   'node tests/browser_backend_client_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/backend-client"',
+  'node tests/browser_run_path_event_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/run-path-events"',
+  'node tests/browser_event_branch_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/events"',
 ].forEach((needle) => {
   assert.ok(
     browserReleaseScript.includes(needle),
@@ -304,12 +308,87 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
 });
 
 [
+  'node tests/sanity_event_flow_checks.cjs',
+  'node tests/sanity_event_bias_distribution_checks.cjs',
+  'node tests/sanity_engineering_event_surface_checks.cjs',
+  'node tests/sanity_fate_lineage_system_checks.cjs',
+  'node tests/sanity_fate_aftereffect_system_checks.cjs',
   'node tests/sanity_trial_challenge_checks.cjs',
   'node tests/sanity_strategic_node_system_checks.cjs',
 ].forEach((needle) => {
   assert.ok(
     runNodeChecks.includes(needle),
     `node release checks should include strategic gameplay sanity marker: ${needle}`,
+  );
+});
+
+[
+  'runPathProgress should force event-side progression',
+  'upgradeCard should interrupt flow',
+  'trial should start battle with enemy array',
+  'fateRingEcho should not interrupt flow',
+  'resonance fateRingEcho should grant opening block buff',
+  'endless fateRingEcho should include ringExpFlat',
+  'endless wisdom fateRingEcho should include extra buff charges',
+  'defiance fateRingEcho should use defiance profile',
+  'defiance fateRingEcho should not fall back to awakened copy',
+  '命环回执',
+  '回响之环',
+].forEach((needle) => {
+  assert.ok(
+    read('tests/sanity_event_flow_checks.cjs').includes(needle),
+    `event flow sanity should cover event/fate marker: ${needle}`,
+  );
+});
+
+[
+  'FATE_PATH_EVENT_POOLS',
+  'pathId: \'resonance\'',
+  'pathId: \'wisdom\'',
+  'fateRingEchoShrine bias too weak',
+  'echoRate',
+].forEach((needle) => {
+  assert.ok(
+    read('tests/sanity_event_bias_distribution_checks.cjs').includes(needle),
+    `event bias sanity should cover fate-path echo marker: ${needle}`,
+  );
+});
+
+[
+  'memory-rift engineering event overlay + reward uplift',
+  'floatingMarketRift',
+  'artifactConfluxBazaar',
+  'after.ringExp > before.ringExp',
+  'choiceTexts.every((text) => !INTERNAL_EFFECT_LABEL_PATTERN.test(text))',
+].forEach((needle) => {
+  assert.ok(
+    browserEventBranchAudit.includes(needle),
+    `browser event branch audit should cover event/fate marker: ${needle}`,
+  );
+});
+
+[
+  'runPathInsightAstrolabe',
+  'runPathBulwarkSanctuary',
+  'runPathShatterBounty',
+  'phaseProgress === 1',
+  '/命途推进/.test',
+].forEach((needle) => {
+  assert.ok(
+    browserRunPathEventAudit.includes(needle),
+    `browser run path event audit should cover run path event marker: ${needle}`,
+  );
+});
+
+[
+  'fate ring echo event applies path-based resonance reward and mirrors result text',
+  'fateRingEchoShrine',
+  'fateRingEcho',
+  'openingBlockBoostBattles',
+].forEach((needle) => {
+  assert.ok(
+    browserFeatureAudit.includes(needle),
+    `browser feature audit should cover fate ring echo marker: ${needle}`,
   );
 });
 

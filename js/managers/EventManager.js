@@ -217,6 +217,86 @@ export class EventManager {
     this.game.chapterEventLedger = this.normalizeChapterEventLedger(ledger);
     return entry;
   }
+  getFateRingEchoProfile(pathId = '') {
+    const normalized = String(pathId || '').trim();
+    const path = normalized || 'crippled';
+    const fallbackNames = {
+      crippled: '残缺印记',
+      awakened: '觉醒命环',
+      toughness: '坚韧之环',
+      agility: '敏捷之环',
+      insight: '洞察之环',
+      destruction: '毁灭之环',
+      wisdom: '智慧之环',
+      resonance: '回响之环',
+      convergence: '汇流之环',
+      defiance: '逆天之环'
+    };
+    const pathName = FATE_RING?.paths?.[path]?.name || fallbackNames[path] || '命环';
+    const profiles = {
+      resonance: {
+        pathName,
+        buffId: 'openingBlockBoostBattles',
+        buffLabel: '开场护盾',
+        resultLine: '回响之环把事件残响稳成护阵，接下来 1 场战斗开场护盾增强。'
+      },
+      convergence: {
+        pathName,
+        buffId: 'firstTurnEnergyBoostBattles',
+        buffLabel: '首回合灵力',
+        resultLine: '汇流之环把残响并入起手节奏，接下来 1 场战斗首回合灵力增强。'
+      },
+      wisdom: {
+        pathName,
+        buffId: 'firstTurnDrawBoostBattles',
+        buffLabel: '首回合抽牌',
+        resultLine: '智慧之环把回执转成调序手稿，接下来 1 场战斗首回合抽牌增强。'
+      },
+      destruction: {
+        pathName,
+        buffId: 'victoryGoldBoostBattles',
+        buffLabel: '胜利悬赏',
+        resultLine: '毁灭之环把回执压成战利契，接下来 1 场战斗胜利悬赏增强。'
+      },
+      toughness: {
+        pathName,
+        buffId: 'victoryHealBoostBattles',
+        buffLabel: '战后医护',
+        resultLine: '坚韧之环把回执沉成余护，接下来 1 场战斗胜利后恢复生命。'
+      },
+      agility: {
+        pathName,
+        buffId: 'firstTurnDrawBoostBattles',
+        buffLabel: '首回合抽牌',
+        resultLine: '敏捷之环把回执转成先手调度，接下来 1 场战斗首回合抽牌增强。'
+      },
+      insight: {
+        pathName,
+        buffId: 'ringExpBoostBattles',
+        buffLabel: '命环经验增益',
+        resultLine: '洞察之环把回执写成感悟路标，接下来 1 场战斗命环经验收益提升。'
+      },
+      awakened: {
+        pathName,
+        buffId: 'ringExpBoostBattles',
+        buffLabel: '命环经验增益',
+        resultLine: '觉醒命环把回执收成感悟路标，接下来 1 场战斗命环经验收益提升。'
+      },
+      defiance: {
+        pathName,
+        buffId: 'firstTurnEnergyBoostBattles',
+        buffLabel: '首回合灵力',
+        resultLine: '逆天之环把回执压成逆势命令，接下来 1 场战斗首回合灵力增强。'
+      },
+      crippled: {
+        pathName,
+        buffId: '',
+        buffLabel: '',
+        resultLine: '残缺印记只能收束一段余响，尚未形成路径增益。'
+      }
+    };
+    return profiles[path] || profiles.awakened;
+  }
   buildEventChoiceEffectSummary(choice = {}) {
     const summary = [];
     const effects = Array.isArray(choice.effects) ? choice.effects : [];
@@ -237,6 +317,9 @@ export class EventManager {
           break;
         case 'ringExp':
           summary.push(`命环经验 +${Math.floor(Number(effect.value) || 0)}`);
+          break;
+        case 'fateRingEcho':
+          summary.push(`命环回执 +${Math.floor(Number(effect.exp ?? effect.value) || 0)} 经验`);
           break;
         case 'heavenlyInsight':
           summary.push(`天机 +${Math.floor(Number(effect.value) || 0)}`);
@@ -645,6 +728,44 @@ export class EventManager {
             this.game.eventResults.push(`♾️ 无尽词缀联动：额外命环经验 +${finalExp - baseExp}`);
           }
           // 如果导致升级，checkFateRingLevelUp 内部会处理并可能弹窗，但这里我们主要关注数值
+          break;
+        }
+      case 'fateRingEcho':
+        {
+          const ring = this.game.player?.fateRing || null;
+          const path = String(ring?.path || 'crippled');
+          const profile = this.getFateRingEchoProfile(path);
+          const baseExp = Math.max(0, Math.floor(Number(effect.exp ?? effect.value) || 18));
+          let finalExp = baseExp;
+          const baseCharges = Math.max(1, Math.floor(Number(effect.charges) || 1));
+          const endlessTuning = getEventTuning();
+          if (baseExp > 0 && endlessTuning) {
+            finalExp += Math.max(0, Math.floor(Number(endlessTuning.ringExpFlat) || 0));
+          }
+          const extraCharges = endlessTuning ? Math.max(0, Math.floor(Number(endlessTuning.bonusAdventureBuffCharges) || 0)) : 0;
+          const charges = Math.max(1, Math.min(5, baseCharges + extraCharges));
+          if (ring) {
+            ring.exp = Math.max(0, Math.floor(Number(ring.exp) || 0)) + finalExp;
+            if (typeof this.game.player.checkFateRingLevelUp === 'function') {
+              this.game.player.checkFateRingLevelUp();
+            }
+          }
+          let buffApplied = false;
+          if (profile.buffId && this.game.player && typeof this.game.player.grantAdventureBuff === 'function') {
+            buffApplied = !!this.game.player.grantAdventureBuff(profile.buffId, charges);
+          }
+          const parts = [`🧬 命环回执：${profile.pathName} · 命环经验 +${finalExp}`];
+          if (buffApplied && profile.buffLabel) {
+            parts.push(`${profile.buffLabel} +${charges} 场`);
+          }
+          this.game.eventResults.push(parts.join('，'));
+          if (finalExp > baseExp) {
+            this.game.eventResults.push(`♾️ 无尽词缀联动：额外命环经验 +${finalExp - baseExp}`);
+          }
+          if (buffApplied && charges > baseCharges) {
+            this.game.eventResults.push(`♾️ 无尽词缀联动：额外层数 +${charges - baseCharges}`);
+          }
+          this.game.eventResults.push(profile.resultLine);
           break;
         }
       case 'heavenlyInsight':
