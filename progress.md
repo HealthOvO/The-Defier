@@ -1,5 +1,29 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-15: 观星台裂隙回响线
+  - 本轮完成
+    - `js/views/StrategicView.js` 在观星台弹窗新增 `锁定裂隙回响线`，复用现有 `rift` 路线谶语，下一重天更偏向记忆裂隙、观星台与事件节点。
+    - 新选项会调用 `applyStrategicRouteForecast('rift')` 与 `rememberObservatoryRouteForecast(routeForecast, 'rift')`，因此 `render_game_to_text()` 的 `map.observatoryForecast.selectedRoute` 会落到 `rift`，`selectedRouteLabel` 会落到 `裂隙回响线`。
+    - `tests/sanity_strategic_node_system_checks.cjs` 增补 `rememberedRift` 断言，锁定观星预报对 rift 路线的序列化标签。
+    - `tests/browser_feature_audit.mjs` 增加真实浏览器回归：观星台必须展示 `裂隙回响线`，点击后下一重路线 label、`map.observatoryForecast.selectedRoute` 与 `selectedRouteLabel` 均正确。
+    - `game-intro.html` 同步玩家可见版本说明，把观星台可锁路线扩展为福缘、锋芒、裂隙回响线和星图战利。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 与 `tests/sanity_intro_progress_sync_checks.cjs` 增加防漏扫 marker，避免新 UI 入口和玩家可见文案脱离发布门禁。
+  - 本轮验证
+    - TDD 红灯：`node tests/browser_feature_audit.mjs http://127.0.0.1:4211 output/browser-feature-rift-red` 在实现前失败于 `observatory node previews future realm and can lock a route forecast`，确认 `hasRift=false`、`choiceCount=4`、`riftNextRealmLabel=""`。
+    - `node tests/sanity_strategic_node_system_checks.cjs` ✅
+    - `node --check js/views/StrategicView.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node --check tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4211 output/browser-feature-rift-green` ✅，确认观星台新增 rift UI 入口并写入 `裂隙回响线` payload。
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4211 output/browser-mobile-rift-green` ✅，确认移动端观星台弹窗 `choiceCount=5` 且新增路线不挤压既有选择。
+    - `node tests/sanity_intro_progress_sync_checks.cjs` ✅，确认独立介绍页与进度锚点包含 `裂隙回响线`。
+    - `npm run test:node` ✅，包含本地后端安全、HMAC、PVP、存档、残影与本地 Node API E2E。
+    - `PORT=4212 OUTPUT_ROOT=output/release-browser-audits-local-20260615-observatory-rift npm run test:release:local` ✅，本地构建、Node checks 与完整浏览器 release gate 通过；fresh 汇总 `output/release-browser-audits-local-20260615-observatory-rift/report.json`：26/26 模块、577 条 findings、0 失败、0 console error、332 张截图。
+  - 当前结论
+    - 观星台现在可以把“前路看到记忆裂隙 / 事件 / 观星台”直接转成下一重路线偏置，避免玩家只能从福缘、锋芒、星图战利三类里间接追裂隙线。
+    - 本轮严格只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-15: 命环回执事件与本地前后端全量复检
   - 本轮完成
     - `js/data/events.js` 新增 `fateRingEchoShrine / 命环回执龛`，接入 resonance / wisdom 命环路径事件池，提供“命环回执”“只取残响”“封龛离开”三种事件抉择。

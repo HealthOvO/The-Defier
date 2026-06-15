@@ -2363,6 +2363,19 @@ async function safeScreenshot(page, outPath) {
       ? JSON.parse(window.render_game_to_text())
       : {};
     const rewardRumors = game.player?.shopRumors || {};
+    document.getElementById('reward-modal')?.classList.remove('active');
+    document.getElementById('event-modal')?.classList.remove('active');
+
+    game.player.shopRumors = typeof game.normalizeShopRumors === 'function'
+      ? game.normalizeShopRumors(null)
+      : { rewardRareCharges: 0, rewardRareBonus: 0, treasureCharges: 0, treasureChanceBonus: 0, nextRealmMapShift: null, nextRealmLabel: '', nextRealmTarget: null, history: [] };
+    game.showObservatoryNode({ id: 91008, row: 0, type: 'observatory', completed: false, accessible: true });
+    const riftBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('裂隙回响线'));
+    if (riftBtn) riftBtn.click();
+    const riftPayload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : {};
+    const riftNextRealmLabel = game.player?.shopRumors?.nextRealmLabel || '';
     if (typeof game.clearObservatoryRouteForecast === 'function') {
       game.clearObservatoryRouteForecast();
     }
@@ -2376,11 +2389,14 @@ async function safeScreenshot(page, outPath) {
       choiceCount: choices.length,
       hasUtility: choices.some((t) => t.includes('福缘星轨')),
       hasAssault: choices.some((t) => t.includes('锋芒星轨')),
+      hasRift: choices.some((t) => t.includes('裂隙回响线')),
       hasReward: choices.some((t) => t.includes('校准星图战利')),
       nextRealmLabel: utilityNextRealmLabel,
+      riftNextRealmLabel,
       insight: Number(game.player?.heavenlyInsight || 0),
       payloadForecast: utilityPayload?.map?.observatoryForecast || null,
       rewardPayloadForecast: rewardPayload?.map?.observatoryForecast || null,
+      riftPayloadForecast: riftPayload?.map?.observatoryForecast || null,
       rewardRareCharges: Number(rewardRumors.rewardRareCharges || 0),
       clearedForecast: clearedPayload?.map?.observatoryForecast || null
     };
@@ -2391,16 +2407,20 @@ async function safeScreenshot(page, outPath) {
       /观星台/.test(observatoryProbe.title) &&
       observatoryProbe.hasUtility &&
       observatoryProbe.hasAssault &&
+      observatoryProbe.hasRift &&
       observatoryProbe.hasReward &&
-      observatoryProbe.choiceCount >= 4 &&
+      observatoryProbe.choiceCount >= 5 &&
       /天象|Boss/.test(observatoryProbe.desc) &&
       /星轨预报/.test(observatoryProbe.forecastText) &&
       /试炼碑|记忆裂隙/.test(observatoryProbe.forecastText) &&
       /机缘补给线/.test(observatoryProbe.nextRealmLabel) &&
+      /裂隙回响线/.test(observatoryProbe.riftNextRealmLabel) &&
       observatoryProbe.insight >= 1 &&
       observatoryProbe.payloadForecast?.selectedRoute === 'utility' &&
       observatoryProbe.rewardPayloadForecast?.selectedRoute === 'reward' &&
       observatoryProbe.rewardPayloadForecast?.selectedRouteLabel === '星图战利' &&
+      observatoryProbe.riftPayloadForecast?.selectedRoute === 'rift' &&
+      observatoryProbe.riftPayloadForecast?.selectedRouteLabel === '裂隙回响线' &&
       observatoryProbe.rewardRareCharges >= 1 &&
       observatoryProbe.clearedForecast === null &&
       /星轨预报/.test(observatoryProbe.payloadForecast?.summaryLine || ''),

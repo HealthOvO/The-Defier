@@ -398,6 +398,8 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'visibleNodeCount === 4',
   'focusNodeTypes.includes(\'trial\')',
   'forecast.topRisk && forecast.topRisk.type === \'trial\'',
+  'rememberedRift',
+  '裂隙回响线',
 ].forEach((needle) => {
   assert.ok(
     strategicNodeChecks.includes(needle),
@@ -409,8 +411,11 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'data-observatory-route-forecast="true"',
   'payloadForecast',
   'observatoryProbe.payloadForecast?.selectedRoute === \'utility\'',
+  'observatoryProbe.hasRift',
+  'observatoryProbe.riftPayloadForecast?.selectedRoute === \'rift\'',
   'observatory node previews future realm and can lock a route forecast',
   '星轨预报',
+  '裂隙回响线',
 ].forEach((needle) => {
   assert.ok(
     browserFeatureAudit.includes(needle),

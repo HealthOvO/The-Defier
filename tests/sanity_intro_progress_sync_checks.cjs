@@ -39,6 +39,7 @@ function assert(condition, message) {
     'seasonBoard.frontier.council',
     'seasonBoard.frontier.resolution',
     'seasonBoard.chapterArc',
+    '裂隙回响线',
   ];
 
   const introOnlyAnchors = [

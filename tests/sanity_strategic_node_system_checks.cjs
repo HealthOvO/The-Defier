@@ -236,6 +236,10 @@ function loadFile(ctx, filePath) {
     const remembered = game.rememberObservatoryRouteForecast(forecast, 'reward');
     assert(remembered && remembered.selectedRoute === 'reward', `remembered forecast should keep reward route id, got ${JSON.stringify(remembered)}`);
     assert(remembered.selectedRouteLabel === '星图战利', `reward forecast should keep reward label, got ${remembered.selectedRouteLabel}`);
+
+    const rememberedRift = game.rememberObservatoryRouteForecast(forecast, 'rift');
+    assert(rememberedRift && rememberedRift.selectedRoute === 'rift', `remembered forecast should keep rift route id, got ${JSON.stringify(rememberedRift)}`);
+    assert(rememberedRift.selectedRouteLabel === '裂隙回响线', `rift forecast should keep rift label, got ${rememberedRift.selectedRouteLabel}`);
   }
 
   // 6) 记忆裂隙所需的命格升阶 helper 应能真实提升命格阶位

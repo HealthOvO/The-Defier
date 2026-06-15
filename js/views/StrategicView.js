@@ -140,6 +140,17 @@ export class StrategicView {
       this.game.closeModal();
       this.game.finishStrategicNode(node, '锋芒星轨已定', `第 ${this.game.player.realm + 1} 重路线趋向：${forecast.label}。\n${forecast.desc}\n天机 +${gained.insight || 0}。`, forecast.icon || '⚔️');
     });
+    appendChoice('🪞', '锁定裂隙回响线', '偏向记忆裂隙、观星台与机缘事件。', () => {
+      const forecast = this.game.applyStrategicRouteForecast('rift');
+      if (typeof this.game.rememberObservatoryRouteForecast === 'function') {
+        this.game.rememberObservatoryRouteForecast(routeForecast, 'rift');
+      }
+      const gained = this.game.grantStrategicCurrencies({
+        insight: 1
+      }, '观星推演');
+      this.game.closeModal();
+      this.game.finishStrategicNode(node, '裂隙回响线已定', `第 ${this.game.player.realm + 1} 重路线趋向：${forecast.label}。\n${forecast.desc}\n天机 +${gained.insight || 0}。`, forecast.icon || '🪞');
+    });
     appendChoice('✨', '校准星图战利', '锁定 1 次高稀有奖励，并获取 1 点天机。', () => {
       const rumors = this.game.ensureShopRumors();
       if (typeof this.game.rememberObservatoryRouteForecast === 'function') {
