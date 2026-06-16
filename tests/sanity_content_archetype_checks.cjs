@@ -287,7 +287,7 @@ function loadFile(ctx, filePath) {
 
   const expectedPathPools = {
     convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar'],
-    resonance: ['fateRingEchoShrine', 'stormchaserCamp', 'thunderConductTrial', 'fulgurMarket'],
+    resonance: ['fateRingEchoShrine', 'stormchaserCamp', 'thunderConductTrial', 'fulgurMarket', 'resonanceWardCanticle'],
     wisdom: ['fateRingEchoShrine', 'lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary', 'wisdomStarScriptorium'],
     destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden', 'ruinBountyWrit']
   };
@@ -317,6 +317,15 @@ function loadFile(ctx, filePath) {
   assert(wisdomEffects.some((effect) => effect.type === 'heavenlyInsight' && Number(effect.value) > 0), 'wisdomStarScriptorium study choice should grant heavenly insight');
   assert(wisdomEffects.some((effect) => effect.type === 'ringExp' && Number(effect.value) > 0), 'wisdomStarScriptorium study choice should grant ring exp');
   assert(wisdomEffects.some((effect) => effect.type === 'adventureBuff' && effect.buffId === 'firstTurnDrawBoostBattles' && Number(effect.charges) > 0), 'wisdomStarScriptorium study choice should grant first-turn draw prep');
+  const resonanceWardCanticle = EVENTS.resonanceWardCanticle;
+  assert(!!resonanceWardCanticle, 'resonance event resonanceWardCanticle should exist');
+  assert(/回响|护阵|共鸣/.test(resonanceWardCanticle.description || ''), 'resonanceWardCanticle should read as a resonance or ward event');
+  const resonanceWardChoice = resonanceWardCanticle.choices?.find((choice) => /合律|立阵|护阵/.test(choice.text || ''));
+  assert(!!resonanceWardChoice, 'resonanceWardCanticle should expose a warding resonance choice');
+  const resonanceEffects = Array.isArray(resonanceWardChoice.effects) ? resonanceWardChoice.effects : [];
+  assert(resonanceEffects.some((effect) => effect.type === 'ringExp' && Number(effect.value) > 0), 'resonanceWardCanticle ward choice should grant ring exp');
+  assert(resonanceEffects.some((effect) => effect.type === 'adventureBuff' && effect.buffId === 'openingBlockBoostBattles' && Number(effect.charges) > 0), 'resonanceWardCanticle ward choice should grant opening block prep');
+  assert(resonanceEffects.some((effect) => effect.type === 'card' && effect.cardId === 'echoWard'), 'resonanceWardCanticle ward choice should grant echoWard');
 
   const expectedEngineeringPools = {
     observatory: ['artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil', 'starObservation', 'astralSupplyDepot', 'floatingMarketRift'],

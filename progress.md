@@ -1,5 +1,31 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-16: 共鸣命途护阵回响谱事件与前后端本地全量复验
+  - 本轮完成
+    - `js/data/events.js` 新增共鸣命途专属事件 `resonanceWardCanticle / 护阵回响谱`：玩家可以选择合律立阵，获得命环经验、下一战开场护盾准备与 `echoWard` 护势卡，也可以试鸣回声换命环经验与少量灵石，或收谱离开。
+    - `FATE_PATH_EVENT_POOLS.resonance` 纳入 `resonanceWardCanticle`，保持为共鸣路径专属事件；未加入全局 `EVENT_POOL`，避免普通事件池稀释路径辨识度。
+    - `tests/sanity_content_archetype_checks.cjs` 锁定共鸣事件池、事件存在、回响 / 护阵文案、合律立阵 choice、`ringExp/adventureBuff/card` 效果、`openingBlockBoostBattles` 开场护盾准备与 `echoWard` 入牌。
+    - `tests/sanity_event_bias_distribution_checks.cjs` 增加共鸣目标事件采样，确认 `resonanceWardCanticle` 命中率不会退化，并保留原命环回执偏置下限。
+    - `tests/browser_feature_audit.mjs` 增加真实浏览器分支：强制抽到 `护阵回响谱`，点击合律立阵后断言命环经验增加、开场护盾 buff 生效、牌库加入 `echoWard`，并且结果文案暴露回响 / 护阵 / 命环信息。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 新增内容、分布、浏览器 feature 三层 marker，防止 release gate 漏掉共鸣护阵事件覆盖。
+  - 本轮验证
+    - TDD 红灯：`node tests/sanity_content_archetype_checks.cjs` 在实现前失败于 `resonance event pool should include resonanceWardCanticle`。
+    - TDD 红灯：`node tests/sanity_event_bias_distribution_checks.cjs` 在实现前失败于 `resonance fate-path pool should include resonanceWardCanticle`。
+    - TDD 红灯：`node tests/browser_feature_audit.mjs http://127.0.0.1:4340 output/browser-feature-resonance-ward-red-20260616` 在实现前确认强制事件队列无法抽到 `resonanceWardCanticle`。
+    - `node --check js/data/events.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node --check tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/sanity_content_archetype_checks.cjs` ✅
+    - `node tests/sanity_event_bias_distribution_checks.cjs` ✅，共鸣路径 `targetEventId=resonanceWardCanticle`，`targetRate=0.0975`。
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `npm run build:pages` ✅
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4340 output/browser-feature-resonance-ward-green-20260616` ✅，真实 UI 分支确认护阵回响谱事件结算。
+    - `npm run test:node` ✅，覆盖本地 Auth、后端安全、前端云同步、事件 / 命途 / 商店 / PVP、后端注册/登录/存档/残影/PVP E2E 等 Node 门禁。
+    - `BACKEND_SECURITY_TEST_PORT=9115 BACKEND_E2E_PORT=9126 PORT=4341 OUTPUT_ROOT=output/release-browser-audits-local-20260616-resonance-ward-final npm run test:release:local` ✅，本地生产构建、完整 Node/后端检查、后端 E2E 与 26 个浏览器 release 子审计通过；fresh 汇总 `output/release-browser-audits-local-20260616-resonance-ward-final/report.json` 为 591 条 finding、0 failure、0 console error，产出 336 张截图。
+  - 当前结论
+    - 共鸣命途现在多了一条“回响研究转开场护阵准备与护势卡”的路径专属事件线，强化该路径把命环回响沉淀成下一战防守节奏的玩法。
+    - 本轮完整复查了本地前端构建、浏览器主链路、移动端布局、PVP、挑战、远征、奖励、洞府、事件强制分支与本地后端注册 / 登录 / 存档 / 残影 / PVP E2E；严格未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-16: 智慧命途星盘旁注阁事件与前后端本地复验
   - 本轮完成
     - `js/data/events.js` 新增智慧命途专属事件 `wisdomStarScriptorium / 星盘旁注阁`：玩家可以选择校注命盘，获得天机、命环经验与下一战首回合抽牌准备，也可以抄录旁页获得命环经验和少量灵石，或合卷离开。

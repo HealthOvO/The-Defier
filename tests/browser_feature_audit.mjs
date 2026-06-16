@@ -3000,6 +3000,65 @@ async function safeScreenshot(page, outPath) {
     if (!window.game || typeof getRandomEvent !== 'function') return;
     game.player.fateRing = game.player.fateRing || {};
     game.player.fateRing.path = 'resonance';
+    game.player.fateRing.level = Math.max(Number(game.player.fateRing.level) || 1, 7);
+    game.player.fateRing.exp = 0;
+    game.player.deck = Array.isArray(game.player.deck) ? game.player.deck : [];
+    game.player.adventureBuffs = {};
+    window.__debugEventQueue = ['resonanceWardCanticle'];
+    const evt = getRandomEvent();
+    if (!evt) return;
+    game.showEventModal(evt, { id: 9100221, row: 2, type: 'event', completed: false, accessible: true });
+  });
+  await page.waitForTimeout(120);
+  const resonanceWardBefore = await page.evaluate(() => {
+    const choices = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+    return {
+      hasEvent: /护阵回响谱/.test(document.getElementById('event-title')?.textContent || ''),
+      title: document.getElementById('event-title')?.textContent || '',
+      deckSize: Array.isArray(game.player?.deck) ? game.player.deck.length : 0,
+      ringExp: game.player?.fateRing?.exp || 0,
+      buffs: { ...(game.player?.adventureBuffs || {}) },
+      choiceText: choices.join(' | '),
+      payload: typeof window.render_game_to_text === 'function' ? JSON.parse(window.render_game_to_text()) : null
+    };
+  });
+  await page.evaluate(() => {
+    const firstChoice = document.querySelector('#event-choices .event-choice');
+    if (firstChoice) firstChoice.click();
+  });
+  await page.waitForTimeout(180);
+  const resonanceWardAfter = await page.evaluate(() => ({
+    deckSize: Array.isArray(game.player?.deck) ? game.player.deck.length : 0,
+    deckIds: Array.isArray(game.player?.deck) ? game.player.deck.map((card) => card?.id || '').filter(Boolean) : [],
+    ringExp: game.player?.fateRing?.exp || 0,
+    buffs: { ...(game.player?.adventureBuffs || {}) },
+    resultText: (document.getElementById('event-desc')?.textContent || '').replace(/\s+/g, ' ').trim(),
+    payload: typeof window.render_game_to_text === 'function' ? JSON.parse(window.render_game_to_text()) : null
+  }));
+  const resonanceWardProbe = { before: resonanceWardBefore, after: resonanceWardAfter };
+  add(
+    'resonance path ward canticle turns echo study into ring exp opening block prep and echoWard',
+    !!resonanceWardProbe &&
+      resonanceWardProbe.before?.hasEvent &&
+      /合律|立阵|护阵/.test(resonanceWardProbe.before?.choiceText || '') &&
+      Number(resonanceWardProbe.after?.ringExp || 0) > Number(resonanceWardProbe.before?.ringExp || 0) &&
+      Number(resonanceWardProbe.after?.buffs?.openingBlockBoostBattles || 0) > Number(resonanceWardProbe.before?.buffs?.openingBlockBoostBattles || 0) &&
+      Number(resonanceWardProbe.after?.deckSize || 0) > Number(resonanceWardProbe.before?.deckSize || 0) &&
+      Array.isArray(resonanceWardProbe.after?.deckIds) &&
+      resonanceWardProbe.after.deckIds.includes('echoWard') &&
+      /回响|护阵|命环/.test(resonanceWardProbe.after?.resultText || ''),
+    JSON.stringify(resonanceWardProbe || null)
+  );
+  await page.evaluate(() => {
+    const em = document.getElementById('event-modal');
+    if (em) em.classList.remove('active');
+  });
+  await page.waitForTimeout(120);
+
+  await page.evaluate(() => {
+    if (!window.game || typeof getRandomEvent !== 'function') return;
+    game.player.fateRing = game.player.fateRing || {};
+    game.player.fateRing.path = 'resonance';
     game.player.fateRing.level = 7;
     game.player.fateRing.exp = 0;
     game.player.adventureBuffs = {};

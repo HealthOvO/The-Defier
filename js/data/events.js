@@ -1857,6 +1857,47 @@ export const EVENTS = {
       effects: []
     }]
   },
+  resonanceWardCanticle: {
+    id: 'resonanceWardCanticle',
+    name: '护阵回响谱',
+    icon: '🎼',
+    description: '古谱把命环回响拆成护阵拍点，回响之环可以借此把一段共鸣转成命环经验、开场护盾准备与护势卡。',
+    choices: [{
+      text: '合律立阵',
+      icon: '🛡️',
+      result: '获得命环经验、开场护盾准备与护势卡',
+      resultType: 'positive',
+      effects: [{
+        type: 'ringExp',
+        value: 28
+      }, {
+        type: 'adventureBuff',
+        buffId: 'openingBlockBoostBattles',
+        charges: 1
+      }, {
+        type: 'card',
+        cardId: 'echoWard'
+      }]
+    }, {
+      text: '试鸣回声',
+      icon: '🔔',
+      result: '只取命环经验与少量护阵路费',
+      resultType: 'neutral',
+      effects: [{
+        type: 'ringExp',
+        value: 18
+      }, {
+        type: 'gold',
+        value: 22
+      }]
+    }, {
+      text: '收谱离开',
+      icon: '🚶',
+      result: '你没有继续调试这段回响',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
   wisdomStarScriptorium: {
     id: 'wisdomStarScriptorium',
     name: '星盘旁注阁',
@@ -4003,7 +4044,7 @@ export const ARCHETYPE_EVENT_POOLS = {
 };
 export const FATE_PATH_EVENT_POOLS = {
   convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar'],
-  resonance: ['fateRingEchoShrine', 'stormchaserCamp', 'thunderConductTrial', 'fulgurMarket'],
+  resonance: ['fateRingEchoShrine', 'stormchaserCamp', 'thunderConductTrial', 'fulgurMarket', 'resonanceWardCanticle'],
   wisdom: ['fateRingEchoShrine', 'lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary', 'wisdomStarScriptorium'],
   destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden', 'ruinBountyWrit']
 };

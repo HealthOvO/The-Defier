@@ -435,6 +435,7 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'pathId: \'destruction\'',
   'targetEventId: \'ruinBountyWrit\'',
   'targetEventId: \'wisdomStarScriptorium\'',
+  'targetEventId: \'resonanceWardCanticle\'',
   'fateRingEchoShrine bias too weak',
   '${targetEventId} bias too weak',
   'echoRate',
@@ -443,6 +444,19 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     read('tests/sanity_event_bias_distribution_checks.cjs').includes(needle),
     `event bias sanity should cover fate-path echo marker: ${needle}`,
+  );
+});
+
+[
+  "resonance: ['fateRingEchoShrine', 'stormchaserCamp', 'thunderConductTrial', 'fulgurMarket', 'resonanceWardCanticle']",
+  'EVENTS.resonanceWardCanticle',
+  'ward choice should grant ring exp',
+  'openingBlockBoostBattles',
+  'ward choice should grant echoWard',
+].forEach((needle) => {
+  assert.ok(
+    read('tests/sanity_content_archetype_checks.cjs').includes(needle),
+    `content archetype sanity should cover resonance ward event marker: ${needle}`,
   );
 });
 
@@ -508,6 +522,19 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     browserFeatureAudit.includes(needle),
     `browser feature audit should cover fate ring echo marker: ${needle}`,
+  );
+});
+
+[
+  'resonance path ward canticle turns echo study into ring exp opening block prep and echoWard',
+  "window.__debugEventQueue = ['resonanceWardCanticle']",
+  '护阵回响谱',
+  'openingBlockBoostBattles',
+  "deckIds.includes('echoWard')",
+].forEach((needle) => {
+  assert.ok(
+    browserFeatureAudit.includes(needle),
+    `browser feature audit should cover resonance ward event marker: ${needle}`,
   );
 });
 
