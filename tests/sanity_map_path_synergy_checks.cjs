@@ -145,6 +145,26 @@ function assert(cond, msg) {
     `combo streak should reset after stage-2 trigger, got ${caseACombo.player.pathSynergyState?.streak}`
   );
 
+  // 1.2) wisdom 命中观星/裂隙应把路线偏好转成天机，并在连击档位继续追加调度资源
+  const caseWisdom = createHarness('wisdom', 'observatory', { heavenlyInsight: 0 });
+  caseWisdom.map.completeNode(caseWisdom.node);
+  assert(caseWisdom.player.fateRing.exp >= 9, `wisdom observatory should grant ring exp, got ${caseWisdom.player.fateRing.exp}`);
+  assert(
+    caseWisdom.player.heavenlyInsight >= 1,
+    `wisdom observatory should grant heavenly insight, got ${caseWisdom.player.heavenlyInsight}`
+  );
+
+  const caseWisdomCombo = createHarness('wisdom', 'memory_rift', { heavenlyInsight: 0 });
+  ['observatory', 'memory_rift', 'event', 'shop'].forEach((type) => {
+    caseWisdomCombo.map.applyPathNodeSynergyReward({ type });
+  });
+  assert(caseWisdomCombo.player.heavenlyInsight >= 3, `wisdom combo should stack insight from strategic hits, got ${caseWisdomCombo.player.heavenlyInsight}`);
+  assert(caseWisdomCombo.player.fateRing.exp >= 68, `wisdom combo should grant staged ring exp, got ${caseWisdomCombo.player.fateRing.exp}`);
+  assert(
+    caseWisdomCombo.player.adventureBuffs.firstTurnDrawBoostBattles >= 1,
+    `wisdom combo stage-2 should grant first-turn draw prep, got ${caseWisdomCombo.player.adventureBuffs.firstTurnDrawBoostBattles}`
+  );
+
   // 2) resonance 命中营地应回血 + 开场护盾增益
   logs.length = 0;
   const caseB = createHarness('resonance', 'rest', { currentHp: 42, maxHp: 90 });

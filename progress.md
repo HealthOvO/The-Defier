@@ -1,5 +1,28 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-16: 智慧路径观星/裂隙节点天机收益与本地复验
+  - 本轮完成
+    - `js/core/map.js` 强化智慧 fate path 的地图节点联动：命中观星台或记忆裂隙时，除了既有命环经验外，额外获得 1 点天机。
+    - 智慧路径连续命中偏好节点的第 2 档连携奖励现在追加 1 点天机，第 4 档继续提供命环经验与首回合抽牌准备，让“事件 / 商店 / 观星 / 裂隙”路线选择更像信息与调度收益链。
+    - `tests/sanity_map_path_synergy_checks.cjs` 增加 VM 层断言，覆盖 wisdom 观星节点天机收益、观星 / 裂隙 / 事件 / 商店连续命中后的天机叠加、命环经验和首回合抽牌准备。
+    - `tests/browser_feature_audit.mjs` 增加真实浏览器分支，直接调用地图节点奖励链验证智慧路径四连偏好节点会产出天机、命环经验和抽牌准备，并在第 4 档后重置连携计数。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 新增 VM 与浏览器 marker，防止后续 release gate 漏掉智慧节点收益覆盖。
+  - 本轮验证
+    - TDD 红灯：`node tests/sanity_map_path_synergy_checks.cjs` 在实现前失败于 `wisdom observatory should grant heavenly insight, got 0`。
+    - `node --check js/core/map.js` ✅
+    - `node --check tests/sanity_map_path_synergy_checks.cjs` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node --check tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/sanity_map_path_synergy_checks.cjs` ✅
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `npm run build:pages` ✅
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4394 output/browser-feature-wisdom-node-synergy-green-20260616` ✅，真实浏览器确认 wisdom 连续偏好节点会产出天机、命环经验、首回合抽牌准备，且无 console error。
+    - `npm run test:node` ✅，覆盖本地 Auth、HMAC/时间戳、前端云同步、事件 / 命途 / 地图 / 商店 / PVP、后端注册/登录/存档/残影/PVP E2E 等 Node 门禁。
+    - `PORT=4416 BACKEND_SECURITY_TEST_PORT=9341 BACKEND_E2E_PORT=9342 BROWSER_BACKEND_SMOKE_PORT=9343 BROWSER_BACKEND_AUTHORITY_SMOKE_PORT=9344 BROWSER_AUTH_UI_SMOKE_PORT=9345 OUTPUT_ROOT=output/release-browser-audits-local-20260616-wisdom-node-synergy-final npm run test:release:local` ✅，本地生产构建、完整 Node/后端检查、后端 E2E 与 26 个浏览器 release 子审计通过；fresh 汇总 `output/release-browser-audits-local-20260616-wisdom-node-synergy-final/report.json` 为 594 条 finding、0 failure、0 console error，产出 336 张截图。
+  - 当前结论
+    - 智慧路径的地图路线偏好现在不再只是命环经验补正，观星 / 裂隙节点能稳定转成天机，连续踩偏好节点也能形成可感知的调度回报。
+    - 本轮仍严格只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-16: 归一命途阵枢约事件与前后端本地复验
   - 本轮完成
     - `js/data/events.js` 新增归一命途专属事件 `convergenceMatrixAccord / 归一阵枢约`：玩家可选择调谐阵枢，获得命环经验、下一战首回合灵力准备与首回合抽牌准备，也可拆取阵纹换命环经验和少量灵石，或撤约离开。

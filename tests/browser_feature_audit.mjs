@@ -2337,6 +2337,54 @@ async function safeScreenshot(page, outPath) {
     JSON.stringify(pathSynergyComboProbe || null)
   );
 
+  const wisdomPathNodeProbe = await page.evaluate(() => {
+    if (!window.game || !game.map || !game.player) return null;
+    game.player.fateRing = game.player.fateRing || {};
+    game.player.fateRing.path = 'wisdom';
+    game.player.fateRing.exp = 0;
+    game.player.heavenlyInsight = 0;
+    game.player.pathSynergyState = null;
+
+    if (typeof game.player.ensureAdventureBuffs === 'function') {
+      game.player.ensureAdventureBuffs();
+    } else {
+      game.player.adventureBuffs = {
+        firstTurnDrawBoostBattles: 0,
+        openingBlockBoostBattles: 0,
+        victoryGoldBoostBattles: 0,
+        firstTurnEnergyBoostBattles: 0,
+        ringExpBoostBattles: 0,
+        victoryHealBoostBattles: 0
+      };
+    }
+    Object.keys(game.player.adventureBuffs || {}).forEach((key) => {
+      game.player.adventureBuffs[key] = 0;
+    });
+
+    if (typeof game.map.applyPathNodeSynergyReward !== 'function') return { missing: true };
+    ['observatory', 'memory_rift', 'event', 'shop'].forEach((type) => {
+      game.map.applyPathNodeSynergyReward({ type });
+    });
+
+    const state = game.player.pathSynergyState || null;
+    return {
+      ringExp: game.player.fateRing.exp || 0,
+      insight: Number(game.player.heavenlyInsight || 0),
+      drawBuff: game.player.adventureBuffs.firstTurnDrawBoostBattles || 0,
+      streak: state ? Number(state.streak || 0) : null
+    };
+  });
+  add(
+    'wisdom path node synergy converts observatory and rift hits into insight and staged draw prep',
+    !!wisdomPathNodeProbe &&
+      !wisdomPathNodeProbe.missing &&
+      Number(wisdomPathNodeProbe.insight || 0) >= 3 &&
+      Number(wisdomPathNodeProbe.ringExp || 0) >= 68 &&
+      Number(wisdomPathNodeProbe.drawBuff || 0) >= 1 &&
+      Number(wisdomPathNodeProbe.streak || 0) === 0,
+    JSON.stringify(wisdomPathNodeProbe || null)
+  );
+
   const routeHintProbe = await page.evaluate(() => {
     if (!window.game || !game.map || typeof game.showScreen !== 'function') return null;
     game.showScreen('map-screen');

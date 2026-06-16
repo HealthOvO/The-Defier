@@ -19,6 +19,7 @@ const browserMobileAudit = read('tests/browser_mobile_layout_audit.mjs');
 const challengeMobileAudit = read('tests/browser_challenge_mobile_flow_audit.mjs');
 const browserChapterFlowAudit = read('tests/browser_chapter_flow_audit.mjs');
 const browserRunPathRewardAudit = read('tests/browser_run_path_reward_audit.mjs');
+const mapPathSynergyChecks = read('tests/sanity_map_path_synergy_checks.cjs');
 const codexSanctumChecks = read('tests/sanity_codex_sanctum_checks.cjs');
 const seasonBoardChecks = read('tests/sanity_season_board_system_checks.cjs');
 const strategicNodeChecks = read('tests/sanity_strategic_node_system_checks.cjs');
@@ -538,6 +539,30 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     browserFeatureAudit.includes(needle),
     `browser feature audit should cover fate ring echo marker: ${needle}`,
+  );
+});
+
+[
+  'wisdom observatory should grant heavenly insight',
+  'wisdom combo should stack insight from strategic hits',
+  'wisdom combo stage-2 should grant first-turn draw prep',
+  "['observatory', 'memory_rift', 'event', 'shop']",
+].forEach((needle) => {
+  assert.ok(
+    mapPathSynergyChecks.includes(needle),
+    `map path synergy sanity should cover wisdom node reward marker: ${needle}`,
+  );
+});
+
+[
+  'wisdom path node synergy converts observatory and rift hits into insight and staged draw prep',
+  "['observatory', 'memory_rift', 'event', 'shop']",
+  'Number(wisdomPathNodeProbe.insight || 0) >= 3',
+  'Number(wisdomPathNodeProbe.drawBuff || 0) >= 1',
+].forEach((needle) => {
+  assert.ok(
+    browserFeatureAudit.includes(needle),
+    `browser feature audit should cover wisdom node reward marker: ${needle}`,
   );
 });
 

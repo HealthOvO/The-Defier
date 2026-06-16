@@ -849,6 +849,14 @@ export class GameMap {
         Utils.showBattleLog(logText);
       }
     };
+    const gainInsight = (amount, logText = '') => {
+      const insight = Math.max(0, Math.floor(Number(amount) || 0));
+      if (insight <= 0) return;
+      player.heavenlyInsight = Math.max(0, Math.floor(Number(player.heavenlyInsight) || 0)) + insight;
+      if (logText && typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+        Utils.showBattleLog(logText);
+      }
+    };
     const healPlayer = (amount, logText = '') => {
       const heal = Math.max(0, Math.floor(Number(amount) || 0));
       if (heal <= 0) return;
@@ -887,6 +895,7 @@ export class GameMap {
       case 'wisdom':
         if (stage === 1) {
           gainRingExp(12, `${stageTag}：命环经验 +12`);
+          gainInsight(1, `${stageTag}：天机 +1`);
         } else {
           gainRingExp(20, `${stageTag}：命环经验 +20`);
           grantBuff('firstTurnDrawBoostBattles', 1, `${stageTag}：首回合抽牌 +1 层`);
@@ -959,6 +968,14 @@ export class GameMap {
         Utils.showBattleLog(logText);
       }
     };
+    const gainInsight = (amount, logText) => {
+      const insight = Math.max(0, Math.floor(Number(amount) || 0));
+      if (insight <= 0) return;
+      player.heavenlyInsight = Math.max(0, Math.floor(Number(player.heavenlyInsight) || 0)) + insight;
+      if (logText && typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+        Utils.showBattleLog(logText);
+      }
+    };
     const healPlayer = (amount, logText) => {
       const heal = Math.max(0, Math.floor(Number(amount) || 0));
       if (heal <= 0) return;
@@ -1003,6 +1020,9 @@ export class GameMap {
         if (node.type === 'event' || node.type === 'shop' || node.type === 'observatory' || node.type === 'memory_rift' || node.type === 'spirit_grotto') {
           qualifiedHit = true;
           gainRingExp(9, '悟境推演：命环经验 +9');
+          if (node.type === 'observatory' || node.type === 'memory_rift') {
+            gainInsight(1, '悟境观测：天机 +1');
+          }
         }
         break;
       case 'insight':
