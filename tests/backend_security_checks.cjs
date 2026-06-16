@@ -1899,6 +1899,10 @@ async function runPvpClientReportedSettlementTestModeChecks() {
     { NODE_ENV: 'production', JWT_SECRET: 'short-production-jwt-secret' },
     'JWT_SECRET must be configured with at least 32 characters in production'
   );
+  await assertServerStartupFails(
+    { NODE_ENV: 'production', JWT_SECRET, DEFIER_INTEGRITY_REQUIRED: '', DEFIER_HMAC_SECRET: '' },
+    'NODE_ENV=production requires DEFIER_INTEGRITY_REQUIRED'
+  );
   await assertServerStartupFails({ DEFIER_INTEGRITY_REQUIRED: '1' }, 'DEFIER_INTEGRITY_REQUIRED requires DEFIER_HMAC_SECRET');
   await runLegacyGhostMigrationChecks();
   await runLegacyGlobalTimestampMigrationChecks();

@@ -77,6 +77,10 @@ function verifySessionSignature(dataStr, salt, signature, sessionToken) {
 }
 
 function validateIntegrityConfig() {
+    const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+    if (isProduction && !isIntegrityRequired()) {
+        throw new Error('NODE_ENV=production requires DEFIER_INTEGRITY_REQUIRED=1');
+    }
     if (!isIntegrityRequired()) return;
     if (!isSignatureConfigured()) {
         throw new Error('DEFIER_INTEGRITY_REQUIRED requires DEFIER_HMAC_SECRET with at least 32 characters');
