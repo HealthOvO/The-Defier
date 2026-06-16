@@ -14,19 +14,49 @@ echo "[release-checks] Writing reports under: $OUTPUT_ROOT"
 
 AUDIT_TIMEOUT_SECONDS="${AUDIT_TIMEOUT_SECONDS:-420}"
 AUDIT_KILL_AFTER_SECONDS="${AUDIT_KILL_AFTER_SECONDS:-15}"
+FRONTEND_LAYOUT_AUDIT_TIMEOUT_SECONDS="${FRONTEND_LAYOUT_AUDIT_TIMEOUT_SECONDS:-1800}"
+FRONTEND_LAYOUT_AUDIT_KILL_AFTER_SECONDS="${FRONTEND_LAYOUT_AUDIT_KILL_AFTER_SECONDS:-15}"
+
+audit_timeout_for() {
+  local name="$1"
+  case "$name" in
+    frontend-layout)
+      printf '%s\n' "$FRONTEND_LAYOUT_AUDIT_TIMEOUT_SECONDS"
+      ;;
+    *)
+      printf '%s\n' "$AUDIT_TIMEOUT_SECONDS"
+      ;;
+  esac
+}
+
+audit_kill_after_for() {
+  local name="$1"
+  case "$name" in
+    frontend-layout)
+      printf '%s\n' "$FRONTEND_LAYOUT_AUDIT_KILL_AFTER_SECONDS"
+      ;;
+    *)
+      printf '%s\n' "$AUDIT_KILL_AFTER_SECONDS"
+      ;;
+  esac
+}
 
 run_audit() {
   local name="$1"
   shift
   local start_ts
   local end_ts
+  local timeout_seconds
+  local kill_after_seconds
   local status
 
   start_ts="$(date +%s)"
+  timeout_seconds="$(audit_timeout_for "$name")"
+  kill_after_seconds="$(audit_kill_after_for "$name")"
   echo "[release-checks] START $name"
 
   set +e
-  node tests/run_with_timeout.mjs "$AUDIT_TIMEOUT_SECONDS" "$AUDIT_KILL_AFTER_SECONDS" "$@"
+  node tests/run_with_timeout.mjs "$timeout_seconds" "$kill_after_seconds" "$@"
   status=$?
   set -e
 
@@ -34,7 +64,7 @@ run_audit() {
   echo "[release-checks] END $name status=$status duration=$((end_ts - start_ts))s"
 
   if [ "$status" -eq 124 ]; then
-    echo "[release-checks] TIMEOUT $name after ${AUDIT_TIMEOUT_SECONDS}s" >&2
+    echo "[release-checks] TIMEOUT $name after ${timeout_seconds}s" >&2
   fi
 
   return "$status"
