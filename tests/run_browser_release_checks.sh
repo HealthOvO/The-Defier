@@ -12,14 +12,8 @@ mkdir -p "$OUTPUT_ROOT"
 echo "[release-checks] Using base URL: $BASE_URL"
 echo "[release-checks] Writing reports under: $OUTPUT_ROOT"
 
-TIMEOUT_BIN=""
-if command -v timeout >/dev/null 2>&1; then
-  TIMEOUT_BIN="timeout"
-elif command -v gtimeout >/dev/null 2>&1; then
-  TIMEOUT_BIN="gtimeout"
-fi
-
 AUDIT_TIMEOUT_SECONDS="${AUDIT_TIMEOUT_SECONDS:-420}"
+AUDIT_KILL_AFTER_SECONDS="${AUDIT_KILL_AFTER_SECONDS:-15}"
 
 run_audit() {
   local name="$1"
@@ -32,13 +26,8 @@ run_audit() {
   echo "[release-checks] START $name"
 
   set +e
-  if [ -n "$TIMEOUT_BIN" ]; then
-    "$TIMEOUT_BIN" --foreground "$AUDIT_TIMEOUT_SECONDS" "$@"
-    status=$?
-  else
-    "$@"
-    status=$?
-  fi
+  node tests/run_with_timeout.mjs "$AUDIT_TIMEOUT_SECONDS" "$AUDIT_KILL_AFTER_SECONDS" "$@"
+  status=$?
   set -e
 
   end_ts="$(date +%s)"
@@ -78,6 +67,6 @@ run_audit pvp-mobile node tests/browser_pvp_mobile_audit.mjs "$BASE_URL" "$OUTPU
 run_audit pvp-mobile-result node tests/browser_pvp_mobile_result_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-mobile-result"
 run_audit challenge-mobile-flow node tests/browser_challenge_mobile_flow_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/challenge-mobile-flow"
 
-node tests/summarize_browser_release_reports.cjs "$OUTPUT_ROOT" "$BASE_URL"
+run_audit summarize node tests/summarize_browser_release_reports.cjs "$OUTPUT_ROOT" "$BASE_URL"
 
 echo "[release-checks] All browser release audits passed."
