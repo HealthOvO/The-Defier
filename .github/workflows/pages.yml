@@ -45,6 +45,9 @@ jobs:
       - name: Run node checks
         run: npm run test:node
 
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
       - name: Start Pages preview server
         run: |
           nohup python3 -m http.server 4173 --bind 127.0.0.1 --directory .site > /tmp/the-defier-preview.log 2>&1 &
