@@ -1857,6 +1857,47 @@ export const EVENTS = {
       effects: []
     }]
   },
+  wisdomStarScriptorium: {
+    id: 'wisdomStarScriptorium',
+    name: '星盘旁注阁',
+    icon: '📚',
+    description: '星图夹页写满旁注，智慧之环会把一次校注转成天机、命环经验与下一战的起手调度。',
+    choices: [{
+      text: '校注命盘',
+      icon: '🔭',
+      result: '获得天机、命环经验与首回合抽牌准备',
+      resultType: 'positive',
+      effects: [{
+        type: 'heavenlyInsight',
+        value: 1
+      }, {
+        type: 'ringExp',
+        value: 30
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnDrawBoostBattles',
+        charges: 1
+      }]
+    }, {
+      text: '抄录旁页',
+      icon: '📖',
+      result: '只取命环经验与少量灵石，不提前改写下一战',
+      resultType: 'neutral',
+      effects: [{
+        type: 'ringExp',
+        value: 18
+      }, {
+        type: 'gold',
+        value: 24
+      }]
+    }, {
+      text: '合卷离开',
+      icon: '🚶',
+      result: '你没有继续拆读旁注',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
   artifactConfluxBazaar: {
     id: 'artifactConfluxBazaar',
     name: '灵器汇流集',
@@ -3963,7 +4004,7 @@ export const ARCHETYPE_EVENT_POOLS = {
 export const FATE_PATH_EVENT_POOLS = {
   convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar'],
   resonance: ['fateRingEchoShrine', 'stormchaserCamp', 'thunderConductTrial', 'fulgurMarket'],
-  wisdom: ['fateRingEchoShrine', 'lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary'],
+  wisdom: ['fateRingEchoShrine', 'lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary', 'wisdomStarScriptorium'],
   destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden', 'ruinBountyWrit']
 };
 export const STRATEGIC_ENGINEERING_EVENT_POOLS = {

@@ -434,6 +434,7 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'pathId: \'wisdom\'',
   'pathId: \'destruction\'',
   'targetEventId: \'ruinBountyWrit\'',
+  'targetEventId: \'wisdomStarScriptorium\'',
   'fateRingEchoShrine bias too weak',
   '${targetEventId} bias too weak',
   'echoRate',
@@ -442,6 +443,19 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     read('tests/sanity_event_bias_distribution_checks.cjs').includes(needle),
     `event bias sanity should cover fate-path echo marker: ${needle}`,
+  );
+});
+
+[
+  "wisdom: ['fateRingEchoShrine', 'lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary', 'wisdomStarScriptorium']",
+  'EVENTS.wisdomStarScriptorium',
+  'study choice should grant heavenly insight',
+  'study choice should grant ring exp',
+  'firstTurnDrawBoostBattles',
+].forEach((needle) => {
+  assert.ok(
+    read('tests/sanity_content_archetype_checks.cjs').includes(needle),
+    `content archetype sanity should cover wisdom scriptorium event marker: ${needle}`,
   );
 });
 
@@ -494,6 +508,19 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     browserFeatureAudit.includes(needle),
     `browser feature audit should cover fate ring echo marker: ${needle}`,
+  );
+});
+
+[
+  'wisdom path scriptorium converts insight study into ring exp and first-turn draw prep',
+  "window.__debugEventQueue = ['wisdomStarScriptorium']",
+  '星盘旁注阁',
+  'firstTurnDrawBoostBattles',
+  'heavenlyInsight = 0',
+].forEach((needle) => {
+  assert.ok(
+    browserFeatureAudit.includes(needle),
+    `browser feature audit should cover wisdom scriptorium event marker: ${needle}`,
   );
 });
 

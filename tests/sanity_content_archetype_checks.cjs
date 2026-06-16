@@ -288,7 +288,7 @@ function loadFile(ctx, filePath) {
   const expectedPathPools = {
     convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar'],
     resonance: ['fateRingEchoShrine', 'stormchaserCamp', 'thunderConductTrial', 'fulgurMarket'],
-    wisdom: ['fateRingEchoShrine', 'lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary'],
+    wisdom: ['fateRingEchoShrine', 'lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary', 'wisdomStarScriptorium'],
     destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden', 'ruinBountyWrit']
   };
   Object.entries(expectedPathPools).forEach(([pathId, expectedIds]) => {
@@ -308,6 +308,15 @@ function loadFile(ctx, filePath) {
   assert(ruinEffects.some((effect) => effect.type === 'gold' && Number(effect.value) > 0), 'ruinBountyWrit bounty choice should grant gold');
   assert(ruinEffects.some((effect) => effect.type === 'ringExp' && Number(effect.value) > 0), 'ruinBountyWrit bounty choice should grant ring exp');
   assert(ruinEffects.some((effect) => effect.type === 'adventureBuff' && effect.buffId === 'victoryGoldBoostBattles' && Number(effect.charges) > 0), 'ruinBountyWrit bounty choice should grant victory bounty buff');
+  const wisdomStarScriptorium = EVENTS.wisdomStarScriptorium;
+  assert(!!wisdomStarScriptorium, 'wisdom event wisdomStarScriptorium should exist');
+  assert(/天机|推演|校注/.test(wisdomStarScriptorium.description || ''), 'wisdomStarScriptorium should read as a wisdom or divination event');
+  const wisdomStudyChoice = wisdomStarScriptorium.choices?.find((choice) => /校注|推演|命盘/.test(choice.text || ''));
+  assert(!!wisdomStudyChoice, 'wisdomStarScriptorium should expose a study choice');
+  const wisdomEffects = Array.isArray(wisdomStudyChoice.effects) ? wisdomStudyChoice.effects : [];
+  assert(wisdomEffects.some((effect) => effect.type === 'heavenlyInsight' && Number(effect.value) > 0), 'wisdomStarScriptorium study choice should grant heavenly insight');
+  assert(wisdomEffects.some((effect) => effect.type === 'ringExp' && Number(effect.value) > 0), 'wisdomStarScriptorium study choice should grant ring exp');
+  assert(wisdomEffects.some((effect) => effect.type === 'adventureBuff' && effect.buffId === 'firstTurnDrawBoostBattles' && Number(effect.charges) > 0), 'wisdomStarScriptorium study choice should grant first-turn draw prep');
 
   const expectedEngineeringPools = {
     observatory: ['artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil', 'starObservation', 'astralSupplyDepot', 'floatingMarketRift'],

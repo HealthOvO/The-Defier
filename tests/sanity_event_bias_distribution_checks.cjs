@@ -189,7 +189,8 @@ function createSeededRandom(seed) {
 
   [
     { pathId: 'destruction', seed: 13331, targetEventId: 'ruinBountyWrit', minTargetRate: 0.06 },
-    { pathId: 'convergence', seed: 13411, targetEventId: 'convergenceRelay', minTargetRate: 0.06 }
+    { pathId: 'convergence', seed: 13411, targetEventId: 'convergenceRelay', minTargetRate: 0.06 },
+    { pathId: 'wisdom', seed: 13523, targetEventId: 'wisdomStarScriptorium', minTargetRate: 0.05 }
   ].forEach(({ pathId, seed, targetEventId, minTargetRate }) => {
     const eventPool = FATE_PATH_EVENT_POOLS[pathId];
     assert(Array.isArray(eventPool) && eventPool.includes(targetEventId), `${pathId} fate-path pool should include ${targetEventId}`);

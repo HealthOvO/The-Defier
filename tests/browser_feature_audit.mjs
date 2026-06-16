@@ -3107,6 +3107,63 @@ async function safeScreenshot(page, outPath) {
 
   await page.evaluate(() => {
     if (!window.game || typeof getRandomEvent !== 'function') return;
+    game.player.fateRing = game.player.fateRing || {};
+    game.player.fateRing.path = 'wisdom';
+    game.player.fateRing.level = Math.max(Number(game.player.fateRing.level) || 1, 7);
+    game.player.fateRing.exp = 0;
+    game.player.heavenlyInsight = 0;
+    game.player.gold = 180;
+    game.player.adventureBuffs = {};
+    window.__debugEventQueue = ['wisdomStarScriptorium'];
+    const evt = getRandomEvent();
+    if (!evt) return;
+    game.showEventModal(evt, { id: 910023, row: 2, type: 'event', completed: false, accessible: true });
+  });
+  await page.waitForTimeout(120);
+  const wisdomScriptoriumBefore = await page.evaluate(() => {
+    const choices = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+    return {
+      hasEvent: /星盘旁注阁/.test(document.getElementById('event-title')?.textContent || ''),
+      title: document.getElementById('event-title')?.textContent || '',
+      insight: Number(game.player?.heavenlyInsight || 0),
+      ringExp: game.player?.fateRing?.exp || 0,
+      buffs: { ...(game.player?.adventureBuffs || {}) },
+      choiceText: choices.join(' | '),
+      payload: typeof window.render_game_to_text === 'function' ? JSON.parse(window.render_game_to_text()) : null
+    };
+  });
+  await page.evaluate(() => {
+    const firstChoice = document.querySelector('#event-choices .event-choice');
+    if (firstChoice) firstChoice.click();
+  });
+  await page.waitForTimeout(180);
+  const wisdomScriptoriumAfter = await page.evaluate(() => ({
+    insight: Number(game.player?.heavenlyInsight || 0),
+    ringExp: game.player?.fateRing?.exp || 0,
+    buffs: { ...(game.player?.adventureBuffs || {}) },
+    resultText: (document.getElementById('event-desc')?.textContent || '').replace(/\s+/g, ' ').trim(),
+    payload: typeof window.render_game_to_text === 'function' ? JSON.parse(window.render_game_to_text()) : null
+  }));
+  const wisdomScriptoriumProbe = { before: wisdomScriptoriumBefore, after: wisdomScriptoriumAfter };
+  add(
+    'wisdom path scriptorium converts insight study into ring exp and first-turn draw prep',
+    !!wisdomScriptoriumProbe &&
+      wisdomScriptoriumProbe.before?.hasEvent &&
+      /校注|推演|命盘/.test(wisdomScriptoriumProbe.before?.choiceText || '') &&
+      Number(wisdomScriptoriumProbe.after?.insight || 0) > Number(wisdomScriptoriumProbe.before?.insight || 0) &&
+      Number(wisdomScriptoriumProbe.after?.ringExp || 0) > Number(wisdomScriptoriumProbe.before?.ringExp || 0) &&
+      Number(wisdomScriptoriumProbe.after?.buffs?.firstTurnDrawBoostBattles || 0) > Number(wisdomScriptoriumProbe.before?.buffs?.firstTurnDrawBoostBattles || 0) &&
+      /天机|命环|抽牌/.test(wisdomScriptoriumProbe.after?.resultText || ''),
+    JSON.stringify(wisdomScriptoriumProbe || null)
+  );
+  await page.evaluate(() => {
+    const em = document.getElementById('event-modal');
+    if (em) em.classList.remove('active');
+  });
+  await page.waitForTimeout(120);
+
+  await page.evaluate(() => {
+    if (!window.game || typeof getRandomEvent !== 'function') return;
     window.__debugEventQueue = ['floatingMarketRift'];
     const evt = getRandomEvent();
     if (!evt) return;
