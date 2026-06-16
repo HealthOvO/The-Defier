@@ -5,6 +5,7 @@ import { chromium } from 'playwright';
 const url = process.argv[2] || 'http://127.0.0.1:4173';
 const outDir = process.argv[3] || 'output/web-pvp-mobile-audit';
 fs.mkdirSync(outDir, { recursive: true });
+const SCREENSHOT_TIMEOUT_MS = 12000;
 
 const findings = [];
 const consoleErrors = [];
@@ -18,7 +19,7 @@ async function safeScreenshot(page, outPath) {
     await page.addStyleTag({
       content: '*, *::before, *::after { animation: none !important; transition: none !important; }'
     }).catch(() => {});
-    await page.screenshot({ path: outPath, fullPage: true, timeout: 0, animations: 'disabled' });
+    await page.screenshot({ path: outPath, fullPage: true, timeout: SCREENSHOT_TIMEOUT_MS, animations: 'disabled' });
   } catch (err) {
     console.warn(`[browser_pvp_mobile_audit] screenshot skipped: ${err?.message || err}`);
   }
@@ -33,10 +34,10 @@ async function safeElementScreenshot(page, selector, outPath) {
     await target.waitFor({ state: 'visible', timeout: 5000 });
     const box = await target.boundingBox();
     if (box && box.width > 0 && box.height > 0) {
-      await page.screenshot({ path: outPath, clip: box, timeout: 0, animations: 'disabled' });
+      await page.screenshot({ path: outPath, clip: box, timeout: SCREENSHOT_TIMEOUT_MS, animations: 'disabled' });
       return;
     }
-    await target.screenshot({ path: outPath, timeout: 0, animations: 'disabled' });
+    await target.screenshot({ path: outPath, timeout: SCREENSHOT_TIMEOUT_MS, animations: 'disabled' });
   } catch (err) {
     console.warn(`[browser_pvp_mobile_audit] element screenshot skipped (${selector}): ${err?.message || err}`);
     await safeScreenshot(page, outPath);
