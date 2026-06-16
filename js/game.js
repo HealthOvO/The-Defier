@@ -4796,6 +4796,10 @@ export class Game {
     if (!this.shopManager) this.shopManager = new ShopManager(this);
     return this.shopManager.evaluateShopServiceFit(service);
   }
+  buildShopServiceDetailMeta(service, activeTab = null) {
+    if (!this.shopManager) this.shopManager = new ShopManager(this);
+    return this.shopManager.buildShopServiceDetailMeta(service, activeTab);
+  }
   getMapNodeTypeLabel(type = '') {
     const map = {
       enemy: '普通战',
@@ -7814,6 +7818,11 @@ export class Game {
                     <span class="price">${service.sold ? '已售出' : this.formatShopPrice(service)}</span>
                 </button>
             `;
+      el.style.cursor = 'zoom-in';
+      el.addEventListener('click', event => {
+        if (event.target && event.target.closest && event.target.closest('.buy-btn')) return;
+        Utils.showShopServiceDetail(service, this.buildShopServiceDetailMeta(service, activeTab));
+      });
       if (!service.sold) {
         const btn = el.querySelector('.buy-btn');
         btn.addEventListener('click', () => this.buyItem('service', index));

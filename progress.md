@@ -1,5 +1,35 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-16: 商店服务详情与前后端本地全量复验
+  - 本轮完成
+    - `js/managers/ShopManager.js` 新增 `buildShopServiceDetailMeta()`，把服务适配度、买后剩余、储备线、建议单次、当前血线和下一节点预判收束成服务详情元数据。
+    - `js/core/utils.js` 新增 `Utils.showShopServiceDetail()`，复用现有双栏详情弹窗，为服务项提供“服务主舞台 / 购买判断 / 经济提示”信息层。
+    - `js/game.js` 与 `js/views/ShopView.js` 同步服务行点击行为：点击服务说明只打开详情，点击购买按钮才执行购买，避免详情点击劫持交易。
+    - `tests/browser_meta_screen_audit.mjs` 增加服务详情主验收，断言详情弹窗显示 `.service-detail-main/.service-detail-side`、买后剩余、储备线、建议单次和适配度。
+    - `tests/browser_feature_audit.mjs` 增加真实交互烟测，覆盖“点服务说明不购买、关闭后点购买按钮才扣费/售出”。
+    - `tests/browser_frontend_layout_audit.mjs` 增加 `shop-service-detail-modal` 场景，覆盖桌面、短屏、移动端下服务详情关闭按钮、摘要行与经济提示可触达。
+    - `tests/sanity_shop_strategy_system_checks.cjs` 增加服务详情 meta 的 Node 级断言；`tests/sanity_release_gate_coverage_checks.cjs` 锁定服务详情、feature 交互和 layout 场景 marker。
+  - 本轮验证
+    - TDD 红灯：`node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4290 output/browser-meta-shop-service-detail-red-20260616` 在实现前失败于 `shop service detail modal opens from service row and shows economy reserve cues`。
+    - `node --check js/core/utils.js` ✅
+    - `node --check js/game.js` ✅
+    - `node --check js/managers/ShopManager.js` ✅
+    - `node --check js/views/ShopView.js` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node --check tests/browser_frontend_layout_audit.mjs` ✅
+    - `node tests/sanity_shop_strategy_system_checks.cjs` ✅
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4290 output/browser-meta-shop-service-detail-green-20260616` ✅，45/45 finding 通过，并产出 `shop-service-detail-layout.png`。
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4290 output/browser-feature-shop-service-detail-green-20260616-rerun2` ✅，确认服务详情点击与购买按钮职责分离。
+    - `node tests/browser_frontend_layout_audit.mjs http://127.0.0.1:4290 output/browser-frontend-layout-shop-service-detail-green-20260616` ✅，159/159 finding 通过，服务详情桌面 / 短屏 / 移动端均无裁切或按钮不可达。
+    - `npm run build:pages` ✅
+    - `npm run test:node` ✅，覆盖本地 Auth 配置、后端安全、前端云同步、商店策略、后端注册/登录/存档/残影/PVP E2E 等 Node 门禁。
+    - `BACKEND_SECURITY_TEST_PORT=9112 BACKEND_E2E_PORT=9123 PORT=4291 OUTPUT_ROOT=output/release-browser-audits-local-20260616-shop-service-detail-final npm run test:release:local` ✅，26 个浏览器 release 子审计、588 条 finding、0 failure、0 console error；本轮 fresh 产物包含 `meta/shop-service-detail-layout.png`、`frontend-layout/desktop-shop-service-detail-modal.png`、`frontend-layout/short-shop-service-detail-modal.png`、`frontend-layout/mobile-shop-service-detail-modal.png` 与 `backend-client/report.json`。
+  - 当前结论
+    - 商店服务从“只露出一行适配理由”升级为可检查买后结余、储备线和下一节点预判的经济决策详情，不改变原购买规则。
+    - 本轮只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-15: 护心证道试炼包与生命阈值判定
   - 本轮完成
     - `js/game.js` 新增试炼碑挑战包 `vitalSeal / 护心证道`：要求 7 回合内取胜，且胜利时生命不低于 70%；该试炼允许掉血，但要求玩家在收官前保住血线。

@@ -12,6 +12,7 @@ const backendClientSmoke = read('tests/browser_backend_client_smoke.mjs');
 const browserAudit = read('tests/browser_audit.mjs');
 const browserPvpAudit = read('tests/browser_pvp_audit.mjs');
 const browserFeatureAudit = read('tests/browser_feature_audit.mjs');
+const browserMetaAudit = read('tests/browser_meta_screen_audit.mjs');
 const browserEventBranchAudit = read('tests/browser_event_branch_audit.mjs');
 const browserRunPathEventAudit = read('tests/browser_run_path_event_audit.mjs');
 const browserMobileAudit = read('tests/browser_mobile_layout_audit.mjs');
@@ -25,6 +26,10 @@ const trialChallengeChecks = read('tests/sanity_trial_challenge_checks.cjs');
 const pvpService = read('js/services/pvp-service.js');
 const pvpServiceChecks = read('tests/sanity_pvp_service_checks.cjs');
 const runNodeChecks = read('tests/run_node_checks.sh');
+const shopManager = read('js/managers/ShopManager.js');
+const coreUtils = read('js/core/utils.js');
+const gameSource = read('js/game.js');
+const shopView = read('js/views/ShopView.js');
 [
   'routes/pvp.js',
   'routes/ghosts.js',
@@ -156,6 +161,26 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     layoutAudit.includes(needle),
     `frontend layout audit should fail clipped dynamic card detail marker: ${needle}`,
+  );
+});
+
+[
+  "id: 'shop-service-detail-modal'",
+  'activateShopServiceDetailModal',
+  'shopServiceDetailProbe',
+  'service-detail-main',
+  'service-detail-side',
+  'shop-service-detail-modal-missing-content',
+  'shop-service-detail-modal-unreachable-content',
+  'shop-service-detail-modal-clipped-content',
+  'hasEconomyText',
+  '买后剩余',
+  '储备线',
+  '建议单次',
+].forEach((needle) => {
+  assert.ok(
+    layoutAudit.includes(needle),
+    `frontend layout audit should cover shop service detail marker: ${needle}`,
   );
 });
 
@@ -604,6 +629,78 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     codexSanctumChecks.includes(needle),
     `codex sanctum checks should cover chapter drill direct routing marker: ${needle}`,
+  );
+});
+
+[
+  'buildShopServiceDetailMeta',
+  'evaluateShopServiceFit(service)',
+  'getShopEconomyOutlook()',
+  '买后剩余',
+  '储备线',
+  '建议单次',
+  '当前血线',
+].forEach((needle) => {
+  assert.ok(
+    shopManager.includes(needle),
+    `shop manager should build service detail economy marker: ${needle}`,
+  );
+});
+
+[
+  'showShopServiceDetail',
+  'service-detail-main',
+  'service-detail-side',
+  '服务详情',
+  '服务主舞台',
+  '购买判断',
+  '点击价格按钮才会购买',
+].forEach((needle) => {
+  assert.ok(
+    coreUtils.includes(needle),
+    `core utils should render service detail modal marker: ${needle}`,
+  );
+});
+
+[
+  'shop service row opens detail without purchasing and buy button remains purchase-only',
+  'shopServiceDetailClickProbe',
+  'hasEconomyText',
+  'afterInfo?.gold === shopServiceDetailClickProbe.before?.gold',
+  'afterBuy?.sold === true',
+].forEach((needle) => {
+  assert.ok(
+    browserFeatureAudit.includes(needle),
+    `browser feature audit should cover shop service detail click marker: ${needle}`,
+  );
+});
+
+[
+  'Utils.showShopServiceDetail(service, this.buildShopServiceDetailMeta(service, activeTab))',
+  "event.target.closest('.buy-btn')",
+].forEach((needle) => {
+  assert.ok(
+    gameSource.includes(needle),
+    `game shop renderer should open service detail without hijacking buy button marker: ${needle}`,
+  );
+  assert.ok(
+    shopView.includes(needle.replace('this.buildShopServiceDetailMeta', 'this.game.buildShopServiceDetailMeta')),
+    `shop view should open service detail without hijacking buy button marker: ${needle}`,
+  );
+});
+
+[
+  'shop service detail modal opens from service row and shows economy reserve cues',
+  '.service-detail-main',
+  '.service-detail-side',
+  '买后剩余',
+  '储备线',
+  '建议单次',
+  '高适配|中适配|低适配',
+].forEach((needle) => {
+  assert.ok(
+    browserMetaAudit.includes(needle),
+    `browser meta audit should cover shop service detail marker: ${needle}`,
   );
 });
 

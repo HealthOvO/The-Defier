@@ -2162,6 +2162,66 @@ async function safeScreenshot(page, outPath) {
     JSON.stringify(scoutPackLocalizationProbe || null)
   );
 
+  const shopServiceDetailClickProbe = await page.evaluate(() => {
+    if (!window.game || !Array.isArray(game.shopServices)) return null;
+    game.player.currentHp = Math.max(1, Math.floor(game.player.maxHp * 0.5));
+    game.player.gold = Math.max(Number(game.player.gold) || 0, 2000);
+    const serviceIndex = game.shopServices.findIndex((service) => service && service.id === 'tacticalPlan' && !service.sold);
+    const rows = Array.from(document.querySelectorAll('#shop-services-container .shop-service'));
+    const row = serviceIndex >= 0 ? rows[serviceIndex] : null;
+    const service = serviceIndex >= 0 ? game.shopServices[serviceIndex] : null;
+    const info = row ? row.querySelector('.service-info') : null;
+    const buyButton = row ? row.querySelector('.buy-btn') : null;
+    const before = {
+      gold: game.player.gold,
+      hp: game.player.currentHp,
+      sold: !!service?.sold
+    };
+    if (!info || !buyButton || !service) {
+      return { ok: false, reason: 'missing_service_row', serviceIndex, rowCount: rows.length };
+    }
+    info.click();
+    const modal = document.getElementById('card-detail-modal');
+    const modalText = modal ? (modal.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    const modalVisible = !!modal && getComputedStyle(modal).display !== 'none';
+    const afterInfo = {
+      gold: game.player.gold,
+      hp: game.player.currentHp,
+      sold: !!service.sold
+    };
+    const closeButton = modal ? modal.querySelector('[data-card-detail-close="true"]') : null;
+    if (closeButton) closeButton.click();
+    buyButton.click();
+    const afterBuy = {
+      gold: game.player.gold,
+      hp: game.player.currentHp,
+      sold: !!service.sold
+    };
+    return {
+      modalVisible,
+      hasMain: !!modal?.querySelector('.service-detail-main'),
+      hasSide: !!modal?.querySelector('.service-detail-side'),
+      hasEconomyText: /买后剩余/.test(modalText) && /储备线/.test(modalText) && /建议单次/.test(modalText),
+      before,
+      afterInfo,
+      afterBuy
+    };
+  });
+  add(
+    'shop service row opens detail without purchasing and buy button remains purchase-only',
+    !!shopServiceDetailClickProbe &&
+      shopServiceDetailClickProbe.modalVisible &&
+      shopServiceDetailClickProbe.hasMain &&
+      shopServiceDetailClickProbe.hasSide &&
+      shopServiceDetailClickProbe.hasEconomyText &&
+      shopServiceDetailClickProbe.afterInfo?.gold === shopServiceDetailClickProbe.before?.gold &&
+      shopServiceDetailClickProbe.afterInfo?.hp === shopServiceDetailClickProbe.before?.hp &&
+      shopServiceDetailClickProbe.afterInfo?.sold === false &&
+      shopServiceDetailClickProbe.afterBuy?.sold === true &&
+      Number(shopServiceDetailClickProbe.afterBuy?.gold || 0) < Number(shopServiceDetailClickProbe.before?.gold || 0),
+    JSON.stringify(shopServiceDetailClickProbe || null)
+  );
+
   const shopServiceEffectProbe = await page.evaluate(() => {
     if (!window.game || !Array.isArray(game.shopServices)) return null;
     game.player.currentHp = Math.max(1, Math.floor(game.player.maxHp * 0.5));

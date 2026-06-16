@@ -729,6 +729,45 @@ ${treasure ? `获得法宝：${treasure.name}
       }]
     };
   }
+  buildShopServiceDetailMeta(service, activeTab = null) {
+    const fit = this.evaluateShopServiceFit(service);
+    const economy = this.getShopEconomyOutlook();
+    const currency = service?.currency || 'gold';
+    const currentBudget = typeof this.game.getStrategicCurrencyAmount === 'function'
+      ? this.game.getStrategicCurrencyAmount(currency)
+      : Number(this.game.player?.gold) || 0;
+    const price = Math.max(0, Number(service?.price) || 0);
+    const currencyLabel = this.game.getStrategicCurrencyLabel ? this.game.getStrategicCurrencyLabel(currency) : currency;
+    const hpPercent = Number.isFinite(Number(economy?.hpRatio)) ? Math.round(economy.hpRatio * 100) : 100;
+    const extraSummaryRows = [{
+      label: '适配度',
+      value: fit.label || '适配未知'
+    }, {
+      label: '买后剩余',
+      value: `${Math.max(0, currentBudget - price)} ${currencyLabel}`
+    }, {
+      label: '储备线',
+      value: `${economy?.reserveTarget ?? 0} 灵石`
+    }, {
+      label: '建议单次',
+      value: `≤ ${economy?.spendCeiling ?? 0} 灵石`
+    }, {
+      label: '当前血线',
+      value: `${hpPercent}%`
+    }];
+    return {
+      sectionLabel: '服务详情',
+      sourceLabel: activeTab?.label || '商店服务',
+      priceText: service?.sold ? '已售出' : this.game.formatShopPrice(service),
+      availabilityText: service?.sold ? '已售出' : this.canAffordShopItem(service) ? '可购买' : '资源不足',
+      usageHint: fit.reason,
+      fitLabel: fit.label,
+      economyNote: economy?.note || '',
+      forecastText: economy?.forecast?.summary || '',
+      extraSummaryRows,
+      closeLabel: '返回商店'
+    };
+  }
   getShopNextNodeForecast() {
     if (!this.game.map || typeof this.game.map.getAccessibleNodes !== 'function') return null;
     const accessible = this.game.map.getAccessibleNodes().filter(node => node && node.id !== this.game.shopNode?.id);

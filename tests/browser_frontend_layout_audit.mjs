@@ -56,6 +56,7 @@ const scenarios = [
   { id: 'treasure-bag-modal', root: '#treasure-bag-modal', title: 'Treasure Bag Modal' },
   { id: 'card-modal', root: '#card-modal', title: 'Card Detail Modal' },
   { id: 'dynamic-card-detail-modal', root: '#card-detail-modal', title: 'Dynamic Card Detail Modal' },
+  { id: 'shop-service-detail-modal', root: '#card-detail-modal', title: 'Shop Service Detail Modal' },
   { id: 'skill-confirm-modal', root: '#skill-confirm-modal', title: 'Skill Confirm Modal' },
   { id: 'treasure-detail-modal', root: '#treasure-detail-modal', title: 'Treasure Detail Modal' },
   { id: 'law-detail-modal', root: '#law-detail-modal', title: 'Law Detail Modal' },
@@ -1017,6 +1018,66 @@ async function prepareScenario(page, scenarioId) {
       }
     };
 
+    const activateShopServiceDetailModal = () => {
+      ensureGame();
+      game.showScreen('map-screen');
+      if (game.player) {
+        game.player.gold = Math.max(Number(game.player.gold) || 0, 180);
+        game.player.maxHp = Math.max(Number(game.player.maxHp) || 1, 96);
+        game.player.currentHp = Math.max(1, Math.floor(game.player.maxHp * 0.58));
+      }
+      const service = {
+        id: 'layoutServiceDecision',
+        type: 'service',
+        name: '万里商路决策单·长名压力样本',
+        icon: '🧾',
+        tagLabel: '布局审计',
+        riskLabel: '买前检查',
+        desc: '打开这项服务时，玩家需要同时看到买后剩余、储备线、建议单次与下一节点预判；这段长说明用于检查服务详情弹窗在短屏和移动端不会裁切关键按钮。',
+        price: 96,
+        sold: false,
+      };
+      let meta = {
+        sectionLabel: '服务详情',
+        sourceLabel: '布局审计页',
+        priceText: '💰 96 灵石',
+        availabilityText: '可购买',
+        usageHint: '先看买后剩余和储备线，再决定是否立刻购买这项服务。',
+        fitLabel: '中适配',
+        economyNote: '当前可支配约 84 灵石，可优先买下真正高适配的卡牌或关键服务。',
+        forecastText: '下一批节点：精英战 / 营地',
+        extraSummaryRows: [
+          { label: '适配度', value: '中适配' },
+          { label: '买后剩余', value: '84 灵石' },
+          { label: '储备线', value: '54 灵石' },
+          { label: '建议单次', value: '≤ 126 灵石' },
+          { label: '当前血线', value: '58%' },
+        ],
+        closeLabel: '返回商店',
+      };
+      if (typeof game.buildShopServiceDetailMeta === 'function') {
+        meta = {
+          ...game.buildShopServiceDetailMeta(service, { label: '布局审计页' }),
+          sectionLabel: '服务详情',
+          sourceLabel: '布局审计页',
+          closeLabel: '返回商店',
+        };
+      }
+      if (typeof Utils !== 'undefined' && typeof Utils.showShopServiceDetail === 'function') {
+        Utils.showShopServiceDetail(service, meta);
+      } else {
+        let modal = document.getElementById('card-detail-modal');
+        if (!modal) {
+          modal = document.createElement('div');
+          modal.id = 'card-detail-modal';
+          modal.className = 'modal-overlay card-detail-overlay';
+          document.body.appendChild(modal);
+        }
+        modal.innerHTML = `<div class="card-detail-container"><button data-card-detail-close="true">返回商店</button><div class="service-detail-main">${safeText(service.desc)}</div><div class="service-detail-side">买后剩余 储备线 建议单次</div></div>`;
+        modal.style.display = 'flex';
+      }
+    };
+
     const activateSkillConfirmModal = () => {
       ensureGame();
       game.showScreen('battle-screen');
@@ -1307,6 +1368,9 @@ async function prepareScenario(page, scenarioId) {
       case 'dynamic-card-detail-modal':
         activateDynamicCardDetailModal();
         break;
+      case 'shop-service-detail-modal':
+        activateShopServiceDetailModal();
+        break;
       case 'skill-confirm-modal':
         activateSkillConfirmModal();
         break;
@@ -1595,6 +1659,7 @@ async function inspectLayout(page, rootSelector, scenarioId) {
     let alertModalProbe = null;
     let treasureBagAlertProbe = null;
     let dynamicCardDetailProbe = null;
+    let shopServiceDetailProbe = null;
     let battleCommandModalProbe = null;
     let endlessParanoiaModalProbe = null;
     let saveSlotsModalProbe = null;
@@ -1784,6 +1849,50 @@ async function inspectLayout(page, rootSelector, scenarioId) {
           type: 'dynamic-card-detail-unreachable-content',
           selector: '#card-detail-modal',
           detail: dynamicCardDetailProbe,
+        });
+      }
+    }
+    if (scenarioId === 'shop-service-detail-modal') {
+      const container = root.querySelector('.card-detail-container');
+      const main = root.querySelector('.service-detail-main');
+      const side = root.querySelector('.service-detail-side');
+      const closeButton = root.querySelector('[data-card-detail-close="true"]');
+      const summaryRows = Array.from(root.querySelectorAll('.cd-summary-row')).filter(isVisible);
+      const statusChips = Array.from(root.querySelectorAll('.detail-status-chip')).filter(isVisible);
+      const tipPanel = root.querySelector('.detail-tip-panel');
+      const modalText = textLabel(root);
+      const closeButtonHit = readHitStateAfterScroll(closeButton);
+      const summaryRowHit = readHitStateAfterScroll(summaryRows[0]);
+      shopServiceDetailProbe = {
+        containerVisible: !!(container && isVisible(container)),
+        mainVisible: !!(main && isVisible(main)),
+        sideVisible: !!(side && isVisible(side)),
+        closeButtonVisible: !!(closeButton && isVisible(closeButton)),
+        closeButtonInitiallyTopHit: closeButtonHit.initial.topHit,
+        closeButtonTopHit: closeButtonHit.final.topHit,
+        closeButtonRect: closeButtonHit.final.rect,
+        summaryRowCount: summaryRows.length,
+        summaryRowInitiallyTopHit: summaryRowHit.initial.topHit,
+        summaryRowTopHit: summaryRowHit.final.topHit,
+        summaryRowRect: summaryRowHit.final.rect,
+        statusChipCount: statusChips.length,
+        tipPanelVisible: !!(tipPanel && isVisible(tipPanel)),
+        hasEconomyText: /买后剩余/.test(root.textContent || '') && /储备线/.test(root.textContent || '') && /建议单次/.test(root.textContent || ''),
+        title: textLabel(root.querySelector('.cd-header h2') || root.querySelector('h2')),
+        modalText,
+      };
+      if (!shopServiceDetailProbe.containerVisible || !shopServiceDetailProbe.mainVisible || !shopServiceDetailProbe.sideVisible || !shopServiceDetailProbe.closeButtonVisible || shopServiceDetailProbe.summaryRowCount < 4 || !shopServiceDetailProbe.hasEconomyText) {
+        issues.push({
+          type: 'shop-service-detail-modal-missing-content',
+          selector: '#card-detail-modal',
+          detail: shopServiceDetailProbe,
+        });
+      }
+      if (!shopServiceDetailProbe.closeButtonTopHit || !shopServiceDetailProbe.summaryRowTopHit) {
+        issues.push({
+          type: 'shop-service-detail-modal-unreachable-content',
+          selector: '#card-detail-modal',
+          detail: shopServiceDetailProbe,
         });
       }
     }
@@ -2550,6 +2659,19 @@ async function inspectLayout(page, rootSelector, scenarioId) {
         });
       }
     }
+    if (scenarioId === 'shop-service-detail-modal') {
+      const clippedWarnings = warnings.filter((warning) => [
+        'text-may-be-clipped',
+        'non-scrollable-content-clipped',
+      ].includes(warning.type));
+      if (clippedWarnings.length > 0) {
+        issues.push({
+          type: 'shop-service-detail-modal-clipped-content',
+          selector: '#card-detail-modal',
+          warnings: clippedWarnings,
+        });
+      }
+    }
     const probedModalClippedWarnings = warnings.filter((warning) => [
       'text-may-be-clipped',
       'non-scrollable-content-clipped',
@@ -2620,6 +2742,7 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       alertModalProbe,
       treasureBagAlertProbe,
       dynamicCardDetailProbe,
+      shopServiceDetailProbe,
       battleCommandModalProbe,
       endlessParanoiaModalProbe,
       saveSlotsModalProbe,

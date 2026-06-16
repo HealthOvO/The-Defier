@@ -177,7 +177,13 @@ function loadFile(ctx, filePath) {
     'getStrategicRouteForecasts',
     'getStrategicRouteForecast',
     'applyStrategicRouteForecast',
-    'applyServiceEffect'
+    'applyServiceEffect',
+    'buildPlayerDeckProfile',
+    'evaluateShopServiceFit',
+    'buildShopServiceDetailMeta',
+    'getMapNodeTypeLabel',
+    'getShopNextNodeForecast',
+    'getShopEconomyOutlook'
   ].forEach((name) => {
     harness[name] = Game.prototype[name];
   });
@@ -211,6 +217,27 @@ function loadFile(ctx, filePath) {
   const activeContractTab = harness.syncActiveShopTab();
   assert(activeContractTab.id === 'contract', 'syncActiveShopTab should activate contract tab');
   assert(Array.isArray(harness.shopServices) && harness.shopServices.length >= 3, 'contract tab should expose services');
+
+  harness.map = {
+    getAccessibleNodes: () => [
+      { id: 'shop-current', row: 2, type: 'shop' },
+      { id: 'elite-next', row: 3, type: 'elite' },
+      { id: 'rest-next', row: 3, type: 'rest' }
+    ]
+  };
+  harness.shopNode = { id: 'shop-current', row: 2 };
+  const detailService = activeContractTab.services.find((service) => service && !service.sold);
+  const serviceDetailMeta = harness.buildShopServiceDetailMeta(detailService, activeContractTab);
+  const detailRowMap = Object.fromEntries((serviceDetailMeta.extraSummaryRows || []).map((row) => [row.label, row.value]));
+  assert(serviceDetailMeta.sectionLabel === '服务详情', 'shop service detail meta should use service detail section label');
+  assert(serviceDetailMeta.sourceLabel === activeContractTab.label, 'shop service detail meta should keep active tab label');
+  assert(['高适配', '中适配', '低适配'].includes(serviceDetailMeta.fitLabel), 'shop service detail meta should expose fit label');
+  assert(String(detailRowMap['买后剩余'] || '').includes('业果'), 'karma service detail should forecast post-buy balance in the service currency');
+  assert(String(detailRowMap['储备线'] || '').includes('灵石'), 'shop service detail should keep gold reserve target visible');
+  assert(String(detailRowMap['建议单次'] || '').includes('灵石'), 'shop service detail should keep spend ceiling visible');
+  assert(String(detailRowMap['当前血线'] || '').endsWith('%'), 'shop service detail should expose current HP line');
+  assert(String(serviceDetailMeta.forecastText || '').includes('精英战'), 'shop service detail should surface next-node forecast');
+  assert(String(serviceDetailMeta.economyNote || '').length > 0, 'shop service detail should include economy note');
 
   const rumorPriceOk = harness.canAffordShopItem({ price: 2, currency: 'insight' });
   const karmaPriceOk = harness.canAffordShopItem({ price: 2, currency: 'karma' });

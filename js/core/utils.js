@@ -416,6 +416,108 @@ export const Utils = {
       container.style.animation = 'modalPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
     }
   },
+  showShopServiceDetail(service, meta = {}) {
+    if (!service) return;
+    let modal = document.getElementById('card-detail-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'card-detail-modal';
+      modal.className = 'modal-overlay card-detail-overlay';
+      modal.onclick = e => {
+        if (e.target === modal) modal.style.display = 'none';
+      };
+      document.body.appendChild(modal);
+    }
+    const sourceLabel = meta.sectionLabel || '服务详情';
+    const sourceText = meta.sourceLabel ? `<div class="cd-summary-row"><span>货架</span><strong>${meta.sourceLabel}</strong></div>` : '';
+    const priceText = meta.priceText ? `<div class="cd-summary-row"><span>售价</span><strong>${meta.priceText}</strong></div>` : '';
+    const availabilityText = meta.availabilityText ? `<div class="cd-summary-row"><span>状态</span><strong>${meta.availabilityText}</strong></div>` : '';
+    const extraSummaryRows = Array.isArray(meta.extraSummaryRows)
+      ? meta.extraSummaryRows.map(row => `<div class="cd-summary-row"><span>${row.label}</span><strong>${row.value}</strong></div>`).join('')
+      : '';
+    const summaryChips = [service.tagLabel, service.riskLabel, meta.fitLabel]
+      .filter(Boolean)
+      .map(label => `<span class="detail-status-chip">${label}</span>`)
+      .join('');
+    const usageHint = meta.usageHint || '先看买后剩余和储备线，再决定是否立刻购买这项服务。';
+    const forecastHtml = meta.forecastText ? `<li>${meta.forecastText}</li>` : '';
+    const economyHtml = meta.economyNote ? `<li>${meta.economyNote}</li>` : '';
+    const closeLabel = meta.closeLabel || '关闭界面';
+    modal.innerHTML = `
+            <div class="card-detail-container detail-dual-layout">
+                <div class="detail-dual-main service-detail-main">
+                    <section class="detail-dual-panel cd-stage-panel">
+                        <div class="detail-panel-heading">
+                            <span class="detail-panel-kicker">${sourceLabel}</span>
+                            <h3>服务主舞台</h3>
+                        </div>
+                        <div class="cd-preview-pane">
+                            <div class="detail-dual-panel service-preview-card">
+                                <div class="service-icon" style="font-size:3rem;">${service.icon || '✨'}</div>
+                                <h2>${service.name || '未知服务'}</h2>
+                                <p class="codex-side-note">${service.desc || '暂无服务说明。'}</p>
+                            </div>
+                        </div>
+                    </section>
+                    <section class="detail-dual-panel cd-copy-panel">
+                        <div class="detail-panel-heading compact">
+                            <span class="detail-panel-kicker">购买判断</span>
+                            <h3>服务摘要</h3>
+                        </div>
+                        <div class="cd-desc-box">${service.desc || '暂无服务说明。'}</div>
+                        <div class="cd-section">
+                            <div class="detail-panel-heading compact">
+                                <span class="detail-panel-kicker">适配理由</span>
+                                <h3>${meta.fitLabel || '适配未知'}</h3>
+                            </div>
+                            <p class="codex-side-note">${usageHint}</p>
+                        </div>
+                    </section>
+                </div>
+                <aside class="detail-dual-side service-detail-side">
+                    <section class="detail-dual-panel cd-info-pane">
+                        <div class="cd-header detail-header common">
+                            <span class="detail-kicker">${sourceLabel}</span>
+                            <h2>${service.name || '未知服务'}</h2>
+                            <div class="detail-sub">${meta.sourceLabel || '商店服务'}</div>
+                        </div>
+                        <div class="detail-status-strip cd-badges">${summaryChips}</div>
+                        <div class="cd-summary-card">
+                            ${priceText}
+                            ${availabilityText}
+                            ${sourceText}
+                            ${extraSummaryRows}
+                        </div>
+                    </section>
+                    <section class="detail-dual-panel detail-tip-panel">
+                        <div class="detail-panel-heading compact">
+                            <span class="detail-panel-kicker">经济提示</span>
+                            <h3>买前检查</h3>
+                        </div>
+                        <ul class="codex-side-list compact">
+                            ${economyHtml}
+                            ${forecastHtml}
+                            <li>点击价格按钮才会购买；点击服务说明只打开详情。</li>
+                        </ul>
+                    </section>
+                    <div class="detail-modal-actions">
+                        <button class="cd-close-btn" type="button" data-card-detail-close="true">${closeLabel}</button>
+                    </div>
+                </aside>
+            </div>
+        `;
+    modal.style.display = 'flex';
+    const closeBtn = modal.querySelector('[data-card-detail-close="true"]');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        modal.style.display = 'none';
+      });
+    }
+    const container = modal.querySelector('.card-detail-container');
+    if (container) {
+      container.style.animation = 'modalPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+    }
+  },
   getEffectDescription(effect) {
     // 简单的效果描述生成器，用于详情页
     switch (effect.type) {

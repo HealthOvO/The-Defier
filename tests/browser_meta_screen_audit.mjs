@@ -5910,6 +5910,43 @@ function rectObj(rect) {
   );
   await safeAuditScreenshot(page, path.join(outDir, 'shop-card-detail-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
 
+  await page.evaluate(() => {
+    const modal = document.getElementById('card-detail-modal');
+    if (modal) modal.style.display = 'none';
+  });
+  await page.click('#shop-services-container .shop-service .service-info', { force: true });
+  await page.waitForTimeout(250);
+  const shopServiceDetailProbe = await page.evaluate(() => {
+    const modal = document.getElementById('card-detail-modal');
+    const main = modal ? modal.querySelector('.service-detail-main') : null;
+    const side = modal ? modal.querySelector('.service-detail-side') : null;
+    const summaryRows = modal ? Array.from(modal.querySelectorAll('.cd-summary-row')).map((row) => (row.textContent || '').replace(/\s+/g, ' ').trim()) : [];
+    const text = (modal?.textContent || '').replace(/\s+/g, ' ').trim();
+    const visible = !!modal && window.getComputedStyle(modal).display !== 'none';
+    return {
+      ok:
+        visible &&
+        !!main &&
+        !!side &&
+        /服务详情/.test(text) &&
+        /结余预估|买后剩余/.test(text) &&
+        /储备线/.test(text) &&
+        /建议单次/.test(text) &&
+        /高适配|中适配|低适配/.test(text),
+      visible,
+      hasMain: !!main,
+      hasSide: !!side,
+      summaryRows,
+      textSample: text.slice(0, 220)
+    };
+  });
+  add(
+    'shop service detail modal opens from service row and shows economy reserve cues',
+    !!shopServiceDetailProbe?.ok,
+    JSON.stringify(shopServiceDetailProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'shop-service-detail-layout.png'), 'browser_meta_screen_audit', { timeout: 9000 });
+
   const shopAdviceProbe = await page.evaluate(() => {
     const summary = document.getElementById('shop-tab-summary');
     const adviceBadge = summary ? summary.querySelector('.shop-advice-badge') : null;

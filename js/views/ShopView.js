@@ -142,6 +142,11 @@ export class ShopView {
                     <span class="price">${service.sold ? '已售出' : this.game.formatShopPrice(service)}</span>
                 </button>
             `;
+      el.style.cursor = 'zoom-in';
+      el.addEventListener('click', event => {
+        if (event.target && event.target.closest && event.target.closest('.buy-btn')) return;
+        Utils.showShopServiceDetail(service, this.game.buildShopServiceDetailMeta(service, activeTab));
+      });
       if (!service.sold) {
         const btn = el.querySelector('.buy-btn');
         btn.addEventListener('click', () => this.game.buyItem('service', index));
