@@ -189,7 +189,7 @@ function createSeededRandom(seed) {
 
   [
     { pathId: 'destruction', seed: 13331, targetEventId: 'ruinBountyWrit', minTargetRate: 0.06 },
-    { pathId: 'convergence', seed: 13411, targetEventId: 'convergenceRelay', minTargetRate: 0.06 },
+    { pathId: 'convergence', seed: 13411, targetEventId: 'convergenceMatrixAccord', minTargetRate: 0.05 },
     { pathId: 'wisdom', seed: 13523, targetEventId: 'wisdomStarScriptorium', minTargetRate: 0.05 },
     { pathId: 'resonance', seed: 13637, targetEventId: 'resonanceWardCanticle', minTargetRate: 0.05 }
   ].forEach(({ pathId, seed, targetEventId, minTargetRate }) => {

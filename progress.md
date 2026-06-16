@@ -1,5 +1,34 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-16: 归一命途阵枢约事件与前后端本地复验
+  - 本轮完成
+    - `js/data/events.js` 新增归一命途专属事件 `convergenceMatrixAccord / 归一阵枢约`：玩家可选择调谐阵枢，获得命环经验、下一战首回合灵力准备与首回合抽牌准备，也可拆取阵纹换命环经验和少量灵石，或撤约离开。
+    - `FATE_PATH_EVENT_POOLS.convergence` 纳入 `convergenceMatrixAccord`，保持为归一路径专属事件；未加入全局 `EVENT_POOL`，避免普通事件池稀释命途辨识度。
+    - `tests/sanity_content_archetype_checks.cjs` 锁定归一事件池、事件存在、归一 / 阵枢文案、调谐阵枢 choice、`ringExp/adventureBuff` 效果、`firstTurnEnergyBoostBattles` 与 `firstTurnDrawBoostBattles`。
+    - `tests/sanity_event_bias_distribution_checks.cjs` 增加归一目标事件采样，确认 `convergenceMatrixAccord` 在归一路径下不会被事件池稀释到不可见。
+    - `tests/browser_feature_audit.mjs` 增加真实浏览器分支：强制抽到 `归一阵枢约`，点击调谐阵枢后断言命环经验增加、首回合灵力 buff 与首回合抽牌 buff 生效，并且结果文案暴露归一 / 阵枢 / 灵力 / 抽牌 / 命环信息。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 新增内容、分布、浏览器 feature 三层 marker，并补齐 `pathId: 'convergence'` 覆盖 marker，防止 release gate 漏掉归一事件覆盖。
+    - `tests/browser_challenge_audit.mjs` 与 `tests/browser_challenge_mobile_flow_audit.mjs` 把挑战页首次打开后的固定等待改为条件等待：必须等到 challenge hub payload、summary、4 个 danger chip 与 4 个 danger axes 都出现后再断言，修复本地 release gate 高负载下的懒加载竞态。
+  - 本轮验证
+    - TDD 红灯：`node tests/sanity_content_archetype_checks.cjs` 在实现前失败于 `convergence event pool should include convergenceMatrixAccord`。
+    - TDD 红灯：`node tests/sanity_event_bias_distribution_checks.cjs` 在实现前失败于 `convergence fate-path pool should include convergenceMatrixAccord`。
+    - TDD 红灯：`node tests/browser_feature_audit.mjs http://127.0.0.1:4380 output/browser-feature-convergence-matrix-red-20260616` 在实现前确认强制事件队列无法抽到 `convergenceMatrixAccord`。
+    - `node --check js/data/events.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node --check tests/browser_challenge_audit.mjs` ✅
+    - `node --check tests/browser_challenge_mobile_flow_audit.mjs` ✅
+    - `node tests/sanity_content_archetype_checks.cjs` ✅
+    - `node tests/sanity_event_bias_distribution_checks.cjs` ✅，归一路径 `targetEventId=convergenceMatrixAccord`，`targetRate=0.10333333333333333`。
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `npm run build:pages` ✅
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4381 output/browser-feature-convergence-matrix-green-20260616` ✅，真实 UI 分支确认归一阵枢约事件结算。
+    - `npm run test:node` ✅，覆盖本地 Auth、后端安全、前端云同步、事件 / 命途 / 商店 / PVP、后端注册/登录/存档/残影/PVP E2E 等 Node 与后端门禁。
+    - `node tests/browser_challenge_audit.mjs http://127.0.0.1:4383 output/browser-challenge-audit-wait-green-20260616` ✅
+    - `node tests/browser_challenge_mobile_flow_audit.mjs http://127.0.0.1:4383 output/browser-challenge-mobile-flow-wait-green-20260616` ✅
+  - 当前结论
+    - 归一命途现在多了一条“多轴调谐转命环经验、首回合灵力与抽牌准备”的路径专属事件线，强化该路径把并轨收益沉淀到下一战启动节奏的玩法。
+    - 本轮严格只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-16: 奖励页三周一章章节演练三赛道入口与前后端本地复验
   - 本轮完成
     - `js/views/RewardView.js` 把奖励页三周一章章程卡从单一 `weekly` 演练入口扩展为 `daily / weekly / global` 三个章节演练入口：按钮分别显示 `设为今日天机章节演练`、`设为七日劫数章节演练`、`设为众生试炼章节演练`。

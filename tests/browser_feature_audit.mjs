@@ -2999,6 +2999,60 @@ async function safeScreenshot(page, outPath) {
   await page.evaluate(() => {
     if (!window.game || typeof getRandomEvent !== 'function') return;
     game.player.fateRing = game.player.fateRing || {};
+    game.player.fateRing.path = 'convergence';
+    game.player.fateRing.level = Math.max(Number(game.player.fateRing.level) || 1, 7);
+    game.player.fateRing.exp = 0;
+    game.player.gold = 180;
+    game.player.adventureBuffs = {};
+    window.__debugEventQueue = ['convergenceMatrixAccord'];
+    const evt = getRandomEvent();
+    if (!evt) return;
+    game.showEventModal(evt, { id: 9100220, row: 2, type: 'event', completed: false, accessible: true });
+  });
+  await page.waitForTimeout(120);
+  const convergenceMatrixBefore = await page.evaluate(() => {
+    const choices = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+    return {
+      hasEvent: /归一阵枢约/.test(document.getElementById('event-title')?.textContent || ''),
+      title: document.getElementById('event-title')?.textContent || '',
+      ringExp: game.player?.fateRing?.exp || 0,
+      buffs: { ...(game.player?.adventureBuffs || {}) },
+      choiceText: choices.join(' | '),
+      payload: typeof window.render_game_to_text === 'function' ? JSON.parse(window.render_game_to_text()) : null
+    };
+  });
+  await page.evaluate(() => {
+    const firstChoice = document.querySelector('#event-choices .event-choice');
+    if (firstChoice) firstChoice.click();
+  });
+  await page.waitForTimeout(180);
+  const convergenceMatrixAfter = await page.evaluate(() => ({
+    ringExp: game.player?.fateRing?.exp || 0,
+    buffs: { ...(game.player?.adventureBuffs || {}) },
+    resultText: (document.getElementById('event-desc')?.textContent || '').replace(/\s+/g, ' ').trim(),
+    payload: typeof window.render_game_to_text === 'function' ? JSON.parse(window.render_game_to_text()) : null
+  }));
+  const convergenceMatrixProbe = { before: convergenceMatrixBefore, after: convergenceMatrixAfter };
+  add(
+    'convergence path matrix accord turns tuning into ring exp first-turn energy and draw prep',
+    !!convergenceMatrixProbe &&
+      convergenceMatrixProbe.before?.hasEvent &&
+      /调谐|阵枢|并轨|归一/.test(convergenceMatrixProbe.before?.choiceText || '') &&
+      Number(convergenceMatrixProbe.after?.ringExp || 0) > Number(convergenceMatrixProbe.before?.ringExp || 0) &&
+      Number(convergenceMatrixProbe.after?.buffs?.firstTurnEnergyBoostBattles || 0) > Number(convergenceMatrixProbe.before?.buffs?.firstTurnEnergyBoostBattles || 0) &&
+      Number(convergenceMatrixProbe.after?.buffs?.firstTurnDrawBoostBattles || 0) > Number(convergenceMatrixProbe.before?.buffs?.firstTurnDrawBoostBattles || 0) &&
+      /归一|阵枢|灵力|抽牌|命环/.test(convergenceMatrixProbe.after?.resultText || ''),
+    JSON.stringify(convergenceMatrixProbe || null)
+  );
+  await page.evaluate(() => {
+    const em = document.getElementById('event-modal');
+    if (em) em.classList.remove('active');
+  });
+  await page.waitForTimeout(120);
+
+  await page.evaluate(() => {
+    if (!window.game || typeof getRandomEvent !== 'function') return;
+    game.player.fateRing = game.player.fateRing || {};
     game.player.fateRing.path = 'resonance';
     game.player.fateRing.level = Math.max(Number(game.player.fateRing.level) || 1, 7);
     game.player.fateRing.exp = 0;

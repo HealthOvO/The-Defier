@@ -36,6 +36,27 @@ function rectFitsViewport(rect, viewportWidth, viewportHeight) {
     && rect.bottom <= viewportHeight;
 }
 
+async function waitForChallengeHubReady(page, expectedTab = 'daily') {
+  await page.waitForFunction((tab) => {
+    const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
+    let payload = null;
+    try {
+      payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())
+        : null;
+    } catch {}
+    const hub = payload?.challenge?.hub || null;
+    const summaryText = text(document.getElementById('challenge-hub-summary'));
+    const dangerChipCount = document.querySelectorAll('#challenge-hub-summary .challenge-danger-chip').length;
+    return window.game?.currentScreen === 'challenge-screen'
+      && hub?.activeTab === tab
+      && text(document.getElementById('challenge-hub-title')).length > 0
+      && /试炼压强|DRI/.test(summaryText)
+      && dangerChipCount === 4
+      && (hub?.dangerProfile?.axes?.length || 0) === 4;
+  }, expectedTab, { timeout: 8000 });
+}
+
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -86,7 +107,7 @@ function rectFitsViewport(rect, viewportWidth, viewportHeight) {
   await page.evaluate(() => {
     if (window.game?.showChallengeHub) game.showChallengeHub('daily');
   });
-  await page.waitForTimeout(350);
+  await waitForChallengeHubReady(page, 'daily').catch(() => {});
 
   const hubProbe = await page.evaluate(() => {
     const rectObject = (rect) => {

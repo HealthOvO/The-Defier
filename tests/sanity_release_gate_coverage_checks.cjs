@@ -434,6 +434,8 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'pathId: \'resonance\'',
   'pathId: \'wisdom\'',
   'pathId: \'destruction\'',
+  'pathId: \'convergence\'',
+  'targetEventId: \'convergenceMatrixAccord\'',
   'targetEventId: \'ruinBountyWrit\'',
   'targetEventId: \'wisdomStarScriptorium\'',
   'targetEventId: \'resonanceWardCanticle\'',
@@ -445,6 +447,19 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     read('tests/sanity_event_bias_distribution_checks.cjs').includes(needle),
     `event bias sanity should cover fate-path echo marker: ${needle}`,
+  );
+});
+
+[
+  "convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar', 'convergenceMatrixAccord']",
+  'EVENTS.convergenceMatrixAccord',
+  'tuning choice should grant ring exp',
+  'firstTurnEnergyBoostBattles',
+  'tuning choice should grant first-turn draw prep',
+].forEach((needle) => {
+  assert.ok(
+    read('tests/sanity_content_archetype_checks.cjs').includes(needle),
+    `content archetype sanity should cover convergence matrix event marker: ${needle}`,
   );
 });
 
@@ -523,6 +538,19 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     browserFeatureAudit.includes(needle),
     `browser feature audit should cover fate ring echo marker: ${needle}`,
+  );
+});
+
+[
+  'convergence path matrix accord turns tuning into ring exp first-turn energy and draw prep',
+  "window.__debugEventQueue = ['convergenceMatrixAccord']",
+  '归一阵枢约',
+  'firstTurnEnergyBoostBattles',
+  'firstTurnDrawBoostBattles',
+].forEach((needle) => {
+  assert.ok(
+    browserFeatureAudit.includes(needle),
+    `browser feature audit should cover convergence matrix event marker: ${needle}`,
   );
 });
 

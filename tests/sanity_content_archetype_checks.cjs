@@ -286,7 +286,7 @@ function loadFile(ctx, filePath) {
   });
 
   const expectedPathPools = {
-    convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar'],
+    convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar', 'convergenceMatrixAccord'],
     resonance: ['fateRingEchoShrine', 'stormchaserCamp', 'thunderConductTrial', 'fulgurMarket', 'resonanceWardCanticle'],
     wisdom: ['fateRingEchoShrine', 'lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary', 'wisdomStarScriptorium'],
     destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden', 'ruinBountyWrit']
@@ -298,6 +298,15 @@ function loadFile(ctx, filePath) {
       assert(actual.includes(eventId), `${pathId} event pool should include ${eventId}`);
     });
   });
+  const convergenceMatrixAccord = EVENTS.convergenceMatrixAccord;
+  assert(!!convergenceMatrixAccord, 'convergence event convergenceMatrixAccord should exist');
+  assert(/归一|并轨|阵枢|汇流/.test(convergenceMatrixAccord.description || ''), 'convergenceMatrixAccord should read as a convergence or matrix event');
+  const convergenceMatrixChoice = convergenceMatrixAccord.choices?.find((choice) => /调谐|阵枢|并轨|归一/.test(choice.text || ''));
+  assert(!!convergenceMatrixChoice, 'convergenceMatrixAccord should expose a matrix tuning choice');
+  const convergenceMatrixEffects = Array.isArray(convergenceMatrixChoice.effects) ? convergenceMatrixChoice.effects : [];
+  assert(convergenceMatrixEffects.some((effect) => effect.type === 'ringExp' && Number(effect.value) > 0), 'convergenceMatrixAccord tuning choice should grant ring exp');
+  assert(convergenceMatrixEffects.some((effect) => effect.type === 'adventureBuff' && effect.buffId === 'firstTurnEnergyBoostBattles' && Number(effect.charges) > 0), 'convergenceMatrixAccord tuning choice should grant first-turn energy prep');
+  assert(convergenceMatrixEffects.some((effect) => effect.type === 'adventureBuff' && effect.buffId === 'firstTurnDrawBoostBattles' && Number(effect.charges) > 0), 'convergenceMatrixAccord tuning choice should grant first-turn draw prep');
   const ruinBountyWrit = EVENTS.ruinBountyWrit;
   assert(!!ruinBountyWrit, 'destruction event ruinBountyWrit should exist');
   assert(/悬赏|战利/.test(ruinBountyWrit.description || ''), 'ruinBountyWrit should read as a bounty or loot event');

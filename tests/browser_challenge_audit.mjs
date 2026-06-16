@@ -14,6 +14,27 @@ function add(name, pass, detail = '') {
   findings.push({ name, pass, detail });
 }
 
+async function waitForChallengeHubReady(page, expectedTab = 'daily') {
+  await page.waitForFunction((tab) => {
+    const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
+    let payload = null;
+    try {
+      payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())
+        : null;
+    } catch {}
+    const hub = payload?.challenge?.hub || null;
+    const summaryText = text(document.getElementById('challenge-hub-summary'));
+    const dangerChipCount = document.querySelectorAll('#challenge-hub-summary .challenge-danger-chip').length;
+    return window.game?.currentScreen === 'challenge-screen'
+      && hub?.activeTab === tab
+      && text(document.getElementById('challenge-hub-title')).length > 0
+      && /试炼压强|DRI/.test(summaryText)
+      && dangerChipCount === 4
+      && (hub?.dangerProfile?.axes?.length || 0) === 4;
+  }, expectedTab, { timeout: 8000 });
+}
+
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -60,7 +81,7 @@ function add(name, pass, detail = '') {
   await page.evaluate(() => {
     document.querySelector('button[onclick="game.showChallengeHub(\'daily\')"]')?.click();
   });
-  await page.waitForTimeout(350);
+  await waitForChallengeHubReady(page, 'daily').catch(() => {});
 
   const challengeHubProbe = await page.evaluate(() => {
     const payload = typeof window.render_game_to_text === 'function'

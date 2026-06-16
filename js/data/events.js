@@ -1788,6 +1788,48 @@ export const EVENTS = {
       }]
     }]
   },
+  convergenceMatrixAccord: {
+    id: 'convergenceMatrixAccord',
+    name: '归一阵枢约',
+    icon: '🔷',
+    description: '阵枢把分岔的命环轨迹压成同一条归一脉冲，归一之环可以借此把多轴调谐转成命环经验、首回合灵力与抽牌准备。',
+    choices: [{
+      text: '调谐阵枢',
+      icon: '🧩',
+      result: '获得命环经验、首回合灵力与抽牌准备',
+      resultType: 'positive',
+      effects: [{
+        type: 'ringExp',
+        value: 32
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnEnergyBoostBattles',
+        charges: 1
+      }, {
+        type: 'adventureBuff',
+        buffId: 'firstTurnDrawBoostBattles',
+        charges: 1
+      }]
+    }, {
+      text: '拆取阵纹',
+      icon: '📐',
+      result: '只取命环经验与少量灵石',
+      resultType: 'neutral',
+      effects: [{
+        type: 'ringExp',
+        value: 20
+      }, {
+        type: 'gold',
+        value: 26
+      }]
+    }, {
+      text: '撤约离开',
+      icon: '🚶',
+      result: '你没有继续压合这道阵枢',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
   harmonicAnvil: {
     id: 'harmonicAnvil',
     name: '谐振灵砧',
@@ -4043,7 +4085,7 @@ export const ARCHETYPE_EVENT_POOLS = {
   soulforge: ['ghostFurnace', 'marionetteArmory', 'ancestralFoundry', 'harmonicAnvil', 'artifactConfluxBazaar', 'shieldRelayBeacon']
 };
 export const FATE_PATH_EVENT_POOLS = {
-  convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar'],
+  convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar', 'convergenceMatrixAccord'],
   resonance: ['fateRingEchoShrine', 'stormchaserCamp', 'thunderConductTrial', 'fulgurMarket', 'resonanceWardCanticle'],
   wisdom: ['fateRingEchoShrine', 'lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary', 'wisdomStarScriptorium'],
   destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden', 'ruinBountyWrit']
