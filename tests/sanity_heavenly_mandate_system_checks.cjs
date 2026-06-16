@@ -419,18 +419,23 @@ function loadFile(ctx, filePath) {
   ctx.game = debtGame;
   ctx.window.game = debtGame;
   const findWeeksAgoTimestamp = (game, weeksAgo = 1) => {
+    const dayMs = 24 * 60 * 60 * 1000;
     const targetTransitions = Math.max(1, Math.floor(Number(weeksAgo) || 1));
+    const maxLookbackDays = Math.max(60, targetTransitions * 21);
     let cursor = Date.now();
     let lastTag = game.getHeavenlyMandateWeekMeta(cursor).weekTag;
     let transitions = 0;
-    while (transitions < targetTransitions) {
-      cursor -= 24 * 60 * 60 * 1000;
+    let scannedDays = 0;
+    while (transitions < targetTransitions && scannedDays < maxLookbackDays) {
+      cursor -= dayMs;
+      scannedDays += 1;
       const nextTag = game.getHeavenlyMandateWeekMeta(cursor).weekTag;
       if (nextTag && nextTag !== lastTag) {
         transitions += 1;
         lastTag = nextTag;
       }
     }
+    if (transitions < targetTransitions) return Date.now() - (targetTransitions * 7 * dayMs);
     return cursor;
   };
   const debtOpenedAt = findWeeksAgoTimestamp(debtGame, 1);
