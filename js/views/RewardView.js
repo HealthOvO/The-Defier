@@ -461,6 +461,14 @@ export class RewardView {
     const chapterArc = seasonBoard?.chapterArc && typeof seasonBoard.chapterArc === 'object' ? seasonBoard.chapterArc : null;
     if (!chapterArc) return null;
     const safeMode = ['daily', 'weekly', 'global'].includes(String(mode || '')) ? String(mode) : 'weekly';
+    const drillModeMeta = typeof this.game.getChapterCodexDrillModes === 'function'
+      ? this.game.getChapterCodexDrillModes().find(entry => entry?.mode === safeMode)
+      : null;
+    const modeLabelMap = {
+      daily: '今日天机章节演练',
+      weekly: '七日劫数章节演练',
+      global: '众生试炼章节演练'
+    };
     const entries = typeof this.game.getChapterCodexEntries === 'function' ? this.game.getChapterCodexEntries() : [];
     if (!Array.isArray(entries) || entries.length === 0) return null;
     const clampChapterIndex = (value) => {
@@ -499,7 +507,7 @@ export class RewardView {
       action: 'challenge',
       value: safeMode,
       mode: safeMode,
-      buttonLabel: safeMode === 'weekly' ? '设为七日劫数章节演练' : '设为章节演练',
+      buttonLabel: `设为${drillModeMeta?.label || modeLabelMap[safeMode] || '章节演练'}`,
       source: 'chapter_arc',
       sourceId: String(chapterArc.id || '').trim(),
       taskSource: 'chapter_codex',
@@ -767,7 +775,16 @@ export class RewardView {
     })();
     const buildDataAttrs = (entries = {}) => buildDataAttributes(entries);
     const getHandoffAction = (sourceKey = 'primary') => typeof this.getRewardSeasonBoardHandoffTarget === 'function' ? this.getRewardSeasonBoardHandoffTarget(sourceKey) : null;
-    const chapterArcDrillAction = typeof this.getRewardChapterArcDrillTarget === 'function' ? this.getRewardChapterArcDrillTarget('weekly') : null;
+    const chapterArcDrillModes = (() => {
+      const modes = typeof this.game.getChapterCodexDrillModes === 'function'
+        ? this.game.getChapterCodexDrillModes().map(entry => entry?.mode).filter(Boolean)
+        : ['daily', 'weekly', 'global'];
+      const safeModes = modes.filter(mode => ['daily', 'weekly', 'global'].includes(String(mode || '')));
+      return [...new Set(safeModes)].sort((a, b) => ['daily', 'weekly', 'global'].indexOf(a) - ['daily', 'weekly', 'global'].indexOf(b));
+    })();
+    const chapterArcDrillActions = typeof this.getRewardChapterArcDrillTarget === 'function'
+      ? chapterArcDrillModes.map(mode => this.getRewardChapterArcDrillTarget(mode)).filter(Boolean)
+      : [];
     const buildActionCard = ({
       tone = 'tracking',
       dataAttrs = {},
@@ -922,7 +939,7 @@ export class RewardView {
       detail: [seasonBoardChapterArcPressureWindow?.reasonLine || seasonBoardChapterArcPressureWindow?.shortLine || '', seasonBoardChapterArcObjective?.summaryLine || '', seasonBoardChapterArc.feedbackLine || '', seasonBoardChapterArcRescue?.open ? seasonBoardChapterArcRescue.guideLine || seasonBoardChapterArcRescue.reasonLine || seasonBoardChapterArcRescue.statusLabel || '' : seasonBoardChapterArcReview?.summaryLine || seasonBoardChapterArcReview?.endingPreviewLine || seasonBoardChapterArc.goalLine || '', seasonBoardChapterArc.goalLine || ''].filter(Boolean).join(' · '),
       metaLines: [seasonBoardChapterArc.windowLabel || '', `第 ${seasonBoardChapterArc.weekSlot || 1}/${seasonBoardChapterArc.targetWeeks || 3} 周`, seasonBoardChapterArcPressureWindow?.shortLine || '', seasonBoardChapterArcObjective?.shortLine || '', seasonBoardChapterArc.progressText ? `归卷 ${seasonBoardChapterArc.progressText}` : '', seasonBoardChapterArcRescue?.statusLabel || seasonBoardChapterArcReview?.statusLabel || ''],
       action: getHandoffAction('chapterArc'),
-      extraActions: chapterArcDrillAction ? [{
+      extraActions: chapterArcDrillActions.map(chapterArcDrillAction => ({
         buttonLabel: chapterArcDrillAction.buttonLabel,
         dataAttrs: {
           'data-season-board-chapter-drill-cta': 'true',
@@ -935,7 +952,7 @@ export class RewardView {
           'data-season-board-chapter-drill-action': chapterArcDrillAction.action,
           'data-season-board-chapter-drill-value': chapterArcDrillAction.value
         }
-      }] : []
+      }))
     }) : '';
     const chips = [];
     const lineageChips = [];

@@ -20,6 +20,7 @@ const challengeMobileAudit = read('tests/browser_challenge_mobile_flow_audit.mjs
 const browserChapterFlowAudit = read('tests/browser_chapter_flow_audit.mjs');
 const browserRunPathRewardAudit = read('tests/browser_run_path_reward_audit.mjs');
 const codexSanctumChecks = read('tests/sanity_codex_sanctum_checks.cjs');
+const seasonBoardChecks = read('tests/sanity_season_board_system_checks.cjs');
 const strategicNodeChecks = read('tests/sanity_strategic_node_system_checks.cjs');
 const runVowChecks = read('tests/sanity_run_vow_system_checks.cjs');
 const trialChallengeChecks = read('tests/sanity_trial_challenge_checks.cjs');
@@ -690,17 +691,34 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
 });
 
 [
-  'reward chapter-arc drill CTA stores chapter training focus and opens weekly challenge hub',
+  'reward chapter-arc drill CTAs route chapter training focus into daily/weekly/global challenge hubs',
+  "const EXPECTED_CHAPTER_ARC_DRILL_MODES = ['daily', 'weekly', 'global']",
   'data-season-board-chapter-drill-cta',
+  "seasonBoardChapterDrillMode === 'daily'",
   "seasonBoardChapterDrillMode === 'weekly'",
+  "seasonBoardChapterDrillMode === 'global'",
   "seasonBoardChapterDrillSource === 'chapter_arc'",
   'seasonBoardChapterDrillFocusId',
   'focus?.sourceRunId === expectedFocusId',
-  "window.game?.challengeHubState?.tab === 'weekly'",
+  'window.game?.challengeHubState?.tab === mode',
+  'three chapter-drill CTAs remain reachable on 360px reward rail',
 ].forEach((needle) => {
   assert.ok(
     browserRunPathRewardAudit.includes(needle),
     `browser run path reward audit should cover chapter arc drill handoff marker: ${needle}`,
+  );
+});
+
+[
+  "getRewardChapterArcDrillTarget(mode)",
+  "['daily', 'weekly', 'global'].map((mode) => chapterArcGame.rewardView.getRewardChapterArcDrillTarget(mode))",
+  "followRewardChapterArcDrill(chapterArcDrillTarget.chapterId, mode)",
+  "chapterArcGame.challengeHubState?.tab === mode",
+  "chapterArcGame.lastRewardSeasonBoardHandoff?.value === mode",
+].forEach((needle) => {
+  assert.ok(
+    seasonBoardChecks.includes(needle),
+    `season board sanity should cover chapter arc reward drill multi-mode marker: ${needle}`,
   );
 });
 
@@ -771,6 +789,20 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     shopView.includes(needle.replace('this.buildShopServiceDetailMeta', 'this.game.buildShopServiceDetailMeta')),
     `shop view should open service detail without hijacking buy button marker: ${needle}`,
+  );
+});
+
+[
+  'rewardSeasonBoardChapterArcDrills.length === 3',
+  "rewardSeasonBoardChapterArcDrillModes.includes('daily')",
+  "rewardSeasonBoardChapterArcDrillModes.includes('weekly')",
+  "rewardSeasonBoardChapterArcDrillModes.includes('global')",
+  'rewardSeasonBoardChapterArcDrillTexts.some(text => /今日天机/.test(text))',
+  'rewardSeasonBoardChapterArcDrillTexts.some(text => /众生试炼/.test(text))',
+].forEach((needle) => {
+  assert.ok(
+    browserMetaAudit.includes(needle),
+    `browser meta audit should cover reward chapter arc drill multi-mode marker: ${needle}`,
   );
 });
 

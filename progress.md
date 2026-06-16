@@ -1,5 +1,31 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-16: 奖励页三周一章章节演练三赛道入口与前后端本地复验
+  - 本轮完成
+    - `js/views/RewardView.js` 把奖励页三周一章章程卡从单一 `weekly` 演练入口扩展为 `daily / weekly / global` 三个章节演练入口：按钮分别显示 `设为今日天机章节演练`、`设为七日劫数章节演练`、`设为众生试炼章节演练`。
+    - 三个入口继续复用既有 `getRewardChapterArcDrillTarget(mode)` / `followRewardChapterArcDrill(chapterId, mode)` 链路，把同一章节档案 focus 写成 `chapter_codex:<chapterId>`，再打开对应的今日天机、七日劫数或众生试炼 tab；不新增奖励账本、不改挑战结算、不改后端存储结构。
+    - `tests/browser_run_path_reward_audit.mjs` 覆盖奖励页三赛道按钮、dataset、focusId、三次点击后的 challenge tab、390px 与 360px 移动可触达性。
+    - `tests/sanity_season_board_system_checks.cjs` 增加 Node 合同守卫，锁定 `daily / weekly / global` 三个 target、按钮标签、handoff value 与 training focus。
+    - `tests/browser_meta_screen_audit.mjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 同步三赛道 release marker，防止后续退回只保留 weekly。
+    - `game-intro.html` 更新当前版本重点，去掉只写 `七日劫数章节演练` 的旧口径，改为今日天机、七日劫数、众生试炼三赛道。
+  - 本轮验证
+    - TDD 红灯：`node tests/browser_run_path_reward_audit.mjs http://127.0.0.1:4351 output/browser-reward-chapter-arc-modes-red-20260616-clean` 在实现前失败，确认奖励页只有 1 个 weekly 章节演练按钮，daily/global 缺失。
+    - TDD 红灯：`node tests/sanity_season_board_system_checks.cjs` 在实现前失败于 `chapter arc reward drill targets should route to daily/weekly/global challenge focus`，确认 multi-mode 合同尚未满足。
+    - `node --check js/views/RewardView.js` ✅
+    - `node --check tests/browser_run_path_reward_audit.mjs` ✅
+    - `node --check tests/browser_meta_screen_audit.mjs` ✅
+    - `node tests/sanity_season_board_system_checks.cjs` ✅
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/sanity_intro_progress_sync_checks.cjs` ✅
+    - `npm run build:pages` ✅
+    - `npm run test:node` ✅，覆盖本地 Auth、HMAC/时间戳、前端云同步、事件 / 命途 / 商店 / PVP、后端注册/登录/存档/残影/PVP E2E 等 Node 与后端门禁。
+    - `node tests/browser_run_path_reward_audit.mjs http://127.0.0.1:4351 output/browser-reward-chapter-arc-modes-green-20260616` ✅，真实浏览器确认 daily / weekly / global 三个按钮分别打开对应 challenge tab，且写入同一个 `chapter_codex:fractured_oath` focus。
+    - `node tests/browser_meta_screen_audit.mjs http://127.0.0.1:4351 output/browser-meta-chapter-arc-modes-green-20260616` ✅，45/45 finding 通过，0 console error。
+    - `BACKEND_SECURITY_TEST_PORT=9116 BACKEND_E2E_PORT=9127 PORT=4352 OUTPUT_ROOT=output/release-browser-audits-local-20260616-chapter-arc-modes-final npm run test:release:local` ✅，本地生产构建、完整 Node/后端检查、后端 E2E 与 26 个浏览器 release 子审计通过；fresh 汇总 `output/release-browser-audits-local-20260616-chapter-arc-modes-final/report.json` 为 592 条 finding、0 failure、0 console error，产出 336 张截图。
+  - 当前结论
+    - 奖励页三周一章章程卡现在能直接把同一章节复盘焦点分派到今日天机、七日劫数或众生试炼，和章节档案详情页已有三赛道章节演练口径保持一致。
+    - 本轮严格只做本地前后端检查；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-16: 共鸣命途护阵回响谱事件与前后端本地全量复验
   - 本轮完成
     - `js/data/events.js` 新增共鸣命途专属事件 `resonanceWardCanticle / 护阵回响谱`：玩家可以选择合律立阵，获得命环经验、下一战开场护盾准备与 `echoWard` 护势卡，也可以试鸣回声换命环经验与少量灵石，或收谱离开。

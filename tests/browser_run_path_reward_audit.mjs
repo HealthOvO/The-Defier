@@ -8,6 +8,7 @@ fs.mkdirSync(outDir, { recursive: true });
 
 const findings = [];
 const consoleErrors = [];
+const EXPECTED_CHAPTER_ARC_DRILL_MODES = ['daily', 'weekly', 'global'];
 
 function add(name, pass, detail = '') {
   findings.push({ name, pass, detail });
@@ -340,7 +341,10 @@ async function safeScreenshot(page, outPath) {
     const chapterArcPressureChip = panel?.querySelector('[data-season-board-chip="chapter-arc-pressure"]') || null;
     const chapterArcObjectiveChip = panel?.querySelector('[data-season-board-chip="chapter-arc-objective"]') || null;
     const chapterArcButton = chapterArcNode?.querySelector('[data-season-board-handoff-cta="true"]') || null;
-    const chapterArcDrillButton = chapterArcNode?.querySelector('[data-season-board-chapter-drill-cta="true"]') || null;
+    const chapterArcDrillButtons = Array.from(chapterArcNode?.querySelectorAll('[data-season-board-chapter-drill-cta="true"]') || []);
+    const chapterArcDrillButton = chapterArcDrillButtons[0] || null;
+    const chapterArcDrillButtonDatasets = chapterArcDrillButtons.map(button => ({ ...button.dataset }));
+    const chapterArcDrillButtonTexts = chapterArcDrillButtons.map(button => button.textContent?.replace(/\s+/g, ' ').trim() || '');
     const payload = typeof window.render_game_to_text === 'function'
       ? JSON.parse(window.render_game_to_text())
       : null;
@@ -362,6 +366,10 @@ async function safeScreenshot(page, outPath) {
       chapterArcButtonCount: chapterArcNode?.querySelectorAll('button').length || 0,
       chapterArcButtonText: chapterArcButton?.textContent?.replace(/\s+/g, ' ').trim() || '',
       chapterArcButtonDataset: chapterArcButton ? { ...chapterArcButton.dataset } : null,
+      chapterArcDrillButtonCount: chapterArcDrillButtons.length,
+      chapterArcDrillButtonTexts,
+      chapterArcDrillButtonDatasets,
+      chapterArcDrillButtonModes: chapterArcDrillButtonDatasets.map(dataset => dataset.seasonBoardChapterDrillMode || ''),
       chapterArcDrillButtonText: chapterArcDrillButton?.textContent?.replace(/\s+/g, ' ').trim() || '',
       chapterArcDrillButtonDataset: chapterArcDrillButton ? { ...chapterArcDrillButton.dataset } : null,
       chapterArcDataset: chapterArcNode ? { ...chapterArcNode.dataset } : null,
@@ -389,14 +397,19 @@ async function safeScreenshot(page, outPath) {
       && /章程|三周|章节/.test(expeditionRewardProbe.chapterArcChipText || '')
       && typeof expeditionRewardProbe.chapterArcText === 'string'
       && expeditionRewardProbe.chapterArcText.length > 0
-      && expeditionRewardProbe.chapterArcButtonCount >= 1
+      && expeditionRewardProbe.chapterArcButtonCount >= 4
       && /章节|章程|档案/.test(expeditionRewardProbe.chapterArcButtonText || '')
-      && /章节演练/.test(expeditionRewardProbe.chapterArcDrillButtonText || '')
-      && expeditionRewardProbe.chapterArcDrillButtonDataset?.seasonBoardChapterDrillCta === 'true'
-      && expeditionRewardProbe.chapterArcDrillButtonDataset?.seasonBoardChapterDrillMode === 'weekly'
-      && expeditionRewardProbe.chapterArcDrillButtonDataset?.seasonBoardChapterDrillSource === 'chapter_arc'
-      && !!expeditionRewardProbe.chapterArcDrillButtonDataset?.seasonBoardChapterDrillChapterId
-      && /^chapter_codex:/.test(expeditionRewardProbe.chapterArcDrillButtonDataset?.seasonBoardChapterDrillFocusId || '')
+      && expeditionRewardProbe.chapterArcDrillButtonCount === EXPECTED_CHAPTER_ARC_DRILL_MODES.length
+      && expeditionRewardProbe.chapterArcDrillButtonTexts.some(text => /今日天机/.test(text))
+      && expeditionRewardProbe.chapterArcDrillButtonTexts.some(text => /七日劫数/.test(text))
+      && expeditionRewardProbe.chapterArcDrillButtonTexts.some(text => /众生试炼/.test(text))
+      && expeditionRewardProbe.chapterArcDrillButtonDatasets.every(dataset => dataset.seasonBoardChapterDrillCta === 'true')
+      && expeditionRewardProbe.chapterArcDrillButtonDatasets.every(dataset => dataset.seasonBoardChapterDrillSource === 'chapter_arc')
+      && expeditionRewardProbe.chapterArcDrillButtonDatasets.every(dataset => !!dataset.seasonBoardChapterDrillChapterId)
+      && expeditionRewardProbe.chapterArcDrillButtonDatasets.every(dataset => /^chapter_codex:/.test(dataset.seasonBoardChapterDrillFocusId || ''))
+      && expeditionRewardProbe.chapterArcDrillButtonDatasets.some(dataset => dataset.seasonBoardChapterDrillMode === 'daily')
+      && expeditionRewardProbe.chapterArcDrillButtonDatasets.some(dataset => dataset.seasonBoardChapterDrillMode === 'weekly')
+      && expeditionRewardProbe.chapterArcDrillButtonDatasets.some(dataset => dataset.seasonBoardChapterDrillMode === 'global')
       && !!expeditionRewardProbe.rewardPayload?.seasonBoard?.chapterArc
       && expeditionRewardProbe.chapterArcButtonDataset?.seasonBoardHandoffSourceKey === 'chapterArc'
       && expeditionRewardProbe.chapterArcButtonDataset?.seasonBoardHandoffAction === 'collection'
@@ -495,42 +508,63 @@ async function safeScreenshot(page, outPath) {
   );
 
   const chapterArcDrillProbe = await page.evaluate(async () => {
-    const button = document.querySelector('#reward-expedition-meta [data-season-board-chapter-arc-reward="true"] [data-season-board-chapter-drill-cta="true"]');
-    if (!button) return { ok: false, reason: 'chapter_arc_drill_missing' };
-    const before = {
-      currentScreen: window.game?.currentScreen || '',
-      dataset: { ...button.dataset },
-      text: (button.textContent || '').replace(/\s+/g, ' ').trim()
-    };
-    button.click();
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const payload = typeof window.render_game_to_text === 'function'
-      ? JSON.parse(window.render_game_to_text())
-      : null;
-    const focus = payload?.challenge?.trainingFocus || null;
-    const focusText = document.querySelector('[data-observatory-training-focus="true"]')?.textContent?.replace(/\s+/g, ' ').trim() || '';
-    const expectedFocusId = before.dataset.seasonBoardChapterDrillFocusId || `chapter_codex:${before.dataset.seasonBoardChapterDrillChapterId || ''}`;
-    return {
-      ok:
-        window.game?.currentScreen === 'challenge-screen'
-        && window.game?.challengeHubState?.tab === 'weekly'
-        && focus?.sourceRunId === expectedFocusId
-        && focus?.guideRecordId === expectedFocusId
-        && /章节演练|章节复盘|复盘/.test(focus?.trainingAdvice || '')
-        && /章|章节|章程|三周/.test(focus?.sourceTitle || focus?.chapterName || focusText || '')
-        && (focus?.trainingTags || []).length >= 3,
-      before,
-      after: {
-        currentScreen: window.game?.currentScreen || '',
-        tab: window.game?.challengeHubState?.tab || '',
-        focus,
-        focusText
+    const expectedModes = ['daily', 'weekly', 'global'];
+    const buttons = Array.from(document.querySelectorAll('#reward-expedition-meta [data-season-board-chapter-arc-reward="true"] [data-season-board-chapter-drill-cta="true"]'));
+    if (buttons.length === 0) return { ok: false, reason: 'chapter_arc_drill_missing' };
+    const results = [];
+    for (const mode of expectedModes) {
+      const button = buttons.find(entry => entry.dataset.seasonBoardChapterDrillMode === mode);
+      if (!button) {
+        results.push({ mode, ok: false, reason: 'mode_button_missing' });
+        continue;
       }
+      const before = {
+        currentScreen: window.game?.currentScreen || '',
+        dataset: { ...button.dataset },
+        text: (button.textContent || '').replace(/\s+/g, ' ').trim()
+      };
+      button.click();
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const payload = typeof window.render_game_to_text === 'function'
+        ? JSON.parse(window.render_game_to_text())
+        : null;
+      const focus = payload?.challenge?.trainingFocus || null;
+      const focusText = document.querySelector('[data-observatory-training-focus="true"]')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+      const expectedFocusId = before.dataset.seasonBoardChapterDrillFocusId || `chapter_codex:${before.dataset.seasonBoardChapterDrillChapterId || ''}`;
+      results.push({
+        mode,
+        ok:
+          window.game?.currentScreen === 'challenge-screen'
+          && window.game?.challengeHubState?.tab === mode
+          && focus?.sourceRunId === expectedFocusId
+          && focus?.guideRecordId === expectedFocusId
+          && /章节演练|章节复盘|复盘/.test(focus?.trainingAdvice || '')
+          && /章|章节|章程|三周/.test(focus?.sourceTitle || focus?.chapterName || focusText || '')
+          && (focus?.trainingTags || []).length >= 3,
+        before,
+        after: {
+          currentScreen: window.game?.currentScreen || '',
+          tab: window.game?.challengeHubState?.tab || '',
+          focus,
+          focusText
+        }
+      });
+    }
+    const focusIds = results
+      .map(result => result.before?.dataset?.seasonBoardChapterDrillFocusId || '')
+      .filter(Boolean);
+    return {
+      ok: results.length === expectedModes.length
+        && expectedModes.every(mode => results.some(result => result.mode === mode && result.ok))
+        && new Set(focusIds).size === 1,
+      expectedModes,
+      results,
+      focusIds
     };
   });
 
   add(
-    'reward chapter-arc drill CTA stores chapter training focus and opens weekly challenge hub',
+    'reward chapter-arc drill CTAs route chapter training focus into daily/weekly/global challenge hubs',
     !!chapterArcDrillProbe?.ok,
     JSON.stringify(chapterArcDrillProbe || null)
   );
@@ -603,7 +637,21 @@ async function safeScreenshot(page, outPath) {
     const sideColumn = document.querySelector('.reward-side-column');
     const panel = document.getElementById('reward-expedition-meta');
     const chapterArcNode = panel?.querySelector('[data-season-board-chapter-arc-reward="true"]') || null;
+    const drillButtons = Array.from(chapterArcNode?.querySelectorAll('[data-season-board-chapter-drill-cta="true"]') || []);
     const chapterArcRect = chapterArcNode?.getBoundingClientRect() || null;
+    const drillRects = drillButtons.map(button => {
+      const rect = button.getBoundingClientRect();
+      return {
+        text: button.textContent?.replace(/\s+/g, ' ').trim() || '',
+        mode: button.dataset.seasonBoardChapterDrillMode || '',
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height
+      };
+    });
     const panelRect = panel?.getBoundingClientRect() || null;
     const sideRect = sideColumn?.getBoundingClientRect() || null;
 
@@ -618,6 +666,10 @@ async function safeScreenshot(page, outPath) {
       panelRight: panelRect ? panelRect.right : 0,
       sideRight: sideRect ? sideRect.right : 0,
       chapterArcRight: chapterArcRect ? chapterArcRect.right : 0,
+      chapterArcDrillButtonCount: drillButtons.length,
+      chapterArcDrillModes: drillRects.map(rect => rect.mode),
+      chapterArcDrillTexts: drillRects.map(rect => rect.text),
+      chapterArcDrillRects: drillRects,
       chapterArcText: chapterArcNode?.textContent?.replace(/\s+/g, ' ').trim() || '',
       narrativeVisible: !!document.getElementById('reward-narrative-brief')
         && getComputedStyle(document.getElementById('reward-narrative-brief')).display !== 'none'
@@ -634,6 +686,9 @@ async function safeScreenshot(page, outPath) {
       && expeditionMobileProbe.panelRight <= expeditionMobileProbe.viewportWidth + 2
       && expeditionMobileProbe.sideRight <= expeditionMobileProbe.viewportWidth + 2
       && expeditionMobileProbe.chapterArcRight <= expeditionMobileProbe.viewportWidth + 2
+      && expeditionMobileProbe.chapterArcDrillButtonCount === EXPECTED_CHAPTER_ARC_DRILL_MODES.length
+      && EXPECTED_CHAPTER_ARC_DRILL_MODES.every(mode => expeditionMobileProbe.chapterArcDrillModes.includes(mode))
+      && expeditionMobileProbe.chapterArcDrillRects.every(rect => rect.width >= 44 && rect.height >= 40 && rect.left >= -2 && rect.right <= expeditionMobileProbe.viewportWidth + 2)
       && /章程|三周|章节/.test(expeditionMobileProbe.chapterArcText || ''),
     JSON.stringify(expeditionMobileProbe || null)
   );
@@ -647,6 +702,7 @@ async function safeScreenshot(page, outPath) {
     const sideColumn = document.querySelector('.reward-side-column');
     const expeditionPanel = document.getElementById('reward-expedition-meta');
     const chapterArcNode = expeditionPanel?.querySelector('[data-season-board-chapter-arc-reward="true"]') || null;
+    const drillButtons = Array.from(chapterArcNode?.querySelectorAll('[data-season-board-chapter-drill-cta="true"]') || []);
     const chips = Array.from(expeditionPanel?.querySelectorAll('[data-season-board-chip]') || []);
     const narrative = document.getElementById('reward-narrative-brief');
     const toRect = (el) => {
@@ -665,6 +721,11 @@ async function safeScreenshot(page, outPath) {
     const sideRect = toRect(sideColumn);
     const expeditionRect = toRect(expeditionPanel);
     const chapterArcRect = toRect(chapterArcNode);
+    const drillRects = drillButtons.map(button => ({
+      ...toRect(button),
+      mode: button.dataset.seasonBoardChapterDrillMode || '',
+      text: button.textContent?.replace(/\s+/g, ' ').trim() || ''
+    }));
     return {
       ok: !!screen && !!sideColumn && !!expeditionPanel && !!narrative,
       viewportWidth: window.innerWidth,
@@ -678,6 +739,10 @@ async function safeScreenshot(page, outPath) {
       sideRight: sideRect?.right || 0,
       expeditionRight: expeditionRect?.right || 0,
       chapterArcRight: chapterArcRect?.right || 0,
+      chapterArcDrillButtonCount: drillButtons.length,
+      chapterArcDrillModes: drillRects.map(rect => rect.mode),
+      chapterArcDrillTexts: drillRects.map(rect => rect.text),
+      chapterArcDrillRects: drillRects,
       chipCount: chips.length,
       titleText: expeditionPanel?.querySelector('.reward-expedition-title')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       narrativeText: narrative?.textContent?.replace(/\s+/g, ' ').trim() || '',
@@ -695,10 +760,26 @@ async function safeScreenshot(page, outPath) {
       && rewardMobileDenseProbe.sideRight <= rewardMobileDenseProbe.viewportWidth + 2
       && rewardMobileDenseProbe.expeditionRight <= rewardMobileDenseProbe.viewportWidth + 2
       && rewardMobileDenseProbe.chapterArcRight <= rewardMobileDenseProbe.viewportWidth + 2
+      && rewardMobileDenseProbe.chapterArcDrillButtonCount === EXPECTED_CHAPTER_ARC_DRILL_MODES.length
+      && EXPECTED_CHAPTER_ARC_DRILL_MODES.every(mode => rewardMobileDenseProbe.chapterArcDrillModes.includes(mode))
+      && rewardMobileDenseProbe.chapterArcDrillTexts.every(text => text.length > 0)
+      && rewardMobileDenseProbe.chapterArcDrillRects.every(rect => rect.width >= 44 && rect.height >= 40 && rect.left >= -2 && rect.right <= rewardMobileDenseProbe.viewportWidth + 2)
       && rewardMobileDenseProbe.chipCount >= 3
       && rewardMobileDenseProbe.titleText.length > 0
       && rewardMobileDenseProbe.narrativeText.length > 0
       && /章程|三周|章节/.test(rewardMobileDenseProbe.chapterArcText || ''),
+    JSON.stringify(rewardMobileDenseProbe || null)
+  );
+
+  add(
+    'three chapter-drill CTAs remain reachable on 360px reward rail',
+    !!rewardMobileDenseProbe?.ok
+      && rewardMobileDenseProbe.chapterArcDrillButtonCount === EXPECTED_CHAPTER_ARC_DRILL_MODES.length
+      && EXPECTED_CHAPTER_ARC_DRILL_MODES.every(mode => rewardMobileDenseProbe.chapterArcDrillModes.includes(mode))
+      && rewardMobileDenseProbe.chapterArcDrillTexts.some(text => /今日天机/.test(text))
+      && rewardMobileDenseProbe.chapterArcDrillTexts.some(text => /七日劫数/.test(text))
+      && rewardMobileDenseProbe.chapterArcDrillTexts.some(text => /众生试炼/.test(text))
+      && rewardMobileDenseProbe.chapterArcDrillRects.every(rect => rect.width >= 44 && rect.height >= 40 && rect.left >= -2 && rect.right <= rewardMobileDenseProbe.viewportWidth + 2),
     JSON.stringify(rewardMobileDenseProbe || null)
   );
 

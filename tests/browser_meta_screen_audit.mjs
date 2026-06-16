@@ -340,7 +340,11 @@ function rectObj(rect) {
     const rewardSeasonBoardChapterArcButtonCount = rewardSeasonBoardChapterArcNode?.querySelectorAll('button').length || 0;
     const rewardSeasonBoardChapterArcHandoff = rewardSeasonBoardChapterArcNode?.querySelector('[data-season-board-handoff-cta="true"]') || null;
     const rewardSeasonBoardChapterArcHandoffText = (rewardSeasonBoardChapterArcHandoff?.textContent || '').replace(/\s+/g, ' ').trim();
-    const rewardSeasonBoardChapterArcDrill = rewardSeasonBoardChapterArcNode?.querySelector('[data-season-board-chapter-drill-cta="true"]') || null;
+    const rewardSeasonBoardChapterArcDrills = Array.from(rewardSeasonBoardChapterArcNode?.querySelectorAll('[data-season-board-chapter-drill-cta="true"]') || []);
+    const rewardSeasonBoardChapterArcDrill = rewardSeasonBoardChapterArcDrills[0] || null;
+    const rewardSeasonBoardChapterArcDrillDatasets = rewardSeasonBoardChapterArcDrills.map(button => ({ ...button.dataset }));
+    const rewardSeasonBoardChapterArcDrillTexts = rewardSeasonBoardChapterArcDrills.map(button => (button.textContent || '').replace(/\s+/g, ' ').trim());
+    const rewardSeasonBoardChapterArcDrillModes = rewardSeasonBoardChapterArcDrillDatasets.map(dataset => dataset.seasonBoardChapterDrillMode || '');
     const rewardSeasonBoardChapterArcDrillText = (rewardSeasonBoardChapterArcDrill?.textContent || '').replace(/\s+/g, ' ').trim();
     const rewardSeasonBoardLaneRewardNodes = Array.from(expeditionPanel?.querySelectorAll('[data-season-board-lane-reward="true"]') || []);
     const rewardSeasonBoardLaneRewardButtons = Array.from(expeditionPanel?.querySelectorAll('[data-season-board-lane-reward-claim="true"]') || []);
@@ -486,9 +490,15 @@ function rectObj(rect) {
         rewardSeasonBoardFrontierChronicleNodeCount === 1 &&
         rewardSeasonBoardFrontierCouncilNodeCount === 1 &&
         rewardSeasonBoardChapterArcNodeCount === 1 &&
-        rewardSeasonBoardChapterArcButtonCount === 2 &&
+        rewardSeasonBoardChapterArcButtonCount === 4 &&
         rewardChapterArcHandoffCount === 1 &&
-        !!rewardSeasonBoardChapterArcDrill &&
+        rewardSeasonBoardChapterArcDrills.length === 3 &&
+        rewardSeasonBoardChapterArcDrillModes.includes('daily') &&
+        rewardSeasonBoardChapterArcDrillModes.includes('weekly') &&
+        rewardSeasonBoardChapterArcDrillModes.includes('global') &&
+        rewardSeasonBoardChapterArcDrillTexts.some(text => /今日天机/.test(text)) &&
+        rewardSeasonBoardChapterArcDrillTexts.some(text => /七日劫数/.test(text)) &&
+        rewardSeasonBoardChapterArcDrillTexts.some(text => /众生试炼/.test(text)) &&
         rewardSeasonBoardChapterArcNode?.dataset?.seasonBoardChapterArcId === rewardSeasonBoard.chapterArc.id &&
         rewardSeasonBoardChapterArcNode?.dataset?.seasonBoardChapterArcWeekSlot === String(rewardSeasonBoard.chapterArc.weekSlot || '') &&
         rewardSeasonBoard.chapterArc.objective.available !== false &&
@@ -500,13 +510,12 @@ function rectObj(rect) {
         rewardSeasonBoardChapterArcHandoff?.dataset?.seasonBoardHandoffSource === 'chapter_arc' &&
         rewardSeasonBoardChapterArcHandoff?.dataset?.seasonBoardHandoffSourceId === rewardSeasonBoard.chapterArc.id &&
         /章节|章程|档案/.test(rewardSeasonBoardChapterArcHandoffText) &&
-        rewardSeasonBoardChapterArcDrill?.dataset?.seasonBoardChapterDrillCta === 'true' &&
-        rewardSeasonBoardChapterArcDrill?.dataset?.seasonBoardChapterDrillMode === 'weekly' &&
-        rewardSeasonBoardChapterArcDrill?.dataset?.seasonBoardChapterDrillSource === 'chapter_arc' &&
-        rewardSeasonBoardChapterArcDrill?.dataset?.seasonBoardChapterDrillSourceId === rewardSeasonBoard.chapterArc.id &&
-        !!rewardSeasonBoardChapterArcDrill?.dataset?.seasonBoardChapterDrillChapterId &&
-        /^chapter_codex:/.test(rewardSeasonBoardChapterArcDrill?.dataset?.seasonBoardChapterDrillFocusId || '') &&
-        /章节演练/.test(rewardSeasonBoardChapterArcDrillText) &&
+        rewardSeasonBoardChapterArcDrillDatasets.every(dataset => dataset.seasonBoardChapterDrillCta === 'true') &&
+        rewardSeasonBoardChapterArcDrillDatasets.every(dataset => dataset.seasonBoardChapterDrillSource === 'chapter_arc') &&
+        rewardSeasonBoardChapterArcDrillDatasets.every(dataset => dataset.seasonBoardChapterDrillSourceId === rewardSeasonBoard.chapterArc.id) &&
+        rewardSeasonBoardChapterArcDrillDatasets.every(dataset => !!dataset.seasonBoardChapterDrillChapterId) &&
+        rewardSeasonBoardChapterArcDrillDatasets.every(dataset => /^chapter_codex:/.test(dataset.seasonBoardChapterDrillFocusId || '')) &&
+        rewardSeasonBoardChapterArcDrillTexts.every(text => /章节演练/.test(text)) &&
         rewardSeasonBoardChapterArcText.includes(rewardSeasonBoard.chapterArc.arcLabel || rewardSeasonBoard.chapterArc.chapterLabel || '') &&
         rewardSeasonBoardChapterArcText.includes(rewardSeasonBoard.chapterArc.summaryLine || '') &&
         rewardSeasonBoardChapterArcText.includes(rewardSeasonBoard.chapterArc.objective.summaryLine || '') &&
@@ -671,6 +680,10 @@ function rectObj(rect) {
       rewardChapterArcHandoffCount,
       rewardSeasonBoardChapterArcHandoffDataset: rewardSeasonBoardChapterArcHandoff ? { ...rewardSeasonBoardChapterArcHandoff.dataset } : null,
       rewardSeasonBoardChapterArcHandoffText,
+      rewardSeasonBoardChapterArcDrillCount: rewardSeasonBoardChapterArcDrills.length,
+      rewardSeasonBoardChapterArcDrillDatasets,
+      rewardSeasonBoardChapterArcDrillTexts,
+      rewardSeasonBoardChapterArcDrillModes,
       rewardSeasonBoardChapterArcDrillDataset: rewardSeasonBoardChapterArcDrill ? { ...rewardSeasonBoardChapterArcDrill.dataset } : null,
       rewardSeasonBoardChapterArcDrillText,
       rewardSeasonBoardLaneRewardText,
