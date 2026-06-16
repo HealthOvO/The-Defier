@@ -565,15 +565,34 @@ async function openNewGameEntry(page) {
   );
 
   // Force an accessible combat node to validate battle transition.
-  const combatNodeType = await page.evaluate(() => {
-    if (!window.game || !game.map || typeof game.map.getAccessibleNodes !== 'function') return null;
-    const node = game.map.getAccessibleNodes().find((n) => ['enemy', 'elite', 'trial', 'boss'].includes(n.type));
-    if (!node) return null;
+  const combatEntry = await page.evaluate(() => {
+    if (!window.game || !game.map || typeof game.map.getAccessibleNodes !== 'function') {
+      return { nodeType: null, strategy: 'no-map' };
+    }
+    const nodes = game.map.getAccessibleNodes();
+    const node = nodes.find((n) => ['enemy', 'elite', 'boss'].includes(n.type))
+      || nodes.find((n) => n.type === 'trial');
+    if (!node) return { nodeType: null, strategy: 'no-combat-node' };
+    if (node.type === 'trial' && typeof game.map.startTrialNode === 'function') {
+      game.map.startTrialNode(node, {
+        name: '审计试炼',
+        enemyHpMul: 1,
+        enemyAtkMul: 1,
+        conditions: {}
+      });
+      return { nodeType: node.type, strategy: 'direct-trial-start' };
+    }
     game.map.onNodeClick(node);
-    return node.type;
+    return { nodeType: node.type, strategy: 'node-click' };
   });
 
-  await page.waitForTimeout(700);
+  await page.waitForFunction(() => {
+    try {
+      return JSON.parse(window.render_game_to_text()).mode === 'battle-screen';
+    } catch {
+      return false;
+    }
+  }, { timeout: 3000 }).catch(() => null);
   const battleMode = await page.evaluate(() => {
     try {
       return JSON.parse(window.render_game_to_text()).mode;
@@ -581,7 +600,11 @@ async function openNewGameEntry(page) {
       return null;
     }
   });
-  add('map node can enter battle', battleMode === 'battle-screen', `nodeType=${combatNodeType}, mode=${battleMode}`);
+  add(
+    'map node can enter battle',
+    battleMode === 'battle-screen',
+    `nodeType=${combatEntry?.nodeType}, strategy=${combatEntry?.strategy}, mode=${battleMode}`
+  );
 
   const vowBattleProbe = await page.evaluate(() => {
     const advisorBody = document.querySelector('#battle-command-panel .battle-advisor-body');

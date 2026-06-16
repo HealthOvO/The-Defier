@@ -146,11 +146,35 @@ async function safeScreenshot(page, outPath) {
     JSON.stringify(mapChapterProbe || null)
   );
 
-  await page.evaluate(() => {
-    const node = game?.map?.getAccessibleNodes?.().find((n) => ['enemy', 'elite', 'trial', 'boss'].includes(n.type));
-    if (node) game.map.onNodeClick(node);
+  const combatEntry = await page.evaluate(() => {
+    const nodes = game?.map?.getAccessibleNodes?.();
+    if (!Array.isArray(nodes) || !window.game || !game.map) {
+      return { nodeType: null, started: false, strategy: 'no-map' };
+    }
+    const node = nodes.find((n) => ['enemy', 'elite', 'boss'].includes(n.type))
+      || nodes.find((n) => n.type === 'trial');
+    if (!node) {
+      return { nodeType: null, started: false, strategy: 'no-combat-node' };
+    }
+    if (node.type === 'trial' && typeof game.map.startTrialNode === 'function') {
+      game.map.startTrialNode(node, {
+        name: '审计试炼',
+        enemyHpMul: 1,
+        enemyAtkMul: 1,
+        conditions: {}
+      });
+      return { nodeType: node.type, started: true, strategy: 'direct-trial-start' };
+    }
+    game.map.onNodeClick(node);
+    return { nodeType: node.type, started: true, strategy: 'node-click' };
   });
-  await page.waitForTimeout(1000);
+  await page.waitForFunction(() => {
+    try {
+      return JSON.parse(window.render_game_to_text()).mode === 'battle-screen';
+    } catch {
+      return false;
+    }
+  }, { timeout: 3000 }).catch(() => null);
 
   const battleMode = await page.evaluate(() => {
     try {
@@ -159,7 +183,11 @@ async function safeScreenshot(page, outPath) {
       return null;
     }
   });
-  add('battle is reachable for guide validation', battleMode === 'battle-screen', `mode=${battleMode}`);
+  add(
+    'battle is reachable for guide validation',
+    battleMode === 'battle-screen',
+    `nodeType=${combatEntry?.nodeType}, strategy=${combatEntry?.strategy}, mode=${battleMode}`
+  );
 
   const cardTypeTemplateProbe = await page.evaluate(() => {
     if (typeof Utils === 'undefined' || typeof Utils.createCardElement !== 'function') {
