@@ -2780,6 +2780,9 @@ export class GameMap {
       if (Number(armedTrial?.conditions?.maxCardsPlayed || 0) > 0) {
         conditionLines.push(`最多打出 ${armedTrial.conditions.maxCardsPlayed} 张牌`);
       }
+      if (Number(armedTrial?.conditions?.minHpPercent || 0) > 0) {
+        conditionLines.push(`胜利时生命 ≥ ${armedTrial.conditions.minHpPercent}%`);
+      }
       if (armedTrial?.conditions?.noDamage) {
         conditionLines.push('本场不可失去生命');
       }

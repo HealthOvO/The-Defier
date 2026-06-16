@@ -21,6 +21,7 @@ const browserRunPathRewardAudit = read('tests/browser_run_path_reward_audit.mjs'
 const codexSanctumChecks = read('tests/sanity_codex_sanctum_checks.cjs');
 const strategicNodeChecks = read('tests/sanity_strategic_node_system_checks.cjs');
 const runVowChecks = read('tests/sanity_run_vow_system_checks.cjs');
+const trialChallengeChecks = read('tests/sanity_trial_challenge_checks.cjs');
 const pvpService = read('js/services/pvp-service.js');
 const pvpServiceChecks = read('tests/sanity_pvp_service_checks.cjs');
 const runNodeChecks = read('tests/run_node_checks.sh');
@@ -306,16 +307,33 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'trial node upgrades into selectable challenge碑 and chosen affix package enters battle state',
   '剑心限令',
   '秘宝回响',
+  '护心证道',
   'cardLimitConditionVisible',
   'card-limit trial fails after seven real browser card plays and clears trial state',
   'treasureHuntRewardVisible',
   'treasure trial grants a real treasure reward after browser victory and clears trial state',
+  'vitalSealConditionVisible',
+  'vital-seal trial succeeds above the HP threshold and fails below it in browser victory flow',
   'maxCardsPlayed',
+  'minHpPercent',
   'trialChallengeProbe.choiceCount >= 6',
 ].forEach((needle) => {
   assert.ok(
     browserFeatureAudit.includes(needle),
     `browser feature audit should cover trial card-limit marker: ${needle}`,
+  );
+});
+
+[
+  'trial catalog should include vitalSeal',
+  'vitalSeal should require at least 70% HP at victory',
+  'vitalSeal should persist minHpPercent condition',
+  'vitalSeal should allow damage when remaining HP stays above threshold',
+  'vitalSeal should fail when remaining HP falls below threshold',
+].forEach((needle) => {
+  assert.ok(
+    trialChallengeChecks.includes(needle),
+    `trial challenge checks should cover vital-seal hp threshold marker: ${needle}`,
   );
 });
 
@@ -471,10 +489,13 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'mobile trial challenge modal stays within viewport and keeps all challenge packages reachable',
   '剑心限令',
   '秘宝回响',
+  '护心证道',
   'hasCardLimit',
   'hasTreasureHunt',
+  'hasVitalSeal',
   'cardLimitConditionVisible',
   'treasureHuntConditionVisible',
+  'vitalSealConditionVisible',
   'choices.length >= 6',
 ].forEach((needle) => {
   assert.ok(

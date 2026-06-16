@@ -5919,6 +5919,25 @@ export class Game {
         value: 1
       }
     }, {
+      id: 'vitalSeal',
+      name: '护心证道',
+      icon: '🫀',
+      desc: '7 回合内取胜，且胜利时生命不低于 70%。允许掉血，但要求你把防线稳住。',
+      conditions: {
+        maxTurns: 7,
+        minHpPercent: 70
+      },
+      rewardMultiplier: 1.5,
+      reward: 'rare_card',
+      bonusGold: 65 + realm * 6,
+      enemyHpMul: 1.14,
+      enemyAtkMul: 1.1,
+      enemyOpeningBlock: 6,
+      enemyDebuff: {
+        type: 'weak',
+        value: 1
+      }
+    }, {
       id: 'oathMirror',
       name: '双誓并压',
       icon: '☯️',
@@ -5944,6 +5963,7 @@ export class Game {
     const conditions = config.conditions && typeof config.conditions === 'object' ? config.conditions : {};
     const maxTurns = Math.max(0, Math.floor(Number(config.maxTurns != null ? config.maxTurns : config.rounds != null ? config.rounds : conditions.maxTurns) || 0));
     const maxCardsPlayed = Math.max(0, Math.floor(Number(config.maxCardsPlayed != null ? config.maxCardsPlayed : conditions.maxCardsPlayed) || 0));
+    const minHpPercent = Math.max(0, Math.min(100, Math.floor(Number(config.minHpPercent != null ? config.minHpPercent : conditions.minHpPercent) || 0)));
     const noDamage = !!(config.noDamage != null ? config.noDamage : conditions.noDamage);
     const normalized = {
       id: String(config.id || config.trialType || 'trialChallenge'),
@@ -5953,6 +5973,7 @@ export class Game {
       conditions: {
         maxTurns,
         maxCardsPlayed,
+        minHpPercent,
         noDamage
       },
       rounds: maxTurns,
@@ -5987,6 +6008,14 @@ export class Game {
     if (Number(conditions.maxCardsPlayed) > 0 && this.battle) {
       const played = Math.max(0, Math.floor(Number(this.battle.cardsPlayedThisBattle != null ? this.battle.cardsPlayedThisBattle : this.battle.cardsPlayedThisTurn) || 0));
       if (played > Number(conditions.maxCardsPlayed)) {
+        return false;
+      }
+    }
+    if (Number(conditions.minHpPercent) > 0 && this.player) {
+      const maxHp = Math.max(1, Math.floor(Number(this.player.maxHp) || 1));
+      const currentHp = Math.max(0, Math.floor(Number(this.player.currentHp) || 0));
+      const hpPercent = currentHp / maxHp * 100;
+      if (hpPercent + 1e-6 < Number(conditions.minHpPercent)) {
         return false;
       }
     }

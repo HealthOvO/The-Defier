@@ -2619,8 +2619,10 @@ async function safeScreenshot(page, outPath) {
       hasDual: choices.some((t) => t.includes('双誓并压')),
       hasCardLimit: choices.some((t) => t.includes('剑心限令')),
       hasTreasureHunt: choices.some((t) => t.includes('秘宝回响')),
+      hasVitalSeal: choices.some((t) => t.includes('护心证道')),
       cardLimitConditionVisible: choices.some((t) => t.includes('最多打出 6 张牌')),
       treasureHuntRewardVisible: choices.some((t) => t.includes('法宝') && t.includes('6 回合内取胜') && t.includes('最多打出 8 张牌')),
+      vitalSealConditionVisible: choices.some((t) => t.includes('胜利时生命') && t.includes('70%')),
       activeTrial: game.activeTrial,
       trialName: game.trialData?.name || null,
       trialChallenge: trialPayload?.battle?.trialChallenge || null,
@@ -2641,8 +2643,10 @@ async function safeScreenshot(page, outPath) {
       trialChallengeProbe.hasDual &&
       trialChallengeProbe.hasCardLimit &&
       trialChallengeProbe.hasTreasureHunt &&
+      trialChallengeProbe.hasVitalSeal &&
       trialChallengeProbe.cardLimitConditionVisible &&
       trialChallengeProbe.treasureHuntRewardVisible &&
+      trialChallengeProbe.vitalSealConditionVisible &&
       trialChallengeProbe.activeTrial === 'cardLimit' &&
       trialChallengeProbe.trialName === '剑心限令' &&
       Number(trialChallengeProbe.trialChallenge?.conditions?.maxCardsPlayed || 0) === 6 &&
@@ -2780,6 +2784,75 @@ async function safeScreenshot(page, outPath) {
       trialTreasureRewardProbe.treasureRewardLogged &&
       !trialTreasureRewardProbe.failureLogged,
     JSON.stringify(trialTreasureRewardProbe || null)
+  );
+
+  const trialVitalSealHpProbe = await page.evaluate(async () => {
+    if (!window.game || typeof game.showTrialChallengeSelection !== 'function' || typeof game.onBattleWon !== 'function') return null;
+    if (Array.isArray(window.Utils?._battleLogHistory)) {
+      window.Utils._battleLogHistory.length = 0;
+    }
+    const runCase = async (hp) => {
+      game.showTrialChallengeSelection({ id: 91016 + hp, row: 2, type: 'trial', completed: false, accessible: true });
+      const vitalBtn = Array.from(document.querySelectorAll('#event-choices .event-choice')).find((el) => (el.textContent || '').includes('护心证道'));
+      if (!vitalBtn) return { ok: false, reason: 'missing_vital_seal_choice', hp };
+      vitalBtn.click();
+      if (!game.battle || !game.player || !Array.isArray(game.battle.enemies) || !game.battle.enemies[0]) {
+        return { ok: false, reason: 'battle_not_started', hp, currentScreen: game.currentScreen };
+      }
+      const beforeHistoryCount = Array.isArray(window.Utils?._battleLogHistory) ? window.Utils._battleLogHistory.length : 0;
+      const enemy = game.battle.enemies[0];
+      game.player.maxHp = 100;
+      game.player.currentHp = hp;
+      game.battle.turnNumber = 3;
+      game.battle.cardsPlayedThisBattle = 3;
+      game.battle.playerTookDamage = hp < 100;
+      enemy.currentHp = 0;
+      enemy.hp = 0;
+      const activeBeforeWin = game.activeTrial;
+      const trialNameBeforeWin = game.trialData?.name || null;
+      const minHpBeforeWin = Number(game.trialData?.conditions?.minHpPercent || 0);
+      await game.onBattleWon([enemy]);
+      const logTexts = Array.isArray(window.Utils?._battleLogHistory)
+        ? window.Utils._battleLogHistory.slice(beforeHistoryCount).map((item) => String(item?.message || '').trim()).filter(Boolean)
+        : [];
+      return {
+        ok: true,
+        hp,
+        activeBeforeWin,
+        trialNameBeforeWin,
+        minHpBeforeWin,
+        trialCleared: game.activeTrial === null && game.trialData === null && game.trialMode === null,
+        successLogged: logTexts.some((text) => text.includes('试炼完成【护心证道】')),
+        failureLogged: logTexts.some((text) => text.includes('试炼未达成【护心证道】条件')),
+        rewardLogged: logTexts.some((text) => text.includes('试炼碑赐赏')),
+        currentScreen: game.currentScreen,
+        logs: logTexts.slice(-10)
+      };
+    };
+    const success = await runCase(72);
+    const failure = await runCase(69);
+    return { success, failure };
+  });
+  add(
+    'vital-seal trial succeeds above the HP threshold and fails below it in browser victory flow',
+    !!trialVitalSealHpProbe &&
+      trialVitalSealHpProbe.success?.ok &&
+      trialVitalSealHpProbe.success?.activeBeforeWin === 'vitalSeal' &&
+      trialVitalSealHpProbe.success?.trialNameBeforeWin === '护心证道' &&
+      trialVitalSealHpProbe.success?.minHpBeforeWin === 70 &&
+      trialVitalSealHpProbe.success?.trialCleared &&
+      trialVitalSealHpProbe.success?.successLogged &&
+      trialVitalSealHpProbe.success?.rewardLogged &&
+      !trialVitalSealHpProbe.success?.failureLogged &&
+      trialVitalSealHpProbe.failure?.ok &&
+      trialVitalSealHpProbe.failure?.activeBeforeWin === 'vitalSeal' &&
+      trialVitalSealHpProbe.failure?.trialNameBeforeWin === '护心证道' &&
+      trialVitalSealHpProbe.failure?.minHpBeforeWin === 70 &&
+      trialVitalSealHpProbe.failure?.trialCleared &&
+      trialVitalSealHpProbe.failure?.failureLogged &&
+      !trialVitalSealHpProbe.failure?.successLogged &&
+      !trialVitalSealHpProbe.failure?.rewardLogged,
+    JSON.stringify(trialVitalSealHpProbe || null)
   );
 
   const campExpandedProbe = await page.evaluate(() => {

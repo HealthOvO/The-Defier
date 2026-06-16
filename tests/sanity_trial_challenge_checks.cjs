@@ -118,7 +118,7 @@ function loadFile(ctx, filePath) {
     const host = { player: { realm: 6 } };
     host.getTrialChallengeCatalog = Game.prototype.getTrialChallengeCatalog;
     const catalog = host.getTrialChallengeCatalog();
-    assert(Array.isArray(catalog) && catalog.length >= 3, `expected >=3 trial challenges, got ${catalog && catalog.length}`);
+    assert(Array.isArray(catalog) && catalog.length >= 6, `expected >=6 trial challenges, got ${catalog && catalog.length}`);
     assert(catalog.some((item) => item && item.id === 'speedKill'), 'trial catalog should include speedKill');
     assert(catalog.some((item) => item && item.id === 'noDamage'), 'trial catalog should include noDamage');
     assert(catalog.some((item) => item && item.conditions && item.conditions.noDamage && item.conditions.maxTurns > 0), 'trial catalog should include combined condition challenge');
@@ -129,6 +129,9 @@ function loadFile(ctx, filePath) {
     assert(treasureHunt, 'trial catalog should include treasureHunt');
     assert(treasureHunt.reward === 'treasure', `treasureHunt should grant treasure reward, got ${treasureHunt.reward}`);
     assert(treasureHunt.conditions && treasureHunt.conditions.maxTurns === 6 && treasureHunt.conditions.maxCardsPlayed === 8, `treasureHunt should combine turn and card pressure, got ${JSON.stringify(treasureHunt.conditions)}`);
+    const vitalSeal = catalog.find((item) => item && item.id === 'vitalSeal');
+    assert(vitalSeal, 'trial catalog should include vitalSeal');
+    assert(vitalSeal.conditions && vitalSeal.conditions.minHpPercent === 70, `vitalSeal should require at least 70% HP at victory, got ${JSON.stringify(vitalSeal && vitalSeal.conditions)}`);
   }
 
   // 2) 挑战状态应统一写入 activeTrial / trialData / trialMode，并可正确判定成功失败
@@ -162,6 +165,33 @@ function loadFile(ctx, filePath) {
     assert(host.evaluateActiveTrialSuccess() === false, 'trial should fail when maxCardsPlayed condition breaks');
     host.battle.cardsPlayedThisBattle = 6;
     assert(host.evaluateActiveTrialSuccess() === true, 'trial should succeed at the exact maxCardsPlayed limit');
+  }
+
+  // 2.5) 护心类试炼应按胜利时生命比例判定，允许掉血但不能低于阈值
+  {
+    const host = {
+      player: { currentHp: 72, maxHp: 100 },
+      activeTrial: null,
+      trialData: null,
+      trialMode: null,
+      battle: { turnNumber: 5, playerTookDamage: true, cardsPlayedThisBattle: 9 }
+    };
+    host.armTrialChallenge = Game.prototype.armTrialChallenge;
+    host.evaluateActiveTrialSuccess = Game.prototype.evaluateActiveTrialSuccess;
+
+    const armed = host.armTrialChallenge({
+      id: 'vitalSeal',
+      name: '护心证道',
+      conditions: { maxTurns: 7, minHpPercent: 70 },
+      rewardMultiplier: 1.5,
+      reward: 'rare_card'
+    });
+    assert(armed && armed.conditions.minHpPercent === 70, `vitalSeal should persist minHpPercent condition, got ${JSON.stringify(armed)}`);
+    assert(host.evaluateActiveTrialSuccess() === true, 'vitalSeal should allow damage when remaining HP stays above threshold');
+    host.player.currentHp = 69;
+    assert(host.evaluateActiveTrialSuccess() === false, 'vitalSeal should fail when remaining HP falls below threshold');
+    host.player.currentHp = 70;
+    assert(host.evaluateActiveTrialSuccess() === true, 'vitalSeal should succeed exactly at the min HP threshold');
   }
 
   // 3) 试炼奖励 helper 应能发放额外灵石与稀有卡奖励

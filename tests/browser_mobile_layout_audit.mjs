@@ -648,8 +648,10 @@ function add(name, pass, detail = '') {
       choiceCount: choices.length,
       hasCardLimit: choiceTexts.some((text) => text.includes('剑心限令')),
       hasTreasureHunt: choiceTexts.some((text) => text.includes('秘宝回响')),
+      hasVitalSeal: choiceTexts.some((text) => text.includes('护心证道')),
       cardLimitConditionVisible: choiceTexts.some((text) => text.includes('最多打出 6 张牌')),
       treasureHuntConditionVisible: choiceTexts.some((text) => text.includes('6 回合内取胜') && text.includes('最多打出 8 张牌')),
+      vitalSealConditionVisible: choiceTexts.some((text) => text.includes('胜利时生命') && text.includes('70%')),
       top: rect ? rect.top : null,
       bottom: rect ? rect.bottom : null,
       height: rect ? rect.height : null,
@@ -662,7 +664,9 @@ function add(name, pass, detail = '') {
         choiceTexts.some((text) => text.includes('剑心限令')) &&
         choiceTexts.some((text) => text.includes('最多打出 6 张牌')) &&
         choiceTexts.some((text) => text.includes('秘宝回响')) &&
-        choiceTexts.some((text) => text.includes('6 回合内取胜') && text.includes('最多打出 8 张牌'))
+        choiceTexts.some((text) => text.includes('6 回合内取胜') && text.includes('最多打出 8 张牌')) &&
+        choiceTexts.some((text) => text.includes('护心证道')) &&
+        choiceTexts.some((text) => text.includes('胜利时生命') && text.includes('70%'))
     };
   });
 

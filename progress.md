@@ -1,5 +1,32 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-15: 护心证道试炼包与生命阈值判定
+  - 本轮完成
+    - `js/game.js` 新增试炼碑挑战包 `vitalSeal / 护心证道`：要求 7 回合内取胜，且胜利时生命不低于 70%；该试炼允许掉血，但要求玩家在收官前保住血线。
+    - `armTrialChallenge()` / `evaluateActiveTrialSuccess()` 新增并判定 `conditions.minHpPercent`，让试炼条件不只限于回合数、出牌数和无伤。
+    - `js/views/EventView.js` 与 `js/core/map.js` 同步 `胜利时生命 ≥ 70%` 条件文案，保证选择弹窗和战斗日志可读。
+    - `tests/sanity_trial_challenge_checks.cjs` 增加 catalog 数量、`vitalSeal`、`minHpPercent` 持久化，以及 72% / 69% / 70% 生命边界断言。
+    - `tests/browser_feature_audit.mjs` 增加真实浏览器回归：选择“护心证道”后，72% 血胜利必须完成并发奖，69% 血胜利必须失败且清理 trial 状态。
+    - `tests/browser_mobile_layout_audit.mjs` 增加移动端可达性断言，确认 7 个试炼包在 390px 视口内仍可见可达，且 `胜利时生命 ≥ 70%` 文案可见。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 锁定 Node / browser / mobile 的 `vitalSeal` marker，防止 release gate 漏扫。
+    - `game-intro.html` 同步玩家可见版本说明。
+  - 本轮验证
+    - TDD 红灯：`node tests/sanity_trial_challenge_checks.cjs` 在实现前失败于 `expected >=6 trial challenges, got 5`。
+    - `node --check js/game.js` ✅
+    - `node --check js/views/EventView.js` ✅
+    - `node --check js/core/map.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node --check tests/browser_mobile_layout_audit.mjs` ✅
+    - `node --check tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/sanity_trial_challenge_checks.cjs` ✅
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4280 output/browser-feature-trial-vital-seal-green-20260615` ✅，确认 `choiceCount=7`，`vitalSealConditionVisible=true`，72% 血成功、69% 血失败且 trial 状态清理。
+    - `node tests/browser_mobile_layout_audit.mjs http://127.0.0.1:4280 output/browser-mobile-trial-vital-seal-green-20260615` ✅，确认移动端 `choiceCount=7` 且弹窗仍在视口内。
+    - `BACKEND_SECURITY_TEST_PORT=9111 BACKEND_E2E_PORT=9122 PORT=4284 OUTPUT_ROOT=output/release-browser-audits-local-20260616-trial-vital-seal-final npm run test:release:local` ✅，本地生产构建、完整 Node/后端检查、后端 E2E 与 26 个浏览器 release 子审计通过；fresh 汇总 `output/release-browser-audits-local-20260616-trial-vital-seal-final/report.json` 为 0 failure。
+  - 当前结论
+    - 试炼碑从速度、无伤、限牌、秘宝奖励扩展到“保血线收官”的防守型挑战，玩家需要在可承受伤害和最终血线之间做新的战斗取舍。
+    - 本轮严格只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-15: 奖励页章程直达七日劫数章节演练
   - 本轮完成
     - `js/views/RewardView.js` 在三周一章奖励卡保留 `查看章节档案`，新增 `设为七日劫数章节演练`，从 `seasonBoard.settlement.chapterIndex` 等字段映射到真实章节档案 id，并复用 `applyChapterCodexDrillFocus(chapterId, 'weekly')` 写入观星台主练焦点。
