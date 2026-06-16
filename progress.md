@@ -1,5 +1,37 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-16: 禁术工程事件池扩展与本地前后端全量复验
+  - 本轮完成
+    - `js/data/events.js` 把 `forbidden_altar` 纳入战略工程事件联动主线，新增 `STRATEGIC_ENGINEERING_EVENT_POOLS / STRATEGIC_ENGINEERING_EVENT_BIAS_CHANCE / STRATEGIC_ENGINEERING_EVENT_FEEDBACK` 对应的禁术工程配置，并在 `applyForbiddenAltarEngineeringAugment()` 中为 `ancientAltar / bloodForgeCovenant / demonContract / blackbannerExecution / bloodloomGarden / ashLedgerTrial` 追加禁术工程强化。
+    - `js/managers/EventManager.js` 为 `forbidden_altar` 增加工程偏置 profile，让事件弹窗与 `render_game_to_text` 能稳定透出 `🩸 禁术工程` 元数据、联动摘要与奖励预告；同时补上 `karma` 的效果摘要与运行时结算。
+    - `js/core/events.js` 同步 legacy 事件执行链对 `karma` 的支持，避免老链路遇到禁术工程强化时丢失业果结算。
+    - `tests/sanity_content_archetype_checks.cjs`、`tests/sanity_event_bias_distribution_checks.cjs`、`tests/sanity_engineering_event_surface_checks.cjs` 增加 `forbidden_altar` 内容池、偏置分布、工程浮层与奖励增强合同。
+    - `tests/browser_event_branch_audit.mjs` 增加真实浏览器禁术工程分支：强制抽到 `blackbannerExecution`，校验工程浮层、`karma` / `ringExp` 奖励增强、残契入牌与结果文案。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 新增 release marker，锁定 `forbidden-altar engineering event overlay + reward uplift`，防止后续本地 release gate 漏扫这条工程事件链。
+  - 本轮验证
+    - TDD 红灯：`node tests/sanity_content_archetype_checks.cjs` 在实现前失败于 `missing engineering event pool for track: forbidden_altar`。
+    - TDD 红灯：`node tests/sanity_engineering_event_surface_checks.cjs` 在实现前失败于 `forced bloodForgeCovenant should still expose forbidden_altar engineering meta, got undefined`。
+    - TDD 红灯：`node tests/sanity_event_bias_distribution_checks.cjs` 在实现前失败于 `invalid engineering event pool: forbidden_altar`。
+    - `node --check js/data/events.js` ✅
+    - `node --check js/managers/EventManager.js` ✅
+    - `node --check js/core/events.js` ✅
+    - `node --check tests/sanity_content_archetype_checks.cjs` ✅
+    - `node --check tests/sanity_event_bias_distribution_checks.cjs` ✅
+    - `node --check tests/sanity_engineering_event_surface_checks.cjs` ✅
+    - `node --check tests/browser_event_branch_audit.mjs` ✅
+    - `node --check tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/sanity_content_archetype_checks.cjs` ✅
+    - `node tests/sanity_engineering_event_surface_checks.cjs` ✅
+    - `node tests/sanity_event_bias_distribution_checks.cjs` ✅，`forbidden_altar` 工程偏置采样命中率稳定在可感知区间。
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `npm run build:pages` ✅
+    - `node tests/browser_event_branch_audit.mjs http://127.0.0.1:4397 output/browser-event-branch-forbidden-altar-green-20260616` ✅，真实浏览器确认 `forbidden_altar` 工程浮层、`karma` 与命环经验增强、残契入牌都已生效，且无 console error。
+    - `npm run test:node` ✅，覆盖本地 Auth、后端安全、前端云同步、事件 / 命途 / 地图 / 商店 / PVP、后端注册/登录/存档/残影/PVP E2E 等 Node 门禁。
+    - `PORT=4422 BACKEND_SECURITY_TEST_PORT=9351 BACKEND_E2E_PORT=9352 BROWSER_BACKEND_SMOKE_PORT=9353 BROWSER_BACKEND_AUTHORITY_SMOKE_PORT=9354 BROWSER_AUTH_UI_SMOKE_PORT=9355 OUTPUT_ROOT=output/release-browser-audits-local-20260616-forbidden-altar-engineering-final npm run test:release:local` ✅，本地生产构建、完整 Node/后端检查、后端 E2E 与 26 个浏览器 release 子审计全部通过；fresh 汇总 `output/release-browser-audits-local-20260616-forbidden-altar-engineering-final/report.json` 为 597 条 finding、0 failure、0 console error、337 张截图，`missingModules=[]`、`duplicateModules=[]`、`unknownModules=[]`。
+  - 当前结论
+    - 禁术工程现在不再只是远征 / 地图层提示，而是会实际改变事件池命中与高风险签誓回报，玩家能在事件弹窗里直接看到并结算业果、命环经验与残契补偿。
+    - 本轮严格只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-16: 智慧路径观星/裂隙节点天机收益与本地复验
   - 本轮完成
     - `js/core/map.js` 强化智慧 fate path 的地图节点联动：命中观星台或记忆裂隙时，除了既有命环经验外，额外获得 1 点天机。

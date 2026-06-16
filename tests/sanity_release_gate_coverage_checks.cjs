@@ -505,10 +505,13 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
 });
 
 [
+  'forbidden-altar engineering event overlay + reward uplift',
+  'blackbannerExecution',
   'memory-rift engineering event overlay + reward uplift',
   'floatingMarketRift',
   'artifactConfluxBazaar',
   'after.ringExp > before.ringExp',
+  'after.karma > before.karma',
   'choiceTexts.every((text) => !INTERNAL_EFFECT_LABEL_PATTERN.test(text))',
 ].forEach((needle) => {
   assert.ok(

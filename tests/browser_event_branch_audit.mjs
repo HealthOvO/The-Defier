@@ -42,6 +42,7 @@ async function getSnapshot(page) {
     maxHp: window.game?.player?.maxHp ?? null,
     gold: window.game?.player?.gold ?? null,
     insight: window.game?.player?.heavenlyInsight ?? null,
+    karma: window.game?.player?.karma ?? null,
     deck: Array.isArray(window.game?.player?.deck) ? window.game.player.deck.length : null,
     ringExp: window.game?.player?.fateRing?.exp ?? null,
     adventureBuffs: window.game?.player?.adventureBuffs
@@ -70,7 +71,7 @@ async function getEventModalSnapshot(page) {
   });
 }
 
-const INTERNAL_EFFECT_LABEL_PATTERN = /\b(openTemporaryShop|openCampfire|removeCardType|permaBuff|runPathProgress|heavenlyInsight|ringExp|endlessPressure|maxHp)\b/;
+const INTERNAL_EFFECT_LABEL_PATTERN = /\b(openTemporaryShop|openCampfire|removeCardType|permaBuff|runPathProgress|heavenlyInsight|karma|ringExp|endlessPressure|maxHp)\b/;
 
 async function armEngineeringSnapshot(page, trackId, tier = 2) {
   await page.evaluate(({ trackId, tier }) => {
@@ -80,6 +81,11 @@ async function armEngineeringSnapshot(page, trackId, tier = 2) {
         name: '观星工程',
         icon: '🔭',
         effectSummary: '观测网已经锁定此地灵流'
+      },
+      forbidden_altar: {
+        name: '禁术工程',
+        icon: '🩸',
+        effectSummary: '禁术、试炼与锻炉形成加速链'
       },
       memory_rift: {
         name: '裂隙工程',
@@ -482,6 +488,28 @@ async function bootstrapRun(page) {
         after.ringExp > before.ringExp + 20 &&
         after.insight > before.insight,
       detail: 'summary shows engineering linkage, bazaar choice gets shop discount + insight, payout is uplifted, and no raw effect ids leak into UI'
+    },
+    {
+      name: 'forbidden-altar engineering event overlay + reward uplift',
+      trackId: 'forbidden_altar',
+      eventId: 'blackbannerExecution',
+      choiceIndex: 1,
+      screenshot: 'engineering-forbidden-altar-event.png',
+      expectModal: (modal) =>
+        modal.eventId === 'blackbannerExecution' &&
+        modal.engineeringMeta?.trackId === 'forbidden_altar' &&
+        /工程联动/.test(modal.summary || '') &&
+        Array.isArray(modal.secondChoice?.effects) &&
+        modal.secondChoice.effects.some((effect) => effect.type === 'karma' && Number(effect.value) > 0) &&
+        modal.secondChoice.effects.some((effect) => effect.type === 'ringExp' && Number(effect.value) >= 18) &&
+        Array.isArray(modal.choiceTexts) &&
+        modal.choiceTexts.length >= 2 &&
+        modal.choiceTexts.every((text) => !INTERNAL_EFFECT_LABEL_PATTERN.test(text)),
+      expectResult: (before, after) =>
+        after.deck > before.deck &&
+        after.ringExp > before.ringExp + 50 &&
+        after.karma > before.karma,
+      detail: 'summary shows engineering linkage, altar payout adds karma + ringExp on top of the residual contract card, and no raw effect ids leak into UI'
     },
     {
       name: 'memory-rift engineering event overlay + reward uplift',

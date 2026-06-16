@@ -105,6 +105,12 @@ function createSeededRandom(seed) {
       minHitRate: 0.22
     },
     {
+      trackId: 'forbidden_altar',
+      tier: 2,
+      seed: 12043,
+      minHitRate: 0.22
+    },
+    {
       trackId: 'memory_rift',
       tier: 2,
       seed: 12079,
@@ -121,11 +127,11 @@ function createSeededRandom(seed) {
       getStrategicEngineeringEventBiasProfile: () => ({
         trackId,
         name: trackId,
-        icon: trackId === 'observatory' ? '🔭' : '🪞',
+        icon: trackId === 'observatory' ? '🔭' : trackId === 'forbidden_altar' ? '🩸' : '🪞',
         tier,
         tierLabel: `T${tier}`,
         eventIds: eventPool,
-        biasChance: trackId === 'observatory' ? 0.34 : 0.32,
+        biasChance: trackId === 'observatory' ? 0.34 : trackId === 'forbidden_altar' ? 0.33 : 0.32,
         signal: 'engineering bias test'
       })
     };

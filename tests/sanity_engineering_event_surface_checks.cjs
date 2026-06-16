@@ -229,6 +229,84 @@ function sumChoiceEffect(choice, effectType) {
   }
 
   {
+    const ctx = createEventContext();
+    loadFile(ctx, path.join(root, 'js/data/events.js'));
+    const getRandomEvent = vm.runInContext('getRandomEvent', ctx);
+
+    ctx.window.game = {
+      player: { deck: [] },
+      getStrategicEngineeringSnapshot: () => ({
+        focusTrack: {
+          trackId: 'forbidden_altar',
+          tier: 2,
+          tierLabel: 'II阶',
+          name: '禁术工程',
+          icon: '🩸',
+          effectSummary: '禁术、试炼与锻炉形成加速链，路线更偏冒险爆发。'
+        },
+        activeTracks: [
+          {
+            trackId: 'forbidden_altar',
+            tier: 2,
+            tierLabel: 'II阶',
+            name: '禁术工程',
+            icon: '🩸',
+            effectSummary: '禁术、试炼与锻炉形成加速链，路线更偏冒险爆发。'
+          }
+        ],
+        summary: '禁术工程 II阶'
+      })
+    };
+    ctx.window.__ALLOW_DEBUG_EVENT_HOOKS__ = true;
+
+    const eventChecks = [
+      {
+        eventId: 'bloodForgeCovenant',
+        assertEvent(evt) {
+          assert(
+            evt.choices[0].effects.some((effect) => effect.type === 'karma' && Number(effect.value) >= 1)
+              && evt.choices[0].effects.some((effect) => effect.type === 'ringExp' && Number(effect.value) >= 12),
+            `bloodForgeCovenant blood pact should gain karma + ringExp, got ${JSON.stringify(evt.choices[0].effects)}`
+          );
+          assert(
+            evt.choices[1].effects.some((effect) => effect.type === 'karma' && Number(effect.value) >= 1)
+              && evt.choices[1].effects.some((effect) => effect.type === 'ringExp' && Number(effect.value) >= 18),
+            `bloodForgeCovenant stable pact should gain karma + ringExp, got ${JSON.stringify(evt.choices[1].effects)}`
+          );
+        }
+      },
+      {
+        eventId: 'blackbannerExecution',
+        assertEvent(evt) {
+          assert(
+            evt.choices[0].effects.some((effect) => effect.type === 'karma' && Number(effect.value) >= 1)
+              && evt.choices[0].effects.some((effect) => effect.type === 'ringExp' && Number(effect.value) >= 12),
+            `blackbannerExecution verdict option should gain karma + ringExp, got ${JSON.stringify(evt.choices[0].effects)}`
+          );
+          assert(
+            evt.choices[1].effects.some((effect) => effect.type === 'karma' && Number(effect.value) >= 1)
+              && sumChoiceEffect(evt.choices[1], 'ringExp') > 60,
+            `blackbannerExecution remains option should gain karma + extra ringExp, got ${JSON.stringify(evt.choices[1].effects)}`
+          );
+        }
+      }
+    ];
+
+    eventChecks.forEach((check) => {
+      ctx.window.__debugEventQueue = [check.eventId];
+      const evt = getRandomEvent();
+      assert(evt && evt.id === check.eventId, `expected forced event ${check.eventId}, got ${evt ? evt.id : 'null'}`);
+      assert(
+        evt.engineeringEventMeta
+          && evt.engineeringEventMeta.trackId === 'forbidden_altar'
+          && evt.engineeringEventMeta.selectedByEngineeringBias === false,
+        `forced ${check.eventId} should still expose forbidden_altar engineering meta, got ${JSON.stringify(evt && evt.engineeringEventMeta)}`
+      );
+      check.assertEvent(evt);
+    });
+  }
+
+  {
     const ctx = createGameContext();
     loadFile(ctx, path.join(root, 'js/managers/MetaProgressionManager.js'));
     loadFile(ctx, path.join(root, 'js/managers/EventManager.js'));
@@ -364,6 +442,145 @@ function sumChoiceEffect(choice, effectType) {
         && presentation.summaryItems.some((item) => /工程：/.test(item))
         && presentation.summaryItems.some((item) => /联动：/.test(item)),
       `event narrative presentation should surface engineering lines, got ${JSON.stringify(presentation)}`
+    );
+  }
+
+  {
+    const ctx = createGameContext();
+    loadFile(ctx, path.join(root, 'js/managers/MetaProgressionManager.js'));
+    loadFile(ctx, path.join(root, 'js/managers/EventManager.js'));
+    loadFile(ctx, path.join(root, 'js/managers/EndlessManager.js'));
+    loadFile(ctx, path.join(root, 'js/managers/RunManager.js'));
+    loadFile(ctx, path.join(root, 'js/managers/SeasonBoardManager.js'));
+    loadFile(ctx, path.join(root, 'js/managers/SanctumAgendaManager.js'));
+    loadFile(ctx, path.join(root, 'js/managers/ShopManager.js'));
+    loadFile(ctx, path.join(root, 'js/managers/SaveManager.js'));
+    loadFile(ctx, path.join(root, 'js/views/EventView.js'));
+    loadFile(ctx, path.join(root, 'js/core/player.js'));
+    loadFile(ctx, path.join(root, 'js/core/map.js'));
+    loadFile(ctx, path.join(root, 'js/core/events.js'));
+    loadFile(ctx, path.join(root, 'js/core/achievements.js'));
+    loadFile(ctx, path.join(root, 'js/core/fateRing.js'));
+    loadFile(ctx, path.join(root, 'js/game.js'));
+    const Game = vm.runInContext('Game', ctx);
+    const EventView = vm.runInContext('EventView', ctx);const game = Object.create(Game.prototype);
+
+    if (typeof game.attachHubControllers === 'function') game.attachHubControllers();
+    [
+      'getStrategicEngineeringCatalog',
+      'createDefaultStrategicEngineeringState',
+      'resolveStrategicEngineeringTier',
+      'normalizeStrategicEngineering',
+      'ensureStrategicEngineeringState',
+      'getStrategicEngineeringTrackSnapshot',
+      'getStrategicEngineeringSnapshot',
+      'getStrategicEngineeringEventBiasProfile',
+      'buildEventChoiceEffectSummary',
+      'getEventNarrativePresentation',
+      'renderGameToText'
+    ].forEach((name) => {
+      game[name] = Game.prototype[name];
+    });
+
+    game.currentScreen = 'map-screen';
+    game.eventView = new EventView(game);
+    game.player = {
+      realm: 4,
+      currentHp: 82,
+      maxHp: 110,
+      block: 0,
+      currentEnergy: 3,
+      baseEnergy: 3,
+      hand: [],
+      drawPile: [],
+      discardPile: [],
+      stance: 'neutral',
+      karma: 2,
+      strategicEngineering: {
+        version: 1,
+        lastAdvancedTrackId: 'forbidden_altar',
+        history: ['🩸 禁术工程推进至 II阶'],
+        tracks: {
+          observatory: { progress: 0, tier: 0, lastRealm: 0 },
+          spirit_grotto: { progress: 0, tier: 0, lastRealm: 0 },
+          forbidden_altar: { progress: 2, tier: 2, lastRealm: 4 },
+          memory_rift: { progress: 0, tier: 0, lastRealm: 0 }
+        }
+      }
+    };
+    game.map = {
+      getAccessibleNodeRiskForecast: () => ({ topRisk: null }),
+      getAccessibleNodes: () => []
+    };
+    game.currentBattleNode = null;
+    game.currentEvent = {
+      engineeringEventMeta: {
+        trackId: 'forbidden_altar',
+        name: '禁术工程',
+        icon: '🩸',
+        tier: 2,
+        tierLabel: 'II阶',
+        summary: '禁术、试炼与锻炉形成加速链，路线更偏冒险爆发。',
+        effectSummary: '高风险签誓会返还更多业果、命环经验与回收补偿。',
+        source: 'engineering-bias',
+        selectedByEngineeringBias: true
+      }
+    };
+    game.getChapterDisplaySnapshot = () => ({
+      chapterIndex: 2,
+      name: '碎誓外域',
+      stageLabel: '第二段',
+      dangerProfile: null,
+      nemesis: null,
+      skyOmen: null,
+      leyline: null
+    });
+    game.getChapterEventLedgerSnapshot = () => ({
+      totalEntries: 0,
+      entries: [],
+      counters: {},
+      recentTags: []
+    });
+    game.getLegacyUnspentEssence = () => 0;
+    game.legacyProgress = { essence: 0, upgrades: {} };
+
+    const payload = JSON.parse(game.renderGameToText());
+    assert(
+      payload.map
+        && payload.map.chapter
+        && payload.map.chapter.engineeringEventBias
+        && payload.map.chapter.engineeringEventBias.trackId === 'forbidden_altar',
+      `render_game_to_text should expose forbidden_altar engineering event bias profile, got ${JSON.stringify(payload.map && payload.map.chapter)}`
+    );
+    assert(
+      Array.isArray(payload.map.chapter.engineeringEventBias.eventIds)
+        && payload.map.chapter.engineeringEventBias.eventIds.includes('bloodForgeCovenant')
+        && payload.map.chapter.engineeringEventBias.eventIds.includes('blackbannerExecution'),
+      `forbidden_altar engineering event bias profile should expose altar event ids, got ${JSON.stringify(payload.map.chapter.engineeringEventBias)}`
+    );
+    assert(
+      payload.eventModal
+        && payload.eventModal.engineeringEventMeta
+        && payload.eventModal.engineeringEventMeta.trackId === 'forbidden_altar'
+        && payload.eventModal.engineeringEventMeta.selectedByEngineeringBias === true,
+      `eventModal payload should mirror forbidden_altar engineering meta, got ${JSON.stringify(payload.eventModal)}`
+    );
+
+    const presentation = game.getEventNarrativePresentation(
+      {
+        id: 'blackbannerExecution',
+        summary: '黑幡行刑台',
+        description: '行刑台在索取血契回执。',
+        engineeringEventMeta: game.currentEvent.engineeringEventMeta,
+        choices: [{ effects: [{ type: 'karma', value: 1 }, { type: 'ringExp', value: 18 }] }]
+      },
+      { type: 'event' }
+    );
+    assert(
+      Array.isArray(presentation.summaryItems)
+        && presentation.summaryItems.some((item) => /工程：/.test(item))
+        && presentation.summaryItems.some((item) => /联动：/.test(item)),
+      `forbidden_altar event narrative presentation should surface engineering lines, got ${JSON.stringify(presentation)}`
     );
   }
 

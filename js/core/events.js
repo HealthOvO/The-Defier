@@ -215,6 +215,9 @@ export class EventSystem {
         player.fateRing.exp += effect.value;
         player.checkFateRingLevelUp();
         return `命环经验 +${effect.value}`;
+      case 'karma':
+        player.karma = Math.max(0, Math.floor(Number(player.karma) || 0)) + Math.max(0, Math.floor(Number(effect.value) || 0));
+        return `业果 +${Math.max(0, Math.floor(Number(effect.value) || 0))}`;
       case 'law':
         if (effect.random) {
           const lawIds = Object.keys(LAWS);

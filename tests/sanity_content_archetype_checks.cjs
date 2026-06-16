@@ -338,6 +338,7 @@ function loadFile(ctx, filePath) {
 
   const expectedEngineeringPools = {
     observatory: ['artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil', 'starObservation', 'astralSupplyDepot', 'floatingMarketRift'],
+    forbidden_altar: ['ancientAltar', 'bloodForgeCovenant', 'demonContract', 'blackbannerExecution', 'bloodloomGarden', 'ashLedgerTrial'],
     memory_rift: ['floatingMarketRift', 'astralSupplyDepot', 'voidRift', 'voidBookkeeper', 'artifactConfluxBazaar', 'convergenceRelay']
   };
   Object.entries(expectedEngineeringPools).forEach(([trackId, expectedIds]) => {
@@ -415,6 +416,63 @@ function loadFile(ctx, filePath) {
   }
 
   // 5.6) 工程偏置应能命中观星/裂隙事件池，并挂上可见强化信息
+  {
+    ctx.window.game = {
+      player: { deck: [] },
+      getStrategicEngineeringSnapshot: () => ({
+        focusTrack: {
+          trackId: 'forbidden_altar',
+          tier: 2,
+          tierLabel: 'II阶',
+          name: '禁术工程',
+          icon: '🩸',
+          effectSummary: '禁术、试炼与锻炉形成加速链，路线更偏冒险爆发。'
+        },
+        activeTracks: [
+          {
+            trackId: 'forbidden_altar',
+            tier: 2,
+            tierLabel: 'II阶',
+            name: '禁术工程',
+            icon: '🩸',
+            effectSummary: '禁术、试炼与锻炉形成加速链，路线更偏冒险爆发。'
+          }
+        ],
+        summary: '禁术工程 II阶'
+      })
+    };
+    const oldRandom = ctx.Math.random;
+    const seq = [0.1, 0.25]; // 触发工程偏置 + 命中池内第二个事件 bloodForgeCovenant
+    let ridx = 0;
+    ctx.Math.random = () => {
+      const val = seq[ridx % seq.length];
+      ridx += 1;
+      return val;
+    };
+    const evt = getRandomEvent();
+    ctx.Math.random = oldRandom;
+    assert(evt && evt.id === 'bloodForgeCovenant', `expected forbidden_altar engineering event hit, got ${evt ? evt.id : 'null'}`);
+    assert(
+      evt.engineeringEventMeta && evt.engineeringEventMeta.trackId === 'forbidden_altar' && evt.engineeringEventMeta.selectedByEngineeringBias === true,
+      `forbidden_altar engineering event should expose engineeringEventMeta, got ${JSON.stringify(evt && evt.engineeringEventMeta)}`
+    );
+    assert(
+      evt.engineeringResonance && evt.engineeringResonance.trackId === 'forbidden_altar' && evt.engineeringResonance.biasSource === 'focus',
+      `forbidden_altar engineering event should also expose engineeringResonance, got ${JSON.stringify(evt && evt.engineeringResonance)}`
+    );
+    assert(/工程联动/.test(evt.summary || ''), `forbidden_altar engineering summary should mention engineering linkage, got ${evt.summary}`);
+    assert(
+      evt.choices[0].effects.some((effect) => effect.type === 'karma' && Number(effect.value) > 0)
+        && evt.choices[0].effects.some((effect) => effect.type === 'ringExp' && Number(effect.value) >= 12),
+      `bloodForgeCovenant blood draft should gain karma + ringExp, got ${JSON.stringify(evt.choices[0].effects)}`
+    );
+    assert(
+      evt.choices[1].effects.some((effect) => effect.type === 'karma' && Number(effect.value) > 0)
+        && evt.choices[1].effects.some((effect) => effect.type === 'ringExp' && Number(effect.value) >= 18),
+      `bloodForgeCovenant stable pact should gain karma + ringExp, got ${JSON.stringify(evt.choices[1].effects)}`
+    );
+  }
+
   {
     ctx.window.game = {
       player: { deck: [] },

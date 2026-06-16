@@ -324,6 +324,9 @@ export class EventManager {
         case 'heavenlyInsight':
           summary.push(`天机 +${Math.floor(Number(effect.value) || 0)}`);
           break;
+        case 'karma':
+          summary.push(`业果 +${Math.floor(Number(effect.value) || 0)}`);
+          break;
         case 'maxHp':
           summary.push(`最大生命 ${Number(effect.value) >= 0 ? '+' : ''}${Math.floor(Number(effect.value) || 0)}`);
           break;
@@ -776,6 +779,17 @@ export class EventManager {
             this.game.eventResults.push(`🔭 天机 +${amount}`);
           } else {
             this.game.eventResults.push('⚠️ 天机未变化');
+          }
+          break;
+        }
+      case 'karma':
+        {
+          const amount = Math.max(0, Math.floor(Number(effect.value) || 0));
+          if (amount > 0) {
+            this.game.player.karma = Math.max(0, Math.floor(Number(this.game.player.karma) || 0)) + amount;
+            this.game.eventResults.push(`🜂 业果 +${amount}`);
+          } else {
+            this.game.eventResults.push('⚠️ 业果未变化');
           }
           break;
         }
@@ -1462,6 +1476,12 @@ export class EventManager {
         biasChanceByTier: [0, 0.24, 0.34, 0.44],
         signalByTier: ['', '观测回路刚接入这处异象，天机与命环校准收益开始抬升。', '观测网已经锁定此地灵流，观测、校准与货单筛选都会更稳。', '跨章观测网压住了灵流波动，本次事件会稳定吐出高价值观测结果。'],
         bonusPreviewByTier: ['', '额外货位 +1 / 小幅折价 / 天机 +1 / 命环经验补正', '额外货位 +1 / 折价 8% / 天机 +1 / 命环经验 +10~16', '额外货位 +1 / 折价 12% / 天机 +2 / 命环经验 +14~24']
+      },
+      forbidden_altar: {
+        eventIdsByTier: [[], ['ancientAltar', 'bloodForgeCovenant', 'demonContract', 'blackbannerExecution'], ['ancientAltar', 'bloodForgeCovenant', 'demonContract', 'blackbannerExecution', 'bloodloomGarden'], ['ancientAltar', 'bloodForgeCovenant', 'demonContract', 'blackbannerExecution', 'bloodloomGarden', 'ashLedgerTrial']],
+        biasChanceByTier: [0, 0.23, 0.33, 0.43],
+        signalByTier: ['', '血契回路刚接入此地，签誓与献祭会额外回收业果。', '禁术工程已经稳住血税回路，高风险签誓会返还更多业果、命环经验与回收补偿。', '跨章血契网已经压住代价波动，本次事件会更偏向高税高回报的禁术交易。'],
+        bonusPreviewByTier: ['', '业果 +1 / 命环经验补正 / 小额灵石回收', '业果 +1 / 命环经验 +12~18 / 灵石 +18 / 战后医护 1 场', '业果 +2 / 命环经验 +18~26 / 灵石 +28 / 战后医护 2 场']
       },
       memory_rift: {
         eventIdsByTier: [[], ['floatingMarketRift', 'astralSupplyDepot', 'voidRift', 'voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard'], ['floatingMarketRift', 'astralSupplyDepot', 'voidRift', 'voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard', 'artifactConfluxBazaar', 'convergenceRelay'], ['floatingMarketRift', 'astralSupplyDepot', 'voidRift', 'voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard', 'artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil']],

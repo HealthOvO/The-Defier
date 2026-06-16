@@ -4092,14 +4092,17 @@ export const FATE_PATH_EVENT_POOLS = {
 };
 export const STRATEGIC_ENGINEERING_EVENT_POOLS = {
   observatory: ['starObservation', 'artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil', 'astralSupplyDepot', 'floatingMarketRift'],
+  forbidden_altar: ['ancientAltar', 'bloodForgeCovenant', 'demonContract', 'blackbannerExecution', 'bloodloomGarden', 'ashLedgerTrial'],
   memory_rift: ['floatingMarketRift', 'astralSupplyDepot', 'voidRift', 'voidBookkeeper', 'ashLedgerTrial', 'convergenceRitual', 'frontierContractBoard', 'artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil']
 };
 export const STRATEGIC_ENGINEERING_EVENT_BIAS_CHANCE = {
   observatory: [0, 0.24, 0.34, 0.44],
+  forbidden_altar: [0, 0.23, 0.33, 0.43],
   memory_rift: [0, 0.22, 0.32, 0.42]
 };
 export const STRATEGIC_ENGINEERING_EVENT_FEEDBACK = {
   observatory: ['', '观测回路刚接入这处异象，天机与命环校准收益开始抬升。', '观测网已经锁定此地灵流，观测、校准与货单筛选都会更稳。', '跨章观测网压住了灵流波动，本次事件会稳定吐出高价值观测结果。'],
+  forbidden_altar: ['', '血契回路刚接入此地，签誓与献祭会额外回收业果。', '禁术工程已经稳住血税回路，高风险签誓会返还更多业果、命环经验与回收补偿。', '跨章血契网已经压住代价波动，本次事件会更偏向高税高回报的禁术交易。'],
   memory_rift: ['', '裂隙回响开始渗入此地，构筑改写与裂隙补给窗口正在放大。', '裂隙工程已经与当前路线并轨，改写构筑与裂隙补给收益进一步抬升。', '深层裂隙回响已成网，本次事件会更偏向高压改写与重配收益。']
 };
 export function getTierScaledValue(values = [], tier = 0, fallback = 0) {
@@ -4634,6 +4637,131 @@ export function applyMemoryRiftEngineeringAugment(event, context = null) {
       break;
   }
 }
+export function applyForbiddenAltarEngineeringAugment(event, context = null) {
+  const tier = Math.max(0, Math.floor(Number(context?.tier) || 0));
+  const karmaBonus = getTierScaledValue([0, 1, 1, 2], tier, 0);
+  const stableRingBonus = getTierScaledValue([0, 12, 18, 26], tier, 0);
+  const riskyRingBonus = getTierScaledValue([0, 8, 12, 18], tier, 0);
+  const goldBonus = getTierScaledValue([0, 10, 18, 28], tier, 0);
+  const healBuffCharges = getTierScaledValue([0, 1, 1, 2], tier, 0);
+  const makeKarmaEffect = () => karmaBonus > 0 ? [{
+    type: 'karma',
+    value: karmaBonus
+  }] : [];
+  switch (event?.id) {
+    case 'ancientAltar':
+      {
+        const sacrificeLife = getEventChoice(event, 0);
+        const sacrificeGold = getEventChoice(event, 1);
+        const empowerCard = getEventChoice(event, 2);
+        addChoiceEffects(sacrificeLife, [...makeKarmaEffect(), ...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : [])]);
+        appendChoiceResult(sacrificeLife, `血契回路回收业果：业果 +${karmaBonus}，命环经验 +${riskyRingBonus}`);
+        addChoiceEffects(sacrificeGold, [...makeKarmaEffect(), ...(stableRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: stableRingBonus
+        }] : [])]);
+        appendChoiceResult(sacrificeGold, `祭坛折返禁术账目：业果 +${karmaBonus}，命环经验 +${stableRingBonus}`);
+        addChoiceEffects(empowerCard, [...makeKarmaEffect(), ...(Math.max(8, Math.floor(stableRingBonus * 0.75)) > 0 ? [{
+          type: 'ringExp',
+          value: Math.max(8, Math.floor(stableRingBonus * 0.75))
+        }] : [])]);
+        appendChoiceResult(empowerCard, `祭坛铭纹反写回报：业果 +${karmaBonus}，命环经验 +${Math.max(8, Math.floor(stableRingBonus * 0.75))}`);
+        break;
+      }
+    case 'bloodForgeCovenant':
+      {
+        const bloodDraft = getEventChoice(event, 0);
+        const stablePact = getEventChoice(event, 1);
+        addChoiceEffects(bloodDraft, [...makeKarmaEffect(), ...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : [])]);
+        appendChoiceResult(bloodDraft, `血炉追补禁术回执：业果 +${karmaBonus}，命环经验 +${riskyRingBonus}`);
+        addChoiceEffects(stablePact, [...makeKarmaEffect(), ...(stableRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: stableRingBonus
+        }] : [])]);
+        appendChoiceResult(stablePact, `血契账本返利：业果 +${karmaBonus}，命环经验 +${stableRingBonus}`);
+        break;
+      }
+    case 'demonContract':
+      {
+        const signContract = getEventChoice(event, 0);
+        const burnPage = getEventChoice(event, 1);
+        addChoiceEffects(signContract, [...makeKarmaEffect(), ...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : [])]);
+        appendChoiceResult(signContract, `残契追认血税：业果 +${karmaBonus}，命环经验 +${riskyRingBonus}`);
+        addChoiceEffects(burnPage, [...makeKarmaEffect(), ...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: goldBonus
+        }] : [])]);
+        appendChoiceResult(burnPage, `焚契灰烬回收：业果 +${karmaBonus}，灵石 +${goldBonus}`);
+        break;
+      }
+    case 'blackbannerExecution':
+      {
+        const takeVerdict = getEventChoice(event, 0);
+        const collectRemains = getEventChoice(event, 1);
+        addChoiceEffects(takeVerdict, [...makeKarmaEffect(), ...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : [])]);
+        appendChoiceResult(takeVerdict, `黑幡裁决回执：业果 +${karmaBonus}，命环经验 +${riskyRingBonus}`);
+        addChoiceEffects(collectRemains, [...makeKarmaEffect(), ...(stableRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: stableRingBonus
+        }] : [])]);
+        appendChoiceResult(collectRemains, `残契归档返利：业果 +${karmaBonus}，命环经验 +${stableRingBonus}`);
+        break;
+      }
+    case 'bloodloomGarden':
+      {
+        const brewTonic = getEventChoice(event, 0);
+        const sootheBath = getEventChoice(event, 1);
+        addChoiceEffects(brewTonic, [...makeKarmaEffect(), ...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : [])]);
+        appendChoiceResult(brewTonic, `药圃抽取血契残响：业果 +${karmaBonus}，命环经验 +${riskyRingBonus}`);
+        addChoiceEffects(sootheBath, [...makeKarmaEffect(), ...(healBuffCharges > 0 ? [{
+          type: 'adventureBuff',
+          buffId: 'victoryHealBoostBattles',
+          charges: healBuffCharges
+        }] : []), ...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: Math.max(8, Math.floor(goldBonus * 0.5))
+        }] : [])]);
+        appendChoiceResult(sootheBath, `药圃回收血税：业果 +${karmaBonus}，战后医护 ${healBuffCharges} 场，灵石 +${Math.max(8, Math.floor(goldBonus * 0.5))}`);
+        break;
+      }
+    case 'ashLedgerTrial':
+      {
+        const cashOut = getEventChoice(event, 0);
+        const steadyNote = getEventChoice(event, 1);
+        addChoiceEffects(cashOut, [...makeKarmaEffect(), ...(goldBonus > 0 ? [{
+          type: 'gold',
+          value: Math.max(8, Math.floor(goldBonus * 0.75))
+        }] : []), ...(riskyRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: riskyRingBonus
+        }] : [])]);
+        appendChoiceResult(cashOut, `血契账页兑现：业果 +${karmaBonus}，灵石 +${Math.max(8, Math.floor(goldBonus * 0.75))}，命环经验 +${riskyRingBonus}`);
+        addChoiceEffects(steadyNote, [...makeKarmaEffect(), ...(stableRingBonus > 0 ? [{
+          type: 'ringExp',
+          value: Math.max(12, Math.floor(stableRingBonus * 0.8))
+        }] : [])]);
+        appendChoiceResult(steadyNote, `账页稳签返还：业果 +${karmaBonus}，命环经验 +${Math.max(12, Math.floor(stableRingBonus * 0.8))}`);
+        break;
+      }
+    default:
+      break;
+  }
+}
 export function applyStrategicEngineeringEventAugment(event, context = null, options = {}) {
   if (!event || !context) return event;
   if (event.engineeringEventMeta && event.engineeringEventMeta.trackId === context.trackId) {
@@ -4642,6 +4770,8 @@ export function applyStrategicEngineeringEventAugment(event, context = null, opt
   markStrategicEngineeringEventMeta(event, context, options);
   if (context.trackId === 'observatory') {
     applyObservatoryEngineeringAugment(event, context);
+  } else if (context.trackId === 'forbidden_altar') {
+    applyForbiddenAltarEngineeringAugment(event, context);
   } else if (context.trackId === 'memory_rift') {
     applyMemoryRiftEngineeringAugment(event, context);
   }
