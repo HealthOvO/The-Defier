@@ -289,7 +289,7 @@ function loadFile(ctx, filePath) {
     convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar'],
     resonance: ['fateRingEchoShrine', 'stormchaserCamp', 'thunderConductTrial', 'fulgurMarket'],
     wisdom: ['fateRingEchoShrine', 'lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary'],
-    destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden']
+    destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden', 'ruinBountyWrit']
   };
   Object.entries(expectedPathPools).forEach(([pathId, expectedIds]) => {
     const actual = FATE_PATH_EVENT_POOLS[pathId];
@@ -298,6 +298,16 @@ function loadFile(ctx, filePath) {
       assert(actual.includes(eventId), `${pathId} event pool should include ${eventId}`);
     });
   });
+  const ruinBountyWrit = EVENTS.ruinBountyWrit;
+  assert(!!ruinBountyWrit, 'destruction event ruinBountyWrit should exist');
+  assert(/悬赏|战利/.test(ruinBountyWrit.description || ''), 'ruinBountyWrit should read as a bounty or loot event');
+  const ruinBountyChoice = ruinBountyWrit.choices?.find((choice) => /追赏|悬赏/.test(choice.text || ''));
+  assert(!!ruinBountyChoice, 'ruinBountyWrit should expose a bounty choice');
+  const ruinEffects = Array.isArray(ruinBountyChoice.effects) ? ruinBountyChoice.effects : [];
+  assert(ruinEffects.some((effect) => effect.type === 'damage' && Number(effect.value) > 0), 'ruinBountyWrit bounty choice should cost HP');
+  assert(ruinEffects.some((effect) => effect.type === 'gold' && Number(effect.value) > 0), 'ruinBountyWrit bounty choice should grant gold');
+  assert(ruinEffects.some((effect) => effect.type === 'ringExp' && Number(effect.value) > 0), 'ruinBountyWrit bounty choice should grant ring exp');
+  assert(ruinEffects.some((effect) => effect.type === 'adventureBuff' && effect.buffId === 'victoryGoldBoostBattles' && Number(effect.charges) > 0), 'ruinBountyWrit bounty choice should grant victory bounty buff');
 
   const expectedEngineeringPools = {
     observatory: ['artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil', 'starObservation', 'astralSupplyDepot', 'floatingMarketRift'],

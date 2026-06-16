@@ -1081,6 +1081,54 @@ export const EVENTS = {
       effects: []
     }]
   },
+  ruinBountyWrit: {
+    id: 'ruinBountyWrit',
+    name: '烬途追赏令',
+    icon: '📜',
+    description: '焦黑榜文仍在跳动，毁灭之环会把一段血线折成战利、命环经验与下一场胜利悬赏。',
+    choices: [{
+      text: '压血追赏',
+      icon: '🩸',
+      result: '失去生命，换取灵石、命环经验与胜利悬赏',
+      resultType: 'negative',
+      condition: {
+        type: 'hp',
+        min: 18
+      },
+      effects: [{
+        type: 'damage',
+        value: 10
+      }, {
+        type: 'gold',
+        value: 70
+      }, {
+        type: 'ringExp',
+        value: 26
+      }, {
+        type: 'adventureBuff',
+        buffId: 'victoryGoldBoostBattles',
+        charges: 1
+      }]
+    }, {
+      text: '拆榜取灰',
+      icon: '🔥',
+      result: '只取命环余烬，不提前透支血线',
+      resultType: 'neutral',
+      effects: [{
+        type: 'ringExp',
+        value: 18
+      }, {
+        type: 'gold',
+        value: 28
+      }]
+    }, {
+      text: '封榜离开',
+      icon: '🚶',
+      result: '你没有签下这份追赏令',
+      resultType: 'neutral',
+      effects: []
+    }]
+  },
   runPathShatterBounty: {
     id: 'runPathShatterBounty',
     name: '断脉悬金榜',
@@ -3916,7 +3964,7 @@ export const FATE_PATH_EVENT_POOLS = {
   convergence: ['convergenceRelay', 'harmonicAnvil', 'artifactConfluxBazaar'],
   resonance: ['fateRingEchoShrine', 'stormchaserCamp', 'thunderConductTrial', 'fulgurMarket'],
   wisdom: ['fateRingEchoShrine', 'lifestringClinic', 'artifactConfluxBazaar', 'ancientLibrary'],
-  destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden']
+  destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden', 'ruinBountyWrit']
 };
 export const STRATEGIC_ENGINEERING_EVENT_POOLS = {
   observatory: ['starObservation', 'artifactConfluxBazaar', 'convergenceRelay', 'harmonicAnvil', 'astralSupplyDepot', 'floatingMarketRift'],

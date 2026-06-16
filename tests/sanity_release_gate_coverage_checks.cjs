@@ -432,12 +432,30 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'FATE_PATH_EVENT_POOLS',
   'pathId: \'resonance\'',
   'pathId: \'wisdom\'',
+  'pathId: \'destruction\'',
+  'targetEventId: \'ruinBountyWrit\'',
   'fateRingEchoShrine bias too weak',
+  '${targetEventId} bias too weak',
   'echoRate',
+  'targetRate',
 ].forEach((needle) => {
   assert.ok(
     read('tests/sanity_event_bias_distribution_checks.cjs').includes(needle),
     `event bias sanity should cover fate-path echo marker: ${needle}`,
+  );
+});
+
+[
+  "destruction: ['overclockSigil', 'bloodForgeCovenant', 'bloodloomGarden', 'ruinBountyWrit']",
+  'EVENTS.ruinBountyWrit',
+  'bounty choice should cost HP',
+  'bounty choice should grant gold',
+  'bounty choice should grant ring exp',
+  'victoryGoldBoostBattles',
+].forEach((needle) => {
+  assert.ok(
+    read('tests/sanity_content_archetype_checks.cjs').includes(needle),
+    `content archetype sanity should cover destruction bounty event marker: ${needle}`,
   );
 });
 
@@ -476,6 +494,19 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     browserFeatureAudit.includes(needle),
     `browser feature audit should cover fate ring echo marker: ${needle}`,
+  );
+});
+
+[
+  'destruction path bounty writ trades HP for loot and victory bounty buff',
+  "window.__debugEventQueue = ['ruinBountyWrit']",
+  '烬途追赏令',
+  'victoryGoldBoostBattles',
+  'game.player.block = 0',
+].forEach((needle) => {
+  assert.ok(
+    browserFeatureAudit.includes(needle),
+    `browser feature audit should cover destruction bounty event marker: ${needle}`,
   );
 });
 

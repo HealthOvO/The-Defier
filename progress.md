@@ -1,5 +1,31 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-16: 毁灭命途追赏事件与本地前后端复验
+  - 本轮完成
+    - `js/data/events.js` 新增毁灭命途专属事件 `ruinBountyWrit / 烬途追赏令`：玩家可以选择压血追赏，用生命换取灵石、命环经验与下一场胜利悬赏，也可以只拆榜取灰或封榜离开。
+    - `FATE_PATH_EVENT_POOLS.destruction` 纳入 `ruinBountyWrit`，保持为毁灭路径专属事件；未加入全局 `EVENT_POOL`，避免普通事件池稀释路径辨识度。
+    - `tests/sanity_content_archetype_checks.cjs` 锁定事件存在、毁灭事件池、压血追赏 choice、`damage/gold/ringExp/adventureBuff` 效果与 `victoryGoldBoostBattles` 悬赏 buff。
+    - `tests/sanity_event_bias_distribution_checks.cjs` 增加毁灭与归一命途目标事件采样，确认路径事件命中率与 `ruinBountyWrit` 目标命中率不会退化。
+    - `tests/browser_feature_audit.mjs` 增加真实浏览器分支：强制抽到 `烬途追赏令`，点击追赏选项后断言生命下降、灵石上涨、命环经验上涨、胜利悬赏 buff 生效，并且结果文案暴露悬赏 / 战利信息。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 新增内容、分布、浏览器 feature 三层 marker，防止 release gate 漏掉毁灭追赏事件覆盖。
+  - 本轮验证
+    - TDD 红灯：`node tests/sanity_content_archetype_checks.cjs` 在实现前失败于 `destruction event pool should include ruinBountyWrit`。
+    - TDD 红灯：`node tests/sanity_event_bias_distribution_checks.cjs` 在实现前失败于 `destruction fate-path pool should include ruinBountyWrit`。
+    - TDD 红灯：`node tests/browser_feature_audit.mjs http://127.0.0.1:4300 output/browser-feature-destruction-writ-red-20260616-tight` 在实现前确认强制事件队列无法抽到 `ruinBountyWrit`。
+    - `node --check js/data/events.js` ✅
+    - `node --check tests/browser_feature_audit.mjs` ✅
+    - `node --check tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `node tests/sanity_content_archetype_checks.cjs` ✅
+    - `node tests/sanity_event_bias_distribution_checks.cjs` ✅，毁灭路径 `targetEventId=ruinBountyWrit`，`targetRate=0.12`。
+    - `node tests/sanity_release_gate_coverage_checks.cjs` ✅
+    - `npm run build:pages` ✅
+    - `npm run test:node` ✅，覆盖本地 Auth、后端安全、前端云同步、事件 / 命途 / 商店 / PVP、后端注册/登录/存档/残影/PVP E2E 等 Node 门禁。
+    - `node tests/browser_feature_audit.mjs http://127.0.0.1:4300 output/browser-feature-destruction-writ-green-20260616-final` ✅，真实 UI 分支确认追赏事件结算。
+    - `BACKEND_SECURITY_TEST_PORT=9113 BACKEND_E2E_PORT=9124 PORT=4311 OUTPUT_ROOT=output/release-browser-audits-local-20260616-destruction-writ-final-rerun npm run test:release:local` ✅，本地生产构建、完整 Node/后端检查、后端 E2E 与 26 个浏览器 release 子审计通过；fresh 汇总 `output/release-browser-audits-local-20260616-destruction-writ-final-rerun/report.json` 为 589 条 finding、0 failure、0 console error，产出 336 张截图。
+  - 当前结论
+    - 毁灭命途现在多了一条“压血换战利与胜利悬赏”的路径专属事件线，强化该路径主动透支血线换节奏的玩法。
+    - 本轮严格只做本地开发与验证；未 SSH 到 `cloud119`，未 rsync，未重启线上后端 / Nginx，未访问或写入 `https://080305.xyz/`。
+
 - 2026-06-16: 商店服务详情与前后端本地全量复验
   - 本轮完成
     - `js/managers/ShopManager.js` 新增 `buildShopServiceDetailMeta()`，把服务适配度、买后剩余、储备线、建议单次、当前血线和下一节点预判收束成服务详情元数据。

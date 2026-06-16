@@ -3045,6 +3045,68 @@ async function safeScreenshot(page, outPath) {
 
   await page.evaluate(() => {
     if (!window.game || typeof getRandomEvent !== 'function') return;
+    game.player.fateRing = game.player.fateRing || {};
+    game.player.fateRing.path = 'destruction';
+    game.player.fateRing.level = Math.max(Number(game.player.fateRing.level) || 1, 7);
+    game.player.fateRing.exp = 0;
+    game.player.maxHp = Math.max(Number(game.player.maxHp) || 1, 96);
+    game.player.currentHp = Math.max(48, Math.floor(game.player.maxHp * 0.72));
+    game.player.block = 0;
+    game.player.gold = 180;
+    game.player.adventureBuffs = {};
+    window.__debugEventQueue = ['ruinBountyWrit'];
+    const evt = getRandomEvent();
+    if (!evt) return;
+    game.showEventModal(evt, { id: 910022, row: 2, type: 'event', completed: false, accessible: true });
+  });
+  await page.waitForTimeout(120);
+  const destructionWritBefore = await page.evaluate(() => {
+    const choices = Array.from(document.querySelectorAll('#event-choices .event-choice')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+    return {
+      hasEvent: /烬途追赏令/.test(document.getElementById('event-title')?.textContent || ''),
+      title: document.getElementById('event-title')?.textContent || '',
+      hp: game.player?.currentHp || 0,
+      gold: game.player?.gold || 0,
+      ringExp: game.player?.fateRing?.exp || 0,
+      buffs: { ...(game.player?.adventureBuffs || {}) },
+      choiceText: choices.join(' | '),
+      payload: typeof window.render_game_to_text === 'function' ? JSON.parse(window.render_game_to_text()) : null
+    };
+  });
+  await page.evaluate(() => {
+    const firstChoice = document.querySelector('#event-choices .event-choice');
+    if (firstChoice) firstChoice.click();
+  });
+  await page.waitForTimeout(180);
+  const destructionWritAfter = await page.evaluate(() => ({
+    hp: game.player?.currentHp || 0,
+    gold: game.player?.gold || 0,
+    ringExp: game.player?.fateRing?.exp || 0,
+    buffs: { ...(game.player?.adventureBuffs || {}) },
+    resultText: (document.getElementById('event-desc')?.textContent || '').replace(/\s+/g, ' ').trim(),
+    payload: typeof window.render_game_to_text === 'function' ? JSON.parse(window.render_game_to_text()) : null
+  }));
+  const destructionWritProbe = { before: destructionWritBefore, after: destructionWritAfter };
+  add(
+    'destruction path bounty writ trades HP for loot and victory bounty buff',
+    !!destructionWritProbe &&
+      destructionWritProbe.before?.hasEvent &&
+      /追赏|悬赏|战利/.test(destructionWritProbe.before?.choiceText || '') &&
+      Number(destructionWritProbe.after?.hp || 0) < Number(destructionWritProbe.before?.hp || 0) &&
+      Number(destructionWritProbe.after?.gold || 0) > Number(destructionWritProbe.before?.gold || 0) &&
+      Number(destructionWritProbe.after?.ringExp || 0) > Number(destructionWritProbe.before?.ringExp || 0) &&
+      Number(destructionWritProbe.after?.buffs?.victoryGoldBoostBattles || 0) > Number(destructionWritProbe.before?.buffs?.victoryGoldBoostBattles || 0) &&
+      /胜利|悬赏|战利/.test(destructionWritProbe.after?.resultText || ''),
+    JSON.stringify(destructionWritProbe || null)
+  );
+  await page.evaluate(() => {
+    const em = document.getElementById('event-modal');
+    if (em) em.classList.remove('active');
+  });
+  await page.waitForTimeout(120);
+
+  await page.evaluate(() => {
+    if (!window.game || typeof getRandomEvent !== 'function') return;
     window.__debugEventQueue = ['floatingMarketRift'];
     const evt = getRandomEvent();
     if (!evt) return;

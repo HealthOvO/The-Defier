@@ -187,5 +187,41 @@ function createSeededRandom(seed) {
     );
   });
 
+  [
+    { pathId: 'destruction', seed: 13331, targetEventId: 'ruinBountyWrit', minTargetRate: 0.06 },
+    { pathId: 'convergence', seed: 13411, targetEventId: 'convergenceRelay', minTargetRate: 0.06 }
+  ].forEach(({ pathId, seed, targetEventId, minTargetRate }) => {
+    const eventPool = FATE_PATH_EVENT_POOLS[pathId];
+    assert(Array.isArray(eventPool) && eventPool.includes(targetEventId), `${pathId} fate-path pool should include ${targetEventId}`);
+
+    ctx.window.game = {
+      player: {
+        deck: [],
+        fateRing: { path: pathId },
+        getPathDoctrineProfile: () => ({ path: pathId, tier: 3 })
+      }
+    };
+
+    ctx.Math.random = createSeededRandom(seed);
+    let hits = 0;
+    let targetHits = 0;
+    for (let i = 0; i < samples; i += 1) {
+      const event = getRandomEvent();
+      if (event && eventPool.includes(event.id)) hits += 1;
+      if (event && event.id === targetEventId) targetHits += 1;
+    }
+    const hitRate = hits / samples;
+    const targetRate = targetHits / samples;
+    results.push({ pathId, hitRate, targetEventId, targetRate });
+    assert(
+      hitRate >= 0.28,
+      `${pathId} fate-path event bias too weak: hitRate=${hitRate.toFixed(3)}, expected >= 0.28`
+    );
+    assert(
+      targetRate >= minTargetRate,
+      `${pathId} ${targetEventId} bias too weak: targetRate=${targetRate.toFixed(3)}, expected >= ${minTargetRate}`
+    );
+  });
+
   console.log(`Event bias distribution checks passed: ${JSON.stringify(results)}`);
 })();
