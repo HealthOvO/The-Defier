@@ -20,19 +20,16 @@ async function safeScreenshot(page, outPath) {
 }
 
 async function clickEventChoice(page, selector) {
-  try {
-    await page.click(selector, { timeout: 3000, force: true, noWaitAfter: true });
-    return 'playwright-force-click';
-  } catch (err) {
-    const fallback = await page.evaluate((targetSelector) => {
-      const btn = document.querySelector(targetSelector);
-      if (!btn) return { ok: false, reason: 'missing' };
-      btn.click();
-      return { ok: true };
-    }, selector).catch(() => ({ ok: false, reason: 'evaluate-failed' }));
-    if (fallback?.ok) return 'dom-click-fallback';
-    throw err;
-  }
+  await page.waitForSelector(selector, { timeout: 3000 });
+  const result = await page.evaluate((targetSelector) => {
+    const btn = document.querySelector(targetSelector);
+    if (!btn) return { ok: false, reason: 'missing' };
+    btn.scrollIntoView({ block: 'center', inline: 'center' });
+    btn.click();
+    return { ok: true };
+  }, selector).catch(() => ({ ok: false, reason: 'evaluate-failed' }));
+  if (result?.ok) return 'dom-click';
+  throw new Error(`failed to click event choice: ${selector} (${result?.reason || 'unknown'})`);
 }
 
 async function getSnapshot(page) {
