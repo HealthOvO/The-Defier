@@ -514,17 +514,38 @@ async function prepareScenario(page, scenarioId) {
       }
     };
 
-    const showMapProbe = () => {
+    const settleMapViewport = async () => {
+      const normalize = () => {
+        const scroller = document.querySelector('#map-scroll-container');
+        if (scroller) {
+          scroller.style.scrollBehavior = 'auto';
+          if (typeof scroller.scrollTo === 'function') {
+            scroller.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+          }
+          scroller.scrollTop = 0;
+          scroller.scrollLeft = 0;
+        }
+      };
+      for (const delayMs of [140, 120, 180, 240]) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        normalize();
+      }
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      normalize();
+    };
+
+    const showMapProbe = async () => {
       ensureGame();
       if (typeof game.startRealm === 'function') {
         game.startRealm(1, false);
       } else {
         game.showScreen('map-screen');
       }
+      await settleMapViewport();
     };
 
-    const showMapToolsProbe = () => {
-      showMapProbe();
+    const showMapToolsProbe = async () => {
+      await showMapProbe();
       const shell = document.querySelector('#map-screen .map-screen-v3');
       if (shell) {
         shell.classList.add('show-map-tools');
@@ -538,12 +559,13 @@ async function prepareScenario(page, scenarioId) {
       }
     };
 
-    const showMapExpeditionIntelProbe = () => {
+    const showMapExpeditionIntelProbe = async () => {
       ensureGame();
       if (typeof game.initializeExpeditionForRealm === 'function') {
         game.initializeExpeditionForRealm(game.player?.realm || 1, true);
       }
       game.showScreen('map-screen');
+      await settleMapViewport();
       const container = document.getElementById('map-screen');
       const shell = container?.querySelector('.map-screen-v3');
       if (shell) {
@@ -572,8 +594,8 @@ async function prepareScenario(page, scenarioId) {
       };
     };
 
-    const clickMapHeaderToggle = (action) => {
-      showMapProbe();
+    const clickMapHeaderToggle = async (action) => {
+      await showMapProbe();
       const container = document.getElementById('map-screen');
       const shell = container?.querySelector('.map-screen-v3');
       if (!container || !shell) return { ok: false, reason: 'missing_map_shell', action };
@@ -1289,21 +1311,21 @@ async function prepareScenario(page, scenarioId) {
         if (typeof game.initRealmSelect === 'function') game.initRealmSelect();
         break;
       case 'map-screen':
-        showMapProbe();
+        await showMapProbe();
         break;
       case 'map-screen-tools':
-        showMapToolsProbe();
+        await showMapToolsProbe();
         break;
       case 'map-screen-intel-toggle':
-        setupResult = clickMapHeaderToggle('toggle-map-intel');
+        setupResult = await clickMapHeaderToggle('toggle-map-intel');
         if (!setupResult.ok) return setupResult;
         break;
       case 'map-screen-tools-toggle':
-        setupResult = clickMapHeaderToggle('toggle-map-tools');
+        setupResult = await clickMapHeaderToggle('toggle-map-tools');
         if (!setupResult.ok) return setupResult;
         break;
       case 'map-screen-expedition-intel-click':
-        setupResult = showMapExpeditionIntelProbe();
+        setupResult = await showMapExpeditionIntelProbe();
         if (!setupResult.ok) return setupResult;
         break;
       case 'battle-screen':
