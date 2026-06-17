@@ -3974,7 +3974,7 @@ function rectObj(rect) {
     };
     if (actionCount <= 0) return probe;
 
-    await page.click(selector, { timeout: 5000, force: true });
+    await page.click(selector, { timeout: 5000, force: true, noWaitAfter: true });
     try {
       await page.waitForFunction(() => {
         const titleText = (document.getElementById('challenge-hub-title')?.textContent || '').replace(/\s+/g, ' ').trim();
