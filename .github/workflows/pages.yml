@@ -127,6 +127,7 @@ jobs:
         run: bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-${{ matrix.shard }}
 
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs:
       - build
       - browser-release
