@@ -41,6 +41,17 @@ audit_kill_after_for() {
   esac
 }
 
+filter_audit_log() {
+  awk '
+    /^\[[^]]+\] START / { print; fflush(); next }
+    /^\[[^]]+\] END / { print; fflush(); next }
+    /^\[run_with_timeout\]/ { print; fflush(); next }
+    /"summary":/ { print; fflush(); next }
+    /"failed":/ { print; fflush(); next }
+    /"consoleErrors":/ { print; fflush(); next }
+  '
+}
+
 run_audit() {
   local name="$1"
   shift
@@ -60,8 +71,10 @@ run_audit() {
   echo "[release-checks] LOG $name $log_path"
 
   set +e
-  node tests/run_with_timeout.mjs "$timeout_seconds" "$kill_after_seconds" "$@" > "$log_path" 2>&1
-  status=$?
+  node tests/run_with_timeout.mjs "$timeout_seconds" "$kill_after_seconds" "$@" 2>&1 \
+    | tee "$log_path" \
+    | filter_audit_log
+  status=${PIPESTATUS[0]}
   set -e
 
   end_ts="$(date +%s)"

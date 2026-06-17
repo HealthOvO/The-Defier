@@ -3231,6 +3231,7 @@ async function inspectBattleOverlaySwitchGuard(page) {
 
     for (const scenario of scenarios) {
       const scenarioStart = Date.now();
+      console.log(`[frontend-layout] START ${viewport.id}/${scenario.id}`);
       let prepareResult = null;
       try {
         prepareResult = await prepareScenario(page, scenario.id);
