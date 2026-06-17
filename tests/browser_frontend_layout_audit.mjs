@@ -7,6 +7,14 @@ const url = process.argv[2] || 'http://127.0.0.1:4173';
 const outDir = process.argv[3] || 'output/browser-frontend-layout-audit';
 fs.mkdirSync(outDir, { recursive: true });
 
+const screenshotMode = String(
+  process.env.FRONTEND_LAYOUT_SCREENSHOT_MODE || (process.env.CI ? 'cdp' : 'playwright'),
+).toLowerCase();
+const captureScreenshots = !['0', 'false', 'off', 'none', 'skip'].includes(screenshotMode);
+const preferCdpScreenshots = screenshotMode === 'cdp';
+const screenshotTimeoutMs = Number.parseInt(process.env.FRONTEND_LAYOUT_SCREENSHOT_TIMEOUT_MS || '8000', 10);
+const cdpScreenshotTimeoutMs = Number.parseInt(process.env.FRONTEND_LAYOUT_CDP_SCREENSHOT_TIMEOUT_MS || '5000', 10);
+
 const viewports = [
   { id: 'desktop', width: 1440, height: 960, isMobile: false },
   { id: 'short', width: 1366, height: 720, isMobile: false },
@@ -94,6 +102,17 @@ function recordConsoleError(text) {
 
 function screenshotName(viewportId, scenarioId) {
   return `${viewportId}-${scenarioId}.png`.replace(/[^a-z0-9_.-]/gi, '-');
+}
+
+async function captureFrontendLayoutScreenshot(page, screenshotPath, label) {
+  if (!captureScreenshots) return false;
+  return safeAuditScreenshot(page, screenshotPath, label, {
+    fullPage: false,
+    timeout: screenshotTimeoutMs,
+    cdpTimeout: cdpScreenshotTimeoutMs,
+    preferCdp: preferCdpScreenshots,
+    fallbackToPlaywright: !preferCdpScreenshots,
+  });
 }
 
 async function waitForPaint(page) {
@@ -2582,7 +2601,7 @@ async function inspectLayout(page, rootSelector, scenarioId) {
         }
       }
 
-      if (isInteractive && style.overflow !== 'visible' && !isIntentionallyClamped(el)) {
+      if (isInteractive && intersectsViewport && style.overflow !== 'visible' && !isIntentionallyClamped(el)) {
         const clippedX = el.scrollWidth > el.clientWidth + 3;
         const clippedY = el.scrollHeight > el.clientHeight + 3 && !isScrollable(el, 'y');
         if (clippedX || clippedY) {
@@ -3208,6 +3227,7 @@ async function inspectBattleOverlaySwitchGuard(page) {
     await page.waitForTimeout(1400);
 
     for (const scenario of scenarios) {
+      const scenarioStart = Date.now();
       let prepareResult = null;
       try {
         prepareResult = await prepareScenario(page, scenario.id);
@@ -3217,14 +3237,16 @@ async function inspectBattleOverlaySwitchGuard(page) {
           type: 'setup-error',
           message: err?.message || String(err),
         }));
+        console.log(`[frontend-layout] END ${viewport.id}/${scenario.id} pass=0 duration=${Date.now() - scenarioStart}ms setup-error`);
         continue;
       }
 
       const screenshotPath = path.join(outDir, screenshotName(viewport.id, scenario.id));
-      await safeAuditScreenshot(page, screenshotPath, `frontend-layout-${viewport.id}-${scenario.id}`, {
-        fullPage: false,
-        timeout: 8000,
-      });
+      const screenshotCaptured = await captureFrontendLayoutScreenshot(
+        page,
+        screenshotPath,
+        `frontend-layout-${viewport.id}-${scenario.id}`,
+      );
 
       const rootSelector = prepareResult?.rootSelector || scenario.root;
       const result = await inspectLayout(page, rootSelector, scenario.id);
@@ -3234,16 +3256,20 @@ async function inspectBattleOverlaySwitchGuard(page) {
       let overlayStressScreenshot = null;
       if (!overlayStress.skipped) {
         const overlayScreenshotPath = path.join(outDir, screenshotName(viewport.id, `${scenario.id}-battle-log-stress`));
-        await safeAuditScreenshot(page, overlayScreenshotPath, `frontend-layout-${viewport.id}-${scenario.id}-battle-log-stress`, {
-          fullPage: false,
-          timeout: 8000,
-        });
-        overlayStressScreenshot = path.relative(process.cwd(), overlayScreenshotPath).replace(/\\/g, '/');
+        const overlayScreenshotCaptured = await captureFrontendLayoutScreenshot(
+          page,
+          overlayScreenshotPath,
+          `frontend-layout-${viewport.id}-${scenario.id}-battle-log-stress`,
+        );
+        overlayStressScreenshot = overlayScreenshotCaptured
+          ? path.relative(process.cwd(), overlayScreenshotPath).replace(/\\/g, '/')
+          : null;
       }
       const detail = {
         title: scenario.title,
         setup: prepareResult,
-        screenshot: path.relative(process.cwd(), screenshotPath).replace(/\\/g, '/'),
+        screenshot: screenshotCaptured ? path.relative(process.cwd(), screenshotPath).replace(/\\/g, '/') : null,
+        screenshotMode,
         overlayStress,
         mapExpeditionIntel,
         mapNodeClick,
@@ -3256,41 +3282,48 @@ async function inspectBattleOverlaySwitchGuard(page) {
           prepareResult?.activation === 'real-battle-resolver'
           && prepareResult?.webdriverOverrideApplied === true
         );
+      const pass = !!prepareResult?.ok
+        && realBattleResolverOk
+        && !!result?.ok
+        && !!overlayStress?.ok
+        && !!mapExpeditionIntel?.ok
+        && !!mapNodeClick?.ok;
       add(
         viewport.id,
         scenario.id,
-        !!prepareResult?.ok
-          && realBattleResolverOk
-          && !!result?.ok
-          && !!overlayStress?.ok
-          && !!mapExpeditionIntel?.ok
-          && !!mapNodeClick?.ok,
+        pass,
         JSON.stringify({
           ...detail,
           realBattleResolverRequired,
           realBattleResolverOk,
         }),
       );
+      console.log(`[frontend-layout] END ${viewport.id}/${scenario.id} pass=${pass ? 1 : 0} duration=${Date.now() - scenarioStart}ms`);
     }
 
     try {
+      const switchGuardStart = Date.now();
       const switchGuard = await inspectBattleOverlaySwitchGuard(page);
       const screenshotPath = path.join(outDir, screenshotName(viewport.id, 'battle-overlay-switch-guard'));
-      await safeAuditScreenshot(page, screenshotPath, `frontend-layout-${viewport.id}-battle-overlay-switch-guard`, {
-        fullPage: false,
-        timeout: 8000,
-      });
+      const screenshotCaptured = await captureFrontendLayoutScreenshot(
+        page,
+        screenshotPath,
+        `frontend-layout-${viewport.id}-battle-overlay-switch-guard`,
+      );
       add(viewport.id, 'battle-overlay-switch-guard', !!switchGuard?.ok, JSON.stringify({
         title: 'Battle Overlay Switch Guard',
-        screenshot: path.relative(process.cwd(), screenshotPath).replace(/\\/g, '/'),
+        screenshot: screenshotCaptured ? path.relative(process.cwd(), screenshotPath).replace(/\\/g, '/') : null,
+        screenshotMode,
         ...switchGuard,
       }));
+      console.log(`[frontend-layout] END ${viewport.id}/battle-overlay-switch-guard pass=${switchGuard?.ok ? 1 : 0} duration=${Date.now() - switchGuardStart}ms`);
     } catch (err) {
       add(viewport.id, 'battle-overlay-switch-guard', false, JSON.stringify({
         title: 'Battle Overlay Switch Guard',
         type: 'setup-error',
         message: err?.message || String(err),
       }));
+      console.log(`[frontend-layout] END ${viewport.id}/battle-overlay-switch-guard pass=0 setup-error`);
     }
 
     await closeWithTimeout(() => page.close(), `page:${viewport.id}`, 3000);
