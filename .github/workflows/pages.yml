@@ -45,8 +45,63 @@ jobs:
       - name: Run node checks
         run: npm run test:node
 
+      - name: Upload Pages preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-site
+          path: .site
+          retention-days: 1
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .site
+
+  browser-release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: core-ui
+            audits: core,feature,automation-boot,map-overview-risk,ui-gallery
+          - shard: frontend-layout
+            audits: frontend-layout
+          - shard: backend-mobile-meta
+            audits: backend-client,auth-ui-cloud,mobile,reward-mobile,meta
+          - shard: run-path-challenge
+            audits: chapter-flow,run-path,run-path-events,run-path-reward,dongfu,challenge
+          - shard: expedition-pvp
+            audits: expedition,events,vow-choice,guide,inheritance,pvp,pvp-mobile,pvp-mobile-result,challenge-mobile-flow
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
+
+      - name: Download Pages preview artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pages-site
+          path: .site
 
       - name: Start Pages preview server
         run: |
@@ -60,19 +115,15 @@ jobs:
           cat /tmp/the-defier-preview.log
           exit 1
 
-      - name: Run browser release checks
-        run: npm run test:browser:release
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: .site
+      - name: Run browser release checks (${{ matrix.shard }})
+        env:
+          AUDIT_FILTER: ${{ matrix.audits }}
+        run: bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-${{ matrix.shard }}
 
   deploy:
-    needs: build
+    needs:
+      - build
+      - browser-release
     runs-on: ubuntu-latest
 
     environment:
