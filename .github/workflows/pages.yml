@@ -95,6 +95,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install backend dependencies
+        if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud')
+        run: npm ci --prefix server
+
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
