@@ -501,15 +501,41 @@ function add(name, pass, detail = '') {
     window.scrollTo(0, 0);
     document.querySelector('#map-screen .map-scroll-container')?.scrollTo(0, 0);
     document.getElementById('map-expedition-panels')?.scrollTo(0, 0);
-    if (window.Utils && typeof window.Utils.showBattleLog === 'function') {
-      window.Utils.showBattleLog('移动端远征遮挡测试：非战斗反馈不应挡住情报卡片。', { category: 'system', duration: 6000 });
-    }
   });
+  const expeditionToastSetup = await page.evaluate(() => {
+    const message = '移动端远征遮挡测试：非战斗反馈不应挡住情报卡片。';
+    const log = document.getElementById('battle-log');
+    const utilsAvailable = !!(window.Utils && typeof window.Utils.showBattleLog === 'function');
+    if (window.Utils && typeof window.Utils.showBattleLog === 'function') {
+      window.Utils.showBattleLog(message, { category: 'system', duration: 6000 });
+    } else if (log) {
+      log.textContent = message;
+      log.classList.remove('log-damage', 'log-status', 'log-reward', 'log-warning');
+      log.classList.add('log-system', 'show');
+    }
+    return {
+      utilsAvailable,
+      className: log?.className || '',
+      text: (log?.textContent || '').replace(/\s+/g, ' ').trim(),
+    };
+  });
+  await page.waitForFunction(() => {
+    const log = document.getElementById('battle-log');
+    if (!log) return false;
+    const style = getComputedStyle(log);
+    return log.classList.contains('show')
+      && style.display !== 'none'
+      && style.visibility !== 'hidden'
+      && Number(style.opacity) > 0.01
+      && log.getBoundingClientRect().width > 0
+      && log.getBoundingClientRect().height > 0;
+  }, null, { timeout: 2000 }).catch(() => {});
   await page.waitForTimeout(250);
-  const expeditionToastProbe = await page.evaluate(() => {
+  const expeditionToastProbe = await page.evaluate((toastSetup) => {
     const log = document.getElementById('battle-log');
     const firstCard = document.querySelector('#map-expedition-panels .expedition-panel-card');
     const headerButtons = Array.from(document.querySelectorAll('#map-screen .map-v3-header button, #map-screen .map-v3-header [role="button"]'));
+    const style = log ? getComputedStyle(log) : null;
     const rectObj = (el) => {
       if (!el) return null;
       const rect = el.getBoundingClientRect();
@@ -532,9 +558,9 @@ function add(name, pass, detail = '') {
     };
     const isVisible = (el) => {
       if (!el) return false;
-      const style = getComputedStyle(el);
+      const elementStyle = getComputedStyle(el);
       const rect = el.getBoundingClientRect();
-      return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0 && rect.width > 0 && rect.height > 0;
+      return elementStyle.display !== 'none' && elementStyle.visibility !== 'hidden' && Number(elementStyle.opacity) > 0.01 && rect.width > 0 && rect.height > 0;
     };
     const logRect = rectObj(log);
     const firstCardRect = rectObj(firstCard);
@@ -545,14 +571,18 @@ function add(name, pass, detail = '') {
     })).filter((entry) => entry.overlap > 12);
     const firstCardOverlap = Math.round(overlapArea(logRect, firstCardRect));
     return {
+      toastSetup,
       logVisible: isVisible(log),
+      logClassName: log?.className || '',
+      logOpacity: style?.opacity || '',
+      logText: (log?.textContent || '').replace(/\s+/g, ' ').trim(),
       logRect,
       firstCardRect,
       firstCardOverlap,
       buttonOverlaps,
       ok: isVisible(log) && firstCardOverlap <= 12 && buttonOverlaps.length === 0
     };
-  });
+  }, expeditionToastSetup);
   add(
     'mobile expedition non-battle toast does not cover map header actions or first expedition card',
     !!expeditionToastProbe && !!expeditionToastProbe.ok,
