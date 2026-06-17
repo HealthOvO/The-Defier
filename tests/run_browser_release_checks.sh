@@ -48,15 +48,19 @@ run_audit() {
   local end_ts
   local timeout_seconds
   local kill_after_seconds
+  local log_path
   local status
 
   start_ts="$(date +%s)"
   timeout_seconds="$(audit_timeout_for "$name")"
   kill_after_seconds="$(audit_kill_after_for "$name")"
+  log_path="$OUTPUT_ROOT/$name/audit.log"
+  mkdir -p "$(dirname "$log_path")"
   echo "[release-checks] START $name"
+  echo "[release-checks] LOG $name $log_path"
 
   set +e
-  node tests/run_with_timeout.mjs "$timeout_seconds" "$kill_after_seconds" "$@"
+  node tests/run_with_timeout.mjs "$timeout_seconds" "$kill_after_seconds" "$@" > "$log_path" 2>&1
   status=$?
   set -e
 
@@ -65,6 +69,11 @@ run_audit() {
 
   if [ "$status" -eq 124 ]; then
     echo "[release-checks] TIMEOUT $name after ${timeout_seconds}s" >&2
+  fi
+
+  if [ "$status" -ne 0 ]; then
+    echo "[release-checks] Last log lines for $name:" >&2
+    tail -n "${AUDIT_FAILURE_LOG_LINES:-120}" "$log_path" | cut -c "1-${AUDIT_FAILURE_LOG_CHARS:-2000}" >&2
   fi
 
   return "$status"
