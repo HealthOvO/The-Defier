@@ -8,7 +8,7 @@ const outDir = process.argv[3] || 'output/browser-frontend-layout-audit';
 fs.mkdirSync(outDir, { recursive: true });
 
 const screenshotMode = String(
-  process.env.FRONTEND_LAYOUT_SCREENSHOT_MODE || (process.env.CI ? 'cdp' : 'playwright'),
+  process.env.FRONTEND_LAYOUT_SCREENSHOT_MODE || (process.env.CI ? 'skip' : 'playwright'),
 ).toLowerCase();
 const captureScreenshots = !['0', 'false', 'off', 'none', 'skip'].includes(screenshotMode);
 const preferCdpScreenshots = screenshotMode === 'cdp';
