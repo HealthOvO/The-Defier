@@ -67,6 +67,16 @@ async function captureScreenshotViaCdp(page, outPath, fullPage, timeoutMs) {
 }
 
 export async function safeAuditScreenshot(page, outPath, label, options = {}) {
+  const screenshotMode = String(
+    options.mode
+      || process.env.BROWSER_AUDIT_SCREENSHOT_MODE
+      || process.env.AUDIT_SCREENSHOT_MODE
+      || '',
+  ).toLowerCase();
+  if (['0', 'false', 'off', 'none', 'skip'].includes(screenshotMode)) {
+    return false;
+  }
+
   const fullPage = options.fullPage !== false;
   const timeout = Number.isFinite(options.timeout) ? options.timeout : 8000;
   const cdpTimeout = Number.isFinite(options.cdpTimeout) ? options.cdpTimeout : 0;

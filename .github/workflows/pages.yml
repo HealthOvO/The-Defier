@@ -123,6 +123,7 @@ jobs:
       - name: Run browser release checks (${{ matrix.shard }})
         env:
           AUDIT_FILTER: ${{ matrix.audits }}
+          BROWSER_AUDIT_SCREENSHOT_MODE: skip
         run: bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-${{ matrix.shard }}
 
   deploy:
