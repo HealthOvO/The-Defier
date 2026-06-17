@@ -14,6 +14,9 @@ const captureScreenshots = !['0', 'false', 'off', 'none', 'skip'].includes(scree
 const preferCdpScreenshots = screenshotMode === 'cdp';
 const screenshotTimeoutMs = Number.parseInt(process.env.FRONTEND_LAYOUT_SCREENSHOT_TIMEOUT_MS || '8000', 10);
 const cdpScreenshotTimeoutMs = Number.parseInt(process.env.FRONTEND_LAYOUT_CDP_SCREENSHOT_TIMEOUT_MS || '5000', 10);
+const reportLogMode = String(
+  process.env.FRONTEND_LAYOUT_REPORT_LOG || (process.env.CI ? 'summary' : 'full'),
+).toLowerCase();
 
 const viewports = [
   { id: 'desktop', width: 1440, height: 960, isMobile: false },
@@ -3341,10 +3344,22 @@ async function inspectBattleOverlaySwitchGuard(page) {
     },
   };
 
-  fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify(report, null, 2));
+  const reportPath = path.join(outDir, 'report.json');
+  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
 
   await closeWithTimeout(() => browser.close(), 'browser', 5000);
+
+  if (reportLogMode === 'full') {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    console.log(JSON.stringify({
+      url,
+      generatedAt: report.generatedAt,
+      report: path.relative(process.cwd(), reportPath).replace(/\\/g, '/'),
+      screenshotMode,
+      summary: report.summary,
+    }, null, 2));
+  }
 
   process.exit(report.summary.failed > 0 || report.summary.consoleErrors > 0 ? 1 : 0);
 })().catch((err) => {
