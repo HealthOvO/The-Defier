@@ -1303,11 +1303,13 @@ async function safeScreenshot(page, outPath) {
   });
   add('log history keeps onboarding tips', hasGuideEntry, hasGuideEntry ? '' : 'guide text not found in history');
 
-  await page.click('.log-filter-btn[data-filter=\"system\"]', { timeout: 3000, force: true });
-  await page.waitForTimeout(200);
   const systemFilterApplied = await page.evaluate(() => {
-    const active = document.querySelector('.log-filter-btn.active');
-    return active ? active.dataset.filter : '';
+    const button = document.querySelector('.log-filter-btn[data-filter="system"]');
+    if (button instanceof HTMLButtonElement) button.click();
+    return new Promise((resolve) => requestAnimationFrame(() => {
+      const active = document.querySelector('.log-filter-btn.active');
+      resolve(active ? active.dataset.filter : '');
+    }));
   });
   add('log filter switch works', systemFilterApplied === 'system', `active=${systemFilterApplied}`);
 
