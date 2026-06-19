@@ -319,6 +319,80 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         });
         assert.equal(wideGapRequester.payload.status, 'waiting', 'long-wait wide rating gap should not auto-match without explicit acceptance');
         pvpLiveRoutes.__livePvpStore.reset();
+
+        const oneSidedWideSeed = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenJ,
+            body: { displayName: '单方宽差等待者', loadout: loadoutA }
+        });
+        assert.equal(oneSidedWideSeed.payload.status, 'waiting', 'wide rating gap seed should wait before one-sided consent probe');
+        const oneSidedWideTicket = pvpLiveRoutes.__livePvpStore.waitingQueue.find(ticket => ticket.queueTicket === oneSidedWideSeed.payload.queueTicket);
+        assert.ok(oneSidedWideTicket, 'one-sided wide gap waiting ticket should exist in store');
+        oneSidedWideTicket.createdAt = Date.now() - (pvpLiveRoutes.__livePvpStore.longWaitThresholdMs * 3);
+        const oneSidedWideRequester = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenK,
+            body: { displayName: '单方宽差新入', loadout: loadoutB, wideMatchConsent: true }
+        });
+        assert.equal(oneSidedWideRequester.payload.status, 'waiting', 'one-sided wide rating consent should not match without the waiting player consent');
+        pvpLiveRoutes.__livePvpStore.reset();
+
+        const acceptedWideSeed = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenJ,
+            body: { displayName: '双方宽差等待者', loadout: loadoutA, wideMatchConsent: true }
+        });
+        assert.equal(acceptedWideSeed.payload.status, 'waiting', 'wide rating accepted seed should wait until another accepted player joins');
+        const acceptedWideTicket = pvpLiveRoutes.__livePvpStore.waitingQueue.find(ticket => ticket.queueTicket === acceptedWideSeed.payload.queueTicket);
+        assert.ok(acceptedWideTicket, 'accepted wide gap waiting ticket should exist in store');
+        acceptedWideTicket.createdAt = Date.now() - (pvpLiveRoutes.__livePvpStore.longWaitThresholdMs * 3);
+        const acceptedWideRequester = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenK,
+            body: { displayName: '双方宽差新入', loadout: loadoutB, wideMatchConsent: true }
+        });
+        assert.equal(acceptedWideRequester.payload.status, 'matched', 'two-sided wide rating consent should allow an explicit wide match');
+        assert.equal(acceptedWideRequester.payload.stateView.matchQuality?.tag, 'wide_but_accepted', 'accepted wide match should expose wide_but_accepted quality tag');
+        assert.equal(acceptedWideRequester.payload.stateView.matchQuality?.expansionStage, 'accepted_200_399', 'accepted wide match should expose accepted 200-399 stage');
+        assert.equal(acceptedWideRequester.payload.stateView.matchQuality?.ratingDeltaBucket, 'expanded_200_399', 'accepted wide match should expose bucketed wide rating delta');
+        assert.equal(acceptedWideRequester.payload.stateView.matchQuality?.wideMatchReason, 'two_sided_explicit_consent', 'accepted wide match should explain explicit two-sided consent');
+        assert.ok(acceptedWideRequester.payload.stateView.matchQuality?.safeguards?.includes('explicit_wide_match_consent'), 'accepted wide match should keep explicit consent safeguard');
+        assert.ok(!/1250|1000/.test(JSON.stringify(acceptedWideRequester.payload.stateView.matchQuality || {})), 'accepted wide match quality should not expose exact player ratings');
+        pvpLiveRoutes.__livePvpStore.reset();
+
+        const laterConsentSeed = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenJ,
+            body: { displayName: '后确认宽差等待者', loadout: loadoutA }
+        });
+        assert.equal(laterConsentSeed.payload.status, 'waiting', 'later wide consent seed should start as waiting without consent');
+        const laterConsentRequester = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenK,
+            body: { displayName: '后确认宽差新入', loadout: loadoutB }
+        });
+        assert.equal(laterConsentRequester.payload.status, 'waiting', 'later wide consent requester should also wait before either player confirms');
+        pvpLiveRoutes.__livePvpStore.waitingQueue.forEach(ticket => {
+            if (ticket && (ticket.queueTicket === laterConsentSeed.payload.queueTicket || ticket.queueTicket === laterConsentRequester.payload.queueTicket)) {
+                ticket.createdAt = Date.now() - (pvpLiveRoutes.__livePvpStore.longWaitThresholdMs * 3);
+            }
+        });
+        const laterSeedConsent = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenJ,
+            body: { displayName: '后确认宽差等待者', loadout: loadoutAChanged, wideMatchConsent: true }
+        });
+        assert.equal(laterSeedConsent.payload.status, 'waiting', 'first later wide consent should only update consent and preserve waiting');
+        assert.equal(laterSeedConsent.payload.loadoutHash, laterConsentSeed.payload.loadoutHash, 'first later wide consent should not overwrite the locked waiting loadout');
+        const laterRequesterConsent = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenK,
+            body: { displayName: '后确认宽差新入', loadout: loadoutB, wideMatchConsent: true }
+        });
+        assert.equal(laterRequesterConsent.payload.status, 'matched', 'second later wide consent should immediately match two existing waiting players');
+        assert.equal(laterRequesterConsent.payload.stateView.matchQuality?.tag, 'wide_but_accepted', 'later accepted wide match should expose wide_but_accepted quality tag');
+        assert.equal(laterRequesterConsent.payload.stateView.matchQuality?.wideMatchReason, 'two_sided_explicit_consent', 'later accepted wide match should explain explicit two-sided consent');
+        pvpLiveRoutes.__livePvpStore.reset();
         pvpLiveRoutes.__attachServices({ ratingProvider: null });
 
         const inviteC = await request(baseUrl, '/api/pvp/live/invites', {

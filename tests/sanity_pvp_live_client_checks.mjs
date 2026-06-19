@@ -72,6 +72,10 @@ assert.equal(calls.at(-1).options.method, 'POST', 'live queue join should POST')
 assert.deepEqual(calls.at(-1).options.data, { displayName: '甲', loadout: liveLoadout }, 'live queue join should forward display name and loadout snapshot candidate');
 assert.notEqual(calls.at(-1).options.data.loadout, liveLoadout, 'live queue join should clone loadout before sending');
 
+const wideConsentJoin = await BackendClient.joinLivePvpQueue({ displayName: '甲', loadout: liveLoadout, wideMatchConsent: true });
+assert.equal(wideConsentJoin.success, true, 'live queue join should accept explicit wide match consent');
+assert.equal(calls.at(-1).options.data.wideMatchConsent, true, 'live queue join should forward explicit wide match consent only when selected');
+
 const longName = `  ${'甲'.repeat(48)}  `;
 const trimmed = await BackendClient.joinLivePvpQueue({ displayName: longName });
 assert.equal(trimmed.success, true, 'live queue join should accept long display name');

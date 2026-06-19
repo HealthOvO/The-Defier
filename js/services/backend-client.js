@@ -794,6 +794,9 @@ export const BackendClient = {
       if (options.loadout && typeof options.loadout === 'object' && !Array.isArray(options.loadout)) {
         data.loadout = this.cloneData(options.loadout);
       }
+      if (options.wideMatchConsent === true) {
+        data.wideMatchConsent = true;
+      }
       const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/queue/join`, {
         method: 'POST',
         data

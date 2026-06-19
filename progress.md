@@ -1,5 +1,27 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-19: V10-S8B live ranked 双方同意宽分差匹配
+  - 本轮完成
+    - live ranked 公共队列新增 `wideMatchConsent` 合同：`200-399` 分差仍不自动匹配，只有长等待扩圈阶段且双方都显式同意时才允许成局；单方同意继续保持 waiting，两个已在 waiting 的玩家后续依次确认后也会立即重新撮合。
+    - `server/pvp-live/live-store.js` 新增 `wide_but_accepted / accepted_200_399 / two_sided_explicit_consent` 匹配质量报告，继续只暴露 rating bucket、candidatePoolSize 和 safeguards，不泄露精确评分。
+    - `pvp_live_queue_tickets` 新增 `wide_match_consent` 持久化字段，`server/pvp-live/live-persistence.js` 可保存 / 恢复等待方同意；重复入队只更新 consent，不重置斗法谱快照或排队时间。
+    - `BackendClient` / `PVPService.live` / `PvpLiveSession` / `PVPScene` 打通 `wideMatchConsent=true` 可选透传；长等待报告新增“接受宽分差”动作，点击后短暂恢复轮询，但仍需对方也确认，不会自动切残影。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定 route、persistence、schema、client 和 UI contract marker，避免后续只保留后端策略而删掉玩家可见入口或持久化合同。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于“双向宽分差同意仍返回 waiting”。
+    - 红测：`node tests/sanity_pvp_live_persistence_checks.cjs` 在实现前失败于“重启后等待方同意未恢复”。
+    - 红测：`node tests/sanity_pvp_live_client_checks.mjs` 在实现前失败于 `wideMatchConsent` 未进入 POST body。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于缺少 `acceptLiveWideMatch` UI 合同。
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_persistence_checks.cjs`
+    - `node tests/sanity_pvp_live_client_checks.mjs`
+    - `node tests/sanity_pvp_live_service_bridge_checks.cjs`
+    - `node tests/sanity_pvp_live_session_checks.mjs`
+    - `node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - live ranked 现在可以在长等待后给双方一个明确、可审计、非强制的宽分差选择，减少真人池不足时的等待挫败，同时避免强弱差自动碾压。它仍不是多实例共享队列、跨进程 WS/队列共享、更广义正式赛季入口、生产 smoke 或线上部署。
+
 - 2026-06-19: V10-S8A live PVP 移动端真实后端 smoke
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增 `BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile` 模式，同一条真实后端双账号链路可在 390x844 / touch 视口下完成入队、匹配、ready、出牌、换手、认输、正式结算、赛季荣誉收藏、公开 replay / audit_safe 负向检查和 ready timeout invalidated 负向检查。

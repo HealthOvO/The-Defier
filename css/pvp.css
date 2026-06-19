@@ -3878,6 +3878,12 @@ input:checked+.seal-slider .seal-face.on {
         padding-top: 6px;
     }
 
+    [data-live-phase="matched"] .pvp-live-loadout-selector,
+    [data-live-phase="setup"] .pvp-live-loadout-selector,
+    [data-live-phase="active"] .pvp-live-loadout-selector {
+        display: none;
+    }
+
     .pvp-live-invite-controls {
         grid-template-columns: 1fr;
     }

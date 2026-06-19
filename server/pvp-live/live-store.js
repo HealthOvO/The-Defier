@@ -56,6 +56,10 @@ function normalizePlayer(player, now = () => Date.now()) {
     };
 }
 
+function normalizeWideMatchConsent(value) {
+    return value === true || value === 'true' || value === 1 || value === '1';
+}
+
 function normalizeRatingScore(value) {
     const numeric = Number(value);
     return Math.max(0, Math.min(9999, Math.floor(Number.isFinite(numeric) ? numeric : DEFAULT_RATING_SCORE)));
@@ -212,6 +216,11 @@ function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHO
                 id: 'continue_waiting',
                 label: '继续等待',
                 detail: '继续等待真人，不自动切残影。'
+            },
+            {
+                id: 'accept_wide_match',
+                label: '接受宽分差',
+                detail: '仅在双方都确认后，才允许 200-399 分差真人局。'
             },
             {
                 id: 'practice',
@@ -391,12 +400,18 @@ class LivePvpStore {
             if (!existing.ratingSnapshot && queueEntry.ratingSnapshot) {
                 existing.ratingSnapshot = queueEntry.ratingSnapshot;
             }
+            if (queueEntry.wideMatchConsent === true) {
+                existing.wideMatchConsent = true;
+            }
             return existing;
         }
         const duplicateUserTicket = this.waitingQueue.find(entry => entry.player && entry.player.userId === queueEntry.player.userId);
         if (duplicateUserTicket) {
             if (!duplicateUserTicket.ratingSnapshot && queueEntry.ratingSnapshot) {
                 duplicateUserTicket.ratingSnapshot = queueEntry.ratingSnapshot;
+            }
+            if (queueEntry.wideMatchConsent === true) {
+                duplicateUserTicket.wideMatchConsent = true;
             }
             return duplicateUserTicket;
         }
@@ -853,6 +868,27 @@ class LivePvpStore {
         };
     }
 
+    makeAcceptedWideMatchQualityInput(opponentTicket, requesterEntry, matchedAt, candidatePoolSize, delta) {
+        const base = this.makeOpenPoolMatchQualityInput(opponentTicket, requesterEntry, matchedAt, candidatePoolSize);
+        return {
+            ...base,
+            tag: 'wide_but_accepted',
+            expansionStage: 'accepted_200_399',
+            ratingDeltaBucket: getRatingDeltaBucket(delta),
+            wideMatchReason: 'two_sided_explicit_consent',
+            safeguards: [
+                'server_authoritative',
+                'snapshot_locked',
+                'setup_ready_required',
+                'first_action_budget',
+                'rating_bucketed',
+                'closest_rating_candidate',
+                'no_exact_rating_exposure',
+                'explicit_wide_match_consent'
+            ]
+        };
+    }
+
     async selectQueueOpponent(requesterEntry) {
         await this.ensureQueueEntryRating(requesterEntry);
         const candidatePoolSize = this.waitingQueue.filter(ticket => ticket && ticket.player && ticket.player.userId !== requesterEntry.player.userId).length + 1;
@@ -886,6 +922,18 @@ class LivePvpStore {
                     delta,
                     createdAt: Math.max(0, Math.floor(Number(opponentTicket.createdAt) || 0)),
                     qualityInput: this.makeRatedMatchQualityInput(opponentTicket, requesterEntry, matchedAt, candidatePoolSize, delta)
+                });
+            } else if (
+                delta <= EXPANDED_RATING_DELTA
+                && policy.expansionStage === 'expanded_100_199'
+                && opponentTicket.wideMatchConsent === true
+                && requesterEntry.wideMatchConsent === true
+            ) {
+                ratedChoices.push({
+                    index,
+                    delta,
+                    createdAt: Math.max(0, Math.floor(Number(opponentTicket.createdAt) || 0)),
+                    qualityInput: this.makeAcceptedWideMatchQualityInput(opponentTicket, requesterEntry, matchedAt, candidatePoolSize, delta)
                 });
             }
         }
@@ -934,6 +982,28 @@ class LivePvpStore {
         const existingTicket = this.waitingQueue.find(ticket => ticket.player.userId === identity.userId)
             || await this.hydrateWaitingQueueEntryForUser(identity.userId);
         if (existingTicket) {
+            if (normalizeWideMatchConsent(playerInput && playerInput.wideMatchConsent) && existingTicket.wideMatchConsent !== true) {
+                existingTicket.wideMatchConsent = true;
+                await this.saveQueueEntry(existingTicket);
+            }
+            if (existingTicket.wideMatchConsent === true) {
+                await this.hydrateWaitingQueueEntriesExceptUser(identity.userId);
+                const selectedOpponent = await this.selectQueueOpponent(existingTicket);
+                if (selectedOpponent && selectedOpponent.index >= 0) {
+                    const opponentTicket = this.waitingQueue[selectedOpponent.index];
+                    if (opponentTicket && opponentTicket.player && opponentTicket.player.userId !== identity.userId) {
+                        this.waitingQueue = this.waitingQueue.filter(ticket => ticket !== opponentTicket && ticket !== existingTicket);
+                        this.queueTickets.delete(opponentTicket.queueTicket);
+                        this.queueTickets.delete(existingTicket.queueTicket);
+                        const match = await this.createMatch(opponentTicket.player, existingTicket.player, selectedOpponent.qualityInput);
+                        await this.deleteQueueEntry(opponentTicket.queueTicket);
+                        await this.deleteQueueEntry(existingTicket.queueTicket);
+                        const opponentResult = this.makeMatchedQueueResult(match, opponentTicket.player.userId);
+                        this.pendingQueueResults.set(opponentTicket.queueTicket, opponentResult);
+                        return this.makeMatchedQueueResult(match, existingTicket.player.userId);
+                    }
+                }
+            }
             return this.makeWaitingQueueResult(existingTicket);
         }
 
@@ -942,6 +1012,7 @@ class LivePvpStore {
             queueTicket: '',
             player,
             ratingSnapshot: await this.resolveRatingSnapshot(player.userId),
+            wideMatchConsent: normalizeWideMatchConsent(playerInput && playerInput.wideMatchConsent),
             createdAt: this.now()
         };
         await this.hydrateWaitingQueueEntriesExceptUser(identity.userId);
@@ -962,6 +1033,7 @@ class LivePvpStore {
             queueTicket,
             player,
             ratingSnapshot: requesterEntry.ratingSnapshot,
+            wideMatchConsent: requesterEntry.wideMatchConsent,
             createdAt: this.now()
         };
         this.waitingQueue.push(queueEntry);

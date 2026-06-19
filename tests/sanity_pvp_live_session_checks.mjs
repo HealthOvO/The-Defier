@@ -358,10 +358,11 @@ const recoveredInbox = await recoveredInboxSession.refreshInviteInbox();
 assert.equal(recoveredInbox.inviteInbox.length, 1, 'successful refreshInviteInbox should store recovered inbox notification');
 assert.equal(recoveredInbox.lastError, null, 'successful refreshInviteInbox should clear stale idle inbox errors');
 
-const waiting = await session.joinQueue({ displayName: '甲' });
+const waiting = await session.joinQueue({ displayName: '甲', wideMatchConsent: true });
 assert.equal(waiting.phase, 'waiting', 'waiting queue join should enter waiting phase');
 assert.equal(waiting.queueTicket, 'pvplq-session', 'waiting queue join should retain queue ticket');
 assert.equal(calls.at(-1).method, 'joinQueue', 'joinQueue should call live service joinQueue');
+assert.equal(calls.at(-1).options.wideMatchConsent, true, 'joinQueue should preserve explicit wide match consent for the live service');
 
 const cancelled = await session.cancelQueue();
 assert.equal(cancelled.phase, 'idle', 'cancel queue should return session to idle');

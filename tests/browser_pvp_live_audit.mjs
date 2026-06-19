@@ -524,6 +524,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
               safeguards: ['real_player_only', 'no_ghost_fallback', 'no_score_change'],
               actions: [
                 { id: 'continue_waiting', label: '继续等待', detail: '继续等待真人，不自动切残影。' },
+                { id: 'accept_wide_match', label: '接受宽分差', detail: '仅在双方都确认后，才允许 200-399 分差真人局。' },
                 { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
                 { id: 'cancel_queue', label: '取消匹配', detail: '取消本次排队，不影响正式积分。' },
               ],
@@ -888,6 +889,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     longWaitProbe.phase === 'waiting'
       && /120 秒无真人/.test(longWaitProbe.report)
       && /继续等待/.test(longWaitProbe.report)
+      && /接受宽分差/.test(longWaitProbe.report)
       && /问道练习/.test(longWaitProbe.report)
       && /取消匹配/.test(longWaitProbe.report)
       && /不会自动切残影/.test(longWaitProbe.report)
@@ -896,6 +898,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && longWaitProbe.buttons['cancel-queue'] === false
       && longWaitProbe.payload?.waitingReport?.reportVersion === 'pvp-live-waiting-report-v1'
       && longWaitProbe.payload?.waitingReport?.longWait === true
+      && longWaitProbe.payload?.waitingReport?.actions?.some(action => action.id === 'accept_wide_match' && /双方都确认/.test(action.detail))
       && longWaitProbe.payload?.waitingReport?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail))
       && !/PVPService\\.findOpponent|reportMatchResult|GhostEnemy|reward|rating|elo/i.test(`${longWaitProbe.report} ${JSON.stringify(longWaitProbe.payload?.waitingReport || {})} ${JSON.stringify(longWaitProbe.calls)}`),
     JSON.stringify(longWaitProbe),

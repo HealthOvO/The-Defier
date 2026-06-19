@@ -222,6 +222,7 @@ function makeQueueEntryFromRow(row) {
             loadoutSnapshot
         },
         ratingSnapshot,
+        wideMatchConsent: Number(row.wide_match_consent) === 1,
         createdAt: Number(row.created_at) || 0
     };
 }
@@ -279,10 +280,11 @@ function makeSqliteLivePvpPersistence() {
             if (!queueEntry || !queueEntry.queueTicket || !queueEntry.player || !queueEntry.player.userId || !queueEntry.player.loadoutSnapshot) return;
             const createdAt = Math.max(0, Math.floor(Number(queueEntry.createdAt) || Date.now()));
             const ratingSnapshot = normalizeRatingSnapshot(queueEntry.ratingSnapshot);
+            const wideMatchConsent = queueEntry.wideMatchConsent === true ? 1 : 0;
             await dbRun(
                 `INSERT INTO pvp_live_queue_tickets
-                    (queue_ticket, user_id, display_name, loadout_snapshot_json, rating_score, rating_bucket, rating_season_id, rating_provisional, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (queue_ticket, user_id, display_name, loadout_snapshot_json, rating_score, rating_bucket, rating_season_id, rating_provisional, wide_match_consent, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(user_id) DO UPDATE SET
                     queue_ticket = excluded.queue_ticket,
                     display_name = excluded.display_name,
@@ -291,6 +293,7 @@ function makeSqliteLivePvpPersistence() {
                     rating_bucket = excluded.rating_bucket,
                     rating_season_id = excluded.rating_season_id,
                     rating_provisional = excluded.rating_provisional,
+                    wide_match_consent = excluded.wide_match_consent,
                     created_at = excluded.created_at`,
                 [
                     queueEntry.queueTicket,
@@ -301,6 +304,7 @@ function makeSqliteLivePvpPersistence() {
                     ratingSnapshot.bucket,
                     ratingSnapshot.seasonId,
                     ratingSnapshot.provisional ? 1 : 0,
+                    wideMatchConsent,
                     createdAt
                 ]
             );

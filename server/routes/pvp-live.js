@@ -126,7 +126,8 @@ router.post('/queue/join', authenticate, asyncHandler(async (req, res) => {
     const result = await livePvpStore.joinQueue({
         userId: req.user.id,
         displayName: getDisplayName(req),
-        loadout: req.body && req.body.loadout
+        loadout: req.body && req.body.loadout,
+        wideMatchConsent: req.body && req.body.wideMatchConsent
     });
     if (result && result.status === 'blocked') {
         return res.status(409).json({ success: false, reason: result.reason, message: result.message || '当前无法进入公共匹配' });

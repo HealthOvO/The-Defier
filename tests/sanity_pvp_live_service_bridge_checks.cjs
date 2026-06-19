@@ -146,9 +146,10 @@ function loadFile(ctx, filePath) {
   assert(typeof PVPService.live.connectRealtime === 'function', 'PVPService.live should expose connectRealtime');
   assert(!('reportResult' in PVPService.live), 'PVPService.live must not expose client-reported result API');
 
-  const join = await PVPService.live.joinQueue({ displayName: '甲' });
+  const join = await PVPService.live.joinQueue({ displayName: '甲', wideMatchConsent: true });
   assert(join.success === true && join.status === 'waiting', 'live join bridge should forward join result');
   assert(calls.at(-1).method === 'joinLivePvpQueue', 'live join bridge should call BackendClient.joinLivePvpQueue');
+  assert(calls.at(-1).options.wideMatchConsent === true, 'live join bridge should preserve explicit wide match consent option');
 
   const cancel = await PVPService.live.cancelQueue('pvplq-test');
   assert(cancel.success === true && cancel.status === 'cancelled', 'live cancel bridge should forward cancel result');

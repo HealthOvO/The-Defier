@@ -301,6 +301,8 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   let rankedRequesterUser;
   let rankedFarQueueTicket;
   let saturatedRequesterUser;
+  let wideAcceptedWaitingUser;
+  let wideAcceptedRequesterUser;
 
   await withServer(async () => {
     waitingUserA = await registerUser('live_waiting_restart_a');
@@ -459,6 +461,47 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
      WHERE user_id LIKE ? OR user_id = ?`,
     [`saturated-fair-${process.pid}-%`, `saturated-near-${process.pid}`],
   );
+
+  await withServer(async () => {
+    wideAcceptedWaitingUser = await registerUser('live_wide_accept_restart_waiting');
+    await setRank(wideAcceptedWaitingUser, 1250, '玄阶');
+    const wideAcceptedWaitingJoin = await request('/api/pvp/live/queue/join', {
+      method: 'POST',
+      token: wideAcceptedWaitingUser.token,
+      body: {
+        displayName: '重启宽差同意等待者',
+        loadout: makeLoadout('wide-accepted-waiting', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']),
+        wideMatchConsent: true,
+      },
+    });
+    assert.equal(wideAcceptedWaitingJoin.payload.status, 'waiting', 'wide accepted waiting player should queue before restart');
+    await dbRun(
+      `UPDATE pvp_live_queue_tickets
+       SET created_at = ?
+       WHERE queue_ticket = ?`,
+      [Date.now() - (4 * 60 * 1000), wideAcceptedWaitingJoin.payload.queueTicket],
+    );
+  });
+
+  await withServer(async () => {
+    wideAcceptedRequesterUser = await registerUser('live_wide_accept_restart_requester');
+    await setRank(wideAcceptedRequesterUser, 1000, '玄阶');
+    const wideAcceptedRestartJoin = await request('/api/pvp/live/queue/join', {
+      method: 'POST',
+      token: wideAcceptedRequesterUser.token,
+      body: {
+        displayName: '重启宽差同意新入',
+        loadout: makeLoadout('wide-accepted-requester', ['pvp_guard', 'pvp_guard', 'pvp_strike', 'pvp_burst']),
+        wideMatchConsent: true,
+      },
+    });
+    assert.equal(wideAcceptedRestartJoin.payload.status, 'matched', `restarted two-sided wide consent should restore consent from the waiting queue row: ${JSON.stringify(wideAcceptedRestartJoin.payload)}`);
+    assert.equal(wideAcceptedRestartJoin.payload.stateView.opponent.displayName, '重启宽差同意等待者', 'restarted accepted wide match should pair with the persisted consenting waiting player');
+    assert.equal(wideAcceptedRestartJoin.payload.stateView.matchQuality?.tag, 'wide_but_accepted', 'restarted accepted wide match should keep wide_but_accepted tag');
+    assert.equal(wideAcceptedRestartJoin.payload.stateView.matchQuality?.expansionStage, 'accepted_200_399', 'restarted accepted wide match should keep accepted wide stage');
+    assert.ok(wideAcceptedRestartJoin.payload.stateView.matchQuality?.safeguards?.includes('explicit_wide_match_consent'), 'restarted accepted wide match should keep explicit consent safeguard');
+    assert.ok(!/1250|1000/.test(JSON.stringify(wideAcceptedRestartJoin.payload.stateView.matchQuality || {})), 'restarted accepted wide match quality should not expose exact ratings');
+  });
 
   await withServer(async () => {
     userA = await registerUser('live_persist_a');

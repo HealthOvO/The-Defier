@@ -943,7 +943,9 @@ export const PVPScene = {
       </div>
       <div>${this.escapeHtml(report.message || '当前真人较少，可继续等待、进入问道练习或取消匹配；不会自动切残影。')}</div>
       <div class="pvp-live-waiting-actions">
-        ${report.actions.map(action => `<span class="pvp-live-waiting-action" title="${this.escapeHtml(action.detail)}">${this.escapeHtml(action.label)}：${this.escapeHtml(action.detail)}</span>`).join('')}
+        ${report.actions.map(action => action.id === 'accept_wide_match'
+          ? `<button class="pvp-live-waiting-action challenge-btn secondary" type="button" data-live-waiting-action="accept-wide-match" title="${this.escapeHtml(action.detail)}" onclick="PVPScene.acceptLiveWideMatch()">${this.escapeHtml(action.label)}</button>`
+          : `<span class="pvp-live-waiting-action" title="${this.escapeHtml(action.detail)}">${this.escapeHtml(action.label)}：${this.escapeHtml(action.detail)}</span>`).join('')}
       </div>
     `;
   },
@@ -2275,7 +2277,7 @@ export const PVPScene = {
     this.liveIntentSeq += 1;
     return `live-ui-${type}-${Date.now().toString(36)}-${this.liveIntentSeq}`;
   },
-  async joinLiveQueue() {
+  async joinLiveQueue(options = {}) {
     this.liveInlineHint = '';
     const session = this.getLiveSession();
     const gameRef = this.getGameRef();
@@ -2283,7 +2285,8 @@ export const PVPScene = {
     const selectedPreset = this.getLiveSelectedLoadoutPreset();
     await session.joinQueue({
       displayName,
-      loadout: this.getLiveQueueLoadoutCandidate(selectedPreset.id)
+      loadout: this.getLiveQueueLoadoutCandidate(selectedPreset.id),
+      ...(options && options.wideMatchConsent === true ? { wideMatchConsent: true } : {})
     });
     this.liveLongWaitPollUntil = 0;
     this.renderLivePanel();
@@ -2292,6 +2295,16 @@ export const PVPScene = {
       this.liveDrillScenario = null;
     }
     if (this.shouldLivePoll(state)) this.startLivePolling();
+  },
+  async acceptLiveWideMatch() {
+    const session = this.getLiveSession();
+    const state = session && typeof session.getState === 'function' ? session.getState() : null;
+    if (!state || state.phase !== 'waiting') return;
+    await this.joinLiveQueue({ wideMatchConsent: true });
+    this.liveLongWaitPollUntil = Date.now() + 30000;
+    this.liveInlineHint = '已确认可接受 200-399 分差真人局；仍需对方也确认，不会自动切残影。';
+    this.renderLivePanel();
+    this.startLivePolling();
   },
   async createLiveInvite() {
     const session = this.getLiveSession();
