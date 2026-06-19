@@ -85,6 +85,7 @@ node tests/sanity_treasure_set_bonus_checks.cjs
 node tests/sanity_card_design_guardrail_checks.cjs
 node tests/sanity_adventure_buff_checks.cjs
 node tests/sanity_pvp_service_checks.cjs
+node tests/sanity_pvp_legacy_season_isolation_checks.cjs
 node tests/sanity_pvp_live_engine_checks.cjs
 node tests/sanity_pvp_live_balance_simulation_checks.cjs
 node tests/sanity_pvp_live_full_gate_balance_checks.cjs

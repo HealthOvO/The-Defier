@@ -738,6 +738,18 @@
     overflow-wrap: anywhere;
 }
 
+.pvp-live-mode-boundary {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(214, 183, 111, 0.18);
+    background: rgba(214, 183, 111, 0.07);
+    color: rgba(247, 236, 206, 0.92);
+    font-size: 0.76rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
 .pvp-live-turn-timer {
     margin-top: 8px;
     padding: 8px 10px;
@@ -1699,6 +1711,15 @@
 
 [data-live-phase="waiting"] .pvp-live-status-card {
     border-color: rgba(147, 205, 255, 0.32);
+}
+
+[data-live-phase="matched"] .pvp-live-mode-boundary,
+[data-live-phase="setup"] .pvp-live-mode-boundary,
+[data-live-phase="active"] .pvp-live-mode-boundary,
+[data-live-phase="sync_required"] .pvp-live-mode-boundary,
+[data-live-phase="finished"] .pvp-live-mode-boundary,
+[data-live-phase="invalidated"] .pvp-live-mode-boundary {
+    display: none;
 }
 
 [data-live-phase="setup"] .pvp-live-status-card {

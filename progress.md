@@ -1,5 +1,19 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-19: V10-S7A 正式赛季写回权限收口
+  - 本轮完成
+    - `js/game.js` 新增 `shouldRecordPVPSeasonVerification()`，正式赛季验证只允许显式 `formalSeasonVerification=true` 且来源为 live ranked 的服务端权威结果写入；`local_practice`、`local_authority_gate`、`local_online_fallback`、`bmob_online`、旧 `server_authoritative` 和 rejected 结果一律不能碰 `seasonVerificationState`。
+    - 旧 `handlePVPVictory()` / `handlePVPDefeat()` 继续保留镜像演武的本地回执、战斗日志和练习收益展示，但不再把旧残影 / 本地胜负 / 降级回执写成正式赛季验证。
+    - 实时论道首屏新增模式边界说明：正式真人入口为 `实时论道`，真人排位由服务端写正式结果；问道练习不写分；好友约战是邀请码真人局且默认不写正式积分；镜像演武不是真人排位，只作为天道榜练习。
+    - `game-intro.html` 同步玩家可见口径：正式胜负、积分和赛季记录只以实时论道为准，镜像演武不是真人排位，不写正式赛季验证；旧“镜像演武兜底”表述已改成镜像练习 / 复盘样本。
+    - 新增 `tests/sanity_pvp_legacy_season_isolation_checks.cjs` 并接入 `tests/run_node_checks.sh` 与 `tests/sanity_release_gate_coverage_checks.cjs`，固定 legacy PVP 不能再污染正式赛季验证。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_legacy_season_isolation_checks.cjs` 在 `shouldRecordPVPSeasonVerification` 缺失时失败。
+    - 绿测：`node tests/sanity_pvp_legacy_season_isolation_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - S7A 先把“练习 / 旧榜单 / 降级回执污染正式赛季验证”的高风险口子收住。live ranked 现有 rank / economy / history / settlement ledger 仍是正式结算主干，但正式赛季奖励、长期目标、多实例共享队列、跨进程 WS/队列共享、生产 smoke 和线上部署仍未封板。
+
 - 2026-06-19: V10-S6A 真 PVP WebSocket 权威同步最小闭环
   - 本轮完成
     - 新增 `server/pvp-live/live-ws.js`，后端在 `/api/pvp/live/ws?token=<sessionToken>` 挂载单进程 WebSocket 入口：连接时校验 JWT，返回 `connected + pvp-live-ws-v1`，`join_match` 返回 seat-scoped `state_sync` 并补发公开 `events_replay`，`heartbeat` 返回 `presence` 并广播最新 StateView，`intent` 返回 `intent_result` 后向双方推送权威状态。

@@ -50,12 +50,17 @@ function assert(condition, message) {
     '众生试炼',
     '裂隙回响线',
     'PVP 结算回执',
+    '正式真人入口',
+    '实时论道',
+    '镜像演武不是真人排位',
   ];
 
   const introOnlyAnchors = [
     '当前版本重点（V9.2）',
     '当前迭代重点（V9.2）',
     'PVP 风险画像已上线',
+    '正式胜负、积分和赛季记录只以实时论道为准',
+    '不写正式赛季验证',
   ];
 
   const progressOnlyAnchors = [

@@ -30,6 +30,7 @@ const runVowChecks = read('tests/sanity_run_vow_system_checks.cjs');
 const trialChallengeChecks = read('tests/sanity_trial_challenge_checks.cjs');
 const pvpService = read('js/services/pvp-service.js');
 const pvpServiceChecks = read('tests/sanity_pvp_service_checks.cjs');
+const pvpLegacySeasonIsolationChecks = read('tests/sanity_pvp_legacy_season_isolation_checks.cjs');
 const pvpLiveEngineChecks = read('tests/sanity_pvp_live_engine_checks.cjs');
 const pvpLiveBalanceSimulationChecks = read('tests/sanity_pvp_live_balance_simulation_checks.cjs');
 const pvpLiveFullGateChecks = read('tests/sanity_pvp_live_full_gate_balance_checks.cjs');
@@ -411,6 +412,7 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'node tests/sanity_codex_sanctum_checks.cjs',
   'node tests/sanity_intro_progress_sync_checks.cjs',
   'node tests/sanity_pvp_service_checks.cjs',
+  'node tests/sanity_pvp_legacy_season_isolation_checks.cjs',
   'node tests/sanity_pvp_live_engine_checks.cjs',
   'node tests/sanity_pvp_live_balance_simulation_checks.cjs',
   'node tests/sanity_pvp_live_full_gate_balance_checks.cjs',
@@ -431,6 +433,19 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     runNodeChecks.includes(needle),
     `node release checks should include strategic gameplay sanity marker: ${needle}`,
+  );
+});
+
+[
+  'shouldRecordPVPSeasonVerification',
+  "settlementSource: 'local_practice'",
+  "settlementSource: 'server_authoritative'",
+  "settlementSource: 'live_ranked'",
+  'formalSeasonVerification: true',
+].forEach((needle) => {
+  assert.ok(
+    pvpLegacySeasonIsolationChecks.includes(needle),
+    `legacy PVP season isolation check should pin marker: ${needle}`,
   );
 });
 
@@ -506,6 +521,9 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'live UI renders active opening safeguard report without hidden payloads',
   'live UI renders opening counterplay cue after protection',
   'live UI mobile renders opening protection event without overflow',
+  'pvp screen opens on live ranked entry by default on mobile',
+  'data-live-mode-boundary',
+  '不是真人排位',
   'live UI selects a baseline loadout before queue join',
   'live UI locks baseline loadout selector after queue join',
   'live UI submits card intent through live service',

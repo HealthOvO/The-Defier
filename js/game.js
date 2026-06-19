@@ -5609,6 +5609,12 @@ export class Game {
     if (!this.pvpResultView) this.pvpResultView = new PVPResultView(this);
     return this.pvpResultView.renderPVPResultReview(review);
   }
+  shouldRecordPVPSeasonVerification(result = null) {
+    if (!result || typeof result !== 'object' || result.rejected) return false;
+    if (result.formalSeasonVerification !== true) return false;
+    const settlementSource = String(result.settlementSource || result.settlementMode || '').trim();
+    return ['live_ranked', 'ranked_live', 'server_live_ranked'].includes(settlementSource);
+  }
   async handlePVPVictory() {
     console.log('PVP Victory!');
     const overlay = document.getElementById('pvp-result-overlay');
@@ -5655,7 +5661,7 @@ export class Game {
     }
     if (result && result.rejected) {
       Utils.showBattleLog('PVP 结算校验未通过，本场积分未变动。');
-    } else if (typeof this.recordSeasonVerificationResult === 'function') {
+    } else if (this.shouldRecordPVPSeasonVerification(result) && typeof this.recordSeasonVerificationResult === 'function') {
       let pvpSeasonMeta = null;
       const weekMeta = typeof this.getHeavenlyMandateWeekMeta === 'function' ? this.getHeavenlyMandateWeekMeta() : null;
       if (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getCurrentSeasonMeta === 'function') {
@@ -5740,7 +5746,7 @@ export class Game {
     }
     if (result && result.rejected) {
       Utils.showBattleLog('PVP 结算校验未通过，本场积分未变动。');
-    } else if (typeof this.recordSeasonVerificationResult === 'function') {
+    } else if (this.shouldRecordPVPSeasonVerification(result) && typeof this.recordSeasonVerificationResult === 'function') {
       let pvpSeasonMeta = null;
       const weekMeta = typeof this.getHeavenlyMandateWeekMeta === 'function' ? this.getHeavenlyMandateWeekMeta() : null;
       if (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getCurrentSeasonMeta === 'function') {

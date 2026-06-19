@@ -302,6 +302,7 @@ assert.ok(!submitLiveCardBody.includes("targetSeat: 'B'"), 'submitLiveCard must 
   '.pvp-live-loadout-presets',
   '.pvp-live-loadout-option',
   '.pvp-live-loadout-option.selected',
+  '.pvp-live-mode-boundary',
   '.pvp-live-turn-timer',
   '.pvp-live-connection-status',
   '.pvp-live-opening-safeguard',
@@ -343,6 +344,16 @@ assert.ok(!submitLiveCardBody.includes("targetSeat: 'B'"), 'submitLiveCard must 
   '[data-live-phase="invalidated"]',
 ].forEach((needle) => {
   assert.ok(css.includes(needle), `live PVP CSS should include marker: ${needle}`);
+});
+
+[
+  'data-live-mode-boundary',
+  '真人排位：入队后由服务端写正式结果',
+  '问道练习：不写分',
+  '好友约战：邀请码真人局',
+  '镜像演武：天道榜练习，不是真人排位',
+].forEach((needle) => {
+  assert.ok(html.includes(needle), `live PVP default entry should explain mode boundary: ${needle}`);
 });
 
 [

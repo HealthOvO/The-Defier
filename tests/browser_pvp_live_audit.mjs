@@ -807,6 +807,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     rankingTabActive: !!document.querySelector('[data-pvp-tab="ranking"]')?.classList.contains('active'),
     livePaneActive: !!document.getElementById('tab-live')?.classList.contains('active'),
     rankingPaneActive: !!document.getElementById('tab-ranking')?.classList.contains('active'),
+    boundaryText: document.querySelector('[data-live-mode-boundary]')?.textContent || '',
     joinVisible: (() => {
       const button = document.querySelector('[data-live-action="join-queue"]');
       if (!button) return false;
@@ -821,6 +822,11 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && defaultEntryProbe.livePaneActive
       && !defaultEntryProbe.rankingTabActive
       && !defaultEntryProbe.rankingPaneActive
+      && /真人排位/.test(defaultEntryProbe.boundaryText)
+      && /问道练习/.test(defaultEntryProbe.boundaryText)
+      && /好友约战/.test(defaultEntryProbe.boundaryText)
+      && /镜像演武/.test(defaultEntryProbe.boundaryText)
+      && /不是真人排位/.test(defaultEntryProbe.boundaryText)
       && defaultEntryProbe.joinVisible,
     JSON.stringify(defaultEntryProbe),
   );
@@ -2272,6 +2278,35 @@ async function safeElementScreenshot(page, selector, outputPath) {
   });
   await mobilePage.click('#pvp-btn', { timeout: 5000, force: true });
   await mobilePage.waitForTimeout(400);
+  const mobileDefaultEntryProbe = await mobilePage.evaluate(() => ({
+    activeTab: JSON.parse(window.render_game_to_text()).pvp?.activeTab || '',
+    liveTabActive: !!document.querySelector('[data-pvp-tab="live"]')?.classList.contains('active'),
+    rankingTabActive: !!document.querySelector('[data-pvp-tab="ranking"]')?.classList.contains('active'),
+    livePaneActive: !!document.getElementById('tab-live')?.classList.contains('active'),
+    rankingPaneActive: !!document.getElementById('tab-ranking')?.classList.contains('active'),
+    boundaryText: document.querySelector('[data-live-mode-boundary]')?.textContent || '',
+    joinVisible: (() => {
+      const button = document.querySelector('[data-live-action="join-queue"]');
+      if (!button) return false;
+      const rect = button.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    })(),
+  }));
+  add(
+    'pvp screen opens on live ranked entry by default on mobile',
+    mobileDefaultEntryProbe.activeTab === 'live'
+      && mobileDefaultEntryProbe.liveTabActive
+      && mobileDefaultEntryProbe.livePaneActive
+      && !mobileDefaultEntryProbe.rankingTabActive
+      && !mobileDefaultEntryProbe.rankingPaneActive
+      && /真人排位/.test(mobileDefaultEntryProbe.boundaryText)
+      && /问道练习/.test(mobileDefaultEntryProbe.boundaryText)
+      && /好友约战/.test(mobileDefaultEntryProbe.boundaryText)
+      && /镜像演武/.test(mobileDefaultEntryProbe.boundaryText)
+      && /不是真人排位/.test(mobileDefaultEntryProbe.boundaryText)
+      && mobileDefaultEntryProbe.joinVisible,
+    JSON.stringify(mobileDefaultEntryProbe),
+  );
   await mobilePage.click('[data-pvp-tab="live"]', { timeout: 5000, force: true });
   await mobilePage.waitForSelector('[data-live-loadout-preset="shield"]', { timeout: 5000 });
   await mobilePage.click('[data-live-loadout-preset="shield"]', { timeout: 5000, force: true });
