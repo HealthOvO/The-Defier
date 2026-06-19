@@ -5,6 +5,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const sqlite3 = require('../server/node_modules/sqlite3').verbose();
 const { normalizeLoadoutSnapshot } = require('../server/pvp-live/loadout');
+const { createInitialLiveState } = require('../server/pvp-live/engine/state');
 const { createLivePvpStore } = require('../server/pvp-live/live-store');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
@@ -254,6 +255,49 @@ function makeLoadout(identitySlot, pattern) {
   };
 }
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function makeStoreStaleMatch({ matchId, stateVersion, now }) {
+  const createdAt = Math.max(1, Math.floor(Number(now) || Date.now()) - 1000);
+  const updatedAt = createdAt + 500;
+  const state = createInitialLiveState({
+    matchId,
+    seats: [
+      {
+        seatId: 'A',
+        userId: 'store-stale-a',
+        displayName: '本地甲',
+        loadout: makeLoadout('store-stale-sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']),
+      },
+      {
+        seatId: 'B',
+        userId: 'store-stale-b',
+        displayName: '本地乙',
+        loadout: makeLoadout('store-stale-shield', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+      },
+    ],
+    matchQuality: {
+      matchedAt: createdAt,
+    },
+  });
+  state.setup.startedAt = createdAt;
+  state.setup.readyDeadlineAt = createdAt + 60000;
+  state.stateVersion = Math.max(1, Math.floor(Number(stateVersion) || 1));
+  return {
+    matchId,
+    mode: 'ranked',
+    createdAt,
+    updatedAt,
+    state,
+    seatsByUserId: {
+      'store-stale-a': 'A',
+      'store-stale-b': 'B',
+    },
+  };
+}
+
 async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   const readyA = await submitIntent(matchId, tokenA, {
     intentId: `${prefix}-ready-a`,
@@ -319,6 +363,145 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   assert.equal(skippedStoreSave?.skipped, true, 'store saveMatch should mark skipped stale persistence writes');
   assert.equal(skippedStoreSave?.reason, 'stale_state_version', 'store saveMatch should keep stale_state_version reason');
   assert.equal(skippedEventSaveCount, 0, 'store saveMatch should not append events when match state persistence is skipped');
+
+  const heartbeatStaleMatchId = 'pvplm-store-stale-heartbeat';
+  const heartbeatNow = 1700000010000;
+  const heartbeatLocalMatch = makeStoreStaleMatch({
+    matchId: heartbeatStaleMatchId,
+    stateVersion: 2,
+    now: heartbeatNow,
+  });
+  const heartbeatAuthoritativeMatch = makeStoreStaleMatch({
+    matchId: heartbeatStaleMatchId,
+    stateVersion: 5,
+    now: heartbeatNow,
+  });
+  heartbeatAuthoritativeMatch.state.seats.B.hp = 31;
+  let heartbeatAuthoritativeLoads = 0;
+  const heartbeatStore = createLivePvpStore({
+    now: () => heartbeatNow,
+    persistence: {
+      async saveMatch(match) {
+        assert.equal(match.matchId, heartbeatStaleMatchId, 'heartbeat stale save should try to persist the local match first');
+        return {
+          saved: false,
+          skipped: true,
+          reason: 'stale_state_version',
+          stateVersion: match.state.stateVersion,
+          persistedStateVersion: heartbeatAuthoritativeMatch.state.stateVersion,
+        };
+      },
+      async loadMatchForUser(userId, matchId) {
+        heartbeatAuthoritativeLoads += 1;
+        assert.equal(userId, 'store-stale-a', 'heartbeat stale reload should use the viewer user id');
+        assert.equal(matchId, heartbeatStaleMatchId, 'heartbeat stale reload should keep the match id');
+        return cloneJson(heartbeatAuthoritativeMatch);
+      },
+      async saveMatchEvents() {
+        throw new Error('heartbeat stale save should not append events after skipped persistence');
+      },
+    },
+  });
+  heartbeatStore.matches.set(heartbeatStaleMatchId, heartbeatLocalMatch);
+  heartbeatStore.activeMatchByUserId.set('store-stale-a', heartbeatStaleMatchId);
+  heartbeatStore.activeMatchByUserId.set('store-stale-b', heartbeatStaleMatchId);
+  const heartbeatResult = await heartbeatStore.recordHeartbeat('store-stale-a', heartbeatStaleMatchId);
+  assert.equal(heartbeatAuthoritativeLoads, 1, 'heartbeat stale save should reload the authoritative persisted match');
+  assert.equal(heartbeatResult?.stateView?.stateVersion, 5, 'heartbeat stale save should return authoritative stateView instead of the local stale view');
+  assert.equal(heartbeatResult?.stateView?.opponent?.hp, 31, 'heartbeat stale save should return the latest persisted combat state');
+  assert.equal(heartbeatStore.matches.get(heartbeatStaleMatchId)?.state?.stateVersion, 5, 'heartbeat stale reload should refresh the in-memory match cache');
+
+  const intentStaleMatchId = 'pvplm-store-stale-intent';
+  const intentNow = 1700000020000;
+  const intentLocalMatch = makeStoreStaleMatch({
+    matchId: intentStaleMatchId,
+    stateVersion: 1,
+    now: intentNow,
+  });
+  const intentAuthoritativeMatch = makeStoreStaleMatch({
+    matchId: intentStaleMatchId,
+    stateVersion: 6,
+    now: intentNow,
+  });
+  intentAuthoritativeMatch.state.seats.B.hp = 29;
+  let intentAuthoritativeLoads = 0;
+  const intentStore = createLivePvpStore({
+    now: () => intentNow,
+    persistence: {
+      async saveMatch(match) {
+        assert.equal(match.matchId, intentStaleMatchId, 'intent stale save should try to persist the accepted local reducer result first');
+        return {
+          saved: false,
+          skipped: true,
+          reason: 'stale_state_version',
+          stateVersion: match.state.stateVersion,
+          persistedStateVersion: intentAuthoritativeMatch.state.stateVersion,
+        };
+      },
+      async loadMatchForUser(userId, matchId) {
+        intentAuthoritativeLoads += 1;
+        assert.equal(userId, 'store-stale-a', 'intent stale reload should use the acting user id');
+        assert.equal(matchId, intentStaleMatchId, 'intent stale reload should keep the match id');
+        return cloneJson(intentAuthoritativeMatch);
+      },
+      async saveMatchEvents() {
+        throw new Error('intent stale save should not append events after skipped persistence');
+      },
+    },
+  });
+  intentStore.matches.set(intentStaleMatchId, intentLocalMatch);
+  intentStore.activeMatchByUserId.set('store-stale-a', intentStaleMatchId);
+  intentStore.activeMatchByUserId.set('store-stale-b', intentStaleMatchId);
+  const intentResult = await intentStore.submitIntent('store-stale-a', intentStaleMatchId, {
+    intentId: 'store-stale-ready-a',
+    intentType: 'ready',
+    stateVersion: 1,
+    payload: {},
+  });
+  assert.equal(intentAuthoritativeLoads, 1, 'intent stale save should reload the authoritative persisted match');
+  assert.equal(intentResult?.result, 'sync_required', 'intent stale save should ask the client to sync instead of returning accepted local state');
+  assert.equal(intentResult?.reason, 'stale_state_version', 'intent stale sync should expose stale_state_version as the reason');
+  assert.deepEqual(intentResult?.events, [], 'intent stale sync should not replay local accepted events that failed persistence');
+  assert.equal(intentResult?.stateView?.stateVersion, 6, 'intent stale sync should return authoritative stateView');
+  assert.equal(intentResult?.stateView?.opponent?.hp, 29, 'intent stale sync should return the latest persisted combat state');
+  assert.equal(intentStore.matches.get(intentStaleMatchId)?.state?.stateVersion, 6, 'intent stale reload should refresh the in-memory match cache');
+
+  const missingReloadMatchId = 'pvplm-store-stale-missing-reload';
+  const missingReloadMatch = makeStoreStaleMatch({
+    matchId: missingReloadMatchId,
+    stateVersion: 3,
+    now: 1700000030000,
+  });
+  const missingReloadStore = createLivePvpStore({
+    now: () => 1700000030000,
+    persistence: {
+      async saveMatch() {
+        return {
+          saved: false,
+          skipped: true,
+          reason: 'stale_state_version',
+          stateVersion: missingReloadMatch.state.stateVersion,
+          persistedStateVersion: 7,
+        };
+      },
+      async loadMatchForUser(userId, matchId) {
+        assert.equal(userId, 'store-stale-a', 'missing stale reload should still use the viewer user id');
+        assert.equal(matchId, missingReloadMatchId, 'missing stale reload should still request the exact match id');
+        return null;
+      },
+      async saveMatchEvents() {
+        throw new Error('missing stale reload should not append events after skipped persistence');
+      },
+    },
+  });
+  missingReloadStore.matches.set(missingReloadMatchId, missingReloadMatch);
+  missingReloadStore.activeMatchByUserId.set('store-stale-a', missingReloadMatchId);
+  missingReloadStore.activeMatchByUserId.set('store-stale-b', missingReloadMatchId);
+  const missingReloadResult = await missingReloadStore.recordHeartbeat('store-stale-a', missingReloadMatchId);
+  assert.equal(missingReloadResult, null, 'missing authoritative stale reload should not return the local dirty heartbeat view');
+  assert.equal(missingReloadStore.matches.has(missingReloadMatchId), false, 'missing authoritative stale reload should evict the local dirty match cache');
+  assert.equal(missingReloadStore.activeMatchByUserId.has('store-stale-a'), false, 'missing authoritative stale reload should clear viewer active match cache');
+  assert.equal(missingReloadStore.activeMatchByUserId.has('store-stale-b'), false, 'missing authoritative stale reload should clear opponent active match cache');
 
   let userA;
   let userB;

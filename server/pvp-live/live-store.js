@@ -1169,6 +1169,70 @@ class LivePvpStore {
         return saveResult;
     }
 
+    isStaleStateSaveResult(saveResult) {
+        return !!(saveResult && saveResult.saved === false && saveResult.reason === 'stale_state_version');
+    }
+
+    evictMatchCache(matchId) {
+        const id = String(matchId || '').trim();
+        if (!id) return;
+        const localMatch = this.matches.get(id);
+        if (localMatch && localMatch.seatsByUserId) {
+            Object.keys(localMatch.seatsByUserId).forEach(participantUserId => {
+                if (this.activeMatchByUserId.get(participantUserId) === id) {
+                    this.activeMatchByUserId.delete(participantUserId);
+                }
+            });
+        }
+        for (const [participantUserId, activeMatchId] of this.activeMatchByUserId.entries()) {
+            if (activeMatchId === id) {
+                this.activeMatchByUserId.delete(participantUserId);
+            }
+        }
+        this.matches.delete(id);
+        this.clearPendingResultsForMatch(id);
+    }
+
+    async rehydrateAuthoritativeMatchForUser(userId, matchId) {
+        if (!this.persistence || typeof this.persistence.loadMatchForUser !== 'function') return null;
+        const requestedMatchId = String(matchId || '').trim();
+        const persisted = await this.persistence.loadMatchForUser(userId, requestedMatchId);
+        if (!persisted || persisted.matchId !== requestedMatchId || !persisted.seatsByUserId || !persisted.seatsByUserId[userId]) {
+            this.evictMatchCache(requestedMatchId);
+            return null;
+        }
+        this.matches.set(persisted.matchId, persisted);
+        const active = persisted.state && !this.isTerminalStatus(persisted.state.status);
+        Object.keys(persisted.seatsByUserId).forEach(participantUserId => {
+            if (active) {
+                this.activeMatchByUserId.set(participantUserId, persisted.matchId);
+            } else {
+                this.activeMatchByUserId.delete(participantUserId);
+            }
+        });
+        if (!active) {
+            this.clearPendingResultsForMatch(persisted.matchId);
+        }
+        const seatId = persisted.seatsByUserId[userId];
+        return {
+            match: persisted,
+            seatId,
+            stateView: this.projectMatchStateView(persisted, seatId)
+        };
+    }
+
+    makeStaleStateSyncResult(authoritative, saveResult) {
+        if (!authoritative) return null;
+        return {
+            result: 'sync_required',
+            reason: 'stale_state_version',
+            state: authoritative.match && authoritative.match.state,
+            events: [],
+            stateView: authoritative.stateView,
+            saveResult
+        };
+    }
+
     async loadMatchEvents(matchId) {
         if (!this.persistence || typeof this.persistence.loadMatchEvents !== 'function') return [];
         return this.persistence.loadMatchEvents(matchId);
@@ -2195,7 +2259,11 @@ class LivePvpStore {
         seat.lastHeartbeatAt = now;
         if (!seat.connectedAt) seat.connectedAt = now;
         if (previousStatus !== 'online') seat.reconnectedAt = now;
-        await this.saveMatch(match);
+        const saveResult = await this.saveMatch(match);
+        if (this.isStaleStateSaveResult(saveResult)) {
+            const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
+            return authoritative ? { ...authoritative, saveResult } : null;
+        }
         return {
             match,
             seatId,
@@ -2230,7 +2298,11 @@ class LivePvpStore {
             if (match.state.status === 'finished') {
                 await this.completeFinishedMatch(match);
             } else {
-                await this.saveMatch(match);
+                const saveResult = await this.saveMatch(match);
+                if (this.isStaleStateSaveResult(saveResult)) {
+                    const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
+                    return this.makeStaleStateSyncResult(authoritative, saveResult);
+                }
             }
         } else if (match.state && this.isTerminalStatus(match.state.status)) {
             await this.releaseIfTerminal(match);
