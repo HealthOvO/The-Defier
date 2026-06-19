@@ -768,6 +768,35 @@ function projectSettlementReport(state, seatId) {
     };
 }
 
+function projectSeasonHonorReward(source) {
+    const reward = source && typeof source === 'object' ? source : null;
+    if (!reward || reward.reportVersion !== 'pvp-live-season-honor-reward-v1') return null;
+    const nextReward = reward.nextReward && typeof reward.nextReward === 'object' ? reward.nextReward : {};
+    const rewardName = String(reward.rewardName || '赛季荣誉外观');
+    return {
+        reportVersion: 'pvp-live-season-honor-reward-v1',
+        rewardId: String(reward.rewardId || 's1_genesis_honor_mark_1'),
+        rewardType: String(reward.rewardType || 'cosmetic_badge'),
+        rewardName,
+        rewardState: reward.rewardState === 'preview' ? 'preview' : 'earned',
+        rewardImpact: 'cosmetic_only',
+        powerImpact: 'none',
+        sourceVisibility: 'server_authoritative_settlement',
+        usesHiddenInformation: false,
+        unlockLine: String(reward.unlockLine || `已点亮外观目标：${rewardName}`),
+        progressLine: String(reward.progressLine || '本季外观目标已更新'),
+        nextReward: {
+            targetGames: Math.max(1, Math.floor(Number(nextReward.targetGames) || 1)),
+            remainingGames: Math.max(0, Math.floor(Number(nextReward.remainingGames) || 0)),
+            rewardId: String(nextReward.rewardId || ''),
+            rewardType: String(nextReward.rewardType || 'cosmetic_badge'),
+            rewardName: String(nextReward.rewardName || '下一档外观目标'),
+            label: String(nextReward.label || '下一档外观目标已更新')
+        },
+        boundary: '仅用于赛季荣誉展示和外观回访，不授予卡牌、属性、资源、起手、匹配或战斗效果。'
+    };
+}
+
 function projectSeasonHonorReport(source) {
     const report = source && typeof source === 'object' ? source : null;
     if (!report || report.reportVersion !== 'pvp-live-season-honor-v1') return null;
@@ -793,6 +822,7 @@ function projectSeasonHonorReport(source) {
             remainingGames: Math.max(0, Math.floor(Number(nextMilestone.remainingGames) || 0)),
             label: String(nextMilestone.label || '赛季荣誉节点已更新')
         },
+        cosmeticReward: projectSeasonHonorReward(report.cosmeticReward),
         summaryLine: String(report.summaryLine || `赛季荣誉 ${gamesPlayed} 场 · 胜 ${wins} / 负 ${losses}`),
         nextGoalLine: String(report.nextGoalLine || '把本局公开结论带到下一局真人排位。'),
         boundary: '只记录赛季荣誉、复盘目标和外观向回访，不改变生命、伤害、抽牌、灵力、起手或匹配。'

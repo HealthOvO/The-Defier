@@ -1562,6 +1562,51 @@
     color: rgba(210, 234, 220, 0.58);
 }
 
+.pvp-live-season-honor-reward {
+    margin-top: 6px;
+    padding: 7px;
+    border-radius: 7px;
+    border: 1px solid rgba(243, 194, 107, 0.18);
+    background: rgba(62, 41, 12, 0.2);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-season-honor-reward-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: rgba(255, 237, 196, 0.9);
+    font-size: 0.66rem;
+    font-weight: 750;
+}
+
+.pvp-live-season-honor-reward-head span:last-child {
+    color: rgba(255, 219, 139, 0.7);
+    text-align: right;
+}
+
+.pvp-live-season-honor-reward-name {
+    margin-top: 5px;
+    color: rgba(255, 244, 219, 0.88);
+    font-size: 0.68rem;
+    font-weight: 750;
+    line-height: 1.35;
+}
+
+.pvp-live-season-honor-reward-progress,
+.pvp-live-season-honor-reward-next,
+.pvp-live-season-honor-reward-boundary {
+    margin-top: 4px;
+    color: rgba(248, 230, 188, 0.72);
+    font-size: 0.64rem;
+    line-height: 1.35;
+}
+
+.pvp-live-season-honor-reward-boundary {
+    color: rgba(238, 219, 176, 0.56);
+}
+
 .pvp-live-loadout-selector .pvp-live-seat-head {
     align-items: center;
 }

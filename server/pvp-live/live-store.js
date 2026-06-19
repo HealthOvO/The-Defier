@@ -1076,6 +1076,17 @@ class LivePvpStore {
             const targetGames = milestones.find(target => target > gamesPlayed) || Math.max(gamesPlayed, milestones[milestones.length - 1]);
             const remainingGames = Math.max(0, targetGames - gamesPlayed);
             const didWin = !!(result && result.didWin);
+            const rewardTrack = [
+                { targetGames: 1, rewardId: 's1_genesis_honor_mark_1', rewardType: 'cosmetic_badge', rewardName: '开天见证徽记' },
+                { targetGames: 3, rewardId: 's1_genesis_honor_frame_3', rewardType: 'cosmetic_frame', rewardName: '三战问道边框' },
+                { targetGames: 5, rewardId: 's1_genesis_honor_title_5', rewardType: 'cosmetic_title', rewardName: '称号·真人论道新锋' },
+                { targetGames: 10, rewardId: 's1_genesis_honor_aura_10', rewardType: 'cosmetic_aura', rewardName: '开天十战辉光' },
+                { targetGames: 20, rewardId: 's1_genesis_honor_banner_20', rewardType: 'cosmetic_banner', rewardName: '二十战荣誉旗' },
+                { targetGames: 50, rewardId: 's1_genesis_honor_legend_50', rewardType: 'cosmetic_title', rewardName: '称号·开天不坠' }
+            ];
+            const earnedReward = rewardTrack.slice().reverse().find(reward => gamesPlayed >= reward.targetGames) || rewardTrack[0];
+            const upcomingReward = rewardTrack.find(reward => reward.targetGames > gamesPlayed) || earnedReward;
+            const rewardRemaining = Math.max(0, upcomingReward.targetGames - gamesPlayed);
             return {
                 reportVersion: 'pvp-live-season-honor-v1',
                 seasonId: String(result && result.seasonId || 's1-genesis'),
@@ -1093,6 +1104,32 @@ class LivePvpStore {
                     targetGames,
                     remainingGames,
                     label: remainingGames === 0 ? `已达 ${targetGames} 场荣誉节点` : `距 ${targetGames} 场荣誉节点还差 ${remainingGames} 场`
+                },
+                cosmeticReward: {
+                    reportVersion: 'pvp-live-season-honor-reward-v1',
+                    rewardId: earnedReward.rewardId,
+                    rewardType: earnedReward.rewardType,
+                    rewardName: earnedReward.rewardName,
+                    rewardState: 'earned',
+                    rewardImpact: 'cosmetic_only',
+                    powerImpact: 'none',
+                    sourceVisibility: 'server_authoritative_settlement',
+                    usesHiddenInformation: false,
+                    unlockLine: `已点亮外观目标：${earnedReward.rewardName}`,
+                    progressLine: rewardRemaining === 0
+                        ? `本季 ${gamesPlayed} 场 · 最高外观档已达成`
+                        : `本季 ${gamesPlayed}/${upcomingReward.targetGames} 场 · 下一档还差 ${rewardRemaining} 场`,
+                    nextReward: {
+                        targetGames: upcomingReward.targetGames,
+                        remainingGames: rewardRemaining,
+                        rewardId: upcomingReward.rewardId,
+                        rewardType: upcomingReward.rewardType,
+                        rewardName: upcomingReward.rewardName,
+                        label: rewardRemaining === 0
+                            ? `已达成 ${upcomingReward.rewardName}`
+                            : `下一档 ${upcomingReward.targetGames} 场：${upcomingReward.rewardName}`
+                    },
+                    boundary: '仅用于赛季荣誉展示和外观回访，不授予卡牌、属性、资源、起手、匹配或战斗效果。'
                 },
                 summaryLine: `赛季荣誉 ${gamesPlayed} 场 · 胜 ${wins} / 负 ${losses}`,
                 nextGoalLine: didWin

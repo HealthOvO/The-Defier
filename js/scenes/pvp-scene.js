@@ -1055,9 +1055,38 @@ export const PVPScene = {
         remainingGames: Math.max(0, Math.floor(Number(nextMilestone.remainingGames) || 0)),
         label: String(nextMilestone.label || '赛季荣誉节点已更新')
       },
+      cosmeticReward: this.getLiveSeasonHonorReward(report.cosmeticReward),
       summaryLine: String(report.summaryLine || `赛季荣誉 ${gamesPlayed} 场 · 胜 ${wins} / 负 ${losses}`),
       nextGoalLine: String(report.nextGoalLine || '把本局公开结论带到下一局真人排位。'),
       boundary: String(report.boundary || '只记录赛季荣誉、复盘目标和外观向回访，不改变生命、伤害、抽牌、灵力、起手或匹配。')
+    };
+  },
+  getLiveSeasonHonorReward(source) {
+    const reward = source && typeof source === 'object' ? source : null;
+    if (!reward || reward.reportVersion !== 'pvp-live-season-honor-reward-v1') return null;
+    const nextReward = reward.nextReward && typeof reward.nextReward === 'object' ? reward.nextReward : {};
+    const rewardName = String(reward.rewardName || '赛季荣誉外观');
+    return {
+      reportVersion: 'pvp-live-season-honor-reward-v1',
+      rewardId: String(reward.rewardId || 's1_genesis_honor_mark_1'),
+      rewardType: String(reward.rewardType || 'cosmetic_badge'),
+      rewardName,
+      rewardState: reward.rewardState === 'preview' ? 'preview' : 'earned',
+      rewardImpact: String(reward.rewardImpact || 'cosmetic_only'),
+      powerImpact: String(reward.powerImpact || 'none'),
+      sourceVisibility: String(reward.sourceVisibility || 'server_authoritative_settlement'),
+      usesHiddenInformation: !!reward.usesHiddenInformation,
+      unlockLine: String(reward.unlockLine || `已点亮外观目标：${rewardName}`),
+      progressLine: String(reward.progressLine || '本季外观目标已更新'),
+      nextReward: {
+        targetGames: Math.max(1, Math.floor(Number(nextReward.targetGames) || 1)),
+        remainingGames: Math.max(0, Math.floor(Number(nextReward.remainingGames) || 0)),
+        rewardId: String(nextReward.rewardId || ''),
+        rewardType: String(nextReward.rewardType || 'cosmetic_badge'),
+        rewardName: String(nextReward.rewardName || '下一档外观目标'),
+        label: String(nextReward.label || '下一档外观目标已更新')
+      },
+      boundary: String(reward.boundary || '仅用于赛季荣誉展示和外观回访，不授予卡牌、属性、资源、起手、匹配或战斗效果。')
     };
   },
   renderLiveSettlementReport(review) {
@@ -1097,6 +1126,22 @@ export const PVPScene = {
             </div>
             <div class="pvp-live-season-honor-summary">${this.escapeHtml(honor.summaryLine)}</div>
             <div class="pvp-live-season-honor-next">${this.escapeHtml(honor.nextMilestone.label)} · ${this.escapeHtml(honor.nextGoalLine)}</div>
+            ${honor.cosmeticReward ? `
+              <div
+                class="pvp-live-season-honor-reward"
+                data-live-season-honor-reward
+                data-live-season-honor-reward-impact="${this.escapeHtml(honor.cosmeticReward.rewardImpact)}"
+              >
+                <div class="pvp-live-season-honor-reward-head">
+                  <span>外观目标</span>
+                  <span>${this.escapeHtml(honor.cosmeticReward.rewardState === 'earned' ? '已点亮' : '预览')}</span>
+                </div>
+                <div class="pvp-live-season-honor-reward-name">${this.escapeHtml(honor.cosmeticReward.rewardName)}</div>
+                <div class="pvp-live-season-honor-reward-progress">${this.escapeHtml(honor.cosmeticReward.unlockLine)} · ${this.escapeHtml(honor.cosmeticReward.progressLine)}</div>
+                <div class="pvp-live-season-honor-reward-next">${this.escapeHtml(honor.cosmeticReward.nextReward.label)}</div>
+                <div class="pvp-live-season-honor-reward-boundary">${this.escapeHtml(honor.cosmeticReward.boundary)}</div>
+              </div>
+            ` : ''}
             <div class="pvp-live-season-honor-boundary">${this.escapeHtml(honor.boundary)}</div>
           </div>
         ` : ''}

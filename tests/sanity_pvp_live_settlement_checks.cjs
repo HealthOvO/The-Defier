@@ -354,6 +354,11 @@ function dbGet(sql, params = []) {
     assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.reportVersion, 'pvp-live-season-honor-v1', 'loser settlement report should expose season honor progress');
     assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.sourceVisibility, 'server_authoritative_settlement', 'season honor progress should come from authoritative settlement');
     assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.powerImpact, 'none', 'season honor progress must not grant combat power');
+    assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.reportVersion, 'pvp-live-season-honor-reward-v1', 'season honor progress should expose cosmetic-only reward track');
+    assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.rewardImpact, 'cosmetic_only', 'season honor reward must be cosmetic only');
+    assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.powerImpact, 'none', 'season honor reward must not grant combat power');
+    assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.rewardState, 'earned', 'first ranked game should earn the first cosmetic honor marker');
+    assert.ok(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.nextReward?.remainingGames > 0, 'season honor reward should point to the next cosmetic target');
 
     const rankAfterA = await request('/api/pvp/rank', { token: userA.token });
     const rankAfterB = await request('/api/pvp/rank', { token: userB.token });
@@ -374,6 +379,7 @@ function dbGet(sql, params = []) {
     assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.coinsAwarded, rankAfterB.payload.wallet.coins - initialRankB.payload.wallet.coins, 'loser settlement report should match wallet reward delta');
     assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.gamesPlayed, rankAfterB.payload.rank.wins + rankAfterB.payload.rank.losses, 'season honor progress should match authoritative ranked games');
     assert.ok(/不改变生命、伤害、抽牌、灵力、起手或匹配/.test(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.boundary || ''), 'season honor progress should state the non-power boundary');
+    assert.ok(/不授予卡牌、属性、资源、起手、匹配或战斗效果/.test(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.boundary || ''), 'season honor reward should state the cosmetic-only non-power boundary');
 
     const duplicateSurrender = await submitIntent(joinB.payload.matchId, userB.token, {
         intentId: 'live-settlement-surrender-b-1',

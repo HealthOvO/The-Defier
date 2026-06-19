@@ -1,5 +1,29 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-19: V10-S7E live ranked 赛季荣誉外观目标
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 在 live ranked 权威结算的 `seasonHonorReport` 下新增 `cosmeticReward`，版本为 `pvp-live-season-honor-reward-v1`，按本季 rankedGames 派生 1/3/5/10/20/50 场外观目标轨。
+    - `cosmeticReward` 固定 `rewardImpact: cosmetic_only`、`powerImpact: none`，只用于赛季荣誉展示和外观回访；边界明确不授予卡牌、属性、资源、起手、匹配或战斗效果。
+    - `server/pvp-live/engine/state-view.js` 将外观目标按当前 seat 白名单投影到 `postMatchReview.settlementReport.seasonHonorReport.cosmeticReward`；`replay_self` 可见自己的外观目标，`replay_public` / `audit_safe` / invalidated / friendly 仍不暴露。
+    - `js/scenes/pvp-scene.js` / `css/pvp.css` 在 live ranked 结算回执的赛季荣誉块内新增 `data-live-season-honor-reward` 子块，显示“外观目标”、已点亮奖励、下一档目标和非强度边界；DOM 标记 `data-live-season-honor-reward-impact="cosmetic_only"`。
+    - settlement、route、replay、UI contract、真实浏览器 smoke 和 release coverage 同步锁住：正式 ranked 终局必须出现外观目标轨，公开回放和无效局不能出现 seat-specific 外观奖励信息。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_settlement_checks.cjs` 在实现前失败于 `seasonHonorReport.cosmeticReward` 缺失。
+    - 绿测：`node tests/sanity_pvp_live_settlement_checks.cjs`
+    - `node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - `node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_replay_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - `node --check server/pvp-live/live-store.js`
+    - `node --check server/pvp-live/engine/state-view.js`
+    - `npm run test:node`
+    - `npm run build:pages`
+    - `AUDIT_FILTER=pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4177 output/release-browser-audits-pvp-s7e-season-reward`
+    - `git diff --check`
+  - 当前结论
+    - live ranked 现在不仅显示正式积分、天道币和赛季荣誉进度，也会给双方各自展示一条非强度外观目标轨，让真人排位有更清晰的长期回访动机。完整领取/装备系统、多实例共享队列、跨进程 WS/队列共享、移动端真实后端 smoke、生产 smoke 和线上部署仍未封板。
+
 - 2026-06-19: V10-S7D 真实后端浏览器负向边界证据
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 在真实后端 smoke 中新增 `requestLivePvpReplay()` 浏览器 helper，直接通过前端服务调用真实 `/api/pvp/live/matches/:matchId/replay`。
