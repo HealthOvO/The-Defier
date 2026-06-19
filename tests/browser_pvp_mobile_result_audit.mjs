@@ -44,6 +44,8 @@ function add(name, pass, detail = '') {
 
   await page.click('#pvp-btn', { timeout: 5000, force: true });
   await page.waitForTimeout(700);
+  await page.locator('.rune-tab', { hasText: '天道榜' }).first().click({ timeout: 5000, force: true });
+  await page.waitForTimeout(400);
 
   const rankingProbe = await page.evaluate(() => {
     const toRect = (el) => {

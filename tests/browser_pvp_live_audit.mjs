@@ -801,6 +801,30 @@ async function safeElementScreenshot(page, selector, outputPath) {
   await page.click('#pvp-btn', { timeout: 5000, force: true });
   await page.waitForTimeout(400);
 
+  const defaultEntryProbe = await page.evaluate(() => ({
+    activeTab: JSON.parse(window.render_game_to_text()).pvp?.activeTab || '',
+    liveTabActive: !!document.querySelector('[data-pvp-tab="live"]')?.classList.contains('active'),
+    rankingTabActive: !!document.querySelector('[data-pvp-tab="ranking"]')?.classList.contains('active'),
+    livePaneActive: !!document.getElementById('tab-live')?.classList.contains('active'),
+    rankingPaneActive: !!document.getElementById('tab-ranking')?.classList.contains('active'),
+    joinVisible: (() => {
+      const button = document.querySelector('[data-live-action="join-queue"]');
+      if (!button) return false;
+      const rect = button.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    })(),
+  }));
+  add(
+    'pvp screen opens on live ranked entry by default',
+    defaultEntryProbe.activeTab === 'live'
+      && defaultEntryProbe.liveTabActive
+      && defaultEntryProbe.livePaneActive
+      && !defaultEntryProbe.rankingTabActive
+      && !defaultEntryProbe.rankingPaneActive
+      && defaultEntryProbe.joinVisible,
+    JSON.stringify(defaultEntryProbe),
+  );
+
   await page.click('[data-pvp-tab="live"]', { timeout: 5000, force: true });
   await page.waitForSelector('[data-live-loadout-preset="sword"]', { timeout: 5000 });
   const initialPresetProbe = await page.evaluate(() => ({

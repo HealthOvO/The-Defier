@@ -56,7 +56,17 @@ async function runScenario(browser, scenario) {
     selectedCardCount: document.querySelectorAll('#run-path-selection .run-path-card.selected').length,
     selectedPathName: document.querySelector('#run-path-selection .run-path-card.selected .run-destiny-name')?.textContent?.trim() || '',
     pvpTitle: document.querySelector('#pvp-ranking-brief .pvp-risk-title')?.textContent?.replace(/\s+/g, ' ').trim() || '',
-    pvpHint: document.getElementById('pvp-challenge-intent')?.textContent?.replace(/\s+/g, ' ').trim() || ''
+    pvpHint: document.getElementById('pvp-challenge-intent')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    pvpLiveTabActive: !!document.querySelector('[data-pvp-tab="live"]')?.classList.contains('active'),
+    pvpRankingTabActive: !!document.querySelector('[data-pvp-tab="ranking"]')?.classList.contains('active'),
+    pvpLivePaneActive: !!document.getElementById('tab-live')?.classList.contains('active'),
+    pvpRankingPaneActive: !!document.getElementById('tab-ranking')?.classList.contains('active'),
+    pvpLiveJoinVisible: (() => {
+      const button = document.querySelector('[data-live-action="join-queue"]');
+      if (!button) return false;
+      const rect = button.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    })()
   }));
 
   const pass = scenario.assert({ payload, probe });
@@ -107,16 +117,17 @@ const scenarios = [
   {
     id: 'guest-pvp',
     query: '?autotest=guest-pvp',
-    name: 'automation boot can land on pvp ranking with focus brief visible',
+    name: 'automation boot lands on live ranked pvp by default',
     assert: ({ payload, probe }) => (
       probe.screen === 'pvp-screen'
       && probe.guestMode
       && payload?.mode === 'pvp-screen'
-      && payload?.pvp?.activeTab === 'ranking'
-      && !!payload?.pvp?.rankingFocus?.rank?.user?.username
-      && !!payload?.pvp?.rankingFocus?.duelBrief?.targetName
-      && /焦点对手/.test(probe.pvpTitle)
-      && /已锁定|可锁定|约战/.test(probe.pvpHint)
+      && payload?.pvp?.activeTab === 'live'
+      && probe.pvpLiveTabActive
+      && probe.pvpLivePaneActive
+      && !probe.pvpRankingTabActive
+      && !probe.pvpRankingPaneActive
+      && probe.pvpLiveJoinVisible
     )
   }
 ];

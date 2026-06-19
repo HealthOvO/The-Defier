@@ -157,8 +157,8 @@
                 <span class="btn-icon">↩</span>
             </button>
             <div class="header-title-group">
-                <h2 class="ink-title">天道榜</h2>
-                <div class="sub-title">HEAVENLY RANKING</div>
+                <h2 class="ink-title">实时论道</h2>
+                <div class="sub-title">LIVE RANKED DUEL</div>
             </div>
             <div class="player-rank-badge">
                 <div class="rank-icon-frame">
@@ -171,13 +171,13 @@
         <div class="pvp-layout-split">
             <!-- Left: Navigation Runes -->
             <div class="pvp-nav-sidebar">
-                <button class="rune-tab active" onclick="PVPScene.switchTab('ranking')">
+                <button class="rune-tab" data-pvp-tab="ranking" onclick="PVPScene.switchTab('ranking')">
                     <div class="rune-icon-container">
                         <span class="rune-icon">📜</span>
                     </div>
                     <span class="rune-name">天道榜</span>
                 </button>
-                <button class="rune-tab" data-pvp-tab="live" onclick="PVPScene.switchTab('live')">
+                <button class="rune-tab active" data-pvp-tab="live" onclick="PVPScene.switchTab('live')">
                     <div class="rune-icon-container">
                         <span class="rune-icon">⚔️</span>
                     </div>
@@ -200,11 +200,11 @@
             <!-- Right: Content Area -->
             <div class="pvp-content-container">
                 <!-- Ranking Tab -->
-                <div id="tab-ranking" class="pvp-tab-pane active">
+                <div id="tab-ranking" class="pvp-tab-pane pvp-legacy-ranking-pane">
                     <div id="pvp-ranking-brief" class="pvp-risk-brief" data-risk-tier="none">
-                        <div class="pvp-risk-kicker">榜单推演</div>
-                        <div class="pvp-risk-title">选择一名对手，查看本场读题建议</div>
-                        <div class="pvp-risk-footnote">这里会显示 PVP DRI、对手档案、赛季题面、分段标签、跨场对照、历史交手留痕、多场趋势、赛季账本、样本筛面摘要、主导风险轴、对策、资源预留与焦点约战单。</div>
+                        <div class="pvp-risk-kicker">镜像演武 · 练习入口</div>
+                        <div class="pvp-risk-title">选择一名榜单残影，查看读题建议并进行镜像演武</div>
+                        <div class="pvp-risk-footnote">此处保留榜单推演、残影档案与焦点约战单，用于练习和复盘；不是真人排位，赛季胜负以“实时论道”为准。</div>
                     </div>
                     <div class="ranking-scroll-area" id="ranking-list">
                         <!-- Dynamic Jade Slips -->
@@ -215,16 +215,16 @@
                     </div>
 
                     <div class="pvp-nav-footer">
-                        <div class="challenge-intent-line" id="pvp-challenge-intent">未锁定焦点目标时，将自动按榜位推演对手。</div>
-                        <button class="challenge-btn pulse" onclick="PVPScene.findMatch()">
+                        <div class="challenge-intent-line" id="pvp-challenge-intent">镜像演武不是真人排位；未锁定焦点目标时，将自动按榜位推演对手。</div>
+                        <button class="challenge-btn pulse" data-pvp-legacy-practice onclick="PVPScene.findMatch()">
                             <span class="btn-glow"></span>
-                            <span class="text">⚔️ 论道切磋</span>
+                            <span class="text">🧪 镜像演武</span>
                         </button>
                     </div>
                 </div>
 
                 <!-- Live PVP Tab -->
-                <div id="tab-live" class="pvp-tab-pane pvp-live-shell" data-live-pvp-root data-live-phase="idle" style="display:none;">
+                <div id="tab-live" class="pvp-tab-pane pvp-live-shell active" data-live-pvp-root data-live-phase="idle">
                     <div class="pvp-risk-brief pvp-live-status-card">
                         <div class="pvp-risk-kicker">实时论道 · 服务端权威</div>
                         <div class="pvp-risk-header">

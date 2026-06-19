@@ -76,6 +76,8 @@ async function clickRuneTab(page, label) {
 
   await page.click('#pvp-btn', { timeout: 5000, force: true });
   await page.waitForTimeout(700);
+  await clickRuneTab(page, '天道榜');
+  await page.waitForTimeout(400);
 
   const pvpMode = await page.evaluate(() => JSON.parse(window.render_game_to_text()).mode);
   add('pvp screen is reachable', pvpMode === 'pvp-screen', `mode=${pvpMode}`);

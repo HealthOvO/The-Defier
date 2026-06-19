@@ -754,8 +754,8 @@ async function runAuthoritativePvpSettlementSmoke(browser) {
       if (typeof window.game?.showScreen === 'function') {
         window.game.showScreen('pvp-screen');
       }
-      if (typeof window.PVPScene?.onShow === 'function') {
-        window.PVPScene.onShow();
+      if (typeof window.PVPScene?.switchTab === 'function') {
+        window.PVPScene.switchTab('ranking');
       }
       return {
         mainName,

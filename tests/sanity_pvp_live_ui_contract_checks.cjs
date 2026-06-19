@@ -22,6 +22,24 @@ const browserGate = read('tests/run_browser_release_checks.sh');
 const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
 
 [
+  {
+    label: 'live rune tab should be the default active entry',
+    pattern: /<button\b(?=[^>]*\bclass="[^"]*\brune-tab\b[^"]*\bactive\b)(?=[^>]*\bdata-pvp-tab="live")(?=[^>]*\bonclick="PVPScene\.switchTab\('live'\)")/s,
+  },
+  {
+    label: 'live pane should be active by default',
+    pattern: /<div\b(?=[^>]*\bid="tab-live")(?=[^>]*\bclass="[^"]*\bpvp-tab-pane\b[^"]*\bpvp-live-shell\b[^"]*\bactive\b)/s,
+  },
+  {
+    label: 'ranking pane should be marked as legacy practice',
+    pattern: /<div\b(?=[^>]*\bid="tab-ranking")(?=[^>]*\bclass="[^"]*\bpvp-tab-pane\b[^"]*\bpvp-legacy-ranking-pane\b)/s,
+  },
+].forEach(({ label, pattern }) => {
+  assert.ok(pattern.test(html), `index live PVP default entry contract failed: ${label}`);
+});
+
+[
+  'data-pvp-legacy-practice',
   "PVPScene.switchTab('live')",
   'data-pvp-tab="live"',
   'data-live-pvp-root',
@@ -63,7 +81,17 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
 });
 
 [
+  'PVPScene.findMatch()',
+  '镜像演武',
+  '不是真人排位',
+].forEach((needle) => {
+  assert.ok(html.includes(needle), `legacy ranking practice entry should be clearly demoted: ${needle}`);
+});
+
+[
   "from \"../services/pvp-live-session.js\"",
+  "activeTab: 'live'",
+  "this.switchTab('live')",
   'getLiveSession()',
   'renderLivePanel()',
   'joinLiveQueue()',

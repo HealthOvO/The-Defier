@@ -13,7 +13,7 @@ export const PVPScene = {
   context: {
     game: null
   },
-  activeTab: 'ranking',
+  activeTab: 'live',
   activeShopCategory: 'all',
   // Shop Category state
   selectedPersonality: 'balanced',
@@ -61,7 +61,7 @@ export const PVPScene = {
   onShow() {
     this.setMatchingState(false);
     this.updateMyRankInfo();
-    this.switchTab('ranking');
+    this.switchTab('live');
   },
   init(context = {}) {
     this.context = {
@@ -85,11 +85,11 @@ export const PVPScene = {
     btn.classList.toggle('is-matching', !!isBusy);
     if (isBusy) {
       if (text) {
-        text.textContent = '⏳ 神念匹配中...';
+        text.textContent = '⏳ 镜像演武匹配中...';
       }
       const hint = document.getElementById('pvp-challenge-intent');
       if (hint) {
-        hint.textContent = '正在锁定焦点目标与残影，若无快照会自动转入镜像演武。';
+        hint.textContent = '正在锁定焦点目标与残影；这不是实时真人排位。';
       }
       return;
     }
@@ -213,13 +213,13 @@ export const PVPScene = {
     const hint = document.getElementById('pvp-challenge-intent');
     const duelBrief = this.rankingFocusData && this.rankingFocusData.duelBrief ? this.rankingFocusData.duelBrief : null;
     if (text) {
-      text.textContent = duelBrief ? '⚔️ 锁定约战' : '⚔️ 论道切磋';
+      text.textContent = duelBrief ? '🧪 锁定镜像' : '🧪 镜像演武';
     }
     if (btn) {
-      btn.title = duelBrief ? `${duelBrief.targetName}｜${duelBrief.engagementLabel}｜${duelBrief.modeLabel}` : '论道切磋';
+      btn.title = duelBrief ? `${duelBrief.targetName}｜${duelBrief.engagementLabel}｜${duelBrief.modeLabel}｜不是真人排位` : '镜像演武，不是真人排位';
     }
     if (hint) {
-      hint.textContent = duelBrief ? `已锁定：${duelBrief.targetName} ｜ ${duelBrief.engagementLabel} ｜ ${duelBrief.modeLabel}` : '未锁定焦点目标时，将自动按榜位推演对手。';
+      hint.textContent = duelBrief ? `已锁定镜像：${duelBrief.targetName} ｜ ${duelBrief.engagementLabel} ｜ ${duelBrief.modeLabel} ｜ 不是真人排位` : '镜像演武不是真人排位；未锁定焦点目标时，将自动按榜位推演对手。';
     }
   },
   setRankingFocus(rank, dangerProfile = null) {
