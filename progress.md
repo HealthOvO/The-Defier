@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-19: V10-S8A live PVP 移动端真实后端 smoke
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增 `BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile` 模式，同一条真实后端双账号链路可在 390x844 / touch 视口下完成入队、匹配、ready、出牌、换手、认输、正式结算、赛季荣誉收藏、公开 replay / audit_safe 负向检查和 ready timeout invalidated 负向检查。
+    - `tests/run_browser_release_checks.sh` 新增 `pvp-live-mobile-real` release audit，`.github/workflows/pages.yml` 的 browser-release shard 与后端依赖安装条件同步纳入该 audit；`tests/summarize_browser_release_reports.cjs` 也把 `pvp-live` / `pvp-live-real` / `pvp-live-mobile-real` 纳入 expected release modules。
+    - 移动端真实 smoke 新增几何与可点击性探针：终局复盘、正式结算、赛季荣誉、外观收藏、关键回合、体验诊断和复盘按钮必须横向不溢出；`elementFromPoint` 验证斗法谱选择、入队、换边再战、ready timeout 队列和复盘按钮中心点真实可点；`noVerticalClip` / `textBlocksDoNotOverflow` 防止长结算内容被裁切或横向挤爆。
+    - `css/pvp.css` 修复移动端 `.pvp-live-post-review` 的 `188px` 硬裁切，允许终局复盘完整展开；结算 / 荣誉头部在窄屏下改纵向排布，质量和倒计时允许换行，live meta grid 从 5 列压成 2 列并允许值换行。
+  - 已验证
+    - 红测：`AUDIT_FILTER=pvp-live-mobile-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4177 output/release-browser-audits-pvp-s8a-mobile-real-red` 在修复 CSS 前失败于移动端终局内容裁切。
+    - 绿测：`AUDIT_FILTER=pvp-live-mobile-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4177 output/release-browser-audits-pvp-s8a-mobile-real`
+    - 回归：`AUDIT_FILTER=pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4177 output/release-browser-audits-pvp-s8a-desktop-real`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - `bash -n tests/run_browser_release_checks.sh`
+    - `npm run build:pages`
+    - `npm run test:node`
+  - 当前结论
+    - live PVP 已有真实后端手机宽度主链路证据，不再只依赖桌面真实 smoke 或旧 PVP mobile ghost 结果页审计。完整生产 smoke、线上部署、多实例共享队列、跨进程 WS/队列共享和更广义正式赛季入口仍未封板。
+
 - 2026-06-19: V10-S7F live ranked 赛季荣誉收藏持久化
   - 本轮完成
     - `server/pvp-live/live-settlement.js` 在 live ranked 权威 settlement 事务内新增 `seasonHonorCollection`，首场 / 3 / 5 / 10 / 20 / 50 场荣誉外观按 `rankedGames` 幂等入库；重复 intent / 重复 settlement 复用 `pvp_live_match_settlements` gate，不重复发放或重复写日志。

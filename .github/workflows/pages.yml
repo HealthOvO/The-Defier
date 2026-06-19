@@ -78,7 +78,7 @@ jobs:
           - shard: run-path-challenge
             audits: chapter-flow,run-path,run-path-events,run-path-reward,dongfu,challenge
           - shard: expedition-pvp
-            audits: expedition,events,vow-choice,guide,inheritance,pvp,pvp-live,pvp-live-real,pvp-mobile,pvp-mobile-result,challenge-mobile-flow
+            audits: expedition,events,vow-choice,guide,inheritance,pvp,pvp-live,pvp-live-real,pvp-live-mobile-real,pvp-mobile,pvp-mobile-result,challenge-mobile-flow
 
     steps:
       - name: Checkout
@@ -96,7 +96,7 @@ jobs:
         run: npm ci
 
       - name: Install backend dependencies
-        if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'pvp-live-real')
+        if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real')
         run: npm ci --prefix server
 
       - name: Install Playwright browser

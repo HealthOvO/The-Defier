@@ -3813,7 +3813,7 @@ input:checked+.seal-slider .seal-face.on {
     }
 
     .pvp-live-meta-grid {
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         margin-top: 6px;
         gap: 4px;
     }
@@ -3832,6 +3832,8 @@ input:checked+.seal-slider .seal-face.on {
         margin-top: 3px;
         font-size: 0.66rem;
         line-height: 1.15;
+        white-space: normal;
+        overflow-wrap: anywhere;
     }
 
     .pvp-live-duel-grid {
@@ -3893,9 +3895,10 @@ input:checked+.seal-slider .seal-face.on {
         padding: 7px 8px;
         font-size: 0.7rem;
         line-height: 1.25;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
     }
 
     .pvp-live-turn-timer {
@@ -3903,9 +3906,10 @@ input:checked+.seal-slider .seal-face.on {
         padding: 5px 8px;
         font-size: 0.7rem;
         line-height: 1.2;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
     }
 
     .pvp-live-connection-status {
@@ -3966,8 +3970,8 @@ input:checked+.seal-slider .seal-face.on {
         padding: 8px;
         font-size: 0.7rem;
         line-height: 1.35;
-        max-height: 188px;
-        overflow: hidden;
+        max-height: none;
+        overflow: visible;
     }
 
     .pvp-live-guide-head {
@@ -3987,6 +3991,20 @@ input:checked+.seal-slider .seal-face.on {
     }
 
     .pvp-live-review-chip {
+        text-align: left;
+    }
+
+    .pvp-live-settlement-head,
+    .pvp-live-season-honor-head,
+    .pvp-live-season-honor-reward-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .pvp-live-settlement-head span:last-child,
+    .pvp-live-season-honor-head span:last-child,
+    .pvp-live-season-honor-reward-head span:last-child {
         text-align: left;
     }
 

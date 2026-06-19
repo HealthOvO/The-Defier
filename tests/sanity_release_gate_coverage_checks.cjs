@@ -8,6 +8,7 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 const prodReadScript = read('scripts/check-production-read-only.sh');
 const pagesWorkflow = read('.github/workflows/pages.yml');
 const browserReleaseScript = read('tests/run_browser_release_checks.sh');
+const browserReleaseSummary = read('tests/summarize_browser_release_reports.cjs');
 const backendSecurityChecks = read('tests/backend_security_checks.cjs');
 const backendClientSmoke = read('tests/browser_backend_client_smoke.mjs');
 const browserAudit = read('tests/browser_audit.mjs');
@@ -344,6 +345,7 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'node tests/browser_pvp_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp"',
   'node tests/browser_pvp_live_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-live"',
   'node tests/browser_pvp_live_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-live-real"',
+  'env BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-live-mobile-real"',
   'node tests/browser_pvp_mobile_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-mobile"',
   'node tests/browser_pvp_mobile_result_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-mobile-result"',
   'node tests/browser_chapter_flow_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/chapter-flow"',
@@ -358,12 +360,23 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
 });
 
 [
-  'audits: expedition,events,vow-choice,guide,inheritance,pvp,pvp-live,pvp-live-real,pvp-mobile,pvp-mobile-result,challenge-mobile-flow',
-  "if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'pvp-live-real')",
+  'audits: expedition,events,vow-choice,guide,inheritance,pvp,pvp-live,pvp-live-real,pvp-live-mobile-real,pvp-mobile,pvp-mobile-result,challenge-mobile-flow',
+  "if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real')",
 ].forEach((needle) => {
   assert.ok(
     pagesWorkflow.includes(needle),
     `GitHub Pages browser-release workflow should include live PVP audit marker: ${needle}`,
+  );
+});
+
+[
+  "'pvp-live'",
+  "'pvp-live-real'",
+  "'pvp-live-mobile-real'",
+].forEach((needle) => {
+  assert.ok(
+    browserReleaseSummary.includes(needle),
+    `browser release summary should expect live PVP audit module: ${needle}`,
   );
 });
 
@@ -594,6 +607,19 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   '对局结束',
   'real browser post-match queue again re-enters real live waiting queue',
   'real browser live PVP smoke has no console errors',
+  'BROWSER_PVP_LIVE_REAL_VIEWPORT',
+  'BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE',
+  'assertMobileActionable',
+  'clickLiveControl',
+  'isMobile: true',
+  'hasTouch: true',
+  'mobileRealLayoutProbe',
+  'real mobile browser live post-match settlement and honor collection stay readable and tappable',
+  'noVerticalClip',
+  'textBlocksDoNotOverflow',
+  'elementFromPoint',
+  'data-live-post-review-action',
+  'window.innerWidth',
 ].forEach((needle) => {
   assert.ok(
     browserPvpLiveRealSmoke.includes(needle),

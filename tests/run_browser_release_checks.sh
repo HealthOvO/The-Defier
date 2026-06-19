@@ -155,6 +155,7 @@ run_selected_audit inheritance node tests/browser_inheritance_audit.mjs "$BASE_U
 run_selected_audit pvp node tests/browser_pvp_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp"
 run_selected_audit pvp-live node tests/browser_pvp_live_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-live"
 run_selected_audit pvp-live-real node tests/browser_pvp_live_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-live-real"
+run_selected_audit pvp-live-mobile-real env BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-live-mobile-real"
 run_selected_audit pvp-mobile node tests/browser_pvp_mobile_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-mobile"
 run_selected_audit pvp-mobile-result node tests/browser_pvp_mobile_result_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-mobile-result"
 run_selected_audit challenge-mobile-flow node tests/browser_challenge_mobile_flow_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/challenge-mobile-flow"

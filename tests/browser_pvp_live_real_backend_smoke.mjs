@@ -11,8 +11,15 @@ const outDir = process.argv[3] || 'output/browser-pvp-live-real-backend-smoke';
 const requestedPort = Number(process.env.BROWSER_PVP_LIVE_REAL_PORT || 0);
 const dbPath = process.env.BROWSER_PVP_LIVE_REAL_DB_PATH
   || path.join(os.tmpdir(), `the-defier-pvp-live-real-${process.pid}.sqlite`);
+const viewportMode = String(process.env.BROWSER_PVP_LIVE_REAL_VIEWPORT || 'desktop').trim().toLowerCase();
+const isMobileViewport = viewportMode === 'mobile';
+const requireMobileViewport = process.env.BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE === '1';
 const runId = `${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
 const password = `pwd_${runId}`;
+
+if (requireMobileViewport && !isMobileViewport) {
+  throw new Error('BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE requires BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile');
+}
 
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -119,7 +126,9 @@ function makeLoadout(identitySlot, pattern) {
 }
 
 async function preparePage(browser, username, displayName) {
-  const context = await browser.newContext({ viewport: { width: 1366, height: 860 } });
+  const context = await browser.newContext(isMobileViewport
+    ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }
+    : { viewport: { width: 1366, height: 860 } });
   await context.addInitScript((targetApiUrl) => {
     try {
       localStorage.setItem('theDefierDebug', 'true');
@@ -241,6 +250,96 @@ async function ensureLiveRealtime(page, timeoutMs = 10000) {
   return getLiveSnapshot(page);
 }
 
+async function assertMobileActionable(page, selector, label) {
+  if (!isMobileViewport) return null;
+  return await page.evaluate(({ targetSelector, targetLabel }) => {
+    const target = document.querySelector(targetSelector);
+    if (!target) {
+      return { ok: false, label: targetLabel, selector: targetSelector, reason: 'missing' };
+    }
+    target.scrollIntoView({ block: 'center', inline: 'nearest' });
+    const rect = target.getBoundingClientRect();
+    const x = Math.min(window.innerWidth - 1, Math.max(1, rect.left + rect.width / 2));
+    const y = Math.min(window.innerHeight - 1, Math.max(1, rect.top + rect.height / 2));
+    const hit = document.elementFromPoint(x, y);
+    const ok = !target.disabled
+      && rect.width > 0
+      && rect.height >= 32
+      && rect.left >= 0
+      && rect.right <= window.innerWidth + 2
+      && rect.top >= 0
+      && rect.bottom <= window.innerHeight + 2
+      && (hit === target || target.contains(hit));
+    return {
+      ok,
+      label: targetLabel,
+      selector: targetSelector,
+      disabled: !!target.disabled,
+      rect: {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      },
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      hitTag: hit?.tagName || '',
+      hitText: hit?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 60) || '',
+    };
+  }, { targetSelector: selector, targetLabel: label });
+}
+
+async function clickLiveControl(page, selector, label) {
+  await page.waitForSelector(selector, { timeout: 5000 });
+  if (isMobileViewport) {
+    const actionability = await page.evaluate(({ targetSelector, targetLabel }) => {
+      const target = document.querySelector(targetSelector);
+      if (!target) {
+        return { ok: false, label: targetLabel, selector: targetSelector, reason: 'missing' };
+      }
+      target.scrollIntoView({ block: 'center', inline: 'nearest' });
+      const rect = target.getBoundingClientRect();
+      const x = Math.min(window.innerWidth - 1, Math.max(1, rect.left + rect.width / 2));
+      const y = Math.min(window.innerHeight - 1, Math.max(1, rect.top + rect.height / 2));
+      const hit = document.elementFromPoint(x, y);
+      const ok = !target.disabled
+        && rect.width > 0
+        && rect.height >= 32
+        && rect.left >= 0
+        && rect.right <= window.innerWidth + 2
+        && rect.top >= 0
+        && rect.bottom <= window.innerHeight + 2
+        && (hit === target || target.contains(hit));
+      const report = {
+        ok,
+        label: targetLabel,
+        selector: targetSelector,
+        disabled: !!target.disabled,
+        rect: {
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          top: Math.round(rect.top),
+          bottom: Math.round(rect.bottom),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        },
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        hitTag: hit?.tagName || '',
+        hitText: hit?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 60) || '',
+      };
+      if (ok) target.click();
+      return report;
+    }, { targetSelector: selector, targetLabel: label });
+    if (!actionability.ok) {
+      throw new Error(`mobile live control is not actionable: ${JSON.stringify(actionability)}`);
+    }
+    return actionability;
+  }
+  await page.click(selector, { timeout: 5000, force: true });
+  return null;
+}
+
 async function refreshUntilLivePhase(page, phase, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs;
   let lastSnapshot = null;
@@ -274,6 +373,7 @@ async function writeReport() {
   const report = {
     url: appUrl,
     apiUrl,
+    viewportMode,
     generatedAt: new Date().toISOString(),
     summary: {
       total: findings.length,
@@ -313,13 +413,13 @@ async function writeReport() {
       window.PVPScene.switchTab('live');
     });
     await seatA.page.waitForSelector('[data-live-loadout-preset="sword"]', { timeout: 5000 });
-    await seatA.page.click('[data-live-loadout-preset="sword"]', { timeout: 5000, force: true });
+    const seatALoadoutActionable = await clickLiveControl(seatA.page, '[data-live-loadout-preset="sword"]', 'seat-a-sword-loadout');
     const selectedA = await seatA.page.evaluate(() => ({
       preset: document.querySelector('[data-live-loadout-preset].selected')?.getAttribute('data-live-loadout-preset') || '',
       label: document.querySelector('[data-live-selected-loadout]')?.textContent || '',
       candidate: window.PVPScene.getLiveQueueLoadoutCandidate(window.PVPScene.getLiveSelectedLoadoutPreset().id),
     }));
-    await seatA.page.click('[data-live-action="join-queue"]', { timeout: 5000, force: true });
+    const seatAJoinActionable = await clickLiveControl(seatA.page, '[data-live-action="join-queue"]', 'seat-a-join-queue');
     const joinA = await waitForLivePhase(seatA.page, 'waiting');
     add(
       'real browser user A joins live queue with locked loadout',
@@ -331,8 +431,9 @@ async function writeReport() {
       selectedA.preset === 'sword'
         && /破阵斗法谱/.test(selectedA.label)
         && selectedA.candidate?.identitySlot === 'sword'
-        && selectedA.candidate?.deck?.length === 20,
-      JSON.stringify(selectedA),
+        && selectedA.candidate?.deck?.length === 20
+        && (!isMobileViewport || (seatALoadoutActionable?.ok === true && seatAJoinActionable?.ok === true)),
+      JSON.stringify({ selectedA, seatALoadoutActionable, seatAJoinActionable }),
     );
 
     const rejoinAChanged = await seatA.page.evaluate(async ({ displayName, loadout }) => {
@@ -353,21 +454,22 @@ async function writeReport() {
       window.PVPScene.switchTab('live');
     });
     await seatB.page.waitForSelector('[data-live-loadout-preset="shield"]', { timeout: 5000 });
-    await seatB.page.click('[data-live-loadout-preset="shield"]', { timeout: 5000, force: true });
+    const seatBLoadoutActionable = await clickLiveControl(seatB.page, '[data-live-loadout-preset="shield"]', 'seat-b-shield-loadout');
     const selectedB = await seatB.page.evaluate(() => ({
       preset: document.querySelector('[data-live-loadout-preset].selected')?.getAttribute('data-live-loadout-preset') || '',
       label: document.querySelector('[data-live-selected-loadout]')?.textContent || '',
       candidate: window.PVPScene.getLiveQueueLoadoutCandidate(window.PVPScene.getLiveSelectedLoadoutPreset().id),
     }));
-    await seatB.page.click('[data-live-action="join-queue"]', { timeout: 5000, force: true });
+    const seatBJoinActionable = await clickLiveControl(seatB.page, '[data-live-action="join-queue"]', 'seat-b-join-queue');
     const joinB = await waitForLivePhase(seatB.page, 'setup');
     add(
       'real browser user B selects live loadout preset through UI',
       selectedB.preset === 'shield'
         && /守势斗法谱/.test(selectedB.label)
         && selectedB.candidate?.identitySlot === 'shield'
-        && selectedB.candidate?.deck?.length === 20,
-      JSON.stringify(selectedB),
+        && selectedB.candidate?.deck?.length === 20
+        && (!isMobileViewport || (seatBLoadoutActionable?.ok === true && seatBJoinActionable?.ok === true)),
+      JSON.stringify({ selectedB, seatBLoadoutActionable, seatBJoinActionable }),
     );
     add(
       'real browser user B joins and receives matched setup state',
@@ -720,6 +822,124 @@ async function writeReport() {
         && postMatchProbe.textPayload?.settlementReport?.seasonHonorReport?.cosmeticReward?.reportVersion === 'pvp-live-season-honor-reward-v1',
       JSON.stringify({ finishedA, finishedB, postMatchProbe, postMatchParity }),
     );
+    if (isMobileViewport) {
+      await seatB.page.evaluate(() => {
+        document.querySelector('[data-live-post-match-review]')?.scrollIntoView({ block: 'start', inline: 'nearest' });
+      });
+      await seatB.page.waitForTimeout(180);
+      const mobileRealLayoutProbe = await seatB.page.evaluate(() => {
+        const toRect = (el) => {
+          if (!el) return null;
+          const rect = el.getBoundingClientRect();
+          return {
+            left: Math.round(rect.left),
+            right: Math.round(rect.right),
+            top: Math.round(rect.top),
+            bottom: Math.round(rect.bottom),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          };
+        };
+        const toBoxMetrics = (el) => {
+          if (!el) return null;
+          return {
+            scrollWidth: Math.round(el.scrollWidth || 0),
+            clientWidth: Math.round(el.clientWidth || 0),
+            scrollHeight: Math.round(el.scrollHeight || 0),
+            clientHeight: Math.round(el.clientHeight || 0),
+          };
+        };
+        const horizontallyInside = (rect) => !!rect
+          && rect.width > 0
+          && rect.left >= 0
+          && rect.right <= window.innerWidth + 2;
+        const root = document.querySelector('[data-live-pvp-root]');
+        const review = document.querySelector('[data-live-post-match-review]');
+        const settlement = document.querySelector('[data-live-settlement-report]');
+        const honor = document.querySelector('[data-live-season-honor]');
+        const honorReward = document.querySelector('[data-live-season-honor-reward]');
+        const actionButtons = Array.from(document.querySelectorAll('[data-live-post-review-action]'));
+        const textBlocks = Array.from(document.querySelectorAll([
+          '[data-live-settlement-report]',
+          '[data-live-season-honor]',
+          '[data-live-season-honor-reward]',
+          '.pvp-live-season-honor-reward-collection',
+          '.pvp-live-season-honor-reward-progress',
+          '.pvp-live-season-honor-reward-next',
+          '.pvp-live-season-honor-reward-boundary',
+        ].join(',')));
+        const buttonHitChecks = actionButtons.map((button) => {
+          button.scrollIntoView({ block: 'center', inline: 'nearest' });
+          const rect = button.getBoundingClientRect();
+          const x = Math.min(window.innerWidth - 1, Math.max(1, rect.left + rect.width / 2));
+          const y = Math.min(window.innerHeight - 1, Math.max(1, rect.top + rect.height / 2));
+          const hit = document.elementFromPoint(x, y);
+          return {
+            id: button.getAttribute('data-live-post-review-action') || '',
+            rect: toRect(button),
+            topHit: hit === button || button.contains(hit),
+            hitTag: hit?.tagName || '',
+            hitText: hit?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 40) || '',
+          };
+        });
+        const allLiveRects = Array.from(document.querySelectorAll('[data-live-post-match-review], [data-live-settlement-report], [data-live-season-honor], [data-live-season-honor-reward], [data-live-key-turn-replay], [data-live-experience-report], [data-live-post-review-action]'))
+          .map((el) => ({ marker: el.getAttribute('data-live-post-review-action') || el.getAttribute('class') || el.tagName, rect: toRect(el) }));
+        return {
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+          root: toRect(root),
+          review: toRect(review),
+          settlement: toRect(settlement),
+          honor: toRect(honor),
+          honorReward: toRect(honorReward),
+          bodyScrollWidth: document.scrollingElement?.scrollWidth || document.documentElement.scrollWidth || 0,
+          reviewText: review?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          settlementText: settlement?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          honorText: honor?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          honorRewardText: honorReward?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          actionIds: actionButtons.map(button => button.getAttribute('data-live-post-review-action') || ''),
+          reviewBox: toBoxMetrics(review),
+          textBlockBoxes: textBlocks.map(el => ({
+            marker: el.getAttribute('data-live-post-review-action') || el.getAttribute('class') || el.tagName,
+            rect: toRect(el),
+            box: toBoxMetrics(el),
+          })),
+          buttonHitChecks,
+          horizontallyInside: {
+            root: horizontallyInside(toRect(root)),
+            review: horizontallyInside(toRect(review)),
+            settlement: horizontallyInside(toRect(settlement)),
+            honor: horizontallyInside(toRect(honor)),
+            honorReward: horizontallyInside(toRect(honorReward)),
+            allLiveRects: allLiveRects.every(item => horizontallyInside(item.rect)),
+          },
+          noVerticalClip: !!review && review.scrollHeight <= review.clientHeight + 1,
+          textBlocksDoNotOverflow: textBlocks.every(el => (el.scrollWidth || 0) <= (el.clientWidth || 0) + 1),
+          allLiveRects,
+        };
+      });
+      add(
+        'real mobile browser live post-match settlement and honor collection stay readable and tappable',
+        mobileRealLayoutProbe.viewport?.width === 390
+          && mobileRealLayoutProbe.bodyScrollWidth <= mobileRealLayoutProbe.viewport.width + 2
+          && mobileRealLayoutProbe.horizontallyInside?.root === true
+          && mobileRealLayoutProbe.horizontallyInside?.review === true
+          && mobileRealLayoutProbe.horizontallyInside?.settlement === true
+          && mobileRealLayoutProbe.horizontallyInside?.honor === true
+          && mobileRealLayoutProbe.horizontallyInside?.honorReward === true
+          && mobileRealLayoutProbe.horizontallyInside?.allLiveRects === true
+          && mobileRealLayoutProbe.noVerticalClip === true
+          && mobileRealLayoutProbe.textBlocksDoNotOverflow === true
+          && /复盘/.test(mobileRealLayoutProbe.reviewText)
+          && /正式积分/.test(mobileRealLayoutProbe.settlementText)
+          && /赛季荣誉/.test(mobileRealLayoutProbe.honorText)
+          && /收藏状态/.test(mobileRealLayoutProbe.honorRewardText)
+          && mobileRealLayoutProbe.actionIds.includes('review_key_turns')
+          && mobileRealLayoutProbe.actionIds.includes('friendly_rematch')
+          && mobileRealLayoutProbe.buttonHitChecks.length >= 3
+          && mobileRealLayoutProbe.buttonHitChecks.every(item => item.topHit === true && item.rect?.left >= 0 && item.rect?.right <= mobileRealLayoutProbe.viewport.width + 2),
+        JSON.stringify(mobileRealLayoutProbe),
+      );
+    }
     const publicReplayProbe = await requestLivePvpReplay(seatB.page, finishedB.matchId, { visibility: 'replay_public' });
     publicReplayProbe.hasForbiddenReport = /postMatchReview|settlementReport|seasonHonorReport|cosmeticReward|seasonHonorCollection|collectionState|viewerSeat/.test(JSON.stringify(publicReplayProbe.replay || {}));
     const auditSafeReplayProbe = await requestLivePvpReplay(seatB.page, finishedB.matchId, { visibility: 'audit_safe' });
@@ -923,7 +1143,7 @@ async function writeReport() {
       JSON.stringify({ restoredPostMatch, reloadPostMatchProbe }),
     );
 
-    await seatB.page.click('[data-live-post-review-action="friendly_rematch"]', { timeout: 5000, force: true });
+    const seatBFriendlyRematchActionable = await clickLiveControl(seatB.page, '[data-live-post-review-action="friendly_rematch"]', 'seat-b-friendly-rematch');
     await seatB.page.waitForTimeout(200);
     const friendlyRematchProbe = await seatB.page.evaluate(() => ({
       phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
@@ -939,10 +1159,11 @@ async function writeReport() {
         && /不写正式积分/.test(friendlyRematchProbe.friendlyText)
         && friendlyRematchProbe.snapshot?.reportVersion === 'pvp-live-friendly-series-v1'
         && friendlyRematchProbe.snapshot?.sourceMatchId === finishedB.matchId
+        && (!isMobileViewport || seatBFriendlyRematchActionable?.ok === true)
         && friendlyRematchProbe.snapshot?.rankedImpact === 'none',
-      JSON.stringify(friendlyRematchProbe),
+      JSON.stringify({ friendlyRematchProbe, seatBFriendlyRematchActionable }),
     );
-    await seatA.page.click('[data-live-post-review-action="friendly_rematch"]', { timeout: 5000, force: true });
+    await clickLiveControl(seatA.page, '[data-live-post-review-action="friendly_rematch"]', 'seat-a-friendly-rematch');
     await seatB.page.waitForFunction(() => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       return snapshot?.phase === 'setup' && snapshot?.mode === 'friendly';
@@ -1032,9 +1253,11 @@ async function writeReport() {
       window.game.player.name = '丁';
       window.PVPScene.switchTab('live');
     });
-    await seatC.page.click('[data-live-action="join-queue"]', { timeout: 5000, force: true });
+    await seatC.page.waitForFunction(() => window.PVPScene?.getLiveSnapshot?.()?.phase === 'idle', null, { timeout: 8000 });
+    await seatD.page.waitForFunction(() => window.PVPScene?.getLiveSnapshot?.()?.phase === 'idle', null, { timeout: 8000 });
+    const seatCJoinActionable = await clickLiveControl(seatC.page, '[data-live-action="join-queue"]', 'seat-c-join-queue');
     const timeoutJoinC = await waitForLivePhase(seatC.page, 'waiting');
-    await seatD.page.click('[data-live-action="join-queue"]', { timeout: 5000, force: true });
+    const seatDJoinActionable = await clickLiveControl(seatD.page, '[data-live-action="join-queue"]', 'seat-d-join-queue');
     const timeoutJoinD = await waitForLivePhase(seatD.page, 'setup');
     const timeoutSetupC = await refreshUntilLivePhase(seatC.page, 'setup');
     await seatC.page.waitForTimeout(10600);
@@ -1066,6 +1289,7 @@ async function writeReport() {
       'real browser ready timeout invalidated terminal state does not expose settlement or season honor',
       timeoutJoinC.phase === 'waiting'
         && timeoutJoinD.phase === 'setup'
+        && (!isMobileViewport || (seatCJoinActionable?.ok === true && seatDJoinActionable?.ok === true))
         && timeoutSetupC.phase === 'setup'
         && invalidatedC.phase === 'invalidated'
         && invalidatedNoSeasonHonorProbe.phase === 'invalidated'
@@ -1084,7 +1308,7 @@ async function writeReport() {
         && invalidatedNoSeasonHonorProbe.matchRead?.success === true
         && invalidatedNoSeasonHonorProbe.matchRead?.stateView?.status === 'invalidated'
         && !invalidatedNoSeasonHonorProbe.matchRead?.stateView?.postMatchReview,
-      JSON.stringify({ timeoutJoinC, timeoutJoinD, timeoutSetupC, invalidatedC, invalidatedNoSeasonHonorProbe }),
+      JSON.stringify({ timeoutJoinC, timeoutJoinD, timeoutSetupC, invalidatedC, invalidatedNoSeasonHonorProbe, seatCJoinActionable, seatDJoinActionable }),
     );
 
     await safeAuditScreenshot(seatA.page, path.join(outDir, 'seat-a-live-real.png'), 'pvp_live_real_seat_a', {
