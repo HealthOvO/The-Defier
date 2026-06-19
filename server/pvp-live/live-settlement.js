@@ -370,7 +370,18 @@ function makeSqliteLivePvpSettlement() {
                     [match.matchId]
                 );
                 if (existing) {
-                    return { settled: false, reason: 'already_settled', matchId: match.matchId };
+                    let payload = null;
+                    try {
+                        payload = existing.payload ? JSON.parse(existing.payload) : null;
+                    } catch (error) {
+                        payload = null;
+                    }
+                    return {
+                        settled: true,
+                        alreadySettled: true,
+                        matchId: match.matchId,
+                        ...(payload && typeof payload === 'object' ? payload : {})
+                    };
                 }
 
                 const winnerUser = await getLiveUser(winnerSeat.userId, winnerSeat.displayName);

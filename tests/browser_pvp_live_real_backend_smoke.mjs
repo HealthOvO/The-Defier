@@ -646,6 +646,9 @@ async function writeReport() {
       experienceSource: document.querySelector('[data-live-experience-report]')?.getAttribute('data-live-experience-source') || '',
       experienceHidden: document.querySelector('[data-live-experience-report]')?.getAttribute('data-live-experience-hidden') || '',
       experienceCheckIds: Array.from(document.querySelectorAll('[data-live-experience-check]')).map(item => item.getAttribute('data-live-experience-check')),
+      settlementText: document.querySelector('[data-live-settlement-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      settlementSource: document.querySelector('[data-live-settlement-report]')?.getAttribute('data-live-settlement-source') || '',
+      settlementHidden: document.querySelector('[data-live-settlement-report]')?.getAttribute('data-live-settlement-hidden') || '',
       reviewActionIds: Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => button.getAttribute('data-live-post-review-action')),
       payload: window.PVPScene.getLiveSnapshot()?.postMatchReview || null,
       textPayload: JSON.parse(window.render_game_to_text()).pvp?.live?.postMatchReview || null,
@@ -675,7 +678,15 @@ async function writeReport() {
         && postMatchParity?.finishReason === true
         && postMatchParity?.evidence === true
         && postMatchParity?.nextActions === true
-        && !/reward|rating|elo/i.test(`${postMatchProbe.text} ${JSON.stringify(postMatchProbe.payload || {})}`),
+        && /正式积分/.test(postMatchProbe.settlementText)
+        && /天道币/.test(postMatchProbe.settlementText)
+        && postMatchProbe.settlementSource === 'server_authoritative_settlement'
+        && postMatchProbe.settlementHidden === 'false'
+        && postMatchProbe.payload?.settlementReport?.reportVersion === 'pvp-live-settlement-report-v1'
+        && postMatchProbe.payload?.settlementReport?.result === 'loss'
+        && postMatchProbe.payload?.settlementReport?.ratingDelta < 0
+        && postMatchProbe.payload?.settlementReport?.coinsAwarded > 0
+        && postMatchProbe.textPayload?.settlementReport?.reportVersion === 'pvp-live-settlement-report-v1',
       JSON.stringify({ finishedA, finishedB, postMatchProbe, postMatchParity }),
     );
     add(

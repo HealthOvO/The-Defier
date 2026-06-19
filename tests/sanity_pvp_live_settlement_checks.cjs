@@ -348,6 +348,9 @@ function dbGet(sql, params = []) {
     });
     assert.equal(surrenderB.payload.result, 'accepted', 'live surrender should be accepted for settlement');
     assert.equal(surrenderB.payload.stateView.status, 'finished', 'live surrender should finish the match');
+    assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'loser state view should expose settlement report after live settlement');
+    assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.result, 'loss', 'loser settlement report should be scoped to the viewer');
+    assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.oldScore, initialRankB.payload.rank.score, 'loser settlement report should expose old score');
 
     const rankAfterA = await request('/api/pvp/rank', { token: userA.token });
     const rankAfterB = await request('/api/pvp/rank', { token: userB.token });
@@ -364,6 +367,8 @@ function dbGet(sql, params = []) {
     assert.ok(rankAfterA.payload.wallet.coins > initialRankA.payload.wallet.coins, 'winner should receive live match reward');
     assert.ok(rankAfterB.payload.wallet.coins > initialRankB.payload.wallet.coins, 'loser should receive participation reward');
     assert.ok(rankAfterA.payload.wallet.coins > rankAfterB.payload.wallet.coins, 'winner reward should exceed loser reward');
+    assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.scoreAfter, rankAfterB.payload.rank.score, 'loser settlement report should match authoritative rank score');
+    assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.coinsAwarded, rankAfterB.payload.wallet.coins - initialRankB.payload.wallet.coins, 'loser settlement report should match wallet reward delta');
 
     const duplicateSurrender = await submitIntent(joinB.payload.matchId, userB.token, {
         intentId: 'live-settlement-surrender-b-1',

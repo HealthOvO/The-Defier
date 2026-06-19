@@ -52,6 +52,46 @@ function makeLoadout(identitySlot, pattern) {
     };
 }
 
+function makeRouteSettlementStub() {
+    const seatUserId = (match, seatId) => Object.entries(match && match.seatsByUserId || {})
+        .find(([, sourceSeat]) => sourceSeat === seatId)?.[0] || '';
+    return {
+        async settleMatch(match) {
+            if (!match || !match.state || match.state.status !== 'finished' || match.state.mode === 'friendly') {
+                return { settled: false, reason: 'not_ranked_finished' };
+            }
+            const finishedEvent = match.state.events.slice().reverse()
+                .find(event => event && event.eventType === 'match_finished' && event.payload);
+            const winnerSeat = String(finishedEvent && finishedEvent.payload && finishedEvent.payload.winnerSeat || '');
+            if (winnerSeat !== 'A' && winnerSeat !== 'B') return { settled: false, reason: 'no_ranked_winner' };
+            const loserSeat = winnerSeat === 'A' ? 'B' : 'A';
+            const finishReason = String(finishedEvent.payload.finishReason || 'lethal');
+            return {
+                settled: true,
+                matchId: match.matchId,
+                finishReason,
+                settledAt: Date.now(),
+                winner: {
+                    userId: seatUserId(match, winnerSeat),
+                    didWin: true,
+                    oldScore: 1000,
+                    newScore: 1024,
+                    ratingDelta: 24,
+                    coinsAwarded: 38
+                },
+                loser: {
+                    userId: seatUserId(match, loserSeat),
+                    didWin: false,
+                    oldScore: 1000,
+                    newScore: 988,
+                    ratingDelta: -12,
+                    coinsAwarded: 12
+                }
+            };
+        }
+    };
+}
+
 function assertTurnTimer(timer, expectedPhase, messagePrefix) {
     assert.equal(timer?.reportVersion, 'pvp-live-turn-timer-v1', `${messagePrefix} should expose turn timer report version`);
     assert.equal(timer?.phase, expectedPhase, `${messagePrefix} should expose ${expectedPhase} timer phase`);
@@ -125,6 +165,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
 
 (async () => {
     pvpLiveRoutes.__livePvpStore.reset();
+    pvpLiveRoutes.__attachServices({ settlement: makeRouteSettlementStub() });
 
     const app = express();
     app.use(express.json());
@@ -813,7 +854,13 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(surrenderB.payload.stateView.postMatchReview?.finishReason, 'surrender', 'surrender review should expose surrender finish reason');
         assert.ok(surrenderB.payload.stateView.postMatchReview?.nextActions?.some(action => action.id === 'queue_again'), 'surrender review should include queue again next action');
         assert.ok(surrenderB.payload.stateView.postMatchReview?.nextActions?.some(action => action.id === 'friendly_rematch'), 'surrender review should include friendly rematch next action');
-        assert.ok(!/reward|rating|elo/i.test(JSON.stringify(surrenderB.payload.stateView.postMatchReview || {})), 'surrender review must not promise reward or exact rating compensation');
+        assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'ranked surrender review should expose authoritative settlement report');
+        assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.sourceVisibility, 'server_authoritative_settlement', 'ranked surrender settlement report should expose server authoritative source visibility');
+        assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.settlementSource, 'live_ranked', 'ranked surrender settlement report should identify live ranked source');
+        assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.formalResultPolicy, 'ranked_authoritative', 'ranked surrender settlement report should be formal authoritative');
+        assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.result, 'loss', 'surrendering seat should see its own loss settlement');
+        assert.ok(surrenderB.payload.stateView.postMatchReview?.settlementReport?.ratingDelta < 0, 'surrendering seat should see negative score delta');
+        assert.ok(surrenderB.payload.stateView.postMatchReview?.settlementReport?.coinsAwarded > 0, 'surrendering seat should still see participation reward');
 
         const rematchA = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
             method: 'POST',
@@ -886,6 +933,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.deepEqual(friendlySurrenderA.payload.stateView.postMatchReview?.friendlySeries?.scoreBySourceSeat, { A: 1, B: 1 }, 'friendly Bo3 round 2 should update tied source score');
         assert.equal(friendlySurrenderA.payload.stateView.postMatchReview?.friendlySeries?.canRequestNextRound, true, 'tied Bo3 should allow a decider rematch');
         assert.ok(friendlySurrenderA.payload.stateView.postMatchReview?.nextActions?.some(action => action.id === 'friendly_rematch'), 'tied Bo3 review should expose decider action');
+        assert.equal(friendlySurrenderA.payload.stateView.postMatchReview?.settlementReport, null, 'friendly review must not expose formal ranked settlement report');
 
         const friendlyDrawWait = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
             method: 'POST',
@@ -1038,6 +1086,10 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(normalFinishB.payload.stateView.postMatchReview?.result, 'win', 'winning live seat should receive a win review');
         assert.equal(normalFinishB.payload.stateView.postMatchReview?.finishReason, 'lethal', 'normal lethal review should expose lethal finish reason');
         assert.ok(normalFinishB.payload.stateView.postMatchReview?.evidence?.some(event => event.eventType === 'damage_applied'), 'normal lethal review should cite public damage evidence');
+        assert.equal(normalFinishB.payload.stateView.postMatchReview?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'normal lethal winner should receive settlement report');
+        assert.equal(normalFinishB.payload.stateView.postMatchReview?.settlementReport?.result, 'win', 'normal lethal winner settlement should be winner-scoped');
+        assert.ok(normalFinishB.payload.stateView.postMatchReview?.settlementReport?.ratingDelta > 0, 'normal lethal winner should see positive score delta');
+        assert.ok(normalFinishB.payload.stateView.postMatchReview?.settlementReport?.coinsAwarded > 0, 'normal lethal winner should see coin reward');
         const normalFinishLoserA = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
             token: tokenA
         });
@@ -1045,6 +1097,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(normalFinishLoserA.payload.stateView.postMatchReview?.result, 'loss', 'normal lethal loser should receive a loss review');
         assert.equal(normalFinishLoserA.payload.stateView.postMatchReview?.finishReason, 'lethal', 'normal lethal loser review should expose lethal finish reason');
         assert.ok(normalFinishLoserA.payload.stateView.postMatchReview?.suggestions?.length >= 1, 'normal lethal loser review should include learning suggestions');
+        assert.equal(normalFinishLoserA.payload.stateView.postMatchReview?.settlementReport?.result, 'loss', 'normal lethal loser settlement should be loser-scoped');
+        assert.ok(normalFinishLoserA.payload.stateView.postMatchReview?.settlementReport?.ratingDelta < 0, 'normal lethal loser should see negative score delta');
 
         pvpLiveRoutes.__livePvpStore.reset();
         const joinD = await request(baseUrl, '/api/pvp/live/queue/join', {

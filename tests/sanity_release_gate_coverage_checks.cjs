@@ -765,7 +765,10 @@ assert.ok(
   'active match should not expose post-match replay',
   'active replay rejection should be stable',
   'participant should fetch replay_self',
+  'winner self replay should include own authoritative settlement report',
+  'winner self replay settlement report should stay seat-scoped',
   'participant should fetch replay_public',
+  'replay_public should not expose seat-specific settlement report',
   'participant should fetch audit_safe replay',
   'non-participant should not fetch replay',
   'browser replay route should reject server_full visibility',
@@ -1094,10 +1097,57 @@ assert.ok(
   'round14 score winner should receive rank win',
   'round14 score loser should receive rank loss',
   'winner reward should exceed loser reward',
+  'loser state view should expose settlement report after live settlement',
+  'loser settlement report should match authoritative rank score',
+  'loser settlement report should match wallet reward delta',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveSettlementChecks.includes(needle),
     `live PVP settlement sanity should pin server-authoritative rank/economy/history marker: ${needle}`,
+  );
+});
+
+[
+  'ranked surrender review should expose authoritative settlement report',
+  'ranked surrender settlement report should be formal authoritative',
+  'friendly review must not expose formal ranked settlement report',
+  'normal lethal winner should receive settlement report',
+  'pvp-live-settlement-report-v1',
+  'server_authoritative_settlement',
+  "formalResultPolicy, 'ranked_authoritative'",
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveRouteChecks.includes(needle),
+    `live PVP route sanity should pin authoritative settlement report marker: ${needle}`,
+  );
+});
+
+[
+  'data-live-settlement-report',
+  'data-live-settlement-source',
+  'pvp-live-settlement-report-v1',
+  'getLiveSettlementReport(',
+  'renderLiveSettlementReport(',
+  '.pvp-live-settlement-report',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveUiContractChecks.includes(needle),
+    `live PVP UI contract should pin settlement report marker: ${needle}`,
+  );
+});
+
+[
+  'settlementText',
+  'settlementSource',
+  'settlementHidden',
+  '正式积分',
+  '天道币',
+  "settlementSource === 'server_authoritative_settlement'",
+  "settlementReport?.reportVersion === 'pvp-live-settlement-report-v1'",
+].forEach((needle) => {
+  assert.ok(
+    browserPvpLiveRealSmoke.includes(needle),
+    `real browser live PVP smoke should pin visible authoritative settlement marker: ${needle}`,
   );
 });
 

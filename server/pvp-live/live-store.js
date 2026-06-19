@@ -1063,6 +1063,50 @@ class LivePvpStore {
         return this.settlement.settleMatch(match);
     }
 
+    buildSettlementReport(match, settlementResult) {
+        if (!match || !match.state || match.state.status !== 'finished') return null;
+        if (match.mode === 'friendly' || match.state.mode === 'friendly') return null;
+        if (!settlementResult || settlementResult.settled !== true) return null;
+        const participants = {};
+        const addParticipant = (key, result) => {
+            if (!result || !result.userId) return;
+            const seatId = Object.entries(match.seatsByUserId || {})
+                .find(([userId]) => userId === result.userId)?.[1] || '';
+            if (!seatId) return;
+            participants[seatId] = {
+                result: result.didWin ? 'win' : 'loss',
+                didWin: !!result.didWin,
+                oldScore: Math.max(0, Math.floor(Number(result.oldScore) || 0)),
+                scoreAfter: Math.max(0, Math.floor(Number(result.newScore) || 0)),
+                ratingDelta: Math.floor(Number(result.ratingDelta) || 0),
+                coinsAwarded: Math.max(0, Math.floor(Number(result.coinsAwarded) || 0)),
+                role: key
+            };
+        };
+        addParticipant('winner', settlementResult.winner);
+        addParticipant('loser', settlementResult.loser);
+        if (!participants.A && !participants.B) return null;
+        return {
+            reportVersion: 'pvp-live-settlement-report-v1',
+            sourceVisibility: 'server_authoritative_settlement',
+            usesHiddenInformation: false,
+            rankedImpact: 'official',
+            settlementSource: 'live_ranked',
+            formalResultPolicy: 'ranked_authoritative',
+            matchId: match.matchId,
+            finishReason: String(settlementResult.finishReason || ''),
+            settledAt: Math.max(0, Math.floor(Number(settlementResult.settledAt) || this.now())),
+            participants
+        };
+    }
+
+    attachSettlementReport(match, settlementResult) {
+        const report = this.buildSettlementReport(match, settlementResult);
+        if (!report) return null;
+        match.state.settlementReport = report;
+        return report;
+    }
+
     isTerminalStatus(status) {
         return status === 'finished' || status === 'invalidated';
     }
@@ -1071,7 +1115,10 @@ class LivePvpStore {
         if (!match || !match.state || match.state.status !== 'finished') return false;
         this.updateFriendlySeriesAfterFinish(match);
         await this.saveMatch(match);
-        await this.settleFinishedMatch(match);
+        const settlementResult = await this.settleFinishedMatch(match);
+        if (this.attachSettlementReport(match, settlementResult)) {
+            await this.saveMatch(match);
+        }
         this.releaseMatch(match);
         return true;
     }

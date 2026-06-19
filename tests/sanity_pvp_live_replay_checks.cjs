@@ -45,6 +45,45 @@ function makeLoadout(identitySlot, pattern) {
   };
 }
 
+function makeReplaySettlementStub() {
+  const seatUserId = (match, seatId) => Object.entries(match && match.seatsByUserId || {})
+    .find(([, sourceSeat]) => sourceSeat === seatId)?.[0] || '';
+  return {
+    async settleMatch(match) {
+      if (!match || !match.state || match.state.status !== 'finished' || match.state.mode === 'friendly') {
+        return { settled: false, reason: 'not_ranked_finished' };
+      }
+      const finishedEvent = match.state.events.slice().reverse()
+        .find(event => event && event.eventType === 'match_finished' && event.payload);
+      const winnerSeat = String(finishedEvent && finishedEvent.payload && finishedEvent.payload.winnerSeat || '');
+      if (winnerSeat !== 'A' && winnerSeat !== 'B') return { settled: false, reason: 'no_ranked_winner' };
+      const loserSeat = winnerSeat === 'A' ? 'B' : 'A';
+      return {
+        settled: true,
+        matchId: match.matchId,
+        finishReason: String(finishedEvent.payload.finishReason || 'lethal'),
+        settledAt: Date.now(),
+        winner: {
+          userId: seatUserId(match, winnerSeat),
+          didWin: true,
+          oldScore: 1000,
+          newScore: 1024,
+          ratingDelta: 24,
+          coinsAwarded: 38
+        },
+        loser: {
+          userId: seatUserId(match, loserSeat),
+          didWin: false,
+          oldScore: 1000,
+          newScore: 988,
+          ratingDelta: -12,
+          coinsAwarded: 12
+        }
+      };
+    }
+  };
+}
+
 async function submitIntent(baseUrl, token, matchId, body) {
   return request(baseUrl, `/api/pvp/live/matches/${matchId}/intents`, {
     method: 'POST',
@@ -96,6 +135,7 @@ function assertPublicReplayShape(replay, visibilityLayer) {
 
 (async () => {
   pvpLiveRoutes.__livePvpStore.reset();
+  pvpLiveRoutes.__attachServices({ settlement: makeReplaySettlementStub() });
 
   const app = express();
   app.use(express.json());
@@ -185,6 +225,8 @@ function assertPublicReplayShape(replay, visibilityLayer) {
     assertPublicReplayShape(selfReplay.payload.replay, 'replay_self');
     assert.equal(selfReplay.payload.replay.viewerSeat, 'A', 'replay_self should expose viewer seat only to the participant');
     assert.equal(selfReplay.payload.replay.postMatchReview?.result, 'win', 'winner self replay should include own public post-match review');
+    assert.equal(selfReplay.payload.replay.postMatchReview?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'winner self replay should include own authoritative settlement report');
+    assert.equal(selfReplay.payload.replay.postMatchReview?.settlementReport?.result, 'win', 'winner self replay settlement report should stay seat-scoped');
 
     const publicReplay = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/replay?visibility=replay_public`, {
       token: tokenA
@@ -193,6 +235,7 @@ function assertPublicReplayShape(replay, visibilityLayer) {
     assertPublicReplayShape(publicReplay.payload.replay, 'replay_public');
     assert.equal(publicReplay.payload.replay.viewerSeat, undefined, 'replay_public should not expose requester seat');
     assert.equal(publicReplay.payload.replay.postMatchReview, undefined, 'replay_public should not expose seat-specific review object');
+    assert.equal(publicReplay.payload.replay.settlementReport, undefined, 'replay_public should not expose seat-specific settlement report');
     assert.ok(publicReplay.payload.replay.publicSummary?.finishReason === 'surrender', 'replay_public should include public finish summary');
 
     const auditReplay = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/replay?visibility=audit_safe`, {

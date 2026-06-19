@@ -680,6 +680,7 @@ function projectPostMatchReview(state, seatId) {
     const copy = getFinishCopy({ result, finishReason, evidenceTypes });
     const keyTurnReplay = buildKeyTurnReplay(evidence, { result, finishReason });
     const experienceReport = buildExperienceReport(evidence, { result, finishReason });
+    const settlementReport = projectSettlementReport(state, seatId);
     const friendlySeries = projectFriendlySeries(state.friendlySeries, state.status);
     const isFriendly = state.mode === 'friendly';
     const canFriendlyRematch = !isFriendly || !!(friendlySeries && friendlySeries.canRequestNextRound);
@@ -727,11 +728,42 @@ function projectPostMatchReview(state, seatId) {
         finishReason,
         summary: copy.summary,
         evidence,
+        settlementReport,
         keyTurnReplay,
         experienceReport,
         friendlySeries,
         suggestions: copy.suggestions.slice(0, 2),
         nextActions
+    };
+}
+
+function projectSettlementReport(state, seatId) {
+    if (!state || state.status !== 'finished' || state.mode === 'friendly') return null;
+    const report = state.settlementReport && typeof state.settlementReport === 'object' ? state.settlementReport : null;
+    if (!report || report.reportVersion !== 'pvp-live-settlement-report-v1') return null;
+    const participants = report.participants && typeof report.participants === 'object' ? report.participants : {};
+    const participant = participants[seatId] && typeof participants[seatId] === 'object' ? participants[seatId] : null;
+    if (!participant) return null;
+    const ratingDelta = Math.floor(Number(participant.ratingDelta) || 0);
+    const coinsAwarded = Math.max(0, Math.floor(Number(participant.coinsAwarded) || 0));
+    const result = participant.result === 'win' || participant.didWin === true ? 'win' : 'loss';
+    const deltaText = ratingDelta > 0 ? `+${ratingDelta}` : `${ratingDelta}`;
+    return {
+        reportVersion: 'pvp-live-settlement-report-v1',
+        sourceVisibility: 'server_authoritative_settlement',
+        usesHiddenInformation: false,
+        rankedImpact: 'official',
+        settlementSource: 'live_ranked',
+        formalResultPolicy: 'ranked_authoritative',
+        result,
+        finishReason: String(report.finishReason || ''),
+        oldScore: Math.max(0, Math.floor(Number(participant.oldScore) || 0)),
+        scoreAfter: Math.max(0, Math.floor(Number(participant.scoreAfter) || 0)),
+        ratingDelta,
+        coinsAwarded,
+        settledAt: Math.max(0, Math.floor(Number(report.settledAt) || 0)),
+        summaryLine: `正式积分 ${deltaText} · 当前 ${Math.max(0, Math.floor(Number(participant.scoreAfter) || 0))} · 天道币 +${coinsAwarded}`,
+        boundary: '本报告来自服务端权威 live ranked 结算；好友约战、问道练习和无效局不会生成正式结算报告。'
     };
 }
 
@@ -909,6 +941,7 @@ function projectStateView(state, seatId) {
         firstMatchGuide: projectFirstMatchGuide(state.firstMatchGuide, state.status),
         loadoutExplorationReport: projectLoadoutExplorationReport(state.loadoutExplorationReport),
         openingSafeguardReport: projectOpeningSafeguardReport(state, seatId),
+        settlementReport: projectSettlementReport(state, seatId),
         postMatchReview: projectPostMatchReview(state, seatId),
         self: projectSelfSeat(state.seats[seatId]),
         opponent: projectPublicSeat(state.seats[opponentSeatId]),

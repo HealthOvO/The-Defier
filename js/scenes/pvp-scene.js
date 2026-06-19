@@ -992,6 +992,7 @@ export const PVPScene = {
       finishReason: String(report.finishReason || ''),
       summary: String(report.summary || ''),
       evidence: evidence.slice(0, 12).map(event => this.getLivePublicEventRef(event)).filter(Boolean),
+      settlementReport: this.getLiveSettlementReport(report.settlementReport),
       keyTurnReplay: this.getLiveKeyTurnReplay(report.keyTurnReplay),
       experienceReport: this.getLiveExperienceReport(report.experienceReport),
       friendlySeries: this.getLiveFriendlySeries(report.friendlySeries),
@@ -1002,6 +1003,59 @@ export const PVPScene = {
         detail: String(action && action.detail || '')
       })).filter(action => action.id && action.label)
     };
+  },
+  getLiveSettlementReport(source) {
+    const report = source && typeof source === 'object' ? source : null;
+    if (!report || report.reportVersion !== 'pvp-live-settlement-report-v1') return null;
+    const ratingDelta = Math.floor(Number(report.ratingDelta) || 0);
+    const coinsAwarded = Math.max(0, Math.floor(Number(report.coinsAwarded) || 0));
+    const scoreAfter = Math.max(0, Math.floor(Number(report.scoreAfter) || 0));
+    const oldScore = Math.max(0, Math.floor(Number(report.oldScore) || 0));
+    const deltaText = ratingDelta > 0 ? `+${ratingDelta}` : `${ratingDelta}`;
+    return {
+      reportVersion: 'pvp-live-settlement-report-v1',
+      sourceVisibility: String(report.sourceVisibility || 'server_authoritative_settlement'),
+      usesHiddenInformation: !!report.usesHiddenInformation,
+      rankedImpact: String(report.rankedImpact || 'official'),
+      settlementSource: String(report.settlementSource || 'live_ranked'),
+      formalResultPolicy: String(report.formalResultPolicy || 'ranked_authoritative'),
+      result: String(report.result || ''),
+      finishReason: String(report.finishReason || ''),
+      oldScore,
+      scoreAfter,
+      ratingDelta,
+      coinsAwarded,
+      settledAt: Math.max(0, Math.floor(Number(report.settledAt) || 0)),
+      summaryLine: String(report.summaryLine || `正式积分 ${deltaText} · 当前 ${scoreAfter} · 天道币 +${coinsAwarded}`),
+      boundary: String(report.boundary || '本报告来自服务端权威 live ranked 结算；好友约战、问道练习和无效局不会生成正式结算报告。')
+    };
+  },
+  renderLiveSettlementReport(review) {
+    const report = review && review.settlementReport ? this.getLiveSettlementReport(review.settlementReport) : null;
+    if (!report) return '';
+    const deltaText = report.ratingDelta > 0 ? `+${report.ratingDelta}` : `${report.ratingDelta}`;
+    const resultLabel = report.result === 'win' ? '胜局结算' : report.result === 'loss' ? '败局结算' : '终局结算';
+    return `
+      <div
+        class="pvp-live-settlement-report"
+        data-live-settlement-report
+        data-live-settlement-source="${this.escapeHtml(report.sourceVisibility)}"
+        data-live-settlement-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
+      >
+        <div class="pvp-live-settlement-head">
+          <span>${this.escapeHtml(resultLabel)}</span>
+          <span>${this.escapeHtml(report.formalResultPolicy)}</span>
+        </div>
+        <div class="pvp-live-settlement-summary">${this.escapeHtml(report.summaryLine)}</div>
+        <div class="pvp-live-settlement-grid">
+          <span>原积分 ${this.escapeHtml(report.oldScore)}</span>
+          <span>正式积分 ${this.escapeHtml(deltaText)}</span>
+          <span>当前 ${this.escapeHtml(report.scoreAfter)}</span>
+          <span>天道币 +${this.escapeHtml(report.coinsAwarded)}</span>
+        </div>
+        <div class="pvp-live-settlement-boundary">${this.escapeHtml(report.boundary)}</div>
+      </div>
+    `;
   },
   renderLiveFriendlySeries(report) {
     const series = this.getLiveFriendlySeries(report);
@@ -1360,6 +1414,7 @@ export const PVPScene = {
         <span class="pvp-live-review-chip">${this.escapeHtml(resultLabel)} · ${this.escapeHtml(finishLabel)}</span>
       </div>
       <div class="pvp-live-review-summary">${this.escapeHtml(review.summary)}</div>
+      ${this.renderLiveSettlementReport(review)}
       ${review.evidence.length ? `
         <div class="pvp-live-review-evidence">
           ${review.evidence.map(event => {

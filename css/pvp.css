@@ -1471,6 +1471,63 @@
     outline: none;
 }
 
+.pvp-live-settlement-report {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(105, 211, 172, 0.2);
+    background: rgba(10, 33, 27, 0.26);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-settlement-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: rgba(223, 250, 239, 0.94);
+    font-size: 0.72rem;
+    font-weight: 750;
+}
+
+.pvp-live-settlement-head span:last-child {
+    color: rgba(149, 229, 192, 0.74);
+    text-align: right;
+}
+
+.pvp-live-settlement-summary {
+    margin-top: 6px;
+    color: rgba(229, 250, 240, 0.88);
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.pvp-live-settlement-grid {
+    margin-top: 6px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+}
+
+.pvp-live-settlement-grid span {
+    min-width: 0;
+    padding: 5px 6px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(226, 245, 235, 0.8);
+    font-size: 0.66rem;
+    line-height: 1.25;
+}
+
+.pvp-live-settlement-boundary {
+    margin-top: 6px;
+    color: rgba(210, 234, 220, 0.62);
+    font-size: 0.66rem;
+    line-height: 1.35;
+}
+
 .pvp-live-loadout-selector .pvp-live-seat-head {
     align-items: center;
 }

@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-19: V10-S7B live ranked 权威结算回执可见化
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 在 live ranked finished 后把 `settleMatch()` 返回的 winner / loser 权威结果组装成 `pvp-live-settlement-report-v1`，二次保存到 `match.state.settlementReport`；好友约战、练习、无效局和 draw no-impact 分支不生成正式结算报告。
+    - `server/pvp-live/engine/state-view.js` 将结算报告按 seat-scoped 视角投影到 `stateView.settlementReport` 和 `postMatchReview.settlementReport`：玩家只看到自己的胜负、原积分、当前积分、ratingDelta、天道币奖励和服务端权威来源，不泄露对手隐藏信息。
+    - `js/scenes/pvp-scene.js` / `css/pvp.css` 在 live post-match review 里新增 `data-live-settlement-report` 区块，显示“正式积分 +/-X / 当前分 / 天道币 +Y / 服务端权威结算”边界；`render_game_to_text()` 通过现有 `postMatchReview` 快照同步输出同一份报告。
+    - `server/pvp-live/live-settlement.js` 的重复结算路径现在会读取既有 settlement payload 并返回 winner / loser 结果，用于重建 UI 报告，同时不重复发奖、不重复写 rank / wallet / history。
+    - route、settlement、replay、UI contract、真实浏览器 smoke 和 release coverage 同步锁住：ranked surrender / lethal 终局必须有正式结算回执，friendly review 和 public replay 不能暴露 seat-specific settlement report。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs`、`node tests/sanity_pvp_live_settlement_checks.cjs` 在服务端投影缺失时失败于 `postMatchReview.settlementReport` 缺失。
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_settlement_checks.cjs`
+    - `node tests/sanity_pvp_live_replay_checks.cjs`
+    - `node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `npm run test:node`
+    - `npm run build:pages`
+    - `AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4177 output/release-browser-audits-pvp-s7b-settlement-report`
+  - 当前结论
+    - live ranked 现在不只“后台写分”，也会在真实赛后复盘里向双方展示自己的正式积分变化、当前分和天道币奖励，并明确这来自服务端权威结算。它仍不是完整正式赛季奖励 / 长期目标系统、多实例共享队列、跨进程 WS/队列共享、生产 smoke 或线上部署。
+
 - 2026-06-19: V10-S7A 正式赛季写回权限收口
   - 本轮完成
     - `js/game.js` 新增 `shouldRecordPVPSeasonVerification()`，正式赛季验证只允许显式 `formalSeasonVerification=true` 且来源为 live ranked 的服务端权威结果写入；`local_practice`、`local_authority_gate`、`local_online_fallback`、`bmob_online`、旧 `server_authoritative` 和 rejected 结果一律不能碰 `seasonVerificationState`。
