@@ -1378,15 +1378,24 @@ class LivePvpStore {
     }
 
     async completeFinishedMatch(match) {
-        if (!match || !match.state || match.state.status !== 'finished') return false;
+        if (!match || !match.state || match.state.status !== 'finished') {
+            return { completed: false, saveResult: null };
+        }
         this.updateFriendlySeriesAfterFinish(match);
-        await this.saveMatch(match);
+        const initialSaveResult = await this.saveMatch(match);
+        if (initialSaveResult && initialSaveResult.saved === false) {
+            return { completed: false, saveResult: initialSaveResult };
+        }
         const settlementResult = await this.settleFinishedMatch(match);
+        let settlementSaveResult = null;
         if (this.attachSettlementReport(match, settlementResult)) {
-            await this.saveMatch(match);
+            settlementSaveResult = await this.saveMatch(match);
+            if (settlementSaveResult && settlementSaveResult.saved === false) {
+                return { completed: false, saveResult: settlementSaveResult };
+            }
         }
         this.releaseMatch(match);
-        return true;
+        return { completed: true, saveResult: settlementSaveResult || initialSaveResult };
     }
 
     async completeInvalidatedMatch(match) {
@@ -2296,7 +2305,11 @@ class LivePvpStore {
                 match.updatedAt = this.now();
             }
             if (match.state.status === 'finished') {
-                await this.completeFinishedMatch(match);
+                const completion = await this.completeFinishedMatch(match);
+                if (this.isStaleStateSaveResult(completion && completion.saveResult)) {
+                    const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
+                    return this.makeStaleStateSyncResult(authoritative, completion.saveResult);
+                }
             } else {
                 const saveResult = await this.saveMatch(match);
                 if (this.isStaleStateSaveResult(saveResult)) {

@@ -1,10 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8I live PVP terminal accepted intent stale-save settlement guard
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 的 `completeFinishedMatch()` 现在会读取第一次 finished state `saveMatch()` 的保存结果；如果返回 `stale_state_version`，立即停止本地 dirty finished state 的 settlement / settlement report 保存 / release。
+    - `submitIntent()` 的 terminal accepted 分支现在会接住 `completeFinishedMatch()` 的 `saveResult`；遇到 stale save 时回读 authoritative persisted match，并返回 `result=sync_required / reason=stale_state_version / events=[] / authoritative stateView`，不再把本地 surrender / finished 结果当成 accepted 发给玩家。
+    - 如果 terminal accepted intent 的 authoritative reload 返回 active match，store 会用权威 match 替换本地 dirty finished cache，并保留双方 active map，避免旧进程把真实仍在进行的对局释放掉。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 新增 terminal surrender 红测：本地 surrender 写输后 settlement fake 调用次数必须为 0，返回值必须是 `sync_required`，并且 `stateView.status` 必须来自 authoritative match 而不是本地 dirty finished state。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定 terminal stale-save settlement guard 的测试文案和实现落点。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_persistence_checks.cjs` 在实现前失败于 `terminal intent stale save should not settle the local dirty finished state`，实际 settlement 调用次数为 1。
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+  - 当前结论
+    - live PVP 的 lower-version stale save 已覆盖 terminal accepted intent 的最危险正式结算分支：本地旧进程不能在 finished 保存写输后继续写正式胜负 / 积分 / release。该切片仍不是完整 route 级统一 rehydrate、settlement report 二次保存写输补偿、同版本双写级 CAS、DB 原子撮合 / 并发 claim 防重、跨进程 WS fanout、生产 smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8H live PVP stale save 权威回读体验收口
   - 本轮完成
     - `server/pvp-live/live-store.js` 新增 `stale_state_version` 保存结果识别和 `rehydrateAuthoritativeMatchForUser()`，在写输后绕过本地 `matches` cache，直接通过 `persistence.loadMatchForUser(userId, matchId)` 回读权威 match。
     - `recordHeartbeat()` 现在遇到低版本 stale save 被 persistence 跳过时，不再返回本地已打过心跳但未持久化的 dirty `stateView`；会刷新内存 match cache / active map，并返回 authoritative persisted match 的 `stateView`。
-    - `submitIntent()` 在 accepted reducer 结果保存写输时，不再把本地 accepted 结果和本地事件回给玩家；会回读权威 match，并返回 `result=sync_required / reason=stale_state_version / events=[] / authoritative stateView`，沿用前端已有同步语义。
+    - `submitIntent()` 在 active 非终局 accepted reducer 结果保存写输时，不再把本地 accepted 结果和本地事件回给玩家；会回读权威 match，并返回 `result=sync_required / reason=stale_state_version / events=[] / authoritative stateView`，沿用前端已有同步语义。
     - 如果 stale save 后权威回读返回空，store 会驱逐本地 dirty match cache / active map，不会让下一次读取继续命中旧进程脏状态。
     - `tests/sanity_pvp_live_persistence_checks.cjs` 新增 store 级回归：heartbeat stale save 必须回读权威 stateVersion / HP，并刷新内存 cache；intent stale save 必须返回 `sync_required`，不得 replay 本地 accepted events；权威回读缺失时必须清掉本地 dirty cache。
     - `tests/sanity_release_gate_coverage_checks.cjs` 固定 S8H marker，防止后续退回“写输后仍返回本地 dirty stateView”。
@@ -27,7 +40,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
     - `node tests/sanity_release_gate_coverage_checks.cjs`
   - 当前结论
-    - live PVP 现在不只是 DB 层挡住低版本晚写，也能把写输原因交还给 store，并避免 stale state 的事件流继续追加。S8H 已沿用该接口补上 heartbeat / intent 写输后的权威回读；但 S8G 本身仍不是完整 active match CAS：同版本双写、route 级统一 rehydrate、终局 settlement 写输收口、DB 原子撮合 / 并发 claim 防重、跨进程 WS fanout、生产 smoke 和线上部署仍未封板。
+    - live PVP 现在不只是 DB 层挡住低版本晚写，也能把写输原因交还给 store，并避免 stale state 的事件流继续追加。S8H/S8I 已沿用该接口补上 heartbeat / 非终局 intent / terminal accepted intent 写输后的权威回读；但 S8G 本身仍不是完整 active match CAS：同版本双写、route 级统一 rehydrate、完整 settlement 写输补偿、DB 原子撮合 / 并发 claim 防重、跨进程 WS fanout、生产 smoke 和线上部署仍未封板。
 
 - 2026-06-20: V10-S8F live PVP active match 低版本晚写保护
   - 本轮完成

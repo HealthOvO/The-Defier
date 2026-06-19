@@ -298,6 +298,24 @@ function makeStoreStaleMatch({ matchId, stateVersion, now }) {
   };
 }
 
+function activateStoreMatch(match, { stateVersion = 1, now = Date.now() } = {}) {
+  match.state.status = 'active';
+  match.state.phase = 'main';
+  match.state.currentSeat = 'A';
+  match.state.stateVersion = Math.max(1, Math.floor(Number(stateVersion) || 1));
+  match.state.setup.battleStartedAt = Math.max(1, Math.floor(Number(now) || Date.now()));
+  match.state.seats.A.ready = true;
+  match.state.seats.B.ready = true;
+  match.state.turnTiming = {
+    reportVersion: 'pvp-live-turn-timing-v1',
+    currentSeat: 'A',
+    startedAt: match.state.setup.battleStartedAt,
+    deadlineAt: match.state.setup.battleStartedAt + 90000,
+    timeoutMs: 90000,
+  };
+  return match;
+}
+
 async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   const readyA = await submitIntent(matchId, tokenA, {
     intentId: `${prefix}-ready-a`,
@@ -465,6 +483,71 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   assert.equal(intentResult?.stateView?.stateVersion, 6, 'intent stale sync should return authoritative stateView');
   assert.equal(intentResult?.stateView?.opponent?.hp, 29, 'intent stale sync should return the latest persisted combat state');
   assert.equal(intentStore.matches.get(intentStaleMatchId)?.state?.stateVersion, 6, 'intent stale reload should refresh the in-memory match cache');
+
+  const terminalIntentStaleMatchId = 'pvplm-store-stale-terminal-intent';
+  const terminalIntentNow = 1700000025000;
+  const terminalLocalMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: terminalIntentStaleMatchId,
+    stateVersion: 4,
+    now: terminalIntentNow,
+  }), { stateVersion: 4, now: terminalIntentNow });
+  const terminalAuthoritativeMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: terminalIntentStaleMatchId,
+    stateVersion: 8,
+    now: terminalIntentNow,
+  }), { stateVersion: 8, now: terminalIntentNow });
+  terminalAuthoritativeMatch.state.seats.B.hp = 27;
+  let terminalAuthoritativeLoads = 0;
+  let terminalSettlementCalls = 0;
+  const terminalIntentStore = createLivePvpStore({
+    now: () => terminalIntentNow,
+    persistence: {
+      async saveMatch(match) {
+        assert.equal(match.matchId, terminalIntentStaleMatchId, 'terminal intent stale save should try to persist the local finished reducer result');
+        assert.equal(match.state.status, 'finished', 'terminal intent stale save should be testing the finished-state save path');
+        return {
+          saved: false,
+          skipped: true,
+          reason: 'stale_state_version',
+          stateVersion: match.state.stateVersion,
+          persistedStateVersion: terminalAuthoritativeMatch.state.stateVersion,
+        };
+      },
+      async loadMatchForUser(userId, matchId) {
+        terminalAuthoritativeLoads += 1;
+        assert.equal(userId, 'store-stale-a', 'terminal intent stale reload should use the acting user id');
+        assert.equal(matchId, terminalIntentStaleMatchId, 'terminal intent stale reload should keep the match id');
+        return cloneJson(terminalAuthoritativeMatch);
+      },
+      async saveMatchEvents() {
+        throw new Error('terminal intent stale save should not append events after skipped persistence');
+      },
+    },
+    settlement: {
+      async settleMatch() {
+        terminalSettlementCalls += 1;
+        return { settled: true };
+      },
+    },
+  });
+  terminalIntentStore.matches.set(terminalIntentStaleMatchId, terminalLocalMatch);
+  terminalIntentStore.activeMatchByUserId.set('store-stale-a', terminalIntentStaleMatchId);
+  terminalIntentStore.activeMatchByUserId.set('store-stale-b', terminalIntentStaleMatchId);
+  const terminalIntentResult = await terminalIntentStore.submitIntent('store-stale-a', terminalIntentStaleMatchId, {
+    intentId: 'store-stale-surrender-a',
+    intentType: 'surrender',
+    stateVersion: 4,
+    payload: {},
+  });
+  assert.equal(terminalSettlementCalls, 0, 'terminal intent stale save should not settle the local dirty finished state');
+  assert.equal(terminalAuthoritativeLoads, 1, 'terminal intent stale save should reload the authoritative persisted match');
+  assert.equal(terminalIntentResult?.result, 'sync_required', 'terminal intent stale save should ask the client to sync instead of returning accepted surrender');
+  assert.equal(terminalIntentResult?.reason, 'stale_state_version', 'terminal intent stale sync should expose stale_state_version as the reason');
+  assert.deepEqual(terminalIntentResult?.events, [], 'terminal intent stale sync should not replay local surrender events that failed persistence');
+  assert.equal(terminalIntentResult?.stateView?.status, 'active', 'terminal intent stale sync should return authoritative status instead of local finished surrender');
+  assert.equal(terminalIntentResult?.stateView?.stateVersion, 8, 'terminal intent stale sync should return authoritative terminal-safe stateView');
+  assert.equal(terminalIntentStore.matches.get(terminalIntentStaleMatchId)?.state?.status, 'active', 'terminal intent stale reload should replace the local dirty finished cache');
+  assert.equal(terminalIntentStore.activeMatchByUserId.get('store-stale-a'), terminalIntentStaleMatchId, 'terminal intent stale reload should keep active map on authoritative active match');
 
   const missingReloadMatchId = 'pvplm-store-stale-missing-reload';
   const missingReloadMatch = makeStoreStaleMatch({
