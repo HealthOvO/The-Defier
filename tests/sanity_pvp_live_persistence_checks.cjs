@@ -429,6 +429,52 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   assert.equal(heartbeatResult?.stateView?.opponent?.hp, 31, 'heartbeat stale save should return the latest persisted combat state');
   assert.equal(heartbeatStore.matches.get(heartbeatStaleMatchId)?.state?.stateVersion, 5, 'heartbeat stale reload should refresh the in-memory match cache');
 
+  const heartbeatConflictMatchId = 'pvplm-store-conflict-heartbeat';
+  const heartbeatConflictMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: heartbeatConflictMatchId,
+    stateVersion: 4,
+    now: 1700000013000,
+  }), { stateVersion: 4, now: 1700000013000 });
+  const heartbeatConflictAuthoritativeMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: heartbeatConflictMatchId,
+    stateVersion: 4,
+    now: 1700000013000,
+  }), { stateVersion: 4, now: 1700000013000 });
+  heartbeatConflictAuthoritativeMatch.state.seats.A.hp = 31;
+  let heartbeatConflictAuthoritativeLoads = 0;
+  const heartbeatConflictStore = createLivePvpStore({
+    now: () => 1700000013000,
+    persistence: {
+      async saveMatch(match) {
+        assert.equal(match.matchId, heartbeatConflictMatchId, 'heartbeat same-version conflict save should target the active match');
+        return {
+          saved: false,
+          skipped: true,
+          reason: 'conflicting_state_version',
+          stateVersion: match.state.stateVersion,
+          persistedStateVersion: heartbeatConflictAuthoritativeMatch.state.stateVersion,
+        };
+      },
+      async loadMatchForUser(userId, matchId) {
+        heartbeatConflictAuthoritativeLoads += 1;
+        assert.equal(userId, 'store-stale-a', 'heartbeat same-version conflict reload should use the viewer user id');
+        assert.equal(matchId, heartbeatConflictMatchId, 'heartbeat same-version conflict reload should keep the match id');
+        return cloneJson(heartbeatConflictAuthoritativeMatch);
+      },
+      async saveMatchEvents() {
+        throw new Error('heartbeat same-version conflict should not append events after skipped persistence');
+      },
+    },
+  });
+  heartbeatConflictStore.matches.set(heartbeatConflictMatchId, heartbeatConflictMatch);
+  heartbeatConflictStore.activeMatchByUserId.set('store-stale-a', heartbeatConflictMatchId);
+  heartbeatConflictStore.activeMatchByUserId.set('store-stale-b', heartbeatConflictMatchId);
+  const heartbeatConflictResult = await heartbeatConflictStore.recordHeartbeat('store-stale-a', heartbeatConflictMatchId);
+  assert.equal(heartbeatConflictAuthoritativeLoads, 1, 'heartbeat same-version conflict should reload the authoritative persisted match');
+  assert.equal(heartbeatConflictResult?.stateView?.stateVersion, 4, 'heartbeat same-version conflict should keep the authoritative state version');
+  assert.equal(heartbeatConflictResult?.stateView?.self?.hp, 31, 'heartbeat same-version conflict should return authoritative stateView instead of local dirty view');
+  assert.equal(heartbeatConflictStore.matches.get(heartbeatConflictMatchId)?.state?.seats?.A?.hp, 31, 'heartbeat same-version conflict reload should refresh the in-memory combat state');
+
   const intentStaleMatchId = 'pvplm-store-stale-intent';
   const intentNow = 1700000020000;
   const intentLocalMatch = makeStoreStaleMatch({
@@ -1053,6 +1099,81 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     stateAfterStaleSave.seats.B.hp,
     opponentHpAfterIntent,
     'persistence CAS should keep the latest combat state when a stale process saves later',
+  );
+  const sameVersionConflictState = JSON.parse(JSON.stringify(latestActiveState));
+  sameVersionConflictState.stateVersion = latestActiveState.stateVersion;
+  if (sameVersionConflictState.seats && sameVersionConflictState.seats.B) {
+    sameVersionConflictState.seats.B.hp = Math.min(50, opponentHpAfterIntent + 2);
+  }
+  const sameVersionConflictSaveResult = await makeLivePvpPersistenceForTest().saveMatch({
+    matchId,
+    createdAt: Number(activeMatchRow.created_at) || Date.now(),
+    updatedAt: Date.now() + 2,
+    state: sameVersionConflictState,
+    connection: {},
+    seatsByUserId: {
+      [userA.userId]: 'A',
+      [userB.userId]: 'B',
+    },
+  });
+  assert.equal(sameVersionConflictSaveResult?.saved, false, 'persistence saveMatch should report same-version active conflicts as skipped');
+  assert.equal(sameVersionConflictSaveResult?.skipped, true, 'persistence same-version conflict result should mark skipped true');
+  assert.equal(sameVersionConflictSaveResult?.reason, 'conflicting_state_version', 'persistence same-version conflict should expose a stable reason');
+  const rowAfterSameVersionConflict = await dbGet('SELECT state_json FROM pvp_live_matches WHERE match_id = ?', [matchId]);
+  const stateAfterSameVersionConflict = JSON.parse(rowAfterSameVersionConflict.state_json);
+  assert.equal(
+    stateAfterSameVersionConflict.stateVersion,
+    stateVersionAfterIntent,
+    'persistence CAS should reject same-version active saves with conflicting state',
+  );
+  assert.equal(
+    stateAfterSameVersionConflict.seats.B.hp,
+    opponentHpAfterIntent,
+    'persistence CAS should keep the latest combat state when a same-version process saves later',
+  );
+  await dbRun('DROP TRIGGER IF EXISTS pvp_live_race_bump');
+  await dbRun(`
+    CREATE TRIGGER pvp_live_race_bump
+    BEFORE UPDATE ON pvp_live_matches
+    WHEN NEW.state_version = OLD.state_version + 1
+    BEGIN
+      UPDATE pvp_live_matches
+         SET state_version = NEW.state_version + 1,
+             state_json = '{"stateVersion":' || (NEW.state_version + 1) || '}'
+       WHERE match_id = OLD.match_id;
+      SELECT RAISE(IGNORE);
+    END
+  `);
+  const postReadRaceState = JSON.parse(JSON.stringify(latestActiveState));
+  postReadRaceState.stateVersion = stateVersionAfterIntent + 1;
+  if (postReadRaceState.seats && postReadRaceState.seats.B) {
+    postReadRaceState.seats.B.hp = Math.max(1, opponentHpAfterIntent - 1);
+  }
+  const postReadRaceSaveResult = await makeLivePvpPersistenceForTest().saveMatch({
+    matchId,
+    createdAt: Number(activeMatchRow.created_at) || Date.now(),
+    updatedAt: Date.now() + 3,
+    state: postReadRaceState,
+    connection: {},
+    seatsByUserId: {
+      [userA.userId]: 'A',
+      [userB.userId]: 'B',
+    },
+  });
+  await dbRun('DROP TRIGGER IF EXISTS pvp_live_race_bump');
+  assert.equal(postReadRaceSaveResult?.saved, false, 'persistence post-read race should report skipped when a newer version wins before write');
+  assert.equal(postReadRaceSaveResult?.skipped, true, 'persistence post-read race result should mark skipped true');
+  assert.equal(postReadRaceSaveResult?.reason, 'stale_state_version', 'persistence post-read race should keep stale_state_version reason when persisted version advances');
+  const rowAfterPostReadRace = await dbGet('SELECT state_json FROM pvp_live_matches WHERE match_id = ?', [matchId]);
+  const stateAfterPostReadRace = JSON.parse(rowAfterPostReadRace.state_json);
+  assert.equal(
+    stateAfterPostReadRace.stateVersion,
+    stateVersionAfterIntent + 2,
+    'persistence post-read race should keep the newer authoritative state version',
+  );
+  await dbRun(
+    'UPDATE pvp_live_matches SET state_version = ?, state_json = ? WHERE match_id = ?',
+    [stateVersionAfterIntent, JSON.stringify(latestActiveState), matchId],
   );
   await dbRun(
     'UPDATE pvp_live_matches SET state_version = 0, state_json = ? WHERE match_id = ?',

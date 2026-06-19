@@ -1170,7 +1170,11 @@ class LivePvpStore {
     }
 
     isStaleStateSaveResult(saveResult) {
-        return !!(saveResult && saveResult.saved === false && saveResult.reason === 'stale_state_version');
+        return !!(
+            saveResult
+            && saveResult.saved === false
+            && (saveResult.reason === 'stale_state_version' || saveResult.reason === 'conflicting_state_version')
+        );
     }
 
     evictMatchCache(matchId) {
@@ -1225,7 +1229,7 @@ class LivePvpStore {
         if (!authoritative) return null;
         return {
             result: 'sync_required',
-            reason: 'stale_state_version',
+            reason: saveResult && saveResult.reason || 'stale_state_version',
             state: authoritative.match && authoritative.match.state,
             events: [],
             stateView: authoritative.stateView,

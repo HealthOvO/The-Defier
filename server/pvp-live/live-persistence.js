@@ -65,7 +65,7 @@ function getStateVersion(state) {
     return Math.max(0, Math.floor(Number(state && state.stateVersion) || 0));
 }
 
-async function loadPersistedMatchStateVersion(matchId) {
+async function loadPersistedMatchStateSnapshot(matchId) {
     const id = String(matchId || '').trim();
     if (!id) return null;
     const row = await dbGet(
@@ -73,10 +73,13 @@ async function loadPersistedMatchStateVersion(matchId) {
         [id]
     );
     if (!row) return null;
-    return Math.max(
-        Math.max(0, Math.floor(Number(row.state_version) || 0)),
-        getStateVersion(parseState(row))
-    );
+    return {
+        stateVersion: Math.max(
+            Math.max(0, Math.floor(Number(row.state_version) || 0)),
+            getStateVersion(parseState(row))
+        ),
+        stateJson: String(row.state_json || '')
+    };
 }
 
 const PUBLIC_EVENT_DATA_KEYS = Object.freeze({
@@ -437,7 +440,9 @@ function makeSqliteLivePvpPersistence() {
             if (!seatA || !seatB || !seatA.userId || !seatB.userId) return { saved: false, skipped: true, reason: 'invalid_seats' };
             const status = String(match.state.status || 'active');
             const stateVersion = getStateVersion(match.state);
-            const persistedStateVersion = await loadPersistedMatchStateVersion(match.matchId);
+            const serializedState = serializeState(match.state);
+            const persistedState = await loadPersistedMatchStateSnapshot(match.matchId);
+            const persistedStateVersion = persistedState ? persistedState.stateVersion : null;
             if (persistedStateVersion !== null && stateVersion < persistedStateVersion) {
                 return {
                     saved: false,
@@ -447,10 +452,25 @@ function makeSqliteLivePvpPersistence() {
                     persistedStateVersion
                 };
             }
+            if (
+                status === 'active'
+                && persistedState
+                && stateVersion === persistedStateVersion
+                && persistedState.stateJson
+                && persistedState.stateJson !== serializedState
+            ) {
+                return {
+                    saved: false,
+                    skipped: true,
+                    reason: 'conflicting_state_version',
+                    stateVersion,
+                    persistedStateVersion
+                };
+            }
             const now = Math.max(0, Math.floor(Number(match.updatedAt) || Date.now()));
             const createdAt = Math.max(0, Math.floor(Number(match.createdAt) || now));
             const finishedAt = status === 'finished' || status === 'invalidated' ? now : 0;
-            await dbRun(
+            const writeResult = await dbRun(
                 `INSERT INTO pvp_live_matches
                     (match_id, status, seat_a_user_id, seat_b_user_id, state_version, state_json, connection_json, created_at, updated_at, finished_at)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -463,20 +483,61 @@ function makeSqliteLivePvpPersistence() {
                     connection_json = excluded.connection_json,
                     updated_at = excluded.updated_at,
                     finished_at = excluded.finished_at
-                 WHERE excluded.state_version >= pvp_live_matches.state_version`,
+                 WHERE
+                    excluded.state_version > pvp_live_matches.state_version
+                    OR pvp_live_matches.status != 'active'
+                    OR excluded.status != 'active'
+                    OR (
+                        excluded.state_version = pvp_live_matches.state_version
+                        AND pvp_live_matches.state_json = excluded.state_json
+                    )`,
                 [
                     match.matchId,
                     status,
                     seatA.userId,
                     seatB.userId,
                     stateVersion,
-                    serializeState(match.state),
+                    serializedState,
                     serializeConnection(match.connection),
                     createdAt,
                     now,
                     finishedAt
                 ]
             );
+            if (writeResult && writeResult.changes === 0) {
+                const latestPersistedState = await loadPersistedMatchStateSnapshot(match.matchId);
+                const latestPersistedStateVersion = latestPersistedState ? latestPersistedState.stateVersion : null;
+                if (latestPersistedStateVersion !== null && stateVersion < latestPersistedStateVersion) {
+                    return {
+                        saved: false,
+                        skipped: true,
+                        reason: 'stale_state_version',
+                        stateVersion,
+                        persistedStateVersion: latestPersistedStateVersion
+                    };
+                }
+                if (
+                    latestPersistedStateVersion !== null
+                    && stateVersion === latestPersistedStateVersion
+                    && latestPersistedState
+                    && latestPersistedState.stateJson === serializedState
+                ) {
+                    return {
+                        saved: true,
+                        skipped: false,
+                        reason: 'saved',
+                        stateVersion,
+                        persistedStateVersion: latestPersistedStateVersion
+                    };
+                }
+                return {
+                    saved: false,
+                    skipped: true,
+                    reason: 'conflicting_state_version',
+                    stateVersion,
+                    persistedStateVersion: latestPersistedStateVersion || persistedStateVersion || stateVersion
+                };
+            }
             return {
                 saved: true,
                 skipped: false,

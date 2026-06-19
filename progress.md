@@ -1,5 +1,19 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8K live PVP active match same-version conflict guard
+  - 本轮完成
+    - `server/pvp-live/live-persistence.js` 的 active match 保存现在会读取 persisted `state_json` 与 `state_version` 快照；当 incoming active state 与权威行处在同一 `stateVersion` 但 `state_json` 内容不同，返回 `saved=false / skipped=true / reason=conflicting_state_version`，不再静默覆盖权威 active match。
+    - SQLite upsert 条件同步收紧为 active CAS：更高 `stateVersion` 才可覆盖；同版本只有 `state_json` 完全一致才允许更新 connection。若写入 no-op，会二次读取权威版本，版本已被其他进程推进时继续返回 `stale_state_version`。
+    - 同一 `stateVersion` 且 `state_json` 相同的保存仍允许通过，用于 heartbeat 这类只更新 `connection_json` 的合法写入。
+    - `server/pvp-live/live-store.js` 把 `conflicting_state_version` 纳入现有权威回读 / `sync_required` 路径；玩家不会继续收到本地 dirty stateView。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 新增行为回归：store heartbeat 遇到同版本冲突必须回读 authoritative persisted match；SQLite persistence 遇到同版本 active 内容冲突必须跳过并保留权威 HP / state；trigger 模拟 post-read/pre-write race 时必须保留 `stale_state_version` 口径。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定同版本冲突的测试文案、persistence 快照比较和 store 回源 marker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_persistence_checks.cjs` 在实现前失败于 `heartbeat same-version conflict should reload the authoritative persisted match`，实际 authoritative load 次数为 0。
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+  - 当前结论
+    - live PVP 已从 lower-version stale save guard 继续推进到 active match same-version content conflict guard：两个进程基于同一 base revision 产生相同 `stateVersion` 但内容不一致时，后到冲突写入不能静默覆盖权威 active match。该切片仍不是 DB 原子撮合 / 并发 claim 防重、settlement report 二次保存写输补偿、route 级统一 rehydrate、跨进程 WS fanout、生产 smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8J live PVP terminal stale rehydrate for timeout / read paths
   - 本轮完成
     - `server/pvp-live/live-store.js` 的 timeout / connection-timeout / invalidated 终局路径现在会返回 completion `saveResult`，不再吞掉 lower-version stale save。
