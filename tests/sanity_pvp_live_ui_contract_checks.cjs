@@ -281,6 +281,7 @@ assert.ok(scene.includes('this.startLiveHeartbeat({ sendImmediately: false })'),
 assert.ok(scene.includes('startLiveRealtime(state = null)'), 'PVPScene should start live realtime transport from session state');
 assert.ok(scene.includes('session.joinRealtimeMatch(sourceState.matchId'), 'PVPScene should join realtime match with the current match id');
 assert.ok(scene.includes('lastSeenRevision: this.getLiveLastSeenEventRevision(sourceState)'), 'PVPScene should request missed event replay from the last seen event revision');
+assert.ok(scene.includes('Array.isArray(sourceState.lastEvents)'), 'PVPScene should include replay event high-water marks when reconnecting realtime');
 assert.ok(scene.includes('this.stopLiveRealtime()'), 'PVPScene should close realtime transport when heartbeat lifecycle stops');
 assert.ok(scene.includes('onChange: () => this.queueLiveRealtimeRender()'), 'PVPScene should re-render when live session receives realtime state');
 assert.ok(scene.includes('queueLiveRealtimeRender()'), 'PVPScene should batch realtime render updates');

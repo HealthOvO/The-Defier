@@ -219,8 +219,95 @@ async function runSyncRequiredBroadcastCheck() {
   }
 }
 
+async function runHeartbeatEventsReplayCheck() {
+  const fakeMatchId = 'pvplm-ws-heartbeat-replay';
+  let heartbeatCalls = 0;
+  let eventLoadCalls = 0;
+  const fakeStore = {
+    heartbeatIntervalMs: 1500,
+    async recordHeartbeat(userId, matchId) {
+      assert.equal(userId, 'ws-heartbeat-b', 'WS heartbeat replay should authenticate the heartbeat user');
+      assert.equal(matchId, fakeMatchId, 'WS heartbeat replay should record heartbeat for the requested match');
+      heartbeatCalls += 1;
+      return {
+        match: { matchId: fakeMatchId },
+        seatId: 'B',
+        stateView: {
+          matchId: fakeMatchId,
+          status: 'active',
+          stateVersion: 12,
+          currentSeat: 'A',
+          connectionReport: {
+            viewer: { seatId: 'B', status: 'online' },
+            opponent: { seatId: 'A', status: 'online' },
+            heartbeatIntervalMs: 1500
+          },
+          self: { seatId: 'B', hand: [] },
+          opponent: { seatId: 'A', handCount: 3 }
+        }
+      };
+    },
+    async getMatchForUser(userId, matchId) {
+      assert.equal(userId, 'ws-heartbeat-b', 'WS heartbeat replay broadcast should refresh the same user seat');
+      assert.equal(matchId, fakeMatchId, 'WS heartbeat replay broadcast should refresh the requested match');
+      return {
+        match: { matchId: fakeMatchId },
+        seatId: 'B',
+        stateView: {
+          matchId: fakeMatchId,
+          status: 'active',
+          stateVersion: 12,
+          currentSeat: 'A',
+          self: { seatId: 'B', hand: [] },
+          opponent: { seatId: 'A', handCount: 3 }
+        }
+      };
+    },
+    async loadMatchEvents(matchId) {
+      assert.equal(matchId, fakeMatchId, 'WS heartbeat replay should load persisted events for missed replay');
+      eventLoadCalls += 1;
+      return [
+        { sequence: 1, eventType: 'battle_started', visibility: 'public', actingSeat: 'A', payload: { firstSeat: 'A', roundIndex: 1, hiddenDeck: ['secret'] } },
+        { sequence: 2, eventType: 'card_played', visibility: 'public', actingSeat: 'A', payload: { cost: 1, remainingEnergy: 2, hiddenCardId: 'private-card' } },
+        { sequence: 3, eventType: 'private_draw', visibility: 'self', actingSeat: 'B', payload: { deck: ['private'] } }
+      ];
+    }
+  };
+
+  const server = http.createServer();
+  attachLivePvpWebSocket(server, { livePvpStore: fakeStore });
+  await listen(server);
+  const wsBaseUrl = `ws://127.0.0.1:${server.address().port}`;
+  const tokenB = generateToken({ id: 'ws-heartbeat-b', username: 'ws-heartbeat-b' });
+  let socketB = null;
+  try {
+    socketB = await openSocket(`${wsBaseUrl}/api/pvp/live/ws?token=${encodeURIComponent(tokenB)}`);
+    await waitForMessage(socketB, message => message.type === 'connected', 'heartbeat replay connected B');
+
+    sendJson(socketB, { type: 'heartbeat', matchId: fakeMatchId });
+    await waitForMessage(socketB, message => message.type === 'presence' && message.matchId === fakeMatchId, 'legacy heartbeat replay presence B');
+    await waitForMessage(socketB, message => message.type === 'state_sync' && message.matchId === fakeMatchId, 'legacy heartbeat replay state_sync B');
+    assert.equal(eventLoadCalls, 0, 'legacy WS heartbeat without lastSeenRevision should not request events replay');
+
+    sendJson(socketB, { type: 'heartbeat', matchId: fakeMatchId, lastSeenRevision: 1 });
+    const presenceB = await waitForMessage(socketB, message => message.type === 'presence' && message.matchId === fakeMatchId, 'heartbeat replay presence B');
+    assert.equal(presenceB.connectionReport?.viewer?.status, 'online', 'WS heartbeat replay should still return presence before replay');
+    const replayB = await waitForMessage(socketB, message => message.type === 'events_replay' && message.matchId === fakeMatchId, 'heartbeat replay events_replay B');
+    assert.equal(replayB.fromRevision, 1, 'WS heartbeat should replay missed public events after lastSeenRevision');
+    assert.deepEqual(replayB.events.map(event => event.sequence), [2], 'WS heartbeat replay should only include missed public events');
+    assert.deepEqual(replayB.events[0].publicData, { cost: 1, remainingEnergy: 2 }, 'WS heartbeat replay should sanitize public event payloads');
+    assert.equal(JSON.stringify(replayB.events).includes('hiddenCardId'), false, 'WS heartbeat replay should not expose private payload keys');
+    assert.equal(heartbeatCalls, 2, 'WS heartbeat replay should record legacy and revision-aware heartbeats');
+    assert.ok(eventLoadCalls >= 1, 'WS heartbeat replay should query the persisted event source');
+  } finally {
+    if (socketB) socketB.close();
+    await close(server);
+  }
+}
+
 (async () => {
   await runSyncRequiredBroadcastCheck();
+  await runHeartbeatEventsReplayCheck();
 
   pvpLiveRoutes.__livePvpStore.reset();
 

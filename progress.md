@@ -1,5 +1,31 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8O live PVP WS heartbeat missed-events replay
+  - 本轮完成
+    - `server/pvp-live/live-ws.js` 的 heartbeat 分支在返回 `presence` 后，如果客户端消息明确携带 `lastSeenRevision`，会继续调用 `sendEventsReplay()` 从持久化事件表 / state events 补发 missed public events。
+    - 补发仍走现有 `makeEventReplay()` 和公开字段白名单：只返回 sequence 大于 `lastSeenRevision` 的 public events，不暴露手牌、牌库、实例 id、原始私密 payload 或 RNG。
+    - `js/services/pvp-live-session.js` 的 `heartbeatRealtime()` 现在会从 `state.lastEvents` 和 `state.stateView.recentEvents` 计算最大已见事件序号，并随 heartbeat 发送 `lastSeenRevision`。
+    - `tests/sanity_pvp_live_ws_checks.cjs` 新增 fake store 回归：只发 heartbeat 也必须先收到 presence，再收到从 revision 之后补发的脱敏 `events_replay`。
+    - `tests/sanity_pvp_live_session_checks.mjs` 固定前端 realtime helper 的 heartbeat envelope 必须携带最新已见事件序号。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定服务端协议 marker、WS 行为文案和前端 session envelope marker。
+    - 挑战者检查后补齐两条高水位边界：空 `events_replay` 不得清空前端已见 revision；重新 join / reconnect 时 `getLiveLastSeenEventRevision()` 必须同时参考 `stateView.recentEvents` 和 `state.lastEvents`。
+    - 同步补旧客户端兼容门禁：不带 `lastSeenRevision` 的 legacy heartbeat 只走 presence / state_sync，不触发事件补发读取。
+    - `docs/designer_major_upgrade_implementation_input_v1.md` 同步 S8O 口径：这是 heartbeat 驱动的 missed-events catch-up，不代表 Redis / 多实例 WS fanout、完整 active match revision/CAS、生产 smoke 或线上部署完成。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ws_checks.cjs` 在实现前失败于 `ws message timeout: heartbeat replay events_replay B`。
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在实现前失败于 heartbeat 消息缺少 `lastSeenRevision: 5`。
+    - 绿测：`node tests/sanity_pvp_live_ws_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node --check server/pvp-live/live-ws.js`
+    - 全量：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 清洁检查：`git diff --check`
+  - 当前结论
+    - live PVP 已从“join 时补发公开事件”继续推进到“heartbeat 也能按客户端已见 revision 补漏公开事件”：弱网短断、跨进程读路径回源或单次 WS 消息漏收后，玩家不必重新 join 才恢复公开行动时间线。该切片仍不是跨进程 WS fanout、Redis / 多实例强一致、完整 active match revision/CAS、生产 smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8N live PVP route-level 读路径权威回源与 WS sync_required fanout
   - 本轮完成
     - `server/pvp-live/live-store.js` 的 `getActiveMatchForUser()` / `getMatchForUser()` 在本地 `matches` cache 命中时也会先用 `loadMatchForUser()` 回源 authoritative persisted match，再继续 timeout / release / stateView 投影。

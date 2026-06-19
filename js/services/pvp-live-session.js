@@ -246,11 +246,19 @@ export function createPvpLiveSession({
     if (!candidate) return Array.isArray(state.lastEvents) ? state.lastEvents : [];
     const currentMax = getMaxEventSequence(state.lastEvents);
     const candidateMax = getMaxEventSequence(candidate);
+    if (isSameLiveMatch(incomingStateView) && currentMax > 0 && candidate.length === 0) {
+      return Array.isArray(state.lastEvents) ? state.lastEvents : [];
+    }
     if (isSameLiveMatch(incomingStateView) && currentMax > 0 && candidateMax > 0 && candidateMax < currentMax) {
       return Array.isArray(state.lastEvents) ? state.lastEvents : [];
     }
     return candidate;
   };
+
+  const getLastSeenEventRevision = () => Math.max(
+    getMaxEventSequence(state.lastEvents),
+    getMaxEventSequence(state.stateView && state.stateView.recentEvents)
+  );
 
   const getTerminalStorageKey = () => {
     const scope = normalizeStorageScope(typeof userScope === 'function' ? userScope() : userScope);
@@ -447,10 +455,16 @@ export function createPvpLiveSession({
       return next;
     }
     if (type === 'events_replay') {
+      const incomingMatchId = String(message.matchId || state.matchId || '');
+      const currentMatchId = String(state.matchId || getStateViewMatchId(state.stateView) || '');
+      const replayEvents = Array.isArray(message.events) ? message.events.slice(-8) : [];
+      const sameMatch = !incomingMatchId || !currentMatchId || incomingMatchId === currentMatchId;
       return publish({
-        matchId: String(message.matchId || state.matchId || ''),
+        matchId: incomingMatchId,
         realtimeStatus: state.realtimeStatus === 'idle' ? 'connected' : state.realtimeStatus,
-        lastEvents: Array.isArray(message.events) ? message.events.slice(-8) : []
+        lastEvents: sameMatch
+          ? resolveAuthoritativeEvents(replayEvents, state.stateView, true)
+          : replayEvents
       });
     }
     if (type === 'presence') {
@@ -560,7 +574,11 @@ export function createPvpLiveSession({
   function heartbeatRealtime(matchId = '') {
     const id = String(matchId || state.matchId || '').trim();
     if (!id) return false;
-    return sendRealtime({ type: 'heartbeat', matchId: id });
+    return sendRealtime({
+      type: 'heartbeat',
+      matchId: id,
+      lastSeenRevision: getLastSeenEventRevision()
+    });
   }
 
   function submitRealtimeIntent(intent = {}, matchId = '') {

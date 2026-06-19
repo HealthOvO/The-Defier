@@ -2312,10 +2312,14 @@ export const PVPScene = {
   },
   getLiveLastSeenEventRevision(state = null) {
     const sourceState = state || this.getLiveSession().getState();
-    const events = sourceState && sourceState.stateView && Array.isArray(sourceState.stateView.recentEvents)
+    const viewEvents = sourceState && sourceState.stateView && Array.isArray(sourceState.stateView.recentEvents)
       ? sourceState.stateView.recentEvents
       : [];
-    return events.reduce((max, event) => Math.max(max, Math.floor(Number(event && event.sequence) || 0)), 0);
+    const replayEvents = sourceState && Array.isArray(sourceState.lastEvents)
+      ? sourceState.lastEvents
+      : [];
+    return viewEvents.concat(replayEvents)
+      .reduce((max, event) => Math.max(max, Math.floor(Number(event && event.sequence) || 0)), 0);
   },
   startLiveRealtime(state = null) {
     const session = this.getLiveSession();

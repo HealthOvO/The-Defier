@@ -37,6 +37,15 @@ globalThis.window = {
 
 const { PVPScene } = await import('../js/scenes/pvp-scene.js');
 
+assert.equal(
+  PVPScene.getLiveLastSeenEventRevision({
+    stateView: { recentEvents: [{ eventType: 'battle_started', sequence: 2 }] },
+    lastEvents: [{ eventType: 'card_played', sequence: 7 }]
+  }),
+  7,
+  'getLiveLastSeenEventRevision should prefer replay event high-water marks when reconnecting',
+);
+
 let currentState = {
   phase: 'active',
   matchId: 'pvpm-ui-runtime-heartbeat',

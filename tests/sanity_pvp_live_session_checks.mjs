@@ -1244,6 +1244,14 @@ realtimeHandlers.onMessage({
 assert.equal(realtimeSession.getState().stateView.stateVersion, 9, 'stale intent_result WS message should not downgrade authoritative stateVersion');
 assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'card_played', 'stale intent_result WS message should not downgrade public events');
 
+realtimeHandlers.onMessage({
+  type: 'events_replay',
+  matchId: 'pvplm-ws-session',
+  fromRevision: 5,
+  events: []
+});
+assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'card_played', 'empty events_replay should not downgrade the last seen public event revision');
+
 realtimeSession.joinRealtimeMatch('pvplm-ws-session', { lastSeenRevision: 4 });
 realtimeSession.heartbeatRealtime();
 realtimeSession.submitRealtimeIntent({
@@ -1254,7 +1262,7 @@ realtimeSession.submitRealtimeIntent({
 });
 assert.deepEqual(realtimeSentMessages.slice(0, 3), [
   { type: 'join_match', matchId: 'pvplm-ws-session', lastSeenRevision: 4 },
-  { type: 'heartbeat', matchId: 'pvplm-ws-session' },
+  { type: 'heartbeat', matchId: 'pvplm-ws-session', lastSeenRevision: 5 },
   {
     type: 'intent',
     matchId: 'pvplm-ws-session',
@@ -1265,7 +1273,7 @@ assert.deepEqual(realtimeSentMessages.slice(0, 3), [
       payload: {}
     }
   }
-], 'live session realtime helpers should send stable WS message envelopes');
+], 'live session realtime helpers should send stable WS message envelopes with last seen event revision');
 realtimeSession.disconnectRealtime();
 assert.equal(realtimeSession.getState().realtimeStatus, 'closed', 'disconnectRealtime should mark realtime closed');
 
