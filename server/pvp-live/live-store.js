@@ -2031,8 +2031,8 @@ class LivePvpStore {
             : {};
         const previousAutomationCount = Math.max(0, Math.floor(Number(timeoutCounts[loserSeat]) || 0));
         if (elapsed < this.turnTimeoutMs * 2 && previousAutomationCount <= 0) {
-            await this.executeFirstTimeoutAutomation(match, loserSeat, elapsed);
-            return true;
+            const automationResult = await this.executeFirstTimeoutAutomation(match, loserSeat, elapsed);
+            return automationResult || { match, saveResult: null };
         }
         const timeoutEvent = this.makeStoreEvent(match, 'turn_timeout', loserSeat, {
             loserSeat,
@@ -2143,8 +2143,8 @@ class LivePvpStore {
             match.state.stateVersion += 1;
         }
         match.updatedAt = this.now();
-        await this.saveMatch(match);
-        return true;
+        const saveResult = await this.saveMatch(match);
+        return { match, saveResult };
     }
 
     getConnectionTimeoutSeats(match) {

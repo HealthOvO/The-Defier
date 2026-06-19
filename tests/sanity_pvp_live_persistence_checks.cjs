@@ -941,6 +941,69 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   assert.equal(settlementReportMismatchResult?.stateView?.postMatchReview?.settlementReport, undefined, 'settlement report mismatch should not attach a local report to authoritative state');
   assert.equal(settlementReportMismatchStore.matches.get(settlementReportMismatchMatchId)?.state?.winnerSeat, 'A', 'settlement report mismatch reload should keep authoritative outcome');
 
+  const softTimeoutStaleMatchId = 'pvplm-store-stale-soft-timeout';
+  const softTimeoutNow = 1700000027000;
+  const softTimeoutLocalMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: softTimeoutStaleMatchId,
+    stateVersion: 4,
+    now: softTimeoutNow,
+  }), { stateVersion: 4, now: softTimeoutNow - 1500 });
+  softTimeoutLocalMatch.state.turnTiming = {
+    reportVersion: 'pvp-live-turn-timing-v1',
+    currentSeat: 'A',
+    startedAt: softTimeoutNow - 1500,
+    deadlineAt: softTimeoutNow - 500,
+    timeoutMs: 1000,
+  };
+  const softTimeoutAuthoritativeMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: softTimeoutStaleMatchId,
+    stateVersion: 9,
+    now: softTimeoutNow,
+  }), { stateVersion: 9, now: softTimeoutNow });
+  softTimeoutAuthoritativeMatch.state.seats.A.hp = 37;
+  let softTimeoutAuthoritativeLoads = 0;
+  let softTimeoutSaveAttempts = 0;
+  const softTimeoutStore = createLivePvpStore({
+    now: () => softTimeoutNow,
+    turnTimeoutMs: 1000,
+    persistence: {
+      async saveMatch(match) {
+        softTimeoutSaveAttempts += 1;
+        assert.equal(match.matchId, softTimeoutStaleMatchId, 'soft timeout stale save should try to persist the local automation result');
+        assert.equal(match.state.status, 'active', 'soft timeout stale save should be testing the first-timeout active automation path');
+        return {
+          saved: false,
+          skipped: true,
+          reason: 'stale_state_version',
+          stateVersion: match.state.stateVersion,
+          persistedStateVersion: softTimeoutAuthoritativeMatch.state.stateVersion,
+        };
+      },
+      async loadMatchForUser(userId, matchId) {
+        softTimeoutAuthoritativeLoads += 1;
+        assert.equal(userId, 'store-stale-a', 'soft timeout stale reload should use the viewer user id');
+        assert.equal(matchId, softTimeoutStaleMatchId, 'soft timeout stale reload should keep the match id');
+        if (softTimeoutAuthoritativeLoads === 1) return cloneJson(softTimeoutLocalMatch);
+        return cloneJson(softTimeoutAuthoritativeMatch);
+      },
+      async saveMatchEvents() {
+        throw new Error('soft timeout stale save should not append events after skipped persistence');
+      },
+    },
+  });
+  softTimeoutStore.matches.set(softTimeoutStaleMatchId, softTimeoutLocalMatch);
+  softTimeoutStore.activeMatchByUserId.set('store-stale-a', softTimeoutStaleMatchId);
+  softTimeoutStore.activeMatchByUserId.set('store-stale-b', softTimeoutStaleMatchId);
+  const softTimeoutResult = await softTimeoutStore.getMatchForUser('store-stale-a', softTimeoutStaleMatchId);
+  assert.equal(softTimeoutSaveAttempts, 1, 'soft timeout stale save should attempt exactly one local automation save');
+  assert.equal(softTimeoutAuthoritativeLoads, 2, 'soft timeout stale save should reload the authoritative persisted match after route-level pre-read');
+  assert.equal(softTimeoutResult?.stateView?.status, 'active', 'soft timeout stale save should return authoritative status instead of local automation state');
+  assert.equal(softTimeoutResult?.stateView?.stateVersion, 9, 'soft timeout stale save should return authoritative state version after reload');
+  assert.equal(softTimeoutResult?.stateView?.self?.hp, 37, 'soft timeout stale save should return authoritative player state after reload');
+  assert.equal(softTimeoutStore.matches.get(softTimeoutStaleMatchId)?.state?.stateVersion, 9, 'soft timeout stale reload should replace the local dirty automation cache');
+  assert.equal(softTimeoutStore.activeMatchByUserId.get('store-stale-a'), softTimeoutStaleMatchId, 'soft timeout stale reload should keep viewer active map on authoritative active match');
+  assert.equal(softTimeoutStore.activeMatchByUserId.get('store-stale-b'), softTimeoutStaleMatchId, 'soft timeout stale reload should keep opponent active map on authoritative active match');
+
   const timeoutStaleMatchId = 'pvplm-store-stale-timeout';
   const timeoutNow = 1700000028000;
   const timeoutLocalMatch = activateStoreMatch(makeStoreStaleMatch({

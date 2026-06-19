@@ -1,5 +1,22 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8R live PVP soft-timeout automation stale-save rehydrate
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 的首次回合超时软托管分支现在会把 `executeFirstTimeoutAutomation()` 的 `saveMatch()` 结果向上冒泡给 `finishMatchByTimeout()` / `sweepMatchTimeout()`，复用既有 stale-save authoritative rehydrate 链路。
+    - 当旧进程在首次超时窗口里执行本地自动防御 / 自动结束回合，但 active state 保存返回 `stale_state_version` 或 `conflicting_state_version` 时，读路径不再继续把本地 dirty automation `stateView` 发给玩家，而会再次回读 authoritative persisted match。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 新增读后写输回归：route-level pre-read 先拿到旧基线，soft-timeout automation 保存写输后必须第二次回源，并保留双方 active map，不追加失败的本地事件流。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定 soft-timeout stale-save 测试文案和 `executeFirstTimeoutAutomation()` saveResult 冒泡源码 marker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_persistence_checks.cjs` 在实现前失败于 `soft timeout stale save should reload the authoritative persisted match after route-level pre-read`，实际回源次数为 1。
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+    - 语法检查：`node --check server/pvp-live/live-store.js`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 全量：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 清洁检查：`git diff --check`
+  - 当前结论
+    - live PVP 的 stale-save 回源范围已从 terminal timeout / invalidated 读路径继续补到首次回合超时软托管：弱网或旧进程触发的自动行动保存失败后，双方不会继续看到未持久化的本地自动行动视图。该切片仍不是完整 active match revision/CAS、Redis / 多实例强一致、跨进程 WS 主动 fanout、生产 smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8Q live PVP same-version connection timeline monotonic merge
   - 本轮完成
     - `server/pvp-live/live-persistence.js` 的 active match upsert 不再把同 `stateVersion` / 同 `state_json` 的 incoming `connection_json` 整段覆盖到权威行；当当前行和 incoming 都是 active 时，写入时基于 SQLite 当前行做 `connectedAt` / `lastHeartbeatAt` / `reconnectedAt` 的 per-seat `MAX()` 合并。
