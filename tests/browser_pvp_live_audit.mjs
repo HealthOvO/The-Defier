@@ -93,6 +93,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
       ],
       exceptionBranches: [
         { id: 'no_real_player_120s', label: '120 秒无真人', detail: '可以继续等待，也可以取消匹配；不会自动切到残影。' },
+        { id: 'wide_match', label: '宽跨度匹配', detail: '只有双方都确认，才会放宽匹配跨度。' },
+        { id: 'disconnect_grace', label: '匹配后断线', detail: '先进入重连宽限，不会立即判负。' },
         { id: 'ready_timeout', label: '准备超时', detail: '本局未开战成功，不写正式积分。' },
         { id: 'refresh_required', label: '需要同步', detail: '刷新权威局面后再继续行动。' },
       ],
@@ -492,6 +494,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
       };
     };
     let queueStatusPolls = 0;
+    window.__setLivePvpAuditQueueStatusPolls = (value = 0) => {
+      queueStatusPolls = Math.max(0, Math.floor(Number(value) || 0));
+    };
     window.PVPService.findOpponent = async () => {
       throw new Error('live UI should not call legacy PVP matching or settlement');
     };
@@ -504,7 +509,16 @@ async function safeElementScreenshot(page, selector, outputPath) {
         return { success: true, status: 'waiting', queueTicket: 'pvplq-browser-live' };
       },
       cancelQueue: async (queueTicket) => {
-        push({ method: 'cancelQueue', queueTicket });
+        const mode = String(window.__livePvpAuditCancelQueueMode || '');
+        push({ method: 'cancelQueue', queueTicket, mode });
+        if (mode === 'matched-race') {
+          window.__livePvpAuditCancelQueueMode = '';
+          return {
+            success: false,
+            reason: 'queue_ticket_expired',
+            message: '实时论道队列可能已经成局，请同步权威战局',
+          };
+        }
         return { success: true, status: 'cancelled', queueTicket };
       },
       getQueueStatus: async (queueTicket) => {
@@ -910,22 +924,91 @@ async function safeElementScreenshot(page, selector, outputPath) {
     return true;
   });
   if (!practiceHintClicked) throw new Error('expected enabled live practice hint button');
-  await page.waitForTimeout(100);
-  const practiceHintProbe = await page.evaluate(() => ({
-    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
-    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
-    calls: window.__livePvpAuditCalls,
-  }));
+  await page.waitForTimeout(450);
+  const practiceHintProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      currentScreen: window.game?.currentScreen || '',
+      pending: payload?.challenge?.pending || null,
+      focus: payload?.challenge?.trainingFocus || null,
+      bannerText: document.getElementById('challenge-selection-banner')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      insightText: document.querySelector('#challenge-selection-banner .challenge-record-insight')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      confirmText: document.querySelector('#confirm-character-btn .btn-text')?.textContent?.trim() || '',
+      drillScenario: payload?.pvp?.live?.drillScenario || window.PVPScene.getLiveSnapshot()?.drillScenario || null,
+      calls: window.__livePvpAuditCalls,
+    };
+  });
   add(
-    'live UI practice hint does not call legacy ghost fallback or settlement',
-    practiceHintProbe.phase === 'waiting'
-      && /问道练习不会写正式积分/.test(practiceHintProbe.hint)
+    'live UI long-wait practice handoff creates no-score playable challenge drill',
+    practiceHintProbe.currentScreen === 'character-selection-screen'
+      && practiceHintProbe.pending?.replayOnly === true
+      && practiceHintProbe.pending?.practiceOnly === true
+      && /^pvp_live_drill_/.test(practiceHintProbe.pending?.ruleId || '')
+      && /^PVP-/.test(practiceHintProbe.pending?.seedSignature || '')
+      && practiceHintProbe.focus?.sourceRunId === 'pvp_live:waiting:pvplq-browser-live'
+      && /长等待练习|等待真人/.test(practiceHintProbe.focus?.trainingAdvice || '')
+      && /真人 PVP|问道练习|不计/.test(practiceHintProbe.bannerText || '')
+      && /等待真人|不写正式积分|隐藏/.test(practiceHintProbe.insightText || '')
+      && /回放命盘/.test(practiceHintProbe.confirmText || '')
+      && practiceHintProbe.drillScenario?.reportVersion === 'pvp-live-drill-scenario-v1'
+      && practiceHintProbe.drillScenario?.sourceMatchId === 'waiting:pvplq-browser-live'
+      && practiceHintProbe.drillScenario?.sourceVisibility === 'replay_self'
+      && practiceHintProbe.drillScenario?.usesHiddenInformation === false
+      && practiceHintProbe.drillScenario?.rankedImpact === 'none'
+      && practiceHintProbe.drillScenario?.waitingReport?.longWait === true
+      && (practiceHintProbe.drillScenario?.trainingTags || []).includes('长等待练习')
+      && (practiceHintProbe.drillScenario?.publicEventTypes || []).includes('queue_long_wait')
+      && practiceHintProbe.calls.some(call => call.method === 'cancelQueue' && call.queueTicket === 'pvplq-browser-live')
+      && !/reward|rating|elo/i.test(JSON.stringify(practiceHintProbe.drillScenario || {}))
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(practiceHintProbe.calls)),
     JSON.stringify(practiceHintProbe),
   );
 
+  await page.evaluate(async () => {
+    window.game.showScreen('pvp-screen');
+    if (window.game) {
+      window.game.pendingChallengeStart = null;
+      window.game.activeChallengeRun = null;
+    }
+    window.PVPScene.switchTab('live');
+    await window.PVPScene.loadLivePanel();
+    window.__setLivePvpAuditQueueStatusPolls?.(0);
+    window.__livePvpAuditCancelQueueMode = 'matched-race';
+  });
+  await page.waitForTimeout(100);
+  await page.click('[data-live-action="join-queue"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
   await page.click('[data-live-action="refresh-match"]', { timeout: 5000, force: true });
   await page.waitForTimeout(200);
+  await page.click('[data-live-action="practice-live"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(350);
+  const cancelRaceProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      currentScreen: window.game?.currentScreen || '',
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      matchId: document.querySelector('[data-live-match-id]')?.textContent || '',
+      pending: payload?.challenge?.pending || null,
+      drillScenario: payload?.pvp?.live?.drillScenario || window.PVPScene.getLiveSnapshot()?.drillScenario || null,
+      calls: window.__livePvpAuditCalls,
+    };
+  });
+  add(
+    'live UI long-wait practice handoff recovers authoritative match when cancel races matchmaking',
+    cancelRaceProbe.currentScreen === 'pvp-screen'
+      && /setup|matched|active/.test(cancelRaceProbe.phase)
+      && /pvplm-browser-live/.test(cancelRaceProbe.matchId)
+      && !cancelRaceProbe.pending
+      && !cancelRaceProbe.drillScenario
+      && cancelRaceProbe.calls.some(call => call.method === 'cancelQueue' && call.mode === 'matched-race')
+      && cancelRaceProbe.calls.filter(call => call.method === 'getQueueStatus' && call.queueTicket === 'pvplq-browser-live').length >= 2
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(cancelRaceProbe.calls)),
+    JSON.stringify(cancelRaceProbe),
+  );
   const matchedProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
     matchId: document.querySelector('[data-live-match-id]')?.textContent || '',
@@ -1026,6 +1109,11 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /破阵斗法谱/.test(matchedProbe.firstGuide)
       && /守势斗法谱/.test(matchedProbe.firstGuide)
       && /弱点/.test(matchedProbe.firstGuide)
+      && /准备超时/.test(matchedProbe.firstGuide)
+      && /需要同步/.test(matchedProbe.firstGuide)
+      && /查看权威事件/.test(matchedProbe.firstGuide)
+      && /调整斗法谱/.test(matchedProbe.firstGuide)
+      && /继续真人排位/.test(matchedProbe.firstGuide)
       && matchedProbe.payload?.firstMatchGuide?.reportVersion === 'pvp-live-first-match-guide-v1'
       && matchedProbe.payload?.firstMatchGuide?.safeguards?.includes('opening_protection')
       && matchedProbe.payload?.firstMatchGuide?.recommendedLoadouts?.length === 3
@@ -2150,6 +2238,17 @@ async function safeElementScreenshot(page, selector, outputPath) {
         { id: 'setup_ready', label: '调息', detail: '准备阶段可调息 0-2 张手牌。' },
         { id: 'opening_protection', label: '护体', detail: '未行动方不会被开局伤害直接终结。' },
       ],
+      exceptionBranches: [
+        { id: 'no_real_player_120s', label: '120 秒无真人', detail: '可以继续等待，也可以取消匹配；不会自动切到残影。' },
+        { id: 'wide_match', label: '宽跨度匹配', detail: '只有双方都确认，才会放宽匹配跨度。' },
+        { id: 'disconnect_grace', label: '匹配后断线', detail: '先进入重连宽限，不会立即判负。' },
+        { id: 'ready_timeout', label: '准备超时', detail: '本局未开战成功，不写正式积分。' },
+        { id: 'refresh_required', label: '需要同步', detail: '刷新权威局面后再继续行动。' },
+      ],
+      reviewActions: [
+        { id: 'review_events', label: '查看权威事件' },
+        { id: 'queue_again', label: '继续真人排位' },
+      ],
     };
     const makeStateView = (stateVersion = 1, currentSeat = 'B', status = 'setup') => ({
       matchId: 'pvplm-browser-live-mobile',
@@ -2344,6 +2443,38 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && mobileConnectionProbe.rect?.right <= mobileConnectionProbe.viewportWidth + 2,
     JSON.stringify(mobileConnectionProbe),
   );
+  const mobileFirstGuideProbe = await mobilePage.evaluate(() => {
+    const node = document.querySelector('[data-live-first-guide]');
+    const style = node ? window.getComputedStyle(node) : null;
+    const rect = node?.getBoundingClientRect();
+    return {
+      text: node?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      overflow: style?.overflow || '',
+      maxHeight: style?.maxHeight || '',
+      clientHeight: node ? Math.round(node.clientHeight) : 0,
+      scrollHeight: node ? Math.round(node.scrollHeight) : 0,
+      rect: rect ? {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      } : null,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  add(
+    'live UI mobile renders first-match guide without clipping exception or review actions',
+    /准备超时/.test(mobileFirstGuideProbe.text)
+      && /需要同步/.test(mobileFirstGuideProbe.text)
+      && /查看权威事件/.test(mobileFirstGuideProbe.text)
+      && /继续真人排位/.test(mobileFirstGuideProbe.text)
+      && mobileFirstGuideProbe.overflow !== 'hidden'
+      && mobileFirstGuideProbe.maxHeight !== '60px'
+      && mobileFirstGuideProbe.scrollHeight <= mobileFirstGuideProbe.clientHeight + 2
+      && mobileFirstGuideProbe.rect?.left >= -1
+      && mobileFirstGuideProbe.rect?.right <= mobileFirstGuideProbe.viewportWidth + 2,
+    JSON.stringify(mobileFirstGuideProbe),
+  );
   await mobilePage.click('[data-live-mulligan-card]', { timeout: 5000, force: true });
   await mobilePage.click('[data-live-action="confirm-mulligan"]', { timeout: 5000, force: true });
   await mobilePage.waitForTimeout(100);
@@ -2387,12 +2518,15 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify(mobileActionProbe),
   );
   await mobilePage.evaluate(() => {
+    const statusCard = document.querySelector('.pvp-live-status-card');
     const root = document.querySelector('[data-live-pvp-root]');
-    const screen = document.getElementById('pvp-screen');
-    if (root && screen) {
-      screen.scrollTo({ top: Math.max(0, root.offsetTop - 22), left: 0, behavior: 'auto' });
+    if (statusCard && typeof statusCard.scrollIntoView === 'function') {
+      statusCard.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'auto' });
+    } else if (root && typeof root.scrollIntoView === 'function') {
+      root.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'auto' });
     } else {
-      root?.scrollIntoView({ block: 'start', inline: 'nearest' });
+      const screen = document.getElementById('pvp-screen');
+      if (root && screen) screen.scrollTo({ top: Math.max(0, root.offsetTop - 22), left: 0, behavior: 'auto' });
     }
   }).catch(() => {});
   await mobilePage.waitForTimeout(100);
@@ -2458,6 +2592,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && mobileProbe.scrollWidth <= mobileProbe.viewportWidth + 2
       && mobileProbe.statusCard?.top >= -1
       && mobileProbe.statusCard?.bottom <= mobileProbe.viewportHeight + 2
+      && mobileProbe.statusCard?.height <= mobileProbe.viewportHeight + 2
       && mobileProbe.root?.left >= 0
       && mobileProbe.root?.right <= mobileProbe.viewportWidth + 2
       && mobileProbe.eventPanel?.left >= -1

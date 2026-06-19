@@ -1,5 +1,24 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8D live PVP 首局引导与长等待练习承接
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 的 `renderLiveFirstMatchGuide()` 不再只展示步骤和推荐谱，已把 `firstMatchGuide.exceptionBranches` 与 `reviewActions` 渲染成玩家可见内容；首局卡片现在能直接解释 120 秒无真人、准备超时、需要同步，以及查看权威事件 / 调整斗法谱 / 继续真人排位等下一步。
+    - `practice-live` 从长等待安全提示升级为实际 handoff：进入 120 秒长等待后点击“问道练习”会先退出当前排队，生成 `pvp-live-drill-scenario-v1`，并交给 challenge hub 打开 replay-only / practice-only / no-score 的练习命盘；不会调用旧残影匹配、旧结算或正式积分路径。
+    - 长等待 handoff 增加取消排队竞态保护：只有 `cancelQueue()` 确认回到 idle 后才写入 drill；如果取消时票据已被撮合消费，则不打开练习，立即 `refreshLiveMatch({ fromAutoPoll: true })` 同步权威战局，避免真人成局后本地停在 waiting 或无人响应。
+    - `getLiveSnapshot()` 允许 waiting 来源的 drillScenario 在退出排队后仍可被 `render_game_to_text()` 审计到，便于复盘“为什么进入了练习”；该场景只记录等待分支、公开规则和推荐谱，不读取对手隐藏手牌或牌库。
+    - `css/pvp.css` 移除移动端 `.pvp-live-first-guide` 的 `max-height: 60px / overflow: hidden` 硬裁切，并为异常分支和复盘动作补齐紧凑样式；`tests/browser_pvp_live_audit.mjs` 新增移动端 `scrollHeight/clientHeight` 与 viewport 探针，防止首局卡片再次被裁掉。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定本轮 UI / release marker，防止后续把长等待练习退回纯提示或把首局 guide 的 exception/review 文案从 DOM 移除。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于缺少 `buildLiveWaitingPracticeScenario(`；追加挑战者问题后，同一测试又失败于 `renderLiveFirstMatchGuide` 截断 `exceptionBranches`；实现后同一测试通过。
+    - `node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `node --check js/scenes/pvp-scene.js`
+    - `node --check tests/browser_pvp_live_audit.mjs`
+    - `npm run build:pages`
+    - `node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-s8d-audit`，53/53 通过，覆盖 `matched-race` 取消排队竞态恢复。
+  - 当前结论
+    - live PVP 的首局理解和长等待挫败感已进一步收口：玩家不再只看到缩略首战简报，也不会在无真人时只剩“提示一下”的练习入口；若练习点击撞上真人成局窗口，也会优先回到权威战局而不是强开练习。该切片仍不是生产部署、真实后端 long-wait smoke、DB 原子撮合 / 并发 claim 防重、active match revision/CAS 或跨进程 WS fanout 的完成证明。
+
 - 2026-06-19: V10-S8C live PVP 跨进程 queue status 成局回收
   - 本轮完成
     - `server/pvp-live/live-store.js` 的 `getQueueStatus()` 新增 active-match handoff：等待方的 queue row 被另一进程撮合消费后，原进程或无状态第三进程仍可通过认证用户恢复自己的持久化 active match，返回 `matched / matchId / seatId / stateView`，不再因为缺少本地 `pendingQueueResults` 直接 404。

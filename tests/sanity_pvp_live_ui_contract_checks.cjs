@@ -111,6 +111,8 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'getLiveSnapshot()',
   'getLiveWaitingReport(',
   'renderLiveWaitingReport(',
+  'buildLiveWaitingPracticeScenario(',
+  'commitLiveWaitingPracticeHandoff(',
   'getLivePostMatchReview(',
   'renderLivePostMatchReview(',
   'getLiveFriendlySeries(',
@@ -311,8 +313,64 @@ const submitLiveCardBody = methodBody(scene, 'submitLiveCard');
 assert.ok(submitLiveCardBody.includes('view.opponent') && submitLiveCardBody.includes("state.seatId === 'B'"), 'submitLiveCard should target the opponent seat from live state, not hard-code seat B');
 assert.ok(!submitLiveCardBody.includes("targetSeat: 'B'"), 'submitLiveCard must not hard-code targetSeat to B');
 
-  [
-    '.pvp-live-shell',
+const firstGuideBody = methodBody(scene, 'renderLiveFirstMatchGuide');
+[
+  'guide.exceptionBranches',
+  'guide.reviewActions',
+  'pvp-live-guide-exceptions',
+  'pvp-live-guide-review-actions',
+  'pvp-live-guide-review-action',
+].forEach((needle) => {
+  assert.ok(firstGuideBody.includes(needle), `renderLiveFirstMatchGuide should render public first-match guide detail: ${needle}`);
+});
+assert.ok(!firstGuideBody.includes('guide.exceptionBranches.slice(0, 3)'), 'renderLiveFirstMatchGuide must not hide later public exception branches such as ready_timeout or refresh_required');
+assert.ok(!firstGuideBody.includes('guide.reviewActions.slice(0, 3)'), 'renderLiveFirstMatchGuide must not hide later public review actions');
+
+const openLivePracticeHintBody = methodBody(scene, 'openLivePracticeHint');
+[
+  'this.commitLiveWaitingPracticeHandoff()',
+  '长等待练习',
+  '不写正式积分',
+].forEach((needle) => {
+  assert.ok(openLivePracticeHintBody.includes(needle), `openLivePracticeHint should execute live waiting practice handoff: ${needle}`);
+});
+
+const waitingPracticeBody = methodBody(scene, 'buildLiveWaitingPracticeScenario');
+[
+  "reportVersion: 'pvp-live-drill-scenario-v1'",
+  "sourceVisibility: 'replay_self'",
+  'usesHiddenInformation: false',
+  "rankedImpact: 'none'",
+  'waitingReport',
+  '等待真人',
+].forEach((needle) => {
+  assert.ok(waitingPracticeBody.includes(needle), `buildLiveWaitingPracticeScenario should create no-score long-wait drill scenario: ${needle}`);
+});
+
+const waitingPracticeCommitBody = methodBody(scene, 'commitLiveWaitingPracticeHandoff');
+[
+  'buildLiveWaitingPracticeScenario',
+  'beginPvpLiveDrillScenario',
+  "showChallengeHub('daily')",
+  '练习不写正式积分',
+  'afterCancelState',
+  'await this.refreshLiveMatch({ fromAutoPoll: true })',
+].forEach((needle) => {
+  assert.ok(waitingPracticeCommitBody.includes(needle), `commitLiveWaitingPracticeHandoff should open playable challenge drill: ${needle}`);
+});
+assert.ok(
+  !/this\.liveDrillScenario\s*=\s*scenario[\s\S]*?session\.cancelQueue/.test(waitingPracticeCommitBody),
+  'commitLiveWaitingPracticeHandoff must only store a drill scenario after queue cancel succeeds'
+);
+assert.ok(
+  !/this\.stopLivePolling\(\)[\s\S]*?session\.cancelQueue/.test(waitingPracticeCommitBody),
+  'commitLiveWaitingPracticeHandoff must not stop queue polling before cancelQueue resolves'
+);
+
+assert.ok(!/\.pvp-live-first-guide\s*\{[\s\S]*?max-height:\s*60px[\s\S]*?overflow:\s*hidden[\s\S]*?\}/.test(css), 'mobile live first-match guide must not hard clip the guide text');
+
+[
+  '.pvp-live-shell',
   '.pvp-live-board',
   '.pvp-live-card-row',
   '.pvp-live-action-bar',
@@ -333,6 +391,9 @@ assert.ok(!submitLiveCardBody.includes("targetSeat: 'B'"), 'submitLiveCard must 
   '.pvp-live-first-guide',
   '.pvp-live-guide-step',
   '.pvp-live-guide-loadout',
+  '.pvp-live-guide-exceptions',
+  '.pvp-live-guide-review-actions',
+  '.pvp-live-guide-review-action',
   '.pvp-live-loadout-exploration',
   '.pvp-live-loadout-exploration-card',
     '.pvp-live-waiting-report',
@@ -445,7 +506,8 @@ assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL
   'live UI private invite join enters friendly setup without legacy settlement',
   'live UI Bo3 tied friendly review exposes decider and auto-enters G3 with same series id',
   'live UI completed Bo3 hides friendly rematch after source seat reaches two wins',
-  'live UI practice hint does not call legacy ghost fallback or settlement',
+  'live UI long-wait practice handoff creates no-score playable challenge drill',
+  'live UI mobile renders first-match guide without clipping exception or review actions',
   'live UI renders all baseline loadouts with balanced selected by default',
   'live UI renders public match quality report without hidden rating leak',
   'live UI shows matched setup state without opponent hand leak',

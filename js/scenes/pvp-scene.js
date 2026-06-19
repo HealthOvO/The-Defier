@@ -886,6 +886,8 @@ export const PVPScene = {
     if (!guide) return '首战简报：等待真人匹配';
     const visibleSteps = guide.steps.slice(0, 4);
     const visibleLoadouts = guide.recommendedLoadouts.slice(0, 3);
+    const visibleExceptions = guide.exceptionBranches;
+    const visibleReviewActions = guide.reviewActions;
     return `
       <div class="pvp-live-guide-head">
         <span class="pvp-live-guide-title">${this.escapeHtml(guide.title)}</span>
@@ -897,6 +899,16 @@ export const PVPScene = {
       ${visibleLoadouts.length ? `
         <div class="pvp-live-guide-loadouts">
           ${visibleLoadouts.map(item => `<span class="pvp-live-guide-loadout" title="${this.escapeHtml(item.role)}">${this.escapeHtml(item.label)} · ${this.escapeHtml(item.weakness)}</span>`).join('')}
+        </div>
+      ` : ''}
+      ${visibleExceptions.length ? `
+        <div class="pvp-live-guide-exceptions">
+          ${visibleExceptions.map(item => `<span class="pvp-live-guide-exception" title="${this.escapeHtml(item.detail)}">${this.escapeHtml(item.label)}：${this.escapeHtml(item.detail)}</span>`).join('')}
+        </div>
+      ` : ''}
+      ${visibleReviewActions.length ? `
+        <div class="pvp-live-guide-review-actions">
+          ${visibleReviewActions.map(item => `<span class="pvp-live-guide-review-action">${this.escapeHtml(item.label)}</span>`).join('')}
         </div>
       ` : ''}
       ${this.renderLiveLoadoutExplorationReport(view)}
@@ -948,6 +960,125 @@ export const PVPScene = {
           : `<span class="pvp-live-waiting-action" title="${this.escapeHtml(action.detail)}">${this.escapeHtml(action.label)}：${this.escapeHtml(action.detail)}</span>`).join('')}
       </div>
     `;
+  },
+  buildLiveWaitingPracticeScenario(state = null) {
+    const sourceState = state && typeof state === 'object' ? state : this.getLiveSession().getState();
+    const waitingReport = this.getLiveWaitingReport(sourceState);
+    if (!waitingReport || !waitingReport.longWait) return null;
+    const queueTicket = String(sourceState && sourceState.queueTicket || '').trim();
+    const sourceId = queueTicket || `long-wait-${Date.now()}`;
+    const selectedLoadout = this.getLiveSelectedLoadoutPreset();
+    const waitSec = Math.ceil(waitingReport.waitMs / 1000);
+    return {
+      reportVersion: 'pvp-live-drill-scenario-v1',
+      sourceMatchId: `waiting:${sourceId}`,
+      sourceVisibility: 'replay_self',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      result: 'waiting',
+      finishReason: 'long_wait',
+      recommendedLoadoutId: selectedLoadout.id,
+      recommendedLoadoutLabel: selectedLoadout.label,
+      themeKey: 'tempo',
+      themeLabel: '等待真人',
+      trainingAdvice: `长等待练习：已等待 ${waitSec}s，先练调息、首轮稳血和低费节奏；不写正式积分。`,
+      drillObjective: `${selectedLoadout.label}：等待真人时练首轮调息和出牌节奏，不写正式积分。`,
+      trainingTags: ['真人 PVP', '长等待练习', '不计积分', '等待真人'],
+      publicEventTypes: ['queue_long_wait'],
+      sourceEventSequences: [],
+      waitingReport
+    };
+  },
+  async commitLiveWaitingPracticeHandoff() {
+    const session = this.getLiveSession();
+    const sourceState = session && typeof session.getState === 'function' ? session.getState() : null;
+    const scenario = this.buildLiveWaitingPracticeScenario(sourceState);
+    if (!scenario) {
+      const message = '问道练习不会写正式积分；当前还未进入 120 秒长等待，可继续等待真人或取消匹配后练习。';
+      this.liveInlineHint = message;
+      const root = document.querySelector('[data-live-pvp-root]');
+      const hint = root ? root.querySelector('[data-live-last-error]') : null;
+      if (hint) hint.textContent = message;
+      if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+        Utils.showBattleLog(message);
+      }
+      return null;
+    }
+    if (sourceState && sourceState.phase === 'waiting' && session && typeof session.cancelQueue === 'function') {
+      let cancelError = null;
+      try {
+        await session.cancelQueue();
+      } catch (error) {
+        cancelError = error;
+      }
+      const afterCancelState = session.getState();
+      const cancelSucceeded = !cancelError
+        && afterCancelState
+        && afterCancelState.phase === 'idle'
+        && !afterCancelState.queueTicket
+        && !afterCancelState.matchId
+        && !afterCancelState.lastError;
+      if (!cancelSucceeded) {
+        this.liveDrillScenario = null;
+        this.liveLongWaitPollUntil = Date.now() + 30 * 1000;
+        this.liveInlineHint = cancelError
+          ? `练习暂未打开；退出排队失败，正在同步权威战局：${cancelError && cancelError.message ? cancelError.message : cancelError}`
+          : '练习暂未打开；排队可能已经成局，正在同步权威战局。';
+        if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+          Utils.showBattleLog(this.liveInlineHint);
+        }
+        await this.refreshLiveMatch({ fromAutoPoll: true });
+        const recoveredState = session.getState();
+        if (this.shouldLivePoll(recoveredState)) this.startLivePolling();
+        return null;
+      }
+    }
+    this.liveDrillScenario = scenario;
+    this.liveLongWaitPollUntil = 0;
+    this.stopLivePolling();
+    const gameRef = this.getGameRef();
+    const focus = {
+      sourceRunId: `pvp_live:${scenario.sourceMatchId}`,
+      guideRecordId: `pvp_live:${scenario.sourceMatchId}`,
+      chapterName: '真人 PVP 长等待',
+      sourceTitle: scenario.recommendedLoadoutLabel,
+      themeKey: scenario.themeKey,
+      themeLabel: scenario.themeLabel,
+      ratingLabel: '长等待练习',
+      ratingTone: 'selected',
+      trainingAdvice: scenario.trainingAdvice,
+      highlightLine: scenario.drillObjective,
+      routeFocusLine: '练习不写正式积分；已退出真人排队，避免成局后无人响应。',
+      compareHint: '练习只使用等待分支和公开规则，不读取对手隐藏手牌或牌库。',
+      trainingTags: scenario.trainingTags,
+      goalHighlights: [
+        `等待分支：${scenario.waitingReport.waitMs}ms`,
+        `推荐谱：${scenario.recommendedLoadoutLabel}`,
+        '正式积分：不变'
+      ]
+    };
+    if (gameRef && typeof gameRef.ensureChallengeHubLoaded === 'function') {
+      await gameRef.ensureChallengeHubLoaded();
+    }
+    if (gameRef && typeof gameRef.setObservatoryTrainingFocus === 'function') {
+      gameRef.setObservatoryTrainingFocus(focus, { silent: true });
+    }
+    const message = '已进入真人 PVP 长等待练习：练习不写正式积分，且已退出本次排队。';
+    this.liveInlineHint = message;
+    const root = document.querySelector('[data-live-pvp-root]');
+    const hint = root ? root.querySelector('[data-live-last-error]') : null;
+    if (hint) hint.textContent = message;
+    if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+      Utils.showBattleLog(message);
+    }
+    let drillStarted = false;
+    if (gameRef && typeof gameRef.beginPvpLiveDrillScenario === 'function') {
+      drillStarted = !!gameRef.beginPvpLiveDrillScenario(scenario);
+    }
+    if (!drillStarted && gameRef && typeof gameRef.showChallengeHub === 'function') {
+      await gameRef.showChallengeHub('daily');
+    }
+    return scenario;
   },
   renderLiveInviteReport(report) {
     const source = report && typeof report === 'object' ? report : null;
@@ -1837,7 +1968,14 @@ export const PVPScene = {
     const state = session && typeof session.getState === 'function' ? session.getState() : null;
     if (!state) return null;
     const view = state.stateView || null;
-    const drillScenario = this.liveDrillScenario && this.liveDrillScenario.sourceMatchId === (state.matchId || (view && view.matchId) || '')
+    const liveDrillSourceId = String(this.liveDrillScenario && this.liveDrillScenario.sourceMatchId || '');
+    const activeLiveSourceId = String(state.matchId || (view && view.matchId) || '');
+    const waitingLiveSourceId = state.queueTicket ? `waiting:${state.queueTicket}` : '';
+    const drillScenario = this.liveDrillScenario && (
+      liveDrillSourceId === activeLiveSourceId
+      || liveDrillSourceId === waitingLiveSourceId
+      || (liveDrillSourceId.startsWith('waiting:') && !activeLiveSourceId)
+    )
       ? {
           ...this.liveDrillScenario,
           trainingTags: Array.isArray(this.liveDrillScenario.trainingTags) ? this.liveDrillScenario.trainingTags.slice(0, 6) : [],
@@ -2385,8 +2523,11 @@ export const PVPScene = {
     this.stopLivePolling();
     this.renderLivePanel();
   },
-  openLivePracticeHint() {
-    const message = '问道练习不会写正式积分；当前切片先保留真人排队，你也可以取消匹配后再进入练习入口。';
+  async openLivePracticeHint() {
+    const scenario = await this.commitLiveWaitingPracticeHandoff();
+    const message = scenario
+      ? '已打开真人 PVP 长等待练习；练习不写正式积分，返回真人排位需重新入队。'
+      : this.liveInlineHint || '问道练习不会写正式积分；当前未进入长等待，继续等待真人或取消匹配后再练习。';
     this.liveInlineHint = message;
     const root = document.querySelector('[data-live-pvp-root]');
     const hint = root ? root.querySelector('[data-live-last-error]') : null;
