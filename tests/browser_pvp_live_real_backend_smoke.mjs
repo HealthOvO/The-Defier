@@ -61,6 +61,7 @@ function startBackend() {
       DEFIER_HMAC_SECRET: 'integration-hmac-secret-32-characters',
       DEFIER_INTEGRITY_REQUIRED: '1',
       DEFIER_DB_PATH: dbPath,
+      PVP_LIVE_SETUP_READY_TIMEOUT_MS: '10000',
       PVP_LIVE_HEARTBEAT_INTERVAL_MS: '1000',
       PVP_LIVE_HEARTBEAT_STALE_MS: '1000',
       PVP_LIVE_RECONNECT_GRACE_MS: '30000',
@@ -261,6 +262,12 @@ async function refreshUntilLivePhase(page, phase, timeoutMs = 10000) {
     await page.waitForTimeout(250);
   }
   throw new Error(`timed out waiting for live phase ${phase}; last=${JSON.stringify(lastSnapshot)}; error=${lastError?.message || ''}`);
+}
+
+async function requestLivePvpReplay(page, matchId, options = {}) {
+  return await page.evaluate(async ({ targetMatchId, replayOptions }) => {
+    return await window.PVPService.live.getReplay(targetMatchId, replayOptions);
+  }, { targetMatchId: matchId, replayOptions: options });
 }
 
 async function writeReport() {
@@ -697,6 +704,39 @@ async function writeReport() {
         && postMatchProbe.textPayload?.settlementReport?.seasonHonorReport?.reportVersion === 'pvp-live-season-honor-v1',
       JSON.stringify({ finishedA, finishedB, postMatchProbe, postMatchParity }),
     );
+    const publicReplayProbe = await requestLivePvpReplay(seatB.page, finishedB.matchId, { visibility: 'replay_public' });
+    publicReplayProbe.hasForbiddenReport = /postMatchReview|settlementReport|seasonHonorReport|viewerSeat/.test(JSON.stringify(publicReplayProbe.replay || {}));
+    const auditSafeReplayProbe = await requestLivePvpReplay(seatB.page, finishedB.matchId, { visibility: 'audit_safe' });
+    auditSafeReplayProbe.hasForbiddenReport = /postMatchReview|settlementReport|seasonHonorReport|viewerSeat/.test(JSON.stringify(auditSafeReplayProbe.replay || {}));
+    add(
+      'real browser replay_public hides seat-specific settlement and season honor reports',
+      publicReplayProbe?.success === true
+        && publicReplayProbe.replay?.visibilityLayer === 'replay_public'
+        && publicReplayProbe.replay?.publicSummary?.finishReason === 'surrender'
+        && publicReplayProbe.replay?.hiddenScan?.forbiddenTokenCount === 0
+        && !publicReplayProbe.replay?.postMatchReview
+        && !publicReplayProbe.replay?.settlementReport
+        && !publicReplayProbe.replay?.seasonHonorReport
+        && !publicReplayProbe.replay?.viewerSeat
+        && publicReplayProbe.hasForbiddenReport === false,
+      JSON.stringify(publicReplayProbe),
+    );
+    add(
+      'real browser audit_safe replay hides seat-specific settlement and season honor reports',
+      auditSafeReplayProbe?.success === true
+        && auditSafeReplayProbe.replay?.visibilityLayer === 'audit_safe'
+        && auditSafeReplayProbe.replay?.sourceVisibilityLayer === 'replay_public'
+        && auditSafeReplayProbe.replay?.publicSummary?.finishReason === 'surrender'
+        && auditSafeReplayProbe.replay?.hiddenScan?.forbiddenTokenCount === 0
+        && Array.isArray(auditSafeReplayProbe.replay?.fieldPaths)
+        && auditSafeReplayProbe.replay?.fieldPaths.length > 0
+        && !auditSafeReplayProbe.replay?.postMatchReview
+        && !auditSafeReplayProbe.replay?.settlementReport
+        && !auditSafeReplayProbe.replay?.seasonHonorReport
+        && !auditSafeReplayProbe.replay?.viewerSeat
+        && auditSafeReplayProbe.hasForbiddenReport === false,
+      JSON.stringify(auditSafeReplayProbe),
+    );
     add(
       'real browser live match renders key-turn replay from public post-match events',
       /关键回合|开战窗口|终局选择/.test(postMatchProbe.keyTurnText)
@@ -955,6 +995,72 @@ async function writeReport() {
         && /默认斗法谱/.test(postRequeueProbe.selectedLoadout)
         && postRequeueProbe.payload?.phase === 'waiting',
       JSON.stringify(postRequeueProbe),
+    );
+
+    await seatB.page.evaluate(async () => {
+      await window.PVPScene.cancelLiveQueue();
+    });
+    await waitForLivePhase(seatB.page, 'idle', 8000);
+
+    const seatC = await preparePage(browser, `live_real_c_${runId}`, '丙');
+    const seatD = await preparePage(browser, `live_real_d_${runId}`, '丁');
+    await seatC.page.evaluate(() => {
+      window.game.player.name = '丙';
+      window.PVPScene.switchTab('live');
+    });
+    await seatD.page.evaluate(() => {
+      window.game.player.name = '丁';
+      window.PVPScene.switchTab('live');
+    });
+    await seatC.page.click('[data-live-action="join-queue"]', { timeout: 5000, force: true });
+    const timeoutJoinC = await waitForLivePhase(seatC.page, 'waiting');
+    await seatD.page.click('[data-live-action="join-queue"]', { timeout: 5000, force: true });
+    const timeoutJoinD = await waitForLivePhase(seatD.page, 'setup');
+    const timeoutSetupC = await refreshUntilLivePhase(seatC.page, 'setup');
+    await seatC.page.waitForTimeout(10600);
+    await seatC.page.evaluate(async () => {
+      await window.PVPScene.refreshLiveMatch();
+    });
+    const invalidatedC = await waitForLivePhase(seatC.page, 'invalidated', 12000);
+    const invalidatedNoSeasonHonorProbe = await seatC.page.evaluate(async () => {
+      const snapshot = window.PVPScene.getLiveSnapshot();
+      const matchRead = await window.PVPService.live.getMatch(snapshot?.matchId || '');
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      return {
+        phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        summary: document.querySelector('[data-live-summary]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        eventTypes: Array.from(document.querySelectorAll('[data-live-event-type]')).map(item => item.getAttribute('data-live-event-type')),
+        postReviewHidden: document.querySelector('[data-live-post-match-review]')?.hidden ?? false,
+        postReviewText: document.querySelector('[data-live-post-match-review]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        settlementText: document.querySelector('[data-live-settlement-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        seasonHonorText: document.querySelector('[data-live-season-honor]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        snapshot,
+        textPayload,
+        matchRead,
+      };
+    });
+    add(
+      'real browser ready timeout invalidated terminal state does not expose settlement or season honor',
+      timeoutJoinC.phase === 'waiting'
+        && timeoutJoinD.phase === 'setup'
+        && timeoutSetupC.phase === 'setup'
+        && invalidatedC.phase === 'invalidated'
+        && invalidatedNoSeasonHonorProbe.phase === 'invalidated'
+        && /准备超时|无效局/.test(invalidatedNoSeasonHonorProbe.summary)
+        && /不写正式积分|不计正式积分/.test(invalidatedNoSeasonHonorProbe.hint)
+        && invalidatedNoSeasonHonorProbe.eventTypes.includes('ready_timeout')
+        && invalidatedNoSeasonHonorProbe.eventTypes.includes('match_invalidated')
+        && invalidatedNoSeasonHonorProbe.postReviewHidden === true
+        && !/正式积分|天道币|赛季荣誉/.test(`${invalidatedNoSeasonHonorProbe.postReviewText} ${invalidatedNoSeasonHonorProbe.settlementText} ${invalidatedNoSeasonHonorProbe.seasonHonorText}`)
+        && invalidatedNoSeasonHonorProbe.snapshot?.phase === 'invalidated'
+        && !invalidatedNoSeasonHonorProbe.snapshot?.postMatchReview
+        && invalidatedNoSeasonHonorProbe.textPayload?.phase === 'invalidated'
+        && !invalidatedNoSeasonHonorProbe.textPayload?.postMatchReview
+        && invalidatedNoSeasonHonorProbe.matchRead?.success === true
+        && invalidatedNoSeasonHonorProbe.matchRead?.stateView?.status === 'invalidated'
+        && !invalidatedNoSeasonHonorProbe.matchRead?.stateView?.postMatchReview,
+      JSON.stringify({ timeoutJoinC, timeoutJoinD, timeoutSetupC, invalidatedC, invalidatedNoSeasonHonorProbe }),
     );
 
     await safeAuditScreenshot(seatA.page, path.join(outDir, 'seat-a-live-real.png'), 'pvp_live_real_seat_a', {
