@@ -549,6 +549,128 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   assert.equal(terminalIntentStore.matches.get(terminalIntentStaleMatchId)?.state?.status, 'active', 'terminal intent stale reload should replace the local dirty finished cache');
   assert.equal(terminalIntentStore.activeMatchByUserId.get('store-stale-a'), terminalIntentStaleMatchId, 'terminal intent stale reload should keep active map on authoritative active match');
 
+  const timeoutStaleMatchId = 'pvplm-store-stale-timeout';
+  const timeoutNow = 1700000028000;
+  const timeoutLocalMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: timeoutStaleMatchId,
+    stateVersion: 4,
+    now: timeoutNow,
+  }), { stateVersion: 4, now: timeoutNow - 5000 });
+  timeoutLocalMatch.state.turnTiming = {
+    reportVersion: 'pvp-live-turn-timing-v1',
+    currentSeat: 'A',
+    startedAt: timeoutNow - 5000,
+    deadlineAt: timeoutNow - 4000,
+    timeoutMs: 1000,
+  };
+  const timeoutAuthoritativeMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: timeoutStaleMatchId,
+    stateVersion: 9,
+    now: timeoutNow,
+  }), { stateVersion: 9, now: timeoutNow });
+  timeoutAuthoritativeMatch.state.seats.A.hp = 33;
+  let timeoutAuthoritativeLoads = 0;
+  let timeoutSettlementCalls = 0;
+  const timeoutStore = createLivePvpStore({
+    now: () => timeoutNow,
+    turnTimeoutMs: 1000,
+    persistence: {
+      async saveMatch(match) {
+        assert.equal(match.matchId, timeoutStaleMatchId, 'timeout stale save should try to persist the local timeout result');
+        assert.equal(match.state.status, 'finished', 'timeout stale save should be testing the timeout finished path');
+        return {
+          saved: false,
+          skipped: true,
+          reason: 'stale_state_version',
+          stateVersion: match.state.stateVersion,
+          persistedStateVersion: timeoutAuthoritativeMatch.state.stateVersion,
+        };
+      },
+      async loadMatchForUser(userId, matchId) {
+        timeoutAuthoritativeLoads += 1;
+        assert.equal(userId, 'store-stale-a', 'timeout stale reload should use the viewer user id');
+        assert.equal(matchId, timeoutStaleMatchId, 'timeout stale reload should keep the match id');
+        return cloneJson(timeoutAuthoritativeMatch);
+      },
+      async saveMatchEvents() {
+        throw new Error('timeout stale save should not append events after skipped persistence');
+      },
+    },
+    settlement: {
+      async settleMatch() {
+        timeoutSettlementCalls += 1;
+        return { settled: true };
+      },
+    },
+  });
+  timeoutStore.matches.set(timeoutStaleMatchId, timeoutLocalMatch);
+  timeoutStore.activeMatchByUserId.set('store-stale-a', timeoutStaleMatchId);
+  timeoutStore.activeMatchByUserId.set('store-stale-b', timeoutStaleMatchId);
+  const timeoutResult = await timeoutStore.getMatchForUser('store-stale-a', timeoutStaleMatchId);
+  assert.equal(timeoutSettlementCalls, 0, 'timeout stale save should not settle the local dirty timeout result');
+  assert.equal(timeoutAuthoritativeLoads, 1, 'timeout stale save should reload the authoritative persisted match');
+  assert.equal(timeoutResult?.stateView?.status, 'active', 'timeout stale save should return authoritative status instead of local timeout finished state');
+  assert.equal(timeoutResult?.stateView?.stateVersion, 9, 'timeout stale save should return authoritative state version after reload');
+  assert.equal(timeoutResult?.stateView?.self?.hp, 33, 'timeout stale save should return authoritative player state after reload');
+  assert.equal(timeoutStore.matches.get(timeoutStaleMatchId)?.state?.status, 'active', 'timeout stale reload should replace the local dirty timeout cache');
+  assert.equal(timeoutStore.activeMatchByUserId.get('store-stale-a'), timeoutStaleMatchId, 'timeout stale reload should keep viewer active map on authoritative active match');
+  assert.equal(timeoutStore.activeMatchByUserId.get('store-stale-b'), timeoutStaleMatchId, 'timeout stale reload should keep opponent active map on authoritative active match');
+
+  const invalidatedReleaseStaleMatchId = 'pvplm-store-stale-release-invalidated';
+  const invalidatedReleaseNow = 1700000029000;
+  const invalidatedReleaseLocalMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: invalidatedReleaseStaleMatchId,
+    stateVersion: 4,
+    now: invalidatedReleaseNow,
+  }), { stateVersion: 4, now: invalidatedReleaseNow });
+  invalidatedReleaseLocalMatch.state.status = 'invalidated';
+  invalidatedReleaseLocalMatch.state.phase = 'invalidated';
+  invalidatedReleaseLocalMatch.state.finishReason = 'ready_timeout';
+  invalidatedReleaseLocalMatch.state.stateVersion = 5;
+  const invalidatedReleaseAuthoritativeMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: invalidatedReleaseStaleMatchId,
+    stateVersion: 10,
+    now: invalidatedReleaseNow,
+  }), { stateVersion: 10, now: invalidatedReleaseNow });
+  invalidatedReleaseAuthoritativeMatch.state.seats.A.hp = 44;
+  let invalidatedReleaseAuthoritativeLoads = 0;
+  const invalidatedReleaseStore = createLivePvpStore({
+    now: () => invalidatedReleaseNow,
+    persistence: {
+      async saveMatch(match) {
+        assert.equal(match.matchId, invalidatedReleaseStaleMatchId, 'invalidated stale release should try to persist the local invalidated result');
+        assert.equal(match.state.status, 'invalidated', 'invalidated stale release should be testing releaseIfTerminal invalidated path');
+        return {
+          saved: false,
+          skipped: true,
+          reason: 'stale_state_version',
+          stateVersion: match.state.stateVersion,
+          persistedStateVersion: invalidatedReleaseAuthoritativeMatch.state.stateVersion,
+        };
+      },
+      async loadMatchForUser(userId, matchId) {
+        invalidatedReleaseAuthoritativeLoads += 1;
+        assert.equal(userId, 'store-stale-a', 'invalidated stale release reload should use the viewer user id');
+        assert.equal(matchId, invalidatedReleaseStaleMatchId, 'invalidated stale release reload should keep the match id');
+        return cloneJson(invalidatedReleaseAuthoritativeMatch);
+      },
+      async saveMatchEvents() {
+        throw new Error('invalidated stale release should not append events after skipped persistence');
+      },
+    },
+  });
+  invalidatedReleaseStore.matches.set(invalidatedReleaseStaleMatchId, invalidatedReleaseLocalMatch);
+  invalidatedReleaseStore.activeMatchByUserId.set('store-stale-a', invalidatedReleaseStaleMatchId);
+  invalidatedReleaseStore.activeMatchByUserId.set('store-stale-b', invalidatedReleaseStaleMatchId);
+  const invalidatedReleaseResult = await invalidatedReleaseStore.getActiveMatchForUser('store-stale-a');
+  assert.equal(invalidatedReleaseAuthoritativeLoads, 1, 'invalidated stale release should reload the authoritative persisted match');
+  assert.equal(invalidatedReleaseResult?.stateView?.status, 'active', 'invalidated stale release should return authoritative status instead of local invalidated state');
+  assert.equal(invalidatedReleaseResult?.stateView?.stateVersion, 10, 'invalidated stale release should return authoritative state version after reload');
+  assert.equal(invalidatedReleaseResult?.stateView?.self?.hp, 44, 'invalidated stale release should return authoritative player state after reload');
+  assert.equal(invalidatedReleaseStore.matches.get(invalidatedReleaseStaleMatchId)?.state?.status, 'active', 'invalidated stale release should replace the local dirty invalidated cache');
+  assert.equal(invalidatedReleaseStore.activeMatchByUserId.get('store-stale-a'), invalidatedReleaseStaleMatchId, 'invalidated stale release should keep viewer active map on authoritative active match');
+  assert.equal(invalidatedReleaseStore.activeMatchByUserId.get('store-stale-b'), invalidatedReleaseStaleMatchId, 'invalidated stale release should keep opponent active map on authoritative active match');
+
   const missingReloadMatchId = 'pvplm-store-stale-missing-reload';
   const missingReloadMatch = makeStoreStaleMatch({
     matchId: missingReloadMatchId,

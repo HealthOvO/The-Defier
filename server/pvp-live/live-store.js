@@ -1399,17 +1399,23 @@ class LivePvpStore {
     }
 
     async completeInvalidatedMatch(match) {
-        if (!match || !match.state || match.state.status !== 'invalidated') return false;
-        await this.saveMatch(match);
+        if (!match || !match.state || match.state.status !== 'invalidated') {
+            return { completed: false, saveResult: null };
+        }
+        const saveResult = await this.saveMatch(match);
+        if (saveResult && saveResult.saved === false) {
+            return { completed: false, saveResult };
+        }
         this.releaseMatch(match);
-        return true;
+        return { completed: true, saveResult };
     }
 
     async releaseIfTerminal(match) {
-        if (!match || !match.state || !this.isTerminalStatus(match.state.status)) return false;
+        if (!match || !match.state || !this.isTerminalStatus(match.state.status)) {
+            return { completed: false, saveResult: null };
+        }
         if (match.state.status === 'finished') {
-            await this.completeFinishedMatch(match);
-            return true;
+            return this.completeFinishedMatch(match);
         }
         return this.completeInvalidatedMatch(match);
     }
@@ -1949,8 +1955,7 @@ class LivePvpStore {
         match.state.events.push(timeoutEvent, finishedEvent);
         match.state.stateVersion += 1;
         match.updatedAt = this.now();
-        await this.completeFinishedMatch(match);
-        return true;
+        return this.completeFinishedMatch(match);
     }
 
     chooseTimeoutAutomationCard(seat) {
@@ -2077,8 +2082,7 @@ class LivePvpStore {
         match.state.events.push(timeoutEvent, invalidatedEvent);
         match.state.stateVersion += 1;
         match.updatedAt = this.now();
-        await this.completeInvalidatedMatch(match);
-        return true;
+        return this.completeInvalidatedMatch(match);
     }
 
     async finishMatchByConnectionTimeout(match) {
@@ -2110,8 +2114,7 @@ class LivePvpStore {
         match.state.events.push(timeoutEvent, finishedEvent);
         match.state.stateVersion += 1;
         match.updatedAt = this.now();
-        await this.completeFinishedMatch(match);
-        return true;
+        return this.completeFinishedMatch(match);
     }
 
     async invalidateActiveByDoubleConnectionTimeout(match) {
@@ -2139,8 +2142,7 @@ class LivePvpStore {
         match.state.events.push(timeoutEvent, invalidatedEvent);
         match.state.stateVersion += 1;
         match.updatedAt = this.now();
-        await this.completeInvalidatedMatch(match);
-        return true;
+        return this.completeInvalidatedMatch(match);
     }
 
     async invalidateSetupByReadyTimeout(match) {
@@ -2167,17 +2169,19 @@ class LivePvpStore {
         match.state.events.push(timeoutEvent, invalidatedEvent);
         match.state.stateVersion += 1;
         match.updatedAt = this.now();
-        await this.completeInvalidatedMatch(match);
-        return true;
+        return this.completeInvalidatedMatch(match);
     }
 
     async sweepMatchTimeout(match) {
-        await this.invalidateSetupByReadyTimeout(match);
-        await this.invalidateSetupByConnectionTimeout(match);
-        await this.invalidateActiveByDoubleConnectionTimeout(match);
-        await this.finishMatchByConnectionTimeout(match);
-        await this.finishMatchByTimeout(match);
-        return match;
+        const results = [
+            await this.invalidateSetupByReadyTimeout(match),
+            await this.invalidateSetupByConnectionTimeout(match),
+            await this.invalidateActiveByDoubleConnectionTimeout(match),
+            await this.finishMatchByConnectionTimeout(match),
+            await this.finishMatchByTimeout(match)
+        ];
+        const staleCompletion = results.find(result => this.isStaleStateSaveResult(result && result.saveResult));
+        return staleCompletion || { match, saveResult: null };
     }
 
     async getActiveMatchForUser(userId) {
@@ -2193,10 +2197,16 @@ class LivePvpStore {
             return null;
         }
         await this.clearWaitingEntriesForMatch(match);
-        await this.sweepMatchTimeout(match);
+        const sweepResult = await this.sweepMatchTimeout(match);
+        if (this.isStaleStateSaveResult(sweepResult && sweepResult.saveResult)) {
+            return this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
+        }
         const seatId = match.seatsByUserId[userId];
         if (!seatId) return null;
-        await this.releaseIfTerminal(match);
+        const releaseResult = await this.releaseIfTerminal(match);
+        if (this.isStaleStateSaveResult(releaseResult && releaseResult.saveResult)) {
+            return this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
+        }
         return {
             match,
             seatId,
@@ -2244,10 +2254,16 @@ class LivePvpStore {
             }
         }
         if (!match) return null;
-        await this.sweepMatchTimeout(match);
+        const sweepResult = await this.sweepMatchTimeout(match);
+        if (this.isStaleStateSaveResult(sweepResult && sweepResult.saveResult)) {
+            return this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
+        }
         const seatId = match.seatsByUserId[userId];
         if (!seatId) return null;
-        await this.releaseIfTerminal(match);
+        const releaseResult = await this.releaseIfTerminal(match);
+        if (this.isStaleStateSaveResult(releaseResult && releaseResult.saveResult)) {
+            return this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
+        }
         return {
             match,
             seatId,

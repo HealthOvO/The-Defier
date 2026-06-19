@@ -1,5 +1,20 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8J live PVP terminal stale rehydrate for timeout / read paths
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 的 timeout / connection-timeout / invalidated 终局路径现在会返回 completion `saveResult`，不再吞掉 lower-version stale save。
+    - `sweepMatchTimeout()` 会聚合 timeout / connection timeout / invalidated finishers 的结果；若任一终局保存返回 `stale_state_version`，直接把 stale completion 冒给读路径。
+    - `releaseIfTerminal()` 现在和 `completeFinishedMatch()` / `completeInvalidatedMatch()` 对齐，返回 `{ completed, saveResult }`，让 `getMatchForUser()` / `getActiveMatchForUser()` 能感知 terminal stale save。
+    - `getMatchForUser()` / `getActiveMatchForUser()` 在 sweep 或 release 遇到 `stale_state_version` 时，会回读 authoritative persisted match 并返回权威 `stateView`，同时替换本地 dirty cache / active map。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 新增 timeout stale-save 红测：本地 timeout finished 保存写输后不得 settlement，不得返回本地 dirty finished view，必须回源拿 active authoritative match。
+    - 同一测试补 `getActiveMatchForUser()` 的 invalidated dirty cache 读时释放覆盖：`releaseIfTerminal()` 保存写输后必须回源 authoritative active match，并保留双方 active map。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定 timeout stale read-path、invalidated release read-path 测试文案和 sweep / release rehydrate 实现 marker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_persistence_checks.cjs` 在实现前失败于 `timeout stale save should reload the authoritative persisted match`，实际 authoritative load 次数为 0。
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+  - 当前结论
+    - live PVP 的 lower-version stale save 现在从 heartbeat / 非终局 intent / terminal accepted intent 扩展到 timeout、connection-timeout、invalidated 和 GET read path 的终局保存分支；旧进程不能在读路径把本地 dirty terminal 视图继续发给玩家。该切片仍不是完整 route 级统一 rehydrate、settlement report 二次保存写输补偿、同版本双写级 CAS、DB 原子撮合 / 并发 claim 防重、跨进程 WS fanout、生产 smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8I live PVP terminal accepted intent stale-save settlement guard
   - 本轮完成
     - `server/pvp-live/live-store.js` 的 `completeFinishedMatch()` 现在会读取第一次 finished state `saveMatch()` 的保存结果；如果返回 `stale_state_version`，立即停止本地 dirty finished state 的 settlement / settlement report 保存 / release。
