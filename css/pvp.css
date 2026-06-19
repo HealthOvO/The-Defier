@@ -1528,6 +1528,40 @@
     line-height: 1.35;
 }
 
+.pvp-live-season-honor {
+    margin-top: 7px;
+    padding-top: 7px;
+    border-top: 1px solid rgba(149, 229, 192, 0.14);
+}
+
+.pvp-live-season-honor-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: rgba(232, 251, 241, 0.88);
+    font-size: 0.68rem;
+    font-weight: 750;
+}
+
+.pvp-live-season-honor-head span:last-child {
+    color: rgba(166, 236, 203, 0.72);
+    text-align: right;
+}
+
+.pvp-live-season-honor-summary,
+.pvp-live-season-honor-next,
+.pvp-live-season-honor-boundary {
+    margin-top: 5px;
+    color: rgba(226, 245, 235, 0.76);
+    font-size: 0.66rem;
+    line-height: 1.35;
+}
+
+.pvp-live-season-honor-boundary {
+    color: rgba(210, 234, 220, 0.58);
+}
+
 .pvp-live-loadout-selector .pvp-live-seat-head {
     align-items: center;
 }

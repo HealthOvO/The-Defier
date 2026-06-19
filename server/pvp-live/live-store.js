@@ -1068,6 +1068,39 @@ class LivePvpStore {
         if (match.mode === 'friendly' || match.state.mode === 'friendly') return null;
         if (!settlementResult || settlementResult.settled !== true) return null;
         const participants = {};
+        const buildSeasonHonorReport = (result) => {
+            const wins = Math.max(0, Math.floor(Number(result && result.wins) || (result && result.didWin ? 1 : 0)));
+            const losses = Math.max(0, Math.floor(Number(result && result.losses) || (result && result.didWin ? 0 : 1)));
+            const gamesPlayed = Math.max(1, Math.floor(Number(result && result.rankedGames) || wins + losses || 1));
+            const milestones = [1, 3, 5, 10, 20, 50];
+            const targetGames = milestones.find(target => target > gamesPlayed) || Math.max(gamesPlayed, milestones[milestones.length - 1]);
+            const remainingGames = Math.max(0, targetGames - gamesPlayed);
+            const didWin = !!(result && result.didWin);
+            return {
+                reportVersion: 'pvp-live-season-honor-v1',
+                seasonId: String(result && result.seasonId || 's1-genesis'),
+                seasonName: String(result && result.seasonName || '开天赛季'),
+                sourceVisibility: 'server_authoritative_settlement',
+                usesHiddenInformation: false,
+                rankedImpact: 'honor_only',
+                powerImpact: 'none',
+                gamesPlayed,
+                wins,
+                losses,
+                resultTag: didWin ? 'win_logged' : 'loss_logged',
+                milestoneLabel: gamesPlayed === 1 ? '首场入账' : `本季 ${gamesPlayed} 场`,
+                nextMilestone: {
+                    targetGames,
+                    remainingGames,
+                    label: remainingGames === 0 ? `已达 ${targetGames} 场荣誉节点` : `距 ${targetGames} 场荣誉节点还差 ${remainingGames} 场`
+                },
+                summaryLine: `赛季荣誉 ${gamesPlayed} 场 · 胜 ${wins} / 负 ${losses}`,
+                nextGoalLine: didWin
+                    ? '本局胜场已进入本季荣誉账本；下一局继续验证同一套节奏是否稳定。'
+                    : '本局败场也进入本季复盘账本；先练公开失守窗口，再回到真人排位。',
+                boundary: '只记录赛季荣誉、复盘目标和外观向回访，不改变生命、伤害、抽牌、灵力、起手或匹配。'
+            };
+        };
         const addParticipant = (key, result) => {
             if (!result || !result.userId) return;
             const seatId = Object.entries(match.seatsByUserId || {})
@@ -1080,6 +1113,7 @@ class LivePvpStore {
                 scoreAfter: Math.max(0, Math.floor(Number(result.newScore) || 0)),
                 ratingDelta: Math.floor(Number(result.ratingDelta) || 0),
                 coinsAwarded: Math.max(0, Math.floor(Number(result.coinsAwarded) || 0)),
+                seasonHonorReport: buildSeasonHonorReport(result),
                 role: key
             };
         };

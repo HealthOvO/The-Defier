@@ -331,7 +331,12 @@ async function settleParticipant({ user, opponentUser, rankRow, opponentRankRow,
         oldScore: currentRating,
         newScore: calc.newRating,
         ratingDelta: calc.delta,
-        coinsAwarded
+        coinsAwarded,
+        wins,
+        losses,
+        rankedGames: wins + losses,
+        seasonId: SEASON_ID,
+        seasonName: '开天赛季'
     };
 }
 

@@ -649,6 +649,8 @@ async function writeReport() {
       settlementText: document.querySelector('[data-live-settlement-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       settlementSource: document.querySelector('[data-live-settlement-report]')?.getAttribute('data-live-settlement-source') || '',
       settlementHidden: document.querySelector('[data-live-settlement-report]')?.getAttribute('data-live-settlement-hidden') || '',
+      seasonHonorText: document.querySelector('[data-live-season-honor]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      seasonHonorPower: document.querySelector('[data-live-season-honor]')?.getAttribute('data-live-season-honor-power') || '',
       reviewActionIds: Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => button.getAttribute('data-live-post-review-action')),
       payload: window.PVPScene.getLiveSnapshot()?.postMatchReview || null,
       textPayload: JSON.parse(window.render_game_to_text()).pvp?.live?.postMatchReview || null,
@@ -686,7 +688,13 @@ async function writeReport() {
         && postMatchProbe.payload?.settlementReport?.result === 'loss'
         && postMatchProbe.payload?.settlementReport?.ratingDelta < 0
         && postMatchProbe.payload?.settlementReport?.coinsAwarded > 0
-        && postMatchProbe.textPayload?.settlementReport?.reportVersion === 'pvp-live-settlement-report-v1',
+        && postMatchProbe.textPayload?.settlementReport?.reportVersion === 'pvp-live-settlement-report-v1'
+        && /赛季荣誉/.test(postMatchProbe.seasonHonorText)
+        && /不改变生命、伤害、抽牌、灵力、起手或匹配/.test(postMatchProbe.seasonHonorText)
+        && postMatchProbe.seasonHonorPower === 'none'
+        && postMatchProbe.payload?.settlementReport?.seasonHonorReport?.reportVersion === 'pvp-live-season-honor-v1'
+        && postMatchProbe.payload?.settlementReport?.seasonHonorReport?.powerImpact === 'none'
+        && postMatchProbe.textPayload?.settlementReport?.seasonHonorReport?.reportVersion === 'pvp-live-season-honor-v1',
       JSON.stringify({ finishedA, finishedB, postMatchProbe, postMatchParity }),
     );
     add(

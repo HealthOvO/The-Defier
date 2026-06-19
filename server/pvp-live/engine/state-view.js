@@ -763,7 +763,39 @@ function projectSettlementReport(state, seatId) {
         coinsAwarded,
         settledAt: Math.max(0, Math.floor(Number(report.settledAt) || 0)),
         summaryLine: `正式积分 ${deltaText} · 当前 ${Math.max(0, Math.floor(Number(participant.scoreAfter) || 0))} · 天道币 +${coinsAwarded}`,
-        boundary: '本报告来自服务端权威 live ranked 结算；好友约战、问道练习和无效局不会生成正式结算报告。'
+        boundary: '本报告来自服务端权威 live ranked 结算；好友约战、问道练习和无效局不会生成正式结算报告。',
+        seasonHonorReport: projectSeasonHonorReport(participant.seasonHonorReport)
+    };
+}
+
+function projectSeasonHonorReport(source) {
+    const report = source && typeof source === 'object' ? source : null;
+    if (!report || report.reportVersion !== 'pvp-live-season-honor-v1') return null;
+    const gamesPlayed = Math.max(1, Math.floor(Number(report.gamesPlayed) || 1));
+    const wins = Math.max(0, Math.floor(Number(report.wins) || 0));
+    const losses = Math.max(0, Math.floor(Number(report.losses) || 0));
+    const nextMilestone = report.nextMilestone && typeof report.nextMilestone === 'object' ? report.nextMilestone : {};
+    return {
+        reportVersion: 'pvp-live-season-honor-v1',
+        seasonId: String(report.seasonId || 's1-genesis'),
+        seasonName: String(report.seasonName || '开天赛季'),
+        sourceVisibility: 'server_authoritative_settlement',
+        usesHiddenInformation: false,
+        rankedImpact: 'honor_only',
+        powerImpact: 'none',
+        gamesPlayed,
+        wins,
+        losses,
+        resultTag: report.resultTag === 'win_logged' ? 'win_logged' : 'loss_logged',
+        milestoneLabel: String(report.milestoneLabel || (gamesPlayed === 1 ? '首场入账' : `本季 ${gamesPlayed} 场`)),
+        nextMilestone: {
+            targetGames: Math.max(gamesPlayed, Math.floor(Number(nextMilestone.targetGames) || gamesPlayed)),
+            remainingGames: Math.max(0, Math.floor(Number(nextMilestone.remainingGames) || 0)),
+            label: String(nextMilestone.label || '赛季荣誉节点已更新')
+        },
+        summaryLine: String(report.summaryLine || `赛季荣誉 ${gamesPlayed} 场 · 胜 ${wins} / 负 ${losses}`),
+        nextGoalLine: String(report.nextGoalLine || '把本局公开结论带到下一局真人排位。'),
+        boundary: '只记录赛季荣誉、复盘目标和外观向回访，不改变生命、伤害、抽牌、灵力、起手或匹配。'
     };
 }
 

@@ -1027,7 +1027,37 @@ export const PVPScene = {
       coinsAwarded,
       settledAt: Math.max(0, Math.floor(Number(report.settledAt) || 0)),
       summaryLine: String(report.summaryLine || `正式积分 ${deltaText} · 当前 ${scoreAfter} · 天道币 +${coinsAwarded}`),
-      boundary: String(report.boundary || '本报告来自服务端权威 live ranked 结算；好友约战、问道练习和无效局不会生成正式结算报告。')
+      boundary: String(report.boundary || '本报告来自服务端权威 live ranked 结算；好友约战、问道练习和无效局不会生成正式结算报告。'),
+      seasonHonorReport: this.getLiveSeasonHonorReport(report.seasonHonorReport)
+    };
+  },
+  getLiveSeasonHonorReport(source) {
+    const report = source && typeof source === 'object' ? source : null;
+    if (!report || report.reportVersion !== 'pvp-live-season-honor-v1') return null;
+    const gamesPlayed = Math.max(1, Math.floor(Number(report.gamesPlayed) || 1));
+    const wins = Math.max(0, Math.floor(Number(report.wins) || 0));
+    const losses = Math.max(0, Math.floor(Number(report.losses) || 0));
+    const nextMilestone = report.nextMilestone && typeof report.nextMilestone === 'object' ? report.nextMilestone : {};
+    return {
+      reportVersion: 'pvp-live-season-honor-v1',
+      seasonId: String(report.seasonId || 's1-genesis'),
+      seasonName: String(report.seasonName || '开天赛季'),
+      sourceVisibility: String(report.sourceVisibility || 'server_authoritative_settlement'),
+      usesHiddenInformation: !!report.usesHiddenInformation,
+      rankedImpact: String(report.rankedImpact || 'honor_only'),
+      powerImpact: String(report.powerImpact || 'none'),
+      gamesPlayed,
+      wins,
+      losses,
+      milestoneLabel: String(report.milestoneLabel || (gamesPlayed === 1 ? '首场入账' : `本季 ${gamesPlayed} 场`)),
+      nextMilestone: {
+        targetGames: Math.max(gamesPlayed, Math.floor(Number(nextMilestone.targetGames) || gamesPlayed)),
+        remainingGames: Math.max(0, Math.floor(Number(nextMilestone.remainingGames) || 0)),
+        label: String(nextMilestone.label || '赛季荣誉节点已更新')
+      },
+      summaryLine: String(report.summaryLine || `赛季荣誉 ${gamesPlayed} 场 · 胜 ${wins} / 负 ${losses}`),
+      nextGoalLine: String(report.nextGoalLine || '把本局公开结论带到下一局真人排位。'),
+      boundary: String(report.boundary || '只记录赛季荣誉、复盘目标和外观向回访，不改变生命、伤害、抽牌、灵力、起手或匹配。')
     };
   },
   renderLiveSettlementReport(review) {
@@ -1035,6 +1065,7 @@ export const PVPScene = {
     if (!report) return '';
     const deltaText = report.ratingDelta > 0 ? `+${report.ratingDelta}` : `${report.ratingDelta}`;
     const resultLabel = report.result === 'win' ? '胜局结算' : report.result === 'loss' ? '败局结算' : '终局结算';
+    const honor = report.seasonHonorReport;
     return `
       <div
         class="pvp-live-settlement-report"
@@ -1054,6 +1085,21 @@ export const PVPScene = {
           <span>天道币 +${this.escapeHtml(report.coinsAwarded)}</span>
         </div>
         <div class="pvp-live-settlement-boundary">${this.escapeHtml(report.boundary)}</div>
+        ${honor ? `
+          <div
+            class="pvp-live-season-honor"
+            data-live-season-honor
+            data-live-season-honor-power="${this.escapeHtml(honor.powerImpact)}"
+          >
+            <div class="pvp-live-season-honor-head">
+              <span>赛季荣誉</span>
+              <span>${this.escapeHtml(honor.milestoneLabel)}</span>
+            </div>
+            <div class="pvp-live-season-honor-summary">${this.escapeHtml(honor.summaryLine)}</div>
+            <div class="pvp-live-season-honor-next">${this.escapeHtml(honor.nextMilestone.label)} · ${this.escapeHtml(honor.nextGoalLine)}</div>
+            <div class="pvp-live-season-honor-boundary">${this.escapeHtml(honor.boundary)}</div>
+          </div>
+        ` : ''}
       </div>
     `;
   },

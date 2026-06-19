@@ -767,8 +767,11 @@ assert.ok(
   'participant should fetch replay_self',
   'winner self replay should include own authoritative settlement report',
   'winner self replay settlement report should stay seat-scoped',
+  'winner self replay should include own season honor progress',
+  'winner self replay season honor should not grant combat power',
   'participant should fetch replay_public',
   'replay_public should not expose seat-specific settlement report',
+  'replay_public should not expose seat-specific season honor progress',
   'participant should fetch audit_safe replay',
   'non-participant should not fetch replay',
   'browser replay route should reject server_full visibility',
@@ -1100,6 +1103,9 @@ assert.ok(
   'loser state view should expose settlement report after live settlement',
   'loser settlement report should match authoritative rank score',
   'loser settlement report should match wallet reward delta',
+  'loser settlement report should expose season honor progress',
+  'season honor progress should match authoritative ranked games',
+  'season honor progress should state the non-power boundary',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveSettlementChecks.includes(needle),
@@ -1112,7 +1118,10 @@ assert.ok(
   'ranked surrender settlement report should be formal authoritative',
   'friendly review must not expose formal ranked settlement report',
   'normal lethal winner should receive settlement report',
+  'ranked surrender settlement report should include season honor progress',
+  'ranked season honor progress should not grant combat power',
   'pvp-live-settlement-report-v1',
+  'pvp-live-season-honor-v1',
   'server_authoritative_settlement',
   "formalResultPolicy, 'ranked_authoritative'",
 ].forEach((needle) => {
@@ -1125,10 +1134,13 @@ assert.ok(
 [
   'data-live-settlement-report',
   'data-live-settlement-source',
+  'data-live-season-honor',
   'pvp-live-settlement-report-v1',
+  'pvp-live-season-honor-v1',
   'getLiveSettlementReport(',
   'renderLiveSettlementReport(',
   '.pvp-live-settlement-report',
+  '.pvp-live-season-honor',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveUiContractChecks.includes(needle),
@@ -1140,10 +1152,14 @@ assert.ok(
   'settlementText',
   'settlementSource',
   'settlementHidden',
+  'seasonHonorText',
+  'seasonHonorPower',
   '正式积分',
   '天道币',
+  '赛季荣誉',
   "settlementSource === 'server_authoritative_settlement'",
   "settlementReport?.reportVersion === 'pvp-live-settlement-report-v1'",
+  "seasonHonorReport?.reportVersion === 'pvp-live-season-honor-v1'",
 ].forEach((needle) => {
   assert.ok(
     browserPvpLiveRealSmoke.includes(needle),

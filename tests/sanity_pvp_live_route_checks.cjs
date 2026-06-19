@@ -861,6 +861,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.result, 'loss', 'surrendering seat should see its own loss settlement');
         assert.ok(surrenderB.payload.stateView.postMatchReview?.settlementReport?.ratingDelta < 0, 'surrendering seat should see negative score delta');
         assert.ok(surrenderB.payload.stateView.postMatchReview?.settlementReport?.coinsAwarded > 0, 'surrendering seat should still see participation reward');
+        assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.reportVersion, 'pvp-live-season-honor-v1', 'ranked surrender settlement report should include season honor progress');
+        assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.powerImpact, 'none', 'ranked season honor progress should not grant combat power');
 
         const rematchA = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
             method: 'POST',
@@ -934,6 +936,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(friendlySurrenderA.payload.stateView.postMatchReview?.friendlySeries?.canRequestNextRound, true, 'tied Bo3 should allow a decider rematch');
         assert.ok(friendlySurrenderA.payload.stateView.postMatchReview?.nextActions?.some(action => action.id === 'friendly_rematch'), 'tied Bo3 review should expose decider action');
         assert.equal(friendlySurrenderA.payload.stateView.postMatchReview?.settlementReport, null, 'friendly review must not expose formal ranked settlement report');
+        assert.equal(friendlySurrenderA.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport, undefined, 'friendly review must not expose ranked season honor progress');
 
         const friendlyDrawWait = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
             method: 'POST',

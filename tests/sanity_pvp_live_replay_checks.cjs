@@ -227,6 +227,8 @@ function assertPublicReplayShape(replay, visibilityLayer) {
     assert.equal(selfReplay.payload.replay.postMatchReview?.result, 'win', 'winner self replay should include own public post-match review');
     assert.equal(selfReplay.payload.replay.postMatchReview?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'winner self replay should include own authoritative settlement report');
     assert.equal(selfReplay.payload.replay.postMatchReview?.settlementReport?.result, 'win', 'winner self replay settlement report should stay seat-scoped');
+    assert.equal(selfReplay.payload.replay.postMatchReview?.settlementReport?.seasonHonorReport?.reportVersion, 'pvp-live-season-honor-v1', 'winner self replay should include own season honor progress');
+    assert.equal(selfReplay.payload.replay.postMatchReview?.settlementReport?.seasonHonorReport?.powerImpact, 'none', 'winner self replay season honor should not grant combat power');
 
     const publicReplay = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/replay?visibility=replay_public`, {
       token: tokenA
@@ -236,6 +238,7 @@ function assertPublicReplayShape(replay, visibilityLayer) {
     assert.equal(publicReplay.payload.replay.viewerSeat, undefined, 'replay_public should not expose requester seat');
     assert.equal(publicReplay.payload.replay.postMatchReview, undefined, 'replay_public should not expose seat-specific review object');
     assert.equal(publicReplay.payload.replay.settlementReport, undefined, 'replay_public should not expose seat-specific settlement report');
+    assert.equal(publicReplay.payload.replay.seasonHonorReport, undefined, 'replay_public should not expose seat-specific season honor progress');
     assert.ok(publicReplay.payload.replay.publicSummary?.finishReason === 'surrender', 'replay_public should include public finish summary');
 
     const auditReplay = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/replay?visibility=audit_safe`, {

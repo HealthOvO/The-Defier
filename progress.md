@@ -1,5 +1,26 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-19: V10-S7C live ranked 赛季荣誉进度非强度化
+  - 本轮完成
+    - `server/pvp-live/live-settlement.js` 在服务端权威结算结果中返回本季 wins / losses / rankedGames / seasonId / seasonName，作为赛季进度的唯一输入，不从客户端或旧 PVP 回执读取。
+    - `server/pvp-live/live-store.js` 为每个 seat-scoped settlement participant 生成 `pvp-live-season-honor-v1`：展示赛季荣誉场次、胜负、下一个荣誉节点、下一局目标和非强度边界。
+    - `server/pvp-live/engine/state-view.js` 只把当前 seat 自己的 `seasonHonorReport` 投影到 `settlementReport`；`replay_self` 继承自己的赛季荣誉进度，`replay_public` 仍不暴露 seat-specific review / settlement / season honor。
+    - `js/scenes/pvp-scene.js` / `css/pvp.css` 在 live ranked 结算回执内新增 `data-live-season-honor` 区块，显示“赛季荣誉 X 场 · 胜/负”和下一节点；DOM 标记 `data-live-season-honor-power="none"`，明确不改变生命、伤害、抽牌、灵力、起手或匹配。
+    - settlement、route、replay、UI contract 和 release coverage 锁住：ranked 终局必须有非强度赛季荣誉报告，friendly / public replay 不得暴露该报告；真实浏览器 smoke 已覆盖 ranked 终局正向展示，真实后端 invalidated / public replay 负向浏览器证据仍列为后续封板项。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_settlement_checks.cjs`、`node tests/sanity_pvp_live_route_checks.cjs`、`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前分别失败于 `seasonHonorReport` 或 `data-live-season-honor` 缺失。
+    - 绿测：`node tests/sanity_pvp_live_settlement_checks.cjs`
+    - `node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_replay_checks.cjs`
+    - `node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `npm run test:node`
+    - `npm run build:pages`
+    - `AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4177 output/release-browser-audits-pvp-s7c-season-honor`
+    - `git diff --check`
+  - 当前结论
+    - live ranked 现在不仅能解释“本局加减多少分”，也能解释“本局对本赛季长期荣誉有什么意义”。该荣誉轨是服务端权威、seat-scoped、非强度化的体验牵引；完整赛季奖励系统、多实例共享队列、真实后端 invalidated / replay 浏览器证据、移动端真实后端 smoke、生产 smoke 和线上部署仍未封板。
+
 - 2026-06-19: V10-S7B live ranked 权威结算回执可见化
   - 本轮完成
     - `server/pvp-live/live-store.js` 在 live ranked finished 后把 `settleMatch()` 返回的 winner / loser 权威结果组装成 `pvp-live-settlement-report-v1`，二次保存到 `match.state.settlementReport`；好友约战、练习、无效局和 draw no-impact 分支不生成正式结算报告。
