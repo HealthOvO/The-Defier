@@ -8,7 +8,9 @@ const {
   CONTENT_PACK_VERSION,
   BASELINE_LOADOUTS,
   BASELINE_BOT_POLICIES,
-  validateContentPack
+  validateContentPack,
+  getLoadoutExplorationProfile,
+  buildLoadoutExplorationReport
 } = require('../server/pvp-live/content/pvp-live-v1-content');
 const {
   runBalanceSimulationQuickGate,
@@ -51,6 +53,23 @@ assert.ok(
   Object.values(contentValidation.roleCoverageByLoadout).every(report => Object.values(report).every(Boolean)),
   'each baseline loadout should cover opening action, defense/recovery, public setup, finisher, and swap slots'
 );
+assert.strictEqual(contentValidation.explorationProfileCount, 8, 'each baseline loadout should expose a public exploration profile');
+BASELINE_LOADOUTS.forEach(loadout => {
+  const profile = getLoadoutExplorationProfile(loadout.id);
+  assert.strictEqual(profile.id, loadout.id, `exploration profile should match loadout id: ${loadout.id}`);
+  assert.ok(profile.funHook && profile.skillTest && profile.publicWeakness, `exploration profile should expose fun hook, skill test, and public weakness: ${loadout.id}`);
+  assert.ok(profile.swapSlots.length >= 2 && profile.swapSlots.length <= 4, `exploration profile should expose 2-4 swap slots: ${loadout.id}`);
+  assert.ok(profile.practiceTopic && profile.practiceTopic.id && profile.practiceTopic.detail, `exploration profile should expose practice topic: ${loadout.id}`);
+  assert.ok(/不改变生命、伤害、抽牌、灵力、起手或匹配/.test(profile.masteryBoundary), `exploration profile should lock non-power mastery boundary: ${loadout.id}`);
+  assert.ok(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo/i.test(JSON.stringify(profile)), `exploration profile must not leak hidden cards or hidden rating: ${loadout.id}`);
+});
+const explorationReport = buildLoadoutExplorationReport();
+assert.strictEqual(explorationReport.reportVersion, 'pvp-live-loadout-exploration-v1', 'exploration report should expose report version');
+assert.strictEqual(explorationReport.sourceVisibility, 'public_content', 'exploration report should be public content only');
+assert.strictEqual(explorationReport.usesHiddenInformation, false, 'exploration report must not use hidden information');
+assert.strictEqual(explorationReport.rankedImpact, 'none', 'exploration report should not write ranked result');
+assert.ok(explorationReport.profiles.length >= 3, 'exploration report should expose multiple replay goals');
+assert.ok(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo/i.test(JSON.stringify(explorationReport)), 'exploration report must not leak hidden cards or hidden rating');
 
 const quickGate = runBalanceSimulationQuickGate({
   seed: 'pvp-live-v1-s2-quick-gate',

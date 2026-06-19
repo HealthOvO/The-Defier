@@ -13,6 +13,7 @@ function methodBody(source, name) {
 
 const html = read('index.html');
 const scene = read('js/scenes/pvp-scene.js');
+const liveSession = read('js/services/pvp-live-session.js');
 const game = read('js/game.js');
 const challengeHub = read('js/core/challenge_hub.js');
 const css = read('css/pvp.css');
@@ -111,6 +112,8 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'Promise.resolve(this.sendLiveHeartbeat())',
   'getLiveFirstMatchGuide(',
   'renderLiveFirstMatchGuide(',
+  'getLiveLoadoutExplorationReport(',
+  'renderLiveLoadoutExplorationReport(',
   'getLiveOpeningSafeguardReport(',
   'renderLiveOpeningSafeguardReport(',
   'formatLiveEvent(',
@@ -142,6 +145,15 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'review_key_turns',
   'data-live-key-turn-replay',
   'data-live-experience-report',
+  'pvp-live-loadout-exploration-v1',
+  'data-live-loadout-exploration',
+  'pvp-live-season-goal-v1',
+  'data-live-season-goal',
+  'data-live-season-goal-action',
+  'data-live-season-goal-dismiss',
+  'getLiveSeasonGoalCard(',
+  'recordLiveSeasonGoalAction(',
+  'dismissLiveSeasonGoal(',
   'experience_check:',
   'sourceVisibility',
   'usesHiddenInformation',
@@ -155,6 +167,17 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'beginPvpLiveDrillScenario',
 ].forEach((needle) => {
   assert.ok(scene.includes(needle), `PVPScene live practice handoff should include marker: ${needle}`);
+});
+
+[
+  'theDefierPvpLiveSeasonGoalV1',
+  'getSeasonGoalState: readSeasonGoalState',
+  'recordSeasonGoalAction',
+  'dismissSeasonGoal',
+  'lastReviewAction',
+  'dismissedUntilSeason',
+].forEach((needle) => {
+  assert.ok(liveSession.includes(needle), `PVP live session should persist local season goal marker: ${needle}`);
 });
 
 [
@@ -262,6 +285,8 @@ assert.ok(!submitLiveCardBody.includes("targetSeat: 'B'"), 'submitLiveCard must 
   '.pvp-live-first-guide',
   '.pvp-live-guide-step',
   '.pvp-live-guide-loadout',
+  '.pvp-live-loadout-exploration',
+  '.pvp-live-loadout-exploration-card',
     '.pvp-live-waiting-report',
     '.pvp-live-invite-panel',
     '.pvp-live-invite-code',
@@ -276,6 +301,8 @@ assert.ok(!submitLiveCardBody.includes("targetSeat: 'B'"), 'submitLiveCard must 
   '.pvp-live-experience-report',
   '.pvp-live-experience-check',
   '.pvp-live-experience-check[data-live-review-focus',
+  '.pvp-live-season-goal',
+  '.pvp-live-season-goal-actions',
   '.pvp-live-review-evidence',
   '.pvp-live-review-actions',
   '.pvp-live-friendly-series',
@@ -338,6 +365,9 @@ assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL
   'live UI post-match key-turn action focuses replay without hidden payloads',
   'live UI renders post-match experience report from public events',
   'live UI experience check focuses linked public evidence without hidden payloads',
+  'live UI renders loadout exploration report without hidden payloads',
+  'live UI renders post-match season goal card and can dismiss it locally',
+  'live UI dismisses season goal locally without hiding post-match review',
   'live UI post-match review actions are clickable safe handoff entries',
   'live UI post-match practice handoff creates no-score drill scenario and opens replay-only playable challenge drill',
   'live UI post-match practice drill can start replay-only no-reward challenge run',

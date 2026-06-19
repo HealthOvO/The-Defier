@@ -914,6 +914,88 @@
     overflow-wrap: anywhere;
 }
 
+.pvp-live-loadout-exploration {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(119, 213, 184, 0.16);
+    background: rgba(13, 30, 32, 0.35);
+    color: rgba(224, 244, 236, 0.9);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-loadout-exploration-head,
+.pvp-live-loadout-exploration-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.pvp-live-loadout-exploration-head {
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.pvp-live-loadout-exploration-head span:last-child,
+.pvp-live-loadout-exploration-card-head span:last-child {
+    color: rgba(154, 233, 206, 0.78);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-align: right;
+}
+
+.pvp-live-loadout-exploration-summary,
+.pvp-live-loadout-exploration-boundary {
+    margin-top: 6px;
+    color: rgba(222, 238, 232, 0.74);
+    font-size: 0.7rem;
+    line-height: 1.4;
+}
+
+.pvp-live-loadout-exploration-grid {
+    margin-top: 8px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.pvp-live-loadout-exploration-card {
+    min-width: 0;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(154, 233, 206, 0.14);
+    background: rgba(7, 18, 24, 0.42);
+}
+
+.pvp-live-loadout-exploration-card-head {
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.pvp-live-loadout-exploration-hook {
+    margin-top: 5px;
+    color: rgba(244, 250, 247, 0.86);
+    font-size: 0.69rem;
+    line-height: 1.36;
+}
+
+.pvp-live-loadout-exploration-lines {
+    margin-top: 6px;
+    display: grid;
+    gap: 4px;
+}
+
+.pvp-live-loadout-exploration-lines span {
+    padding: 5px 6px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(213, 232, 226, 0.72);
+    font-size: 0.66rem;
+    line-height: 1.32;
+}
+
 .pvp-live-waiting-report {
     margin-top: 10px;
     padding: 10px;
@@ -1310,6 +1392,71 @@
     color: rgba(226, 241, 231, 0.76);
     font-size: 0.66rem;
     line-height: 1.35;
+}
+
+.pvp-live-season-goal {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(243, 194, 107, 0.16);
+    background: rgba(32, 24, 8, 0.22);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-season-goal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: rgba(250, 238, 212, 0.92);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.pvp-live-season-goal-head span:last-child {
+    color: rgba(243, 194, 107, 0.78);
+    text-align: right;
+}
+
+.pvp-live-season-goal-detail,
+.pvp-live-season-goal-boundary,
+.pvp-live-season-goal-last {
+    margin-top: 5px;
+    color: rgba(244, 232, 207, 0.76);
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.pvp-live-season-goal-boundary,
+.pvp-live-season-goal-last {
+    color: rgba(231, 216, 188, 0.62);
+}
+
+.pvp-live-season-goal-actions {
+    margin-top: 7px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-season-goal-actions button {
+    min-width: 0;
+    padding: 5px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(243, 194, 107, 0.18);
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(250, 238, 212, 0.86);
+    font: inherit;
+    font-size: 0.68rem;
+    cursor: pointer;
+}
+
+.pvp-live-season-goal-actions button:hover,
+.pvp-live-season-goal-actions button:focus-visible {
+    border-color: rgba(243, 194, 107, 0.42);
+    background: rgba(243, 194, 107, 0.1);
+    outline: none;
 }
 
 .pvp-live-loadout-selector .pvp-live-seat-head {
@@ -3540,6 +3687,24 @@ input:checked+.seal-slider .seal-face.on {
     .pvp-live-loadout-presets {
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 6px;
+    }
+
+    .pvp-live-loadout-exploration-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .pvp-live-season-goal-head,
+    .pvp-live-loadout-exploration-head,
+    .pvp-live-loadout-exploration-card-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .pvp-live-season-goal-head span:last-child,
+    .pvp-live-loadout-exploration-head span:last-child,
+    .pvp-live-loadout-exploration-card-head span:last-child {
+        text-align: left;
     }
 
     .pvp-live-loadout-option {

@@ -20,6 +20,15 @@ const DEFAULT_STATE = Object.freeze({
   updatedAt: 0
 });
 const LAST_TERMINAL_MATCH_STORAGE_KEY = 'theDefierPvpLiveLastTerminalMatchV1';
+const SEASON_GOAL_STORAGE_KEY = 'theDefierPvpLiveSeasonGoalV1';
+const ALLOWED_SEASON_GOAL_ACTIONS = Object.freeze([
+  'queue_again',
+  'practice',
+  'friendly_rematch',
+  'adjust_loadout',
+  'review_events',
+  'review_key_turns'
+]);
 
 function cloneData(value) {
   if (value === undefined || value === null) return value;
@@ -247,6 +256,83 @@ export function createPvpLiveSession({
     const scope = normalizeStorageScope(typeof userScope === 'function' ? userScope() : userScope);
     return scope ? `${LAST_TERMINAL_MATCH_STORAGE_KEY}:${scope}` : LAST_TERMINAL_MATCH_STORAGE_KEY;
   };
+
+  const normalizeSeasonId = (seasonId = '') => normalizeStorageScope(seasonId || 's1-genesis');
+
+  const getSeasonGoalStorageKey = (seasonId = '') => {
+    const scope = normalizeStorageScope(typeof userScope === 'function' ? userScope() : userScope);
+    const safeSeasonId = normalizeSeasonId(seasonId);
+    return scope ? `${SEASON_GOAL_STORAGE_KEY}:${scope}:${safeSeasonId}` : `${SEASON_GOAL_STORAGE_KEY}:${safeSeasonId}`;
+  };
+
+  const normalizeSeasonGoalState = (raw = {}, seasonId = '') => {
+    const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const safeSeasonId = normalizeSeasonId(source.seasonId || seasonId);
+    const actionId = ALLOWED_SEASON_GOAL_ACTIONS.includes(String(source.lastReviewAction || ''))
+      ? String(source.lastReviewAction)
+      : '';
+    const recommendedMode = ['queue_again', 'practice', 'friendly_rematch', 'adjust_loadout'].includes(String(source.recommendedMode || ''))
+      ? String(source.recommendedMode)
+      : '';
+    return {
+      version: 1,
+      seasonId: safeSeasonId,
+      lastReviewAction: actionId,
+      recommendedMode,
+      lastMatchId: String(source.lastMatchId || '').slice(0, 96),
+      dismissedUntilSeason: source.dismissedUntilSeason && normalizeSeasonId(source.dismissedUntilSeason) === safeSeasonId ? safeSeasonId : '',
+      updatedAt: Math.max(0, Math.floor(Number(source.updatedAt) || 0))
+    };
+  };
+
+  const readSeasonGoalState = (seasonId = '') => {
+    const safeSeasonId = normalizeSeasonId(seasonId);
+    if (!storage || typeof storage.getItem !== 'function') {
+      return normalizeSeasonGoalState({}, safeSeasonId);
+    }
+    try {
+      const raw = storage.getItem(getSeasonGoalStorageKey(safeSeasonId));
+      return normalizeSeasonGoalState(raw ? JSON.parse(raw) : {}, safeSeasonId);
+    } catch (error) {
+      return normalizeSeasonGoalState({}, safeSeasonId);
+    }
+  };
+
+  const writeSeasonGoalState = (seasonId = '', patch = {}) => {
+    const safeSeasonId = normalizeSeasonId(seasonId);
+    const nextState = normalizeSeasonGoalState({
+      ...readSeasonGoalState(safeSeasonId),
+      ...(patch && typeof patch === 'object' ? patch : {}),
+      seasonId: safeSeasonId,
+      updatedAt: now()
+    }, safeSeasonId);
+    if (!storage || typeof storage.setItem !== 'function') return nextState;
+    try {
+      storage.setItem(getSeasonGoalStorageKey(safeSeasonId), JSON.stringify(nextState));
+    } catch (error) {
+      // Goal memory is a local convenience only; live PVP must continue without it.
+    }
+    return nextState;
+  };
+
+  const recordSeasonGoalAction = ({
+    seasonId = '',
+    actionId = '',
+    matchId = '',
+    recommendedMode = ''
+  } = {}) => {
+    const safeAction = ALLOWED_SEASON_GOAL_ACTIONS.includes(String(actionId || '')) ? String(actionId) : '';
+    if (!safeAction) return readSeasonGoalState(seasonId);
+    return writeSeasonGoalState(seasonId, {
+      lastReviewAction: safeAction,
+      recommendedMode,
+      lastMatchId: matchId
+    });
+  };
+
+  const dismissSeasonGoal = (seasonId = '') => writeSeasonGoalState(seasonId, {
+    dismissedUntilSeason: normalizeSeasonId(seasonId)
+  });
 
   const readStoredTerminalMatchId = () => {
     if (!storage || typeof storage.getItem !== 'function') return '';
@@ -1173,6 +1259,9 @@ export function createPvpLiveSession({
     submitRealtimeIntent,
     heartbeatRealtime,
     disconnectRealtime,
+    getSeasonGoalState: readSeasonGoalState,
+    recordSeasonGoalAction,
+    dismissSeasonGoal,
     getReplay,
     requestRematch,
     pollRematch,

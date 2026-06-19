@@ -1,5 +1,6 @@
 const { RULE_VERSION, RULES, getCardDefinition } = require('./rules');
 const { cloneLoadoutSnapshot, normalizeLoadoutSnapshot, publicLoadoutSummary } = require('../loadout');
+const { buildLoadoutExplorationReport } = require('../content/pvp-live-v1-content');
 
 function cloneDeep(value) {
     return JSON.parse(JSON.stringify(value));
@@ -333,6 +334,7 @@ function createInitialLiveState({ matchId, seats, matchQuality, mode = 'ranked',
         matchQuality: normalizeMatchQuality(matchQuality),
         friendlySeries: safeMode === 'friendly' ? normalizeFriendlySeries(friendlySeries) : null,
         firstMatchGuide: createFirstMatchGuide({ mode: safeMode }),
+        loadoutExplorationReport: buildLoadoutExplorationReport(),
         social: {
             emotesBySeat: {
                 A: { lastSentAt: 0, count: 0 },

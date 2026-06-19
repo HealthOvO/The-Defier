@@ -142,6 +142,15 @@ assert(baseState.firstMatchGuide.exceptionBranches.some(item => item.id === 'rea
 assert(baseState.firstMatchGuide.exceptionBranches.some(item => item.id === 'refresh_required'), 'first-match guide should explain refresh_required exception');
 assert(baseState.firstMatchGuide.reviewActions.length >= 3, 'first-match guide should expose at least three review actions');
 assert(!/reward|rating|elo/i.test(JSON.stringify(baseState.firstMatchGuide)), 'first-match guide must not imply hidden reward or exact rating compensation');
+assert(baseState.loadoutExplorationReport && baseState.loadoutExplorationReport.reportVersion === 'pvp-live-loadout-exploration-v1', 'initial state should expose loadout exploration report');
+assert(baseState.loadoutExplorationReport.sourceVisibility === 'public_content', 'loadout exploration report should come from public content');
+assert(baseState.loadoutExplorationReport.usesHiddenInformation === false, 'loadout exploration report must not use hidden information');
+assert(baseState.loadoutExplorationReport.rankedImpact === 'none', 'loadout exploration report should not write ranked result');
+assert(Array.isArray(baseState.loadoutExplorationReport.profiles) && baseState.loadoutExplorationReport.profiles.length >= 3, 'loadout exploration report should expose multiple replay goals');
+assert(baseState.loadoutExplorationReport.profiles.every(item => item.funHook && item.skillTest && item.publicWeakness && item.practiceTopic && item.practiceTopic.id), 'loadout exploration profiles should include fun hook, skill test, weakness, and practice topic');
+assert(baseState.loadoutExplorationReport.profiles.every(item => Array.isArray(item.swapSlots) && item.swapSlots.length >= 2), 'loadout exploration profiles should include swap slots');
+assert(/不改变生命、伤害、抽牌、灵力、起手或匹配/.test(baseState.loadoutExplorationReport.progressionBoundary), 'loadout exploration report should lock non-power mastery boundary');
+assert(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo/i.test(JSON.stringify(baseState.loadoutExplorationReport)), 'loadout exploration report must not leak hidden cards or hidden rating');
 
 const viewA = projectStateView(baseState, 'A');
 assert(viewA.status === 'setup' && viewA.setup.readyDeadlineAt > 0, 'state view should expose setup readiness metadata');
@@ -153,6 +162,12 @@ assert(viewA.firstMatchGuide.recommendedLoadouts.length === 3, 'state view first
 assert(viewA.firstMatchGuide.exceptionBranches.some(item => item.id === 'ready_timeout'), 'state view first-match guide should expose ready timeout exception branch');
 assert(viewA.firstMatchGuide.reviewActions.length >= 3, 'state view first-match guide should expose review action entries');
 assert(!/reward|rating|elo/i.test(JSON.stringify(viewA.firstMatchGuide)), 'state view first-match guide must not leak hidden rating or reward promises');
+assert(viewA.loadoutExplorationReport && viewA.loadoutExplorationReport.reportVersion === 'pvp-live-loadout-exploration-v1', 'state view should expose loadout exploration report');
+assert(viewA.loadoutExplorationReport.sourceVisibility === 'public_content', 'state view exploration report should be public content only');
+assert(viewA.loadoutExplorationReport.usesHiddenInformation === false, 'state view exploration report must not use hidden information');
+assert(viewA.loadoutExplorationReport.rankedImpact === 'none', 'state view exploration report should not write ranked result');
+assert(viewA.loadoutExplorationReport.profiles.length >= 3, 'state view exploration report should expose replay goals');
+assert(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo/i.test(JSON.stringify(viewA.loadoutExplorationReport)), 'state view exploration report must not leak hidden cards or hidden rating');
 assert(viewA.openingSafeguardReport && viewA.openingSafeguardReport.reportVersion === 'pvp-live-opening-safeguard-v1', 'state view should expose active opening safeguard report');
 assert(viewA.openingSafeguardReport.damageBudget.firstSeat === 18, 'opening safeguard report should expose first-seat damage budget');
 assert(viewA.openingSafeguardReport.damageBudget.secondSeat === 22, 'opening safeguard report should expose second-seat damage budget');

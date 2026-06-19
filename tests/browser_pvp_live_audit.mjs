@@ -102,6 +102,60 @@ async function safeElementScreenshot(page, selector, outputPath) {
         { id: 'queue_again', label: '继续真人排位' },
       ],
     });
+    const makeLoadoutExplorationReport = () => ({
+      reportVersion: 'pvp-live-loadout-exploration-v1',
+      contentPackVersion: 'pvp-live-v1-content-pack',
+      sourceVisibility: 'public_content',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      title: '谱系探索',
+      summary: '每套谱都给出公开弱点、替换方向和练习课题，鼓励下一局有目标地调整。',
+      progressionBoundary: '熟练徽章与高光收藏只记录荣誉，不改变生命、伤害、抽牌、灵力、起手或匹配。',
+      profiles: [
+        {
+          id: 'aggro_pressure',
+          label: '快攻压迫',
+          primaryDecisionAxis: '前两手压血后，是继续抢节奏还是保留低费防御。',
+          funHook: '用快速压迫制造紧张感，但必须证明优势来自连续公开窗口。',
+          skillTest: '首动预算挡下爆发后，能否用第二段伤害和调息顺序继续收束。',
+          publicWeakness: '第一波被护盾或回复挡住后，手牌续航和防守窗口都会变窄。',
+          swapSlots: [
+            { id: 'aggro_defense_pair', label: '低费防御位', detail: '测试被反打时的稳定性。' },
+            { id: 'aggro_setup_pair', label: '公开 setup 位', detail: '补入可见铺垫。' },
+          ],
+          practiceTopic: { id: 'practice_after_budget_clamp', label: '首动预算后继续施压', detail: '练习爆发被压低后的下一手。' },
+          masteryBoundary: '熟练徽章和高光收藏只记录荣誉，不改变生命、伤害、抽牌、灵力、起手或匹配。',
+        },
+        {
+          id: 'shield_counter',
+          label: '守势反击',
+          primaryDecisionAxis: '先把护盾转成反击，还是继续稳血拖到长局评分。',
+          funHook: '被压迫时仍有反击目标，败方不只是被动挨打。',
+          skillTest: '能否识别对手爆发后的空窗，把防御资源转成伤害。',
+          publicWeakness: '收束慢，连续空防会让对手调息找到第二波压力。',
+          swapSlots: [
+            { id: 'shield_finisher_pair', label: '反击终结位', detail: '提高护盾后反打速度。' },
+            { id: 'shield_draw_pair', label: '续航位', detail: '提升长局稳定性。' },
+          ],
+          practiceTopic: { id: 'practice_block_to_counter', label: '护盾转反击', detail: '练习把防守窗口转成反压。' },
+          masteryBoundary: '熟练徽章和高光收藏只记录荣誉，不改变生命、伤害、抽牌、灵力、起手或匹配。',
+        },
+        {
+          id: 'draw_midrange',
+          label: '过牌中速',
+          primaryDecisionAxis: '用调息找稳定路线，还是直接消耗资源换即时压力。',
+          funHook: '每局都有不同资源路线，适合持续优化手牌规划。',
+          skillTest: '能否把过牌变成有效行动，而不是只让回合更慢。',
+          publicWeakness: '爆发和防守都不极端，遇到专精谱时需要靠调度取胜。',
+          swapSlots: [
+            { id: 'midrange_burst_pair', label: '爆发补强位', detail: '提高终局速度。' },
+            { id: 'midrange_guard_pair', label: '稳血位', detail: '提高抗快攻能力。' },
+          ],
+          practiceTopic: { id: 'practice_draw_to_action', label: '过牌转行动', detail: '练习调息后形成明确结果。' },
+          masteryBoundary: '熟练徽章和高光收藏只记录荣誉，不改变生命、伤害、抽牌、灵力、起手或匹配。',
+        },
+      ],
+    });
     const makePostMatchReview = (status = 'setup') => status === 'finished' ? ({
       reportVersion: 'pvp-live-post-match-review-v1',
       result: 'loss',
@@ -289,6 +343,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
         rankedImpact: 'none',
       },
       firstMatchGuide: makeFirstMatchGuide(status),
+      loadoutExplorationReport: makeLoadoutExplorationReport(),
       postMatchReview: makePostMatchReview(status),
       setup: status === 'setup' ? { readyDeadlineAt: Date.now() + 45000, mulliganLimit: 2 } : null,
       turnTimer: makeTurnTimer(status, currentSeat),
@@ -850,6 +905,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
     connectionStatus: document.querySelector('[data-live-connection-status]')?.textContent || '',
     openingSafeguard: document.querySelector('[data-live-opening-safeguard]')?.textContent || '',
     firstGuide: document.querySelector('[data-live-first-guide]')?.textContent || '',
+    loadoutExplorationText: document.querySelector('[data-live-loadout-exploration]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    loadoutExplorationSource: document.querySelector('[data-live-loadout-exploration]')?.getAttribute('data-live-loadout-exploration-source') || '',
+    loadoutExplorationHidden: document.querySelector('[data-live-loadout-exploration]')?.getAttribute('data-live-loadout-exploration-hidden') || '',
+    loadoutProfileIds: Array.from(document.querySelectorAll('[data-live-loadout-profile]')).map(item => item.getAttribute('data-live-loadout-profile')),
     opponentHandLeaked: Array.from(document.querySelectorAll('[data-live-opponent] [data-live-card]')).length,
     presetDisabled: Array.from(document.querySelectorAll('[data-live-loadout-preset]')).map(button => button.disabled),
     payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
@@ -941,6 +1000,24 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && matchedProbe.payload?.firstMatchGuide?.reviewActions?.length >= 3
       && matchedProbe.payload?.firstMatchGuide?.steps?.some(step => step.id === 'setup_ready')
       && !/reward|rating|elo/i.test(`${matchedProbe.firstGuide} ${JSON.stringify(matchedProbe.payload?.firstMatchGuide || {})}`),
+    JSON.stringify(matchedProbe),
+  );
+  add(
+    'live UI renders loadout exploration report without hidden payloads',
+    /谱系探索/.test(matchedProbe.loadoutExplorationText)
+      && /快攻压迫/.test(matchedProbe.loadoutExplorationText)
+      && /守势反击/.test(matchedProbe.loadoutExplorationText)
+      && /过牌中速/.test(matchedProbe.loadoutExplorationText)
+      && /不改变生命、伤害、抽牌、灵力、起手或匹配/.test(matchedProbe.loadoutExplorationText)
+      && matchedProbe.loadoutExplorationSource === 'public_content'
+      && matchedProbe.loadoutExplorationHidden === 'false'
+      && ['aggro_pressure', 'shield_counter', 'draw_midrange'].every(id => matchedProbe.loadoutProfileIds.includes(id))
+      && matchedProbe.payload?.loadoutExplorationReport?.reportVersion === 'pvp-live-loadout-exploration-v1'
+      && matchedProbe.payload?.loadoutExplorationReport?.sourceVisibility === 'public_content'
+      && matchedProbe.payload?.loadoutExplorationReport?.usesHiddenInformation === false
+      && matchedProbe.payload?.loadoutExplorationReport?.rankedImpact === 'none'
+      && matchedProbe.payload?.loadoutExplorationReport?.profiles?.length >= 3
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo/i.test(JSON.stringify(matchedProbe.payload?.loadoutExplorationReport || {})),
     JSON.stringify(matchedProbe),
   );
 
@@ -1101,8 +1178,15 @@ async function safeElementScreenshot(page, selector, outputPath) {
     experienceSource: document.querySelector('[data-live-experience-report]')?.getAttribute('data-live-experience-source') || '',
     experienceHidden: document.querySelector('[data-live-experience-report]')?.getAttribute('data-live-experience-hidden') || '',
     experienceCheckIds: Array.from(document.querySelectorAll('[data-live-experience-check]')).map(item => item.getAttribute('data-live-experience-check')),
+    seasonGoalText: document.querySelector('[data-live-season-goal]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    seasonGoalMode: document.querySelector('[data-live-season-goal]')?.getAttribute('data-live-season-goal-mode') || '',
+    seasonGoalDismissState: document.querySelector('[data-live-season-goal]')?.getAttribute('data-live-season-goal-dismiss-state') || '',
+    seasonGoalSource: document.querySelector('[data-live-season-goal]')?.getAttribute('data-live-season-goal-source') || '',
+    seasonGoalHidden: document.querySelector('[data-live-season-goal]')?.getAttribute('data-live-season-goal-hidden') || '',
+    seasonGoalActionIds: Array.from(document.querySelectorAll('[data-live-season-goal-action]')).map(button => button.getAttribute('data-live-season-goal-action')),
     reviewActionIds: Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => button.getAttribute('data-live-post-review-action')),
     reviewPayload: window.PVPScene.getLiveSnapshot()?.postMatchReview || null,
+    seasonGoalPayload: window.PVPScene.getLiveSnapshot()?.seasonGoal || null,
     textPayload: JSON.parse(window.render_game_to_text()).pvp?.live?.postMatchReview || null,
     calls: window.__livePvpAuditCalls,
   }));
@@ -1169,6 +1253,44 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && reviewParity?.experienceChecks === true
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(surrenderProbe.reviewPayload?.experienceReport || {})),
     JSON.stringify({ ...surrenderProbe, reviewParity }),
+  );
+  add(
+    'live UI renders post-match season goal card and can dismiss it locally',
+    /本赛季下一局目标/.test(surrenderProbe.seasonGoalText)
+      && /问道练习/.test(surrenderProbe.seasonGoalText)
+      && /不写正式积分或奖励/.test(surrenderProbe.seasonGoalText)
+      && surrenderProbe.seasonGoalMode === 'practice'
+      && surrenderProbe.seasonGoalDismissState === 'active'
+      && surrenderProbe.seasonGoalSource === 'public_review'
+      && surrenderProbe.seasonGoalHidden === 'false'
+      && surrenderProbe.seasonGoalActionIds.includes('practice')
+      && surrenderProbe.seasonGoalPayload?.reportVersion === 'pvp-live-season-goal-v1'
+      && surrenderProbe.seasonGoalPayload?.sourceVisibility === 'public_review'
+      && surrenderProbe.seasonGoalPayload?.usesHiddenInformation === false
+      && surrenderProbe.seasonGoalPayload?.rankedImpact === 'none'
+      && surrenderProbe.seasonGoalPayload?.recommendedMode === 'practice'
+      && surrenderProbe.seasonGoalPayload?.dismissState === 'active'
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo/i.test(JSON.stringify(surrenderProbe.seasonGoalPayload || {})),
+    JSON.stringify({ ...surrenderProbe, reviewParity }),
+  );
+  await page.evaluate(() => {
+    document.querySelector('[data-live-season-goal-dismiss]')?.click();
+  });
+  await page.waitForTimeout(120);
+  const seasonGoalDismissProbe = await page.evaluate(() => ({
+    visibleGoalCount: document.querySelectorAll('[data-live-season-goal]').length,
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    seasonGoalPayload: window.PVPScene.getLiveSnapshot()?.seasonGoal || null,
+    postReviewStillVisible: !!document.querySelector('[data-live-post-match-review]'),
+  }));
+  add(
+    'live UI dismisses season goal locally without hiding post-match review',
+    seasonGoalDismissProbe.visibleGoalCount === 0
+      && /已关闭本赛季复盘目标提示/.test(seasonGoalDismissProbe.hint)
+      && seasonGoalDismissProbe.seasonGoalPayload?.dismissState === 'dismissed_until_season'
+      && seasonGoalDismissProbe.seasonGoalPayload?.rankedImpact === 'none'
+      && seasonGoalDismissProbe.postReviewStillVisible === true,
+    JSON.stringify(seasonGoalDismissProbe),
   );
 
   await page.click('[data-live-experience-check="decision_windows"]', { timeout: 5000, force: true });

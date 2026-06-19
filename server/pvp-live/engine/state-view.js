@@ -104,6 +104,51 @@ function projectFirstMatchGuide(firstMatchGuide, status = 'setup') {
     };
 }
 
+function projectLoadoutExplorationReport(loadoutExplorationReport) {
+    const report = loadoutExplorationReport && typeof loadoutExplorationReport === 'object' ? loadoutExplorationReport : {};
+    const profiles = Array.isArray(report.profiles) ? report.profiles : [];
+    return {
+        reportVersion: String(report.reportVersion || 'pvp-live-loadout-exploration-v1'),
+        contentPackVersion: String(report.contentPackVersion || ''),
+        sourceVisibility: String(report.sourceVisibility || 'public_content'),
+        usesHiddenInformation: report.usesHiddenInformation === true,
+        rankedImpact: String(report.rankedImpact || 'none'),
+        title: String(report.title || '谱系探索'),
+        summary: String(report.summary || ''),
+        progressionBoundary: String(report.progressionBoundary || ''),
+        profiles: profiles.slice(0, 4).map(profile => {
+            const practiceTopic = profile && profile.practiceTopic && typeof profile.practiceTopic === 'object' ? profile.practiceTopic : {};
+            const swapSlots = Array.isArray(profile && profile.swapSlots) ? profile.swapSlots : [];
+            return {
+                id: String(profile && profile.id || ''),
+                label: String(profile && profile.label || ''),
+                primaryDecisionAxis: String(profile && profile.primaryDecisionAxis || ''),
+                funHook: String(profile && profile.funHook || ''),
+                skillTest: String(profile && profile.skillTest || ''),
+                publicWeakness: String(profile && profile.publicWeakness || ''),
+                swapSlots: swapSlots.slice(0, 4).map(slot => ({
+                    id: String(slot && slot.id || ''),
+                    label: String(slot && slot.label || ''),
+                    detail: String(slot && slot.detail || '')
+                })).filter(slot => slot.id && slot.label && slot.detail),
+                practiceTopic: {
+                    id: String(practiceTopic.id || ''),
+                    label: String(practiceTopic.label || ''),
+                    detail: String(practiceTopic.detail || '')
+                },
+                masteryBoundary: String(profile && profile.masteryBoundary || '')
+            };
+        }).filter(profile => (
+            profile.id
+            && profile.label
+            && profile.primaryDecisionAxis
+            && profile.skillTest
+            && profile.publicWeakness
+            && profile.practiceTopic.id
+        ))
+    };
+}
+
 const PUBLIC_EVENT_DATA_KEYS = {
     mulligan_completed: ['seatId', 'count'],
     player_ready: ['seatId'],
@@ -862,6 +907,7 @@ function projectStateView(state, seatId) {
         matchQuality: projectMatchQuality(state.matchQuality),
         friendlySeries: projectFriendlySeries(state.friendlySeries, state.status),
         firstMatchGuide: projectFirstMatchGuide(state.firstMatchGuide, state.status),
+        loadoutExplorationReport: projectLoadoutExplorationReport(state.loadoutExplorationReport),
         openingSafeguardReport: projectOpeningSafeguardReport(state, seatId),
         postMatchReview: projectPostMatchReview(state, seatId),
         self: projectSelfSeat(state.seats[seatId]),

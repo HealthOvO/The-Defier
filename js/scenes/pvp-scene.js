@@ -754,6 +754,89 @@ export const PVPScene = {
       })).filter(item => item.id && item.label)
     };
   },
+  getLiveLoadoutExplorationReport(view) {
+    const report = view && view.loadoutExplorationReport && typeof view.loadoutExplorationReport === 'object'
+      ? view.loadoutExplorationReport
+      : null;
+    if (!report) return null;
+    const profiles = Array.isArray(report.profiles) ? report.profiles : [];
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-loadout-exploration-v1'),
+      contentPackVersion: String(report.contentPackVersion || ''),
+      sourceVisibility: String(report.sourceVisibility || 'public_content'),
+      usesHiddenInformation: report.usesHiddenInformation === true,
+      rankedImpact: String(report.rankedImpact || 'none'),
+      title: String(report.title || '谱系探索'),
+      summary: String(report.summary || ''),
+      progressionBoundary: String(report.progressionBoundary || ''),
+      profiles: profiles.slice(0, 4).map(profile => {
+        const practiceTopic = profile && profile.practiceTopic && typeof profile.practiceTopic === 'object' ? profile.practiceTopic : {};
+        const swapSlots = Array.isArray(profile && profile.swapSlots) ? profile.swapSlots : [];
+        return {
+          id: String(profile && profile.id || ''),
+          label: String(profile && profile.label || ''),
+          primaryDecisionAxis: String(profile && profile.primaryDecisionAxis || ''),
+          funHook: String(profile && profile.funHook || ''),
+          skillTest: String(profile && profile.skillTest || ''),
+          publicWeakness: String(profile && profile.publicWeakness || ''),
+          swapSlots: swapSlots.slice(0, 4).map(slot => ({
+            id: String(slot && slot.id || ''),
+            label: String(slot && slot.label || ''),
+            detail: String(slot && slot.detail || '')
+          })).filter(slot => slot.id && slot.label && slot.detail),
+          practiceTopic: {
+            id: String(practiceTopic.id || ''),
+            label: String(practiceTopic.label || ''),
+            detail: String(practiceTopic.detail || '')
+          },
+          masteryBoundary: String(profile && profile.masteryBoundary || '')
+        };
+      }).filter(profile => (
+        profile.id
+        && profile.label
+        && profile.funHook
+        && profile.skillTest
+        && profile.publicWeakness
+        && profile.practiceTopic.id
+      ))
+    };
+  },
+  renderLiveLoadoutExplorationReport(view) {
+    const report = this.getLiveLoadoutExplorationReport(view);
+    if (!report || report.profiles.length === 0) return '';
+    const visibleProfiles = report.profiles.slice(0, 3);
+    return `
+      <div
+        class="pvp-live-loadout-exploration"
+        data-live-loadout-exploration
+        data-live-loadout-exploration-source="${this.escapeHtml(report.sourceVisibility)}"
+        data-live-loadout-exploration-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
+      >
+        <div class="pvp-live-loadout-exploration-head">
+          <span>${this.escapeHtml(report.title)}</span>
+          <span>${this.escapeHtml(report.rankedImpact === 'none' ? '不写正式积分' : report.rankedImpact)}</span>
+        </div>
+        ${report.summary ? `<div class="pvp-live-loadout-exploration-summary">${this.escapeHtml(report.summary)}</div>` : ''}
+        <div class="pvp-live-loadout-exploration-grid">
+          ${visibleProfiles.map(profile => `
+            <div class="pvp-live-loadout-exploration-card" data-live-loadout-profile="${this.escapeHtml(profile.id)}">
+              <div class="pvp-live-loadout-exploration-card-head">
+                <span>${this.escapeHtml(profile.label)}</span>
+                <span>${this.escapeHtml(profile.practiceTopic.label)}</span>
+              </div>
+              <div class="pvp-live-loadout-exploration-hook">${this.escapeHtml(profile.funHook)}</div>
+              <div class="pvp-live-loadout-exploration-lines">
+                <span>${this.escapeHtml(profile.skillTest)}</span>
+                <span>${this.escapeHtml(profile.publicWeakness)}</span>
+                <span>${this.escapeHtml(profile.swapSlots.slice(0, 2).map(slot => slot.label).join(' / ') || profile.primaryDecisionAxis)}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        ${report.progressionBoundary ? `<div class="pvp-live-loadout-exploration-boundary">${this.escapeHtml(report.progressionBoundary)}</div>` : ''}
+      </div>
+    `;
+  },
   getLiveFriendlySeries(source) {
     const report = source && source.friendlySeries && typeof source.friendlySeries === 'object'
       ? source.friendlySeries
@@ -816,6 +899,7 @@ export const PVPScene = {
           ${visibleLoadouts.map(item => `<span class="pvp-live-guide-loadout" title="${this.escapeHtml(item.role)}">${this.escapeHtml(item.label)} · ${this.escapeHtml(item.weakness)}</span>`).join('')}
         </div>
       ` : ''}
+      ${this.renderLiveLoadoutExplorationReport(view)}
     `;
   },
   getLiveWaitingReport(state) {
@@ -1123,6 +1207,139 @@ export const PVPScene = {
       </div>
     `;
   },
+  getLiveSeasonGoalSeasonId(view) {
+    const seasonId = String(view && view.matchQuality && view.matchQuality.seasonId || '').trim();
+    return seasonId || 's1-genesis';
+  },
+  getLiveSeasonGoalRecommendedMode(review) {
+    const actionIds = new Set((Array.isArray(review && review.nextActions) ? review.nextActions : [])
+      .map(action => String(action && action.id || ''))
+      .filter(Boolean));
+    const experienceReport = review && review.experienceReport ? this.getLiveExperienceReport(review.experienceReport) : null;
+    if ((review && review.result === 'loss') || (experienceReport && experienceReport.nonGameRisk === 'watch')) {
+      if (actionIds.has('practice')) return 'practice';
+      if (actionIds.has('adjust_loadout')) return 'adjust_loadout';
+    }
+    const friendlySeries = review && review.friendlySeries ? this.getLiveFriendlySeries(review.friendlySeries) : null;
+    if (friendlySeries && friendlySeries.canRequestNextRound && actionIds.has('friendly_rematch')) return 'friendly_rematch';
+    if (review && review.result === 'win' && actionIds.has('queue_again')) return 'queue_again';
+    if (actionIds.has('adjust_loadout')) return 'adjust_loadout';
+    if (actionIds.has('queue_again')) return 'queue_again';
+    return 'practice';
+  },
+  getLiveSeasonGoalCopy(mode, review) {
+    const result = String(review && review.result || '');
+    const copies = {
+      practice: {
+        label: '问道练习',
+        title: result === 'loss' ? '本赛季下一局目标：先练失守窗口' : '本赛季下一局目标：复刻关键节奏',
+        detail: result === 'loss'
+          ? '把首败拆成一个公开课题，先用练习复现压力窗口，再回到真人排位。'
+          : '用练习复刻本局有效节奏，确认它不是偶然手顺。'
+      },
+      queue_again: {
+        label: '继续真人排位',
+        title: '本赛季下一局目标：带着结论再打一局',
+        detail: '本局公开轨迹可解释，下一局继续验证同一套节奏是否稳定。'
+      },
+      friendly_rematch: {
+        label: '低压力再战',
+        title: '本赛季下一局目标：同对手换边复现',
+        detail: '邀请本局对手进行不计正式结果的再战，验证先后手和调谱差异。'
+      },
+      adjust_loadout: {
+        label: '调整斗法谱',
+        title: '本赛季下一局目标：先改一个弱点',
+        detail: '只围绕复盘暴露的一个公开弱点调谱，避免一口气改掉整套打法。'
+      }
+    };
+    return copies[mode] || copies.practice;
+  },
+  getLiveSeasonGoalCard(view) {
+    const review = this.getLivePostMatchReview(view);
+    if (!review) return null;
+    const seasonId = this.getLiveSeasonGoalSeasonId(view);
+    const session = this.getLiveSession();
+    const stored = session && typeof session.getSeasonGoalState === 'function'
+      ? session.getSeasonGoalState(seasonId)
+      : { seasonId, lastReviewAction: '', recommendedMode: '', dismissedUntilSeason: '' };
+    const recommendedMode = this.getLiveSeasonGoalRecommendedMode(review);
+    const copy = this.getLiveSeasonGoalCopy(recommendedMode, review);
+    const dismissed = stored && stored.dismissedUntilSeason === seasonId;
+    return {
+      reportVersion: 'pvp-live-season-goal-v1',
+      sourceVisibility: 'public_review',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      seasonId,
+      dismissState: dismissed ? 'dismissed_until_season' : 'active',
+      recommendedMode,
+      actionLabel: copy.label,
+      title: copy.title,
+      detail: copy.detail,
+      boundary: '只记录本地复盘目标，不写正式积分或奖励。',
+      lastReviewAction: String(stored && stored.lastReviewAction || ''),
+      updatedAt: Math.max(0, Math.floor(Number(stored && stored.updatedAt) || 0))
+    };
+  },
+  renderLiveSeasonGoalCard(view) {
+    const goal = this.getLiveSeasonGoalCard(view);
+    if (!goal || goal.dismissState === 'dismissed_until_season') return '';
+    return `
+      <div
+        class="pvp-live-season-goal"
+        data-live-season-goal
+        data-live-season-goal-mode="${this.escapeHtml(goal.recommendedMode)}"
+        data-live-season-goal-dismiss-state="${this.escapeHtml(goal.dismissState)}"
+        data-live-season-goal-source="${this.escapeHtml(goal.sourceVisibility)}"
+        data-live-season-goal-hidden="${goal.usesHiddenInformation ? 'true' : 'false'}"
+      >
+        <div class="pvp-live-season-goal-head">
+          <span>${this.escapeHtml(goal.title)}</span>
+          <span>${this.escapeHtml(goal.actionLabel)}</span>
+        </div>
+        <div class="pvp-live-season-goal-detail">${this.escapeHtml(goal.detail)}</div>
+        <div class="pvp-live-season-goal-boundary">${this.escapeHtml(goal.boundary)}</div>
+        ${goal.lastReviewAction ? `<div class="pvp-live-season-goal-last">上次复盘动作：${this.escapeHtml(goal.lastReviewAction)}</div>` : ''}
+        <div class="pvp-live-season-goal-actions">
+          <button
+            type="button"
+            data-live-season-goal-action="${this.escapeHtml(goal.recommendedMode)}"
+            onclick="PVPScene.handleLivePostReviewAction('${this.escapeHtml(goal.recommendedMode)}')"
+          >${this.escapeHtml(goal.actionLabel)}</button>
+          <button
+            type="button"
+            data-live-season-goal-dismiss="${this.escapeHtml(goal.seasonId)}"
+            onclick="PVPScene.dismissLiveSeasonGoal('${this.escapeHtml(goal.seasonId)}')"
+          >本赛季不再提示</button>
+        </div>
+      </div>
+    `;
+  },
+  recordLiveSeasonGoalAction(actionId) {
+    const state = this.getLiveSession().getState();
+    const view = state && state.stateView ? state.stateView : null;
+    const goal = this.getLiveSeasonGoalCard(view);
+    const session = this.getLiveSession();
+    if (!goal || !session || typeof session.recordSeasonGoalAction !== 'function') return null;
+    return session.recordSeasonGoalAction({
+      seasonId: goal.seasonId,
+      actionId,
+      recommendedMode: goal.recommendedMode,
+      matchId: state.matchId || view && view.matchId || ''
+    });
+  },
+  dismissLiveSeasonGoal(seasonId = '') {
+    const session = this.getLiveSession();
+    if (session && typeof session.dismissSeasonGoal === 'function') {
+      session.dismissSeasonGoal(seasonId || this.getLiveSeasonGoalSeasonId(this.getLiveSession().getState()?.stateView));
+    }
+    this.liveInlineHint = '已关闭本赛季复盘目标提示；这只影响本地显示，不写正式积分或奖励。';
+    this.renderLivePanel();
+    const root = document.querySelector('[data-live-pvp-root]');
+    const hint = root ? root.querySelector('[data-live-last-error]') : null;
+    if (hint) hint.textContent = this.liveInlineHint;
+  },
   isLivePostReviewActionDisabled(actionId, phase = 'idle') {
     if (phase !== 'waiting_rematch') return false;
     return ['friendly_rematch', 'adjust_loadout', 'practice', 'queue_again'].includes(String(actionId || ''));
@@ -1159,6 +1376,7 @@ export const PVPScene = {
       ${this.renderLiveFriendlySeries(review.friendlySeries)}
       ${this.renderLiveExperienceReport(review)}
       ${this.renderLiveKeyTurnReplay(review)}
+      ${this.renderLiveSeasonGoalCard(view)}
       <div class="pvp-live-review-actions">
         ${review.nextActions.map(action => `
           <button
@@ -1482,7 +1700,9 @@ export const PVPScene = {
       openingSafeguardReport: this.getLiveOpeningSafeguardReport(view),
       friendlySeries: this.getLiveFriendlySeries(view && view.friendlySeries ? view.friendlySeries : state.rematchReport),
       firstMatchGuide: this.getLiveFirstMatchGuide(view),
+      loadoutExplorationReport: this.getLiveLoadoutExplorationReport(view),
       postMatchReview: this.getLivePostMatchReview(view),
+      seasonGoal: this.getLiveSeasonGoalCard(view),
       drillScenario,
       waitingReport: this.getLiveWaitingReport(state),
       inviteReport: state.inviteReport || null,
@@ -2043,6 +2263,7 @@ export const PVPScene = {
       this.renderLivePanel();
       return;
     }
+    this.recordLiveSeasonGoalAction(id);
     if (id === 'queue_again') {
       await this.joinLiveQueue();
       return;
