@@ -1,5 +1,21 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-19: V10-S8C live PVP 跨进程 queue status 成局回收
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 的 `getQueueStatus()` 新增 active-match handoff：等待方的 queue row 被另一进程撮合消费后，原进程或无状态第三进程仍可通过认证用户恢复自己的持久化 active match，返回 `matched / matchId / seatId / stateView`，不再因为缺少本地 `pendingQueueResults` 直接 404。
+    - 新增 `pvp_live_queue_handoffs` 持久化 outbox，并在撮合创建 match 后、删除 queue row 前写入 `queueTicket -> userId -> matchId`；无状态进程必须命中本地旧票据或该 handoff 记录才允许返回 matched，伪造 ticket 不能借 active match 取回对局。
+    - 保留旧的一次性消费语义：pending result 与 handoff fallback 首次返回 matched 后会登记 `consumedQueueTickets`，同一进程重复用旧 ticket 轮询仍返回空；DB stale waiting row 不会盖过真实 active match。
+    - 新增 `tests/sanity_pvp_live_cross_process_queue_checks.cjs`，用两个有状态 store + 一个无状态 store 共享同一持久化层，覆盖 A 在进程 A 入队、B 在进程 B 成局、无状态进程和原进程都能恢复同一 match、伪造 ticket 被拒绝、先读 current 后仍可用旧 ticket handoff、以及 match 保存后 queue row 删除滞后的窗口。
+    - `tests/run_node_checks.sh` 与 `tests/sanity_release_gate_coverage_checks.cjs` 纳入 S8C 门禁，防止后续跨进程 handoff 回退为单进程 pending map 或删掉 schema / persistence outbox。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs` 在实现前失败于无状态进程无法从已消费 queue row 恢复 matched。
+    - 绿测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs`
+    - `node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_persistence_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - live PVP 已补上 HTTP queue status 的跨进程成局回收，降低负载均衡 / 非粘性轮询下“对手已成局但等待方拿不到 match”的割裂体验。它仍不是完整多实例强一致队列：DB 原子撮合 / 并发 claim 防重、active match revision/CAS、跨进程 WS fanout、生产 smoke 和线上部署仍未封板。
+
 - 2026-06-19: V10-S8B live ranked 双方同意宽分差匹配
   - 本轮完成
     - live ranked 公共队列新增 `wideMatchConsent` 合同：`200-399` 分差仍不自动匹配，只有长等待扩圈阶段且双方都显式同意时才允许成局；单方同意继续保持 waiting，两个已在 waiting 的玩家后续依次确认后也会立即重新撮合。

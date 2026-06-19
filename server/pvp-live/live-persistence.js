@@ -227,6 +227,16 @@ function makeQueueEntryFromRow(row) {
     };
 }
 
+function makeQueueHandoffFromRow(row) {
+    if (!row || !row.queue_ticket || !row.user_id || !row.match_id) return null;
+    return {
+        queueTicket: String(row.queue_ticket),
+        userId: String(row.user_id),
+        matchId: String(row.match_id),
+        createdAt: Math.max(0, Math.floor(Number(row.created_at) || 0))
+    };
+}
+
 function makeRematchRequestFromRow(row) {
     if (!row || !row.source_match_id || !row.series_id || !row.players_json) return null;
     let players = [];
@@ -318,6 +328,37 @@ function makeSqliteLivePvpPersistence() {
             const id = String(userId || '').trim();
             if (!id) return;
             await dbRun('DELETE FROM pvp_live_queue_tickets WHERE user_id = ?', [id]);
+        },
+        async saveQueueHandoff(handoff) {
+            if (!handoff || !handoff.queueTicket || !handoff.userId || !handoff.matchId) return;
+            await dbRun(
+                `INSERT INTO pvp_live_queue_handoffs
+                    (queue_ticket, user_id, match_id, created_at)
+                 VALUES (?, ?, ?, ?)
+                 ON CONFLICT(queue_ticket) DO UPDATE SET
+                    user_id = excluded.user_id,
+                    match_id = excluded.match_id,
+                    created_at = excluded.created_at`,
+                [
+                    String(handoff.queueTicket),
+                    String(handoff.userId),
+                    String(handoff.matchId),
+                    Math.max(0, Math.floor(Number(handoff.createdAt) || Date.now()))
+                ]
+            );
+        },
+        async loadQueueHandoff(queueTicket, userId) {
+            const ticket = String(queueTicket || '').trim();
+            const id = String(userId || '').trim();
+            if (!ticket || !id) return null;
+            const row = await dbGet(
+                `SELECT * FROM pvp_live_queue_handoffs
+                 WHERE queue_ticket = ?
+                   AND user_id = ?
+                 LIMIT 1`,
+                [ticket, id]
+            );
+            return makeQueueHandoffFromRow(row);
         },
         async loadQueueEntryByTicket(queueTicket) {
             const ticket = String(queueTicket || '').trim();

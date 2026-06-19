@@ -371,6 +371,7 @@ class LivePvpStore {
         this.waitingQueue = [];
         this.queueTickets = new Map();
         this.pendingQueueResults = new Map();
+        this.consumedQueueTickets = new Set();
         this.matches = new Map();
         this.activeMatchByUserId = new Map();
         this.friendlyRematchRequests = new Map();
@@ -468,6 +469,26 @@ class LivePvpStore {
         }
         if (!this.persistence || typeof this.persistence.deleteQueueEntryForUser !== 'function') return;
         await this.persistence.deleteQueueEntryForUser(id);
+    }
+
+    async saveQueueHandoff(handoff) {
+        if (!this.persistence || typeof this.persistence.saveQueueHandoff !== 'function') return;
+        await this.persistence.saveQueueHandoff(handoff);
+    }
+
+    async loadQueueHandoff(queueTicket, userId) {
+        if (!this.persistence || typeof this.persistence.loadQueueHandoff !== 'function') return null;
+        return this.persistence.loadQueueHandoff(queueTicket, userId);
+    }
+
+    async saveMatchedQueueHandoff(queueEntry, match) {
+        if (!queueEntry || !queueEntry.queueTicket || !queueEntry.player || !queueEntry.player.userId || !match || !match.matchId) return;
+        await this.saveQueueHandoff({
+            queueTicket: queueEntry.queueTicket,
+            userId: queueEntry.player.userId,
+            matchId: match.matchId,
+            createdAt: this.now()
+        });
     }
 
     async saveFriendlyRematchRequest(request) {
@@ -996,6 +1017,8 @@ class LivePvpStore {
                         this.queueTickets.delete(opponentTicket.queueTicket);
                         this.queueTickets.delete(existingTicket.queueTicket);
                         const match = await this.createMatch(opponentTicket.player, existingTicket.player, selectedOpponent.qualityInput);
+                        await this.saveMatchedQueueHandoff(opponentTicket, match);
+                        await this.saveMatchedQueueHandoff(existingTicket, match);
                         await this.deleteQueueEntry(opponentTicket.queueTicket);
                         await this.deleteQueueEntry(existingTicket.queueTicket);
                         const opponentResult = this.makeMatchedQueueResult(match, opponentTicket.player.userId);
@@ -1021,6 +1044,7 @@ class LivePvpStore {
             const [opponentTicket] = this.waitingQueue.splice(selectedOpponent.index, 1);
             this.queueTickets.delete(opponentTicket.queueTicket);
             const match = await this.createMatch(opponentTicket.player, player, selectedOpponent.qualityInput);
+            await this.saveMatchedQueueHandoff(opponentTicket, match);
             await this.deleteQueueEntry(opponentTicket.queueTicket);
             await this.deleteQueueEntryForUser(player.userId);
             const opponentResult = this.makeMatchedQueueResult(match, opponentTicket.player.userId);
@@ -1058,21 +1082,24 @@ class LivePvpStore {
     }
 
     async getQueueStatus(userId, queueTicket) {
-        const pendingResult = this.pendingQueueResults.get(queueTicket);
+        const ticket = String(queueTicket || '').trim();
+        if (!ticket) return null;
+        const pendingResult = this.pendingQueueResults.get(ticket);
         if (pendingResult) {
             if (pendingResult.userId !== userId) return null;
             const match = this.matches.get(pendingResult.matchId);
             if (!match || !match.seatsByUserId[userId]) {
-                this.pendingQueueResults.delete(queueTicket);
+                this.pendingQueueResults.delete(ticket);
                 return null;
             }
             await this.sweepMatchTimeout(match);
             if (this.isTerminalStatus(match.state.status)) {
                 await this.releaseIfTerminal(match);
-                this.pendingQueueResults.delete(queueTicket);
+                this.pendingQueueResults.delete(ticket);
                 return null;
             }
-            this.pendingQueueResults.delete(queueTicket);
+            this.pendingQueueResults.delete(ticket);
+            this.consumedQueueTickets.add(ticket);
             return {
                 status: 'matched',
                 matchId: match.matchId,
@@ -1081,17 +1108,32 @@ class LivePvpStore {
             };
         }
 
-        const queueEntry = this.queueTickets.get(queueTicket)
-            || await this.hydrateWaitingQueueEntryByTicket(queueTicket);
-        if (!queueEntry || queueEntry.player.userId !== userId) return null;
+        if (this.consumedQueueTickets.has(ticket)) return null;
+
+        const localQueueEntry = this.queueTickets.get(ticket);
+        const queueEntry = localQueueEntry || await this.hydrateWaitingQueueEntryByTicket(ticket);
+        const handoff = await this.loadQueueHandoff(ticket, userId);
+        if (queueEntry && queueEntry.player.userId !== userId && !handoff) return null;
+
         const activeMatch = await this.getActiveMatchForUser(userId);
         if (activeMatch && activeMatch.match && !this.isTerminalStatus(activeMatch.match.state && activeMatch.match.state.status)) {
-            await this.deleteQueueEntry(queueTicket);
-            return null;
+            await this.deleteQueueEntry(ticket);
+            const handoffMatchesActive = handoff && handoff.matchId === activeMatch.match.matchId;
+            const localEntryMatchesUser = localQueueEntry && localQueueEntry.player && localQueueEntry.player.userId === userId;
+            if (!handoffMatchesActive && !localEntryMatchesUser) return null;
+            this.consumedQueueTickets.add(ticket);
+            return {
+                status: 'matched',
+                matchId: activeMatch.match.matchId,
+                seatId: activeMatch.seatId,
+                stateView: activeMatch.stateView
+            };
         }
+
+        if (!queueEntry) return null;
         return {
             status: 'waiting',
-            queueTicket,
+            queueTicket: ticket,
             loadoutHash: queueEntry.player && queueEntry.player.loadoutSnapshot && queueEntry.player.loadoutSnapshot.loadoutHash || '',
             loadoutSummary: publicLoadoutSummary(queueEntry.player && queueEntry.player.loadoutSnapshot),
             waitingReport: makeWaitingReport({

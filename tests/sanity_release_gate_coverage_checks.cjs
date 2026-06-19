@@ -42,6 +42,7 @@ const pvpLiveReplayChecks = read('tests/sanity_pvp_live_replay_checks.cjs');
 const pvpLiveReplaySource = read('server/pvp-live/replay.js');
 const pvpLiveWsChecks = read('tests/sanity_pvp_live_ws_checks.cjs');
 const pvpLiveWsSource = read('server/pvp-live/live-ws.js');
+const pvpLiveCrossProcessQueueChecks = read('tests/sanity_pvp_live_cross_process_queue_checks.cjs');
 const serverApp = read('server/app.js');
 const pvpLiveRouteChecks = read('tests/sanity_pvp_live_route_checks.cjs');
 const pvpLivePersistenceChecks = read('tests/sanity_pvp_live_persistence_checks.cjs');
@@ -433,6 +434,7 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'node tests/sanity_pvp_live_golden_replay_checks.cjs',
   'node tests/sanity_pvp_live_replay_checks.cjs',
   'node tests/sanity_pvp_live_ws_checks.cjs',
+  'node tests/sanity_pvp_live_cross_process_queue_checks.cjs',
   'node tests/sanity_pvp_live_route_checks.cjs',
   'node tests/sanity_pvp_live_persistence_checks.cjs',
   'node tests/sanity_pvp_live_settlement_checks.cjs',
@@ -881,6 +883,25 @@ assert.ok(
 });
 
 [
+  'process A waiting player should recover the cross-process match from persistence instead of receiving 404/waiting',
+  'stateless process should recover the cross-process match even after the queue row was consumed',
+  'stateless process should consume the recovered queue ticket after the first matched poll',
+  'stateless process should not recover a match for a queue ticket that never belonged to the player',
+  'queue ticket should still hand off once after current-match recovery clears local waiting state',
+  'stateless process should use the persisted handoff even when queue-row deletion lags behind match creation',
+  'process B second player should create a shared live match',
+  'cross-process match handoff should consume both public queue tickets',
+  'saveQueueHandoff(handoff)',
+  'loadQueueHandoff(queueTicket, userId)',
+  'loadActiveMatchForUser(userId)',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveCrossProcessQueueChecks.includes(needle),
+    `live PVP cross-process queue sanity should pin shared queue handoff marker: ${needle}`,
+  );
+});
+
+[
   'first queue join should reject illegal loadout',
   'illegal loadout response should expose validation reason',
   'first queue join should return locked loadout hash',
@@ -1091,6 +1112,8 @@ assert.ok(
 [
   'wide_match_consent INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE pvp_live_queue_tickets ADD COLUMN wide_match_consent INTEGER NOT NULL DEFAULT 0',
+  'CREATE TABLE IF NOT EXISTS pvp_live_queue_handoffs',
+  'idx_pvp_live_queue_handoffs_user',
   'CREATE TABLE IF NOT EXISTS pvp_live_match_events',
   'UNIQUE(match_id, event_id)',
   'UNIQUE(match_id, event_sequence)',
@@ -1105,6 +1128,10 @@ assert.ok(
 [
   'wideMatchConsent: Number(row.wide_match_consent) === 1',
   'wide_match_consent = excluded.wide_match_consent',
+  'function makeQueueHandoffFromRow(row)',
+  'async saveQueueHandoff(handoff)',
+  'INSERT INTO pvp_live_queue_handoffs',
+  'async loadQueueHandoff(queueTicket, userId)',
   'async saveMatchEvents(matchId, events = [])',
   'INSERT OR IGNORE INTO pvp_live_match_events',
   'async loadMatchEvents(matchId)',

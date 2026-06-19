@@ -185,6 +185,19 @@ const initDb = () => {
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_queue_rating ON pvp_live_queue_tickets(rating_score, created_at)`, (err) => {
                 if (err) fail(err);
             });
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_live_queue_handoffs (
+                queue_ticket TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                match_id TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id),
+                FOREIGN KEY(match_id) REFERENCES pvp_live_matches(match_id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_queue_handoffs_user ON pvp_live_queue_handoffs(user_id, created_at)`, (err) => {
+                if (err) fail(err);
+            });
             db.run(`CREATE TABLE IF NOT EXISTS pvp_live_matches (
                 match_id TEXT PRIMARY KEY,
                 status TEXT NOT NULL,
