@@ -1,5 +1,28 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8E live PVP 真实后端长等待 smoke
+  - 本轮完成
+    - `server/routes/pvp-live.js` 新增 `PVP_LIVE_LONG_WAIT_THRESHOLD_MS` 运行配置透传，复用 `LivePvpStore.longWaitThresholdMs` 的既有构造参数；测试环境可把 long-wait 阈值压到 1 秒，生产默认仍是 120 秒。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 在真实 `server/app.js` + 临时 SQLite + 真实浏览器账号链路里新增单人长等待分支：真实账号入队、等待超过阈值、刷新 queue status 后必须得到 `waitingReport.longWait=true`、`no_ghost_fallback`、`practice`、`cancel_queue` 和可点击 `practice-live`。
+    - 同一真实 smoke 继续点击 `practice-live`，验证先取消真实队列，再打开 replay-only / practice-only / no-score 的 `pvp-live-drill-scenario-v1`，且 drill 只包含等待分支、公开规则、推荐谱，不包含 reward / rating / ELO。
+    - `js/scenes/pvp-scene.js` 的长等待标题不再写死“120 秒无真人”，而是按 `waitingReport.longWaitThresholdMs` 动态显示，避免测试环境或未来配置调参时玩家看到错误阈值。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定真实后端 long-wait smoke 的 finding、动态阈值文案、drill 安全边界和 route env marker，防止后续退回 fake-only 覆盖。
+  - 已验证
+    - 红测：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-real-s8e-red` 在实现前失败于真实后端 `longWaitThresholdMs` 仍是 120000，`practice-live` 被禁用。
+    - 红测：同一 smoke 追加动态阈值断言后失败于 UI 写死 `120 秒无真人`。
+    - 绿测：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-real-s8e-green2`，34/34 通过。
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - `node --check server/routes/pvp-live.js`
+    - `node --check js/scenes/pvp-scene.js`
+    - `node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - `AUDIT_FILTER=pvp-live-real,pvp-live-mobile-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-s8e-real`
+    - `node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-s8e-audit`，53/53 通过，consoleErrors 为 0。
+    - `npm run test:node`
+    - `npm run build:pages`
+  - 当前结论
+    - live PVP 的长等待练习不再只停留在 mock browser 审计：真实后端、真实账号、真实 queue status 和真实 challenge handoff 都已有本地证据。该切片仍不是线上部署、生产域名 smoke、DB 原子撮合 / 并发 claim 防重、active match revision/CAS 或跨进程 WS fanout 的完成证明。
+
 - 2026-06-20: V10-S8D live PVP 首局引导与长等待练习承接
   - 本轮完成
     - `js/scenes/pvp-scene.js` 的 `renderLiveFirstMatchGuide()` 不再只展示步骤和推荐谱，已把 `firstMatchGuide.exceptionBranches` 与 `reviewActions` 渲染成玩家可见内容；首局卡片现在能直接解释 120 秒无真人、准备超时、需要同步，以及查看权威事件 / 调整斗法谱 / 继续真人排位等下一步。

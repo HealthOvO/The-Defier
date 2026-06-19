@@ -69,6 +69,7 @@ function startBackend() {
       DEFIER_INTEGRITY_REQUIRED: '1',
       DEFIER_DB_PATH: dbPath,
       PVP_LIVE_SETUP_READY_TIMEOUT_MS: '10000',
+      PVP_LIVE_LONG_WAIT_THRESHOLD_MS: '1000',
       PVP_LIVE_HEARTBEAT_INTERVAL_MS: '1000',
       PVP_LIVE_HEARTBEAT_STALE_MS: '1000',
       PVP_LIVE_RECONNECT_GRACE_MS: '30000',
@@ -405,6 +406,77 @@ async function writeReport() {
     await waitForHealth(backend);
     seatA = await preparePage(browser, `live_real_a_${runId}`, '甲');
     seatB = await preparePage(browser, `live_real_b_${runId}`, '乙');
+    const longWaitSeat = await preparePage(browser, `live_real_wait_${runId}`, '候');
+    await longWaitSeat.page.evaluate(() => {
+      window.game.player.name = '候';
+      window.PVPScene.switchTab('live');
+    });
+    await longWaitSeat.page.waitForSelector('[data-live-action="join-queue"]', { timeout: 5000 });
+    const longWaitJoinActionable = await clickLiveControl(longWaitSeat.page, '[data-live-action="join-queue"]', 'long-wait-join-queue');
+    const longWaitJoin = await waitForLivePhase(longWaitSeat.page, 'waiting');
+    await longWaitSeat.page.waitForTimeout(1250);
+    await longWaitSeat.page.evaluate(async () => {
+      await window.PVPScene.refreshLiveMatch();
+    });
+    const longWaitProbe = await longWaitSeat.page.evaluate(() => {
+      const snapshot = window.PVPScene.getLiveSnapshot();
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      return {
+        phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        waitingText: document.querySelector('[data-live-waiting-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        practiceDisabled: !!document.querySelector('[data-live-action="practice-live"]')?.disabled,
+        cancelDisabled: !!document.querySelector('[data-live-action="cancel-queue"]')?.disabled,
+        snapshot,
+        textPayload,
+      };
+    });
+    add(
+      'real browser long-wait waiting report exposes no-ghost no-score practice options',
+      longWaitJoin.phase === 'waiting'
+        && longWaitProbe.phase === 'waiting'
+        && longWaitProbe.snapshot?.waitingReport?.longWait === true
+        && longWaitProbe.snapshot?.waitingReport?.longWaitThresholdMs === 1000
+        && longWaitProbe.textPayload?.waitingReport?.longWait === true
+        && /1 秒无真人/.test(longWaitProbe.waitingText)
+        && /无真人|继续等待/.test(longWaitProbe.waitingText)
+        && /不会自动切残影/.test(longWaitProbe.waitingText)
+        && /问道练习|不写正式积分/.test(longWaitProbe.waitingText)
+        && longWaitProbe.practiceDisabled === false
+        && longWaitProbe.cancelDisabled === false
+        && (!isMobileViewport || longWaitJoinActionable?.ok === true),
+      JSON.stringify({ longWaitJoin, longWaitProbe, longWaitJoinActionable }),
+    );
+    const longWaitPracticeActionable = await clickLiveControl(longWaitSeat.page, '[data-live-action="practice-live"]', 'long-wait-practice-live');
+    await longWaitSeat.page.waitForTimeout(650);
+    const longWaitPracticeProbe = await longWaitSeat.page.evaluate(() => {
+      const payload = JSON.parse(window.render_game_to_text());
+      return {
+        currentScreen: window.game?.currentScreen || '',
+        pending: payload?.challenge?.pending || null,
+        focus: payload?.challenge?.trainingFocus || null,
+        drillScenario: payload?.pvp?.live?.drillScenario || window.PVPScene.getLiveSnapshot()?.drillScenario || null,
+        livePhase: window.PVPScene.getLiveSnapshot()?.phase || '',
+      };
+    });
+    add(
+      'real browser long-wait practice opens no-score drill after cancelling queue',
+      longWaitPracticeProbe.currentScreen === 'character-selection-screen'
+        && longWaitPracticeProbe.pending?.replayOnly === true
+        && longWaitPracticeProbe.pending?.practiceOnly === true
+        && /^pvp_live_drill_/.test(longWaitPracticeProbe.pending?.ruleId || '')
+        && longWaitPracticeProbe.focus?.sourceRunId === `pvp_live:waiting:${longWaitJoin.queueTicket}`
+        && longWaitPracticeProbe.drillScenario?.reportVersion === 'pvp-live-drill-scenario-v1'
+        && longWaitPracticeProbe.drillScenario?.sourceMatchId === `waiting:${longWaitJoin.queueTicket}`
+        && longWaitPracticeProbe.drillScenario?.sourceVisibility === 'replay_self'
+        && longWaitPracticeProbe.drillScenario?.usesHiddenInformation === false
+        && longWaitPracticeProbe.drillScenario?.rankedImpact === 'none'
+        && longWaitPracticeProbe.drillScenario?.waitingReport?.longWait === true
+        && (longWaitPracticeProbe.drillScenario?.trainingTags || []).includes('长等待练习')
+        && !/reward|rating|elo/i.test(JSON.stringify(longWaitPracticeProbe.drillScenario || {}))
+        && (!isMobileViewport || longWaitPracticeActionable?.ok === true),
+      JSON.stringify({ longWaitPracticeProbe, longWaitPracticeActionable }),
+    );
 
     const changedLoadoutA = makeLoadout('curse', ['pvp_guard', 'pvp_guard', 'pvp_strike', 'pvp_burst']);
 

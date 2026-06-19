@@ -948,9 +948,10 @@ export const PVPScene = {
     const report = this.getLiveWaitingReport(state);
     if (!report || !report.longWait) return '';
     const waitSec = Math.ceil(report.waitMs / 1000);
+    const thresholdSec = Math.max(1, Math.ceil(report.longWaitThresholdMs / 1000));
     return `
       <div class="pvp-live-waiting-head">
-        <span>120 秒无真人</span>
+        <span>${this.escapeHtml(thresholdSec)} 秒无真人</span>
         <span>已等待 ${this.escapeHtml(waitSec)}s</span>
       </div>
       <div>${this.escapeHtml(report.message || '当前真人较少，可继续等待、进入问道练习或取消匹配；不会自动切残影。')}</div>

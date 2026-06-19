@@ -8,6 +8,7 @@ const router = express.Router();
 const livePvpStore = createLivePvpStore({
     turnTimeoutMs: Number(process.env.PVP_LIVE_TURN_TIMEOUT_MS),
     setupReadyTimeoutMs: Number(process.env.PVP_LIVE_SETUP_READY_TIMEOUT_MS || process.env.PVP_LIVE_TURN_TIMEOUT_MS),
+    longWaitThresholdMs: Number(process.env.PVP_LIVE_LONG_WAIT_THRESHOLD_MS),
     heartbeatIntervalMs: Number(process.env.PVP_LIVE_HEARTBEAT_INTERVAL_MS),
     heartbeatStaleMs: Number(process.env.PVP_LIVE_HEARTBEAT_STALE_MS),
     reconnectGraceMs: Number(process.env.PVP_LIVE_RECONNECT_GRACE_MS),

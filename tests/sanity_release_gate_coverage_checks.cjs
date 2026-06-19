@@ -45,6 +45,7 @@ const pvpLiveWsSource = read('server/pvp-live/live-ws.js');
 const pvpLiveCrossProcessQueueChecks = read('tests/sanity_pvp_live_cross_process_queue_checks.cjs');
 const serverApp = read('server/app.js');
 const pvpLiveRouteChecks = read('tests/sanity_pvp_live_route_checks.cjs');
+const pvpLiveRoute = read('server/routes/pvp-live.js');
 const pvpLivePersistenceChecks = read('tests/sanity_pvp_live_persistence_checks.cjs');
 const pvpLiveDatabase = read('server/db/database.js');
 const pvpLivePersistence = read('server/pvp-live/live-persistence.js');
@@ -1248,6 +1249,15 @@ assert.ok(
 });
 
 [
+  'longWaitThresholdMs: Number(process.env.PVP_LIVE_LONG_WAIT_THRESHOLD_MS)',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveRoute.includes(needle),
+    `PVP live route should expose real-backend long-wait threshold config marker: ${needle}`,
+  );
+});
+
+[
   'settlementText',
   'settlementSource',
   'settlementHidden',
@@ -1288,6 +1298,17 @@ assert.ok(
   '!auditSafeReplayProbe.replay?.cosmeticReward',
   '!auditSafeReplayProbe.replay?.seasonHonorCollection',
   'ready timeout invalidated terminal state does not expose settlement or season honor',
+  'PVP_LIVE_LONG_WAIT_THRESHOLD_MS',
+  'real browser long-wait waiting report exposes no-ghost no-score practice options',
+  'real browser long-wait practice opens no-score drill after cancelling queue',
+  'longWaitProbe.snapshot?.waitingReport?.longWait === true',
+  'longWaitProbe.snapshot?.waitingReport?.longWaitThresholdMs === 1000',
+  '/1 秒无真人/.test(longWaitProbe.waitingText)',
+  "longWaitPracticeProbe.pending?.practiceOnly === true",
+  "longWaitPracticeProbe.drillScenario?.reportVersion === 'pvp-live-drill-scenario-v1'",
+  "longWaitPracticeProbe.drillScenario?.sourceVisibility === 'replay_self'",
+  'longWaitPracticeProbe.drillScenario?.usesHiddenInformation === false',
+  "longWaitPracticeProbe.drillScenario?.rankedImpact === 'none'",
   'invalidatedNoSeasonHonorProbe',
   "!invalidatedNoSeasonHonorProbe.snapshot?.postMatchReview",
   "!invalidatedNoSeasonHonorProbe.textPayload?.postMatchReview",
