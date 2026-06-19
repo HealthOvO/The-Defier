@@ -606,6 +606,273 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   assert.equal(terminalIntentStore.matches.get(terminalIntentStaleMatchId)?.state?.status, 'active', 'terminal intent stale reload should replace the local dirty finished cache');
   assert.equal(terminalIntentStore.activeMatchByUserId.get('store-stale-a'), terminalIntentStaleMatchId, 'terminal intent stale reload should keep active map on authoritative active match');
 
+  const settlementReportStaleMatchId = 'pvplm-store-stale-settlement-report';
+  const settlementReportNow = 1700000026500;
+  const settlementReportLocalMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: settlementReportStaleMatchId,
+    stateVersion: 4,
+    now: settlementReportNow,
+  }), { stateVersion: 4, now: settlementReportNow });
+  const settlementReportAuthoritativeMatch = cloneJson(settlementReportLocalMatch);
+  settlementReportAuthoritativeMatch.state.status = 'finished';
+  settlementReportAuthoritativeMatch.state.phase = 'finished';
+  settlementReportAuthoritativeMatch.state.finishReason = 'surrender';
+  settlementReportAuthoritativeMatch.state.winnerSeat = 'B';
+  settlementReportAuthoritativeMatch.state.loserSeat = 'A';
+  settlementReportAuthoritativeMatch.state.stateVersion = 6;
+  delete settlementReportAuthoritativeMatch.state.settlementReport;
+  let settlementReportSaveCalls = 0;
+  let settlementReportAuthoritativeLoads = 0;
+  let settlementReportCompensated = false;
+  const settlementReportStore = createLivePvpStore({
+    now: () => settlementReportNow,
+    persistence: {
+      async saveMatch(match) {
+        assert.equal(match.matchId, settlementReportStaleMatchId, 'settlement report stale save should target the finished match');
+        settlementReportSaveCalls += 1;
+        if (settlementReportSaveCalls === 1) {
+          assert.equal(match.state.status, 'finished', 'settlement report stale test should first persist the terminal state');
+          assert.ok(!match.state.settlementReport, 'initial finished save should happen before settlement report is attached');
+          settlementReportAuthoritativeMatch.state = cloneJson(match.state);
+          settlementReportAuthoritativeMatch.state.stateVersion = 6;
+          return { saved: true, skipped: false, reason: 'saved' };
+        }
+        if (settlementReportSaveCalls === 2) {
+          assert.equal(match.state.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'second save should include the local settlement report');
+          return {
+            saved: false,
+            skipped: true,
+            reason: 'stale_state_version',
+            stateVersion: match.state.stateVersion,
+            persistedStateVersion: settlementReportAuthoritativeMatch.state.stateVersion,
+          };
+        }
+        assert.equal(match.state.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'compensation save should retry with the settlement report attached');
+        assert.equal(match.state.status, 'finished', 'compensation save should keep authoritative terminal status');
+        settlementReportCompensated = true;
+        settlementReportAuthoritativeMatch.state = cloneJson(match.state);
+        return { saved: true, skipped: false, reason: 'saved' };
+      },
+      async loadMatchForUser(userId, matchId) {
+        settlementReportAuthoritativeLoads += 1;
+        assert.equal(userId, 'store-stale-a', 'settlement report stale reload should use the acting user id');
+        assert.equal(matchId, settlementReportStaleMatchId, 'settlement report stale reload should keep the match id');
+        return cloneJson(settlementReportAuthoritativeMatch);
+      },
+      async saveMatchEvents() {},
+    },
+    settlement: {
+      async settleMatch() {
+        return {
+          settled: true,
+          finishReason: 'surrender',
+          settledAt: settlementReportNow,
+          winner: {
+            userId: 'store-stale-b',
+            didWin: true,
+            oldScore: 1000,
+            newScore: 1024,
+            ratingDelta: 24,
+            coinsAwarded: 20,
+            wins: 1,
+            losses: 0,
+            rankedGames: 1,
+            seasonId: 's1-genesis',
+            seasonHonorClaim: { collectionState: 'newly_unlocked', unlockedAt: settlementReportNow, collectionSize: 1 },
+          },
+          loser: {
+            userId: 'store-stale-a',
+            didWin: false,
+            oldScore: 1000,
+            newScore: 986,
+            ratingDelta: -14,
+            coinsAwarded: 8,
+            wins: 0,
+            losses: 1,
+            rankedGames: 1,
+            seasonId: 's1-genesis',
+            seasonHonorClaim: { collectionState: 'newly_unlocked', unlockedAt: settlementReportNow, collectionSize: 1 },
+          },
+        };
+      },
+    },
+  });
+  settlementReportStore.matches.set(settlementReportStaleMatchId, settlementReportLocalMatch);
+  settlementReportStore.activeMatchByUserId.set('store-stale-a', settlementReportStaleMatchId);
+  settlementReportStore.activeMatchByUserId.set('store-stale-b', settlementReportStaleMatchId);
+  const settlementReportResult = await settlementReportStore.submitIntent('store-stale-a', settlementReportStaleMatchId, {
+    intentId: 'store-stale-settlement-report-surrender-a',
+    intentType: 'surrender',
+    stateVersion: 4,
+    payload: {},
+  });
+  assert.equal(settlementReportAuthoritativeLoads, 1, 'settlement report stale save should reload authoritative finished match for compensation');
+  assert.equal(settlementReportCompensated, true, 'settlement report stale save should retry the report save against authoritative finished state');
+  assert.equal(settlementReportResult?.result, 'accepted', 'settlement report compensation should keep the accepted terminal intent result');
+  assert.equal(settlementReportResult?.state?.stateVersion, 6, 'settlement report compensation should return authoritative finished state');
+  assert.equal(settlementReportResult?.stateView?.status, 'finished', 'settlement report compensation should return finished stateView');
+  assert.equal(settlementReportResult?.stateView?.stateVersion, 6, 'settlement report compensation should return authoritative finished state version');
+  assert.equal(settlementReportResult?.stateView?.postMatchReview?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'settlement report compensation should return the authoritative settlement report');
+  assert.equal(settlementReportStore.matches.get(settlementReportStaleMatchId)?.state?.stateVersion, 6, 'settlement report compensation should refresh local cache with authoritative finished state');
+  assert.equal(settlementReportStore.matches.get(settlementReportStaleMatchId)?.state?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'settlement report compensation should refresh local cache with the saved report');
+  assert.equal(settlementReportStore.activeMatchByUserId.has('store-stale-a'), false, 'settlement report compensation should release terminal viewer active map after save');
+  assert.equal(settlementReportStore.activeMatchByUserId.has('store-stale-b'), false, 'settlement report compensation should release terminal opponent active map after save');
+
+  const settlementReportConflictMatchId = 'pvplm-store-conflict-settlement-report';
+  const settlementReportConflictNow = 1700000027000;
+  const settlementReportConflictLocalMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: settlementReportConflictMatchId,
+    stateVersion: 4,
+    now: settlementReportConflictNow,
+  }), { stateVersion: 4, now: settlementReportConflictNow });
+  const settlementReportConflictAuthoritativeMatch = cloneJson(settlementReportConflictLocalMatch);
+  settlementReportConflictAuthoritativeMatch.state.status = 'finished';
+  settlementReportConflictAuthoritativeMatch.state.phase = 'finished';
+  settlementReportConflictAuthoritativeMatch.state.finishReason = 'surrender';
+  settlementReportConflictAuthoritativeMatch.state.winnerSeat = 'B';
+  settlementReportConflictAuthoritativeMatch.state.loserSeat = 'A';
+  settlementReportConflictAuthoritativeMatch.state.stateVersion = 5;
+  delete settlementReportConflictAuthoritativeMatch.state.settlementReport;
+  let settlementReportConflictSaveCalls = 0;
+  let settlementReportConflictLoads = 0;
+  let settlementReportConflictCompensated = false;
+  const settlementReportConflictStore = createLivePvpStore({
+    now: () => settlementReportConflictNow,
+    persistence: {
+      async saveMatch(match) {
+        assert.equal(match.matchId, settlementReportConflictMatchId, 'settlement report conflict save should target the finished match');
+        settlementReportConflictSaveCalls += 1;
+        if (settlementReportConflictSaveCalls === 1) {
+          assert.equal(match.state.status, 'finished', 'settlement report conflict test should first persist the terminal state');
+          settlementReportConflictAuthoritativeMatch.state = cloneJson(match.state);
+          settlementReportConflictAuthoritativeMatch.state.stateVersion = match.state.stateVersion;
+          return { saved: true, skipped: false, reason: 'saved' };
+        }
+        if (settlementReportConflictSaveCalls === 2) {
+          assert.equal(match.state.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'settlement report conflict save should include the local settlement report');
+          return {
+            saved: false,
+            skipped: true,
+            reason: 'conflicting_state_version',
+            stateVersion: match.state.stateVersion,
+            persistedStateVersion: settlementReportConflictAuthoritativeMatch.state.stateVersion,
+          };
+        }
+        settlementReportConflictCompensated = true;
+        settlementReportConflictAuthoritativeMatch.state = cloneJson(match.state);
+        return { saved: true, skipped: false, reason: 'saved' };
+      },
+      async loadMatchForUser(userId, matchId) {
+        settlementReportConflictLoads += 1;
+        assert.equal(userId, 'store-stale-a', 'settlement report conflict reload should use the acting user id');
+        assert.equal(matchId, settlementReportConflictMatchId, 'settlement report conflict reload should keep the match id');
+        return cloneJson(settlementReportConflictAuthoritativeMatch);
+      },
+      async saveMatchEvents() {},
+    },
+    settlement: {
+      async settleMatch() {
+        return {
+          settled: true,
+          finishReason: 'surrender',
+          settledAt: settlementReportConflictNow,
+          winner: { userId: 'store-stale-b', didWin: true, ratingDelta: 24, coinsAwarded: 20 },
+          loser: { userId: 'store-stale-a', didWin: false, ratingDelta: -14, coinsAwarded: 8 },
+        };
+      },
+    },
+  });
+  settlementReportConflictStore.matches.set(settlementReportConflictMatchId, settlementReportConflictLocalMatch);
+  settlementReportConflictStore.activeMatchByUserId.set('store-stale-a', settlementReportConflictMatchId);
+  settlementReportConflictStore.activeMatchByUserId.set('store-stale-b', settlementReportConflictMatchId);
+  const settlementReportConflictResult = await settlementReportConflictStore.submitIntent('store-stale-a', settlementReportConflictMatchId, {
+    intentId: 'store-conflict-settlement-report-surrender-a',
+    intentType: 'surrender',
+    stateVersion: 4,
+    payload: {},
+  });
+  assert.equal(settlementReportConflictLoads, 1, 'settlement report conflict save should reload authoritative finished match for compensation');
+  assert.equal(settlementReportConflictCompensated, true, 'settlement report conflict save should retry the report save against authoritative finished state');
+  assert.equal(settlementReportConflictResult?.result, 'accepted', 'settlement report conflict compensation should keep the accepted terminal intent result');
+  assert.equal(settlementReportConflictResult?.stateView?.postMatchReview?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'settlement report conflict compensation should return the authoritative settlement report');
+
+  const settlementReportMismatchMatchId = 'pvplm-store-mismatch-settlement-report';
+  const settlementReportMismatchNow = 1700000027500;
+  const settlementReportMismatchLocalMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: settlementReportMismatchMatchId,
+    stateVersion: 4,
+    now: settlementReportMismatchNow,
+  }), { stateVersion: 4, now: settlementReportMismatchNow });
+  const settlementReportMismatchAuthoritativeMatch = cloneJson(settlementReportMismatchLocalMatch);
+  settlementReportMismatchAuthoritativeMatch.state.status = 'finished';
+  settlementReportMismatchAuthoritativeMatch.state.phase = 'finished';
+  settlementReportMismatchAuthoritativeMatch.state.finishReason = 'surrender';
+  settlementReportMismatchAuthoritativeMatch.state.winnerSeat = 'A';
+  settlementReportMismatchAuthoritativeMatch.state.loserSeat = 'B';
+  settlementReportMismatchAuthoritativeMatch.state.stateVersion = 6;
+  delete settlementReportMismatchAuthoritativeMatch.state.settlementReport;
+  let settlementReportMismatchSaveCalls = 0;
+  let settlementReportMismatchLoads = 0;
+  const settlementReportMismatchStore = createLivePvpStore({
+    now: () => settlementReportMismatchNow,
+    persistence: {
+      async saveMatch(match) {
+        assert.equal(match.matchId, settlementReportMismatchMatchId, 'settlement report mismatch save should target the finished match');
+        settlementReportMismatchSaveCalls += 1;
+        if (settlementReportMismatchSaveCalls === 1) {
+          settlementReportMismatchAuthoritativeMatch.state = cloneJson(match.state);
+          settlementReportMismatchAuthoritativeMatch.state.winnerSeat = 'A';
+          settlementReportMismatchAuthoritativeMatch.state.loserSeat = 'B';
+          settlementReportMismatchAuthoritativeMatch.state.stateVersion = 6;
+          return { saved: true, skipped: false, reason: 'saved' };
+        }
+        if (settlementReportMismatchSaveCalls === 2) {
+          assert.equal(match.state.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'settlement report mismatch save should include the local settlement report');
+          return {
+            saved: false,
+            skipped: true,
+            reason: 'stale_state_version',
+            stateVersion: match.state.stateVersion,
+            persistedStateVersion: settlementReportMismatchAuthoritativeMatch.state.stateVersion,
+          };
+        }
+        throw new Error('settlement report mismatch should not retry report save when authoritative outcome differs');
+      },
+      async loadMatchForUser(userId, matchId) {
+        settlementReportMismatchLoads += 1;
+        assert.equal(userId, 'store-stale-a', 'settlement report mismatch reload should use the acting user id');
+        assert.equal(matchId, settlementReportMismatchMatchId, 'settlement report mismatch reload should keep the match id');
+        return cloneJson(settlementReportMismatchAuthoritativeMatch);
+      },
+      async saveMatchEvents() {},
+    },
+    settlement: {
+      async settleMatch() {
+        return {
+          settled: true,
+          finishReason: 'surrender',
+          settledAt: settlementReportMismatchNow,
+          winner: { userId: 'store-stale-b', didWin: true, ratingDelta: 24, coinsAwarded: 20 },
+          loser: { userId: 'store-stale-a', didWin: false, ratingDelta: -14, coinsAwarded: 8 },
+        };
+      },
+    },
+  });
+  settlementReportMismatchStore.matches.set(settlementReportMismatchMatchId, settlementReportMismatchLocalMatch);
+  settlementReportMismatchStore.activeMatchByUserId.set('store-stale-a', settlementReportMismatchMatchId);
+  settlementReportMismatchStore.activeMatchByUserId.set('store-stale-b', settlementReportMismatchMatchId);
+  const settlementReportMismatchResult = await settlementReportMismatchStore.submitIntent('store-stale-a', settlementReportMismatchMatchId, {
+    intentId: 'store-mismatch-settlement-report-surrender-a',
+    intentType: 'surrender',
+    stateVersion: 4,
+    payload: {},
+  });
+  assert.equal(settlementReportMismatchLoads, 2, 'settlement report mismatch should reload once for compensation check and once for stale sync result');
+  assert.equal(settlementReportMismatchResult?.result, 'sync_required', 'settlement report mismatch should ask the client to sync instead of accepting a dirty report');
+  assert.equal(settlementReportMismatchResult?.stateView?.status, 'finished', 'settlement report mismatch should return authoritative finished status');
+  assert.equal(settlementReportMismatchResult?.stateView?.postMatchReview?.settlementReport, undefined, 'settlement report mismatch should not attach a local report to authoritative state');
+  assert.equal(settlementReportMismatchStore.matches.get(settlementReportMismatchMatchId)?.state?.winnerSeat, 'A', 'settlement report mismatch reload should keep authoritative outcome');
+
   const timeoutStaleMatchId = 'pvplm-store-stale-timeout';
   const timeoutNow = 1700000028000;
   const timeoutLocalMatch = activateStoreMatch(makeStoreStaleMatch({

@@ -1,5 +1,20 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8M live PVP settlement report 二次保存写输补偿
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 新增 terminal outcome 提取和 settlement report save-loss compensation：`completeFinishedMatch()` 在第一次 finished save 成功、`settleMatch()` 已执行、第二次附带 `settlementReport` 的 `saveMatch()` 写输后，会回读 authoritative persisted finished match。
+    - 若权威 finished match 缺 `settlementReport`，且本地终局 event outcome 与权威 finished outcome 一致，store 会把本次服务端权威 `pvp-live-settlement-report-v1` 补写回权威 state，再释放 active map 并返回带 report 的 terminal view。
+    - 补偿路径不会重复 `settleMatch()`，也不会在 outcome 不一致或权威 match 已有报告时覆盖权威状态；仍沿用 stale/conflict saveResult 合同。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 新增红测：第一次 finished save 成功、settlement 已执行、第二次 report save 返回 `stale_state_version` 且权威 finished match 缺 report 时，必须回读、补写、返回 accepted terminal result 和带 settlement report 的 finished stateView。
+    - 同一测试继续补齐 `conflicting_state_version` 正例和 outcome mismatch 负例：同版本冲突也要补偿；权威 outcome 不一致时不得补写本地 report，只能返回权威同步结果。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定 S8M 测试文案、conflict / mismatch 边界和 store 补偿实现 marker。
+    - `docs/designer_major_upgrade_implementation_input_v1.md` 同步 S8M 口径：只覆盖 settlement report 二次保存写输补偿，不代表 route-level unified rehydrate、完整 active CAS、Redis / 多实例、跨进程 WS fanout、生产 smoke 或线上部署。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_persistence_checks.cjs` 在实现前失败于 `settlement report stale save should retry the report save against authoritative finished state`，实际 compensation flag 为 `false`。
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+  - 当前结论
+    - live PVP 终局正式结算链路已从“第一次 finished save 写输不结算”继续推进到“settlement report 二次保存写输可补偿”：玩家不应因为第二次报告保存竞争失败而丢失赛后正式结算回执；若权威 outcome 已不同，则本地报告不会覆盖权威终局。该切片仍不是 route-level unified rehydrate、完整 active CAS、Redis / 多实例强一致队列、跨进程 WS fanout、生产 smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8L live PVP SQLite queue ticket atomic claim / duplicate-match prevention
   - 本轮完成
     - `server/pvp-live/live-persistence.js` 新增 `claimQueueEntry(queueTicket, userId)` 和 `claimQueueEntries(queueClaims)`：单票据用 SQLite 条件删除，双票据 pair claim 用单条 CTE `DELETE`，只有两张 waiting ticket 都存在且 userId 匹配时才一起删除。

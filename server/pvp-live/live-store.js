@@ -1418,6 +1418,56 @@ class LivePvpStore {
         return report;
     }
 
+    getFinishedOutcome(state) {
+        const source = state && typeof state === 'object' ? state : {};
+        const events = Array.isArray(source.events) ? source.events : [];
+        const finishedEvent = events.slice().reverse().find(event => event && event.eventType === 'match_finished');
+        const payload = finishedEvent && finishedEvent.payload && typeof finishedEvent.payload === 'object'
+            ? finishedEvent.payload
+            : {};
+        return {
+            finishReason: String(source.finishReason || payload.finishReason || ''),
+            winnerSeat: String(source.winnerSeat || payload.winnerSeat || ''),
+            loserSeat: String(source.loserSeat || payload.loserSeat || '')
+        };
+    }
+
+    canApplySettlementReportCompensation(sourceMatch, authoritativeMatch) {
+        if (!sourceMatch || !sourceMatch.state || !sourceMatch.state.settlementReport) return false;
+        if (!authoritativeMatch || !authoritativeMatch.state || authoritativeMatch.state.status !== 'finished') return false;
+        if (authoritativeMatch.state.settlementReport) return false;
+        const sourceOutcome = this.getFinishedOutcome(sourceMatch.state);
+        const authoritativeOutcome = this.getFinishedOutcome(authoritativeMatch.state);
+        if (!sourceOutcome.finishReason || !sourceOutcome.winnerSeat || (!sourceOutcome.loserSeat && sourceOutcome.winnerSeat !== 'draw')) {
+            return false;
+        }
+        return sourceOutcome.finishReason === authoritativeOutcome.finishReason
+            && sourceOutcome.winnerSeat === authoritativeOutcome.winnerSeat
+            && sourceOutcome.loserSeat === authoritativeOutcome.loserSeat;
+    }
+
+    async compensateSettlementReportSaveLoss(match, saveResult) {
+        if (!this.isStaleStateSaveResult(saveResult)) return null;
+        if (!match || !match.matchId || !match.seatsByUserId || !match.state || !match.state.settlementReport) return null;
+        const [userId] = Object.keys(match.seatsByUserId);
+        if (!userId) return null;
+        const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
+        const authoritativeMatch = authoritative && authoritative.match;
+        if (!this.canApplySettlementReportCompensation(match, authoritativeMatch)) return null;
+        authoritativeMatch.state.settlementReport = JSON.parse(JSON.stringify(match.state.settlementReport));
+        authoritativeMatch.updatedAt = this.now();
+        const compensationSaveResult = await this.saveMatch(authoritativeMatch);
+        if (compensationSaveResult && compensationSaveResult.saved === false) {
+            return { completed: false, saveResult: compensationSaveResult, match: authoritativeMatch };
+        }
+        match.state = authoritativeMatch.state;
+        match.updatedAt = authoritativeMatch.updatedAt;
+        match.connection = authoritativeMatch.connection;
+        match.seatsByUserId = authoritativeMatch.seatsByUserId;
+        this.releaseMatch(authoritativeMatch);
+        return { completed: true, saveResult: compensationSaveResult, match: authoritativeMatch };
+    }
+
     isTerminalStatus(status) {
         return status === 'finished' || status === 'invalidated';
     }
@@ -1436,6 +1486,8 @@ class LivePvpStore {
         if (this.attachSettlementReport(match, settlementResult)) {
             settlementSaveResult = await this.saveMatch(match);
             if (settlementSaveResult && settlementSaveResult.saved === false) {
+                const compensation = await this.compensateSettlementReportSaveLoss(match, settlementSaveResult);
+                if (compensation && compensation.completed) return compensation;
                 return { completed: false, saveResult: settlementSaveResult };
             }
         }
@@ -2370,6 +2422,9 @@ class LivePvpStore {
                 if (this.isStaleStateSaveResult(completion && completion.saveResult)) {
                     const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
                     return this.makeStaleStateSyncResult(authoritative, completion.saveResult);
+                }
+                if (completion && completion.match && completion.match.state) {
+                    reduced.state = completion.match.state;
                 }
             } else {
                 const saveResult = await this.saveMatch(match);
