@@ -128,7 +128,100 @@ function sendJson(ws, payload) {
   ws.send(JSON.stringify(payload));
 }
 
+async function runSyncRequiredBroadcastCheck() {
+  let authoritativeVersion = 10;
+  const fakeMatchId = 'pvplm-ws-sync-required';
+  const fakeStore = {
+    heartbeatIntervalMs: 1500,
+    async getMatchForUser(userId, matchId) {
+      assert.equal(matchId, fakeMatchId, 'WS sync_required broadcast fake store should read the requested match');
+      const seatId = userId === 'ws-sync-a' ? 'A' : 'B';
+      return {
+        match: { matchId: fakeMatchId },
+        seatId,
+        stateView: {
+          matchId: fakeMatchId,
+          status: 'active',
+          stateVersion: authoritativeVersion,
+          currentSeat: authoritativeVersion >= 11 ? 'B' : 'A',
+          self: { seatId, hand: [] },
+          opponent: { seatId: seatId === 'A' ? 'B' : 'A', handCount: 3 }
+        }
+      };
+    },
+    async submitIntent(userId, matchId, intent) {
+      assert.equal(userId, 'ws-sync-a', 'WS sync_required broadcast should submit as the acting user');
+      assert.equal(matchId, fakeMatchId, 'WS sync_required broadcast should submit the requested match');
+      assert.equal(intent.intentId, 'ws-sync-required-intent', 'WS sync_required broadcast should forward the intent payload');
+      authoritativeVersion = 11;
+      return {
+        result: 'sync_required',
+        reason: 'conflicting_state_version',
+        events: [],
+        stateView: {
+          matchId: fakeMatchId,
+          status: 'active',
+          stateVersion: authoritativeVersion,
+          currentSeat: 'B',
+          self: { seatId: 'A', hand: [] },
+          opponent: { seatId: 'B', handCount: 3 }
+        }
+      };
+    },
+    async loadMatchEvents() {
+      return [];
+    }
+  };
+
+  const server = http.createServer();
+  attachLivePvpWebSocket(server, { livePvpStore: fakeStore });
+  await listen(server);
+  const wsBaseUrl = `ws://127.0.0.1:${server.address().port}`;
+  const tokenA = generateToken({ id: 'ws-sync-a', username: 'ws-sync-a' });
+  const tokenB = generateToken({ id: 'ws-sync-b', username: 'ws-sync-b' });
+  let socketA = null;
+  let socketB = null;
+  try {
+    socketA = await openSocket(`${wsBaseUrl}/api/pvp/live/ws?token=${encodeURIComponent(tokenA)}`);
+    socketB = await openSocket(`${wsBaseUrl}/api/pvp/live/ws?token=${encodeURIComponent(tokenB)}`);
+    await waitForMessage(socketA, message => message.type === 'connected', 'sync_required connected A');
+    await waitForMessage(socketB, message => message.type === 'connected', 'sync_required connected B');
+
+    sendJson(socketA, { type: 'join_match', matchId: fakeMatchId, lastSeenRevision: 0 });
+    await waitForMessage(socketA, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.seatId === 'A', 'sync_required state_sync A');
+    await waitForMessage(socketA, message => message.type === 'events_replay' && message.matchId === fakeMatchId, 'sync_required events_replay A');
+    sendJson(socketB, { type: 'join_match', matchId: fakeMatchId, lastSeenRevision: 0 });
+    await waitForMessage(socketB, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.seatId === 'B', 'sync_required state_sync B');
+    await waitForMessage(socketB, message => message.type === 'events_replay' && message.matchId === fakeMatchId, 'sync_required events_replay B');
+
+    sendJson(socketA, {
+      type: 'intent',
+      matchId: fakeMatchId,
+      intent: {
+        intentId: 'ws-sync-required-intent',
+        intentType: 'play_card',
+        stateVersion: 9,
+        payload: { cardInstanceId: 'A-card-1', targetSeat: 'B' }
+      }
+    });
+    const intentResultA = await waitForMessage(socketA, message => message.type === 'intent_result' && message.intentId === 'ws-sync-required-intent', 'sync_required intent_result A');
+    assert.equal(intentResultA.result, 'sync_required', 'WS sync_required intent should report sync_required to the sender');
+    assert.equal(intentResultA.reason, 'conflicting_state_version', 'WS sync_required intent should preserve the authoritative sync reason');
+    const syncToA = await waitForMessage(socketA, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 11, 'sync_required broadcast state_sync A');
+    assert.equal(syncToA.seatId, 'A', 'WS sync_required intent should also refresh the sender with authoritative state_sync');
+    assert.equal(syncToA.stateView?.currentSeat, intentResultA.stateView?.currentSeat, 'WS sync_required sender state_sync should match intent_result authoritative turn');
+    const broadcastToB = await waitForMessage(socketB, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 11, 'sync_required broadcast state_sync B');
+    assert.equal(broadcastToB.seatId, 'B', 'WS sync_required intent should broadcast authoritative sync to the opponent seat');
+  } finally {
+    if (socketA) socketA.close();
+    if (socketB) socketB.close();
+    await close(server);
+  }
+}
+
 (async () => {
+  await runSyncRequiredBroadcastCheck();
+
   pvpLiveRoutes.__livePvpStore.reset();
 
   const app = express();

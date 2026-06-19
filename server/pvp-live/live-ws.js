@@ -219,7 +219,7 @@ function attachLivePvpWebSocket(server, {
             stateView: result.stateView,
             serverTime: now()
         });
-        if (result.result === 'accepted') {
+        if (result.result === 'accepted' || (result.result === 'sync_required' && result.stateView)) {
             await broadcastState(matchId);
         }
     }

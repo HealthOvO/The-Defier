@@ -393,6 +393,74 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   assert.equal(skippedStoreSave?.reason, 'stale_state_version', 'store saveMatch should keep stale_state_version reason');
   assert.equal(skippedEventSaveCount, 0, 'store saveMatch should not append events when match state persistence is skipped');
 
+  const currentReadMatchId = 'pvplm-store-current-read-authoritative';
+  const currentReadNow = 1700000007000;
+  const currentReadLocalMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: currentReadMatchId,
+    stateVersion: 2,
+    now: currentReadNow,
+  }), { stateVersion: 2, now: currentReadNow });
+  const currentReadAuthoritativeMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: currentReadMatchId,
+    stateVersion: 7,
+    now: currentReadNow,
+  }), { stateVersion: 7, now: currentReadNow });
+  currentReadAuthoritativeMatch.state.seats.B.hp = 26;
+  let currentReadAuthoritativeLoads = 0;
+  const currentReadStore = createLivePvpStore({
+    now: () => currentReadNow,
+    persistence: {
+      async loadMatchForUser(userId, matchId) {
+        currentReadAuthoritativeLoads += 1;
+        assert.equal(userId, 'store-stale-a', 'current match read should use the viewer user id for authoritative reload');
+        assert.equal(matchId, currentReadMatchId, 'current match read should reload the cached active match id');
+        return cloneJson(currentReadAuthoritativeMatch);
+      },
+    },
+  });
+  currentReadStore.matches.set(currentReadMatchId, currentReadLocalMatch);
+  currentReadStore.activeMatchByUserId.set('store-stale-a', currentReadMatchId);
+  currentReadStore.activeMatchByUserId.set('store-stale-b', currentReadMatchId);
+  const currentReadResult = await currentReadStore.getActiveMatchForUser('store-stale-a');
+  assert.equal(currentReadAuthoritativeLoads, 1, 'current match read should reload newer authoritative persisted active match before serving cached state');
+  assert.equal(currentReadResult?.stateView?.stateVersion, 7, 'current match read should return authoritative active state version');
+  assert.equal(currentReadResult?.stateView?.opponent?.hp, 26, 'current match read should return authoritative combat state');
+  assert.equal(currentReadStore.matches.get(currentReadMatchId)?.state?.stateVersion, 7, 'current match read should refresh local cache with authoritative state');
+
+  const directReadMatchId = 'pvplm-store-direct-read-authoritative';
+  const directReadNow = 1700000008000;
+  const directReadLocalMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: directReadMatchId,
+    stateVersion: 4,
+    now: directReadNow,
+  }), { stateVersion: 4, now: directReadNow });
+  const directReadAuthoritativeMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: directReadMatchId,
+    stateVersion: 4,
+    now: directReadNow,
+  }), { stateVersion: 4, now: directReadNow });
+  directReadAuthoritativeMatch.state.seats.A.hp = 28;
+  let directReadAuthoritativeLoads = 0;
+  const directReadStore = createLivePvpStore({
+    now: () => directReadNow,
+    persistence: {
+      async loadMatchForUser(userId, matchId) {
+        directReadAuthoritativeLoads += 1;
+        assert.equal(userId, 'store-stale-a', 'direct match read should use the viewer user id for authoritative reload');
+        assert.equal(matchId, directReadMatchId, 'direct match read should reload the requested match id');
+        return cloneJson(directReadAuthoritativeMatch);
+      },
+    },
+  });
+  directReadStore.matches.set(directReadMatchId, directReadLocalMatch);
+  directReadStore.activeMatchByUserId.set('store-stale-a', directReadMatchId);
+  directReadStore.activeMatchByUserId.set('store-stale-b', directReadMatchId);
+  const directReadResult = await directReadStore.getMatchForUser('store-stale-a', directReadMatchId);
+  assert.equal(directReadAuthoritativeLoads, 1, 'direct match read should reload authoritative same-version-conflict state instead of stale local cache');
+  assert.equal(directReadResult?.stateView?.stateVersion, 4, 'direct match read should keep authoritative same-version state version');
+  assert.equal(directReadResult?.stateView?.self?.hp, 28, 'direct match read should return authoritative same-version combat state');
+  assert.equal(directReadStore.matches.get(directReadMatchId)?.state?.seats?.A?.hp, 28, 'direct match read should refresh local cache with authoritative same-version state');
+
   const heartbeatStaleMatchId = 'pvplm-store-stale-heartbeat';
   const heartbeatNow = 1700000010000;
   const heartbeatLocalMatch = makeStoreStaleMatch({
@@ -424,7 +492,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
         heartbeatAuthoritativeLoads += 1;
         assert.equal(userId, 'store-stale-a', 'heartbeat stale reload should use the viewer user id');
         assert.equal(matchId, heartbeatStaleMatchId, 'heartbeat stale reload should keep the match id');
-        return cloneJson(heartbeatAuthoritativeMatch);
+        return cloneJson(heartbeatAuthoritativeLoads === 1 ? heartbeatLocalMatch : heartbeatAuthoritativeMatch);
       },
       async saveMatchEvents() {
         throw new Error('heartbeat stale save should not append events after skipped persistence');
@@ -435,7 +503,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   heartbeatStore.activeMatchByUserId.set('store-stale-a', heartbeatStaleMatchId);
   heartbeatStore.activeMatchByUserId.set('store-stale-b', heartbeatStaleMatchId);
   const heartbeatResult = await heartbeatStore.recordHeartbeat('store-stale-a', heartbeatStaleMatchId);
-  assert.equal(heartbeatAuthoritativeLoads, 1, 'heartbeat stale save should reload the authoritative persisted match');
+  assert.equal(heartbeatAuthoritativeLoads, 2, 'heartbeat stale save should reload the authoritative persisted match after route-level pre-read');
   assert.equal(heartbeatResult?.stateView?.stateVersion, 5, 'heartbeat stale save should return authoritative stateView instead of the local stale view');
   assert.equal(heartbeatResult?.stateView?.opponent?.hp, 31, 'heartbeat stale save should return the latest persisted combat state');
   assert.equal(heartbeatStore.matches.get(heartbeatStaleMatchId)?.state?.stateVersion, 5, 'heartbeat stale reload should refresh the in-memory match cache');
@@ -470,7 +538,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
         heartbeatConflictAuthoritativeLoads += 1;
         assert.equal(userId, 'store-stale-a', 'heartbeat same-version conflict reload should use the viewer user id');
         assert.equal(matchId, heartbeatConflictMatchId, 'heartbeat same-version conflict reload should keep the match id');
-        return cloneJson(heartbeatConflictAuthoritativeMatch);
+        return cloneJson(heartbeatConflictAuthoritativeLoads === 1 ? heartbeatConflictMatch : heartbeatConflictAuthoritativeMatch);
       },
       async saveMatchEvents() {
         throw new Error('heartbeat same-version conflict should not append events after skipped persistence');
@@ -481,7 +549,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   heartbeatConflictStore.activeMatchByUserId.set('store-stale-a', heartbeatConflictMatchId);
   heartbeatConflictStore.activeMatchByUserId.set('store-stale-b', heartbeatConflictMatchId);
   const heartbeatConflictResult = await heartbeatConflictStore.recordHeartbeat('store-stale-a', heartbeatConflictMatchId);
-  assert.equal(heartbeatConflictAuthoritativeLoads, 1, 'heartbeat same-version conflict should reload the authoritative persisted match');
+  assert.equal(heartbeatConflictAuthoritativeLoads, 2, 'heartbeat same-version conflict should reload the authoritative persisted match after route-level pre-read');
   assert.equal(heartbeatConflictResult?.stateView?.stateVersion, 4, 'heartbeat same-version conflict should keep the authoritative state version');
   assert.equal(heartbeatConflictResult?.stateView?.self?.hp, 31, 'heartbeat same-version conflict should return authoritative stateView instead of local dirty view');
   assert.equal(heartbeatConflictStore.matches.get(heartbeatConflictMatchId)?.state?.seats?.A?.hp, 31, 'heartbeat same-version conflict reload should refresh the in-memory combat state');
@@ -517,7 +585,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
         intentAuthoritativeLoads += 1;
         assert.equal(userId, 'store-stale-a', 'intent stale reload should use the acting user id');
         assert.equal(matchId, intentStaleMatchId, 'intent stale reload should keep the match id');
-        return cloneJson(intentAuthoritativeMatch);
+        return cloneJson(intentAuthoritativeLoads === 1 ? intentLocalMatch : intentAuthoritativeMatch);
       },
       async saveMatchEvents() {
         throw new Error('intent stale save should not append events after skipped persistence');
@@ -533,7 +601,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     stateVersion: 1,
     payload: {},
   });
-  assert.equal(intentAuthoritativeLoads, 1, 'intent stale save should reload the authoritative persisted match');
+  assert.equal(intentAuthoritativeLoads, 2, 'intent stale save should reload the authoritative persisted match after route-level pre-read');
   assert.equal(intentResult?.result, 'sync_required', 'intent stale save should ask the client to sync instead of returning accepted local state');
   assert.equal(intentResult?.reason, 'stale_state_version', 'intent stale sync should expose stale_state_version as the reason');
   assert.deepEqual(intentResult?.events, [], 'intent stale sync should not replay local accepted events that failed persistence');
@@ -574,7 +642,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
         terminalAuthoritativeLoads += 1;
         assert.equal(userId, 'store-stale-a', 'terminal intent stale reload should use the acting user id');
         assert.equal(matchId, terminalIntentStaleMatchId, 'terminal intent stale reload should keep the match id');
-        return cloneJson(terminalAuthoritativeMatch);
+        return cloneJson(terminalAuthoritativeLoads === 1 ? terminalLocalMatch : terminalAuthoritativeMatch);
       },
       async saveMatchEvents() {
         throw new Error('terminal intent stale save should not append events after skipped persistence');
@@ -597,7 +665,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     payload: {},
   });
   assert.equal(terminalSettlementCalls, 0, 'terminal intent stale save should not settle the local dirty finished state');
-  assert.equal(terminalAuthoritativeLoads, 1, 'terminal intent stale save should reload the authoritative persisted match');
+  assert.equal(terminalAuthoritativeLoads, 2, 'terminal intent stale save should reload the authoritative persisted match after route-level pre-read');
   assert.equal(terminalIntentResult?.result, 'sync_required', 'terminal intent stale save should ask the client to sync instead of returning accepted surrender');
   assert.equal(terminalIntentResult?.reason, 'stale_state_version', 'terminal intent stale sync should expose stale_state_version as the reason');
   assert.deepEqual(terminalIntentResult?.events, [], 'terminal intent stale sync should not replay local surrender events that failed persistence');
@@ -657,7 +725,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
         settlementReportAuthoritativeLoads += 1;
         assert.equal(userId, 'store-stale-a', 'settlement report stale reload should use the acting user id');
         assert.equal(matchId, settlementReportStaleMatchId, 'settlement report stale reload should keep the match id');
-        return cloneJson(settlementReportAuthoritativeMatch);
+        return cloneJson(settlementReportAuthoritativeLoads === 1 ? settlementReportLocalMatch : settlementReportAuthoritativeMatch);
       },
       async saveMatchEvents() {},
     },
@@ -706,7 +774,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     stateVersion: 4,
     payload: {},
   });
-  assert.equal(settlementReportAuthoritativeLoads, 1, 'settlement report stale save should reload authoritative finished match for compensation');
+  assert.equal(settlementReportAuthoritativeLoads, 2, 'settlement report stale save should reload authoritative finished match for compensation after route-level pre-read');
   assert.equal(settlementReportCompensated, true, 'settlement report stale save should retry the report save against authoritative finished state');
   assert.equal(settlementReportResult?.result, 'accepted', 'settlement report compensation should keep the accepted terminal intent result');
   assert.equal(settlementReportResult?.state?.stateVersion, 6, 'settlement report compensation should return authoritative finished state');
@@ -766,7 +834,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
         settlementReportConflictLoads += 1;
         assert.equal(userId, 'store-stale-a', 'settlement report conflict reload should use the acting user id');
         assert.equal(matchId, settlementReportConflictMatchId, 'settlement report conflict reload should keep the match id');
-        return cloneJson(settlementReportConflictAuthoritativeMatch);
+        return cloneJson(settlementReportConflictLoads === 1 ? settlementReportConflictLocalMatch : settlementReportConflictAuthoritativeMatch);
       },
       async saveMatchEvents() {},
     },
@@ -791,7 +859,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     stateVersion: 4,
     payload: {},
   });
-  assert.equal(settlementReportConflictLoads, 1, 'settlement report conflict save should reload authoritative finished match for compensation');
+  assert.equal(settlementReportConflictLoads, 2, 'settlement report conflict save should reload authoritative finished match for compensation after route-level pre-read');
   assert.equal(settlementReportConflictCompensated, true, 'settlement report conflict save should retry the report save against authoritative finished state');
   assert.equal(settlementReportConflictResult?.result, 'accepted', 'settlement report conflict compensation should keep the accepted terminal intent result');
   assert.equal(settlementReportConflictResult?.stateView?.postMatchReview?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'settlement report conflict compensation should return the authoritative settlement report');
@@ -842,7 +910,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
         settlementReportMismatchLoads += 1;
         assert.equal(userId, 'store-stale-a', 'settlement report mismatch reload should use the acting user id');
         assert.equal(matchId, settlementReportMismatchMatchId, 'settlement report mismatch reload should keep the match id');
-        return cloneJson(settlementReportMismatchAuthoritativeMatch);
+        return cloneJson(settlementReportMismatchLoads === 1 ? settlementReportMismatchLocalMatch : settlementReportMismatchAuthoritativeMatch);
       },
       async saveMatchEvents() {},
     },
@@ -867,7 +935,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     stateVersion: 4,
     payload: {},
   });
-  assert.equal(settlementReportMismatchLoads, 2, 'settlement report mismatch should reload once for compensation check and once for stale sync result');
+  assert.equal(settlementReportMismatchLoads, 3, 'settlement report mismatch should reload for route-level pre-read, compensation check, and stale sync result');
   assert.equal(settlementReportMismatchResult?.result, 'sync_required', 'settlement report mismatch should ask the client to sync instead of accepting a dirty report');
   assert.equal(settlementReportMismatchResult?.stateView?.status, 'finished', 'settlement report mismatch should return authoritative finished status');
   assert.equal(settlementReportMismatchResult?.stateView?.postMatchReview?.settlementReport, undefined, 'settlement report mismatch should not attach a local report to authoritative state');

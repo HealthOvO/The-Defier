@@ -855,6 +855,7 @@ assert.ok(
   "message.type === 'intent'",
   'livePvpStore.recordHeartbeat',
   'livePvpStore.submitIntent',
+  "result.result === 'accepted' || (result.result === 'sync_required' && result.stateView)",
   'jwt.verify(token, getJwtSecret())',
   "socket.write('HTTP/1.1 401 Unauthorized",
 ].forEach((needle) => {
@@ -883,6 +884,10 @@ assert.ok(
   'WS heartbeat should return presence connection report',
   'WS intent should return accepted intent_result',
   'WS accepted intent should push state_sync to the opponent seat',
+  'WS sync_required intent should report sync_required to the sender',
+  'WS sync_required intent should also refresh the sender with authoritative state_sync',
+  'WS sync_required sender state_sync should match intent_result authoritative turn',
+  'WS sync_required intent should broadcast authoritative sync to the opponent seat',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveWsChecks.includes(needle),
@@ -1089,6 +1094,10 @@ assert.ok(
   'heartbeat stale save should reload the authoritative persisted match',
   'heartbeat stale save should return authoritative stateView instead of the local stale view',
   'heartbeat stale reload should refresh the in-memory match cache',
+  'current match read should reload newer authoritative persisted active match before serving cached state',
+  'current match read should refresh local cache with authoritative state',
+  'direct match read should reload authoritative same-version-conflict state instead of stale local cache',
+  'direct match read should refresh local cache with authoritative same-version state',
   'heartbeat same-version conflict should reload the authoritative persisted match',
   'heartbeat same-version conflict should return authoritative stateView instead of local dirty view',
   'heartbeat same-version conflict reload should refresh the in-memory combat state',
@@ -1285,6 +1294,8 @@ assert.ok(
   'return authoritative ? { ...authoritative, saveResult } : null',
   "result: 'sync_required'",
   'this.makeStaleStateSyncResult(authoritative, saveResult)',
+  'const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, activeMatchId)',
+  'match = authoritative && authoritative.match || null',
   'getFinishedOutcome(state)',
   'async compensateSettlementReportSaveLoss(match, saveResult)',
   'this.canApplySettlementReportCompensation(match, authoritativeMatch)',

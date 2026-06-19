@@ -2288,7 +2288,12 @@ class LivePvpStore {
             if (!hydrated) return null;
         }
         const activeMatchId = this.activeMatchByUserId.get(userId);
-        const match = this.matches.get(activeMatchId);
+        let match = this.matches.get(activeMatchId);
+        if (activeMatchId && this.persistence && typeof this.persistence.loadMatchForUser === 'function') {
+            const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, activeMatchId);
+            if (!authoritative) return null;
+            match = authoritative.match;
+        }
         if (!match) {
             this.activeMatchByUserId.delete(userId);
             return null;
@@ -2332,17 +2337,9 @@ class LivePvpStore {
 
     async getMatchForUser(userId, matchId) {
         let match = this.matches.get(matchId);
-        if (!match && this.persistence && typeof this.persistence.loadMatchForUser === 'function') {
-            const persisted = await this.persistence.loadMatchForUser(userId, matchId);
-            if (persisted) {
-                match = persisted;
-                this.matches.set(match.matchId, match);
-                if (match.state && !this.isTerminalStatus(match.state.status)) {
-                    Object.keys(match.seatsByUserId).forEach(participantUserId => {
-                        this.activeMatchByUserId.set(participantUserId, match.matchId);
-                    });
-                }
-            }
+        if (this.persistence && typeof this.persistence.loadMatchForUser === 'function') {
+            const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, matchId);
+            match = authoritative && authoritative.match || null;
         }
         if (!match && this.persistence && typeof this.persistence.loadActiveMatchForUser === 'function') {
             const hydrated = await this.hydrateActiveMatchForUser(userId);

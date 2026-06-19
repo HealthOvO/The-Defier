@@ -1,5 +1,22 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8N live PVP route-level 读路径权威回源与 WS sync_required fanout
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 的 `getActiveMatchForUser()` / `getMatchForUser()` 在本地 `matches` cache 命中时也会先用 `loadMatchForUser()` 回源 authoritative persisted match，再继续 timeout / release / stateView 投影。
+    - `server/pvp-live/live-ws.js` 在 `submitIntent()` 返回 `sync_required` 且带权威 `stateView` 时，也会触发 `broadcastState()`；发起方和对手都会收到同一权威 `state_sync`，不必等下一次 heartbeat。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 新增 current/direct read 红测：更高版本权威 active match 和同版本不同内容权威 state 都必须覆盖本地 dirty cache；同时把旧写输测试改为“route pre-read + read-after-write-loss”合同，保留读后竞争窗口。
+    - `tests/sanity_pvp_live_ws_checks.cjs` 新增 fake WS `sync_required` 场景：sender 收到 `intent_result=sync_required` 后，sender 和 opponent 都必须收到权威 `state_sync`，且 sender 的 `state_sync` turn 与 `intent_result.stateView` 一致。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定 S8N read-path rehydrate、WS sync_required fanout 和实现 marker。
+    - `docs/designer_major_upgrade_implementation_input_v1.md` 同步 S8N 口径：只覆盖 route-level 读路径权威回源和单进程 WS sync_required fanout，不代表 Redis / 多实例强一致、完整 active revision/CAS、跨进程 WS fanout、生产 smoke 或线上部署。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_persistence_checks.cjs` 在实现前失败于 `current match read should reload newer authoritative persisted active match before serving cached state`，实际 load 次数为 0。
+    - 红测：`node tests/sanity_pvp_live_ws_checks.cjs` 在实现前失败于 `ws message timeout: sync_required broadcast state_sync B`。
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ws_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - live PVP 已从“写输后被动回源”继续推进到“读路径先对齐权威 state，再执行后续动作”：HTTP current/direct/replay/heartbeat/intent 和 WS state_sync 都更难把旧进程 dirty `stateView` 发给玩家；WS `sync_required` 也不再只通知发起方。该切片仍不是 Redis / 多实例强一致队列、完整 active match revision/CAS、跨进程 WS fanout、生产 smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8M live PVP settlement report 二次保存写输补偿
   - 本轮完成
     - `server/pvp-live/live-store.js` 新增 terminal outcome 提取和 settlement report save-loss compensation：`completeFinishedMatch()` 在第一次 finished save 成功、`settleMatch()` 已执行、第二次附带 `settlementReport` 的 `saveMatch()` 写输后，会回读 authoritative persisted finished match。
