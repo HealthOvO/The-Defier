@@ -77,6 +77,17 @@ async function insertStaleWaitingQueueRow({ queueTicket, user, identitySlot, loa
   );
 }
 
+async function insertQueueClaimUser({ userId, username }) {
+  const now = Date.now();
+  await dbRun(
+    `INSERT INTO users (id, username, password_hash, created_at, global_updated_at)
+     VALUES (?, ?, 'pvp-live-queue-claim-test', ?, 0)
+     ON CONFLICT(id) DO UPDATE SET
+      username = excluded.username`,
+    [userId, username, now],
+  );
+}
+
 async function setRank(user, score, division = '玄阶') {
   const now = Date.now();
   await dbRun(
@@ -850,6 +861,81 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     });
     assert.equal(pollASecondRead.status, 404, 'restarted waiting queue matched ticket should be consumed after first read');
   });
+
+  const queueClaimUserA = {
+    userId: `queue-claim-a-${process.pid}`,
+    username: `queue_claim_a_${process.pid}`,
+  };
+  const queueClaimUserB = {
+    userId: `queue-claim-b-${process.pid}`,
+    username: `queue_claim_b_${process.pid}`,
+  };
+  const queueClaimTicketA = `pvplq-atomic-pair-a-${process.pid}`;
+  const queueClaimTicketB = `pvplq-atomic-pair-b-${process.pid}`;
+  await insertQueueClaimUser(queueClaimUserA);
+  await insertQueueClaimUser(queueClaimUserB);
+  await insertStaleWaitingQueueRow({
+    queueTicket: queueClaimTicketA,
+    user: queueClaimUserA,
+    identitySlot: 'queue-claim-a',
+    loadoutHash: `queue-claim-a-${process.pid}`,
+  });
+  const duplicatePairClaim = await makeLivePvpPersistenceForTest().claimQueueEntries([
+    { queueTicket: queueClaimTicketA, userId: queueClaimUserA.userId },
+    { queueTicket: queueClaimTicketA, userId: queueClaimUserA.userId },
+  ]);
+  assert.equal(duplicatePairClaim.claimed, false, 'SQLite queue pair claim should reject duplicate ticket input');
+  assert.equal(duplicatePairClaim.claimedCount, 0, 'SQLite queue pair claim should not delete duplicate ticket input');
+  assert.ok(
+    await dbGet('SELECT queue_ticket FROM pvp_live_queue_tickets WHERE queue_ticket = ?', [queueClaimTicketA]),
+    'SQLite queue pair claim should keep the ticket when duplicate input is rejected',
+  );
+  const missingPairClaim = await makeLivePvpPersistenceForTest().claimQueueEntries([
+    { queueTicket: queueClaimTicketA, userId: queueClaimUserA.userId },
+    { queueTicket: `pvplq-atomic-pair-missing-${process.pid}`, userId: queueClaimUserB.userId },
+  ]);
+  assert.equal(missingPairClaim.claimed, false, 'SQLite queue pair claim should fail when either ticket is missing');
+  assert.equal(missingPairClaim.claimedCount, 0, 'SQLite queue pair claim should not partially claim when either ticket is missing');
+  assert.ok(
+    await dbGet('SELECT queue_ticket FROM pvp_live_queue_tickets WHERE queue_ticket = ?', [queueClaimTicketA]),
+    'SQLite queue pair claim should keep the first ticket when the pair is incomplete',
+  );
+  await insertStaleWaitingQueueRow({
+    queueTicket: queueClaimTicketB,
+    user: queueClaimUserB,
+    identitySlot: 'queue-claim-b',
+    loadoutHash: `queue-claim-b-${process.pid}`,
+  });
+  const mismatchedPairClaim = await makeLivePvpPersistenceForTest().claimQueueEntries([
+    { queueTicket: queueClaimTicketA, userId: queueClaimUserA.userId },
+    { queueTicket: queueClaimTicketB, userId: queueClaimUserA.userId },
+  ]);
+  assert.equal(mismatchedPairClaim.claimed, false, 'SQLite queue pair claim should reject userId mismatch');
+  assert.equal(mismatchedPairClaim.claimedCount, 0, 'SQLite queue pair claim should not partially delete on userId mismatch');
+  assert.ok(
+    await dbGet('SELECT queue_ticket FROM pvp_live_queue_tickets WHERE queue_ticket = ?', [queueClaimTicketA]),
+    'SQLite queue pair claim should keep the first ticket when the second userId mismatches',
+  );
+  assert.ok(
+    await dbGet('SELECT queue_ticket FROM pvp_live_queue_tickets WHERE queue_ticket = ?', [queueClaimTicketB]),
+    'SQLite queue pair claim should keep the second ticket when its userId mismatches',
+  );
+  const acceptedPairClaim = await makeLivePvpPersistenceForTest().claimQueueEntries([
+    { queueTicket: queueClaimTicketA, userId: queueClaimUserA.userId },
+    { queueTicket: queueClaimTicketB, userId: queueClaimUserB.userId },
+  ]);
+  assert.equal(acceptedPairClaim.claimed, true, 'SQLite queue pair claim should atomically claim both waiting tickets');
+  assert.equal(acceptedPairClaim.claimedCount, 2, 'SQLite queue pair claim should report both claimed tickets');
+  assert.equal(
+    await dbGet('SELECT queue_ticket FROM pvp_live_queue_tickets WHERE queue_ticket = ?', [queueClaimTicketA]),
+    null,
+    'SQLite queue pair claim should remove the first ticket after successful pair claim',
+  );
+  assert.equal(
+    await dbGet('SELECT queue_ticket FROM pvp_live_queue_tickets WHERE queue_ticket = ?', [queueClaimTicketB]),
+    null,
+    'SQLite queue pair claim should remove the second ticket after successful pair claim',
+  );
 
   await withServer(async () => {
     rankedFarUser = await registerUser('live_ranked_restart_far');

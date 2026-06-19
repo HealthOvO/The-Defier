@@ -345,6 +345,48 @@ function makeSqliteLivePvpPersistence() {
             if (!ticket) return;
             await dbRun('DELETE FROM pvp_live_queue_tickets WHERE queue_ticket = ?', [ticket]);
         },
+        async claimQueueEntry(queueTicket, userId) {
+            const ticket = String(queueTicket || '').trim();
+            const id = String(userId || '').trim();
+            if (!ticket || !id) return { claimed: false };
+            const result = await dbRun(
+                'DELETE FROM pvp_live_queue_tickets WHERE queue_ticket = ? AND user_id = ?',
+                [ticket, id]
+            );
+            return { claimed: !!(result && result.changes > 0) };
+        },
+        async claimQueueEntries(queueClaims) {
+            const claims = (Array.isArray(queueClaims) ? queueClaims : []).map(claim => ({
+                queueTicket: String(claim && claim.queueTicket || '').trim(),
+                userId: String(claim && claim.userId || '').trim()
+            }));
+            if (claims.length === 0 || claims.some(claim => !claim.queueTicket || !claim.userId)) {
+                return { claimed: false, claimedCount: 0 };
+            }
+            const uniqueTickets = new Set(claims.map(claim => claim.queueTicket));
+            if (uniqueTickets.size !== claims.length) return { claimed: false, claimedCount: 0 };
+            const valuesSql = claims.map(() => '(?, ?)').join(', ');
+            const claimParams = claims.flatMap(claim => [claim.queueTicket, claim.userId]);
+            const result = await dbRun(
+                `WITH requested(queue_ticket, user_id) AS (VALUES ${valuesSql}),
+                    claimable AS MATERIALIZED (
+                        SELECT q.queue_ticket
+                          FROM pvp_live_queue_tickets q
+                          JOIN requested r
+                            ON q.queue_ticket = r.queue_ticket
+                           AND q.user_id = r.user_id
+                    ),
+                    claim_count AS MATERIALIZED (
+                        SELECT COUNT(*) AS total FROM claimable
+                    )
+                 DELETE FROM pvp_live_queue_tickets
+                  WHERE queue_ticket IN (SELECT queue_ticket FROM claimable)
+                    AND (SELECT total FROM claim_count) = ?`,
+                [...claimParams, claims.length]
+            );
+            const claimedCount = Math.max(0, Math.floor(Number(result && result.changes) || 0));
+            return { claimed: claimedCount === claims.length, claimedCount };
+        },
         async deleteQueueEntryForUser(userId) {
             const id = String(userId || '').trim();
             if (!id) return;

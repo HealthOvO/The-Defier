@@ -17,11 +17,25 @@ function makeLoadout(identitySlot, pattern) {
   };
 }
 
+function makeRatingProvider(scoresByUserId) {
+  return {
+    async getLivePvpRating(userId) {
+      const score = Number(scoresByUserId[String(userId || '')]);
+      return {
+        score: Number.isFinite(score) ? score : 1000,
+        division: '玄阶',
+        seasonId: 's1-genesis',
+      };
+    },
+  };
+}
+
 function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
   const queueEntries = new Map();
   const queueHandoffs = new Map();
   const matches = new Map();
   const activeStatuses = new Set(['setup', 'active']);
+  const claimHooks = new Map();
 
   return {
     async saveQueueEntry(queueEntry) {
@@ -57,6 +71,45 @@ function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
         .sort((left, right) => left.createdAt - right.createdAt)
         .map(clone);
     },
+    async claimQueueEntry(queueTicket, userId) {
+      const ticket = String(queueTicket || '');
+      const id = String(userId || '');
+      const entry = queueEntries.get(ticket) || null;
+      if (!entry || !entry.player || entry.player.userId !== id) {
+        return { claimed: false };
+      }
+      queueEntries.delete(ticket);
+      const hook = claimHooks.get(ticket);
+      if (hook) {
+        claimHooks.delete(ticket);
+        await hook({ queueTicket: ticket, userId: id, queueEntry: clone(entry) });
+      }
+      return { claimed: true, queueEntry: clone(entry) };
+    },
+    async claimQueueEntries(queueClaims) {
+      const claims = (Array.isArray(queueClaims) ? queueClaims : []).map((claim) => ({
+        queueTicket: String(claim && claim.queueTicket || ''),
+        userId: String(claim && claim.userId || ''),
+      }));
+      if (claims.length === 0 || claims.some(claim => !claim.queueTicket || !claim.userId)) {
+        return { claimed: false, claimedCount: 0 };
+      }
+      const uniqueTickets = new Set(claims.map(claim => claim.queueTicket));
+      if (uniqueTickets.size !== claims.length) return { claimed: false, claimedCount: 0 };
+      const entries = claims.map((claim) => queueEntries.get(claim.queueTicket) || null);
+      const allPresent = entries.every((entry, index) => entry
+        && entry.player
+        && entry.player.userId === claims[index].userId);
+      if (!allPresent) return { claimed: false, claimedCount: 0 };
+      claims.forEach(claim => queueEntries.delete(claim.queueTicket));
+      for (let index = 0; index < claims.length; index += 1) {
+        const hook = claimHooks.get(claims[index].queueTicket);
+        if (!hook) continue;
+        claimHooks.delete(claims[index].queueTicket);
+        await hook({ queueTicket: claims[index].queueTicket, userId: claims[index].userId, queueEntry: clone(entries[index]) });
+      }
+      return { claimed: true, claimedCount: claims.length, queueEntries: entries.map(clone) };
+    },
     async saveMatch(match) {
       matches.set(match.matchId, clone(match));
     },
@@ -81,6 +134,9 @@ function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
     },
     inspectQueueTickets() {
       return Array.from(queueEntries.keys());
+    },
+    setClaimHook(queueTicket, hook) {
+      claimHooks.set(String(queueTicket || ''), hook);
     },
   };
 }
@@ -201,6 +257,98 @@ function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
     laggingPoll?.status,
     'matched',
     'stateless process should use the persisted handoff even when queue-row deletion lags behind match creation',
+  );
+
+  const staleClaimPersistence = makeSharedPersistence();
+  const staleClaimStoreA = createLivePvpStore({ now: () => now, persistence: staleClaimPersistence });
+  const staleClaimStoreB = createLivePvpStore({ now: () => now, persistence: staleClaimPersistence });
+  const staleClaimStoreC = createLivePvpStore({ now: () => now, persistence: staleClaimPersistence });
+  const staleClaimJoinA = await staleClaimStoreA.joinQueue({
+    userId: 'cross-process-stale-claim-a',
+    displayName: '抢占甲',
+    loadout: makeLoadout('sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']),
+  });
+  assert.equal(staleClaimJoinA.status, 'waiting', 'stale claim first player should enter queue');
+  await staleClaimStoreC.hydrateWaitingQueueEntriesExceptUser('cross-process-stale-claim-c');
+  const staleClaimJoinB = await staleClaimStoreB.joinQueue({
+    userId: 'cross-process-stale-claim-b',
+    displayName: '抢占乙',
+    loadout: makeLoadout('shield', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+  });
+  assert.equal(staleClaimJoinB.status, 'matched', 'stale claim second process should create the first match');
+  const staleClaimJoinC = await staleClaimStoreC.joinQueue({
+    userId: 'cross-process-stale-claim-c',
+    displayName: '抢占丙',
+    loadout: makeLoadout('mirror', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+  });
+  assert.equal(
+    staleClaimJoinC.status,
+    'waiting',
+    'stale local queue candidate should not create a duplicate match after atomic claim fails',
+  );
+  assert.notEqual(
+    staleClaimJoinC.matchId,
+    staleClaimJoinB.matchId,
+    'stale local queue candidate should not reuse the consumed opponent ticket for a second match',
+  );
+
+  const pairClaimPersistence = makeSharedPersistence();
+  const pairClaimRatings = makeRatingProvider({
+    'cross-process-pair-claim-a': 1250,
+    'cross-process-pair-claim-b': 1000,
+    'cross-process-pair-claim-c': 1260,
+  });
+  const pairStoreOptions = {
+    now: () => now,
+    persistence: pairClaimPersistence,
+    ratingProvider: pairClaimRatings,
+    longWaitThresholdMs: 1000,
+  };
+  const pairClaimStoreA = createLivePvpStore(pairStoreOptions);
+  const pairClaimStoreB = createLivePvpStore(pairStoreOptions);
+  const pairClaimStoreC = createLivePvpStore(pairStoreOptions);
+  const pairJoinA = await pairClaimStoreA.joinQueue({
+    userId: 'cross-process-pair-claim-a',
+    displayName: '双票甲',
+    loadout: makeLoadout('sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']),
+  });
+  assert.equal(pairJoinA.status, 'waiting', 'pair claim first waiting player should queue without wide consent');
+  now += 3000;
+  const pairJoinB = await pairClaimStoreB.joinQueue({
+    userId: 'cross-process-pair-claim-b',
+    displayName: '双票乙',
+    loadout: makeLoadout('shield', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+    wideMatchConsent: true,
+  });
+  assert.equal(pairJoinB.status, 'waiting', 'pair claim wide opponent should wait until both sides consent');
+  assert.ok(pairJoinB.queueTicket, 'pair claim wide opponent should keep a queue ticket');
+  await pairClaimStoreC.hydrateWaitingQueueEntriesExceptUser('cross-process-pair-claim-c');
+  now += 3000;
+  let interleavedPairJoinC = null;
+  pairClaimPersistence.setClaimHook(pairJoinA.queueTicket, async () => {
+    interleavedPairJoinC = await pairClaimStoreC.joinQueue({
+      userId: 'cross-process-pair-claim-c',
+      displayName: '双票丙',
+      loadout: makeLoadout('mirror', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+    });
+  });
+  const pairJoinAConsent = await pairClaimStoreA.joinQueue({
+    userId: 'cross-process-pair-claim-a',
+    displayName: '双票甲',
+    loadout: makeLoadout('sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']),
+    wideMatchConsent: true,
+  });
+  assert.equal(pairJoinAConsent.status, 'matched', 'pair claim consenting waiting player should match the accepted wide opponent');
+  assert.ok(interleavedPairJoinC, 'pair claim hook should interleave the third process before match creation');
+  assert.equal(
+    interleavedPairJoinC.status,
+    'waiting',
+    'existing waiting ticket should be claimed atomically before match creation',
+  );
+  assert.notEqual(
+    interleavedPairJoinC.matchId,
+    pairJoinAConsent.matchId,
+    'existing waiting ticket should not appear in two live matches after pair claim',
   );
 
   console.log('sanity_pvp_live_cross_process_queue_checks passed');

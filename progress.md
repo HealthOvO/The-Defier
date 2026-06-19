@@ -1,5 +1,19 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8L live PVP SQLite queue ticket atomic claim / duplicate-match prevention
+  - 本轮完成
+    - `server/pvp-live/live-persistence.js` 新增 `claimQueueEntry(queueTicket, userId)` 和 `claimQueueEntries(queueClaims)`：单票据用 SQLite 条件删除，双票据 pair claim 用单条 CTE `DELETE`，只有两张 waiting ticket 都存在且 userId 匹配时才一起删除。
+    - `server/pvp-live/live-store.js` 在 `joinQueue()` 创建 match 前先 claim waiting ticket：新入队 requester 走对手单票据 claim；已有等待者二次确认宽分差时走自己 + 对手双票据 pair claim。任一 claim 失败都回到 waiting，不再用 stale local candidate 创建 duplicate live match。
+    - `tests/sanity_pvp_live_cross_process_queue_checks.cjs` 新增两类 stale candidate 回归：第三进程缓存 A 后不得复用已被第二进程消费的 A；已有等待者 A 二次确认宽分差时，也不能在 A 被另一个进程抢先撮合后继续用 A 创建第二场 match。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 新增 SQLite pair claim 直接门禁：缺任意一张 ticket 时 `claimed=false / claimedCount=0` 且不删除现有票据；两张齐全时必须 `claimed=true / claimedCount=2` 并同时删除。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定 atomic claim / pair claim 测试文案、persistence claim SQL 和 store claim-before-create marker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs` 在实现前失败于 `stale local queue candidate should not create a duplicate match after atomic claim fails`，实际返回 `matched`。
+    - 红测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs` 在 pair claim 实现前失败于 `existing waiting ticket should be claimed atomically before match creation`，实际返回 `matched`。
+    - 绿测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs`
+  - 当前结论
+    - live PVP 公共队列已从 handoff 恢复继续推进到 SQLite 单库 queue ticket atomic claim / duplicate-match prevention：共享 SQLite 下同一个 waiting ticket 只能被一个撮合进程消费，已有等待者重新撮合时两张 waiting ticket 必须一起 claim 成功。该切片仍不是 Redis / 多实例强一致队列、跨进程 WS fanout、生产 smoke、线上部署或完整正式封板。
+
 - 2026-06-20: V10-S8K live PVP active match same-version conflict guard
   - 本轮完成
     - `server/pvp-live/live-persistence.js` 的 active match 保存现在会读取 persisted `state_json` 与 `state_version` 快照；当 incoming active state 与权威行处在同一 `stateVersion` 但 `state_json` 内容不同，返回 `saved=false / skipped=true / reason=conflicting_state_version`，不再静默覆盖权威 active match。

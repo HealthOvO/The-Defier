@@ -458,6 +458,45 @@ class LivePvpStore {
         await this.persistence.deleteQueueEntry(queueTicket);
     }
 
+    async claimQueueEntry(queueEntry) {
+        if (!queueEntry || !queueEntry.queueTicket || !queueEntry.player || !queueEntry.player.userId) {
+            return { claimed: false };
+        }
+        this.waitingQueue = this.waitingQueue.filter(entry => entry !== queueEntry);
+        this.queueTickets.delete(queueEntry.queueTicket);
+        if (!this.persistence || typeof this.persistence.claimQueueEntry !== 'function') {
+            return { claimed: true, queueEntry };
+        }
+        const result = await this.persistence.claimQueueEntry(queueEntry.queueTicket, queueEntry.player.userId);
+        if (result && result.claimed) return { claimed: true, queueEntry };
+        return { claimed: false };
+    }
+
+    async claimQueueEntries(queueEntries) {
+        const entries = Array.isArray(queueEntries) ? queueEntries : [];
+        const claims = entries.map(entry => ({
+            queueEntry: entry,
+            queueTicket: String(entry && entry.queueTicket || '').trim(),
+            userId: String(entry && entry.player && entry.player.userId || '').trim()
+        }));
+        if (claims.length === 0 || claims.some(claim => !claim.queueTicket || !claim.userId)) {
+            return { claimed: false };
+        }
+        const uniqueTickets = new Set(claims.map(claim => claim.queueTicket));
+        if (uniqueTickets.size !== claims.length) return { claimed: false };
+        this.waitingQueue = this.waitingQueue.filter(entry => !entries.includes(entry));
+        claims.forEach(claim => this.queueTickets.delete(claim.queueTicket));
+        if (!this.persistence || typeof this.persistence.claimQueueEntries !== 'function') {
+            return { claimed: true, queueEntries: entries };
+        }
+        const result = await this.persistence.claimQueueEntries(claims.map(claim => ({
+            queueTicket: claim.queueTicket,
+            userId: claim.userId
+        })));
+        if (result && result.claimed) return { claimed: true, queueEntries: entries };
+        return { claimed: false };
+    }
+
     async deleteQueueEntryForUser(userId) {
         const id = String(userId || '').trim();
         if (!id) return;
@@ -1013,9 +1052,10 @@ class LivePvpStore {
                 if (selectedOpponent && selectedOpponent.index >= 0) {
                     const opponentTicket = this.waitingQueue[selectedOpponent.index];
                     if (opponentTicket && opponentTicket.player && opponentTicket.player.userId !== identity.userId) {
-                        this.waitingQueue = this.waitingQueue.filter(ticket => ticket !== opponentTicket && ticket !== existingTicket);
-                        this.queueTickets.delete(opponentTicket.queueTicket);
-                        this.queueTickets.delete(existingTicket.queueTicket);
+                        const pairClaim = await this.claimQueueEntries([existingTicket, opponentTicket]);
+                        if (!pairClaim.claimed) {
+                            return this.makeWaitingQueueResult(existingTicket);
+                        }
                         const match = await this.createMatch(opponentTicket.player, existingTicket.player, selectedOpponent.qualityInput);
                         await this.saveMatchedQueueHandoff(opponentTicket, match);
                         await this.saveMatchedQueueHandoff(existingTicket, match);
@@ -1041,15 +1081,16 @@ class LivePvpStore {
         await this.hydrateWaitingQueueEntriesExceptUser(identity.userId);
         const selectedOpponent = await this.selectQueueOpponent(requesterEntry);
         if (selectedOpponent && selectedOpponent.index >= 0) {
-            const [opponentTicket] = this.waitingQueue.splice(selectedOpponent.index, 1);
-            this.queueTickets.delete(opponentTicket.queueTicket);
-            const match = await this.createMatch(opponentTicket.player, player, selectedOpponent.qualityInput);
-            await this.saveMatchedQueueHandoff(opponentTicket, match);
-            await this.deleteQueueEntry(opponentTicket.queueTicket);
-            await this.deleteQueueEntryForUser(player.userId);
-            const opponentResult = this.makeMatchedQueueResult(match, opponentTicket.player.userId);
-            this.pendingQueueResults.set(opponentTicket.queueTicket, opponentResult);
-            return this.makeMatchedQueueResult(match, player.userId);
+            const opponentTicket = this.waitingQueue[selectedOpponent.index];
+            const opponentClaim = await this.claimQueueEntry(opponentTicket);
+            if (opponentClaim.claimed) {
+                const match = await this.createMatch(opponentTicket.player, player, selectedOpponent.qualityInput);
+                await this.saveMatchedQueueHandoff(opponentTicket, match);
+                await this.deleteQueueEntryForUser(player.userId);
+                const opponentResult = this.makeMatchedQueueResult(match, opponentTicket.player.userId);
+                this.pendingQueueResults.set(opponentTicket.queueTicket, opponentResult);
+                return this.makeMatchedQueueResult(match, player.userId);
+            }
         }
 
         const queueTicket = makeId('pvplq');
