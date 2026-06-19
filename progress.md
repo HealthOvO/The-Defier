@@ -1,5 +1,20 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8F live PVP active match 低版本晚写保护
+  - 本轮完成
+    - `server/db/database.js` 为 `pvp_live_matches` 增加 `state_version INTEGER NOT NULL DEFAULT 0`，让 active match 的权威 revision 不再只藏在 `state_json` 里。
+    - `server/pvp-live/live-persistence.js` 的 `saveMatch()` 新增持久化 revision 读取：先取 `pvp_live_matches.state_version` 和 `state_json.stateVersion` 的较大值，低于现有权威版本的晚到保存直接跳过；SQLite upsert 也加上 `WHERE excluded.state_version >= pvp_live_matches.state_version`。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 新增真实 DB stale-save 场景：正常 active match 打出一手后，用低一版 `stateVersion` 和被改坏的 HP 晚到保存，必须保留最新 `stateVersion` / HP。
+    - 同一测试补迁移兜底：模拟老库新增列后 `state_version=0` 但 `state_json.stateVersion` 已是高版本，低版本晚写仍不得覆盖。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定 `state_version` schema、迁移兜底、保存条件和 stale-save 行为断言，避免后续退回普通 upsert。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_persistence_checks.cjs` 在实现前失败于 `persistence CAS should reject stale active match saves with lower stateVersion`，实际 DB 回退到旧 `stateVersion=3`。
+    - 红测：追加迁移兜底断言后，同一命令失败于 `persistence CAS should derive existing revision from state_json for migrated rows`。
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - live PVP active match 持久化已能挡住低版本旧进程晚写，降低多进程 / 重启恢复下双方看到旧局面的风险。该切片仍不是完整 active match revision/CAS：两个进程基于同一 base revision 生成同一新 `stateVersion` 的同版本双写、写输后的 store rehydrate、DB 原子撮合 / 并发 claim 防重、跨进程 WS fanout、生产 smoke 和线上部署仍未封板。
+
 - 2026-06-20: V10-S8E live PVP 真实后端长等待 smoke
   - 本轮完成
     - `server/routes/pvp-live.js` 新增 `PVP_LIVE_LONG_WAIT_THRESHOLD_MS` 运行配置透传，复用 `LivePvpStore.longWaitThresholdMs` 的既有构造参数；测试环境可把 long-wait 阈值压到 1 秒，生产默认仍是 120 秒。

@@ -42,6 +42,12 @@ function dbGet(sql, params = []) {
   });
 }
 
+function makeLivePvpPersistenceForTest() {
+  process.env.DEFIER_DB_PATH = DB_PATH;
+  const { makeSqliteLivePvpPersistence } = require('../server/pvp-live/live-persistence');
+  return makeSqliteLivePvpPersistence();
+}
+
 async function insertStaleWaitingQueueRow({ queueTicket, user, identitySlot, loadoutHash }) {
   const loadoutSnapshot = {
     loadoutHash,
@@ -566,8 +572,66 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   assert.equal(persistedConnection.reportVersion, 'pvp-live-connection-v1', 'persisted connection timeline should keep report version');
   assert.ok(persistedConnection.seats && persistedConnection.seats.B && persistedConnection.seats.B.lastHeartbeatAt > 0, 'persisted connection timeline should keep seat B heartbeat');
 
-  const activeMatchRow = await dbGet('SELECT state_json, created_at FROM pvp_live_matches WHERE match_id = ?', [matchId]);
+  const activeMatchRow = await dbGet('SELECT state_json, state_version, created_at FROM pvp_live_matches WHERE match_id = ?', [matchId]);
   assert.ok(activeMatchRow && activeMatchRow.state_json, 'active live match state should be persisted before restart');
+  const latestActiveState = JSON.parse(activeMatchRow.state_json);
+  assert.equal(latestActiveState.stateVersion, stateVersionAfterIntent, 'active match row should contain latest state version before stale-save CAS check');
+  assert.equal(Number(activeMatchRow.state_version), stateVersionAfterIntent, 'active match row should persist state_version beside state_json');
+  const staleActiveState = JSON.parse(JSON.stringify(latestActiveState));
+  staleActiveState.stateVersion = Math.max(0, latestActiveState.stateVersion - 1);
+  if (staleActiveState.seats && staleActiveState.seats.B) {
+    staleActiveState.seats.B.hp = Math.min(50, opponentHpAfterIntent + 1);
+  }
+  await makeLivePvpPersistenceForTest().saveMatch({
+    matchId,
+    createdAt: Number(activeMatchRow.created_at) || Date.now(),
+    updatedAt: Date.now() + 1,
+    state: staleActiveState,
+    connection: {},
+    seatsByUserId: {
+      [userA.userId]: 'A',
+      [userB.userId]: 'B',
+    },
+  });
+  const rowAfterStaleSave = await dbGet('SELECT state_json FROM pvp_live_matches WHERE match_id = ?', [matchId]);
+  const stateAfterStaleSave = JSON.parse(rowAfterStaleSave.state_json);
+  assert.equal(
+    stateAfterStaleSave.stateVersion,
+    stateVersionAfterIntent,
+    'persistence CAS should reject stale active match saves with lower stateVersion',
+  );
+  assert.equal(
+    stateAfterStaleSave.seats.B.hp,
+    opponentHpAfterIntent,
+    'persistence CAS should keep the latest combat state when a stale process saves later',
+  );
+  await dbRun(
+    'UPDATE pvp_live_matches SET state_version = 0, state_json = ? WHERE match_id = ?',
+    [JSON.stringify(latestActiveState), matchId],
+  );
+  await makeLivePvpPersistenceForTest().saveMatch({
+    matchId,
+    createdAt: Number(activeMatchRow.created_at) || Date.now(),
+    updatedAt: Date.now() + 2,
+    state: staleActiveState,
+    connection: {},
+    seatsByUserId: {
+      [userA.userId]: 'A',
+      [userB.userId]: 'B',
+    },
+  });
+  const migratedRowAfterStaleSave = await dbGet('SELECT state_json FROM pvp_live_matches WHERE match_id = ?', [matchId]);
+  const migratedStateAfterStaleSave = JSON.parse(migratedRowAfterStaleSave.state_json);
+  assert.equal(
+    migratedStateAfterStaleSave.stateVersion,
+    stateVersionAfterIntent,
+    'persistence CAS should derive existing revision from state_json for migrated rows',
+  );
+  assert.equal(
+    migratedStateAfterStaleSave.seats.B.hp,
+    opponentHpAfterIntent,
+    'migrated active match rows should keep latest combat state when state_version backfill is still zero',
+  );
   const corruptedActiveState = JSON.parse(activeMatchRow.state_json);
   delete corruptedActiveState.turnTiming;
   if (corruptedActiveState.setup) delete corruptedActiveState.setup.battleStartedAt;

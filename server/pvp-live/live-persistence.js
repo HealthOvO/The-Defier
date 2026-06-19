@@ -61,6 +61,24 @@ function serializeConnection(connection) {
     return JSON.stringify(connection || {});
 }
 
+function getStateVersion(state) {
+    return Math.max(0, Math.floor(Number(state && state.stateVersion) || 0));
+}
+
+async function loadPersistedMatchStateVersion(matchId) {
+    const id = String(matchId || '').trim();
+    if (!id) return null;
+    const row = await dbGet(
+        'SELECT state_version, state_json FROM pvp_live_matches WHERE match_id = ? LIMIT 1',
+        [id]
+    );
+    if (!row) return null;
+    return Math.max(
+        Math.max(0, Math.floor(Number(row.state_version) || 0)),
+        getStateVersion(parseState(row))
+    );
+}
+
 const PUBLIC_EVENT_DATA_KEYS = Object.freeze({
     mulligan_completed: ['seatId', 'count'],
     player_ready: ['seatId'],
@@ -418,26 +436,32 @@ function makeSqliteLivePvpPersistence() {
             const seatB = match.state.seats.B;
             if (!seatA || !seatB || !seatA.userId || !seatB.userId) return;
             const status = String(match.state.status || 'active');
+            const stateVersion = getStateVersion(match.state);
+            const persistedStateVersion = await loadPersistedMatchStateVersion(match.matchId);
+            if (persistedStateVersion !== null && stateVersion < persistedStateVersion) return;
             const now = Math.max(0, Math.floor(Number(match.updatedAt) || Date.now()));
             const createdAt = Math.max(0, Math.floor(Number(match.createdAt) || now));
             const finishedAt = status === 'finished' || status === 'invalidated' ? now : 0;
             await dbRun(
                 `INSERT INTO pvp_live_matches
-                    (match_id, status, seat_a_user_id, seat_b_user_id, state_json, connection_json, created_at, updated_at, finished_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (match_id, status, seat_a_user_id, seat_b_user_id, state_version, state_json, connection_json, created_at, updated_at, finished_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(match_id) DO UPDATE SET
                     status = excluded.status,
                     seat_a_user_id = excluded.seat_a_user_id,
                     seat_b_user_id = excluded.seat_b_user_id,
+                    state_version = excluded.state_version,
                     state_json = excluded.state_json,
                     connection_json = excluded.connection_json,
                     updated_at = excluded.updated_at,
-                    finished_at = excluded.finished_at`,
+                    finished_at = excluded.finished_at
+                 WHERE excluded.state_version >= pvp_live_matches.state_version`,
                 [
                     match.matchId,
                     status,
                     seatA.userId,
                     seatB.userId,
+                    stateVersion,
                     serializeState(match.state),
                     serializeConnection(match.connection),
                     createdAt,

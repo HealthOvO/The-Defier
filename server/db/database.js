@@ -203,6 +203,7 @@ const initDb = () => {
                 status TEXT NOT NULL,
                 seat_a_user_id TEXT NOT NULL,
                 seat_b_user_id TEXT NOT NULL,
+                state_version INTEGER NOT NULL DEFAULT 0,
                 state_json TEXT NOT NULL,
                 connection_json TEXT NOT NULL DEFAULT '{}',
                 created_at INTEGER NOT NULL,
@@ -212,6 +213,11 @@ const initDb = () => {
                 if (err) fail(err);
             });
             db.run(`ALTER TABLE pvp_live_matches ADD COLUMN connection_json TEXT NOT NULL DEFAULT '{}'`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) {
+                    fail(err);
+                }
+            });
+            db.run(`ALTER TABLE pvp_live_matches ADD COLUMN state_version INTEGER NOT NULL DEFAULT 0`, (err) => {
                 if (err && !/duplicate column/i.test(String(err.message || ''))) {
                     fail(err);
                 }

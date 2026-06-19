@@ -1073,6 +1073,11 @@ assert.ok(
   'restarted active live match join should return matched',
   'restarted active match should take precedence over any stale waiting row',
   'restarted current match should keep latest state version',
+  'active match row should persist state_version beside state_json',
+  'persistence CAS should reject stale active match saves with lower stateVersion',
+  'persistence CAS should keep the latest combat state when a stale process saves later',
+  'persistence CAS should derive existing revision from state_json for migrated rows',
+  'migrated active match rows should keep latest combat state when state_version backfill is still zero',
   'restarted active live match join should preserve locked loadout hash',
   'restarted current match should keep locked identity slot',
   'heartbeat connection timeline should be persisted with the live match row',
@@ -1117,6 +1122,8 @@ assert.ok(
 });
 
 [
+  'state_version INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE pvp_live_matches ADD COLUMN state_version INTEGER NOT NULL DEFAULT 0',
   'wide_match_consent INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE pvp_live_queue_tickets ADD COLUMN wide_match_consent INTEGER NOT NULL DEFAULT 0',
   'CREATE TABLE IF NOT EXISTS pvp_live_queue_handoffs',
@@ -1133,6 +1140,12 @@ assert.ok(
 });
 
 [
+  'function getStateVersion(state)',
+  'async function loadPersistedMatchStateVersion(matchId)',
+  'loadPersistedMatchStateVersion(match.matchId)',
+  'stateVersion < persistedStateVersion',
+  'state_version = excluded.state_version',
+  'WHERE excluded.state_version >= pvp_live_matches.state_version',
   'wideMatchConsent: Number(row.wide_match_consent) === 1',
   'wide_match_consent = excluded.wide_match_consent',
   'function makeQueueHandoffFromRow(row)',
