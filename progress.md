@@ -1,5 +1,21 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8P live PVP WS cross-process heartbeat state catch-up evidence
+  - 本轮完成
+    - `tests/sanity_pvp_live_ws_checks.cjs` 新增双 WS server 场景：`serverA` 和 `serverB` 各自挂载独立 `attachLivePvpWebSocket()`，模拟两个进程，背后共享一个 fake authority `stateVersion`。
+    - A 连接进程 1 并提交 accepted intent 后，权威 `stateVersion` 从 20 推进到 21；B 连接进程 2，不依赖进程 1 的本地 `clients` 集合或主动 fanout。
+    - B 在下一次 `heartbeat` 后必须先收到 `presence`，再收到 seat-scoped `state_sync(stateVersion=21)`，证明 heartbeat 会经 `recordHeartbeat()` / `getMatchForUser()` 回源权威状态并刷新本进程 WS 客户端。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定双 server 场景、跨进程 heartbeat catch-up 文案和 process A state advance marker。
+    - `docs/designer_major_upgrade_implementation_input_v1.md` 同步 S8P 口径：这是 WS 编排层 heartbeat interval 内的有界状态追赶协议证据，不代表 Redis / 多实例主动 fanout、真实多实例 persistence smoke、完整 active match revision/CAS、生产 smoke 或线上部署完成。
+  - 已验证
+    - 绿测：`node tests/sanity_pvp_live_ws_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 全量：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 清洁检查：`git diff --check`
+  - 当前结论
+    - live PVP 的 WS 同步现在不只证明单进程广播和 missed events replay，也用双 WS server / fake authority 证明跨进程断开的对手能在下一次 heartbeat 内追上共享权威状态。这能降低非粘性连接下“对手进程已推进但本进程 UI 卡旧状态”的体验风险；但它仍是 heartbeat 有界追赶协议证据，不是主动跨进程 fanout，也不是 Redis / 多实例强一致、真实多实例 persistence smoke、生产 smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8O live PVP WS heartbeat missed-events replay
   - 本轮完成
     - `server/pvp-live/live-ws.js` 的 heartbeat 分支在返回 `presence` 后，如果客户端消息明确携带 `lastSeenRevision`，会继续调用 `sendEventsReplay()` 从持久化事件表 / state events 补发 missed public events。

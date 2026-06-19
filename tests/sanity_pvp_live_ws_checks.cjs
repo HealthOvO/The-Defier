@@ -305,9 +305,118 @@ async function runHeartbeatEventsReplayCheck() {
   }
 }
 
+async function runCrossProcessHeartbeatStateCatchupCheck() {
+  const fakeMatchId = 'pvplm-ws-cross-heartbeat-catchup';
+  let authoritativeVersion = 20;
+  let processBHeartbeatReads = 0;
+
+  const makeStateView = (userId) => {
+    const seatId = userId === 'ws-cross-a' ? 'A' : 'B';
+    return {
+      matchId: fakeMatchId,
+      status: 'active',
+      stateVersion: authoritativeVersion,
+      currentSeat: authoritativeVersion >= 21 ? 'B' : 'A',
+      recentEvents: authoritativeVersion >= 21
+        ? [{ eventType: 'card_played', sequence: 7 }]
+        : [{ eventType: 'battle_started', sequence: 6 }],
+      self: { seatId, hand: [] },
+      opponent: { seatId: seatId === 'A' ? 'B' : 'A', handCount: 3 }
+    };
+  };
+
+  const makeAccess = (userId) => ({
+    match: { matchId: fakeMatchId },
+    seatId: userId === 'ws-cross-a' ? 'A' : 'B',
+    stateView: makeStateView(userId)
+  });
+
+  const makeStore = (processLabel) => ({
+    heartbeatIntervalMs: 1500,
+    async getMatchForUser(userId, matchId) {
+      assert.equal(matchId, fakeMatchId, `${processLabel} should read the requested shared match`);
+      return makeAccess(userId);
+    },
+    async recordHeartbeat(userId, matchId) {
+      assert.equal(userId, 'ws-cross-b', 'cross-process heartbeat catch-up should be driven by the remote opponent');
+      assert.equal(matchId, fakeMatchId, 'cross-process heartbeat catch-up should record the requested match');
+      processBHeartbeatReads += 1;
+      return makeAccess(userId);
+    },
+    async submitIntent(userId, matchId, intent) {
+      assert.equal(processLabel, 'process-a', 'cross-process state advance should happen on process A');
+      assert.equal(userId, 'ws-cross-a', 'cross-process state advance should submit as player A');
+      assert.equal(matchId, fakeMatchId, 'cross-process state advance should submit to the shared match');
+      assert.equal(intent.intentId, 'ws-cross-advance', 'cross-process state advance should forward the intent payload');
+      authoritativeVersion = 21;
+      return {
+        result: 'accepted',
+        reason: 'accepted',
+        events: [{ sequence: 7, eventType: 'card_played', visibility: 'public', actingSeat: 'A', payload: { cost: 1, remainingEnergy: 2 } }],
+        stateView: makeStateView(userId)
+      };
+    },
+    async loadMatchEvents() {
+      return [];
+    }
+  });
+
+  const serverA = http.createServer();
+  const serverB = http.createServer();
+  attachLivePvpWebSocket(serverA, { livePvpStore: makeStore('process-a') });
+  attachLivePvpWebSocket(serverB, { livePvpStore: makeStore('process-b') });
+  await listen(serverA);
+  await listen(serverB);
+  const wsBaseUrlA = `ws://127.0.0.1:${serverA.address().port}`;
+  const wsBaseUrlB = `ws://127.0.0.1:${serverB.address().port}`;
+  const tokenA = generateToken({ id: 'ws-cross-a', username: 'ws-cross-a' });
+  const tokenB = generateToken({ id: 'ws-cross-b', username: 'ws-cross-b' });
+  let socketA = null;
+  let socketB = null;
+  try {
+    socketA = await openSocket(`${wsBaseUrlA}/api/pvp/live/ws?token=${encodeURIComponent(tokenA)}`);
+    socketB = await openSocket(`${wsBaseUrlB}/api/pvp/live/ws?token=${encodeURIComponent(tokenB)}`);
+    await waitForMessage(socketA, message => message.type === 'connected', 'cross-process connected A');
+    await waitForMessage(socketB, message => message.type === 'connected', 'cross-process connected B');
+
+    sendJson(socketA, { type: 'join_match', matchId: fakeMatchId, lastSeenRevision: 0 });
+    await waitForMessage(socketA, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 20, 'cross-process initial state_sync A');
+    await waitForMessage(socketA, message => message.type === 'events_replay' && message.matchId === fakeMatchId, 'cross-process events_replay A');
+    sendJson(socketB, { type: 'join_match', matchId: fakeMatchId, lastSeenRevision: 0 });
+    await waitForMessage(socketB, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 20, 'cross-process initial state_sync B');
+    await waitForMessage(socketB, message => message.type === 'events_replay' && message.matchId === fakeMatchId, 'cross-process events_replay B');
+
+    sendJson(socketA, {
+      type: 'intent',
+      matchId: fakeMatchId,
+      intent: {
+        intentId: 'ws-cross-advance',
+        intentType: 'play_card',
+        stateVersion: 20,
+        payload: { cardInstanceId: 'A-card-1', targetSeat: 'B' }
+      }
+    });
+    await waitForMessage(socketA, message => message.type === 'intent_result' && message.intentId === 'ws-cross-advance' && message.stateView?.stateVersion === 21, 'cross-process intent_result A');
+    await waitForMessage(socketA, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 21, 'cross-process local state_sync A');
+
+    sendJson(socketB, { type: 'heartbeat', matchId: fakeMatchId });
+    await waitForMessage(socketB, message => message.type === 'presence' && message.matchId === fakeMatchId, 'cross-process heartbeat presence B');
+    const catchupB = await waitForMessage(socketB, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 21, 'cross-process heartbeat state_sync B');
+    assert.equal(catchupB.seatId, 'B', 'cross-process heartbeat catch-up should keep the remote seat scope');
+    assert.equal(catchupB.stateView?.currentSeat, 'B', 'cross-process heartbeat should catch up opponent state from authoritative store');
+    assert.equal(processBHeartbeatReads, 1, 'cross-process heartbeat catch-up should read process B authoritative heartbeat once');
+  } finally {
+    if (socketA) socketA.close();
+    if (socketB) socketB.close();
+    await close(serverA);
+    await close(serverB);
+  }
+}
+
 (async () => {
   await runSyncRequiredBroadcastCheck();
   await runHeartbeatEventsReplayCheck();
+  await runCrossProcessHeartbeatStateCatchupCheck();
 
   pvpLiveRoutes.__livePvpStore.reset();
 

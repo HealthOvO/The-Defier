@@ -894,6 +894,10 @@ assert.ok(
   'WS sync_required intent should also refresh the sender with authoritative state_sync',
   'WS sync_required sender state_sync should match intent_result authoritative turn',
   'WS sync_required intent should broadcast authoritative sync to the opponent seat',
+  'cross-process heartbeat should catch up opponent state from authoritative store',
+  'cross-process heartbeat catch-up should keep the remote seat scope',
+  'cross-process state advance should happen on process A',
+  'attachLivePvpWebSocket(serverA, { livePvpStore: makeStore',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveWsChecks.includes(needle),
